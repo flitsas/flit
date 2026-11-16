@@ -50,7 +50,7 @@ import { AccionesBloqueLote } from "./AccionesBloqueLote";
 import { CabeceraLote } from "./CabeceraLote";
 import { GrillaLote } from "./GrillaLote";
 import { MetricasLote } from "./MetricasLote";
-import { hayDatosSaneamiento, leerFiltroSaneamiento, type FiltroSaneamiento, type FiltroTablero } from "@/lib/tablero/filtrosTablero";
+import { hayDatosSaneamiento, hayVeredictos, leerFiltroSaneamiento, type FiltroSaneamiento, type FiltroTablero } from "@/lib/tablero/filtrosTablero";
 import { pedirSondeoNotificaciones } from "@/lib/notificaciones/useNotificaciones";
 
 /** «hh:mm» en hora de Colombia (HU #14562 AC26). */
@@ -327,7 +327,8 @@ export function TableroLote({
 
   // FE-2 (spec-ui §2.3): las acciones de la fila van en el menú «Acciones» (desplegable + mensajes; UA-1 retiró el chip del saneamiento).
   const accionVehiculo =
-    puedeDescargar || puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento || hayVerDeuda
+    // HU #14584 §6.4: «Ver dictamen» también vive en el menú, así que basta con que alguna fila traiga veredicto.
+    puedeDescargar || puedeReprocesar || puedeDerivar || puedeSanear || hayAlgunSaneamiento || hayVerDeuda || hayVeredictos(grilla?.vehiculos ?? [])
       ? (v: FilaVehiculo) =>
           grilla && (
             <AccionesVehiculo
@@ -350,6 +351,7 @@ export function TableroLote({
               reintentar={() => reintentarVehiculo(diagnosticoId, v.id)}
               onReintentado={(r) => alReintentar(r, v.id)}
               onErrorReintento={alFallarReproceso}
+              onVerDictamen={(disparador) => setDictamen({ vehiculo: v, disparador })}
             />
           )
       : undefined;
@@ -499,7 +501,6 @@ export function TableroLote({
                   )
                 : undefined
             }
-            onAbrirDictamen={(vehiculo, disparador) => setDictamen({ vehiculo, disparador })}
             onQuitarFiltro={() => {
               setFiltro(null);
               if (filtroSaneamiento) cambiarFiltroSaneamiento(null);

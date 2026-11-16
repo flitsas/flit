@@ -3,6 +3,7 @@
 import type { ComponentType, ReactNode } from "react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
+import { TOOLTIP_SECUNDARIO_CLS, Tooltip } from "@flit/ui/Tooltip";
 import { TABLA_MOVIL_CELL_CLS } from "@flit/ui/table-styles";
 import type { Fuente } from "@/lib/configuracion";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type MotivoNa } from "@/lib/tablero/api";
@@ -56,7 +57,8 @@ const estiloDe = (tono: Tono) => ({ c: `var(--dx-estado-${tono}-borde)`, ct: `va
 const MOTIVOS_NA: Record<MotivoNa, string> = {
   SERVICIO_PUBLICO: "Servicio público",
   DEPARTAMENTO_NO_SOPORTADO: "Departamento no soportado",
-  SIN_DOCUMENTO_LOCATARIO: "Sin documento del locatario",
+  // Contrato 1.6.0 §1.1 (decisión del orquestador): el código se conserva; el locatario sale solo del RUNT.
+  SIN_DOCUMENTO_LOCATARIO: "El RUNT no reporta locatario",
 };
 
 const FECHA_DATO = new Intl.DateTimeFormat("es-CO", {
@@ -82,11 +84,49 @@ const NOTAS_ERROR: Record<string, string> = {
   LIMITE_PROVEEDOR: "Límite del proveedor",
 };
 
+/**
+ * Línea secundaria del estado (HU #14584, spec-ui §6.2): va en el tooltip del chip y, por debajo de 900 px, en línea bajo él.
+ * Ejecutado / Con deuda: la fecha del dato (o «Consultado en este lote»); Error: la nota; Novedad: el motivo; Sin ejecutar:
+ * «La consulta aún no termina».
+ */
 function detalle(celda: CeldaGrilla): string | null {
   if (celda.estado === "NA") return celda.motivo_na || celda.motivo_na_etiqueta ? motivoNaDeCelda(celda) : null;
   if (celda.estado === "ERROR") return (celda.tipo_error && NOTAS_ERROR[celda.tipo_error]) || "No se pudo consultar";
-  if (celda.estado === "COMPLETADO" && celda.reutilizada && celda.dato_obtenido_en) return `Dato del ${fechaDelDato(celda.dato_obtenido_en)}`;
+  if (celda.estado === "COMPLETADO") return celda.dato_obtenido_en ? `Dato del ${fechaDelDato(celda.dato_obtenido_en)}` : "Consultado en este lote";
+  if (celda.estado === "PENDIENTE" || celda.estado === "EN_CURSO") return LA_CONSULTA_NO_TERMINA;
   return null;
+}
+
+const LA_CONSULTA_NO_TERMINA = "La consulta aún no termina";
+
+/** Contenido del tooltip: el estado y su línea secundaria (spec-ui §6.2). Sin PII: solo textos fijos y la fecha (SP-19). */
+function ContenidoTooltip({ texto, nota }: { texto: string; nota: string | null }) {
+  return (
+    <>
+      {texto}
+      {nota && <span className={TOOLTIP_SECUNDARIO_CLS}>{nota}</span>}
+    </>
+  );
+}
+
+/** La línea secundaria en la celda solo por debajo de 900 px (tarjeta); arriba la lleva el tooltip, que ya la anuncia. */
+function LineaMovil({ children }: { children: ReactNode }) {
+  return (
+    <span aria-hidden="true" className="text-xs text-muted-foreground min-[900px]:hidden">
+      {children}
+    </span>
+  );
+}
+
+/** Chip sin enlace como disparador enfocable del tooltip (tradeoff aceptado en spec-ui §6.2: una parada de Tab más). */
+function ChipEnfocable({ etiqueta, contenido, children }: { etiqueta: string; contenido: ReactNode; children: ReactNode }) {
+  return (
+    <Tooltip contenido={contenido}>
+      <span tabIndex={0} aria-label={etiqueta} className={`inline-flex rounded-full ${FOCO_CLS}`}>
+        {children}
+      </span>
+    </Tooltip>
+  );
 }
 
 /** Celda reprocesable: en ERROR y sin depender de un RUNT en error (esa la libera el reproceso del RUNT). */
@@ -170,21 +210,32 @@ export function CeldaSemaforo({
   marca,
   accion,
 }: CeldaSemaforoProps) {
-  if (!solicitada)
+  if (!solicitada) {
+    const texto = textoEstadoCelda(SIN_SOLICITAR);
     return (
       <td data-fuente={fuente} data-label={nombreFuente} data-estado="NA" data-motivo={SIN_SOLICITAR} className={TD_CLS}>
         <div className={CONTENIDO_CLS}>
-          <ChipEstadoCelda estado={SIN_SOLICITAR} />
-          <span className="text-xs text-muted-foreground">{MOTIVO_SIN_SOLICITAR}</span>
+          <ChipEnfocable etiqueta={`${nombreFuente} de ${identificador}: ${texto}`} contenido={<ContenidoTooltip texto={texto} nota={MOTIVO_SIN_SOLICITAR} />}>
+            <ChipEstadoCelda estado={SIN_SOLICITAR} />
+          </ChipEnfocable>
+          <LineaMovil>{MOTIVO_SIN_SOLICITAR}</LineaMovil>
         </div>
       </td>
     );
-  if (!celda)
+  }
+  if (!celda) {
+    const texto = textoEstadoCelda("PENDIENTE");
     return (
       <td data-fuente={fuente} data-label={nombreFuente} data-estado="SIN_CELDA" className={TD_CLS}>
-        <ChipEstadoCelda estado="PENDIENTE" />
+        <div className={CONTENIDO_CLS}>
+          <ChipEnfocable etiqueta={`${nombreFuente} de ${identificador}: ${texto}`} contenido={<ContenidoTooltip texto={texto} nota={LA_CONSULTA_NO_TERMINA} />}>
+            <ChipEstadoCelda estado="PENDIENTE" />
+          </ChipEnfocable>
+          <LineaMovil>{LA_CONSULTA_NO_TERMINA}</LineaMovil>
+        </div>
       </td>
     );
+  }
 
   const nota = detalle(celda);
   const conDeuda = fuente === "IMPUESTO_DEPARTAMENTAL" && celda.estado === "COMPLETADO" && celda.tiene_deuda === true;
@@ -193,21 +244,26 @@ export function CeldaSemaforo({
     <td data-fuente={fuente} data-label={nombreFuente} data-celda={celda.id} data-estado={celda.estado} className={TD_CLS}>
       <div className={CONTENIDO_CLS}>
         {hrefDetalle ? (
-          <a
-            href={hrefDetalle}
-            target="_blank"
-            rel="noopener noreferrer"
-            aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${texto} ${NUEVA_PESTANA}`}
-            className={`inline-flex cursor-pointer items-center gap-1 rounded-full transition duration-[var(--dx-motion-rapido)] hover:opacity-90 motion-reduce:transition-none ${FOCO_CLS}`}
-          >
-            <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
-            <span className="sr-only">{NUEVA_PESTANA}</span>
-          </a>
+          // HU #14584 §6.2: el enlace del chip es el disparador del tooltip (ya es enfocable).
+          <Tooltip contenido={<ContenidoTooltip texto={texto} nota={nota} />}>
+            <a
+              href={hrefDetalle}
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${texto} ${NUEVA_PESTANA}`}
+              className={`inline-flex cursor-pointer items-center gap-1 rounded-full transition duration-[var(--dx-motion-rapido)] hover:opacity-90 motion-reduce:transition-none ${FOCO_CLS}`}
+            >
+              <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
+              <span className="sr-only">{NUEVA_PESTANA}</span>
+            </a>
+          </Tooltip>
         ) : (
-          <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
+          <ChipEnfocable etiqueta={`${nombreFuente} de ${identificador}: ${texto}`} contenido={<ContenidoTooltip texto={texto} nota={nota} />}>
+            <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
+          </ChipEnfocable>
         )}
         {marca}
-        {nota && <span className="text-xs text-muted-foreground">{nota}</span>}
+        {nota && <LineaMovil>{nota}</LineaMovil>}
         {accion}
         {puedeReprocesar && esReprocesable(celda) && (
           <BotonReprocesar

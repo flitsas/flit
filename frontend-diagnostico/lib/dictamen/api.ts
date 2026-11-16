@@ -46,6 +46,8 @@ export interface Dictamen {
   ajustado_por_flit?: boolean;
   /** Fecha del ajuste; solo con ajustado_por_flit. */
   ajustado_en?: string | null;
+  /** Contrato 1.6.0 §1.2: cambio de propietario del vehículo (true pinta el ícono; false/null, nada). */
+  cambio_propietario?: boolean | null;
 }
 
 export interface DictamenBackoffice extends Dictamen {

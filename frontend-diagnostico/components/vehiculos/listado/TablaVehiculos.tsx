@@ -6,7 +6,17 @@ import { TABLA_MOVIL_CELL_CLS, TABLA_MOVIL_CELL_TITULO_CLS, TABLA_MOVIL_ROW_CLS,
 import { FOCO_CLS } from "@/components/configuracion/estilos";
 import { EtiquetaSaneamiento } from "@/components/saneamiento/EtiquetaSaneamiento";
 import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
-import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, Etiqueta, FILA_TABLA_CLS, type TonoEtiqueta } from "@/components/tablero/vistasDetalle/comun";
+import { IconoCambioPropietario } from "@/components/tablero/IconoCambioPropietario";
+import {
+  CABECERA_TABLA_CLS,
+  CABECERA_TABLA_ESTILO,
+  CELDA_TABLA_CLS,
+  CONTENEDOR_TABLA_CLS,
+  Etiqueta,
+  FILA_TABLA_CLS,
+  FILA_TABLA_HOVER_CLS,
+  type TonoEtiqueta,
+} from "@/components/tablero/vistasDetalle/comun";
 import { nombreModo } from "@/lib/diagnosticos/listado";
 import { identificadorFila, type FilaVehiculoListado } from "@/lib/vehiculos/listado";
 import { Casilla } from "./ControlesSeleccion";
@@ -59,14 +69,18 @@ function FilaVehiculo({ f, seleccionFila, marcada, hayCasillas, onCambiarSelecci
   const estado = ESTADO_VEHICULO[f.estado] ?? ESTADO_VEHICULO.EN_PROCESO;
   const dictamen = dictamenDe(f);
   return (
-    <tr className={`${FILA_TABLA_CLS} bg-card ${TABLA_MOVIL_ROW_CLS}`}>
+    <tr className={`${FILA_TABLA_CLS} ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
       {hayCasillas && (
         <td data-label="Selección" className={CELDA_CLS}>
           <Casilla placa={placa} seleccion={seleccionFila} marcada={marcada} onCambiar={(m) => onCambiarSeleccion(f.vehiculo_id, m)} />
         </td>
       )}
       <th scope="row" data-label="Placa" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS} text-left font-semibold`}>
-        {esPlaca(placa) ? <Placa placa={placa} /> : placa ? <span className="break-all font-mono">{placa}</span> : <span>Sin placa</span>}
+        <span className="inline-flex flex-wrap items-center gap-1.5">
+          {esPlaca(placa) ? <Placa placa={placa} /> : placa ? <span className="break-all font-mono">{placa}</span> : <span>Sin placa</span>}
+          {/* HU #14585 (spec-ui §6.5): ícono de cambio de propietario a la derecha de la placa, solo con true. */}
+          <IconoCambioPropietario cambio={f.cambio_propietario} />
+        </span>
       </th>
       <td data-label="Diagnóstico" className={`${CELDA_CLS} break-words`}>
         {f.diagnostico_nombre}
@@ -111,7 +125,7 @@ function FilaVehiculo({ f, seleccionFila, marcada, hayCasillas, onCambiarSelecci
 export function TablaVehiculos({ vehiculos, selecciones, seleccion, focoPendienteRef, ...fila }: TablaVehiculosProps) {
   const columnas = fila.hayCasillas ? (["Selección", ...COLUMNAS] as const) : COLUMNAS;
   return (
-    <div className="overflow-x-auto rounded-xl border border-border max-[900px]:overflow-visible max-[900px]:border-0">
+    <div className={`${CONTENEDOR_TABLA_CLS} max-[900px]:overflow-visible max-[900px]:border-0`}>
       <table
         ref={(el) => {
           if (el && focoPendienteRef.current) {

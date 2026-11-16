@@ -38,6 +38,11 @@ export interface AccionesVehiculoProps {
   reintentar: () => Promise<ResultadoReintento>;
   onReintentado: (resultado: ResultadoReintento) => void;
   onErrorReintento: (mensaje: string, refrescar: boolean) => void;
+  /**
+   * HU #14584 §6.4: «Ver dictamen» abre el panel del dictamen con el disparador «Acciones» (recibe el foco al cerrarlo). Va
+   * primero, en su grupo, solo si la fila trae veredicto. Sin él, no hay ítem.
+   */
+  onVerDictamen?: (disparador: HTMLElement | null) => void;
 }
 
 type IconoItem = NonNullable<MenuAccionesItem["icon"]>;
@@ -48,6 +53,11 @@ const Deuda: IconoItem = ({ className }) => <IconoDxDeuda tamano={16} className=
 const Externo = iconoComo("externo") as IconoItem;
 const NubeBajar = iconoComo("nube-bajar") as IconoItem;
 const Reintento = iconoComo("reintento") as IconoItem;
+const Dictamen = iconoComo("documento") as IconoItem;
+
+/** Grupos del menú (spec-ui §4): separador entre «Dictamen» y el resto. */
+const GRUPO_DICTAMEN = "dictamen";
+const GRUPO_ACCIONES = "acciones";
 
 const MENSAJE_CLS = "max-w-[12rem] text-xs font-semibold";
 
@@ -77,6 +87,7 @@ export function AccionesVehiculo({
   reintentar,
   onReintentado,
   onErrorReintento,
+  onVerDictamen,
 }: AccionesVehiculoProps) {
   const placa = v.placa || v.vin || v.identificador;
   // Disparador «Acciones» de la fila: destino del foco al cancelar un modal de crear trámite (se busca al cerrar el modal).
@@ -108,6 +119,19 @@ export function AccionesVehiculo({
   const reintento = useReintento({ reintentar, onReintentado, onError: onErrorReintento });
 
   const items: MenuAccionesItem[] = [];
+
+  // 0 — dictamen (HU #14584 §6.4): «Ver dictamen» al principio, en su grupo, si la fila trae veredicto.
+  if (onVerDictamen && v.veredicto != null) {
+    items.push({
+      key: "dictamen",
+      label: "Ver dictamen",
+      ariaLabel: `Ver dictamen de ${placa}`,
+      icon: Dictamen,
+      grupo: GRUPO_DICTAMEN,
+      onSelect: ({ disparador: d }) => onVerDictamen(d),
+    });
+  }
+  const inicioAcciones = items.length;
 
   // 1 / 1′ — saneamiento (HU #14577 §2.1: la bandera va antes de «Crear trámite»).
   if (sanear.tipo === "alternar") {
@@ -186,6 +210,8 @@ export function AccionesVehiculo({
       onSelect: () => void reintento.alPulsar(),
     });
   }
+
+  for (const item of items.slice(inicioAcciones)) item.grupo = GRUPO_ACCIONES;
 
   const ocupado = tramite.enviando || reintento.enviando || (sanear.tipo === "alternar" && sanear.enVuelo);
 

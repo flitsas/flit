@@ -221,7 +221,7 @@ describe("PaginaDetalleConsulta — HU #14087 AC7: auditoría de consulta (se qu
   it("novedad: chip «Novedad» con su motivo", async () => {
     const { pagina } = await pintarDetalle(detalle("RUNT_LOCATARIO", { estado: "NA", motivo_na: "SIN_DOCUMENTO_LOCATARIO", dato_obtenido_en: null, personas: [] }));
     expect(within(auditoria(pagina)).getByText("Novedad")).toBeInTheDocument();
-    expect(auditoria(pagina)).toHaveTextContent(/sin el documento del locatario/i);
+    expect(auditoria(pagina)).toHaveTextContent(/El RUNT no reporta locatario/);
   });
 
   it("por persona: rol, documento enmascarado tal cual, consultado_en y estado mapeado", async () => {

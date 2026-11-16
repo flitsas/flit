@@ -14,6 +14,7 @@ import { ListadoVehiculos, type ListadoVehiculosProps } from "@/components/vehic
 import type { FilaVehiculoListado, ListaVehiculos } from "@/lib/vehiculos/listado";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
 import { deudaSinPendientes, saneamientoEnGestion } from "@/components/saneamiento/__tests__/datosDeuda";
+import { esperarCabecera12px, esperarTablaPorDefecto } from "@/components/comun/__tests__/tablaPorDefecto";
 
 // Uso de ejemplo (HU #14577 AC21–AC23, spec-ui §4): pestaña «Vehículos» del inicio.
 //   <ListadoVehiculos puedeCrear={crearDiagnosticos} puedeSanear={puedeSanear(capacidades)} puedeDescargar={descargarReportes} />
@@ -573,5 +574,25 @@ describe("ListadoVehiculos — AC23/AC42: 360 px y tokens", () => {
   it("los archivos de la pestaña no tienen colores sueltos (solo tokens)", () => {
     const fuente = readFileSync(join(__dirname, "..", "ListadoVehiculos.tsx"), "utf8");
     expect(fuente).not.toMatch(/#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/);
+  });
+});
+
+// HU #14585 (spec-ui §6.5, §7; contrato 1.6.0 §1.2 `FilaPlaca.cambio_propietario`). Uso de ejemplo: GET /vehiculos con una fila
+// { …, cambio_propietario: true } → ícono «Cambio de propietario» junto a la placa; la tabla con la receta por defecto.
+describe("ListadoVehiculos — HU #14585: tabla por defecto e ícono de cambio de propietario", () => {
+  it("A7.1: contenedor, cabecera de 12 px y hover de fila de la tabla por defecto", async () => {
+    simularApi({ "GET /vehiculos": () => Response.json(lista(filasBase())) });
+    pintar();
+    esperarTablaPorDefecto(await tabla());
+    esperarCabecera12px();
+  });
+
+  it("A6.7: el ícono va en la celda de la placa solo con true", async () => {
+    simularApi({ "GET /vehiculos": () => Response.json(lista([filaVeh(1, { cambio_propietario: true }), filaVeh(2, { cambio_propietario: false }), filaVeh(3)])) });
+    pintar();
+    await tabla();
+    expect(within(within(fila("TST001")).getByRole("rowheader")).getByRole("button", { name: "Cambio de propietario" })).toBeInTheDocument();
+    expect(within(fila("TST002")).queryByRole("button", { name: "Cambio de propietario" })).toBeNull();
+    expect(within(fila("TST003")).queryByRole("button", { name: "Cambio de propietario" })).toBeNull();
   });
 });

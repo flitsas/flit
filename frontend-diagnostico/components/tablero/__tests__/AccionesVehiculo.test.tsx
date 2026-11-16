@@ -231,3 +231,30 @@ describe("AccionesVehiculo — resultados (spec-ui §2.5)", () => {
     expect(onAbrirDeuda).toHaveBeenCalledWith(disparador());
   });
 });
+
+// HU #14584 §6.4 (A6.6): «Ver dictamen» abre el menú, en su grupo «Dictamen», antes del orden D-103; solo si la fila trae
+// veredicto. Uso de ejemplo: <AccionesVehiculo … onVerDictamen={(disparador) => setDictamen({ vehiculo: v, disparador })} />.
+describe("AccionesVehiculo — HU #14584: «Ver dictamen» en el menú", () => {
+  it("con veredicto, «Ver dictamen» va primero y llama a onVerDictamen con el disparador", () => {
+    const onVerDictamen = vi.fn();
+    pintar({ vehiculo: TERMINADO({ veredicto: "VIABLE" }), onVerDictamen });
+    expect(abrir().map((i) => i.textContent?.trim())[0]).toBe("Ver dictamen");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Ver dictamen de TST001" }));
+    expect(onVerDictamen).toHaveBeenCalledWith(disparador());
+  });
+
+  it("sin veredicto (Pendiente o modo Simple) no hay «Ver dictamen»", () => {
+    pintar({ vehiculo: TERMINADO({ veredicto: null }), onVerDictamen: vi.fn() });
+    expect(abrir().map((i) => i.textContent?.trim())).not.toContain("Ver dictamen");
+  });
+
+  it("sin otras capacidades, la fila con veredicto igual tiene el menú con «Ver dictamen»", () => {
+    pintar({
+      vehiculo: TERMINADO({ veredicto: "BLOQUEADO", pegada: false }),
+      capacidades: { sanear: false, derivar: false, descargar: false, reprocesar: false },
+      conDatosSaneamiento: false,
+      onVerDictamen: vi.fn(),
+    });
+    expect(abrir().map((i) => i.textContent?.trim())).toEqual(["Ver dictamen"]);
+  });
+});

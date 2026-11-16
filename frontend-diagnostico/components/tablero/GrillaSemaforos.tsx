@@ -19,14 +19,14 @@ import { IconoDxRunt } from "@/components/dx/iconos/IconoDxRunt";
 import { IconoDxRuntPersona } from "@/components/dx/iconos/IconoDxRuntPersona";
 import { IconoDxSimit } from "@/components/dx/iconos/IconoDxSimit";
 import { IconoDxSimitPersona } from "@/components/dx/iconos/IconoDxSimitPersona";
-import { enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
 import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
 import { nombreFuente, nombreSubfuente, type Fuente } from "@/lib/configuracion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { rutaPaginaDetalle } from "@/lib/tablero/detalle";
 import { FUENTES_TABLA, PILARES, fuentesPedidas } from "@/lib/tablero/pilares";
 import { CeldaSemaforo, type CeldaSemaforoProps } from "./CeldaSemaforo";
-import { nombreRol } from "@/lib/rotulos";
+import { IconoCambioPropietario } from "./IconoCambioPropietario";
+import { FILA_TABLA_HOVER_CLS } from "./vistasDetalle/comun";
 
 /** Cabecera de tabla del UI Kit 2026 (auditoría m-4): 13 px en negrita sobre la barra --table-header-*. */
 const CABECERA_CLS = TABLA_HEADER_CELL_CLS;
@@ -40,7 +40,6 @@ const CABECERA_ESTILO = { background: "var(--table-header-bg)", color: "var(--ta
 /** Separador vertical entre columnas de la cabecera. */
 const SEPARADOR_CLS = "border-l border-card/60";
 const TEXTO_SECUNDARIO_CLS = "text-xs text-muted-foreground";
-const DOCUMENTO_CLS = "whitespace-nowrap font-mono text-xs font-medium text-flit-primary";
 /** Celda de la fila; por debajo de 900 px, renglón de la tarjeta con su `data-label` (HU #14562 AC56). */
 const TD_CLS = `px-3 py-2.5 align-top ${TABLA_MOVIL_CELL_CLS}`;
 
@@ -100,7 +99,10 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
   accionVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
   /** Título de la columna de `accionVehiculo`; por defecto «Reporte» (Punto 3: «Acciones» cuando también hay reintentos). */
   tituloAccionVehiculo?: string;
-  /** Acción bajo la placa (corte 7: «Dictamen»). No entra en el sondeo de la grilla: quien la pinta pide el dictamen al abrirla. */
+  /**
+   * Marcas bajo la placa (backoffice: «Ajustado por FLIT», etiqueta del saneamiento). HU #14584 §6.4: Dictamen y Auditoría ya
+   * no van aquí sino en el menú «Acciones» (`accionVehiculo`).
+   */
   accionEncabezado?: (vehiculo: FilaVehiculo) => ReactNode;
   /**
    * Casilla de selección al inicio de cada fila (Punto 4, masivo: solo con la capacidad `derivar` y la derivación encendida).
@@ -125,15 +127,6 @@ const FIJA_DER_CLS = "min-[900px]:sticky min-[900px]:right-0 z-10";
 /** FE-2 (spec-ui §2.3): la columna de acciones (chip + disparador «Acciones» + mensaje) mide 10rem en th y td. */
 const ANCHO_ACCIONES_CLS = "w-[10rem] min-w-[10rem]";
 
-/** «—» con nombre accesible cuando el dato no existe. */
-function SinDato({ etiqueta }: { etiqueta: string }) {
-  return (
-    <span role="img" aria-label={etiqueta} className={TEXTO_SECUNDARIO_CLS}>
-      —
-    </span>
-  );
-}
-
 function EncabezadoVehiculo({
   vehiculo,
   pedidas,
@@ -152,8 +145,12 @@ function EncabezadoVehiculo({
       data-label="Placa o VIN"
       className={`${FIJA_IZQ_CLS} ${izquierda} bg-card px-3 py-2.5 text-left align-top font-normal ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
     >
-      <span className="block font-mono text-sm font-bold uppercase tracking-wider text-flit-primary">
-        {vehiculo.placa || vehiculo.vin || vehiculo.identificador}
+      {/* HU #14585 (spec-ui §6.5): el ícono de cambio de propietario a la derecha de la placa, en la misma línea. */}
+      <span className="flex flex-wrap items-center gap-1.5">
+        <span className="font-mono text-sm font-bold uppercase tracking-wider text-flit-primary">
+          {vehiculo.placa || vehiculo.vin || vehiculo.identificador}
+        </span>
+        <IconoCambioPropietario cambio={vehiculo.cambio_propietario} />
       </span>
       <span className={`mt-1 block ${TEXTO_SECUNDARIO_CLS}`}>{`${resueltas} de ${pedidas.size} consultas`}</span>
       {vehiculo.terminado && (
@@ -167,47 +164,10 @@ function EncabezadoVehiculo({
   );
 }
 
-/** Documento que declaró el cliente: tipo y número enmascarado (nunca completo) y su rol. */
-function CeldaDocumentoDeclarado({ vehiculo }: { vehiculo: FilaVehiculo }) {
-  const d = vehiculo.documento_declarado;
-  return (
-    <td data-columna="documento-declarado" data-label="Documento declarado" className={TD_CLS}>
-      {d ? (
-        <span className="flex flex-col gap-0.5">
-          <span className={DOCUMENTO_CLS}>{`${d.tipo_documento} ${enmascararDocumento(d.documento_enmascarado)}`}</span>
-          <span className={TEXTO_SECUNDARIO_CLS}>{nombreRol(d.rol)}</span>
-        </span>
-      ) : (
-        <SinDato etiqueta="Sin documento declarado" />
-      )}
-    </td>
-  );
-}
-
-/** Documentos de los propietarios del vehículo, uno por línea, enmascarados. */
-function CeldaDocumentosPropietario({ vehiculo }: { vehiculo: FilaVehiculo }) {
-  const propietarios = vehiculo.propietarios ?? [];
-  return (
-    <td data-columna="documento-propietario" data-label="Documento del propietario" className={TD_CLS}>
-      {propietarios.length > 0 ? (
-        <ul className="flex flex-col gap-0.5">
-          {propietarios.map((p, i) => (
-            <li key={`${i}-${p.documento_enmascarado}`} className={DOCUMENTO_CLS}>
-              {`${p.tipo_documento} ${enmascararDocumento(p.documento_enmascarado)}`}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <SinDato etiqueta="Sin documentos del propietario" />
-      )}
-    </td>
-  );
-}
-
 /**
  * Tabla de resultados del lote (HU #13748; rediseño HU #14087), la misma para Express (1 vehículo), Masivo y backoffice. Por
- * fila: placa (o VIN) con su avance «n de m consultas» (m = fuentes pedidas) y el badge «Terminado», el documento declarado y
- * los documentos del propietario. Luego SIEMPRE las 8 fuentes agrupadas por pilar (RUNT, SIMIT, Avalúo comercial, Impuesto
+ * fila: placa (o VIN) con el ícono de cambio de propietario (HU #14585), su avance «n de m consultas» (m = fuentes pedidas) y
+ * el badge «Terminado»; sin columnas de documento (contrato 1.6.0 C5, SP-4/SP-19). Luego SIEMPRE las 8 fuentes agrupadas por pilar (RUNT, SIMIT, Avalúo comercial, Impuesto
  * departamental) en el orden de FUENTES: la no pedida dice «Sin solicitar»; la pedida sin celda todavía, «Sin ejecutar». El
  * usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada semáforo con consulta abre su detalle (HU #13801)
  * en una pestaña nueva (HU #14087), ya sin modal.
@@ -236,7 +196,7 @@ export function GrillaSemaforos({
   return (
     // Ronda 2 de E2E: mismo patrón que el resto de contenedores desplazables de la ola (región enfocable solo con desborde).
     <RegionDesplazable nombre="Semáforo de consultas del lote" className="rounded-xl border border-border">
-      <table aria-label="Semáforo de consultas del lote" className={`w-full min-w-[1280px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
+      <table aria-label="Semáforo de consultas del lote" className={`w-full min-w-[1040px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
             {casillaVehiculo && (
@@ -257,12 +217,6 @@ export function GrillaSemaforos({
                 Dictamen
               </th>
             )}
-            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
-              Documento declarado
-            </th>
-            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
-              Documento del propietario
-            </th>
             {PILARES.map((p) =>
               p.fuentes.length > 1 ? (
                 // FE-2 (spec-ui §2.6): «RUNT» y «SIMIT» centrados sobre sus subcolumnas (sin el text-left del kit).
@@ -303,7 +257,7 @@ export function GrillaSemaforos({
           {vehiculos.map((v) => {
             const porFuente = new Map(v.celdas.map((c) => [c.fuente, c]));
             return (
-              <tr key={v.id} data-vehiculo={v.id} className={`border-t border-[var(--table-row-border)] bg-card ${TABLA_MOVIL_ROW_CLS}`}>
+              <tr key={v.id} data-vehiculo={v.id} className={`border-t border-[var(--table-row-border)] ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
                 {casillaVehiculo && (
                   <td data-columna="seleccion" data-label="Seleccionar" className={`${TD_CLS} ${FIJA_IZQ_CLS} min-[900px]:left-0 bg-card`}>
                     {casillaVehiculo(v)}
@@ -315,8 +269,6 @@ export function GrillaSemaforos({
                     {dictamenVehiculo(v)}
                   </td>
                 )}
-                <CeldaDocumentoDeclarado vehiculo={v} />
-                <CeldaDocumentosPropietario vehiculo={v} />
                 {FUENTES_TABLA.map((f) => {
                   const solicitada = pedidas.has(f);
                   const celda = solicitada ? porFuente.get(f) : undefined;

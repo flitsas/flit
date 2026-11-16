@@ -28,6 +28,7 @@ import {
   rotuloFuenteAlerta,
   type Dictamen,
 } from "@/lib/dictamen/api";
+import { IconoCambioPropietario } from "./IconoCambioPropietario";
 
 export interface PanelDictamenProps {
   diagnosticoId: string;
@@ -262,9 +263,11 @@ export function PanelDictamen({
     const { dictamen } = carga;
     contenido = (
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-flit-primary">
+        <p className="flex flex-wrap items-center gap-1.5 text-sm text-flit-primary">
           Veredicto:{" "}
           <Etiqueta tono={dictamen.veredicto === "BLOQUEADO" ? "danger" : "success"}>{nombreVeredicto(dictamen.veredicto)}</Etiqueta>
+          {/* HU #14585 (contrato 1.6.0 §1.2): cambio de propietario del vehículo, solo con true. */}
+          <IconoCambioPropietario cambio={dictamen.cambio_propietario} />
         </p>
         {dictamen.veredicto === "BLOQUEADO" && (
           <InlineAlert
