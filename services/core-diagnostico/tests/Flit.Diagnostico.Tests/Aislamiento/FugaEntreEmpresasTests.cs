@@ -90,8 +90,12 @@ public sealed class FugaEntreEmpresasTests
 
     // Punto 4 (ADR-0072 (d)8): la derivación está apagada por defecto y sus GET (progreso de operaciones) solo se mapean encendida;
     // aquí se enciende para que la cobertura de fuga los vea. El consumidor y el reconciliador siguen apagados.
-    private static void ConDerivacion(WebApplicationBuilder b) =>
+    // HU #14587: el doble del gRPC de usuarios de core-api, que responde por la empresa de la metadata (escenario RutaUsuarios).
+    private static void ConDerivacion(WebApplicationBuilder b)
+    {
         b.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { [$"{OpcionesDerivacion.Seccion}:Habilitada"] = "true" });
+        new Usuarios.UsuariosProductoFalso().Registrar(b);
+    }
 
     private static IEnumerable<EndpointDataSource> Fuentes(WebApplication app) => app.Services.GetServices<EndpointDataSource>();
 }

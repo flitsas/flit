@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Diagnostico.Tests.Aislamiento;
 
@@ -83,6 +84,14 @@ public static class EscenariosDeFuga
     /// así que con el token de A la URL de B pide la compañía B por parámetro y no debe devolver nada de ella.
     /// </summary>
     public const string RutaSesion = Program.Prefijo + "/sesion";
+
+    /// <summary>
+    /// Usuarios de Diagnóstico de la compañía (HU #14587, ADR-0089). La lista vive en core-api: el doble del gRPC
+    /// (<see cref="Usuarios.UsuariosProductoFalso.PorEmpresa"/>) responde solo las filas de la empresa que core-diagnostico manda en
+    /// <c>x-flit-tenant-id</c>. Con el token de A no aparece ningún usuario ni correo de B (SP-13). El patrón termina en <c>/</c> porque
+    /// la ruta es la raíz del grupo.
+    /// </summary>
+    public const string RutaUsuarios = Program.Prefijo + "/usuarios/";
 
     /// <summary>
     /// Configuración de la compañía (HU #13741): cada empresa siembra su fila con un autor operativo propio, que la lectura
@@ -240,6 +249,16 @@ public static class EscenariosDeFuga
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
         new EscenarioDeFuga(RutaSesion, (empresa, _) =>
             Task.FromResult(new Sembrado($"{RutaSesion}?empresa={empresa.Id}", [empresa.Id.ToString()]))),
+        new EscenarioDeFuga(RutaUsuarios, (empresa, _) =>
+        {
+            var plataforma = (Usuarios.UsuariosProductoFalso)empresa.Api.App.Services
+                .GetRequiredService<Flit.Platform.Grpc.V1.UsuariosProductoService.UsuariosProductoServiceClient>();
+            var usuario = Guid.NewGuid();
+            var fila = Usuarios.UsuariosDePrueba.Fila(usuario);
+            fila.Email = $"fuga.{empresa.Id:N}@empresa.test";
+            plataforma.PorEmpresa[empresa.Id.ToString()] = [fila];
+            return Task.FromResult(new Sembrado(Program.Prefijo + "/usuarios", [usuario.ToString(), fila.Email]));
+        }),
         EscenarioDeFuga.Con(RutaConfiguracion, _ => new ConfiguracionEmpresa { OperativaActualizadaPor = Guid.NewGuid() }, c => c.OperativaActualizadaPor!.Value),
         new EscenarioDeFuga(RutaTiposTramite, (empresa, _) =>
             Task.FromResult(new Sembrado(RutaTiposTramite, ["TRASPASO_STANDARD"], Exclusivos: [empresa.Id.ToString()]))),

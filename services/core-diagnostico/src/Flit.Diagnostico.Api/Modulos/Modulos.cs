@@ -205,6 +205,8 @@ public static class Modulos
         // HU #14579, BE-0 (ADR-0088): E1 y R0–R3 (los llenan BE-1..BE-3).
         Estadisticas.EstadisticasRegistro.MapEstadisticas(api);
         Reportes.Catalogo.ReportesRegistro.MapReportesCatalogo(api);
+        // HU #14587 (ADR-0089): usuarios de Diagnóstico de la compañía, delegados en la plataforma.
+        Usuarios.UsuariosEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }

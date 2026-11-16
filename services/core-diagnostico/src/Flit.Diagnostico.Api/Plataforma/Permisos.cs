@@ -31,6 +31,12 @@ public static class Permisos
     public const string SaneamientoGestionar = "diagnostico.saneamiento.gestionar";
 
     /// <summary>
+    /// Gestionar los usuarios de Diagnóstico de la compañía (HU #14587, contrato-api §3.1, SP-17, ADR-0089): solo <c>admin_diagnostico</c>.
+    /// Cada ruta de <c>/usuarios*</c> lo exige en el servidor; el backoffice de usuarios es del SuperAdmin.
+    /// </summary>
+    public const string UsuariosGestionar = "diagnostico.usuarios.gestionar";
+
+    /// <summary>
     /// Módulos del manifiesto con sus permisos y el nombre que ve el administrador de roles. El código de módulo es global
     /// en la plataforma (<c>security.modules</c>), por eso lleva el prefijo <c>diagnostico_</c>.
     /// </summary>
@@ -61,6 +67,10 @@ public static class Permisos
         [
             (SaneamientoSolicitar, "Solicitar el saneamiento de un vehículo"), (SaneamientoGestionar, "Gestionar saneamientos (backoffice FLIT)"),
         ]),
+        ("diagnostico_usuarios", "Diagnóstico · Usuarios",
+        [
+            (UsuariosGestionar, "Gestionar los usuarios de Diagnóstico de la compañía"),
+        ]),
     ];
 
     // HU #14579, BE-0 (O8 = D-1, ADR-0088): reportes.ver va a los dos roles por defecto. Un rol ya asignado en Identidad lo recibe solo si la
@@ -77,7 +87,9 @@ public static class Permisos
     public static IReadOnlyList<(string Codigo, string Nombre, string[] Permisos)> RolesPorDefecto { get; } =
     [
         ("usuario_diagnostico", "Usuario de Diagnóstico", Usuario),
-        ("admin_diagnostico", "Administrador de Diagnóstico", [.. Usuario, ConfiguracionEditar, ConsultasReprocesar]),
+        // HU #14587 (H-U5): UsuariosGestionar llega a los admin_diagnostico ya asignados porque la plataforma agrega al rol existente los
+        // permisos del manifiesto que le faltan (ProductManifestStore).
+        ("admin_diagnostico", "Administrador de Diagnóstico", [.. Usuario, ConfiguracionEditar, ConsultasReprocesar, UsuariosGestionar]),
     ];
 
     /// <summary>Todos los slugs del manifiesto.</summary>
