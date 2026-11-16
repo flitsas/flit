@@ -41,6 +41,12 @@ public sealed class UsuariosProductoFalso : UsuariosProductoService.UsuariosProd
 
     public Exception? Falla { get; set; }
 
+    /// <summary>
+    /// Filas por empresa (prueba de fuga, HU #13722): si tiene alguna, <c>ListarUsuariosProducto</c> responde solo las de la empresa que
+    /// llega en <c>x-flit-tenant-id</c>, como hace core-api. Así se ve qué empresa mandó core-diagnostico.
+    /// </summary>
+    public ConcurrentDictionary<string, List<UsuarioProducto>> PorEmpresa { get; } = new(StringComparer.Ordinal);
+
     /// <summary>Registra este doble y el de conteos (<paramref name="conteo"/> o uno vacío) antes que los del servicio.</summary>
     public void Registrar(WebApplicationBuilder b, UsuariosConteoFalso? conteo = null)
     {
@@ -52,7 +58,19 @@ public sealed class UsuariosProductoFalso : UsuariosProductoService.UsuariosProd
     public void Registrar(WebApplicationBuilder b) => Registrar(b, null);
 
     public override AsyncUnaryCall<ListarUsuariosProductoResponse> ListarUsuariosProductoAsync(ListarUsuariosProductoRequest request, CallOptions options) =>
-        Responder(nameof(ListarUsuariosProductoAsync), request, options, () => Lista);
+        Responder(nameof(ListarUsuariosProductoAsync), request, options, () => PorEmpresa.IsEmpty ? Lista : DeLaEmpresa(options.Headers));
+
+    private ListarUsuariosProductoResponse DeLaEmpresa(Metadata? cabeceras)
+    {
+        var r = new ListarUsuariosProductoResponse();
+        if (cabeceras?.GetValue(PlatformServiceCallInterceptor.TenantMetadata) is { } empresa && PorEmpresa.TryGetValue(empresa, out var filas))
+        {
+            r.Usuarios.AddRange(filas);
+            r.Total = filas.Count;
+        }
+
+        return r;
+    }
 
     public override AsyncUnaryCall<InvitarUsuarioProductoResponse> InvitarUsuarioProductoAsync(InvitarUsuarioProductoRequest request, CallOptions options) =>
         Responder(nameof(InvitarUsuarioProductoAsync), request, options, () => new InvitarUsuarioProductoResponse());

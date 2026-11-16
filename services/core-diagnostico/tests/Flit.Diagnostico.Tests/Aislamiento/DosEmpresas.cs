@@ -47,9 +47,10 @@ public sealed class EmpresaDePrueba(ApiDePrueba api, Guid id)
     /// Token de un usuario del producto con los permisos de lectura de Diagnóstico (sin ellos no hay sesión, HU #13726); cada
     /// GET exige el suyo (<c>diagnosticos.ver</c>, <c>configuracion.ver</c> desde la HU #13741, <c>diagnosticos.crear</c>
     /// para <c>/tipos-tramite</c> desde la HU #13742, <c>reportes.descargar</c> para el PDF del vehículo desde la HU #13848 y
-    /// <c>reportes.ver</c> para el módulo de reportes desde la HU #14579).
+    /// <c>reportes.ver</c> para el módulo de reportes desde la HU #14579 y <c>usuarios.gestionar</c> para <c>GET /usuarios</c> desde la
+    /// HU #14587).
     /// </summary>
-    public string Token => _token ??= api.Token(empresa: Id, permisos: [Permisos.DiagnosticosVer, Permisos.ConfiguracionVer, Permisos.DiagnosticosCrear, Permisos.ReportesDescargar, Permisos.ReportesVer]);
+    public string Token => _token ??= api.Token(empresa: Id, permisos: [Permisos.DiagnosticosVer, Permisos.ConfiguracionVer, Permisos.DiagnosticosCrear, Permisos.ReportesDescargar, Permisos.ReportesVer, Permisos.UsuariosGestionar]);
 
     public HttpClient Cliente() => api.Cliente(Token);
 
