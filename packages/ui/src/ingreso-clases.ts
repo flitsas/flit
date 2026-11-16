@@ -28,7 +28,7 @@ export const INGRESO_ENLACE_CLS =
   "inline-flex min-h-11 items-center text-sm font-medium text-[color:var(--di-action)] underline underline-offset-[3px]";
 /** Mensaje de error del formulario (`.ingreso__error`). */
 export const INGRESO_ERROR_CLS =
-  "m-0 flex items-center gap-2 rounded-[9px] border border-[color:var(--kit-naranja)] bg-[#ff4e001a] px-3.5 py-2.5 text-[0.8125rem] font-semibold text-[color:var(--badge-warning-fg)]";
+  "m-0 flex items-center gap-2 rounded-[9px] border border-[color:var(--kit-naranja)] bg-[var(--badge-warning-bg)] px-3.5 py-2.5 text-[0.8125rem] font-semibold text-[color:var(--badge-warning-fg)]";
 /** Aviso de acceso (bloqueo, rol desactivado, dominio propio): misma caja suave del error. */
 export const INGRESO_AVISO_CLS = "flex gap-3 rounded-[9px] p-5";
 /** Botón de enviar (`.ingreso__boton`), sobre `buttonClass()`. */
