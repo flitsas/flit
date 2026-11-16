@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { ListadoDiagnosticos } from "@/components/listado/ListadoDiagnosticos";
 import { diagnostico, lista } from "@/lib/diagnosticos/__tests__/datosListado";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
+import { esperarCabecera12px, esperarTablaPorDefecto } from "@/components/comun/__tests__/tablaPorDefecto";
 import {
   TABLA_MOVIL_CELL_CLS,
   TABLA_MOVIL_CELL_TITULO_CLS,
@@ -392,5 +393,16 @@ describe("ListadoDiagnosticos — HU #14562 AC56: tarjetas por debajo de 900 px"
     const fila = (await tabla()).querySelector("tbody tr")!;
     expect(clases(fila)).toContain("motion-reduce:transition-none");
     expect(clases(fila)).toContain("duration-[var(--dx-motion-rapido)]");
+  });
+});
+
+// HU #14585 (spec-ui §1, A7.1): el listado principal es el referente de la tabla por defecto (contenedor centralizado y
+// cabecera de 12 px). Uso de ejemplo: esperarTablaPorDefecto(await tabla()).
+describe("ListadoDiagnosticos — HU #14585: referente de la tabla por defecto", () => {
+  it("contenedor CONTENEDOR_TABLA_CLS, cabecera de 12 px y hover de fila", async () => {
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    esperarTablaPorDefecto(await tabla());
+    esperarCabecera12px();
   });
 });

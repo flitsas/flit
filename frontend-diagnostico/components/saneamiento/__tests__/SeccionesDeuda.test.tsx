@@ -3,6 +3,7 @@ import { fireEvent, render, screen, within } from "@testing-library/react";
 import { SeccionesDeuda } from "@/components/saneamiento/SeccionesDeuda";
 import type { FuenteDeudaSimit } from "@/lib/saneamiento/api";
 import { deudaCompleta, deudaSinPendientes } from "./datosDeuda";
+import { esperarTablaPorDefecto } from "@/components/comun/__tests__/tablaPorDefecto";
 
 // Uso de ejemplo: <SeccionesDeuda deuda={panelDeuda} /> pinta las secciones «Dictamen» y «Deuda por fuente» de PS-2 con los
 // datos que recibe por props (no pide nada). La reutiliza la gestión del backoffice (PS-5) en modo lectura.
@@ -95,7 +96,7 @@ describe("SeccionesDeuda — AC15: deuda por fuente", () => {
     const rtm = tarjeta(/^Revisión técnico-mecánica/);
     fireEvent.click(rtm);
     expect(contenidoDe(rtm)).toHaveTextContent("Vence el 01/05/2027");
-    expect(contenidoDe(tarjeta(/^SIMIT del locatario/))).toHaveTextContent("No se consultó: falta el documento del locatario.");
+    expect(contenidoDe(tarjeta(/^SIMIT del locatario/))).toHaveTextContent("No se consultó: el RUNT no reporta locatario.");
   });
 
   it("sin hallazgos en ninguna fuente: «Sin pendientes» y nunca queda vacío", () => {
@@ -159,5 +160,22 @@ describe("SeccionesDeuda — AC15: deuda por fuente", () => {
     simit.persona.nombre = "Persona De Prueba";
     render(<SeccionesDeuda deuda={deuda} />);
     expect(screen.queryByText(/Persona De Prueba/)).not.toBeInTheDocument();
+  });
+});
+
+// HU #14585 (spec-ui §7, A7.1) y contrato §1.1: tabla por defecto en las secciones de deuda y motivo del locatario según el
+// RUNT (SIN_DOCUMENTO_LOCATARIO ya no depende de lo declarado). Uso de ejemplo: render(<SeccionesDeuda deuda={deuda} />).
+describe("SeccionesDeuda — HU #14585: tabla por defecto y motivo del locatario", () => {
+  it("la tabla de comparendos usa el contenedor y la cabecera de la tabla por defecto", () => {
+    render(<SeccionesDeuda deuda={deudaCompleta()} />);
+    const simit = contenidoDe(tarjeta(/^SIMIT del propietario/));
+    esperarTablaPorDefecto(within(simit).getByRole("table", { name: "Comparendos de SIMIT del propietario" }));
+  });
+
+  it("SIMIT del locatario sin locatario en el RUNT dice «No se consultó: el RUNT no reporta locatario.»", () => {
+    render(<SeccionesDeuda deuda={deudaCompleta()} />);
+    const texto = contenidoDe(tarjeta(/^SIMIT del locatario/));
+    expect(texto).toHaveTextContent("No se consultó: el RUNT no reporta locatario.");
+    expect(texto).not.toHaveTextContent("documento del locatario");
   });
 });

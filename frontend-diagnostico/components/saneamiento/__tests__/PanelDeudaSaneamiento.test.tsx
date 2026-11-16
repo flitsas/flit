@@ -12,6 +12,7 @@ import { banderaPanelDeuda } from "@/components/saneamiento/BanderaPanelDeuda";
 import type { EstadoSaneamientoActivo } from "@/lib/saneamiento/api";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
 import { LOTE, PLACA, RUTA_DEUDA, RUTA_SANEAMIENTO, VEHICULO, deudaCompleta, deudaSinPendientes, saneamientoEnGestion } from "./datosDeuda";
+import { esperarTablaPorDefecto } from "@/components/comun/__tests__/tablaPorDefecto";
 
 // Uso de ejemplo: desde la bandera, «Ver deuda», el aviso «Vehículo bloqueado» del dictamen o la grilla de placas:
 //   <PanelDeudaSaneamiento diagnosticoId={id} vehiculoId={vid} identificador="ABC123" puedeSanear puedeDescargar
@@ -613,5 +614,14 @@ describe("PanelDeudaSaneamiento — FE-1 modal de 640 px", () => {
     expect(onClose).not.toHaveBeenCalled();
     fireEvent.keyDown(document.activeElement ?? document.body, { key: "Escape" });
     expect(onClose).toHaveBeenCalledTimes(1);
+  });
+});
+
+// HU #14585 (spec-ui §7, A7.1): conceptos del saneamiento con la tabla por defecto. Uso de ejemplo: esperarTablaPorDefecto(tabla).
+describe("PanelDeudaSaneamiento — HU #14585: tabla por defecto", () => {
+  it("la tabla de conceptos usa el contenedor, la cabecera de 12 px y el hover de fila", async () => {
+    simularApi({ [`GET ${RUTA_DEUDA}`]: () => json(deudaCompleta()), [`GET ${RUTA_SANEAMIENTO}`]: () => json(saneamientoEnGestion()) });
+    pintar();
+    esperarTablaPorDefecto(await screen.findByRole("table", { name: "Conceptos del saneamiento" }));
   });
 });

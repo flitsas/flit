@@ -32,8 +32,10 @@ import {
   CABECERA_TABLA_CLS,
   CABECERA_TABLA_ESTILO,
   CELDA_TABLA_CLS,
+  CONTENEDOR_TABLA_CLS,
   Etiqueta,
   FILA_TABLA_CLS,
+  FILA_TABLA_HOVER_CLS,
 } from "@/components/tablero/vistasDetalle/comun";
 import { ApiError } from "@/lib/api";
 import { listarLotesBackoffice, mensajeErrorBackoffice, type DiagnosticoBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/backoffice/api";
@@ -207,7 +209,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
     const { lista } = carga;
     contenido = (
       <div className="flex flex-col gap-3">
-        <div className="overflow-x-auto rounded-xl border border-border">
+        <div className={CONTENEDOR_TABLA_CLS}>
           <table aria-label="Lotes de la compañía" className={`w-full min-w-[640px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
             <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
@@ -222,7 +224,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
               {lista.diagnosticos.map((d) => {
                 const estado = vistaEstadoLote(d.estado, d.estado_etiqueta);
                 return (
-                  <tr key={d.id} className={`${FILA_TABLA_CLS} bg-card ${TABLA_MOVIL_ROW_CLS}`}>
+                  <tr key={d.id} className={`${FILA_TABLA_CLS} ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
                     <td data-label="Lote" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>
                       <Link
                         href={`/backoffice/diagnosticos/${encodeURIComponent(d.id)}?empresa=${encodeURIComponent(filtros.empresa)}`}

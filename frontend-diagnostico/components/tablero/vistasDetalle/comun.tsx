@@ -4,11 +4,20 @@ import { etiquetaKit } from "@flit/ui/StatusBadge";
 // Piezas comunes de las vistas del detalle de celda (HU #13801), también para la grilla de backoffice (F06-H5). Todo valor
 // visual sale de los tokens de @flit/ui (tokens.css): cabecera de tabla gris de marca, borde de fila y tintas AA.
 
-/** Cabecera de tabla del sistema: barra gris de marca (--table-header-*), versalita de 10px (misma que la grilla). */
-export const CABECERA_TABLA_CLS = "px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider";
+/**
+ * «Tabla por defecto» de Diagnóstico (HU #14584/#14585, spec-ui §1; referente: ListadoDiagnosticos). Todas las tablas propias
+ * (listado, grilla del lote, backoffice, saneamiento, vehículos) usan estas recetas en vez de repetir radio, borde o cabecera.
+ */
+/** Contenedor de la tabla: desborde horizontal dentro del bloque, radio 12 px y borde gris de marca. */
+export const CONTENEDOR_TABLA_CLS = "overflow-x-auto rounded-xl border border-border";
+/** Cabecera de tabla del sistema: barra gris de marca (--table-header-*), versalita de 12 px (T4: piso tipográfico del kit). */
+export const CABECERA_TABLA_CLS = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider";
 export const CABECERA_TABLA_ESTILO: CSSProperties = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" };
 export const CELDA_TABLA_CLS = "px-3 py-2 align-top text-xs text-flit-primary";
 export const FILA_TABLA_CLS = "border-t border-[var(--table-row-border)]";
+/** Fila de la tabla por defecto: superficie de tarjeta y hover --table-row-hover con el token de movimiento (T8). */
+export const FILA_TABLA_HOVER_CLS =
+  "bg-card transition-colors duration-[var(--dx-motion-rapido)] hover:bg-[var(--table-row-hover)] motion-reduce:transition-none";
 export const TEXTO_SECUNDARIO_CLS = "text-xs text-muted-foreground";
 
 /** Tarjeta interna del detalle (borde gris de marca, radio 12px). */

@@ -38,7 +38,7 @@ import { EtiquetaSaneamiento } from "@/components/saneamiento/EtiquetaSaneamient
 import { useRegionVivaPantalla } from "@/components/saneamiento/RegionVivaPantalla";
 import { EtiquetaTono } from "@/components/saneamiento/SeccionesDeuda";
 import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
-import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, FILA_TABLA_CLS } from "@/components/tablero/vistasDetalle/comun";
+import { CABECERA_TABLA_CLS, CABECERA_TABLA_ESTILO, CELDA_TABLA_CLS, CONTENEDOR_TABLA_CLS, FILA_TABLA_CLS, FILA_TABLA_HOVER_CLS } from "@/components/tablero/vistasDetalle/comun";
 import { ApiError } from "@/lib/api";
 import {
   ESTADOS_BANDEJA_POR_DEFECTO,
@@ -296,7 +296,7 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
             {errorTomar}
           </p>
         )}
-        <div className="overflow-x-auto rounded-xl border border-border">
+        <div className={CONTENEDOR_TABLA_CLS}>
           <table aria-label="Saneamientos" className={`w-full border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
             <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
@@ -324,7 +324,7 @@ export function BandejaSaneamientos({ filtros: iniciales }: BandejaSaneamientosP
                       if ((e.target as HTMLElement).closest("a, button, input, label")) return;
                       router.push(irA(f));
                     }}
-                    className={`${FILA_TABLA_CLS} cursor-pointer bg-card hover:bg-[color:var(--kit-hover)] ${TABLA_MOVIL_ROW_CLS}`}
+                    className={`${FILA_TABLA_CLS} ${FILA_TABLA_HOVER_CLS} cursor-pointer ${TABLA_MOVIL_ROW_CLS}`}
                   >
                     <td data-label="Elegir" className={CELDA_CLS}>
                       <input

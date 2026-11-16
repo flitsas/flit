@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ListaLotesBackoffice } from "@/components/backoffice/ListaLotesBackoffice";
 import { EMPRESA_A, listaLotes, lote, simularApi } from "@/lib/backoffice/__tests__/datos";
+import { esperarCabecera12px, esperarTablaPorDefecto } from "@/components/comun/__tests__/tablaPorDefecto";
 import { BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
 import {
   TABLA_MOVIL_CELL_CLS,
@@ -292,5 +293,16 @@ describe("ListaLotesBackoffice — AP-8: texto fijo en el error", () => {
     const aviso = reintentar.closest('[role="alert"]') as HTMLElement;
     expect(aviso).toHaveTextContent("Intenta de nuevo en un momento.");
     expect(document.body).not.toHaveTextContent(SECRETO_AP8);
+  });
+});
+
+// HU #14585 (spec-ui §7, A7.1): lotes de la compañía con la tabla por defecto. Uso de ejemplo: esperarTablaPorDefecto(tabla).
+describe("ListaLotesBackoffice — HU #14585: tabla por defecto", () => {
+  it("contenedor, cabecera de 12 px y hover de fila iguales al listado principal", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(1, { nombre: "Lote uno" })])) });
+    montar();
+    await elegir("Transportes", /Transportes A SAS/);
+    esperarTablaPorDefecto(await screen.findByRole("table", { name: /lotes de la compañía/i }));
+    esperarCabecera12px();
   });
 });
