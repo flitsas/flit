@@ -46,3 +46,5 @@ export * from "./NotificacionPersistente";
 // HU #14562 · M2 y M11 (auditoría de la oleada): trampa de foco de capas y regiones vivas diferidas.
 export * from "./useTrampaFoco";
 export * from "./useRegionViva";
+// HU #14584 (spec-ui §5): tooltip compartido (hover con retardo, foco, Esc, flip, toggletip táctil).
+export * from "./Tooltip";

@@ -56,6 +56,7 @@
     "./SelectorSegmentado": "./src/SelectorSegmentado.tsx",
     "./ZonaArrastre": "./src/ZonaArrastre.tsx",
     "./NotificacionPersistente": "./src/NotificacionPersistente.tsx",
+    "./Tooltip": "./src/Tooltip.tsx",
     "./useTrampaFoco": "./src/useTrampaFoco.ts",
     "./useRegionViva": "./src/useRegionViva.ts"
   },

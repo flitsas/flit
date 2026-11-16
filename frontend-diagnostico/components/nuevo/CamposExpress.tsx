@@ -1,14 +1,14 @@
 "use client";
 
 import { useId, useState, type Ref } from "react";
-import { AYUDA_FORMATOS_PLACA, TIPOS_DOCUMENTO_LOCATARIO } from "@/lib/express/api";
+import { AYUDA_FORMATOS_PLACA, TIPOS_DOCUMENTO_PROPIETARIO } from "@/lib/express/api";
 import { limpiarIdentificador } from "@/lib/validation/fieldRules";
 import { enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
 import { AYUDA_CLS, CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
 import { CAMPO_INVALIDO_CLS, ERROR_CLS, INSIGNIA_CLS } from "@/components/parametrizacion/estilos";
 import type { BorradorExpress } from "./borradores";
 
-export interface ErroresLocatario {
+export interface ErroresPropietario {
   tipo?: string;
   documento?: string;
 }
@@ -17,7 +17,7 @@ export interface CamposExpressProps {
   borrador: BorradorExpress;
   onCambio: (cambio: Partial<BorradorExpress>) => void;
   errorPlaca?: string | null;
-  errores?: ErroresLocatario;
+  errores?: ErroresPropietario;
   disabled?: boolean;
   /** Formulario de Parámetros: Enter en estos campos lo envía aunque estén en la otra zona. */
   formId?: string;
@@ -27,7 +27,8 @@ export interface CamposExpressProps {
 /**
  * Vehículo del Express (HU #13755, reubicado en la zona Vehículos de la pantalla única, HU #14085): placa o VIN, que se
  * ve normalizado mientras se escribe (mayúsculas, solo letras y números, sin recortar), y el documento opcional del
- * locatario, rotulado «Declarado por el cliente» y enmascarado tras escribirlo. Placa y locatario van lado a lado en
+ * propietario actual (HU #14585), rotulado «Declarado por el cliente» y enmascarado tras escribirlo; se compara con el
+ * propietario que reporta el RUNT y ya no alimenta las fuentes de locatario. Placa y propietario van lado a lado en
  * pantallas anchas. El documento solo vive en memoria: no se guarda en el navegador ni se registra en la consola.
  */
 export function CamposExpress({ borrador, onCambio, errorPlaca, errores = {}, disabled = false, formId, placaRef }: CamposExpressProps) {
@@ -77,10 +78,10 @@ export function CamposExpress({ borrador, onCambio, errorPlaca, errores = {}, di
         )}
       </div>
 
-      <section aria-labelledby={`${id}-locatario`} className="flex min-w-0 flex-col gap-1.5">
+      <section aria-labelledby={`${id}-propietario`} className="flex min-w-0 flex-col gap-1.5">
         <div className="flex flex-wrap items-center gap-2">
-          <h3 id={`${id}-locatario`} className={ETIQUETA_CLS}>
-            Locatario
+          <h3 id={`${id}-propietario`} className={ETIQUETA_CLS}>
+            Propietario actual (opcional)
           </h3>
           <span id={rotuloId} className={INSIGNIA_CLS}>
             Declarado por el cliente
@@ -89,7 +90,7 @@ export function CamposExpress({ borrador, onCambio, errorPlaca, errores = {}, di
         <div className="grid gap-3 sm:grid-cols-[minmax(0,11rem)_minmax(0,1fr)]">
           <div className="flex flex-col gap-1.5">
             <label htmlFor={tipoId} className={ETIQUETA_CLS}>
-              Tipo de documento <span className="sr-only">del locatario</span>
+              Tipo de documento <span className="sr-only">del propietario actual</span>
             </label>
             <select
               id={tipoId}
@@ -102,7 +103,7 @@ export function CamposExpress({ borrador, onCambio, errorPlaca, errores = {}, di
               className={`${CAMPO_CLS} ${CAMPO_INVALIDO_CLS}`}
             >
               <option value="">Sin documento</option>
-              {TIPOS_DOCUMENTO_LOCATARIO.map((t) => (
+              {TIPOS_DOCUMENTO_PROPIETARIO.map((t) => (
                 <option key={t} value={t}>
                   {t}
                 </option>
@@ -116,7 +117,7 @@ export function CamposExpress({ borrador, onCambio, errorPlaca, errores = {}, di
           </div>
           <div className="flex flex-col gap-1.5">
             <label htmlFor={docId} className={ETIQUETA_CLS}>
-              Número de documento <span className="sr-only">del locatario</span> (opcional)
+              Número de documento <span className="sr-only">del propietario actual</span> (opcional)
             </label>
             <input
               id={docId}
@@ -140,7 +141,10 @@ export function CamposExpress({ borrador, onCambio, errorPlaca, errores = {}, di
             )}
           </div>
         </div>
-        <p className={AYUDA_CLS}>Opcional. Se guarda cifrado y en pantalla solo se ven los 4 últimos caracteres.</p>
+        <p className={AYUDA_CLS}>
+          Opcional. Si lo declaras, lo comparamos con el propietario actual que reporta el RUNT. Se guarda cifrado y en pantalla
+          solo se ven los 4 últimos caracteres.
+        </p>
       </section>
     </div>
   );

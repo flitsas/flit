@@ -28,7 +28,7 @@ import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_C
 import { ParametrosDiagnostico } from "@/components/parametrizacion/ParametrosDiagnostico";
 import type { Parametrizacion } from "@/components/parametrizacion/useParametrizacion";
 import type { BorradorExpress } from "./borradores";
-import { CamposExpress, type ErroresLocatario } from "./CamposExpress";
+import { CamposExpress, type ErroresPropietario } from "./CamposExpress";
 import { ZonasCreacion } from "./ZonasCreacion";
 import { ResultadoCreacion } from "./ResultadoCreacion";
 
@@ -58,7 +58,7 @@ export interface CreacionExpressProps {
 }
 
 /**
- * Express en la pantalla única (HU #14085; reglas de la HU #13755): a la izquierda la placa o el VIN y el locatario, a la
+ * Express en la pantalla única (HU #14085; reglas de la HU #13755): a la izquierda la placa o el VIN y el propietario actual, a la
  * derecha los parámetros con el nombre autogenerado, que sigue a la placa mientras el usuario no lo edite. El botón principal
  * («Continuar» con estimado antes de lanzar, «Iniciar diagnóstico» sin él) valida la placa con la regla de Trámites y el rechazo por longitud, los parámetros y el tipo de documento; con
  * estimado_consultas = ANTES_DE_LANZAR pide POST /express/estimado y lo muestra en Parámetros antes de lanzar; lanza con
@@ -73,7 +73,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
   const [fase, setFase] = useState<Fase>({ tipo: "editando" });
   const [errorGeneral, setErrorGeneral] = useState<ErrorGeneral | null>(null);
   const [errorPlaca, setErrorPlaca] = useState<string | null>(null);
-  const [errores, setErrores] = useState<ErroresLocatario>({});
+  const [errores, setErrores] = useState<ErroresPropietario>({});
   const [enfocar, setEnfocar] = useState(0);
   const ocupado = fase.tipo === "enviando" || fase.tipo === "confirmar";
   const nombre = borrador.nombreManual ?? nombreAutogenerado(borrador.placa);
@@ -109,8 +109,8 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
     // Un 422 de un campo (del vehículo o de la cabecera) se pinta en ese campo y el foco va a él.
     if (campo || p.aplicarErrorApi(e)) {
       if (campo === "identificador") setErrorPlaca(mensaje);
-      if (campo === "tipo_documento_locatario") setErrores({ tipo: mensaje });
-      if (campo === "documento_locatario") setErrores({ documento: mensaje });
+      if (campo === "tipo_documento_propietario") setErrores({ tipo: mensaje });
+      if (campo === "documento_propietario") setErrores({ documento: mensaje });
       setEnfocar((n) => n + 1);
       return;
     }
@@ -146,7 +146,7 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
     if (ocupado) return;
     const errorDePlaca = errorIdentificador(borrador.placa);
     const parametrosValidos = p.validar(nombre);
-    const errorTipo = borrador.documento.trim() && !borrador.tipoDocumento ? "Elige el tipo de documento del locatario." : undefined;
+    const errorTipo = borrador.documento.trim() && !borrador.tipoDocumento ? "Elige el tipo de documento del propietario actual." : undefined;
     setErrorPlaca(errorDePlaca);
     setErrores({ tipo: errorTipo });
     if (errorDePlaca || !parametrosValidos || errorTipo) {
@@ -204,9 +204,9 @@ export function CreacionExpress({ p, configuracion, borrador, onBorrador, onOcup
                 <p className={AYUDA_CLS}>
                   Consultas previstas por fuente para <span className="font-semibold tracking-widest">{fase.entrada.identificador}</span>.
                 </p>
-                {fase.entrada.documento_locatario && (
+                {fase.entrada.documento_propietario && (
                   <p className={AYUDA_CLS}>
-                    Locatario: <DocumentoDeclarado tipo={fase.entrada.tipo_documento_locatario} documento={fase.entrada.documento_locatario} />
+                    Propietario actual: <DocumentoDeclarado tipo={fase.entrada.tipo_documento_propietario} documento={fase.entrada.documento_propietario} />
                   </p>
                 )}
                 <ListaEstimado estimado={fase.estimado} />

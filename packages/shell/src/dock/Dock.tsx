@@ -24,9 +24,27 @@ type Props = {
   homeActive: boolean;
   /** Contenedor con scroll (layout `app`); sin él, la ventana. El dock queda dentro de ese contenedor, no fijo. */
   scrollRef?: RefObject<HTMLElement | null>;
+  /**
+   * HU #14583 (spec-ui §9), opt-in. `lados` (por defecto): cada grupo en su `side` y el lado corto relleno con
+   * espaciadores, como siempre. `equilibrada`: se ignora `side`; los grupos visibles, en orden de catálogo, se reparten
+   * ceil(n/2) a la izquierda del inicio y el resto a la derecha (impar: sobra a la izquierda), sin espaciadores, así la
+   * cápsula mide solo su contenido.
+   */
+  distribucion?: DistribucionDock;
 };
 
-export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scrollRef }: Props) {
+export type DistribucionDock = "lados" | "equilibrada";
+
+/** Lados del dock según la distribución (ver `Props.distribucion`). */
+export function repartirDock(groups: DockGroup[], distribucion: DistribucionDock = "lados"): { left: DockGroup[]; right: DockGroup[]; pad: boolean } {
+  if (distribucion === "equilibrada") {
+    const corte = Math.ceil(groups.length / 2);
+    return { left: groups.slice(0, corte), right: groups.slice(corte), pad: false };
+  }
+  return { left: groups.filter((g) => g.side === "left"), right: groups.filter((g) => g.side === "right"), pad: true };
+}
+
+export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scrollRef, distribucion = "lados" }: Props) {
   const { openSection, toggle, close, navRef, triggerId, panelId } = useDisclosureNav("flit-suite-dock");
   // Guía §8: al bajar, solo la ilustración (como el dock del prototipo en tableta); al subir o cerca del inicio, con
   // el nombre.
@@ -34,9 +52,8 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
   const showLabels = !atBottom || !!openSection;
   const home = useDockHomeMark(homeIconSrc);
 
-  const left = groups.filter((g) => g.side === "left");
-  const right = groups.filter((g) => g.side === "right");
-  const sideLen = Math.max(left.length, right.length);
+  const { left, right, pad } = repartirDock(groups, distribucion);
+  const sideLen = pad ? Math.max(left.length, right.length) : 0;
 
   const pill = (g: DockGroup) => (
     <DockGroupPill
@@ -54,7 +71,7 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
   return (
     <div className={`pointer-events-none ${scrollRef ? "absolute" : "fixed"} inset-x-0 bottom-0 z-40 hidden justify-center px-2 pb-[18px] lg:flex`}>
       <nav ref={navRef} aria-label="Navegación principal" className="dock-capsula pointer-events-auto relative inline-flex max-w-full items-center">
-        {Array.from({ length: sideLen - left.length }).map((_, i) => (
+        {Array.from({ length: Math.max(0, sideLen - left.length) }).map((_, i) => (
           <DockSpacer key={`lp-${i}`} showLabels={showLabels} />
         ))}
         {left.map(pill)}
@@ -68,7 +85,7 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
           {home.content}
         </Link>
         {right.map(pill)}
-        {Array.from({ length: sideLen - right.length }).map((_, i) => (
+        {Array.from({ length: Math.max(0, sideLen - right.length) }).map((_, i) => (
           <DockSpacer key={`rp-${i}`} showLabels={showLabels} />
         ))}
       </nav>

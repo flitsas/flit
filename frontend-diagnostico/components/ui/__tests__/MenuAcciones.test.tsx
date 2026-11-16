@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { ActionsMenu, type ActionsMenuItem } from "@flit/ui";
 import { MenuAcciones } from "@/components/ui/MenuAcciones";
 
@@ -171,5 +171,99 @@ describe("MenuAcciones — Kit 2026 propio de Diagnóstico (FE-2, U10-1)", () =>
     abrir();
     expect(screen.getByTestId("scroll").contains(screen.getByRole("menu"))).toBe(false);
     expect(screen.getByRole("menu").parentElement).toBe(document.body);
+  });
+});
+
+// HU #14584 (spec-ui §4, A4.1–A4.3): flip vertical. Abre hacia arriba si no cabe abajo; si no cabe en ninguno de los dos
+// lados, va al de más espacio con altura máxima y scroll interno (último recurso). Separador entre grupos de ítems.
+describe("MenuAcciones — flip vertical y grupos (HU #14584)", () => {
+  const ALTO_MENU = 160;
+  let rectBoton = { top: 100, bottom: 132, left: 600, right: 700, width: 100, height: 32 };
+  let altoMenu = ALTO_MENU;
+
+  beforeEach(() => {
+    rectBoton = { top: 100, bottom: 132, left: 600, right: 700, width: 100, height: 32 };
+    altoMenu = ALTO_MENU;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+      const r =
+        this.getAttribute("role") === "menu"
+          ? { top: 0, bottom: altoMenu, left: 0, right: 240, width: 240, height: altoMenu }
+          : this.getAttribute("aria-haspopup") === "menu"
+            ? rectBoton
+            : { top: 0, bottom: 0, left: 0, right: 0, width: 0, height: 0 };
+      return { ...r, x: r.left, y: r.top, toJSON: () => r } as DOMRect;
+    });
+  });
+  afterEach(() => vi.restoreAllMocks());
+
+  const items = [
+    { key: "a", label: "Ver dictamen", onSelect: vi.fn() },
+    { key: "b", label: "Ver deuda", onSelect: vi.fn() },
+  ];
+
+  it("A4.2: con espacio abajo abre hacia abajo (data-lado=abajo), sin altura máxima", () => {
+    render(<MenuAcciones ariaLabel="Acciones de la placa ABC123" items={items} />);
+    abrir();
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveAttribute("data-lado", "abajo");
+    expect(parseFloat(menu.style.top)).toBe(rectBoton.bottom + 4);
+    expect(menu.style.maxHeight).toBe("");
+    expect(menu.style.visibility).not.toBe("hidden");
+  });
+
+  it("A4.1: a 40 px del borde inferior abre hacia arriba con todos los ítems visibles y sin scroll", () => {
+    rectBoton = { top: window.innerHeight - 72, bottom: window.innerHeight - 40, left: 600, right: 700, width: 100, height: 32 };
+    render(<MenuAcciones ariaLabel="Acciones de la placa ABC123" items={items} />);
+    abrir();
+    const menu = screen.getByRole("menu");
+    expect(menu).toHaveAttribute("data-lado", "arriba");
+    expect(parseFloat(menu.style.top)).toBe(rectBoton.top - ALTO_MENU - 4);
+    expect(menu.style.maxHeight).toBe("");
+    expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+  });
+
+  it("A4.3: si no cabe en ningún lado, va al de más espacio con altura máxima y scroll interno", () => {
+    altoMenu = 2000;
+    rectBoton = { top: 300, bottom: 332, left: 600, right: 700, width: 100, height: 32 };
+    render(<MenuAcciones ariaLabel="Acciones de la placa ABC123" items={items} />);
+    abrir();
+    const menu = screen.getByRole("menu");
+    const espacioAbajo = window.innerHeight - rectBoton.bottom - 8;
+    expect(menu).toHaveAttribute("data-lado", "abajo");
+    expect(parseFloat(menu.style.maxHeight)).toBe(espacioAbajo - 8);
+    expect(menu.className).toContain("overflow-y-auto");
+  });
+
+  it("el foco inicial sigue yendo al primer ítem habilitado tras medir, y Esc lo devuelve al disparador", () => {
+    rectBoton = { top: window.innerHeight - 72, bottom: window.innerHeight - 40, left: 600, right: 700, width: 100, height: 32 };
+    render(<MenuAcciones ariaLabel="Acciones de la placa ABC123" items={items} />);
+    const disparador = abrir();
+    expect(screen.getByRole("menuitem", { name: "Ver dictamen" })).toHaveFocus();
+    fireEvent.keyDown(screen.getByRole("menuitem", { name: "Ver dictamen" }), { key: "Escape" });
+    expect(disparador).toHaveFocus();
+  });
+
+  it("grupo: entre grupos distintos hay un separador; sin `grupo` no hay ninguno (no regresión)", () => {
+    const { unmount } = render(
+      <MenuAcciones
+        ariaLabel="Acciones de la placa ABC123"
+        items={[
+          { key: "d", label: "Ver dictamen", onSelect: vi.fn(), grupo: "dictamen" },
+          { key: "au", label: "Auditoría del dictamen", onSelect: vi.fn(), grupo: "dictamen" },
+          { key: "s", label: "Sanear", onSelect: vi.fn(), grupo: "operacion" },
+        ]}
+      />,
+    );
+    abrir();
+    expect(within(screen.getByRole("menu")).getAllByRole("separator")).toHaveLength(1);
+    const [d, au, s] = screen.getAllByRole("menuitem");
+    fireEvent.keyDown(d, { key: "ArrowDown" });
+    expect(au).toHaveFocus();
+    fireEvent.keyDown(au, { key: "ArrowDown" });
+    expect(s).toHaveFocus();
+    unmount();
+    render(<MenuAcciones ariaLabel="Acciones de la placa ABC123" items={items} />);
+    abrir();
+    expect(within(screen.getByRole("menu")).queryAllByRole("separator")).toHaveLength(0);
   });
 });

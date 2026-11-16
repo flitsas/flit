@@ -4,6 +4,7 @@ import { DiagnosticoShell } from "@/components/DiagnosticoShell";
 import CargaDiagnostico from "@/app/(app)/diagnosticos/[id]/carga/page";
 import type { CapacidadesDiagnostico } from "@/lib/sesion";
 import { ERRORES_CARGA, type FilaResumen } from "@/lib/carga/api";
+import { correccionesAConfirmar } from "@/components/carga/CargaMasiva";
 import { ID, archivo, correccionesDe, fila, formularioDe, llamadas, resumen, ruta, sesion, simularApi } from "./datos";
 
 // Uso de ejemplo: /diagnosticos/{id}/carga sube el archivo, muestra el Resumen de Validación con la tabla de filas
@@ -129,8 +130,8 @@ describe("/diagnosticos/{id}/carga — continuar solo con los válidos (AC 5, re
 
   it("nunca reenvía el documento enmascarado: lo omite si se conserva, lo vacía si se quitó y manda el reescrito completo", async () => {
     const conDoc = (n: number, identificador: string, errores: FilaResumen["errores"]) =>
-      fila({ fila: n, identificador, identificador_norm: identificador.replace(/-/g, ""), tipo_identificador: null, tipo_documento_locatario: "CC", documento_locatario: "****7788", valida: false, errores });
-    const errDoc: FilaResumen["errores"] = [{ campo: "Documento_Locatario", code: "DOCUMENTO_INVALIDO", mensaje: "Documento inválido." }];
+      fila({ fila: n, identificador, identificador_norm: identificador.replace(/-/g, ""), tipo_identificador: null, tipo_documento_propietario: "CC", documento_propietario: "****7788", valida: false, errores });
+    const errDoc: FilaResumen["errores"] = [{ campo: "Documento_Propietario", code: "DOCUMENTO_INVALIDO", mensaje: "Documento inválido." }];
     const errId: FilaResumen["errores"] = [{ campo: "Identificador_Vehiculo", code: "IDENTIFICADOR_INVALIDO", mensaje: "No es una placa ni un VIN válido." }];
     const api = await montar({
       [`POST ${ruta("/carga")}`]: () =>
@@ -140,9 +141,9 @@ describe("/diagnosticos/{id}/carga — continuar solo con los válidos (AC 5, re
     });
     await subir();
     const resumenRegion = await screen.findByRole("region", { name: "Resumen de validación" });
-    fireEvent.change(screen.getByRole("combobox", { name: "Tipo de documento del locatario de la fila 6" }), { target: { value: "" } });
+    fireEvent.change(screen.getByRole("combobox", { name: "Tipo de documento del propietario actual de la fila 6" }), { target: { value: "" } });
     fireEvent.change(screen.getByRole("textbox", { name: "Identificador de la fila 7" }), { target: { value: "TST127" } });
-    fireEvent.change(screen.getByRole("textbox", { name: "Documento del locatario de la fila 8" }), { target: { value: "1020304050" } });
+    fireEvent.change(screen.getByRole("textbox", { name: "Documento del propietario actual de la fila 8" }), { target: { value: "1020304050" } });
     await waitFor(() => expect(within(resumenRegion).getByText("Válidos").nextSibling).toHaveTextContent("4"));
 
     fireEvent.click(continuar());
@@ -150,9 +151,9 @@ describe("/diagnosticos/{id}/carga — continuar solo con los válidos (AC 5, re
     await waitFor(() => expect(navegacion.push).toHaveBeenCalledWith(`/diagnosticos/${ID}`));
     const [post] = llamadas(api, "POST", ruta("/vehiculos"));
     expect(correccionesDe(post)).toEqual([
-      { fila: 6, tipo_documento_locatario: null, documento_locatario: null },
+      { fila: 6, tipo_documento_propietario: null, documento_propietario: null },
       { fila: 7, identificador: "TST127" },
-      { fila: 8, tipo_documento_locatario: "CC", documento_locatario: "1020304050" },
+      { fila: 8, tipo_documento_propietario: "CC", documento_propietario: "1020304050" },
     ]);
     expect(String(formularioDe(post).get("correcciones"))).not.toContain("****");
   });
@@ -239,5 +240,56 @@ describe("/diagnosticos/{id}/carga — tres pasos sin consultas externas (AC20, 
     fireEvent.click(screen.getByRole("button", { name: "Quitar archivo" }));
     expect(screen.queryByText("flota.csv")).toBeNull();
     expect(screen.getByRole("button", { name: "Validar archivo" })).toBeDisabled();
+  });
+});
+
+// HU #14585 (contrato §1, C1/C2): el documento declarado es el del propietario actual. Las correcciones viajan con
+// tipo_documento_propietario / documento_propietario; un error de fila con la cabecera vieja (alias aceptado por la API,
+// archivos que ya circulan) sigue contando como error de documento. El texto de la subida habla del propietario actual.
+describe("Carga — propietario actual (HU #14585)", () => {
+  const original = (campo: string): FilaResumen =>
+    fila({ fila: 4, identificador: "TST124", valida: false, tipo_documento_propietario: "CC", documento_propietario: "****4050", errores: [{ campo: campo as FilaResumen["errores"][number]["campo"], code: "DOCUMENTO_INVALIDO", mensaje: "x" }] });
+
+  it.each(["Documento_Propietario", "Tipo_Documento_Propietario", "Documento_Locatario"])(
+    "un error de %s sin reescribir el documento lo vacía con los campos nuevos",
+    (campo) => {
+      const erronea = original(campo);
+      const corregida = { ...erronea, valida: true, errores: [] };
+      const capturada = { fila: 4, identificador: "TST124", tipo_documento_propietario: "CC", documento_propietario: "****4050" };
+      expect(correccionesAConfirmar({ filas: [corregida], capturadas: new Map([[4, capturada]]), erroneas: [erronea] })).toEqual([
+        { fila: 4, tipo_documento_propietario: null, documento_propietario: null },
+      ]);
+    },
+  );
+
+  it("ENCABEZADO_AMBIGUO y DEMASIADAS_SOLICITUDES tienen texto fijo propio", () => {
+    expect(ERRORES_CARGA.ENCABEZADO_AMBIGUO).toMatch(/propietario/i);
+    expect(ERRORES_CARGA.DEMASIADAS_SOLICITUDES).toBeTruthy();
+  });
+
+  // CR-7 (code review del kit): el texto fijo llega a la pantalla, nunca el mensaje del servidor.
+  it("422 ENCABEZADO_AMBIGUO al analizar: muestra el texto fijo de columnas duplicadas", async () => {
+    await montar({ [`POST ${ruta("/carga")}`]: () => Response.json({ code: "ENCABEZADO_AMBIGUO", error: SECRETO }, { status: 422 }) });
+    await subir();
+    expect(await screen.findByText(ERRORES_CARGA.ENCABEZADO_AMBIGUO)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).toBeNull();
+  });
+
+  it("429 DEMASIADAS_SOLICITUDES al confirmar: muestra el texto fijo de espera", async () => {
+    await montar({
+      [`POST ${ruta("/carga")}`]: () => Response.json(resumen()),
+      [`POST ${ruta("/vehiculos")}`]: () => Response.json({ code: "DEMASIADAS_SOLICITUDES", error: SECRETO }, { status: 429, headers: { "Retry-After": "30" } }),
+    });
+    await subir();
+    await screen.findByRole("region", { name: "Resumen de validación" });
+    fireEvent.click(continuar());
+    expect(await screen.findByText(ERRORES_CARGA.DEMASIADAS_SOLICITUDES)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).toBeNull();
+  });
+
+  it("la ayuda de la subida pide el documento del propietario actual (opcional)", async () => {
+    await montar({});
+    expect(await screen.findByText(/el documento del propietario actual \(opcional\)/i)).toBeInTheDocument();
+    expect(screen.queryByText(/documento del locatario/i)).toBeNull();
   });
 });
