@@ -16,13 +16,19 @@ namespace Flit.Admin.Tests.Identity;
 /// HU #13459 — el catálogo de organismos de tránsito por gRPC solo lo lee un cliente de servicio de Identidad con el
 /// scope <c>platform.tramites.catalogos</c> (aud=tramites), como svc-comparendos para su réplica.
 /// </summary>
-public sealed class CatalogosGrpcTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class CatalogosGrpcTests(CatalogosGrpcTests.Anfitrion anfitrion) : IClassFixture<CatalogosGrpcTests.Anfitrion>
 {
+    /// <summary>Un host por clase (ver <see cref="HostPorClase"/>): antes cada prueba arrancaba el suyo y no lo liberaba.</summary>
+    public sealed class Anfitrion : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) => Construir(factory);
+    }
+
     [Fact]
     public async Task ConElScopeDeCatalogos_Entra()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var token = await TokenAsync(host, "svc-comparendos-prueba", "platform.tramites.catalogos", ct);
         var respuesta = await ListarAsync(host, token, ct);
         respuesta.Organismos.Select(o => o.Codigo).Should().BeInAscendingOrder(StringComparer.Ordinal);
@@ -32,13 +38,13 @@ public sealed class CatalogosGrpcTests(WebApplicationFactory<Program> factory) :
     public async Task SinElScope_OSinToken_SeRechaza()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await RechazadoAsync(host, await TokenAsync(host, "svc-identidad-prueba", "platform.identidad.read", ct), ct);
         await RechazadoAsync(host, await TokenAsync(host, "svc-ict-prueba", "platform.tramites.ict", ct), ct);
         await RechazadoAsync(host, token: null, ct);
     }
 
-    private WebApplicationFactory<Program> Host() =>
+    private static WebApplicationFactory<Program> Construir(WebApplicationFactory<Program> factory) =>
         OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
         {
             foreach (var (cliente, scope) in new[] { ("svc-comparendos-prueba", "platform.tramites.catalogos"), ("svc-identidad-prueba", "platform.identidad.read"), ("svc-ict-prueba", "platform.tramites.ict") })
