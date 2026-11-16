@@ -26,7 +26,7 @@ import { rutaPaginaDetalle } from "@/lib/tablero/detalle";
 import { FUENTES_TABLA, PILARES, fuentesPedidas } from "@/lib/tablero/pilares";
 import { CeldaSemaforo, type CeldaSemaforoProps } from "./CeldaSemaforo";
 import { IconoCambioPropietario } from "./IconoCambioPropietario";
-import { FILA_TABLA_HOVER_CLS } from "./vistasDetalle/comun";
+import { CONTENEDOR_TABLA_CLS, FILA_TABLA_HOVER_CLS } from "./vistasDetalle/comun";
 
 /** Cabecera de tabla del UI Kit 2026 (auditoría m-4): 13 px en negrita sobre la barra --table-header-*. */
 const CABECERA_CLS = TABLA_HEADER_CELL_CLS;
@@ -126,6 +126,8 @@ const FIJA_IZQ_CLS = "min-[900px]:sticky z-10";
 const FIJA_DER_CLS = "min-[900px]:sticky min-[900px]:right-0 z-10";
 /** FE-2 (spec-ui §2.3): la columna de acciones (chip + disparador «Acciones» + mensaje) mide 10rem en th y td. */
 const ANCHO_ACCIONES_CLS = "w-[10rem] min-w-[10rem]";
+/** CR-6: las celdas fijas tienen fondo propio (tapan lo que desplaza debajo); con la fila en hover toman su mismo color. */
+const FONDO_FIJA_CLS = "bg-card group-hover:bg-[var(--table-row-hover)] transition-colors duration-[var(--dx-motion-rapido)] motion-reduce:transition-none";
 
 function EncabezadoVehiculo({
   vehiculo,
@@ -143,7 +145,7 @@ function EncabezadoVehiculo({
     <th
       scope="row"
       data-label="Placa o VIN"
-      className={`${FIJA_IZQ_CLS} ${izquierda} bg-card px-3 py-2.5 text-left align-top font-normal ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
+      className={`${FIJA_IZQ_CLS} ${izquierda} ${FONDO_FIJA_CLS} px-3 py-2.5 text-left align-top font-normal ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
     >
       {/* HU #14585 (spec-ui §6.5): el ícono de cambio de propietario a la derecha de la placa, en la misma línea. */}
       <span className="flex flex-wrap items-center gap-1.5">
@@ -195,7 +197,7 @@ export function GrillaSemaforos({
 
   return (
     // Ronda 2 de E2E: mismo patrón que el resto de contenedores desplazables de la ola (región enfocable solo con desborde).
-    <RegionDesplazable nombre="Semáforo de consultas del lote" className="rounded-xl border border-border">
+    <RegionDesplazable nombre="Semáforo de consultas del lote" className={CONTENEDOR_TABLA_CLS}>
       <table aria-label="Semáforo de consultas del lote" className={`w-full min-w-[1040px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
@@ -257,9 +259,9 @@ export function GrillaSemaforos({
           {vehiculos.map((v) => {
             const porFuente = new Map(v.celdas.map((c) => [c.fuente, c]));
             return (
-              <tr key={v.id} data-vehiculo={v.id} className={`border-t border-[var(--table-row-border)] ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+              <tr key={v.id} data-vehiculo={v.id} className={`group border-t border-[var(--table-row-border)] ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
                 {casillaVehiculo && (
-                  <td data-columna="seleccion" data-label="Seleccionar" className={`${TD_CLS} ${FIJA_IZQ_CLS} min-[900px]:left-0 bg-card`}>
+                  <td data-columna="seleccion" data-label="Seleccionar" className={`${TD_CLS} ${FIJA_IZQ_CLS} min-[900px]:left-0 ${FONDO_FIJA_CLS}`}>
                     {casillaVehiculo(v)}
                   </td>
                 )}
@@ -290,7 +292,7 @@ export function GrillaSemaforos({
                   );
                 })}
                 {accionVehiculo && (
-                  <td data-label={tituloAccionVehiculo} className={`${TD_CLS} ${FIJA_DER_CLS} ${ANCHO_ACCIONES_CLS} bg-card`}>
+                  <td data-label={tituloAccionVehiculo} className={`${TD_CLS} ${FIJA_DER_CLS} ${ANCHO_ACCIONES_CLS} ${FONDO_FIJA_CLS}`}>
                     {accionVehiculo(v)}
                   </td>
                 )}

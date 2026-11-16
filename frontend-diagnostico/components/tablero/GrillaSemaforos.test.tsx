@@ -5,6 +5,7 @@ import { FUENTES, nombreFuente, nombreSubfuente } from "@/lib/configuracion";
 import { V1, V2, V3, celda, grilla, llamadas, loteTerminadoConErrores, simularApi, vehiculo } from "@/lib/tablero/__tests__/datos";
 import type { Grilla } from "@/lib/tablero/api";
 import { simularDesborde } from "@/components/comun/__tests__/desborde";
+import { CONTENEDOR_TABLA_CLS } from "@/components/tablero/vistasDetalle/comun";
 import { createElement, type ComponentType } from "react";
 import { join, resolve } from "node:path";
 import {
@@ -175,6 +176,16 @@ describe("GrillaSemaforos — HU #14585: placa con su ícono de cambio de propie
     const fila = filaDe(container, "vehiculo-1");
     expect(fila.className).toContain("hover:bg-[var(--table-row-hover)]");
     expect(fila.className).toContain("motion-reduce:transition-none");
+  });
+
+  it("CR-6: contenedor CONTENEDOR_TABLA_CLS y las celdas fijas (placa y Acciones) toman el hover de la fila (group-hover)", () => {
+    const { container } = pintar(grilla({ vehiculos: [V1] }), false, { accionVehiculo: () => <span>acción</span> });
+    const contenedor = screen.getByRole("table", { name: /semáforo de consultas/i }).parentElement!;
+    for (const c of CONTENEDOR_TABLA_CLS.split(" ")) expect(contenedor.className.split(/\s+/)).toContain(c);
+    const fila = filaDe(container, "vehiculo-1");
+    expect(fila.className.split(/\s+/)).toContain("group");
+    expect(within(fila).getByRole("rowheader").className).toContain("group-hover:bg-[var(--table-row-hover)]");
+    expect(fila.querySelector<HTMLElement>("td:last-child")!.className).toContain("group-hover:bg-[var(--table-row-hover)]");
   });
 });
 
