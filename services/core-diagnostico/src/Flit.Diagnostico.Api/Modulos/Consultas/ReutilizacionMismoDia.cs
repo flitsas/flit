@@ -1,5 +1,7 @@
+using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
+using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
@@ -36,7 +38,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// </summary>
 /// <example>
 /// <code>
-/// var resultado = await ReutilizacionMismoDia.BuscarAsync(contexto, reloj.GetUtcNow(), ct)
+/// var resultado = await ReutilizacionMismoDia.BuscarAsync(contexto, reloj.GetUtcNow(), documentos, ct)
 ///     ?? await ejecutor.EjecutarAsync(contexto, ct);
 /// </code>
 /// </example>
@@ -44,12 +46,13 @@ internal static class ReutilizacionMismoDia
 {
     /// <summary>
     /// El resultado copiado de la celda vigente de hoy, listo para cerrar la celda; null si no hay ninguna (entonces se llama a
-    /// la fuente).
+    /// la fuente). <paramref name="documentos"/> descifra los propietarios copiados para recalcular <c>cambio_propietario</c> (HU #14582).
     /// </summary>
     public static async Task<ResultadoCelda?> BuscarAsync(
-        ContextoCelda contexto, DateTimeOffset ahora, CancellationToken ct, IProtectorDocumentoPersona? documentos = null)
+        ContextoCelda contexto, DateTimeOffset ahora, IProtectorDocumentoPersona documentos, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contexto);
+        ArgumentNullException.ThrowIfNull(documentos);
         var celda = contexto.Celda;
         var db = contexto.Db;
         var empresa = celda.TenantId;
@@ -110,11 +113,24 @@ internal static class ReutilizacionMismoDia
                 var deOrigen = await DocumentosVehiculo.PersonasDelVehiculoAsync(dbCierre, empresa, deVehiculo.Id, token).ConfigureAwait(false);
                 var copia = DocumentosVehiculo.CopiarPersonas(destino, deVehiculo, deOrigen, ahora);
                 await DocumentosVehiculo.RegistrarPersonasAsync(dbCierre, destino, copia, token).ConfigureAwait(false);
-                // HU #14582 (SP-5): con el declarado del destino; los propietarios copiados se descifran solo si hay declarado.
-                if (documentos is not null && destino.PropietarioDeclaradoDocCifrado is not null)
+                // HU #14582 (SP-5): con el declarado del destino; los propietarios copiados se descifran solo si hay declarado. Un
+                // cifrado ilegible no rompe el cierre: el resultado queda null, como en FijarCambioPropietario (CR-2).
+                if (destino.PropietarioDeclaradoDocCifrado is not null)
                 {
-                    DocumentosVehiculo.FijarCambioPropietario(destino, [.. copia.Where(p => p.Rol == RolPersona.Propietario)
-                        .Select(p => (p.DocTipo, documentos.Desproteger(p.DocCifrado)))], documentos);
+                    List<(string Tipo, string Numero)>? propietarios;
+                    try
+                    {
+                        propietarios = [.. copia.Where(p => p.Rol == RolPersona.Propietario).Select(p => (p.DocTipo, documentos.Desproteger(p.DocCifrado)))];
+                    }
+                    catch (CryptographicException)
+                    {
+                        propietarios = null;
+                    }
+
+                    if (propietarios is null)
+                        destino.CambioPropietario = null;
+                    else
+                        DocumentosVehiculo.FijarCambioPropietario(destino, propietarios, documentos, MetricasDiagnostico.OrigenReutilizacion);
                 }
             })
             : null;

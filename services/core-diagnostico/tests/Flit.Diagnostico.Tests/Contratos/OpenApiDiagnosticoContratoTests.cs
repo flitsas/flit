@@ -219,8 +219,8 @@ public sealed class OpenApiDiagnosticoContratoTests
     private static readonly string[] ColumnasDeLaListaBlanca =
     [
         "fecha_diagnostico", "diagnostico_nombre", "modalidad", "tipo_analisis", "tipo_tramite", "placa", "vin", "servicio", "organismo",
-        "departamento", "propietarios_documentos", "locatario_documento", "locatario_origen", "veredicto", "estado_consultas",
-        "saneamiento_estado", "tramite_numero", "fuente", "estado", "motivo_na", "tipo_error", "intentos", "duracion_ms", "dato_obtenido_en",
+        "departamento", "propietarios_documentos", "propietario_declarado_documento", "cambio_propietario", "locatario_runt_documento",
+        "veredicto", "estado_consultas", "saneamiento_estado", "tramite_numero", "fuente", "estado", "motivo_na", "tipo_error", "intentos", "duracion_ms", "dato_obtenido_en",
         "reutilizada", "origen", "solicitado_en", "tomado_en", "cerrado_en", "dias_hasta_cierre", "motivo_cierre", "renglones_total",
         "renglones_pendientes", "fecha", "tipo_operacion", "motivo", "empresa_nombre", "empresa_nit", "diagnosticos", "vehiculos",
         "consultas_exitosas", "consultas_con_error", "tasa_exito", "consultas_runt", "consultas_simit", "consultas_avaluo",
@@ -249,6 +249,22 @@ public sealed class OpenApiDiagnosticoContratoTests
             Bloque(respuesta, sangria: 4).Should().Contain("lecturas_backoffice").And.NotContain("No audita").And.NotContain("no audita", respuesta);
         foreach (var operacion in new[] { "reporteEmpresaBackoffice", "exportarReporteEmpresaExcelBackoffice", "exportarReporteEmpresaPdfBackoffice" })
             Bloque("get:", sangria: 4, desde: "operationId: " + operacion).Should().Contain("intento", operacion);
+    }
+
+    // HU #14582 be1-b (contrato-api §1.3, §1.1, SP-5, SP-6) — reporte vehiculos con propietario_declarado_documento,
+    // cambio_propietario y locatario_runt_documento (sin locatario_origen); Excel del lote con las dos columnas fijas; plantilla con
+    // la hoja «Instrucciones»; 429 DEMASIADAS_SOLICITUDES con Retry-After en Express, estimado y confirmación.
+    [Fact]
+    public void HU14582_b_reportes_con_cambio_de_propietario_y_429_en_express_y_confirmacion()
+    {
+        var pagina = Bloque("PaginaReporteDto:", sangria: 4);
+        pagina.Should().Contain("propietario_declarado_documento, cambio_propietario, locatario_runt_documento")
+            .And.NotContain("locatario_documento,").And.NotContain("locatario_origen");
+        Yaml.Value.Should().Contain("Propietario actual declarado («TIPO ****1234» o vacío), Cambio de propietario")
+            .And.Contain("Una segunda hoja «Instrucciones»");
+        Bloque("DemasiadasSolicitudes:", sangria: 4).Should().Contain("DEMASIADAS_SOLICITUDES").And.Contain("Retry-After");
+        foreach (var operacion in new[] { "operationId: confirmarVehiculosDiagnostico", "operationId: crearDiagnosticoExpress", "operationId: estimarDiagnosticoExpress" })
+            Respuestas(operacion).Should().Contain("\"429\": { $ref: \"#/components/responses/DemasiadasSolicitudes\" }", operacion);
     }
 
     // HU #14582 (contrato-api §1.1/§1.2, C1, C2, C5, SP-4) — 1.6.0: propietario actual declarado con alias obsoleto de entrada,

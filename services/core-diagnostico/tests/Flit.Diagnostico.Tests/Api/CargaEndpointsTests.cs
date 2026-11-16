@@ -76,6 +76,37 @@ public sealed class CargaEndpointsTests
         tabla.Filas.Should().BeEmpty();
     }
 
+    // HU #14582 (contrato §1.1, spec-ui §8) — la plantilla trae una segunda hoja «Instrucciones» que explica cada columna; las dos
+    // del documento dicen «Propietario actual (opcional)» y ninguna habla de locatario. La primera hoja sigue siendo la de datos: la
+    // plantilla se sube tal cual.
+    [Fact]
+    public async Task HU14582_plantilla_explica_las_columnas_del_propietario_actual_opcional()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.SinBaseAsync();
+
+        var respuesta = await api.Cliente(Cabeceras.TokenUsuario(api, Guid.NewGuid())).GetAsync(RutaPlantilla, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
+        var bytes = await respuesta.Content.ReadAsByteArrayAsync(ct);
+        using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        using (var libro = new StreamReader(zip.GetEntry("xl/workbook.xml")!.Open()))
+        {
+            var xmlLibro = await libro.ReadToEndAsync(ct);
+            xmlLibro.IndexOf("Vehiculos", StringComparison.Ordinal).Should()
+                .BeLessThan(xmlLibro.IndexOf(PlantillaCarga.HojaInstrucciones, StringComparison.Ordinal), "la hoja de datos va primero");
+        }
+
+        var instrucciones = zip.GetEntry("xl/worksheets/sheet2.xml");
+        instrucciones.Should().NotBeNull("la plantilla trae la hoja de instrucciones");
+        using var lector = new StreamReader(instrucciones!.Open());
+        var xml = await lector.ReadToEndAsync(ct);
+        xml.Should().Contain("Identificador_Vehiculo").And.Contain("Tipo_Documento_Propietario").And.Contain("Documento_Propietario");
+        System.Text.RegularExpressions.Regex.Count(xml, @"Propietario actual \(opcional\)").Should().Be(2, "una por cada columna del documento");
+        xml.Should().NotContainEquivalentOf("locatario");
+        LectorXlsx.Leer(bytes).Encabezados.Should().Equal("Identificador_Vehiculo", "Tipo_Documento_Propietario", "Documento_Propietario");
+    }
+
     // Escenario 2 (F02-C6) — el mismo contenido en .xlsx y en .csv (punto y coma y coma) da el mismo resumen.
     [Fact]
     public async Task Xlsx_y_csv_con_el_mismo_contenido_dan_el_mismo_resumen()

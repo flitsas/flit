@@ -18,8 +18,10 @@ internal static class ExpressEndpoints
 
     public static void Map(RouteGroupBuilder api)
     {
-        api.MapPost(Ruta, Crear).RequirePermiso(Permisos.DiagnosticosCrear).WithName("CrearDiagnosticoExpress");
-        api.MapPost(RutaEstimado, Estimar).RequirePermiso(Permisos.DiagnosticosCrear).WithName("EstimarDiagnosticoExpress");
+        // HU #14582 (SP-5): límite por usuario en los dos (429 DEMASIADAS_SOLICITUDES).
+        api.MapPost(Ruta, Crear).RequirePermiso(Permisos.DiagnosticosCrear).RequireRateLimiting(LimitesSolicitudes.Express).WithName("CrearDiagnosticoExpress");
+        api.MapPost(RutaEstimado, Estimar).RequirePermiso(Permisos.DiagnosticosCrear).RequireRateLimiting(LimitesSolicitudes.Express)
+            .WithName("EstimarDiagnosticoExpress");
     }
 
     private static async Task<IResult> Crear(ExpressEntradaDto cuerpo, ServicioExpress servicio, CancellationToken ct)

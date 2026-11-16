@@ -23,11 +23,18 @@ public static class Program
 {
     public const string Prefijo = "/api/v1/diagnostico";
 
-    public static async Task Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
+        // HU #14582 (H-A3): `backfill-cambio-propietario --empresa <uuid> [--lote n]` corre el backfill y sale, sin arrancar el host
+        // ni migrar (lo lanza infra por ambiente, con la configuración del servicio por variables de entorno). Un argumento inválido
+        // escribe el uso por stderr y sale con 2, sin traza.
+        if (Modulos.Trabajos.ComandoBackfillCambioPropietario.EsComando(args))
+            return await Modulos.Trabajos.ComandoBackfillCambioPropietario.CorrerAsync(args, () => Build([]), Console.Error, CancellationToken.None).ConfigureAwait(false);
+
         var app = Build(args);
         await MigrateAsync(app).ConfigureAwait(false);
         await app.RunAsync().ConfigureAwait(false);
+        return 0;
     }
 
     internal static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
@@ -70,6 +77,10 @@ public static class Program
         builder.Services.AddMotorConsultas(builder.Configuration);
         // HU #13753: Diagnóstico Express (cabecera + un vehículo en una transacción) y su estimado de vista previa.
         builder.Services.AddScoped<Modulos.Express.ServicioExpress>();
+        // HU #14582 (SP-5, B-6, DM-2): límites de solicitudes de Express, confirmación e invitaciones (429 DEMASIADAS_SOLICITUDES)
+        // y la auditoría de sondeo de declaraciones de propietario por placa y día.
+        builder.Services.AddLimitesSolicitudes(builder.Configuration);
+        builder.Services.AddScoped<Modulos.Vehiculos.AuditoriaSondeoPropietario>();
         // HU #13743: tablero del lote (grilla incremental, cierre del panel e historial de estados).
         Modulos.Tablero.EndpointsTablero.AddTablero(builder.Services);
         // HU #14576 (ADR-0087): saneamiento del cliente (marcar, desmarcar, masivo y detalle).
@@ -125,6 +136,7 @@ public static class Program
         app.UseFlitCorrelationId();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter();
         // HU #13726: toda ruta de negocio verifica la suscripción de la compañía del token (fail-closed); /health* queda fuera.
         app.UseGuardSuscripcion(Prefijo);
 

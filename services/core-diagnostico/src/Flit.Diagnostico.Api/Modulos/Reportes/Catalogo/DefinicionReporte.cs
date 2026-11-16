@@ -39,8 +39,10 @@ internal static class DefinicionReporte
         new("organismo", "Organismo de tránsito", Texto, false),
         new("departamento", "Departamento", Texto, false),
         new("propietarios_documentos", "Propietarios (documento)", Texto, true),
-        new("locatario_documento", "Locatario (documento)", Texto, true),
-        new("locatario_origen", "Origen del locatario", Texto, false),
+        // HU #14582 (contrato §1.3, SP-6): el declarado es el propietario actual; el locatario sale solo del RUNT.
+        new("propietario_declarado_documento", "Propietario actual declarado (documento)", Texto, true),
+        new("cambio_propietario", "Cambio de propietario", Texto, false),
+        new("locatario_runt_documento", "Locatario RUNT (documento)", Texto, true),
         new("veredicto", "Veredicto", Texto, false),
         new("estado_consultas", "Estado de las consultas", Texto, false),
         new("saneamiento_estado", "Saneamiento", Texto, false),

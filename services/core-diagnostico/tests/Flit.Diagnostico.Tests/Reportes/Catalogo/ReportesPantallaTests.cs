@@ -24,7 +24,9 @@ namespace Flit.Diagnostico.Tests.Reportes.Catalogo;
 /// </example>
 public sealed class ReportesPantallaTests
 {
-    // Vehículos con documento completo: propietarios en orden, locatario declarado, «No disponible» si el cifrado no se lee.
+    // Vehículos con documento completo: propietarios en orden, propietario actual declarado con «Cambio de propietario» Sí/No/vacío
+    // (HU #14582, contrato §1.3, SP-6), locatario solo del RUNT (la persona histórica DECLARADO_CLIENTE no se pinta como locatario),
+    // «No disponible» si el cifrado no se lee.
     [Fact]
     public async Task BE2_vehiculos_trae_documentos_completos_y_no_disponible_si_no_se_descifra()
     {
@@ -35,7 +37,10 @@ public sealed class ReportesPantallaTests
         await ReportesDePrueba.LoteAsync(empresa,
         [
             new("RPT101", Vin: "9ZZRPT00000000101", Propietarios: [new("CC", "1020304050"), new("NIT", "900123456")],
-                Locatario: new("CC", "5566778899"), LocatarioDeclarado: true, Veredicto: "VIABLE"),
+                Locatario: new("CC", "5566778899"), LocatarioDeclarado: true, Veredicto: "VIABLE",
+                PropietarioDeclarado: new("CC", "5566778899"), CambioPropietario: true),
+            new("RPT103", Propietarios: [new("CC", "1020304050")], Locatario: new("NIT", "900777666"),
+                PropietarioDeclarado: new("CC", "1020304050"), CambioPropietario: false),
         ], ct, nombre: "Lote con documentos");
         await ReportesDePrueba.LoteAsync(empresa, [new("RPT102", CifradoIlegible: true)], ct, nombre: "Lote ilegible", express: true);
 
@@ -48,12 +53,19 @@ public sealed class ReportesPantallaTests
         pagina.GetProperty("ambito").GetString().Should().Be("COMPANIA");
         pagina.GetProperty("pagina").GetInt32().Should().Be(1);
         pagina.GetProperty("tamano").GetInt32().Should().Be(25);
-        pagina.GetProperty("total").GetInt32().Should().Be(2);
+        pagina.GetProperty("total").GetInt32().Should().Be(3);
         var filas = ReportesDePrueba.Filas(pagina).ToDictionary(f => f.GetProperty("placa").GetString()!);
         var conDocs = filas["RPT101"];
         conDocs.GetProperty("propietarios_documentos").GetString().Should().Be("CC 1020304050; NIT 900123456");
-        conDocs.GetProperty("locatario_documento").GetString().Should().Be("CC 5566778899");
-        conDocs.GetProperty("locatario_origen").GetString().Should().Be("DECLARADO");
+        conDocs.GetProperty("propietario_declarado_documento").GetString().Should().Be("CC 5566778899");
+        conDocs.GetProperty("cambio_propietario").GetString().Should().Be("Sí");
+        conDocs.GetProperty("locatario_runt_documento").ValueKind.Should().Be(JsonValueKind.Null, "SP-6: el declarado histórico no es locatario RUNT");
+        conDocs.TryGetProperty("locatario_documento", out _).Should().BeFalse();
+        conDocs.TryGetProperty("locatario_origen", out _).Should().BeFalse("SP-6: se retira, siempre sería RUNT");
+        var conRunt = filas["RPT103"];
+        conRunt.GetProperty("locatario_runt_documento").GetString().Should().Be("NIT 900777666");
+        conRunt.GetProperty("propietario_declarado_documento").GetString().Should().Be("CC 1020304050");
+        conRunt.GetProperty("cambio_propietario").GetString().Should().Be("No");
         conDocs.GetProperty("vin").GetString().Should().Be("9ZZRPT00000000101");
         conDocs.GetProperty("veredicto").GetString().Should().Be("VIABLE");
         conDocs.GetProperty("modalidad").GetString().Should().Be("MASIVO");
@@ -63,7 +75,9 @@ public sealed class ReportesPantallaTests
         conDocs.GetProperty("fecha_diagnostico").GetString().Should().EndWith("-05:00", "instantes en hora Colombia");
         var ilegible = filas["RPT102"];
         ilegible.GetProperty("propietarios_documentos").GetString().Should().Be("CC No disponible");
-        ilegible.GetProperty("locatario_documento").ValueKind.Should().Be(JsonValueKind.Null);
+        ilegible.GetProperty("locatario_runt_documento").ValueKind.Should().Be(JsonValueKind.Null);
+        ilegible.GetProperty("propietario_declarado_documento").ValueKind.Should().Be(JsonValueKind.Null);
+        ilegible.GetProperty("cambio_propietario").ValueKind.Should().Be(JsonValueKind.Null, "sin declarado: vacío");
         ilegible.GetProperty("veredicto").ValueKind.Should().Be(JsonValueKind.Null);
         ilegible.GetProperty("modalidad").GetString().Should().Be("EXPRESS");
         ReportesDePrueba.Filas(pagina).Select(f => f.GetProperty("fecha_diagnostico").GetDateTimeOffset()).Should().BeInDescendingOrder();

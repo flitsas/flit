@@ -62,7 +62,7 @@ internal sealed partial class PublicadorCeldas(
         var contexto = new ContextoCelda(CeldaEnCurso.De(celda), db);
         // HU #13739 (D-10): el dato de hoy de la misma compañía se copia sin mensaje; HU #13746 (R-1): el reproceso nunca reutiliza.
         if (celda.ReprocesoUsuarioId is null
-            && await ReutilizacionMismoDia.BuscarAsync(contexto, ahora, ct, documentos).ConfigureAwait(false) is { } reutilizado)
+            && await ReutilizacionMismoDia.BuscarAsync(contexto, ahora, documentos, ct).ConfigureAwait(false) is { } reutilizado)
         {
             Reutilizada(log, celda.Id, celda.Fuente, reutilizado.ReutilizadaDeId!.Value);
             await CerrarAsync(celda, reutilizado, RegistroIntentos.CrearTodos(contexto.Celda, ahora, ahora, reutilizado), versionTablero, ct, recalcular)

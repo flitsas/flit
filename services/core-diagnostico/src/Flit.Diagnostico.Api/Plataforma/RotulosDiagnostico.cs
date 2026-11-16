@@ -43,6 +43,20 @@ internal static partial class RotulosDiagnostico
     /// <summary>Aviso del dictamen en el PDF mientras el texto definitivo no está (decisión 5.2: no nombra la IA).</summary>
     public const string AnalisisEnPreparacion = "Análisis en preparación";
 
+    /// <summary>«Cambio de propietario» en los reportes (HU #14582, §1.3) cuando <c>cambio_propietario</c> es true.</summary>
+    public const string CambioPropietarioSi = "Sí";
+
+    /// <summary>«Cambio de propietario» en los reportes cuando <c>cambio_propietario</c> es false.</summary>
+    public const string CambioPropietarioNo = "No";
+
+    /// <summary>Texto de <c>cambio_propietario</c> para el Excel del lote y el reporte <c>vehiculos</c>: «Sí», «No» o null (vacío).</summary>
+    public static string? DeCambioPropietario(bool? cambio) => cambio switch
+    {
+        true => CambioPropietarioSi,
+        false => CambioPropietarioNo,
+        null => null,
+    };
+
     private const string PrefijoFuentePendiente = "Consulta pendiente";
 
     private static ILogger _log = NullLogger.Instance;

@@ -32,8 +32,10 @@ namespace Flit.Diagnostico.Tests.Reportes.Catalogo;
 internal sealed record DocumentoSembrado(string Tipo, string Numero);
 
 /// <summary>
-/// Vehículo a sembrar para los reportes: propietarios en su orden, locatario (del RUNT o declarado), veredicto vigente y, si se
-/// da <see cref="CifradoIlegible"/>, un propietario más cuyo cifrado no se puede leer.
+/// Vehículo a sembrar para los reportes: propietarios en su orden, locatario (del RUNT o, con <see cref="LocatarioDeclarado"/>,
+/// una persona histórica <c>DECLARADO_CLIENTE</c> como las que quedan de antes de la S3, sin columnas de locatario en el vehículo,
+/// HU #14582), propietario actual declarado (<c>propietario_declarado_doc_*</c>) con su <c>cambio_propietario</c>, veredicto vigente
+/// y, si se da <see cref="CifradoIlegible"/>, un propietario más cuyo cifrado no se puede leer.
 /// </summary>
 internal sealed record VehiculoReporteSembrado(
     string Placa,
@@ -42,7 +44,9 @@ internal sealed record VehiculoReporteSembrado(
     DocumentoSembrado? Locatario = null,
     bool LocatarioDeclarado = false,
     string? Veredicto = null,
-    bool CifradoIlegible = false);
+    bool CifradoIlegible = false,
+    DocumentoSembrado? PropietarioDeclarado = null,
+    bool? CambioPropietario = null);
 
 /// <summary>
 /// Ayudas de las pruebas del módulo de reportes con PII (HU #14579, BE-2/BE-3): arranque con el protector de prueba y la captura de
@@ -157,7 +161,7 @@ internal static class ReportesDePrueba
         for (var i = 0; i < vehiculos.Length; i++)
         {
             var v = vehiculos[i];
-            var declarado = v.Locatario is { } loc && v.LocatarioDeclarado ? protector.Proteger(loc.Numero) : null;
+            var declarado = v.PropietarioDeclarado is { } dec ? protector.Proteger(dec.Numero) : null;
             var vehiculo = new VehiculoDiagnostico
             {
                 DiagnosticoId = cabecera.Id,
@@ -171,9 +175,9 @@ internal static class ReportesDePrueba
                 DepartamentoCodigo = "11",
                 Orden = i + 1,
                 EstadoConsultas = "COMPLETADO",
-                LocatarioDocTipo = declarado is null ? null : v.Locatario!.Tipo,
-                LocatarioDocCifrado = declarado,
-                LocatarioDocOrigen = declarado is null ? null : OrigenDocumento.DeclaradoCliente,
+                PropietarioDeclaradoDocTipo = declarado is null ? null : v.PropietarioDeclarado!.Tipo,
+                PropietarioDeclaradoDocCifrado = declarado,
+                CambioPropietario = declarado is null ? null : v.CambioPropietario,
             };
             filas.Add(vehiculo);
             var orden = 1;
@@ -183,7 +187,7 @@ internal static class ReportesDePrueba
                 personas.Add(Persona(vehiculo, RolPersona.Propietario, orden++, "CC", [.. ProtectorDePrueba.Ilegible], OrigenDocumento.Proveedor, ahora));
             if (v.Locatario is { } l)
             {
-                personas.Add(Persona(vehiculo, RolPersona.Locatario, 1, l.Tipo, declarado is null ? protector.Proteger(l.Numero) : [.. declarado],
+                personas.Add(Persona(vehiculo, RolPersona.Locatario, 1, l.Tipo, protector.Proteger(l.Numero),
                     v.LocatarioDeclarado ? OrigenDocumento.DeclaradoCliente : OrigenDocumento.Proveedor, ahora));
             }
 

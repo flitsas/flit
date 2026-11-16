@@ -23,12 +23,13 @@ internal sealed record ConfirmacionLote(Guid DiagnosticoId, ResultadoConfirmacio
 /// servidor revalida todo (<see cref="ConfirmadorVehiculos"/>): sin válidos o por encima del límite de la copia de
 /// configuración responde 422 sin guardar nada. En una transacción: guarda los válidos (el propietario actual declarado, cifrado
 /// con <see cref="IProtectorDocumentoPersona"/> en <c>propietario_declarado_doc_*</c>, HU #14582; nunca como locatario), deja el
-/// estimado en la cabecera y
+/// estimado en la cabecera, revisa el sondeo de declaraciones por placa (<see cref="AuditoriaSondeoPropietario"/>, SP-5) y
 /// entrega la lista limpia a <see cref="IEncoladorConsultas"/>, que crea las celdas y pasa el lote a EN_PROCESO (HU #13727);
 /// si el encolador falla no queda nada. Los logs solo llevan conteos.
 /// </summary>
 internal sealed partial class ServicioConfirmacionVehiculos(
-    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, IEncoladorConsultas encolador, ILogger<ServicioConfirmacionVehiculos> log)
+    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, IEncoladorConsultas encolador, AuditoriaSondeoPropietario sondeo,
+    ILogger<ServicioConfirmacionVehiculos> log)
 {
     public const string CodigoSinValidos = AnalizadorCarga.CodigoSinValidos;
     public const string CodigoLimiteSuperado = AnalizadorCarga.CodigoLimiteSuperado;
@@ -106,6 +107,8 @@ internal sealed partial class ServicioConfirmacionVehiculos(
         db.AddRange(vehiculos);
         cabecera.EstimadoConsultas = JsonSerializer.Serialize(resultado.Estimado.ToDictionary(e => CodigosDeEnum.Codigo(e.Fuente), e => e.Consultas));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        // HU #14582 (SP-5): aviso si una placa acumula hoy más declaraciones de propietario que el umbral (solo ids y conteo).
+        await sondeo.RevisarAsync(cabecera, vehiculos, ct).ConfigureAwait(false);
         await encolador.EncolarAsync(
             cabecera.Id, [.. vehiculos.Select(v => new VehiculoAEncolar(v.Id, v.IdentificadorNorm, v.TipoIdentificador))], ct).ConfigureAwait(false);
         return new ConfirmacionLote(cabecera.Id, resultado, vehiculos, parametros.MostrarEstimado);

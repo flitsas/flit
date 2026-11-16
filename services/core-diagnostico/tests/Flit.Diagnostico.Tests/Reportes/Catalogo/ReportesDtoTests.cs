@@ -26,8 +26,8 @@ public sealed class ReportesDtoTests
         ["vehiculos"] =
         [
             "fecha_diagnostico", "diagnostico_nombre", "modalidad", "tipo_analisis", "tipo_tramite", "placa", "vin", "servicio", "organismo",
-            "departamento", "propietarios_documentos", "locatario_documento", "locatario_origen", "veredicto", "estado_consultas",
-            "saneamiento_estado", "tramite_numero",
+            "departamento", "propietarios_documentos", "propietario_declarado_documento", "cambio_propietario", "locatario_runt_documento",
+            "veredicto", "estado_consultas", "saneamiento_estado", "tramite_numero",
         ],
         ["consultas"] =
         [
@@ -52,7 +52,8 @@ public sealed class ReportesDtoTests
         var ct = TestContext.Current.CancellationToken;
         var empresa = DosEmpresas.En(api).A;
         var lote = await ReportesDePrueba.LoteAsync(empresa,
-            [new("RPT301", Propietarios: [new("CC", "4444444444")], Locatario: new("CC", "5555555555")), new("RPT302")], ct);
+            [new("RPT301", Propietarios: [new("CC", "4444444444")], Locatario: new("CC", "5555555555"),
+                PropietarioDeclarado: new("CC", "4444444444"), CambioPropietario: false), new("RPT302")], ct);
         await SaneamientoDePrueba.SembrarAsync(empresa, lote.Id, lote.Vehiculos[0].Id, EstadoSaneamiento.EnGestion, ct);
         await ReportesDePrueba.DerivacionAsync(empresa, lote.Id, lote.Vehiculos[1].Id, EstadoItemDerivacion.Omitido, ct, motivo: "SIN_DICTAMEN");
         using var cliente = api.Cliente(ReportesDePrueba.Token(api, empresa.Id));
@@ -79,7 +80,9 @@ public sealed class ReportesDtoTests
 
         var vehiculos = await ReportesDePrueba.JsonAsync(await cliente.GetAsync(ReportesDePrueba.Ruta("vehiculos"), ct), ct);
         vehiculos.GetProperty("columnas").EnumerateArray().Where(c => c.GetProperty("pii").GetBoolean()).Select(c => c.GetProperty("clave").GetString())
-            .Should().BeEquivalentTo("placa", "vin", "propietarios_documentos", "locatario_documento");
+            .Should().BeEquivalentTo("placa", "vin", "propietarios_documentos", "propietario_declarado_documento", "locatario_runt_documento");
+        vehiculos.GetProperty("columnas").EnumerateArray().Single(c => c.GetProperty("clave").GetString() == "cambio_propietario")
+            .GetProperty("titulo").GetString().Should().Be("Cambio de propietario", "HU #14582 §1.3: rótulo de la columna");
     }
 
     private static List<string> Prohibidas(JsonElement elemento)
