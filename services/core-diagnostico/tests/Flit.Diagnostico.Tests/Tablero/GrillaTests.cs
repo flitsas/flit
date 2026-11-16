@@ -15,6 +15,7 @@ using Flit.Diagnostico.Tests.Api;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Npgsql;
 using Xunit;
 
 namespace Flit.Diagnostico.Tests.Tablero;
@@ -34,12 +35,6 @@ namespace Flit.Diagnostico.Tests.Tablero;
 public sealed class GrillaTests
 {
     private static readonly string[] Prohibidos = ["Origen", "UsuarioManual", "DocTipo", "DocCifrado", "Cifrado", "Payload"];
-
-    /// <summary>
-    /// Únicas propiedades con «documento» que admite el DTO de cliente (HU #14087, decisión del usuario 2026-10-27): el objeto del
-    /// documento declarado, el tipo y el número ENMASCARADO. Cualquier otra (un número en claro, p. ej.) rompe R-20.
-    /// </summary>
-    private static readonly string[] DocumentosPermitidos = ["DocumentoDeclarado", "TipoDocumento", "DocumentoEnmascarado"];
 
     // AC1 (F04-C3) — lote en versión 10, dos celdas cambian a 11 y 12: desde 10 llegan solo esas dos y la versión 12.
     [Fact]
@@ -92,11 +87,12 @@ public sealed class GrillaTests
         propiedades.Should().NotBeEmpty();
         var nombres = propiedades.Select(p => p.Name).ToList();
         nombres.Should().NotContain(n => Prohibidos.Any(x => n.Contains(x, StringComparison.OrdinalIgnoreCase)));
-        nombres.Where(n => n.Contains("Documento", StringComparison.OrdinalIgnoreCase)).Distinct()
-            .Should().BeEquivalentTo(DocumentosPermitidos, "de documentos solo viajan el declarado (objeto), el tipo y el enmascarado");
+        nombres.Where(n => n.Contains("Documento", StringComparison.OrdinalIgnoreCase)).Should()
+            .BeEmpty("HU #14582 SP-4: ningún documento viaja en la grilla, ni enmascarado; solo cambio_propietario");
         var json = propiedades.Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? p.Name).ToList();
         json.Should().NotContain(n => n.Contains("origen") || n.Contains("usuario_manual") || n.Contains("payload") || n.Contains("cifrado"));
-        json.Where(n => n.Contains("doc")).Distinct().Should().BeEquivalentTo(["documento_declarado", "tipo_documento", "documento_enmascarado"]);
+        json.Where(n => n.Contains("doc")).Should().BeEmpty();
+        json.Should().Contain("cambio_propietario");
 
         await using var api = await ApiDePrueba.ConBaseAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
@@ -114,11 +110,10 @@ public sealed class GrillaTests
         Tablero.CeldasDe(JsonElement.Parse(cuerpo)).Single().GetProperty("estado").GetString().Should().Be("COMPLETADO");
     }
 
-    // HU #14087 AC4 — cada fila trae el documento declarado (rol, tipo, enmascarado) y los propietarios del RUNT en su orden,
-    // enmascarados en el servidor («****» + 4 últimos); sin personas, documento_declarado=null y propietarios=[]. Si el vehículo
-    // aún no tiene personas (RUNT sin cerrar), el declarado sale de la captura. Nunca el número en claro.
+    // HU #14582 AC10 (SP-1, SP-4; reemplaza HU #14087 AC4) — cada fila trae cambio_propietario tal como está persistido (true, false o
+    // null, siempre presente, también en el delta) y ningún documento: ni el declarado ni los propietarios, ni enmascarados.
     [Fact]
-    public async Task Fila_trae_documento_declarado_y_propietarios_enmascarados()
+    public async Task HU14582_AC10_fila_trae_cambio_propietario_persistido_sin_documentos()
     {
         await using var api = await ApiDePrueba.ConBaseAsync();
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
@@ -139,41 +134,39 @@ public sealed class GrillaTests
                 Persona(protector, v161, RolPersona.Propietario, 2, "CC", "1012345678", OrigenDocumento.Proveedor),
                 Persona(protector, v161, RolPersona.Propietario, 1, "NIT", "900123456-7", OrigenDocumento.Proveedor),
                 Persona(protector, v161, RolPersona.Locatario, 1, "CC", "5566778899", OrigenDocumento.DeclaradoCliente));
-            var capturado = await db.Set<VehiculoDiagnostico>().SingleAsync(v => v.Id == v163, ct);
-            capturado.LocatarioDocTipo = "CE";
-            capturado.LocatarioDocCifrado = protector.Proteger("77441122");
-            capturado.LocatarioDocOrigen = OrigenDocumento.DeclaradoCliente;
             await db.SaveChangesAsync(ct);
+        }
+
+        await using (var conexion = new NpgsqlConnection(api.BaseDeDatos))
+        {
+            await conexion.OpenAsync(ct);
+            foreach (var (vehiculo, cambio) in new[] { (v161, "true"), (v163, "false") })
+            {
+                await using var comando = new NpgsqlCommand(
+                    "UPDATE diagnostico.vehiculos SET propietario_declarado_doc_tipo = 'CE', propietario_declarado_doc_cifrado = @cifrado, " +
+                    $"cambio_propietario = {cambio} WHERE id = @id", conexion);
+                comando.Parameters.AddWithValue("cifrado", protector.Proteger("77441122"));
+                comando.Parameters.AddWithValue("id", vehiculo);
+                await comando.ExecuteNonQueryAsync(ct);
+            }
         }
 
         var respuesta = await empresa.Cliente().GetAsync(Tablero.RutaGrilla(lote.Id), ct);
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        cuerpo.Should().NotContainAny(["1012345678", "900123456", "5566778899", "77441122", "DECLARADO_CLIENTE", "PROVEEDOR"]);
+        cuerpo.Should().NotContainAny(["1012345678", "900123456", "5566778899", "77441122", "****", "DECLARADO_CLIENTE", "PROVEEDOR",
+            "documento_declarado", "\"propietarios\"", "documento_enmascarado"]);
         var filas = JsonElement.Parse(cuerpo).GetProperty("vehiculos").EnumerateArray()
             .ToDictionary(f => f.GetProperty("identificador").GetString()!);
-
-        var declarado = filas["TST161"].GetProperty("documento_declarado");
-        declarado.GetProperty("rol").GetString().Should().Be("LOCATARIO");
-        declarado.GetProperty("tipo_documento").GetString().Should().Be("CC");
-        declarado.GetProperty("documento_enmascarado").GetString().Should().Be("****8899");
-        filas["TST161"].GetProperty("propietarios").EnumerateArray()
-            .Select(p => $"{p.GetProperty("tipo_documento").GetString()} {p.GetProperty("documento_enmascarado").GetString()}")
-            .Should().Equal(["NIT ****4567", "CC ****5678"], "en su orden, solo los PROPIETARIO");
-
-        filas["TST162"].GetProperty("documento_declarado").ValueKind.Should().Be(JsonValueKind.Null);
-        filas["TST162"].GetProperty("propietarios").GetArrayLength().Should().Be(0, "sin personas, la lista va vacía (siempre presente)");
-
-        var soloCaptura = filas["TST163"].GetProperty("documento_declarado");
-        soloCaptura.GetProperty("rol").GetString().Should().Be("LOCATARIO");
-        soloCaptura.GetProperty("tipo_documento").GetString().Should().Be("CE");
-        soloCaptura.GetProperty("documento_enmascarado").GetString().Should().Be("****1122", "sin RUNT cerrado, el declarado de la captura");
+        filas["TST161"].GetProperty("cambio_propietario").ValueKind.Should().Be(JsonValueKind.True);
+        filas["TST162"].GetProperty("cambio_propietario").ValueKind.Should().Be(JsonValueKind.Null, "sin declarado: null, siempre presente");
+        filas["TST163"].GetProperty("cambio_propietario").ValueKind.Should().Be(JsonValueKind.False);
 
         var incremental = await Tablero.JsonAsync(await empresa.Cliente().GetAsync(Tablero.RutaGrilla(lote.Id, desde: 2), ct), ct);
         var cambiada = incremental.GetProperty("vehiculos").EnumerateArray().Single();
         cambiada.GetProperty("identificador").GetString().Should().Be("TST163", "solo viaja la fila con celdas cambiadas");
-        cambiada.GetProperty("documento_declarado").GetProperty("documento_enmascarado").GetString().Should().Be("****1122", "con sus documentos actuales");
+        cambiada.GetProperty("cambio_propietario").ValueKind.Should().Be(JsonValueKind.False, "el delta lleva el valor persistido");
     }
 
     // AC5 (F04-C10, D-10) — la celda reutilizada trae la fecha y hora del dato original.
@@ -265,7 +258,8 @@ public sealed class GrillaTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await respuesta.Content.ReadAsStringAsync(ct));
         var estimado = (await Tablero.JsonAsync(respuesta, ct)).GetProperty("estimado_consultas").EnumerateArray()
             .Select(e => $"{e.GetProperty("fuente").GetString()} {e.GetProperty("estimadas").GetInt32()} {e.GetProperty("consumidas").GetInt32()}");
-        estimado.Should().Equal(["RUNT 2 2", "RUNT_LOCATARIO 1 1"], "la reutilizada (desde_cache) no consume");
+        estimado.Should().Equal(["RUNT 2 2", "RUNT_LOCATARIO 0 1"],
+            "la reutilizada (desde_cache) no consume; HU #14582: sin personas registradas el locatario estimado es 0 (el declarado ya no cuenta)");
     }
 
     // AC8 — sin AL_FINALIZAR, o con el lote abierto, la respuesta no trae estimado.

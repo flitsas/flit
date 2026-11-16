@@ -51,7 +51,7 @@ internal static partial class VehiculosEndpoints
         var filas = cuerpo?.Filas ?? [];
         var tabla = new TablaCarga(
             [PlantillaCarga.ColumnaIdentificador, PlantillaCarga.ColumnaTipoDocumento, PlantillaCarga.ColumnaDocumento],
-            [.. filas.Select((f, i) => new FilaLeida(f?.Fila ?? i + 2, [f?.Identificador, f?.TipoDocumentoLocatario, f?.DocumentoLocatario]))]);
+            [.. filas.Select((f, i) => FilaLeida(f, i))]);
         var resumen = AnalizadorCarga.Analizar(tabla, CargaEndpoints.Parametros(cabecera));
         var registro = logs.CreateLogger(typeof(VehiculosEndpoints).FullName!);
         FilasRevalidadas(registro, cabecera.Id, resumen.TotalFilas, resumen.Validos, resumen.Erroneos);
@@ -84,8 +84,7 @@ internal static partial class VehiculosEndpoints
         var resultado = confirmacion.Resultado;
         var porOrden = confirmacion.Vehiculos.ToDictionary(v => v.Orden);
         var vehiculos = resultado.Validos.Select(v => new VehiculoConfirmadoDto(
-            porOrden[v.Orden].Id, v.Orden, v.IdentificadorOriginal, v.IdentificadorNorm, CodigosDeEnum.Codigo(v.Tipo), v.TipoDocumentoLocatario,
-            v.DocumentoLocatario is null ? null : AnalizadorCarga.Enmascarar(v.DocumentoLocatario))).ToList();
+            porOrden[v.Orden].Id, v.Orden, v.IdentificadorOriginal, v.IdentificadorNorm, CodigosDeEnum.Codigo(v.Tipo))).ToList();
         var estimado = confirmacion.MostrarEstimado
             ? resultado.Estimado.Select(EstimadoFuenteDto.De).ToList()
             : null;
@@ -93,6 +92,13 @@ internal static partial class VehiculosEndpoints
             new ResultadoConfirmacionDto(
                 confirmacion.DiagnosticoId, vehiculos.Count, resultado.Invalidos, resultado.Duplicados, resultado.LimiteVehiculosLote, vehiculos, estimado),
             statusCode: StatusCodes.Status202Accepted);
+    }
+
+    /// <summary>La fila como la de la plantilla: sin número, su posición en la hoja; el documento del nombre nuevo o del alias (C1).</summary>
+    private static FilaLeida FilaLeida(FilaCapturadaDto? fila, int indice)
+    {
+        var (tipo, numero) = fila?.Declarado() ?? (null, null);
+        return new FilaLeida(fila?.Fila ?? indice + 2, [fila?.Identificador, tipo, numero]);
     }
 
     [LoggerMessage(EventId = 13752, Level = LogLevel.Information,

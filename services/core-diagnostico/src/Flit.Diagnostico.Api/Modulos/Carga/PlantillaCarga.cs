@@ -7,9 +7,10 @@ namespace Flit.Diagnostico.Api.Modulos.Carga;
 /// <summary>
 /// Plantilla de carga masiva (HU #13749, F02-C5, plan §6.1, R-3): un .xlsx con una hoja «Vehiculos» y el encabezado
 /// <see cref="ColumnaIdentificador"/> (obligatoria) y las opcionales <see cref="ColumnaTipoDocumento"/> y
-/// <see cref="ColumnaDocumento"/>. Las tres columnas van con formato de texto (<c>@</c>) para que Excel no convierta un
-/// documento largo en notación científica ni quite ceros. El documento del propietario no se pide: sale del RUNT por placa
-/// (D-02). Es fija: igual para toda compañía, se genera una vez y se sirve la misma copia.
+/// <see cref="ColumnaDocumento"/>: el propietario actual (opcional, HU #14582), que solo se compara con el del RUNT. Las cabeceras
+/// viejas del locatario (<see cref="ColumnaTipoDocumentoObsoleta"/>, <see cref="ColumnaDocumentoObsoleta"/>) se aceptan como alias sin
+/// fecha de retiro (contrato C2). Las tres columnas van con formato de texto (<c>@</c>) para que Excel no convierta un documento
+/// largo en notación científica ni quite ceros. Es fija: igual para toda compañía, se genera una vez y se sirve la misma copia.
 /// </summary>
 /// <example>
 /// <code>
@@ -19,8 +20,10 @@ namespace Flit.Diagnostico.Api.Modulos.Carga;
 internal static class PlantillaCarga
 {
     public const string ColumnaIdentificador = "Identificador_Vehiculo";
-    public const string ColumnaTipoDocumento = "Tipo_Documento_Locatario";
-    public const string ColumnaDocumento = "Documento_Locatario";
+    public const string ColumnaTipoDocumento = "Tipo_Documento_Propietario";
+    public const string ColumnaDocumento = "Documento_Propietario";
+    public const string ColumnaTipoDocumentoObsoleta = "Tipo_Documento_Locatario";
+    public const string ColumnaDocumentoObsoleta = "Documento_Locatario";
     public const string ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
     public const string NombreArchivo = "plantilla-diagnostico.xlsx";
 

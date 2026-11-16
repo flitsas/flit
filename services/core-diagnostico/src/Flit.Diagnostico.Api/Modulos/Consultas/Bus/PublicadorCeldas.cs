@@ -3,6 +3,7 @@ using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
+using Flit.Diagnostico.Domain.Personas;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 
@@ -40,7 +41,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// </example>
 internal sealed partial class PublicadorCeldas(
     DiagnosticoDb db, IPlatformOutbox outbox, IEnumerable<IConstructorSolicitud> constructores, IEnumerable<IEjecutorCelda> ejecutores,
-    IProtectorRespuestaFuente protector, TimeProvider reloj, EmisorDictamen emisor, ILogger<PublicadorCeldas> log)
+    IProtectorRespuestaFuente protector, TimeProvider reloj, EmisorDictamen emisor, ILogger<PublicadorCeldas> log,
+    IProtectorDocumentoPersona documentos)
 {
     private readonly Dictionary<Guid, bool> _express = [];
 
@@ -60,7 +62,7 @@ internal sealed partial class PublicadorCeldas(
         var contexto = new ContextoCelda(CeldaEnCurso.De(celda), db);
         // HU #13739 (D-10): el dato de hoy de la misma compañía se copia sin mensaje; HU #13746 (R-1): el reproceso nunca reutiliza.
         if (celda.ReprocesoUsuarioId is null
-            && await ReutilizacionMismoDia.BuscarAsync(contexto, ahora, ct).ConfigureAwait(false) is { } reutilizado)
+            && await ReutilizacionMismoDia.BuscarAsync(contexto, ahora, ct, documentos).ConfigureAwait(false) is { } reutilizado)
         {
             Reutilizada(log, celda.Id, celda.Fuente, reutilizado.ReutilizadaDeId!.Value);
             await CerrarAsync(celda, reutilizado, RegistroIntentos.CrearTodos(contexto.Celda, ahora, ahora, reutilizado), versionTablero, ct, recalcular)
