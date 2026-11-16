@@ -42,6 +42,10 @@ export interface TooltipProps {
   children: ReactElement;
   lado?: LadoTooltip;
   desactivado?: boolean;
+  /**
+   * Deja la burbuja montada aunque esté cerrada (oculta por opacidad). PROHIBIDO con contenido de datos o PII (SP-19):
+   * documentos (también enmascarados), nombres, correos o cualquier valor de una fila. Solo literales fijos de la UI.
+   */
   persistente?: boolean;
   /** Id de la burbuja; por defecto uno de `useId`. */
   id?: string;
