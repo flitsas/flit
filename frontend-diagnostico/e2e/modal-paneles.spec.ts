@@ -15,7 +15,20 @@ import {
   recorrerConTab,
   sembrarExpress,
 } from "./saneamiento-comun";
-import { abrirAcciones, anchoPanel, clicEnVelo, maxDialogos, panelDe, revisarTemasOla, vigilarDialogos } from "./ola-ux-comun";
+import {
+  abrirAcciones,
+  abrirDictamenDesdeAcciones,
+  anchoPanel,
+  celdaDictamen,
+  clicEnVelo,
+  disparadorAcciones,
+  itemAuditoria,
+  itemDictamen,
+  maxDialogos,
+  panelDe,
+  revisarTemasOla,
+  vigilarDialogos,
+} from "./ola-ux-comun";
 
 /**
  * FE-1 · Paneles laterales de Diagnóstico como modal de 640 px (spec-ui §1; decisiones U6 y V1 = `PanelModal`).
@@ -31,8 +44,11 @@ import { abrirAcciones, anchoPanel, clicEnVelo, maxDialogos, panelDe, revisarTem
  * Lista congelada (ajustar en la Fase 3 si el componente final cambia un nombre):
  *   - button «Acciones de la placa <placa>» · menu · menuitem «/^Ver deuda/» (FE-2, aún no existe)
  *   - dialog «Deuda y saneamiento» · dialog «Dictamen · <placa>» · dialog «Auditoría del dictamen · <placa>»
- *   - heading (h2) con el título del modal · button «Cerrar» · button «Ver dictamen de <placa>» · button «Ver deuda y sanear»
- *   - button «Ver deuda de la placa <placa>» (Vehículos) · button «Auditoría del dictamen de <placa>» (backoffice)
+ *   - heading (h2) con el título del modal · button «Cerrar» · button «Ver deuda y sanear»
+ *   - button «Ver deuda de la placa <placa>» (Vehículos)
+ *   Oleada 2026-11-16 (spec-ui §6.4): «Ver dictamen de <placa>» y «Auditoría del dictamen de <placa>» dejan de ser botones
+ *   de la columna Placa y pasan a menuitem del menú «Acciones de la placa <placa>» (cliente y backoffice); el foco vuelve a
+ *   ese disparador. La columna «Dictamen» queda como dato (td[data-columna=dictamen]).
  *   - table «/semáforo de consultas/i» · table «Vehículos de la compañía»
  * Mide el panel como el primer hijo del overlay `role=dialog` (Modal.tsx): 640 px ± 2 en 1280; viewport − 24 en 360.
  */
@@ -129,18 +145,16 @@ test.describe("FE-1 paneles como modal de 640 px", () => {
     });
   });
 
-  test("Dictamen: 640 px, foco al título, el velo sí cierra, Escape devuelve el foco a «Ver dictamen»", async ({ page }) => {
+  test("Dictamen: 640 px, foco al título, el velo sí cierra, Escape devuelve el foco a «Acciones»", async ({ page }) => {
     exigirCliente();
     test.skip(!lote, "Depende de la siembra del test anterior");
     test.setTimeout(240_000);
     await entrar(page, CLIENTE.usuario!, CLIENTE.clave!, `/diagnosticos/${lote}`);
     await page.goto(`${APP}/diagnosticos/${lote}`);
-    const dictamen = page.getByRole("button", { name: `Ver dictamen de ${placa}` });
+    const dictamen = disparadorAcciones(page, placa);
     await expect(dictamen).toBeVisible();
 
-    await dictamen.click();
-    const dialogo = dialogoDictamen(page, placa);
-    await expect(dialogo).toBeVisible();
+    const { dialogo } = await abrirDictamenDesdeAcciones(page, placa);
     await esperarAncho(dialogo, ANCHO_PANEL);
     await esperarCabeceraDePanel(dialogo, `Dictamen · ${placa}`);
     // spec-ui §1.6: en Dictamen el foco inicial va al título (h2 tabindex=-1).
@@ -151,28 +165,27 @@ test.describe("FE-1 paneles como modal de 640 px", () => {
     await clicEnVelo(page);
     await expect(page.getByRole("dialog")).toHaveCount(0);
 
-    await dictamen.click();
-    await expect(dialogo).toBeVisible();
+    await abrirDictamenDesdeAcciones(page, placa);
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(dictamen).toBeFocused();
   });
 
-  test("D-15: de Dictamen a Deuda nunca hay dos role=dialog y al cerrar Deuda el foco vuelve a «Ver dictamen»", async ({ page }) => {
+  test("D-15: de Dictamen a Deuda nunca hay dos role=dialog y al cerrar Deuda el foco vuelve a «Acciones»", async ({ page }) => {
     exigirCliente();
     test.skip(!lote, "Depende de la siembra del primer test");
     test.skip(!conAnalisis, "La compañía no permite Con Análisis IA: sin dictamen bloqueado no hay «Ver deuda y sanear»");
     test.setTimeout(240_000);
     await entrar(page, CLIENTE.usuario!, CLIENTE.clave!, `/diagnosticos/${lote}`);
     await page.goto(`${APP}/diagnosticos/${lote}`);
-    const dictamen = page.getByRole("button", { name: `Ver dictamen de ${placa}` });
-    // El dictamen IA se calcula después de las consultas: se recarga hasta que la fila diga «Bloqueado».
+    const dictamen = disparadorAcciones(page, placa);
+    // El dictamen IA se calcula después de las consultas: se recarga hasta que la columna Dictamen (dato) diga «Bloqueado».
     await expect(async () => {
       await page.reload();
-      await expect(dictamen).toContainText(/Bloqueado/i, { timeout: 5_000 });
+      await expect(celdaDictamen(page, placa)).toContainText(/Bloqueado/i, { timeout: 5_000 });
     }).toPass({ timeout: 150_000, intervals: [3_000] });
 
-    await dictamen.click();
+    await abrirDictamenDesdeAcciones(page, placa);
     const panelDictamen = dialogoDictamen(page, placa);
     await expect(panelDictamen.getByText("Vehículo bloqueado")).toBeVisible();
     await vigilarDialogos(page);
@@ -212,9 +225,13 @@ test.describe("FE-1 paneles como modal de 640 px", () => {
     await entrar(page, BACKOFFICE.usuario!, BACKOFFICE.clave!, "/");
     await page.goto(`${APP}/backoffice/diagnosticos/${lote}?empresa=${encodeURIComponent(EMPRESA!)}`);
     await expect(page.getByRole("table", { name: /semáforo de consultas/i })).toBeVisible();
-    const auditoria = page.getByRole("button", { name: `Auditoría del dictamen de ${placa}` });
-    test.skip((await auditoria.count()) === 0, "El usuario de backoffice no tiene verAuditoria");
-    await auditoria.click();
+    // Oleada 2026-11-16: la auditoría es un ítem del menú «Acciones» de la nueva columna del backoffice.
+    const auditoria = disparadorAcciones(page, placa);
+    await abrirAcciones(page, placa);
+    const item = itemAuditoria(page, placa);
+    test.skip((await item.count()) === 0, "El usuario de backoffice no tiene verAuditoria");
+    await expect(itemDictamen(page, placa)).toBeVisible();
+    await item.click();
     const dialogo = page.getByRole("dialog", { name: `Auditoría del dictamen · ${placa}` });
     await expect(dialogo).toBeVisible();
     await esperarAncho(dialogo, ANCHO_PANEL);

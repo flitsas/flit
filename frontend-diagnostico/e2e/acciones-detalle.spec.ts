@@ -12,6 +12,7 @@ import {
   sinDesbordeHorizontal,
 } from "./saneamiento-comun";
 import {
+  ITEM,
   ORDEN_ITEMS,
   abrirAcciones,
   disparadorAcciones,
@@ -37,7 +38,8 @@ import {
  * Variables: E2E_USUARIO / E2E_CLAVE (compañía, sin rol admin: sin reprocesarConsultas).
  *
  * Lista congelada (componentes nuevos de la Fase 2; ajustar en la Fase 3 si el nombre final cambia):
- *   - button «Acciones de la placa <placa>» (aria-haspopup=menu, aria-expanded) · menu · menuitem «Solicitar saneamiento» ·
+ *   - button «Acciones de la placa <placa>» (aria-haspopup=menu, aria-expanded) · menu · menuitem «Ver dictamen de <placa>» ·
+ *     «Auditoría del dictamen de <placa>» (oleada 2026-11-16, grupo Dictamen + separator) · menuitem «Solicitar saneamiento» ·
  *     «Quitar solicitud de saneamiento» · «Ver saneamiento» · «Crear trámite» · «Ver trámite #N» · «Ver deuda» ·
  *     «Descargar PDF» · «Reintentar consultas»
  *   - texto sr-only «Sin acciones para la placa <placa>» (el chip «Saneamiento: …» de la fila no se usa: el carril fe1 lo
@@ -142,11 +144,16 @@ test.describe("FE-2 menú de acciones y cabecera RUNT/SIMIT", () => {
     // Sin la capacidad el ítem no existe; con la capacidad, existe (habilitado o con motivo).
     const c = sesion.capacidades;
     const tiene = (re: RegExp) => nombres.some((n) => re.test(n));
-    expect(tiene(ORDEN_ITEMS[0]), "saneamiento ↔ capacidad sanear").toBe(Boolean(c.sanear) || tiene(/^Ver saneamiento/));
-    expect(tiene(ORDEN_ITEMS[1]), "trámite ↔ capacidad derivar").toBe(c.derivar);
-    expect(tiene(ORDEN_ITEMS[3]), "PDF ↔ capacidad descargarReportes").toBe(c.descargarReportes);
-    if (!c.reprocesarConsultas) expect(tiene(ORDEN_ITEMS[4]), "sin reprocesarConsultas no hay «Reintentar»").toBe(false);
-    expect(tiene(ORDEN_ITEMS[2]), "«Ver deuda» en una fila terminada").toBe(true);
+    expect(tiene(ORDEN_ITEMS[ITEM.saneamiento]), "saneamiento ↔ capacidad sanear").toBe(Boolean(c.sanear) || tiene(/^Ver saneamiento/));
+    expect(tiene(ORDEN_ITEMS[ITEM.tramite]), "trámite ↔ capacidad derivar").toBe(c.derivar);
+    expect(tiene(ORDEN_ITEMS[ITEM.pdf]), "PDF ↔ capacidad descargarReportes").toBe(c.descargarReportes);
+    if (!c.reprocesarConsultas) expect(tiene(ORDEN_ITEMS[ITEM.reintentar]), "sin reprocesarConsultas no hay «Reintentar»").toBe(false);
+    expect(tiene(ORDEN_ITEMS[ITEM.deuda]), "«Ver deuda» en una fila terminada").toBe(true);
+    // Oleada 2026-11-16 (spec-ui §6.4): «Ver dictamen» abre el menú y «Auditoría del dictamen» solo con verAuditoria; un
+    // separador divide el grupo Dictamen del grupo D-103.
+    expect(tiene(ORDEN_ITEMS[ITEM.dictamen]), "«Ver dictamen» en el menú").toBe(true);
+    expect(tiene(ORDEN_ITEMS[ITEM.auditoria]), "auditoría ↔ capacidad verAuditoria").toBe(Boolean(c.verAuditoria));
+    await expect(menu.getByRole("separator")).toHaveCount(1);
 
     // El scroll horizontal de la grilla no recorta el menú: queda entero en el viewport y encima de todo.
     const caja = (await menu.boundingBox())!;
@@ -290,14 +297,22 @@ test.describe("FE-2 menú de acciones y cabecera RUNT/SIMIT", () => {
     test.setTimeout(180_000);
     await entrar(page, CLIENTE.usuario!, CLIENTE.clave!, `/diagnosticos/${lote}`);
     // Variación de /sesion dentro del contrato: sin ninguna capacidad de acción de fila (solo lo que pinta el front).
-    await variarCapacidades(page, { sanear: false, derivar: false, descargarReportes: false, reprocesarConsultas: false });
+    await variarCapacidades(page, { sanear: false, derivar: false, descargarReportes: false, reprocesarConsultas: false, verAuditoria: false });
     await page.goto(`${APP}/diagnosticos/${lote}`);
     await expect(grilla(page)).toBeVisible();
-    // V7 no termina: sin capacidades no le queda «Ver deuda» (exige vehículo terminado) ni ningún otro ítem. Las filas
-    // terminadas pueden conservar «Ver deuda» (no depende de una capacidad), así que solo se mira V7.
-    await expect(disparadorAcciones(page, V7)).toHaveCount(0);
-    const sinAcciones = page.getByText(`Sin acciones para la placa ${V7}`, { exact: true });
-    await expect(sinAcciones).toHaveCount(1);
-    await expect(sinAcciones).toHaveClass(/sr-only/);
+    // V7 no termina: sin capacidades no le queda «Ver deuda» (exige vehículo terminado) ni ningún otro ítem del grupo D-103.
+    // Las filas terminadas pueden conservar «Ver deuda» (no depende de una capacidad), así que solo se mira V7.
+    // Oleada 2026-11-16 (spec-ui §6.4): «Ver dictamen» está en el menú siempre que la fila tenga dictamen, así que V7 puede
+    // conservar el disparador solo con el grupo Dictamen. Sin dictamen, vuelve el «Sin acciones…» sr-only.
+    if (await disparadorAcciones(page, V7).count()) {
+      const { menu } = await abrirAcciones(page, V7);
+      const nombres = await nombresItems(menu);
+      expect(nombres.every((n) => ORDEN_ITEMS[ITEM.dictamen].test(n)), `V7 sin capacidades solo tiene «Ver dictamen»: ${nombres.join(" | ")}`).toBe(true);
+      await page.keyboard.press("Escape");
+    } else {
+      const sinAcciones = page.getByText(`Sin acciones para la placa ${V7}`, { exact: true });
+      await expect(sinAcciones).toHaveCount(1);
+      await expect(sinAcciones).toHaveClass(/sr-only/);
+    }
   });
 });

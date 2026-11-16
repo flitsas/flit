@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { lanzarExpress } from "./express";
+import { abrirDictamenDesdeAcciones, celdaDictamen } from "./ola-ux-comun";
 
 /**
  * HU #13748 (F04-H2) — tablero del lote con semáforos y sondeo incremental.
@@ -25,7 +26,8 @@ import { lanzarExpress } from "./express";
  *   - button «/reprocesar/i»
  *   - button «/^Vehículos: \d+$/»
  *   - columnheader «Dictamen»
- *   - button «Ver dictamen de ${PLACA}»
+ *   - menuitem «Ver dictamen de ${PLACA}» dentro de button «Acciones de la placa ${PLACA}» (oleada 2026-11-16, spec-ui §6.4:
+ *     sale de la columna Placa; la columna Dictamen queda como dato td[data-columna=dictamen])
  *   - dialog «Dictamen · ${PLACA}»
  *   - button «Cerrar» (ola 2026-11-15, FE-1: el dictamen es ahora un modal de 640 px, el mismo dialog con el mismo nombre)
  *   - dialog (sin nombre)
@@ -113,11 +115,11 @@ test.describe("tablero del lote", () => {
     // de la suite (antes panel lateral) con el mismo nombre y «Cerrar»; el ancho lo mide modal-paneles.spec.ts.
     await expect(page.getByRole("button", { name: /^Vehículos: \d+$/ })).toBeVisible();
     await expect(grilla.getByRole("columnheader", { name: "Dictamen" })).toBeVisible();
-    const dictamen = grilla.getByRole("button", { name: `Ver dictamen de ${PLACA}` });
-    await expect(dictamen).toHaveText(/Viable|Bloqueado|Pendiente/);
-    await dictamen.click();
-    const panel = page.getByRole("dialog", { name: `Dictamen · ${PLACA}` });
-    await expect(panel).toBeVisible();
+    // Oleada 2026-11-16 (spec-ui §6.4): la columna conserva el veredicto como dato (sin botón) y el panel se abre desde «Acciones».
+    await expect(celdaDictamen(page, PLACA)).toHaveText(/Viable|Bloqueado|Pendiente/);
+    await expect(celdaDictamen(page, PLACA).getByRole("button")).toHaveCount(0);
+    await expect(grilla.getByRole("button", { name: `Ver dictamen de ${PLACA}` })).toHaveCount(0);
+    const { dialogo: panel } = await abrirDictamenDesdeAcciones(page, PLACA);
     await panel.getByRole("button", { name: "Cerrar" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });

@@ -24,7 +24,18 @@ import {
   sinDesbordeHorizontal,
   tomarPorApi,
 } from "./saneamiento-comun";
-import { abrirAcciones, bandera, cerrarAcciones, disparadorAcciones, esperarBandera, esperarDeshabilitadoConMotivo, estadoBandera, pulsarBandera } from "./ola-ux-comun";
+import {
+  abrirAcciones,
+  abrirDictamenDesdeAcciones,
+  bandera,
+  celdaDictamen,
+  cerrarAcciones,
+  disparadorAcciones,
+  esperarBandera,
+  esperarDeshabilitadoConMotivo,
+  estadoBandera,
+  pulsarBandera,
+} from "./ola-ux-comun";
 
 /**
  * HU #14577 — saneamiento del lado de la compañía: PS-1 (tablero del lote) y PS-2 (panel «Deuda y saneamiento»).
@@ -48,7 +59,8 @@ import { abrirAcciones, bandera, cerrarAcciones, disparadorAcciones, esperarBand
  *     <placa>». No se usa el chip «Saneamiento: …» de la fila (el carril fe1 lo retira).
  *   - Panel PS-2: button «Solicitar saneamiento de la placa <placa>» (aria-pressed, sin cambio)
  *   - button «Ver saneamiento de la placa <placa>: En saneamiento»
- *   - button «Ver deuda de la placa <placa>» · button «Ver dictamen de <placa>» · button «Ver deuda y sanear»
+ *   - button «Ver deuda de la placa <placa>» · menuitem «Ver dictamen de <placa>» (en «Acciones», oleada 2026-11-16) ·
+ *     button «Ver deuda y sanear»
  *   - group «Filtrar por saneamiento» · button «Con saneamiento» · button «Sin saneamiento»
  *   - searchbox «Buscar por placa o VIN» · button «Limpiar filtros» · texto «Ningún vehículo coincide»
  *   - checkbox «Seleccionar la placa <placa>» · button «Seleccionar todos los elegibles» · button «Quitar selección»
@@ -372,9 +384,10 @@ test.describe("PS-2 panel «Deuda y saneamiento»", () => {
       await expect(accionesF).toBeFocused();
     });
 
-    await test.step("AC13: desde «Ver deuda y sanear» del dictamen bloqueado; el foco vuelve a «Ver dictamen»", async () => {
-      const dictamen = page.getByRole("button", { name: `Ver dictamen de ${F}` });
-      if (!conAnalisis || !(await dictamen.count())) {
+    await test.step("AC13: desde «Ver deuda y sanear» del dictamen bloqueado; el foco vuelve a «Acciones» (oleada 2026-11-16)", async () => {
+      // Oleada 2026-11-16 (spec-ui §6.4): «Ver dictamen» es un ítem del menú «Acciones»; la columna Dictamen es dato.
+      const dictamen = disparadorAcciones(page, F);
+      if (!conAnalisis || !(await celdaDictamen(page, F).count())) {
         test.info().annotations.push({ type: "omitido", description: "Entrada desde el dictamen: la compañía no permite Con Análisis IA" });
         return;
       }
@@ -382,9 +395,9 @@ test.describe("PS-2 panel «Deuda y saneamiento»", () => {
       // «Pendiente» y el panel «no tiene un dictamen vigente». Se recarga hasta que el lote lo muestre.
       await expect(async () => {
         await page.reload();
-        await expect(dictamen).toContainText(/Bloqueado/i, { timeout: 5_000 });
+        await expect(celdaDictamen(page, F)).toContainText(/Bloqueado/i, { timeout: 5_000 });
       }).toPass({ timeout: 150_000, intervals: [3_000] });
-      await dictamen.click();
+      await abrirDictamenDesdeAcciones(page, F);
       const panelDictamen = page.getByRole("dialog", { name: `Dictamen · ${F}` });
       await expect(panelDictamen.getByText("Vehículo bloqueado")).toBeVisible();
       await panelDictamen.getByRole("button", { name: "Ver deuda y sanear" }).click();
