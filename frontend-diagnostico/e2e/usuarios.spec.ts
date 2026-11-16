@@ -345,7 +345,17 @@ test.describe("HU #14588 Usuarios de Diagnóstico", () => {
     await capturar(page, SPEC, 13, "superadmin-companias", { paginaCompleta: true });
     await revisarTemasReq(page, "usuarios-companias-1280", { captura: "US-3" });
 
-    const nombreEmpresa = MOCK ? EMPRESA_DEMO.nombre : ((await companias.getByRole("row").nth(1).getByRole("cell").first().textContent()) ?? "").trim();
+    // Con backend real se elige la primera compañía con usuarios (columna «Usuarios» > 0): el paso 2 espera la tabla, no el vacío.
+    const nombreEmpresa = MOCK
+      ? EMPRESA_DEMO.nombre
+      : await (async () => {
+          const filas = companias.getByRole("row");
+          for (let i = 1; i < (await filas.count()); i++) {
+            const celdas = filas.nth(i).getByRole("cell");
+            if (Number(((await celdas.nth(2).textContent()) ?? "0").trim()) > 0) return ((await celdas.first().textContent()) ?? "").trim();
+          }
+          throw new Error("Ninguna compañía con usuarios de Diagnóstico en la BD local");
+        })();
 
     // O-1: el texto buscado (nombre o NIT, que puede ser una cédula) llega a la API pero no a la URL de la pantalla.
     const buscarCompania = page.getByRole("textbox", { name: "Buscar por nombre o NIT" });
