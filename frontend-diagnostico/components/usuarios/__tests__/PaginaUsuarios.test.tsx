@@ -124,7 +124,8 @@ describe("HU14588 PaginaUsuarios — admin de compañía (spec-ui §10.1)", () =
     render(<PaginaUsuarios />);
     await screen.findByRole("table");
     fireEvent.change(screen.getByRole("textbox", { name: "Buscar por nombre o correo" }), { target: { value: "zzz" } });
-    expect(await screen.findByText("Ningún usuario coincide")).toBeInTheDocument();
+    // Debounce de 300 ms + fetch: con la CPU acotada (maxWorkers=2) puede pasar de 1 s.
+    expect(await screen.findByText("Ningún usuario coincide", undefined, { timeout: 4000 })).toBeInTheDocument();
     fireEvent.click(screen.getAllByRole("button", { name: "Limpiar filtros" }).at(-1)!);
     await screen.findByRole("table");
     expect(screen.getByRole("textbox", { name: "Buscar por nombre o correo" })).toHaveValue("");
@@ -268,7 +269,8 @@ describe("HU14588 PaginaUsuarios — SuperAdmin (spec-ui §10.2)", () => {
     const f = simular({
       "GET /backoffice/usuarios/empresas": () =>
         Response.json({ pagina: 1, tamano: 20, total: 1, empresas: [{ ...EMPRESA, estado: "ACTIVA", usuarios_diagnostico: 4, administradores_diagnostico: 1 }] }),
-      [`GET /backoffice/empresas/${EMPRESA.id}/usuarios`]: () => lista(USUARIOS, ["usuario_diagnostico", "admin_diagnostico"]),
+      [`GET /backoffice/empresas/${EMPRESA.id}/usuarios`]: () =>
+        Response.json({ pagina: 1, tamano: 25, total: USUARIOS.length, roles_asignables: ["usuario_diagnostico", "admin_diagnostico"], usuarios: USUARIOS, empresa: EMPRESA }),
     });
     render(<PaginaUsuarios />);
     await screen.findByRole("table");
@@ -294,5 +296,72 @@ describe("HU14588 PaginaUsuarios — SuperAdmin (spec-ui §10.2)", () => {
     render(<PaginaUsuarios />);
     expect(await screen.findByText(/no tiene Diagnóstico activo|no existe/i)).toBeInTheDocument();
     expect(screen.getAllByRole("link", { name: /Usuarios|Volver a compañías/ }).length).toBeGreaterThan(0);
+  });
+});
+
+// D-6: la cabecera del backoffice sale de `empresa` de GET /backoffice/empresas/{id}/usuarios; la lista pagina en el servidor.
+describe("HU14588 PaginaUsuarios — D-6 cabecera de la compañía y paginación", () => {
+  const conEmpresa = (empresa: unknown) => () =>
+    Response.json({
+      pagina: 1,
+      tamano: 25,
+      total: USUARIOS.length,
+      roles_asignables: ["usuario_diagnostico", "admin_diagnostico"],
+      usuarios: USUARIOS,
+      ...(empresa ? { empresa } : {}),
+    });
+
+  it("con ?empresa, nombre y NIT de la cabecera y de las migas salen de `empresa` de la lista, sin pedir las compañías", async () => {
+    sesionMock.actual = sesion({ superAdmin: true });
+    nav.params = new URLSearchParams({ empresa: EMPRESA.id });
+    const f = simular({ [`GET /backoffice/empresas/${EMPRESA.id}/usuarios`]: conEmpresa(EMPRESA) });
+    render(<PaginaUsuarios />);
+    await screen.findByRole("table");
+    expect(screen.getByText(/Compañía Demo · NIT 900000001/)).toBeInTheDocument();
+    expect(screen.getByRole("navigation", { name: "Migas de pan" }).querySelector('[aria-current="page"]')).toHaveTextContent("Compañía Demo");
+    expect(pedidos(f, "/backoffice/usuarios/empresas")).toEqual([]);
+    expect(screen.queryByText(/Compañía seleccionada/)).toBeNull();
+  });
+
+  it("sin `empresa` en la respuesta (back anterior): esqueleto en la cabecera, nunca un texto genérico", async () => {
+    sesionMock.actual = sesion({ superAdmin: true });
+    nav.params = new URLSearchParams({ empresa: EMPRESA.id });
+    const f = simular({ [`GET /backoffice/empresas/${EMPRESA.id}/usuarios`]: conEmpresa(null) });
+    render(<PaginaUsuarios />);
+    await screen.findByRole("table");
+    expect(screen.getByRole("status", { name: "Cargando la compañía…" })).toBeInTheDocument();
+    expect(screen.queryByText(/Compañía seleccionada/)).toBeNull();
+    expect(pedidos(f, "/backoffice/usuarios/empresas")).toEqual([]);
+  });
+
+  it("la lista pide tamano=25 por defecto; cambiar de página y de tamaño vuelve a pedir y actualiza «N de M»", async () => {
+    const f = simular({
+      "GET /usuarios": (url) => {
+        const pagina = Number(url.searchParams.get("pagina"));
+        const tamano = Number(url.searchParams.get("tamano"));
+        const usuarios = [fila(`00000000-0000-4000-8000-0000000009${pagina}1`, `Persona ${pagina}`, { acciones: ["SUSPENDER"] })];
+        return Response.json({ pagina, tamano, total: 60, roles_asignables: ["usuario_diagnostico"], usuarios });
+      },
+    });
+    render(<PaginaUsuarios />);
+    await screen.findByText("Persona 1");
+    const q = () => new URL(String(f.mock.calls.at(-1)![0]), "http://x").searchParams;
+    expect([q().get("pagina"), q().get("tamano")]).toEqual(["1", "25"]);
+    expect(screen.getByText(/^Mostrando 1 de 60 usuarios$/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Página 2" }));
+    await screen.findByText("Persona 2");
+    expect([q().get("pagina"), q().get("tamano")]).toEqual(["2", "25"]);
+    fireEvent.change(screen.getByRole("combobox", { name: "Filas por página" }), { target: { value: "50" } });
+    await screen.findByText("Persona 1");
+    expect([q().get("pagina"), q().get("tamano")]).toEqual(["1", "50"]);
+    expect(screen.getByText(/^Mostrando 1 de 60 usuarios$/)).toBeInTheDocument();
+  });
+
+  it("SuperAdmin sin ?empresa: las compañías piden tamano=25 por defecto", async () => {
+    sesionMock.actual = sesion({ superAdmin: true });
+    const f = simular({ "GET /backoffice/usuarios/empresas": () => Response.json({ pagina: 1, tamano: 25, total: 0, empresas: [] }) });
+    render(<PaginaUsuarios />);
+    await screen.findByText("Ninguna compañía tiene Diagnóstico activo");
+    expect(new URL(String(f.mock.calls.at(-1)![0]), "http://x").searchParams.get("tamano")).toBe("25");
   });
 });

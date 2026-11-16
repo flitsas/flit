@@ -32,7 +32,16 @@ export interface UsuarioDiagnostico {
   motivo_sin_acciones: MotivoSinAcciones | null;
 }
 
+/** Compañía de la cabecera en el backoffice (D-6): `GET /backoffice/empresas/{empresa}/usuarios` la trae en el 200. */
+export interface EmpresaCabecera {
+  id: string;
+  nombre: string;
+  nit: string | null;
+}
+
 export interface ListaUsuarios {
+  /** Solo en el grupo del backoffice (D-6). Opcional para tolerar un back anterior: sin ella, la cabecera queda en esqueleto. */
+  empresa?: EmpresaCabecera;
   pagina: number;
   tamano: number;
   total: number;
@@ -85,8 +94,10 @@ export interface FiltrosEmpresas {
 export const BUSQUEDA_MAXIMA = 100;
 export const NOMBRE_MAXIMO = 150;
 export const CORREO_MAXIMO = 254;
-/** Filas por página por defecto (spec-ui §10.1: 20). */
-export const TAMANO_POR_DEFECTO = 20;
+/** Filas por página por defecto (D-6: 25) y tope del contrato (§3.3: tamano 1..100, pagina × tamano ≤ 10 000). */
+export const TAMANO_POR_DEFECTO = 25;
+export const TAMANO_MAXIMO = 100;
+export const FILAS_MAXIMAS = 10_000;
 /** Espera tras la última tecla del buscador antes de consultar (como el listado del inicio). */
 export const ESPERA_BUSQUEDA_MS = 300;
 

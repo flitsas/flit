@@ -14,11 +14,12 @@ import { Migas } from "@/components/comun/Migas";
 import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, ENLACE_ACCION_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { puedeGestionarUsuarios, type SesionDiagnostico } from "@/lib/sesion";
-import { accesoNegadoUsuarios, listarEmpresasUsuarios, listarUsuarios, traducirErrorUsuarios } from "@/lib/usuarios/api";
+import { accesoNegadoUsuarios, listarUsuarios, traducirErrorUsuarios } from "@/lib/usuarios/api";
 import {
   AVISO_INVITACION,
   TAMANO_POR_DEFECTO,
   type AccionUsuario,
+  type EmpresaCabecera,
   type FiltroConUsuarios,
   type FiltrosEmpresas,
   type FiltrosUsuarios,
@@ -111,8 +112,10 @@ function VistaUsuarios({ sesion, empresa, volver }: { sesion: SesionDiagnostico;
   const [roles, setRoles] = useState<RolDiagnostico[]>([]);
   const [dialogo, setDialogo] = useState<Dialogo | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
-  const [empresaVista, setEmpresaVista] = useState<{ nombre: string; nit: string | null } | null>(null);
+  // D-6: nombre y NIT de la compañía del backoffice vienen en `empresa` de la propia lista (se conserva el último).
+  const [empresaVista, setEmpresaVista] = useState<EmpresaCabecera | null>(null);
   const invitarRef = useRef<HTMLButtonElement>(null);
+
   const clave = JSON.stringify(filtros);
 
   useEffect(() => {
@@ -122,6 +125,7 @@ function VistaUsuarios({ sesion, empresa, volver }: { sesion: SesionDiagnostico;
         if (control.signal.aborted) return;
         setCarga({ tipo: "listo", lista });
         setRoles(lista.roles_asignables);
+        if (lista.empresa) setEmpresaVista(lista.empresa);
       },
       (error: unknown) => {
         if (!control.signal.aborted) setCarga({ tipo: "error", error });
@@ -129,22 +133,6 @@ function VistaUsuarios({ sesion, empresa, volver }: { sesion: SesionDiagnostico;
     );
     return () => control.abort();
   }, [empresa, clave, intento]);
-
-  // Nombre y NIT de la compañía del backoffice para la cabecera y las migas (la ruta solo trae el id).
-  useEffect(() => {
-    if (!empresa) return;
-    const control = new AbortController();
-    listarEmpresasUsuarios({ busqueda: "", usuarios: null, pagina: 1, tamano: 100 }, control.signal).then(
-      (l) => {
-        const e = l.empresas.find((x) => x.id === empresa);
-        if (!control.signal.aborted) setEmpresaVista(e ? { nombre: e.nombre, nit: e.nit } : { nombre: "Compañía seleccionada", nit: null });
-      },
-      () => {
-        if (!control.signal.aborted) setEmpresaVista({ nombre: "Compañía seleccionada", nit: null });
-      },
-    );
-    return () => control.abort();
-  }, [empresa]);
 
   const acceso = carga.tipo === "error" ? accesoNegadoUsuarios(carga.error) : null;
   useEffect(() => {
@@ -174,7 +162,6 @@ function VistaUsuarios({ sesion, empresa, volver }: { sesion: SesionDiagnostico;
     else setDialogo({ tipo: "estado", accion, usuario, disparador });
   };
 
-  const nombreCompania = empresa ? (empresaVista?.nombre ?? "") : (sesion.empresa.nombre ?? "");
   const botonInvitar = (
     // Botón nativo con la clase del kit: `Button` no expone `ref` y el foco debe volver aquí al cerrar «Invitar usuario».
     <button
@@ -279,15 +266,22 @@ function VistaUsuarios({ sesion, empresa, volver }: { sesion: SesionDiagnostico;
       <CabeceraModulo
         titulo="Usuarios"
         icono="colaboradores"
-        encima={empresa ? <Migas migas={[{ texto: "Usuarios", href: volver }, { texto: nombreCompania || "Compañía" }]} /> : undefined}
+        encima={
+          empresa ? (
+            empresaVista ? (
+              <Migas migas={[{ texto: "Usuarios", href: volver }, { texto: empresaVista.nombre }]} />
+            ) : (
+              // D-6: sin `empresa` en la respuesta (back anterior) o mientras llega, esqueleto; nunca un nombre genérico.
+              <span role="status" aria-label="Cargando la compañía…" className="block h-4 w-48 rounded-full bg-[var(--di-surface-sunken)] motion-safe:animate-pulse" />
+            )
+          ) : undefined
+        }
         descripcion={
-          empresa && empresaVista?.nit ? (
-            <>
-              {nombreCompania} · NIT {empresaVista.nit}
-            </>
-          ) : (
-            nombreCompania || undefined
-          )
+          empresa
+            ? empresaVista
+              ? `${empresaVista.nombre}${empresaVista.nit ? ` · NIT ${empresaVista.nit}` : ""}`
+              : undefined
+            : sesion.empresa.nombre || undefined
         }
         acciones={botonInvitar}
       />

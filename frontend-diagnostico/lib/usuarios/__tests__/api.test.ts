@@ -9,6 +9,7 @@ import {
   suspenderUsuario,
   traducirErrorUsuarios,
 } from "@/lib/usuarios/api";
+import { TAMANO_POR_DEFECTO } from "@/lib/usuarios/tipos";
 
 // Uso de ejemplo: listarUsuarios(null, filtros) llama a GET /usuarios (compañía del token); listarUsuarios(empresa, …) al
 // gemelo del backoffice /backoffice/empresas/{empresa}/usuarios (solo SuperAdmin). invitarUsuario manda solo
@@ -193,5 +194,35 @@ describe("HU14588 lib/usuarios — textos fijos de error (AP-9)", () => {
   it("503 de la plataforma tiene su propio texto; lo desconocido cae en el respaldo", () => {
     expect(traducirErrorUsuarios(new ApiError(503, "x", "PLATAFORMA_NO_DISPONIBLE"), "respaldo")).not.toBe("respaldo");
     expect(traducirErrorUsuarios(new Error("boom"), "respaldo")).toBe("respaldo");
+  });
+});
+
+// D-6 (contrato, 2026-11-16): el 200 del backoffice trae la empresa de la cabecera; la paginación es del servidor.
+describe("HU14588 lib/usuarios — D-6 empresa de la cabecera y paginación", () => {
+  it("la lista del backoffice trae `empresa` { id, nombre, nit }", async () => {
+    simular(Response.json(lista({ empresa: { id: EMPRESA, nombre: "Compañía Demo", nit: "900000001" } })));
+    const r = await listarUsuarios(EMPRESA, FILTROS);
+    expect(r.empresa).toEqual({ id: EMPRESA, nombre: "Compañía Demo", nit: "900000001" });
+  });
+
+  it("nit nulo se conserva como null; sin `empresa` (back anterior o ruta del cliente) queda undefined", async () => {
+    simular(Response.json(lista({ empresa: { id: EMPRESA, nombre: "Compañía Demo", nit: null } })));
+    expect((await listarUsuarios(EMPRESA, FILTROS)).empresa).toEqual({ id: EMPRESA, nombre: "Compañía Demo", nit: null });
+    simular(Response.json(lista()));
+    expect((await listarUsuarios(null, FILTROS)).empresa).toBeUndefined();
+  });
+
+  it("tamano se acota a 1..100 y pagina a >= 1 antes de llamar (contrato §3.3)", async () => {
+    const f = simular(Response.json(lista()));
+    await listarUsuarios(null, { ...FILTROS, pagina: 0, tamano: 500 });
+    await listarEmpresasUsuarios({ busqueda: "", usuarios: null, pagina: -3, tamano: 0 }).catch(() => undefined);
+    const q1 = new URL(llamada(f, 0).url, "http://x").searchParams;
+    const q2 = new URL(llamada(f, 1).url, "http://x").searchParams;
+    expect([q1.get("pagina"), q1.get("tamano")]).toEqual(["1", "100"]);
+    expect([q2.get("pagina"), q2.get("tamano")]).toEqual(["1", "1"]);
+  });
+
+  it("el tamaño por defecto es 25 (D-6)", () => {
+    expect(TAMANO_POR_DEFECTO).toBe(25);
   });
 });

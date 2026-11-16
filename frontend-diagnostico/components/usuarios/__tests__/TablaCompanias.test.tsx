@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { TablaCompanias } from "@/components/usuarios/TablaCompanias";
+import type { FiltrosEmpresas } from "@/lib/usuarios/tipos";
 
 // Uso de ejemplo: <TablaCompanias filtros={{ busqueda: "", usuarios: null, pagina: 1, tamano: 20 }} onCambiar={aplicar} />
 // paso 1 del SuperAdmin (spec-ui §10.2): GET /backoffice/usuarios/empresas, tabla Compañía · NIT · Usuarios ·
@@ -102,3 +103,38 @@ describe("HU14588 TablaCompanias", () => {
     await waitFor(() => expect(onCambiar).toHaveBeenCalledWith(expect.objectContaining({ busqueda: "9000" })));
   });
 });
+
+// D-6: paginación en el servidor con el Pagination del kit (página, tamaño, total y selector de tamaño).
+describe("HU14588 TablaCompanias — paginación en el servidor (D-6)", () => {
+  const muchas = (pagina: number, tamano: number) =>
+    Response.json({
+      pagina,
+      tamano,
+      total: 60,
+      empresas: Array.from({ length: 2 }, (_, i) => ({ ...DEMO, id: `00000000-0000-4000-8000-0000000001${pagina}${i}`, nombre: `Compañía ${pagina}-${i}` })),
+    });
+
+  it("pide pagina y tamano de los filtros, cambia de página y de tamaño y muestra «N de M»", async () => {
+    const fetchMock = vi.fn(async (u: RequestInfo | URL) => {
+      const q = new URL(String(u), "http://x").searchParams;
+      return muchas(Number(q.get("pagina")), Number(q.get("tamano")));
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const onCambiar = vi.fn();
+    const filtros: FiltrosEmpresas = { busqueda: "", usuarios: null, pagina: 1, tamano: 25 };
+    const { rerender } = render(<TablaCompanias filtros={filtros} onCambiar={onCambiar} />);
+    await screen.findByRole("table");
+    const q1 = new URL(String(fetchMock.mock.calls.at(-1)![0]), "http://x").searchParams;
+    expect([q1.get("pagina"), q1.get("tamano")]).toEqual(["1", "25"]);
+    expect(screen.getByText("Mostrando 2 de 60 compañías")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Página 2" }));
+    expect(onCambiar).toHaveBeenLastCalledWith({ pagina: 2 });
+    fireEvent.change(screen.getByRole("combobox", { name: "Filas por página" }), { target: { value: "50" } });
+    expect(onCambiar).toHaveBeenLastCalledWith({ tamano: 50, pagina: 1 });
+    rerender(<TablaCompanias filtros={{ ...filtros, pagina: 2 }} onCambiar={onCambiar} />);
+    await screen.findByText("Compañía 2-0");
+    const q2 = new URL(String(fetchMock.mock.calls.at(-1)![0]), "http://x").searchParams;
+    expect([q2.get("pagina"), q2.get("tamano")]).toEqual(["2", "25"]);
+  });
+});
+

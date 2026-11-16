@@ -7,9 +7,12 @@ import {
   ACCIONES_USUARIO,
   BUSQUEDA_MAXIMA,
   ESTADOS_USUARIO,
+  FILAS_MAXIMAS,
+  TAMANO_MAXIMO,
   MOTIVOS_SIN_ACCIONES,
   ROLES_DIAGNOSTICO,
   type AccionUsuario,
+  type EmpresaCabecera,
   type EmpresaUsuarios,
   type EstadoUsuario,
   type FiltrosEmpresas,
@@ -25,6 +28,16 @@ import {
 /** Raíz de las rutas de usuarios: la del token sin empresa; la del backoffice con ella. */
 export function rutaUsuarios(empresa: string | null): string {
   return empresa ? `/backoffice/empresas/${encodeURIComponent(empresa)}/usuarios` : "/usuarios";
+}
+
+/**
+ * Paginación dentro del contrato (§3.3): tamano entre 1 y 100 y pagina entre 1 y floor(10 000 / tamano). Se aplica al leer
+ * la URL y antes de llamar, para no provocar un 400 PAGINACION_INVALIDA con una URL editada a mano.
+ */
+export function acotarPaginacion(pagina: number, tamano: number): { pagina: number; tamano: number } {
+  const t = Math.min(TAMANO_MAXIMO, Math.max(1, Math.trunc(Number.isFinite(tamano) ? tamano : 1)));
+  const p = Math.min(Math.floor(FILAS_MAXIMAS / t), Math.max(1, Math.trunc(Number.isFinite(pagina) ? pagina : 1)));
+  return { pagina: p, tamano: t };
 }
 
 const esDe = <T extends string>(lista: readonly T[], v: unknown): v is T => typeof v === "string" && (lista as readonly string[]).includes(v);
@@ -56,6 +69,14 @@ function filaOError(dato: unknown): UsuarioDiagnostico {
   return fila;
 }
 
+/** `empresa` del 200 del backoffice (D-6); un valor sin id o sin nombre se ignora (la cabecera queda en esqueleto). */
+function empresaCabeceraDesde(dato: unknown): EmpresaCabecera | undefined {
+  if (!dato || typeof dato !== "object") return undefined;
+  const e = dato as Record<string, unknown>;
+  if (typeof e.id !== "string" || typeof e.nombre !== "string" || !e.nombre.trim()) return undefined;
+  return { id: e.id, nombre: e.nombre, nit: typeof e.nit === "string" && e.nit.trim() ? e.nit : null };
+}
+
 function listaDesde(dato: unknown): ListaUsuarios {
   const d = (dato ?? {}) as Record<string, unknown>;
   // Un cuerpo sin arreglo es un contrato roto, no una lista vacía: se muestra como error, nunca como «sin usuarios».
@@ -65,7 +86,9 @@ function listaDesde(dato: unknown): ListaUsuarios {
     const f = filaDesde(u);
     return f ? [f] : [];
   });
+  const empresa = empresaCabeceraDesde(d.empresa);
   return {
+    ...(empresa ? { empresa } : {}),
     pagina: entero(d.pagina, 1),
     tamano: entero(d.tamano, usuarios.length),
     total: entero(d.total, usuarios.length),
@@ -82,12 +105,13 @@ function consulta(pares: [string, string | number | null | undefined][]): string
 
 /** GET /usuarios (o el del backoffice): búsqueda recortada, rol y estado en explode, paginado. */
 export async function listarUsuarios(empresa: string | null, filtros: FiltrosUsuarios, signal?: AbortSignal): Promise<ListaUsuarios> {
+  const { pagina, tamano } = acotarPaginacion(filtros.pagina, filtros.tamano);
   const q = consulta([
     ["busqueda", filtros.busqueda.trim().slice(0, BUSQUEDA_MAXIMA)],
     ["rol", filtros.rol],
     ["estado", filtros.estado],
-    ["pagina", filtros.pagina],
-    ["tamano", filtros.tamano],
+    ["pagina", pagina],
+    ["tamano", tamano],
   ]);
   return listaDesde(await apiFetch<unknown>(`${rutaUsuarios(empresa)}?${q}`, { signal, cache: "no-store" }));
 }
@@ -132,11 +156,12 @@ function empresaDesde(dato: unknown): EmpresaUsuarios | null {
 
 /** GET /backoffice/usuarios/empresas (solo SuperAdmin): compañías con Diagnóstico activo y sus conteos. Sin estado (H-U3). */
 export async function listarEmpresasUsuarios(filtros: FiltrosEmpresas, signal?: AbortSignal): Promise<ListaEmpresasUsuarios> {
+  const { pagina, tamano } = acotarPaginacion(filtros.pagina, filtros.tamano);
   const q = consulta([
     ["busqueda", filtros.busqueda.trim().slice(0, BUSQUEDA_MAXIMA)],
     ["usuarios", filtros.usuarios],
-    ["pagina", filtros.pagina],
-    ["tamano", filtros.tamano],
+    ["pagina", pagina],
+    ["tamano", tamano],
   ]);
   const d = ((await apiFetch<unknown>(`/backoffice/usuarios/empresas?${q}`, { signal, cache: "no-store" })) ?? {}) as Record<string, unknown>;
   if (!Array.isArray(d.empresas)) throw new Error("La lista de compañías llegó con un formato inesperado.");

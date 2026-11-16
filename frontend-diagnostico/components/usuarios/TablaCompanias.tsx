@@ -149,6 +149,7 @@ export function TablaCompanias({ filtros, onCambiar }: TablaCompaniasProps) {
     const { lista } = carga;
     contenido = (
       <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">{`Mostrando ${lista.empresas.length} de ${lista.total} compañías`}</p>
         <div className="overflow-x-auto rounded-xl border border-border">
           <table aria-label="Compañías con Diagnóstico activo" className={`w-full min-w-[720px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
             <thead className={TABLA_MOVIL_THEAD_CLS}>
