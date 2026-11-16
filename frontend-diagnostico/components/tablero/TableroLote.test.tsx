@@ -997,4 +997,18 @@ describe("/diagnosticos/{id} — HU #14584: auditoría y dictamen desde el menú
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(disparadorDe("TST001")).toHaveFocus();
   });
+
+  it("CR-9: «Ver dictamen» de una fila Pendiente (SIN_DICTAMEN) muestra el vacío claro, sin aviso de error", async () => {
+    await montar({
+      [GRILLA]: () => Response.json(grilla()),
+      [`GET /diagnosticos/${ID}/vehiculos/vehiculo-1/dictamen`]: () => Response.json({ code: "SIN_DICTAMEN", error: "x" }, { status: 404 }),
+    });
+    fireEvent.click(accionFila("TST001", "Ver dictamen de TST001"));
+    await avanzar();
+    await avanzar();
+    const panel = screen.getByRole("dialog", { name: "Dictamen · TST001" });
+    expect(within(panel).getByText("Este vehículo no tiene un dictamen vigente.")).toBeInTheDocument();
+    expect(within(panel).queryByRole("alert")).toBeNull();
+    expect(within(panel).queryByRole("button", { name: "Reintentar" })).toBeNull();
+  });
 });
