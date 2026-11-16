@@ -137,7 +137,8 @@ test.describe("HU #14584 grilla del detalle", () => {
 
     // Sin solicitar (AVALUO fuera de columnas): disparador enfocable con nombre «<fuente> de <placa>: Sin solicitar».
     const sinSolicitar = disparadorCelda(page, V1, "AVALUO");
-    await expect(sinSolicitar).toHaveAttribute("aria-label", new RegExp(`${FUENTES_NOMBRE.AVALUO} de ${V1}: Sin solicitar`));
+    // CR-8 (fe2): el nombre va como texto sr-only dentro del disparador, no como aria-label del span.
+    await expect(sinSolicitar.locator(".sr-only")).toHaveText(new RegExp(`${FUENTES_NOMBRE.AVALUO} de ${V1}: Sin solicitar`));
     await sinSolicitar.hover();
     await page.waitForTimeout(120);
     expect((await estadoTooltip(sinSolicitar)).abierto, "hover: aún cerrado antes de 300 ms").toBe(false);
