@@ -80,6 +80,10 @@ public static class Program
         builder.Services.AddMotorConsultas(builder.Configuration);
         // HU #13753: Diagnóstico Express (cabecera + un vehículo en una transacción) y su estimado de vista previa.
         builder.Services.AddScoped<Modulos.Express.ServicioExpress>();
+        // HU #14582 (SP-5, B-6, DM-2): límites de solicitudes de Express, confirmación e invitaciones (429 DEMASIADAS_SOLICITUDES)
+        // y la auditoría de sondeo de declaraciones de propietario por placa y día.
+        builder.Services.AddLimitesSolicitudes(builder.Configuration);
+        builder.Services.AddScoped<Modulos.Vehiculos.AuditoriaSondeoPropietario>();
         // HU #13743: tablero del lote (grilla incremental, cierre del panel e historial de estados).
         Modulos.Tablero.EndpointsTablero.AddTablero(builder.Services);
         // HU #14576 (ADR-0087): saneamiento del cliente (marcar, desmarcar, masivo y detalle).
@@ -135,6 +139,7 @@ public static class Program
         app.UseFlitCorrelationId();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter();
         // HU #13726: toda ruta de negocio verifica la suscripción de la compañía del token (fail-closed); /health* queda fuera.
         app.UseGuardSuscripcion(Prefijo);
 

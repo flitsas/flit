@@ -32,7 +32,9 @@ internal static partial class VehiculosEndpoints
     {
         api.MapPost(RutaValidarFilas, ValidarFilas).RequirePermiso(Permisos.DiagnosticosCrear).WithName("ValidarFilasCargaDiagnostico");
         api.MapGet(RutaListado, Listar).RequirePermiso(Permisos.DiagnosticosVer).WithName("ListarVehiculos");
-        api.MapPost(RutaVehiculos, Confirmar).RequirePermiso(Permisos.DiagnosticosCrear).DisableAntiforgery().WithName("ConfirmarVehiculosDiagnostico");
+        // HU #14582 (SP-5): límite por usuario y por compañía (429 DEMASIADAS_SOLICITUDES).
+        api.MapPost(RutaVehiculos, Confirmar).RequirePermiso(Permisos.DiagnosticosCrear).RequireRateLimiting(LimitesSolicitudes.Confirmacion)
+            .DisableAntiforgery().WithName("ConfirmarVehiculosDiagnostico");
     }
 
     private static async Task<IResult> Listar(HttpRequest peticion, ListadoVehiculos listado, CancellationToken ct) =>
