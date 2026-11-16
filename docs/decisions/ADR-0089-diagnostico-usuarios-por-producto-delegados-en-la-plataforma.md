@@ -150,6 +150,31 @@ sequenceDiagram
     DX-->>FE: 200 UsuarioDiagnostico
 ```
 
+## Notas de implementación (HU #14587, carril be2a, 2026-11-16)
+
+Lo que la implementación fijó o descubrió. No cambia la decisión. El estado sigue en **Propuesto**.
+
+- **Audiencia del token de servicio (H-U1, cerrado).** El JwtBearer de core-api acepta `aud=plataforma` y `aud=tramites`. El interceptor del SDK exige la audiencia exacta que se le pasa. Los scopes `platform.usuarios.diagnostico` y `platform.usuarios.diagnostico.conteos` se mapean a `aud=tramites` en `OidcDefaults.ServiceScopeAudiences`, igual que `platform.tramites.derivacion`. `tramites` es el código de servicio de core-api, y `plataforma` es la audiencia de Identidad. Si se usara `plataforma`, el mismo token también serviría contra core-identity.
+- **Excepción A5/A6/A16 en `security.product_role_suspensions`.** La tabla no lleva `created_*/updated_*`, `row_version` ni soft delete, y no tiene el disparador de `row_version`. Es una marca: suspender la inserta y reactivar la borra. `suspended_at`/`suspended_by` hacen de alta. La historia queda en `audit.audit_logs` (disparador `tr_product_role_suspensions_audit`) y en `admin.audit` (actor, rol antes/después, causa). Sí cumple RLS `tenant_isolation`. `product_code varchar(40)` lleva FK a `platform.products(code)`. Una fila por (empresa, usuario, producto).
+- **Invitar (`InviteProductUserHandler`).**
+  - Correo nuevo: crea la invitación con `CreateInvitationHandler` y UN rol resuelto por código.
+  - Miembro de la empresa sin rol del producto: recibe la asignación y conserva los roles de otros productos.
+  - Miembro que ya tiene cualquier rol de Diagnóstico, aunque sea un rol propio de la compañía: no se hace nada.
+  - AdminCompany o SuperAdmin: no se hace nada (causa `OBJETIVO_PROTEGIDO`).
+  - Invitación pendiente: no se hace nada.
+  - Correo de otra empresa: no se hace nada; nunca se mueve a nadie de empresa.
+  - La respuesta es la misma en todos los casos. La causa solo va a `admin.audit`.
+  - Un rol que no existe o una carrera con otra invitación se traducen a los códigos del contrato (`ROL_NO_PERMITIDO`, `ROL_YA_VIGENTE`).
+- **Lista blanca en lectura.** El listado y los conteos solo incluyen `usuario_diagnostico` y `admin_diagnostico` globales. Un rol propio de la compañía con `product_code='diagnostico'` no se ve ni se toca (NOT_FOUND). Un `admin_diagnostico` solo actúa sobre quien tiene `usuario_diagnostico`.
+- **Último admin.** La guarda corre dentro de la transacción de la escritura (`SELECT … FOR UPDATE` sobre las asignaciones vigentes del rol admin en la empresa). Cuenta solo cuentas activas y sin suspensión temporal vigente.
+- **Empresa objetivo del SuperAdmin.** core-api comprueba que la empresa exista y tenga el producto encendido, también en su cadena de cabezas. Si no, responde NOT_FOUND con `ErrorInfo.reason = EMPRESA_NO_ENCONTRADA`.
+- **Casos límite del espejo (H-U6).** Comprobado en 5433:
+  - Asignar o cerrar `admin_diagnostico` a quien no es AdminCompany no dispara `trg_ura_mirror_product_admins` (DDL 126), que solo reacciona a filas de AdminCompany.
+  - Si el hub luego le da AdminCompany a ese usuario, el espejo no duplica (ya tiene rol del producto).
+  - Si después se lo quita, el espejo cierra **todos** sus `admin_<producto>` de sistema, incluido el `admin_diagnostico` que le dio el SuperAdmin desde Diagnóstico.
+  - El `AssignRoleHandler` del hub (B-1) sigue cerrando todas las asignaciones del tenant, también las de Diagnóstico.
+  - Los dos casos se resuelven con ADR-0063.
+
 ## ADRs relacionados
 
 - [ADR-0063] (borrador/Propuesto): roles por producto. Este ADR adelanta solo las operaciones de asignación por producto.
