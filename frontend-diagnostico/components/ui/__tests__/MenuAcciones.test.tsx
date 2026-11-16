@@ -267,3 +267,27 @@ describe("MenuAcciones — flip vertical y grupos (HU #14584)", () => {
     expect(within(screen.getByRole("menu")).queryAllByRole("separator")).toHaveLength(0);
   });
 });
+
+// Code review HU #14588 (CR-1): con `ariaDescribedBy` el disparador se describe por un nodo visible (p. ej. la celda del
+// nombre) y no lleva `title`, para no copiar datos de la fila en atributos (SP-19, SP-20).
+describe("MenuAcciones — ariaDescribedBy sin title (CR-1 de #14588)", () => {
+  it("con ariaDescribedBy: aria-describedby al id dado y sin title; el nombre accesible es el genérico", () => {
+    render(
+      <>
+        <span id="celda-nombre">Persona Ejemplo</span>
+        <MenuAcciones ariaLabel="Acciones del usuario" ariaDescribedBy="celda-nombre" items={[{ key: "a", label: "Suspender", onSelect: vi.fn() }]} />
+      </>,
+    );
+    const disparador = screen.getByRole("button", { name: "Acciones del usuario" });
+    expect(disparador).toHaveAttribute("aria-describedby", "celda-nombre");
+    expect(disparador).toHaveAccessibleDescription("Persona Ejemplo");
+    expect(disparador).not.toHaveAttribute("title");
+  });
+
+  it("sin ariaDescribedBy conserva el title de siempre (usos de fe2 con la placa)", () => {
+    render(<MenuAcciones ariaLabel="Acciones de la placa ABC123" items={[{ key: "a", label: "Ver deuda", onSelect: vi.fn() }]} />);
+    const disparador = screen.getByRole("button", { name: "Acciones de la placa ABC123" });
+    expect(disparador).toHaveAttribute("title", "Acciones de la placa ABC123");
+    expect(disparador).not.toHaveAttribute("aria-describedby");
+  });
+});

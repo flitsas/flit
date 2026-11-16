@@ -38,6 +38,12 @@ export interface CapacidadesDiagnostico {
    * contrato 1.5.0 SP-2, decisión Q4). Opcional; ausente = false (`tieneVistaGlobal`).
    */
   verEstadisticasGlobales?: boolean;
+  /**
+   * Módulo Usuarios de Diagnóstico (HU #14588, contrato §3.1, SP-17): permiso `diagnostico.usuarios.gestionar` (solo
+   * admin_diagnostico) o SuperAdmin. Abre la entrada «Usuarios» y /usuarios. Opcional: un back anterior no la manda y
+   * cuenta como false (`puedeGestionarUsuarios`). La API vuelve a exigirlo en cada ruta.
+   */
+  gestionarUsuarios?: boolean;
 }
 
 export interface SesionDiagnostico {
@@ -71,4 +77,9 @@ export function tieneVistaGlobal(capacidades: CapacidadesDiagnostico | null | un
 /** Entrada «Reportes» y página /reportes: con `verReportes` (compañía) o con la vista global (rutas del backoffice). */
 export function puedeVerReportes(capacidades: CapacidadesDiagnostico | null | undefined): boolean {
   return capacidades?.verReportes === true || tieneVistaGlobal(capacidades);
+}
+
+/** Entrada «Usuarios» y página /usuarios: solo con `gestionarUsuarios` en true (ausente = false). */
+export function puedeGestionarUsuarios(capacidades: CapacidadesDiagnostico | null | undefined): boolean {
+  return capacidades?.gestionarUsuarios === true;
 }

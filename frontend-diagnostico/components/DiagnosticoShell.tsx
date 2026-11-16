@@ -11,7 +11,7 @@ import { CampanaDiagnostico } from "@/components/dx/campana/CampanaDiagnostico";
 import { ApiError, apiFetch } from "@/lib/api";
 import { ResumenSaneamientosContext, useSondeoResumenSaneamientos } from "@/lib/backoffice/useResumenSaneamientos";
 import { mensajeErrorFijo } from "@/lib/errores";
-import { puedeGestionarSaneamiento, puedeVerReportes, type CapacidadesDiagnostico, type SesionDiagnostico } from "@/lib/sesion";
+import { puedeGestionarSaneamiento, puedeGestionarUsuarios, puedeVerReportes, type CapacidadesDiagnostico, type SesionDiagnostico } from "@/lib/sesion";
 
 export interface UsuarioShell extends ShellUser {
   permissions: string[];
@@ -118,10 +118,36 @@ function navOperacion(capacidades: CapacidadesDiagnostico | undefined): NavCatal
   return { sections, items };
 }
 
-/** Catálogo completo: Diagnósticos · Reportes · (Backoffice) | Inicio | Ajustes. */
+/**
+ * «Usuarios» (HU #14588, spec-ui §9, A9.4): sección de una sola entrada (enlace directo a /usuarios) con la ilustración
+ * de colaboradores del kit, solo con la capacidad gestionarUsuarios (se filtra al armar el catálogo). Va entre Backoffice
+ * y Configuración; la API vuelve a exigir el permiso en cada ruta.
+ */
+const SECCION_USUARIOS: NavCatalog["sections"][number] = {
+  id: "usuarios",
+  label: "Usuarios",
+  icon: iconoComo("usuarios"),
+  side: "right",
+  ilustracion: rutaKit("modulo/colaboradores"),
+};
+const ENTRADA_USUARIOS: NavCatalog["items"][number] = {
+  key: "usuarios",
+  label: "Usuarios",
+  href: "/usuarios",
+  section: "usuarios",
+  icon: iconoComo("usuarios"),
+  ilustracion: rutaKit("modulo/colaboradores"),
+};
+
+/** Catálogo completo en orden: Diagnósticos · Reportes · (Backoffice) · (Usuarios) · Configuración. */
 function catalogoDock(base: NavCatalog, capacidades: CapacidadesDiagnostico | undefined): NavCatalog {
   const operacion = navOperacion(capacidades);
-  return { sections: [...operacion.sections, ...base.sections], items: [...operacion.items, ...base.items] };
+  const usuarios = puedeGestionarUsuarios(capacidades);
+  const ajustes = base.sections.findIndex((s) => s.id === "ajustes");
+  const corte = ajustes < 0 ? base.sections.length : ajustes;
+  const sections = usuarios ? [...base.sections.slice(0, corte), SECCION_USUARIOS, ...base.sections.slice(corte)] : base.sections;
+  const items = usuarios ? [...base.items, ENTRADA_USUARIOS] : base.items;
+  return { sections: [...operacion.sections, ...sections], items: [...operacion.items, ...items] };
 }
 
 /** Código de la 403 cuando la API niega el acceso sin decir por qué (usuario sin ningún permiso diagnostico.*). */

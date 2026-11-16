@@ -63,6 +63,12 @@ export interface MenuAccionesProps {
   attentionHint?: string;
   /** Acción de un ítem en vuelo: `aria-busy` en el disparador. */
   ocupado?: boolean;
+  /**
+   * Id de un nodo visible que describe el disparador (p. ej. la celda con el nombre de la fila). Con él, `ariaLabel` queda
+   * genérico («Acciones del usuario») y el disparador no lleva `title`: los datos de la fila no se copian en atributos
+   * (SP-19, SP-20; CR-1 de la HU #14588).
+   */
+  ariaDescribedBy?: string;
 }
 
 /**
@@ -82,6 +88,7 @@ export function MenuAcciones({
   attention = false,
   attentionHint,
   ocupado = false,
+  ariaDescribedBy,
 }: MenuAccionesProps) {
   const [open, setOpen] = useState(false);
   const [coords, setCoords] = useState<Coordenadas | null>(null);
@@ -318,7 +325,8 @@ export function MenuAcciones({
         aria-controls={open ? menuId : undefined}
         aria-label={attention && attentionHint ? `${ariaLabel}. ${attentionHint}` : ariaLabel}
         aria-busy={ocupado || undefined}
-        title={attention && attentionHint ? attentionHint : ariaLabel}
+        aria-describedby={ariaDescribedBy}
+        title={ariaDescribedBy ? undefined : attention && attentionHint ? attentionHint : ariaLabel}
         onClick={() => {
           setOpen((o) => {
             if (o) setCoords(null);

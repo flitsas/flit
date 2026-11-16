@@ -324,3 +324,56 @@ describe("HU14583 dock equilibrado en Diagnóstico", () => {
     expect(hijos.filter((el) => el.tagName === "SPAN" && el.getAttribute("aria-hidden") === "true")).toHaveLength(0);
   });
 });
+
+// HU #14588 (spec-ui §9, A9.4): la entrada «Usuarios» (/usuarios) sale solo con la capacidad gestionarUsuarios y va,
+// en orden de catálogo, entre Backoffice y Configuración. Con el dock equilibrado el admin de compañía queda
+// Diagnósticos · Reportes | Inicio | Usuarios · Configuración.
+describe("HU14588 entrada «Usuarios» del dock", () => {
+  const conCapacidades = (extra: Record<string, boolean>, permisos: string[] = sesion.permisos) =>
+    vi.fn(async (u: RequestInfo | URL) =>
+      String(u).startsWith("/api/v1/diagnostico/notificaciones")
+        ? Response.json({ no_leidas: 0, items: [], siguiente: null })
+        : String(u) === "/api/v1/diagnostico/backoffice/saneamientos/resumen"
+          ? Response.json({ solicitados: 0 })
+          : Response.json({ ...sesion, permisos, capacidades: { ...sesion.capacidades, ...extra } }),
+    );
+  const admin = { ...usuario, permissions: ["diagnostico.diagnosticos.ver", "diagnostico.configuracion.ver"], roles: ["admin_diagnostico"] };
+
+  it("sin gestionarUsuarios no hay enlace «Usuarios»", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ verReportes: true }));
+    montar();
+    await screen.findByText("pantalla base");
+    expect(screen.queryAllByRole("link", { name: "Usuarios" })).toHaveLength(0);
+  });
+
+  it("admin con gestionarUsuarios: «Usuarios» (/usuarios); Diagnósticos · Reportes | Inicio | Usuarios · Configuración (2|2)", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ verReportes: true, gestionarUsuarios: true }));
+    render(
+      <DiagnosticoShell user={admin} tramitesUrl="https://tramites.prueba">
+        <p>pantalla base</p>
+      </DiagnosticoShell>,
+    );
+    await screen.findByText("pantalla base");
+    expect(screen.getAllByRole("link", { name: "Usuarios" }).map((a) => a.getAttribute("href"))).toContain("/usuarios");
+    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
+    const hijos = Array.from(nav.children);
+    const fab = hijos.findIndex((el) => el.getAttribute("aria-label") === "Inicio Diagnóstico");
+    expect(hijos.slice(0, fab).map((el) => el.textContent)).toEqual(["Diagnósticos", "Reportes"]);
+    expect(hijos.slice(fab + 1).map((el) => el.textContent)).toEqual(["Usuarios", "Configuración"]);
+  });
+
+  it("SuperAdmin: Diagnósticos · Reportes · Backoffice | Inicio | Usuarios · Configuración (3|2)", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ backoffice: true, verReportes: true, gestionarUsuarios: true }));
+    render(
+      <DiagnosticoShell user={{ ...admin, isSuperAdmin: true }} tramitesUrl="https://tramites.prueba">
+        <p>pantalla base</p>
+      </DiagnosticoShell>,
+    );
+    await screen.findByText("pantalla base");
+    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
+    const hijos = Array.from(nav.children);
+    const fab = hijos.findIndex((el) => el.getAttribute("aria-label") === "Inicio Diagnóstico");
+    expect(hijos.slice(0, fab).map((el) => el.textContent)).toEqual(["Diagnósticos", "Reportes", "Backoffice"]);
+    expect(hijos.slice(fab + 1).map((el) => el.textContent)).toEqual(["Usuarios", "Configuración"]);
+  });
+});
