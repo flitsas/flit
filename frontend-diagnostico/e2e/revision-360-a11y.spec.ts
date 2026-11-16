@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { lanzarExpress } from "./express";
+import { abrirDictamenDesdeAcciones, disparadorAcciones, itemDictamen } from "./ola-ux-comun";
 
 /**
  * Revisión local del rediseño UI Kit 2026 (HU #14562): 360x800 (sin scroll horizontal, controles alcanzables, texto sin
@@ -196,10 +197,10 @@ test.describe("revisión 360 + axe (usuario de compañía)", () => {
       await expect(grilla).toBeVisible();
       await expect(grilla.locator("[data-celda][data-estado]").first()).toHaveAttribute("data-estado", "COMPLETADO", { timeout: 60_000 });
       await revisarPantalla(page, "05-tablero");
-      const dictamen = grilla.getByRole("button", { name: `Ver dictamen de ${PLACA}` });
+      // Oleada 2026-11-16 (spec-ui §6.4): «Ver dictamen» es un ítem del menú «Acciones» de la fila (antes botón de la columna).
+      const dictamen = disparadorAcciones(page, PLACA);
       if (await dictamen.count()) {
-        await dictamen.click();
-        await expect(page.getByRole("dialog", { name: `Dictamen · ${PLACA}` })).toBeVisible();
+        await abrirDictamenDesdeAcciones(page, PLACA);
         await revisarPantalla(page, "06-tablero-panel-dictamen");
         await page.keyboard.press("Escape");
         guardar("teclado-dictamen-escape-360", { cerrado: (await page.getByRole("dialog").count()) === 0 });
@@ -292,9 +293,13 @@ test.describe("teclado en escritorio (1280)", () => {
     const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
     await expect(grilla).toBeVisible();
     resultado.tablero = await ordenDeTab(page, 30);
-    const dictamen = grilla.getByRole("button", { name: `Ver dictamen de ${PLACA}` });
+    // Oleada 2026-11-16: se llega al dictamen con teclado desde «Acciones» (Enter abre el menú y el foco va al primer ítem,
+    // «Ver dictamen»; Enter lo activa). El foco debe volver a «Acciones».
+    const dictamen = disparadorAcciones(page, PLACA);
     if (await dictamen.count()) {
       await dictamen.focus();
+      await page.keyboard.press("Enter");
+      await expect(itemDictamen(page, PLACA)).toBeFocused();
       await page.keyboard.press("Enter");
       const panel = page.getByRole("dialog", { name: `Dictamen · ${PLACA}` });
       await expect(panel).toBeVisible();
