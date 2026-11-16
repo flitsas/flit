@@ -23,11 +23,21 @@ public static class Program
 {
     public const string Prefijo = "/api/v1/diagnostico";
 
-    public static async Task Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
+        // HU #14582 (H-A3): `backfill-cambio-propietario --empresa <uuid> [--lote n]` corre el backfill y sale, sin arrancar el host
+        // ni migrar (lo lanza infra por ambiente, con la configuración del servicio por variables de entorno).
+        if (Modulos.Trabajos.ComandoBackfillCambioPropietario.EsComando(args))
+        {
+            var opciones = Modulos.Trabajos.ComandoBackfillCambioPropietario.Leer(args);
+            await using var comando = Build([]);
+            return await Modulos.Trabajos.ComandoBackfillCambioPropietario.EjecutarAsync(comando.Services, opciones, CancellationToken.None).ConfigureAwait(false);
+        }
+
         var app = Build(args);
         await MigrateAsync(app).ConfigureAwait(false);
         await app.RunAsync().ConfigureAwait(false);
+        return 0;
     }
 
     internal static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)

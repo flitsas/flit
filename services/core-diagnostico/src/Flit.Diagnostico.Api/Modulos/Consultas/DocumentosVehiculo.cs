@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
+using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
@@ -107,7 +108,9 @@ internal static class DocumentosVehiculo
     /// Fija <c>cambio_propietario</c> (HU #14582, contrato §1.5, SP-1/SP-3) con <see cref="ComparacionPropietario"/>: el propietario
     /// actual declarado del vehículo (se descifra aquí, una vez) frente a <paramref name="propietariosRunt"/>, en claro y solo en
     /// memoria. Sin declarado queda null; si el declarado no se puede descifrar, también null. Se llama en la transacción que cierra
-    /// la celda RUNT (la consultada, la reprocesada y la reutilizada del mismo día); las lecturas solo leen la columna. No loguea nada.
+    /// la celda RUNT (la consultada, la reprocesada y la reutilizada del mismo día) y en el backfill; las lecturas solo leen la columna.
+    /// No loguea nada: los propietarios con un tipo fuera de la tabla de sinónimos solo suman al contador
+    /// <see cref="MetricasDiagnostico.TiposNoHomologados"/> con el id del vehículo (CR-4, §1.4).
     /// </summary>
     public static void FijarCambioPropietario(
         VehiculoDiagnostico vehiculo, IReadOnlyList<(string Tipo, string Numero)> propietariosRunt, IProtectorDocumentoPersona protector)
@@ -115,6 +118,7 @@ internal static class DocumentosVehiculo
         ArgumentNullException.ThrowIfNull(vehiculo);
         ArgumentNullException.ThrowIfNull(propietariosRunt);
         ArgumentNullException.ThrowIfNull(protector);
+        MetricasDiagnostico.ContarTiposNoHomologados(vehiculo.Id, propietariosRunt.Count(p => HomologacionTipoDocumento.Canonico(p.Tipo) is null));
         if (vehiculo.PropietarioDeclaradoDocTipo is not { } tipo || vehiculo.PropietarioDeclaradoDocCifrado is not { } cifrado)
         {
             vehiculo.CambioPropietario = null;
