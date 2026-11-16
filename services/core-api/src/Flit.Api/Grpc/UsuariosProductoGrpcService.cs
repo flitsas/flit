@@ -35,7 +35,8 @@ internal sealed partial class UsuariosProductoGrpcService(
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
         var (tenant, actor) = await AutorizarAsync(request.Producto, context).ConfigureAwait(false);
-        if (request.Estados.Any(e => e == EstadoUsuarioProducto.Unspecified))
+        // CR-7: un valor que el enum no conoce (cliente con otra versión del proto) es un filtro inválido, no «suspendido».
+        if (request.Estados.Any(e => e == EstadoUsuarioProducto.Unspecified || !Enum.IsDefined(e)))
             throw Rechazo(ProductRoleErrorCodes.FiltroInvalido, ProductRoleErrorKind.InvalidArgument, "Estado desconocido en el filtro.");
 
         var query = new ListProductUsersQuery(tenant, actor, request.Producto, request.Busqueda, [.. request.Roles],
