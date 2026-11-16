@@ -257,6 +257,19 @@ describe("Express — errores (AC4)", () => {
     expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
   });
 
+  // CR-7 (code review del kit): el límite de POST /express (429 + Retry-After) llega a la pantalla con su texto fijo.
+  it("429 DEMASIADAS_SOLICITUDES: aviso con el texto fijo de espera, sin el mensaje del servidor ni navegar", async () => {
+    montar({
+      query: "modo=express&placa=TST123",
+      rutas: { "POST /express": () => Response.json({ code: "DEMASIADAS_SOLICITUDES", error: SECRETO }, { status: 429, headers: { "Retry-After": "30" } }) },
+    });
+    await nombre();
+    await continuar();
+    expect(await screen.findByText(ERRORES_EXPRESS.DEMASIADAS_SOLICITUDES)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
   it("AP-9: un 422 sin campo da «Revisa la parametrización» con el texto fijo del code", async () => {
     montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => Response.json({ code: "FUENTE_NO_HABILITADA", error: SECRETO }, { status: 422 }) } });
     await nombre();

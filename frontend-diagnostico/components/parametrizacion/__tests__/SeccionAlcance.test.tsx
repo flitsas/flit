@@ -146,6 +146,9 @@ describe("SeccionAlcance — contador y disposición (HU #14583)", () => {
     expect(nodo.parentElement?.className).toMatch(/(^| )flex( |$)/);
     expect(nodo.parentElement?.className).toContain("items-center");
     expect(within(nodo).getByText("seleccionadas", { exact: false }).className).toContain("sr-only");
+    // CR-2: se anuncia el contador completo («3 de 9 fuentes seleccionadas»), no solo el número que cambió.
+    expect(nodo).toHaveAttribute("aria-live", "polite");
+    expect(nodo).toHaveAttribute("aria-atomic", "true");
     expect(nodo.className).toContain("bg-[var(--badge-info-bg)]");
     expect(nodo.className).toContain("rounded-full");
   });
