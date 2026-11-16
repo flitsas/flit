@@ -38,13 +38,13 @@ internal sealed record GrillaBackofficeDto(
             g.Columnas, g.Avance,
             [.. g.Vehiculos.Select(v => new FilaVehiculoBackofficeDto(
                 v.Id, v.Orden, v.Identificador, v.TipoIdentificador, v.Placa, v.Vin, v.Terminado, [.. v.Celdas.Select(CeldaGrillaBackofficeDto.De)],
-                v.DocumentoDeclarado, v.Propietarios, saneamientos?.GetValueOrDefault(v.Id)))],
+                v.CambioPropietario, saneamientos?.GetValueOrDefault(v.Id)))],
             g.Estimado);
     }
 }
 
 /// <summary>
-/// Una fila de la grilla del backoffice: igual a <see cref="FilaVehiculoDto"/> (documentos enmascarados incluidos) con celdas del
+/// Una fila de la grilla del backoffice: igual a <see cref="FilaVehiculoDto"/> (con <c>cambio_propietario</c> y sin documentos, HU #14582) con celdas del
 /// backoffice y, desde HU #14576 (AC35), <c>saneamiento: {estado, id} | null</c>, sin elegibilidad: el backoffice no marca.
 /// </summary>
 internal sealed record FilaVehiculoBackofficeDto(
@@ -56,8 +56,7 @@ internal sealed record FilaVehiculoBackofficeDto(
     [property: JsonPropertyName("vin")] string? Vin,
     [property: JsonPropertyName("terminado")] bool Terminado,
     [property: JsonPropertyName("celdas")] IReadOnlyList<CeldaGrillaBackofficeDto> Celdas,
-    [property: JsonPropertyName("documento_declarado")] DocumentoDeclaradoDto? DocumentoDeclarado,
-    [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios,
+    [property: JsonPropertyName("cambio_propietario")] bool? CambioPropietario,
     [property: JsonPropertyName("saneamiento")] SaneamientoFilaBackofficeDto? Saneamiento = null)
 {
     /// <summary>Rótulo del tipo de identificador (punto 5).</summary>

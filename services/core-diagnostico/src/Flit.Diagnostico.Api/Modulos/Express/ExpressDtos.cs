@@ -8,7 +8,8 @@ namespace Flit.Diagnostico.Api.Modulos.Express;
 /// <summary>
 /// Cuerpo de <c>POST /express</c> y de <c>POST /express/estimado</c> (HU #13753, F02-H6): la cabecera (nombre opcional, modo,
 /// tipo de trámite y alcance, como en <c>POST /diagnosticos</c>) y el único vehículo (identificador y, opcional, el documento
-/// del locatario). Es una clase (no un record) para que ningún <c>ToString</c> automático lleve el documento a un log.
+/// del propietario actual, HU #14582, con el alias obsoleto de locatario). Es una clase (no un record) para que ningún
+/// <c>ToString</c> automático lleve el documento a un log.
 /// </summary>
 public sealed class ExpressEntradaDto
 {
@@ -29,16 +30,34 @@ public sealed class ExpressEntradaDto
     [JsonPropertyName("identificador")]
     public string? Identificador { get; init; }
 
-    [JsonPropertyName("tipo_documento_locatario")]
-    public string? TipoDocumentoLocatario { get; init; }
+    private bool _traeTipo;
+    private bool _traeDocumento;
+    private bool _traeTipoObsoleto;
+    private bool _traeDocumentoObsoleto;
 
-    [JsonPropertyName("documento_locatario")]
-    public string? DocumentoLocatario { get; init; }
+    [JsonPropertyName(AliasPropietario.CampoTipo)]
+    public string? TipoDocumentoPropietario { get; init { field = value; _traeTipo = true; } }
+
+    [JsonPropertyName(AliasPropietario.CampoDocumento)]
+    public string? DocumentoPropietario { get; init { field = value; _traeDocumento = true; } }
+
+    /// <summary>Alias obsoleto (contrato C1, se retira en 1.7.0).</summary>
+    [JsonPropertyName(AliasPropietario.CampoTipoObsoleto)]
+    public string? TipoDocumentoLocatarioObsoleto { get; init { field = value; _traeTipoObsoleto = true; } }
+
+    /// <summary>Alias obsoleto (contrato C1, se retira en 1.7.0).</summary>
+    [JsonPropertyName(AliasPropietario.CampoDocumentoObsoleto)]
+    public string? DocumentoLocatarioObsoleto { get; init { field = value; _traeDocumentoObsoleto = true; } }
+
+    /// <summary>Tipo y número declarados, del nombre nuevo o del alias; 400 <c>CAMPOS_EXCLUYENTES</c> si vinieron los dos.</summary>
+    public (string? Tipo, string? Numero) Declarado() => (
+        AliasPropietario.Elegir(_traeTipo, TipoDocumentoPropietario, _traeTipoObsoleto, TipoDocumentoLocatarioObsoleto, AliasPropietario.CampoTipo, AliasPropietario.CampoTipoObsoleto),
+        AliasPropietario.Elegir(_traeDocumento, DocumentoPropietario, _traeDocumentoObsoleto, DocumentoLocatarioObsoleto, AliasPropietario.CampoDocumento, AliasPropietario.CampoDocumentoObsoleto));
 }
 
 /// <summary>
-/// Respuesta 201 del Express: la cabecera creada (<c>es_express=true</c>, en CREADO), su único vehículo (documento del
-/// locatario enmascarado) y, solo con <c>estimado_consultas=ANTES_DE_LANZAR</c> en la copia de configuración, el estimado.
+/// Respuesta 201 del Express: la cabecera creada (<c>es_express=true</c>, en CREADO), su único vehículo (sin documentos, HU #14582
+/// C5) y, solo con <c>estimado_consultas=ANTES_DE_LANZAR</c> en la copia de configuración, el estimado.
 /// </summary>
 public sealed record ExpressCreadoDto(
     [property: JsonPropertyName("id")] Guid Id,

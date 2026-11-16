@@ -179,7 +179,8 @@ internal sealed record FilaPlacaDto(
     [property: JsonPropertyName("saneamiento")] SaneamientoFilaPlacaDto Saneamiento,
     [property: JsonPropertyName("tramite")] TramiteFilaPlacaDto? Tramite,
     [property: JsonPropertyName("vin")] string? Vin = null,
-    [property: JsonPropertyName("identificador")] string? Identificador = null);
+    [property: JsonPropertyName("identificador")] string? Identificador = null,
+    [property: JsonPropertyName("cambio_propietario")] bool? CambioPropietario = null);
 
 /// <summary>Saneamiento de la fila: estado no anulado (o null), si se puede solicitar y por qué no.</summary>
 internal sealed record SaneamientoFilaPlacaDto(
@@ -279,6 +280,7 @@ internal sealed class ListadoVehiculos(DiagnosticoDb db, UsuarioActual usuario)
                 f.Vehiculo.SaneamientoEstado,
                 f.Vehiculo.TramiteId,
                 f.Vehiculo.TramiteNumero,
+                f.Vehiculo.CambioPropietario,
             })
             .ToListAsync(ct).ConfigureAwait(false);
 
@@ -291,7 +293,7 @@ internal sealed class ListadoVehiculos(DiagnosticoDb db, UsuarioActual usuario)
                 f.Terminado ? FiltroVehiculos.EstadoTerminado : FiltroVehiculos.EstadoEnProceso, f.Veredicto,
                 new SaneamientoFilaPlacaDto(vigente is { } e ? CodigosDeEnum.Codigo(e) : null, motivo is null, motivo),
                 f.TramiteId is { } tramite ? new TramiteFilaPlacaDto(tramite, f.TramiteNumero) : null,
-                f.Vin, f.Identificador);
+                f.Vin, f.Identificador, f.CambioPropietario);
         })]);
     }
 }

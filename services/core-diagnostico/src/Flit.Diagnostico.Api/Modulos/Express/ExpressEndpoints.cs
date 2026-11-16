@@ -28,8 +28,7 @@ internal static class ExpressEndpoints
         var vehiculo = confirmacion.Vehiculos.Single();
         var validado = confirmacion.Resultado.Validos.Single();
         var vehiculoDto = new VehiculoConfirmadoDto(
-            vehiculo.Id, vehiculo.Orden, validado.IdentificadorOriginal, validado.IdentificadorNorm, CodigosDeEnum.Codigo(validado.Tipo),
-            validado.TipoDocumentoLocatario, validado.DocumentoLocatario is null ? null : AnalizadorCarga.Enmascarar(validado.DocumentoLocatario));
+            vehiculo.Id, vehiculo.Orden, validado.IdentificadorOriginal, validado.IdentificadorNorm, CodigosDeEnum.Codigo(validado.Tipo));
         var estimado = confirmacion.MostrarEstimado
             ? confirmacion.Resultado.Estimado.Select(EstimadoFuenteDto.De).ToList()
             : null;

@@ -839,7 +839,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("origen")
-                        .HasComment("PROVEEDOR (RUNT) o DECLARADO_CLIENTE (locatario declarado cuando el proveedor no trae ninguno).");
+                        .HasComment("PROVEEDOR (RUNT); DECLARADO_CLIENTE solo en filas históricas anteriores a HU #14582 (el declarado ya no entra como persona).");
 
                     b.Property<string>("Rol")
                         .IsRequired()
@@ -3372,6 +3372,11 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("id")
                         .HasComment("uuid v7 generado por la aplicación.");
 
+                    b.Property<bool?>("CambioPropietario")
+                        .HasColumnType("boolean")
+                        .HasColumnName("cambio_propietario")
+                        .HasComment("true si el declarado (homologado) no coincide con ningún propietario RUNT (personas_vehiculo rol PROPIETARIO); false si coincide; null sin declarado o sin RUNT cerrado.");
+
                     b.Property<string>("DatosConsolidados")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -3412,17 +3417,6 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("identificador_original")
                         .HasComment("@pii:low Identificador tal como lo escribió el cliente (placa o VIN).");
 
-                    b.Property<byte[]>("LocatarioDeclaradoDocCifrado")
-                        .HasColumnType("bytea")
-                        .HasColumnName("locatario_declarado_doc_cifrado")
-                        .HasComment("@pii:high Documento del locatario declarado por el cliente, cifrado; respaldo cuando el proveedor trae el suyo (R-3).");
-
-                    b.Property<string>("LocatarioDeclaradoDocTipo")
-                        .HasMaxLength(8)
-                        .HasColumnType("character varying(8)")
-                        .HasColumnName("locatario_declarado_doc_tipo")
-                        .HasComment("Tipo del documento del locatario declarado por el cliente que el del proveedor reemplazó (respaldo, R-3).");
-
                     b.Property<byte[]>("LocatarioDocCifrado")
                         .HasColumnType("bytea")
                         .HasColumnName("locatario_doc_cifrado")
@@ -3432,7 +3426,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("locatario_doc_origen")
-                        .HasComment("PROVEEDOR (autollenado de Intempo) o DECLARADO_CLIENTE (lo declaró el cliente y sigue vigente); null sin documento.");
+                        .HasComment("PROVEEDOR (autollenado de Intempo); DECLARADO_CLIENTE solo en filas anteriores a HU #14582 (S3). Null sin documento.");
 
                     b.Property<string>("LocatarioDocTipo")
                         .HasMaxLength(8)
@@ -3456,6 +3450,17 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnType("character varying(10)")
                         .HasColumnName("placa")
                         .HasComment("@pii:low Placa del vehículo.");
+
+                    b.Property<byte[]>("PropietarioDeclaradoDocCifrado")
+                        .HasColumnType("bytea")
+                        .HasColumnName("propietario_declarado_doc_cifrado")
+                        .HasComment("@pii:high Documento del propietario actual declarado por el cliente, cifrado con Data Protection (mismo IProtectorDocumentoPersona, HU #13751). Nunca en claro ni en logs.");
+
+                    b.Property<string>("PropietarioDeclaradoDocTipo")
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)")
+                        .HasColumnName("propietario_declarado_doc_tipo")
+                        .HasComment("Tipo de documento del propietario actual declarado por el cliente (opcional, Express/Masivo). Solo para compararlo con el propietario RUNT; no alimenta consultas.");
 
                     b.Property<byte[]>("PropietarioDocCifrado")
                         .HasColumnType("bytea")
@@ -3562,15 +3567,15 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
 
                             t.HasCheckConstraint("ck_locatario_origen", "(locatario_doc_cifrado IS NULL) = (locatario_doc_origen IS NULL)");
 
+                            t.HasCheckConstraint("ck_vehiculos_cambio_propietario", "cambio_propietario IS NULL OR propietario_declarado_doc_cifrado IS NOT NULL");
+
                             t.HasCheckConstraint("ck_vehiculos_datos_consolidados_objeto", "jsonb_typeof(datos_consolidados) = 'object'");
 
                             t.HasCheckConstraint("ck_vehiculos_identificador_norm", "identificador_norm = upper(identificador_norm) AND identificador_norm !~ '\\s'");
 
-                            t.HasCheckConstraint("ck_vehiculos_locatario_declarado", "(locatario_declarado_doc_tipo IS NULL) = (locatario_declarado_doc_cifrado IS NULL)");
-
-                            t.HasCheckConstraint("ck_vehiculos_locatario_declarado_con_proveedor", "locatario_declarado_doc_cifrado IS NULL OR locatario_doc_origen = 'PROVEEDOR'");
-
                             t.HasCheckConstraint("ck_vehiculos_locatario_doc_origen", "locatario_doc_origen IS NULL OR locatario_doc_origen IN ('DECLARADO_CLIENTE', 'PROVEEDOR')");
+
+                            t.HasCheckConstraint("ck_vehiculos_propietario_declarado", "(propietario_declarado_doc_tipo IS NULL) = (propietario_declarado_doc_cifrado IS NULL)");
 
                             t.HasCheckConstraint("ck_vehiculos_saneamiento_estado", "saneamiento_estado IS NULL OR saneamiento_estado IN ('SOLICITADO', 'EN_GESTION', 'SANEADO', 'NO_PROCEDE')");
 
