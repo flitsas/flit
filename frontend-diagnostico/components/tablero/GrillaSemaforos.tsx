@@ -124,6 +124,11 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
  */
 const FIJA_IZQ_CLS = "min-[900px]:sticky z-10";
 const FIJA_DER_CLS = "min-[900px]:sticky min-[900px]:right-0 z-10";
+/**
+ * M-2 (A6.2): la th de una columna fija es sticky arriba y al costado. Va en z-20, por encima de las th sticky normales (z-10 del
+ * kit), que si no la tapan al desplazar en horizontal porque van después en el DOM. Las celdas fijas del cuerpo siguen en z-10.
+ */
+const CABECERA_FIJA_CLS = `${CABECERA_CLS.replace(/\bz-10\b/, "z-20")} min-[900px]:sticky`;
 /** FE-2 (spec-ui §2.3): la columna de acciones (chip + disparador «Acciones» + mensaje) mide 10rem en th y td. */
 const ANCHO_ACCIONES_CLS = "w-[10rem] min-w-[10rem]";
 /** CR-6: las celdas fijas tienen fondo propio (tapan lo que desplaza debajo); con la fila en hover toman su mismo color. */
@@ -202,14 +207,14 @@ export function GrillaSemaforos({
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
             {casillaVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${FIJA_IZQ_CLS} min-[900px]:left-0 w-10 align-bottom`} style={CABECERA_ESTILO}>
+              <th scope="col" rowSpan={2} className={`${CABECERA_FIJA_CLS} min-[900px]:left-0 w-10 align-bottom`} style={CABECERA_ESTILO}>
                 <span className="sr-only">Seleccionar</span>
               </th>
             )}
             <th
               scope="col"
               rowSpan={2}
-              className={`${CABECERA_CLS} ${FIJA_IZQ_CLS} ${izquierdaPlaca} ${casillaVehiculo ? SEPARADOR_CLS : ""} align-bottom`}
+              className={`${CABECERA_FIJA_CLS} ${izquierdaPlaca} ${casillaVehiculo ? SEPARADOR_CLS : ""} align-bottom`}
               style={CABECERA_ESTILO}
             >
               Placa o VIN
@@ -235,7 +240,7 @@ export function GrillaSemaforos({
               ),
             )}
             {accionVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${FIJA_DER_CLS} ${SEPARADOR_CLS} ${ANCHO_ACCIONES_CLS} align-bottom`} style={CABECERA_ESTILO}>
+              <th scope="col" rowSpan={2} className={`${CABECERA_FIJA_CLS} min-[900px]:right-0 ${SEPARADOR_CLS} ${ANCHO_ACCIONES_CLS} align-bottom`} style={CABECERA_ESTILO}>
                 {tituloAccionVehiculo}
               </th>
             )}
