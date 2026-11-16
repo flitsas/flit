@@ -12,7 +12,8 @@ import { revisarTemasOla } from "./ola-ux-comun";
  * Variables: E2E_USUARIO / E2E_CLAVE (compañía con diagnosticos.crear).
  *
  * Lista congelada:
- *   - region «Parámetros» · region «Vehículos» · region «Información general» · group «Modo» · group «Alcance»
+ *   - region «Parámetros» · region «Vehículos» · region «Información general» · group «Modo» · group «/^Alcance/» (oleada
+ *     2026-11-16: el contador «N de M fuentes» puede entrar en el nombre)
  *   - textbox «Nombre del diagnóstico» · textbox «Placa o VIN» · button «/^(Continuar|Iniciar diagnóstico)$/»
  *   - button «Validar archivo» · button «Lanzar diagnóstico» · region «Resumen de validación» · etiqueta «/archivo de vehículos/i»
  *   - radio «Express» · radio «Masivo» · checkbox «RUNT vehículo»
@@ -26,7 +27,9 @@ const vehiculos = (page: Page) => page.getByRole("region", { name: "Vehículos" 
 const secciones = (page: Page) => ({
   info: parametros(page).getByRole("region", { name: "Información general" }),
   modo: parametros(page).getByRole("group", { name: "Modo", exact: true }),
-  alcance: parametros(page).getByRole("group", { name: "Alcance", exact: true }),
+  // Oleada 2026-11-16 (spec-ui §2.2): el contador «N de M fuentes» puede ir dentro del legend, así que el nombre del grupo
+  // empieza por «Alcance» pero ya no es exacto.
+  alcance: parametros(page).getByRole("group", { name: /^Alcance(\s|$)/ }).first(),
 });
 const cta = (page: Page, modo: (typeof MODOS)[number]) =>
   modo === "masivo" ? page.getByRole("button", { name: "Validar archivo" }) : page.getByRole("button", { name: /^(Continuar|Iniciar diagnóstico)$/ });
@@ -59,7 +62,7 @@ test.describe("FE-3 carga en una columna", () => {
   });
 
   for (const modo of MODOS) {
-    test(`${modo}: Parámetros arriba de Vehículos a ancho completo, sin sticky; en 1280 px las 3 secciones en fila`, async ({ page }) => {
+    test(`${modo}: Parámetros arriba de Vehículos a ancho completo, sin sticky; en 1280 px Info y Modo en fila y Alcance debajo a fila completa`, async ({ page }) => {
       await irANuevo(page, modo, 1280);
       const [p, v] = [await caja(parametros(page)), await caja(vehiculos(page))];
       expect(p.y + p.height, "Parámetros termina antes de que empiece Vehículos").toBeLessThanOrEqual(v.y + 1);
@@ -67,14 +70,14 @@ test.describe("FE-3 carga en una columna", () => {
       expect(Math.abs(p.x - v.x)).toBeLessThanOrEqual(2);
       expect(await parametros(page).evaluate((el) => getComputedStyle(el).position)).not.toBe("sticky");
 
-      // ≥ 1280 (xl): Información general · Modo · Alcance lado a lado, en ese orden, y Alcance la más ancha (2fr).
+      // Oleada 2026-11-16 (spec-ui §2.4): Información general · Modo lado a lado y Alcance en fila completa debajo
+      // (col-span-full), para que el grupo Vehículo quepa en una sola fila de 4 tarjetas. Antes: las 3 en fila, Alcance 2fr.
       const s = secciones(page);
       const [i, m, a] = [await caja(s.info), await caja(s.modo), await caja(s.alcance)];
       expect(Math.abs(i.y - m.y), "Info y Modo en la misma fila").toBeLessThanOrEqual(8);
-      expect(Math.abs(m.y - a.y), "Modo y Alcance en la misma fila").toBeLessThanOrEqual(8);
       expect(i.x).toBeLessThan(m.x);
-      expect(m.x).toBeLessThan(a.x);
-      expect(a.width).toBeGreaterThan(m.width);
+      expect(a.y, "Alcance debajo de Info y Modo").toBeGreaterThanOrEqual(Math.max(i.y + i.height, m.y + m.height) - 1);
+      expect(a.width, "Alcance a fila completa").toBeGreaterThanOrEqual(m.x + m.width - i.x - 4);
 
       // Barra de acción al final, después de Vehículos y fuera de Parámetros.
       const boton = cta(page, modo);
