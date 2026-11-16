@@ -148,6 +148,15 @@ describe("AC6 — desmarcar y reversión si falla", () => {
     expect(boton.querySelector("svg path:nth-child(2)")).toHaveAttribute("fill", "currentColor");
   });
 
+  it("CR-2 (WCAG 1.4.3): encendida, el fondo es opaco (--di-accent-soft sobre --card), así el hover de la fila no baja el contraste", () => {
+    simularApi({});
+    montar(SOLICITADO);
+    const clases = screen.getByRole("button", { name: NOMBRE }).className.split(/\s+/);
+    expect(clases).toContain("bg-card");
+    expect(clases).toContain("bg-[image:linear-gradient(var(--di-accent-soft),var(--di-accent-soft))]");
+    expect(clases).not.toContain("bg-[var(--di-accent-soft)]");
+  });
+
   it("un clic la apaga de inmediato y llama DELETE …/saneamiento; 204 deja sin saneamiento y lo anuncia", async () => {
     const api = simularApi({ [DELETE]: () => new Response(null, { status: 204 }) });
     const onAnunciar = vi.fn();
@@ -283,10 +292,10 @@ describe("Contrato visual y de props (spec-ui §1.3)", () => {
     expect(screen.getByRole("button", { name: NOMBRE }).className).toContain("var(--kit-tinta)");
   });
 
-  it("encendida agrega el fondo --di-accent-soft; el archivo no tiene colores sueltos", () => {
+  it("encendida agrega el tinte --di-accent-soft (sobre --card, opaco: CR-2); el archivo no tiene colores sueltos", () => {
     simularApi({});
     montar(SOLICITADO);
-    expect(screen.getByRole("button", { name: NOMBRE }).className).toContain("bg-[var(--di-accent-soft)]");
+    expect(screen.getByRole("button", { name: NOMBRE }).className).toContain("var(--di-accent-soft)");
     const fuente = readFileSync(join(__dirname, "..", "BotonSanear.tsx"), "utf8");
     expect(fuente).not.toMatch(/#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})\b/);
   });
