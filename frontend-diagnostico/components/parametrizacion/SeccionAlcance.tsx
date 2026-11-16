@@ -63,7 +63,7 @@ export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obliga
           <Titulo id={tituloId} className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary"}>
             Alcance
           </Titulo>
-          <span aria-live="polite" className={CONTADOR_CLS}>
+          <span aria-live="polite" aria-atomic="true" className={CONTADOR_CLS}>
             <span className="font-bold tabular-nums">{marcadas}</span> de <span className="font-bold tabular-nums">{ofrecidas.length}</span>{" "}
             fuentes<span className="sr-only"> seleccionadas</span>
           </span>
