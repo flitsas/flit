@@ -1,0 +1,153 @@
+syntax = "proto3";
+
+package flit.platform.v1;
+
+option csharp_namespace = "Flit.Platform.Grpc.V1";
+
+// Usuarios de un producto de la suite, gestionados desde el propio producto (ADR-0089, HU #14587). Lo atiende core-api,
+// dueño del esquema security, del correo de invitación y de la auditoría administrativa.
+//
+// Autenticación: token de servicio de Identidad con aud=tramites (core-api) y el scope dedicado. Solo el cliente
+// svc-diagnostico entra; el scope ata el cliente al producto, así que `producto` debe ser "diagnostico" o la llamada
+// recibe PERMISSION_DENIED.
+// Metadata obligatoria: x-flit-tenant-id (empresa objetivo) y x-flit-actor-id (uuid del usuario que actúa).
+// core-api REVERIFICA al actor en la base (patrón AutorDerivacion, ADR-0084): cuenta activa, sin suspensión vigente y,
+// en la empresa objetivo, admin_diagnostico vigente con el permiso diagnostico.usuarios.gestionar; o SuperAdmin.
+// Si no, PERMISSION_DENIED. Los rechazos de negocio llevan google.rpc.ErrorInfo (domain flitsas.com, reason = código):
+//   PERMISSION_DENIED   ROL_NO_ASIGNABLE | OBJETIVO_PROTEGIDO
+//   NOT_FOUND           USUARIO_NO_ENCONTRADO (no es de la empresa o no tiene ni tuvo rol del producto: mismo error)
+//   FAILED_PRECONDITION ULTIMO_ADMINISTRADOR | USUARIO_SUSPENDIDO | INVITACION_PENDIENTE | ROL_YA_VIGENTE
+//   INVALID_ARGUMENT    ROL_NO_PERMITIDO | ACCION_SOBRE_SI_MISMO | CORREO_INVALIDO | NOMBRE_REQUERIDO | FILTRO_INVALIDO | PAGINACION_INVALIDA
+// Habeas Data: el correo es PII; core-api no lo escribe en claro en logs.
+// Scope: platform.usuarios.diagnostico.
+service UsuariosProductoService {
+  // Usuarios con rol del producto (vigente o suspendido) e invitaciones pendientes con rol del producto, de la empresa
+  // de la metadata. Orden: estado (activo, invitado, suspendido) y nombre. tamano 1..100, pagina >= 1, pagina x tamano <= 10000.
+  rpc ListarUsuariosProducto(ListarUsuariosProductoRequest) returns (ListarUsuariosProductoResponse);
+
+  // Respuesta vacía y uniforme en todos los casos (correo nuevo, miembro sin rol, ya con rol, invitación pendiente,
+  // correo de otra empresa). La causa real solo va a la auditoría de core-api. Nunca mueve a un usuario de empresa.
+  rpc InvitarUsuarioProducto(InvitarUsuarioProductoRequest) returns (InvitarUsuarioProductoResponse);
+
+  // Cambia SOLO la asignación del producto: las de otros productos del usuario se conservan. Idempotente.
+  rpc CambiarRolProducto(CambiarRolProductoRequest) returns (CambiarRolProductoResponse);
+
+  // Cierra la asignación del producto y guarda la marca de suspensión de producto. La cuenta no cambia. Idempotente.
+  rpc SuspenderEnProducto(SuspenderEnProductoRequest) returns (SuspenderEnProductoResponse);
+
+  // Recrea la asignación con el rol que tenía al suspenderse y borra la marca. Idempotente.
+  rpc ReactivarEnProducto(ReactivarEnProductoRequest) returns (ReactivarEnProductoResponse);
+}
+
+// Global: sin x-flit-tenant-id. Scope platform.usuarios.diagnostico.conteos, solo svc-diagnostico; el actor
+// (x-flit-actor-id) tiene que ser SuperAdmin, reverificado en la base.
+service UsuariosProductoConteoService {
+  rpc ContarPorEmpresa(ContarPorEmpresaRequest) returns (ContarPorEmpresaResponse);
+}
+
+message ListarUsuariosProductoRequest {
+  string producto = 1;
+  string busqueda = 2;                         // contiene, sin tildes ni mayúsculas, sobre nombre o correo; <= 100
+  repeated string roles = 3;                   // códigos de rol del producto; vacío = todos
+  repeated EstadoUsuarioProducto estados = 4;  // vacío = todos
+  int32 pagina = 5;                            // >= 1 (0 = 1)
+  int32 tamano = 6;                            // 1..100 (0 = 25)
+}
+
+message ListarUsuariosProductoResponse {
+  repeated UsuarioProducto usuarios = 1;
+  int32 total = 2;
+  repeated string roles_asignables = 3;        // lo que ESTE actor puede dar al invitar o cambiar rol
+}
+
+message UsuarioProducto {
+  string id = 1;                               // usuario (TIPO_FILA_USUARIO) o invitación (TIPO_FILA_INVITACION)
+  TipoFila tipo = 2;
+  string nombre = 3;
+  string email = 4;                            // PII
+  string rol_codigo = 5;                       // rol del producto vigente, el que tenía al suspenderse o el de la invitación
+  EstadoUsuarioProducto estado = 6;
+  repeated AccionUsuario acciones = 7;         // calculadas en core-api para el actor
+  MotivoSinAcciones motivo_sin_acciones = 8;
+}
+
+message InvitarUsuarioProductoRequest {
+  string producto = 1;
+  string email = 2;
+  string nombre = 3;
+  string rol_codigo = 4;
+}
+
+message InvitarUsuarioProductoResponse {}
+
+message CambiarRolProductoRequest {
+  string producto = 1;
+  string usuario_id = 2;
+  string rol_codigo = 3;
+}
+
+message CambiarRolProductoResponse {
+  UsuarioProducto usuario = 1;                 // la fila actualizada, con acciones recalculadas
+}
+
+message SuspenderEnProductoRequest {
+  string producto = 1;
+  string usuario_id = 2;
+}
+
+message SuspenderEnProductoResponse {
+  UsuarioProducto usuario = 1;
+}
+
+message ReactivarEnProductoRequest {
+  string producto = 1;
+  string usuario_id = 2;
+}
+
+message ReactivarEnProductoResponse {
+  UsuarioProducto usuario = 1;
+}
+
+message ContarPorEmpresaRequest {
+  string producto = 1;
+}
+
+message ContarPorEmpresaResponse {
+  repeated ConteoEmpresa conteos = 1;          // solo empresas con al menos un usuario o invitación del producto
+}
+
+message ConteoEmpresa {
+  string empresa_id = 1;
+  int32 usuarios = 2;                          // activos + invitados + suspendidos en el producto
+  int32 administradores = 3;                   // activos con el rol admin del producto
+}
+
+enum TipoFila {
+  TIPO_FILA_UNSPECIFIED = 0;
+  TIPO_FILA_USUARIO = 1;
+  TIPO_FILA_INVITACION = 2;
+}
+
+enum EstadoUsuarioProducto {
+  ESTADO_USUARIO_PRODUCTO_UNSPECIFIED = 0;
+  ESTADO_USUARIO_PRODUCTO_ACTIVO = 1;
+  ESTADO_USUARIO_PRODUCTO_SUSPENDIDO = 2;
+  ESTADO_USUARIO_PRODUCTO_INVITADO = 3;
+}
+
+// Una cuenta inactiva en la plataforma no es un estado de producto: va en MOTIVO_SIN_ACCIONES_CUENTA_INACTIVA.
+enum AccionUsuario {
+  ACCION_USUARIO_UNSPECIFIED = 0;
+  ACCION_USUARIO_CAMBIAR_ROL = 1;
+  ACCION_USUARIO_SUSPENDER = 2;
+  ACCION_USUARIO_REACTIVAR = 3;
+}
+
+enum MotivoSinAcciones {
+  MOTIVO_SIN_ACCIONES_UNSPECIFIED = 0;         // ninguno: la fila tiene acciones
+  MOTIVO_SIN_ACCIONES_USTED_MISMO = 1;
+  MOTIVO_SIN_ACCIONES_ADMIN_COMPANIA = 2;
+  MOTIVO_SIN_ACCIONES_SOLO_SUPERADMIN = 3;
+  MOTIVO_SIN_ACCIONES_INVITACION = 4;
+  MOTIVO_SIN_ACCIONES_CUENTA_INACTIVA = 5;
+}
