@@ -229,7 +229,8 @@ export async function esperarTablaPorDefecto(page: Page, tabla: Locator, nombre:
     await ponerTema(page, tema);
     await page.waitForTimeout(150);
     const m = await medirTabla(tabla);
-    expect.soft(m.radioContenedor, `${nombre} (${tema}): contenedor rounded-xl`).toBeGreaterThanOrEqual(12);
+    // rounded-xl del kit = var(--radius) = 9 px (packages/ui tokens.css), el mismo radio del listado principal (referente A7.2).
+    expect.soft(m.radioContenedor, `${nombre} (${tema}): contenedor rounded-xl`).toBeGreaterThanOrEqual(9);
     expect.soft(m.bordeContenedor, `${nombre} (${tema}): contenedor con borde`).toBeGreaterThanOrEqual(1);
     expect.soft(m.fondoCabecera, `${nombre} (${tema}): fondo de cabecera = --table-header-bg`).toBe(m.fondoEsperado);
     expect.soft(m.textoCabecera, `${nombre} (${tema}): texto de cabecera = --table-header-fg`).toBe(m.textoEsperado);
