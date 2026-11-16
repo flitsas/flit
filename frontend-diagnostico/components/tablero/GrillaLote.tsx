@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ChipFiltro } from "@flit/ui/ChipsFiltro";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import {
@@ -78,9 +78,15 @@ export function GrillaLote({
   const vehiculos = aplicarFiltrosGrilla(filtrarPorSaneamiento(filtrarVehiculos(grilla.vehiculos, filtro), filtroSaneamiento), filtros);
   const total = grilla.vehiculos.length;
   const filtrando = filtro !== null || filtroSaneamiento !== null || hayFiltrosGrilla(filtros);
+  const buscador = useRef<HTMLInputElement>(null);
   const limpiar = () => {
     setFiltros(FILTROS_GRILLA_VACIOS);
     onQuitarFiltro?.();
+  };
+  /** CR-3: el «Limpiar filtros» del vacío también lleva el foco al buscador (el vacío se desmonta al limpiar). */
+  const limpiarDesdeVacio = () => {
+    limpiar();
+    buscador.current?.focus();
   };
 
   return (
@@ -88,6 +94,7 @@ export function GrillaLote({
       <FiltrosGrilla
         grilla={grilla}
         vehiculos={grilla.vehiculos}
+        buscadorRef={buscador}
         valor={filtros}
         onCambiar={setFiltros}
         onLimpiar={limpiar}
@@ -111,7 +118,7 @@ export function GrillaLote({
         resumen={`Mostrando ${vehiculos.length} de ${total} vehículos`}
       />
       {filtrando && vehiculos.length === 0 ? (
-        <VacioFiltros onLimpiar={limpiar} mensaje={filtroSaneamiento ? "Quita el filtro de saneamiento o prueba con otra búsqueda." : undefined} />
+        <VacioFiltros onLimpiar={limpiarDesdeVacio} mensaje={filtroSaneamiento ? "Quita el filtro de saneamiento o prueba con otra búsqueda." : undefined} />
       ) : (
         <GrillaSemaforos
           grilla={grilla}

@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, useRef, type ReactNode } from "react";
+import { useId, useRef, type ReactNode, type RefObject } from "react";
 import { CHIPS_FILTRO_FILA_CLS, ChipFiltro } from "@flit/ui/ChipsFiltro";
 import { EstadoVacio } from "@flit/ui/EstadoVacio";
 import { iconoComo } from "@flit/ui/iconoComo";
@@ -31,6 +31,8 @@ const LIMPIAR_CLS =
   "focus-visible:outline-[var(--di-action)] max-[640px]:w-full max-[640px]:justify-center";
 
 export interface FiltrosGrillaProps {
+  /** Campo del buscador: quien pinta la barra le devuelve el foco tras «Limpiar filtros» del vacío (CR-3, spec-ui §6.6). */
+  buscadorRef?: RefObject<HTMLInputElement | null>;
   grilla: Pick<Grilla, "columnas">;
   /** Todas las filas de la grilla (las opciones y conteos salen de ellas, no de las filtradas). */
   vehiculos: readonly FilaVehiculo[];
@@ -53,9 +55,10 @@ export interface FiltrosGrillaProps {
  * filtros», siempre visible y deshabilitado sin filtros, que devuelve el foco al buscador. Filtra en memoria, sin parámetros
  * nuevos en la API (contrato §2) y sin escribir en la URL (SP-21).
  */
-export function FiltrosGrilla({ grilla, vehiculos, valor, onCambiar, onLimpiar, hayActivos, extra, resumen }: FiltrosGrillaProps) {
+export function FiltrosGrilla({ grilla, vehiculos, valor, onCambiar, onLimpiar, hayActivos, extra, resumen, buscadorRef }: FiltrosGrillaProps) {
   const id = useId();
-  const buscador = useRef<HTMLInputElement>(null);
+  const propio = useRef<HTMLInputElement>(null);
+  const buscador = buscadorRef ?? propio;
   const fuentes = fuentesFiltrables(grilla.columnas);
   const estados = valor.fuente ? opcionesEstado(vehiculos, valor.fuente) : [];
   const conDictamen = hayVeredictos(vehiculos);

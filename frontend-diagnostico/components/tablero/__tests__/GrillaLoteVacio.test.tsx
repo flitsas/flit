@@ -35,6 +35,8 @@ describe("GrillaLote — HU #14562 m-12: vacío por filtro", () => {
     expect(screen.queryByRole("table", { name: /semáforo de consultas/i })).toBeNull();
     fireEvent.click(screen.getAllByRole("button", { name: "Limpiar filtros" }).at(-1)!);
     expect(screen.getByLabelText("Buscar por placa o VIN")).toHaveValue("");
+    // CR-3 (spec-ui §6.6): el «Limpiar filtros» del vacío lleva el foco al buscador, como el de la barra.
+    expect(screen.getByLabelText("Buscar por placa o VIN")).toHaveFocus();
     expect(screen.getByRole("table", { name: /semáforo de consultas/i })).toBeInTheDocument();
   });
 

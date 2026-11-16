@@ -150,6 +150,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
   const [leyendo, setLeyendo] = useState(false);
   // HU #14584 §6.6 (decisión del orquestador): la misma barra de filtros del tablero, en memoria.
   const [filtros, setFiltros] = useState<ValorFiltros>(FILTROS_GRILLA_VACIOS);
+  const buscador = useRef<HTMLInputElement>(null);
   const grillaRef = useRef<TGrillaBackoffice | null>(null);
   const contenedor = useRef<HTMLDivElement>(null);
 
@@ -318,6 +319,7 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
               Las celdas con la marca «Manual» se llenaron a mano desde el backoffice. La compañía ve el mismo dato, sin la marca.
             </p>
             <FiltrosGrilla
+              buscadorRef={buscador}
               grilla={grilla}
               vehiculos={filas}
               valor={filtros}
@@ -327,7 +329,13 @@ export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficePro
               resumen={`Mostrando ${visibles.length} de ${filas.length} vehículos`}
             />
             {filtrando && visibles.length === 0 ? (
-              <VacioFiltros onLimpiar={() => setFiltros(FILTROS_GRILLA_VACIOS)} />
+              <VacioFiltros
+                onLimpiar={() => {
+                  setFiltros(FILTROS_GRILLA_VACIOS);
+                  // CR-3: como el botón de la barra, el foco vuelve al buscador.
+                  buscador.current?.focus();
+                }}
+              />
             ) : (
             <div ref={contenedor}>
               <GrillaSemaforos

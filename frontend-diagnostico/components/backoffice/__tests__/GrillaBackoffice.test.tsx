@@ -334,6 +334,17 @@ describe("GrillaBackoffice — HU #14584 §6.4 (A6.6): Dictamen y Auditoría en 
     expect(screen.getByRole("combobox", { name: "Estado" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Limpiar filtros" })).toBeDisabled();
   });
+
+  it("CR-3: «Limpiar filtros» del vacío por filtro restablece la grilla y lleva el foco al buscador", async () => {
+    montar();
+    await tabla();
+    fireEvent.change(screen.getByLabelText("Buscar por placa o VIN"), { target: { value: "ZZZ999" } });
+    expect(await screen.findByText("Ningún vehículo coincide")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Limpiar filtros" }).at(-1)!);
+    expect(screen.getByLabelText("Buscar por placa o VIN")).toHaveValue("");
+    expect(screen.getByLabelText("Buscar por placa o VIN")).toHaveFocus();
+    expect(await tabla()).toBeInTheDocument();
+  });
 });
 
 // HU #14562 AC56 (auditoría B2/M6): la grilla del backoffice es la misma GrillaSemaforos, así que pasa a tarjetas bajo 900 px
