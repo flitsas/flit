@@ -56,7 +56,8 @@ public sealed class ExcelLoteTests
     private const string PayloadAvaluo =
         """{"sin_valor_comercial":false,"valor_sugerido":48500000,"fuente_principal":"fasecolda","fuentes":[{"fuente":"fasecolda","estado":"OK","valor":48500000,"muestras":3,"fecha":"2026-10-22"}]}""";
 
-    private static readonly string[] Fijas = ["Orden", "Identificador", "Tipo de identificador", "Placa", "VIN", "Estado del vehículo"];
+    private static readonly string[] Fijas =
+        ["Orden", "Identificador", "Tipo de identificador", "Placa", "VIN", "Propietario actual declarado", "Cambio de propietario", "Estado del vehículo"];
 
     private static readonly string[] DeRunt =
     [
@@ -280,13 +281,15 @@ public sealed class ExcelLoteTests
         var vehiculo = lote.Vehiculos.Single().Id;
         var uno = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 1, "10005678", ct);
         var dos = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 2, "30009012", ct);
-        var locatario = await PersonaAsync(api, empresa, vehiculo, RolPersona.Locatario, 1, "20001234", ct, OrigenDocumento.DeclaradoCliente);
+        var historico = await PersonaAsync(api, empresa, vehiculo, RolPersona.Locatario, 1, "20009999", ct, OrigenDocumento.DeclaradoCliente);
+        var locatario = await PersonaAsync(api, empresa, vehiculo, RolPersona.Locatario, 2, "20001234", ct);
         await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST451", Fuente.Runt), PayloadRunt, ct);
         await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST451", Fuente.RuntPropietario), Personas(
             (uno.Id, 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[]}"""),
             (dos.Id, 2, "RUNT_PERSONA", "ERROR", "null")), ct);
         await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST451", Fuente.RuntLocatario), Personas(
-            (locatario.Id, 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[]}""")), ct);
+            (historico.Id, 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[]}"""),
+            (locatario.Id, 2, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[]}""")), ct);
 
         var libro = await ExcelDePrueba.LibroOkAsync(api, ExcelDePrueba.Token(api, empresa.Id), lote.Id, ct);
 
@@ -294,8 +297,47 @@ public sealed class ExcelLoteTests
         libro.Valor("Vehículos", fila, "RUNT propietarios — Documentos").Should().Be("C ****5678; C ****9012");
         libro.Valor("Vehículos", fila, "RUNT propietarios — Personas consultadas").Should().Be("1");
         libro.Valor("Vehículos", fila, "RUNT propietarios — Personas con error").Should().Be("1");
-        libro.Valor("Vehículos", fila, "RUNT locatarios — Documentos").Should().Be($"C ****1234 ({PersonaReporte.Declarado})");
+        libro.Valor("Vehículos", fila, "RUNT locatarios — Documentos").Should()
+            .Be("C ****1234", "HU #14582 §1.3: la persona histórica DECLARADO_CLIENTE no se pinta como locatario y sin el sufijo de declarado");
+        libro.Valor("Vehículos", fila, "RUNT locatarios — Personas consultadas").Should().Be("1");
+        libro.Texto.Should().NotContain(PersonaReporte.Declarado).And.NotContain("****9999");
         libro.Texto.Should().NotContainAny(["10005678", "0005678", "30009012", "0009012", "20001234", "0001234"], "el documento nunca sale completo");
+    }
+
+    // HU #14582 (contrato §1.3) — columnas fijas «Propietario actual declarado» («TIPO ****1234», enmascarado como el resto de la
+    // hoja) y «Cambio de propietario» (Sí / No / vacío), leídas de la columna persistida sin recalcular (SP-1).
+    [Fact]
+    public async Task HU14582_propietario_declarado_enmascarado_y_cambio_de_propietario()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        Flit.Diagnostico.Tests.Tablero.CeldaSembrada[] runt = [new(Fuente.Runt, EstadoCelda.Pendiente, 1)];
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt], vehiculos:
+            [new("TST481", runt), new("TST482", runt), new("TST483", runt)]);
+        var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
+        await using (var db = empresa.Db())
+        {
+            var filas = await db.Set<VehiculoDiagnostico>().Where(v => v.DiagnosticoId == lote.Id).ToDictionaryAsync(v => v.IdentificadorNorm, ct);
+            filas["TST481"].PropietarioDeclaradoDocTipo = "CC";
+            filas["TST481"].PropietarioDeclaradoDocCifrado = protector.Proteger("1020304050");
+            filas["TST481"].CambioPropietario = true;
+            filas["TST482"].PropietarioDeclaradoDocTipo = "NIT";
+            filas["TST482"].PropietarioDeclaradoDocCifrado = protector.Proteger("900123456");
+            filas["TST482"].CambioPropietario = false;
+            await db.SaveChangesAsync(ct);
+        }
+
+        var libro = await ExcelDePrueba.LibroOkAsync(api, ExcelDePrueba.Token(api, empresa.Id), lote.Id, ct);
+
+        libro.Valor("Vehículos", libro.Fila("Vehículos", "TST481"), "Propietario actual declarado").Should().Be("CC ****4050");
+        libro.Valor("Vehículos", libro.Fila("Vehículos", "TST481"), "Cambio de propietario").Should().Be("Sí");
+        libro.Valor("Vehículos", libro.Fila("Vehículos", "TST482"), "Propietario actual declarado").Should().Be("NIT ****3456");
+        libro.Valor("Vehículos", libro.Fila("Vehículos", "TST482"), "Cambio de propietario").Should().Be("No");
+        libro.Valor("Vehículos", libro.Fila("Vehículos", "TST483"), "Propietario actual declarado").Should().BeNullOrEmpty();
+        libro.Valor("Vehículos", libro.Fila("Vehículos", "TST483"), "Cambio de propietario").Should().BeNullOrEmpty();
+        libro.Texto.Should().NotContainAny(["1020304050", "900123456"], "el declarado nunca sale completo en el Excel del lote");
     }
 
     // Inyección de fórmulas (contexto técnico de la HU) — el nombre del lote y datos del RUNT que empiezan por =, +, - o @ quedan como
@@ -503,7 +545,7 @@ public sealed class ExcelLoteTests
                 new(Fuente.SimitPropietario, EstadoCelda.Pendiente, 1), new(Fuente.SimitLocatario, EstadoCelda.Na, 1), new(Fuente.Avaluo, EstadoCelda.Pendiente, 1)])]);
         var vehiculo = lote.Vehiculos.Single().Id;
         var propietario = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 1, "10005678", ct);
-        var locatario = await PersonaAsync(api, empresa, vehiculo, RolPersona.Locatario, 1, "20001234", ct, OrigenDocumento.DeclaradoCliente);
+        var locatario = await PersonaAsync(api, empresa, vehiculo, RolPersona.Locatario, 1, "20001234", ct);
         await TableroAyudas.PayloadAsync(empresa, lote.Celda(placa, Fuente.Runt), PayloadRunt, ct, manual: true);
         var manual = await TableroAyudas.PayloadAsync(empresa, lote.Celda(placa, Fuente.SimitVehiculo), PayloadSimit, ct, manual: true);
         await TableroAyudas.PayloadAsync(empresa, lote.Celda(placa, Fuente.Avaluo), PayloadAvaluo, ct);

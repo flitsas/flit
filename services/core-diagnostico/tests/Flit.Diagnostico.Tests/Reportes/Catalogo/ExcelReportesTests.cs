@@ -73,4 +73,46 @@ public sealed class ExcelReportesTests
         filtros.Should().Contain("vehiculos").And.Contain(ReportesDePrueba.Hoy.ToString("yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture));
         filtros.Should().NotContain("RPT6", "la hoja Filtros no lleva el valor de la placa");
     }
+
+    // HU #14582 (contrato §1.3, SP-6) — columnas del propietario actual declarado en el Excel del reporte: «Cambio de propietario»
+    // Sí/No/vacío; el declarado entra desde Excel, así que un tipo que empieza por = sale como texto literal y sin fórmula. Sin
+    // reportes.descargar, 403 (no se amplía quién lo ve).
+    [Fact]
+    public async Task HU14582_propietario_declarado_y_cambio_de_propietario_como_texto_literal()
+    {
+        await using var api = await ReportesDePrueba.ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        await ReportesDePrueba.LoteAsync(empresa,
+        [
+            new("RPT611", Propietarios: [new("CC", "1020304050")], PropietarioDeclarado: new("=1+1", "77"), CambioPropietario: true),
+            new("RPT612", Propietarios: [new("CC", "1020304050")], PropietarioDeclarado: new("CC", "1020304050"), CambioPropietario: false),
+            new("RPT613", Propietarios: [new("CC", "1020304050")]),
+        ], ct);
+
+        var sinPermiso = await api.Cliente(ReportesDePrueba.Token(api, empresa.Id)).GetAsync(ReportesDePrueba.Ruta("vehiculos", "placa=RPT61", "/excel"), ct);
+        var respuesta = await api.Cliente(ReportesDePrueba.Token(api, empresa.Id, descargar: true))
+            .GetAsync(ReportesDePrueba.Ruta("vehiculos", "placa=RPT61", "/excel"), ct);
+
+        sinPermiso.StatusCode.Should().Be(HttpStatusCode.Forbidden, "SP-6: sin reportes.descargar no hay archivo");
+        var bytes = await respuesta.Content.ReadAsByteArrayAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, System.Text.Encoding.UTF8.GetString(bytes));
+        var libro = ExcelDePrueba.Leer(bytes);
+        var reporte = libro.Hojas["Reporte"];
+        reporte[1].Should().Contain(["Propietario actual declarado (documento)", "Cambio de propietario", "Locatario RUNT (documento)"]);
+        reporte[1].Should().NotContain("Origen del locatario");
+        var declarado = Array.IndexOf(reporte[1], "Propietario actual declarado (documento)");
+        var cambio = Array.IndexOf(reporte[1], "Cambio de propietario");
+        var placa = Array.IndexOf(reporte[1], "Placa");
+        int Fila(string p) => reporte.FindIndex(2, r => r.Length > placa && r[placa] == p);
+        reporte[Fila("RPT611")][declarado].Should().Be("=1+1 77");
+        libro.EsLiteral("Reporte", Fila("RPT611"), declarado).Should().BeTrue("SP-6: el declarado que parece fórmula queda literal");
+        reporte[Fila("RPT611")][cambio].Should().Be("Sí");
+        reporte[Fila("RPT612")][declarado].Should().Be("CC 1020304050");
+        reporte[Fila("RPT612")][cambio].Should().Be("No");
+        var sinDeclarado = reporte[Fila("RPT613")];
+        (sinDeclarado.Length <= cambio || string.IsNullOrEmpty(sinDeclarado[cambio])).Should().BeTrue("sin declarado, vacío");
+        libro.Formulas.Should().Be(0);
+    }
 }

@@ -11,11 +11,19 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes.Catalogo;
 /// <summary>
 /// Reporte <c>vehiculos</c> (HU #14579, BE-2; contrato-api §4; SP-16, O10): un renglón por vehículo de los diagnósticos creados en el
 /// rango, con la placa, el VIN y el documento <b>completo</b> de propietarios y locatario de <c>personas_vehiculo</c> (cifrado hasta
-/// después del registro). Sin nombre de persona: no se guarda y la respuesta completa de la fuente no se descifra. El locatario es el
-/// del RUNT si lo hay; si no, el declarado (persona o, mientras el RUNT no cierra, la captura del vehículo).
+/// después del registro). Sin nombre de persona: no se guarda y la respuesta completa de la fuente no se descifra. HU #14582 (contrato
+/// §1.3, SP-6): el locatario es solo el del RUNT (<c>locatario_runt_documento</c>; las personas históricas <c>DECLARADO_CLIENTE</c> no
+/// cuentan); el documento declarado por el cliente es el propietario actual (<c>propietario_declarado_documento</c>, de
+/// <c>vehiculos.propietario_declarado_doc_*</c>) y <c>cambio_propietario</c> sale Sí / No / vacío de la columna persistida, sin
+/// recalcular (SP-1). Los documentos se descifran después del registro, como el resto.
 /// </summary>
 internal sealed class ReporteVehiculos(NombresTramite tramites) : IReporte
 {
+    /// <summary>Texto de <c>cambio_propietario</c> (HU #14582): true → «Sí», false → «No», null → vacío.</summary>
+    public const string CambioSi = "Sí";
+
+    public const string CambioNo = "No";
+
     public TipoReporte Tipo => TipoReporte.Vehiculos;
 
     public Task<int> ContarAsync(ContextoReporte contexto, FiltroReporte filtro, CancellationToken ct) => Consulta(contexto, filtro).CountAsync(ct);
@@ -37,12 +45,11 @@ internal sealed class ReporteVehiculos(NombresTramite tramites) : IReporte
         var propias = personas.ToList();
         var propietarios = propias.Where(p => p.Rol == RolPersona.Propietario).OrderBy(p => p.Orden)
             .Select(p => new DocumentoCifrado(p.Id, p.DocTipo, p.DocCifrado)).ToList();
-        var locatarios = propias.Where(p => p.Rol == RolPersona.Locatario).OrderBy(p => p.Origen == OrigenDocumento.Proveedor ? 0 : 1).ThenBy(p => p.Orden).ToList();
-        (DocumentoCifrado Documento, OrigenDocumento Origen)? locatario = locatarios.Count > 0
-            ? (new DocumentoCifrado(locatarios[0].Id, locatarios[0].DocTipo, locatarios[0].DocCifrado), locatarios[0].Origen)
-            : l.LocatarioDocOrigen == OrigenDocumento.DeclaradoCliente && l.LocatarioDocTipo is { } tipo && l.LocatarioDocCifrado is { } cifrado
-                ? (new DocumentoCifrado(null, tipo, cifrado), OrigenDocumento.DeclaradoCliente)
-                : null;
+        var locatario = propias.Where(p => p.Rol == RolPersona.Locatario && p.Origen == OrigenDocumento.Proveedor).OrderBy(p => p.Orden)
+            .Select(p => new DocumentoCifrado(p.Id, p.DocTipo, p.DocCifrado)).FirstOrDefault();
+        var declarado = l.PropietarioDeclaradoDocTipo is { } tipo && l.PropietarioDeclaradoDocCifrado is { } cifrado
+            ? new DocumentoCifrado(null, tipo, cifrado)
+            : null;
 
         var fila = new FilaReporte { Empresa = l.Empresa };
         var v = fila.Valores;
@@ -57,14 +64,16 @@ internal sealed class ReporteVehiculos(NombresTramite tramites) : IReporte
         v["organismo"] = l.Organismo;
         v["departamento"] = l.Departamento;
         v["propietarios_documentos"] = null;
-        v["locatario_documento"] = null;
-        v["locatario_origen"] = locatario is { } lo ? (lo.Origen == OrigenDocumento.Proveedor ? "RUNT" : "DECLARADO") : null;
+        v["propietario_declarado_documento"] = null;
+        v["cambio_propietario"] = l.CambioPropietario is { } cambio ? (cambio ? CambioSi : CambioNo) : null;
+        v["locatario_runt_documento"] = null;
         v["veredicto"] = l.Veredicto;
         v["estado_consultas"] = l.EstadoConsultas;
         v["saneamiento_estado"] = ValoresReporte.Codigo(l.SaneamientoEstado);
         v["tramite_numero"] = l.TramiteNumero;
         fila.Cifrados.Add(new DocumentosPorDescifrar("propietarios_documentos", propietarios));
-        fila.Cifrados.Add(new DocumentosPorDescifrar("locatario_documento", locatario is { } d ? [d.Documento] : []));
+        fila.Cifrados.Add(new DocumentosPorDescifrar("propietario_declarado_documento", declarado is { } d ? [d] : []));
+        fila.Cifrados.Add(new DocumentosPorDescifrar("locatario_runt_documento", locatario is { } r ? [r] : []));
         return fila;
     }
 
@@ -132,9 +141,9 @@ internal sealed class ReporteVehiculos(NombresTramite tramites) : IReporte
                    Servicio = v.Servicio,
                    Organismo = v.OrganismoNombre,
                    Departamento = v.DepartamentoCodigo,
-                   LocatarioDocTipo = v.LocatarioDocTipo,
-                   LocatarioDocCifrado = v.LocatarioDocCifrado,
-                   LocatarioDocOrigen = v.LocatarioDocOrigen,
+                   PropietarioDeclaradoDocTipo = v.PropietarioDeclaradoDocTipo,
+                   PropietarioDeclaradoDocCifrado = v.PropietarioDeclaradoDocCifrado,
+                   CambioPropietario = v.CambioPropietario,
                    Veredicto = vigentes.Where(d => d.TenantId == v.TenantId && d.VehiculoId == v.Id).Select(d => d.Veredicto).FirstOrDefault(),
                    EstadoConsultas = v.EstadoConsultas,
                    SaneamientoEstado = v.SaneamientoEstado,
@@ -159,9 +168,9 @@ internal sealed class ReporteVehiculos(NombresTramite tramites) : IReporte
         public string? Servicio { get; init; }
         public string? Organismo { get; init; }
         public string? Departamento { get; init; }
-        public string? LocatarioDocTipo { get; init; }
-        public byte[]? LocatarioDocCifrado { get; init; }
-        public OrigenDocumento? LocatarioDocOrigen { get; init; }
+        public string? PropietarioDeclaradoDocTipo { get; init; }
+        public byte[]? PropietarioDeclaradoDocCifrado { get; init; }
+        public bool? CambioPropietario { get; init; }
         public string? Veredicto { get; init; }
         public string EstadoConsultas { get; init; } = string.Empty;
         public EstadoSaneamiento? SaneamientoEstado { get; init; }

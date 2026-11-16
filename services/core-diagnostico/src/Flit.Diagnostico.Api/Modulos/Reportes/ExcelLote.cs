@@ -24,7 +24,8 @@ internal sealed record DatosTecnicosVehiculo(string? Marca, string? Linea, int? 
 /// Renderizador del Excel del lote (HU #13849, F07-H4, F07-C5/C6/C9/C10): función pura del contenido de F07-H2
 /// (<see cref="ContenidoReporteLote"/>), de los datos técnicos del RUNT y del estimado frente a lo consumido de la grilla (#13796).
 /// <list type="bullet">
-/// <item>Hoja «Vehículos»: una fila por vehículo en el orden de la carga; columnas fijas y, por fuente del alcance en el orden de la
+/// <item>Hoja «Vehículos»: una fila por vehículo en el orden de la carga; columnas fijas (con el propietario actual declarado
+/// enmascarado y «Cambio de propietario» Sí/No/vacío, HU #14582) y, por fuente del alcance en el orden de la
 /// grilla, estado + datos (<see cref="ColumnasExcel"/>). Lo no terminado (pendiente, N/A o «Consulta no disponible») lleva solo su
 /// estado; el vehículo sale Terminado, En proceso o Con error.</item>
 /// <item>Hoja «Diagnóstico»: ID, nombre del lote, empresa, usuario creador, fecha de creación (hora Colombia) y tipo de análisis.</item>
@@ -43,8 +44,16 @@ internal sealed record DatosTecnicosVehiculo(string? Marca, string? Linea, int? 
 /// </example>
 internal static class ExcelLote
 {
-    /// <summary>Versión del diseño: entra en la huella (súbela al cambiar hojas, columnas o cómo se pinta una celda). 2 = monto de impuesto null no es cero.</summary>
-    public const int VersionPlantilla = 2;
+    /// <summary>
+    /// Versión del diseño: entra en la huella (súbela al cambiar hojas, columnas o cómo se pinta una celda). 2 = monto de impuesto null no
+    /// es cero. 3 = columnas del propietario actual declarado y del cambio de propietario (HU #14582).
+    /// </summary>
+    public const int VersionPlantilla = 3;
+
+    /// <summary>Texto de «Cambio de propietario» cuando es true / false (null queda vacío).</summary>
+    public const string Si = "Sí";
+
+    public const string No = "No";
 
     public const string ContentType = TabularWorkbookWriter.ContentType;
 
@@ -113,6 +122,7 @@ internal static class ExcelLote
             var fila = new List<Celda>
             {
                 Celda.Of(v.Orden), Celda.Of(v.Identificador), Celda.Of(RotulosDiagnostico.DeTipoIdentificador(v.TipoIdentificador)), Celda.Of(v.Placa), Celda.Of(v.Vin),
+                Celda.Of(v.PropietarioDeclarado), v.CambioPropietario is { } cambio ? Celda.Of(cambio ? Si : No) : Celda.Empty,
                 Celda.Of(EstadoVehiculo(v.Secciones)),
             };
             foreach (var seccion in v.Secciones)
