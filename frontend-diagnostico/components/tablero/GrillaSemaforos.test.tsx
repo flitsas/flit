@@ -222,7 +222,9 @@ describe("GrillaSemaforos — HU #14584 §6.2: la celda pinta solo el chip; el d
     const { container } = pintar(grilla({ vehiculos: [V1] }));
     const td = fuenteDe(filaDe(container, "vehiculo-1"), "RUNT_PROPIETARIO");
     const span = td.querySelector<HTMLElement>("[tabindex='0']")!;
-    expect(span).toHaveAttribute("aria-label", "RUNT propietario de TST001: Sin solicitar");
+    // CR-8: sin aria-label en un span sin rol; el nombre va como texto sr-only dentro del disparador.
+    expect(span).not.toHaveAttribute("aria-label");
+    expect(span.querySelector(".sr-only")).toHaveTextContent("RUNT propietario de TST001: Sin solicitar");
     act(() => span.focus());
     expect(screen.getByRole("tooltip")).toHaveTextContent("No se pidió en este lote");
   });

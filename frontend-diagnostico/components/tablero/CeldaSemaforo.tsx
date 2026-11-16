@@ -122,8 +122,12 @@ function LineaMovil({ children }: { children: ReactNode }) {
 function ChipEnfocable({ etiqueta, contenido, children }: { etiqueta: string; contenido: ReactNode; children: ReactNode }) {
   return (
     <Tooltip contenido={contenido}>
-      <span tabIndex={0} aria-label={etiqueta} className={`inline-flex rounded-full ${FOCO_CLS}`}>
-        {children}
+      <span tabIndex={0} className={`inline-flex rounded-full ${FOCO_CLS}`}>
+        {/* CR-8: nombre como texto sr-only (un aria-label en un span sin rol no se anuncia de forma fiable). */}
+        <span className="sr-only">{etiqueta}</span>
+        <span aria-hidden="true" className="inline-flex">
+          {children}
+        </span>
       </span>
     </Tooltip>
   );
