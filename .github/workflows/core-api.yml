@@ -84,7 +84,9 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { nombre: admin, carril: admin, shard: 0 }
+          # admin va en 2 shards por clase (ADMIN_SHARDS): cada uno en su runner de GitHub, con su Postgres.
+          - { nombre: admin-0, carril: admin, shard: 0 }
+          - { nombre: admin-1, carril: admin, shard: 1 }
           - { nombre: integration-0, carril: integration, shard: 0 }
           - { nombre: integration-1, carril: integration, shard: 1 }
           - { nombre: integration-2, carril: integration, shard: 2 }
@@ -163,6 +165,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: '4'
+          ADMIN_SHARDS: '2'
           # La cobertura solo se recoge en push: en el PR alarga la corrida sin que nadie la mire.
           COBERTURA: ${{ github.event_name == 'push' && '1' || '' }}
 
