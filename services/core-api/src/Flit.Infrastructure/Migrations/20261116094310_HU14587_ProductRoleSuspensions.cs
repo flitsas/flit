@@ -19,7 +19,7 @@ namespace Flit.Infrastructure.Migrations
                     id = table.Column<Guid>(type: "uuid", nullable: false, defaultValueSql: "uuidv7()"),
                     tenant_id = table.Column<Guid>(type: "uuid", nullable: false),
                     user_id = table.Column<Guid>(type: "uuid", nullable: false),
-                    product_code = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    product_code = table.Column<string>(type: "character varying(40)", maxLength: 40, nullable: false),
                     role_id = table.Column<Guid>(type: "uuid", nullable: false, comment: "Rol del producto que tenía al suspenderse; se recrea al reactivar."),
                     suspended_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false, defaultValueSql: "now()"),
                     suspended_by = table.Column<Guid>(type: "uuid", nullable: false, comment: "Usuario que suspendió (@pii:low).")
@@ -28,6 +28,13 @@ namespace Flit.Infrastructure.Migrations
                 {
                     table.PrimaryKey("pk_product_role_suspensions", x => x.id);
                     table.CheckConstraint("ck_product_role_suspensions_product_code", "product_code <> ''");
+                    table.ForeignKey(
+                        name: "fk_product_role_suspensions_products",
+                        column: x => x.product_code,
+                        principalSchema: "platform",
+                        principalTable: "products",
+                        principalColumn: "code",
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "fk_product_role_suspensions_roles",
                         column: x => x.role_id,
@@ -53,6 +60,12 @@ namespace Flit.Infrastructure.Migrations
                 comment: "Suspensión de un usuario en un producto (ADR-0089): la asignación del rol del producto se cierra y esta fila permite listarlo como SUSPENDIDO y reactivarlo con el mismo rol. No suspende la cuenta.");
 
             migrationBuilder.CreateIndex(
+                name: "ix_product_role_suspensions_product_code",
+                schema: "security",
+                table: "product_role_suspensions",
+                column: "product_code");
+
+            migrationBuilder.CreateIndex(
                 name: "ix_product_role_suspensions_role_id",
                 schema: "security",
                 table: "product_role_suspensions",
@@ -73,7 +86,7 @@ namespace Flit.Infrastructure.Migrations
 
             // ADR-0089 (HU #14587): mismo régimen que las demás tablas con tenant_id del esquema security (RLS + tenant_isolation)
             // y rastro en audit.audit_logs de cada suspensión (INSERT) y reactivación (DELETE): la fila es una marca que se
-            // borra al reactivar, así que no lleva row_version ni soft delete; la historia queda en el audit y en admin.audit.
+            // borra al reactivar, así que no lleva row_version ni soft delete (excepción A5/A6/A16 documentada en el ADR).
             migrationBuilder.Sql(
                 """
                 ALTER TABLE security.product_role_suspensions ENABLE ROW LEVEL SECURITY;

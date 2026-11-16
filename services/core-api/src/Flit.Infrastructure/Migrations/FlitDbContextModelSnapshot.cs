@@ -5606,8 +5606,8 @@ namespace Flit.Infrastructure.Migrations
 
                     b.Property<string>("ProductCode")
                         .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("character varying(32)")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
                         .HasColumnName("product_code");
 
                     b.Property<Guid>("RoleId")
@@ -5636,6 +5636,9 @@ namespace Flit.Infrastructure.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_product_role_suspensions");
+
+                    b.HasIndex("ProductCode")
+                        .HasDatabaseName("ix_product_role_suspensions_product_code");
 
                     b.HasIndex("RoleId")
                         .HasDatabaseName("ix_product_role_suspensions_role_id");
@@ -13123,6 +13126,13 @@ namespace Flit.Infrastructure.Migrations
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Security.ProductRoleSuspensionEntity", b =>
                 {
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Platform.ProductEntity", null)
+                        .WithMany()
+                        .HasForeignKey("ProductCode")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_product_role_suspensions_products");
+
                     b.HasOne("Flit.Infrastructure.Persistence.Entities.Security.Role", null)
                         .WithMany()
                         .HasForeignKey("RoleId")

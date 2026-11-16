@@ -1,4 +1,5 @@
 using Flit.Infrastructure.Persistence.Entities.Identity;
+using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Infrastructure.Persistence.Entities.Security;
 using Flit.Infrastructure.Persistence.Schemas;
 using Microsoft.EntityFrameworkCore;
@@ -18,7 +19,7 @@ internal sealed class ProductRoleSuspensionConfiguration : IEntityTypeConfigurat
         });
         builder.HasKey(x => x.Id).HasName("pk_product_role_suspensions");
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
-        builder.Property(x => x.ProductCode).HasMaxLength(32).IsRequired();
+        builder.Property(x => x.ProductCode).HasMaxLength(40).IsRequired();
         builder.Property(x => x.RoleId).HasComment("Rol del producto que tenía al suspenderse; se recrea al reactivar.");
         builder.Property(x => x.SuspendedAt).HasDefaultValueSql("now()");
         builder.Property(x => x.SuspendedBy).HasComment("Usuario que suspendió (@pii:low).");
@@ -35,5 +36,9 @@ internal sealed class ProductRoleSuspensionConfiguration : IEntityTypeConfigurat
             .HasConstraintName("fk_product_role_suspensions_users").OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<Role>().WithMany().HasForeignKey(x => x.RoleId)
             .HasConstraintName("fk_product_role_suspensions_roles").OnDelete(DeleteBehavior.Restrict);
+        // Mismo largo y catálogo que platform.products.code (CR-9): un producto inexistente no se puede marcar.
+        builder.HasOne<ProductEntity>().WithMany().HasForeignKey(x => x.ProductCode)
+            .HasConstraintName("fk_product_role_suspensions_products").OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.ProductCode).HasDatabaseName("ix_product_role_suspensions_product_code");
     }
 }
