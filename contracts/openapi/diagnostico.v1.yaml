@@ -9,7 +9,8 @@ info:
     sale siempre del token y ningún parámetro la cambia. Los permisos tienen el formato
     diagnostico.<modulo>.<accion> (§6.2) y se registran con el manifiesto del producto
     (PUT /api/v1/platform/products/diagnostico/manifest, ver platform.v1.yaml). Diagnóstico no publica
-    rutas para crear o modificar compañías, usuarios, roles ni suscripciones (R-4). Los errores de
+    rutas para crear o modificar compañías, cuentas de usuario, roles ni suscripciones (R-4); el módulo Usuarios
+    solo gestiona el rol de Diagnóstico y lo delega en la plataforma (ADR-0089). Los errores de
     regla responden { code, error } con un code estable. Toda ruta bajo /api/v1/diagnostico pasa por el
     guard de suscripción (HU #13726): si la compañía del token no tiene Diagnóstico activo, o no se puede
     verificar con Identidad (fail-closed), responde 403 con code PRODUCTO_NO_HABILITADO. /health y
@@ -58,6 +59,15 @@ info:
     consumidor es la app de Diagnóstico, que sale en el mismo despliegue. FilaResumen renombra sus campos de documento
     (siempre enmascarado). El motivo N/A SIN_DOCUMENTO_LOCATARIO conserva el código y su texto pasa a
     «El RUNT no reporta locatario».
+
+    1.6.0 incluye además el módulo Usuarios de Diagnóstico (HU #14587, ADR-0089), sin subir la versión: rutas nuevas
+    /usuarios* de la compañía (permiso nuevo diagnostico.usuarios.gestionar, solo admin_diagnostico, y la compañía solo del
+    token) y del backoffice del SuperAdmin (/backoffice/empresas/{empresa}/usuarios* y /backoffice/usuarios/empresas). Todas
+    delegan en flit.platform.v1.UsuariosProductoService de core-api por gRPC. En contratos existentes solo se agrega la
+    capacidad requerida gestionarUsuarios. Invitar responde 202 uniforme. Códigos nuevos: EMPRESA_NO_PERMITIDA, ROL_NO_PERMITIDO,
+    ROL_NO_ASIGNABLE, OBJETIVO_PROTEGIDO, ACCION_SOBRE_SI_MISMO, USUARIO_NO_ENCONTRADO, USUARIO_SUSPENDIDO, INVITACION_PENDIENTE,
+    ULTIMO_ADMINISTRADOR, ROL_YA_VIGENTE, CORREO_INVALIDO, NOMBRE_REQUERIDO, FILTRO_INVALIDO, PAGINACION_INVALIDA,
+    DEMASIADAS_SOLICITUDES, PLATAFORMA_NO_DISPONIBLE y PLATAFORMA_NO_CONFIGURADA.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -126,6 +136,11 @@ tags:
     description: >
       Dashboard de Diagnóstico (ADR-0088): conteos, sumas y porcentajes en vivo por compañía, sin datos personales. La compañía con
       diagnostico.diagnosticos.ver y la visibilidad del lote; el backoffice, con volumetría.
+  - name: Usuarios
+    description: >
+      Usuarios de Diagnóstico de la compañía (HU #14587, ADR-0089): listar, invitar, cambiar el rol de Diagnóstico, suspender y
+      reactivar en el producto. Diagnóstico no tiene cuentas propias: delega en el gRPC de usuarios por producto de core-api, que
+      reverifica al actor y aplica las reglas. Campos en snake_case.
   - name: Backoffice
     description: >
       Lectura entre compañías del backoffice (D-16, ADR-0073; ajustes 2026-11-11, punto 1). Dos políticas: la de
@@ -4053,6 +4068,361 @@ paths:
         "429": { $ref: "#/components/responses/ExportacionEnCurso" }
         "503": { $ref: "#/components/responses/IdentidadNoDisponible" }
 
+  /api/v1/diagnostico/usuarios:
+    get:
+      tags: [Usuarios]
+      operationId: listarUsuariosDiagnostico
+      summary: Usuarios de Diagnóstico de la compañía (lista paginada)
+      description: >
+        HU #14587 (ADR-0089). Permiso diagnostico.usuarios.gestionar (admin_diagnostico) o SuperAdmin; usuario_diagnostico recibe 403.
+        La compañía sale solo del token: un parámetro empresa responde 400 EMPRESA_NO_PERMITIDA. Delega en
+        flit.platform.v1.UsuariosProductoService.ListarUsuariosProducto de core-api, que reverifica al actor. Solo usuarios con rol
+        usuario_diagnostico o admin_diagnostico (D-5). Orden: estado (ACTIVO, INVITADO, SUSPENDIDO) y nombre.
+      parameters:
+        - $ref: "#/components/parameters/BusquedaUsuarios"
+        - $ref: "#/components/parameters/RolUsuarios"
+        - $ref: "#/components/parameters/EstadoUsuarios"
+        - $ref: "#/components/parameters/PaginaUsuarios"
+        - $ref: "#/components/parameters/TamanoUsuarios"
+      responses:
+        "200":
+          description: Página de usuarios con lo que el actor puede hacer en cada fila.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ListaUsuariosDiagnostico" } } }
+        "400":
+          description: FILTRO_INVALIDO, PAGINACION_INVALIDA o EMPRESA_NO_PERMITIDA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ProhibidoUsuarios"
+        "503":
+          $ref: "#/components/responses/PlataformaUsuariosNoDisponible"
+
+  /api/v1/diagnostico/usuarios/invitaciones:
+    post:
+      tags: [Usuarios]
+      operationId: invitarUsuarioDiagnostico
+      summary: Invitar a una persona a Diagnóstico o darle el acceso
+      description: >
+        HU #14587 (SP-10, SP-11, SP-15, SP-16). Solo el código de rol (lista blanca); un rol_id u otro campo se ignora. Un
+        admin_diagnostico solo da usuario_diagnostico (403 ROL_NO_ASIGNABLE). Respuesta 202 uniforme en todos los casos (correo nuevo,
+        miembro sin rol de Diagnóstico, ya con rol, invitación pendiente o correo de otra compañía): la causa solo va a la auditoría de
+        core-api y nunca se mueve a un usuario de compañía. El correo no se escribe en los logs. Límite diagnostico-invitaciones
+        (20/h por actor, 100/h por compañía).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/InvitacionUsuarioDiagnostico" } } }
+      responses:
+        "202":
+          description: Aceptada (cuerpo uniforme).
+          content: { application/json: { schema: { $ref: "#/components/schemas/InvitacionAceptada" } } }
+        "400":
+          description: CORREO_INVALIDO (campo correo), NOMBRE_REQUERIDO (campo nombre) o EMPRESA_NO_PERMITIDA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ProhibidoUsuarios"
+        "413":
+          $ref: "#/components/responses/CuerpoMuyGrande"
+        "422":
+          description: ROL_NO_PERMITIDO (campo rol), fuera de la lista blanca.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "429":
+          description: DEMASIADAS_SOLICITUDES (20/h por actor, 100/h por compañía).
+          headers:
+            Retry-After: { schema: { type: integer }, description: Segundos para reintentar. }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          $ref: "#/components/responses/PlataformaUsuariosNoDisponible"
+
+  /api/v1/diagnostico/usuarios/{usuario}/rol:
+    parameters:
+      - $ref: "#/components/parameters/UsuarioDiagnosticoId"
+    put:
+      tags: [Usuarios]
+      operationId: cambiarRolUsuarioDiagnostico
+      summary: Cambiar el rol de Diagnóstico de un usuario
+      description: >
+        HU #14587 (SP-9 = a). Solo toca la asignación del producto diagnostico; los roles de otros productos se conservan. Idempotente.
+        Solo el SuperAdmin da o quita admin_diagnostico (SP-11 = a).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CambioRolDiagnostico" } } }
+      responses:
+        "200":
+          description: La fila actualizada, con las acciones recalculadas.
+          content: { application/json: { schema: { $ref: "#/components/schemas/UsuarioDiagnostico" } } }
+        "400":
+          description: ACCION_SOBRE_SI_MISMO o EMPRESA_NO_PERMITIDA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ProhibidoAccionUsuario"
+        "404":
+          $ref: "#/components/responses/UsuarioNoEncontrado"
+        "409":
+          description: USUARIO_SUSPENDIDO, INVITACION_PENDIENTE o ULTIMO_ADMINISTRADOR.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "422":
+          description: ROL_NO_PERMITIDO (campo rol).
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          $ref: "#/components/responses/PlataformaUsuariosNoDisponible"
+
+  /api/v1/diagnostico/usuarios/{usuario}/suspension:
+    parameters:
+      - $ref: "#/components/parameters/UsuarioDiagnosticoId"
+    post:
+      tags: [Usuarios]
+      operationId: suspenderUsuarioDiagnostico
+      summary: Suspender a un usuario en Diagnóstico
+      description: >
+        HU #14587 (SP-12 = a). Cierra solo la asignación del rol de Diagnóstico y guarda la marca de suspensión del producto; la cuenta y
+        los demás productos no cambian. Idempotente.
+      responses:
+        "200":
+          description: La fila con estado SUSPENDIDO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/UsuarioDiagnostico" } } }
+        "400":
+          description: ACCION_SOBRE_SI_MISMO o EMPRESA_NO_PERMITIDA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ProhibidoAccionUsuario"
+        "404":
+          $ref: "#/components/responses/UsuarioNoEncontrado"
+        "409":
+          description: ULTIMO_ADMINISTRADOR o INVITACION_PENDIENTE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          $ref: "#/components/responses/PlataformaUsuariosNoDisponible"
+    delete:
+      tags: [Usuarios]
+      operationId: reactivarUsuarioDiagnostico
+      summary: Reactivar a un usuario en Diagnóstico
+      description: >
+        HU #14587. Recrea la asignación con el rol que tenía al suspenderse y borra la marca. Idempotente. Si la cuenta está inactiva en la
+        plataforma, la fila sale ACTIVO con motivo_sin_acciones CUENTA_INACTIVA.
+      responses:
+        "200":
+          description: La fila con estado ACTIVO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/UsuarioDiagnostico" } } }
+        "400":
+          description: ACCION_SOBRE_SI_MISMO o EMPRESA_NO_PERMITIDA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ProhibidoAccionUsuario"
+        "404":
+          $ref: "#/components/responses/UsuarioNoEncontrado"
+        "409":
+          description: ROL_YA_VIGENTE (el hub le dio otro rol de Diagnóstico; la marca se borra) o INVITACION_PENDIENTE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          $ref: "#/components/responses/PlataformaUsuariosNoDisponible"
+
+  /api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios:
+    parameters:
+      - $ref: "#/components/parameters/EmpresaUsuariosBackoffice"
+    get:
+      tags: [Usuarios, Backoffice]
+      operationId: listarUsuariosDiagnosticoBackoffice
+      summary: Usuarios de Diagnóstico de una compañía (SuperAdmin)
+      description: >
+        HU #14587. Política diagnostico.backoffice.usuarios: solo SuperAdmin (un usuario FLIT con diagnostico.backoffice.ver recibe 403).
+        La compañía es la de la ruta y debe tener Diagnóstico activo (404 EMPRESA_NO_ENCONTRADA si no; 503 IDENTIDAD_NO_DISPONIBLE si
+        Identidad no responde); la lectura queda en lecturas_backoffice. Mismos parámetros que /usuarios. D-6: el 200 trae además la
+        cabecera empresa (la misma resolución de Identidad que valida la ruta).
+      parameters:
+        - $ref: "#/components/parameters/BusquedaUsuarios"
+        - $ref: "#/components/parameters/RolUsuarios"
+        - $ref: "#/components/parameters/EstadoUsuarios"
+        - $ref: "#/components/parameters/PaginaUsuarios"
+        - $ref: "#/components/parameters/TamanoUsuarios"
+      responses:
+        "200":
+          description: Página de usuarios de la compañía con su cabecera.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ListaUsuariosDiagnosticoBackoffice" } } }
+        "400":
+          description: FILTRO_INVALIDO, PAGINACION_INVALIDA o EMPRESA_REQUERIDA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ProhibidoUsuarios"
+        "404":
+          description: EMPRESA_NO_ENCONTRADA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          $ref: "#/components/responses/PlataformaUsuariosNoDisponible"
+
+  /api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios/invitaciones:
+    parameters:
+      - $ref: "#/components/parameters/EmpresaUsuariosBackoffice"
+    post:
+      tags: [Usuarios, Backoffice]
+      operationId: invitarUsuarioDiagnosticoBackoffice
+      summary: Invitar a una persona a Diagnóstico en una compañía (SuperAdmin)
+      description: Igual que POST /usuarios/invitaciones sobre la compañía de la ruta; el SuperAdmin puede dar admin_diagnostico.
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/InvitacionUsuarioDiagnostico" } } }
+      responses:
+        "202":
+          description: Aceptada (cuerpo uniforme).
+          content: { application/json: { schema: { $ref: "#/components/schemas/InvitacionAceptada" } } }
+        "400":
+          description: CORREO_INVALIDO o NOMBRE_REQUERIDO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ProhibidoUsuarios"
+        "404":
+          description: EMPRESA_NO_ENCONTRADA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "422":
+          description: ROL_NO_PERMITIDO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "429":
+          description: DEMASIADAS_SOLICITUDES.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          $ref: "#/components/responses/PlataformaUsuariosNoDisponible"
+
+  /api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios/{usuario}/rol:
+    parameters:
+      - $ref: "#/components/parameters/EmpresaUsuariosBackoffice"
+      - $ref: "#/components/parameters/UsuarioDiagnosticoId"
+    put:
+      tags: [Usuarios, Backoffice]
+      operationId: cambiarRolUsuarioDiagnosticoBackoffice
+      summary: Cambiar el rol de Diagnóstico de un usuario de una compañía (SuperAdmin)
+      description: Igual que PUT /usuarios/{usuario}/rol sobre la compañía de la ruta (404 EMPRESA_NO_ENCONTRADA si no tiene Diagnóstico).
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: "#/components/schemas/CambioRolDiagnostico" } } }
+      responses:
+        "200":
+          description: La fila actualizada.
+          content: { application/json: { schema: { $ref: "#/components/schemas/UsuarioDiagnostico" } } }
+        "400":
+          description: ACCION_SOBRE_SI_MISMO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ProhibidoAccionUsuario"
+        "404":
+          $ref: "#/components/responses/UsuarioNoEncontrado"
+        "409":
+          description: USUARIO_SUSPENDIDO, INVITACION_PENDIENTE o ULTIMO_ADMINISTRADOR.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "422":
+          description: ROL_NO_PERMITIDO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          $ref: "#/components/responses/PlataformaUsuariosNoDisponible"
+
+  /api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios/{usuario}/suspension:
+    parameters:
+      - $ref: "#/components/parameters/EmpresaUsuariosBackoffice"
+      - $ref: "#/components/parameters/UsuarioDiagnosticoId"
+    post:
+      tags: [Usuarios, Backoffice]
+      operationId: suspenderUsuarioDiagnosticoBackoffice
+      summary: Suspender a un usuario en Diagnóstico en una compañía (SuperAdmin)
+      responses:
+        "200":
+          description: La fila con estado SUSPENDIDO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/UsuarioDiagnostico" } } }
+        "400":
+          description: ACCION_SOBRE_SI_MISMO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ProhibidoAccionUsuario"
+        "404":
+          $ref: "#/components/responses/UsuarioNoEncontrado"
+        "409":
+          description: ULTIMO_ADMINISTRADOR o INVITACION_PENDIENTE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          $ref: "#/components/responses/PlataformaUsuariosNoDisponible"
+    delete:
+      tags: [Usuarios, Backoffice]
+      operationId: reactivarUsuarioDiagnosticoBackoffice
+      summary: Reactivar a un usuario en Diagnóstico en una compañía (SuperAdmin)
+      responses:
+        "200":
+          description: La fila con estado ACTIVO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/UsuarioDiagnostico" } } }
+        "400":
+          description: ACCION_SOBRE_SI_MISMO.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ProhibidoAccionUsuario"
+        "404":
+          $ref: "#/components/responses/UsuarioNoEncontrado"
+        "409":
+          description: ROL_YA_VIGENTE o INVITACION_PENDIENTE.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "503":
+          $ref: "#/components/responses/PlataformaUsuariosNoDisponible"
+
+  /api/v1/diagnostico/backoffice/usuarios/empresas:
+    get:
+      tags: [Usuarios, Backoffice]
+      operationId: listarEmpresasUsuariosBackoffice
+      summary: Compañías con Diagnóstico y sus conteos de usuarios (SuperAdmin)
+      description: >
+        HU #14587. Solo SuperAdmin. Las compañías de Identidad con Diagnóstico (EmpresasService.ListarEmpresasConProducto) con los conteos
+        de UsuariosProductoConteoService.ContarPorEmpresa: usuarios_diagnostico = ACTIVO + INVITADO + SUSPENDIDO con rol de Diagnóstico;
+        administradores_diagnostico = ACTIVO con admin_diagnostico. estado siempre ACTIVA (H-U3). GET /backoffice/empresas no cambia (C7).
+      parameters:
+        - name: busqueda
+          in: query
+          required: false
+          description: Contiene sobre el nombre sin tildes ni mayúsculas, o prefijo del NIT si es numérico; hasta 100 caracteres.
+          schema: { type: string, maxLength: 100 }
+        - name: usuarios
+          in: query
+          required: false
+          description: CON (al menos un usuario de Diagnóstico) o SIN.
+          schema: { type: string, enum: [CON, SIN] }
+        - name: orden
+          in: query
+          required: false
+          description: nombre (alfabético, por defecto) o usuarios (de más a menos usuarios, luego nombre).
+          schema: { type: string, enum: [nombre, usuarios], default: nombre }
+        - $ref: "#/components/parameters/PaginaUsuarios"
+        - $ref: "#/components/parameters/TamanoUsuarios"
+      responses:
+        "200":
+          description: Página de compañías.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ListaEmpresasUsuarios" } } }
+        "400":
+          description: FILTRO_INVALIDO o PAGINACION_INVALIDA.
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: No es SuperAdmin (sin cuerpo).
+        "503":
+          description: >
+            IDENTIDAD_NO_CONFIGURADA (sin Retry-After), IDENTIDAD_NO_DISPONIBLE (con Retry-After), PLATAFORMA_NO_DISPONIBLE (con
+            Retry-After) o PLATAFORMA_NO_CONFIGURADA.
+          headers:
+            Retry-After: { schema: { type: integer, example: 30 }, description: Segundos para reintentar. }
+          content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+
 components:
   securitySchemes:
     bearerAuth:
@@ -4063,6 +4433,29 @@ components:
   responses:
     Unauthorized:
       description: Sin sesión, token inválido o de otro producto.
+    ProhibidoUsuarios:
+      description: >
+        Sin diagnostico.usuarios.gestionar (o, en el backoffice, sin SuperAdmin), o la plataforma rechazó al actor: sin cuerpo.
+        Con cuerpo: SIN_EMPRESA, PRODUCTO_NO_HABILITADO o ROL_NO_ASIGNABLE (un admin_diagnostico intenta dar admin_diagnostico).
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+    ProhibidoAccionUsuario:
+      description: >
+        OBJETIVO_PROTEGIDO (el objetivo es AdminCompany o SuperAdmin: se gestiona en el hub) o ROL_NO_ASIGNABLE (solo el SuperAdmin da o
+        quita admin_diagnostico; un admin_diagnostico no actúa sobre otro). Sin cuerpo: sin permiso.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+    UsuarioNoEncontrado:
+      description: >
+        USUARIO_NO_ENCONTRADO: el usuario no es de la compañía o no tiene ni tuvo rol de Diagnóstico (mismo cuerpo en los dos casos, SP-13).
+        En el backoffice, EMPRESA_NO_ENCONTRADA si la compañía no tiene Diagnóstico.
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
+    PlataformaUsuariosNoDisponible:
+      description: >
+        PLATAFORMA_NO_DISPONIBLE: core-api no respondió (con Retry-After). PLATAFORMA_NO_CONFIGURADA: el servicio no tiene la dirección
+        gRPC de core-api (Diagnostico:Tramites:Address, sin Retry-After). En el backoffice, IDENTIDAD_NO_DISPONIBLE si no se pudo verificar
+        la compañía.
+      headers:
+        Retry-After: { schema: { type: integer, example: 30 }, description: Segundos para reintentar (30). }
+      content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
     CuerpoMuyGrande:
       description: >
         CUERPO_MUY_GRANDE. El cuerpo JSON de las rutas nuevas del saneamiento admite hasta 65536 bytes (64 KiB, CR-11). Se
@@ -4099,6 +4492,49 @@ components:
       content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }
 
   parameters:
+    UsuarioDiagnosticoId:
+      name: usuario
+      in: path
+      required: true
+      description: id de UsuarioDiagnostico (uuid).
+      schema: { type: string, format: uuid }
+    EmpresaUsuariosBackoffice:
+      name: empresa
+      in: path
+      required: true
+      description: id de la compañía (EmpresaUsuarios.id), con Diagnóstico activo.
+      schema: { type: string, format: uuid }
+    BusquedaUsuarios:
+      name: busqueda
+      in: query
+      required: false
+      description: Contiene, sin tildes ni mayúsculas, sobre nombre o correo; hasta 100 caracteres.
+      schema: { type: string, maxLength: 100 }
+    RolUsuarios:
+      name: rol
+      in: query
+      required: false
+      style: form
+      explode: true
+      schema: { type: array, items: { $ref: "#/components/schemas/RolDiagnostico" } }
+    EstadoUsuarios:
+      name: estado
+      in: query
+      required: false
+      style: form
+      explode: true
+      schema: { type: array, items: { type: string, enum: [ACTIVO, INVITADO, SUSPENDIDO] } }
+    PaginaUsuarios:
+      name: pagina
+      in: query
+      required: false
+      description: ">= 1; pagina x tamano <= 10000."
+      schema: { type: integer, minimum: 1, default: 1 }
+    TamanoUsuarios:
+      name: tamano
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, maximum: 100, default: 25 }
     SaneamientoId:
       name: sid
       in: path
@@ -4267,6 +4703,7 @@ components:
         - verAuditoria
         - verVolumetria
         - backofficeOperacion
+        - gestionarUsuarios
       properties:
         crearDiagnosticos:
           type: boolean
@@ -4310,6 +4747,10 @@ components:
           description: >
             1.5.0 (ADR-0088). Política de configuración del backoffice y diagnostico.volumetria.ver, la misma regla que
             /backoffice/estadisticas*. Una compañía cliente con los permisos armados a mano la tiene en false. Opcional para el front.
+        gestionarUsuarios:
+          type: boolean
+          description: >
+            HU #14587 (ADR-0089). diagnostico.usuarios.gestionar (solo admin_diagnostico) o SuperAdmin, la misma regla que /usuarios*.
         backofficeOperacion:
           type: boolean
           description: >
@@ -7248,6 +7689,102 @@ components:
       properties:
         motivo: { type: string, minLength: 10, maxLength: 500, description: "Sin espacios al inicio ni al final (422 MOTIVO_REQUERIDO); sin caracteres de control (422 TEXTO_INVALIDO)." }
         version: { $ref: "#/components/schemas/VersionSaneamiento" }
+
+    RolDiagnostico:
+      type: string
+      description: Lista blanca de roles de Diagnóstico (SP-10), por código.
+      enum: [usuario_diagnostico, admin_diagnostico]
+    UsuarioDiagnostico:
+      type: object
+      description: >
+        Una fila del módulo Usuarios (SP-18): sin roles de otros productos ni datos de sesión. acciones y motivo_sin_acciones los calcula
+        core-api para el actor que pide.
+      required: [id, tipo, nombre, correo, rol, rol_etiqueta, estado, acciones, motivo_sin_acciones]
+      properties:
+        id: { type: string, format: uuid, description: Usuario (tipo USUARIO) o invitación (tipo INVITACION). }
+        tipo: { type: string, enum: [USUARIO, INVITACION] }
+        nombre: { type: string }
+        correo: { type: string, description: "@pii:medium. Solo en la celda visible (SP-20)." }
+        rol: { $ref: "#/components/schemas/RolDiagnostico" }
+        rol_etiqueta: { type: string, example: Usuario de Diagnóstico }
+        estado:
+          type: string
+          enum: [ACTIVO, INVITADO, SUSPENDIDO]
+          description: SUSPENDIDO = sin acceso a Diagnóstico (rol retirado, SP-12 = a); la cuenta de la plataforma no cambia.
+        acciones:
+          type: array
+          items: { type: string, enum: [CAMBIAR_ROL, SUSPENDER, REACTIVAR] }
+        motivo_sin_acciones:
+          type: string
+          nullable: true
+          enum: [USTED_MISMO, ADMIN_COMPANIA, SOLO_SUPERADMIN, INVITACION, CUENTA_INACTIVA, null]
+    ListaUsuariosDiagnostico:
+      type: object
+      required: [pagina, tamano, total, usuarios, roles_asignables]
+      properties:
+        pagina: { type: integer }
+        tamano: { type: integer }
+        total: { type: integer }
+        roles_asignables:
+          type: array
+          description: "Lo que el actor puede dar al invitar o cambiar rol (SP-11): admin_diagnostico solo [usuario_diagnostico]; SuperAdmin los dos."
+          items: { $ref: "#/components/schemas/RolDiagnostico" }
+        usuarios:
+          type: array
+          items: { $ref: "#/components/schemas/UsuarioDiagnostico" }
+    EmpresaCabecera:
+      type: object
+      description: D-6. Cabecera de la compañía del backoffice, de la misma resolución de Identidad que valida la ruta.
+      required: [id, nombre, nit]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string, description: Vacío solo en local sin Identidad configurada. }
+        nit: { type: string, nullable: true }
+    ListaUsuariosDiagnosticoBackoffice:
+      allOf:
+        - $ref: "#/components/schemas/ListaUsuariosDiagnostico"
+        - type: object
+          required: [empresa]
+          properties:
+            empresa: { $ref: "#/components/schemas/EmpresaCabecera" }
+    InvitacionUsuarioDiagnostico:
+      type: object
+      required: [correo, nombre, rol]
+      properties:
+        correo: { type: string, format: email, maxLength: 254 }
+        nombre: { type: string, minLength: 1, maxLength: 150 }
+        rol: { $ref: "#/components/schemas/RolDiagnostico" }
+    CambioRolDiagnostico:
+      type: object
+      required: [rol]
+      properties:
+        rol: { $ref: "#/components/schemas/RolDiagnostico" }
+    InvitacionAceptada:
+      type: object
+      required: [resultado, mensaje]
+      properties:
+        resultado: { type: string, enum: [ACEPTADA] }
+        mensaje: { type: string, example: "Si el correo es válido, la persona recibirá la invitación o el acceso a Diagnóstico." }
+    EmpresaUsuarios:
+      type: object
+      required: [id, nombre, nit, estado, usuarios_diagnostico, administradores_diagnostico]
+      properties:
+        id: { type: string, format: uuid }
+        nombre: { type: string }
+        nit: { type: string, nullable: true }
+        estado: { type: string, enum: [ACTIVA] }
+        usuarios_diagnostico: { type: integer }
+        administradores_diagnostico: { type: integer }
+    ListaEmpresasUsuarios:
+      type: object
+      required: [pagina, tamano, total, empresas]
+      properties:
+        pagina: { type: integer }
+        tamano: { type: integer }
+        total: { type: integer }
+        empresas:
+          type: array
+          items: { $ref: "#/components/schemas/EmpresaUsuarios" }
 
     ErrorRegla:
       type: object

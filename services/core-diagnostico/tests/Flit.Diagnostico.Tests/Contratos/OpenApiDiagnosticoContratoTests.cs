@@ -281,6 +281,49 @@ public sealed class OpenApiDiagnosticoContratoTests
             .And.Contain("Identificador_Vehiculo, Tipo_Documento_Propietario y Documento_Propietario");
     }
 
+    // HU #14587 (contrato-api §3.1–§3.3, D-5) — 1.6.0 sin subir versión: rutas de Usuarios de la compañía y del backoffice, esquemas del
+    // contrato, la capacidad requerida gestionarUsuarios y los códigos de error de la traducción del gRPC.
+    [Fact]
+    public void HU14587_usuarios_de_Diagnostico_en_la_version_1_6_0()
+    {
+        var info = Bloque("info:", sangria: 0);
+        info.Should().Contain("version: \"1.6.0\"").And.Contain("ADR-0089").And.Contain("diagnostico.usuarios.gestionar");
+
+        string[] rutas =
+        [
+            "/api/v1/diagnostico/usuarios:", "/api/v1/diagnostico/usuarios/invitaciones:", "/api/v1/diagnostico/usuarios/{usuario}/rol:",
+            "/api/v1/diagnostico/usuarios/{usuario}/suspension:", "/api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios:",
+            "/api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios/invitaciones:", "/api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios/{usuario}/rol:",
+            "/api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios/{usuario}/suspension:", "/api/v1/diagnostico/backoffice/usuarios/empresas:",
+        ];
+        foreach (var ruta in rutas)
+            Yaml.Value.Should().Contain("\n  " + ruta + "\n", ruta);
+
+        Bloque("Capacidades:", sangria: 4).Should().Contain("- gestionarUsuarios").And.Contain("gestionarUsuarios:");
+        Bloque("ListaUsuariosDiagnostico:", sangria: 4).Should().Contain("required: [pagina, tamano, total, usuarios, roles_asignables]");
+        var fila = Bloque("UsuarioDiagnostico:", sangria: 4);
+        fila.Should().Contain("required: [id, tipo, nombre, correo, rol, rol_etiqueta, estado, acciones, motivo_sin_acciones]")
+            .And.Contain("@pii:medium").And.Contain("CUENTA_INACTIVA").And.Contain("CAMBIAR_ROL");
+        Bloque("RolDiagnostico:", sangria: 4).Should().Contain("enum: [usuario_diagnostico, admin_diagnostico]");
+        Bloque("InvitacionUsuarioDiagnostico:", sangria: 4).Should().Contain("required: [correo, nombre, rol]").And.Contain("maxLength: 254");
+        Bloque("InvitacionAceptada:", sangria: 4).Should().Contain("ACEPTADA");
+        Bloque("EmpresaUsuarios:", sangria: 4).Should().Contain("usuarios_diagnostico:").And.Contain("administradores_diagnostico:");
+        Bloque("ListaEmpresasUsuarios:", sangria: 4).Should().Contain("empresas:");
+
+        foreach (var codigo in new[]
+        {
+            "EMPRESA_NO_PERMITIDA", "FILTRO_INVALIDO", "PAGINACION_INVALIDA", "CORREO_INVALIDO", "NOMBRE_REQUERIDO", "ROL_NO_PERMITIDO",
+            "ROL_NO_ASIGNABLE", "OBJETIVO_PROTEGIDO", "ACCION_SOBRE_SI_MISMO", "USUARIO_NO_ENCONTRADO", "USUARIO_SUSPENDIDO",
+            "INVITACION_PENDIENTE", "ULTIMO_ADMINISTRADOR", "ROL_YA_VIGENTE", "DEMASIADAS_SOLICITUDES", "PLATAFORMA_NO_DISPONIBLE",
+            "PLATAFORMA_NO_CONFIGURADA",
+        })
+        {
+            Yaml.Value.Should().Contain(codigo, codigo);
+        }
+
+        Respuestas("operationId: invitarUsuarioDiagnostico").Should().Contain("\"202\":").And.Contain("\"429\":");
+    }
+
     /// <summary>El bloque <c>responses:</c> de la operación cuya línea contiene <paramref name="operacion"/> (el primero después de ella).</summary>
     private static string Respuestas(string operacion)
     {

@@ -29,6 +29,22 @@ public sealed class SuperficieApiTests
         "permisos", "suscripciones", "suscripcion", "subscriptions", "productos", "products",
     };
 
+    /// <summary>
+    /// HU #14587 (ADR-0089, contrato-api §3.3): las únicas escrituras de usuarios que Diagnóstico publica. No administran la cuenta: solo
+    /// el rol de Diagnóstico, y delegan en el gRPC de core-api, que vuelve a aplicar las reglas (SP-14). Cualquier otra sigue prohibida.
+    /// </summary>
+    private static readonly string[] EscriturasDelegadas =
+    [
+        "POST /api/v1/diagnostico/usuarios/invitaciones",
+        "PUT /api/v1/diagnostico/usuarios/{usuario:guid}/rol",
+        "POST /api/v1/diagnostico/usuarios/{usuario:guid}/suspension",
+        "DELETE /api/v1/diagnostico/usuarios/{usuario:guid}/suspension",
+        "POST /api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios/invitaciones",
+        "PUT /api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios/{usuario:guid}/rol",
+        "POST /api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios/{usuario:guid}/suspension",
+        "DELETE /api/v1/diagnostico/backoffice/empresas/{empresa}/usuarios/{usuario:guid}/suspension",
+    ];
+
     private static readonly string[] MetodosDeEscritura = [HttpMethods.Post, HttpMethods.Put, HttpMethods.Patch, HttpMethods.Delete];
 
     // Escenario 5 — no existen rutas de escritura de compañías, usuarios, roles ni suscripciones.
@@ -41,11 +57,17 @@ public sealed class SuperficieApiTests
         var rutas = api.App.Services.GetServices<EndpointDataSource>().SelectMany(f => f.Endpoints).OfType<RouteEndpoint>()
             .Select(e => (Metodos: e.Metadata.GetMetadata<IHttpMethodMetadata>()?.HttpMethods ?? [], Patron: e.RoutePattern.RawText ?? string.Empty))
             .ToList();
+        var escrituras = rutas
+            .Where(r => r.Metodos.Intersect(MetodosDeEscritura, StringComparer.OrdinalIgnoreCase).Any())
+            .SelectMany(r => r.Metodos.Select(m => $"{m} /{r.Patron.TrimStart('/')}"))
+            .ToList();
         var deEscritura = rutas
             .Where(r => r.Metodos.Intersect(MetodosDeEscritura, StringComparer.OrdinalIgnoreCase).Any())
-            .Where(r => RecursosDePlataforma.Contains(UltimoLiteral(r.Patron)))
-            .Select(r => $"{string.Join(',', r.Metodos)} {r.Patron}")
+            .Where(r => RecursosDePlataforma.Contains(UltimoLiteral(r.Patron)) || r.Patron.Contains("/usuarios", StringComparison.Ordinal))
+            .SelectMany(r => r.Metodos.Select(m => $"{m} /{r.Patron.TrimStart('/')}"))
+            .Except(EscriturasDelegadas, StringComparer.Ordinal)
             .ToList();
+        escrituras.Should().Contain(EscriturasDelegadas, "HU #14587: las escrituras delegadas del módulo Usuarios existen");
 
         rutas.Should().Contain(r => r.Patron.TrimStart('/') == Program.Prefijo.TrimStart('/') + "/sesion", "la superficie que se recorre es la publicada");
         deEscritura.Should().BeEmpty("Diagnóstico no administra compañías, usuarios, roles ni suscripciones (R-4)");

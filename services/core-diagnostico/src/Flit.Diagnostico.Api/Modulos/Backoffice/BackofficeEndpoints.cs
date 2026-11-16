@@ -56,6 +56,9 @@ public static class BackofficeEndpoints
         EstadisticasBackofficeEndpoints.Map(api);
         ReportesBackofficeEndpoints.Map(api);
 
+        // HU #14587 (ADR-0089, contrato-api §3.2): el backoffice de usuarios es solo del SuperAdmin (PoliticaUsuariosBackoffice), con sus grupos.
+        UsuariosBackofficeEndpoints.Map(api);
+
         api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre).MapFallback(() => Results.NotFound());
     }
 

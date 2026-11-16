@@ -9,7 +9,8 @@ namespace Flit.Diagnostico.Api.Plataforma;
 /// <c>tenant_type=FLIT</c> (§6.2, D-16) salvo al SuperAdmin, que tiene todas las capacidades sin mirar la compañía (decisión
 /// D23 de la HU #14563). <see cref="Sanear"/> sigue <c>diagnostico.saneamiento.solicitar</c> y <see cref="GestionarSaneamiento"/> la
 /// operación FLIT con <c>diagnostico.saneamiento.gestionar</c> (HU #14576). <see cref="VerReportes"/> y <see cref="VerEstadisticasGlobales"/>
-/// salen de <see cref="ReglasEstadisticasYReportes"/>, la misma regla que sus rutas (HU #14579, BE-0, SP-2). Es una ayuda para la interfaz; cada endpoint vuelve a
+/// salen de <see cref="ReglasEstadisticasYReportes"/>, la misma regla que sus rutas (HU #14579, BE-0, SP-2). <see cref="GestionarUsuarios"/>
+/// sigue <c>diagnostico.usuarios.gestionar</c> o SuperAdmin, la regla de <c>/usuarios*</c> (HU #14587, §3.1). Es una ayuda para la interfaz; cada endpoint vuelve a
 /// exigir su permiso.
 /// </summary>
 public sealed record Capacidades(
@@ -30,7 +31,8 @@ public sealed record Capacidades(
     bool Sanear,
     bool GestionarSaneamiento,
     bool VerReportes,
-    bool VerEstadisticasGlobales)
+    bool VerEstadisticasGlobales,
+    bool GestionarUsuarios)
 {
     public static Capacidades De(UsuarioActual usuario)
     {
@@ -56,7 +58,9 @@ public sealed record Capacidades(
             GestionarSaneamiento: usuario.BackofficeOperacion && usuario.Tiene(Permisos.SaneamientoGestionar),
             // HU #14579, BE-0 (SP-2): la misma regla que las rutas R1 y E2.
             VerReportes: ReglasEstadisticasYReportes.VerReportes(usuario),
-            VerEstadisticasGlobales: ReglasEstadisticasYReportes.VerEstadisticasGlobales(usuario));
+            VerEstadisticasGlobales: ReglasEstadisticasYReportes.VerEstadisticasGlobales(usuario),
+            // HU #14587 (contrato-api §3.1, SP-17): la misma regla que RequirePermiso(UsuariosGestionar) en /usuarios*.
+            GestionarUsuarios: usuario.Tiene(Permisos.UsuariosGestionar));
     }
 }
 

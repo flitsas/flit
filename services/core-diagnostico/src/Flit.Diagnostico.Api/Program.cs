@@ -92,7 +92,10 @@ public static class Program
         builder.Services.AddRedactorDictamen(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);
+        // HU #14587 (ADR-0089): usuarios de Diagnóstico delegados en el gRPC de core-api (mismo Diagnostico:Tramites:Address).
+        Modulos.Usuarios.UsuariosEndpoints.AddUsuarios(builder.Services, builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();
+        builder.Services.AddExceptionHandler<Modulos.Usuarios.ManejadorReglasUsuarios>();
         builder.Services.AddProblemDetails();
         AddTokensDeServicio(builder.Services, builder.Configuration);
         builder.Services.AddHttpClient(RegistroManifiesto.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));

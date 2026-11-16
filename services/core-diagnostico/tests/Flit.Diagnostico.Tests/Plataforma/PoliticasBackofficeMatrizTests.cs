@@ -65,7 +65,7 @@ public sealed class PoliticasBackofficeMatrizTests
         NoDenegada,
     }
 
-    private sealed record Seccion(string Nombre, HttpMethod Metodo, string Url, string? Cuerpo, bool Operacion, Senal Pasa);
+    private sealed record Seccion(string Nombre, HttpMethod Metodo, string Url, string? Cuerpo, bool Operacion, Senal Pasa, bool SoloSuperAdmin = false);
 
     private sealed record Actor(string Nombre, bool Configuracion, bool Operacion, Func<ApiDePrueba, string> Token);
 
@@ -102,6 +102,13 @@ public sealed class PoliticasBackofficeMatrizTests
         new("tomar varios saneamientos", HttpMethod.Post, $"{Base}/saneamientos/tomar", """{ "items": [] }""", true, Senal.NoDenegada),
         new("detalle de un saneamiento", HttpMethod.Get, $"{Base}/saneamientos/{Saneamiento}", null, true, Senal.EmpresaRequerida),
         new("cerrar un saneamiento", HttpMethod.Post, $"{Base}/saneamientos/{Saneamiento}/cerrar", "{}", true, Senal.EmpresaRequerida),
+        // HU #14587 (contrato-api §3.2, PoliticaUsuariosBackoffice): el backoffice de usuarios es SOLO del SuperAdmin; el operador FLIT con
+        // diagnostico.backoffice.ver recibe 403. Sin plataforma configurada, quien pasa recibe 503 PLATAFORMA_NO_CONFIGURADA o, en la
+        // tabla de compañías, 503 IDENTIDAD_NO_CONFIGURADA.
+        new("usuarios de una compañía (invitar)", HttpMethod.Post, $"{Base}/empresas/{EmpresaRuta}/usuarios/invitaciones",
+            """{ "correo": "a@b.test", "nombre": "Persona", "rol": "usuario_diagnostico" }""", false, Senal.NoDenegada, SoloSuperAdmin: true),
+        new("usuarios de una compañía (suspender)", HttpMethod.Post, $"{Base}/empresas/{EmpresaRuta}/usuarios/{Vehiculo}/suspension", null, false, Senal.NoDenegada, SoloSuperAdmin: true),
+        new("tabla de compañías de usuarios", HttpMethod.Get, $"{Base}/usuarios/empresas", null, false, Senal.IdentidadNoConfigurada, SoloSuperAdmin: true),
     ];
 
     private static readonly Dictionary<string, Actor> Actores = new Actor[]
@@ -140,7 +147,8 @@ public sealed class PoliticasBackofficeMatrizTests
                 pedido.Content = new StringContent(seccion.Cuerpo, Encoding.UTF8, "application/json");
             using var respuesta = await cliente.SendAsync(pedido, ct);
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
-            var debePasar = seccion.Operacion ? actor.Operacion : actor.Configuracion;
+            var debePasar = seccion.SoloSuperAdmin ? nombre.StartsWith("superadmin", StringComparison.Ordinal)
+                : seccion.Operacion ? actor.Operacion : actor.Configuracion;
             var error = debePasar ? Pasa(seccion.Pasa, respuesta.StatusCode, texto) : NoPasa(nombre, respuesta.StatusCode);
             if (error is not null)
                 fallos.Add($"{seccion.Nombre} ({seccion.Metodo} {seccion.Url}): {error}");

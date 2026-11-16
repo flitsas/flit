@@ -55,7 +55,7 @@ public sealed class RegistroManifiestoTests
         raiz.GetProperty("version").GetString().Should().Be("1");
         var slugs = raiz.GetProperty("modules").EnumerateArray()
             .SelectMany(m => m.GetProperty("permissions").EnumerateArray().Select(p => p.GetProperty("slug").GetString()!)).ToList();
-        slugs.Should().HaveCount(16, "13 de la tabla §6.2, los 2 del saneamiento (HU #14576 AC31) y diagnostico.reportes.ver (BE-0)").And.OnlyHaveUniqueItems().And.AllSatisfy(s => s.Should().StartWith("diagnostico."));
+        slugs.Should().HaveCount(17, "13 de la tabla §6.2, los 2 del saneamiento (HU #14576 AC31), diagnostico.reportes.ver (BE-0) y diagnostico.usuarios.gestionar (HU #14587)").And.OnlyHaveUniqueItems().And.AllSatisfy(s => s.Should().StartWith("diagnostico."));
         raiz.GetProperty("modules").EnumerateArray().Should().AllSatisfy(m =>
         {
             m.GetProperty("code").GetString().Should().StartWith("diagnostico_");
@@ -64,6 +64,12 @@ public sealed class RegistroManifiestoTests
         var roles = raiz.GetProperty("defaultRoles").EnumerateArray().ToList();
         roles.Select(r => r.GetProperty("code").GetString()).Should().BeEquivalentTo("usuario_diagnostico", "admin_diagnostico");
         roles.SelectMany(r => r.GetProperty("permissions").EnumerateArray().Select(p => p.GetString())).Should().AllSatisfy(p => slugs.Should().Contain(p));
+        // HU #14587 (H-U5): el permiso viaja en el rol admin_diagnostico; ProductManifestStore agrega al rol existente los permisos que le
+        // faltan, así que los admin_diagnostico ya asignados lo reciben sin resiembra.
+        roles.Single(r => r.GetProperty("code").GetString() == "admin_diagnostico").GetProperty("permissions").EnumerateArray()
+            .Select(p => p.GetString()).Should().Contain("diagnostico.usuarios.gestionar");
+        roles.Single(r => r.GetProperty("code").GetString() == "usuario_diagnostico").GetProperty("permissions").EnumerateArray()
+            .Select(p => p.GetString()).Should().NotContain("diagnostico.usuarios.gestionar");
     }
 
     // Escenario 2 — el gateway no responde: reintenta con espera creciente y el servicio sigue sano.

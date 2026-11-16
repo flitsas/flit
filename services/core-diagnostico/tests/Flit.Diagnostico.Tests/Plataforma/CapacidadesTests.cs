@@ -88,6 +88,35 @@ public sealed class CapacidadesTests
         (await cliente.GetAsync(SondaGlobales, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
     }
 
+    // HU #14587 (contrato-api §3.1, SP-17) — gestionarUsuarios es verdadera si y solo si GET /usuarios responde distinto de 403: con
+    // diagnostico.usuarios.gestionar o SuperAdmin. Sin plataforma configurada la ruta da 503, que cuenta como «pasó la política».
+    [Theory]
+    [InlineData("admin_con_gestionar", true)]
+    [InlineData("superadmin", true)]
+    [InlineData("usuario_diagnostico", false)]
+    [InlineData("admin_sin_gestionar", false)]
+    [InlineData("flit_backoffice", false)]
+    public async Task HU14587_gestionarUsuarios_coincide_con_la_autorizacion_de_usuarios(string perfil, bool esperado)
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.SinBaseAsync();
+        var token = perfil switch
+        {
+            "admin_con_gestionar" => api.Token(roles: ["admin_diagnostico"], permisos: [Permisos.DiagnosticosVer, "diagnostico.usuarios.gestionar"], tipoEmpresa: "CLIENTE"),
+            "superadmin" => api.Token(roles: ["SuperAdmin"], permisos: [], tipoEmpresa: "CLIENTE"),
+            "usuario_diagnostico" => api.Token(roles: ["usuario_diagnostico"], permisos: [Permisos.DiagnosticosVer, Permisos.DiagnosticosCrear], tipoEmpresa: "CLIENTE"),
+            "admin_sin_gestionar" => api.Token(roles: ["admin_diagnostico"], permisos: [Permisos.DiagnosticosVer, Permisos.ConfiguracionEditar], tipoEmpresa: "CLIENTE"),
+            _ => api.Token(roles: ["operador"], permisos: [Permisos.BackofficeVer, Permisos.DiagnosticosVer], tipoEmpresa: "FLIT"),
+        };
+        using var cliente = api.Cliente(token);
+
+        var sesion = await cliente.GetFromJsonAsync<JsonElement>(Program.Prefijo + "/sesion", ct);
+        var ruta = (await cliente.GetAsync(Program.Prefijo + "/usuarios", ct)).StatusCode;
+
+        sesion.GetProperty("capacidades").GetProperty("gestionarUsuarios").GetBoolean().Should().Be(esperado, perfil);
+        (ruta != HttpStatusCode.Forbidden).Should().Be(esperado, $"{perfil}: GET /usuarios respondió {ruta}");
+    }
+
     private static void MapearSondas(WebApplication app)
     {
         app.MapGet(SondaReportes, () => Results.Ok()).RequireAuthorization().RequiereVerReportes();

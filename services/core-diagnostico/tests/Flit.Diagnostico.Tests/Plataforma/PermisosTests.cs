@@ -31,6 +31,8 @@ public sealed partial class PermisosTests
             "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.reportes.descargar",
             "diagnostico.derivacion.crear", "diagnostico.configuracion.ver", "diagnostico.configuracion.editar",
             "diagnostico.consultas.reprocesar", "diagnostico.saneamiento.solicitar", "diagnostico.reportes.ver",
+            // HU #14587 (contrato-api §3.1, SP-17): gestionar usuarios de Diagnóstico, solo el admin.
+            "diagnostico.usuarios.gestionar",
         ],
     };
 
@@ -44,6 +46,8 @@ public sealed partial class PermisosTests
         "diagnostico.saneamiento.solicitar", "diagnostico.saneamiento.gestionar",
         // HU #14579, BE-0 (O8 = D-1, SP-1): ver reportes en pantalla va a los dos roles; exportar sigue con reportes.descargar.
         "diagnostico.reportes.ver",
+        // HU #14587 (contrato-api §3.1, SP-17): módulo Usuarios, solo admin_diagnostico.
+        "diagnostico.usuarios.gestionar",
     ];
 
     private static List<string> Slugs => Permisos.Modulos.SelectMany(m => m.Permisos).Select(p => p.Slug).ToList();
@@ -103,6 +107,18 @@ public sealed partial class PermisosTests
         diagnosticos.Should().Contain(("diagnostico.reportes.ver", "Ver reportes de la compañía (con datos personales)"));
         diagnosticos.Should().Contain(("diagnostico.reportes.descargar", "Descargar reportes, exportaciones y evidencias"));
         Permisos.ReportesVer.Should().Be("diagnostico.reportes.ver");
+    }
+
+    // HU #14587 (contrato-api §3.1, SP-17) — permiso nuevo en su módulo diagnostico_usuarios, solo en admin_diagnostico.
+    [Fact]
+    public void HU14587_usuarios_gestionar_en_su_modulo_y_solo_en_admin_diagnostico()
+    {
+        var modulo = Permisos.Modulos.Single(m => m.Codigo == "diagnostico_usuarios");
+
+        modulo.Nombre.Should().Be("Diagnóstico · Usuarios");
+        modulo.Permisos.Should().Equal(("diagnostico.usuarios.gestionar", "Gestionar los usuarios de Diagnóstico de la compañía"));
+        Permisos.RolesPorDefecto.Single(r => r.Codigo == "admin_diagnostico").Permisos.Should().Contain("diagnostico.usuarios.gestionar");
+        Permisos.RolesPorDefecto.Single(r => r.Codigo == "usuario_diagnostico").Permisos.Should().NotContain("diagnostico.usuarios.gestionar");
     }
 
     [GeneratedRegex(@"^diagnostico(\.[a-z]+){2,3}$", RegexOptions.CultureInvariant)]
