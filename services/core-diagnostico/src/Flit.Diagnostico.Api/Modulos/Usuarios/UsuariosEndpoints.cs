@@ -36,7 +36,7 @@ public static partial class UsuariosEndpoints
     /// Política de límite de invitar (DM-2): 20/h por actor y 100/h por compañía, 429 <c>DEMASIADAS_SOLICITUDES</c>. La registra be1-b en
     /// <c>AddRateLimiter</c>; este módulo solo la exige en la ruta.
     /// </summary>
-    public const string PoliticaLimiteInvitaciones = "diagnostico-invitaciones";
+    public const string PoliticaLimiteInvitaciones = LimitesSolicitudes.Invitaciones;
 
     public const string CodigoEmpresaNoPermitida = "EMPRESA_NO_PERMITIDA";
 
