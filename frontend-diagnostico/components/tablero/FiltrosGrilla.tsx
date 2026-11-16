@@ -151,7 +151,7 @@ export function FiltrosGrilla({ grilla, vehiculos, valor, onCambiar, onLimpiar, 
           Limpiar filtros
         </button>
       </div>
-      <p aria-live="polite" className={AYUDA_CLS}>
+      <p aria-live="polite" aria-atomic="true" className={AYUDA_CLS}>
         {resumen}
       </p>
     </div>
