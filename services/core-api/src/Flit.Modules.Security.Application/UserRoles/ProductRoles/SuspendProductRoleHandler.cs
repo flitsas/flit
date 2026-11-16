@@ -29,7 +29,9 @@ public sealed class SuspendProductRoleHandler(IProductRoleRepository repo)
         var otherAdmins = await repo.CountOtherActiveAdminsAsync(cmd.TenantId, ProductRoleRules.AdminRole(cmd.ProductCode), cmd.UserId, ct).ConfigureAwait(false);
         ProductRoleRules.EnsureNotLastAdmin(cmd.ProductCode, current.Code, otherAdmins);
 
-        await repo.SuspendAsync(cmd.TenantId, cmd.UserId, cmd.ProductCode, current.Id, cmd.Actor.UserId, null, ct).ConfigureAwait(false);
+        // CR-4: la guarda que vale es la del repositorio, dentro de la transacción (SELECT … FOR UPDATE).
+        var guarda = string.Equals(current.Code, ProductRoleRules.AdminRole(cmd.ProductCode), StringComparison.Ordinal) ? current.Code : null;
+        await repo.SuspendAsync(cmd.TenantId, cmd.UserId, cmd.ProductCode, current.Id, cmd.Actor.UserId, guarda, ct).ConfigureAwait(false);
         var updated = member with { CurrentRole = null, SuspendedRole = current };
         return new ProductRoleOutcome(ProductRoleRules.RowFor(cmd.Actor, cmd.ProductCode, updated), current.Code, null, Changed: true);
     }

@@ -75,6 +75,7 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
     public Task ReplaceProductRoleAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct) =>
         InTransactionAsync(async () =>
         {
+            await GuardLastAdminAsync(tenantId, userId, lastAdminGuardRoleCode, ct).ConfigureAwait(false);
             await CloseProductAssignmentsAsync(tenantId, userId, productCode, actorId, ct).ConfigureAwait(false);
             await InsertAssignmentAsync(tenantId, userId, roleId, actorId, ct).ConfigureAwait(false);
         }, ct);
@@ -85,6 +86,7 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
     public Task SuspendAsync(Guid tenantId, Guid userId, string productCode, Guid roleId, Guid actorId, string? lastAdminGuardRoleCode, CancellationToken ct) =>
         InTransactionAsync(async () =>
         {
+            await GuardLastAdminAsync(tenantId, userId, lastAdminGuardRoleCode, ct).ConfigureAwait(false);
             await CloseProductAssignmentsAsync(tenantId, userId, productCode, actorId, ct).ConfigureAwait(false);
             await DeleteMarkerAsync(tenantId, userId, productCode, ct).ConfigureAwait(false);
             db.ProductRoleSuspensions.Add(new ProductRoleSuspensionEntity
@@ -223,6 +225,25 @@ public sealed class ProductRoleRepository(FlitDbContext db) : IProductRoleReposi
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// CR-4 — guarda atómica del último admin: bloquea (<c>FOR UPDATE</c>) las asignaciones vigentes del rol admin en la
+    /// empresa y, dentro de la misma transacción, exige otro admin activo. Dos bajas simultáneas de los dos últimos admins
+    /// se serializan en el bloqueo y la segunda ve la primera ya confirmada.
+    /// </summary>
+    private async Task GuardLastAdminAsync(Guid tenantId, Guid userId, string? adminRoleCode, CancellationToken ct)
+    {
+        if (adminRoleCode is null)
+            return;
+
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            SELECT a.id FROM security.user_role_assignments a JOIN security.roles r ON r.id = a.role_id
+             WHERE a.tenant_id = {tenantId} AND a.deleted_at IS NULL AND r.code = {adminRoleCode} AND r.deleted_at IS NULL
+             FOR UPDATE OF a
+            """, ct).ConfigureAwait(false);
+        if (await CountOtherActiveAdminsAsync(tenantId, adminRoleCode, userId, ct).ConfigureAwait(false) <= 0)
+            throw new ProductRoleRuleException(ProductRoleErrorCodes.UltimoAdministrador, ProductRoleErrorKind.FailedPrecondition, "La compañía quedaría sin administrador del producto.");
     }
 
     private Task<int> CloseProductAssignmentsAsync(Guid tenantId, Guid userId, string productCode, Guid actorId, CancellationToken ct) =>
