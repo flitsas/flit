@@ -1,6 +1,6 @@
 # Plan CI/CD de flitsas/flit: estado para retomar
 
-> Última actualización: **2026-11-04 (UTC)**. Documento vivo: actualizarlo al cerrar cada sesión de trabajo.
+> Última actualización: **2026-11-16 (UTC)** (ver §3c). Documento vivo: actualizarlo al cerrar cada sesión de trabajo.
 > Plan original y revisión: `Downloads\plan-ci-runners-flit\` del equipo de Jorman (`Plan-CI-runners-propios-flit.md`, `Revision-plan-2026-10-23.md`, anexos A–E).
 > Operación de las VPS: repo `flitsas/flit-gitops`, `docs/manual-operacion-vps.md` §8 y `docs/argocd-notificaciones/`.
 
@@ -119,11 +119,51 @@ El usuario no puede ampliar la 177 y quiere todo el CI en ella con los repos pri
 2. PR de `ci/core-api-vps` a develop → staging → release.
 3. Mover a la 177 el CI liviano (CI, CD, contratos, security scan) y flito; luego `RUNNER_CORE_API=flit-ci` con 1 runner para core-api, repos privados (rotar SMTP antes) y grupo `flit-ci` sin `allows_public_repositories`.
 
+## 3c. Retomado el 2026-11-16: admin en GitHub, nivelación y decisión sobre el pool
+
+**Diagnóstico (corrida de develop del 14-nov, 43653636793):** admin tardaba 40 min. Lo dominaban clases que arrancaban un host por prueba (o por cliente HTTP) y nunca lo liberaban:
+
+| Clase | Antes (pared) |
+|---|---|
+| `PersonaNaturalCotizacionGrpcTests` | 1.025 s |
+| `PersonaNaturalIdentidadGrpcTests` | 490 s |
+| `PersonaNaturalGrpcTests` | 458 s |
+| `CrearBorradorDesdeDiagnosticoPostgresTests` | 442 s |
+| `PortalCobroTests` | 400 s |
+| `PersonaNaturalTiposPostgresTests` | 354 s |
+| `TarifasOtTests` | 232 s |
+
+Las tres primeras ya tenían el arreglo en #760, que no estaba fusionado (develop les había sumado pruebas nuevas con el patrón viejo).
+
+**Cambios** (#760 → develop; nivelados en #765 → staging y #766 → release, con `.github/` idéntico en las 3 ramas):
+- Host por clase (`HostPorClase`) también en TarifasOt, PortalCobro, CrearBorradorDesdeDiagnostico, PN Tipos, TiposTramite y Catalogos gRPC. En TarifasOt y PortalCobro, el perfil OT falso pasa a ser uno por clase, con un registro tenant → organismo que llena y vacía cada escenario.
+- **Postgres del CI con `max_connections=500`**. Admin agotaba las 100 conexiones del contenedor («too many clients already») y se quedaba esperando. El ajuste existía solo en staging: entró dentro de #860, un PR de funcionalidad.
+- `--blame-hang` en admin (HU14397) conservado; timeout 55.
+- **Admin en 2 shards por clase en GitHub** (`admin-0`/`admin-1`, `ADMIN_SHARDS=2`), cada uno en su runner. 3.242 + 2.629 = 5.871 pruebas, verificado con `LISTAR=1`. En el pool sigue en 1 (memoria).
+- Release: la prueba `RegenerarMandatoContratoOpenApiTests.Contrato_InfoVersionSubioDePatch` esperaba 1.0.6 y el contrato está en 1.0.7 (#885). Rompía admin en todo PR a release; se corrigió en #766.
+
+| Fecha | Corrida | Rama | Resultado |
+|---|---|---|---|
+| 2026-11-14 | 43653636793 | develop (antes) | admin 40 min (5.150 pruebas aprox.) |
+| 2026-11-16 | 43957451910 | #760, admin entero | ✅ admin **24,5 min** de pruebas (5.874) · job 29,5 min; la clase más lenta pasó a 3 min |
+| 2026-11-16 | 43958380370 | #766 (release), admin entero | admin 17 min (5.150); 1 fallo preexistente de versión del contrato (corregido) |
+
+**#762 (CI liviano y CD con `vars.RUNNER`):** merge de develop. Además, los 5 Dockerfiles de frontends hacen `chown` solo de `.next`: el `chown -R /app` duplicaba toda la app (~1,2 GB) y exportar esa capa a la caché gha costaba 169 de 350 s del build del frontend (run 43448681292). Ahora la capa pesa 127 MB, probado en local.
+
+**Descartado:** `output: "standalone"` de Next. Congela `rewrites()` al compilar, y esos rewrites leen `CORE_API_ORIGIN`/`CORE_ICT_ORIGIN` en runtime. Solo se puede si los rewrites pasan al gateway o a un middleware.
+
+**Decisión sobre el pool y los repos privados (opción A, recomendada el 2026-11-16):** core-api sigue en GitHub mientras el repo sea público, porque no cuesta minutos. Con la 177 sin ampliar, el pool admite un solo runner para core-api: con ~30 corridas al día habría fila y sería más lento que GitHub. #760 y #762 dejan todo listo para activar el pool con variables (`RUNNER_CORE_API`, `RUNNER`). Pasar a privado queda para cuando haya capacidad (ampliar la 177 o una máquina para CI), o si se acepta pagar minutos (~15k/mes, unos USD 70–90 de excedente).
+
+**Para activar el pool cuando se decida** (lo tiene que hacer el usuario: el clasificador bloquea abrir el grupo):
+1. Rotar SMTP y pasar flit (y flito) a privado.
+2. `gh workflow run ci.yml --ref develop -f runner=flit-ci` (también contracts, security-scan, python-ml y core-api), con r3 encendido en la 177 (`systemctl --user enable --now actions-runner@r3` como `runner`) y `/root/monitor-pool.sh`.
+3. Variables de repo `RUNNER=flit-ci` y `RUNNER_CORE_API=flit-ci`.
+
 ## 4. Pendientes fuera de las fases
 - Rotar la clave SMTP expuesta (el usuario dijo «más adelante»; hacerlo antes de pasar a privado).
 - Revocar el PAT `ghp_` en claro en `scan-piloto.sh` (177).
-- Frontend: `output: "standalone"` de Next + etapa de runtime mínima (787 MB → ~200 MB; aplica a frontend, frontend-hub y frontend-comparendos).
-- Revisar la caché gha de los otros 9 builds de `cd.yml`.
+- ~~Frontend standalone~~: descartado por ahora (ver §3c, rewrites en runtime).
+- ~~Caché gha de los otros builds~~: el costo era la capa del `chown -R /app` de los frontends (arreglado en #762, §3c). Los demás builds se reutilizan por `reuse-image` casi siempre.
 - Prueba intermitente: `OidcClientSyncConcurrenciaTests.SincronizacionesSimultaneas_DelMismoCliente_NoFallanYLoDejanCreado` (core-identity).
 - 177, sin confirmar por el usuario: volúmenes docker de la reversa (~5 GB) y bases `flitpdn` / `flit1pdn_old_20260929` (~4,4 GB).
 - Equipo local: borrar el contenedor `flit-admin-pg` y las imágenes `eq-core-api:*` cuando Docker Desktop esté encendido; worktrees `D:/FLIT/Code/flit-wt-{argo,pool,admin,docker}`.
@@ -135,4 +175,4 @@ El usuario no puede ampliar la 177 y quiere todo el CI en ella con los repos pri
 - Grupo `flit-ci`: `allows_public_repositories=false`.
 - 177 sin procesos ni contenedores del pool; DEV/QA responden 200; 0 reinicios de pods.
 - Monitor de la medición: `/root/monitor-pool.sh` (log `/root/monitor-pool-*.log`); apagado con `/root/apagar-pool.sh`. Ojo: `pkill -f monitor-pool` mata también la sesión SSH que lo invoca (su línea de comandos contiene el texto).
-- **Para retomar mañana:** nada de la Fase 4 hasta que la 177 se amplíe. Lo siguiente con valor sin depender de eso: imágenes del frontend en modo standalone (§4).
+- **Para retomar (2026-11-16):** fusionar #760 → #765 → #766 y #762; medir el CI de admin en 2 shards y el build del frontend tras #762. Activar el pool solo con los pasos de §3c.
