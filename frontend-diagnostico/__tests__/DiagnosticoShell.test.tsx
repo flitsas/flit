@@ -300,3 +300,27 @@ describe("FE-4 dock: «Diagnósticos» y «Reportes» como enlaces directos (spe
     expect(pos("Reportes")).toBeLessThan(pos("Backoffice"));
   });
 });
+
+// HU #14583 (spec-ui §9, A9.3): Diagnóstico activa el dock equilibrado. Con Diagnósticos · Reportes · Backoffice
+// (3 grupos) quedan 2 a la izquierda del inicio y 1 a la derecha, sin espaciadores; antes iban los 3 a la izquierda.
+describe("HU14583 dock equilibrado en Diagnóstico", () => {
+  it("3 grupos → Diagnósticos · Reportes | Inicio | Backoffice, sin espaciadores", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: RequestInfo | URL) =>
+        String(u).startsWith("/api/v1/diagnostico/notificaciones")
+          ? Response.json({ no_leidas: 0, items: [], siguiente: null })
+          : Response.json({ ...sesion, capacidades: { ...sesion.capacidades, backoffice: true, verReportes: true } }),
+      ),
+    );
+    montar();
+    await screen.findByText("pantalla base");
+    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
+    const hijos = Array.from(nav.children);
+    const fab = hijos.findIndex((el) => el.getAttribute("aria-label") === "Inicio Diagnóstico");
+    expect(fab).toBe(2);
+    expect(hijos.slice(0, fab).map((el) => el.textContent)).toEqual(["Diagnósticos", "Reportes"]);
+    expect(hijos.slice(fab + 1).map((el) => el.textContent)).toEqual(["Backoffice"]);
+    expect(hijos.filter((el) => el.tagName === "SPAN" && el.getAttribute("aria-hidden") === "true")).toHaveLength(0);
+  });
+});
