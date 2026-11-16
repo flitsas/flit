@@ -251,14 +251,47 @@ export async function pulsarBandera(page: Page, placa: string) {
   await bandera(page, placa).click();
 }
 
-/** Orden de los ítems (spec-ui §2.3 con V2 adoptado en decisiones-usuario.md). */
+/**
+ * Orden de los ítems (spec-ui §2.3 con V2 adoptado en decisiones-usuario.md).
+ * Oleada «requerimiento.pdf» (2026-11-16, spec-ui §6.4): el menú suma al principio el grupo «Dictamen» («Ver dictamen» y,
+ * con verAuditoria, «Auditoría del dictamen»), separado del grupo D-103 por un `role=separator`. Los índices de
+ * `ITEM.*` nombran cada posición para no depender del número.
+ */
 export const ORDEN_ITEMS: readonly RegExp[] = [
+  /^Ver dictamen/,
+  /^Auditoría del dictamen/,
   /^(Solicitar saneamiento|Quitar solicitud de saneamiento|Ver saneamiento)/,
   /^(Crear trámite|Creando…|Ver trámite #)/,
   /^Ver deuda/,
   /^Descargar PDF/,
   /^(Reintentar consultas|Reintentando…)/,
 ];
+export const ITEM = { dictamen: 0, auditoria: 1, saneamiento: 2, tramite: 3, deuda: 4, pdf: 5, reintentar: 6 } as const;
+
+/**
+ * Oleada 2026-11-16 (spec-ui §6.4): «Ver dictamen» y «Auditoría del dictamen» salen de la columna Placa/VIN y pasan al menú
+ * «Acciones» de la fila (cliente y backoffice). Nombre accesible del ítem con la placa: «Ver dictamen de ABC123».
+ */
+export const itemDictamen = (page: Page, placa: string) => page.getByRole("menu").getByRole("menuitem", { name: `Ver dictamen de ${placa}`, exact: true });
+export const itemAuditoria = (page: Page, placa: string) =>
+  page.getByRole("menu").getByRole("menuitem", { name: `Auditoría del dictamen de ${placa}`, exact: true });
+
+/** Abre «Dictamen · <placa>» desde el menú de la fila; devuelve el disparador, al que vuelve el foco al cerrar. */
+export async function abrirDictamenDesdeAcciones(page: Page, placa: string) {
+  const { disparador } = await abrirAcciones(page, placa);
+  await itemDictamen(page, placa).click();
+  const dialogo = page.getByRole("dialog", { name: `Dictamen · ${placa}` });
+  await expect(dialogo).toBeVisible();
+  return { disparador, dialogo };
+}
+
+/** Celda de dato «Dictamen» de la fila (se conserva como chip Viable/Bloqueado/Pendiente, ya no es botón). */
+export const celdaDictamen = (page: Page, placa: string) =>
+  page
+    .getByRole("table", { name: /semáforo de consultas/i })
+    .getByRole("row")
+    .filter({ has: page.getByRole("rowheader", { name: new RegExp(placa) }) })
+    .locator('td[data-columna="dictamen"]');
 
 /** Nombres accesibles de los `menuitem` del menú abierto, en orden. */
 export async function nombresItems(menu: Locator): Promise<string[]> {
