@@ -25,6 +25,9 @@ public static class ProductRoleErrorCodes
     public const string NombreRequerido = "NOMBRE_REQUERIDO";
     public const string FiltroInvalido = "FILTRO_INVALIDO";
     public const string PaginacionInvalida = "PAGINACION_INVALIDA";
+
+    /// <summary>CR-2 / D-7: la empresa objetivo del SuperAdmin no existe o no tiene el producto encendido.</summary>
+    public const string EmpresaNoEncontrada = "EMPRESA_NO_ENCONTRADA";
 }
 
 /// <summary>Rechazo de negocio de una operación por producto. <see cref="Code"/> viaja tal cual al cliente.</summary>

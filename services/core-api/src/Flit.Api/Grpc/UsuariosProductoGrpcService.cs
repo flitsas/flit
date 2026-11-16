@@ -133,6 +133,13 @@ internal sealed partial class UsuariosProductoGrpcService(
         var caller = PlatformServiceCaller.From(context);
         var actorId = DiagnosticoUsuariosServicioAuthorization.VerificarLlamante(caller, producto, context.RequestHeaders);
         var actor = await actores.VerificarAsync(caller.TenantId, actorId, producto, context.CancellationToken).ConfigureAwait(false);
+        if (actor is { IsSuperAdmin: true }
+            && !await actores.EmpresaHabilitadaAsync(caller.TenantId, producto, context.CancellationToken).ConfigureAwait(false))
+        {
+            // CR-2 / D-7: el SuperAdmin elige la empresa; si no existe o no tiene el producto, NOT_FOUND uniforme.
+            throw Rechazo(ProductRoleErrorCodes.EmpresaNoEncontrada, ProductRoleErrorKind.NotFound, "Empresa no encontrada.");
+        }
+
         if (actor is not null)
             return (caller.TenantId, actor);
 

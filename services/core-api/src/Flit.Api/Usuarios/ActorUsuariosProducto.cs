@@ -22,6 +22,9 @@ internal interface IActorUsuariosProducto
     /// <param name="tenantId"><c>null</c> en la operación global (conteos): solo el SuperAdmin.</param>
     /// <returns>El actor reverificado, o <c>null</c> si no puede.</returns>
     Task<ProductActor?> VerificarAsync(Guid? tenantId, Guid actorId, string producto, CancellationToken ct);
+
+    /// <summary>CR-2: la empresa existe y tiene el producto encendido (también por su cadena de cabezas).</summary>
+    Task<bool> EmpresaHabilitadaAsync(Guid tenantId, string producto, CancellationToken ct);
 }
 
 /// <summary>
@@ -58,6 +61,19 @@ internal sealed class ActorUsuariosProducto(FlitDbContext db) : IActorUsuariosPr
 {
     private const string SuperAdminRole = "SuperAdmin";
     private const string ProductoPlataforma = "plataforma";
+
+    /// <summary>
+    /// CR-2: la empresa existe, está activa y tiene el producto encendido, también en su cadena de cabezas (la misma lectura
+    /// que usan los permisos efectivos, <see cref="EffectivePermissionOverrideReader.EnabledProductsAsync"/>).
+    /// </summary>
+    public async Task<bool> EmpresaHabilitadaAsync(Guid tenantId, string producto, CancellationToken ct)
+    {
+        var existe = await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId && t.IsActive, ct).ConfigureAwait(false);
+        if (!existe)
+            return false;
+        var productos = await new EffectivePermissionOverrideReader(db).EnabledProductsAsync(tenantId, ct).ConfigureAwait(false);
+        return productos.Contains(producto);
+    }
 
     public async Task<ProductActor?> VerificarAsync(Guid? tenantId, Guid actorId, string producto, CancellationToken ct)
     {

@@ -72,7 +72,7 @@ public sealed class UsuariosProductoGrpcServiceTests
             Contexto("svc-ict")), StatusCode.PermissionDenied);
 
         _actores.Llamadas.Should().Be(0);
-        await _repo.DidNotReceiveWithAnyArgs().ReplaceProductRoleAsync(default, default, default!, default, default, default);
+        await _repo.DidNotReceiveWithAnyArgs().ReplaceProductRoleAsync(default, default, default!, default, default, default, default);
     }
 
     [Fact]
@@ -100,7 +100,7 @@ public sealed class UsuariosProductoGrpcServiceTests
         respuesta.Usuario.RolCodigo.Should().Be("admin_diagnostico");
         respuesta.Usuario.Estado.Should().Be(EstadoUsuarioProducto.Activo);
         respuesta.Usuario.Acciones.Should().Equal(AccionUsuario.CambiarRol, AccionUsuario.Suspender);
-        await _repo.Received(1).ReplaceProductRoleAsync(Empresa, id, P, AdminRol.Id, ActorId, Arg.Any<CancellationToken>());
+        await _repo.Received(1).ReplaceProductRoleAsync(Empresa, id, P, AdminRol.Id, ActorId, null, Arg.Any<CancellationToken>());
         var entrada = _auditoria.Entradas.Should().ContainSingle().Which;
         entrada.Operation.Should().Be(AuditVocabulary.Operations.AssignRole);
         entrada.Result.Should().Be(AuditVocabulary.Results.Success);
@@ -197,7 +197,7 @@ public sealed class UsuariosProductoGrpcServiceTests
     [Fact]
     public async Task Conteos_SoloSuperAdmin()
     {
-        _repo.CountByTenantAsync(P, "admin_diagnostico", Arg.Any<CancellationToken>()).Returns([new ProductTenantCount(Empresa, 4, 1)]);
+        _repo.CountByTenantAsync(P, Arg.Any<IReadOnlyCollection<string>>(), "admin_diagnostico", Arg.Any<CancellationToken>()).Returns([new ProductTenantCount(Empresa, 4, 1)]);
         var servicio = new UsuariosProductoConteoGrpcService(_actores, new ListProductUsersHandler(_repo));
 
         await Falla(() => servicio.ContarPorEmpresa(new ContarPorEmpresaRequest { Producto = P }, new ContextoFalso("svc-diagnostico", Guid.Empty, ActorId.ToString(), Ct)),
@@ -213,6 +213,7 @@ public sealed class UsuariosProductoGrpcServiceTests
     private sealed class ActorFalso : IActorUsuariosProducto
     {
         public bool Permitir { get; set; } = true;
+        public bool EmpresaHabilitada { get; set; } = true;
         public bool SuperAdmin { get; set; }
         public int Llamadas { get; private set; }
         public Guid? UltimoTenant { get; private set; }
@@ -227,6 +228,63 @@ public sealed class UsuariosProductoGrpcServiceTests
                 return Task.FromResult<ProductActor?>(null);
             return Task.FromResult<ProductActor?>(new ProductActor(actorId, SuperAdmin));
         }
+
+        public Task<bool> EmpresaHabilitadaAsync(Guid tenantId, string producto, CancellationToken ct) => Task.FromResult(EmpresaHabilitada);
+    }
+
+    [Fact]
+    public async Task SuperAdmin_EmpresaSinDiagnosticoOInexistente_RecibeNotFoundEmpresaNoEncontrada_SinTocarNada()
+    {
+        _actores.SuperAdmin = true;
+        _actores.EmpresaHabilitada = false;
+        var id = Guid.NewGuid();
+        Miembro(id, UsuarioRol);
+
+        await Falla(() => Servicio().ListarUsuariosProducto(new ListarUsuariosProductoRequest { Producto = P }, Contexto()),
+            StatusCode.NotFound, "EMPRESA_NO_ENCONTRADA");
+        await Falla(() => Servicio().CambiarRolProducto(new CambiarRolProductoRequest { Producto = P, UsuarioId = id.ToString(), RolCodigo = "admin_diagnostico" }, Contexto()),
+            StatusCode.NotFound, "EMPRESA_NO_ENCONTRADA");
+
+        await _repo.DidNotReceiveWithAnyArgs().ReplaceProductRoleAsync(default, default, default!, default, default, default, default);
+    }
+
+    [Fact]
+    public async Task Listar_ConEstadoDesconocido_RecibeInvalidArgumentConFiltroInvalido()
+    {
+        var request = new ListarUsuariosProductoRequest { Producto = P };
+        request.Estados.Add((EstadoUsuarioProducto)99);
+
+        await Falla(() => Servicio().ListarUsuariosProducto(request, Contexto()), StatusCode.InvalidArgument, "FILTRO_INVALIDO");
+    }
+
+    [Fact]
+    public async Task Invitar_AdminCompany_RespuestaUniforme_CausaObjetivoProtegidoEnLaAuditoria()
+    {
+        _repo.ResolveInviteTargetAsync(Empresa, "admin.compania@ejemplo.test", P, Arg.Any<CancellationToken>())
+            .Returns(new InviteTarget(InviteTargetKind.ProtectedMember, Guid.NewGuid()));
+        _actores.SuperAdmin = true;
+
+        var respuesta = await Servicio().InvitarUsuarioProducto(
+            new InvitarUsuarioProductoRequest { Producto = P, Email = "admin.compania@ejemplo.test", Nombre = "Admin", RolCodigo = "usuario_diagnostico" }, Contexto());
+
+        respuesta.Should().Be(new InvitarUsuarioProductoResponse());
+        _auditoria.Entradas.Should().ContainSingle().Which.ErrorCode.Should().Be("OBJETIVO_PROTEGIDO");
+        await _repo.DidNotReceiveWithAnyArgs().AddProductRoleAsync(default, default, default, default, default);
+    }
+
+    [Fact]
+    public async Task InvitacionPorPlataforma_RolQueNoExisteEnLaEmpresa_SeTraduceARolNoPermitido()
+    {
+        var invitaciones = Substitute.For<Flit.Modules.Security.Domain.Auth.IInvitationRepository>();
+        invitaciones.RoleExistsInTenantAsync(default, default, default).ReturnsForAnyArgs(false);
+        var handler = new Flit.Modules.Security.Application.Auth.CreateInvitation.CreateInvitationHandler(
+            invitaciones, Substitute.For<Flit.Modules.Security.Domain.Auth.ISecureTokenGenerator>(), Substitute.For<Flit.Modules.Security.Domain.Auth.IEmailSender>(),
+            new Flit.Modules.Security.Application.Auth.CreateInvitation.InvitationOptions(), Substitute.For<Flit.Modules.Security.Application.Auth.Network.INetworkUrlBaseResolver>(),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Flit.Modules.Security.Application.Auth.CreateInvitation.CreateInvitationHandler>.Instance);
+
+        var act = () => new InvitacionProductoPorPlataforma(handler).SendAsync(Empresa, "nueva@ejemplo.test", "Nueva", Guid.NewGuid(), ActorId, Ct);
+
+        (await act.Should().ThrowAsync<ProductRoleRuleException>()).Which.Code.Should().Be("ROL_NO_PERMITIDO");
     }
 
     private sealed class AuditoriaFalsa : IAdminAuditWriter
