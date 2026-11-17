@@ -1,19 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  AlertCircle,
-  Calendar,
-  FileText,
-  Hash,
-  Mail,
-  RefreshCw,
-  ScanFace,
-  ShieldCheck,
-  User,
-  X,
-} from 'lucide-react';
+import { Hash } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from '@/components/atom/Modal';
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS } from '@flit/ui/Modal';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
@@ -29,10 +21,12 @@ import { ApprovalOriginChip, puedeVerOrigenAprobacion } from '@/components/atom/
 import { CertificadoIdentidadAccion } from '@/components/atom/modules/CertificadoIdentidadAccion';
 import { IdentityInfoTile } from '@/components/atom/modules/IdentityInfoTile';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
-import { FLIT } from '@/lib/flit-design-tokens';
 import type { BiometricEstado, BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+import {
+  DIALOGO_FRANJA_CIRCULO,
+} from '@/components/operacion/dialogo-propio';
 /**
 
  * Panel lateral derecho de proceso de identidad (CF-06/CF-07), mismo patrón que Reportes /
@@ -140,16 +134,14 @@ export function PrevalidacionDetailDrawer({
       size="lg"
       zClassName="z-50"
       header={({ titleId }) => (
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-2">
-            <span
-              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl"
-              style={{ background: FLIT.blueAlpha(0.12), color: FLIT.brand.blue }}
-              aria-hidden
-            >
-              <ScanFace className="h-4 w-4" />
+        // Franja del Modal (homologación #14507): el encabezado propio sale a sangre del margen del panel.
+        <div className={`${MODAL_CABECERA_CLS} -mx-4 -mt-4 sm:-mx-6 sm:-mt-6`}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <div className="flex min-w-0 max-w-full flex-col items-center gap-2">
+            <span aria-hidden className="contents">
+              <Icono nombre="biometria" disco size={52} />
             </span>
-            <h2 id={titleId} className="truncate text-sm font-bold text-flit-primary dark:text-white">
+            <h2 id={titleId} className={`${MODAL_TITULO_CLS} truncate`}>
               {title}
             </h2>
           </div>
@@ -157,9 +149,9 @@ export function PrevalidacionDetailDrawer({
             type="button"
             onClick={onClose}
             aria-label="Cerrar proceso"
-            className="grid h-8 w-8 place-items-center rounded-lg border hover:bg-[rgba(79,116,201,0.1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
+            className={MODAL_CERRAR_CLS}
           >
-            <X className="h-4 w-4 opacity-70" aria-hidden="true" />
+            <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
         </div>
       )}
@@ -168,18 +160,18 @@ export function PrevalidacionDetailDrawer({
           {loading && !detail && !error && (
             <div role="status" aria-live="polite" aria-busy="true" className="space-y-3">
               <span className="sr-only">Cargando proceso…</span>
-              <div className="h-4 w-2/3 animate-pulse rounded bg-black/10 dark:bg-white/10" />
-              <div className="h-24 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+              <div className="h-4 w-2/3 animate-pulse rounded bg-secondary" />
+              <div className="h-24 w-full animate-pulse rounded-xl bg-secondary" />
             </div>
           )}
 
           {error && !detail && (
             <div
               className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-              style={{ borderColor: FLIT.state.danger, background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
+              style={{ borderColor: 'var(--destructive)', background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
               role="alert"
             >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <p className="font-semibold">No se pudo cargar el proceso.</p>
                 <p className="opacity-80">{error}</p>
@@ -192,35 +184,35 @@ export function PrevalidacionDetailDrawer({
               <div className="flex flex-wrap items-center justify-between gap-2">
                 {awaiting ? (
                   <div className="flex items-center gap-2">
-                    <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: FLIT.brand.blue }} aria-hidden />
-                    <p className="text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
+                    <Icono nombre="reintento" className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--di-action)' }} />
+                    <p className="text-xs font-semibold" style={{ color: 'var(--di-action)' }}>
                       Esperando validación de {detail.name}
                     </p>
                   </div>
                 ) : (
-                  <p className="text-sm font-semibold text-flit-primary dark:text-white">{detail.name}</p>
+                  <p className="text-sm font-semibold text-foreground">{detail.name}</p>
                 )}
                 <StatusBadge label={meta.label} tone={meta.tone} ariaLabel={`Estado: ${meta.label}`} wrap />
               </div>
 
               {/* Campos con iconos — lectura rápida, sin tabla densa */}
               <div className="grid gap-2 sm:grid-cols-2">
-                <IdentityInfoTile icon={User} label="Persona" value={detail.name} />
+                <IdentityInfoTile icon={iconoComo("persona")} label="Persona" value={detail.name} />
                 <IdentityInfoTile
-                  icon={FileText}
+                  icon={iconoComo("documento")}
                   label="Documento"
                   value={`${detail.documentType} ${detail.documentNumber}`}
                   mono
                 />
-                <IdentityInfoTile icon={Mail} label="Correo" value={detail.email || '—'} />
+                <IdentityInfoTile icon={iconoComo("correo")} label="Correo" value={detail.email || '—'} />
                 <IdentityInfoTile
                   icon={Hash}
                   label="Intentos Kyverum"
                   value={`${detail.intentos} / ${detail.maxIntentos}`}
                 />
-                <IdentityInfoTile icon={Calendar} label="Enlace vigente hasta" value={detail.expired ? 'Vencido' : formatFecha(detail.expiresAt)} />
+                <IdentityInfoTile icon={iconoComo("calendario")} label="Enlace vigente hasta" value={detail.expired ? 'Vencido' : formatFecha(detail.expiresAt)} />
                 <IdentityInfoTile
-                  icon={ShieldCheck}
+                  icon={iconoComo("escudo")}
                   label="Score"
                   value={detail.score != null ? String(detail.score) : '—'}
                 />
@@ -256,7 +248,7 @@ export function PrevalidacionDetailDrawer({
               {detail.status === 'rechazado' && detail.rejectionReason && (
                 <p
                   className="rounded-xl px-3 py-2 text-[11px]"
-                  style={{ background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
+                  style={{ background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
                 >
                   Motivo del rechazo: {detail.rejectionReason}
                 </p>
@@ -266,9 +258,9 @@ export function PrevalidacionDetailDrawer({
                 <div
                   className="rounded-xl p-3 text-[11px]"
                   style={{
-                    background: FLIT.warningAlpha(0.08),
-                    border: `1px solid ${FLIT.warningAlpha(0.3)}`,
-                    color: FLIT.state.warning,
+                    background: 'var(--di-warning-soft)',
+                    border: '1px solid color-mix(in srgb, var(--di-warning) 30%, transparent)',
+                    color: 'var(--di-warning)',
                   }}
                   role="status"
                   aria-live="polite"
@@ -286,7 +278,7 @@ export function PrevalidacionDetailDrawer({
           {showCaptura && <IdentityCaptureLinkBlock captureUrl={detail.captureUrl!} />}
 
               <div className="rounded-xl border p-3">
-                <p className="mb-1 text-[11px] font-semibold text-flit-primary dark:text-white">
+                <p className="mb-1 text-[11px] font-semibold text-foreground">
                   Tracking del proceso
                 </p>
                 <p className="mb-2 text-[10px] opacity-60">

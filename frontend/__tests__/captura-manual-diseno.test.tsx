@@ -149,7 +149,7 @@ describe("paso Firma alineado con Kyverum (HU #13295)", () => {
   it("muestra el cuadro de autorización con scroll interno y sin mencionar a Kyverum", async () => {
     await toFirma();
     const box = screen.getByRole("region", { name: "Texto de autorización" });
-    expect(box).toHaveClass("overflow-y-auto", "max-h-40", "bg-slate-50", "rounded-2xl", "border");
+    expect(box).toHaveClass("overflow-y-auto", "max-h-40", "bg-secondary", "rounded-2xl", "border");
     expect(box).toHaveAttribute("tabindex", "0");
     expect(box).toHaveTextContent(AUTORIZACION_FIRMA_TEXT);
     expect(AUTORIZACION_FIRMA_TEXT).not.toMatch(/kyverum/i);
@@ -198,7 +198,7 @@ describe("paso Firma alineado con Kyverum (HU #13295)", () => {
     expect(screen.queryByRole("heading")).not.toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: "Progreso de la verificación" });
     expect(within(nav).getAllByText("completado,", { exact: false })).toHaveLength(5);
-    expect(screen.getAllByTestId("step-line").every((l) => l.className.includes("bg-flit-brand"))).toBe(true);
+    expect(within(nav).getAllByRole("listitem").every((li) => li.getAttribute("data-estado") === "hecho")).toBe(true);
     expect(document.body.textContent).not.toMatch(/kyverum|verificando/i);
     expect(screen.getByTestId("enviando-info").firstElementChild).toHaveClass("motion-safe:animate-spin");
     resolve({ status: "pendiente_revision_manual" });

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Plus, RefreshCw, Trash2, Upload } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Contador, Progreso, useSondeo } from "@/components/ocr/comunes";
@@ -114,7 +114,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
   };
 
   return (
-    <Modal
+    <Modal icono="archivo-subir"
       open
       onClose={onCerrar}
       busy={enviando}
@@ -154,10 +154,10 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
             agregar(e.dataTransfer.files);
           }}
           className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center text-xs transition ${
-            arrastrando ? "border-flit-brand bg-[#EFF6FF] dark:bg-flit-brand/10" : "border-[#DFE5ED] dark:border-white/15"
+            arrastrando ? "border-flit-brand bg-secondary dark:bg-flit-brand/10" : "border-border"
           }`}
         >
-          <Upload className="h-5 w-5 text-flit-brand" aria-hidden />
+          <Icono nombre="nube-subir" className="h-5 w-5 text-flit-brand" />
           <span className="font-semibold">Arrastra los archivos aquí o haz clic para elegirlos</span>
           <span className="opacity-60">JPG, PNG, TIFF o PDF · máximo 20 MB cada uno</span>
           <input
@@ -176,24 +176,24 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
           <div className="flex flex-col gap-2">
             <div className="flex items-center justify-between text-xs">
               <span>
-                <b>{validos}</b> archivos listos{invalidos > 0 && <> · <b className="text-[#B42318]">{invalidos}</b> rechazados</>}
+                <b>{validos}</b> archivos listos{invalidos > 0 && <> · <b className="text-destructive">{invalidos}</b> rechazados</>}
                 {" · "}
-                <b className={excedido ? "text-[#B42318]" : ""}>{textoTotal(total)}</b>
+                <b className={excedido ? "text-destructive" : ""}>{textoTotal(total)}</b>
               </span>
-              <button type="button" className="text-xs font-semibold text-[#3B4FD6] hover:underline" onClick={() => setElegidos([])}>
+              <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => setElegidos([])}>
                 Quitar todos
               </button>
             </div>
-            <ul className="max-h-60 overflow-y-auto rounded-xl border border-[#DFE5ED] text-xs dark:border-white/15">
+            <ul className="max-h-60 overflow-y-auto rounded-xl border border-border text-xs">
               {elegidos.map((a, i) => (
-                <li key={`${a.archivo.name}-${a.archivo.size}`} className="flex items-center justify-between gap-3 border-b border-[#EEF1F6] px-3 py-1.5 last:border-0 dark:border-white/10">
-                  <span className={`truncate ${a.error ? "text-[#B42318]" : ""}`}>
+                <li key={`${a.archivo.name}-${a.archivo.size}`} className="flex items-center justify-between gap-3 border-b border-border px-3 py-1.5 last:border-0">
+                  <span className={`truncate ${a.error ? "text-destructive" : ""}`}>
                     {a.archivo.name}
                     <span className="ml-2 opacity-60">{(a.archivo.size / 1024 / 1024).toFixed(1)} MB</span>
                     {a.error && <span className="ml-2 font-semibold">· {a.error}</span>}
                   </span>
                   <button type="button" aria-label={`Quitar ${a.archivo.name}`} onClick={() => setElegidos((l) => l.filter((_, j) => j !== i))}>
-                    <Trash2 className="h-3.5 w-3.5 opacity-60 hover:opacity-100" aria-hidden />
+                    <Icono nombre="papelera" className="h-3.5 w-3.5 opacity-60 hover:opacity-100" />
                   </button>
                 </li>
               ))}
@@ -292,12 +292,12 @@ function Paquetes() {
         acciones={
           <>
             <button type="button" className={controlCls(false)} onClick={lista.recargar}>
-              <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="reintento" className="h-3.5 w-3.5" />
               Actualizar
             </button>
             {puedeCrear && (
               <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setCreando(true)}>
-                <Plus className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="mas" className="h-3.5 w-3.5" />
                 Nuevo paquete
               </button>
             )}
@@ -315,11 +315,11 @@ function Paquetes() {
       <div className="flex flex-wrap gap-2">
         <Contador etiqueta="Paquetes" valor={c?.paquetes} />
         <Contador etiqueta="Documentos" valor={c?.documentos} />
-        <Contador etiqueta="En cola" valor={c?.pendientes} clase="text-[#3B4FD6]" />
-        <Contador etiqueta="Completos" valor={c?.completos} clase="text-[#1E7B3C]" />
-        <Contador etiqueta="Incompletos" valor={c?.incompletos} clase="text-[#B45309]" />
-        <Contador etiqueta="Fallidos" valor={c?.fallidos} clase="text-[#B42318]" />
-        <Contador etiqueta="Duplicados" valor={c?.duplicados} clase="text-[#6D28D9]" />
+        <Contador etiqueta="En cola" valor={c?.pendientes} clase="text-flit-brand-ink" />
+        <Contador etiqueta="Completos" valor={c?.completos} clase="text-[var(--flit-success-ink)]" />
+        <Contador etiqueta="Incompletos" valor={c?.incompletos} clase="text-[var(--badge-warning-fg)]" />
+        <Contador etiqueta="Fallidos" valor={c?.fallidos} clase="text-destructive" />
+        <Contador etiqueta="Duplicados" valor={c?.duplicados} clase="text-[var(--badge-purple-fg)]" />
         <Contador etiqueta="Registrados" valor={c?.registrados} />
       </div>
 

@@ -36,7 +36,7 @@ interface Props {
 const CAUSAL_POR_DEFECTO = 'COMPRAVENTA' as const;
 
 const INPUT_BASE = WIZARD_INPUT;
-const REQUIRED_LABEL = 'text-xs font-medium text-[#59677D] dark:text-white/70 mb-1.5 flex items-center gap-1.5';
+const REQUIRED_LABEL = 'text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5';
 
 const EMPTY: CommercialData = {
   valorVenta: null,
@@ -214,7 +214,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             <div>
               <label htmlFor="comercial-valor" className={REQUIRED_LABEL}>
                 Valor de venta <span className="font-normal opacity-70">($)</span>
-                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">
                   *
                 </span>
               </label>

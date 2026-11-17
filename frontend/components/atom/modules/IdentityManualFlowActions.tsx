@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertCircle, AlertTriangle, ExternalLink, Link2, RefreshCw, Send } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
@@ -17,7 +18,12 @@ import {
   type AccionManual,
 } from '@/lib/identity/manual-flow';
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
-import { WIZARD_CTA_GRADIENT } from '@/components/operacion/wizard-field-styles';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_PANEL,
+} from '@/components/operacion/dialogo-propio';
+import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
 
@@ -34,13 +40,11 @@ const AVISO_CORREO =
   'No se pudo enviar el correo al titular. Regenera el enlace cuando tenga un correo válido, o cópialo y envíalo por otro canal.';
 
 const BTN_BASE =
-  'inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:focus-visible:ring-[#7C9BFF] disabled:cursor-not-allowed disabled:opacity-70';
+  'inline-flex items-center justify-center gap-1.5 rounded-full px-5 py-2 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70';
 /** Acción secundaria navy del guardián (patrón «NavyButton»); en tema oscuro, translúcida sobre la tarjeta #162744. */
-const NAVY_BTN = `${BTN_BASE} bg-[#162744] text-white hover:opacity-90 dark:border dark:border-white/15 dark:bg-white/10 dark:hover:bg-white/15`;
+const NAVY_BTN = `${BTN_BASE} bg-[var(--table-header-bg)] text-[var(--table-header-fg)] hover:opacity-90 dark:border dark:border-border`;
 /** Secundario «blanco con borde» del guardián. */
-const GHOST_BTN = `${BTN_BASE} border border-[#DFE5ED] bg-white text-flit-primary hover:bg-[#F4F8FF] dark:border-white/15 dark:bg-transparent dark:text-white dark:hover:bg-white/5`;
-/** CTA principal del modal: degradado primario (token gradient.primary), con el mismo valor de WIZARD_CTA_GRADIENT. */
-const CTA_BTN = `${BTN_BASE} text-white hover:opacity-90`;
+const GHOST_BTN = `${BTN_BASE} border border-border bg-card text-foreground hover:bg-secondary dark:bg-transparent`;
 const AVISO_CLS = 'flex items-start gap-2 rounded-[10px] border text-xs';
 
 export interface IdentityManualFlowActionsProps {
@@ -100,10 +104,10 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
 
   const items: ActionsMenuItem[] = [];
   if (puedeActivar) {
-    items.push({ key: 'activar', label: 'Activar flujo manual', icon: Send, onSelect: () => openDialog('activar') });
+    items.push({ key: 'activar', label: 'Activar flujo manual', icon: iconoComo("radicacion"), onSelect: () => openDialog('activar') });
   }
   if (esperaCaptura) {
-    items.push({ key: 'regenerar', label: 'Regenerar enlace', icon: RefreshCw, onSelect: () => openDialog('regenerar') });
+    items.push({ key: 'regenerar', label: 'Regenerar enlace', icon: iconoComo("reintento"), onSelect: () => openDialog('regenerar') });
   }
   const verEnManuales = onVerEnManuales && tieneDetalleManual(v) ? onVerEnManuales : undefined;
   if (items.length === 0 && !correoFallo && !verEnManuales) return null;
@@ -117,9 +121,9 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
               label={
                 <span className="inline-flex items-center gap-1.5">
                   {rechazada ? (
-                    <AlertCircle className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="alerta" className="h-3.5 w-3.5" />
                   ) : (
-                    <Link2 className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="externo" className="h-3.5 w-3.5" />
                   )}
                   {rechazada ? CHIP_RECHAZADA : 'Flujo manual activo'}
                 </span>
@@ -128,7 +132,7 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
               ariaLabel={rechazada ? CHIP_RECHAZADA : 'Flujo manual activo'}
             />
             {v.expiresAt && (
-              <span className="text-xs text-flit-primary dark:text-white/80">
+              <span className="text-xs text-foreground">
                 El enlace vence: <span className="font-semibold">{formatFechaHora(v.expiresAt)}</span>
               </span>
             )}
@@ -137,7 +141,7 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
         <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
           {verEnManuales && (
             <button type="button" className={GHOST_BTN} onClick={() => verEnManuales(v.id)}>
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="externo" className="h-3.5 w-3.5" />
               Ver en validaciones manuales
             </button>
           )}
@@ -161,7 +165,7 @@ export function IdentityManualFlowActions({ validation: v, onChanged, onVerEnMan
             color: 'var(--badge-warning-fg)',
           }}
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
           <p>{AVISO_CORREO}</p>
         </div>
       )}
@@ -259,8 +263,7 @@ function ManualFlowConfirmDialog({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[110] flex items-center justify-center px-4 py-6"
-      style={{ background: 'rgba(22,39,68,0.45)', backdropFilter: 'blur(6px)' }}
+      className={`fixed inset-0 z-[110] flex items-center justify-center px-4 py-6 ${MODAL_VELO_CLS}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget && !busy) onClose();
       }}
@@ -272,12 +275,17 @@ function ManualFlowConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="w-full max-w-md rounded-[18px] border border-[#DFE5ED] bg-white p-5 text-flit-primary shadow-2xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
+        className={`${DIALOGO_PANEL} w-full max-w-md`}
       >
-        <h2 id={titleId} className="text-base font-bold">
-          {titulo}
-        </h2>
-        <div id={descId} className="mt-3 space-y-2 text-sm text-flit-primary dark:text-white/80">
+        <div className={MODAL_CABECERA_CLS}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <Icono nombre="identidad" disco size={52} />
+          <h2 id={titleId} className={MODAL_TITULO_CLS}>
+            {titulo}
+          </h2>
+        </div>
+        <div className="p-5">
+        <div id={descId} className="space-y-2 text-sm text-foreground">
           <p>{texto}</p>
           {kyverumEnCurso && (
             <p
@@ -288,7 +296,7 @@ function ManualFlowConfirmDialog({
                 color: 'var(--badge-warning-fg)',
               }}
             >
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
               Se cancelará la validación de Kyverum en curso
             </p>
           )}
@@ -303,24 +311,24 @@ function ManualFlowConfirmDialog({
               color: 'var(--badge-danger-fg)',
             }}
           >
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+            <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
             <p>{error}</p>
           </div>
         )}
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className={GHOST_BTN} onClick={onClose} disabled={busy}>
+          <button type="button" className={buttonClass({ variant: 'secondary', size: 'sm' })} onClick={onClose} disabled={busy}>
             Cancelar
           </button>
           <button
             type="button"
-            className={CTA_BTN}
-            style={{ background: WIZARD_CTA_GRADIENT }}
+            className={buttonClass({ size: 'sm' })}
             onClick={onConfirm}
             disabled={busy}
             aria-busy={busy}
           >
             {busy ? 'Enviando…' : 'Confirmar'}
           </button>
+        </div>
         </div>
       </div>
     </div>,

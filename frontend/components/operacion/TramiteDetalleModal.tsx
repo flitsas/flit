@@ -1,18 +1,9 @@
 'use client';
 
-import { useCallback, useEffect, useRef, useState } from 'react';
-import {
-  Coins,
-  Download,
-  Eye,
-  FileCheck2,
-  FileText,
-  FolderCheck,
-  Loader2,
-  PenLine,
-  Users,
-  X,
-} from 'lucide-react';
+import { type ComponentType, type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
+import { Coins, FolderCheck } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { AttachmentPreview, AvisoDescargaFallida, useAttachmentPreview } from './TramiteDocumentosModal';
 import { SeccionCargando, SeccionError } from './detalle/primitivos';
@@ -26,7 +17,6 @@ import {
   DETALLE_CARD,
   DETALLE_CTA_GRADIENT,
   DETALLE_NAVY,
-  DETALLE_BORDER,
 } from './detalle/detalle-visual';
 import { TramiteDetalleDocumentos } from './detalle/TramiteDetalleDocumentos';
 import { TramiteDetalleActores } from './detalle/TramiteDetalleActores';
@@ -34,7 +24,7 @@ import { TramiteDetalleVehiculo } from './detalle/TramiteDetalleVehiculo';
 import { TramiteDetalleComercial } from './detalle/TramiteDetalleComercial';
 import { TramiteDetalleIdentidad } from './detalle/TramiteDetalleIdentidad';
 import { RevocationRequestButton } from './RevocationRequestButton';
-import { DetalleVehiculoSidebar } from './detalle/DetalleVehiculoSidebar';
+import { DetalleResumen } from './detalle/DetalleResumen';
 import { TimelineTrackPanel } from './detalle/TimelineTrackPanel';
 import {
   mapEventsToTimelineNodes,
@@ -52,7 +42,14 @@ import {
   ETIQUETA_SOLO_CONSULTA,
   describirErrorDeSeccion,
 } from '@/lib/tramites/network-scope';
-import { revocationRequestLabel, revocationRequestTone } from '@/lib/tramites/estados';
+import {
+  ESTADO_ICONO,
+  type EstadoTramite,
+  estadoChipClass,
+  estadoChipStyle,
+  revocationRequestLabel,
+  revocationRequestTone,
+} from '@/lib/tramites/estados';
 import type {
   BiometricValidation,
   InstanceSummary,
@@ -63,6 +60,10 @@ import type {
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 import { formatFechaHora } from '@/lib/format/date';
+
+/** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
+const ICONO_DOCUMENTO = iconoComo("documento");
+const ICONO_USUARIOS = iconoComo("usuarios");
 /**
 
  * Modal «Ver» — detalle del trámite radicado. Shell alineado al mockup (`DetalleTramiteModal`):
@@ -85,26 +86,26 @@ export type TramiteDetalleInitialPanel = Exclude<PanelTracking, null>;
 
 const PASOS_POR_MODALIDAD: Record<
   ProcedureFamily,
-  { id: SeccionId; label: string; Icon: typeof FileText }[]
+  { id: SeccionId; label: string; Icon: ComponentType<{ className?: string; style?: CSSProperties }> }[]
 > = {
   TRASPASO: [
-    { id: 'vehiculo', label: 'Trámite y vehículo', Icon: FileText },
-    { id: 'actores', label: 'Actores y validación', Icon: Users },
+    { id: 'vehiculo', label: 'Trámite y vehículo', Icon: ICONO_DOCUMENTO },
+    { id: 'actores', label: 'Actores y validación', Icon: ICONO_USUARIOS },
     { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
     { id: 'comercial', label: 'Datos comerciales', Icon: Coins },
-    { id: 'expediente', label: 'FUR y expediente', Icon: FileCheck2 },
+    { id: 'expediente', label: 'FUR y expediente', Icon: ICONO_DOCUMENTO },
   ],
   MATRICULAS: [
-    { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: FileText },
-    { id: 'actores', label: 'Comprador y rep. legal', Icon: Users },
+    { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: ICONO_DOCUMENTO },
+    { id: 'actores', label: 'Comprador y rep. legal', Icon: ICONO_USUARIOS },
     { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
-    { id: 'expediente', label: 'FUR y expediente', Icon: FileCheck2 },
+    { id: 'expediente', label: 'FUR y expediente', Icon: ICONO_DOCUMENTO },
   ],
   OTROS: [
-    { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: FileText },
-    { id: 'actores', label: 'Comprador y rep. legal', Icon: Users },
+    { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: ICONO_DOCUMENTO },
+    { id: 'actores', label: 'Comprador y rep. legal', Icon: ICONO_USUARIOS },
     { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
-    { id: 'expediente', label: 'FUR y expediente', Icon: FileCheck2 },
+    { id: 'expediente', label: 'FUR y expediente', Icon: ICONO_DOCUMENTO },
   ],
 };
 
@@ -140,12 +141,12 @@ function BotonSubsanacion({
     >
       {loading ? (
         <>
-          <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+          <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
           Abriendo el asistente…
         </>
       ) : (
         <>
-          <PenLine className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="lapiz" className="h-3.5 w-3.5" />
           {label}
         </>
       )}
@@ -423,7 +424,7 @@ export function TramiteDetalleModal({
     pasos.findIndex((p) => p.id === seccion),
   );
   const pasoActivo = pasos[pasoActivoIndex];
-  const StepIcon = pasoActivo?.Icon ?? FileText;
+  const StepIcon = pasoActivo?.Icon ?? ICONO_DOCUMENTO;
   const estadoVigente = detail?.status ?? item?.estado;
   const rejectedFromVigente = detail?.rejectedFrom ?? item?.rejectedFrom;
   const estadoHdr =
@@ -510,7 +511,7 @@ export function TramiteDetalleModal({
               <h2
                 id={titleId}
                 className="text-[22px] font-bold leading-tight"
-                style={{ color: BLUE }}
+                style={{ color: 'var(--di-heading)' }}
               >
                 {title}
               </h2>
@@ -521,10 +522,21 @@ export function TramiteDetalleModal({
                   aria-pressed={panelTracking === 'timeline'}
                   aria-label={`Estado: ${estadoHdr.label}. Ver línea de tiempo del trámite`}
                   title="Ver línea de tiempo del trámite"
-                  className="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[11px] font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-                  style={{ background: estadoHdr.color }}
+                  className={`${estadoChipClass(estadoVigente)} inline-flex items-center gap-1.5 rounded-full border py-1 ${ESTADO_ICONO[estadoVigente as EstadoTramite] ? 'pl-1 pr-3' : 'px-3'} text-[12px] font-bold transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2`}
+                  style={{
+                    background: estadoChipStyle(estadoVigente).bg,
+                    color: estadoChipStyle(estadoVigente).color,
+                    borderColor: estadoChipStyle(estadoVigente).border,
+                  }}
                 >
-                  <estadoHdr.Icon className="h-3.5 w-3.5" aria-hidden="true" />
+                  {/* HU #14482: el icono de línea sigue en el DOM pero oculto. UI Kit 2026: delante del texto va el
+                      disco del estado del kit (decorativo). Es un botón, así que conserva la píldora y no toma la
+                      punta de `.kit-etiqueta`: su recorte se comería el anillo de foco. */}
+                  <estadoHdr.Icon className="hidden" aria-hidden="true" />
+                  {ESTADO_ICONO[estadoVigente as EstadoTramite] ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- disco estático del kit
+                    <img src={ESTADO_ICONO[estadoVigente as EstadoTramite]} alt="" aria-hidden="true" width={20} height={20} className="h-5 w-5 shrink-0" />
+                  ) : null}
                   {estadoHdr.label}
                 </button>
               ) : null}
@@ -549,14 +561,14 @@ export function TramiteDetalleModal({
                   ariaLabel={`${ETIQUETA_SOLO_CONSULTA}: trámite de un cliente de la red`}
                   label={
                     <span className="inline-flex items-center gap-1">
-                      <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                      <Icono nombre="ojo" className="h-3.5 w-3.5" />
                       {ETIQUETA_SOLO_CONSULTA}
                     </span>
                   }
                 />
               ) : null}
             </div>
-            <p className="mt-1 text-[12px]" style={{ color: '#475569' }}>
+            <p className="mt-1 text-[12px]" style={{ color: 'var(--muted-foreground)' }}>
               <span className="font-mono">{item.referenceNumber}</span> · {item.placa ?? '—'} ·
               Responsable: {item.gestorNombre ?? '—'}
               {consultaMode && tenantNameRed ? ` · Cliente: ${tenantNameRed}` : ''}
@@ -576,11 +588,11 @@ export function TramiteDetalleModal({
                   type="button"
                   onClick={() => toggleTracking(key)}
                   aria-pressed={active}
-                  className="rounded-xl border-2 px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+                  className="min-h-9 rounded-[10px] border px-3 py-2 text-xs font-semibold transition hover:bg-[var(--di-accent-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
                   style={
                     active
-                      ? { background: BLUE, borderColor: BLUE, color: '#fff' }
-                      : { borderColor: DETALLE_BORDER, color: NAVY, background: 'transparent' }
+                      ? { background: 'var(--di-accent-soft)', borderColor: 'var(--di-action)', color: 'var(--di-action)' }
+                      : { borderColor: 'var(--di-border)', color: 'var(--di-text-secondary)', background: 'var(--di-surface-elevated)' }
                   }
                 >
                   {label}
@@ -591,9 +603,9 @@ export function TramiteDetalleModal({
               type="button"
               onClick={onClose}
               aria-label="Cerrar"
-              className="rounded-xl border border-[#DFE5ED] bg-white p-2 dark:border-white/5 dark:bg-[#0B0F14]"
+              className="rounded-xl border border-border bg-card p-2"
             >
-              <X className="h-4 w-4" aria-hidden="true" />
+              <Icono nombre="cerrar" className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -754,11 +766,21 @@ export function TramiteDetalleModal({
               </InlineAlert>
             ) : null}
 
-            <DetalleStepper
-              pasos={pasosStepper}
-              pasoActivoId={panelTracking ? '' : seccion}
-              onSelect={(id) => selectSeccion(id as SeccionId)}
-            />
+            {/* HU #14482 — resumen de la propuesta (vehículo y fichas) con los pasos de sección
+                integrados tras la línea divisoria. Con un panel de seguimiento abierto el resumen se
+                oculta, como la antigua columna del vehículo, y los pasos quedan en su tarjeta: pulsar
+                uno cierra el panel. */}
+            {(() => {
+              const stepper = (
+                <DetalleStepper
+                  pasos={pasosStepper}
+                  pasoActivoId={panelTracking ? '' : seccion}
+                  onSelect={(id) => selectSeccion(id as SeccionId)}
+                  integrado={!panelTracking}
+                />
+              );
+              return panelTracking ? stepper : <DetalleResumen item={item} detalle={detail} pasos={stepper} />;
+            })()}
 
             <div className="mt-3 grid grid-cols-1 items-stretch gap-4 lg:grid-cols-12">
               {panelTracking === 'timeline' ? (
@@ -812,7 +834,7 @@ export function TramiteDetalleModal({
                         onClick={() => void cargarMasLinea()}
                         disabled={lineaStatus === 'loading'}
                         className="rounded-xl border px-3 py-1.5 text-xs font-semibold transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-                        style={{ borderColor: '#DFE5ED', color: 'var(--color-flit-brand)' }}
+                        style={{ borderColor: 'var(--border)', color: 'var(--color-flit-brand)' }}
                       >
                         {lineaStatus === 'loading' ? 'Cargando…' : 'Ver más'}
                       </button>
@@ -824,7 +846,7 @@ export function TramiteDetalleModal({
                 <div className="lg:col-span-12">
                   {consultaMode ? (
                     // HU #12362 (AC3) — sin petición, sin error técnico ni reintento.
-                    <p className="text-xs text-flit-primary/70 dark:text-white/70" role="status">
+                    <p className="text-xs text-muted-foreground" role="status">
                       {COPY_SECCION_FUERA_DE_ALCANCE}
                     </p>
                   ) : identidadLoading ? (
@@ -857,11 +879,7 @@ export function TramiteDetalleModal({
                 </div>
               ) : (
                 <>
-                  <div className="lg:col-span-4">
-                    <DetalleVehiculoSidebar item={item} canal={detail} />
-                  </div>
-
-                  <div className="flex min-w-0 flex-col gap-4 lg:col-span-8">
+                  <div className="flex min-w-0 flex-col gap-4 lg:col-span-12">
                     <div className="flex items-center gap-2">
                       <StepIcon className="h-4 w-4 shrink-0" style={{ color: BLUE }} aria-hidden="true" />
                       <h3 className="text-sm font-bold" style={{ color: BLUE }}>
@@ -955,7 +973,7 @@ export function TramiteDetalleModal({
                                   {systemAttachments.map((a) => (
                                     <li
                                       key={a.id}
-                                      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
+                                      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-border"
                                     >
                                       <span className="min-w-0">
                                         <span className="block truncate text-xs font-medium">{a.filename}</span>
@@ -970,10 +988,10 @@ export function TramiteDetalleModal({
                                         onClick={() => void preview.download(a)}
                                         aria-label={`Descargar ${a.filename}`}
                                         title="Descargar"
-                                        className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand border-[#DFE5ED] dark:border-white/10"
+                                        className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand border-border"
                                         style={{ color: BLUE }}
                                       >
-                                        <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                                        <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                                       </button>
                                     </li>
                                   ))}

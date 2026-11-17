@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, Search } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   Field,
   INPUT_CLS,
@@ -81,7 +81,7 @@ function IdentityFiltroPopover({
         className={controlCls(aplicadasCount > 0)}
       >
         {aplicadasCount > 0 ? `Filtros (${aplicadasCount})` : '+ Filtro'}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <div
@@ -110,11 +110,11 @@ function IdentityFiltroPopover({
           ) : (
             <>
               {condiciones.length > 0 ? (
-                <div className="mb-2 flex flex-wrap gap-1.5 border-b border-[#DFE5ED] pb-2 dark:border-white/10">
+                <div className="mb-2 flex flex-wrap gap-1.5 border-b border-border pb-2">
                   {condiciones.map((c) => (
                     <span
                       key={c.fieldId}
-                      className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+                      className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-flit-brand-ink"
                     >
                       <button
                         type="button"
@@ -141,7 +141,7 @@ function IdentityFiltroPopover({
                     <button
                       type="button"
                       onClick={() => setEditando(f)}
-                      className="w-full rounded-lg px-2 py-2 text-left text-xs font-semibold text-flit-primary transition hover:bg-[#EEF5FF] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:text-white dark:hover:bg-white/10"
+                      className="w-full rounded-lg px-2 py-2 text-left text-xs font-semibold text-foreground transition hover:bg-secondary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                     >
                       {f.label}
                     </button>
@@ -154,7 +154,7 @@ function IdentityFiltroPopover({
           {/* Mismo criterio que Trámites: mientras se edita un campo, el pie del listado no existe (el
               editor trae su propio «Aplicar», que confirma LA CONDICIÓN). */}
           {editando ? null : (
-            <div className="mt-2 flex items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+            <div className="mt-2 flex items-center justify-end gap-2 border-t border-border pt-3">
               <button
                 type="button"
                 onClick={() => {
@@ -162,7 +162,7 @@ function IdentityFiltroPopover({
                   close();
                 }}
                 disabled={condiciones.length === 0 && aplicadasCount === 0}
-                className="rounded-xl border border-[#FF4E00] px-3 py-2 text-xs font-semibold text-[#C2410C] transition hover:bg-[#FF4E00]/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
+                className="rounded-xl border border-[var(--badge-danger-border)] px-3 py-2 text-xs font-semibold text-destructive transition hover:bg-[var(--badge-danger-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-40"
               >
                 Empezar de cero
               </button>
@@ -218,13 +218,13 @@ export function IdentityFilterEditor({
 
   return (
     <div className="text-left" data-testid={`identidad-filtro-editor-${field.id}`}>
-      <p className="mb-2 text-xs font-semibold text-[#0B1F33] dark:text-white">{field.label}</p>
-      {field.hint ? <p className="mb-2 text-[11px] text-[#59677D] dark:text-white/60">{field.hint}</p> : null}
+      <p className="mb-2 text-xs font-semibold text-foreground">{field.label}</p>
+      {field.hint ? <p className="mb-2 text-[11px] text-muted-foreground">{field.hint}</p> : null}
 
       {field.kind === 'opcion' ? (
         <div role="radiogroup" aria-label={field.label} className="flex flex-col gap-1">
           {field.options.map((o) => (
-            <label key={o.value} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-[#EEF5FF] dark:hover:bg-white/10">
+            <label key={o.value} className="flex items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-secondary">
               <input
                 type="radio"
                 name={`identidad-filtro-${field.id}`}
@@ -291,7 +291,7 @@ export function IdentityFilterEditor({
       ) : null}
 
       {error ? (
-        <p id={errorId} role="alert" className="mt-2 text-xs font-medium text-[#C2410C]">
+        <p id={errorId} role="alert" className="mt-2 text-xs font-medium text-destructive">
           {error}
         </p>
       ) : null}
@@ -301,7 +301,7 @@ export function IdentityFilterEditor({
           <button
             type="button"
             onClick={onRemove}
-            className="rounded-xl px-3 py-2 text-xs font-semibold text-[#59677D] transition hover:bg-[#DFE5ED]/40"
+            className="rounded-xl px-3 py-2 text-xs font-semibold text-muted-foreground transition hover:bg-secondary"
           >
             Quitar
           </button>
@@ -362,10 +362,7 @@ export function ValidacionesFiltrosBar({
     <div className="flex flex-wrap items-center gap-2" role="search" aria-label="Filtros de validaciones">
       {scopeSelector}
       <div className="relative w-64 shrink-0">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand"
-          aria-hidden="true"
-        />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" />
         <input
           type="search"
           aria-label="Buscar validaciones por nombre, documento o radicado"

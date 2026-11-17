@@ -79,14 +79,14 @@ export const ESTADOS_PAQUETE = Object.keys(ESTADO_PAQUETE);
 
 /** Estados de documento con su color de §7.6 (el morado de DUPLICADO no existe en los tonos de @flit/ui). */
 export const ESTADO_DOCUMENTO: Record<string, { texto: string; clase: string }> = {
-  Pendiente: { texto: "Pendiente", clase: "bg-[#EEF1F6] text-[#475569] dark:bg-white/10 dark:text-slate-300" },
-  EnProcesamiento: { texto: "En procesamiento", clase: "bg-[#E8EEFF] text-[#3B4FD6] dark:bg-flit-brand/20 dark:text-[#8FA8FF]" },
-  Completo: { texto: "Completo", clase: "bg-[#E7F6EC] text-[#1E7B3C] dark:bg-emerald-500/15 dark:text-emerald-300" },
-  Incompleto: { texto: "Incompleto", clase: "bg-[#FFF1E5] text-[#B45309] dark:bg-orange-500/15 dark:text-orange-300" },
-  Fallido: { texto: "Fallido", clase: "bg-[#FDECEC] text-[#B42318] dark:bg-red-500/15 dark:text-red-300" },
-  Duplicado: { texto: "Duplicado", clase: "bg-[#F1EAFE] text-[#6D28D9] dark:bg-violet-500/15 dark:text-violet-300" },
-  Registrado: { texto: "Registrado", clase: "bg-[#E7F6EC] text-[#14532D] dark:bg-emerald-500/25 dark:text-emerald-200" },
-  Descartado: { texto: "Descartado", clase: "bg-[#F4F5F7] text-[#94A3B8] dark:bg-white/5 dark:text-slate-500" },
+  Pendiente: { texto: "Pendiente", clase: "bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)]" },
+  EnProcesamiento: { texto: "En procesamiento", clase: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]" },
+  Completo: { texto: "Completo", clase: "bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)]" },
+  Incompleto: { texto: "Incompleto", clase: "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]" },
+  Fallido: { texto: "Fallido", clase: "bg-[var(--badge-danger-bg)] text-[var(--badge-danger-fg)]" },
+  Duplicado: { texto: "Duplicado", clase: "bg-[var(--badge-purple-bg)] text-[var(--badge-purple-fg)]" },
+  Registrado: { texto: "Registrado", clase: "bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)] font-semibold" },
+  Descartado: { texto: "Descartado", clase: "bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)] opacity-70" },
 };
 
 export const ESTADOS_DOCUMENTO = Object.keys(ESTADO_DOCUMENTO);

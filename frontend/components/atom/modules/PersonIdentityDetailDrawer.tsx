@@ -1,15 +1,8 @@
 'use client';
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import {
-  AlertCircle,
-  Check,
-  ChevronDown,
-  Copy,
-  RefreshCw,
-  ScanFace,
-  X,
-} from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { ApprovalOriginChip, puedeVerOrigenAprobacion } from '@/components/atom/modules/ApprovalOriginChip';
@@ -26,7 +19,6 @@ import { IdentityManualFlowActions } from '@/components/atom/modules/IdentityMan
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import { CertificadoIdentidadAccion } from '@/components/atom/modules/CertificadoIdentidadAccion';
 import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
-import { FLIT } from '@/lib/flit-design-tokens';
 import { ETIQUETA_SOLO_CONSULTA } from '@/lib/tramites/network-scope';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useReconcileIdentity } from '@/hooks/useReconcileIdentity';
@@ -37,6 +29,12 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_PANEL,
+} from '@/components/operacion/dialogo-propio';
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 /**
 
  * Detalle multi-validación por persona (HU #11273 / CF-06 / ADR-0040).
@@ -261,28 +259,31 @@ export function PersonIdentityDetailDrawer({
     >
       <button
         type="button"
-        className="absolute inset-0"
-        style={{ background: 'rgba(22, 39, 68, 0.45)', backdropFilter: 'blur(6px)' }}
+        className={`absolute inset-0 ${MODAL_VELO_CLS}`}
         aria-label="Cerrar panel"
         onClick={onClose}
       />
       <div
-        className="relative z-10 flex max-h-[90vh] w-full max-w-5xl flex-col overflow-hidden rounded-[18px] border bg-white shadow-2xl dark:bg-[#0B0F14]"
-        style={{ borderColor: FLIT.border.soft }}
+        className={`${DIALOGO_PANEL} z-10 flex max-h-[90vh] w-full max-w-5xl flex-col`}
       >
-        <header className="flex shrink-0 items-center justify-between gap-3 px-6 py-4">
+        <header className={`${MODAL_CABECERA_CLS} mb-4`}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <Icono nombre="identidad" disco size={52} />
           <h2
             id="person-identity-process-title"
-            className="min-w-0 truncate text-base font-bold"
-            style={{ color: FLIT.brand.blue }}
+            className={`${MODAL_TITULO_CLS} truncate`}
           >
             Historial y tracking de identidad
           </h2>
           {mandatario ? (
-            <StatusBadge label="Mandatario" tone="info" ariaLabel="Validación propia del mandatario" />
+            <span className="relative z-[1] inline-flex rounded-full bg-[var(--di-surface-elevated)]">
+              <StatusBadge label="Mandatario" tone="info" ariaLabel="Validación propia del mandatario" />
+            </span>
           ) : null}
           {soloConsulta ? (
-            <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel="Detalle en solo consulta" />
+            <span className="relative z-[1] inline-flex rounded-full bg-[var(--di-surface-elevated)]">
+              <StatusBadge label={ETIQUETA_SOLO_CONSULTA} tone="neutral" ariaLabel="Detalle en solo consulta" />
+            </span>
           ) : null}
           <div className="flex items-center gap-2 shrink-0">
             <button
@@ -290,20 +291,19 @@ export function PersonIdentityDetailDrawer({
               onClick={() => void handleActualizar()}
               disabled={ocupado}
               aria-busy={ocupado}
-              className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-[12px] font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: FLIT.brand.blue, outlineColor: FLIT.brand.blue }}
+              className={buttonClass({ size: 'sm' })}
               aria-label={consultaProveedor ? 'Actualizar estado consultando al proveedor' : 'Actualizar estado'}
             >
-              <RefreshCw className={`h-3.5 w-3.5 ${loading || ocupado ? 'animate-spin' : ''}`} aria-hidden="true" />
+              <Icono nombre="reintento" className={`h-3.5 w-3.5 ${loading || ocupado ? 'animate-spin' : ''}`} />
               Actualizar estado
             </button>
             <button
               type="button"
               onClick={onClose}
               aria-label="Cerrar proceso"
-              className="grid h-8 w-8 place-items-center rounded-lg hover:bg-[rgba(79,116,201,0.1)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#4F74C9]"
+              className={MODAL_CERRAR_CLS}
             >
-              <X className="h-4 w-4 opacity-70" aria-hidden="true" />
+              <Icono nombre="cerrar" className="h-5 w-5" />
             </button>
           </div>
         </header>
@@ -312,19 +312,19 @@ export function PersonIdentityDetailDrawer({
           {loading && !data && !error && (
             <div role="status" aria-live="polite" aria-busy="true" className="space-y-3">
               <span className="sr-only">Cargando proceso…</span>
-              <div className="h-4 w-2/3 animate-pulse rounded bg-black/10 dark:bg-white/10" />
-              <div className="h-24 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
-              <div className="h-32 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+              <div className="h-4 w-2/3 animate-pulse rounded bg-secondary" />
+              <div className="h-24 w-full animate-pulse rounded-xl bg-secondary" />
+              <div className="h-32 w-full animate-pulse rounded-xl bg-secondary" />
             </div>
           )}
 
           {error && !data && (
             <div
               className="flex items-start gap-2 rounded-xl border p-3 text-xs"
-              style={{ borderColor: FLIT.state.danger, background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
+              style={{ borderColor: 'var(--destructive)', background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
               role="alert"
             >
-              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <p className="font-semibold">No se pudo cargar el historial.</p>
                 <p className="opacity-80">{error}</p>
@@ -345,7 +345,7 @@ export function PersonIdentityDetailDrawer({
 
           {!loading && data && data.validations.length === 0 && (
             <div className="text-center py-10 text-xs opacity-70">
-              <ScanFace className="mx-auto h-8 w-8 opacity-30" aria-hidden="true" />
+              <Icono nombre="biometria" className="mx-auto h-8 w-8 opacity-30" />
               <p className="mt-2">Sin validaciones para este documento.</p>
             </div>
           )}
@@ -353,25 +353,24 @@ export function PersonIdentityDetailDrawer({
           {data && latest && latestMeta && (
             <div className="space-y-4 text-xs">
               <div
-                className="rounded-xl border bg-white px-4 py-3"
-                style={{ borderColor: FLIT.border.soft }}
+                className="rounded-xl border bg-card px-4 py-3"
+                style={{ borderColor: 'var(--border)' }}
               >
                 <div className="flex flex-wrap items-center gap-2">
                   {awaiting ? (
                     <div className="flex min-w-0 items-center gap-2">
-                      <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: FLIT.brand.blue }} aria-hidden />
-                      <p className="text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
+                      <Icono nombre="reintento" className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--di-action)' }} />
+                      <p className="text-xs font-semibold" style={{ color: 'var(--di-action)' }}>
                         Esperando validación de {personName}
                       </p>
                     </div>
                   ) : (
-                    <p className="text-[15px] font-bold uppercase tracking-wide text-flit-primary dark:text-white">
+                    <p className="text-[15px] font-bold uppercase tracking-wide text-foreground">
                       {personName}
                     </p>
                   )}
                   <span
-                    className="rounded-full px-2.5 py-0.5 font-mono text-[11px] font-semibold"
-                    style={{ background: FLIT.blueAlpha(0.12), color: FLIT.brand.blue }}
+                    {...etiquetaKit('info', { className: 'font-mono' })}
                   >
                     {latest.documentType} {latest.documentNumber}
                   </span>
@@ -382,7 +381,7 @@ export function PersonIdentityDetailDrawer({
                     wrap
                   />
                 </div>
-                <p className="mt-1 text-[12px]" style={{ color: FLIT.text.secondary }}>
+                <p className="mt-1 text-[12px]" style={{ color: 'var(--muted-foreground)' }}>
                   {latest.email || '—'}
                 </p>
               </div>
@@ -458,27 +457,23 @@ function ValidationAccordionItem({
   });
 
   return (
-    <div className="rounded-xl border overflow-hidden" role="listitem" style={{ borderColor: FLIT.border.soft }}>
+    <div className="rounded-xl border overflow-hidden" role="listitem" style={{ borderColor: 'var(--border)' }}>
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[rgba(79,116,201,0.05)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[#4F74C9]"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-flit-brand"
         aria-expanded={open}
         aria-controls={panelId}
         onClick={() => setOpen((o) => !o)}
       >
-        <span className="text-[13px] font-semibold text-flit-primary dark:text-white">{title}</span>
-        <ChevronDown
-          className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-          style={{ color: FLIT.brand.blue }}
-          aria-hidden
-        />
+        <span className="text-[13px] font-semibold text-foreground">{title}</span>
+        <Icono nombre="abajo" className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} style={{ color: 'var(--di-action)' }} />
       </button>
 
       {open && (
-        <div id={panelId} className="space-y-3 border-t px-3 py-3" style={{ borderColor: FLIT.border.soft }}>
+        <div id={panelId} className="space-y-3 border-t px-3 py-3" style={{ borderColor: 'var(--border)' }}>
           <div
             className="grid gap-3 rounded-xl border px-3 py-3 sm:grid-cols-3"
-            style={{ borderColor: FLIT.border.soft }}
+            style={{ borderColor: 'var(--border)' }}
           >
             <SessionStat
               label="Asociado a trámite"
@@ -530,7 +525,7 @@ function ValidationAccordionItem({
           {v.status === 'rechazado' && motivoRechazo && (
             <p
               className="rounded-xl px-3 py-2 text-[11px]"
-              style={{ background: FLIT.dangerAlpha(0.06), color: FLIT.state.danger }}
+              style={{ background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
             >
               Motivo del rechazo: {motivoRechazo}
             </p>
@@ -540,9 +535,9 @@ function ValidationAccordionItem({
             <div
               className="rounded-xl p-3 text-[11px]"
               style={{
-                background: FLIT.warningAlpha(0.08),
-                border: `1px solid ${FLIT.warningAlpha(0.3)}`,
-                color: FLIT.state.warning,
+                background: 'var(--di-warning-soft)',
+                border: '1px solid color-mix(in srgb, var(--di-warning) 30%, transparent)',
+                color: 'var(--di-warning)',
               }}
               role="status"
               aria-live="polite"
@@ -559,11 +554,11 @@ function ValidationAccordionItem({
 
           {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} provider={v.provider} />}
 
-          <div className="rounded-xl border p-3" style={{ borderColor: FLIT.border.soft }}>
-            <p className="mb-1 text-[13px] font-semibold text-flit-primary dark:text-white">
+          <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)' }}>
+            <p className="mb-1 text-[13px] font-semibold text-foreground">
               Tracking de auditoría y proceso (tiempo real)
             </p>
-            <p className="mb-2 text-[11px]" style={{ color: FLIT.text.secondary }}>
+            <p className="mb-2 text-[11px]" style={{ color: 'var(--muted-foreground)' }}>
               Historial cronológico de eventos, cifrado y respuestas del proveedor.
             </p>
             <IdentityValidationTrackingPanel
@@ -611,7 +606,7 @@ function VerifyIdStat({ verificationId }: { verificationId?: string | null }) {
         <div className="mt-0.5 flex items-start gap-1.5">
           <span
             className="min-w-0 select-all break-all font-mono text-[12px] font-semibold"
-            style={{ color: FLIT.brand.blue }}
+            style={{ color: 'var(--di-action)' }}
           >
             {id}
           </span>
@@ -621,18 +616,18 @@ function VerifyIdStat({ verificationId }: { verificationId?: string | null }) {
             aria-label="Copiar ID de Verify"
             title="Copiar ID de Verify"
             className="grid h-6 w-6 shrink-0 place-items-center rounded-full border hover:bg-[var(--badge-info-bg)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-            style={{ borderColor: FLIT.brand.blue, color: FLIT.brand.blue }}
+            style={{ borderColor: 'var(--di-action)', color: 'var(--di-action)' }}
           >
-            {copied ? <Check className="h-3 w-3" aria-hidden /> : <Copy className="h-3 w-3" aria-hidden />}
+            {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Icono nombre="copiar" className="h-3 w-3" />}
           </button>
         </div>
       ) : (
-        <p className="mt-0.5 text-[12px] font-semibold" style={{ color: FLIT.text.primary }}>
+        <p className="mt-0.5 text-[12px] font-semibold" style={{ color: 'var(--foreground)' }}>
           —
         </p>
       )}
       {id ? (
-        <span role="status" aria-live="polite" className="text-[11px] font-semibold" style={{ color: FLIT.text.primary }}>
+        <span role="status" aria-live="polite" className="text-[11px] font-semibold" style={{ color: 'var(--foreground)' }}>
           {copied ? 'Copiado' : ''}
         </span>
       ) : null}
@@ -661,7 +656,7 @@ function SessionStat({
       ) : (
         <p
           className={`mt-0.5 truncate text-[12px] font-semibold ${accent ? 'font-mono' : ''}`}
-          style={{ color: accent ? FLIT.brand.blue : FLIT.text.primary }}
+          style={{ color: accent ? 'var(--di-action)' : 'var(--foreground)' }}
         >
           {value}
         </p>

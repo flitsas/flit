@@ -332,6 +332,9 @@ public static class InfrastructureExtensions
         // consolidado maestro, compartido por AdminOtEndpoints y el lote de la bandeja OT.
         services.AddScoped<OtClientProcedures.IOtClientProcedureConsolidadoContext,
             OtClientProcedures.OtClientProcedureConsolidadoContext>();
+        // HU #14547 — misma matriz para el maestro que rearma «Regenerar mandato y consolidado» (admin).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoMaestroPrecedenciaProvider,
+            OtClientProcedures.ConsolidadoMaestroPrecedenciaProvider>();
 
         // Épica #13216 — HU13390: selección del lote desde la bandeja del OT (origen ot_bandeja), con el
         // universo, los filtros y el orden de la bandeja (lo elige LoteSeleccionResolverPorOrigen).

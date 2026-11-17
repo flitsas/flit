@@ -6,7 +6,7 @@
 // identidad»; con Baúl de firmas, Persona jurídica o Formato en blanco no se muestra nada.
 
 import { useState } from "react";
-import { Send } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import type { MandateSigner, MandateSignerIdentityResend } from "@/lib/api/admin-mandate-signers";
 import {
@@ -67,7 +67,7 @@ export function MandatarioIdentidadBlock({
             disabled={sending}
             className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
           >
-            <Send className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="radicacion" className="h-3.5 w-3.5" />
             {sending ? "Enviando…" : "Reenviar validación"}
           </button>
         )}
@@ -76,12 +76,12 @@ export function MandatarioIdentidadBlock({
         {vista.detalle}
       </p>
       {mensaje && (
-        <p className="mt-1 text-xs leading-tight" style={{ color: "#3f7a15" }} role="status" data-testid="mandatario-validacion-mensaje">
+        <p className="mt-1 text-xs leading-tight" style={{ color: "var(--flit-success-ink)" }} role="status" data-testid="mandatario-validacion-mensaje">
           {mensaje}
         </p>
       )}
       {error && (
-        <p className="mt-1 text-xs leading-tight" style={{ color: "#E5484D" }} role="alert">
+        <p className="mt-1 text-xs leading-tight" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}

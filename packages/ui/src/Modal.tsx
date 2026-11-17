@@ -2,15 +2,37 @@
 
 import { useEffect, useId } from "react";
 import { createPortal } from "react-dom";
-import { X, type LucideIcon } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { cn } from "./cn";
+import { Icono, type NombreIcono } from "./Icono";
 
 // HU #10496 — Componente Modal unificado (ancho estándar, blur consistente y
 // contraste legible en dark). Encapsula el overlay (`fixed inset-0` + backdrop
-// blur), el panel (ancho estándar, bordes por token, `dark:bg-[#0B0F14]` y color
+// blur), el panel (ancho estándar, superficie y bordes por token, tema oscuro incluido, y color
 // de texto base legible en dark) y el encabezado (icono opcional + título + botón
 // cerrar). Reemplaza el boilerplate que cada diálogo repetía con z-index, blur y
 // anchos divergentes. El cuerpo (formulario, campos, botones) se pasa como
 // `children`; el título lo renderiza el propio Modal para garantizar el contraste.
+// UI Kit 2026 (propuesta-2, `.modal`): contenedor blanco de radio 9 px con borde de 1 px y sin sombra; ícono de 52 px
+// centrado sobre el título (1,375 rem, azul), subtítulo gris, X discreta arriba a la derecha y velo azul al 50 % con
+// desenfoque de 5 px. Mismas props y mismo comportamiento (Escape, clic fuera, ocupado, portal).
+
+/**
+ * Clases del velo y del panel del Modal, para los diálogos y drawers propios que conservan su componente (foco, Escape,
+ * portal) y solo toman el aspecto del kit: velo azul al 50 % con desenfoque de 5 px y panel blanco con borde de 1 px,
+ * radio de 9 px y sin sombra.
+ */
+export const MODAL_VELO_CLS = "bg-[var(--overlay)] backdrop-blur-[5px]";
+export const MODAL_PANEL_CLS = "rounded-[9px] border border-[color:var(--di-border)] bg-card text-flit-primary shadow-none dark:text-foreground";
+/** Cabecera del kit para diálogos propios: ícono de 52 px (`<Icono … disco size={52} />`), título y bajada centrados. */
+export const MODAL_CABECERA_CLS = "relative flex shrink-0 flex-col items-center gap-2 px-14 pb-1 pt-6 text-center";
+/** Título del diálogo: 1,375 rem en negrita, color de títulos del kit. */
+export const MODAL_TITULO_CLS = "text-[1.375rem] font-bold leading-tight text-[color:var(--di-heading)]";
+export const MODAL_DESCRIPCION_CLS = "mt-1 text-sm text-[color:var(--di-text-tertiary)]";
+/** La X discreta arriba a la derecha (el contenedor de la cabecera es `relative`). */
+export const MODAL_CERRAR_CLS =
+  "absolute right-2 top-2 grid h-9 w-9 place-items-center rounded-full bg-transparent text-[color:var(--di-text-tertiary)] " +
+  "transition hover:bg-[color:var(--kit-hover)] hover:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]";
 
 export type ModalSize = "sm" | "md" | "lg" | "xl" | "2xl";
 
@@ -35,11 +57,13 @@ export interface ModalProps {
   onClose: () => void;
   /** Título accesible; el Modal lo asocia vía `aria-labelledby`. */
   title: string;
-  /** Icono opcional a la izquierda del título (Lucide). */
+  /** Ícono del kit centrado sobre el título (preferido). */
+  icono?: NombreIcono;
+  /** @deprecated Usa `icono`. Ícono Lucide; se pinta en el mismo disco centrado mientras se migra. */
   icon?: LucideIcon;
-  /** Fondo del recuadro del icono (por defecto azul de marca). */
+  /** @deprecated Sin efecto: el disco es el del kit. */
   iconBg?: string;
-  /** Clase del título; por defecto navy/blanco legible en ambos temas. */
+  /** Clase del título (tamaño y peso). El color es el de los títulos del kit (`--di-heading`). */
   titleClassName?: string;
   /** Subtítulo opcional bajo el título. */
   description?: React.ReactNode;
@@ -66,9 +90,10 @@ export function Modal({
   open,
   onClose,
   title,
+  icono,
   icon: Icon,
-  iconBg = "var(--color-flit-brand)",
-  titleClassName = "text-base font-bold text-flit-primary dark:text-white",
+  iconBg,
+  titleClassName = "text-[1.375rem] font-bold leading-tight",
   description,
   size = "md",
   zClassName = "z-[100]",
@@ -81,6 +106,7 @@ export function Modal({
   children,
 }: ModalProps) {
   const titleId = useId();
+  void iconBg;
 
   // Escape cierra el modal (salvo que esté ocupado).
   useEffect(() => {
@@ -113,7 +139,7 @@ export function Modal({
 
   return createPortal(
     <div
-      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-hidden bg-slate-900/50 px-4 py-6 backdrop-blur-md`}
+      className={`fixed inset-0 ${zClassName} flex items-center justify-center overflow-hidden bg-[var(--overlay)] px-3 py-6 backdrop-blur-[5px]`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -127,43 +153,46 @@ export function Modal({
       onClick={(e) => e.stopPropagation()}
     >
       <div
-        className={`flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col rounded-2xl border border-[#DFE5ED] bg-white p-4 text-flit-primary shadow-2xl sm:p-6 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white ${panelClassName}`}
+        className={`relative flex max-h-[calc(100dvh-3rem)] w-full min-w-0 ${SIZE_CLASS[size]} flex-col overflow-clip rounded-[var(--di-radius-modal)] border border-[color:var(--di-border)] bg-card text-flit-primary shadow-none dark:text-foreground ${panelClassName}`}
       >
         {resolvedHeader !== undefined ? (
-          <div className="mb-4 shrink-0">{resolvedHeader}</div>
+          <div className="mx-4 mt-4 shrink-0 sm:mx-6 sm:mt-6">{resolvedHeader}</div>
         ) : (
-          <div className="mb-4 flex shrink-0 items-start justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              {Icon && (
-                <span
-                  className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl"
-                  style={{ background: iconBg }}
-                >
-                  <Icon className="h-4.5 w-4.5 text-white" />
-                </span>
-              )}
-              <div className="min-w-0">
-                <h2 id={titleId} className={titleClassName}>
-                  {title}
-                </h2>
-                {description && (
-                  <p className="mt-0.5 text-xs opacity-70">{description}</p>
-                )}
-              </div>
+          // `.modal__franja` del kit: ícono centrado, título y subtítulo; la X flota arriba a la derecha.
+          <div className={MODAL_CABECERA_CLS}>
+            {icono ? (
+              <Icono nombre={icono} disco size={52} />
+            ) : Icon ? (
+              <span aria-hidden="true" className="kit-disco h-[52px] w-[52px]">
+                <Icon className="h-7 w-7" strokeWidth={1.75} />
+              </span>
+            ) : null}
+            <div className="min-w-0 leading-tight">
+              <h2 id={titleId} className={cn(titleClassName, "text-[color:var(--di-heading)]")}>
+                {title}
+              </h2>
+              {description && <p className={MODAL_DESCRIPCION_CLS}>{description}</p>}
             </div>
             <button
               type="button"
               aria-label="Cerrar"
               onClick={requestClose}
-              className="shrink-0 text-slate-400 hover:text-slate-700 dark:hover:text-white"
+              className={MODAL_CERRAR_CLS}
             >
-              <X className="h-5 w-5" />
+              <Icono nombre="cerrar" size={20} />
             </button>
           </div>
         )}
-        <div className={`min-h-0 flex-1 overflow-x-hidden overflow-y-auto ${bodyClassName}`}>{children}</div>
+        {/* Márgenes y no padding: el cuerpo conserva su barra de scroll y el `px-*` que algunos llamadores le pasan. */}
+        <div
+          className={`mx-4 mt-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto sm:mx-6 ${footer ? "" : "mb-4 sm:mb-6"} ${bodyClassName}`}
+        >
+          {children}
+        </div>
         {footer ? (
-          <div className="mt-4 shrink-0 border-t border-[#DFE5ED] pt-4 dark:border-white/10">{footer}</div>
+          <div className="mx-4 mb-4 mt-4 shrink-0 border-t border-[color:var(--di-divider)] pt-4 sm:mx-6 sm:mb-6">
+            {footer}
+          </div>
         ) : null}
       </div>
     </div>,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Download } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, Modal, usePaginacion } from "@flit/ui";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
 import { Encabezado } from "@/components/Pantalla";
@@ -33,8 +33,9 @@ function DetalleCifra({ sel, periodo, onCerrar, onVer }: { sel: Seleccion; perio
   const filas = lista.datos ?? [];
   const titulo = METRICAS.find((m) => m.clave === sel.metrica)?.titulo ?? sel.metrica;
   return (
-    <Modal open onClose={onCerrar} title={`${titulo} · ${sel.usuario}`} description={`Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}.`} size="xl">
+    <Modal icono="reportes" open onClose={onCerrar} title={`${titulo} · ${sel.usuario}`} description={`Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}.`} size="xl">
       <DataTable
+        tarjeta={false}
         ariaLabel="Comparendos de la cifra"
         rows={pg.paginar(filas)}
         getRowKey={(c) => c.id}
@@ -80,14 +81,14 @@ function Contenido() {
         descripcion="Acciones hechas por cada usuario en el periodo. Lo automático (consultas, envíos programados y favorables automáticos) no se atribuye a nadie. Haz clic en una cifra para ver sus comparendos."
         acciones={
           <button type="button" className={controlCls(false)} onClick={exportar} disabled={filas.length === 0}>
-            <Download className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
             Exportar a Excel
           </button>
         }
       />
       <FiltrosPeriodo valor={periodo} onAplicar={setPeriodo} />
       {filas.length > 0 && (
-        <p className="text-xs text-[#5B6B82] dark:text-slate-300">
+        <p className="text-xs text-muted-foreground">
           Total del periodo: <b>{totales.gestionados.toLocaleString("es-CO")}</b> comparendos gestionados, <b>{totales.dpEnviados.toLocaleString("es-CO")}</b> DPs enviados y{" "}
           <b>{totales.pagos.toLocaleString("es-CO")}</b> pagos registrados.
         </p>
@@ -111,7 +112,7 @@ function Contenido() {
               f[m.clave] > 0 ? (
                 <button
                   type="button"
-                  className="font-semibold text-[#3B4FD6] hover:underline dark:text-[#9FB3FF]"
+                  className="font-semibold text-flit-brand-ink hover:underline"
                   onClick={() => setSel({ usuarioId: f.usuarioId, usuario: f.usuario, metrica: m.clave })}
                 >
                   {f[m.clave].toLocaleString("es-CO")}

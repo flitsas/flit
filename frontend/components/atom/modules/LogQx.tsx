@@ -1,23 +1,14 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
+import { CHIP_FILTRO_CLS, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
-import {
-  BadgeCheck,
-  Ban,
-  CheckCircle2,
-  ChevronRight,
-  CircleDashed,
-  Clock,
-  FileCheck2,
-  RefreshCw,
-  Search,
-  X,
-  XCircle,
-} from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import { ModuleTitle } from "./ModuleTitle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { Pagination } from "@/components/atom/Pagination";
@@ -28,6 +19,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { WIZARD_CTA_GRADIENT } from "@/components/operacion/wizard-field-styles";
@@ -53,6 +45,8 @@ import {
   Secretaria,
   secretaria,
 } from "@/lib/logqx/labels";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
 /**
  * Módulo "LOG QX" — bandeja (HU #11788, Feature #11784). Reemplaza la pantalla que exigía una
@@ -318,7 +312,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   }, [aplicar, filtros]);
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="LOG QX"
         subtitle="Trámites con integración Quipux. Filtra por fecha, placa, documento o estado, y abre la trazabilidad completa del que necesites."
@@ -335,18 +329,19 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
             onClick={quitarTramite}
             className="inline-flex items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 font-medium text-flit-brand hover:bg-flit-brand/10"
           >
-            <X className="h-3 w-3" aria-hidden="true" /> Ver todos
+            <Icono nombre="cerrar" className="h-3 w-3" /> Ver todos
           </button>
         </div>
       )}
 
-      {/* Tira de contadores por estado, con la misma presentación que los KPIs de Trámites
+      {/* HU #14476 — chips de conteo del prototipo «Diseño Inteligente» («12 Recibidos»), solo con clases: el icono y la
+          barrita quedan ocultos y el conteo pasa delante. Antes: tira de contadores por estado, con la misma presentación que los KPIs de Trámites
           (`EstadoFunnel`): una tarjeta única dividida en columnas, con icono en pastilla del tono
           del estado, etiqueta y conteo. Antes eran siete cajas grises indistinguibles entre sí. */}
       <div
         role="group"
         aria-label="Contadores por estado"
-        className="grid shrink-0 grid-cols-2 divide-[#EEF2F7] overflow-hidden rounded-2xl border border-[#DFE5ED] bg-white sm:grid-cols-4 sm:divide-x lg:grid-cols-7 dark:divide-white/5 dark:border-white/10 dark:bg-[#162744]"
+        className={`${CHIPS_FILTRO_FILA_CLS} shrink-0`}
       >
         {ESTADOS_BANDEJA.map((estado) => {
           const meta = ESTADO_BANDEJA[estado];
@@ -360,28 +355,27 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
               aria-label={`${meta.label}: ${total} trámite${total === 1 ? "" : "s"}`}
               aria-pressed={activo}
               onClick={() => alternarEstado(estado)}
-              className="flex flex-col items-center gap-1 px-2 py-3 transition hover:bg-flit-brand/[0.06] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
-              style={activo ? { background: meta.style.bg } : undefined}
+              className={`${CHIP_FILTRO_CLS} group`}
             >
               {/* El icono es elemento gráfico (umbral 3:1): lleva el tono PURO del estado. */}
               <span
-                className="grid h-8 w-8 shrink-0 place-items-center rounded-full"
+                className="hidden"
                 style={{ background: meta.style.bg }}
               >
                 <Icon className="h-4 w-4" style={{ color: meta.style.accent }} aria-hidden="true" />
               </span>
-              <span className="max-w-full truncate text-xs font-medium text-flit-primary/70 dark:text-white/70">
+              <span className="order-2 max-w-full truncate text-[0.8125rem]">
                 {meta.label}
               </span>
               <span
-                className="text-xl font-bold leading-none tabular-nums text-flit-primary dark:text-white"
+                className="order-1 text-base font-bold leading-none tabular-nums text-[color:var(--di-text-primary)] group-aria-pressed:text-[color:var(--di-action)]"
                 aria-hidden="true"
               >
                 {total}
               </span>
               {/* El filtro activo no depende solo del fondo. */}
               <span
-                className="h-0.5 w-6 rounded-full"
+                className="hidden"
                 style={{ background: activo ? meta.style.color : "transparent" }}
                 aria-hidden="true"
               />
@@ -392,7 +386,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
 
       <form
         onSubmit={handleSubmit}
-        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-[#DFE5ED] dark:border-white/10 bg-white dark:bg-[#0B0F14] p-3"
+        className="flex flex-wrap items-end gap-2 shrink-0 rounded-2xl border border-border bg-card p-3"
         role="search"
         aria-label="Filtros del LOG QX"
       >
@@ -472,16 +466,15 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
         <span className="flex-1" />
         {(hayFiltros || fetching) && (
           <button type="button" onClick={limpiar} className={ghostCls}>
-            <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+            <Icono nombre="cerrar" className="h-3.5 w-3.5" /> Limpiar
           </button>
         )}
         <button
           type="submit"
           disabled={fetching}
-          className="flex items-center gap-2 rounded-lg px-4 py-2 text-xs font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ background: WIZARD_CTA_GRADIENT }}
+          className={buttonClass({ variant: "primary", size: "sm" })}
         >
-          <Search className="h-3.5 w-3.5" aria-hidden="true" /> Aplicar
+          <Icono nombre="buscar" className="h-3.5 w-3.5" /> Aplicar
         </button>
       </form>
 
@@ -494,7 +487,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
         emptyMessage="Ningún trámite con integración Quipux coincide con los filtros. Amplía el rango de fechas o quita algún filtro."
       >
         {entries && entries.length > 0 && (
-          <>
+          <div className={TABLA_TARJETA_CLS}>
             {/* Tabla en el patrón del resto de la consola (companies / trámites): cabecera en
                 pastilla #DFE5ED y cada fila como tarjeta blanca separada, no una rejilla de
                 bordes. */}
@@ -561,18 +554,17 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
                 setPageSize(n);
               }}
             />
-          </>
+          </div>
         )}
       </UiStateBoundary>
     </div>
   );
 }
 
-const inputCls =
-  "rounded-lg border border-[#D9DEE8] dark:border-white/15 bg-white dark:bg-[#0B0F14] px-2.5 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+// HU #14484 — el `.control` del prototipo y los botones `.btn sm`, los mismos de la barra de Trámites.
+const inputCls = TRAMITES_INPUT_CLS;
 
-const ghostCls =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] dark:border-white/15 px-3 py-2 text-xs font-medium opacity-80 hover:opacity-100 hover:border-flit-brand";
+const ghostCls = buttonClass({ variant: "secondary", size: "sm" });
 
 /** Cabeceras entre el chevron y «Antigüedad»; el orden lo fijó el PO. */
 const COLUMNAS = [
@@ -587,14 +579,14 @@ const COLUMNAS = [
 ] as const;
 
 /** Icono por estado, en la línea de `ESTADO_ICON` de la tira de KPIs de trámites. */
-const ESTADO_ICON: Record<LogQxBandejaEstado, typeof CircleDashed> = {
-  sin_radicar: CircleDashed,
-  pendiente: FileCheck2,
-  radicado: BadgeCheck,
-  en_tramite: RefreshCw,
-  aprobado: CheckCircle2,
-  rechazado: XCircle,
-  fallido: Ban,
+const ESTADO_ICON: Record<LogQxBandejaEstado, ComponentType<IconoComoProps>> = {
+  sin_radicar: iconoComo("espera"),
+  pendiente: iconoComo("documento"),
+  radicado: iconoComo("check"),
+  en_tramite: iconoComo("reintento"),
+  aprobado: iconoComo("check"),
+  rechazado: iconoComo("cerrar"),
+  fallido: iconoComo("distinto"),
 };
 
 const tdCls = "border-y px-4 py-3 align-middle";
@@ -637,8 +629,8 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${
-          abierta ? "shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]" : ""
+        className={`cursor-pointer bg-card ${TABLA_ROW_HOVER_CLS} ${
+          abierta ? "shadow-none" : ""
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -652,22 +644,19 @@ function FilaTramite({
         }}
       >
         <td className={`${tdCls} rounded-l-xl border-l px-3`}>
-          <ChevronRight
-            className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierta ? "rotate-90" : ""}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="derecha" className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierta ? "rotate-90" : ""}`} />
         </td>
         <td className={tdCls}>
           <span className="font-mono font-semibold text-flit-brand">{entry.referenceNumber}</span>
           {entry.intentos > 1 && (
-            <span className="ml-1.5 rounded-full bg-[#FF4E00]/15 px-1.5 py-0.5 font-mono text-[10px] font-bold text-[#C2410C]">
+            <span {...etiquetaKit("danger", { className: "ml-1.5 font-mono" })}>
               {entry.intentos} intentos
             </span>
           )}
         </td>
         <td className={tdCls}>
           {entry.plate ? (
-            <span className="rounded border border-[#D9DEE8] bg-[#F4F6FA] px-1.5 py-0.5 font-mono font-bold tracking-wide dark:border-white/15 dark:bg-white/5">
+            <span className="rounded border border-border bg-secondary px-1.5 py-0.5 font-mono font-bold tracking-wide dark:bg-secondary">
               {entry.plate}
             </span>
           ) : (
@@ -704,7 +693,7 @@ function FilaTramite({
         <td className={`${tdCls} rounded-r-xl border-r`}>
           {espera ? (
             <span
-              className={`whitespace-nowrap font-mono tabular-nums ${alta ? "font-bold text-[#C2410C]" : ""}`}
+              className={`whitespace-nowrap font-mono tabular-nums ${alta ? "font-bold text-destructive" : ""}`}
             >
               {espera}
               {alta ? " ⚠" : ""}
@@ -717,7 +706,7 @@ function FilaTramite({
       {abierta && (
         <tr>
           {/* El detalle es su propia tarjeta, coherente con las filas-tarjeta de la tabla. */}
-          <td colSpan={10} className="rounded-xl border bg-[#F4F7FC] p-0 dark:bg-white/[0.03]">
+          <td colSpan={10} className="rounded-xl border bg-secondary p-0">
             <Vistazo entry={entry} onAbrir={onAbrir} esAdmin={esAdmin} />
           </td>
         </tr>
@@ -747,7 +736,7 @@ function Vistazo({
           {pasos(entry).map((p) => (
             <span
               key={p.label}
-              className="inline-flex items-center gap-1.5 rounded-full border border-[#DFE5ED] bg-white px-2.5 py-1 text-[11px] font-medium dark:border-white/10 dark:bg-[#0B0F14]"
+              {...etiquetaKit({ c: p.color, ct: "var(--di-text-primary)" })}
             >
               <p.Icon className="h-3.5 w-3.5" style={{ color: p.color }} aria-hidden="true" />
               {p.label}
@@ -755,7 +744,7 @@ function Vistazo({
           ))}
         </div>
         {entry.rejectionReason && (
-          <p className="mt-3 rounded-lg border-l-2 border-[#FF4E00] bg-[#FF4E00]/[0.08] px-3 py-2 text-xs text-[#C2410C]">
+          <p className="mt-3 rounded-lg border-l-2 border-destructive bg-[var(--badge-danger-bg)] px-3 py-2 text-xs text-destructive">
             Motivo del rechazo: {entry.rejectionReason}
           </p>
         )}
@@ -778,7 +767,7 @@ function Vistazo({
         <Link
           href={hrefTramite(entry.procedureInstanceId, entry.clientTenantId, esAdmin)}
           onClick={(e) => e.stopPropagation()}
-          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[#DFE5ED] bg-white px-4 py-2 text-xs font-semibold text-flit-brand transition hover:bg-flit-brand/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/15 dark:bg-transparent"
+          className="inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-border bg-card px-4 py-2 text-xs font-semibold text-flit-brand transition hover:bg-flit-brand/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
         >
           Ver trámite
         </Link>
@@ -855,7 +844,7 @@ function resumen(e: LogQxBandejaEntry): string {
  * Los iconos son del set de la app (lucide) y no glifos sueltos (⏳, ✓, ○): esos se renderizan
  * como emoji, con su propio color y su propia caja, y desentonan con el resto de la consola.
  */
-function pasos(e: LogQxBandejaEntry): { Icon: typeof CircleDashed; color: string; label: string }[] {
+function pasos(e: LogQxBandejaEntry): { Icon: ComponentType<IconoComoProps>; color: string; label: string }[] {
   const gris = ESTADO_BANDEJA.sin_radicar.style.accent;
   const espera = ESTADO_BANDEJA.en_tramite.style.accent;
   const ok = ESTADO_BANDEJA.aprobado.style.accent;
@@ -863,31 +852,31 @@ function pasos(e: LogQxBandejaEntry): { Icon: typeof CircleDashed; color: string
 
   if (e.estado === "sin_radicar") {
     return [
-      { Icon: CircleDashed, color: gris, label: "Sin encolar" },
-      { Icon: Clock, color: espera, label: "Elegible, a la espera" },
+      { Icon: iconoComo("espera"), color: gris, label: "Sin encolar" },
+      { Icon: iconoComo("reloj"), color: espera, label: "Elegible, a la espera" },
     ];
   }
 
-  const out: { Icon: typeof CircleDashed; color: string; label: string }[] = [];
+  const out: { Icon: ComponentType<IconoComoProps>; color: string; label: string }[] = [];
 
   if (e.estado === "pendiente") {
-    out.push({ Icon: CircleDashed, color: gris, label: "En cola" });
+    out.push({ Icon: iconoComo("espera"), color: gris, label: "En cola" });
   } else if (e.estado !== "fallido") {
-    out.push({ Icon: BadgeCheck, color: ok, label: "Radicado" });
+    out.push({ Icon: iconoComo("check"), color: ok, label: "Radicado" });
   }
 
   if (e.pollCount > 0) {
-    out.push({ Icon: RefreshCw, color: espera, label: `${e.pollCount} consultas` });
+    out.push({ Icon: iconoComo("reintento"), color: espera, label: `${e.pollCount} consultas` });
   }
 
-  if (e.estado === "en_tramite") out.push({ Icon: Clock, color: espera, label: "Sin decisión" });
+  if (e.estado === "en_tramite") out.push({ Icon: iconoComo("reloj"), color: espera, label: "Sin decisión" });
   if (e.estado === "radicado") {
-    out.push({ Icon: Clock, color: espera, label: "Primera consulta pendiente" });
+    out.push({ Icon: iconoComo("reloj"), color: espera, label: "Primera consulta pendiente" });
   }
-  if (e.estado === "aprobado") out.push({ Icon: CheckCircle2, color: ok, label: "Aprobado" });
-  if (e.estado === "rechazado") out.push({ Icon: XCircle, color: mal, label: "Rechazado" });
+  if (e.estado === "aprobado") out.push({ Icon: iconoComo("check"), color: ok, label: "Aprobado" });
+  if (e.estado === "rechazado") out.push({ Icon: iconoComo("cerrar"), color: mal, label: "Rechazado" });
   if (e.estado === "fallido") {
-    out.push({ Icon: Ban, color: ESTADO_BANDEJA.fallido.style.accent, label: "Radicación fallida" });
+    out.push({ Icon: iconoComo("distinto"), color: ESTADO_BANDEJA.fallido.style.accent, label: "Radicación fallida" });
   }
 
   return out;

@@ -31,6 +31,8 @@ public static class OidcDefaults
         ["platform.tramites.catalogos"] = ServiceAudiences.Tramites,
         // HU #14033 (Épica #14021): fachada gRPC del portal de persona natural (identidad, requisitos, cotización y estado).
         ["platform.tramites.persona_natural"] = ServiceAudiences.Tramites,
+        // ADR-0084 (Punto 4): creación de borradores de trámite desde Diagnóstico Vehicular (solo svc-diagnostico).
+        ["platform.tramites.derivacion"] = ServiceAudiences.Tramites,
         // HU #14050 (Épica #14021): lectura por pull de las solicitudes radicadas en core-personanatural (la usa core-api, svc-tramites).
         ["platform.personanatural.leer"] = ServiceAudiences.PersonaNatural,
     };

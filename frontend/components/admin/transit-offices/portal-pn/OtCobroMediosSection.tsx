@@ -4,8 +4,12 @@
 // medio, los switches «Valor del trámite» y «Valor de la gestión» con su monto. El monto vive en Precios y aquí solo se
 // ve. El cliente se inyecta: sirve al OT, al SuperAdmin en un OT y a la web de persona (Plataforma, sin PIN).
 // Siempre se muestra lo último guardado: ante un fallo no se cambia nada y se informa el motivo exacto.
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import { CreditCard, Lock, Store, type LucideIcon } from "lucide-react";
+import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
+import { useCallback, useEffect, useId, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { Store } from "lucide-react";
+import type { IconoComoProps } from "@flit/ui/iconoComo";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -26,8 +30,8 @@ import type {
   TipoCobro,
 } from "@/lib/api/admin-ot-portal-cobro";
 
-export const COBRO_ON = "#8CC63F";
-export const COBRO_OFF = "#91A5B5";
+export const COBRO_ON = "var(--flit-success-ink)";
+export const COBRO_OFF = "var(--border-strong)";
 
 export const MOTIVO_SIN_MONTO =
   "Este concepto no tiene un monto mayor que cero. Define el valor en Precios y vuelve a encenderlo.";
@@ -43,8 +47,8 @@ const AYUDA_MEDIO: Record<MedioPago, string> = {
   PASARELA: "La persona paga en línea desde el portal.",
   PIN: "La persona paga en la caja del organismo con un PIN.",
 };
-const ICONO_MEDIO: Record<MedioPago, LucideIcon> = {
-  PASARELA: CreditCard,
+const ICONO_MEDIO: Record<MedioPago, ComponentType<IconoComoProps>> = {
+  PASARELA: iconoComo("credencial"),
   PIN: Store,
 };
 const NOMBRE_CONCEPTO: Record<ConceptoCobro, string> = {
@@ -70,6 +74,8 @@ export interface OtCobroMediosSectionProps {
   onIrAPrecios: () => void;
   /** Cómo se llama ese lugar en esta pantalla: «Precios» en el OT, «Tarifas» en Plataforma. */
   nombrePrecios?: string;
+  /** HU #14477 — `false` cuando se monta dentro de un panel que ya es tarjeta (el hub del OT), para no apilar dos. */
+  tarjeta?: boolean;
   /** Abre el formulario de precio de ese trámite sin salir de la pantalla. Sin él, solo se ofrece «Ir a Precios». */
   onDefinirPrecio?: (tipoTramiteId: string) => void;
   /** Cambia cuando los precios cambian: recarga los montos sin mostrar el esqueleto. */
@@ -102,14 +108,9 @@ export function CobroSwitch({
       aria-busy={busy || undefined}
       disabled={disabled || busy}
       onClick={() => onChange(!checked)}
-      className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-      style={{ background: checked ? COBRO_ON : COBRO_OFF }}
+      className={INTERRUPTOR_CLS}
     >
-      <span
-        aria-hidden="true"
-        className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all"
-        style={{ left: checked ? "calc(100% - 22px)" : "2px" }}
-      />
+      <span aria-hidden="true" className={INTERRUPTOR_PERILLA_CLS} />
     </button>
   );
 }
@@ -126,6 +127,7 @@ export function OtCobroMediosSection({
   conPin = true,
   onIrAPrecios,
   nombrePrecios = "Precios",
+  tarjeta = true,
   onDefinirPrecio,
   recargar = 0,
 }: OtCobroMediosSectionProps) {
@@ -258,11 +260,11 @@ export function OtCobroMediosSection({
       .flatMap((m) => m.conceptos)
       .find((c) => c.charge === charge)?.montoCop;
     return monto && monto > 0 ? (
-      <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-white">
+      <span className="text-sm font-semibold tabular-nums text-flit-primary">
         {cop.format(monto)}
       </span>
     ) : (
-      <span className="text-sm text-[#59677D] dark:text-white/70">Sin monto</span>
+      <span className="text-sm text-muted-foreground">Sin monto</span>
     );
   }
 
@@ -294,17 +296,17 @@ export function OtCobroMediosSection({
             onChange={(next) => moverSwitch(tipo, medio, charge, next)}
           />
           <span className="flex flex-col leading-tight">
-            <span className="flex items-center gap-1 text-sm font-semibold text-flit-primary dark:text-white">
+            <span className="flex items-center gap-1 text-sm font-semibold text-flit-primary">
               {NOMBRE_CORTO[charge]}
-              {soloSuperAdmin && <Lock className="h-3 w-3" aria-hidden="true" />}
+              {soloSuperAdmin && <Icono nombre="candado" className="h-3 w-3" />}
             </span>
-            <span className="text-xs text-[#59677D] dark:text-white/70">
+            <span className="text-xs text-muted-foreground">
               {c.enabled ? "Se cobra" : "No se cobra"}
             </span>
           </span>
         </div>
         {(sinPermiso || avisoFila) && (
-          <p id={motivoId} className="max-w-[14rem] text-xs text-[#59677D] dark:text-white/70">
+          <p id={motivoId} className="max-w-[14rem] text-xs text-muted-foreground">
             {avisoFila?.mensaje ?? MOTIVO_SIN_PERMISO}
             {avisoFila && !onDefinirPrecio && (
               <>
@@ -333,14 +335,14 @@ export function OtCobroMediosSection({
 
   function celdaMedio(tipo: TipoCobro, method: MedioPago): ReactNode {
     const medio = tipo.medios.find((m) => m.method === method);
-    if (!medio) return <span className="text-xs text-[#59677D] dark:text-white/70">No aplica</span>;
+    if (!medio) return <span className="text-xs text-muted-foreground">No aplica</span>;
     const total = medio.conceptos.filter((c) => c.enabled).reduce((suma, c) => suma + c.montoCop, 0);
     return (
       <div className="flex flex-wrap items-start gap-x-5 gap-y-2">
         {interruptor(tipo, medio, "TRAMITE")}
         {interruptor(tipo, medio, "GESTION")}
         <div className="flex flex-col items-start gap-1 leading-tight">
-          <span className="text-sm font-semibold tabular-nums text-flit-primary dark:text-white">
+          <span className="text-sm font-semibold tabular-nums text-flit-primary">
             {total > 0 ? cop.format(total) : "Sin cobro"}
           </span>
           {medio.ofrecido ? (
@@ -358,7 +360,7 @@ export function OtCobroMediosSection({
       key: "tipo",
       header: "Trámite",
       render: (t) => (
-        <span className="font-semibold text-flit-primary dark:text-white">{t.nombre}</span>
+        <span className="font-semibold text-flit-primary">{t.nombre}</span>
       ),
     },
     { key: "TRAMITE", header: NOMBRE_CONCEPTO.TRAMITE, render: (t) => celdaMonto(t, "TRAMITE") },
@@ -378,27 +380,27 @@ export function OtCobroMediosSection({
     return (
       <div
         key={m.method}
-        className="flex flex-wrap items-center gap-4 rounded-[14px] border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#162744]"
+        className="flex flex-wrap items-center gap-4 rounded-[14px] border border-border bg-card p-4"
       >
         <span
           aria-hidden="true"
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#E6EFFC] text-[#557EFF] dark:bg-white/10 dark:text-white"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-secondary text-flit-brand-ink"
         >
           <Icono className="h-5 w-5" />
         </span>
         <div className="min-w-[12rem] flex-1">
-          <p className="text-base font-semibold text-flit-primary dark:text-white">
+          <p className="text-base font-semibold text-flit-primary">
             {NOMBRE_MEDIO[m.method]}
           </p>
-          <p className="text-sm text-[#59677D] dark:text-white/70">{AYUDA_MEDIO[m.method]}</p>
-          <p className="text-xs font-semibold text-[#59677D] dark:text-white/70">
+          <p className="text-sm text-muted-foreground">{AYUDA_MEDIO[m.method]}</p>
+          <p className="text-xs font-semibold text-muted-foreground">
             {m.enabled
               ? `${ofrecidos} de ${tipos.length} trámites se ofrecen`
               : "La persona no ve este medio. Sus interruptores se aplican cuando lo enciendas."}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-flit-primary dark:text-white">
+          <span className="text-sm font-semibold text-flit-primary">
             {m.enabled ? "Activado" : "Desactivado"}
           </span>
           <CobroSwitch
@@ -453,14 +455,15 @@ export function OtCobroMediosSection({
           {gestionBloqueada && (
             <p
               id={idNotaGestion}
-              className="flex items-center gap-1.5 text-xs text-[#59677D] dark:text-white/70"
+              className="flex items-center gap-1.5 text-xs text-muted-foreground"
             >
-              <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <Icono nombre="candado" className="h-3.5 w-3.5 shrink-0" />
               {MOTIVO_GESTION_SOLO_SUPERADMIN}
             </p>
           )}
 
           <DataTable<TipoCobro>
+            tarjeta={tarjeta}
             ariaLabel="Valores por trámite y si se cobran en cada medio de pago"
             columns={columnas}
             rows={pg.paginar(tipos)}
@@ -474,7 +477,7 @@ export function OtCobroMediosSection({
             }}
           />
 
-          <p className="text-xs text-[#59677D] dark:text-white/70">
+          <p className="text-xs text-muted-foreground">
             El total de cada medio suma lo que se cobra en él. No incluye el envío ni las transformaciones: se suman cuando aplican.
             {!conPin && " Si un trámite no tiene valor general, se muestra el mayor valor por organismo."}
           </p>

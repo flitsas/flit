@@ -18,9 +18,15 @@ namespace Flit.Admin.Tests.PersonaNatural;
 /// pruebas usan el tipo sembrado y se omiten si la base no lo tiene o no lo tiene encendido; destino, prenda, leasing y
 /// simultáneos se prueban con tipos propios (códigos únicos, retirados al terminar).
 /// </summary>
-public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class PersonaNaturalTiposPostgresTests(PersonaNaturalTiposPostgresTests.Anfitrion anfitrion) : IClassFixture<PersonaNaturalTiposPostgresTests.Anfitrion>
 {
-    private WebApplicationFactory<Program> Host() => factory.WithWebHostBuilder(_ => { }).ConEmpresaPersonaNatural();
+    /// <summary>Un host por clase (ver <see cref="HostPorClase"/>): antes cada prueba arrancaba el suyo y no lo liberaba.</summary>
+    public sealed class Anfitrion : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) => Construir(factory);
+    }
+
+    private static WebApplicationFactory<Program> Construir(WebApplicationFactory<Program> factory) => factory.WithWebHostBuilder(_ => { }).ConEmpresaPersonaNatural();
 
     // ── Declaraciones de los tipos sembrados ─────────────────────────────────────────────────────────────────────────
 
@@ -28,7 +34,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task CambioDeColor_GuardaElColorNuevoYLaBanderaCambio_ConElSoporteComoAdjuntoDelPortal()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.UsarTipoSembradoAsync("CAMBIO_COLOR", ct);
         var solicitud = e.Solicitud(
@@ -50,7 +56,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task CambioDeColor_ElMismoArchivoParaDosDocumentos_SeRegistraUnaVezPorTipo()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.UsarTipoSembradoAsync("CAMBIO_COLOR", ct);
         var solicitud = e.Solicitud(
@@ -71,7 +77,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task Blindaje_ElDesmonteDejaLaBanderaDerivadaEnFalso_YLosNivelesEnVerdadero()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.UsarTipoSembradoAsync("BLINDAJE", ct);
         var desmonte = e.Solicitud(
@@ -92,7 +98,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task CancelacionDeMatricula_GuardaLaCausalYSusDocumentos()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.UsarTipoSembradoAsync("CANCELACION_MATRICULA", ct);
         var solicitud = e.Solicitud(
@@ -116,7 +122,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task UnTipoPrendarioDeAccionUnica_FijaLaDecision_AunqueElPortalMandeOtra(string tipo, string esperada)
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.UsarTipoSembradoAsync(tipo, ct);
         var solicitud = e.Solicitud(partes: [e.Parte("comprador", "2000000004")], prenda: new PrendaPortal(true, "Banco Uno", "900123456", "sin_prenda"));
@@ -135,7 +141,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task UnTipoPrendarioDeAccionUnica_RadicadoDesdeElPortal_PasaElGateDePrendaDeFlit2(string tipo, string deLaMatriz, string deLaDecision)
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.UsarTipoSembradoAsync(tipo, ct);
         var levanta = tipo == "LEVANTAMIENTO_PRENDA";
@@ -159,7 +165,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task LevantamientoRadicadoSinEntidad_NoPasaElGateDePrenda_ComoEnFlit2()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.UsarTipoSembradoAsync("LEVANTAMIENTO_PRENDA", ct);
         var solicitud = e.Solicitud(
@@ -182,7 +188,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task TrasladoDeCuenta_EscribeLasCuatroClavesDelDestino_ConLosDatosDelCatalogo_NoLosDelNavegador()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct, perfil: """{"requiresBuyer":true,"requiresDestinationTransitOffice":true}""", familia: "OTROS");
         var solicitud = e.Solicitud(
             partes: [e.Parte("comprador", "2000000005")],
@@ -204,7 +210,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task TrasladoDeCuenta_ConUnDestinoQueNoExiste_SeRechazaYElBorradorQuedaAnulado()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct, perfil: """{"requiresBuyer":true,"requiresDestinationTransitOffice":true}""", familia: "OTROS");
         var solicitud = e.Solicitud(
             partes: [e.Parte("comprador", "2000000006")],
@@ -228,7 +234,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task LaDecisionDePrenda_SeRegistraEnFlit2_ConLaMismaDecisionDelPortal(string? decision, bool tiene, string esperada)
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var solicitud = e.Solicitud(
             partes: [e.Parte("comprador", "2000000007"), e.Parte("vendedor", "2000000008")],
@@ -245,7 +251,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task Leasing_SoloSeCapturaAlLocatario_YElDocumentoDelPropietarioDelDiagnosticoNoSePisa()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct, perfil: """{"requiresBuyer":true,"requiresLessee":true}""", familia: "OTROS");
         var solicitud = e.Solicitud(
             partes: [e.Parte("locatario", "2000000009")],
@@ -263,7 +269,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task UnSimultaneoEnUnTraspaso_GuardaElValorNuevoYLaBandera_PorqueElTipoAcumulaComplementos()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var solicitud = e.Solicitud(
             partes: [e.Parte("comprador", "2000000010"), e.Parte("vendedor", "2000000011")],
@@ -282,7 +288,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task UnTipoDeOtrosSinDeclaraciones_RechazaUnaTransformacionAjena_ComoEnFlit2()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct, perfil: """{"requiresBuyer":true,"allowsComplementaryTransformations":false}""", familia: "OTROS");
         var solicitud = e.Solicitud(partes: [e.Parte("comprador", "2000000012")], campos: new() { ["cambio_color"] = "true" });
         await e.SembrarValidacionesAsync(solicitud, ct);
@@ -297,7 +303,7 @@ public sealed class PersonaNaturalTiposPostgresTests(WebApplicationFactory<Progr
     public async Task ListarOrganismosDestino_SoloDevuelveLosHabilitadosParaLaEmpresaPnYOperables_FiltraPorTextoYResuelvePorId()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.HacerOperableAsync(e.Destino, ct);
         var lector = e.Servicio<Flit.Infrastructure.PersonaNatural.PersonaNaturalPortalReader>();

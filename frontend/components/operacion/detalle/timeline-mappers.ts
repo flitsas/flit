@@ -12,10 +12,10 @@ import { formatFechaHora } from '@/lib/format/date';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import type { TimelineTrackNode } from './TimelineTrackPanel';
 
-const GREEN = '#8CC63F';
-const WARN = '#F9AC00';
-const RED = '#FF4E00';
-const GREY = '#94A3B8';
+const GREEN = 'var(--flit-success-ink)';
+const WARN = 'var(--badge-warning-fg)';
+const RED = 'var(--destructive)';
+const GREY = 'var(--muted-foreground)';
 const BLUE = 'var(--color-flit-brand)';
 
 const PARTE_LABEL: Record<BiometricParte, string> = {

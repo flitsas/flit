@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Certifications;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure.Consultations;
@@ -46,11 +46,12 @@ internal sealed class VerifikConductorConsultationProvider(
         var url = $"/v2/co/runt/conductor?documentType={Uri.EscapeDataString(documentType)}" +
                   $"&documentNumber={Uri.EscapeDataString(documentNumber)}";
 
-        return await SendAsync(url, ct);
+        return await SendAsync(url, documentNumber, ct);
     }
 
-    private async Task<ConsultationResult> SendAsync(string url, CancellationToken ct)
+    private async Task<ConsultationResult> SendAsync(string url, string documentNumber, CancellationToken ct)
     {
+        HttpStatusCode? estado = null;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -59,18 +60,31 @@ internal sealed class VerifikConductorConsultationProvider(
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var response = await http.SendAsync(request, ct);
+            estado = response.StatusCode;
 
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return NotFound();
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode));
 
-            var payload = await response.Content.ReadFromJsonAsync<VerifikConductorResponse>(JsonOptions, ct);
+            // HU #14153 AC1 — se lee como texto y se deserializa desde ahí (patrón de verifik_rues) para conservar el cuerpo tal
+            // cual llegó: el Diagnóstico muestra la respuesta íntegra del proveedor. Trámites no lo persiste (sin Certifications,
+            // la ingesta canónica no corre).
+            var raw = await response.Content.ReadAsStringAsync(ct);
+            var payload = JsonSerializer.Deserialize<VerifikConductorResponse>(raw, JsonOptions);
             if (payload is null)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode));
 
-            return VerifikConductorResultMapper.Map(payload);
+            return VerifikConductorResultMapper.Map(payload) with
+            {
+                RawPayload = new RawProviderPayload(
+                    ProviderKey: Key_,
+                    SubjectKind: RawProviderPayload.PersonSubject,
+                    SubjectKey: documentNumber,
+                    PayloadJson: raw,
+                    QueriedAt: DateTimeOffset.UtcNow),
+            };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -78,15 +92,15 @@ internal sealed class VerifikConductorConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Timeout());
         }
         catch (HttpRequestException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Red());
         }
         catch (JsonException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(estado));
         }
     }
 
@@ -143,6 +157,9 @@ internal sealed class VerifikConductorConsultationProvider(
         new(Key_, "yellow",
             [new ConsultationCheck("conductor", "Persona en RUNT", "unknown", Key_, "Persona no encontrada en RUNT")],
             []);
+
+    /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
+    private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
 
     // No se pudo consultar la persona en el RUNT (no-200/timeout/red/respuesta ilegible).
     // Check "error" (contrato consistente); el lookup de persona solo lee HydratedFields y cae

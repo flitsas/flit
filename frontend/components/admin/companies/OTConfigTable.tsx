@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Search, Settings2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -16,6 +17,7 @@ import {
   filtrarOrganismosOtConfig,
 } from "@/lib/companies/ot-config-filtros";
 import { useTablaFiltros, type TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /** Estado operativo de un OT en FLIT (HU #10518) para bloquear habilitación. */
 export interface OtOperationalInfo {
@@ -260,17 +262,17 @@ export function OTConfigTable({
               <span
                 role="status"
                 className="flex items-center gap-1 text-xs font-semibold"
-                style={{ color: "#0a8f8b" }}
+                style={{ color: "var(--flit-success-ink)" }}
               >
-                <Check className="h-3 w-3" /> Guardado
+                <Icono nombre="check" className="h-3 w-3" /> Guardado
               </span>
             ) : null}
             {reason && (
               <span
                 id={reasonId}
-                className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
-                style={{ color: "#b25a00", borderColor: "#f0c38e", background: "#fff7ed" }}
+                {...etiquetaKit("warning")}
               >
+                <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                 {reason} en FLIT
               </span>
             )}
@@ -294,7 +296,7 @@ export function OTConfigTable({
                     {
                       key: "config",
                       label: "Configurar",
-                      icon: Settings2,
+                      icon: iconoComo("ajustes"),
                       onSelect: () => onOpenConfig(office),
                       disabled: !enabledForConfig,
                       disabledReason:
@@ -319,8 +321,8 @@ export function OTConfigTable({
         </p>
       </div>
 
-      <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand dark:bg-[#0B0F14]">
-        <Search className="h-4 w-4 opacity-60" />
+      <div className="flex max-w-md items-center gap-2 rounded-xl border bg-card p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand">
+        <Icono nombre="buscar" className="h-4 w-4 opacity-60" />
         <label htmlFor="ot-config-search" className="sr-only">
           Buscar organismo de tránsito
         </label>
@@ -335,6 +337,7 @@ export function OTConfigTable({
 
       {(
         <DataTable
+          tarjeta={false}
           emptyContent={
             filtros.hayFiltros ? <TablaFiltrosVacio onLimpiar={limpiarTodo} /> : undefined
           }

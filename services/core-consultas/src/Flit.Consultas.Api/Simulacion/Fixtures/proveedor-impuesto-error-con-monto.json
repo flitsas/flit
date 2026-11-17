@@ -1,0 +1,6 @@
+{
+  "pendingDebtTaxes": true,
+  "pendingTotalToPay": "$ 1.000.000 COP",
+  "pendingDetailTax": [],
+  "observationError": { "descriptionError": "situacion no catalogada", "descriptionErrorDevelopment": "TRAZA-INTERNA-NO-COPIAR", "typeError": 1 }
+}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, StatusBadge } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -71,7 +71,7 @@ export default function PermisosPorOrganismo() {
               </select>
             </label>
             <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!nuevoOt} onClick={() => nuevoOt && guardar(nuevoOt, nuevoRl || null, true, false).then(() => setNuevoOt(null))}>
-              <Plus className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="mas" className="h-3.5 w-3.5" />
               Bloquear cambio
             </button>
           </div>

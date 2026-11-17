@@ -17,6 +17,8 @@ vi.mock('@/lib/api/tramites-client', () => ({
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ push: mocks.push, replace: vi.fn(), prefetch: vi.fn() }),
+  // HU #14481 — la página lee ?placa/?estado/?atajo para volver a montar el listado con la entrada nueva.
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('@/components/operacion/OperacionView', () => ({

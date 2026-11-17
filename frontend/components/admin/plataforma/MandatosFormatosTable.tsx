@@ -1,6 +1,5 @@
 "use client";
 
-import { Eye, Pencil, RotateCcw } from "lucide-react";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -8,6 +7,7 @@ import type { MandatoFormatView } from "@/lib/api/admin-plataforma-mandatos";
 import { formatFechaHora } from "@/lib/format/date";
 import { resolveTipoNegocio, tipoNegocioLabel } from "@/lib/plataforma/mandato-templates";
 import { TipoMandatoAyuda } from "./TipoMandatoAyuda";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export interface MandatosFormatosTableProps {
   formatos: readonly MandatoFormatView[];
@@ -40,8 +40,8 @@ export function MandatosFormatosTable({
       header: "Nombre",
       render: (row) => (
         <div className="flex flex-col gap-0.5">
-          <span className="font-semibold text-[#162244] dark:text-white">{row.name}</span>
-          <span className="font-mono text-[11px] text-[#59677D] dark:text-white/55">
+          <span className="font-semibold text-foreground">{row.name}</span>
+          <span className="font-mono text-[11px] text-muted-foreground">
             {row.code}
           </span>
         </div>
@@ -77,7 +77,7 @@ export function MandatosFormatosTable({
           subject={row.name}
           actions={[
             {
-              icon: Pencil,
+              icon: iconoComo("lapiz"),
               label: `Editar formato ${row.name}`,
               tone: "primary",
               onClick: () => onEdit(row.code),
@@ -86,7 +86,7 @@ export function MandatosFormatosTable({
             ...(row.selectableAsRedaction
               ? [
                   {
-                    icon: Eye,
+                    icon: iconoComo("ojo"),
                     label: `Ver documento del formato ${row.name}`,
                     onClick: () => onPreview(row.code),
                     disabled: previewing !== null,
@@ -96,7 +96,7 @@ export function MandatosFormatosTable({
             ...(onResetTemplate && !row.delegatesToOfficeTemplate && row.currentVersion > 0
               ? [
                   {
-                    icon: RotateCcw,
+                    icon: iconoComo("reintento"),
                     label: `Restablecer formato ${row.name}`,
                     onClick: () => onResetTemplate(row),
                     disabled: previewing !== null,
@@ -111,6 +111,7 @@ export function MandatosFormatosTable({
 
   return (
     <DataTable
+      tarjeta={false}
       columns={columns}
       rows={pageRows}
       getRowKey={(row) => row.code}

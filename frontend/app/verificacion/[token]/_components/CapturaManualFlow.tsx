@@ -134,7 +134,7 @@ export function CapturaManualFlow({
       <StepBar state={sending ? { current: STEPS.length - 1, completed: STEPS.map((_, i) => i), finished: false } : steps} />
       {sending ? <EnviandoInfo /> : null}
       {notice && !steps.finished && !sending ? (
-        <p role="alert" className="mt-4 rounded-xl bg-red-50 p-3 text-sm text-red-900">
+        <p role="alert" className="mt-4 rounded-xl bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]">
           {notice}
         </p>
       ) : null}

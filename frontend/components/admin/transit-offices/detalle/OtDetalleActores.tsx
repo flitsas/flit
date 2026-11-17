@@ -113,7 +113,7 @@ export function OtDetalleActores({ procedure }: { procedure: OtClientProcedure }
         filas={filas}
       />
       {faltantes.length > 0 ? (
-        <p className="text-xs font-medium" style={{ color: "#B45309" }} role="alert">
+        <p className="text-xs font-medium" style={{ color: "var(--badge-warning-fg)" }} role="alert">
           Faltan actores esperados para este tipo de trámite:{" "}
           {faltantes.map(actorTypeLabel).join(", ")}.
         </p>

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, usePaginacion } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SearchInput } from "@/components/SearchInput";
@@ -11,6 +11,7 @@ import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS, TEXTAREA_CLS }
 import { apiFetch } from "@/lib/api";
 import type { AliasOt, Organismo, Pagina } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 
 function EditarOrganismo({ ot, onCerrar, onGuardado }: { ot: Organismo; onCerrar: () => void; onGuardado: () => void }) {
   const [correos, setCorreos] = useState(ot.correosRadicacion.join("\n"));
@@ -35,7 +36,7 @@ function EditarOrganismo({ ot, onCerrar, onGuardado }: { ot: Organismo; onCerrar
   };
 
   return (
-    <Modal
+    <Modal icono="banco"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -100,7 +101,7 @@ function Alias() {
 
   return (
     <div className="flex flex-col gap-3">
-      <p className="text-sm text-[#5B6B82] dark:text-slate-300">
+      <p className="text-sm text-muted-foreground">
         Un alias traduce el texto de secretaría que trae una fuente al organismo del catálogo. Sin organismo no se pueden enviar DP ni solicitudes de cambio.
       </p>
       <div className="grid grid-cols-1 items-end gap-3 sm:grid-cols-3">
@@ -113,7 +114,7 @@ function Alias() {
           <SelectorOrganismo valor={ot} onCambio={(id) => setOt(id)} />
         </div>
         <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || !texto.trim() || !ot} onClick={crear}>
-          <Plus className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="mas" className="h-3.5 w-3.5" />
           Crear alias
         </button>
       </div>
@@ -134,8 +135,8 @@ function Alias() {
             header: "",
             align: "right",
             render: (a) => (
-              <button type="button" aria-label={`Borrar alias ${a.texto}`} className="text-[#B42318] hover:opacity-70" onClick={() => borrar(a)}>
-                <Trash2 className="h-4 w-4" />
+              <button type="button" aria-label={`Borrar alias ${a.texto}`} className="text-destructive hover:opacity-70" onClick={() => borrar(a)}>
+                <Icono nombre="papelera" className="h-4 w-4" />
               </button>
             ),
           },
@@ -161,11 +162,11 @@ export default function Organismos() {
     <Requiere superAdmin>
       <section className="flex flex-col gap-4">
         <Encabezado titulo="Organismos de tránsito" descripcion="Catálogo del RUNT con los correos donde se radican los derechos de petición." />
-        <div className="flex gap-2" role="tablist">
-          <button type="button" role="tab" aria-selected={pestana === "catalogo"} className={controlCls(pestana === "catalogo")} onClick={() => setPestana("catalogo")}>
+        <div className={PESTANAS_LISTA_CLS} role="tablist">
+          <button type="button" role="tab" aria-selected={pestana === "catalogo"} className={pestanaClass(pestana === "catalogo")} onClick={() => setPestana("catalogo")}>
             Catálogo
           </button>
-          <button type="button" role="tab" aria-selected={pestana === "alias"} className={controlCls(pestana === "alias")} onClick={() => setPestana("alias")}>
+          <button type="button" role="tab" aria-selected={pestana === "alias"} className={pestanaClass(pestana === "alias")} onClick={() => setPestana("alias")}>
             Alias de secretarías
           </button>
         </div>

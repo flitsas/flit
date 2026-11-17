@@ -15,8 +15,11 @@
 // El resumen («2 filtros · últimos 30 días») hace además el trabajo de fondo: convierte un nombre
 // que solo significaba algo el día que se guardó en algo que se reconoce meses después.
 
-import { Bookmark, CalendarPlus, Check, ChevronRight, Lightbulb, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
+import { CalendarPlus, Lightbulb, type LucideIcon } from "lucide-react";
+import { Icono, type NombreIcono } from "@flit/ui/Icono";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
+import { useMemo, useState, type ComponentType } from "react";
 
 import { Modal } from "@/components/atom/Modal";
 import { RANGE_PRESETS, type SavedQuery } from "@/lib/api/queries";
@@ -63,10 +66,10 @@ export function SavedQueryList({
 
   return (
     <div className="flex flex-col gap-4" data-testid={`${testIdPrefix}-guardadas`}>
-      <Grupo titulo="Mis consultas" cuenta={propias.length} icono={Bookmark}>
+      <Grupo titulo="Mis consultas" cuenta={propias.length} icono={iconoComo("marcador")}>
         {propias.length === 0 ? (
           // Un hueco en blanco no explica nada. Este dice qué aparecerá aquí y de dónde sale.
-          <p className="rounded-xl border border-dashed border-[#DFE5ED] px-3 py-3 text-[11px] leading-relaxed text-[#6B7280] dark:border-white/15 dark:text-white/45">
+          <p className="rounded-xl border border-dashed border-border px-3 py-3 text-[11px] leading-relaxed text-muted-foreground">
             Las consultas que guardes aparecen aquí, listas para volver a ejecutarlas con un clic.
           </p>
         ) : (
@@ -85,7 +88,7 @@ export function SavedQueryList({
             testIdPrefix={testIdPrefix}
             grupoId="guardadas"
             modalTitulo="Mis consultas"
-            modalIcono={Bookmark}
+            modalIcono="marcador"
           />
         )}
       </Grupo>
@@ -158,7 +161,7 @@ function ConsultasConDesborde({
   /** Distingue los data-testid del «Ver todas» y el buscador de este grupo del otro grupo. */
   grupoId: string;
   modalTitulo: string;
-  modalIcono: typeof Bookmark;
+  modalIcono: NombreIcono | LucideIcon;
 }) {
   const [modalAbierto, setModalAbierto] = useState(false);
 
@@ -199,7 +202,7 @@ function ConsultasConDesborde({
         <button
           type="button"
           onClick={() => setModalAbierto(true)}
-          className="w-full rounded-lg border border-[#DFE5ED] px-2 py-1.5 text-[11px] font-semibold text-[#6B7280] transition hover:border-flit-brand/50 hover:text-flit-brand dark:border-white/15 dark:text-white/50"
+          className="w-full rounded-lg border border-border px-2 py-1.5 text-[11px] font-semibold text-muted-foreground transition hover:border-flit-brand/50 hover:text-flit-brand"
           data-testid={`${testIdPrefix}-ver-todas-${grupoId}`}
         >
           Ver todas ({items.length})
@@ -211,7 +214,7 @@ function ConsultasConDesborde({
           open={modalAbierto}
           onClose={() => setModalAbierto(false)}
           title={modalTitulo}
-          icon={modalIcono}
+          {...(typeof modalIcono === "string" ? { icono: modalIcono } : { icon: modalIcono })}
           size="sm"
         >
           <BuscadorDeConsultas
@@ -272,10 +275,7 @@ function BuscadorDeConsultas({
   return (
     <div className="flex flex-col gap-3">
       <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[#9AA5B4] dark:text-white/30"
-          aria-hidden="true"
-        />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
         <input
           autoFocus
           type="search"
@@ -283,13 +283,13 @@ function BuscadorDeConsultas({
           onChange={(e) => setBusqueda(e.target.value)}
           placeholder="Buscar por nombre…"
           aria-label="Buscar consulta"
-          className="w-full rounded-lg border border-[#DFE5ED] bg-transparent py-2 pl-8 pr-2 text-xs outline-none focus:border-flit-brand dark:border-white/15"
+          className="w-full rounded-lg border border-input bg-transparent py-2 pl-8 pr-2 text-xs outline-none focus:border-flit-brand"
           data-testid={`${testIdPrefix}-buscar-${grupoId}`}
         />
       </div>
 
       {filtradas.length === 0 ? (
-        <p className="rounded-xl border border-dashed border-[#DFE5ED] px-3 py-3 text-[11px] leading-relaxed text-[#6B7280] dark:border-white/15 dark:text-white/45">
+        <p className="rounded-xl border border-dashed border-border px-3 py-3 text-[11px] leading-relaxed text-muted-foreground">
           Ninguna consulta coincide con «{busqueda.trim()}».
         </p>
       ) : (
@@ -334,24 +334,24 @@ function Grupo({
   cuenta: number;
   nota?: string;
   /** Distingue el grupo de un vistazo, sin depender solo del texto del título. */
-  icono: typeof Bookmark;
+  icono: ComponentType<IconoComoProps>;
   /** Traza la línea de separación con el grupo anterior. */
   separado?: boolean;
   children: React.ReactNode;
 }) {
   return (
-    <div className={separado ? "border-t border-[#DFE5ED] pt-4 dark:border-white/10" : undefined}>
-      <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-[#F5F7FA] px-2 py-1.5 dark:bg-white/[0.06]">
-        <Icono className="h-3.5 w-3.5 shrink-0 text-flit-brand dark:text-[#9DB5FF]" aria-hidden="true" />
-        <p className="text-[11px] font-bold uppercase tracking-wider text-flit-primary dark:text-white/75">
+    <div className={separado ? "border-t border-border pt-4" : undefined}>
+      <div className="mb-2 flex items-center gap-1.5 rounded-lg bg-secondary px-2 py-1.5">
+        <Icono className="h-3.5 w-3.5 shrink-0 text-flit-brand" aria-hidden="true" />
+        <p className="text-[11px] font-bold uppercase tracking-wider text-flit-primary dark:text-muted-foreground">
           {titulo}
         </p>
-        <span className="ml-auto rounded-full bg-white px-1.5 py-px text-[10px] font-semibold tabular-nums text-[#6B7280] dark:bg-white/10 dark:text-white/50">
+        <span className="ml-auto rounded-full bg-card px-1.5 py-px text-[10px] font-semibold tabular-nums text-muted-foreground">
           {cuenta}
         </span>
       </div>
       {nota && (
-        <p className="mb-1.5 px-0.5 text-[10px] leading-snug text-[#9AA5B4] dark:text-white/30">
+        <p className="mb-1.5 px-0.5 text-[10px] leading-snug text-muted-foreground">
           {nota}
         </p>
       )}
@@ -387,17 +387,17 @@ function Item({
   if (confirmando) {
     return (
       <li
-        className="rounded-xl border border-[#C0392B]/40 bg-[#C0392B]/5 p-2.5"
+        className="rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-2.5"
         data-testid={`${testIdPrefix}-borrar-${query.id}`}
       >
-        <p className="mb-2 text-[11px] leading-snug text-[#0B1F33] dark:text-white/80">
+        <p className="mb-2 text-[11px] leading-snug text-foreground dark:text-muted-foreground">
           Se borrará <span className="font-semibold">«{query.nombre}»</span>.
         </p>
         <div className="flex gap-1.5">
           <button
             type="button"
             onClick={() => onConfirmarBorrado(query)}
-            className="flex-1 rounded-lg bg-[#C0392B] px-2 py-1.5 text-[11px] font-semibold text-white hover:bg-[#A63325]"
+            className="flex-1 rounded-lg bg-destructive px-2 py-1.5 text-[11px] font-semibold text-destructive-foreground hover:bg-destructive/90"
             data-testid={`${testIdPrefix}-borrar-confirmar-${query.id}`}
           >
             Borrar
@@ -406,7 +406,7 @@ function Item({
             type="button"
             autoFocus
             onClick={() => onPedirBorrado(null)}
-            className="flex-1 rounded-lg border border-[#DFE5ED] bg-white px-2 py-1.5 text-[11px] font-semibold text-[#6B7280] hover:text-[#0B1F33] dark:border-white/15 dark:bg-transparent dark:text-white/60 dark:hover:text-white"
+            className="flex-1 rounded-lg border border-border bg-card px-2 py-1.5 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
           >
             Cancelar
           </button>
@@ -425,7 +425,7 @@ function Item({
         className={`w-full cursor-pointer rounded-xl border py-2 pl-2.5 pr-7 text-left transition ${
           activo
             ? "border-flit-brand bg-flit-brand/[0.07] shadow-[inset_3px_0_0_0_var(--color-flit-brand)]"
-            : "border-[#DFE5ED] hover:border-flit-brand/50 hover:bg-[#F5F7FA] dark:border-white/10 dark:hover:border-flit-brand/40 dark:hover:bg-white/5"
+            : "border-border hover:border-flit-brand/50 hover:bg-secondary dark:hover:border-flit-brand/40"
         }`}
         data-testid={`${testIdPrefix}-guardada-${query.id}`}
       >
@@ -435,35 +435,32 @@ function Item({
           <span
             className={`min-w-0 flex-1 text-xs leading-snug line-clamp-2 ${
               activo
-                ? "font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
-                : "font-medium text-[#0B1F33] dark:text-white/85"
+                ? "font-semibold text-flit-brand-ink"
+                : "font-medium text-foreground dark:text-muted-foreground"
             }`}
           >
             {query.nombre}
           </span>
           {activo && !modificada && (
-            <Check className="mt-[3px] h-3 w-3 shrink-0 text-flit-brand" aria-hidden="true" />
+            <Icono nombre="check" className="mt-[3px] h-3 w-3 shrink-0 text-flit-brand" />
           )}
         </span>
 
-        <span className="mt-0.5 flex items-center gap-1 text-[10px] leading-snug text-[#6B7280] dark:text-white/40">
+        <span className="mt-0.5 flex items-center gap-1 text-[10px] leading-snug text-muted-foreground">
           {resumen(query)}
         </span>
 
         {/* Decir que lo de pantalla ya no es lo guardado evita el malentendido clásico: creer que
             se está mirando la consulta de siempre cuando alguien tocó un filtro. */}
         {activo && modificada && (
-          <span className="mt-1 inline-block rounded-full bg-[#F2C14E]/20 px-1.5 py-px text-[10px] font-semibold text-[#8A6100] dark:text-[#F2C14E]">
+          <span {...etiquetaKit("warning", { className: "mt-1" })}>
             modificada
           </span>
         )}
 
         {/* La flecha solo aparece al apuntar: basta para decir «esto se abre» sin competir con el
             nombre, que es lo que la persona viene a leer. */}
-        <ChevronRight
-          className="pointer-events-none absolute right-1.5 top-2.5 h-3.5 w-3.5 text-[#9AA5B4] opacity-0 transition-opacity group-hover:opacity-100 dark:text-white/30"
-          aria-hidden="true"
-        />
+        <Icono nombre="derecha" className="pointer-events-none absolute right-1.5 top-2.5 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
       </button>
 
       {/* Programar y borrar comparten la esquina inferior derecha, en un grupo — así ninguno tapa
@@ -476,7 +473,7 @@ function Item({
               onClick={() => onSchedule(query)}
               aria-label={`Programar informe de ${query.nombre}`}
               title={`Programar informe de «${query.nombre}»`}
-              className="rounded-md p-1 text-[#9AA5B4] transition hover:bg-flit-brand/10 hover:text-flit-brand dark:text-white/30"
+              className="rounded-md p-1 text-muted-foreground transition hover:bg-flit-brand/10 hover:text-flit-brand"
             >
               <CalendarPlus className="h-3 w-3" aria-hidden="true" />
             </button>
@@ -487,9 +484,9 @@ function Item({
               onClick={() => onPedirBorrado(query)}
               aria-label={`Borrar ${query.nombre}`}
               title={`Borrar «${query.nombre}»`}
-              className="rounded-md p-1 text-[#9AA5B4] transition hover:bg-[#C0392B]/10 hover:text-[#C0392B] dark:text-white/30"
+              className="rounded-md p-1 text-muted-foreground transition hover:bg-[var(--badge-danger-bg)] hover:text-destructive"
             >
-              <Trash2 className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="papelera" className="h-3 w-3" />
             </button>
           )}
         </span>

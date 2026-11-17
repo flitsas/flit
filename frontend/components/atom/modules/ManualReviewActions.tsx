@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, Check, X } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@flit/ui/Modal';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
 import { MANUAL_AVISO, MANUAL_AVISO_BASE, MANUAL_BTN_SECUNDARIO, MANUAL_FOCO, MANUAL_SELECT_CLASS } from './manual-field-styles';
@@ -37,7 +37,7 @@ export function DangerButton({
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode }) {
   return (
-    <button type="button" {...props} className={`${BTN_BASE} ${props.className ?? ''}`} style={{ background: WIZARD_CTA_GRADIENT_DANGER }}>
+    <button type="button" {...props} className={`${BTN_BASE} ${props.className ?? ''}`} style={{ background: WIZARD_CTA_GRADIENT_DANGER, color: 'var(--destructive-foreground)' }}>
       {children}
     </button>
   );
@@ -99,10 +99,10 @@ export function ManualReviewActions({
     <>
       <div className="flex flex-wrap items-center justify-end gap-3" role="group" aria-label="Decisión sobre la validación">
         <DangerButton onClick={() => setDialogo('rechazar')}>
-          <X className="h-4 w-4" aria-hidden /> Rechazar
+          <Icono nombre="cerrar" className="h-4 w-4" /> Rechazar
         </DangerButton>
         <GradientButton onClick={() => setDialogo('aprobar')}>
-          <Check className="h-4 w-4" aria-hidden /> Aprobar
+          <Icono nombre="check" className="h-4 w-4" /> Aprobar
         </GradientButton>
       </div>
       {dialogo === 'aprobar' && (
@@ -175,14 +175,14 @@ function AprobarDialog({ detail, client, onClose, onDone, onStale }: DialogoProp
   };
 
   return (
-    <Modal open onClose={onClose} busy={busy} title="Aprobar validación" size="sm" zClassName="z-[110]">
+    <Modal open onClose={onClose} busy={busy} title="Aprobar validación" icono="check" size="sm" zClassName="z-[110]">
       <div ref={panelRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
         <p className="text-sm">
           La validación de <strong>{detail.fullName}</strong> quedará vigente 30 días.
         </p>
         {error && (
           <p role="alert" className={`${MANUAL_AVISO_BASE} items-center font-medium ${MANUAL_AVISO.danger}`}>
-            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /> {error}
+            <Icono nombre="alerta" className="h-4 w-4 shrink-0" /> {error}
           </p>
         )}
         <div className="flex justify-end gap-3">
@@ -225,7 +225,7 @@ function RechazarDialog({ detail, client, onClose, onDone, onStale }: DialogoPro
   };
 
   return (
-    <Modal open onClose={onClose} busy={busy} title="Rechazar validación" size="sm" zClassName="z-[110]">
+    <Modal open onClose={onClose} busy={busy} title="Rechazar validación" icono="distinto" size="sm" zClassName="z-[110]">
       <div ref={panelRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
         <div>
           <label htmlFor={selectId} className={WIZARD_LABEL}>
@@ -247,12 +247,12 @@ function RechazarDialog({ detail, client, onClose, onDone, onStale }: DialogoPro
             ))}
           </select>
         </div>
-        <p className="text-sm text-[#59677D] dark:text-white/70">
+        <p className="text-sm text-muted-foreground">
           El cliente recibirá este motivo por correo y podrá repetir la captura.
         </p>
         {error && (
           <p role="alert" className={`${MANUAL_AVISO_BASE} items-center font-medium ${MANUAL_AVISO.danger}`}>
-            <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden /> {error}
+            <Icono nombre="alerta" className="h-4 w-4 shrink-0" /> {error}
           </p>
         )}
         <div className="flex justify-end gap-3">

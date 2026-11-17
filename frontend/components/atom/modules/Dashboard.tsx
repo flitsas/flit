@@ -10,18 +10,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import {
-  Activity,
-  AlertTriangle,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  ExternalLink,
-  FileText,
-  CheckCircle,
-  Car,
-  Layers,
-} from "lucide-react";
+import { Icono, IconoModulo } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   fetchActiveModules,
@@ -43,19 +32,21 @@ import { COPY } from "@/lib/copy/copy-catalog";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
 import { NetworkScopeBadge } from "@/components/operacion/NetworkScopeBadge";
 import { ETIQUETA_SOLO_COMPANIA_PROPIA } from "@/lib/tramites/network-scope";
-import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
-import { DateRangePicker } from "@/components/atom/DateRangePicker";
+import { estadoAcentoVar, estadoLabel } from "@/lib/tramites/estados";
+import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
+import { RangoFechas } from "@/components/atom/RangoFechas";
+import { GraficoDona } from "@/components/inicio/GraficoDona";
 import { CompanySelector } from "./_reportes/CompanySelector";
 import { isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
 import { ApiError } from "@/lib/api/types";
 import type {
   ActiveModulesResponse,
   AnalyticsOverviewResponse,
-  CategoryMetrics,
   CompanyListItem,
   MonthlyTrendPoint,
 } from "@/lib/api/types";
 import type { BiometricValidationStats } from "@/lib/api/types/procedure-runtime";
+import { InicioModulos } from "@/components/inicio/InicioModulos";
 
 /** KPI de volumen del dashboard gestor (HU #12700 / E03). */
 export const DASHBOARD_KPI_TOTAL_LABEL = COPY.E03;
@@ -84,7 +75,8 @@ const MONTH_NAMES = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Se
 const SERIES = [
   { label: "Matrículas", color: "var(--color-flit-brand)", family: "MATRICULAS" },
   { label: "Traspasos", color: "var(--color-flit-tech)", family: "TRASPASO" },
-  { label: "Otros", color: "#F9AC00", family: "OTROS" },
+  // HU #14481 — sin naranja: la tinta de la propuesta (`--di-accent`, que en oscuro pasa a azul claro).
+  { label: "Otros", color: "var(--di-accent)", family: "OTROS" },
 ] as const;
 
 function buildChartData(items: MonthlyTrendPoint[]) {
@@ -103,13 +95,6 @@ function buildChartData(items: MonthlyTrendPoint[]) {
   return Array.from(map.entries())
     .sort(([a], [b]) => a.localeCompare(b))
     .map(([, v]) => v);
-}
-
-function countCompleted(categories: CategoryMetrics[]): number {
-  return categories.reduce(
-    (sum, cat) => sum + (cat.byStatus.find((s) => s.status === "aprobado")?.count ?? 0),
-    0,
-  );
 }
 
 function describeError(error: unknown, networkActive = false): string {
@@ -167,7 +152,44 @@ function buildWelcomeBody(
 // activos el carrusel solo muestra el slide fijo (AC3).
 
 /** Fondo del carrusel, IGUAL en todos los slides (welcome y banner) — ver render de `Dashboard`. */
-const BRAND_GRADIENT = "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)";
+// UI Kit 2026: el slide fijo es la lámina `.banner-kit__lamina--degradado` del manual, con el contraste AA ya calculado
+// con texto blanco (ui-kit-2026.css), en vez de la tarjeta clara con el círculo turquesa.
+const BRAND_GRADIENT = "linear-gradient(160deg, #007d79 0%, #1670b8 55%, #1d53ff 100%)";
+const esBienvenida = (slide: { type: string }) => slide.type === "welcome";
+
+/**
+ * HU #14481 — los dos filtros de la cabecera (Rango de fechas y Compañía) con el `.control` del
+ * prototipo: 44 px, contorno de control visible, superficie elevada y la etiqueta como `.campo
+ * label` (13 px, 600, sin versalitas). Son átomos compartidos que solo aceptan `className` en la
+ * raíz, así que el aspecto se aplica desde aquí a su campo (`>button` del selector de fechas,
+ * `input` del buscador de compañía) sin tocarlos.
+ */
+const FILTRO_CONTROL_CLS =
+  "[&>label]:text-[0.8125rem] [&>label]:font-semibold [&>label]:normal-case [&>label]:opacity-100 " +
+  "[&>label]:text-[color:var(--di-text-primary)] " +
+  "[&>button]:min-h-10 [&>button]:rounded-[9px] [&>button]:border-[color:var(--di-border-control)] " +
+  "[&>button]:bg-[var(--di-surface-elevated)] [&>button]:text-[color:var(--di-text-primary)] " +
+  "[&_input]:h-10 [&_input]:rounded-[9px] [&_input]:border-[color:var(--di-border-control)] " +
+  "[&_input]:bg-[var(--di-surface-elevated)] [&_input]:text-[color:var(--di-text-primary)]";
+
+/**
+ * UI Kit 2026 — rejilla de los filtros de la cabecera, con el mismo hueco que las cifras de abajo. `RangoFechas` es un
+ * átomo compartido: su raíz pasa a `display: contents` para que Periodo, Desde y Hasta sean celdas de esta rejilla
+ * (Periodo junto a Compañía; Desde y Hasta en la fila siguiente, una columna cada uno) y sus campos toman el control
+ * del kit (`TRAMITES_INPUT_CLS`: 40 px, radio 9 px, contorno de control). Sus estados y manejadores no cambian.
+ */
+const FILTROS_REJILLA_CLS =
+  "grid grid-cols-2 gap-3 items-end [&>[data-testid=rango-fechas]]:contents " +
+  "[&>[data-testid=rango-fechas]>label]:min-w-0 [&>[data-testid=rango-fechas]>p]:col-span-2 " +
+  "[&>[data-testid=rango-fechas]>label]:text-[0.8125rem] [&>[data-testid=rango-fechas]>label]:font-semibold " +
+  "[&>[data-testid=rango-fechas]>label]:text-[color:var(--di-text-primary)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:h-10 [&>[data-testid=rango-fechas]_:is(select,input)]:w-full " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:min-w-0 [&>[data-testid=rango-fechas]_:is(select,input)]:rounded-[9px] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:border-[color:var(--di-border-control)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:bg-[var(--di-surface-elevated)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:px-3 [&>[data-testid=rango-fechas]_:is(select,input)]:text-sm " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:text-[color:var(--di-text-primary)] " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:focus:border-[color:var(--di-action)]";
 
 type WelcomeSlide = {
   type: "welcome";
@@ -188,7 +210,7 @@ type Slide = WelcomeSlide | BannerSlide;
 function buildSlides(displayName: string, welcomeBody: string, banners: ActiveBanner[]): Slide[] {
   const welcome: WelcomeSlide = {
     type: "welcome",
-    title: `${DASHBOARD_HERO_PREFIX} ${displayName} 👋`,
+    title: `${DASHBOARD_HERO_PREFIX} ${displayName}`,
     body: welcomeBody,
   };
 
@@ -455,7 +477,6 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const matriculas = categories.find((c) => c.category === "matriculas")?.total ?? 0;
   const traspasos = categories.find((c) => c.category === "traspasos")?.total ?? 0;
   const otros = categories.find((c) => c.category === "otros")?.total ?? 0;
-  const completados = countCompleted(categories);
   // HU #13665 (FF-4) — sin Ver de una familia, su tarjeta y su serie no se pintan (la API ya no la cuenta).
   const { showsInAggregates } = useFamilyAccess();
 
@@ -471,6 +492,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
       .filter((s) => s.count > 0)
       .sort((a, b) => b.count - a.count);
   }, [categories]);
+
+  const totalFunnel = globalFunnel.reduce((sum, f) => sum + f.count, 0);
 
   const chartData = useMemo(() => buildChartData(trend), [trend]);
 
@@ -513,15 +536,17 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const bannerColor = useDominantColor(s.type === "banner" ? s.imageUrl : undefined);
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-foreground">
       {/* Fila superior: Banner + KPIs — la columna derecha fija el alto; el banner se estira (HU #12725 B.1). */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0 items-stretch">
         {/* Banner carousel */}
         <div
-          className="relative md:col-span-2 rounded-2xl text-white overflow-hidden flex flex-col justify-between h-full min-h-[var(--dashboard-hero-h)]"
+          className={`relative md:col-span-2 overflow-hidden flex flex-col justify-between h-full min-h-[200px] max-sm:min-h-[180px] ${
+            esBienvenida(s) ? "rounded-[9px] text-white" : "rounded-2xl text-white"
+          }`}
           data-testid="dashboard-hero-banner"
         >
-          {/* Capa de fondo: gradiente de marca fijo en el slide de bienvenida; en un banner, el
+          {/* Capa de fondo: lámina degradada del kit en el slide de bienvenida; en un banner, el
               color PROMEDIO de esa misma imagen (así combina con cualquier banner, no solo con
               el azul/turquesa de marca) — es el respaldo que se ve cuando `object-contain` deja
               margen (abajo de `md`, ver siguiente bloque); en `md+` es invisible, cubierto por el
@@ -548,23 +573,31 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               imagen de banner; sobre el gradiente del slide fijo es imperceptible. */}
           <div
             className="absolute inset-0"
-            style={{ background: "linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)" }}
+            style={{
+              background: esBienvenida(s)
+                ? "transparent"
+                : "linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)",
+            }}
           />
           {s.type === "welcome" && (
-            <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full opacity-15 bg-white" />
+            // Círculo de la lámina del kit (`.banner-kit__lamina::after`): blanco translúcido arriba a la derecha.
+            <div className="absolute -right-[50px] -top-[70px] h-[190px] w-[190px] rounded-full bg-white/[0.14]" />
           )}
           {s.type === "welcome" ? (
-            <div className="relative flex flex-col gap-2 max-w-[85%] px-6 pt-5 overflow-hidden">
-              <div className="flex items-center gap-3 min-w-0">
-                <div
-                  className="h-10 w-10 rounded-xl grid place-items-center shrink-0"
-                  style={{ background: "rgba(255,255,255,0.18)" }}
+            // Lámina del kit (`.banner-kit__lamina`): el chip de 42 px con el ícono de Inicio junto al título y el
+            // texto en flujo, con el pie reservado para los puntos del carrusel, así un aviso largo agranda el banner
+            // en vez de cortarse o montarse sobre ellos.
+            <div className="relative flex flex-1 flex-col justify-center gap-2.5 max-w-[85%] px-6 pt-6 pb-16">
+              <div className="flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[9px] bg-white/[0.22]"
                 >
-                  <Activity className="h-5 w-5" />
-                </div>
-                <h2 className="text-2xl md:text-3xl font-bold leading-tight line-clamp-2 min-w-0">{s.title}</h2>
+                  <IconoModulo clave="inicio" size={22} />
+                </span>
+                <h2 className="text-2xl md:text-[1.75rem] font-bold leading-tight line-clamp-2 min-w-0 text-white">{s.title}</h2>
               </div>
-              <p className="text-sm md:text-base opacity-95 leading-snug line-clamp-3">{s.body}</p>
+              <p className="max-w-[58ch] text-sm md:text-base leading-snug line-clamp-3 text-white">{s.body}</p>
             </div>
           ) : s.linkUrl ? (
             // Sin título visible (solo el banner): el enlace cubre toda la imagen — al acercarse,
@@ -579,8 +612,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             >
               <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/25" />
               <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary shadow-lg">
-                  <ExternalLink className="h-5 w-5" aria-hidden="true" />
+                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary">
+                  <Icono nombre="externo" className="h-5 w-5" />
                 </span>
               </span>
             </a>
@@ -600,11 +633,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   key={i}
                   onClick={() => setSlide(i)}
                   aria-label={`Slide ${i + 1}`}
-                  className="h-1.5 rounded-full transition-all"
-                  style={{
-                    width: i === slide ? 16 : 5,
-                    background: i === slide ? "#ffffff" : "rgba(255,255,255,0.5)",
-                  }}
+                  // Puntos del kit (`.banner-kit__punto`): 8 px, el actual de 22 px en blanco pleno.
+                  className={`h-2 rounded-full transition-all ${i === slide ? "bg-current" : "bg-white/50"}`}
+                  style={{ width: i === slide ? 22 : 8 }}
                 />
               ))}
             </div>
@@ -613,17 +644,19 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 onClick={() => setSlide((v) => (v - 1 + slides.length) % slides.length)}
                 disabled={slides.length <= 1}
                 aria-label="Anterior"
-                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
+                // Flecha del kit (`.banner-kit__flecha`): 30 px, blanco translúcido sobre la lámina o la imagen.
+                className="h-[30px] w-[30px] rounded-full grid place-items-center bg-white/[0.22] text-white hover:bg-white/[0.36] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.22] focus-visible:outline-2 focus-visible:outline-white"
               >
-                <ChevronLeft className="h-3 w-3" />
+                <Icono nombre="izquierda" size={18} />
               </button>
               <button
                 onClick={() => setSlide((v) => (v + 1) % slides.length)}
                 disabled={slides.length <= 1}
                 aria-label="Siguiente"
-                className="h-6 w-6 rounded-full grid place-items-center bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
+                // Flecha del kit (`.banner-kit__flecha`): 30 px, blanco translúcido sobre la lámina o la imagen.
+                className="h-[30px] w-[30px] rounded-full grid place-items-center bg-white/[0.22] text-white hover:bg-white/[0.36] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.22] focus-visible:outline-2 focus-visible:outline-white"
               >
-                <ChevronRight className="h-3 w-3" />
+                <Icono nombre="derecha" size={18} />
               </button>
             </div>
           </div>
@@ -631,16 +664,22 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
 
         {/* Columna derecha: filtros en fila + KPIs 2×2 (HU #12725 B.1 / D3). */}
         <div
-          className="flex flex-col gap-3 min-h-[var(--dashboard-hero-h)]"
+          // HU #14481 (referencia de Samuel): la columna fija el alto de la fila y el banner se estira a ella
+          // (`items-stretch`), no al revés; por eso aquí no hay alto mínimo.
+          className="flex flex-col gap-3"
           data-testid="dashboard-hero-column"
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-end" data-testid="dashboard-filter-row">
-            <DateRangePicker
+          <div
+            className={`${FILTROS_REJILLA_CLS} ${
+              isSuper ? "" : "[&>[data-testid=rango-fechas]>label:first-child]:col-span-2"
+            }`}
+            data-testid="dashboard-filter-row"
+          >
+            <RangoFechas
               value={range}
               onChange={setRange}
-              disabled={status === "loading"}
-              label="Rango de fechas"
-              className="min-w-0"
+              permiteSinRango
+              idPrefix="dashboard-rango"
             />
             {isSuper && (
               <CompanySelector
@@ -650,7 +689,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                 disabled={status === "loading"}
                 defaultLabel="Todas las compañías"
                 id="dashboard-compania"
-                className="min-w-0"
+                className={`col-start-2 row-start-1 min-w-0 ${FILTRO_CONTROL_CLS}`}
               />
             )}
           </div>
@@ -668,73 +707,64 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           {/* KPIs de Trámites — solo visibles si el módulo está habilitado para el tenant
               (AC1: `true` por defecto mientras carga, evita ocultar la sección con parpadeo). */}
           {tramitesModuleEnabled !== false && (
-            // Bug #13055 — vuelve la tarjeta «Otros Trámites» (la decisión D3 de absorberla en el
-            // Total se revierte a pedido de QA/producto): 5 tarjetas en 3 columnas; la última fila
-            // queda incompleta y alineada a la izquierda.
-            <div className="grid grid-cols-3 gap-3 flex-1" data-testid="dashboard-kpi-grid">
+            // HU #14481 (referencia de Samuel) — solo las tres familias, en una fila de 3 columnas; el
+            // «Total trámites» y «Completados» salen de la cabecera (el total sigue en el saludo).
+            // Compactas y arriba, bajo los filtros (referencia de Samuel): sin `flex-1` ni estirarse hasta el alto
+            // del banner; la columna puede quedar más baja que él.
+            <div className="grid grid-cols-3 items-start gap-3" data-testid="dashboard-kpi-grid">
               {[
-                { label: DASHBOARD_KPI_TOTAL_LABEL, value: totalTramites, icon: FileText, color: "var(--color-flit-brand)", family: null },
-                { label: "Matrículas", value: matriculas, icon: Car, color: "var(--color-flit-tech)", family: "MATRICULAS" as const },
-                { label: "Traspasos", value: traspasos, icon: Activity, color: "#F9AC00", family: "TRASPASO" as const },
-                { label: "Otros Trámites", value: otros, icon: Layers, color: "var(--color-flit-primary)", family: "OTROS" as const },
-                { label: "Completados", value: completados, icon: CheckCircle, color: "#8CC63F", family: null },
-              ].filter((k) => k.family === null || showsInAggregates(k.family)).map((k) => {
-                const Icon = k.icon;
+                // UI Kit 2026: claves del kit con glifo (disco --kit-hover y glifo azul), no los discos sólidos
+                // @tramite-matricula/@tramite-traspaso: placa para matrícula e intercambio para traspaso.
+                { label: "Matrículas", value: matriculas, ilustracion: "preasignacion" as const, family: "MATRICULAS" as const },
+                { label: "Traspasos", value: traspasos, ilustracion: "llamadas" as const, family: "TRASPASO" as const },
+                { label: "Otros Trámites", value: otros, ilustracion: "procesos" as const, family: "OTROS" as const },
+              ].filter((k) => showsInAggregates(k.family)).map((k) => {
                 const isError = status === "error";
+                // HU #14481 (propuesta): `TarjetaMetrica` de @flit/ui —etiqueta, cifra en tinta e
+                // ilustración— en vez del número de color y el ícono en un círculo.
                 return (
-                  // El título ocupa la fila completa y el icono baja a la del número. Antes
-                  // compartía fila con el icono dentro de un `min-w-0` con `truncate`, así que solo
-                  // disponía de `ancho − 48px` y con la rejilla en 3 columnas los rótulos largos se
-                  // cortaban en pantalla («Total Trá…», «Otros Trá…», «Completa…»). Recuperados esos
-                  // 48px, el rótulo más largo cabe y el tamaño sube al piso tipográfico de 12px.
-                  <div
+                  <TarjetaMetrica
                     key={k.label}
-                    className="rounded-2xl p-3 flex flex-col gap-2 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
-                  >
-                    <div className="min-w-0">
-                      {/* line-clamp-2 en vez de truncate: si algún día entra un rótulo más largo,
-                          se parte en dos líneas en vez de perder texto por el borde. */}
-                      <p className="text-xs opacity-70 font-medium leading-tight line-clamp-2">
-                        {k.label}
-                      </p>
-                      {/* AC1 — cada indicador dice que es de la red (texto, no solo color). */}
-                      {networkActive && (
-                        <NetworkScopeBadge
-                          scope={net.scope}
-                          hijos={net.children}
-                          className="mt-1"
-                          testId={`kpi-red-${k.label}`}
-                        />
-                      )}
-                    </div>
-                    {/* `items-end`: la cifra y el icono se alinean por su base, no por su centro —
-                        con alturas tan distintas (24px vs 36px) centrarlos descuadraba la fila. */}
-                    <div className="flex items-end justify-between gap-2">
-                      {isError ? (
-                        <p
-                          className="text-xl font-bold flex items-center gap-1.5 min-w-0"
-                          style={{ color: "#FF4E00" }}
+                    // La columna de 1/3 deja ~120 px: en la rejilla de TarjetaMetrica (1fr + auto) el
+                    // rótulo se comía el ancho y la ilustración quedaba en 0 px. Aquí la tarjeta va a
+                    // una columna —el rótulo usa todo el ancho y no se parte— y la ilustración se fija
+                    // abajo a la derecha, junto a la cifra, con un tamaño que no se encoge.
+                    className="relative grid-cols-1 content-start gap-y-0.5 p-3.5 [&>:nth-child(3)]:absolute [&>:nth-child(3)]:bottom-3 [&>:nth-child(3)]:right-3 [&>:nth-child(3)]:h-10 [&>:nth-child(3)]:w-10 [&>:nth-child(3)]:shrink-0 [&>:nth-child(3)]:max-w-none [&>span:nth-child(2)]:pr-12 [&>span:nth-child(2)]:text-2xl"
+                    icono={k.ilustracion}
+                    etiqueta={
+                      <span className="block min-w-0">
+                        {/* line-clamp-2 en vez de truncate: si algún día entra un rótulo más largo,
+                            se parte en dos líneas en vez de perder texto por el borde. */}
+                        <span className="block text-xs font-medium leading-tight line-clamp-2">{k.label}</span>
+                        {/* AC1 — cada indicador dice que es de la red (texto, no solo color). */}
+                        {networkActive && (
+                          <NetworkScopeBadge
+                            scope={net.scope}
+                            hijos={net.children}
+                            className="mt-1"
+                            testId={`kpi-red-${k.label}`}
+                          />
+                        )}
+                      </span>
+                    }
+                    cifra={
+                      isError ? (
+                        <span
+                          className="flex items-center gap-1.5 min-w-0 text-xl"
+                          style={{ color: "var(--di-danger)" }}
                           title={errorMessage ?? "No se pudo cargar este indicador."}
                         >
-                          <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden="true" />
+                          <Icono nombre="alerta" className="h-4 w-4 shrink-0" />
                           <span>—</span>
                           <span className="sr-only">Error al cargar {k.label.toLowerCase()}</span>
-                        </p>
+                        </span>
+                      ) : status === "loading" ? (
+                        "—"
                       ) : (
-                        // `tabular-nums` y sin truncar: recortar un conteo mostraría una cifra
-                        // falsa. Mismo criterio que la tira de contadores del OT.
-                        <p className="text-2xl font-bold leading-none tabular-nums" style={{ color: k.color }}>
-                          {status === "loading" ? "—" : k.value}
-                        </p>
-                      )}
-                      <div
-                        className="h-9 w-9 rounded-xl grid place-items-center shrink-0"
-                        style={{ background: isError ? "#FF4E001A" : `${k.color}1A` }}
-                      >
-                        <Icon className="h-4 w-4" style={{ color: isError ? "#FF4E00" : k.color }} />
-                      </div>
-                    </div>
-                  </div>
+                        k.value
+                      )
+                    }
+                  />
                 );
               })}
             </div>
@@ -758,13 +788,13 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             {comingSoonModules.map((m) => (
               <div
                 key={m.key}
-                className="rounded-2xl p-4 flex items-center gap-3 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10"
+                className="rounded-2xl p-4 flex items-center gap-3 bg-card border border-border"
               >
                 <div
                   className="h-11 w-11 rounded-xl grid place-items-center shrink-0"
-                  style={{ background: "#7D87981A" }}
+                  style={{ background: "var(--badge-neutral-bg)" }}
                 >
-                  <Clock className="h-5 w-5" style={{ color: "#7D8798" }} aria-hidden="true" />
+                  <Icono nombre="reloj" className="h-5 w-5" style={{ color: "var(--badge-neutral-fg)" }} />
                 </div>
                 <div>
                   <p className="text-sm font-bold">{m.label}</p>
@@ -775,6 +805,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
           </div>
         </UiStateBoundary>
       )}
+
+      {/* HU #14481 — cifras por estado y módulos del rol en acordeón. */}
+      <InicioModulos />
 
       {/* Fila inferior: Distribución general + Validaciones Biométricas (cada una con su propio estado) + gráfica mensual (chartStatus) */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -790,38 +823,26 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               skeletonRows={3}
             >
               {/* Distribución general de trámites por estado (las 4 categorías, no solo traspasos) */}
-              <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-                <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+              <section className="rounded-[9px] border border-[color:var(--di-border)] bg-card px-6 pb-6 pt-4 max-sm:p-4 flex flex-col">
+                <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)] flex flex-wrap items-center gap-2">
                   Distribución General de Trámites
                   {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="distribucion-red" />}
                 </h2>
                 {globalFunnel.length === 0 ? (
                   <p className="text-xs opacity-50 mt-2">Sin trámites en el rango seleccionado.</p>
                 ) : (
-                  <ul className="space-y-2">
-                    {globalFunnel.map((f, i) => {
-                      const color = estadoChipStyle(f.status).accent;
-                      return (
-                        <li
-                          key={f.status}
-                          className="flex items-center gap-3 p-2 rounded-xl bg-[color-mix(in_srgb,var(--color-flit-brand)_6%,transparent)] dark:bg-white/5"
-                        >
-                          <span
-                            className="h-7 w-7 rounded-full grid place-items-center text-[11px] font-bold text-white shrink-0"
-                            style={{ background: color }}
-                          >
-                            {i + 1}
-                          </span>
-                          <span className="flex-1 text-xs font-medium">
-                            {estadoLabel(f.status)}
-                          </span>
-                          <span className="text-base font-bold" style={{ color }}>
-                            {f.count}
-                          </span>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  // UI Kit 2026 — dona de la propuesta con los MISMOS datos que pintaba la lista: cada estado con su
+                  // acento, su cifra y su porcentaje; el total al centro. La leyenda sigue siendo la lista accesible.
+                  <GraficoDona
+                    total={totalFunnel}
+                    porciones={globalFunnel.map((f) => ({
+                      clave: f.status,
+                      etiqueta: estadoLabel(f.status),
+                      valor: f.count,
+                      color: estadoAcentoVar(f.status),
+                      detalle: `${totalFunnel > 0 ? Math.round((f.count / totalFunnel) * 100) : 0}\u00a0%`,
+                    }))}
+                  />
                 )}
               </section>
             </UiStateBoundary>
@@ -836,8 +857,8 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             skeletonRows={3}
           >
             {/* Validaciones Biométricas: KPIs + aviso de próximas a vencer */}
-            <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-              <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+            <section className="rounded-[9px] border border-[color:var(--di-border)] bg-card px-6 pb-6 pt-4 max-sm:p-4 flex flex-col">
+              <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)] flex flex-wrap items-center gap-2">
                 Validaciones Biométricas
                 {/* Sin ruta de red para biometría: sigue siendo del cliente propio y se rotula
                     para que no se lea como agregado de la red (AC1). */}
@@ -847,16 +868,22 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   </span>
                 )}
               </h2>
-              <div className="grid grid-cols-2 gap-2">
+              {/* HU #14481 (referencia de Samuel) — tres cajitas; el punto de color, con el acento del estado
+                  de trámite equivalente (Aprobado, Preparado, Rechazado), las distingue sin ícono. */}
+              <div className="grid grid-cols-3 gap-2">
                 {[
-                  { label: "Total", value: biometricStats?.total ?? 0, color: "var(--color-flit-brand)" },
-                  { label: "Aprobadas", value: biometricStats?.aprobadas ?? 0, color: "#8CC63F" },
-                  { label: "En proceso", value: biometricStats?.enProceso ?? 0, color: "#F9AC00" },
-                  { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0, color: "#FF4E00" },
+                  { label: "Aprobadas", value: biometricStats?.aprobadas ?? 0, punto: estadoAcentoVar("aprobado") },
+                  { label: "En proceso", value: biometricStats?.enProceso ?? 0, punto: estadoAcentoVar("preparado") },
+                  { label: "Rechazadas", value: biometricStats?.rechazadas ?? 0, punto: estadoAcentoVar("rechazado") },
                 ].map((k) => (
-                  <div key={k.label} className="rounded-xl border p-2.5">
-                    <p className="text-[10px] opacity-70 font-medium">{k.label}</p>
-                    <p className="text-lg font-bold mt-0.5" style={{ color: k.color }}>
+                  // Referencia de Samuel: tarjetita blanca con todo centrado — punto, nombre y cifra.
+                  <div
+                    key={k.label}
+                    className="flex min-w-0 flex-col items-center gap-1.5 rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-2 py-3 text-center"
+                  >
+                    <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-full" style={{ background: k.punto }} />
+                    <p className="text-xs font-medium leading-tight text-[color:var(--di-text-secondary)]">{k.label}</p>
+                    <p className="text-2xl font-bold leading-tight tabular-nums text-[color:var(--di-text-primary)]">
                       {k.value}
                     </p>
                   </div>
@@ -865,9 +892,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
               {expiringSoonCount > 0 && (
                 <div
                   className="mt-3 flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-medium"
-                  style={{ background: "#F9AC001A", color: "#B26A00" }}
+                  // Aviso pendiente de la propuesta: cielo con texto en tinta; el naranja queda en el ícono.
+                  style={{ background: "var(--di-sky)", color: "var(--di-heading)" }}
                 >
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+                  <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--di-alerta-punto)" }} />
                   {expiringSoonCount} validación{expiringSoonCount === 1 ? "" : "es"} próxima
                   {expiringSoonCount === 1 ? "" : "s"} a vencer
                 </div>
@@ -887,27 +915,28 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             emptyMessage="No hay datos de tendencia en los últimos 6 meses."
             skeletonRows={3}
           >
-            <section className="rounded-2xl p-4 bg-white dark:bg-[#0B0F14] border border-[#DFE5ED] dark:border-white/10 flex flex-col">
-              <h2 className="text-sm font-bold mb-3 flex flex-wrap items-center gap-2">
+            <section className="rounded-[9px] border border-[color:var(--di-border)] bg-card px-6 pb-6 pt-4 max-sm:p-4 flex flex-col">
+              <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)] flex flex-wrap items-center gap-2">
                 Seguimiento operativo
                 {networkActive && <NetworkScopeBadge scope={net.scope} hijos={net.children} testId="seguimiento-red" />}
               </h2>
               <div className="h-[280px] -mx-2">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={chartData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                    {/* UI Kit 2026 (`barrasGrupo`): guías horizontales punteadas 3·4 en --kit-linea y ejes en 11 px gris. */}
                     <CartesianGrid
-                      strokeDasharray="3 3"
-                      stroke="rgba(127,127,127,0.18)"
+                      strokeDasharray="3 4"
+                      stroke="var(--kit-linea)"
                       vertical={false}
                     />
                     <XAxis
                       dataKey="m"
-                      tick={{ fontSize: 10, fill: "currentColor" }}
+                      tick={{ fontSize: 11, fill: "var(--di-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
                     />
                     <YAxis
-                      tick={{ fontSize: 10, fill: "currentColor" }}
+                      tick={{ fontSize: 11, fill: "var(--di-text-tertiary)" }}
                       axisLine={false}
                       tickLine={false}
                     />
@@ -917,21 +946,22 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                         background: "rgba(22,39,68,0.95)",
                         border: "none",
                         borderRadius: 10,
-                        color: "#fff",
+                        color: "white",
                         fontSize: 11,
                       }}
                       labelStyle={{ color: "var(--color-flit-tech)", fontWeight: 600 }}
                     />
                     {SERIES.filter((s) => showsInAggregates(s.family)).map((s) => (
-                      <Bar key={s.label} dataKey={s.label} fill={s.color} radius={[4, 4, 0, 0]} />
+                      <Bar key={s.label} dataKey={s.label} fill={s.color} radius={[3, 3, 0, 0]} />
                     ))}
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="flex items-center justify-center gap-3 mt-1 text-[9px]">
+              {/* Leyenda centrada del kit (`.leyenda`): puntos de 10 px, texto de 13 px. */}
+              <div className="mt-2 flex flex-wrap items-center justify-center gap-x-[18px] gap-y-1.5 text-[0.8125rem]">
                 {SERIES.filter((s) => showsInAggregates(s.family)).map(({ color, label }) => (
-                  <span key={label} className="flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full" style={{ background: color }} />
+                  <span key={label} className="flex items-center gap-2">
+                    <span className="h-2.5 w-2.5 rounded-full" style={{ background: color }} />
                     {label}
                   </span>
                 ))}

@@ -5,7 +5,6 @@
 // portal» (si aun así la API responde 422 `tipo_no_elegible`, se muestra el motivo en la fila y se recarga). Dejar de
 // ofrecerlo pide confirmación porque el ciudadano deja de verlo.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EyeOff } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -122,7 +121,7 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
       render: (t) => (
         <>
           <span className="block font-semibold">{t.nombre}</span>
-          <span className="block text-xs text-[#59677D] dark:text-white/70">{legible(t.familia)}</span>
+          <span className="block text-xs text-muted-foreground">{legible(t.familia)}</span>
         </>
       ),
     },
@@ -219,7 +218,7 @@ export function TiposSection({ onIrATarifas, onCambio }: TiposSectionProps) {
       {apagando && (
         <PnConfirmDialog
           title="Dejar de ofrecer este trámite"
-          icon={EyeOff}
+          icono="ojo-tachado"
           tone="danger"
           confirmLabel="Dejar de ofrecer"
           onClose={() => setApagando(null)}

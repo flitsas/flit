@@ -6,37 +6,8 @@
 //   siempre); Log ICT es solo del SuperAdmin (Bug #13445);
 // - las entradas que dependen del tipo de empresa (organismo de tránsito, cabeza de grupo, AdminCompany) solo se
 //   declaran para quien corresponde, porque el SuperAdmin las vería todas.
-import {
-  BadgeCheck,
-  BarChart3,
-  Bell,
-  BrainCircuit,
-  MailWarning,
-  Building2,
-  ClipboardList,
-  FileSignature,
-  FileStack,
-  FileArchive,
-  FileText,
-  FolderCog,
-  Fingerprint,
-  Webhook,
-  History,
-  Image as ImageIcon,
-  Landmark,
-  ListChecks,
-  Lock,
-  Monitor,
-  Network,
-  Radar,
-  Route,
-  ScrollText,
-  Send,
-  ShieldCheck,
-  Timer,
-  UserRound,
-  Users,
-} from "lucide-react";
+import { BrainCircuit, FolderCog, Webhook, Image as ImageIcon, Monitor, ScrollText } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { NavCatalog, NavIcon, NavItem } from "@flit/shell/nav";
 import { OT_ADM_DOCK, otHubListPath, otHubModulePath } from "@/components/admin/transit-offices/ot-nav";
 import { CONFIRMACION_RUNT_BASE_PATH } from "@/components/admin/plataforma/confirmacion-runt/confirmacion-runt-nav";
@@ -49,8 +20,10 @@ import {
   DOCK_GROUP_LABEL,
   DOCK_GROUP_ORDER,
   DOCK_GROUP_SIDE,
+  DOCK_ITEM_DESCRIPCION,
   DOCK_ITEM_GROUP,
   SPA_DOCK_ITEM_LABEL,
+  dockIlustracion,
 } from "./dockGroups";
 
 /** Lo que el token no dice por sí solo y cambia qué entradas existen. */
@@ -68,9 +41,19 @@ export interface TramitesNavContext {
 
 type Entry = Omit<NavItem, "section" | "children"> & { children?: Entry[] };
 
-/** Los hijos van en la sección del padre; solo el padre necesita grupo en DOCK_ITEM_GROUP. */
+/**
+ * Los hijos van en la sección del padre; solo el padre necesita grupo en DOCK_ITEM_GROUP. Cada entrada lleva además su
+ * ilustración y su descripción corta (HU #14479), solo presentación: ni la ruta ni quién la ve cambian.
+ */
 function withSection(entry: Entry, section: string): NavItem {
-  return { ...entry, section, children: entry.children?.map((c) => withSection(c, section)) };
+  const descripcion = DOCK_ITEM_DESCRIPCION[entry.key];
+  return {
+    ...entry,
+    section,
+    ilustracion: entry.ilustracion ?? dockIlustracion(entry.key),
+    ...(descripcion ? { descripcion } : {}),
+    children: entry.children?.map((c) => withSection(c, section)),
+  };
 }
 
 function inSection(entry: Entry): NavItem {
@@ -94,36 +77,52 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
   // Dashboard no va en el dock: el botón central (Inicio) abre el mismo módulo. Trámites vive en su ruta.
   // Usuario OT: las pestañas de su organismo reemplazan a los módulos homónimos (invariante dock ≡ URL).
   const spaEntries = [
-    spa("tramites", FileStack, "/tramites"),
-    spa("reportes", BarChart3),
-    spa("validaciones", ShieldCheck),
+    spa("tramites", iconoComo("archivo"), "/tramites"),
+    spa("reportes", iconoComo("reportes")),
+    spa("validaciones", iconoComo("escudo")),
     // HU #12194 — el id coincide con el `code` del módulo RBAC `historial-placa`.
-    spa("historial-placa", History),
-    spa("usuarios", Users),
+    spa("historial-placa", iconoComo("reloj")),
+    spa("usuarios", iconoComo("usuarios")),
   ];
   entries.push(...spaEntries.filter((e) => !(ctx.isOtUser && OT_ADMIN_SPA_OMIT.has(e.key))));
 
   const superAdmin = (key: string, label: string, href: string, icon: NavIcon): Entry => ({ key, label, href, icon, superAdminOnly: true });
   entries.push(
-    superAdmin("admin-companies", "Compañías", "/admin/companies", Building2),
+    // HU #14479 (UI kit «Diseño Inteligente»): Administradores se ordena en cuatro secciones con nombre en vez de una
+    // lista plana. Cada entrada conserva su ruta y su regla de visibilidad; una sección sin entradas visibles para el
+    // rol no aparece (buildDock descarta contenedores vacíos).
     {
-      // Tránsito es contenedor: el catálogo de causales alimenta el modal de rechazo del organismo.
+      // El catálogo de causales alimenta el modal de rechazo del organismo.
       key: "admin-transit",
-      label: "Tránsito",
+      label: "Compañías y tránsito",
       href: "",
-      icon: Landmark,
+      icon: iconoComo("banco"),
       superAdminOnly: true,
       children: [
-        superAdmin("admin-transit-offices", "Organismos", otHubListPath(), Landmark),
-        superAdmin("admin-rejection-reasons", "Causales de rechazo", "/admin/causales-rechazo", ClipboardList),
+        superAdmin("admin-companies", "Compañías", "/admin/companies", iconoComo("empresas")),
+        superAdmin("admin-transit-offices", "Organismos", otHubListPath(), iconoComo("banco")),
+        superAdmin("admin-rejection-reasons", "Causales de rechazo", "/admin/causales-rechazo", iconoComo("portapapeles")),
       ],
     },
-    superAdmin("admin-documents", "Documental", "/admin/documents", FolderCog),
-    superAdmin("admin-improntas", "Improntas", "/admin/improntas", Fingerprint),
-    superAdmin("admin-quipux", "Quipux", "/admin/quipux", Send),
-    superAdmin("admin-jobs", "Procesos periódicos", "/admin/jobs", Timer),
-    { key: "rbac", label: "RBAC Admin", href: "/?m=rbac", icon: Lock, ...navGatingFor("rbac") },
-    { key: "auditoria", label: "Auditoría", href: "/?m=auditoria", icon: ScrollText, ...navGatingFor("auditoria") },
+    {
+      key: "admin-documentos",
+      label: "Documentos",
+      href: "",
+      icon: FolderCog,
+      children: [
+        superAdmin("admin-documents", "Documental", "/admin/documents", FolderCog),
+        superAdmin("admin-improntas", "Improntas", "/admin/improntas", iconoComo("identidad")),
+        // Generación documental (Feature #12201, R12): por módulo accesible, no por rol.
+        {
+          key: "admin-generacion-documental",
+          label: "Generación documental",
+          href: GENERACION_DOCUMENTAL_BASE_PATH,
+          icon: iconoComo("documento"),
+          ...navGatingFor("admin-generacion-documental"),
+        },
+        superAdmin("admin-quipux", "Quipux", "/admin/quipux", iconoComo("radicacion")),
+      ],
+    },
     {
       // Plataforma es contenedor: lo núcleo es del SuperAdmin; Confirmación RUNT (HU #12313, justo después de Tipos de
       // trámites) va por permiso, así que un rol con solo ese permiso ve Plataforma con esa entrada. Banners es solo SuperAdmin.
@@ -132,40 +131,43 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       href: "",
       icon: Monitor,
       children: [
-        superAdmin("admin-tipos-tramite", "Tipos de trámites", "/admin/plataforma/tipos-tramite", ListChecks),
+        superAdmin("admin-tipos-tramite", "Tipos de trámites", "/admin/plataforma/tipos-tramite", iconoComo("lista")),
         {
           key: "admin-confirmacion-runt",
           label: "Confirmación RUNT",
           href: CONFIRMACION_RUNT_BASE_PATH,
-          icon: BadgeCheck,
+          icon: iconoComo("check"),
           ...navGatingFor("admin-confirmacion-runt"),
         },
-        superAdmin("admin-mandatos", "Mandatos", "/admin/plataforma/mandatos", FileSignature),
-        superAdmin("admin-fur", "FUR", "/admin/plataforma/fur", FileText),
-        superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", Bell),
+        superAdmin("admin-mandatos", "Mandatos", "/admin/plataforma/mandatos", iconoComo("firma")),
+        superAdmin("admin-fur", "FUR", "/admin/plataforma/fur", iconoComo("documento")),
+        superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", iconoComo("campana")),
         // Feature #13508 / HU #13511 — multi-proveedor OCR y DR. FLIT (solo SuperAdmin).
         superAdmin("admin-configuracion-ia", "Configuración de IA", "/admin/plataforma/configuracion-ia", BrainCircuit),
         // Epic #13316 (HU #13358): correos y webhooks que agotaron sus reintentos.
-        superAdmin("admin-mensajes-muertos", "Mensajes muertos", "/admin/plataforma/mensajes-muertos", MailWarning),
+        superAdmin("admin-mensajes-muertos", "Mensajes muertos", "/admin/plataforma/mensajes-muertos", iconoComo("correo")),
         // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).
-        superAdmin("admin-descarga-masiva", "Descarga masiva", "/admin/plataforma/descarga-masiva", FileArchive),
+        superAdmin("admin-descarga-masiva", "Descarga masiva", "/admin/plataforma/descarga-masiva", iconoComo("archivo")),
         superAdmin("admin-banners", "Banners", "/admin/banners", ImageIcon),
         // HU #14074 (Épica #14021) — tarifas, organismos y tipos, parámetros y contenido del portal de Persona Natural.
         // Solo SuperAdmin: la API exige el rol y el permiso `platform.persona_natural.manage` (el SuperAdmin pasa todo);
         // un rol con el permiso pero sin el rol de SuperAdmin no lo ve, igual que la ruta (regla `admin`).
         {
-          ...superAdmin("admin-persona-natural", "Persona Natural", "/admin/plataforma/persona-natural", UserRound),
+          ...superAdmin("admin-persona-natural", "Persona Natural", "/admin/plataforma/persona-natural", iconoComo("persona")),
           permission: ["platform.persona_natural.manage"],
         },
       ],
     },
-    // Generación documental (Feature #12201, R12): por módulo accesible, no por rol.
     {
-      key: "admin-generacion-documental",
-      label: "Generación documental",
-      href: GENERACION_DOCUMENTAL_BASE_PATH,
-      icon: FileText,
-      ...navGatingFor("admin-generacion-documental"),
+      key: "admin-seguridad",
+      label: "Seguridad y operación",
+      href: "",
+      icon: iconoComo("candado"),
+      children: [
+        { key: "rbac", label: "RBAC Admin", href: "/?m=rbac", icon: iconoComo("candado"), ...navGatingFor("rbac") },
+        { key: "auditoria", label: "Auditoría", href: "/?m=auditoria", icon: ScrollText, ...navGatingFor("auditoria") },
+        superAdmin("admin-jobs", "Procesos periódicos", "/admin/jobs", iconoComo("cronometro")),
+      ],
     },
   );
 
@@ -183,12 +185,12 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       ...otHubNavGating(tab, ctx.isOtAdmin),
     });
     entries.push(
-      ot(OT_ADM_DOCK.tramites, COPY.B21Tramites, "client-procedures", FileStack),
-      ot(OT_ADM_DOCK.documents, "Documentos", "documents", FileText),
-      ot(OT_ADM_DOCK.usuarios, COPY.B21Usuarios, "usuarios", Users),
-      ot(OT_ADM_DOCK.reportes, COPY.B21Reportes, "reportes", BarChart3),
-      ot(OT_ADM_DOCK.mandatos, "Mandatos", "mandatos", FileSignature),
-      ot(OT_ADM_DOCK.imprintValidation, "Validar impronta", "imprint-validation", Fingerprint),
+      ot(OT_ADM_DOCK.tramites, COPY.B21Tramites, "client-procedures", iconoComo("archivo")),
+      ot(OT_ADM_DOCK.documents, "Documentos", "documents", iconoComo("documento")),
+      ot(OT_ADM_DOCK.usuarios, COPY.B21Usuarios, "usuarios", iconoComo("usuarios")),
+      ot(OT_ADM_DOCK.reportes, COPY.B21Reportes, "reportes", iconoComo("reportes")),
+      ot(OT_ADM_DOCK.mandatos, "Mandatos", "mandatos", iconoComo("firma")),
+      ot(OT_ADM_DOCK.imprintValidation, "Validar impronta", "imprint-validation", iconoComo("identidad")),
       ot(OT_ADM_DOCK.webhooks, "Webhooks", "webhooks", Webhook),
     );
     // Épica #14297 / HU #14377 — Portal Persona Natural del organismo: solo el ot_admin (por rol, sin permiso delegable).
@@ -197,7 +199,7 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         key: OT_ADM_DOCK.portalPersonaNatural,
         label: "Portal Persona Natural",
         href: otHubModulePath(officeId, "portal-persona-natural"),
-        icon: UserRound,
+        icon: iconoComo("persona"),
       });
     }
   }
@@ -206,14 +208,14 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
   // `ctx.isAdminCompany`, que sale del mismo claim, porque además dependen de `isGroupParent` y `tenantId`.)
   // Gestor: una sola entrada «Administración» a la consola de su compañía (/admin/companies lleva a su empresa).
   if (ctx.isAdminCompany) {
-    entries.push({ key: "mi-empresa", label: "Administración", href: "/admin/companies", icon: Building2 });
+    entries.push({ key: "mi-empresa", label: "Administración", href: "/admin/companies", icon: iconoComo("empresas") });
     if (ctx.isGroupParent && ctx.tenantId) {
-      entries.push({ key: "admin-network", label: "Red de clientes", href: `/admin/companies/${ctx.tenantId}/children`, icon: Building2 });
+      entries.push({ key: "admin-network", label: "Red de clientes", href: `/admin/companies/${ctx.tenantId}/children`, icon: iconoComo("empresas") });
     }
   }
 
   entries.push(
-    { key: "log-qx", label: "Log QX", href: "/?m=log-qx", icon: Radar, ...navGatingFor("log-qx") },
+    { key: "log-qx", label: "Log QX", href: "/?m=log-qx", icon: iconoComo("consulta"), ...navGatingFor("log-qx") },
     {
       // ICT es contenedor: nombra el sistema y luego qué se quiere de él (HU #11619). Sin permiso propio, como
       // Plataforma: `buildDock` lo muestra solo si le queda algún hijo visible. Log ICT es solo del SuperAdmin;
@@ -221,17 +223,23 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       key: "ict",
       label: "ICT",
       href: "",
-      icon: Network,
+      icon: iconoComo("integraciones"),
       children: [
-        { key: "ict-logs", label: "Log ICT", href: "/?m=ict-logs", icon: Network, ...navGatingFor("ict-logs") },
-        { key: "ict-trazabilidad", label: "Trazabilidad ICT", href: "/?m=ict-trazabilidad", icon: Route, ...navGatingFor("ict-trazabilidad") },
-        { key: "ict-reportes", label: "Reportes ICT", href: "/?m=ict-reportes", icon: BarChart3, ...navGatingFor("ict-reportes") },
+        { key: "ict-logs", label: "Log ICT", href: "/?m=ict-logs", icon: iconoComo("integraciones"), ...navGatingFor("ict-logs") },
+        { key: "ict-trazabilidad", label: "Trazabilidad ICT", href: "/?m=ict-trazabilidad", icon: iconoComo("ruta"), ...navGatingFor("ict-trazabilidad") },
+        { key: "ict-reportes", label: "Reportes ICT", href: "/?m=ict-reportes", icon: iconoComo("reportes"), ...navGatingFor("ict-reportes") },
       ],
     },
   );
 
   return {
-    sections: DOCK_GROUP_ORDER.map((id) => ({ id, label: DOCK_GROUP_LABEL[id], icon: DOCK_GROUP_ICON[id], side: DOCK_GROUP_SIDE[id] })),
+    sections: DOCK_GROUP_ORDER.map((id) => ({
+      id,
+      label: DOCK_GROUP_LABEL[id],
+      icon: DOCK_GROUP_ICON[id],
+      side: DOCK_GROUP_SIDE[id],
+      ilustracion: dockIlustracion(id),
+    })),
     items: entries.map(inSection),
   };
 }

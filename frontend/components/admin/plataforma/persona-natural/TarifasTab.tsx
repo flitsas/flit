@@ -5,7 +5,7 @@
 // estado de cada versión (vigente, futura o cerrada), filtros por columna estándar, historial por fila y creación o
 // versionado en un modal. Las cotizaciones ya emitidas no cambian al registrar una tarifa nueva. Sin datos bancarios.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { History, PencilLine, ReceiptText } from "lucide-react";
+import { ReceiptText } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -35,6 +35,7 @@ import { nombrePropio } from "./formato";
 import { PnSeccionHeader } from "./pn-componentes";
 import { TarifaFormModal, type TarifaFormMode } from "./TarifaFormModal";
 import { ESTADO_TARIFA_LABEL, ESTADO_TARIFA_TONE, TarifaHistorialModal } from "./TarifaHistorialModal";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   { id: "organismo", label: "Organismo", tipo: "texto" },
@@ -80,9 +81,11 @@ export interface TarifasTabProps {
   api?: TarifasApi;
   /** Presentación y restricciones; por defecto Plataforma, sin cambios. */
   modo?: TarifasModo;
+  /** HU #14477 — `false` cuando se monta dentro de un panel que ya es tarjeta (el hub del OT), para no apilar dos. */
+  tarjeta?: boolean;
 }
 
-export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api = TARIFAS_API_PLATAFORMA, modo }: TarifasTabProps = {}) {
+export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api = TARIFAS_API_PLATAFORMA, modo, tarjeta = true }: TarifasTabProps = {}) {
   const fijo = modo?.organismoFijo === true;
   const { show } = useToast();
   const [tarifas, setTarifas] = useState<TarifaPn[]>([]);
@@ -190,11 +193,11 @@ export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api 
   function actionsFor(g: GrupoTarifa): RowAction[] {
     const nombre = `${g.tipoTramiteNombre ?? "todos los trámites"} en ${g.organismoNombre ?? "todos los organismos"}`;
     const actions: RowAction[] = [
-      { icon: History, label: `Ver historial de ${nombre}`, onClick: () => setHistorial(g) },
+      { icon: iconoComo("reloj"), label: `Ver historial de ${nombre}`, onClick: () => setHistorial(g) },
     ];
     if (g.estado !== "cerrada" && !esSoloLectura(g)) {
       actions.push({
-        icon: PencilLine,
+        icon: iconoComo("lapiz"),
         label: `Cambiar valores de ${nombre}`,
         tone: "primary",
         onClick: () => abrirFormulario({ kind: "version", grupo: g }),
@@ -222,7 +225,7 @@ export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api 
               Organismo
             </EncabezadoFiltrable>
           ),
-          render: (g) => g.organismoNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los organismos</span>,
+          render: (g) => g.organismoNombre ?? <span className="text-muted-foreground">Todos los organismos</span>,
         },
     {
       key: "tipo",
@@ -231,7 +234,7 @@ export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api 
           Trámite
         </EncabezadoFiltrable>
       ),
-      render: (g) => g.tipoTramiteNombre ?? <span className="text-[#59677D] dark:text-white/70">Todos los trámites</span>,
+      render: (g) => g.tipoTramiteNombre ?? <span className="text-muted-foreground">Todos los trámites</span>,
     },
     { key: "derechos", header: "Derechos de tránsito", cellClassName: "whitespace-nowrap", render: (g) => valorDe(g, "DERECHOS_TRANSITO") },
     { key: "servicio", header: "Servicio digital FLIT", cellClassName: "whitespace-nowrap", render: (g) => valorDe(g, "SERVICIO_FLIT") },
@@ -312,13 +315,14 @@ export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api 
           onRetry={() => void load()}
         >
           <DataTable<GrupoTarifa>
+            tarjeta={tarjeta}
             ariaLabel="Tarifas del portal de Persona Natural"
             columns={columns}
             rows={pg.paginar(visibles)}
             getRowKey={(g) => g.clave}
             emptyContent={
               grupos.length === 0 && !filtros.hayFiltros ? (
-                <p className="text-sm text-[#59677D] dark:text-white/70">
+                <p className="text-sm text-muted-foreground">
                   No hay tarifas vigentes ni próximas. Para ver las anteriores, filtra por Estado en el encabezado de la columna.
                 </p>
               ) : (

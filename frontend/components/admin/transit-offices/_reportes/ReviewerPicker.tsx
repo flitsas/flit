@@ -71,7 +71,7 @@ export function ReviewerPicker({
 
   return (
     <div className="flex flex-col gap-1" ref={containerRef}>
-      <label className="text-[11px] font-semibold text-[#6B7280] dark:text-white/50">
+      <label className="text-[11px] font-semibold text-muted-foreground">
         Revisores
       </label>
       <div className="relative">
@@ -88,11 +88,11 @@ export function ReviewerPicker({
 
         {open && (
           <div
-            className="absolute left-0 z-50 mt-2 max-h-[22rem] w-72 overflow-y-auto rounded-2xl border border-[#DFE5ED] bg-white p-3 shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
+            className="absolute left-0 z-50 mt-2 max-h-[22rem] w-72 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-[var(--kit-sombra)]"
             data-testid="ot-reviewers-picker-panel"
           >
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/50">
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
                 {plural(options.length, "revisor", "revisores")}
               </span>
               {/* Volver a «todos» es un clic, no desmarcar veinte casillas una por una. */}
@@ -118,7 +118,7 @@ export function ReviewerPicker({
             )}
 
             {visibles.length === 0 ? (
-              <p className="px-1.5 py-2 text-xs text-[#6B7280] dark:text-white/50">
+              <p className="px-1.5 py-2 text-xs text-muted-foreground">
                 {options.length === 0
                   ? "Nadie ha decidido trámites en este organismo todavía."
                   : "Ningún revisor coincide con la búsqueda."}
@@ -127,7 +127,7 @@ export function ReviewerPicker({
               visibles.map((option) => (
                 <label
                   key={option.userId}
-                  className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-[#F5F7FA] dark:hover:bg-white/5"
+                  className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-secondary"
                 >
                   <input
                     type="checkbox"
@@ -138,7 +138,7 @@ export function ReviewerPicker({
                   <span className="min-w-0 flex-1 truncate">{option.displayName}</span>
                   {/* El histórico ordena la lista y da contexto: quien tiene 3 decisiones en dos
                       años no es comparable con quien tiene 900. */}
-                  <span className="shrink-0 tabular-nums text-[10px] text-[#6B7280] dark:text-white/40">
+                  <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">
                     {formatInt(option.decisiones)}
                   </span>
                 </label>

@@ -1,12 +1,26 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { loginUser } from "@/lib/api/auth";
 import { rememberEmail, storeToken } from "@/lib/auth/session";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { FLIT_PRIVACY_POLICY_URL } from "@/lib/brand/types";
-import { ShieldAlert, Lock, Mail, User as UserIcon, ExternalLink } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { buttonClass } from "@flit/ui/Button";
+import {
+  CampoClave,
+  IngresoAyuda,
+  IngresoLayout,
+  INGRESO_AVISO_CLS,
+  INGRESO_BOTON_CLS,
+  INGRESO_CONTROL_CLS,
+  INGRESO_ENLACE_CLS,
+  INGRESO_ERROR_CLS,
+  INGRESO_ETIQUETA_CLS,
+  INGRESO_ICONO_CLS,
+  INGRESO_TITULO_CLS,
+} from "@flit/ui/Ingreso";
 
 /**
  * HU #12424 AC2 — datos del 403 `NETWORK_DOMAIN_REQUIRED` (ADR-0060 D3). Vienen tal cual del
@@ -17,62 +31,8 @@ interface NetworkRedirectInfo {
   loginUrl: string;
 }
 
-function ParticlesCanvas() {
-  const ref = useRef<HTMLCanvasElement>(null);
-  useEffect(() => {
-    const canvas = ref.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    let raf = 0;
-    const resize = () => {
-      canvas.width = canvas.offsetWidth * devicePixelRatio;
-      canvas.height = canvas.offsetHeight * devicePixelRatio;
-    };
-    resize();
-    window.addEventListener("resize", resize);
-    const N = 80;
-    const pts = Array.from({ length: N }, () => ({
-      x: Math.random() * canvas.width,
-      y: Math.random() * canvas.height,
-      vx: (Math.random() - 0.5) * 0.4 * devicePixelRatio,
-      vy: (Math.random() - 0.5) * 0.4 * devicePixelRatio,
-    }));
-    const tick = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      for (const p of pts) {
-        p.x += p.vx; p.y += p.vy;
-        if (p.x < 0 || p.x > canvas.width) p.vx *= -1;
-        if (p.y < 0 || p.y > canvas.height) p.vy *= -1;
-      }
-      for (let i = 0; i < N; i++) {
-        for (let j = i + 1; j < N; j++) {
-          const dx = pts[i].x - pts[j].x, dy = pts[i].y - pts[j].y;
-          const d = Math.hypot(dx, dy);
-          if (d < 120 * devicePixelRatio) {
-            ctx.strokeStyle = `rgba(255,255,255,${0.12 * (1 - d / (120 * devicePixelRatio))})`;
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(pts[i].x, pts[i].y);
-            ctx.lineTo(pts[j].x, pts[j].y);
-            ctx.stroke();
-          }
-        }
-        ctx.fillStyle = "rgba(255,255,255,0.6)";
-        ctx.beginPath();
-        ctx.arc(pts[i].x, pts[i].y, 1.5 * devicePixelRatio, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      raf = requestAnimationFrame(tick);
-    };
-    tick();
-    return () => { cancelAnimationFrame(raf); window.removeEventListener("resize", resize); };
-  }, []);
-  return <canvas ref={ref} className="absolute inset-0 w-full h-full" />;
-}
-
-// Login real del diseño base (Feature #10113, HU #10172). Conserva el prototipo
-// (panel visual con partículas, branding) pero cablea la autenticación al backend:
+// Login real del diseño base (Feature #10113, HU #10172). El aspecto es el ingreso de la propuesta
+// «Diseño Inteligente» (IngresoLayout de @flit/ui, HU #14485); cablea la autenticación al backend:
 // loginUser() → JWT en cookie+storage → onAuthenticated(). El 2FA queda fuera de
 // alcance del Feature, así que el flujo es de un solo paso (credenciales).
 export function Login({
@@ -140,158 +100,117 @@ export function Login({
     }
   }
 
+  const aviso = "border border-[color:var(--di-danger)] bg-[color:var(--di-danger-soft)]";
+  const volver = "mt-3 text-xs font-semibold text-[color:var(--di-action)] transition hover:opacity-80";
+
   return (
-    <div className="h-screen w-full flex flex-col md:flex-row overflow-hidden">
-      {/* LEFT — Visual panel */}
-      <div
-        className="relative w-full md:w-7/12 min-h-[260px] md:min-h-0 flex flex-col items-center justify-center overflow-hidden order-1"
-        style={{ background: "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)" }}
-      >
-        <ParticlesCanvas />
-        <div className="relative z-10 flex flex-col items-center px-8 text-center">
-          <BrandLogo variant="white" className="max-w-[280px] md:max-w-[360px] w-full h-auto object-contain" />
-        </div>
+    <IngresoLayout
+      logo={<BrandLogo variant="white" />}
+      logoTarjeta={<BrandLogo variant="auto" alt="" />}
+      pie={
         <a
           href={FLIT_PRIVACY_POLICY_URL}
           target="_blank"
           rel="noopener noreferrer"
-          className="absolute bottom-0 left-0 right-0 mb-6 text-center text-xs text-white/70 hover:text-white transition z-10"
+          className="text-[color:var(--di-ingreso-texto-2)] transition hover:text-[color:var(--di-ingreso-texto)]"
         >
           Políticas de Privacidad y Términos de Uso
         </a>
-      </div>
+      }
+    >
+      <h1 className={INGRESO_TITULO_CLS}>Iniciar Sesión</h1>
 
-      {/* RIGHT — Form */}
-      <div className="w-full md:w-5/12 bg-white flex flex-col justify-center px-6 sm:px-12 lg:px-16 py-10 order-2 overflow-y-auto">
-        <div className="max-w-sm w-full mx-auto">
-          <div className="flex flex-col items-center gap-3 mb-8">
-            <div className="h-16 w-16 rounded-full flex items-center justify-center" style={{ background: "var(--color-flit-tech)" }}>
-              <UserIcon className="h-8 w-8 text-white" strokeWidth={2.2} />
+      {blocked ? (
+        <div className={`${INGRESO_AVISO_CLS} ${aviso} animate-fade-in`} role="alert">
+          <Icono nombre="alerta" className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-danger)]" />
+          <div className="text-sm">
+            <p className="font-semibold text-[color:var(--di-danger)]">Acceso Restringido</p>
+            <p className="mt-1 text-xs text-[color:var(--di-text-secondary)]">Tu cuenta está bloqueada temporalmente. Contacta a tu administrador para restablecer el acceso.</p>
+            <button type="button" onClick={() => setBlocked(false)} className={volver}>
+              ← Volver a intentar
+            </button>
+          </div>
+        </div>
+      ) : roleDeactivated ? (
+        <div className={`${INGRESO_AVISO_CLS} ${aviso} animate-fade-in`} role="alert">
+          <Icono nombre="alerta" className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-danger)]" />
+          <div className="text-sm">
+            <p className="font-semibold text-[color:var(--di-danger)]">Acceso Restringido</p>
+            <p className="mt-1 text-xs text-[color:var(--di-text-secondary)]">Tu rol ha sido desactivado y no puedes ingresar al sistema. Contacta a tu administrador para resolver este problema.</p>
+            <button type="button" onClick={() => setRoleDeactivated(false)} className={volver}>
+              ← Volver a intentar
+            </button>
+          </div>
+        </div>
+      ) : networkRedirect ? (
+        <div
+          className={`${INGRESO_AVISO_CLS} animate-fade-in border border-[color:var(--di-action)] bg-[color:var(--di-accent-soft)]`}
+          role="alert"
+          aria-live="assertive"
+        >
+          <Icono nombre="externo" className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-action)]" />
+          <div className="text-sm">
+            <p className="font-semibold text-[color:var(--di-heading)]">Tu red tiene un dominio propio</p>
+            <p className="mt-1 text-xs text-[color:var(--di-text-secondary)]">
+              Ingresa desde <strong>{networkRedirect.networkDomain}</strong> para acceder a tu cuenta.
+            </p>
+            <a
+              href={networkRedirect.loginUrl}
+              rel="noopener"
+              className="mt-3 inline-flex items-center gap-1 text-xs font-semibold text-[color:var(--di-action)] underline hover:opacity-80"
+            >
+              Ir a {networkRedirect.networkDomain}
+            </a>
+            <button type="button" onClick={() => setNetworkRedirect(null)} className={`block ${volver}`}>
+              ← Volver a intentar
+            </button>
+          </div>
+        </div>
+      ) : (
+        <form onSubmit={submitCreds} className="grid gap-4 animate-fade-in" aria-label="Iniciar sesión" noValidate>
+          <div>
+            <label htmlFor="login-email" className={INGRESO_ETIQUETA_CLS}>Correo</label>
+            <div className="relative">
+              <Icono nombre="correo" className={INGRESO_ICONO_CLS} />
+              <input
+                id="login-email"
+                type="email"
+                autoComplete="username"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="usuario@flit.io"
+                aria-invalid={error ? true : undefined}
+                className={INGRESO_CONTROL_CLS}
+              />
             </div>
-            <h1 className="text-2xl font-bold" style={{ color: "var(--color-flit-brand)", fontFamily: "Poppins, sans-serif" }}>
-              Iniciar Sesión
-            </h1>
+          </div>
+          <div>
+            <label htmlFor="login-password" className={INGRESO_ETIQUETA_CLS}>Contraseña</label>
+            <CampoClave
+              id="login-password"
+              autoComplete="current-password"
+              value={pass}
+              onChange={(e) => setPass(e.target.value)}
+              placeholder="••••••••"
+              aria-invalid={error ? true : undefined}
+            />
+            <Link href="/auth/forgot-password" className={INGRESO_ENLACE_CLS}>
+              ¿Olvidó su contraseña?
+            </Link>
           </div>
 
-          {blocked ? (
-            <div className="rounded-xl border p-5 flex gap-3 animate-fade-in" style={{ borderColor: "var(--color-flit-alert)", background: "rgba(255,78,0,0.06)" }} role="alert">
-              <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--color-flit-alert)" }} />
-              <div className="text-sm">
-                <p className="font-semibold" style={{ color: "var(--color-flit-alert)" }}>Acceso Restringido</p>
-                <p className="text-slate-600 text-xs mt-1">Tu cuenta está bloqueada temporalmente. Contacta a tu administrador para restablecer el acceso.</p>
-                <button
-                  type="button"
-                  onClick={() => setBlocked(false)}
-                  className="text-xs mt-3 font-semibold transition hover:opacity-80"
-                  style={{ color: "var(--color-flit-brand)" }}
-                >
-                  ← Volver a intentar
-                </button>
-              </div>
-            </div>
-          ) : roleDeactivated ? (
-            <div className="rounded-xl border p-5 flex gap-3 animate-fade-in" style={{ borderColor: "var(--color-flit-alert)", background: "rgba(255,78,0,0.06)" }} role="alert">
-              <ShieldAlert className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--color-flit-alert)" }} />
-              <div className="text-sm">
-                <p className="font-semibold" style={{ color: "var(--color-flit-alert)" }}>Acceso Restringido</p>
-                <p className="text-slate-600 text-xs mt-1">Tu rol ha sido desactivado y no puedes ingresar al sistema. Contacta a tu administrador para resolver este problema.</p>
-                <button
-                  type="button"
-                  onClick={() => setRoleDeactivated(false)}
-                  className="text-xs mt-3 font-semibold transition hover:opacity-80"
-                  style={{ color: "var(--color-flit-brand)" }}
-                >
-                  ← Volver a intentar
-                </button>
-              </div>
-            </div>
-          ) : networkRedirect ? (
-            <div
-              className="rounded-xl border p-5 flex gap-3 animate-fade-in"
-              style={{ borderColor: "var(--color-flit-brand)", background: "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" }}
-              role="alert"
-              aria-live="assertive"
-            >
-              <ExternalLink className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
-              <div className="text-sm">
-                <p className="font-semibold" style={{ color: "var(--color-flit-brand)" }}>Tu red tiene un dominio propio</p>
-                <p className="text-slate-600 text-xs mt-1">
-                  Ingresa desde <strong>{networkRedirect.networkDomain}</strong> para acceder a tu cuenta.
-                </p>
-                <a
-                  href={networkRedirect.loginUrl}
-                  rel="noopener"
-                  className="inline-flex items-center gap-1 text-xs mt-3 font-semibold underline hover:opacity-80"
-                  style={{ color: "var(--color-flit-brand)" }}
-                >
-                  Ir a {networkRedirect.networkDomain}
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setNetworkRedirect(null)}
-                  className="block text-xs mt-3 font-semibold transition hover:opacity-80"
-                  style={{ color: "var(--color-flit-brand)" }}
-                >
-                  ← Volver a intentar
-                </button>
-              </div>
-            </div>
-          ) : (
-            <form onSubmit={submitCreds} className="space-y-4 animate-fade-in" aria-label="Iniciar sesión" noValidate>
-              <div>
-                <label htmlFor="login-email" className="text-xs font-medium text-slate-600 mb-1.5 block">Usuario Corporativo</label>
-                <div className="relative">
-                  <Mail className="h-4 w-4 absolute left-3 top-3.5 text-slate-400" />
-                  <input
-                    id="login-email"
-                    type="email"
-                    autoComplete="username"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="usuario@flit.io"
-                    aria-invalid={error ? true : undefined}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-                  />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="login-password" className="text-xs font-medium text-slate-600 mb-1.5 block">Contraseña</label>
-                <div className="relative">
-                  <Lock className="h-4 w-4 absolute left-3 top-3.5 text-slate-400" />
-                  <input
-                    id="login-password"
-                    type="password"
-                    autoComplete="current-password"
-                    value={pass}
-                    onChange={(e) => setPass(e.target.value)}
-                    placeholder="••••••••"
-                    aria-invalid={error ? true : undefined}
-                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-                  />
-                </div>
-                <Link href="/auth/forgot-password" className="inline-block text-xs mt-2 text-slate-500 hover:text-flit-brand transition">
-                  ¿Olvidó su contraseña?
-                </Link>
-              </div>
-
-              {error && (
-                <p role="alert" className="text-xs flex items-center gap-2" style={{ color: "var(--color-flit-alert)" }}>
-                  <ShieldAlert className="h-3.5 w-3.5" /> {error}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-                style={{ background: "var(--color-flit-brand)" }}
-              >
-                {loading ? "Ingresando…" : "Iniciar Sesión"}
-              </button>
-            </form>
+          {error && (
+            <p role="alert" className={INGRESO_ERROR_CLS}>
+              <Icono nombre="alerta" className="h-3.5 w-3.5" /> {error}
+            </p>
           )}
-        </div>
-      </div>
-    </div>
+
+          <button type="submit" disabled={loading} className={buttonClass({ className: INGRESO_BOTON_CLS })}>
+            {loading ? "Ingresando…" : "Iniciar Sesión"}
+          </button>
+          <IngresoAyuda />
+        </form>
+      )}
+    </IngresoLayout>
   );
 }

@@ -1,29 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import {
-  ArrowDown,
-  ArrowUp,
-  ArrowUpDown,
-  Check,
-  Eye,
-  FileStack,
-  FolderOpen,
-  Paperclip,
-  Pencil,
-  Scale,
-  Star,
-  Tag,
-  Undo2,
-  X,
-} from "lucide-react";
+import { ArrowUpDown, Tag } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { Placa } from "@flit/ui/Placa";
 import {
   TABLA_CELDA_SECUNDARIA_CLS,
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import { COPY } from "@/lib/copy/copy-catalog";
 import { OtTablePagination } from "./OtTablePagination";
@@ -32,7 +21,10 @@ import { CasillaFilaLote } from "@/components/operacion/BarraSeleccionLote";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import { formatOtDate, formatOtProcedureStatus, plateUpdateWindow, procedureStatusChip } from "./ot-utils";
 import {
+  ESTADO_ICONO,
+  estadoChipClass,
   esRevocationRequestStatus,
+  type EstadoTramite,
   revocationRequestListColor,
   revocationRequestListLabel,
 } from "@/lib/tramites/estados";
@@ -42,6 +34,11 @@ import {
   type OtProceduresSortOption,
   otColumnToSortBy,
 } from "@/lib/admin/ot-procedures-columns";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+
+/** Íconos del kit como componente, fuera del render (estables). */
+const IconoArriba = iconoComo("arriba");
+const IconoAbajo = iconoComo("abajo");
 
 export interface ClientProceduresTableProps {
   rows: OtClientProcedure[];
@@ -156,7 +153,7 @@ function SortMenu({
   }, [open]);
 
   const activa = opciones.find((o) => o.sort === sortBy);
-  const Icon = !activa ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+  const Icon = !activa ? ArrowUpDown : sortDir === "asc" ? IconoArriba : IconoAbajo;
 
   return (
     <div className="relative inline-block">
@@ -173,7 +170,7 @@ function SortMenu({
             ? `Ordenar ${label}. Ahora: ${activa.label} ${sortDir === "asc" ? "ascendente" : "descendente"}`
             : `Ordenar ${label}`
         }
-        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase transition-colors hover:opacity-80 ${
+        className={`inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 normal-case transition-colors hover:opacity-80 ${
           activa ? "underline underline-offset-4" : ""
         }`}
       >
@@ -186,22 +183,22 @@ function SortMenu({
           ref={panelRef}
           role="menu"
           aria-label={`Ordenar por, en ${label}`}
-          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-[#DFE5ED] bg-white normal-case text-flit-primary shadow-xl dark:border-white/10 dark:bg-[#162744] dark:text-white"
+          className="absolute left-0 top-full z-50 mt-1.5 w-[16rem] overflow-hidden rounded-xl border border-border bg-card normal-case text-flit-primary shadow-[var(--kit-sombra)]"
         >
-          <p className="border-b border-[#EEF2F7] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[#7B8794] dark:border-white/10 dark:text-white/50">
+          <p className="border-b border-border px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
             Ordenar por
           </p>
           <div className="p-1.5">
             {opciones.map((opcion) => (
               <div
                 key={opcion.id}
-                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-[#F1F5F9] [&+&]:pt-2 dark:[&+&]:border-white/5"
+                className="rounded-lg px-2 py-1.5 [&+&]:mt-0.5 [&+&]:border-t [&+&]:border-border [&+&]:pt-2"
               >
                 <p className="mb-1.5 text-xs font-medium">{opcion.label}</p>
                 <span className="flex items-center gap-1.5">
                   {(["asc", "desc"] as const).map((dir) => {
                     const seleccionada = sortBy === opcion.sort && sortDir === dir;
-                    const Flecha = dir === "asc" ? ArrowUp : ArrowDown;
+                    const Flecha = dir === "asc" ? IconoArriba : IconoAbajo;
                     return (
                       <button
                         key={dir}
@@ -215,8 +212,8 @@ function SortMenu({
                         }}
                         className={`inline-flex flex-1 items-center justify-center gap-1 rounded-md border px-2 py-1 text-[11px] font-medium transition-colors ${
                           seleccionada
-                            ? "border-[#2C6BED] bg-[#2C6BED] text-white"
-                            : "border-[#DFE5ED] text-[#5A6B7F] hover:bg-[#EEF5FF] dark:border-white/15 dark:text-white/70 dark:hover:bg-white/10"
+                            ? "border-flit-brand bg-flit-brand text-white"
+                            : "border-border text-muted-foreground hover:bg-secondary"
                         }`}
                       >
                         <Flecha className="h-3 w-3" aria-hidden="true" />
@@ -255,7 +252,7 @@ function SortableTh({
   const apiKey = otColumnToSortBy(columnKey);
   const active = sortBy === apiKey || (columnKey === "fechaRadicacion" && sortBy === "createdAt");
   const nextDir: "asc" | "desc" = active && sortDir === "asc" ? "desc" : "asc";
-  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? ArrowUp : ArrowDown;
+  const Icon = !active ? ArrowUpDown : sortDir === "asc" ? IconoArriba : IconoAbajo;
 
   const cls = `${TABLA_HEADER_CELL_CLS} ${className}`.trim();
   const style = { background: TABLA_HEADER_BG, color: TABLA_HEADER_FG };
@@ -289,7 +286,7 @@ function SortableTh({
     <th className={cls} style={style}>
       <button
         type="button"
-        className="inline-flex items-center gap-1 uppercase hover:opacity-80"
+        className="inline-flex items-center gap-1 normal-case hover:opacity-80"
         aria-label={`Ordenar por ${sortLabel ?? label}${active ? ` (${sortDir === "asc" ? "ascendente" : "descendente"})` : ""}`}
         onClick={() => onSortChange(apiKey, nextDir)}
       >
@@ -325,11 +322,7 @@ function renderCelda(
       return (
         <span className="flex items-center gap-1.5">
           {row.prioritario && (
-            <Star
-              className="h-3.5 w-3.5 shrink-0"
-              style={{ color: "#F59E0B", fill: "#F59E0B" }}
-              aria-label="Trámite prioritario"
-            />
+            <Icono nombre="medalla" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--badge-warning-fg)", fill: "var(--color-flit-alert)" }} etiqueta="Trámite prioritario" />
           )}
           {/* Ajuste 2026-11-10 (D3=b) — el radicado es el ÚNICO control que abre el detalle: la fila
               ya no lo hace, para poder seleccionar y copiar datos sin abrir nada. Mismo aspecto que
@@ -351,7 +344,12 @@ function renderCelda(
     case "vin":
       return row.vin?.trim() || "—";
     case "placa":
-      return row.placa?.trim() || "—";
+      // Propuesta: placa amarilla (`Placa` de @flit/ui), con el texto tal cual viene; sin placa, el guion.
+      return row.placa?.trim() ? (
+        <Placa placa={row.placa.trim()} />
+      ) : (
+        "—"
+      );
     case "vendedor":
       return row.vendedorNombre?.trim() || "—";
     case "comprador":
@@ -374,7 +372,12 @@ function renderCelda(
     case "estado": {
       const estadoLabel = formatOtProcedureStatus(row.status);
       const chip = (
-        <StatusBadge label={estadoLabel} {...procedureStatusChip(row.status)} />
+        <StatusBadge
+          className={estadoChipClass(row.status)}
+          label={estadoLabel}
+          icono={ESTADO_ICONO[row.status as EstadoTramite]}
+          {...procedureStatusChip(row.status)}
+        />
       );
       return (
         <div className="flex flex-wrap items-center gap-1.5">
@@ -408,7 +411,7 @@ function renderCelda(
               style={{ color: revocationRequestListColor(row.revocationRequestStatus) }}
               title={`Sub-estado de revocatoria: ${revocationRequestListLabel(row.revocationRequestStatus)}`}
             >
-              <Undo2 className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="devolucion" className="h-3 w-3" />
               {revocationRequestListLabel(row.revocationRequestStatus)}
             </span>
           ) : null}
@@ -475,7 +478,7 @@ export function ClientProceduresTable({
       items.push({
         key: "aprobar",
         label: COPY.E01Aprobar,
-        icon: Check,
+        icon: iconoComo("check"),
         onSelect: () => onApprove(row),
       });
     }
@@ -493,13 +496,13 @@ export function ClientProceduresTable({
       items.push({
         key: "rechazar",
         label: COPY.E01Rechazar,
-        icon: X,
+        icon: iconoComo("cerrar"),
         onSelect: () => onReject(row),
       });
     }
 
     if (row.status === "asignado" && showApprovalActions && onRevoke) {
-      items.push({ key: "liberar-placa", label: "Liberar placa", icon: Undo2, onSelect: () => onRevoke(row) });
+      items.push({ key: "liberar-placa", label: "Liberar placa", icon: iconoComo("devolucion"), onSelect: () => onRevoke(row) });
     }
 
     // HU #12577 (Feature #12565) AC1 — decidir la solicitud de revocatoria del gestor. Solo es
@@ -514,7 +517,7 @@ export function ClientProceduresTable({
       items.push({
         key: "decidir-revocatoria",
         label: "Decidir revocatoria",
-        icon: Scale,
+        icon: iconoComo("mazo"),
         disabled: !conSolicitudActiva,
         disabledReason: "El gestor no ha solicitado la revocatoria de este trámite.",
         onSelect: () => onDecideRevocation(row),
@@ -531,7 +534,7 @@ export function ClientProceduresTable({
       items.push({
         key: "actualizar-placa",
         label: ventana.disabled ? "Actualizar placa" : `Actualizar placa (${ventana.minutosRestantes} min)`,
-        icon: Pencil,
+        icon: iconoComo("lapiz"),
         disabled: ventana.disabled,
         disabledReason: ventana.disabledReason,
         onSelect: () => onUpdatePlate(row),
@@ -539,14 +542,14 @@ export function ClientProceduresTable({
     }
 
     if (row.status === "aprobado" && onAdjuntarLt) {
-      items.push({ key: "adjuntar-lt", label: COPY.E02, icon: Paperclip, onSelect: () => onAdjuntarLt(row) });
+      items.push({ key: "adjuntar-lt", label: COPY.E02, icon: iconoComo("archivo"), onSelect: () => onAdjuntarLt(row) });
     }
 
     if ((row.status === "entregado" || row.status === "aprobado") && onConsolidado) {
       items.push({
         key: "consolidado",
         label: COPY.A12,
-        icon: FileStack,
+        icon: iconoComo("archivo"),
         // Se deshabilita mientras se abre: el consolidado puede tener que generarse, y un segundo
         // clic dispararía una segunda generación del mismo expediente.
         disabled: consolidadoActingId === row.id,
@@ -559,7 +562,7 @@ export function ClientProceduresTable({
       items.push({
         key: "documentos",
         label: "Ver documentos",
-        icon: FolderOpen,
+        icon: iconoComo("carpeta"),
         onSelect: () => onVerDocumentos(row),
       });
     }
@@ -568,7 +571,7 @@ export function ClientProceduresTable({
       items.push({
         key: "detalle",
         label: "Detalle del trámite",
-        icon: Eye,
+        icon: iconoComo("ojo"),
         onSelect: () => onVerDetalle(row),
       });
     }
@@ -577,9 +580,9 @@ export function ClientProceduresTable({
   };
 
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={`flex flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
-      <table className="w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
+      <table className="di-tabla-tarjetas w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
         <thead>
           <tr>
             {conCasillas ? (
@@ -617,11 +620,11 @@ export function ClientProceduresTable({
               // Bug #13055 — tabla homologada con el modelo de trámites.
               // Ajuste 2026-11-10 (D3=b) — la fila ya no abre el detalle (ni con clic ni con
               // teclado): lo abre el botón del radicado, que da además la puerta de teclado.
-              className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+              className={`bg-[var(--di-surface-elevated)] [&>td]:bg-[var(--di-surface-elevated)] ${TABLA_ROW_HOVER_CLS}`}
             >
               {conCasillas && onToggle ? (
                 // La casilla corta clic y teclado (CasillaFilaLote): marcar no abre el detalle (AC1).
-                <td className="w-10 rounded-l-xl border-y border-l border-flit-gray px-4 py-3 align-middle dark:border-white/10">
+                <td className="w-10 rounded-l-xl border-y border-l border-[color:var(--di-border)] px-4 py-3 align-middle">
                   <CasillaFilaLote
                     radicado={row.referenceNumber}
                     seleccionado={seleccion?.estaSeleccionado(row.id) ?? false}
@@ -632,8 +635,10 @@ export function ClientProceduresTable({
               {columnasVisibles.map((columna, indice) => (
                 <td
                   key={columna.key}
+                  // Excepción aprobada: en celular la fila es tarjeta y la celda dice su columna.
+                  data-label={columna.label}
                   className={`${indice === 0 && !conCasillas ? "rounded-l-xl border-l " : ""}border-y px-4 py-3 ${CELDA_CLS[columna.key] ?? ""}`}
-                  style={{ borderColor: "#DFE5ED" }}
+                  style={{ borderColor: "var(--di-border)" }}
                 >
                   {renderCelda(columna.key, row, onVerDetalle)}
                 </td>
@@ -650,7 +655,7 @@ export function ClientProceduresTable({
               {/* Las acciones cortan la propagación: pulsar «Aprobar» abriría además el detalle. */}
               <td
                 className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                style={{ borderColor: "#DFE5ED" }}
+                style={{ borderColor: "var(--di-border)" }}
                 onClick={(e) => e.stopPropagation()}
                 onKeyDown={(e) => e.stopPropagation()}
               >
@@ -659,12 +664,14 @@ export function ClientProceduresTable({
                   {row.status === "entregado" && (
                     <span className="flex flex-wrap justify-end gap-1">
                       {row.soatPagado && (
-                        <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-semibold text-emerald-700">
+                        <span {...etiquetaKit("success", { className: "di-estado di-estado--check" })}>
+                          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                           SOAT
                         </span>
                       )}
                       {row.impuestoDepartamentalPagado && (
-                        <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                        <span {...etiquetaKit("info", { className: "di-estado di-estado--check" })}>
+                          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                           Impuesto
                         </span>
                       )}

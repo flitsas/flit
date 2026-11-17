@@ -59,6 +59,15 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 
 /** Tope de la exportación. Existe para no encadenar decenas de páginas; si se alcanza, se DICE. */
@@ -291,7 +300,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
 
         {zoom && (
           <p
-            className="flex flex-wrap items-center gap-2 rounded-xl bg-flit-brand/10 px-3 py-2 text-[11px] text-[#2B4AA8] dark:text-[#9DB4FF]"
+            className="flex flex-wrap items-center gap-2 rounded-xl bg-flit-brand/10 px-3 py-2 text-[11px] text-[color:var(--di-action)]"
             data-testid="ot-report-zoom"
           >
             Informe acotado a <strong>{zoom.label}</strong> desde la gráfica.
@@ -324,13 +333,13 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               <Tile
                 value={formatInt(resumen.aprobados)}
                 label="Aprobados"
-                accent="#8CC63F"
+                accent="var(--serie-verde)"
                 hint={pctOf(resumen.aprobados, resumen.total)}
               />
               <Tile
                 value={formatInt(resumen.rechazados + resumen.enSubsanacion)}
                 label="Rechazados"
-                accent="#FF4E00"
+                accent="var(--serie-naranja)"
                 hint={`${formatInt(resumen.enSubsanacion)} con subsanación abierta`}
               />
               <Tile
@@ -385,7 +394,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
             ) : (
               <>
                 <TimeHistogram buckets={resumen.distribucionTiempos} />
-                <p className="text-[11px] text-[#6B7280] dark:text-white/50">
+                <p className="text-[11px] text-muted-foreground">
                   Calculado sobre {formatInt(resumen.decididos)} de{" "}
                   {plural(resumen.total, "trámite recibido", "trámites recibidos")} con decisión.
                 </p>
@@ -441,7 +450,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
               disabled={exportDisabled}
               aria-busy={exportState.busy}
               className="rounded-xl px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
               data-testid="ot-report-export-xlsx"
             >
               {exportState.busy ? "Exportando…" : "Exportar a Excel"}
@@ -452,7 +461,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                 onClick={() => void handleExport("csv")}
                 disabled={exportDisabled}
                 aria-busy={exportState.busy}
-                className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold transition hover:border-flit-brand disabled:opacity-60 dark:border-white/10"
+                className="rounded-xl border border-border px-3 py-2 text-xs font-semibold transition hover:border-flit-brand disabled:opacity-60"
                 data-testid="ot-report-export"
               >
                 CSV
@@ -462,7 +471,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
         }
       >
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[11px] font-semibold text-[#6B7280] dark:text-white/50">
+          <span className="text-[11px] font-semibold text-muted-foreground">
             Vistas rápidas:
           </span>
           {REPORT_PRESETS.map((preset) => {
@@ -479,7 +488,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                 className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
                   activa
                     ? "border-flit-brand bg-flit-brand/10 text-flit-brand"
-                    : "border-[#DFE5ED] text-[#6B7280] hover:border-flit-brand hover:text-flit-brand dark:border-white/10 dark:text-white/50"
+                    : "border-border text-muted-foreground hover:border-flit-brand hover:text-flit-brand"
                 }`}
               >
                 {preset.label}
@@ -489,10 +498,8 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
           {/* Quitar o añadir una columna deja de coincidir con cualquier vista. Decirlo evita que
               el usuario crea que sigue en «Gestión» y exporte otra cosa de la que espera. */}
           {presetActivo === null && (
-            <span
-              className="rounded-full bg-[#F5F7FA] px-3 py-1 text-[11px] font-semibold text-[#6B7280] dark:bg-white/5 dark:text-white/50"
-              data-testid="ot-report-preset-personalizada"
-            >
+            <span {...etiquetaKit("neutral")} data-testid="ot-report-preset-personalizada">
+              <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
               Selección propia
             </span>
           )}
@@ -501,7 +508,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
         {exportState.notice && (
           <p
             role="status"
-            className="rounded-xl bg-[#F5F7FA] px-3 py-2 text-[11px] text-[#6B7280] dark:bg-white/5 dark:text-white/60"
+            className="rounded-xl bg-secondary px-3 py-2 text-[11px] text-muted-foreground"
           >
             {exportState.notice}
           </p>
@@ -518,8 +525,8 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
         ) : (
           <>
             <div className={CARDLIST_SCROLL}>
-              <table className={`min-w-[40rem] ${CARDLIST_TABLE}`} data-testid="ot-report-table">
-                <thead>
+              <table className={`min-w-[40rem] ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} data-testid="ot-report-table">
+                <thead className={TABLA_MOVIL_THEAD_CLS}>
                   <tr className={CARDLIST_HEAD_ROW}>
                     {columns.map((column) => (
                       <th key={column.id} scope="col" className={CARDLIST_TH}>
@@ -527,7 +534,7 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                           <button
                             type="button"
                             onClick={() => toggleSort(column.sort!)}
-                            className="flex items-center gap-1 uppercase transition hover:text-flit-brand"
+                            className="flex items-center gap-1 normal-case text-inherit transition hover:opacity-80"
                             aria-label={`Ordenar por ${column.label}`}
                           >
                             {column.label}
@@ -542,16 +549,17 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
                     ))}
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={TABLA_MOVIL_TBODY_CLS}>
                   {report.filas.map((row) => (
                     <tr
                       key={row.procedureInstanceId}
-                      className={CARDLIST_ROW}
+                      className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}
                     >
-                      {columns.map((column) => (
+                      {columns.map((column, i) => (
                         <td
                           key={column.id}
-                          className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""}`}
+                          data-label={column.label}
+                          className={`${CARDLIST_CELL} ${column.numeric ? "tabular-nums" : ""} ${TABLA_MOVIL_CELL_CLS} ${i === 0 ? TABLA_MOVIL_CELL_TITULO_CLS : ""}`}
                         >
                           {column.id === "estado" ? (
                             <EstadoChip estado={row.estadoOt} />
@@ -585,12 +593,8 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
 function EstadoChip({ estado }: { estado: string }) {
   const meta = estadoMeta(estado);
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-      style={{ background: `${meta.color}1A`, color: meta.color }}
-      title={meta.hint}
-    >
-      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full" style={{ background: meta.color }} />
+    <span {...etiquetaKit({ c: meta.color })} title={meta.hint}>
+      <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
       {meta.label}
     </span>
   );

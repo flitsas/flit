@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye } from 'lucide-react';
+import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { RowActions } from '@/components/atom/RowActions';
 import { Pagination } from '@/components/atom/Pagination';
@@ -9,6 +9,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from '@/components/atom/table-styles';
 import { formatFechaHora } from '@/lib/format/date';
 import { revocationRequestListLabel, revocationRequestListTone } from '@/lib/tramites/estados';
@@ -49,7 +50,7 @@ export function RevocationRequestsTable({
   const page = Math.floor(skip / take) + 1;
 
   return (
-    <div className="flex flex-1 flex-col gap-3">
+    <div className={`flex flex-1 flex-col gap-3 ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
         <table
           aria-label="Solicitudes de revocatoria"
@@ -128,44 +129,44 @@ export function RevocationRequestsTable({
             {items.map((item) => (
               <tr
                 key={item.revocationRequestId}
-                className={`bg-white text-xs dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                className={`bg-card text-xs ${TABLA_ROW_HOVER_CLS}`}
               >
                 <td
                   className="rounded-l-xl border-y border-l px-4 py-3 font-semibold"
-                  style={{ borderColor: '#DFE5ED' }}
+                  style={{ borderColor: 'var(--border)' }}
                 >
                   {item.referenceNumber}
                 </td>
-                <td className="border-y px-4 py-3 uppercase" style={{ borderColor: '#DFE5ED' }}>
+                <td className="border-y px-4 py-3 uppercase" style={{ borderColor: 'var(--border)' }}>
                   {item.placa ?? '—'}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: '#DFE5ED' }}>
+                <td className="border-y px-4 py-3" style={{ borderColor: 'var(--border)' }}>
                   {item.transitOfficeName ?? '—'}
                 </td>
-                <td className="border-y px-4 py-3" style={{ borderColor: '#DFE5ED' }}>
+                <td className="border-y px-4 py-3" style={{ borderColor: 'var(--border)' }}>
                   <StatusBadge
                     label={revocationRequestListLabel(item.status)}
                     tone={revocationRequestListTone(item.status)}
                   />
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: '#DFE5ED' }}>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: 'var(--border)' }}>
                   {item.attemptNumber}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: '#DFE5ED' }}>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: 'var(--border)' }}>
                   {formatFechaHora(item.requestedAt)}
                 </td>
-                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: '#DFE5ED' }}>
+                <td className="border-y px-4 py-3 opacity-80" style={{ borderColor: 'var(--border)' }}>
                   {formatFechaHora(item.decidedAt)}
                 </td>
                 {onView ? (
                   <td
                     className="rounded-r-xl border-y border-r px-4 py-3 text-right"
-                    style={{ borderColor: '#DFE5ED' }}
+                    style={{ borderColor: 'var(--border)' }}
                   >
                     <RowActions
                       actions={[
                         {
-                          icon: Eye,
+                          icon: iconoComo("ojo"),
                           label: `Ver trámite ${item.referenceNumber}`,
                           onClick: () => onView(item),
                           tone: 'primary',
@@ -174,7 +175,7 @@ export function RevocationRequestsTable({
                     />
                   </td>
                 ) : (
-                  <td className="rounded-r-xl border-y border-r" style={{ borderColor: '#DFE5ED' }} />
+                  <td className="rounded-r-xl border-y border-r" style={{ borderColor: 'var(--border)' }} />
                 )}
               </tr>
             ))}

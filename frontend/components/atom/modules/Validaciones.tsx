@@ -1,5 +1,6 @@
 'use client';
 
+import { etiquetaKit } from '@flit/ui/StatusBadge';
 import {
   useCallback,
   useEffect,
@@ -8,25 +9,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import {
-  AlertCircle,
-  AlertTriangle,
-  Bell,
-  CheckCircle2,
-  CalendarX,
-  ChevronDown,
-  Clock,
-  Copy,
-  ExternalLink,
-  ListTree,
-  Pencil,
-  RotateCcw,
-  ScanFace,
-  Send,
-  ShieldCheck,
-  X,
-  XCircle,
-} from 'lucide-react';
+import { CalendarX, ListTree } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
 import { ModuleTitle } from './ModuleTitle';
 import { SectionTabs } from '@/components/atom/SectionTabs';
@@ -55,6 +40,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from '@/components/atom/table-styles';
 import { ColumnSelector } from '@/components/atom/ColumnSelector';
 import { SearchableSelect } from '@/components/atom/SearchableSelect';
@@ -110,6 +96,12 @@ import { familiaLabel } from '@/lib/api/types/familia-labels';
 
 import { ZONA_COLOMBIA, formatFechaHora } from '@/lib/format/date';
 import { useTamanoDePagina } from '@/components/atom/usePaginacion';
+import { buttonClass } from '@flit/ui/Button';
+import {
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_PANEL,
+} from '@/components/operacion/dialogo-propio';
+import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 /**
 
  * Módulo ÚNICO de Identidad: validaciones y prevalidaciones viven aquí (antes había una pantalla
@@ -184,17 +176,18 @@ function maskDoc(tipoDoc: string, documento: string): string {
  * (verde holgado, ámbar por vencer, rojo vencida) + etiqueta. La vigencia es de 30 días desde la
  * aprobación; el backend ya calcula los días (0 = vencida). Null cuando la validación no está aprobada.
  */
-function vigenciaBadge(dias: number | null): { label: string; color: string; bg: string } | null {
+function vigenciaBadge(dias: number | null): { label: string; color: string; bg: string; tono: 'danger' | 'warning' | 'success' } | null {
   if (dias == null) return null;
-  if (dias <= 0) return { label: 'Vencida', color: '#E43D30', bg: 'rgba(228,61,48,0.12)' };
+  if (dias <= 0) return { label: 'Vencida', color: 'var(--badge-danger-fg)', bg: 'var(--badge-danger-bg)', tono: 'danger' };
   if (dias <= 7) {
     return {
       label: `Por vencer (≤${dias} día${dias === 1 ? '' : 's'})`,
-      color: '#F05A35',
-      bg: 'rgba(249,172,0,0.16)',
+      color: 'var(--badge-warning-fg)',
+      bg: 'var(--badge-warning-bg)',
+      tono: 'warning',
     };
   }
-  return { label: 'Vigente', color: '#70CF3A', bg: 'rgba(140,198,63,0.16)' };
+  return { label: 'Vigente', color: 'var(--badge-success-fg)', bg: 'var(--badge-success-bg)', tono: 'success' };
 }
 
 /** Cadencia del auto-refresco en vivo de la grilla (fase 2). 15 s: fresco sin presionar el backend. */
@@ -1101,7 +1094,7 @@ function ValidacionesLista({
     ) : null;
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-foreground">
       {/* Anuncios para lector de pantalla del resultado de crear/editar/reenviar (WCAG 2.1 AA) */}
       <div className="sr-only" role="status" aria-live="polite">
         {liveMessage}
@@ -1118,13 +1111,12 @@ function ValidacionesLista({
               onClick={() => setIncidenciasOpen(true)}
               aria-label="Ver alertas de validación"
               aria-busy={stuckLoading}
-              className="relative grid h-7 w-7 place-items-center rounded-lg border border-[#DFE5ED] bg-white transition hover:bg-[#EEF5FF] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand dark:bg-[#162744]"
+              className="relative grid h-7 w-7 place-items-center rounded-lg border border-border bg-card transition hover:bg-secondary focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
             >
-              <Bell className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="campana" className="h-3.5 w-3.5" />
               {!stuckLoading && stuck && stuck.total > 0 ? (
                 <span
-                  className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold text-white"
-                  style={{ background: '#FF4E00' }}
+                  className="absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full px-1 text-[10px] font-bold text-white bg-flit-alert"
                 >
                   {stuck.total > 99 ? '99+' : stuck.total}
                 </span>
@@ -1153,7 +1145,7 @@ function ValidacionesLista({
           aria-describedby={networkActive ? 'val-nueva-solo-propio' : undefined}
           title={networkActive ? 'Disponible en Mi compañía' : undefined}
           className="flex h-[88px] w-full shrink-0 flex-col items-center justify-center rounded-2xl px-4 text-[13px] font-semibold leading-tight text-white transition hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:cursor-not-allowed disabled:opacity-50 sm:w-36"
-          style={{ background: 'linear-gradient(90deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)' }}
+          style={{ background: 'var(--di-gradient-action)' }}
         >
           <span>Nueva</span>
           <span>prevalidación</span>
@@ -1233,19 +1225,18 @@ function ValidacionesLista({
       {error && (
         <div
           className="rounded-2xl p-4 border text-xs flex items-start gap-3"
-          style={{ borderColor: '#E43D30', background: 'rgba(228,61,48,0.06)', color: '#E43D30' }}
+          style={{ borderColor: 'var(--badge-danger-border)', background: 'var(--badge-danger-bg)', color: 'var(--badge-danger-fg)' }}
           role="alert"
           aria-live="polite"
         >
-          <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+          <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" />
           <div className="space-y-2">
             <p className="font-semibold">No se pudieron cargar las validaciones.</p>
             <p className="opacity-80">{error}</p>
             <button
               type="button"
               onClick={() => void handleRefresh()}
-              className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: '#E43D30' }}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-semibold bg-destructive text-destructive-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
             >
               Reintentar
             </button>
@@ -1261,7 +1252,7 @@ function ValidacionesLista({
           className="flex-1 min-h-0 grid place-items-center rounded-2xl border"
         >
           <div className="text-center max-w-md px-6 py-10">
-            <ScanFace className="mx-auto h-10 w-10 opacity-30" aria-hidden="true" />
+            <Icono nombre="biometria" className="mx-auto h-10 w-10 opacity-30" />
             {filtersActive ? (
               // AC2 — hubo respuesta vacía CON filtros activos: no es el estado inicial sin datos.
               <>
@@ -1282,7 +1273,7 @@ function ValidacionesLista({
                   type="button"
                   onClick={handleNew}
                   className="mt-4 mx-auto flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-                  style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
+                  style={{ background: 'var(--gradient-action)' }}
                 >
                   Nueva prevalidación
                 </button>
@@ -1293,7 +1284,7 @@ function ValidacionesLista({
       )}
 
       {!initialLoading && !isEmpty && persons !== null && (
-        <div className="flex flex-col">
+        <div className={`flex flex-col ${TABLA_TARJETA_CLS}`}>
           <PersonasTable
             rows={persons}
             columns={tableColumns}
@@ -1423,16 +1414,21 @@ function ValidacionesLista({
       {/* Confirmación de envío (HU #10944, AC2): reenvío standalone o reintento de trámite */}
       {confirmAction && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${MODAL_VELO_CLS}`}
           role="alertdialog"
           aria-modal="true"
           aria-labelledby="val-resend-confirm-title"
         >
-          <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0B0F14]">
-            <h2 id="val-resend-confirm-title" className="text-base font-semibold text-flit-primary dark:text-white">
-              Reenviar validación
-            </h2>
-            <p className="mt-2 text-sm opacity-70">
+          <div className={`${DIALOGO_PANEL} w-full max-w-sm`}>
+            <div className={MODAL_CABECERA_CLS}>
+              <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+              <Icono nombre="radicacion" disco size={52} />
+              <h2 id="val-resend-confirm-title" className={MODAL_TITULO_CLS}>
+                Reenviar validación
+              </h2>
+            </div>
+            <div className="p-6">
+            <p className="text-sm opacity-70">
               {confirmAction.mode === 'retry' ? (
                 <>
                   Se lanzará una validación de identidad <strong>nueva</strong> para{' '}
@@ -1448,7 +1444,7 @@ function ValidacionesLista({
               )}
             </p>
             {resendConfirmError && (
-              <p role="alert" aria-live="assertive" className="mt-2 text-xs font-medium" style={{ color: '#FF4E00' }}>
+              <p role="alert" aria-live="assertive" className="mt-2 text-xs font-medium text-destructive">
                 {resendConfirmError}
               </p>
             )}
@@ -1460,7 +1456,7 @@ function ValidacionesLista({
                   setResendConfirmError(null);
                 }}
                 disabled={resendSubmitting}
-                className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary transition hover:bg-black/5 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand disabled:opacity-50 dark:text-white dark:hover:bg-white/10"
+                className={buttonClass({ variant: 'secondary', size: 'sm' })}
               >
                 Cancelar
               </button>
@@ -1468,11 +1464,11 @@ function ValidacionesLista({
                 type="button"
                 onClick={() => void handleConfirmAction()}
                 disabled={resendSubmitting}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-60 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
-                style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
+                className={buttonClass({ size: 'sm' })}
               >
                 {resendSubmitting ? 'Enviando…' : 'Confirmar reenvío'}
               </button>
+            </div>
             </div>
           </div>
         </div>
@@ -1536,16 +1532,21 @@ function CompanyPickerDialog({
   const [elegida, setElegida] = useState('');
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${MODAL_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="val-pick-company-title"
     >
-      <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl dark:bg-[#0B0F14]">
-        <h2 id="val-pick-company-title" className="text-base font-semibold text-flit-primary dark:text-white">
-          ¿Para qué compañía es la prevalidación?
-        </h2>
-        <p className="mt-1 text-sm opacity-70">
+      <div className={`${DIALOGO_PANEL} w-full max-w-md`}>
+        <div className={MODAL_CABECERA_CLS}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <Icono nombre="empresas" disco size={52} />
+          <h2 id="val-pick-company-title" className={MODAL_TITULO_CLS}>
+            ¿Para qué compañía es la prevalidación?
+          </h2>
+        </div>
+        <div className="p-6">
+        <p className="text-sm opacity-70">
           Estás viendo todas las compañías. La prevalidación queda registrada en la que elijas.
         </p>
         <div className="mt-4">
@@ -1562,7 +1563,7 @@ function CompanyPickerDialog({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-xl border px-4 py-2 text-sm font-medium text-flit-primary transition hover:bg-black/5 dark:text-white dark:hover:bg-white/10"
+            className={buttonClass({ variant: 'secondary', size: 'sm' })}
           >
             Cancelar
           </button>
@@ -1570,11 +1571,11 @@ function CompanyPickerDialog({
             type="button"
             onClick={() => onPick(elegida)}
             disabled={elegida === ''}
-            className="rounded-xl px-4 py-2 text-sm font-semibold text-white transition disabled:opacity-50"
-            style={{ background: 'linear-gradient(90deg, #4FD4CC 0%, var(--color-flit-brand) 100%)' }}
+            className={buttonClass({ size: 'sm' })}
           >
             Continuar
           </button>
+        </div>
         </div>
       </div>
     </div>
@@ -1592,16 +1593,15 @@ function LiveIndicator({ at }: { at: Date | null }) {
     : null;
   return (
     <span
-      className="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold shrink-0"
-      style={{ background: 'rgba(140,198,63,0.16)', color: '#4F7A12' }}
+      {...etiquetaKit('success', { className: 'shrink-0' })}
       title={time ? `La lista se actualiza automáticamente · ${time}` : 'La lista se actualiza automáticamente'}
     >
       <span className="relative flex h-2 w-2" aria-hidden="true">
         <span
           className="absolute inline-flex h-full w-full animate-ping rounded-full opacity-60"
-          style={{ background: '#8CC63F' }}
+          style={{ background: 'var(--flit-success-ink)' }}
         />
-        <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: '#8CC63F' }} />
+        <span className="relative inline-flex h-2 w-2 rounded-full" style={{ background: 'var(--flit-success-ink)' }} />
       </span>
       En vivo
     </span>
@@ -1690,8 +1690,7 @@ function StuckIncidenciasDialog({
   const total = stuck?.total ?? 0;
   return (
     <div
-      className="fixed inset-0 z-50 grid place-items-center p-6"
-      style={{ background: 'rgba(22,39,68,0.45)', backdropFilter: 'blur(6px)' }}
+      className={`fixed inset-0 z-50 grid place-items-center p-6 ${MODAL_VELO_CLS}`}
       role="presentation"
       onClick={onClose}
     >
@@ -1699,23 +1698,29 @@ function StuckIncidenciasDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="incidencias-title"
-        className="relative max-h-[88vh] w-full max-w-5xl overflow-y-auto rounded-2xl border border-[#DFE5ED] bg-white p-6 dark:bg-[#162744]"
+        className={`${DIALOGO_PANEL} flex max-h-[88vh] w-full max-w-5xl flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
+        {/* La X sigue primera en el orden de foco; se pinta sobre la franja, arriba a la derecha. */}
         <button
           type="button"
           onClick={onClose}
           aria-label="Cerrar"
-          className="absolute right-4 top-4 rounded-lg p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand"
+          className="absolute right-4 top-3 z-[2] grid h-10 w-10 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)] sm:right-5 sm:top-4"
         >
-          <X className="h-4 w-4 opacity-70" aria-hidden="true" />
+          <Icono nombre="cerrar" className="h-5 w-5" />
         </button>
-        <div className="flex flex-wrap items-start justify-between gap-4 pr-8">
+        <div className={`${MODAL_CABECERA_CLS}`}>
+          <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+          <Icono nombre="alerta" disco size={52} />
+          <h2 id="incidencias-title" className={MODAL_TITULO_CLS}>
+            Gestión de incidencias en validaciones
+          </h2>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h2 id="incidencias-title" className="text-base font-bold" style={{ color: 'var(--color-flit-brand)' }}>
-              Gestión de incidencias en validaciones
-            </h2>
-            <p className="mt-1 text-[13px] leading-snug opacity-70">
+            <p className="text-[13px] leading-snug opacity-70">
               {stuckError
                 ? 'No se pudieron cargar las validaciones atascadas.'
                 : total > 0
@@ -1729,8 +1734,7 @@ function StuckIncidenciasDialog({
                 type="button"
                 onClick={onRequeueAll}
                 disabled={requeuingAll || requeueAllDisabledReason !== null}
-                className="h-11 shrink-0 rounded-xl px-6 text-[13px] font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-                style={{ background: '#FF4E00' }}
+                className="h-11 shrink-0 rounded-xl px-6 text-[13px] font-semibold text-white bg-flit-alert disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
                 aria-label="Reintentar todas las validaciones atascadas"
                 aria-describedby={requeueAllDisabledReason ? 'requeue-all-reason' : undefined}
               >
@@ -1754,7 +1758,7 @@ function StuckIncidenciasDialog({
         {stuckError ? (
           <div
             className="mt-4 rounded-2xl border p-4 text-sm"
-            style={{ borderColor: '#F05A35', background: 'rgba(249,172,0,0.10)', color: '#F05A35' }}
+            style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)', color: 'var(--badge-warning-fg)' }}
             role="alert"
             aria-label="Error al cargar validaciones atascadas"
           >
@@ -1763,8 +1767,7 @@ function StuckIncidenciasDialog({
             <button
               type="button"
               onClick={onRetryLoad}
-              className="mt-2 rounded-lg px-3 py-1.5 text-xs font-semibold text-white"
-              style={{ background: '#F05A35' }}
+              className="mt-2 rounded-lg px-3 py-1.5 text-xs font-semibold text-white bg-flit-alert"
             >
               Reintentar
             </button>
@@ -1785,6 +1788,7 @@ function StuckIncidenciasDialog({
             />
           </div>
         ) : null}
+        </div>
       </div>
     </div>
   );
@@ -1839,7 +1843,7 @@ function StuckEventsBanner({
               const open = openKeys.has(group.key);
               const panelId = `stuck-group-${group.key}`;
               return (
-                <li key={group.key} className="rounded-2xl border bg-white p-4 dark:bg-[#0B0F14]" style={{ borderColor: '#DFE5ED' }}>
+                <li key={group.key} className="rounded-2xl border border-border bg-card p-4">
                   <button
                     type="button"
                     onClick={() => toggleGroup(group.key)}
@@ -1855,16 +1859,12 @@ function StuckEventsBanner({
                     </span>
                     <span className="flex items-center gap-2">
                       <span
-                        className="rounded-full px-2.5 py-1 text-xs font-semibold"
-                        style={{ background: 'rgba(255,78,0,0.14)', color: '#FF4E00' }}
+                        {...etiquetaKit({ c: 'var(--badge-pending-border)', ct: 'var(--badge-pending-fg)' })}
                       >
                         {group.events.length} evento{group.events.length === 1 ? '' : 's'} pendiente
                         {group.events.length === 1 ? '' : 's'}
                       </span>
-                    <ChevronDown
-                      className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`}
-                      aria-hidden="true"
-                    />
+                    <Icono nombre="abajo" className={`h-4 w-4 shrink-0 transition-transform ${open ? 'rotate-180' : ''}`} />
                     </span>
                   </button>
                   {open && (
@@ -1902,27 +1902,24 @@ function StuckEventsBanner({
   return (
     <section
       className="rounded-2xl border px-3 py-2 shrink-0"
-      style={{ borderColor: '#F05A35', background: 'rgba(249,172,0,0.10)' }}
+      style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)' }}
       aria-label="Validaciones de identidad atascadas"
     >
       <div className="flex items-center gap-2">
-        <AlertTriangle className="h-4 w-4 shrink-0" style={{ color: '#F05A35' }} aria-hidden="true" />
+        <Icono nombre="alerta" className="h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} />
         <button
           type="button"
           onClick={() => setOpenPanel((v) => !v)}
           aria-expanded={openPanel}
           aria-controls="stuck-panel"
           className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-          style={{ color: '#F05A35' }}
+          style={{ color: 'var(--badge-warning-fg)' }}
         >
           <span className="truncate" role="status" aria-live="polite">
             {stuck.total} validación{stuck.total === 1 ? '' : 'es'} de identidad atascada
             {stuck.total === 1 ? '' : 's'}
           </span>
-          <ChevronDown
-            className={`h-3.5 w-3.5 shrink-0 transition-transform ${openPanel ? 'rotate-180' : ''}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="abajo" className={`h-3.5 w-3.5 shrink-0 transition-transform ${openPanel ? 'rotate-180' : ''}`} />
         </button>
         {stuck.total > 1 && (
           <button
@@ -1930,10 +1927,10 @@ function StuckEventsBanner({
             onClick={onRequeueAll}
             disabled={requeuingAll}
             className="flex shrink-0 items-center gap-1 rounded-lg border px-2.5 py-1 text-xs font-semibold disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-            style={{ borderColor: '#F05A35', color: '#F05A35' }}
+            style={{ borderColor: 'var(--badge-warning-border)', color: 'var(--badge-warning-fg)' }}
             aria-label="Reintentar todas las validaciones atascadas"
           >
-            <RotateCcw className={`h-3 w-3 ${requeuingAll ? 'animate-spin' : ''}`} aria-hidden="true" />
+            <Icono nombre="reintento" className={`h-3 w-3 ${requeuingAll ? 'animate-spin' : ''}`} />
             {requeuingAll ? 'Reencolando…' : 'Reintentar todos'}
           </button>
         )}
@@ -1961,17 +1958,16 @@ function StuckRow({
   const kindLabel = esEnvio ? 'Envío a proveedor' : 'Firma · FUR';
   return (
     <li
-      className="flex items-center justify-between gap-3 rounded-xl border bg-white px-3 py-2 text-xs dark:bg-[#0B0F14]"
-      style={{ borderColor: 'rgba(240,90,53,0.3)' }}
+      className="flex items-center justify-between gap-3 rounded-xl border bg-card px-3 py-2 text-xs"
+      style={{ borderColor: 'var(--badge-warning-border)' }}
     >
       <span className="min-w-0 truncate">
         <span
-          className="mr-1.5 inline-block rounded px-1.5 py-px text-[10px] font-semibold align-middle"
-          style={{ background: 'rgba(240,90,53,0.14)', color: '#F05A35' }}
+          {...etiquetaKit('warning', { className: 'mr-1.5 align-middle' })}
         >
           {kindLabel}
         </span>
-        {company ? <span className="mr-1.5 font-semibold text-[#4F74C9]">{company} ·</span> : null}
+        {company ? <span className="mr-1.5 font-semibold text-flit-brand-ink">{company} ·</span> : null}
         <span className="font-medium">{event.name ?? 'Persona no disponible'}</span>
         <span className="opacity-60">
           {event.documentNumber ? ` · ${maskDoc(event.documentType ?? '', event.documentNumber)}` : ''}
@@ -1983,11 +1979,10 @@ function StuckRow({
         type="button"
         onClick={() => onRequeue(event)}
         disabled={busy}
-        className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 font-semibold text-white disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ background: '#F05A35' }}
+        className="flex shrink-0 items-center gap-1 rounded-lg px-2.5 py-1 font-semibold text-white bg-flit-alert disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
         aria-label={`Reintentar la validación de ${event.name ?? 'persona no disponible'}`}
       >
-        <RotateCcw className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} aria-hidden="true" />
+        <Icono nombre="reintento" className={`h-3 w-3 ${busy ? 'animate-spin' : ''}`} />
         {busy ? 'Reencolando…' : 'Reintentar'}
       </button>
     </li>
@@ -2011,25 +2006,25 @@ function StatsCards({
   loading: boolean;
 }) {
   const cards = [
-    { l: 'Total personas', v: totalPersonas, i: ShieldCheck, c: '#4F74C9' },
-    { l: 'Aprobadas', v: stats?.aprobadas, i: CheckCircle2, c: '#70CF3A' },
-    { l: 'En proceso', v: stats?.enProceso, i: Clock, c: '#F05A35' },
-    { l: 'Rechazadas', v: stats?.rechazadas, i: XCircle, c: '#E43D30' },
+    { l: 'Total personas', v: totalPersonas, i: iconoComo("escudo"), c: 'var(--badge-info-fg)', b: 'var(--badge-info-bg)' },
+    { l: 'Aprobadas', v: stats?.aprobadas, i: iconoComo("check"), c: 'var(--badge-success-fg)', b: 'var(--badge-success-bg)' },
+    { l: 'En proceso', v: stats?.enProceso, i: iconoComo("reloj"), c: 'var(--badge-warning-fg)', b: 'var(--badge-warning-bg)' },
+    { l: 'Rechazadas', v: stats?.rechazadas, i: iconoComo("cerrar"), c: 'var(--badge-danger-fg)', b: 'var(--badge-danger-bg)' },
   ];
   return (
     <div
-      className="grid grid-cols-2 divide-x divide-[#EEF2F7] rounded-2xl border border-[#DFE5ED] bg-white shadow-sm sm:grid-cols-4 dark:bg-[#162744] shrink-0"
+      className="grid grid-cols-2 divide-x divide-border rounded-2xl border border-border bg-card sm:grid-cols-4 shrink-0"
     >
       {cards.map((k) => {
         const Icon = k.i;
         return (
           <div key={k.l} className="flex flex-col items-center justify-center gap-1 px-3 py-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full" style={{ background: `${k.c}1F` }}>
+            <span className="flex h-7 w-7 items-center justify-center rounded-full" style={{ background: k.b }}>
               <Icon className="h-3.5 w-3.5" style={{ color: k.c }} aria-hidden="true" />
             </span>
             <p className="w-full truncate text-center text-xs font-medium opacity-70">{k.l}</p>
             {loading ? (
-              <div className="h-6 w-12 animate-pulse rounded bg-black/10 dark:bg-white/10" aria-hidden="true" />
+              <div className="h-6 w-12 animate-pulse rounded bg-secondary" aria-hidden="true" />
             ) : (
               <p className="text-lg font-bold leading-none" style={{ color: k.c }}>
                 {k.v ?? 0}
@@ -2426,7 +2421,7 @@ function ValidacionRow({
     actionItems.push({
       key: 'copiar',
       label: copied ? 'Enlace copiado' : 'Copiar enlace',
-      icon: Copy,
+      icon: iconoComo("copiar"),
       onSelect: () => {
         void copiarEnlace();
       },
@@ -2434,7 +2429,7 @@ function ValidacionRow({
     actionItems.push({
       key: 'abrir',
       label: 'Abrir captura',
-      icon: ExternalLink,
+      icon: iconoComo("externo"),
       onSelect: () => {
         window.open(r.captureUrl!, '_blank', 'noopener,noreferrer');
       },
@@ -2445,14 +2440,14 @@ function ValidacionRow({
     actionItems.push({
       key: 'nueva',
       label: 'Nueva prevalidación',
-      icon: ScanFace,
+      icon: iconoComo("biometria"),
       onSelect: () => onNewFor(r),
     });
   } else if (!isTramite) {
     actionItems.push({
       key: 'editar',
       label: 'Editar',
-      icon: Pencil,
+      icon: iconoComo("lapiz"),
       onSelect: () => onEdit(r),
     });
   }
@@ -2468,7 +2463,7 @@ function ValidacionRow({
         // Mismo rótulo que en las prevalidaciones: para el gestor la acción es "reenviar", aunque
         // por dentro sean endpoints distintos (aquí nace una validación nueva para la parte).
         label: 'Reenviar',
-        icon: sinParte ? Clock : Send,
+        icon: sinParte ? iconoComo("reloj") : iconoComo("radicacion"),
         onSelect: () => onRetryClick(r),
         disabled: sinParte,
         disabledReason: sinParte
@@ -2489,7 +2484,7 @@ function ValidacionRow({
       actionItems.push({
         key: 'admin-reenviar',
         label: 'Reenviar',
-        icon: Send,
+        icon: iconoComo("radicacion"),
         onSelect: () => onAdminReenviarClick(r),
       });
     }
@@ -2499,7 +2494,7 @@ function ValidacionRow({
     actionItems.push({
       key: 'reenviar',
       label: 'Reenviar',
-      icon: resendDisabledReason ? Clock : Send,
+      icon: resendDisabledReason ? iconoComo("reloj") : iconoComo("radicacion"),
       onSelect: () => onResendClick(r),
       disabled: resendDisabledReason !== null,
       disabledReason: resendDisabledReason ?? undefined,
@@ -2530,13 +2525,12 @@ function ValidacionRow({
     tramite: (
       <div className="min-w-0">
         {r.referenceNumber ? (
-          <span className="flex items-center gap-1 font-mono font-semibold" style={{ color: '#4F74C9' }}>
+          <span className="flex items-center gap-1 font-mono font-semibold text-flit-brand-ink">
             <span className="truncate">{r.referenceNumber}</span>
           </span>
         ) : (
           <span
-            className="inline-block max-w-full rounded-full px-2 py-0.5 text-center text-[10px] font-semibold leading-tight"
-            style={{ background: 'rgba(79,116,201,0.12)', color: '#4F74C9' }}
+            {...etiquetaKit('info', { className: 'max-w-full' })}
           >
             {esMandatario ? 'Mandatario' : 'Prevalidación'}
           </span>
@@ -2596,8 +2590,7 @@ function ValidacionRow({
         {vigencia ? (
           <span
             title={r.validUntil ? formatFechaCorta(r.validUntil) : undefined}
-            className="font-medium"
-            style={{ color: vigencia.color }}
+            {...etiquetaKit(vigencia.tono)}
           >
             {vigencia.label}
           </span>
@@ -2622,11 +2615,11 @@ function ValidacionRow({
   const menuItems = soloConsulta || esMandatario ? actionItems.filter((i) => i.key === 'proceso') : actionItems;
 
   const celdaCls = 'border-y px-4 py-3 align-middle';
-  const celdaStyle = { borderColor: '#DFE5ED' };
+  const celdaStyle = { borderColor: 'var(--table-row-border)' };
 
   return (
     // Fila no navegable: el detalle/proceso se abre solo desde Acciones → Ver proceso.
-    <tr aria-label={ariaLabel} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
+    <tr aria-label={ariaLabel} className={`bg-card ${TABLA_ROW_HOVER_CLS}`}>
       {columns.map((key, i) => (
         <td
           key={key}
@@ -2644,13 +2637,13 @@ function ValidacionRow({
           <ActionsMenu
             ariaLabel={`Acciones de validación de ${r.name}`}
             items={menuItems}
-            className="bg-white dark:bg-[#0B0F14]"
+            className="bg-card"
           />
           {!isTramite && !esMandatario && admiteReenvio && resendDisabledReason && (
             <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
           )}
           {copied && (
-            <span className="text-[10px] font-semibold" style={{ color: '#4F74C9' }} role="status" aria-live="polite">
+            <span className="text-[10px] font-semibold text-flit-brand-ink" role="status" aria-live="polite">
               Enlace copiado
             </span>
           )}

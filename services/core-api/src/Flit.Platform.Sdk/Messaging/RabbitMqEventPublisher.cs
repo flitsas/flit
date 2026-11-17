@@ -14,7 +14,8 @@ public interface IEventPublisher
 /// Publicador sobre RabbitMQ.Client (ADR-0064): una conexión por proceso, canal con confirmaciones del broker
 /// (<c>BasicPublishAsync</c> espera el ack y falla con un nack o si se cae la conexión), mensajes persistentes y el
 /// exchange topic <c>flit.&lt;productor&gt;</c> declarado (durable, idempotente) la primera vez; el exchange de otro servicio
-/// (trabajos) solo se comprueba. Si la conexión se pierde, la siguiente publicación abre otra.
+/// (trabajos) solo se comprueba. Si la conexión se pierde, la siguiente publicación abre otra. Cada mensaje lleva
+/// <c>user_id</c> = usuario de la conexión, que el broker valida (HU #13727).
 /// </summary>
 internal sealed class RabbitMqEventPublisher(PlatformMessagingOptions options) : IEventPublisher, IAsyncDisposable
 {
@@ -22,6 +23,7 @@ internal sealed class RabbitMqEventPublisher(PlatformMessagingOptions options) :
     private readonly ConcurrentDictionary<string, bool> _declared = new(StringComparer.Ordinal);
     private IConnection? _connection;
     private IChannel? _channel;
+    private string? _usuario;
 
     public async Task PublishAsync(OutboxMessage message, CancellationToken ct)
     {
@@ -52,6 +54,9 @@ internal sealed class RabbitMqEventPublisher(PlatformMessagingOptions options) :
                 DeliveryMode = DeliveryModes.Persistent,
                 Timestamp = new AmqpTimestamp(envelope.OccurredAt.ToUnixTimeSeconds()),
                 Headers = new Dictionary<string, object?> { ["x-flit-tenant-id"] = envelope.TenantId.ToString() },
+                // HU #13727 (ADR-0075): RabbitMQ rechaza un user_id distinto del usuario autenticado, así que el consumidor
+                // puede confiar en él para saber qué servicio publicó (PlatformConsumerOptions.ProductoresPermitidos).
+                UserId = _usuario ??= UsuarioDe(options.ConnectionString),
             };
             await channel.BasicPublishAsync(message.Exchange, message.RoutingKey, mandatory: false, properties,
                 Encoding.UTF8.GetBytes(message.Payload), ct).ConfigureAwait(false);
@@ -105,6 +110,9 @@ internal sealed class RabbitMqEventPublisher(PlatformMessagingOptions options) :
             // Una conexión ya caída puede fallar al cerrarse; no importa, se abre otra.
         }
     }
+
+    /// <summary>Usuario con que se autentica la conexión de <paramref name="uri"/> (<c>guest</c> si la URI no trae usuario).</summary>
+    internal static string UsuarioDe(string uri) => new ConnectionFactory { Uri = new Uri(uri) }.UserName;
 
     public async ValueTask DisposeAsync()
     {

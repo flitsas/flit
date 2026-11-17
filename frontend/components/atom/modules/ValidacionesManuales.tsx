@@ -1,7 +1,8 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
-import { Eye, Info, Link2, Search } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { DataTable, type DataTableColumn } from '@flit/ui/DataTable';
 import { ActionsMenu } from '@/components/atom/ActionsMenu';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
@@ -29,7 +30,7 @@ import { puedeCopiarEnlaceManual } from '@/lib/identity/manual-flow';
 /**
  * Pestaña «Validaciones manuales» de Validaciones (Épica #13202, HU-C5). Solo Super Admin: quien la monta
  * (`Validaciones`) ya comprobó el rol. Tabla del modelo único de trámites: `DataTable` (cabecera
- * `table-styles`, filas-tarjeta, sin tarjeta envolvente), `ActionsMenu`, paginación numerada con
+ * `table-styles`, filas-tarjeta y, desde la HU #14477, tarjeta envolvente), `ActionsMenu`, paginación numerada con
  * «Filas por página» y `CarLoaderModal` mientras carga.
  */
 
@@ -151,7 +152,7 @@ export function ValidacionesManuales({
     {
       key: 'nombre',
       header: 'Nombre',
-      render: (r) => <span className="font-semibold text-flit-primary dark:text-white">{r.fullName}</span>,
+      render: (r) => <span className="font-semibold text-foreground">{r.fullName}</span>,
     },
     { key: 'documento', header: 'Documento', render: (r) => <span className="font-mono">{r.documentNumber}</span> },
     { key: 'compania', header: 'Compañía', render: (r) => r.tenantName },
@@ -171,7 +172,7 @@ export function ValidacionesManuales({
               key: 'ver-detalle',
               label: 'Ver detalle',
               ariaLabel: `Ver detalle de ${r.fullName}`,
-              icon: Eye,
+              icon: iconoComo("ojo"),
               onSelect: () => setDetalleId(r.id),
             },
             // HU #14306: solo si espera captura del cliente (no aprobada ni con captura enviada).
@@ -181,7 +182,7 @@ export function ValidacionesManuales({
                     key: 'copiar-enlace',
                     label: 'Copiar enlace',
                     ariaLabel: `Copiar enlace de ${r.fullName}`,
-                    icon: Link2,
+                    icon: iconoComo("externo"),
                     onSelect: () => void copiar(r.id),
                   },
                 ]
@@ -200,7 +201,7 @@ export function ValidacionesManuales({
             Nombre o número de documento
           </label>
           <div className="relative mt-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-70" aria-hidden />
+            <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 opacity-70" />
             <input
               id={`${idBase}-q`}
               type="search"
@@ -265,7 +266,7 @@ export function ValidacionesManuales({
             color: 'var(--badge-info-fg)',
           }}
         >
-          <Info className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <Icono nombre="exclamacion" className="mt-0.5 h-4 w-4 shrink-0" />
           <p className="flex-1">No encontramos esa validación manual.</p>
           <button
             type="button"

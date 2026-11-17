@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AlertTriangle, Pencil } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActionsMenu } from "@/components/atom/RowActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -109,7 +110,7 @@ export function OtCompaniasMandatarioTable({
                 ariaLabel="Sin mandatario"
                 label={
                   <span className="inline-flex items-center gap-1" data-testid="ot-mandatos-sin-mandatario">
-                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden={true} />
+                    <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
                     Sin mandatario
                   </span>
                 }
@@ -119,7 +120,7 @@ export function OtCompaniasMandatarioTable({
           return name ? (
             name
           ) : (
-            <span className="text-[#59677D] dark:text-white/55">Sin definir</span>
+            <span className="text-muted-foreground">Sin definir</span>
           );
         },
       },
@@ -133,7 +134,7 @@ export function OtCompaniasMandatarioTable({
             subject={row.name}
             actions={[
               {
-                icon: Pencil,
+                icon: iconoComo("lapiz"),
                 label: `Editar mandatario de ${row.name}`,
                 tone: "primary",
                 onClick: () => onEdit(row),
@@ -155,7 +156,7 @@ export function OtCompaniasMandatarioTable({
   return (
     <div className="flex flex-col gap-3" data-testid="ot-mandatos-companias">
       <div className="flex flex-wrap items-end justify-between gap-2">
-        <h3 className="text-sm font-semibold text-[#162244] dark:text-white">Compañías</h3>
+        <h3 className="text-sm font-semibold text-foreground">Compañías</h3>
         <label className="min-w-[12rem] flex-1 sm:max-w-xs">
           <span className="sr-only">Buscar compañía por nombre o NIT</span>
           <input
@@ -164,7 +165,7 @@ export function OtCompaniasMandatarioTable({
             onChange={(e) => setEntrada(e.target.value)}
             placeholder="Buscar por nombre o NIT…"
             aria-describedby={corta ? "ot-mandatos-busqueda-ayuda" : undefined}
-            className="w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-[#162244] placeholder:text-[#59677D]/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+            className="w-full rounded-xl border border-input bg-background px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
             data-testid="ot-mandatos-company-search"
           />
         </label>
@@ -172,7 +173,7 @@ export function OtCompaniasMandatarioTable({
       {corta ? (
         <p
           id="ot-mandatos-busqueda-ayuda"
-          className="text-[11px] text-[#59677D] dark:text-white/65"
+          className="text-[11px] text-muted-foreground"
           data-testid="ot-mandatos-busqueda-ayuda"
         >
           Escribe al menos {MIN_BUSQUEDA_COMPANIAS} caracteres.
