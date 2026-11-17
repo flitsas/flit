@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { KeyRound, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 import { adminResetPassword } from "@/lib/api/auth";
@@ -71,7 +71,7 @@ export function ResetPasswordDialog({ user, onClose, onDone }: ResetPasswordDial
   }
 
   return (
-    <Modal open onClose={handleClose} title="Restablecer contraseña" size="sm">
+    <Modal open onClose={handleClose} title="Restablecer contraseña" icono="candado" size="sm">
       <div className="space-y-4 p-1">
         {success ? (
           <p className="text-sm opacity-80" role="status">
@@ -110,9 +110,9 @@ export function ResetPasswordDialog({ user, onClose, onDone }: ResetPasswordDial
               style={{ background: "var(--color-flit-brand)" }}
             >
               {busy ? (
-                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                <Icono nombre="girador" className="h-4 w-4 animate-spin" />
               ) : (
-                <KeyRound className="h-4 w-4" aria-hidden />
+                <Icono nombre="rol" className="h-4 w-4" />
               )}
               Confirmar reset
             </button>

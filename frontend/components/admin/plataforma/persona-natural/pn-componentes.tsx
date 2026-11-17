@@ -3,18 +3,21 @@
 // Piezas compartidas de Plataforma > Persona Natural (Épica #14021): botón con la estructura estándar (icono + texto,
 // deshabilitado y cargando), diálogo de confirmación para acciones que cambian lo que ve el ciudadano y encabezado de
 // sección con ayuda breve. Todo sale de los tokens de `pn-ui.ts` (línea base de globals.css).
-import { useState, type ButtonHTMLAttributes, type ReactNode } from "react";
-import { Loader2, type LucideIcon } from "lucide-react";
+import { useState, type ButtonHTMLAttributes, type ComponentType, type ReactNode } from "react";
+import { type LucideIcon } from "lucide-react";
+import { Icono, type NombreIcono } from "@flit/ui/Icono";
+import type { IconoComoProps } from "@flit/ui/iconoComo";
 import { Modal } from "@/components/atom/Modal";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { PN_CANCEL_BTN_CLS, PN_DANGER_BTN_STYLE, PN_PRIMARY_BTN_CLS, PN_PRIMARY_BTN_STYLE } from "./pn-ui";
 import { pnErrorMessage } from "./pnErrors";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 export type PnButtonVariant = "primary" | "secondary" | "danger";
 
 export interface PnButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "className" | "style"> {
   variant?: PnButtonVariant;
-  icon?: LucideIcon;
+  icon?: ComponentType<IconoComoProps>;
   /** Muestra el indicador de carga en lugar del icono y deshabilita el botón. */
   loading?: boolean;
 }
@@ -44,7 +47,7 @@ export function PnButton({
       style={style}
     >
       {loading ? (
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        <Icono nombre="girador" className="h-4 w-4 animate-spin" />
       ) : (
         Icon && <Icon className="h-4 w-4" aria-hidden="true" />
       )}
@@ -108,7 +111,8 @@ export function PnSeccionHeader({
           <h2 id={id} className="flex flex-wrap items-center gap-2 text-base font-bold text-flit-primary">
             {titulo}
             {contador && (
-              <span className="rounded-full bg-secondary px-2.5 py-0.5 text-xs font-semibold text-[color:var(--flit-brand-ink)]">
+              <span {...etiquetaKit("neutral")}>
+                <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                 {contador}
               </span>
             )}
@@ -123,11 +127,13 @@ export function PnSeccionHeader({
 
 export interface PnConfirmDialogProps {
   title: string;
-  icon: LucideIcon;
+  icon?: LucideIcon;
+  /** Ícono del kit en el disco del Modal; gana sobre `icon`. */
+  icono?: NombreIcono;
   /** `danger` para lo que deja de verse o se retira; `primary` para lo que se publica o se activa. */
   tone?: "danger" | "primary";
   confirmLabel: string;
-  confirmIcon?: LucideIcon;
+  confirmIcon?: ComponentType<IconoComoProps>;
   children: ReactNode;
   onClose: () => void;
   /** Ejecuta la acción; si lanza, el motivo se muestra aquí y el diálogo no se cierra. */
@@ -138,6 +144,7 @@ export interface PnConfirmDialogProps {
 export function PnConfirmDialog({
   title,
   icon,
+  icono,
   tone = "primary",
   confirmLabel,
   confirmIcon,
@@ -166,6 +173,7 @@ export function PnConfirmDialog({
       busy={busy}
       title={title}
       icon={icon}
+      icono={icono}
       iconBg={tone === "danger" ? "var(--destructive)" : "var(--color-flit-brand)"}
       size="sm"
       footer={

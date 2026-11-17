@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useMemo, useRef, useState } from "react";
-import { Check, ChevronDown, Search, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * Selector con buscador interno (combobox). Nace para los pickers de compañía: con decenas de
@@ -184,17 +184,15 @@ export function SearchableSelect({
         className={
           hideLabel
             ? "sr-only"
-            : "text-[10px] font-semibold uppercase opacity-60 text-flit-primary dark:text-foreground"
+            : // HU #14562 · D3: con opacity-60 daba 4,15:1; --di-text-tertiary da 5,56:1 en claro y 7,45:1 en oscuro.
+              "text-[10px] font-semibold uppercase text-[color:var(--di-text-tertiary)]"
         }
       >
         {label}
       </label>
 
       <div className="relative">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
-          aria-hidden="true"
-        />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40" />
         <input
           id={baseId}
           ref={inputRef}
@@ -235,7 +233,7 @@ export function SearchableSelect({
               aria-label="Quitar selección"
               className="rounded p-1 opacity-50 transition hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1"
             >
-              <X className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="cerrar" className="h-3.5 w-3.5" />
             </button>
           )}
           <button
@@ -253,10 +251,7 @@ export function SearchableSelect({
             aria-hidden="true"
             className="rounded p-1 opacity-50 transition hover:opacity-100 disabled:opacity-30"
           >
-            <ChevronDown
-              className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`}
-              aria-hidden="true"
-            />
+            <Icono nombre="abajo" className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
           </button>
         </div>
 
@@ -268,7 +263,8 @@ export function SearchableSelect({
             className="absolute z-50 mt-1 max-h-64 w-full overflow-y-auto rounded-xl border bg-card py-1 shadow-[var(--shadow-modal)]"
           >
             {filtradas.length === 0 && (
-              <li className="px-3 py-2 text-xs opacity-60">{noResultsLabel}</li>
+              // HU #14562 · N-1: como el hint (O-6), el token terciario en vez de opacity-60 (AA con la lista abierta).
+              <li className="px-3 py-2 text-xs text-[color:var(--di-text-tertiary)]">{noResultsLabel}</li>
             )}
             {filtradas.map((o, i) => {
               const activa = i === indiceActivo;
@@ -288,10 +284,11 @@ export function SearchableSelect({
                 >
                   <span className="min-w-0">
                     <span className="block truncate text-flit-primary dark:text-foreground">{o.label}</span>
-                    {o.hint && <span className="block truncate text-[10px] opacity-60">{o.hint}</span>}
+                    {/* HU #14562 · O-6: como la etiqueta (D3), el token terciario en vez de opacity-60 (AA con la lista abierta). */}
+                    {o.hint && <span className="block truncate text-[10px] text-[color:var(--di-text-tertiary)]">{o.hint}</span>}
                   </span>
                   {elegida && (
-                    <Check className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
+                    <Icono nombre="check" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
                   )}
                 </li>
               );

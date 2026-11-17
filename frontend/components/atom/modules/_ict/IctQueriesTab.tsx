@@ -8,6 +8,7 @@
 // las consultas del organismo y de la empresa gestora. Aquí solo queda lo que es propio de ICT: qué
 // columnas tiene su tabla, sobre qué fechas filtra y a qué endpoint llama.
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useMemo } from "react";
 import { QueryConsole } from "@/components/consultas/QueryConsole";
 import type { QuerySource, SavedQuery } from "@/lib/api/queries";
@@ -71,11 +72,7 @@ export function IctQueriesTab({ tenantId, onScheduleQuery }: IctQueriesTabProps)
       renderCell={(columnId, fila) =>
         columnId === "estado" ? (
           <span
-            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-            style={{
-              background: `color-mix(in srgb, ${ictEstadoMeta(fila.estado).color} 10%, transparent)`,
-              color: ictEstadoMeta(fila.estado).color,
-            }}
+            {...etiquetaKit({ c: ictEstadoMeta(fila.estado).color })}
           >
             {ictEstadoMeta(fila.estado).label}
           </span>

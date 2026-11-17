@@ -1,44 +1,55 @@
-import type { ButtonHTMLAttributes } from "react";
+import type { ButtonHTMLAttributes, MouseEvent } from "react";
 import { cn } from "./cn";
 
 /**
- * Familia `.btn` del prototipo «Diseño Inteligente» (rama `propuesta`, propuesta.css), HU #14476:
+ * Botones del Manual UI Kit 2026 (propuesta-2, ui-kit-2026.css `.btn`): píldora plana, sin sombra ni degradado.
  *
- * - `primary`: píldora con `--di-gradient-action`, sombra de botón y un levantón de 1 px al pasar el cursor.
- * - `secondary`: píldora blanca con contorno de control y texto de acción (el «Cancelar» de los diálogos).
- * - `navy`: píldora tinta sólida.
- * - `ghost`: solo texto de acción (el enlace o «Cerrar» del pie de los diálogos).
- *
- * El texto del principal va con `--di-on-action` (no `text-white`) para que, cuando el oscuro pase al degradado claro
- * del prototipo, baste con cambiar el token.
+ * - `primary`: azul (#1D53FF, AA con blanco) — avanza.
+ * - `secondary` y `navy`: azul oscuro (#162744) — navega o acción secundaria. En oscuro lleva un aro de 1 px.
+ * - `positiva`: verde (#8CC63F) con texto tinta — confirma.
+ * - `alerta`: naranja (#D44100) — alerta o acción destructiva.
+ * - `ghost`: solo texto de acción subrayado.
+ * Al pasar el cursor se oscurece (brillo 0,9) y al pulsar baja 1 px. Deshabilitado: gris del kit con texto blanco.
  */
-export type ButtonVariant = "primary" | "secondary" | "navy" | "ghost";
+export type ButtonVariant = "primary" | "secondary" | "navy" | "positiva" | "alerta" | "ghost";
 export type ButtonSize = "sm" | "md";
 
 const BASE =
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full font-semibold no-underline " +
-  "transition-[transform,box-shadow,background] duration-150 ease-[cubic-bezier(0.2,0,0,1)] " +
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-action)] focus-visible:ring-offset-2 " +
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-full border-0 font-semibold no-underline shadow-none " +
+  "transition-[filter,transform,background] duration-150 ease-[cubic-bezier(0.2,0,0,1)] " +
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--kit-azul-relleno)] focus-visible:ring-offset-2 " +
   "focus-visible:ring-offset-[var(--di-surface-elevated)] " +
-  "disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:translate-y-0 aria-busy:cursor-progress";
+  "disabled:cursor-not-allowed aria-busy:cursor-progress";
+
+const RELLENO =
+  "hover:brightness-90 active:brightness-[.78] active:translate-y-px " +
+  "disabled:bg-[color:var(--kit-gris)] disabled:text-white disabled:hover:brightness-100 disabled:active:translate-y-0";
+
+// HU #14562 · M9: el botón en espera usa aria-disabled en lugar de disabled, con el mismo aspecto del deshabilitado.
+// Estas clases solo se agregan con `cargando`; sin la prop, el marcado es el de siempre.
+const ESPERA_GHOST = "aria-disabled:text-[color:var(--kit-gris)] aria-disabled:hover:bg-transparent";
+const ESPERA_RELLENO =
+  "aria-disabled:bg-[color:var(--kit-gris)] aria-disabled:text-white aria-disabled:hover:brightness-100 aria-disabled:active:translate-y-0";
 
 const VARIANT: Record<ButtonVariant, string> = {
-  primary:
-    "border-0 [background:var(--di-gradient-action)] text-[color:var(--di-on-action)] shadow-[var(--shadow-button)] " +
-    "hover:[background:var(--di-gradient-action-hover)] hover:-translate-y-px disabled:hover:[background:var(--di-gradient-action)]",
-  secondary:
-    "border border-[color:var(--di-border-control)] bg-[color:var(--di-surface-elevated)] text-[color:var(--di-action)] " +
-    "hover:bg-[color:var(--di-accent-soft)] disabled:hover:bg-[color:var(--di-surface-elevated)]",
-  navy: "border-0 bg-[color:var(--di-accent)] text-[color:var(--di-on-accent)] hover:bg-[color:var(--di-accent-hover)]",
-  ghost: "border-0 bg-transparent text-[color:var(--di-action)] hover:bg-[color:var(--di-accent-soft)] disabled:hover:bg-transparent",
+  primary: `bg-[color:var(--kit-azul-relleno)] text-white ${RELLENO}`,
+  secondary: `bg-[color:var(--kit-tinta)] text-white dark:shadow-[inset_0_0_0_1px_#3a5688] ${RELLENO}`,
+  navy: `bg-[color:var(--kit-tinta)] text-white dark:shadow-[inset_0_0_0_1px_#3a5688] ${RELLENO}`,
+  positiva: `bg-[color:var(--kit-verde)] text-[color:var(--kit-tinta)] ${RELLENO}`,
+  alerta: `bg-[color:var(--kit-naranja-boton)] text-white ${RELLENO}`,
+  ghost:
+    "bg-transparent text-[color:var(--di-action)] underline underline-offset-[3px] hover:bg-[color:var(--kit-hover)] " +
+    "disabled:text-[color:var(--kit-gris)] disabled:hover:bg-transparent",
 };
 
 const SIZE: Record<ButtonSize, string> = {
   // .btn.sm: 36 px de alto (barras densas y pies de diálogo).
-  sm: "min-h-9 px-3.5 py-1.5 text-xs",
+  sm: "min-h-9 px-[18px] py-1.5 text-sm",
   // .btn: 44 px, el área táctil del sistema.
-  md: "min-h-11 px-5 py-2.5 text-sm",
+  md: "min-h-11 px-6 py-2.5 text-base",
 };
+
+const GHOST_PAD: Record<ButtonSize, string> = { sm: "px-3", md: "px-3" };
 
 /** Clases de la familia `.btn`, para pintar como botón un `<a>`, un `<Link>` o un botón propio. */
 export function buttonClass({
@@ -46,14 +57,61 @@ export function buttonClass({
   size = "md",
   className,
 }: { variant?: ButtonVariant; size?: ButtonSize; className?: string } = {}): string {
-  return cn(BASE, VARIANT[variant], SIZE[size], className);
+  return cn(BASE, VARIANT[variant], SIZE[size], variant === "ghost" && GHOST_PAD[size], className);
 }
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: ButtonVariant;
   size?: ButtonSize;
+  /**
+   * HU #14562 · UI-1: espera de una acción. Marca aria-busy y pone el girador antes del texto (gira solo con movimiento
+   * permitido). Sin la prop, o en `false`, el marcado es el de siempre.
+   * HU #14562 · M9: el botón queda inoperable con `aria-disabled="true"` y no con `disabled`, para que conserve el foco
+   * de quien lo pulsó con el teclado (2.4.3). Los clics se ignoran y no envía el formulario.
+   */
+  cargando?: boolean;
 }
 
-export function Button({ variant = "primary", size = "md", className, type = "button", ...rest }: ButtonProps) {
-  return <button type={type} className={buttonClass({ variant, size, className })} {...rest} />;
+export function Button({ variant = "primary", size = "md", className, type = "button", cargando, children, onClick, ...rest }: ButtonProps) {
+  if (!cargando) {
+    return (
+      <button type={type} className={buttonClass({ variant, size, className })} onClick={onClick} {...rest}>
+        {children}
+      </button>
+    );
+  }
+  // Mientras espera, un `disabled` del llamador (p. ej. «ocupado») tampoco se pone: soltaría el foco igual. El botón ya es
+  // inoperable por aria-disabled y el clic ignorado.
+  const { disabled: _disabled, ...resto } = rest;
+  void _disabled;
+  return (
+    <button
+      type={type}
+      className={buttonClass({ variant, size, className: cn(variant === "ghost" ? ESPERA_GHOST : ESPERA_RELLENO, className) })}
+      {...resto}
+      aria-disabled="true"
+      aria-busy="true"
+      onClick={(e: MouseEvent<HTMLButtonElement>) => {
+        // Ignorado mientras espera; preventDefault evita además el envío del formulario con type="submit".
+        e.preventDefault();
+      }}
+    >
+      <svg
+        data-parte="girador"
+        aria-hidden="true"
+        focusable="false"
+        viewBox="0 0 24 24"
+        width="1em"
+        height="1em"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2.5}
+        strokeLinecap="round"
+        className="shrink-0 motion-safe:animate-spin"
+      >
+        <path d="M21 12a9 9 0 1 1-6.2-8.56" />
+      </svg>
+      {children}
+    </button>
+  );
 }

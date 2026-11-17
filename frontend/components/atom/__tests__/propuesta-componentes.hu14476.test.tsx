@@ -9,11 +9,13 @@ import { Modal } from "@flit/ui/Modal";
 
 const marcaDe = (el: HTMLElement) => el.querySelector("[data-marca]")?.getAttribute("data-marca");
 
+// UI Kit 2026 (propuesta-2): la etiqueta con punta lleva el ícono de estado del kit o, sin él, el punto del tono; el
+// estado se lee en el texto y en esa marca, nunca solo en el color de fondo.
 describe("StatusBadge — el estado nunca solo por color", () => {
   it.each([
-    ["success", "check"],
+    ["success", "punto"],
     ["warning", "punto"],
-    ["danger", "equis"],
+    ["danger", "punto"],
     ["info", "punto"],
     ["neutral", "punto"],
   ] as const)("%s lleva la marca %s antes del texto", (tone, marca) => {
@@ -24,31 +26,30 @@ describe("StatusBadge — el estado nunca solo por color", () => {
     expect(chip.textContent).toBe("Estado");
   });
 
-  it("el punto de pendiente es naranja y el de info toma el color del texto", () => {
+  it("el punto y el contorno toman el color pleno del tono (--c)", () => {
     const { unmount } = render(<StatusBadge tone="warning" label="Pendiente" />);
-    expect((screen.getByRole("status").querySelector("[data-marca]") as HTMLElement).style.background).toBe(
-      "var(--di-alerta-punto)",
-    );
+    const chip = screen.getByRole("status");
+    expect(chip.style.getPropertyValue("--c")).toBe("var(--badge-warning-border)");
+    expect(chip.querySelector("[data-marca]")?.className).toContain("kit-etiqueta__punto");
     unmount();
-    render(<StatusBadge tone="info" label="Info" />);
-    expect((screen.getByRole("status").querySelector("[data-marca]") as HTMLElement).style.background).toBe(
-      "currentcolor",
-    );
+    render(<StatusBadge tone="info" label="Info" icono="/assets/estados/preparado.svg" />);
+    expect(screen.getByRole("status").querySelector("img")?.getAttribute("src")).toBe("/assets/estados/preparado.svg");
   });
 });
 
 describe("Button — familia .btn", () => {
-  it("el principal es píldora con degradado y texto por token", () => {
+  // UI Kit 2026: píldora plana — azul avanza, tinta navega, verde confirma, naranja alerta; nunca degradado.
+  it("el principal es píldora azul plana con texto blanco", () => {
     const cls = buttonClass();
     expect(cls).toContain("rounded-full");
-    expect(cls).toContain("[background:var(--di-gradient-action)]");
-    expect(cls).toContain("text-[color:var(--di-on-action)]");
-    expect(cls).not.toContain("text-white");
+    expect(cls).toContain("bg-[color:var(--kit-azul-relleno)]");
+    expect(cls).toContain("text-white");
+    expect(cls).not.toContain("gradient");
   });
 
-  it("el secundario lleva contorno y no degradado", () => {
+  it("el secundario es tinta plana y no degradado", () => {
     const cls = buttonClass({ variant: "secondary" });
-    expect(cls).toContain("border-[color:var(--di-border-control)]");
+    expect(cls).toContain("bg-[color:var(--kit-tinta)]");
     expect(cls).not.toContain("gradient");
   });
 
@@ -84,15 +85,15 @@ describe("Placa", () => {
   });
 });
 
-describe("Modal — franja tinta", () => {
-  it("pinta título, ícono y X sobre la franja con el color sobre acento, aunque el llamador pase otro color", () => {
+describe("Modal — cabecera del kit", () => {
+  it("pinta título (en el color de títulos del kit), ícono y X, aunque el llamador pase otro color", () => {
     render(
       <Modal open onClose={() => {}} title="Nuevo rol" icon={FileText} titleClassName="text-lg font-bold text-flit-primary">
         cuerpo
       </Modal>,
     );
     const titulo = screen.getByRole("heading", { name: "Nuevo rol" });
-    expect(titulo.className).toContain("text-[color:var(--di-on-accent)]");
+    expect(titulo.className).toContain("text-[color:var(--di-heading)]");
     expect(titulo.className).not.toContain("text-flit-primary");
     expect(titulo.className).toContain("text-lg");
     expect(screen.getByRole("dialog", { name: "Nuevo rol" })).toBeTruthy();

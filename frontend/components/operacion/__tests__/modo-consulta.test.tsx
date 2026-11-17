@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
+import { GLIFOS } from '@flit/ui/iconos-kit';
 
 /**
  * HU #12362 — Vista consolidada: modo consulta transversal en el módulo de trámites.
@@ -434,8 +435,11 @@ describe('HU #12362 — AC1/AC2/AC8: listado, un caso por punto de escritura', (
         expect(screen.queryByRole('menuitem', { name: 'Radicar' })).not.toBeInTheDocument();
         expect(screen.queryByRole('menuitem', { name: 'Continuar' })).not.toBeInTheDocument();
         const ver = screen.getByRole('menuitem', { name: 'Ver' });
-        expect(ver.querySelector('svg.lucide-eye')).not.toBeNull();
-        expect(ver.querySelector('svg.lucide-file-check')).toBeNull();
+        // UI Kit 2026: los íconos son los del kit (`svg.kit-icono`); el glifo se reconoce por su dibujo.
+        const trazo = (inner: string) => /\sd="([^"]+)"/.exec(inner)?.[1] ?? '';
+        const glifo = ver.querySelector('svg.kit-icono')?.innerHTML ?? '';
+        expect(trazo(glifo)).toBe(trazo(GLIFOS.ojo.inner));
+        expect(trazo(glifo)).not.toBe(trazo(GLIFOS.documento.inner));
       },
       interactuar: async () => abrirAcciones('TR-RED'),
     },

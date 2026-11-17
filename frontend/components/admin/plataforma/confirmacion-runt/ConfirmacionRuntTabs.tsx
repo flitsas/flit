@@ -1,5 +1,6 @@
 "use client";
 
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { useRouter } from "next/navigation";
 import {
   confirmacionRuntTabPath,
@@ -23,7 +24,7 @@ export function ConfirmacionRuntTabs({
 
   return (
     <div
-      className="flex items-center gap-1 overflow-x-auto border-b border-border"
+      className={PESTANAS_LISTA_CLS}
       role="tablist"
       aria-label="Secciones de Confirmación RUNT"
     >
@@ -36,16 +37,9 @@ export function ConfirmacionRuntTabs({
             role="tab"
             aria-selected={active}
             onClick={() => router.push(confirmacionRuntTabPath(tab.id))}
-            className="relative shrink-0 px-4 py-2.5 text-xs font-semibold transition"
-            style={{ color: active ? "var(--color-flit-brand)" : "var(--color-flit-primary)", opacity: active ? 1 : 0.65 }}
+            className={pestanaClass(active, "shrink-0")}
           >
             {tab.label}
-            {active && (
-              <span
-                className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
-                style={{ background: "var(--color-flit-brand)" }}
-              />
-            )}
           </button>
         );
       })}

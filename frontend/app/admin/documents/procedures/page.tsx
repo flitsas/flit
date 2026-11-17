@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ArrowRight, Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { useProcedureTypes } from "@/hooks/useProcedureTypes";
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from "@/lib/validation/fieldRules";
@@ -34,7 +34,7 @@ export default function DocumentProceduresPage() {
   return (
     <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
       <button type="button" onClick={() => router.push("/admin/documents")} className={ADMIN_BACK_LINK_CLS}>
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver al catálogo
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" /> Volver al catálogo
       </button>
 
       <ModuleTitle
@@ -48,7 +48,7 @@ export default function DocumentProceduresPage() {
             Buscar trámite
           </label>
           <div className="relative">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-50" />
+            <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-50" />
             <input
               id="procedure-type-search"
               value={q}
@@ -75,7 +75,7 @@ export default function DocumentProceduresPage() {
                     <span className="block text-xs font-semibold">{p.name}</span>
                     <span className="block font-mono text-[10px] opacity-60">{p.code}</span>
                   </span>
-                  <ArrowRight className="h-4 w-4 text-[color:var(--color-flit-brand)]" aria-hidden="true" />
+                  <Icono nombre="derecha" className="h-4 w-4 text-[color:var(--color-flit-brand)]" />
                 </button>
               ))}
           </div>

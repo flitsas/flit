@@ -1,4 +1,4 @@
-import { Check } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ActivateAccountForm } from "@/components/auth/ActivateAccountForm";
 import { AuthCard } from "@/components/auth/AuthCard";
 import { brandDisplayName } from "@/lib/brand/types";
@@ -36,7 +36,7 @@ export default async function ActivateAccountPage({ searchParams }: PageProps) {
             ].map((item) => (
               <div key={item} className="flex items-center gap-3 text-sm text-[color:var(--di-ingreso-texto-2)]">
                 <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-[color:var(--di-ingreso-acento-2)] text-[color:var(--di-ingreso-fondo)]">
-                  <Check className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" />
+                  <Icono nombre="check" className="h-3 w-3" />
                 </span>
                 {item}
               </div>

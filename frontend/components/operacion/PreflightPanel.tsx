@@ -15,6 +15,7 @@ import type {
 import { WIZARD_BTN, WIZARD_BTN_SOLID, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 interface Props {
 
   snapshot: PreflightSnapshot | null;
@@ -135,9 +136,9 @@ function DiagnosticOkPill({ label, ariaLabel }: { label: string; ariaLabel: stri
     <span
       role="status"
       aria-label={ariaLabel}
-      className="inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-      style={{ background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' }}
+      {...etiquetaKit('success', { className: 'shrink-0' })}
     >
+      <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
       {label}
     </span>
   );
@@ -472,7 +473,7 @@ export function PreflightPanel({
             return (
               <li
                 key={c.key}
-                className="flex flex-col gap-2 rounded-xl border bg-card p-4 shadow-sm"
+                className="flex flex-col gap-2 rounded-xl border bg-card p-4"
                 style={{ borderColor: 'var(--border)' }}
               >
                 {/* `flex-wrap`: la pastilla no encoge ni parte (`whitespace-nowrap` + `shrink-0`),

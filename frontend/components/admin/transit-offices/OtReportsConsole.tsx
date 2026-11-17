@@ -1,9 +1,10 @@
 "use client";
 
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { useCallback, useEffect, useState } from "react";
 import { agruparTiposTramite, type GrupoTiposTramite } from "@/components/consultas/tipo-tramite";
 import { tramitesClient } from "@/lib/api/tramites-client";
-import { CalendarClock } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   fetchOtClientCompanies,
   fetchOtReviewerOptions,
@@ -148,8 +149,8 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
 
   return (
     <div className="flex flex-col gap-6" data-testid="ot-reports-console">
-      <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border">
-        <div role="tablist" aria-label="Reportes del organismo" className="flex flex-wrap gap-1">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div role="tablist" aria-label="Reportes del organismo" className={PESTANAS_LISTA_CLS}>
           {OT_REPORTES_TABS.map((item) => {
             const active = tab === item.id;
             return (
@@ -160,11 +161,7 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
                 aria-selected={active}
                 title={item.hint}
                 onClick={() => selectTab(item.id)}
-                className={`-mb-px border-b-2 px-4 py-2 text-xs font-semibold transition ${
-                  active
-                    ? "border-flit-brand text-flit-brand"
-                    : "border-transparent text-muted-foreground hover:text-flit-primary dark:hover:text-foreground"
-                }`}
+                className={pestanaClass(active)}
               >
                 {item.label}
               </button>
@@ -177,7 +174,7 @@ export function OtReportsConsole({ transitOfficeId }: OtReportsConsoleProps) {
           className="mb-2 inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium hover:bg-secondary"
           data-testid="ot-reportes-abrir-programacion"
         >
-          <CalendarClock className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="calendario" className="h-4 w-4" />
           Programación y alertas
         </button>
       </div>

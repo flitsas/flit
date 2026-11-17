@@ -1,5 +1,6 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { CarLoader } from "@/components/atom/CarLoader";
 import { InlineAlert } from "@/components/atom/InlineAlert";
@@ -387,7 +388,7 @@ export function ParametrosMotorLotePanel() {
         <button
           type="submit"
           disabled={ocupado || !sucio}
-          className="rounded-full bg-gradient-to-r from-flit-tech to-flit-brand px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50"
+          className={buttonClass({ size: "sm" })}
         >
           {guardando ? "Guardando…" : "Guardar parámetros"}
         </button>

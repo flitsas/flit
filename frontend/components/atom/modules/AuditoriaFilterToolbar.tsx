@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { RefreshCw, SlidersHorizontal, X } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type { AdminAuditModule, AdminAuditResult, AdminAuditTenantType } from '@/lib/api/types';
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from '@/lib/validation/fieldRules';
 import { buttonClass } from '@flit/ui/Button';
@@ -172,7 +172,7 @@ export function AuditoriaFilterToolbar({
           style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
           aria-label="Actualizar auditoría"
         >
-          <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} aria-hidden="true" />
+          <Icono nombre="reintento" className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
           Actualizar
         </button>
       </div>
@@ -259,7 +259,7 @@ export function AuditoriaFilterToolbar({
             aria-controls="auditoria-filtros-avanzados"
             className={buttonClass({ variant: 'ghost', size: 'sm' })}
           >
-            <SlidersHorizontal className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="filtro" className="h-3 w-3" />
             {showAdvanced ? 'Menos filtros' : 'Más filtros'}
           </button>
           {hasActiveFilters && (
@@ -269,7 +269,7 @@ export function AuditoriaFilterToolbar({
               className={buttonClass({ variant: 'secondary', size: 'sm' })}
               aria-label="Limpiar filtros"
             >
-              <X className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="cerrar" className="h-3 w-3" />
               Limpiar filtros
             </button>
           )}

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { ChevronRight, RefreshCw } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
@@ -283,10 +283,7 @@ export function IdentityValidationTrackingPanel({
         aria-expanded={open}
         aria-label="Ver tracking de la validación"
       >
-        <ChevronRight
-          className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`}
-          aria-hidden
-        />
+        <Icono nombre="derecha" className={`h-3 w-3 transition-transform ${open ? 'rotate-90' : ''}`} />
         Ver tracking
       </button>
       )}
@@ -368,7 +365,7 @@ export function IdentityValidationTrackingPanel({
               style={{ color: 'var(--di-action)', outlineColor: 'var(--di-action)' }}
               aria-label="Refrescar bitácora"
             >
-              <RefreshCw className={`h-2.5 w-2.5 ${loading ? 'animate-spin' : ''}`} aria-hidden />
+              <Icono nombre="reintento" className={`h-2.5 w-2.5 ${loading ? 'animate-spin' : ''}`} />
               Refrescar
             </button>
           )}

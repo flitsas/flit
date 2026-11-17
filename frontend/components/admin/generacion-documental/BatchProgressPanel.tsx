@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Download } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { downloadStandaloneBatchZip } from "@/lib/api/admin-generacion-documental";
@@ -134,7 +134,7 @@ export function BatchProgressPanel({ batchId }: BatchProgressPanelProps) {
                 className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                 style={{ background: "var(--color-flit-brand)" }}
               >
-                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                 {descargando ? "Preparando ZIP…" : "Descargar documentos generados"}
               </button>
 

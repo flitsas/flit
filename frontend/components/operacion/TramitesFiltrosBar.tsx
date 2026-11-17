@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type ReactNode, type RefObject } from 'react';
-import { ChevronDown, Search, X } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { buttonClass } from '@flit/ui/Button';
 import { TRAMITES_INPUT_CLS, controlCls } from './tramites-control-styles';
 import {
@@ -41,7 +41,7 @@ export type Periodo = (typeof PERIODOS)[number];
 // HU #14476 — `.control` del prototipo, compartido con Validaciones (ver tramites-control-styles).
 export const INPUT_CLS = TRAMITES_INPUT_CLS;
 export const POPOVER_SURFACE_CLS =
-  'rounded-2xl border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--shadow-modal)]';
+  'rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--kit-sombra)]';
 
 
 /**
@@ -198,7 +198,7 @@ export function PeriodoPopover({
         className={controlCls(activo)}
       >
         {activo ? periodo : 'Periodo'}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <div
@@ -378,7 +378,7 @@ function FiltroEspecificoPopover({
         className={controlCls(count > 0)}
       >
         {count > 0 ? `Filtros (${count})` : 'Filtros'}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <div
@@ -386,7 +386,7 @@ function FiltroEspecificoPopover({
           id={panelId}
           role="dialog"
           aria-label="Filtros del listado"
-          className="absolute right-0 top-full z-50 mt-2 w-[22rem] rounded-xl border border-border bg-card p-3 shadow-lg"
+          className="absolute right-0 top-full z-50 mt-2 w-[22rem] rounded-[9px] border border-border bg-card p-3 shadow-[var(--kit-sombra)]"
         >
           {fieldsError ? (
             fieldsError
@@ -580,10 +580,7 @@ export function TramitesFiltrosBar({
     <>
       {/* Búsqueda: ancho fijo w-64, icono marca — spec flit-tramites-chrome. */}
       <div className="relative w-64 shrink-0">
-        <Search
-          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand"
-          aria-hidden="true"
-        />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" />
         <input
           type="search"
           aria-label={searchAriaLabel}
@@ -697,7 +694,7 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
             aria-label="Quitar filtro de periodo"
             className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
-            <X className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="cerrar" className="h-3 w-3" />
           </button>
         </span>
       ) : null}
@@ -713,7 +710,7 @@ export function FiltrosChipsTira({ periodo, onQuitarPeriodo, chips, onQuitarChip
             aria-label={`Quitar filtro ${chip.label}`}
             className="rounded-full transition hover:opacity-70 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
           >
-            <X className="h-3 w-3" aria-hidden="true" />
+            <Icono nombre="cerrar" className="h-3 w-3" />
           </button>
         </span>
       ))}

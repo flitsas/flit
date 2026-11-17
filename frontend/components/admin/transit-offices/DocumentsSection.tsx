@@ -3,7 +3,7 @@
 import { buttonClass } from "@flit/ui/Button";
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Tag, Trash2 } from "lucide-react";
+import { Tag } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { getToken } from "@/lib/api/client";
@@ -29,6 +29,7 @@ import { DocumentPrecedenceList } from "./DocumentPrecedenceList";
 import { OtTabBar } from "./OtTabBar";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 import { TAG_COLOR_OPTIONS, TagFormPanel } from "./TagFormPanel";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 /** Nombre accesible/legible del color de una etiqueta (HU #12883 AC3 — paleta cerrada). */
 function tagColorLabel(hex: string): string {
@@ -211,7 +212,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
         <RowActions
           actions={[
             {
-              icon: Trash2,
+              icon: iconoComo("papelera"),
               label: `Eliminar etiqueta ${tag.name}`,
               tone: "danger",
               onClick: () => setDeleteTarget(tag),
@@ -372,7 +373,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
             aria-describedby="delete-tag-desc"
             className={`relative w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}
           >
-            <FranjaDialogo className="-mx-6 -mt-6 mb-4">
+            <FranjaDialogo icono="papelera" className="-mx-6 -mt-6 mb-4">
               <h3 id="delete-tag-title" className={`text-sm font-bold ${DIALOGO_TITULO_CLS}`}>
                 Eliminar etiqueta
               </h3>

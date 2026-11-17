@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowUpRight, CheckCircle2, Info, XCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   enlaceTramite,
   etiquetaConteo,
@@ -10,6 +10,7 @@ import {
 } from "@/lib/migracion/types";
 
 import { formatFechaHora } from "@/lib/format/date";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit, type StatusTone } from "@flit/ui/StatusBadge";
 /**
 
  * El reporte de una migración, en el mismo orden en que lo imprime la consola por SSH: de dónde
@@ -76,10 +77,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
             <ul className="mt-2 flex flex-col gap-1">
               {instancia.avisos.map((aviso, i) => (
                 <li key={i} className="flex items-start gap-1.5">
-                  <AlertTriangle
-                    className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--badge-warning-fg)]"
-                    aria-hidden="true"
-                  />
+                  <Icono nombre="alerta" className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[var(--badge-warning-fg)]" />
                   <span className="opacity-90">{aviso}</span>
                 </li>
               ))}
@@ -97,7 +95,7 @@ export function ReporteMigracion({ respuesta }: { respuesta: MigracionRespuesta 
           style={{ backgroundColor: "var(--color-flit-brand)" }}
         >
           Abrir el trámite en V2
-          <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="externo" className="h-3.5 w-3.5" />
         </a>
       )}
 
@@ -116,7 +114,7 @@ function Encabezado({ respuesta }: { respuesta: MigracionRespuesta }) {
   if (conProblemas) {
     return (
       <Titular
-        icono={<XCircle className="h-5 w-5 text-destructive" aria-hidden="true" />}
+        icono={<Icono nombre="cerrar" className="h-5 w-5 text-destructive" />}
         texto="La migración reportó problemas"
         detalle="Revisa abajo qué instancia falló y por qué. Reintentar es seguro."
       />
@@ -126,7 +124,7 @@ function Encabezado({ respuesta }: { respuesta: MigracionRespuesta }) {
   if (origen.dryRun) {
     return (
       <Titular
-        icono={<Info className="h-5 w-5" aria-hidden="true" style={{ color: "var(--color-flit-brand)" }} />}
+        icono={<Icono nombre="exclamacion" className="h-5 w-5" style={{ color: "var(--color-flit-brand)" }} />}
         texto="Simulación completada"
         // Se nombra el control tal y como está rotulado en pantalla: la versión anterior decía
         // «vuelve a lanzarla sin simulación» y ese botón no existe con ese nombre en ningún sitio.
@@ -137,7 +135,7 @@ function Encabezado({ respuesta }: { respuesta: MigracionRespuesta }) {
 
   return (
     <Titular
-      icono={<CheckCircle2 className="h-5 w-5 text-[var(--flit-success-ink)]" aria-hidden="true" />}
+      icono={<Icono nombre="check" className="h-5 w-5 text-[var(--flit-success-ink)]" />}
       texto={yaMigrado ? "El trámite ya estaba migrado" : "Migración completada"}
       detalle={
         yaMigrado
@@ -204,21 +202,20 @@ function Dato({ etiqueta, valor }: { etiqueta: string; valor: string }) {
  * la misma fila decía «Simulado» en azul en la tabla y «Simulado» en verde tres centímetros más
  * abajo, en la pantalla donde el color es justo lo que la gente mira para saber si ya migró.
  */
-const TONO_ESTADO: Record<string, string> = {
-  Simulated: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]",
-  Skipped: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
-  NotMigrated: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
-  NoAttachments: "bg-[var(--badge-neutral-bg)] text-muted-foreground",
-  NotFoundInV1: "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]",
+const TONO_ESTADO: Record<string, StatusTone> = {
+  Simulated: "info",
+  Skipped: "neutral",
+  NotMigrated: "neutral",
+  NoAttachments: "neutral",
+  NotFoundInV1: "warning",
 };
 
 function Insignia({ estado, conProblemas }: { estado: string; conProblemas: boolean }) {
-  const clases = conProblemas
-    ? "bg-[var(--badge-danger-bg)] text-destructive"
-    : (TONO_ESTADO[estado] ?? "bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]");
+  const tono: StatusTone = conProblemas ? "danger" : (TONO_ESTADO[estado] ?? "success");
 
   return (
-    <span className={`rounded-md px-2 py-0.5 text-xs font-semibold ${clases}`}>
+    <span {...etiquetaKit(tono)}>
+      <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
       {etiquetaEstadoInstancia(estado)}
     </span>
   );

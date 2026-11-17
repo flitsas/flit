@@ -2,6 +2,7 @@
 
 import { CampoValorInline } from './primitivos';
 import { DETALLE_CARD, DETALLE_NAVY } from './detalle-visual';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 const CARD = `${DETALLE_CARD} flex h-full flex-col p-5`;
 
@@ -107,7 +108,8 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
                   {n.label}
                 </p>
                 {n.isActive ? (
-                  <span className="di-estado di-estado--check rounded-full bg-[var(--di-success-soft)] px-2.5 py-0.5 text-xs font-semibold text-[var(--di-success)]">
+                  <span {...etiquetaKit('success')}>
+                    <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                     Vigente
                   </span>
                 ) : null}

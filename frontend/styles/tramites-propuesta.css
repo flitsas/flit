@@ -8,8 +8,7 @@
 
 /* ── Chip de estado del trámite (HU #14482): solo texto, con el color propio del estado (tokens --estado-*). ── */
 .di-estado { display: inline-flex; align-items: center; gap: 6px; }
-/* StatusBadge con color crudo pinta un punto genérico (data-marca): el chip de trámite va sin marca. */
-.di-estado > [data-marca] { display: none; }
+/* UI Kit 2026: el chip de estado es la etiqueta con punta del kit (StatusBadge) y conserva su punto o su ícono. */
 /* Marcas que siguen en pastillas que no son estado del trámite («✓ Adjunto», SOAT…). */
 .di-estado--check::before,
 .di-estado--punto::before,
@@ -97,4 +96,28 @@
   /* Acciones arriba a la derecha de la tarjeta, junto a la primera celda. */
   .di-tabla-tarjetas tbody > tr > td:last-of-type { grid-column: 2; grid-row: 1; align-self: start; }
   .di-tabla-tarjetas tbody > tr > td:first-of-type { grid-column: 1; grid-row: 1; }
+}
+
+/* ===================== Manual UI Kit 2026 (propuesta-2) ===================== */
+.di-antetitulo { font-weight: 500; letter-spacing: 0.04em; color: var(--di-text-tertiary); }
+.di-placa-vacia { border-radius: 8px; border: 1px dashed var(--kit-linea); background: var(--kit-hover); }
+.di-vehiculo__nombre { color: var(--di-heading); }
+.di-fichas > div, .di-fichas > p { border-radius: 9px; background: var(--kit-hover); }
+.di-fichas__dt { color: var(--di-text-tertiary); letter-spacing: 0.04em; }
+.di-fichas__dd { color: var(--di-text-primary); }
+.di-paso__num { background: var(--di-surface-elevated); color: var(--kit-gris); border: 2px solid var(--kit-gris); }
+.di-paso__num--hecho { background: var(--kit-verde); border-color: var(--kit-verde); color: #fff; }
+.di-paso__num--actual { background: var(--di-surface-elevated); border-color: var(--kit-azul-texto); color: var(--kit-azul-texto); box-shadow: 0 0 0 4px var(--kit-hover); }
+.dark .di-paso__num--actual { color: var(--kit-azul-texto); }
+.di-paso__num--bloqueado { border-style: dashed; }
+.di-actividad > li::before { background: var(--kit-azul-texto); box-shadow: 0 0 0 3px var(--kit-hover); }
+.di-actividad > li.di-actividad--vigente::before { background: var(--kit-verde); box-shadow: 0 0 0 3px var(--kit-hover); }
+.di-actividad > li:not(:last-child)::after { background: var(--di-border); }
+.di-lista-fila > li { border-top-color: var(--di-border); }
+.di-firmantes > li { border-radius: 9px; }
+.di-carga { border-radius: 9px; border: 1.5px dashed var(--kit-azul-texto); }
+.di-carga:hover { background: var(--kit-hover); }
+.di-carga--lista { border: 1.5px solid var(--kit-verde); background: #8cc63f1a; color: var(--di-success); }
+@media (max-width: 640px) {
+  .di-tabla-tarjetas tbody > tr { border-radius: 9px; box-shadow: none; padding: 4px 14px 8px; }
 }

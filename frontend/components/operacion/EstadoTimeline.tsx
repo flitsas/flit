@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { StatusHistoryItem } from '@/lib/api/types/procedure-runtime';
-import { estadoChipClass, estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { estadoLabel } from '@/lib/tramites/estados';
+import { EtiquetaEstado } from './EtiquetaEstado';
 import { LogQxLink } from './LogQxLink';
 
 
@@ -87,7 +88,6 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
     <div>
       <ol style={{ listStyle: 'none', margin: 0, padding: 0 }}>
         {items.map((item, index) => {
-          const chip = estadoChipStyle(item.toStatus);
           const isLast = index === items.length - 1;
           return (
             <li
@@ -115,20 +115,7 @@ export function EstadoTimeline({ instanceId }: { instanceId: string }) {
                 }}
               />
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                <span
-                  className={estadoChipClass(item.toStatus)}
-                  style={{
-                    background: chip.bg,
-                    color: chip.color,
-                    border: `1px solid ${chip.border}`,
-                    borderRadius: 999,
-                    padding: '2px 10px',
-                    fontSize: 12,
-                    fontWeight: 600,
-                  }}
-                >
-                  {estadoLabel(item.toStatus)}
-                </span>
+                <EtiquetaEstado estado={item.toStatus}>{estadoLabel(item.toStatus)}</EtiquetaEstado>
                 {item.fromStatus ? (
                   <span style={{ color: 'var(--muted-foreground)', fontSize: 12 }}>
                     desde {estadoLabel(item.fromStatus)}

@@ -4,8 +4,12 @@
 // medio, los switches «Valor del trámite» y «Valor de la gestión» con su monto. El monto vive en Precios y aquí solo se
 // ve. El cliente se inyecta: sirve al OT, al SuperAdmin en un OT y a la web de persona (Plataforma, sin PIN).
 // Siempre se muestra lo último guardado: ante un fallo no se cambia nada y se informa el motivo exacto.
-import { useCallback, useEffect, useId, useMemo, useState, type ReactNode } from "react";
-import { CreditCard, Lock, Store, type LucideIcon } from "lucide-react";
+import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
+import { useCallback, useEffect, useId, useMemo, useState, type ComponentType, type ReactNode } from "react";
+import { Store } from "lucide-react";
+import type { IconoComoProps } from "@flit/ui/iconoComo";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -43,8 +47,8 @@ const AYUDA_MEDIO: Record<MedioPago, string> = {
   PASARELA: "La persona paga en línea desde el portal.",
   PIN: "La persona paga en la caja del organismo con un PIN.",
 };
-const ICONO_MEDIO: Record<MedioPago, LucideIcon> = {
-  PASARELA: CreditCard,
+const ICONO_MEDIO: Record<MedioPago, ComponentType<IconoComoProps>> = {
+  PASARELA: iconoComo("credencial"),
   PIN: Store,
 };
 const NOMBRE_CONCEPTO: Record<ConceptoCobro, string> = {
@@ -104,14 +108,9 @@ export function CobroSwitch({
       aria-busy={busy || undefined}
       disabled={disabled || busy}
       onClick={() => onChange(!checked)}
-      className="relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60"
-      style={{ background: checked ? COBRO_ON : COBRO_OFF }}
+      className={INTERRUPTOR_CLS}
     >
-      <span
-        aria-hidden="true"
-        className="absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all"
-        style={{ left: checked ? "calc(100% - 22px)" : "2px" }}
-      />
+      <span aria-hidden="true" className={INTERRUPTOR_PERILLA_CLS} />
     </button>
   );
 }
@@ -299,7 +298,7 @@ export function OtCobroMediosSection({
           <span className="flex flex-col leading-tight">
             <span className="flex items-center gap-1 text-sm font-semibold text-flit-primary">
               {NOMBRE_CORTO[charge]}
-              {soloSuperAdmin && <Lock className="h-3 w-3" aria-hidden="true" />}
+              {soloSuperAdmin && <Icono nombre="candado" className="h-3 w-3" />}
             </span>
             <span className="text-xs text-muted-foreground">
               {c.enabled ? "Se cobra" : "No se cobra"}
@@ -458,7 +457,7 @@ export function OtCobroMediosSection({
               id={idNotaGestion}
               className="flex items-center gap-1.5 text-xs text-muted-foreground"
             >
-              <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <Icono nombre="candado" className="h-3.5 w-3.5 shrink-0" />
               {MOTIVO_GESTION_SOLO_SUPERADMIN}
             </p>
           )}

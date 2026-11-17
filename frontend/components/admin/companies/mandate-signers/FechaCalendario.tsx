@@ -2,7 +2,7 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { CalendarDays } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DayButton, DayPicker, type DayButtonProps } from "react-day-picker";
 import { es } from "react-day-picker/locale";
 import "react-day-picker/style.css";
@@ -98,7 +98,7 @@ export function FechaCalendario({
         } ${value ? "text-flit-primary" : "text-muted-foreground"}`}
       >
         <span>{texto}</span>
-        <CalendarDays className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+        <Icono nombre="calendario" className="h-4 w-4 shrink-0 text-muted-foreground" />
       </button>
       {open && box
         ? createPortal(

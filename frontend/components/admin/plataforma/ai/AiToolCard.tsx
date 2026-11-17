@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -240,7 +240,7 @@ export function AiToolCard({
                   aria-label={`Subir prioridad de ${etiquetaProveedor(slot.providerCode)}`}
                   className="rounded-lg border border-border p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-30"
                 >
-                  <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="arriba" className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
@@ -249,7 +249,7 @@ export function AiToolCard({
                   aria-label={`Bajar prioridad de ${etiquetaProveedor(slot.providerCode)}`}
                   className="rounded-lg border border-border p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-30"
                 >
-                  <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="abajo" className="h-3.5 w-3.5" />
                 </button>
               </div>
 
@@ -270,7 +270,7 @@ export function AiToolCard({
                 aria-label={`Activar ${etiquetaProveedor(slot.providerCode)} en ${label}`}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-flit-brand px-3 py-1.5 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50"
               >
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="check" className="h-3.5 w-3.5" />
                 Activar
               </button>
             </li>
@@ -315,7 +315,7 @@ export function AiToolCard({
             if (!activating) setConfirmProvider(null);
           }}
           busy={activating}
-          icon={AlertTriangle}
+          icono="alerta"
           iconBg="var(--color-flit-alert)"
           title="Cambiar proveedor activo"
           titleClassName="text-base font-bold text-flit-primary"

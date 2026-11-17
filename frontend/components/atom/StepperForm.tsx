@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Lock, AlertTriangle, Upload, ArrowLeft, ArrowRight, ShieldCheck, FileSignature, Pause, Sparkles, X, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 const STEPS = [
   "Consulta del Vehículo",
@@ -110,7 +110,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
       <div className="glass rounded-2xl p-4 flex flex-col min-h-0 lg:max-h-[calc(100vh-120px)]">
         <div className="flex items-center justify-between mb-4 shrink-0">
           <h3 className="font-bold text-foreground text-sm">Asistente Transaccional</h3>
-          <button onClick={onExit} className="p-1 rounded-lg hover:bg-secondary"><X className="h-4 w-4 text-muted-foreground" /></button>
+          <button onClick={onExit} className="p-1 rounded-lg hover:bg-secondary"><Icono nombre="cerrar" className="h-4 w-4 text-muted-foreground" /></button>
         </div>
         <ol className="space-y-2 flex-1 min-h-0 overflow-y-auto">
           {STEPS.map((label, i) => {
@@ -119,7 +119,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
             return (
               <li key={n} className={`flex items-start gap-3 p-2.5 rounded-xl transition ${active ? "bg-card/80 scale-[1.02]" : done ? "" : "opacity-40"}`} style={active ? { boxShadow: "inset 0 0 0 2px var(--color-flit-brand)" } : {}}>
                 <div className="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold font-mono shrink-0" style={{ background: done ? "var(--color-flit-tech)" : active ? "var(--color-flit-brand)" : "var(--badge-neutral-bg)", color: done || active ? "white" : "var(--badge-neutral-fg)" }}>
-                  {done ? <Check className="h-4 w-4" /> : n}
+                  {done ? <Icono nombre="check" className="h-4 w-4" /> : n}
                 </div>
                 <div className="min-w-0">
                   <p className="text-[10px] font-mono text-muted-foreground">PASO {String(n).padStart(2, "0")}</p>
@@ -153,7 +153,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                 {collision && (
                   <div className="rounded-xl p-4" style={{ background: "var(--badge-pending-bg)", border: "1px solid var(--badge-pending-border)" }}>
                     <div className="flex items-start gap-3">
-                      <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--badge-pending-fg)" }} />
+                      <Icono nombre="alerta" className="h-5 w-5 mt-0.5 shrink-0" style={{ color: "var(--badge-pending-fg)" }} />
                       <div>
                         <p className="font-bold text-sm" style={{ color: "var(--badge-pending-fg)" }}>BLOQUEO POR COLISIÓN DE TRANSACCIÓN</p>
                         <p className="text-xs text-muted-foreground mt-1 font-mono">La placa <b>{placa}</b> ya existe en trámite activo con estado ∈ &#123;Borrador(1), Preparado(3), Enviado(4)&#125;.</p>
@@ -186,13 +186,13 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                     </>
                   ) : (
                     <div className="sm:col-span-2 rounded-xl p-4" style={{ background: "color-mix(in srgb, var(--color-flit-tech) 10%, transparent)", border: "1px solid var(--color-flit-tech)" }}>
-                      <Check className="inline h-5 w-5 mr-2" style={{ color: "var(--color-flit-tech)" }} />
+                      <Icono nombre="check" className="inline h-5 w-5 mr-2" style={{ color: "var(--color-flit-tech)" }} />
                       <span className="font-semibold" style={{ color: "var(--badge-success-fg)" }}>Paz y Salvo Corporativo adjunto · Validación RUNT/RNMC superada</span>
                     </div>
                   )}
                 </div>
                 <button onClick={() => setPazSalvo(true)} className="w-full rounded-xl border-2 border-dashed border-flit-brand py-8 text-sm text-flit-brand hover:bg-flit-brand/5 transition flex flex-col items-center gap-2">
-                  <Upload className="h-6 w-6" />
+                  <Icono nombre="nube-subir" className="h-6 w-6" />
                   Adjuntar Paz y Salvo Corporativo (Drag &amp; Drop)
                 </button>
               </div>
@@ -225,7 +225,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                     <button key={m.id} onClick={() => setModalidad(m.id)} className={`text-left rounded-2xl p-5 glass ${sel ? "" : "opacity-80"}`} style={sel ? { boxShadow: "inset 0 0 0 2px var(--color-flit-brand)" } : {}}>
                       <div className="flex items-center justify-between">
                         <p className="font-bold text-foreground">{m.title}</p>
-                        {sel && <div className="h-6 w-6 rounded-full flex items-center justify-center" style={{ background: "var(--color-flit-brand)" }}><Check className="h-4 w-4 text-white" /></div>}
+                        {sel && <div className="h-6 w-6 rounded-full flex items-center justify-center" style={{ background: "var(--color-flit-brand)" }}><Icono nombre="check" className="h-4 w-4 text-white" /></div>}
                       </div>
                       <p className="text-xs text-muted-foreground mt-2">{m.desc}</p>
                     </button>
@@ -276,7 +276,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {["Motor", "Chasis", "Serie", "VIN"].map((l) => (
                     <div key={l} className="rounded-xl bg-card/70 border border-dashed border-border p-4 text-center">
-                      <Upload className="h-5 w-5 mx-auto text-muted-foreground" />
+                      <Icono nombre="nube-subir" className="h-5 w-5 mx-auto text-muted-foreground" />
                       <p className="text-xs font-mono mt-2 text-muted-foreground">{l}</p>
                       {ocrPct > 30 && <p className="text-[10px]" style={{ color: "var(--badge-success-fg)" }}>✓ Capturado</p>}
                     </div>
@@ -292,7 +292,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   </div>
                   <div className="flex-1">
                     <button onClick={() => { setOcrPct(0); setOcrRunning(true); }} disabled={ocrRunning} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white inline-flex items-center gap-2" style={{ background: "var(--color-flit-brand)" }}>
-                      {ocrRunning ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Simular Procesamiento OCR (IA)
+                      {ocrRunning ? <Icono nombre="girador" className="h-4 w-4 animate-spin" /> : <Icono nombre="destello" className="h-4 w-4" />} Simular Procesamiento OCR (IA)
                     </button>
                     {ocrPct >= 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-success-fg)" }}>✓ Coincidencia ≥90% · Aprobación automática</p>}
                     {ocrPct >= 70 && ocrPct < 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-warning-fg)" }}>⚠ Coincidencia 70-89% · Advertencia ámbar inyectada</p>}
@@ -323,13 +323,13 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
             {step === 8 && (
               modalidad === "leasing" ? (
                 <div className="rounded-2xl p-8 text-center opacity-80" style={{ background: "rgba(100,116,139,0.08)", border: "1px dashed rgba(100,116,139,0.3)" }}>
-                  <Lock className="h-10 w-10 mx-auto text-muted-foreground" />
+                  <Icono nombre="candado" className="h-10 w-10 mx-auto text-muted-foreground" />
                   <p className="font-bold text-foreground mt-3">Firma del comprador no requerida por ley bajo modalidad de leasing corporativo</p>
                   <p className="text-xs text-muted-foreground mt-2 font-mono">auto-skip → step 9</p>
                 </div>
               ) : (
                 <div className="rounded-xl bg-card border-2 border-border p-6 text-center">
-                  <FileSignature className="h-8 w-8 mx-auto text-muted-foreground" />
+                  <Icono nombre="firma" className="h-8 w-8 mx-auto text-muted-foreground" />
                   <p className="text-sm text-muted-foreground mt-2">Repetir captura de firma para el comprador (mismas opciones).</p>
                 </div>
               )
@@ -340,7 +340,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                 <label className="flex items-start gap-3 p-4 rounded-xl bg-card/70 border border-border cursor-pointer">
                   <input type="checkbox" checked={isPaused} onChange={(e) => setIsPaused(e.target.checked)} className="mt-1" />
                   <div>
-                    <p className="font-semibold text-foreground flex items-center gap-2"><Pause className="h-4 w-4" /> Activar flag de pausa global <span className="font-mono text-xs text-muted-foreground">isPaused: true</span></p>
+                    <p className="font-semibold text-foreground flex items-center gap-2"><Icono nombre="pausa" className="h-4 w-4" /> Activar flag de pausa global <span className="font-mono text-xs text-muted-foreground">isPaused: true</span></p>
                     <p className="text-xs text-muted-foreground mt-1">Blindará el registro y deshabilitará cualquier transición de estado superior.</p>
                   </div>
                 </label>
@@ -355,7 +355,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                 <div className="relative mx-auto h-24 w-24">
                   <div className="absolute inset-0 rounded-full animate-pulse" style={{ background: "var(--color-flit-brand)", filter: "blur(30px)", opacity: 0.5 }} />
                   <div className="relative h-24 w-24 rounded-full flex items-center justify-center" style={{ background: "var(--di-gradient-action)" }}>
-                    <Check className="h-12 w-12 text-white" strokeWidth={3} />
+                    <Icono nombre="check" className="h-12 w-12 text-white" />
                   </div>
                 </div>
                 <div>
@@ -363,7 +363,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   <p className="text-sm text-muted-foreground mt-1">Expediente blindado e inmutable en el holding.</p>
                 </div>
                 <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full font-mono text-xs" style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)", color: "var(--color-flit-brand)" }}>
-                  <ShieldCheck className="h-4 w-4" /> Estado: 4 (Submitted) · Bus QX OK
+                  <Icono nombre="escudo" className="h-4 w-4" /> Estado: 4 (Submitted) · Bus QX OK
                 </div>
                 <div className="glass rounded-xl p-4 text-left mx-auto max-w-xl">
                   <p className="text-[10px] font-mono text-muted-foreground uppercase">SHA-256 Inmutable</p>
@@ -378,10 +378,10 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
         {/* Footer nav */}
         {step < 10 && (
           <div className="flex justify-between items-center">
-            <button onClick={prev} disabled={step === 1} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl glass text-sm text-foreground disabled:opacity-40"><ArrowLeft className="h-4 w-4" /> Anterior</button>
+            <button onClick={prev} disabled={step === 1} className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl glass text-sm text-foreground disabled:opacity-40"><Icono nombre="izquierda" className="h-4 w-4" /> Anterior</button>
             <p className="text-xs font-mono text-muted-foreground hidden sm:block">Paso {step} de 10</p>
             <button onClick={next} disabled={!canAdvance()} className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold text-white disabled:opacity-40 disabled:cursor-not-allowed" style={{ background: "var(--color-flit-brand)" }}>
-              Continuar <ArrowRight className="h-4 w-4" />
+              Continuar <Icono nombre="derecha" className="h-4 w-4" />
             </button>
           </div>
         )}

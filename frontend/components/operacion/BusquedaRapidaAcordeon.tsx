@@ -1,7 +1,7 @@
 'use client';
 
 import { useSyncExternalStore } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * Epic #12686 — acordeón «Búsqueda rápida» debajo de la tira de estados. Presentacional: cada
@@ -88,10 +88,7 @@ export function BusquedaRapidaAcordeon({
           className="flex w-full items-center justify-between rounded-2xl px-4 py-2.5 text-left text-xs font-semibold text-foreground transition hover:bg-flit-brand/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
         >
           Búsqueda rápida
-          <ChevronDown
-            className={`h-4 w-4 opacity-60 transition-transform motion-reduce:transition-none ${abierto ? 'rotate-180' : ''}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="abajo" className={`h-4 w-4 opacity-60 transition-transform motion-reduce:transition-none ${abierto ? 'rotate-180' : ''}`} />
         </button>
       </h2>
       <div id={panelId} hidden={!abierto} className="px-4 pb-3">

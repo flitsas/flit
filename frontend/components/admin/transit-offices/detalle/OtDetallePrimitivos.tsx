@@ -68,7 +68,7 @@ export function OtSello({ texto, color, soft }: { texto: string; color: string; 
   return (
     <span
       className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-      style={soft ? { background: `color-mix(in srgb, ${color} 13%, transparent)`, color } : { background: color, color: "#fff" }}
+      style={soft ? { background: `color-mix(in srgb, ${color} 13%, transparent)`, color } : { background: color, color: "var(--di-on-action)" }}
     >
       {texto}
     </span>

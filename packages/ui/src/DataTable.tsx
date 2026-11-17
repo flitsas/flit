@@ -120,7 +120,7 @@ export function DataTable<T>({
     (status === undefined || status === "ready" || status === "empty");
 
   return (
-    <div className={`flex flex-1 flex-col ${tarjeta ? TABLA_TARJETA_CLS : ""}`}>
+    <div className={`flex flex-1 flex-col ${tarjeta ? TABLA_TARJETA_CLS : "kit-tabla"}`}>
       <UiStateBoundary
         status={showEmptyContent ? "ready" : effectiveStatus}
         emptyMessage={emptyMessage}

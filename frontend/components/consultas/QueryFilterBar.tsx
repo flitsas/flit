@@ -162,7 +162,7 @@ export function QueryFilterBar({
             fields={disponibles}
             onPick={setEditing}
             testIdPrefix={testIdPrefix}
-            className="absolute left-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-2xl"
+            className="absolute left-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-[var(--kit-sombra)]"
           />
         )}
       </div>
@@ -283,7 +283,7 @@ export function ConditionEditor({
     <div
       className={
         anchored
-          ? "absolute left-0 top-full z-50 mt-2 w-80 rounded-2xl border border-border bg-card p-3 text-left shadow-2xl"
+          ? "absolute left-0 top-full z-50 mt-2 w-80 rounded-2xl border border-border bg-card p-3 text-left shadow-[var(--kit-sombra)]"
           : "text-left"
       }
       data-testid={`${testIdPrefix}-editor-${field.id}`}

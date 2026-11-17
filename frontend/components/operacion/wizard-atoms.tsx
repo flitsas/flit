@@ -8,6 +8,7 @@
  */
 
 import { useId, type ReactNode } from 'react';
+import { INTERRUPTOR_PERILLA_CLS } from '@flit/ui/Interruptor';
 
 /**
  * Par rótulo/valor de las grillas de datos consolidados (RUNT, resumen del FUR).
@@ -313,13 +314,17 @@ export function WizardFieldToggle({
         }}
       >
         <span>{checked ? labelOn : labelOff}</span>
+        {/* UI Kit 2026: la pista es el dibujo del interruptor del kit (verde encendido, gris apagado), en la
+            proporción 68 × 36 de `INTERRUPTOR_CLS`; la perilla propia se oculta porque el dibujo ya la trae. */}
         <span
           aria-hidden="true"
-          className="relative inline-block h-5 w-9 shrink-0 rounded-full transition"
-          style={{ background: checked ? 'var(--color-flit-brand)' : 'var(--border-strong)' }}
+          className="relative inline-block h-6 w-[45px] shrink-0 rounded-full transition"
+          style={{
+            background: `url("/assets/kit/interruptor-${checked ? 'encendido' : 'apagado'}.svg") center / contain no-repeat`,
+          }}
         >
           <span
-            className="absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all"
+            className={INTERRUPTOR_PERILLA_CLS}
             style={{ left: checked ? 18 : 2 }}
           />
         </span>

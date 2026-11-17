@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileSearch, Loader2, Play } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ErrorMigracion, migrarTramite } from "@/lib/migracion/client";
 import {
   ETIQUETA_TRAMITE,
@@ -123,12 +123,12 @@ export function MigrarUno() {
         >
           {corriendo ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              <Icono nombre="girador" className="h-4 w-4 animate-spin" />
               Migrando…
             </>
           ) : (
             <>
-              <Play className="h-4 w-4" aria-hidden="true" />
+              <Icono nombre="avance" className="h-4 w-4" />
               {dryRun ? "Simular" : "Migrar de verdad"}
             </>
           )}
@@ -154,16 +154,12 @@ export function MigrarUno() {
           <div className="flex min-h-[8rem] flex-col items-center justify-center gap-2 text-center">
             {corriendo ? (
               <>
-                <Loader2
-                  className="h-5 w-5 animate-spin"
-                  aria-hidden="true"
-                  style={{ color: "var(--color-flit-brand)" }}
-                />
+                <Icono nombre="girador" className="h-5 w-5 animate-spin" style={{ color: "var(--color-flit-brand)" }} />
                 <p className="text-sm opacity-70">Esperando al migrador…</p>
               </>
             ) : (
               <>
-                <FileSearch className="h-6 w-6 opacity-30" aria-hidden="true" />
+                <Icono nombre="consulta" className="h-6 w-6 opacity-30" />
                 <p className="max-w-xs text-sm opacity-60">
                   Elige un trámite y lanza la migración: el reporte aparecerá aquí.
                 </p>

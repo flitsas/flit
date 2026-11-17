@@ -14,6 +14,7 @@ import { reauthenticate } from "@flit/auth/client";
 import { SESSION_EXPIRED_EVENT } from "@/lib/auth/session";
 import { isOidcSession } from "@/lib/auth/session-mode";
 import { buttonClass } from "@flit/ui/Button";
+import { MODAL_VELO_CLS } from "@flit/ui/Modal";
 
 export function SessionExpiredListener() {
   const [open, setOpen] = useState(false);
@@ -59,7 +60,7 @@ export function SessionExpiredListener() {
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--overlay)] backdrop-blur-md px-4"
+      className={`fixed inset-0 z-[100] flex items-center justify-center ${MODAL_VELO_CLS} px-4`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="session-expired-title"

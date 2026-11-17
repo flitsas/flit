@@ -51,4 +51,4 @@ export const OT_OVERLAY_STYLE = {
  * desplazable. Con los acordeones abiertos, los botones de decidir siguen a la vista.
  */
 export const OT_SHEET_CLASS =
-  "flex w-[900px] max-w-full max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-secondary p-4 shadow-[var(--shadow-modal)]";
+  "flex w-[900px] max-w-full max-h-[85vh] flex-col overflow-hidden rounded-[9px] border border-[color:var(--di-border)] bg-secondary p-4 shadow-none";

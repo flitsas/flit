@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { FileText, Info } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { WizardModal } from './WizardModal';
 import { ALLOWED_MIME } from './DocumentChecklist';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -75,7 +75,7 @@ function GrupoDocumentos({
           className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-card"
           aria-hidden="true"
         >
-          <FileText className="h-3.5 w-3.5" style={{ color: tono.fg }} />
+          <Icono nombre="documento" className="h-3.5 w-3.5" style={{ color: tono.fg }} />
         </span>
         <h4 className="text-xs font-bold" style={{ color: tono.fg }}>
           {titulo}
@@ -184,7 +184,7 @@ export function ProcedureDocsPreviewInformativo({
           className="inline-flex items-center gap-1.5 text-xs font-semibold underline-offset-2 hover:underline"
           style={{ color: 'var(--color-flit-brand)' }}
         >
-          <FileText className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="documento" className="h-3.5 w-3.5" />
           Ver documentos a tener listos
         </button>
       )}
@@ -233,7 +233,7 @@ export function ProcedureDocsPreviewInformativo({
                 style={{ borderColor: 'var(--border)' }}
               >
                 <p className="flex min-w-0 items-center gap-1.5 text-xs opacity-70">
-                  <Info className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                  <Icono nombre="exclamacion" className="h-3.5 w-3.5 shrink-0" />
                   Los documentos deben estar legibles y en formato {FORMATOS_ADMITIDOS}.
                 </p>
                 {/* «Entendido», no «Cerrar»: la X del modal ya lleva ese nombre, y el pie no repite la

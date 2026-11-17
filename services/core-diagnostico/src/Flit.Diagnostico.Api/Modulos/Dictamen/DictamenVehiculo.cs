@@ -33,7 +33,7 @@ public sealed class DictamenVehiculo : IEntidadDeEmpresa
     /// <summary>Versión del catálogo con la que se dictaminó. No es FK: la versión no identifica una sola fila.</summary>
     public int CatalogoVersion { get; init; }
 
-    /// <summary><c>PLANTILLA</c> o <c>LLM</c>.</summary>
+    /// <summary><c>PLANTILLA</c>, <c>LLM</c> o <c>MANUAL</c> (textos editados por FLIT).</summary>
     public required string RedactadoPor { get; set; }
 
     /// <summary><c>PENDIENTE</c> o <c>COMPLETADA</c>. Completada si y solo si la redactó el LLM.</summary>
@@ -56,6 +56,18 @@ public sealed class DictamenVehiculo : IEntidadDeEmpresa
 
     /// <summary>Instante del override; null si no hubo.</summary>
     public DateTimeOffset? OverrideEn { get; set; }
+
+    /// <summary>Motivo del ajuste FLIT (10..500). Texto libre de soporte: solo backoffice, nunca en DTO de compañía, eventos ni logs.</summary>
+    public string? AjusteMotivo { get; set; }
+
+    /// <summary>Versión vigente que reemplazó el override o ajuste FLIT (siempre <c>Version - 1</c>); null en las automáticas.</summary>
+    public int? AjustadoDesdeVersion { get; set; }
+
+    /// <summary>
+    /// True si el vehículo ya tenía trámite cuando soporte confirmó el ajuste con <c>confirmar_con_tramite</c> (HU #14563 AC23,
+    /// ADR-0084). Solo un ajuste puede llevarlo; el trámite no se revierte ni se cancela. Solo backoffice.
+    /// </summary>
+    public bool AjusteConTramite { get; set; }
 
     /// <summary>Instante en que se guardó el dictamen (<c>timestamptz</c>).</summary>
     public DateTimeOffset CreadoEn { get; init; }

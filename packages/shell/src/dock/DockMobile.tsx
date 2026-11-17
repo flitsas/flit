@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type RefObject } from "react";
-import { X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { DockEntry, DockGroup } from "../nav";
 import { DockEntryLink } from "./Dock";
 import { DockGlyph } from "./DockGlyph";
@@ -79,7 +79,7 @@ export function DockMobile({ groups, homeIconSrc, scrollRef }: Props) {
                 <strong>Navegación</strong>
               </span>
               <button type="button" onClick={close} className="dock-menu__cerrar" aria-label="Cerrar menú">
-                <X className="h-4 w-4" aria-hidden="true" />
+                <Icono nombre="cerrar" className="h-4 w-4" />
               </button>
             </div>
             <div className="dock-menu__lista">

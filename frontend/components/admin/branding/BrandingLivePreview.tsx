@@ -1,7 +1,8 @@
 "use client";
 
 import { useMemo, type CSSProperties } from "react";
-import { FileText, Home, Settings } from "lucide-react";
+import { Home } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { isValidHexColor } from "@/lib/brand/contrast";
 import { deriveBrandSurfaces } from "@/lib/brand/derive-tokens";
 import type { BrandColors } from "@/lib/api/branding";
@@ -107,10 +108,10 @@ export function BrandingLivePreview({ colors, platformName, logoUrl }: BrandingL
             <Home className="h-3 w-3" aria-hidden /> Inicio
           </span>
           <span className="flex items-center gap-1 rounded-full px-3 py-1 text-[10px] font-medium text-[#59677d]">
-            <FileText className="h-3 w-3" aria-hidden /> Trámites
+            <Icono nombre="documento" className="h-3 w-3" /> Trámites
           </span>
           <span className="flex items-center gap-1 rounded-full bg-[var(--nav-app-bg)] px-3 py-1 text-[10px] font-medium text-[#59677d]">
-            <Settings className="h-3 w-3" aria-hidden /> Ajustes
+            <Icono nombre="ajustes" className="h-3 w-3" /> Ajustes
           </span>
         </div>
       </div>

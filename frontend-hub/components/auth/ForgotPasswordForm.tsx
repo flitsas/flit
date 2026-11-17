@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { postJson } from "@/lib/api";
-import { Mail } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { INGRESO_ICONO_CLS } from "@flit/ui/Ingreso";
 import { ERROR_CLASS, INPUT_CLASS, LABEL_CLASS, STATUS_CLASS, SUBMIT_CLASS } from "./AuthCard";
 
@@ -45,7 +45,7 @@ export function ForgotPasswordForm() {
       <div>
         <label htmlFor="fp-email" className={LABEL_CLASS}>Correo electrónico</label>
         <div className="relative">
-          <Mail className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="correo" className={INGRESO_ICONO_CLS} />
           <input id="fp-email" type="email" autoComplete="username" className={INPUT_CLASS} value={email} onChange={(e) => setEmail(e.target.value)} />
         </div>
       </div>

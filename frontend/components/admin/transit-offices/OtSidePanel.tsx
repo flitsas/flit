@@ -1,6 +1,6 @@
 "use client";
 
-import { X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { ReactNode } from "react";
 import { Modal, type ModalSize } from "@/components/atom/Modal";
 
@@ -62,9 +62,9 @@ export function OtSidePanel({
       panelClassName={surface === "modal" ? "!bg-secondary" : ""}
       bodyClassName={scrollable ? "" : "!overflow-y-hidden"}
       header={({ titleId }) => (
-        <div className="flex items-start justify-between gap-3">
+        <div className="relative flex flex-col items-center px-10 text-center">
           {/* El nombre accesible del diálogo es `ariaLabel`; el texto visible es `title`. */}
-          <h2 id={titleId} aria-label={ariaLabel} className="text-base font-bold text-flit-primary">
+          <h2 id={titleId} aria-label={ariaLabel} className="text-[1.375rem] font-bold leading-tight text-[color:var(--di-heading)]">
             {title}
           </h2>
           <button
@@ -72,9 +72,9 @@ export function OtSidePanel({
             aria-label="Cerrar"
             onClick={onClose}
             disabled={disabled}
-            className="shrink-0 text-muted-foreground hover:text-muted-foreground dark:hover:text-foreground"
+            className="absolute -right-2 -top-2 grid h-9 w-9 place-items-center rounded-full bg-transparent text-[color:var(--di-text-tertiary)] transition hover:bg-[color:var(--kit-hover)] hover:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)] disabled:opacity-50"
           >
-            <X className="h-5 w-5" />
+            <Icono nombre="cerrar" size={20} />
           </button>
         </div>
       )}

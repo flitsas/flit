@@ -1,14 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import {
-  ChevronDown,
-  Copy,
-  ExternalLink,
-  FileSignature,
-  RefreshCw,
-  RotateCcw,
-} from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient, getIdentitySendConflict } from '@/lib/api/tramites-client';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
@@ -957,10 +950,7 @@ function TrazabilidadDisclosure({ children }: { children: ReactNode }) {
         style={{ color: 'var(--color-flit-brand)' }}
       >
         Ver trazabilidad de validación
-        <ChevronDown
-          className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
-          aria-hidden="true"
-        />
+        <Icono nombre="abajo" className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div id={panelId} className="mt-2">
@@ -989,7 +979,7 @@ function VaultCoveredView() {
         style={{ background: 'var(--color-flit-brand)', color: 'white' }}
         aria-hidden
       >
-        <FileSignature className="h-5 w-5" />
+        <Icono nombre="firma" className="h-5 w-5" />
       </span>
       <div className="space-y-0.5">
         <p className="text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
@@ -1037,7 +1027,7 @@ function KyverumPendingIntro({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+        <Icono nombre="reintento" className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--color-flit-brand)' }} />
         <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
           Esperando validación de {v.name}
         </p>
@@ -1089,7 +1079,7 @@ function KyverumCapturePanel({ validation: v }: { validation: BiometricValidatio
         className={`${WIZARD_BTN_BRAND} inline-flex items-center gap-1.5 px-3 py-1.5`}
         style={{ background: WIZARD_BTN_SOLID }}
       >
-        <ExternalLink className="h-3 w-3" aria-hidden />
+        <Icono nombre="externo" className="h-3 w-3" />
         Abrir captura Kyverum
       </a>
       <button
@@ -1099,7 +1089,7 @@ function KyverumCapturePanel({ validation: v }: { validation: BiometricValidatio
         style={{ borderColor: WIZARD_BTN_SOLID, color: WIZARD_BTN_SOLID }}
         aria-label="Copiar enlace de captura"
       >
-        <Copy className="h-3 w-3" aria-hidden />
+        <Icono nombre="copiar" className="h-3 w-3" />
         {copied ? 'Copiado' : 'Copiar enlace'}
       </button>
       <a
@@ -1161,7 +1151,7 @@ function ReconcileAction({
         style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
         aria-label="Actualizar estado de la validación consultando al proveedor"
       >
-        <RotateCcw className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} aria-hidden />
+        <Icono nombre="reintento" className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} />
         {submitting ? 'Consultando…' : 'Actualizar estado'}
       </button>
       {message?.tone === 'info' && (
@@ -1257,7 +1247,7 @@ function SentPendingView({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <RefreshCw className="h-3.5 w-3.5" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+        <Icono nombre="reintento" className="h-3.5 w-3.5" style={{ color: 'var(--color-flit-brand)' }} />
         <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
           {headline} de {v.name}
         </p>

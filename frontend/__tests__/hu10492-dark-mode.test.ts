@@ -84,17 +84,18 @@ describe("HU #10492 — AC2: pantalla RBAC con tema oscuro completo", () => {
 describe("HU #10492 — AC3: token de borde = gris de marca en claro y borde propio en oscuro (valores del UI kit, HU #14474)", () => {
   const css = readDesignCss();
 
-  it("happy path: :root define --border como el gris de marca #DFE5ED", () => {
-    expect(css).toMatch(/--border:\s*#dfe5ed/i);
+  it("happy path: :root define --border como la línea del kit #A9C9FC", () => {
+    // UI Kit 2026 (propuesta-2): borde de 1 px #A9C9FC en todo contenedor.
+    expect(css).toMatch(/--border:\s*#a9c9fc/i);
   });
 
-  it("contrato: .dark redefine --border con el borde oscuro de la propuesta (#22375c)", () => {
+  it("contrato: .dark redefine --border con la línea oscura del kit (#3a5688)", () => {
     const darkBlock = css.slice(css.indexOf(".dark"));
-    expect(darkBlock).toMatch(/--border:\s*#22375c/i);
+    expect(darkBlock).toMatch(/--border:\s*#3a5688/i);
   });
 
-  it("edge: no regresión — el token de marca --color-flit-gray sigue siendo #DFE5ED", () => {
-    // HU #14478: con respaldo por tema (var(--flit-gray-tema, #dfe5ed)); en claro sigue siendo #DFE5ED.
-    expect(css).toMatch(/--color-flit-gray:\s*(?:var\(--flit-gray-tema,\s*)?#dfe5ed/i);
+  it("edge: no regresión — el token de marca --color-flit-gray es la línea del kit #A9C9FC", () => {
+    // HU #14478: con respaldo por tema (var(--flit-gray-tema, …)); UI Kit 2026 (propuesta-2): en claro, #A9C9FC.
+    expect(css).toMatch(/--color-flit-gray:\s*(?:var\(--flit-gray-tema,\s*)?#a9c9fc/i);
   });
 });

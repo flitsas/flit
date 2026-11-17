@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { AlertTriangle, Ban, Eye, Loader2, Pencil } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -34,6 +35,7 @@ import {
   TABLA_ROW_HOVER_CLS,
   TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * Pestaña "Baúl de Firmas" (HU #10644): registra, lista, consulta, CORRIGE y anula firmas de
@@ -187,9 +189,9 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                     </td>
                     <td data-label="Estado" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                       <span
-                        className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
-                        style={{ color: badge.color, borderColor: badge.border, background: badge.bg }}
+                        {...etiquetaKit({ c: badge.border, ct: badge.color })}
                       >
+                        <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                         {ESTADO_LABELS[item.estado] ?? item.estado}
                       </span>
                     </td>
@@ -200,7 +202,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                       <RowActions
                         actions={[
                           {
-                            icon: Eye,
+                            icon: iconoComo("ojo"),
                             label: `Ver detalle de la firma de ${item.fullName}`,
                             onClick: () => setDetail(item),
                             tone: "primary",
@@ -208,13 +210,13 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
                           ...(!revoked
                             ? [
                                 {
-                                  icon: Pencil,
+                                  icon: iconoComo("lapiz"),
                                   label: `Corregir la firma de ${item.fullName}`,
                                   onClick: () => setToEdit(item),
                                   tone: "primary" as const,
                                 },
                                 {
-                                  icon: Ban,
+                                  icon: iconoComo("distinto"),
                                   label: `Anular la firma de ${item.fullName}`,
                                   onClick: () => setToRevoke(item),
                                   tone: "danger" as const,
@@ -274,7 +276,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
           onClose={() => setToRevoke(null)}
           busy={revoking}
           size="sm"
-          icon={AlertTriangle}
+          icono="alerta"
           iconBg="var(--destructive)"
           title="Anular firma"
         >
@@ -298,7 +300,7 @@ export function SignatureVaultTab({ tenantId }: { tenantId: string }) {
               className="flex flex-1 items-center justify-center gap-2 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
               style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
             >
-              {revoking && <Loader2 className="h-4 w-4 animate-spin" />}
+              {revoking && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
               Anular firma
             </button>
           </div>

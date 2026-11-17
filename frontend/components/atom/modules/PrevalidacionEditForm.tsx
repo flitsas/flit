@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AlertCircle, AlertTriangle, CheckCircle2, ExternalLink, Loader2, Lock, X } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient, TramitesApiError } from '@/lib/api/tramites-client';
 import type {
   EditarPrevalidacionRequest,
@@ -10,15 +10,11 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { buttonClass } from '@flit/ui/Button';
 import {
-  DIALOGO_FRANJA,
-  DIALOGO_FRANJA_CERRAR,
   DIALOGO_FRANJA_CIRCULO,
-  DIALOGO_FRANJA_ICONO,
-  DIALOGO_FRANJA_TITULO,
   DIALOGO_PANEL,
   DIALOGO_PIE,
-  DIALOGO_VELO,
 } from '@/components/operacion/dialogo-propio';
+import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 
 /**
  * Formulario de edición de una prevalidación STANDALONE (HU #10944 — Feature #10864, CF-03;
@@ -118,24 +114,25 @@ export function PrevalidacionEditForm({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${DIALOGO_VELO}`}
+      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${MODAL_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="pv-edit-title"
     >
       <div className={`${DIALOGO_PANEL} w-full max-w-lg`}>
-        <div className={DIALOGO_FRANJA}>
+        <div className={MODAL_CABECERA_CLS}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-          <h2 id="pv-edit-title" className={DIALOGO_FRANJA_TITULO}>
+          <Icono nombre="lapiz" disco size={52} />
+          <h2 id="pv-edit-title" className={MODAL_TITULO_CLS}>
             Editar prevalidación
           </h2>
           <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar formulario de edición"
-            className={DIALOGO_FRANJA_CERRAR}
+            className={MODAL_CERRAR_CLS}
           >
-            <X className="h-5 w-5" aria-hidden="true" />
+            <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
         </div>
 
@@ -173,7 +170,7 @@ export function PrevalidacionEditForm({
               </div>
             </div>
             <p id="pv-edit-doc-reason" className="flex items-start gap-1.5 text-[11px] opacity-70">
-              <Lock className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+              <Icono nombre="candado" className="h-3.5 w-3.5 shrink-0 mt-0.5" />
               El tipo y el número de documento no son editables porque definen la identidad. Para
               corregirlos, anula este registro y crea una prevalidación nueva.
             </p>
@@ -229,7 +226,7 @@ export function PrevalidacionEditForm({
                 role="status"
                 aria-live="polite"
               >
-                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--color-flit-brand)' }} aria-hidden="true" />
+                <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" style={{ color: 'var(--color-flit-brand)' }} />
                 <span>
                   Al guardar, la validación se reenviará al nuevo correo y el enlace anterior dejará de
                   funcionar.
@@ -245,7 +242,7 @@ export function PrevalidacionEditForm({
                 role="alert"
                 aria-live="assertive"
               >
-                <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden="true" />
+                <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" />
                 <div className="space-y-2">
                   <span>{apiError}</span>
                   {offerNueva && (
@@ -273,7 +270,7 @@ export function PrevalidacionEditForm({
               disabled={submitting || hasErrors}
               className={buttonClass({ size: 'sm' })}
             >
-              {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              {submitting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
               {submitting ? 'Guardando…' : willResend ? 'Guardar y reenviar' : 'Guardar cambios'}
             </button>
           </div>
@@ -325,16 +322,16 @@ export function PrevalidacionResendResultPanel({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${DIALOGO_VELO}`}
+      className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${MODAL_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="pv-resend-title"
     >
       <div className={`${DIALOGO_PANEL} w-full max-w-md`}>
-        <div className={DIALOGO_FRANJA}>
+        <div className={MODAL_CABECERA_CLS}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
-          <CheckCircle2 className={DIALOGO_FRANJA_ICONO} aria-hidden="true" />
-          <h2 id="pv-resend-title" className={DIALOGO_FRANJA_TITULO}>
+          <Icono nombre="check" disco size={52} />
+          <h2 id="pv-resend-title" className={MODAL_TITULO_CLS}>
             Validación reenviada
           </h2>
         </div>
@@ -365,7 +362,7 @@ export function PrevalidacionResendResultPanel({
               >
                 {captureUrl}
               </a>
-              <ExternalLink className="h-3.5 w-3.5 shrink-0 text-flit-brand" aria-hidden="true" />
+              <Icono nombre="externo" className="h-3.5 w-3.5 shrink-0 text-flit-brand" />
             </div>
             <button
               type="button"

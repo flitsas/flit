@@ -4,7 +4,6 @@
 // su vigencia, valor y usuario. Solo lectura: una versión no se edita, el cambio es una versión nueva. El historial es
 // por concepto, así que si la fila tiene varios se elige cuál ver.
 import { useEffect, useMemo, useState } from "react";
-import { History } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -105,7 +104,7 @@ export function TarifaHistorialModal({
       onClose={onClose}
       title="Historial de la tarifa"
       description={`${grupo.tipoTramiteNombre ?? "Todos los trámites"} · ${grupo.organismoNombre ?? "Todos los organismos"}`}
-      icon={History}
+      icono="reloj"
       size="xl"
     >
       <div className="flex flex-col gap-4">

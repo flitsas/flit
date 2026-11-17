@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { FolderOpen } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   archivosDesdeArrastre,
   filtrarUtiles,
@@ -72,7 +72,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
       onDragOver={(e) => e.preventDefault()}
       onDragEnter={handleDragEnter}
       onDragLeave={handleDragLeave}
-      className="rounded-xl border-2 border-dashed bg-card p-10 text-center shadow-sm transition-all duration-200 hover:shadow-md"
+      className="rounded-xl border-2 border-dashed bg-card p-10 text-center transition-all duration-200 hover:bg-[var(--kit-hover)]"
       style={{
         borderColor: dragging ? 'var(--color-flit-brand)' : 'var(--border)',
         background: dragging ? 'var(--badge-info-bg)' : undefined,
@@ -141,7 +141,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
           className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-card px-6 text-[13px] font-semibold transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent"
           style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
         >
-          <FolderOpen className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="carpeta" className="h-4 w-4" />
           Seleccionar carpeta
         </button>
       </div>

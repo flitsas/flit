@@ -7,7 +7,7 @@ import { useState } from "react";
 import { changePassword } from "@/lib/api/auth";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-policy";
 import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/auth/passwordReusedError";
-import { Lock } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { INGRESO_ICONO_CLS } from "@flit/ui/Ingreso";
 import {
   AUTH_ERROR_CLASS,
@@ -76,7 +76,7 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
           Contraseña actual
         </label>
         <div className="relative">
-          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
           <input
             id="cp-current"
             type="password"
@@ -92,7 +92,7 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
           Nueva contraseña
         </label>
         <div className="relative">
-          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
           <input
             id="cp-next"
             type="password"
@@ -109,7 +109,7 @@ export function ChangePasswordForm({ onSuccess }: { onSuccess?: () => void }) {
           Confirmar nueva contraseña
         </label>
         <div className="relative">
-          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
           <input
             id="cp-confirm"
             type="password"

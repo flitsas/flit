@@ -8,7 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * Acordeón del wizard, en el lenguaje visual de la propuesta: tarjeta blanca de radio amplio,
@@ -170,10 +170,7 @@ export function WizardAccordion({
             aria-label={open ? `Contraer ${title}` : `Expandir ${title}`}
             className="grid h-8 w-8 place-items-center rounded-lg transition hover:bg-[var(--di-accent-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
-            <ChevronDown
-              className={`h-4 w-4 opacity-70 transition-transform ${open ? 'rotate-180' : ''}`}
-              aria-hidden="true"
-            />
+            <Icono nombre="abajo" className={`h-4 w-4 opacity-70 transition-transform ${open ? 'rotate-180' : ''}`} />
           </button>
         </div>
       </div>

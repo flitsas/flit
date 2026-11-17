@@ -42,9 +42,9 @@ export interface SearchResult {
   ilustracion?: string;
 }
 
-/** Ilustraciones fijas del buscador (`public/assets/ilustraciones` existe en las 4 apps). */
-const ILUS_INICIO = "/assets/ilustraciones/inicio.webp";
-const ILUS_PLACA = "/assets/ilustraciones/consulta-placa.webp";
+/** Íconos fijos del buscador: el disco del kit (`public/assets/kit/modulo` existe en las 4 apps). */
+const ILUS_INICIO = "/assets/kit/modulo/inicio.svg";
+const ILUS_PLACA = "/assets/kit/modulo/consulta-placa.svg";
 
 /** Placa colombiana: carro (ABC123) o moto (ABC12D). Se compara sin espacios ni guiones y en mayúsculas. */
 const PLACA = /^[A-Z]{3}\d{2}[A-Z0-9]$/;

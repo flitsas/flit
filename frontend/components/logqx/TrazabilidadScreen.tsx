@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { getToken } from "@/lib/api/client";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -94,7 +95,7 @@ export function TrazabilidadScreen({
         href={volverHref}
         className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-medium opacity-70 hover:text-flit-brand hover:opacity-100"
       >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" />
         Volver a LOG QX <span className="opacity-60">(filtros conservados)</span>
       </Link>
 
@@ -108,7 +109,7 @@ export function TrazabilidadScreen({
         {data && r && (
           <>
             {/* Cabecera fija: la identificación no se pierde al desplazar la línea de tiempo. */}
-            <header className="sticky top-0 z-30 mb-4 rounded-2xl border border-border bg-card shadow-sm">
+            <header className="sticky top-0 z-30 mb-4 rounded-2xl border border-border bg-card">
               <div className="flex flex-wrap items-start gap-5 px-5 py-4">
                 <div className="min-w-[300px] flex-1">
                   <h1 className="font-mono text-[19px] font-bold tracking-tight">
@@ -184,7 +185,7 @@ export function TrazabilidadScreen({
               )}
 
               <div
-                className="flex flex-wrap items-center gap-1 border-t border-border px-5"
+                className={`${PESTANAS_LISTA_CLS} border-t border-border px-5`}
                 role="tablist"
                 aria-label="Vista de la trazabilidad"
               >
@@ -239,17 +240,9 @@ function Tab({
       onClick={() => onSelect(valor)}
       // Mismo tab que el resto de la consola (`TramitesListToolbar`): el estado activo se marca
       // con color Y con subrayado, para no depender solo del color.
-      className="relative rounded-t-lg px-4 py-2.5 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
-      style={activa ? { color: "var(--color-flit-brand)" } : { color: "var(--color-flit-primary)", opacity: 0.65 }}
+      className={pestanaClass(activa)}
     >
       {children}
-      {activa ? (
-        <span
-          className="absolute inset-x-2 -bottom-px h-0.5 rounded-full"
-          style={{ background: "var(--color-flit-brand)" }}
-          aria-hidden="true"
-        />
-      ) : null}
     </button>
   );
 }

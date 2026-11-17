@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, StatusBadge } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { ConsultasEmpresa } from "@/components/consultas/ConsultasAdmin";
@@ -39,14 +39,14 @@ function Copias({ titulo, ayuda, valor, onCambio, soloLectura }: { titulo: strin
           )}
           {!soloLectura && (
             <button type="button" aria-label="Quitar" className="text-destructive hover:opacity-70" onClick={() => onCambio(valor.filter((_, j) => j !== i))}>
-              <Trash2 className="h-4 w-4" />
+              <Icono nombre="papelera" className="h-4 w-4" />
             </button>
           )}
         </div>
       ))}
       {!soloLectura && (
         <button type="button" className={`${controlCls(false)} w-fit`} onClick={() => onCambio([...valor, { correo: "", tipos: [] }])}>
-          <Plus className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="mas" className="h-3.5 w-3.5" />
           Agregar correo
         </button>
       )}

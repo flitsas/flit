@@ -1,6 +1,6 @@
 "use client";
 
-import { BookOpen, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useEffect, useRef, type RefObject } from "react";
 import {
   hasActiveConversation,
@@ -177,7 +177,7 @@ export function DrFlitChatPanel({
             title="Ocultar panel (conserva la conversación)"
             className="relative z-[1] grid h-10 w-10 shrink-0 place-items-center rounded-full bg-[color-mix(in_srgb,var(--di-on-accent)_18%,transparent)] text-[color:var(--di-on-accent)] transition hover:bg-[color-mix(in_srgb,var(--di-on-accent)_30%,transparent)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--di-on-accent)]"
           >
-            <X className="h-5 w-5" aria-hidden="true" />
+            <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
         </header>
 
@@ -257,10 +257,7 @@ export function DrFlitChatPanel({
                 style={{ background: "var(--dr-flit-icon-tint)" }}
                 aria-hidden="true"
               >
-                <BookOpen
-                  className="h-5 w-5"
-                  style={{ color: "var(--dr-flit-brand-blue)" }}
-                />
+                <Icono nombre="ayuda" className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
               </span>
               <span className="min-w-0 flex-1">
                 <span

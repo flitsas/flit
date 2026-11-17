@@ -245,8 +245,8 @@ public sealed class ExpressEndpointsTests
     {
         var ct = TestContext.Current.CancellationToken;
         await using var api = await ApiDePrueba.SinBaseAsync();
-        var backoffice = Permisos.RolesPorDefecto.Single(r => r.Codigo == "backoffice_diagnostico").Permisos;
-        using var cliente = api.Cliente(api.Token(permisos: backoffice, roles: ["backoffice_diagnostico"], tipoEmpresa: "FLIT"));
+        var backoffice = OperadorBackofficeDePrueba.Slugs;
+        using var cliente = api.Cliente(api.Token(permisos: backoffice, roles: ["admin_diagnostico"], tipoEmpresa: "FLIT"));
 
         var express = await cliente.PostAsync(Ruta, Cuerpo(Express("ABC123")), ct);
         var estimado = await cliente.PostAsync(RutaEstimado, Cuerpo(Express("ABC123")), ct);

@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
@@ -136,7 +136,7 @@ export function OtHubLayout({
           onClick={() => router.push(otHubListPath())}
           className={`mb-4 ${ADMIN_BACK_LINK_CLS}`}
         >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="izquierda" className="h-4 w-4" />
           Volver al listado de OT
         </button>
       )}

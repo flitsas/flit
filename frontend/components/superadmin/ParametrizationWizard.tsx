@@ -1,6 +1,6 @@
 'use client';
 
-import { Check, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { useParametrizationWizard } from '@/hooks/useParametrizationWizard';
 import { Step1Identidad } from './wizard/Step1Identidad';
 import { Step2Tipologia } from './wizard/Step2Tipologia';
@@ -128,11 +128,11 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                     className="h-8 w-8 rounded-full grid place-items-center text-[11px] font-bold shrink-0"
                     style={{
                       background: isDone ? 'var(--color-flit-tech)' : isActive ? 'var(--color-flit-brand)' : 'var(--border)',
-                      color: isDone || isActive ? '#fff' : 'var(--color-flit-primary)',
+                      color: isDone || isActive ? 'var(--di-on-accent)' : 'var(--color-flit-primary)',
                     }}
                     aria-current={isActive ? 'step' : undefined}
                   >
-                    {isDone ? <Check className="h-4 w-4" aria-hidden="true" /> : i + 1}
+                    {isDone ? <Icono nombre="check" className="h-4 w-4" /> : i + 1}
                   </span>
                   <span className={`text-xs ${isActive ? 'font-bold' : 'opacity-70'}`}>
                     {s}
@@ -210,7 +210,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
               style={{ borderColor: 'var(--color-flit-primary)', color: 'var(--color-flit-primary)' }}
               aria-label="Ir al paso anterior"
             >
-              <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="izquierda" className="h-3 w-3" />
               Anterior
             </button>
 
@@ -229,11 +229,11 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                 onClick={() => setStep(step + 1)}
                 disabled={loading}
                 className="flex items-center gap-1 px-5 py-2 rounded-xl text-xs font-semibold disabled:opacity-50"
-                style={{ background: 'var(--color-flit-brand)', color: '#fff' }}
+                style={{ background: 'var(--color-flit-brand)', color: 'var(--di-on-accent)' }}
                 aria-label="Continuar al siguiente paso"
               >
                 Continuar
-                <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                <Icono nombre="derecha" className="h-3 w-3" />
               </button>
             ) : (
               <button
@@ -244,7 +244,7 @@ export function ParametrizationWizard({ editingId, onExit }: ParametrizationWiza
                 aria-label="Continuar al siguiente paso"
               >
                 {loading ? 'Guardando…' : 'Continuar'}
-                <ChevronRight className="h-3 w-3" aria-hidden="true" />
+                <Icono nombre="derecha" className="h-3 w-3" />
               </button>
             )}
           </div>

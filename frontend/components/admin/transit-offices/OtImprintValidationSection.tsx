@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useMemo, useState } from "react";
-import { FileText, History, ShieldCheck } from "lucide-react";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
@@ -25,6 +24,7 @@ import { ApiError } from "@/lib/api/types";
 import { openPdfBlobInNewTab } from "@/lib/documents/open-document-tab";
 
 import { formatFechaHora } from "@/lib/format/date";
+import { iconoComo } from "@flit/ui/iconoComo";
 type ViewPhase = "idle" | "loading" | "error" | "empty" | "ready";
 
 type HistoryPhase = "idle" | "loading" | "error" | "empty" | "ready";
@@ -323,7 +323,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
             <RowActions
               actions={[
                 {
-                  icon: FileText,
+                  icon: iconoComo("documento"),
                   label: canViewPdf
                     ? `Ver PDF de impronta ${row.placa}`
                     : `PDF no disponible para impronta ${row.placa}`,
@@ -333,13 +333,13 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
                   tone: "primary",
                 },
                 {
-                  icon: History,
+                  icon: iconoComo("reloj"),
                   label: `Ver bitácora de impronta ${row.placa}`,
                   onClick: () => void openHistoryModal(row),
                   tone: "primary",
                 },
                 {
-                  icon: ShieldCheck,
+                  icon: iconoComo("escudo"),
                   label: `Validar firma de impronta ${row.placa}`,
                   onClick: () => openValidateModal(row),
                   tone: "primary",
@@ -511,7 +511,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         open={modalRow !== null}
         onClose={closeValidateModal}
         title="Validar firma digital"
-        icon={ShieldCheck}
+        icono="escudo"
         description={
           modalRow
             ? `Placa ${modalRow.placa} · firmado ${formatDateTime(modalRow.signedAt)}. Pegue el texto de «Firma digital impronta» del PDF.`
@@ -562,7 +562,7 @@ export function OtImprintValidationSection({ transitOfficeId }: { transitOfficeI
         open={historyRow !== null}
         onClose={closeHistoryModal}
         title="Bitácora de validaciones"
-        icon={History}
+        icono="reloj"
         description={
           historyRow
             ? `Placa ${historyRow.placa} · intentos registrados para esta impronta.`

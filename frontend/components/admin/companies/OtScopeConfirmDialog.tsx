@@ -1,6 +1,5 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 
 export interface OtScopeConfirmDialogProps {
@@ -33,7 +32,7 @@ export function OtScopeConfirmDialog({
       open={open}
       onClose={onCancel}
       busy={busy}
-      icon={AlertTriangle}
+      icono="alerta"
       iconBg="var(--color-flit-alert)"
       title="Confirmar cambio de organismos"
       titleClassName="text-base font-bold text-flit-primary"

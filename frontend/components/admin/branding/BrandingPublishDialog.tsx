@@ -1,6 +1,5 @@
 "use client";
 
-import { Rocket } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 
 export interface BrandingPublishDialogProps {
@@ -25,7 +24,7 @@ export function BrandingPublishDialog({
   note = "Las comunicaciones ya enviadas no cambian.",
 }: BrandingPublishDialogProps) {
   return (
-    <Modal open={open} onClose={onClose} busy={busy} size="sm" icon={Rocket} title={title}>
+    <Modal open={open} onClose={onClose} busy={busy} size="sm" icono="avance" title={title}>
       <p className="text-sm opacity-80">{description}</p>
       <p className="mt-2 text-sm font-medium" style={{ color: "var(--badge-warning-fg)" }} role="note">
         {note}

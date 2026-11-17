@@ -10,7 +10,7 @@
 // HU #13666 (Feature #13636 F-F): los tipos de servicio (Matrículas, Traspasos, Otros trámites) se muestran como el par
 // Ver / Crear del Panel SA: «Crear» deshabilitado sin «Ver», y quitar «Ver» quita «Crear» (regla «crear exige ver»).
 import { useEffect, useMemo, useState } from "react";
-import { Loader2, Shield } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { FamilyPairCheckboxes } from "@/components/shared/permissions/FamilyPairCheckboxes";
 import { RoleEditorSections } from "@/components/shared/permissions/RoleEditorSections";
@@ -293,7 +293,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
       busy={busy}
       title={title}
       description={description_}
-      icon={Shield}
+      icono="escudo"
       size="lg"
       footer={
         <div className="flex justify-end gap-2">
@@ -313,7 +313,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
               className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow-button)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
               style={{ background: "var(--gradient-action)" }}
             >
-              {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              {busy && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
               {creating ? "Crear rol" : "Guardar cambios"}
             </button>
           )}
@@ -322,7 +322,7 @@ export function CompanyRoleFormModal({ mode, onClose, onSaved }: CompanyRoleForm
     >
       {loading ? (
         <div role="status" aria-busy="true" className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          <Icono nombre="girador" className="h-4 w-4 animate-spin" />
           Cargando permisos…
         </div>
       ) : loadError ? (

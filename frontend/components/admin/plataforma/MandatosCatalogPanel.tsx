@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, FileText, RotateCcw, Search, UserRound, Users } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from "@/components/atom/Modal";
 import { SectionTabs } from "@/components/atom/SectionTabs";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
@@ -201,7 +202,7 @@ export function MandatosCatalogPanel() {
             {
               key: "mandato",
               label: "Configuración del mandato",
-              icon: FileText,
+              icon: iconoComo("documento"),
               onSelect: () => setEditing({ office: row, mode: "mandato" }),
               disabled: actingId !== null || previewing !== null,
               disabledReason: "Hay otra acción en curso.",
@@ -209,7 +210,7 @@ export function MandatosCatalogPanel() {
             {
               key: "mandatario",
               label: "Configuración del mandatario",
-              icon: Users,
+              icon: iconoComo("usuarios"),
               onSelect: () => setEditing({ office: row, mode: "mandatario" }),
               disabled: actingId !== null || previewing !== null,
               disabledReason: "Hay otra acción en curso.",
@@ -217,7 +218,7 @@ export function MandatosCatalogPanel() {
             {
               key: "personas",
               label: "Mandatarios del organismo",
-              icon: UserRound,
+              icon: iconoComo("persona"),
               onSelect: () => router.push(`/admin/transit-offices/${row.officeId}/mandatos`),
             },
             ...(row.hasExplicitConfig
@@ -225,7 +226,7 @@ export function MandatosCatalogPanel() {
                   {
                     key: "default",
                     label: "Restablecer default",
-                    icon: RotateCcw,
+                    icon: iconoComo("reintento"),
                     onSelect: () => setResetTarget(row),
                     disabled: actingId !== null,
                     disabledReason: "Hay otra acción en curso.",
@@ -311,10 +312,7 @@ export function MandatosCatalogPanel() {
           </h2>
           <label className="relative block w-full sm:max-w-xs">
             <span className="sr-only">Buscar organismo o plantilla</span>
-            <Search
-              className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
+            <Icono nombre="buscar" className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input
               type="search"
               value={search}
@@ -441,7 +439,7 @@ function ResetFormatoDialog({
       open
       onClose={onCancel}
       busy={busy}
-      icon={AlertTriangle}
+      icono="alerta"
       iconBg="var(--color-flit-alert)"
       title="Restablecer redacción de fábrica"
       titleClassName="text-base font-bold text-flit-primary"
@@ -514,7 +512,7 @@ function ResetConfirmDialog({
       open
       onClose={onCancel}
       busy={busy}
-      icon={AlertTriangle}
+      icono="alerta"
       iconBg="var(--color-flit-alert)"
       title="Restablecer configuración"
       titleClassName="text-base font-bold text-flit-primary"

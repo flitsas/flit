@@ -249,7 +249,7 @@ public sealed class SimulacionTests
         };
         var publicador = new PublicadorResultado(new OutboxCapturada());
         var trabajo = new TrabajoConsultaDiagnostico(Guid.CreateVersion7(), Guid.CreateVersion7(), null, FuentesBus.Runt, RpcConsultas.PorPlaca,
-            System.Text.Json.JsonDocument.Parse("{}").RootElement.Clone());
+            System.Text.Json.JsonElement.Parse("{}"));
 
         foreach (var (rpc, solicitud) in solicitudes)
         {

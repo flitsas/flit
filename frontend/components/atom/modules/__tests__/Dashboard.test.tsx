@@ -647,9 +647,9 @@ describe("Dashboard — HU #12725 layout hero y KPIs 2×2", () => {
 
     const banner = await screen.findByTestId("dashboard-hero-banner");
     const column = screen.getByTestId("dashboard-hero-column");
-    // Apilado (celular) el banner conserva el alto del token; a partir de md se estira a la columna.
-    expect(banner.className).toContain("min-h-[var(--dashboard-hero-h)]");
-    expect(banner.className).toContain("md:min-h-0");
+    // UI Kit 2026: la lámina del banner mide al menos 200 px (180 px en celular) y se estira a la columna.
+    expect(banner.className).toContain("min-h-[200px]");
+    expect(banner.className).toContain("max-sm:min-h-[180px]");
     expect(column.className).not.toContain("min-h-");
     expect(banner.style.minHeight).toBe("");
   });

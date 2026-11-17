@@ -7,6 +7,7 @@
 // cobertura, export que recorre todas las páginas— sobre otro catálogo. La pregunta que resuelve es
 // la de una gestora: «pegué las cuarenta placas de esta flota, ¿por qué salieron treinta y siete?».
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useMemo } from "react";
 import { QueryConsole } from "@/components/consultas/QueryConsole";
 import type { QuerySource, SavedQuery } from "@/lib/api/queries";
@@ -133,11 +134,7 @@ export function ConsultasTab({
         renderCell={(columnId, fila) =>
           columnId === "estado" ? (
             <span
-              className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-              style={{
-                background: `color-mix(in srgb, ${estadoEmpresa(fila.status).color} 10%, transparent)`,
-                color: estadoEmpresa(fila.status).color,
-              }}
+              {...etiquetaKit({ c: estadoEmpresa(fila.status).color })}
             >
               {estadoEmpresa(fila.status).label}
             </span>
@@ -161,11 +158,7 @@ export function ConsultasTab({
       renderCell={(columnId, fila) =>
         columnId === "estado" ? (
           <span
-            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-            style={{
-              background: `color-mix(in srgb, ${estadoEmpresa(fila.status).color} 10%, transparent)`,
-              color: estadoEmpresa(fila.status).color,
-            }}
+            {...etiquetaKit({ c: estadoEmpresa(fila.status).color })}
           >
             {estadoEmpresa(fila.status).label}
           </span>

@@ -25,8 +25,14 @@ namespace Flit.Admin.Tests.Identity;
 /// <c>new CatalogosService.CatalogosServiceClient(invoker).ListarTiposTramiteAsync(new ListarTiposTramiteRequest())</c>
 /// con un token client_credentials de svc-diagnostico (aud=tramites).</para>
 /// </summary>
-public sealed class TiposTramiteGrpcTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class TiposTramiteGrpcTests(TiposTramiteGrpcTests.Anfitrion anfitrion) : IClassFixture<TiposTramiteGrpcTests.Anfitrion>
 {
+    /// <summary>Un host por clase (ver <see cref="HostPorClase"/>): antes cada prueba arrancaba el suyo y no lo liberaba.</summary>
+    public sealed class Anfitrion : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) => Construir(factory);
+    }
+
     private const string Catalogos = "platform.tramites.catalogos";
     private const string IdentidadRead = "platform.identidad.read";
     private const string Diagnostico = "svc-diagnostico-prueba";
@@ -36,7 +42,7 @@ public sealed class TiposTramiteGrpcTests(WebApplicationFactory<Program> factory
     public async Task ClientePermitido_RecibeSoloPublicadosYActivos_ConSusCampos()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var prefijo = $"T13731{Guid.NewGuid():N}"[..20].ToUpperInvariant();
         var publicado = Tipo($"{prefijo}_B", "Traspaso de prueba", "TRASPASO", PublicationStatus.Published, activo: true, wizard: true);
         var publicadoSinWizard = Tipo($"{prefijo}_A", "Matrícula de prueba", "MATRICULAS", PublicationStatus.Published, activo: true, wizard: false);
@@ -66,7 +72,7 @@ public sealed class TiposTramiteGrpcTests(WebApplicationFactory<Program> factory
     public async Task OtroClienteConElScope_PermissionDenied_YSigueLeyendoOrganismos()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var token = await TokenAsync(host, Comparendos, Catalogos, ct);
 
         var call = () => ListarTiposAsync(host, token, ct);
@@ -80,7 +86,7 @@ public sealed class TiposTramiteGrpcTests(WebApplicationFactory<Program> factory
     public async Task SinToken_Unauthenticated_YSinElScope_Rechazado()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
 
         var sinToken = () => ListarTiposAsync(host, token: null, ct);
         (await sinToken.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
@@ -94,13 +100,13 @@ public sealed class TiposTramiteGrpcTests(WebApplicationFactory<Program> factory
     [Fact]
     public void Configuracion_SoloSvcDiagnosticoEstaPermitido_YTieneElScope()
     {
-        var configuracion = factory.Services.GetRequiredService<IConfiguration>();
+        var configuracion = anfitrion.Base.Services.GetRequiredService<IConfiguration>();
 
         configuracion.GetSection("Catalogos:TiposTramite:ClientesPermitidos").Get<string[]>().Should().Equal("svc-diagnostico");
         configuracion.GetSection("Suite:Oidc:ServiceClients:svc-diagnostico:Scopes").Get<string[]>().Should().Contain(Catalogos);
     }
 
-    private WebApplicationFactory<Program> Host() =>
+    private static WebApplicationFactory<Program> Construir(WebApplicationFactory<Program> factory) =>
         OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
         {
             b.UseSetting("Catalogos:TiposTramite:ClientesPermitidos:0", Diagnostico);

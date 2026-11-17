@@ -1,5 +1,23 @@
-import type { ReactNode } from 'react';
-import { AlertTriangle, CheckCircle2, Info, XCircle } from 'lucide-react';
+import type { ComponentType, CSSProperties, ReactNode } from 'react';
+
+/**
+ * Ícono de aviso del Manual UI Kit 2026: el disco del paquete (`/assets/kit/aviso-*.svg`, `estado-pendiente.svg`). Mismo
+ * contrato que un ícono de línea (`className`, `style`) para que quien desestructura `Icon` de los tonos no cambie.
+ */
+type IconoAviso = ComponentType<{ className?: string; style?: CSSProperties; 'aria-hidden'?: boolean | 'true' | 'false' }>;
+const aviso = (archivo: string, nombre: string): IconoAviso => {
+  function AvisoKit({ className, style }: { className?: string; style?: CSSProperties }) {
+    // eslint-disable-next-line @next/next/no-img-element -- disco estático del kit
+    return <img src={`/assets/kit/${archivo}.svg`} alt="" aria-hidden="true" className={`object-contain ${className ?? ''}`} style={style} />;
+  }
+  AvisoKit.displayName = nombre;
+  return AvisoKit;
+};
+// El nombre de cada uno dice qué ícono es (el triángulo de alerta, el disco de error…), como el de línea que reemplaza.
+const AVISO_ERROR = aviso('aviso-error', 'XCircle·kit');
+const AVISO_ALERTA = aviso('aviso-alerta', 'AlertTriangle·kit');
+const AVISO_INFO = aviso('aviso-info', 'Info·kit');
+const AVISO_OK = aviso('aviso-ok', 'CheckCircle·kit');
 
 // Aviso en línea reutilizable (dentro de modales, formularios o paneles). Unifica el patrón que el
 // producto ya usaba suelto en varias pantallas —bloque redondeado, fondo tenue del color del tono y
@@ -20,33 +38,33 @@ export type InlineAlertTone = 'error' | 'warning' | 'info' | 'success' | 'pendin
  */
 export const INLINE_ALERT_TONES: Record<
   InlineAlertTone,
-  { color: string; background: string; border: string; Icon: typeof AlertTriangle }
+  { color: string; background: string; border: string; Icon: IconoAviso }
 > = {
   error: {
     color: 'var(--badge-danger-fg)',
     background: 'var(--badge-danger-bg)',
     border: 'var(--badge-danger-border)',
-    Icon: XCircle,
+    Icon: AVISO_ERROR,
   },
   warning: {
     // Ámbar FLIT (#F9AC00 familia) — tokens de globals.css / design guardian v2.1.
     color: 'var(--badge-warning-fg)',
     background: 'var(--badge-warning-bg)',
     border: 'var(--badge-warning-border)',
-    Icon: AlertTriangle,
+    Icon: AVISO_ALERTA,
   },
   info: {
     color: 'var(--badge-info-fg)',
     background: 'var(--badge-info-bg)',
     border: 'var(--badge-info-border)',
-    Icon: Info,
+    Icon: AVISO_INFO,
   },
   success: {
     // Verde tintado (PDF 20 ago) — no cian.
     color: 'var(--badge-success-fg)',
     background: 'var(--badge-success-bg)',
     border: 'var(--badge-success-border)',
-    Icon: CheckCircle2,
+    Icon: AVISO_OK,
   },
   pending: {
     // Naranja corporativo FLIT — `--color-flit-alert` (#FF4E00). Texto `--badge-pending-fg`
@@ -54,7 +72,7 @@ export const INLINE_ALERT_TONES: Record<
     color: 'var(--badge-pending-fg)',
     background: 'var(--badge-pending-bg)',
     border: 'var(--badge-pending-border)',
-    Icon: AlertTriangle,
+    Icon: AVISO_ALERTA,
   },
 };
 
@@ -90,17 +108,17 @@ export function InlineAlert({
       id={id}
       role={interrumpe ? 'alert' : 'status'}
       aria-live={interrumpe ? 'assertive' : 'polite'}
-      className={`flex items-start ${compact ? 'gap-1.5 rounded-lg p-1.5' : 'gap-3 rounded-xl p-3'} ${className}`.trim()}
+      className={`flex items-start ${compact ? 'gap-1.5 rounded-[9px] p-1.5' : 'gap-3 rounded-[9px] px-4 py-3'} ${className}`.trim()}
       style={{ background, border: `1px solid ${border}` }}
     >
-      <Icon className={compact ? 'mt-0.5 h-3.5 w-3.5 shrink-0' : 'mt-0.5 h-4 w-4 shrink-0'} style={{ color }} aria-hidden="true" />
+      <Icon className={compact ? 'mt-0.5 h-3.5 w-3.5 shrink-0' : 'h-[22px] w-[22px] shrink-0'} />
       <div className="min-w-0 flex-1">
         {title ? (
-          <p className="text-xs font-semibold" style={{ color }}>
+          <p className="text-sm font-semibold" style={{ color }}>
             {title}
           </p>
         ) : null}
-        <div className={`text-xs leading-relaxed ${title ? 'mt-0.5' : ''}`} style={{ color }}>
+        <div className={`text-sm leading-relaxed ${title ? 'mt-0.5' : ''}`} style={{ color }}>
           {children}
         </div>
       </div>

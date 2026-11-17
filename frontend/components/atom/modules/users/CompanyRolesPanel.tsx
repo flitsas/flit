@@ -5,7 +5,8 @@
 // Patrón de tabla de trámites (table-styles, botón «Acciones» con menú, Pagination numerada con «Filas por página»), modal normal
 // y los 4 estados (cargando, error, vacío, lleno). Backend: HU #13441 (/api/v1/security/roles).
 import { useCallback, useEffect, useState } from "react";
-import { Eye, Loader2, Pencil, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { Modal } from "@/components/atom/Modal";
 import { Pagination } from "@/components/atom/Pagination";
@@ -61,11 +62,11 @@ export function CompanyRolesPanel({ onChanged }: { onChanged?: () => void } = {}
 
   function actionsFor(role: TenantRole): RowAction[] {
     if (!isOwnRole(role)) {
-      return [{ icon: Eye, label: `Ver permisos de ${role.name}`, onClick: () => setForm({ kind: "view", role }) }];
+      return [{ icon: iconoComo("ojo"), label: `Ver permisos de ${role.name}`, onClick: () => setForm({ kind: "view", role }) }];
     }
     return [
-      { icon: Pencil, label: `Editar ${role.name}`, tone: "primary", onClick: () => setForm({ kind: "edit", role }) },
-      { icon: Trash2, label: `Eliminar ${role.name}`, tone: "danger", onClick: () => setDeleteTarget(role) },
+      { icon: iconoComo("lapiz"), label: `Editar ${role.name}`, tone: "primary", onClick: () => setForm({ kind: "edit", role }) },
+      { icon: iconoComo("papelera"), label: `Eliminar ${role.name}`, tone: "danger", onClick: () => setDeleteTarget(role) },
     ];
   }
 
@@ -212,7 +213,7 @@ function DeleteCompanyRoleDialog({
         if (!busy) onClose();
       }}
       busy={busy}
-      icon={Trash2}
+      icono="papelera"
       iconBg="var(--destructive)"
       title="Eliminar rol"
     >
@@ -241,7 +242,7 @@ function DeleteCompanyRoleDialog({
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
             style={{ background: "var(--destructive)" }}
           >
-            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+            {busy && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
             Eliminar
           </button>
         </div>

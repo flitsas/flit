@@ -34,17 +34,17 @@ export const TRAMITES_CONTROL_CLS = buttonClass({
  * prototipo. Va con `!` porque se concatena al de reposo sin resolver conflictos de clases.
  */
 export const TRAMITES_CONTROL_ACTIVO_CLS =
-  'border-[color:var(--di-action)]! bg-[color:var(--di-accent-soft)]!';
+  'bg-[color:var(--kit-azul-relleno)]! text-white!';
 
 /**
  * Campo de texto o selector de la barra: `.control` del prototipo (contorno de control, radio de
  * 12px, superficie elevada) con el alto de 36px de la fila.
  */
 export const TRAMITES_INPUT_CLS =
-  'h-9 rounded-xl border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3 text-xs ' +
-  'text-[color:var(--di-text-primary)] placeholder:text-[color:var(--di-text-tertiary)] outline-none transition ' +
-  'focus:border-[color:var(--di-action)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
-  'focus-visible:ring-offset-2';
+  'h-10 rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3 text-sm ' +
+  'text-[color:var(--di-text-primary)] placeholder:text-[color:var(--kit-gris)] outline-none transition ' +
+  'focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] focus:outline-none ' +
+  'focus-visible:ring-2 focus-visible:ring-[var(--di-action)]';
 
 /** Clase del control según tenga o no algo aplicado. */
 export function controlCls(activo: boolean): string {

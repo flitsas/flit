@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { Eye, Loader2 } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   openLoadingDocumentTab,
@@ -570,7 +570,7 @@ function ReconstruccionPanel({
         className="mb-3 flex items-start gap-2 rounded-xl border p-3 text-xs"
         style={{ borderColor: BLUE, background: 'color-mix(in srgb, var(--color-flit-brand) 6%, transparent)', color: INK_BLUE }}
       >
-        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+        <Icono nombre="girador" className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold">Reconstrucción en curso</p>
           <p className="mt-0.5">{COPY_RECONSTRUCCION_EN_CURSO}</p>
@@ -600,7 +600,7 @@ function ReconstruccionPanel({
           color: 'var(--badge-warning-fg)',
         }}
       >
-        <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" aria-hidden="true" />
+        <Icono nombre="girador" className="mt-0.5 h-4 w-4 shrink-0 animate-spin" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold">La actualización sigue en proceso</p>
           <p className="mt-0.5">
@@ -679,7 +679,7 @@ function DocRow({
       // es el hundido en el fondo de app que el guardián de diseño ya había marcado y que la
       // captura no tiene. `dark:bg-[#162744]` es la misma superficie oscura de tarjeta anidada que
       // usa `WIZARD_CARD` en toda la app, no el fondo de app.
-      className="flex flex-col gap-3 rounded-xl border bg-card p-4 shadow-sm"
+      className="flex flex-col gap-3 rounded-xl border bg-card p-4"
       style={{ borderColor: BORDER }}
     >
       <div className="flex items-start justify-between gap-2">
@@ -724,7 +724,7 @@ function DocRow({
           aria-label={`Ver PDF de ${label}`}
           onClick={() => void handleVer()}
         >
-          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="ojo" className="h-3.5 w-3.5" />
           {busy ? 'Abriendo…' : 'Ver PDF'}
         </button>
       ) : null}

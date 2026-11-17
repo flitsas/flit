@@ -2,7 +2,8 @@
 
 import { Suspense, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { ArrowDownWideNarrow, ArrowUpNarrowWide, Download, Mail, RefreshCw, Search, Send } from "lucide-react";
+import { ArrowDownWideNarrow, ArrowUpNarrowWide } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ActionsMenu, DataTable, InlineAlert, Modal, usePaginacion, type DataTableColumn } from "@flit/ui";
 import { BusquedaRapida } from "@/components/bandeja/BusquedaRapida";
 import { COLUMNAS_BANDEJA } from "@/components/bandeja/columnas";
@@ -245,7 +246,7 @@ function ContenidoBandeja() {
         <>
           <div className="flex flex-wrap items-center gap-2">
             <div className="relative w-full sm:w-64">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" aria-hidden />
+              <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" />
               <input
                 type="search"
                 value={textoBuscar}
@@ -297,7 +298,7 @@ function ContenidoBandeja() {
             <div className="ml-auto flex items-center gap-2">
               {tienePermiso(sesion, "comparendos.bandeja.exportar") && (
                 <button type="button" className={controlCls(false)} onClick={pedirExportacion} disabled={exportando !== null || lista.estado !== "ready" || totalFiltrado === 0}>
-                  <Download className="h-3.5 w-3.5" aria-hidden />
+                  <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                   {exportando ?? "Exportar"}
                 </button>
               )}
@@ -309,7 +310,7 @@ function ContenidoBandeja() {
                   contadores.recargar();
                 }}
               >
-                <RefreshCw className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="reintento" className="h-3.5 w-3.5" />
                 Actualizar
               </button>
             </div>
@@ -345,13 +346,13 @@ function ContenidoBandeja() {
               </span>
               {puedeLote && (
                 <button type="button" className={controlCls(true)} onClick={() => setEnvioMasivo(true)}>
-                  <Send className="h-3.5 w-3.5" aria-hidden />
+                  <Icono nombre="radicacion" className="h-3.5 w-3.5" />
                   Enviar derecho de petición
                 </button>
               )}
               {puedeAvisos && (
                 <button type="button" className={controlCls(true)} onClick={() => setEnvioAviso(true)}>
-                  <Mail className="h-3.5 w-3.5" aria-hidden />
+                  <Icono nombre="correo" className="h-3.5 w-3.5" />
                   Enviar aviso
                 </button>
               )}
@@ -394,7 +395,7 @@ function ContenidoBandeja() {
         }}
       />
       {confirmarPartes !== null && (
-        <Modal
+        <Modal icono="nube-bajar"
           open
           onClose={() => setConfirmarPartes(null)}
           title="Exportar en varios archivos"

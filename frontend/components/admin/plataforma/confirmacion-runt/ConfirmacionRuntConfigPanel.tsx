@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { CarLoader } from "@/components/atom/CarLoader";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { useToast } from "@/components/admin/Toast";
@@ -325,7 +325,7 @@ export function ConfirmacionRuntConfigPanel() {
             onClick={() => void getLatestRuntConfirmationRun().then(setUltima).catch(() => undefined)}
             className="flex items-center gap-1 text-xs font-semibold text-flit-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-3.5 w-3.5" />
             Actualizar
           </button>
         </div>

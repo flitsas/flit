@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { tramitesClient } from '@/lib/api/tramites-client';
-import { estadoChipClass, estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
+import { estadoLabelConOrigen } from '@/lib/tramites/estados';
+import { EtiquetaEstado } from './EtiquetaEstado';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 
 /**
@@ -89,7 +90,6 @@ export function EstadoAcciones({
     // Subsanar SOLO en rechazado y mientras el flag no esté activo.
     ...(status === 'rechazado' && !subsanacionActiva ? [ACCION_SUBSANAR] : []),
   ];
-  const chip = estadoChipStyle(status);
 
   const ejecutar = async (accion: AccionConfig) => {
     const reason = motivo.trim() || accion.motivoPorDefecto?.trim() || '';
@@ -142,20 +142,8 @@ export function EstadoAcciones({
         }}
       >
         <span style={{ color: 'var(--muted-foreground)', fontSize: 13, fontWeight: 600 }}>Estado del trámite:</span>
-        <span
-          className={estadoChipClass(status)}
-          style={{
-            background: chip.bg,
-            color: chip.color,
-            border: `1px solid ${chip.border}`,
-            borderRadius: 999,
-            padding: '2px 10px',
-            fontSize: 12,
-            fontWeight: 600,
-          }}
-        >
-          {estadoLabelConOrigen(status, rejectedFrom)}
-        </span>
+        {/* UI Kit 2026: etiqueta de estado del kit con su disco. */}
+        <EtiquetaEstado estado={status}>{estadoLabelConOrigen(status, rejectedFrom)}</EtiquetaEstado>
         {subsanacionActiva ? (
           <span
             title="Subsanación activa: el trámite permanece en Rechazado mientras se corrige"
@@ -250,8 +238,8 @@ export function EstadoAcciones({
               style={{
                 background: pending.destructive ? 'var(--destructive)' : WIZARD_CTA_GRADIENT,
                 border: 'none',
-                color: '#fff',
-                borderRadius: 8,
+                color: 'white',
+                borderRadius: 9,
                 padding: '6px 14px',
                 fontSize: 12,
                 fontWeight: 600,

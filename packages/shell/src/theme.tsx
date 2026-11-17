@@ -53,11 +53,8 @@ export function useSuiteTheme(): { dark: boolean; toggle: () => void } {
   return { dark: DARK_MODE_ENABLED ? dark : false, toggle };
 }
 
-/** Ilustraciones del interruptor (prototipo «Diseño Inteligente», HU #14479); cada app las sirve desde su public/. */
-const TEMA_OSCURO_SRC = "/assets/ilustraciones/tema-oscuro.webp";
-const TEMA_CLARO_SRC = "/assets/ilustraciones/tema-claro.webp";
-
-/** Interruptor claro/oscuro: botón redondo con la ilustración del tema al que se pasa (`.icono-btn` del prototipo). */
+/** Interruptor claro/oscuro del Manual UI Kit 2026 (`.tema-kit`): el dibujo del paquete de íconos (sol en claro, luna en
+ * oscuro) como fondo de 60 × 32 px; `aria-pressed` dice si el oscuro está puesto. Cada app sirve /assets/kit/. */
 export function ThemeToggle() {
   const { dark, toggle } = useSuiteTheme();
 
@@ -71,19 +68,13 @@ export function ThemeToggle() {
           aria-disabled="true"
           aria-label={THEME_COMING_SOON_MESSAGE}
           aria-pressed={false}
-          className="suite-icono-btn"
-        >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img className="suite-icono-btn__ilus" src={TEMA_OSCURO_SRC} alt="" aria-hidden="true" />
-        </button>
+          className="suite-tema"
+        />
       </span>
     );
   }
 
   return (
-    <button type="button" onClick={toggle} aria-label="Cambiar tema" aria-pressed={dark} className="suite-icono-btn">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img className="suite-icono-btn__ilus" src={dark ? TEMA_CLARO_SRC : TEMA_OSCURO_SRC} alt="" aria-hidden="true" />
-    </button>
+    <button type="button" onClick={toggle} aria-label="Cambiar tema" aria-pressed={dark} className="suite-tema" />
   );
 }

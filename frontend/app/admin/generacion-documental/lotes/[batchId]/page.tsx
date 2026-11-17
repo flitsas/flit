@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useParams, useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { GeneracionDocumentalTabs } from "@/components/admin/generacion-documental/GeneracionDocumentalTabs";
@@ -33,7 +33,7 @@ export default function AdminGeneracionDocumentalLoteDetallePage() {
         onClick={() => router.push(generacionDocumentalTabPath("lotes"))}
         className={ADMIN_BACK_LINK_CLS}
       >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" />
         Volver a Carga masiva
       </button>
 

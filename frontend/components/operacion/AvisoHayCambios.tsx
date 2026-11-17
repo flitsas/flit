@@ -1,6 +1,6 @@
 'use client';
 
-import { RefreshCw } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * Epic #12686 (HU #12808) — el sondeo trajo un conteo distinto al de la tabla para la tarjeta
@@ -14,7 +14,7 @@ export function AvisoHayCambios({ onActualizar }: { onActualizar: () => void }) 
         onClick={onActualizar}
         className="inline-flex items-center gap-1.5 rounded-lg border border-flit-brand/40 bg-flit-brand/10 px-3 py-1.5 text-xs font-semibold text-flit-brand-ink transition hover:bg-flit-brand/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
       >
-        <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="reintento" className="h-3.5 w-3.5" />
         Hay cambios — Actualizar
       </button>
     </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useRef, useState, type RefObject } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { controlCls } from './tramites-control-styles';
 import {
   REVOCATION_REQUEST_LIST_STATUSES,
@@ -107,7 +107,7 @@ function EstadoPopover({ selected, onChange, disabled }: EstadoPopoverProps) {
         className={controlCls(activo)}
       >
         {activo ? `Estado (${selected.length})` : 'Estado'}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <div

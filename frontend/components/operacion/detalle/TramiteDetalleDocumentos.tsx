@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, Eye } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   AttachmentPreview,
   AvisoDescargaFallida,
@@ -31,7 +31,8 @@ import {
   DetalleBadgeSoft,
   type SeccionDetalleProps,
 } from './primitivos';
-import { DETALLE_BLUE, DETALLE_GREEN, DETALLE_GOLD, DETALLE_GREY } from './detalle-visual';
+import { DETALLE_BLUE, DETALLE_GREEN, DETALLE_GOLD } from './detalle-visual';
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * Sección «Documentos» del modal de detalle (Frente C, `Paso3` de la propuesta).
@@ -86,7 +87,7 @@ function DownloadButton({
       className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 border-border"
       style={{ color: AZUL }}
     >
-      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+      <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
     </button>
   );
 }
@@ -187,7 +188,7 @@ function ConsultaRow({
           className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 border-border"
           style={{ color: AZUL }}
         >
-          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="ojo" className="h-3.5 w-3.5" />
         </button>
         <DownloadButton filename={attachment.filename} onClick={() => onDescargar(attachment)} />
       </span>
@@ -199,10 +200,9 @@ function ConsultaRow({
 function RotuloSoloConsulta() {
   return (
     <span
-      className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-      style={{ background: `color-mix(in srgb, ${DETALLE_GREY} 13%, transparent)`, color: 'var(--muted-foreground)' }}
+      {...etiquetaKit('neutral', { className: 'shrink-0' })}
     >
-      <Eye className="h-3 w-3" aria-hidden="true" />
+      <Icono nombre="ojo" className="h-3.5 w-3.5" />
       {ETIQUETA_SOLO_CONSULTA}
     </span>
   );

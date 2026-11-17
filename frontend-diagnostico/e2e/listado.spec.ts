@@ -13,6 +13,27 @@ import { lanzarExpress } from "./express";
  *
  * E2E_USUARIO es un usuario de la compañía con diagnosticos.crear y diagnosticos.ver. Las credenciales son de usuarios de
  * prueba del ambiente DEV y entran solo por variables de entorno.
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - heading «Diagnóstico vehicular»
+ *   - searchbox «Nombre»
+ *   - table «Diagnósticos de la compañía»
+ *   - row (sin nombre)
+ *   - row «new RegExp(nombre)»
+ *   - cell (sin nombre)
+ *   - link (sin nombre)
+ *   - table «/semáforo de consultas/i»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
+ *   Del helper express.ts (lanzarExpress):
+ *     - textbox «Placa o VIN»
+ *     - button «Diagnosticar en línea»
+ *     - textbox «Nombre del diagnóstico»
+ *     - button «/^(Continuar|Iniciar diagnóstico)$/»
+ *     - button «Lanzar diagnóstico»
+ *     - link «Ver tablero»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 /** Placa de prueba terminada en 1: la simulación de RUNT responde con éxito. */
@@ -22,7 +43,7 @@ async function entrar(page: Page, usuario: string, clave: string) {
   await page.goto(`${APP}/`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
   await page.waitForURL(`${APP}/`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
@@ -51,7 +72,8 @@ test.describe("listado de diagnósticos del inicio", () => {
     // AC1: la fila trae tipo, estado y creador; Enter en su enlace abre el tablero.
     await expect(fila.getByRole("cell").nth(3)).not.toBeEmpty();
     await fila.getByRole("link", { name: nombre }).press("Enter");
-    await page.waitForURL(tablero);
+    // HU #14562: el enlace lleva «?desde=<filtros>» para que la miga vuelva al listado filtrado; se compara la ruta.
+    await page.waitForURL((url) => url.pathname === new URL(tablero).pathname);
     await expect(page.getByRole("table", { name: /semáforo de consultas/i })).toBeVisible();
 
     // Volver atrás conserva el filtro en la URL y en el campo.

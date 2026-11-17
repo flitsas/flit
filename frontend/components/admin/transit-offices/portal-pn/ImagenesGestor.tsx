@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ArrowDown, ArrowUp, ImagePlus, Images, Pencil, Trash2 } from "lucide-react";
+import { ImagePlus, Images } from "lucide-react";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { Modal } from "@/components/atom/Modal";
 import {
@@ -13,6 +13,7 @@ import {
 import { PORTAL_IMAGE_ACCEPT, validatePortalCarouselLink } from "@/lib/brand/validate-portal-image";
 import type { ClienteMarcaPortal } from "./cliente-marca";
 import { useAuthedImage } from "./useAuthedImage";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 /** Operaciones que necesita el gestor (las cumplen `carrusel` y `banners` del cliente de marca). */
 export interface ApiGestorImagenes {
@@ -235,7 +236,7 @@ export function GestorImagenes({
         onClose={() => setRemoveTarget(null)}
         busy={pending}
         size="sm"
-        icon={Trash2}
+        icono="papelera"
         title={config.tituloModalQuitar}
       >
         <p className="text-sm opacity-80">{config.confirmarQuitar(removeTarget?.alt ?? "")}</p>
@@ -303,11 +304,11 @@ function FilaImagen({ config, item, index, total, imagen, readOnly, disabled, on
           <ActionsMenu
             ariaLabel={config.accionesLabel(index + 1, item.alt)}
             items={[
-              { key: "editar", label: "Editar", icon: Pencil, onSelect: onEdit, disabled },
+              { key: "editar", label: "Editar", icon: iconoComo("lapiz"), onSelect: onEdit, disabled },
               {
                 key: "subir",
                 label: "Subir",
-                icon: ArrowUp,
+                icon: iconoComo("arriba"),
                 onSelect: () => onMove(-1),
                 disabled: disabled || index === 0,
                 disabledReason: "Ya es la primera.",
@@ -315,12 +316,12 @@ function FilaImagen({ config, item, index, total, imagen, readOnly, disabled, on
               {
                 key: "bajar",
                 label: "Bajar",
-                icon: ArrowDown,
+                icon: iconoComo("abajo"),
                 onSelect: () => onMove(1),
                 disabled: disabled || index === total - 1,
                 disabledReason: "Ya es la última.",
               },
-              { key: "quitar", label: "Quitar", icon: Trash2, onSelect: onRemove, disabled, tone: "danger" },
+              { key: "quitar", label: "Quitar", icon: iconoComo("papelera"), onSelect: onRemove, disabled, tone: "danger" },
             ]}
           />
         </div>
@@ -396,7 +397,8 @@ function FormularioImagen({ config, item, busy, onClose, onSubmit }: FormularioP
       onClose={onClose}
       busy={busy}
       size="md"
-      icon={nueva ? ImagePlus : Pencil}
+      icon={nueva ? ImagePlus : undefined}
+      icono={nueva ? undefined : "lapiz"}
       title={nueva ? config.tituloModalAgregar : config.tituloModalEditar}
     >
       <form onSubmit={(e) => void handleSubmit(e)} noValidate className="flex flex-col gap-4">

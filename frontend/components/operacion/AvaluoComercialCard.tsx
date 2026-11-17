@@ -9,6 +9,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_BTN_SOLID, WIZARD_CTA_GRADIENT, WIZARD_LABEL } from './wizard-field-styles';
 import { cn } from '@/lib/utils';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /** Etiquetas legibles por fuente; orden de render. */
 const SOURCE_LABELS: Record<string, string> = {
@@ -113,11 +114,11 @@ export function AvaluoComercialCard({
 
               {sugerido != null && accepted && (
                 <span
-                  className="shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-                  style={{ background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' }}
+                  {...etiquetaKit('success', { className: 'shrink-0' })}
                   role="status"
                   aria-live="polite"
                 >
+                  <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                   Valor sugerido aceptado
                 </span>
               )}

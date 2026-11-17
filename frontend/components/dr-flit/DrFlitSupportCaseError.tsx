@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DrFlitSupportPanel } from "./DrFlitSupportPanel";
 
 /**
@@ -26,7 +26,7 @@ export function DrFlitSupportCaseError({
         className="flex items-start gap-2 rounded-[var(--dr-flit-radius-card)] border p-3 text-sm"
         style={{ borderColor: "var(--dr-flit-accent)", background: "var(--dr-flit-card-bg)", color: "var(--dr-flit-text)" }}
       >
-        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-accent)" }} aria-hidden="true" />
+        <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-accent)" }} />
         {message}
       </p>
       <div className="flex flex-col gap-2">

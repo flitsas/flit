@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ExternalLink, Pencil, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { bannerEstadoTone } from "@/components/atom/statusTones";
@@ -166,7 +167,7 @@ export function BannerListTable({
                         className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full transition hover:bg-flit-brand/10"
                         style={{ color: "var(--color-flit-brand)" }}
                       >
-                        <ExternalLink className="h-3.5 w-3.5" />
+                        <Icono nombre="externo" className="h-3.5 w-3.5" />
                       </a>
                     </span>
                   ) : (
@@ -186,13 +187,13 @@ export function BannerListTable({
                   <RowActions
                     actions={[
                       {
-                        icon: Pencil,
+                        icon: iconoComo("lapiz"),
                         label: `Editar ${b.name}`,
                         onClick: () => onEdit(b),
                         tone: "primary",
                       },
                       {
-                        icon: Trash2,
+                        icon: iconoComo("papelera"),
                         label: `Eliminar ${b.name}`,
                         onClick: () => onDelete(b),
                         tone: "danger",
@@ -209,6 +210,7 @@ export function BannerListTable({
       <Pagination page={page} pageSize={pageSize} totalCount={totalCount} onPageChange={onPageChange} onPageSizeChange={onPageSizeChange} className="mt-auto" />
 
       <Modal
+        icono="ojo"
         open={preview !== null}
         onClose={() => setPreview(null)}
         title={preview?.name ?? "Banner"}

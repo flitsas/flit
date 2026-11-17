@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Power, RefreshCw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { DomainRegisterForm } from "@/components/admin/domain/DomainRegisterForm";
 import { DomainStatusPanel } from "@/components/admin/domain/DomainStatusPanel";
@@ -197,7 +197,7 @@ function ActivationCard({ tenantId, network, onRefresh, onActivated }: Activatio
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
             style={{ background: "var(--gradient-action)" }}
           >
-            <Power className="h-3.5 w-3.5" aria-hidden /> Activar red
+            <Icono nombre="encendido" className="h-3.5 w-3.5" /> Activar red
           </button>
         )}
         <button
@@ -205,11 +205,11 @@ function ActivationCard({ tenantId, network, onRefresh, onActivated }: Activatio
           onClick={onRefresh}
           className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold"
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Actualizar estado
+          <Icono nombre="reintento" className="h-3.5 w-3.5" /> Actualizar estado
         </button>
       </div>
 
-      <Modal open={confirming} onClose={() => setConfirming(false)} busy={activating} size="sm" icon={Power} title="Activar la red">
+      <Modal open={confirming} onClose={() => setConfirming(false)} busy={activating} size="sm" icono="encendido" title="Activar la red">
         <p className="text-sm opacity-80">
           {`Los usuarios de esta red dejarán de poder iniciar sesión por el dominio de FLIT y deberán entrar por ${hubHost ?? "su dominio principal"}.`}
         </p>

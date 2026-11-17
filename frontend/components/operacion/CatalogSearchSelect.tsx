@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo, useRef, useState } from 'react';
-import { ChevronDown, Search } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * Selector de catálogo con buscador (dropdown list filtrable).
@@ -69,20 +69,17 @@ export function CatalogSearchSelect({
         <span className={display ? 'font-medium' : 'opacity-50'}>
           {display || 'Selecciona…'}
         </span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
+        <Icono nombre="abajo" className="h-3.5 w-3.5 shrink-0 opacity-50" />
       </button>
 
       {open && !disabled && (
         <div
-          className="absolute z-30 mt-1 w-full rounded-xl border bg-card p-2 shadow-lg"
+          className="absolute z-30 mt-1 w-full rounded-xl border bg-card p-2 shadow-[var(--kit-sombra)]"
           role="listbox"
           aria-label={label}
         >
           <div className="relative mb-2">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
-              aria-hidden
-            />
+            <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40" />
             <input
               ref={inputRef}
               type="search"

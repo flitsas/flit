@@ -2,7 +2,7 @@
 
 import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useEffect, useState } from "react";
-import { BellRing, CalendarClock, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { cn } from "@/lib/utils";
 import type { ReportType } from "@/lib/api/analytics-scheduling";
 import { SchedulesSection } from "./SchedulesSection";
@@ -79,7 +79,7 @@ export function SchedulingPanel({
         className={`w-full max-w-4xl overflow-hidden ${DIALOGO_PANEL_CLS}`}
       >
         <header>
-          <FranjaDialogo>
+          <FranjaDialogo icono="calendario">
           <div>
             <h2 className={`text-lg font-bold ${DIALOGO_TITULO_CLS}`}>
               Programación y alertas
@@ -96,7 +96,7 @@ export function SchedulingPanel({
             onClick={onClose}
             className={DIALOGO_CERRAR_CLS}
           >
-            <X className="h-5 w-5" aria-hidden="true" />
+            <Icono nombre="cerrar" className="h-5 w-5" />
           </button>
           </FranjaDialogo>
         </header>
@@ -109,7 +109,7 @@ export function SchedulingPanel({
             style={tab === "schedules" ? { background: "var(--di-accent)" } : undefined}
             aria-current={tab === "schedules" ? "page" : undefined}
           >
-            <CalendarClock className="h-4 w-4" aria-hidden="true" /> Informes programados
+            <Icono nombre="calendario" className="h-4 w-4" /> Informes programados
           </button>
           <button
             type="button"
@@ -118,7 +118,7 @@ export function SchedulingPanel({
             style={tab === "alerts" ? { background: "var(--di-accent)" } : undefined}
             aria-current={tab === "alerts" ? "page" : undefined}
           >
-            <BellRing className="h-4 w-4" aria-hidden="true" /> Alertas
+            <Icono nombre="campana" className="h-4 w-4" /> Alertas
           </button>
         </nav>
 

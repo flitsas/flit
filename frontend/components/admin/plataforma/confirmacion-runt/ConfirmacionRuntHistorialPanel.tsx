@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Download, RefreshCw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -339,7 +339,7 @@ export function ConfirmacionRuntHistorialPanel() {
             onClick={() => setRecarga((n) => n + 1)}
             className={buttonClass({ variant: "secondary", size: "sm" })}
           >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-3.5 w-3.5" />
             Actualizar
           </button>
           <button
@@ -349,7 +349,7 @@ export function ConfirmacionRuntHistorialPanel() {
             data-testid="confirmacion-runt-export"
             className={buttonClass({ variant: "secondary", size: "sm" })}
           >
-            <Download className={`h-3.5 w-3.5 ${exportando ? "animate-pulse" : ""}`} aria-hidden="true" />
+            <Icono nombre="nube-bajar" className={`h-3.5 w-3.5 ${exportando ? "animate-pulse" : ""}`} />
             {exportando ? "Exportando…" : "Exportar"}
           </button>
         </span>

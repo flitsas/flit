@@ -3,9 +3,10 @@
 // Trazabilidad ICT (Feature #11814). Módulo NUEVO: no sustituye a «Log ICT», que se queda como la
 // capa técnica de bajo nivel, ni a «Reportes ICT», que sigue siendo la vista agregada por compañía.
 // Lo que aporta es el nivel que faltaba: el trámite.
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 import { CHIP_FILTRO_CLS, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronRight, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ModuleTitle } from "./ModuleTitle";
 import { Pagination } from "@/components/atom/Pagination";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -460,7 +461,7 @@ export function IctTrazabilidad() {
         )}
         {(hayFiltros || cargando) && (
           <button type="button" onClick={limpiar} className={ghostCls}>
-            <X className="h-3.5 w-3.5" aria-hidden="true" /> Limpiar
+            <Icono nombre="cerrar" className="h-3.5 w-3.5" /> Limpiar
           </button>
         )}
         <button
@@ -617,10 +618,7 @@ function FilaTramite({
         }}
       >
         <td className={`${tdCls} rounded-l-xl border-l px-3`}>
-          <ChevronRight
-            className={`h-3.5 w-3.5 text-flit-brand transition-transform ${abierta ? "rotate-90" : ""}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="derecha" className={`h-3.5 w-3.5 text-flit-brand transition-transform ${abierta ? "rotate-90" : ""}`} />
         </td>
         <td className={tdCls}>
           <span className="font-mono font-semibold text-flit-brand">{tramite.numero}</span>
@@ -638,15 +636,8 @@ function FilaTramite({
         <td className={tdCls}>{tramite.compania ?? "—"}</td>
         <td className={tdCls}>{tramite.radicador || "—"}</td>
         <td className={tdCls}>
-          <span
-            className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-semibold"
-            style={estilo ? { background: estilo.bg, color: estilo.color } : undefined}
-          >
-            <span
-              className="h-1.5 w-1.5 rounded-full"
-              style={{ background: estilo?.accent }}
-              aria-hidden="true"
-            />
+          <span {...etiquetaKit(estilo ? { c: estilo.border, ct: estilo.color } : "neutral")}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             {estadoIctLabel(tramite.estado)}
           </span>
         </td>

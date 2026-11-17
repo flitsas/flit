@@ -1,6 +1,6 @@
 "use client";
 
-import { XCircle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ErrorMigracion } from "@/lib/migracion/client";
 
 /**
@@ -34,7 +34,7 @@ export function AvisoError({ error }: { error: Error }) {
 
   return (
     <div className="flex items-start gap-2 rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-sm">
-      <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" aria-hidden="true" />
+      <Icono nombre="cerrar" className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
       <div className="min-w-0">
         <p className="font-semibold text-destructive">{titulo(codigo)}</p>
         {/* Sin detalle no se pinta el hueco: hay errores en los que el titular ya lo dice todo. */}

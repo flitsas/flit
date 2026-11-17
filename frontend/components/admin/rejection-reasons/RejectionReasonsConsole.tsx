@@ -8,7 +8,7 @@ import {
   updateRejectionReason,
 } from "@/lib/api/ot-metrics";
 import type { RejectionReason } from "@/lib/api/types-ot";
-import { Pencil, PowerOff, RotateCcw } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { buttonClass } from "@flit/ui/Button";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
@@ -330,13 +330,13 @@ function ReasonsTable({
                   <RowActions
                     actions={[
                       {
-                        icon: Pencil,
+                        icon: iconoComo("lapiz"),
                         label: `Editar causal ${r.description}`,
                         onClick: () => onEdit(r),
                         tone: "primary",
                       },
                       {
-                        icon: r.isActive ? PowerOff : RotateCcw,
+                        icon: r.isActive ? iconoComo("asistente-apagado") : iconoComo("reintento"),
                         label: `${r.isActive ? "Retirar" : "Reactivar"} causal ${r.description}`,
                         onClick: () => onToggle(r),
                         disabled: busy,

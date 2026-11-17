@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import { IMPRONTAS_TABS, improntasTabPath, type ImprontasTabId } from "./improntas-nav";
 
 /**
@@ -14,7 +15,7 @@ export function ImprontasTabs({ activeId }: { activeId: ImprontasTabId }) {
 
   return (
     <div
-      className="flex items-center gap-1 overflow-x-auto border-b"
+      className={PESTANAS_LISTA_CLS}
       role="tablist"
       aria-label="Secciones del módulo de improntas"
     >
@@ -27,16 +28,9 @@ export function ImprontasTabs({ activeId }: { activeId: ImprontasTabId }) {
             role="tab"
             aria-selected={active}
             onClick={() => router.push(improntasTabPath(tab.id))}
-            className="relative shrink-0 px-4 py-2.5 text-xs font-semibold transition"
-            style={{ color: active ? "var(--color-flit-brand)" : "var(--color-flit-primary)", opacity: active ? 1 : 0.65 }}
+            className={pestanaClass(active, "relative shrink-0")}
           >
             {tab.label}
-            {active && (
-              <span
-                className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
-                style={{ background: "var(--color-flit-brand)" }}
-              />
-            )}
           </button>
         );
       })}

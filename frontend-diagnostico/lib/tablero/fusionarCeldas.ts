@@ -14,9 +14,11 @@ function fusionarVehiculo(actual: FilaVehiculo, recibido: FilaVehiculo): FilaVeh
     return nueva && nueva.version >= anterior.version ? nueva : anterior;
   };
   const conocidas = new Set(actual.celdas.map((c) => c.fuente));
+  // HU #14562 AC30 (H1): con versión de fila, una fila atrasada no pisa los datos de fila (veredicto, derivación, marca).
+  const atrasada = actual.version != null && recibido.version != null && recibido.version < actual.version;
   return {
     ...actual,
-    ...recibido,
+    ...(atrasada ? {} : recibido),
     celdas: [...actual.celdas.map(vigente), ...recibido.celdas.filter((c) => !conocidas.has(c.fuente))],
   };
 }
@@ -35,12 +37,17 @@ export function fusionarCeldas(actual: Grilla | null, cambios: Grilla): Grilla {
     ...cambios.vehiculos.filter((v) => !conocidos.has(v.id)),
   ].sort(porOrden);
 
+  // HU #14563 B1/B2: conteos y lote viajan en cada delta; un backend que no los manda conserva los que ya se tenían (AC31).
+  const cabecera: Grilla = { ...cambios, conteos: cambios.conteos ?? actual.conteos, lote: cambios.lote ?? actual.lote };
+  if (!cabecera.conteos) delete cabecera.conteos;
+  if (!cabecera.lote) delete cabecera.lote;
+
   // Punto 3: la lista de pegadas viaja siempre y manda sobre el `pegada` de cada fila (las que se pegan solo por tiempo no se reenvían).
   if (cambios.vehiculos_pegados) {
     const pegados = new Set(cambios.vehiculos_pegados);
-    return { ...cambios, vehiculos: vehiculos.map((v) => ({ ...v, pegada: pegados.has(v.id) })) };
+    return { ...cabecera, vehiculos: vehiculos.map((v) => ({ ...v, pegada: pegados.has(v.id) })) };
   }
-  return { ...cambios, vehiculos };
+  return { ...cabecera, vehiculos };
 }
 
 const SIN_TERMINAR: ReadonlySet<CeldaGrilla["estado"]> = new Set(["PENDIENTE", "EN_CURSO"]);

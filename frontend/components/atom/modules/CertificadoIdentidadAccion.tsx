@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Download } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import {
   estadoCertificado,
@@ -65,7 +65,7 @@ export function CertificadoIdentidadAccion({
         className="inline-flex w-fit items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50 border-border"
         style={{ color: 'var(--di-action)' }}
       >
-        <Download className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <Icono nombre="nube-bajar" className="h-3.5 w-3.5 shrink-0" />
         {busy ? 'Descargando…' : 'Descargar certificado'}
       </button>
       {error ? (

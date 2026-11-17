@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2, MailX } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 
@@ -87,7 +87,7 @@ export function CancelInvitationDialog({
       open
       onClose={handleClose}
       busy={busy}
-      icon={MailX}
+      icono="correo"
       iconBg="var(--destructive)"
       title="Cancelar invitación"
       description={invitation.email}
@@ -133,7 +133,7 @@ export function CancelInvitationDialog({
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
             style={{ background: "var(--destructive)" }}
           >
-            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {busy && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
             {busy ? "Cancelando…" : "Cancelar invitación"}
           </button>
         </div>

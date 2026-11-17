@@ -1,4 +1,4 @@
-import { Lock } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { LEYENDA_CONFIGURADO_POR_ORGANISMO } from "@/lib/plataforma/mandatario-permisos";
 
 /**
@@ -11,7 +11,7 @@ export function MandatarioCandado() {
       className="mt-0.5 flex items-center gap-1 text-xs font-medium text-muted-foreground"
       data-testid="mandatario-candado"
     >
-      <Lock className="h-3 w-3 shrink-0" aria-hidden={true} />
+      <Icono nombre="candado" className="h-3 w-3 shrink-0" />
       {LEYENDA_CONFIGURADO_POR_ORGANISMO}
     </span>
   );

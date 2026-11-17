@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye } from 'lucide-react';
+import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { RowActions } from '@/components/atom/RowActions';
 import { Pagination } from '@/components/atom/Pagination';
@@ -166,7 +166,7 @@ export function RevocationRequestsTable({
                     <RowActions
                       actions={[
                         {
-                          icon: Eye,
+                          icon: iconoComo("ojo"),
                           label: `Ver trámite ${item.referenceNumber}`,
                           onClick: () => onView(item),
                           tone: 'primary',

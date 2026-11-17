@@ -5,7 +5,7 @@
 // rotar. Toda acción pide confirmación. Mientras la API no invalide los pases ya emitidos, las acciones que
 // cortan el acceso lo advierten: un pase emitido sigue valiendo hasta que vence (30 min).
 import { useState } from "react";
-import { KeyRound, Loader2, LockOpen, Power, RefreshCcw, type LucideIcon } from "lucide-react";
+import { Icono, type NombreIcono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import type { ExternalClient } from "@/lib/api/external-clients";
 import { externalClientErrorMessage } from "./externalClientErrors";
@@ -17,7 +17,7 @@ const PASES_VIGENTES =
 
 interface Copy {
   title: string;
-  icon: LucideIcon;
+  icon: NombreIcono;
   body: string;
   warning?: string;
   confirm: string;
@@ -29,7 +29,7 @@ function copyFor(action: ExternalClientAction, client: ExternalClient): Copy {
     case "regenerate":
       return {
         title: "Regenerar secreto",
-        icon: RefreshCcw,
+        icon: "reintento",
         body: `Se genera un secreto nuevo para «${client.clientId}» y se muestra una sola vez. Entrégueselo al sistema externo por un canal seguro.`,
         warning: PASES_VIGENTES,
         confirm: "Regenerar secreto",
@@ -38,7 +38,7 @@ function copyFor(action: ExternalClientAction, client: ExternalClient): Copy {
     case "unlock":
       return {
         title: "Desbloquear cliente",
-        icon: LockOpen,
+        icon: "candado-abierto",
         body: `«${client.clientId}» quedó bloqueado por intentos fallidos. Al desbloquearlo podrá volver a pedir pases de inmediato.`,
         confirm: "Desbloquear",
         danger: false,
@@ -46,7 +46,7 @@ function copyFor(action: ExternalClientAction, client: ExternalClient): Copy {
     case "must-rotate":
       return {
         title: "Obligar a rotar el secreto",
-        icon: KeyRound,
+        icon: "rol",
         body: `«${client.clientId}» no podrá obtener pases nuevos hasta que se le regenere el secreto.`,
         warning: PASES_VIGENTES,
         confirm: "Obligar a rotar",
@@ -57,7 +57,7 @@ function copyFor(action: ExternalClientAction, client: ExternalClient): Copy {
       return client.isActive
         ? {
             title: "Desactivar cliente",
-            icon: Power,
+            icon: "encendido",
             body: `«${client.clientId}» no podrá obtener pases nuevos mientras esté inactivo.`,
             warning: PASES_VIGENTES,
             confirm: "Desactivar",
@@ -65,7 +65,7 @@ function copyFor(action: ExternalClientAction, client: ExternalClient): Copy {
           }
         : {
             title: "Activar cliente",
-            icon: Power,
+            icon: "encendido",
             body: `«${client.clientId}» podrá volver a obtener pases con su secreto vigente.`,
             confirm: "Activar",
             danger: false,
@@ -104,7 +104,7 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
       onClose={onClose}
       busy={busy}
       title={copy.title}
-      icon={copy.icon}
+      icono={copy.icon}
       iconBg={copy.danger ? "var(--destructive)" : "var(--color-flit-brand)"}
       size="sm"
       footer={
@@ -129,7 +129,7 @@ export function ExternalClientActionDialog({ action, client, onClose, onConfirm 
               color: "var(--destructive-foreground)",
             }}
           >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            {busy && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
             {copy.confirm}
           </button>
         </div>

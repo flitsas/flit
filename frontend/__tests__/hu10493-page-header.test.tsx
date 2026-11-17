@@ -35,11 +35,12 @@ describe("HU #10493 / HU #14474 — AC2: cabecera page-header de la propuesta (a
     expect(cabecera!.textContent).toContain("En vivo");
   });
 
-  it("muestra la ilustración del módulo (decorativa) elegida por el título", () => {
+  it("muestra el ícono del módulo (decorativo) elegido por el título", () => {
+    // UI Kit 2026 (propuesta-2): el ícono del kit en su disco (`.kit-disco`), no la ilustración WebP.
     const { container } = render(<ModuleTitle title="Validaciones de identidad" />);
-    const img = container.querySelector("header img");
-    expect(img?.getAttribute("src")).toBe("/assets/ilustraciones/identidad.webp");
-    expect(img?.getAttribute("alt")).toBe("");
+    const disco = container.querySelector("header .kit-disco");
+    expect(disco).not.toBeNull();
+    expect(disco?.getAttribute("aria-hidden")).toBe("true");
   });
 
   it("edge: sin action ni right renderiza el título sin romper", () => {

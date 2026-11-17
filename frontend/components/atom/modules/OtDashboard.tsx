@@ -31,10 +31,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { AlertTriangle, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import { Icono, IconoModulo } from "@flit/ui/Icono";
 import { buttonClass } from "@flit/ui/Button";
 import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
-import { rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { getToken } from "@/lib/api/client";
@@ -231,14 +230,11 @@ export function OtDashboard() {
 const ROTACION_MS = 6000;
 
 /**
- * Fondo del slide fijo (la cola). HU #14481 (propuesta), misma receta que el Inicio del gestor: el `.page-header` del
- * prototipo, una tarjeta clara de superficie a cielo con texto en tinta, en vez del degradado azul y turquesa con
- * texto blanco. Los banners con imagen conservan su fondo y su velo.
+ * Fondo del slide fijo (la cola). UI Kit 2026, misma receta que el Inicio del gestor: la lámina
+ * `.banner-kit__lamina--degradado` del manual, con el contraste AA ya calculado con texto blanco, en vez de la tarjeta
+ * clara con el círculo turquesa. Los banners con imagen conservan su fondo y su velo.
  */
-const BRAND_GRADIENT = "linear-gradient(120deg,var(--di-surface-elevated) 35%,var(--di-sky) 100%)";
-
-/** Ilustración del slide fijo: la de organismos de tránsito del prototipo, a la izquierda como `.page-header__ilus`. */
-const ILUSTRACION_COLA = rutaIlustracion("organismos");
+const BRAND_GRADIENT = "linear-gradient(160deg, #007d79 0%, #1670b8 55%, #1d53ff 100%)";
 
 type MensajeSlide = {
   kind: "mensaje";
@@ -356,12 +352,11 @@ function Bienvenida({
     <header
       className={`relative flex flex-col justify-between overflow-hidden ${
         fijo
-          ? "rounded-[28px] border border-[color:var(--di-border)] text-[color:var(--di-heading)] shadow-[var(--shadow-card)]"
+          ? "rounded-[9px] text-white"
           : "rounded-2xl text-white"
-      } ${className}`}
-      style={{ minHeight: "220px" }}
+      } min-h-[200px] max-sm:min-h-[180px] ${className}`}
     >
-      {/* Capa de fondo: gradiente de marca fijo en el slide de la cola; en un banner, el color
+      {/* Capa de fondo: lámina degradada del kit en el slide de la cola; en un banner, el color
           PROMEDIO de esa misma imagen (así combina con cualquier banner, no solo con el
           azul/turquesa de marca) — es el respaldo que se ve cuando `object-contain` deja margen
           (abajo de `md`, ver siguiente bloque); en `md+` es invisible, cubierto por el banner a
@@ -394,16 +389,8 @@ function Bienvenida({
         }}
       />
       {mensaje.kind === "mensaje" && (
-        // Círculos del prototipo: el turquesa lleno arriba a la derecha y, con `outline`, el aro grande de cielo
-        // alrededor (`.page-header::before/::after`), sin marcado nuevo.
-        <div
-          className="absolute -right-[60px] -top-[110px] h-[230px] w-[230px] rounded-full opacity-90 max-sm:-right-12 max-sm:-top-[60px] max-sm:h-[120px] max-sm:w-[120px]"
-          style={{
-            background: "var(--di-highlight-decor)",
-            outline: "1.5px solid color-mix(in srgb, var(--di-sky-line) 50%, transparent)",
-            outlineOffset: "95px",
-          }}
-        />
+        // Círculo de la lámina del kit (`.banner-kit__lamina::after`): blanco translúcido arriba a la derecha.
+        <div className="absolute -right-[50px] -top-[70px] h-[190px] w-[190px] rounded-full bg-white/[0.14]" />
       )}
 
       {/* Sin título visible del banner (solo el banner): el enlace cubre toda la imagen — al
@@ -419,8 +406,8 @@ function Bienvenida({
         >
           <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/25" />
           <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary shadow-lg">
-              <ExternalLink className="h-5 w-5" aria-hidden="true" />
+            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary">
+              <Icono nombre="externo" className="h-5 w-5" />
             </span>
           </span>
         </a>
@@ -430,32 +417,31 @@ function Bienvenida({
           solo ocupe una franja arriba y otra abajo — sin esto, el hueco vacío del medio tapaba el
           enlace del banner de abajo y ni el hover ni el clic le llegaban nunca. Se restaura
           pointer-events-auto solo en la franja de controles (puntos/flechas), que sí son clicables. */}
-      {/* En el slide fijo, la ilustración va de fondo a la izquierda de esta misma caja (92 px; 58 px en celular),
-          como `.page-header__ilus`, sin marcado nuevo. Va arriba, a la altura del antetítulo y el título: la columna de
-          cifras estira el banner, y centrada en vertical quedaba flotando lejos del texto. */}
-      <div
-        className={`relative flex flex-1 flex-col justify-between px-6 py-5 pointer-events-none ${
-          fijo
-            ? "bg-no-repeat bg-[length:92px_92px] bg-[position:24px_20px] pl-[132px] max-sm:bg-[length:58px_58px] max-sm:bg-[position:14px_20px] max-sm:pl-[84px]"
-            : ""
-        }`}
-        style={fijo ? { backgroundImage: `url("${ILUSTRACION_COLA}")` } : undefined}
-      >
+      <div className="relative flex flex-1 flex-col justify-between px-6 py-5 pointer-events-none">
         <div className="max-w-[85%]">
           {/* Antetítulo del prototipo (`.antetitulo`): el nombre del organismo en versalitas, en el azul de acento. */}
           <p
             className={`text-[11px] uppercase ${
-              fijo ? "font-bold tracking-[0.06em] text-[color:var(--di-highlight)]" : "font-semibold tracking-wide opacity-80"
+              fijo ? "font-bold tracking-[0.06em] text-white/80" : "font-semibold tracking-wide opacity-80"
             }`}
           >
             {organismo ?? "Organismo de tránsito"}
           </p>
           {mensaje.kind === "mensaje" ? (
             <>
-              <h1 className="mt-1 text-2xl font-bold leading-tight text-[color:var(--di-heading)] md:text-3xl after:mt-2.5 after:block after:h-[5px] after:w-16 after:rounded-full after:bg-[linear-gradient(90deg,var(--di-sky-line),var(--di-sky))] after:content-['']">
-                {mensaje.title}
-              </h1>
-              <p className="mt-2.5 text-sm leading-snug text-[color:var(--di-text-secondary)]">{mensaje.body}</p>
+              {/* Lámina del kit: el chip de 42 px con el ícono de organismos junto al título. */}
+              <div className="mt-2 flex min-w-0 items-center gap-3">
+                <span
+                  aria-hidden="true"
+                  className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[9px] bg-white/[0.22]"
+                >
+                  <IconoModulo clave="organismos" size={22} />
+                </span>
+                <h1 className="min-w-0 text-2xl font-bold leading-tight text-white md:text-[1.75rem]">
+                  {mensaje.title}
+                </h1>
+              </div>
+              <p className="mt-2.5 max-w-[58ch] text-sm leading-snug text-white">{mensaje.body}</p>
             </>
           ) : (
             <span className="sr-only">{mensaje.name}</span>
@@ -471,17 +457,9 @@ function Bienvenida({
                 onClick={() => setActual(i)}
                 aria-label={`Mensaje ${i + 1} de ${mensajes.length}`}
                 aria-current={i === actual}
-                className="h-1.5 rounded-full transition-all"
-                style={{
-                  width: i === actual ? 16 : 5,
-                  background: fijo
-                    ? i === actual
-                      ? "var(--di-action)"
-                      : "var(--di-border-control)"
-                    : i === actual
-                      ? "#ffffff"
-                      : "rgba(255,255,255,0.5)",
-                }}
+                // Puntos del kit (`.banner-kit__punto`): 8 px, el actual de 22 px en blanco pleno.
+                className={`h-2 rounded-full transition-all ${i === actual ? "bg-current" : "bg-white/50"}`}
+                style={{ width: i === actual ? 22 : 8 }}
               />
             ))}
           </div>
@@ -491,26 +469,20 @@ function Bienvenida({
               onClick={() => setActual((i) => (i - 1 + mensajes.length) % mensajes.length)}
               disabled={mensajes.length <= 1}
               aria-label="Mensaje anterior"
-              className={`grid h-6 w-6 place-items-center rounded-full disabled:cursor-not-allowed disabled:opacity-40 ${
-                fijo
-                  ? "bg-[var(--di-surface-elevated)] text-[color:var(--di-action)] shadow-[var(--shadow-card)] hover:bg-[var(--di-accent-soft)]"
-                  : "bg-white/15 hover:bg-white/25 disabled:hover:bg-white/15"
-              }`}
+              // Flecha del kit (`.banner-kit__flecha`): 30 px, blanco translúcido sobre la lámina o la imagen.
+              className="grid h-[30px] w-[30px] place-items-center rounded-full bg-white/[0.22] text-white hover:bg-white/[0.36] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.22] focus-visible:outline-2 focus-visible:outline-white"
             >
-              <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="izquierda" size={18} />
             </button>
             <button
               type="button"
               onClick={() => setActual((i) => (i + 1) % mensajes.length)}
               disabled={mensajes.length <= 1}
               aria-label="Mensaje siguiente"
-              className={`grid h-6 w-6 place-items-center rounded-full disabled:cursor-not-allowed disabled:opacity-40 ${
-                fijo
-                  ? "bg-[var(--di-surface-elevated)] text-[color:var(--di-action)] shadow-[var(--shadow-card)] hover:bg-[var(--di-accent-soft)]"
-                  : "bg-white/15 hover:bg-white/25 disabled:hover:bg-white/15"
-              }`}
+              // Flecha del kit (`.banner-kit__flecha`): 30 px, blanco translúcido sobre la lámina o la imagen.
+              className="grid h-[30px] w-[30px] place-items-center rounded-full bg-white/[0.22] text-white hover:bg-white/[0.36] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.22] focus-visible:outline-2 focus-visible:outline-white"
             >
-              <ChevronRight className="h-3 w-3" aria-hidden="true" />
+              <Icono nombre="derecha" size={18} />
             </button>
           </div>
         </div>
@@ -794,7 +766,7 @@ function ErrorPanel({ message, onRetry }: { message: string | null; onRetry: () 
       className="flex flex-col items-start gap-3 rounded-2xl border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] px-5 py-4"
     >
       <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-[var(--badge-warning-fg)]" aria-hidden="true" />
+        <Icono nombre="alerta" className="h-4 w-4 shrink-0 text-[var(--badge-warning-fg)]" />
         No se pudo cargar el estado de la cola
       </p>
       <p className="text-xs text-muted-foreground">
@@ -992,10 +964,10 @@ function PanelOperativoResto({
 
 function Tarjeta({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
   return (
-    // `.card` de la propuesta: borde --di-border y radio de 20 px; el título como `.card__cabeza h2`, sin versalitas.
-    <section className="rounded-[20px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] p-5 shadow-[var(--shadow-card)]">
+    // `.card` del UI Kit 2026: borde --di-border, radio de 9 px y sin sombra; el título como `.card__cabeza h2` (24 px, azul).
+    <section className="rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] px-6 pb-6 pt-4 max-sm:p-4">
       {titulo && (
-        <h2 className="mb-4 text-[0.9375rem] font-semibold leading-tight text-[color:var(--di-heading)]">
+        <h2 className="mb-4 text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)]">
           {titulo}
         </h2>
       )}
@@ -1031,7 +1003,7 @@ function Navegable({
       // El nombre accesible dice a dónde lleva: el texto visible es una etiqueta y un número, que
       // por sí solos no anuncian que haya una lista detrás.
       aria-label={etiqueta}
-      className={`${className} text-left transition hover:border-flit-brand hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand`}
+      className={`${className} text-left transition hover:border-flit-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand`}
     >
       {children}
     </button>
@@ -1052,7 +1024,7 @@ function Kpi({
   value: number | string | undefined;
   cargando: boolean;
   /** Ilustración del prototipo a la derecha de la cifra (HU #14481). */
-  ilustracion: Ilustracion;
+  ilustracion: string;
   /** Lo que espera al organismo: con trámites, la tarjeta lleva el borde turquesa (`.metrica--pendiente`). */
   pendiente?: boolean;
   hint?: string;
@@ -1074,11 +1046,11 @@ function Kpi({
     // si la fila la estira (la mediana es más alta), la cifra sigue pegada bajo el rótulo en vez de caer al fondo. El
     // pie es la aclaración de la cifra, no una acción: va en el gris terciario.
     <TarjetaMetrica
-      className="relative w-full grid-cols-1 content-start p-4 [&>img]:absolute [&>img]:bottom-3.5 [&>img]:right-3.5 [&>img]:h-9 [&>img]:w-9 [&>img]:max-w-none [&>img]:shrink-0 [&>span:nth-child(2)]:pr-11 [&>span:nth-child(4)]:pr-11 [&>span:nth-child(4)]:font-normal [&>span:nth-child(4)]:text-[color:var(--di-text-tertiary)]"
+      className="relative w-full grid-cols-1 content-start p-4 [&>:nth-child(3)]:absolute [&>:nth-child(3)]:bottom-3.5 [&>:nth-child(3)]:right-3.5 [&>:nth-child(3)]:h-9 [&>:nth-child(3)]:w-9 [&>:nth-child(3)]:max-w-none [&>:nth-child(3)]:shrink-0 [&>span:nth-child(2)]:pr-11 [&>span:nth-child(4)]:pr-11 [&>span:nth-child(4)]:font-normal [&>span:nth-child(4)]:text-[color:var(--di-text-tertiary)]"
       etiqueta={label}
       cifra={<span className={tamano}>{cargando ? "—" : (value ?? 0)}</span>}
       colorCifra={sinDato ? "var(--di-text-tertiary)" : undefined}
-      ilustracion={rutaIlustracion(ilustracion)}
+      icono={ilustracion}
       pie={hint}
       pendiente={Boolean(pendiente) && navegable}
       onClick={navegable ? onAbrir : undefined}

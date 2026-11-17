@@ -1,7 +1,8 @@
 "use client";
 
-import { createElement, useEffect, useState } from "react";
-import { CheckCircle2, Clock, FileText, Gauge, MinusCircle, Ticket, type LucideIcon } from "lucide-react";
+import { useEffect, useState } from "react";
+import { IconoModulo } from "@flit/ui/Icono";
+import { ICONO_TONO, rutaKit } from "@flit/ui/iconos-mapas";
 import { listTenantProducts, setTenantProduct, type TenantProduct } from "@/lib/api/platform";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { ToggleSwitch } from "../ToggleSwitch";
@@ -9,8 +10,6 @@ import { ToggleSwitch } from "../ToggleSwitch";
 // HU #12967 (Epic #13217) — productos de la FLIT Suite encendidos para la compañía. Lee el estado real
 // (platform.tenant_products), no la configuración de la compañía: funciona aunque la compañía no tenga configuración
 // guardada. Encender o apagar se aplica al instante, sin «Guardar todo», y queda auditado. Solo SuperAdmin.
-
-const ICONS: Record<string, LucideIcon> = { tramites: FileText, comparendos: Ticket, diagnostico: Gauge };
 
 const DATE = new Intl.DateTimeFormat("es-CO", { dateStyle: "medium", timeStyle: "short", timeZone: "America/Bogota" });
 
@@ -27,28 +26,16 @@ function ProductBadges({ product }: { product: TenantProduct }) {
     <>
       <StatusBadge
         tone={product.enabled ? "success" : "neutral"}
+        icono={rutaKit(product.enabled ? ICONO_TONO.ok : ICONO_TONO[""])}
         ariaLabel={`Estado de ${product.name}: ${product.enabled ? "Encendido" : "Apagado"}`}
-        label={
-          <span className="inline-flex items-center gap-1">
-            {product.enabled ? (
-              <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
-            ) : (
-              <MinusCircle className="h-3.5 w-3.5" aria-hidden />
-            )}
-            {product.enabled ? "Encendido" : "Apagado"}
-          </span>
-        }
+        label={product.enabled ? "Encendido" : "Apagado"}
       />
       {product.comingSoon && (
         <StatusBadge
           tone="neutral"
+          icono={rutaKit(ICONO_TONO[""])}
           ariaLabel={`${product.name}: próximamente`}
-          label={
-            <span className="inline-flex items-center gap-1">
-              <Clock className="h-3.5 w-3.5" aria-hidden />
-              Próximamente
-            </span>
-          }
+          label="Próximamente"
         />
       )}
     </>
@@ -117,9 +104,7 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
             return (
               <li key={p.productCode} className="space-y-2">
                 <div className="flex items-start gap-3">
-                  <span className="mt-3 grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-flit-brand/10 text-flit-brand">
-                    {createElement(ICONS[p.productCode] ?? FileText, { className: "h-4 w-4", "aria-hidden": true })}
-                  </span>
+                  <IconoModulo clave={p.productCode} disco size={36} className="mt-3 shrink-0" />
                   <div className="flex-1">
                     <ToggleSwitch
                       id={`producto-${p.productCode}`}

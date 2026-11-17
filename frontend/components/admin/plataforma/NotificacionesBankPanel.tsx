@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Info, Mail, Send } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
@@ -174,13 +175,13 @@ export function NotificacionesBankPanel() {
           <RowActions
             actions={[
               {
-                icon: Eye,
+                icon: iconoComo("ojo"),
                 label: `Preview FLIT de ${row.name}`,
                 tone: "primary",
                 onClick: () => setPreviewTarget({ row, channel: "FLIT_SMTP", formatLabel: "FLIT" }),
               },
               {
-                icon: Send,
+                icon: iconoComo("radicacion"),
                 label: `Enviar FLIT de ${row.name}`,
                 tone: "primary",
                 onClick: () =>
@@ -194,13 +195,13 @@ export function NotificacionesBankPanel() {
             <RowActions
               actions={[
                 {
-                  icon: Eye,
+                  icon: iconoComo("ojo"),
                   label: `Preview Renting de ${row.name}`,
                   onClick: () =>
                     setPreviewTarget({ row, channel: "TENANT_API", formatLabel: "Renting" }),
                 },
                 {
-                  icon: Send,
+                  icon: iconoComo("radicacion"),
                   label: `Enviar Renting de ${row.name}`,
                   onClick: () =>
                     setSendTarget({
@@ -242,7 +243,7 @@ export function NotificacionesBankPanel() {
       header: "Remitente",
       render: (row) => (
         <span className="inline-flex items-center gap-1.5 text-xs text-foreground dark:text-muted-foreground">
-          <Mail className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <Icono nombre="correo" className="h-3.5 w-3.5 shrink-0" />
           {senderText(row)}
         </span>
       ),
@@ -255,7 +256,7 @@ export function NotificacionesBankPanel() {
         if (row.kind === "kyverum") {
           return (
             <span className="inline-flex max-w-[220px] items-start justify-end gap-1.5 text-right text-[11px] text-muted-foreground">
-              <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              <Icono nombre="exclamacion" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               El correo lo emite el proveedor; FLIT no controla su contenido.
             </span>
           );

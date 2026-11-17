@@ -1,23 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { ESTADO_LABELS, ESTADOS_TRAMITE, estadoAcentoVar, type EstadoTramite } from "@/lib/tramites/estados";
+import { CHIP_EMBUDO_CLS, EMBUDO_CLS } from "@flit/ui/ChipsFiltro";
+import { cn } from "@flit/ui/cn";
+import { ESTADO_ICONO, ESTADO_LABELS, ESTADOS_TRAMITE, type EstadoTramite } from "@/lib/tramites/estados";
 import { tramitesPorEstado } from "./destinos";
 import type { ConteosEstado } from "./useConteosEstado";
 
 /**
- * HU #14481 (referencia de Samuel) — la misma tira de baldosas que `FranjaEstados` de /tramites (HU #14482): franja
- * blanca, una baldosa por estado con el nombre, la cifra grande y la barra del color del estado, sin íconos. Aquí cada
- * baldosa es un enlace (no un botón de filtro), así que se repite su receta en vez de reutilizar el componente.
+ * UI Kit 2026 — el mismo embudo del kit que `FranjaEstados` de /tramites (`EMBUDO_CLS` / `CHIP_EMBUDO_CLS`): una
+ * columna por estado con su disco arriba, el nombre y la cifra, sin barra de color. Aquí cada columna es un enlace (no
+ * un botón de filtro), así que se aplican las mismas clases en vez de reutilizar el componente.
  */
-const FRANJA_CLS =
-  "flex list-none flex-wrap gap-2 rounded-2xl bg-[var(--di-surface-elevated)] p-2 shadow-[var(--shadow-card)]";
+const FRANJA_CLS = cn(EMBUDO_CLS, "m-0 list-none");
 
-const BALDOSA_CLS =
-  "flex h-full flex-col items-center justify-start gap-1 rounded-xl border border-transparent " +
-  "bg-[var(--di-surface-elevated)] px-3 pb-2.5 pt-3 text-center no-underline transition-colors " +
-  "hover:bg-[var(--di-accent-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand " +
-  "focus-visible:ring-offset-2 focus-visible:ring-offset-background";
+/** El chip del embudo en columna normal: el DOM ya va en el orden visual (disco, nombre, cifra). */
+const BALDOSA_CLS = cn(CHIP_EMBUDO_CLS, "h-full w-full flex-col justify-start no-underline");
 
 /**
  * HU #14481 (AC2) — cifras de trámites por estado. Cada cifra es un enlace a /tramites filtrado por ese estado; el
@@ -26,10 +24,10 @@ const BALDOSA_CLS =
 export function CifrasEstado({ conteos }: { conteos: ConteosEstado }) {
   return (
     <section aria-labelledby="inicio-cifras-titulo">
-      <h2 id="inicio-cifras-titulo" className="text-base font-semibold text-[color:var(--di-heading)]">
+      <h2 id="inicio-cifras-titulo" className="text-2xl font-medium leading-tight text-[color:var(--kit-azul-texto)]">
         Tus trámites por estado
       </h2>
-      <p className="mt-0.5 text-xs text-[color:var(--di-text-tertiary)]">Pulsa una cifra para ver esos trámites.</p>
+      <p className="mt-0.5 text-[0.8125rem] text-[color:var(--di-text-tertiary)]">Pulsa una cifra para ver esos trámites.</p>
 
       {conteos.estado === "cargando" ? (
         <p className="mt-4 text-sm text-[color:var(--di-text-tertiary)]" role="status">
@@ -40,7 +38,7 @@ export function CifrasEstado({ conteos }: { conteos: ConteosEstado }) {
       ) : (
         <ul className={`mt-4 ${FRANJA_CLS}`}>
           {ESTADOS_TRAMITE.map((estado) => (
-            <li key={estado} className="min-w-[7.5rem] flex-1">
+            <li key={estado} className="min-w-0">
               <Cifra estado={estado} total={conteos.conteos[estado] ?? 0} />
             </li>
           ))}
@@ -58,14 +56,16 @@ function Cifra({ estado, total }: { estado: EstadoTramite; total: number }) {
       className={BALDOSA_CLS}
       aria-label={`${etiqueta}: ${total} ${total === 1 ? "trámite" : "trámites"}`}
     >
+      {/* Disco del estado del kit, decorativo: el nombre accesible del enlace ya dice el estado y la cifra. */}
+      {/* eslint-disable-next-line @next/next/no-img-element -- disco estático del kit */}
+      <img src={ESTADO_ICONO[estado]} alt="" aria-hidden="true" width={32} height={32} className="mb-0.5 h-8 w-8" />
       {/* Hasta dos líneas, como en /tramites: «Solicitud de revocatoria» no cabe en una. */}
-      <span className="max-w-full text-[0.8125rem] font-medium leading-tight text-[color:var(--di-text-primary)]" aria-hidden="true">
+      <span className="max-w-full text-xs font-medium leading-tight text-[color:var(--di-text-primary)]" aria-hidden="true">
         {etiqueta}
       </span>
-      <span className="text-[1.375rem] font-bold leading-none tabular-nums text-[color:var(--di-heading)]" aria-hidden="true">
+      <span className="text-xl font-bold leading-none tabular-nums text-[color:var(--di-text-primary)]" aria-hidden="true">
         {total.toLocaleString("es-CO")}
       </span>
-      <span className="mt-1.5 h-1 w-3/5 rounded-full" style={{ background: estadoAcentoVar(estado) }} aria-hidden="true" />
     </Link>
   );
 }

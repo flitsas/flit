@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ArrowRight, CheckCircle2, Eye, MinusCircle, ShieldAlert } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { AuditLogEntry } from "@/lib/api/types";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RangoFechas } from "@/components/atom/RangoFechas";
@@ -9,6 +9,7 @@ import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import { Modal } from "@/components/atom/Modal";
 import { SearchInput } from "@/components/atom/SearchInput";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { iconoDeTono } from "@/components/admin/companies/ConfigUi";
 import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { esRangoVacio, sinRango, type DateRange } from "@/components/atom/modules/_reportes/range";
 import type { TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
@@ -141,7 +142,7 @@ export function AuditLogTable({
       key: "new",
       header: (
         <span className="inline-flex items-center gap-1.5">
-          <ArrowRight className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="derecha" className="h-3.5 w-3.5" />
           Valor nuevo
         </span>
       ),
@@ -260,20 +261,8 @@ function ParsedValue({ parsed, onDetail }: { parsed: ParsedAuditValue; onDetail?
     case "empty":
       return <span aria-label="Sin valor">—</span>;
     case "boolean": {
-      const Icon = parsed.tone === "success" ? CheckCircle2 : parsed.tone === "warning" ? ShieldAlert : MinusCircle;
       const label = parsed.value ? parsed.positive : parsed.negative;
-      return (
-        <StatusBadge
-          tone={parsed.tone}
-          ariaLabel={label}
-          label={
-            <span className="inline-flex items-center gap-1.5">
-              <Icon className="h-3.5 w-3.5" aria-hidden />
-              {label}
-            </span>
-          }
-        />
-      );
+      return <StatusBadge tone={parsed.tone} icono={iconoDeTono(parsed.tone)} ariaLabel={label} label={label} />;
     }
     case "text":
       return <span className="break-words">{parsed.text}</span>;
@@ -285,7 +274,7 @@ function ParsedValue({ parsed, onDetail }: { parsed: ParsedAuditValue; onDetail?
           className="inline-flex items-center gap-1.5 rounded-lg px-2 py-1 text-xs font-semibold text-flit-brand hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           title={parsed.summary}
         >
-          <Eye className="h-4 w-4" aria-hidden />
+          <Icono nombre="ojo" className="h-4 w-4" />
           Ver detalle
         </button>
       );
@@ -308,6 +297,7 @@ function AuditDetailModal({ entry, onClose }: { entry: AuditLogEntry | null; onC
   const newParsed = parseAuditValue(entry.newValue, entry.fieldName);
   return (
     <Modal
+      icono="portapapeles"
       open
       onClose={onClose}
       size="lg"

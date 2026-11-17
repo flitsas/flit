@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Paperclip } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type { ProcedureAttachment } from '@/lib/api/types/procedure-runtime';
 import { cn } from '@/lib/utils';
 import { tramitesClient } from '@/lib/api/tramites-client';
@@ -18,6 +18,7 @@ import {
   parseBlindajeOpcion,
 } from '@/lib/catalogs/blindaje';
 import { WIZARD_INPUT, WIZARD_LABEL } from './wizard-field-styles';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 interface DocumentoSugerido {
   /** Nombre legible del documento a adjuntar. NO es el nombre de archivo del cargue. */
@@ -214,18 +215,13 @@ export function BlindajeDeclaracionCard({
 
       <div
         className={cn(
-          'relative flex flex-col rounded-xl bg-card p-4 shadow-sm transition hover:shadow-md sm:max-w-sm',
+          'relative flex flex-col rounded-xl bg-card p-4 border border-[color:var(--di-border)] transition hover:border-[color:var(--di-action)] sm:max-w-sm',
           listo ? 'border' : 'border-2 border-dashed hover:border-flit-brand hover:bg-secondary',
         )}
         style={{ borderColor: 'var(--border)' }}
       >
-        <span
-          className={cn(
-            'absolute right-3 top-3 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs',
-            listo ? 'font-semibold' : 'bg-[var(--badge-danger-bg)] font-medium text-[var(--badge-danger-fg)]',
-          )}
-          style={listo ? { background: 'var(--badge-success-bg)', color: 'var(--badge-success-fg)' } : undefined}
-        >
+        <span {...etiquetaKit(listo ? 'success' : 'danger', { className: 'absolute right-3 top-3' })}>
+          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
           {listo ? 'Validado' : '* Obligatorio'}
         </span>
 
@@ -310,7 +306,7 @@ export function BlindajeDeclaracionCard({
                   borderWidth: certificado ? 1 : 2,
                 }}
               >
-                <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="archivo" className="h-3.5 w-3.5" />
                 {uploading ? 'Subiendo…' : certificado ? 'Reemplazar archivo' : 'Adjuntar archivo'}
               </button>
               {certificado && (

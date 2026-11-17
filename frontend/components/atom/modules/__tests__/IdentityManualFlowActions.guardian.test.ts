@@ -67,7 +67,7 @@ describe('guardián de diseño · modal de IdentityManualFlowActions', () => {
   it('velo, panel y franja del Modal en su sitio (homologación #14507), sin hex de oscuro', () => {
     // Homologación #14507 (regla 3): el diálogo propio toma velo (--overlay), radio, sombra y franja del Modal
     // desde `dialogo-propio.ts`, sin migrar a @flit/ui/Modal.
-    expect(src).toContain('DIALOGO_VELO');
+    expect(src).toContain('MODAL_VELO_CLS'); // UI Kit 2026 (S3): el velo sale de @flit/ui/Modal
     expect(src).toContain('DIALOGO_PANEL');
     expect(src).toContain('DIALOGO_FRANJA');
     expect(src).not.toContain("rgba(22,39,68,0.45)");

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type { LinkedProcedureRef } from '@/lib/api/types/procedure-runtime';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
 
@@ -70,7 +70,7 @@ export function AssociatedProceduresList({
               ) : (
                 <>
                   <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--di-action)' }}>
-                    {linkable ? <ExternalLink className="h-3 w-3 shrink-0" aria-hidden /> : null}
+                    {linkable ? <Icono nombre="externo" className="h-3 w-3 shrink-0" /> : null}
                     {p.referenceNumber}
                     {p.primary ? (
                       <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold opacity-70">

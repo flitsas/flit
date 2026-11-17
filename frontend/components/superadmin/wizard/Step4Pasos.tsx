@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { GripVertical, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
+import { GripVertical } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { ProcedureStep } from '@/lib/api/types/procedure-parametrization';
 
 interface Step4Props {
@@ -50,7 +51,7 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
                 className="p-1 rounded opacity-50 hover:opacity-100 disabled:opacity-20"
                 aria-label={`Mover ${step.title} hacia arriba`}
               >
-                <ChevronUp className="h-3.5 w-3.5" />
+                <Icono nombre="arriba" className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={() => onMove(index, 'down')}
@@ -58,14 +59,14 @@ export function Step4Pasos({ steps, onMove, onAdd, onRemove }: Step4Props) {
                 className="p-1 rounded opacity-50 hover:opacity-100 disabled:opacity-20"
                 aria-label={`Mover ${step.title} hacia abajo`}
               >
-                <ChevronDown className="h-3.5 w-3.5" />
+                <Icono nombre="abajo" className="h-3.5 w-3.5" />
               </button>
               <button
                 onClick={() => onRemove(index)}
                 className="p-1 rounded opacity-40 hover:opacity-100"
                 aria-label={`Eliminar paso ${step.title}`}
               >
-                <Trash2 className="h-3.5 w-3.5" style={{ color: 'var(--destructive)' }} />
+                <Icono nombre="papelera" className="h-3.5 w-3.5" style={{ color: 'var(--destructive)' }} />
               </button>
             </div>
           </div>

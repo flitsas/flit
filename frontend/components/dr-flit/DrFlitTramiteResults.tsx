@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { COPY } from "@/lib/copy/copy-catalog";
 import { estadoChipStyle, estadoLabel } from "@/lib/tramites/estados";
 import { estadoHint } from "./dr-flit-estados";
@@ -142,7 +142,7 @@ export function DrFlitTramiteResults({
               }}
             >
               Ver trámite
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="externo" className="h-3.5 w-3.5" />
             </button>
           </li>
         );

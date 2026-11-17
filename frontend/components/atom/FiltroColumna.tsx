@@ -19,7 +19,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Filter } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   INPUT_CLS,
   PERIODOS,
@@ -348,7 +348,7 @@ function BotonFiltro({
           activo ? "text-[color:var(--di-highlight-decor)]" : "text-inherit"
         }`}
       >
-        <Filter className={`h-3.5 w-3.5 ${activo ? "fill-current" : ""}`} aria-hidden="true" />
+        <Icono nombre="filtro" className={`h-3.5 w-3.5 ${activo ? "fill-current" : ""}`} />
       </button>
       {open && typeof document !== "undefined"
         ? createPortal(

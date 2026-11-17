@@ -1,5 +1,8 @@
 'use client';
 
+import { CHIP_EMBUDO_CLS, EMBUDO_CLS } from '@flit/ui/ChipsFiltro';
+import { cn } from '@flit/ui/cn';
+
 /**
  * Epic #12686 — la tira de tarjetas con conteo que comparten el listado del gestor
  * (`EstadoFunnel`) y la bandeja del OT (`OtBandejaCountersStrip`). Presentacional: cada pantalla
@@ -18,24 +21,20 @@ export interface FranjaItem {
   /** Fondo de la tarjeta elegida y color de su subrayado. */
   activeBg: string;
   activeColor: string;
-  /** HU #14482 — color propio del estado para la barra del pie (`var(--estado-<x>-acento)`). */
+  /** HU #14482 — color propio del estado (`var(--estado-<x>-acento)`). UI Kit 2026: el embudo del kit ya no pinta la
+   * barra del pie (el estado lo dice su disco); se conserva en el contrato para quien lo arma. */
   acento: string;
 }
 
 /**
- * HU #14482 — tira de baldosas: franja blanca con una baldosa por estado (nombre arriba, cifra
- * grande y una barra corta con el color del estado al pie). El color va solo en la barra; el texto
- * queda en tinta. En anchos menores las baldosas pasan a varias filas.
+ * UI Kit 2026 — el embudo de estados del kit (`EMBUDO_CLS` / `CHIP_EMBUDO_CLS` de `@flit/ui/ChipsFiltro`): una franja
+ * con una columna por estado —el disco del estado arriba, el nombre y la cifra— y la elegida en --kit-hover con aro azul.
+ * En celular se desliza en horizontal. Mismos botones, nombres accesibles y filtro de siempre; solo cambia el aspecto.
  */
-const FRANJA_CLS =
-  'flex flex-wrap gap-2 rounded-2xl bg-[var(--di-surface-elevated)] p-2 shadow-[var(--shadow-card)]';
+const FRANJA_CLS = EMBUDO_CLS;
 
-const BALDOSA_CLS =
-  'flex min-w-[7.5rem] flex-1 cursor-pointer flex-col items-center justify-start gap-1 rounded-xl border ' +
-  'border-transparent bg-[var(--di-surface-elevated)] px-3 pb-2.5 pt-3 text-center transition-colors ' +
-  'hover:bg-[var(--di-accent-soft)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
-  'focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 ' +
-  'aria-pressed:border-[color:color-mix(in_srgb,var(--di-action)_35%,transparent)] aria-pressed:bg-[var(--di-accent-soft)]';
+/** El chip del embudo en columna normal: aquí el DOM ya va en el orden visual (disco, nombre, cifra). */
+const BALDOSA_CLS = cn(CHIP_EMBUDO_CLS, 'flex-col justify-start');
 
 // Columnas en pantalla ancha: una por tarjeta. Clases literales para que Tailwind las genere.
 
@@ -77,7 +76,7 @@ export function FranjaEstados({
             title={item.title}
             disabled={disabled}
             onClick={() => onSelect?.(activo ? '' : item.key)}
-            className={BALDOSA_CLS}
+            className={`group ${BALDOSA_CLS}`}
           >
             {/* Decorativo: el nombre accesible del botón ya dice la tarjeta y el conteo. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -85,26 +84,21 @@ export function FranjaEstados({
               src={item.icon}
               alt=""
               aria-hidden="true"
-              width={28}
-              height={28}
-              className="hidden"
+              width={32}
+              height={32}
+              className="mb-0.5 h-8 w-8"
             />
             {/* Hasta dos líneas: «Solicitud de revocatoria» no cabe en una y truncarla la
                 confundía con la tarjeta de al lado. */}
-            <span className="max-w-full text-[0.8125rem] font-medium leading-tight text-[color:var(--di-text-primary)]">
+            <span className="max-w-full text-xs font-medium leading-tight text-[color:var(--di-text-primary)]">
               {item.label}
             </span>
             <span
-              className="text-[1.375rem] font-bold leading-none tabular-nums text-[color:var(--di-heading)]"
+              className="text-xl font-bold leading-none tabular-nums group-aria-pressed:text-[color:var(--kit-azul-texto)]"
               aria-hidden="true"
             >
               {item.count ?? '—'}
             </span>
-            <span
-              className="mt-1.5 h-1 w-3/5 rounded-full"
-              style={{ background: item.acento }}
-              aria-hidden="true"
-            />
           </button>
         );
       })}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronRight, Download } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Pagination } from "@/components/atom/Pagination";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -23,6 +23,7 @@ import {
   resultado,
 } from "@/lib/logqx/labels";
 import { bogotaClock, buildXlsx, XLSX_MIME, type XlsxCell } from "@/lib/xlsx";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * Pestaña «Log completo» (HU #11790). Todos los eventos de la radicación, filtrados y paginados EN
@@ -108,7 +109,8 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
         </label>
 
         {ocultarSinNovedad && data && data.ocultosSinNovedad > 0 && (
-          <span className="rounded-full bg-[var(--badge-danger-bg)] px-2.5 py-1 font-mono text-[11.5px] tabular-nums text-destructive">
+          <span {...etiquetaKit("neutral", { className: "font-mono tabular-nums" })}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             {data.ocultosSinNovedad.toLocaleString("es-CO")} consultas sin novedad ocultas
           </span>
         )}
@@ -142,7 +144,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
           disabled={!data || data.data.length === 0}
           className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium opacity-80 hover:opacity-100 disabled:opacity-40"
         >
-          <Download className="h-3.5 w-3.5" aria-hidden="true" /> Exportar
+          <Icono nombre="nube-bajar" className="h-3.5 w-3.5" /> Exportar
         </button>
       </div>
 
@@ -254,7 +256,7 @@ function FilaEvento({
     <>
       <tr
         className={`cursor-pointer bg-card ${TABLA_ROW_HOVER_CLS} ${
-          abierto ? "shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]" : ""
+          abierto ? "bg-[var(--kit-hover)]" : ""
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -268,10 +270,7 @@ function FilaEvento({
         }}
       >
         <td className={`${tdCls} rounded-l-xl border-l px-3`}>
-          <ChevronRight
-            className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierto ? "rotate-90" : ""}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="derecha" className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierto ? "rotate-90" : ""}`} />
         </td>
         <td className={`${tdCls} whitespace-nowrap font-mono tabular-nums`}>
           {formatFecha(evento.occurredAt)}
@@ -419,10 +418,9 @@ function Columna({
     <div className="min-w-0 overflow-hidden rounded-[9px] border border-border bg-card">
       <div className="flex items-center gap-2 border-b border-border bg-secondary px-3 py-2 dark:bg-secondary">
         <span
-          className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
-            tono === "info" ? "bg-flit-brand/15 text-flit-brand" : "bg-[var(--badge-success-bg)] text-[var(--flit-success-ink)]"
-          }`}
+          {...etiquetaKit(tono === "info" ? "info" : "success", { className: "font-mono" })}
         >
+          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
           {etiqueta}
         </span>
         <h4 className="text-[12px] font-semibold opacity-75">{titulo}</h4>

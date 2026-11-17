@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Search, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from "@/lib/validation/fieldRules";
 import { buttonClass } from "@flit/ui/Button";
 import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
@@ -118,14 +118,14 @@ export function CompanyFiltersPanel({ onApply, initialValue = EMPTY }: CompanyFi
           type="submit"
           className={buttonClass({ variant: "primary", size: "sm" })}
         >
-          <Search className="h-4 w-4" /> Buscar
+          <Icono nombre="buscar" className="h-4 w-4" /> Buscar
         </button>
         <button
           type="button"
           onClick={handleClear}
           className={buttonClass({ variant: "secondary", size: "sm" })}
         >
-          <X className="h-4 w-4" /> Limpiar
+          <Icono nombre="cerrar" className="h-4 w-4" /> Limpiar
         </button>
       </div>
 

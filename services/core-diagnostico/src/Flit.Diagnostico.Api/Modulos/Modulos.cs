@@ -36,6 +36,9 @@ public static class Modulos
         services.TryAddSingleton<Catalogos.EstadoCapacidadImpuesto>();
         services.TryAddScoped<Catalogos.ISincronizacionDepartamentosImpuesto, Catalogos.SincronizacionDepartamentosImpuesto>();
         services.AddHostedService<Catalogos.TrabajadorSincronizacionDepartamentosImpuesto>();
+        services.AddOptions<Notificaciones.OpcionesNotificaciones>().Bind(configuration.GetSection(Notificaciones.OpcionesNotificaciones.Seccion));
+        services.TryAddScoped<Notificaciones.PurgaNotificaciones>();
+        services.AddHostedService<Notificaciones.TrabajadorPurgaNotificaciones>();
         return services;
     }
 
@@ -194,6 +197,7 @@ public static class Modulos
         Consultas.EndpointsReproceso.Map(api);
         Reportes.ReportesEndpoints.Map(api);
         Reportes.EvidenciasEndpoints.Map(api);
+        Notificaciones.NotificacionesEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
         return api;
     }

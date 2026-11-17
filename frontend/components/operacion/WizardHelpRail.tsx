@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { FileText, ListChecks } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { WizardModal } from './WizardModal';
 import { ActiveDeedsList, useActiveDeeds } from './ActiveDeedsCollapse';
 import { ProcedureDocsPreviewInformativo } from './ProcedureDocsPreviewInformativo';
@@ -17,7 +17,7 @@ import { ProcedureDocsPreviewInformativo } from './ProcedureDocsPreviewInformati
  * para llegar a lo suyo. En el carril siguen a un clic sin costar altura.
  *
  * Los paneles se renderizan FUERA del carril, como en el diseño: siguen como hermanos del `<div>`
- * del carril y no dentro de él, para que un panel `fixed inset-0` se posicione respecto al
+ * del carril y no dentro de él, para que un panel fijo a pantalla completa se posicione respecto al
  * viewport y no quede anidado en un contenedor que no es la raíz del documento.
  */
 export function WizardHelpRail({
@@ -50,12 +50,12 @@ export function WizardHelpRail({
       >
         <RailButton
           label="Escrituras vigentes"
-          icon={<FileText className="h-4 w-4" aria-hidden="true" />}
+          icon={<Icono nombre="documento" className="h-4 w-4" />}
           onClick={() => setEscrituras(true)}
         />
         <RailButton
           label="Documentos a tener listos"
-          icon={<ListChecks className="h-4 w-4" aria-hidden="true" />}
+          icon={<Icono nombre="lista" className="h-4 w-4" />}
           onClick={() => setDocumentos(true)}
         />
       </div>

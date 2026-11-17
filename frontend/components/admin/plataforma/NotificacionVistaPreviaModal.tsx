@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -121,7 +120,7 @@ export function NotificacionVistaPreviaModal({
       open={open}
       onClose={onClose}
       title={`Ver en vivo — ${templateName}${titleSuffix}${typeSuffix}`}
-      icon={Eye}
+      icono="ojo"
       size="xl"
     >
       <div className="flex flex-col gap-4">

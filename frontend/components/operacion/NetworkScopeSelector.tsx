@@ -1,7 +1,7 @@
 'use client';
 
 import { useId } from 'react';
-import { Network } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import type { NetworkChildOption, NetworkChildrenStatus } from '@/hooks/useNetworkScope';
 import {
   ETIQUETA_ALCANCE,
@@ -60,7 +60,7 @@ export function NetworkScopeSelector({
         htmlFor={id}
         className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground"
       >
-        <Network className="h-4 w-4 text-flit-brand" aria-hidden="true" />
+        <Icono nombre="integraciones" className="h-4 w-4 text-flit-brand" />
         {label}
       </label>
       <select

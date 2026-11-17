@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Modal } from "@flit/ui/Modal";
@@ -190,7 +190,7 @@ function Fila({ titulo, onQuitar, children }: { titulo: string; onQuitar: () => 
       <div className="flex items-center justify-between gap-2">
         <span className="text-sm font-semibold text-flit-primary">{titulo}</span>
         <button type="button" onClick={onQuitar} className={BOTON_FILA_CLS}>
-          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="papelera" className="h-3.5 w-3.5" />
           {`Quitar ${titulo.toLowerCase()}`}
         </button>
       </div>
@@ -202,7 +202,7 @@ function Fila({ titulo, onQuitar, children }: { titulo: string; onQuitar: () => 
 function Agregar({ texto, onClick, deshabilitado }: { texto: string; onClick: () => void; deshabilitado?: boolean }) {
   return (
     <button type="button" onClick={onClick} disabled={deshabilitado} className={BOTON_FILA_CLS}>
-      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+      <Icono nombre="mas" className="h-3.5 w-3.5" />
       {texto}
     </button>
   );
@@ -243,6 +243,7 @@ function FormSimit({ b, raiz, errores, onChange }: { b: SimitBorrador; raiz: str
 function FormAvaluo({ b, raiz, errores, onChange }: { b: AvaluoBorrador; raiz: string; errores: ErroresCampo; onChange: AlCambiar<AvaluoBorrador> }) {
   const fuente = (i: number, clave: keyof AvaluoBorrador["fuentes"][number]) => (v: string) =>
     onChange({ ...b, fuentes: b.fuentes.map((f, j) => (j === i ? { ...f, [clave]: v } : f)) }, `${raiz}.fuentes[${i}].${clave}`);
+  const ref = (clave: keyof AvaluoBorrador["referencia"]) => (v: string) => onChange({ ...b, referencia: { ...b.referencia, [clave]: v } }, `${raiz}.referencia.${clave}`);
   return (
     <div className="flex flex-col gap-3">
       <Marca
@@ -257,6 +258,7 @@ function FormAvaluo({ b, raiz, errores, onChange }: { b: AvaluoBorrador; raiz: s
           <Texto
             campo={`${raiz}.valor_sugerido`}
             etiqueta="Valor sugerido (pesos)"
+            ayuda="Valor comercial en pesos, sin decimales."
             numerico
             valor={b.valor_sugerido}
             errores={errores}
@@ -272,6 +274,15 @@ function FormAvaluo({ b, raiz, errores, onChange }: { b: AvaluoBorrador; raiz: s
             onChange={(v) => onChange({ ...b, fuente_principal: v as AvaluoBorrador["fuente_principal"] }, `${raiz}.fuente_principal`)}
           />
         </div>
+      )}
+      {!b.sin_valor_comercial && (
+        <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <legend className="mb-1 text-sm font-semibold text-flit-primary">Referencia Fasecolda</legend>
+          <Texto campo={`${raiz}.referencia.codigo_fasecolda`} etiqueta="Código Fasecolda" ayuda="8 dígitos." numerico valor={b.referencia.codigo_fasecolda} errores={errores} onChange={ref("codigo_fasecolda")} />
+          <Texto campo={`${raiz}.referencia.modelo`} etiqueta="Modelo (año)" numerico valor={b.referencia.modelo} errores={errores} onChange={ref("modelo")} />
+          <Texto campo={`${raiz}.referencia.marca`} etiqueta="Marca" valor={b.referencia.marca} errores={errores} onChange={ref("marca")} />
+          <Texto campo={`${raiz}.referencia.linea`} etiqueta="Línea" valor={b.referencia.linea} errores={errores} onChange={ref("linea")} />
+        </fieldset>
       )}
       <p className={AYUDA_CLS}>La fecha del dato la pone el servidor.</p>
       {b.fuentes.map((f, i) => (
@@ -524,7 +535,7 @@ export function FormularioLlenadoManual({ consultaId, empresa, nombreFuente, ide
   }
 
   return (
-    <Modal
+    <Modal icono="lapiz"
       open
       onClose={onClose}
       busy={enviando}

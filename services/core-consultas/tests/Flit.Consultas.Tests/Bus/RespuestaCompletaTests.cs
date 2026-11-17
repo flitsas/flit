@@ -118,7 +118,7 @@ public sealed class RespuestaCompletaTests
     }
 
     private static TrabajoConsultaDiagnostico Trabajo(string rpc) =>
-        new(Guid.CreateVersion7(), Guid.CreateVersion7(), null, FuentesBus.Runt, rpc, JsonDocument.Parse("{}").RootElement.Clone());
+        new(Guid.CreateVersion7(), Guid.CreateVersion7(), null, FuentesBus.Runt, rpc, JsonElement.Parse("{}"));
 
     private static ConsultarVehiculoIntempoResponse Intempo()
     {

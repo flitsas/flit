@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type RefObject } from "react";
-import { CalendarDays, ChevronDown } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { buttonClass } from "@flit/ui/Button";
 import {
   DayPicker,
@@ -30,7 +30,7 @@ const FIELD_CLS =
   "inline-flex h-10 w-full min-w-[220px] items-center gap-2 rounded-[10px] border border-border bg-card px-3 text-xs font-medium text-flit-primary outline-none transition hover:bg-secondary focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-border dark:bg-card dark:text-foreground dark:hover:bg-white/5";
 
 const POPOVER_CLS =
-  "absolute left-0 top-full z-40 mt-2 rounded-xl border border-border bg-card p-3 shadow-lg dark:border-border dark:bg-card dark:text-foreground";
+  "absolute left-0 top-full z-40 mt-2 rounded-xl border border-border bg-card p-3 shadow-[var(--kit-sombra)] dark:border-border dark:bg-card dark:text-foreground";
 
 /** ISO `YYYY-MM-DD` → `DD/MM/AAAA` para mostrar al usuario. */
 export function isoToDisplay(iso: string): string {
@@ -231,9 +231,9 @@ export function DateRangePicker({
           }
         }}
       >
-        <CalendarDays className="h-4 w-4 shrink-0 opacity-70" aria-hidden="true" />
+        <Icono nombre="calendario" className="h-4 w-4 shrink-0 opacity-70" />
         <span className="min-w-0 flex-1 truncate text-left">{displayText}</span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden="true" />
+        <Icono nombre="abajo" className="h-3.5 w-3.5 shrink-0 opacity-60" />
       </button>
 
       {invalidMessage && !open && (

@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { AlertTriangle, Paperclip } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient, TramitesApiError } from '@/lib/api/tramites-client';
 import type { RequestRevocationResult } from '@/lib/api/types/procedure-runtime';
 import { WizardModal } from './WizardModal';
@@ -141,11 +141,7 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
             style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)' }}
             role="alert"
           >
-            <AlertTriangle
-              className="mt-0.5 h-4 w-4 shrink-0"
-              style={{ color: 'var(--badge-warning-fg)' }}
-              aria-hidden="true"
-            />
+            <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} />
             <p className="text-xs leading-relaxed" style={{ color: 'var(--color-flit-primary)' }}>
               <strong>Esta acción no tiene reversa.</strong> Al continuar iniciarás la solicitud de
               revocatoria de este trámite Aprobado. En el siguiente paso deberás indicar el motivo,
@@ -229,7 +225,7 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
                 className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-flit-brand/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
               >
-                <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="archivo" className="h-3.5 w-3.5" />
                 {file ? 'Cambiar archivo' : 'Elegir archivo PDF'}
               </button>
               {file ? (

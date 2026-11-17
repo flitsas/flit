@@ -31,6 +31,7 @@ export function UnlinkCompanyDialog({ child, headName, onClose, onUnlinked }: Un
 
   return (
     <Modal
+      icono="externo"
       open
       onClose={onClose}
       busy={busy}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ChevronDown, ChevronRight, SlidersHorizontal } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { apiFetch } from "@/lib/api";
 import {
   contarFiltros,
@@ -126,9 +126,9 @@ export function MenuFiltros({
         aria-controls={abierto ? id : undefined}
         className={controlCls(n > 0)}
       >
-        <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="filtro" className="h-3.5 w-3.5" />
         {n > 0 ? `Filtros (${n})` : "Filtros"}
-        <ChevronDown className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="abajo" className="h-3.5 w-3.5" />
       </button>
       {abierto && (
         <div
@@ -176,7 +176,7 @@ export function MenuFiltros({
                           <span className="block font-medium">{NOMBRE_CAMPO[clave]}</span>
                           {valor && <span className="block truncate text-[11px] font-semibold text-flit-brand-ink">{valor}</span>}
                         </span>
-                        <ChevronRight className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
+                        <Icono nombre="derecha" className="h-3.5 w-3.5 shrink-0 opacity-50" />
                       </button>
                     );
                   })}

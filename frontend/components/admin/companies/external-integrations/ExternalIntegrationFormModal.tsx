@@ -3,7 +3,7 @@
 // HU #14068 AC2 — Alta de la integración de Persona Natural de la compañía: modal normal (no lateral) con nombre y
 // finalidad opcionales (la API pone valores por defecto). Si falla, conserva lo escrito y muestra el motivo.
 import { useState } from "react";
-import { PlugZap } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { PnButton } from "@/components/admin/plataforma/persona-natural/pn-componentes";
 import { Modal } from "@/components/atom/Modal";
@@ -57,14 +57,14 @@ export function ExternalIntegrationFormModal({ onClose, onCreate }: ExternalInte
       busy={busy}
       title="Crear conexión de Persona Natural"
       description="Conecta el portal de Persona Natural con esta compañía. La clave secreta se genera al crear y se muestra una sola vez."
-      icon={PlugZap}
+      icono="integraciones"
       size="md"
       footer={
         <div className="flex justify-end gap-2">
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="external-integration-form" variant="primary" icon={PlugZap} loading={busy}>
+          <PnButton type="submit" form="external-integration-form" variant="primary" icon={iconoComo("integraciones")} loading={busy}>
             Crear conexión
           </PnButton>
         </div>

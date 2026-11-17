@@ -51,8 +51,9 @@ const EXPECTED_TOKEN_DEFAULT_HEX: Record<string, string> = {
   "--color-flit-brand": "#557eff",
   "--color-flit-tech": "#00dbd5",
   "--color-flit-alert": "#ff4e00",
-  "--color-flit-bg": "#eef5ff",
-  "--color-flit-gray": "#dfe5ed",
+  // UI Kit 2026 (propuesta-2): fondo #E6F0FF y línea #A9C9FC.
+  "--color-flit-bg": "#e6f0ff",
+  "--color-flit-gray": "#a9c9fc",
 };
 
 // Los 6 hex de marca crudos — si alguno reaparece literal en la salida renderizada de una

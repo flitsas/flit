@@ -23,7 +23,7 @@
 //     placa, así que entrar por el atajo y entrar escribiéndola producen exactamente la misma
 //     pantalla — que es el criterio del PO.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Eye, Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { buttonClass } from "@flit/ui/Button";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -221,7 +221,7 @@ export function HistorialPlaca({
             data-testid={`historial-placa-ver-${row.id}`}
             className="inline-flex items-center justify-center rounded-lg border p-1.5 text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background"
           >
-            <Eye className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="ojo" className="h-3.5 w-3.5" />
           </button>
         ),
       },
@@ -307,7 +307,7 @@ export function HistorialPlaca({
           className={buttonClass({ size: "sm" })}
           data-testid="historial-placa-search-btn"
         >
-          <Search className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="buscar" className="h-3.5 w-3.5" />
           Consultar
         </button>
       </form>

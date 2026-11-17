@@ -146,6 +146,8 @@ export function ProgresoDerivacion({ diagnosticoId, inicial, leerAlInicio, noEnc
       </div>
 
       <div role="status" aria-live="polite" className="flex flex-col gap-2">
+        {/* HU #14562 AC32: el avance «Creando trámites» se ve hasta que la operación termina. */}
+        {!progreso.terminada && <p className="text-sm font-semibold text-flit-primary">Creando trámites…</p>}
         <p className="text-sm font-medium text-flit-primary">
           {`${hechas} de ${progreso.total} procesadas · ${progreso.creadas} creadas · ${progreso.omitidas + noEncoladas.length} omitidas · ${progreso.fallidas} fallidas · ${progreso.enCurso} en curso`}
         </p>

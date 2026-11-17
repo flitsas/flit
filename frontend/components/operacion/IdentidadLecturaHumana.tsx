@@ -11,6 +11,7 @@ import {
 import type { BiometricValidation, IdentityAuditEvent } from '@/lib/api/types/procedure-runtime';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 /**
 
  * HU #12186 — la validación de identidad de UNA persona, contada para quien gestiona el trámite.
@@ -176,18 +177,18 @@ export function IdentidadLecturaHumana({
   );
 }
 
-const TONO_CLS: Record<TonoIdentidad, string> = {
-  ok: 'bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)]',
-  pendiente: 'bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]',
-  alerta: 'bg-[var(--badge-danger-bg)] text-[var(--badge-danger-fg)]',
-  neutro: 'bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]',
+/** UI Kit 2026: tono de la etiqueta del kit por significado (el «neutro» de identidad es informativo). */
+const TONO_KIT: Record<TonoIdentidad, 'success' | 'warning' | 'danger' | 'info'> = {
+  ok: 'success',
+  pendiente: 'warning',
+  alerta: 'danger',
+  neutro: 'info',
 };
 
 function Pildora({ label, tono }: { label: string; tono: TonoIdentidad }) {
   return (
-    <span
-      className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${TONO_CLS[tono]}`}
-    >
+    <span {...etiquetaKit(TONO_KIT[tono])}>
+      <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
       {label}
     </span>
   );

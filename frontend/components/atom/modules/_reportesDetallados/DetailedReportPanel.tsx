@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Download } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
@@ -211,7 +211,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
               className="inline-flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
               style={{ background: "var(--color-flit-brand)" }}
             >
-              <Download className="h-4 w-4" aria-hidden="true" />
+              <Icono nombre="nube-bajar" className="h-4 w-4" />
               {exporting ? "Descargando…" : "Descargar Excel"}
             </button>
           )}
@@ -253,7 +253,7 @@ export function DetailedReportPanel({ embedded = false }: DetailedReportPanelPro
           disabled={exporting}
           className="self-start inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-xs font-semibold"
         >
-          <Download className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="nube-bajar" className="h-4 w-4" />
           Descargar Excel
         </button>
       )}

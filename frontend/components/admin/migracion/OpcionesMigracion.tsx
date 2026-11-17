@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DESCRIPCION_INSTANCIA, INSTANCIAS, type Instancia } from "@/lib/migracion/types";
 
 /**
@@ -194,7 +194,7 @@ function ModoEjecucion({
 
       {avisarDependencia && (
         <p className="flex items-start gap-1.5 text-xs text-[var(--badge-warning-fg)]">
-          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <Icono nombre="alerta" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
             Simulando, los adjuntos y los documentos solo se pueden comprobar en trámites que{" "}
             <strong className="font-semibold">ya estén migrados</strong>: se cuelgan de la data

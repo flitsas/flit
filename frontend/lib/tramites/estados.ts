@@ -106,12 +106,10 @@ export interface EstadoChipStyle {
  * la luminosidad, que es lo que corresponde cuando un color del prototipo no cumple contraste en
  * un uso concreto. `borrador` y `anulado` ya cumplen y se usan tal cual.
  *
- * ADR-0059: `preasignacion` es ámbar (#E08A00, el del artefacto de la epic: «falta algo del
- * organismo», a medio camino entre el azul de lo que avanza y el rojo de lo que se devolvió);
- * `asignado` es índigo (#6366F1), heredado del badge de placa asignada para que el usuario no
- * reaprenda; `revocado` (violeta) se separa de `anulado` (vino) porque son dos finales distintos:
- * uno lo decide el gestor, el otro lo deshace el organismo. Los mismos tonos valen para el
- * organismo: sus tarjetas y chips leen de aquí.
+ * UI Kit 2026 (propuesta-2): los discos son los `estado-*.svg` del kit. `preasignacion` es el
+ * naranja de «sin placa» (#F77A00), `asignado` el azul de la placa (#557EFF), `entregado` el
+ * turquesa del kit (#14C4A6) y `revocado` el amarillo (#F9B130), que lo sigue separando de
+ * `anulado` (vino). Los mismos tonos valen para el organismo: sus tarjetas y chips leen de aquí.
  */
 export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
   borrador: {
@@ -130,19 +128,19 @@ export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
     bg: 'var(--estado-preasignacion-bg)',
     color: 'var(--estado-preasignacion-fg)',
     border: 'var(--estado-preasignacion-border)',
-    accent: '#E08A00',
+    accent: '#F77A00',
   },
   asignado: {
     bg: 'var(--estado-asignado-bg)',
     color: 'var(--estado-asignado-fg)',
     border: 'var(--estado-asignado-border)',
-    accent: '#6366F1',
+    accent: '#557EFF',
   },
   entregado: {
     bg: 'var(--estado-entregado-bg)',
     color: 'var(--estado-entregado-fg)',
     border: 'var(--estado-entregado-border)',
-    accent: '#00A99D',
+    accent: '#14C4A6',
   },
   aprobado: {
     bg: 'var(--estado-aprobado-bg)',
@@ -166,7 +164,7 @@ export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
     bg: 'var(--estado-revocado-bg)',
     color: 'var(--estado-revocado-fg)',
     border: 'var(--estado-revocado-border)',
-    accent: '#8B5CF6',
+    accent: '#F9B130',
   },
   subsanacion: {
     bg: 'var(--estado-subsanacion-bg)',

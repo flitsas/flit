@@ -1,6 +1,6 @@
 'use client';
 
-import { X } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { WIZARD_LABEL } from './wizard-field-styles';
 import {
   OWNERSHIP_CAP_MESSAGE,
@@ -211,7 +211,7 @@ export function OwnershipTabsBar({
                   className="grid h-9 place-items-center rounded-r-full border border-l-0 pl-1 pr-3 opacity-70 transition hover:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
                   style={pillStyle}
                 >
-                  <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="cerrar" className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
@@ -355,7 +355,7 @@ export function OwnershipPercentagePanel({
           disabled={readOnly || sliderMax <= 0}
           aria-valuetext={`${formatPercent(active.percentage)}%`}
           onChange={(e) => onPercentageChange(active.index, Number(e.target.value))}
-          className="h-1.5 w-full appearance-none rounded-full outline-none transition disabled:opacity-70 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-[color:var(--muted-foreground)] [&::-webkit-slider-thumb]:bg-card [&::-webkit-slider-thumb]:shadow-md [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[color:var(--muted-foreground)] [&::-moz-range-thumb]:bg-card [&::-moz-range-thumb]:shadow-md"
+          className="h-1.5 w-full appearance-none rounded-full outline-none transition disabled:opacity-70 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:border-2 [&::-webkit-slider-thumb]:border-[color:var(--muted-foreground)] [&::-webkit-slider-thumb]:bg-card [&::-moz-range-thumb]:h-4 [&::-moz-range-thumb]:w-4 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:rounded-full [&::-moz-range-thumb]:border-2 [&::-moz-range-thumb]:border-[color:var(--muted-foreground)] [&::-moz-range-thumb]:bg-card"
           style={{
             background: `linear-gradient(to right, ${activeColor} ${sliderMax > 0 ? (activeSliderValue / sliderMax) * 100 : 0}%, var(--border) ${sliderMax > 0 ? (activeSliderValue / sliderMax) * 100 : 0}%)`,
             accentColor: activeColor,

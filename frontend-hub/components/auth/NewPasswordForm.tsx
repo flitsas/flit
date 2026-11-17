@@ -5,7 +5,7 @@ import { useState } from "react";
 import { postJson } from "@/lib/api";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/password-policy";
 import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/password-reused";
-import { Lock } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { INGRESO_ICONO_CLS } from "@flit/ui/Ingreso";
 import { ERROR_CLASS, HINT_CLASS, INPUT_CLASS, LABEL_CLASS, LINK_BUTTON_CLASS, STATUS_CLASS, SUBMIT_CLASS } from "./AuthCard";
 
@@ -94,7 +94,7 @@ export function NewPasswordForm({ mode, token }: { mode: NewPasswordMode; token:
       <div>
         <label htmlFor="np-password" className={LABEL_CLASS}>Nueva contraseña</label>
         <div className="relative">
-          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
           <input id="np-password" type="password" autoComplete="new-password" className={INPUT_CLASS} value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
         <p className={HINT_CLASS}>{PASSWORD_POLICY_HINT}</p>
@@ -102,7 +102,7 @@ export function NewPasswordForm({ mode, token }: { mode: NewPasswordMode; token:
       <div>
         <label htmlFor="np-confirm" className={LABEL_CLASS}>Confirmar contraseña</label>
         <div className="relative">
-          <Lock className={INGRESO_ICONO_CLS} aria-hidden="true" />
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
           <input id="np-confirm" type="password" autoComplete="new-password" className={INPUT_CLASS} value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </div>
       </div>

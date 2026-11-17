@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowDown, ArrowUp, GripVertical, Trash2 } from "lucide-react";
+import { GripVertical } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ScopeBadge } from "@/components/admin/documents/panels/ScopeBadge";
 import { catalogDocumentTitle } from "@/lib/tramites/document-labels";
 import { DocumentCatalogCaption } from "@/components/shared/DocumentCatalogCaption";
@@ -80,7 +81,7 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               aria-label={`Subir ${displayName(o)}`}
               className="rounded-lg border p-1 disabled:opacity-30"
             >
-              <ArrowUp className="h-3.5 w-3.5" />
+              <Icono nombre="arriba" className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -89,7 +90,7 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               aria-label={`Bajar ${displayName(o)}`}
               className="rounded-lg border p-1 disabled:opacity-30"
             >
-              <ArrowDown className="h-3.5 w-3.5" />
+              <Icono nombre="abajo" className="h-3.5 w-3.5" />
             </button>
             <button
               type="button"
@@ -99,7 +100,7 @@ export function OverridesList({ overrides, onReorder, onDelete, busy }: Override
               className="rounded-lg border p-1 disabled:opacity-40"
               style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
             >
-              <Trash2 className="h-3.5 w-3.5" />
+              <Icono nombre="papelera" className="h-3.5 w-3.5" />
             </button>
           </div>
         </li>

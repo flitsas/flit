@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import type { DocumentType } from "@/lib/api/types-documents";
 
@@ -34,7 +33,7 @@ export function ConfirmDeleteDocumentTypeDialog({
       onClose={onClose}
       busy={busy}
       size="sm"
-      icon={Trash2}
+      icono="papelera"
       iconBg="var(--destructive)"
       title="Eliminar tipo de documento"
       titleClassName="text-base font-bold text-destructive"

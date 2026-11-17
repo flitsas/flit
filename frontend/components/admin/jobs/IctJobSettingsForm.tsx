@@ -3,7 +3,7 @@
 // HU #12123 — formulario SuperAdmin de ict.job_settings. Espejo de QuipuxSettingsForm:
 // 4 estados (vacío/carga/error/lleno), clamps en UI alineados al API, sin secretos.
 import { useCallback, useEffect, useState } from "react";
-import { Save } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { CarLoader, CarLoaderModal } from "@/components/atom/CarLoader";
 import { InlineAlert } from "@/components/atom/InlineAlert";
@@ -330,7 +330,7 @@ export function IctJobSettingsForm() {
       <div className="flex justify-end pb-2">
         <CreateButton
           label={saving ? "Guardando…" : "Guardar configuración"}
-          icon={Save}
+          icon={iconoComo("nube-subir")}
           disabled={saving}
           onClick={() => void save()}
         />

@@ -1,5 +1,5 @@
 import { useId, type ReactNode, type Ref } from "react";
-import { CarFront, SlidersHorizontal } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { AYUDA_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 
 export interface DosZonasProps {
@@ -31,7 +31,7 @@ export function DosZonas({ vehiculos, ayudaVehiculos, despuesVehiculos, parametr
         <div className={`${TARJETA_CLS} flex flex-col gap-4`}>
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
-              <CarFront className="h-5 w-5 text-flit-brand" aria-hidden="true" />
+              <Icono nombre="carro" className="h-5 w-5 text-flit-brand" />
               <h2 id={`${id}-vehiculos`} className={TITULO_CLS}>
                 Vehículos
               </h2>
@@ -48,7 +48,7 @@ export function DosZonas({ vehiculos, ayudaVehiculos, despuesVehiculos, parametr
         className={`${TARJETA_CLS} flex min-w-0 flex-col gap-4 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:overflow-y-auto`}
       >
         <div className="flex items-center gap-2">
-          <SlidersHorizontal className="h-5 w-5 text-flit-brand" aria-hidden="true" />
+          <Icono nombre="filtro" className="h-5 w-5 text-flit-brand" />
           <h2 id={`${id}-parametros`} className={TITULO_CLS}>
             Parámetros
           </h2>

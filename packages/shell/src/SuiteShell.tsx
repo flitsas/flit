@@ -16,6 +16,7 @@ import { CommandPalette } from "./CommandPalette";
 import { ShellNavProvider } from "./ShellNavContext";
 import type { PlateSearch, SearchAction } from "./search";
 import { ThemeToggle } from "./theme";
+import { useSuiteApps } from "./useSuiteApps";
 
 export type { NavCatalog, NavItem, NavSection, NavViewer } from "./nav";
 export type { ShellUser } from "./AccountMenu";
@@ -117,6 +118,9 @@ export function SuiteShell({
   const home = useMemo(() => ({ href: homeHref, label: `Inicio ${productName}` }), [homeHref, productName]);
   const shellNav = useMemo(() => ({ groups, homeHref }), [groups, homeHref]);
   const accountUser = useMemo(() => ({ ...user, roleLabel: user.roleLabel ?? suiteRoleLabel(roles ?? []) }), [user, roles]);
+  // HU #14562 · D1: una sola carga de me/apps para ▦ y para «Tus productos» del menú de usuario (móvil).
+  const appsState = useSuiteApps(apps, loadApps);
+  const accountProducts = useMemo(() => ({ state: appsState, productCode }), [appsState, productCode]);
 
   // Barra superior del prototipo «Diseño Inteligente» (HU #14479, `.barra`): marca y producto a la izquierda; a la
   // derecha el buscador ancho (Ctrl K), el menú de productos, el tema y el bloque de usuario. Sin campana: la suite
@@ -131,9 +135,9 @@ export function SuiteShell({
       <div className="suite-barra__acciones">
         <CommandPalette groups={groups} home={home} actions={searchActions} plate={plateSearch} />
         {headerActions}
-        <ProductMenu productCode={productCode} apps={apps} loadApps={loadApps} />
+        <ProductMenu productCode={productCode} state={appsState} />
         {themeToggle && <ThemeToggle />}
-        <AccountMenu user={accountUser} links={menuLinks} onLogout={onLogout} />
+        <AccountMenu user={accountUser} links={menuLinks} onLogout={onLogout} products={accountProducts} />
       </div>
     </header>
   );
@@ -159,14 +163,8 @@ export function SuiteShell({
       <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--di-surface)] text-[var(--color-flit-primary)] dark:text-white">
         {header}
         <main className="relative min-h-0 flex-1 overflow-hidden">
-          {/* Propuesta «Diseño Inteligente» (propuesta.css `.fondo`): círculo cielo abajo a la izquierda y arco fino a la
-              derecha, fijos detrás del contenido. Sin `isolate` ni z-index negativo: el main no debe crear un contexto de
-              apilamiento, o los paneles fijos de las páginas (Dr. FLIT, z-50) quedan debajo de la barra (z-40). El orden
-              del DOM ya pone el contenido encima de los círculos. */}
-          <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-clip">
-            <span className="absolute -bottom-[220px] -left-[180px] h-[520px] w-[520px] rounded-full bg-[var(--di-sky)]" />
-            <span className="absolute -right-[380px] top-[18%] h-[640px] w-[640px] rounded-full border-[1.5px] border-[var(--di-sky-line)] opacity-35" />
-          </div>
+          {/* UI Kit 2026: fondo plano --di-surface, sin los círculos decorativos del diseño anterior. Sin `isolate` ni
+              z-index negativo en el main: los paneles fijos de las páginas (Dr. FLIT, z-50) deben quedar sobre la barra. */}
           {/* Colchón inferior para que el dock no tape el final del contenido (guía §4.3). El fondo propio de las
               páginas (`.app-bg`) se apaga aquí para que se vea el de la propuesta. */}
           <div

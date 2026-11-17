@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { FileQuestion } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 
 /**
  * 404 del segmento `/admin/plataforma/confirmacion-runt` (Plataforma → Confirmación RUNT).
@@ -21,7 +21,7 @@ export default function AdminConfirmacionRuntNotFound() {
           style={{ color: "var(--destructive)" }}
           aria-hidden="true"
         >
-          <FileQuestion className="h-6 w-6" strokeWidth={1.8} />
+          <Icono nombre="documento" className="h-6 w-6" />
         </div>
         <p
           className="text-3xl font-bold tracking-tight text-muted-foreground"

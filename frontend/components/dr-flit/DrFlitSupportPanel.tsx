@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, Mail, Phone } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   DR_FLIT_SUPPORT_CASE_URL,
   DR_FLIT_SUPPORT_EMAIL,
@@ -39,11 +39,7 @@ export function DrFlitSupportPanel({
               href={`mailto:${DR_FLIT_SUPPORT_EMAIL}`}
               className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-[var(--dr-flit-bubble)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)]"
             >
-              <Mail
-                className="h-4 w-4 shrink-0"
-                style={{ color: "var(--dr-flit-brand-blue)" }}
-                aria-hidden
-              />
+              <Icono nombre="correo" className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-brand-blue)" }} />
               <span className="min-w-0">
                 <span
                   className="block text-xs font-medium"
@@ -66,11 +62,7 @@ export function DrFlitSupportPanel({
                 href={`tel:${DR_FLIT_SUPPORT_PHONE.replace(/\s/g, "")}`}
                 className="flex items-center gap-3 rounded-lg px-2 py-1.5 transition-colors hover:bg-[var(--dr-flit-bubble)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)]"
               >
-                <Phone
-                  className="h-4 w-4 shrink-0"
-                  style={{ color: "var(--dr-flit-brand-blue)" }}
-                  aria-hidden
-                />
+                <Icono nombre="celular" className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-brand-blue)" }} />
                 <span className="min-w-0">
                   <span
                     className="block text-xs font-medium"
@@ -118,7 +110,7 @@ export function DrFlitSupportPanel({
               style={{ color: "var(--dr-flit-brand-title)" }}
             >
               O usa el formulario web de FLIT SAS
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="externo" className="h-3.5 w-3.5" />
             </button>
           </>
         ) : (
@@ -130,7 +122,7 @@ export function DrFlitSupportPanel({
               style={{ background: "var(--dr-flit-gradient-primary)" }}
             >
               Generar un caso de soporte
-              <ExternalLink className="h-4 w-4" aria-hidden />
+              <Icono nombre="externo" className="h-4 w-4" />
             </button>
             <p
               className="mt-2 text-center text-[11px]"

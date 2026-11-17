@@ -6,7 +6,7 @@ import { loginUser } from "@/lib/api/auth";
 import { rememberEmail, storeToken } from "@/lib/auth/session";
 import { BrandLogo } from "@/components/brand/BrandLogo";
 import { FLIT_PRIVACY_POLICY_URL } from "@/lib/brand/types";
-import { ShieldAlert, Mail, ExternalLink } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { buttonClass } from "@flit/ui/Button";
 import {
   CampoClave,
@@ -122,7 +122,7 @@ export function Login({
 
       {blocked ? (
         <div className={`${INGRESO_AVISO_CLS} ${aviso} animate-fade-in`} role="alert">
-          <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-danger)]" />
+          <Icono nombre="alerta" className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-danger)]" />
           <div className="text-sm">
             <p className="font-semibold text-[color:var(--di-danger)]">Acceso Restringido</p>
             <p className="mt-1 text-xs text-[color:var(--di-text-secondary)]">Tu cuenta está bloqueada temporalmente. Contacta a tu administrador para restablecer el acceso.</p>
@@ -133,7 +133,7 @@ export function Login({
         </div>
       ) : roleDeactivated ? (
         <div className={`${INGRESO_AVISO_CLS} ${aviso} animate-fade-in`} role="alert">
-          <ShieldAlert className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-danger)]" />
+          <Icono nombre="alerta" className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-danger)]" />
           <div className="text-sm">
             <p className="font-semibold text-[color:var(--di-danger)]">Acceso Restringido</p>
             <p className="mt-1 text-xs text-[color:var(--di-text-secondary)]">Tu rol ha sido desactivado y no puedes ingresar al sistema. Contacta a tu administrador para resolver este problema.</p>
@@ -148,7 +148,7 @@ export function Login({
           role="alert"
           aria-live="assertive"
         >
-          <ExternalLink className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-action)]" />
+          <Icono nombre="externo" className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-action)]" />
           <div className="text-sm">
             <p className="font-semibold text-[color:var(--di-heading)]">Tu red tiene un dominio propio</p>
             <p className="mt-1 text-xs text-[color:var(--di-text-secondary)]">
@@ -171,7 +171,7 @@ export function Login({
           <div>
             <label htmlFor="login-email" className={INGRESO_ETIQUETA_CLS}>Correo</label>
             <div className="relative">
-              <Mail className={INGRESO_ICONO_CLS} />
+              <Icono nombre="correo" className={INGRESO_ICONO_CLS} />
               <input
                 id="login-email"
                 type="email"
@@ -201,7 +201,7 @@ export function Login({
 
           {error && (
             <p role="alert" className={INGRESO_ERROR_CLS}>
-              <ShieldAlert className="h-3.5 w-3.5" /> {error}
+              <Icono nombre="alerta" className="h-3.5 w-3.5" /> {error}
             </p>
           )}
 

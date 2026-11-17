@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 import { InlineAlert } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion, type Ilustracion } from "@flit/ui/ilustraciones";
+import type { Ilustracion } from "@flit/ui/ilustraciones";
 import { tienePermiso } from "@/lib/sesion";
 
 /** Ilustración de la cabecera según el título, como `ModuleTitle` de Trámites; sin coincidencia, la de Comparendos. */
@@ -46,7 +46,7 @@ export function Encabezado({
     <CabeceraModulo
       titulo={titulo}
       descripcion={descripcion}
-      ilustracion={rutaIlustracion(ilustracion ?? ilustracionPara(titulo))}
+      icono={ilustracion ?? ilustracionPara(titulo)}
       acciones={acciones && <div className="flex flex-wrap items-center gap-2">{acciones}</div>}
     />
   );

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, Rocket, Save, Undo2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { refreshBrand } from "@/app/actions/brand";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { brandContrastPairs, isValidHexColor } from "@/lib/brand/contrast";
@@ -259,7 +259,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
           className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
           style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
         >
-          <Eye className="h-3.5 w-3.5" aria-hidden /> Previsualizar
+          <Icono nombre="ojo" className="h-3.5 w-3.5" /> Previsualizar
         </button>
       </div>
 
@@ -350,7 +350,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
               className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
             >
-              <Save className="h-3.5 w-3.5" aria-hidden /> {saving ? "Guardando…" : "Guardar borrador"}
+              <Icono nombre="nube-subir" className="h-3.5 w-3.5" /> {saving ? "Guardando…" : "Guardar borrador"}
             </button>
             <button
               type="button"
@@ -360,7 +360,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
               style={{ background: "var(--gradient-action)" }}
             >
-              <Rocket className="h-3.5 w-3.5" aria-hidden /> Publicar
+              <Icono nombre="avance" className="h-3.5 w-3.5" /> Publicar
             </button>
 
             {source === "admin" && branding?.published && (
@@ -371,7 +371,7 @@ export function BrandingConfigurator({ source, tenantId }: BrandingConfiguratorP
                 className="ml-auto inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-50"
                 style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
               >
-                <Undo2 className="h-3.5 w-3.5" aria-hidden /> Retirar marca publicada
+                <Icono nombre="devolucion" className="h-3.5 w-3.5" /> Retirar marca publicada
               </button>
             )}
           </div>

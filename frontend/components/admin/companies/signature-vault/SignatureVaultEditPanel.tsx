@@ -88,7 +88,7 @@ export function SignatureVaultEditPanel({
   const valido = fullName.trim() !== "" && desde !== "" && hasta !== "";
 
   return (
-    <Modal open onClose={onClose} title="Corregir firma" size="md">
+    <Modal icono="firma" open onClose={onClose} title="Corregir firma" size="md">
       <div className="space-y-3 text-xs">
         <p className="rounded-xl border border-border px-3 py-2 text-xs opacity-80">
           Se corrigen los datos de captura. El documento ({item.documentType} {item.documentNumber}) y

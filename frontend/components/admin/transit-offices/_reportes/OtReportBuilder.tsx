@@ -67,6 +67,7 @@ import {
   TABLA_MOVIL_TBODY_CLS,
   TABLA_MOVIL_THEAD_CLS,
 } from "@/components/atom/table-styles";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 
 /** Tope de la exportación. Existe para no encadenar decenas de páginas; si se alcanza, se DICE. */
@@ -497,10 +498,8 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
           {/* Quitar o añadir una columna deja de coincidir con cualquier vista. Decirlo evita que
               el usuario crea que sigue en «Gestión» y exporte otra cosa de la que espera. */}
           {presetActivo === null && (
-            <span
-              className="rounded-full bg-secondary px-3 py-1 text-[11px] font-semibold text-muted-foreground"
-              data-testid="ot-report-preset-personalizada"
-            >
+            <span {...etiquetaKit("neutral")} data-testid="ot-report-preset-personalizada">
+              <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
               Selección propia
             </span>
           )}
@@ -594,12 +593,8 @@ export function OtReportBuilder({ transitOfficeId, companies, tiposTramite }: Ot
 function EstadoChip({ estado }: { estado: string }) {
   const meta = estadoMeta(estado);
   return (
-    <span
-      className="inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-      style={{ background: `color-mix(in srgb, ${meta.color} 10%, transparent)`, color: meta.color }}
-      title={meta.hint}
-    >
-      <span aria-hidden="true" className="h-1.5 w-1.5 rounded-full" style={{ background: meta.color }} />
+    <span {...etiquetaKit({ c: meta.color })} title={meta.hint}>
+      <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
       {meta.label}
     </span>
   );

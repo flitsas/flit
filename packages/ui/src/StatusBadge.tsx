@@ -34,46 +34,28 @@ export interface StatusBadgeProps extends StatusBadgeStyle {
   wrap?: boolean;
   /** Tooltip nativo con el texto completo (útil cuando la tabla muestra una etiqueta corta). */
   title?: string;
+  /** Ruta del disco de estado del kit (p. ej. `/assets/estados/aprobado.svg`); sin él va el punto del tono. */
+  icono?: string;
 }
 
-/**
- * Marca que va antes del texto, como el `.badge::before` del prototipo «Diseño Inteligente» (rama `propuesta`):
- * completo lleva un check azul, pendiente un punto naranja, error una equis naranja y el resto un punto del color
- * del texto. Es lo que hace que el estado no dependa solo del color (los tres primeros comparten el fondo cielo).
- */
-function Marca({ tone }: { tone?: StatusBadgeTone }) {
-  if (tone === "success") {
-    return (
-      <svg aria-hidden="true" data-marca="check" viewBox="0 0 10 8" className="h-2 w-2.5 shrink-0" fill="none">
-        <path d="M1 4.2 3.7 6.8 9 1.2" stroke="var(--di-success-dot)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-    );
-  }
-  if (tone === "danger") {
-    return (
-      <svg aria-hidden="true" data-marca="equis" viewBox="0 0 8 8" className="h-2 w-2 shrink-0" fill="none">
-        <path d="M1 1 7 7M7 1 1 7" stroke="var(--di-alerta-punto)" strokeWidth="1.8" strokeLinecap="round" />
-      </svg>
-    );
-  }
-  return (
-    <span
-      aria-hidden="true"
-      data-marca="punto"
-      className="h-1.5 w-1.5 shrink-0 rounded-full"
-      style={{ background: tone === "warning" ? "var(--di-alerta-punto)" : "currentColor" }}
-    />
-  );
-}
+/** Color pleno (`--c`) y de texto (`--ct`) de cada tono: los de la etiqueta del Manual UI Kit 2026. */
+const TONO: Record<StatusBadgeTone, { c: string; ct: string }> = {
+  success: { c: "var(--badge-success-border)", ct: "var(--badge-success-fg)" },
+  warning: { c: "var(--badge-warning-border)", ct: "var(--badge-warning-fg)" },
+  danger: { c: "var(--badge-danger-border)", ct: "var(--badge-danger-fg)" },
+  info: { c: "var(--badge-info-border)", ct: "var(--badge-info-fg)" },
+  neutral: { c: "var(--badge-neutral-border)", ct: "var(--badge-neutral-fg)" },
+  purple: { c: "var(--badge-purple-border)", ct: "var(--badge-purple-fg)" },
+  tinta: { c: "var(--badge-tinta-border)", ct: "var(--badge-tinta-fg)" },
+};
 
 /**
- * Chip de estado unificado (HU #10494, tones HU #10844), con el aspecto del `.badge` de la propuesta (HU #14476):
- * píldora sin borde de color (el borde de cada tono coincide con su fondo, salvo el aro naranja de `danger`), texto
- * tinta y una marca antes del texto (ver {@link Marca}). El COLOR se resuelve por `tone` desde los `--badge-*` de
- * `tokens.css`, consistentes en claro y oscuro.
+ * Chip de estado unificado (HU #10494, tones HU #10844) con la forma del Manual UI Kit 2026 (propuesta-2, `.badge`):
+ * etiqueta con punta (lado izquierdo redondo, derecho en punta), contorno de 1 px en el color pleno del tono, relleno
+ * al 10 % y texto oscurecido a AA. Antes del texto va el ícono de estado del kit (`icono`, 20 px) o, sin él, un punto
+ * de 8 px del color del tono: el estado nunca depende solo del color. La forma vive en `.kit-etiqueta` (tokens.css).
  *
- * La API cruda (`bg`/`color`/`border`) queda `@deprecated` solo para la migración; los
- * nuevos usos deben pasar `tone`.
+ * La API cruda (`bg`/`color`/`border`) queda `@deprecated`: el borde es el color pleno y `color` el del texto.
  */
 export function StatusBadge({
   label,
@@ -85,29 +67,61 @@ export function StatusBadge({
   className = "",
   wrap = false,
   title,
+  icono,
 }: StatusBadgeProps) {
-  const style: CSSProperties = tone
-    ? {
-        background: `var(--badge-${tone}-bg)`,
-        color: `var(--badge-${tone}-fg)`,
-        borderColor: `var(--badge-${tone}-border)`,
-      }
-    : { background: bg, color, borderColor: border ?? color };
+  const t = tone ? TONO[tone] : { c: border ?? color ?? "var(--badge-neutral-border)", ct: color ?? "var(--badge-neutral-fg)" };
+  // El color del tono sigue en el estilo en línea (contrato de HU #10844: todo color sale de los --badge-*); la forma
+  // del kit la dibujan dos capas de `.kit-etiqueta`: el contorno con punta en --c y el relleno al 10 % encima.
+  const style = {
+    "--c": t.c,
+    "--ct": t.ct,
+    ...(tone
+      ? { background: `var(--badge-${tone}-bg)`, color: `var(--badge-${tone}-fg)`, borderColor: `var(--badge-${tone}-border)` }
+      : { background: bg, color, borderColor: border ?? color }),
+  } as CSSProperties;
   const aria = ariaLabel ?? (typeof label === "string" ? `Estado: ${label}` : undefined);
   return (
     <span
       role="status"
       aria-label={aria}
-      // 12px es el piso tipográfico del sistema; estaba en 11 y es texto que el gestor lee para
-      // saber en qué estado va cada fila.
       title={title}
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-[3px] text-xs font-semibold ${
+      data-tono={tone ?? "propio"}
+      className={`kit-etiqueta${icono ? " kit-etiqueta--icono" : ""} ${
         wrap ? "min-w-0 max-w-full justify-center whitespace-normal text-center leading-tight" : "whitespace-nowrap"
       } ${className}`}
       style={style}
     >
-      <Marca tone={tone} />
+      {icono ? (
+        // eslint-disable-next-line @next/next/no-img-element -- disco estático del kit
+        <img src={icono} alt="" aria-hidden="true" width={20} height={20} className="kit-etiqueta__icono" />
+      ) : (
+        <span aria-hidden="true" data-marca="punto" className="kit-etiqueta__punto" />
+      )}
       {label}
     </span>
   );
 }
+
+/**
+ * Forma de la etiqueta del kit para un elemento PROPIO que ya existe (un `<span>` de estado, un chip de una tabla o una
+ * tarjeta) sin cambiar su DOM ni su accesibilidad: StatusBadge agrega role="status" y aria-label; esto no. Devuelve la
+ * clase y las variables de color; el contenido (punto, ícono o texto) lo pone quien lo usa.
+ *
+ *   <span {...etiquetaKit("success")}><span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />Activo</span>
+ *   <span {...etiquetaKit({ c: estilo.border, ct: estilo.color })}>…</span>
+ */
+export function etiquetaKit(
+  tono: StatusBadgeTone | { c: string; ct?: string },
+  opciones: { icono?: boolean; className?: string } = {},
+): { className: string; style: CSSProperties } {
+  const t = typeof tono === "string" ? TONO[tono] : { c: tono.c, ct: tono.ct ?? tono.c };
+  return {
+    className: `kit-etiqueta${opciones.icono ? " kit-etiqueta--icono" : ""} whitespace-nowrap${opciones.className ? ` ${opciones.className}` : ""}`,
+    style: { "--c": t.c, "--ct": t.ct } as CSSProperties,
+  };
+}
+
+/** Punto de 8 px del color del tono, para usar dentro de `etiquetaKit` cuando no hay ícono de estado. */
+export const ETIQUETA_PUNTO_CLS = "kit-etiqueta__punto";
+/** Ícono de 20 px dentro de `etiquetaKit({…}, { icono: true })` (p. ej. `<img src={ESTADO_ICONO[e]} className={…}>`). */
+export const ETIQUETA_ICONO_CLS = "kit-etiqueta__icono";

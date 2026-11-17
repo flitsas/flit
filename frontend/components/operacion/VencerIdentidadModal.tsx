@@ -1,7 +1,8 @@
 'use client';
 
 import { type ReactNode, useState } from 'react';
-import { CalendarX, Copy } from 'lucide-react';
+import { CalendarX } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
@@ -166,7 +167,7 @@ export function VencerIdentidadModal({ row, onClose, onVencida }: VencerIdentida
                     onClick={() => void copiar()}
                     className="inline-flex items-center gap-1.5 text-xs font-semibold text-flit-brand underline-offset-2 hover:underline"
                   >
-                    <Copy className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="copiar" className="h-3.5 w-3.5" />
                     Copiar enlace
                   </button>
                   {copiado ? (

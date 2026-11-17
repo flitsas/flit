@@ -88,7 +88,7 @@ export function ReviewerPicker({
 
         {open && (
           <div
-            className="absolute left-0 z-50 mt-2 max-h-[22rem] w-72 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-2xl"
+            className="absolute left-0 z-50 mt-2 max-h-[22rem] w-72 overflow-y-auto rounded-2xl border border-border bg-card p-3 shadow-[var(--kit-sombra)]"
             data-testid="ot-reviewers-picker-panel"
           >
             <div className="mb-2 flex items-center justify-between gap-2">

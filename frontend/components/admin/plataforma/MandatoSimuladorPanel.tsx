@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Eye, Mail } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   fetchMandateSimulationPreview,
   listMandateSimulatorSigners,
@@ -500,7 +500,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
               className="inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
               style={{ background: "var(--gradient-action)" }}
             >
-              <Mail className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="correo" className="h-3.5 w-3.5" />
               {sending ? "Enviando…" : "Enviar por correo"}
             </button>
           </>
@@ -513,7 +513,7 @@ export function MandatoSimuladorPanel({ offices }: MandatoSimuladorPanelProps) {
           className="ml-auto inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:opacity-50"
           style={{ background: "var(--gradient-action)" }}
         >
-          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="ojo" className="h-3.5 w-3.5" />
           {previewing ? "Generando…" : "Ver PDF"}
         </button>
       </div>

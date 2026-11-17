@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Ban } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 
@@ -85,7 +84,7 @@ export function SuspendOrDeactivateModal({
       busy={busy}
       size="sm"
       title={title}
-      icon={Ban}
+      icono="distinto"
       iconBg={accentColor}
       description={
         <>
