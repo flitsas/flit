@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { Icono } from "@flit/ui/Icono";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { DataTable, type DataTableColumn } from "@flit/ui/DataTable";
 import { StatusBadge } from "@flit/ui/StatusBadge";
@@ -74,9 +75,9 @@ const ATAJO_SIN_FIRMAS = "sin_firmas" as const;
 export const DIAS_INACTIVIDAD_CRITICA = 10;
 
 const FAMILIAS = [
-  { categoria: "matriculas", etiqueta: "Matrícula inicial", ilustracion: "preasignacion", family: "MATRICULAS" },
-  { categoria: "traspasos", etiqueta: "Traspasos", ilustracion: "llamadas", family: "TRASPASO" },
-  { categoria: "otros", etiqueta: "Otros trámites", ilustracion: "procesos", family: "OTROS" },
+  { categoria: "matriculas", etiqueta: "Matrícula inicial", ilustracion: "matricula", family: "MATRICULAS" },
+  { categoria: "traspasos", etiqueta: "Traspasos", ilustracion: "traspaso", family: "TRASPASO" },
+  { categoria: "otros", etiqueta: "Otros trámites", ilustracion: "otros-tramites", family: "OTROS" },
 ] as const;
 
 type FiltroTipo = CategoriaGestor | "todos";
@@ -126,7 +127,7 @@ function cifraKpi(status: UiStatus, valor: number, errorMessage?: string): React
         style={{ color: "var(--di-danger)" }}
         title={errorMessage ?? "No se pudo cargar este indicador."}
       >
-        <Icono nombre="alerta" className="h-4 w-4 shrink-0" />
+        <IconoAviso tipo="error" className="h-4 w-4 shrink-0" />
         Sin datos
       </span>
     );

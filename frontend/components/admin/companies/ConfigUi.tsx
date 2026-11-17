@@ -4,6 +4,7 @@ import { useId, useLayoutEffect, useRef, useState, type ReactNode } from "react"
 import { Icono } from "@flit/ui/Icono";
 import { ICONO_TONO, rutaKit } from "@flit/ui/iconos-mapas";
 import { StatusBadge, type StatusTone } from "@/components/atom/StatusBadge";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 // Piezas visuales compartidas por las pestañas de configuración de la compañía (Trámites, Configuración
 // Empresa). Todo deriva de los tokens de globals.css: fondo de tarjeta blanco, borde #DFE5ED, sombra de card,
@@ -42,7 +43,7 @@ export function StateChip({ text, tone }: { text: string; tone: ChipTone }) {
 export function Hint({ children }: { children: ReactNode }) {
   return (
     <p className={`flex items-start gap-1.5 ${HELP_TEXT}`}>
-      <Icono nombre="exclamacion" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <IconoAviso tipo="info" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
       <span>{children}</span>
     </p>
   );

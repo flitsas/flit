@@ -66,13 +66,13 @@ export const MARCAS_TRAMITE = [
   {
     id: 'prenda',
     label: 'Con prenda',
-    src: '/assets/marcas/prenda.svg',
+    src: '/assets/kit/tramite-prenda.svg',
     lee: (item: InstanceSummary) => item.tienePrenda === true,
   },
   {
     id: 'transformacion',
     label: 'Con transformación',
-    src: '/assets/marcas/transformacion.svg',
+    src: '/assets/kit/tramite-transformacion.svg',
     lee: (item: InstanceSummary) => item.tieneTransformacion === true,
   },
   {

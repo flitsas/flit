@@ -24,6 +24,7 @@ import {
   validateBulkInviteFile,
 } from "@/lib/users/bulkInviteErrors";
 import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_DESCRIPCION_CLS, MODAL_PANEL_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 const PRIMARY_FILL = "var(--kit-azul-relleno)";
 const MAX_MB = BULK_INVITE_MAX_FILE_BYTES / (1024 * 1024);
@@ -453,7 +454,7 @@ export function BulkInviteModal({
                   className="inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-xs font-semibold text-white transition hover:opacity-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-45"
                   style={{ background: PRIMARY_FILL }}
                 >
-                  <Icono nombre="nube-subir" className={`h-3.5 w-3.5 ${phase === "validating" ? "animate-pulse" : ""}`} />
+                  <Icono nombre="archivo-subir" className={`h-3.5 w-3.5 ${phase === "validating" ? "animate-pulse" : ""}`} />
                   {phase === "validating" ? "Validando…" : "Validar archivo"}
                 </button>
               )}
@@ -517,7 +518,7 @@ function ErrorList({ rows }: { rows: ReturnType<typeof bulkInviteErrorRows> }) {
   return (
     <div className="flex flex-col gap-1.5" data-testid="bulk-invite-error-list">
       <p className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: "var(--badge-danger-fg)" }}>
-        <Icono nombre="alerta" className="h-3.5 w-3.5" />
+        <IconoAviso tipo="error" className="h-3.5 w-3.5" />
         Filas con error ({rows.length})
       </p>
       {/* Región con scroll accesible por teclado (tabIndex + nombre). */}

@@ -18,7 +18,7 @@ export function suiteAccountLinks(accountUrl = ""): AccountLink[] {
   const base = accountUrl.replace(/\/+$/, "");
   return [
     { label: "Ayuda", href: `${base}/manual`, icon: iconoComo("ayuda") },
-    { label: "Cambio de contraseña", href: `${base}/profile/change-password`, icon: iconoComo("rol") },
+    { label: "Cambio de contraseña", href: `${base}/profile/change-password`, icon: iconoComo("candado") },
   ];
 }
 

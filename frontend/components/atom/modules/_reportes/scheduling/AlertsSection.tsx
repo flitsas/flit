@@ -2,7 +2,6 @@
 
 import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
-import { BellPlus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -46,6 +45,8 @@ import {
 import { METRIC_LABELS, OPERATOR_LABELS, formatDateTime } from "./labels";
 import { AlertRuleForm } from "./AlertRuleForm";
 import { AlertEventsHistory } from "./AlertEventsHistory";
+
+const ICONO_CAMPANA = iconoComo("campana");
 
 interface AlertsSectionProps {
   tenantId?: string;
@@ -164,7 +165,7 @@ export function AlertsSection({ tenantId, needsCompany = false, otTransitOfficeI
           </button>
         </div>
         {subView === "rules" && !formOpen && !needsCompany && (
-          <CreateButton size="sm" label="Nueva alerta" icon={BellPlus} onClick={() => setCreating(true)} />
+          <CreateButton size="sm" label="Nueva alerta" icon={ICONO_CAMPANA} onClick={() => setCreating(true)} />
         )}
       </div>
 

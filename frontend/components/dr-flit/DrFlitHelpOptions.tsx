@@ -1,15 +1,17 @@
 "use client";
 
-import { Headphones } from "lucide-react";
 import type { ComponentType } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import { DR_FLIT_HELP_OPTIONS, type DrFlitHelpOptionId } from "./dr-flit-intents";
 
+const ICONO_AYUDA = iconoComo("ayuda");
+
 const ICONS: Record<DrFlitHelpOptionId, ComponentType<IconoComoProps>> = {
-  "necesito-ayuda": iconoComo("ayuda"),
+  // «Necesito ayuda» abre la documentación; el disco «?» de Ayuda queda para Soporte (PDF: ayuda = soporte).
+  "necesito-ayuda": iconoComo("documento"),
   normativa: iconoComo("mazo"),
-  soporte: Headphones,
+  soporte: ICONO_AYUDA,
 };
 
 export function DrFlitHelpOptions({

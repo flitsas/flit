@@ -41,7 +41,7 @@ export function TipoMandatoAyuda({ label = "Tipo de mandato" }: { label?: string
         onClick={() => setOpen((v) => !v)}
         className="inline-flex h-5 w-5 items-center justify-center rounded-full text-inherit hover:bg-white/10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring"
       >
-        <Icono nombre="exclamacion" className="h-3.5 w-3.5" />
+        <Icono nombre="ayuda" className="h-3.5 w-3.5" />
       </button>
       {open ? (
         <span

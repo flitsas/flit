@@ -266,7 +266,7 @@ export function InviteUserModal({
             {/* Perfil — solo el SuperAdmin elige; los demás administran su propio perfil. */}
             {isSuperAdmin && !fixedTarget && (
               <fieldset>
-                <legend className="mb-1 block text-xs font-semibold">Perfil *</legend>
+                <legend className="mb-1 block text-xs font-semibold">Perfil <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span></legend>
                 <div className="flex flex-col gap-1.5">
                   {USER_PROFILE_ORDER.map((p) => {
                     const Icon = PROFILE_ICON[p];

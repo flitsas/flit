@@ -126,7 +126,9 @@ public sealed partial class IctGrpcProcedureDraftClient(
             request.FieldValues.Add(new FieldValue { FieldKey = "vin", ValueText = master.Vin });
         }
 
-        if (!string.IsNullOrWhiteSpace(master.Plate))
+        // En matrícula con plate_assignment_type 2/3/4 la placa la emite el mapper según el tipo (el dígito de
+        // preferencia del tipo 2 NO es una placa); en los demás casos viaja tal cual.
+        if (!string.IsNullOrWhiteSpace(master.Plate) && !IctDraftFieldValuesMapper.PlacaPorTipoDeAsignacion(master))
         {
             request.FieldValues.Add(new FieldValue { FieldKey = "plate", ValueText = master.Plate });
         }

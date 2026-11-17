@@ -448,7 +448,6 @@ export function PortalPnDesignSection({
                   className="focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                   style={{ background: "var(--primary)", color: "var(--primary-foreground)" }}
                 >
-                  <Icono nombre="nube-subir" className="h-3.5 w-3.5" />{" "}
                   {saving ? "Guardando…" : "Guardar borrador"}
                 </button>
                 <button

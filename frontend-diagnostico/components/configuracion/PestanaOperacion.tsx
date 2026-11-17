@@ -249,7 +249,6 @@ export function PestanaOperacion({
             Descartar
           </button>
           <button type="submit" disabled={deshabilitado} className={BOTON_PRIMARIO_CLS}>
-          <Icono nombre="nube-subir" className="h-4 w-4" />
           {estado.tipo === "guardando" ? "Guardando…" : "Guardar operación"}
           </button>
         </div>

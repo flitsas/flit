@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { Modal } from "@flit/ui/Modal";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
@@ -183,7 +183,7 @@ export function ModalTipoTramite({
             Cancelar
           </button>
           <button type="button" onClick={() => onConfirmar(codigo)} disabled={!hayTipos || !codigo} className={BOTON_PRIMARIO_CLS}>
-            {abreEnPestana ? <ExternalLink className="h-4 w-4" aria-hidden="true" /> : <IconoDxCrearTramite tamano={16} />}
+            {abreEnPestana ? <Icono nombre="externo" className="h-4 w-4" /> : <IconoDxCrearTramite tamano={16} />}
             {textoConfirmar}
           </button>
         </div>
@@ -241,7 +241,7 @@ export function ModalConfirmarTramite({ identificador, tramite, onClose, onConfi
             Cancelar
           </button>
           <button ref={confirmarRef} type="button" onClick={onConfirmar} className={BOTON_PRIMARIO_CLS}>
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            <Icono nombre="externo" className="h-4 w-4" />
             {`Crear ${sustantivo}`}
           </button>
         </div>
@@ -491,7 +491,7 @@ export function AccionTramiteFila(props: AccionTramiteFilaProps) {
   if (a.tramite && a.urlVer) {
     accion = (
       <a ref={enlaceRef} href={a.urlVer} target="_blank" rel="noopener noreferrer" aria-label={a.nombreVer} className={ENLACE_ACCION_CLS}>
-        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="externo" className="h-3.5 w-3.5" />
         {a.textoVer}
       </a>
     );

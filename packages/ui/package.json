@@ -35,6 +35,7 @@
     "./TarjetaMetrica": "./src/TarjetaMetrica.tsx",
     "./UiStateBoundary": "./src/UiStateBoundary.tsx",
     "./Icono": "./src/Icono.tsx",
+    "./IconoAviso": "./src/IconoAviso.tsx",
     "./iconos-mapas": "./src/iconos-mapas.ts",
     "./iconos-kit": "./src/iconos-kit.ts",
     "./Interruptor": "./src/Interruptor.tsx",

@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { MailPlus } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
@@ -15,6 +14,9 @@ import { P } from "@/lib/nav";
 import { capacidades, tienePermiso } from "@/lib/sesion";
 import type { DetalleComparendo } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_CORREO = iconoComo("correo");
 
 const Z = "z-[120]";
 type Solicitud = DetalleComparendo["solicitudesCambio"][number];
@@ -242,7 +244,7 @@ export function AccionesCambio({ ctx }: { ctx: ContextoDetalle }) {
           )}
           {puedeAviso4 && (
             <button type="button" className={controlCls(false)} disabled={reenviando} onClick={aviso4}>
-              <MailPlus className="h-3.5 w-3.5" aria-hidden />
+              <ICONO_CORREO className="h-3.5 w-3.5" aria-hidden />
               {reenviando ? "Reenviando…" : "Reenviar aviso 4"}
             </button>
           )}

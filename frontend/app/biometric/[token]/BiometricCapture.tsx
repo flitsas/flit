@@ -214,7 +214,7 @@ export function BiometricCapture({ token }: Props) {
                   className="h-12 w-12 rounded-lg grid place-items-center border"
                   aria-hidden="true"
                 >
-                  <Icono nombre="nube-subir" className="h-4 w-4 opacity-40" />
+                  <Icono nombre="archivo-subir" className="h-4 w-4 opacity-40" />
                 </span>
               )}
             </div>

@@ -2419,7 +2419,10 @@ components:
           description: 'Indica el tipo de asignacion de la placa, 2 significa un número de preferencia del 0 al 9, (Ojo, el
             campo pueder ir vacío) 3 significa que van a enviar la placa normal (ABC123) y 4 significa rango de placas, quiere
             decir que pueden enviar un placa que pero de un rango asignado por el OT: significa que van a enviar la placa
-            normal (ABC123). Es obligatorio si es Matricula'
+            normal (ABC123). Es obligatorio si es Matricula. Con 3 la placa enviada se respeta como placa entregada. Con 4 la
+            placa debe pertenecer al rango que el OT asigno a la compania y estar disponible: si no esta en el rango (o no
+            se conoce el OT del tramite) el borrador no se crea y el pre-tramite queda con novedades (placa_fuera_de_rango,
+            placa_rango_sin_ot). Con 2 el valor es solo el digito de preferencia y nunca se toma como placa.'
           examples:
           - 1
         seller:

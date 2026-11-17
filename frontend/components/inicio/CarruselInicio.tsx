@@ -117,7 +117,7 @@ export function CarruselInicio({
               aria-hidden="true"
               className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[9px] bg-white/[0.22]"
             >
-              <IconoModulo clave="inicio" size={22} />
+              <IconoModulo clave="banners" size={22} />
             </span>
             <h2 className="text-2xl md:text-[1.75rem] font-bold leading-tight line-clamp-2 min-w-0 text-white">
               {s.titulo}

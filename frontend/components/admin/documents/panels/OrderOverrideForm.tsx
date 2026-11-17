@@ -7,6 +7,7 @@ import { ScopeBadge } from "@/components/admin/documents/panels/ScopeBadge";
 import { ApiError, ApiValidationError } from "@/lib/api/types";
 import type { DocumentType, OverrideScope } from "@/lib/api/types-documents";
 import { digitsOnly } from "@/lib/format/currency";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 // Formulario de alta de override de orden por OT o Cliente (HU #10198, AC3/AC4).
 // Muestra el badge del scope (OT/CLIENTE) y, para CLIENTE, la nota de precedencia
@@ -68,7 +69,7 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
           style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           role="note"
         >
-          <Icono nombre="exclamacion" className="mt-px h-3.5 w-3.5 shrink-0" />
+          <IconoAviso tipo="alerta" className="mt-px h-3.5 w-3.5 shrink-0" />
           Precedencia: CLIENTE &gt; OT &gt; Default. Este orden prevalece sobre el de OT y el default.
         </p>
       )}

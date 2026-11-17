@@ -2,6 +2,7 @@
 
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
 import { Icono } from "@flit/ui/Icono";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 // Toast mínimo sin dependencias externas (HU #10194). Colores de la propuesta (HU #14486): éxito con el azul del
 // check, advertencia y error con el naranja de las marcas de estado.
@@ -59,11 +60,11 @@ export function ToastProvider({ children }: { children: ReactNode }) {
             style={{ borderColor: COLOR_TOAST[toast.type], minWidth: 260 }}
           >
             {toast.type === "success" ? (
-              <Icono nombre="check" className="h-4 w-4 shrink-0" style={{ color: COLOR_TOAST.success }} />
+              <IconoAviso tipo="ok" className="h-4 w-4 shrink-0" />
             ) : toast.type === "warning" ? (
-              <Icono nombre="alerta" className="h-4 w-4 shrink-0" style={{ color: COLOR_TOAST.warning }} />
+              <IconoAviso tipo="alerta" className="h-4 w-4 shrink-0" />
             ) : (
-              <Icono nombre="cerrar" className="h-4 w-4 shrink-0" style={{ color: COLOR_TOAST.error }} />
+              <IconoAviso tipo="error" className="h-4 w-4 shrink-0" />
             )}
             <p className="flex-1 font-medium">{toast.message}</p>
             <button type="button" aria-label="Cerrar notificación" onClick={() => dismiss(toast.id)}>

@@ -81,6 +81,7 @@ import {
   validateOwnershipShares,
   withOwnershipFields,
 } from '@/lib/tramites/ownership-share';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 export type ActorsModalidad = 'matricula_inicial' | 'traspaso';
 
@@ -2452,7 +2453,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           role="status"
           aria-live="polite"
         >
-          Actores guardados ✓
+          <IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />
+          Actores guardados
         </span>
       ) : (
         <span />
@@ -2650,7 +2652,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               className="font-semibold mb-2 flex items-center gap-1.5 flex-wrap"
               style={cardTone('info').title}
             >
-              <Icono nombre="exclamacion" className="h-3.5 w-3.5 shrink-0" />
+              <IconoAviso tipo="info" className="h-3.5 w-3.5 shrink-0" />
               Empresa encontrada en RUES
               {originBadge(r.mode, 'RUES')}
             </p>
@@ -2913,7 +2915,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               role="status"
             >
               <span className="flex items-center gap-2">
-                <span aria-hidden="true">{r.hasPendingFines ? '⚠' : '⊙'}</span>
+                <span aria-hidden="true" className="inline-flex">{r.hasPendingFines ? <IconoAviso tipo="alerta" className="h-4 w-4" /> : <IconoAviso tipo="ok" className="h-4 w-4" />}</span>
                 <span className="font-semibold">
                   {r.hasPendingFines
                     ? 'ALERTA: Comparendos / Multas Pendientes'
@@ -3125,6 +3127,8 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
               className="h-[42px] shrink-0 rounded-xl bg-flit-brand px-3 text-xs font-semibold text-white disabled:opacity-50"
               style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
             >
+              {/* PDF: Autocompletar (varita) junto a los botones que traen los datos de la persona. */}
+              <Icono nombre="varita" className="mr-1.5 inline-block h-3.5 w-3.5 align-[-2px]" />
               {rlState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
             </button>
           )}
@@ -3180,7 +3184,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
           {/* Email — obligatorio en persona jurídica (HU #10688): el RL valida la identidad. */}
           <div>
             <label htmlFor={`${index}-rl-email`} className={WIZARD_LABEL}>
-              Correo electrónico <span style={{ color: 'var(--destructive)' }}>*</span>
+              Correo electrónico <span style={{ color: 'var(--destructive)' }}><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
             </label>
             <input
               id={`${index}-rl-email`}
@@ -3485,7 +3489,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                       className="mt-1 flex items-center gap-1.5 text-xs"
                       style={{ color: 'var(--destructive)' }}
                     >
-                      <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
+                      <IconoAviso tipo="error" className="h-3.5 w-3.5 shrink-0" />
                       No se pudo cargar el documento del propietario. Escríbelo manualmente o{' '}
                       <button
                         type="button"
@@ -3507,6 +3511,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
                     aria-label="Consultar RUNT"
                   >
+                    <Icono nombre="varita" className="mr-1.5 inline-block h-3.5 w-3.5 align-[-2px]" />
                     {runtState.status === 'loading' ? 'Consultando…' : 'Consultar RUNT'}
                   </button>
                 )}
@@ -3593,7 +3598,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div>
               <label htmlFor="comprador-nombre" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 {isJuridical(actor) ? 'Razón social' : 'Nombres y apellidos'}
-                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
               </label>
               <input
                 id="comprador-nombre"
@@ -3645,7 +3650,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div>
               <label htmlFor="comprador-email" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Correo electrónico
-                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
               </label>
               <input
                 id="comprador-email"
@@ -3670,7 +3675,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div>
               <label htmlFor="comprador-telefono" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Teléfono
-                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
               </label>
               <input
                 id="comprador-telefono"
@@ -3700,7 +3705,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div className={`relative ${showCiudades ? 'z-40' : ''}`}>
               <label htmlFor="comprador-ciudad" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Ciudad
-                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
               </label>
               <input
                 id="comprador-ciudad"
@@ -3756,7 +3761,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             <div>
               <label htmlFor="comprador-direccion" className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                 Dirección
-                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
               </label>
               <input
                 id="comprador-direccion"
@@ -4068,7 +4073,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div>
                       <label htmlFor={`${prefix}-numeroDoc`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                         Número de documento
-                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
                       </label>
                       <input
                         id={`${prefix}-numeroDoc`}
@@ -4093,6 +4098,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         className="flex h-[42px] shrink-0 items-center justify-center rounded-xl bg-flit-brand px-5 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
                         style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
                       >
+                        <Icono nombre="varita" className="mr-1.5 inline-block h-3.5 w-3.5 align-[-2px]" />
                         {runtState.status === 'loading'
                           ? 'Consultando…'
                           : isJuridical(actor) ? 'Consultar RUES' : 'Consultar RUNT'}
@@ -4111,7 +4117,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                   <div className="sm:max-w-md">
                     <label htmlFor={`${prefix}-numeroDoc`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                       {isJuridical(actor) ? 'NIT' : 'Número de documento'}
-                      <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                      <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
                     </label>
                     <input
                       id={`${prefix}-numeroDoc`}
@@ -4155,7 +4161,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         className="mt-1 flex items-center gap-1.5 text-xs"
                         style={{ color: 'var(--destructive)' }}
                       >
-                        <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
+                        <IconoAviso tipo="error" className="h-3.5 w-3.5 shrink-0" />
                         No se pudo cargar el documento del propietario. Escríbelo manualmente o{' '}
                         <button
                           type="button"
@@ -4175,6 +4181,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                         className="mt-2 rounded-xl bg-flit-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50"
                         style={{ backgroundColor: WIZARD_BTN_SOLID, backgroundImage: 'none' }}
                       >
+                        <Icono nombre="varita" className="mr-1.5 inline-block h-3.5 w-3.5 align-[-2px]" />
                         {runtState.status === 'loading'
                           ? 'Consultando…'
                           : isJuridical(actor) ? 'Consultar RUES' : 'Consultar RUNT'}
@@ -4197,7 +4204,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                 <div>
                   <label htmlFor={`${prefix}-nombre`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                     {isJuridical(actor) ? 'Razón social' : 'Nombres y apellidos'}
-                    <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                    <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
                   </label>
                   <input
                     id={`${prefix}-nombre`}
@@ -4248,7 +4255,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div>
                       <label htmlFor={`${prefix}-email`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                         Correo electrónico
-                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
                       </label>
                       <input
                         id={`${prefix}-email`}
@@ -4272,7 +4279,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div>
                       <label htmlFor={`${prefix}-telefono`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                         Teléfono
-                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
                       </label>
                       <input
                         id={`${prefix}-telefono`}
@@ -4302,7 +4309,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div className={`relative ${showCiudadSuggestions ? 'z-40' : ''}`}>
                       <label htmlFor={`${prefix}-ciudad`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                         Ciudad
-                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
                       </label>
                       <input
                         id={`${prefix}-ciudad`}
@@ -4361,7 +4368,7 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
                     <div>
                       <label htmlFor={`${prefix}-direccion`} className={`${WIZARD_LABEL} mb-1.5 flex items-center gap-1.5`}>
                         Dirección
-                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">*</span>
+                        <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
                       </label>
                       <input
                         id={`${prefix}-direccion`}

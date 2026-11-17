@@ -27,6 +27,7 @@ import { formatFechaHora } from '@/lib/format/date';
 import {
   DIALOGO_FRANJA_CIRCULO,
 } from '@/components/operacion/dialogo-propio';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 /**
 
  * Panel lateral derecho de proceso de identidad (CF-06/CF-07), mismo patrón que Reportes /
@@ -171,7 +172,7 @@ export function PrevalidacionDetailDrawer({
               style={{ borderColor: 'var(--destructive)', background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
               role="alert"
             >
-              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
+              <IconoAviso tipo="error" className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <p className="font-semibold">No se pudo cargar el proceso.</p>
                 <p className="opacity-80">{error}</p>
