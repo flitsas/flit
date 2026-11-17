@@ -275,6 +275,8 @@ class ClienteDeServicio(unittest.TestCase):
                 "platform.manifest", "platform.identidad.read", "platform.tramites.catalogos", "platform.identidad.empresas",
                 # ADR-0084 (P4): el rpc CrearBorradorDesdeDiagnostico de core-api exige este scope.
                 "platform.tramites.derivacion",
+                # HU #14587: UsuariosProductoService de core-api (autogestión de usuarios de Diagnóstico y sus conteos).
+                "platform.usuarios.diagnostico", "platform.usuarios.diagnostico.conteos",
             ]),
         )
 
