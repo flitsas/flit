@@ -27,7 +27,7 @@ export function SeccionInformacionGeneral({ nombre, onNombre, error, disabled = 
 
   return (
     <section aria-labelledby={`${id}-titulo`} className={compacta ? "flex flex-col gap-3" : `${TARJETA_CLS} flex flex-col gap-4`}>
-      <Titulo id={`${id}-titulo`} className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary dark:text-white"}>
+      <Titulo id={`${id}-titulo`} className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary"}>
         Información general
       </Titulo>
       <div className="flex flex-col gap-1.5">

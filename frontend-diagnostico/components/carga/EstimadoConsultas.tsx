@@ -15,11 +15,11 @@ export function ListaEstimado({ estimado }: { estimado: EstimadoFuente[] }) {
     <>
       <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {estimado.map((e) => (
-          <div key={e.fuente} className="flex flex-col rounded-xl border border-[var(--color-flit-gray)] px-3 py-2 dark:border-white/15">
+          <div key={e.fuente} className="flex flex-col rounded-xl border border-border px-3 py-2">
             <dt className={AYUDA_CLS}>{FUENTES.find((f) => f.codigo === e.fuente)?.nombre ?? e.fuente}</dt>
             <dd
               aria-describedby={e.minimo ? ayudaId : undefined}
-              className="text-lg font-semibold text-flit-primary dark:text-white"
+              className="text-lg font-semibold text-flit-primary"
             >
               {e.minimo && <span className="text-xs font-semibold">al menos </span>}
               {e.consultas}
@@ -45,7 +45,7 @@ export function EstimadoConsultas({ estimado }: { estimado?: EstimadoFuente[] })
   if (!estimado?.length) return null;
   return (
     <section aria-labelledby="estimado-titulo" className="flex flex-col gap-2">
-      <h3 id="estimado-titulo" className="text-sm font-semibold text-flit-primary dark:text-white">
+      <h3 id="estimado-titulo" className="text-sm font-semibold text-flit-primary">
         Estimado de consultas
       </h3>
       <p className={AYUDA_CLS}>Consultas previstas por fuente según el último análisis del archivo.</p>

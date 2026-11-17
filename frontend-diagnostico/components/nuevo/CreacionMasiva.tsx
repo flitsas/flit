@@ -173,7 +173,7 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
     analisis && vigente ? (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className={AYUDA_CLS}>
-          Archivo analizado: <span className="break-all font-semibold text-flit-primary dark:text-white">{analisis.archivo.name}</span>
+          Archivo analizado: <span className="break-all font-semibold text-flit-primary">{analisis.archivo.name}</span>
         </p>
         <button type="button" onClick={subirOtro} disabled={ocupado} className={BOTON_SECUNDARIO_CLS}>
           <RotateCcw className="h-4 w-4" aria-hidden="true" />

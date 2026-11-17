@@ -38,7 +38,7 @@ export function ResumenValidacion({ resumen, onCorregir, onContinuar, confirmand
   return (
     <section aria-labelledby="resumen-titulo" className={`${TARJETA_CLS} flex flex-col gap-4`}>
       <div className="flex flex-col gap-1">
-        <h2 id="resumen-titulo" className="text-lg font-semibold text-flit-primary dark:text-white">
+        <h2 id="resumen-titulo" className="text-lg font-semibold text-flit-primary">
           Resumen de validación
         </h2>
         <p className={AYUDA_CLS}>
@@ -56,7 +56,7 @@ export function ResumenValidacion({ resumen, onCorregir, onContinuar, confirmand
             <dt className="text-xs font-semibold uppercase tracking-wider" style={{ color: `var(--badge-${c.tono}-fg)` }}>
               {c.etiqueta}
             </dt>
-            <dd className="text-2xl font-semibold text-flit-primary dark:text-white">{resumen[c.clave]}</dd>
+            <dd className="text-2xl font-semibold text-flit-primary">{resumen[c.clave]}</dd>
           </div>
         ))}
       </dl>

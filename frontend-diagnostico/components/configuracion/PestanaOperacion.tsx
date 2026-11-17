@@ -77,7 +77,7 @@ export function PestanaOperacion({
   return (
     <form onSubmit={alEnviar} aria-labelledby="operacion-titulo" className={`${TARJETA_CLS} flex flex-col gap-5`} noValidate>
       <div>
-        <h2 id="operacion-titulo" className="text-lg font-semibold text-flit-primary dark:text-white">
+        <h2 id="operacion-titulo" className="text-lg font-semibold text-flit-primary">
           Operación de la compañía
         </h2>
         <p className={AYUDA_CLS}>Cómo trabaja tu compañía con Diagnóstico dentro de lo contratado.</p>

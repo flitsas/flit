@@ -45,7 +45,7 @@ export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obliga
     <section className={compacta ? "flex flex-col gap-3" : `${TARJETA_CLS} flex flex-col gap-4`}>
       <fieldset aria-describedby={error ? errorId : undefined} className="flex flex-col gap-4">
         <legend className="mb-1">
-          <Titulo className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary dark:text-white"}>Alcance</Titulo>
+          <Titulo className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary"}>Alcance</Titulo>
         </legend>
         {!compacta && <p className={AYUDA_CLS}>Elige qué fuentes consultar por cada vehículo. Solo ves las que tu compañía tiene contratadas.</p>}
         {faltantes.length > 0 && (
@@ -145,7 +145,7 @@ function CasillaFuente({
             Dependiente
           </span>
         )}
-        {motivoBloqueo && <Lock className="h-3.5 w-3.5 text-[var(--nav-texto)]" aria-hidden="true" />}
+        {motivoBloqueo && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
       </label>
       {motivoBloqueo && (
         <span role="tooltip" id={tooltipId} className={TOOLTIP_CLS}>
