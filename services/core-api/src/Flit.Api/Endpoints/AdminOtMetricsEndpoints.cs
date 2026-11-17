@@ -110,6 +110,18 @@ public static class AdminOtMetricsEndpoints
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
+        group.MapGet("/clientes-por-familia", GetClientsByFamilyAsync)
+            .WithName("AdminOtMetricsClientsByFamily")
+            .WithSummary("Trámites por cliente corporativo, partidos por familia")
+            .WithDescription("Cuántos trámites le radicó cada empresa cliente al organismo en el "
+                + "rango, en Matrícula inicial / Traspasos / Otros trámites. El universo es el del "
+                + "informe del periodo (los que llegaron al organismo dentro del rango).")
+            .Produces<OtClientsByFamilyDto>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
         group.MapGet("/client-companies", ListClientCompaniesAsync)
             .WithName("AdminOtMetricsClientCompanies")
             .WithSummary("Empresas cliente del organismo, para el filtro del reporte")
@@ -150,6 +162,31 @@ public static class AdminOtMetricsEndpoints
 
         var result = await handler
             .HandleAsync(context.TenantId, context.Filter, bucket!, context.ScopedOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+
+        return result is null ? NoTransitOffice() : Results.Ok(result);
+    }
+
+    private static async Task<IResult> GetClientsByFamilyAsync(
+        HttpContext httpContext,
+        [FromServices] GetOtClientsByFamilyHandler handler,
+        [FromServices] ITransitOfficeCatalog transitOfficeCatalog,
+        CancellationToken cancellationToken,
+        [FromQuery] DateOnly? from = null,
+        [FromQuery] DateOnly? to = null,
+        [FromQuery] Guid? transitOfficeId = null)
+    {
+        // Sin familia ni empresa: la tabla ES el cruce empresa × familia, así que filtrar por
+        // cualquiera de los dos la vaciaría de sentido.
+        var (context, error) = ResolveContext(
+            httpContext, transitOfficeCatalog, from, to, null, null, null, transitOfficeId);
+        if (error is not null)
+        {
+            return error;
+        }
+
+        var result = await handler
+            .HandleAsync(context.TenantId, context.Filter, context.ScopedOfficeId, cancellationToken)
             .ConfigureAwait(false);
 
         return result is null ? NoTransitOffice() : Results.Ok(result);
