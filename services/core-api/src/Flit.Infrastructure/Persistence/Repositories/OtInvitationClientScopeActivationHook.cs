@@ -20,11 +20,6 @@ internal sealed class OtInvitationClientScopeActivationHook(FlitDbContext db) : 
             .Where(c => c.InvitationId == data.InvitationId)
             .Select(c => c.ClientTenantId)
             .ToListAsync(cancellationToken).ConfigureAwait(false);
-        if (clientIds.Count == 0)
-        {
-            return;
-        }
-
         var officeId = await db.TransitOfficeProfiles.AsNoTracking()
             .Where(p => p.TenantId == data.TenantId)
             .Select(p => (Guid?)p.TransitOfficeId)
@@ -33,6 +28,20 @@ internal sealed class OtInvitationClientScopeActivationHook(FlitDbContext db) : 
         {
             // Un tenant que no es OT no tiene alcance por compañías que aplicar.
             return;
+        }
+
+        if (clientIds.Count == 0)
+        {
+            // Red de seguridad: un invitador restringido ('especificos') no puede dejar a nadie en 'todos'. Si su invitación
+            // llegó sin compañías (p. ej. falló guardarlas tras crearla), el invitado hereda el alcance ACTUAL del invitador.
+            var inviterScope = await OtUserClientScopeReader
+                .ReadAsync(db, data.InvitedBy, officeId.Value, cancellationToken).ConfigureAwait(false);
+            if (inviterScope is not { Count: > 0 })
+            {
+                return;
+            }
+
+            clientIds = [.. inviterScope];
         }
 
         var scopeId = Guid.CreateVersion7();

@@ -281,3 +281,95 @@ describe("OtUsersSection — alcance de clientes", () => {
     );
   });
 });
+
+describe("OtUsersSection — actor restringido", () => {
+  it("invitar: con actorRestricted «Todos» queda deshabilitado, hay nota y el defecto es «específicos»", async () => {
+    vi.mocked(fetchOtClientCompanies).mockResolvedValue({
+      items: companies.slice(0, 2),
+      actorRestricted: true,
+    });
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Gina Gestora");
+    await user.click(screen.getByRole("button", { name: /invitar/i }));
+    const dialog = await screen.findByRole("dialog");
+    const todos = await within(dialog).findByRole("radio", { name: "Todos los clientes" });
+    expect(todos).toBeDisabled();
+    await waitFor(() =>
+      expect(within(dialog).getByRole("radio", { name: "Clientes específicos" })).toBeChecked(),
+    );
+    expect(
+      within(dialog).getByText(/solo puedes asignar los clientes que tú gestionas/i),
+    ).toBeInTheDocument();
+    expect(todos).toHaveAccessibleDescription(/solo puedes asignar/i);
+  });
+
+  it("editar: usuario en «Todos» y actor restringido muestra «Todos» marcado pero bloqueado; cambiar a específicos guarda", async () => {
+    vi.mocked(fetchOtClientCompanies).mockResolvedValue({
+      items: companies,
+      actorRestricted: true,
+    });
+    const { user, dialog } = await openEdit("Gina Gestora");
+    const todos = await within(dialog).findByRole("radio", { name: "Todos los clientes" });
+    await waitFor(() => expect(todos).toBeDisabled());
+    expect(todos).toBeChecked();
+    expect(within(dialog).getByTestId("client-scope-restricted-note")).toBeInTheDocument();
+    await user.click(within(dialog).getByRole("radio", { name: "Clientes específicos" }));
+    await user.click(await within(dialog).findByRole("checkbox", { name: /Carga Gamma/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Guardar cambios" }));
+    await waitFor(() =>
+      expect(setOtUserClientScope).toHaveBeenCalledWith(
+        "u-1",
+        { mode: "especificos", clientTenantIds: ["c-3"] },
+        { transitOfficeId: "ot-1" },
+      ),
+    );
+  });
+
+  it("sin actorRestricted (o false) «Todos» sigue habilitado y sin nota", async () => {
+    const { dialog } = await openEdit("Gina Gestora");
+    expect(await within(dialog).findByRole("radio", { name: "Todos los clientes" })).toBeEnabled();
+    expect(within(dialog).queryByTestId("client-scope-restricted-note")).not.toBeInTheDocument();
+  });
+
+  it("CLIENT_SCOPE_EXCEEDS_ACTOR se muestra con un mensaje claro y no guarda el usuario", async () => {
+    vi.mocked(setOtUserClientScope).mockRejectedValue(
+      new ApiError(403, "Forbidden", { error: "CLIENT_SCOPE_EXCEEDS_ACTOR" }),
+    );
+    const { user, dialog } = await openEdit("Gina Gestora");
+    await user.click(await within(dialog).findByRole("radio", { name: "Clientes específicos" }));
+    await user.click(await within(dialog).findByRole("checkbox", { name: /Transportes Alfa/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Guardar cambios" }));
+    expect(await within(dialog).findByText(/dentro de los que tú gestionas/i)).toBeInTheDocument();
+    expect(updateOtUser).not.toHaveBeenCalled();
+  });
+
+  it("Gestor OT restringido (su fila trae «específicos») ve la nota al invitar; sin restricción no", async () => {
+    session.isOtAdmin = false;
+    vi.mocked(fetchOtUsers).mockResolvedValue({
+      data: [
+        gina,
+        {
+          ...yo,
+          roleCode: "gestor_tramites_ot",
+          clientScope: { mode: "especificos", clientCount: 1 },
+        },
+      ],
+    });
+    const user = userEvent.setup();
+    const { unmount } = renderSection();
+    await screen.findByText("Gina Gestora");
+    await user.click(screen.getByRole("button", { name: /invitar/i }));
+    expect(await screen.findByTestId("invite-inherits-scope-note")).toHaveTextContent(
+      /mismos clientes/i,
+    );
+    unmount();
+
+    vi.mocked(fetchOtUsers).mockResolvedValue({ data: [gina, yo] });
+    renderSection();
+    await screen.findByText("Gina Gestora");
+    await user.click(screen.getByRole("button", { name: /invitar/i }));
+    await screen.findByRole("dialog");
+    expect(screen.queryByTestId("invite-inherits-scope-note")).not.toBeInTheDocument();
+  });
+});
