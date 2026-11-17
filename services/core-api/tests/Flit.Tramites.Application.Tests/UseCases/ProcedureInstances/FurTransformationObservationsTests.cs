@@ -157,6 +157,33 @@ public sealed class FurTransformationObservationsTests
         result.Should().BeNull();
     }
 
+    [Theory]
+    [InlineData("SUV", "SUV", true, null)]            // igual al RUNT
+    [InlineData("suv", "  SUV ", true, null)]         // igual salvo mayúsculas/espacios
+    [InlineData("SUV", "", true, null)]               // efectivo vacío
+    [InlineData("SUV", null, true, null)]
+    [InlineData("SUV", "PICKUP", false, "PICKUP")]    // con snapshot basta que sea distinto
+    [InlineData(null, "PICKUP", true, "PICKUP")]      // sin snapshot: solo si está declarada
+    [InlineData(null, "PICKUP", false, null)]
+    [InlineData(null, "", true, null)]
+    public void ValorNuevo_SoloDevuelveUnValorDistintoDelRunt(
+        string? runt, string? efectivo, bool declarada, string? esperado)
+    {
+        FurTransformationObservations.ValorNuevo(runt, efectivo, declarada).Should().Be(esperado);
+    }
+
+    [Fact]
+    public void ComposeDeclaradas_SinValorNuevo_NoEscribeLaLinea()
+    {
+        var texto = FurTransformationObservations.ComposeDeclaradas(
+            new FurTransformacionesDeclaradas(Color: true, Carroceria: true, Combustible: true),
+            FurTransformationObservations.ValorNuevo("ROJO", "rojo", true),
+            FurTransformationObservations.ValorNuevo("GASOLINA", "GASOLINA", true),
+            FurTransformationObservations.ValorNuevo("SUV", "SUV", true));
+
+        texto.Should().BeNull();
+    }
+
     [Fact]
     public void ComposeDeclaradas_ConcatenaSinReemplazar()
     {

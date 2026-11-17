@@ -488,6 +488,28 @@ internal sealed class PlateRangeRepository : IPlateRangeRepository
             },
             cancellationToken);
 
+    public Task<bool> IsPlateAvailableAsync(
+        Guid companyTenantId,
+        Guid transitOfficeId,
+        string plate,
+        CancellationToken cancellationToken = default) =>
+        ExecuteInTenantScopeAsync(
+            companyTenantId,
+            async () =>
+            {
+                var normalized = plate?.Trim().ToUpperInvariant() ?? string.Empty;
+                return await _context.PlateRangeDetails
+                    .AsNoTracking()
+                    .AnyAsync(
+                        d => d.TenantId == companyTenantId
+                            && d.TransitOfficeId == transitOfficeId
+                            && d.Plate == normalized
+                            && d.State == PlateState.Disponible,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            },
+            cancellationToken);
+
     // HU #10800 — asignación de placa FUERA DE RANGO: registra la placa como un rango ad-hoc de 1 placa
     // (prefijo + número parseados) y la reserva al trámite. Respeta el modelo (plate_range_id NOT NULL) y
     // la unicidad (uq_plate_range_details_office_plate) sin cambio de esquema.
