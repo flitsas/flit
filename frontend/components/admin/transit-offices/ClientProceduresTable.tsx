@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { ArrowUpDown, Tag } from "lucide-react";
+import { ArrowUpDown } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -35,6 +35,8 @@ import {
   otColumnToSortBy,
 } from "@/lib/admin/ot-procedures-columns";
 import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+
+const ICONO_PLACA = iconoComo("placa");
 
 /** Íconos del kit como componente, fuera del render (estables). */
 const IconoArriba = iconoComo("arriba");
@@ -487,7 +489,7 @@ export function ClientProceduresTable({
       items.push({
         key: "asignar-placa",
         label: "Asignar placa",
-        icon: Tag,
+        icon: ICONO_PLACA,
         onSelect: () => onAssignPlate(row),
       });
     }
@@ -562,7 +564,7 @@ export function ClientProceduresTable({
       items.push({
         key: "documentos",
         label: "Ver documentos",
-        icon: iconoComo("carpeta"),
+        icon: iconoComo("documento"),
         onSelect: () => onVerDocumentos(row),
       });
     }

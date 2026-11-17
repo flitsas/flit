@@ -115,7 +115,7 @@ export function WhitelistTextarea({ entries, onSave }: WhitelistTextareaProps) {
         className="flex items-center gap-2 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
         style={{ background: "var(--color-flit-brand)" }}
       >
-        <Icono nombre="nube-subir" className="h-3.5 w-3.5" /> {saving ? "Guardando…" : "Guardar lista blanca"}
+        {saving ? "Guardando…" : "Guardar lista blanca"}
       </button>
 
       {entries.length > 0 && (

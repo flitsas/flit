@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useId, type ReactNode } from "react";
-import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { ListaDefinicion } from "@flit/ui/ListaDefinicion";
 import { TarjetaPlegable } from "@flit/ui/TarjetaPlegable";
@@ -40,6 +39,7 @@ import {
   TARJETA_DETALLE_CLS,
   Vacio,
 } from "./vistasDetalle/comun";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 // Cuerpo del detalle de una celda (HU #13801; HU #14087): desde HU #14087 se pinta en su página, en pestaña nueva
 // (PaginaDetalleConsulta), ya sin modal. Aquí quedan la vista (VistaDetalleCelda) y el foco atrapado que usa el formulario
@@ -177,7 +177,7 @@ function Auditoria({ detalle }: { detalle: Detalle }) {
             <span className="text-sm font-medium tabular-nums text-flit-primary">{fechaOGuion(detalle.dato_obtenido_en)}</span>
             {detalle.reutilizada && (
               <span className={`inline-flex items-center gap-1 ${ROTULO_CLS}`}>
-                <Icono nombre="exclamacion" className="h-3.5 w-3.5" />
+                <IconoAviso tipo="info" className="h-3.5 w-3.5" />
                 Fecha del dato original: reutilizado de una consulta del mismo día
               </span>
             )}

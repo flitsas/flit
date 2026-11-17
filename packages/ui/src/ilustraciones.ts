@@ -11,6 +11,9 @@ export const ILUSTRACIONES = [
   "inicio", "integraciones", "mandatos", "matricula", "notificaciones", "organismos", "pendientes", "perfil",
   "placa-colombia", "preasignacion", "procesos", "productos", "reportes", "revocatorias", "roles", "seguridad",
   "tema-claro", "tema-oscuro", "tramites", "traspaso", "trazabilidad", "vencidos",
+  // Módulos sin ícono en el PDF definitivo pero con glifo propio en el kit (disco generado igual que los demás).
+  "log-qx", "log-ict", "quipux", "reportes-ict", "reportes-detallados", "tipos-tramite",
+  "configuracion-ia", "mensajes-muertos", "pagos",
 ] as const;
 
 export type Ilustracion = (typeof ILUSTRACIONES)[number];
@@ -32,11 +35,11 @@ const POR_CLAVE: Record<string, Ilustracion> = {
   revocatorias: "revocatorias",
   rbac: "roles",
   auditoria: "auditoria",
-  "log-qx": "integraciones",
+  "log-qx": "log-qx",
   ict: "integraciones",
-  "ict-logs": "integraciones",
+  "ict-logs": "log-ict",
   "ict-trazabilidad": "trazabilidad",
-  "ict-reportes": "reportes",
+  "ict-reportes": "reportes-ict",
   ayuda: "ayuda",
   perfil: "perfil",
   // Administradores (secciones y entradas)
@@ -50,18 +53,18 @@ const POR_CLAVE: Record<string, Ilustracion> = {
   "admin-documents": "documentos",
   "admin-improntas": "improntas",
   "admin-generacion-documental": "generacion-documental",
-  "admin-quipux": "integraciones",
+  "admin-quipux": "quipux",
   "admin-plataforma": "configuracion",
-  "admin-tipos-tramite": "tramites",
+  "admin-tipos-tramite": "tipos-tramite",
   "admin-confirmacion-runt": "fuentes-oficiales",
   "admin-mandatos": "mandatos",
   "admin-fur": "fur",
   "admin-notificaciones": "notificaciones",
-  "admin-configuracion-ia": "configuracion",
-  "admin-mensajes-muertos": "notificaciones",
+  "admin-configuracion-ia": "configuracion-ia",
+  "admin-mensajes-muertos": "mensajes-muertos",
   "admin-descarga-masiva": "documentos",
   "admin-banners": "banners",
-  "admin-persona-natural": "identidad",
+  "admin-persona-natural": "perfil",
   "admin-seguridad": "seguridad",
   "admin-jobs": "procesos",
   // Productos de la suite

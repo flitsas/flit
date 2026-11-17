@@ -3,7 +3,6 @@
 import { buttonClass } from "@flit/ui/Button";
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ShieldOff } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -57,6 +56,8 @@ import {
   SuspendOrDeactivateModal,
   type SuspendMode,
 } from "@/components/atom/modules/users/SuspendOrDeactivateModal";
+
+const ICONO_CANDADO_ABIERTO = iconoComo("candado-abierto");
 
 export interface OtUsersSectionProps {
   transitOfficeId: string;
@@ -242,7 +243,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     if (!isInvitationRow(u) && isSuperAdmin) {
       if (u.isSuspended) {
         actions.push({
-          icon: ShieldOff,
+          icon: ICONO_CANDADO_ABIERTO,
           label: `Reactivar usuario ${u.fullName}`,
           onClick: () => void handleUnsuspend(u.id),
         });

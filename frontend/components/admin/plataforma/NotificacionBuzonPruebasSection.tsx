@@ -9,6 +9,7 @@ import {
 } from "@/lib/api/admin-plataforma-notificaciones";
 
 import { formatFechaHora } from "@/lib/format/date";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 export interface NotificacionBuzonPruebasSectionProps {
 
   mailbox: NotificationTestMailbox | null;
@@ -158,7 +159,7 @@ export function NotificacionBuzonPruebasSection({
             </div>
             {formError ? (
               <p role="alert" className="inline-flex items-center gap-1.5 text-xs text-destructive">
-                <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
+                <IconoAviso tipo="error" className="h-3.5 w-3.5 shrink-0" />
                 {formError}
               </p>
             ) : null}
@@ -179,7 +180,7 @@ export function NotificacionBuzonPruebasSection({
                 className="inline-flex items-center gap-1.5 text-xs text-destructive"
                 data-testid="notificaciones-buzon-sin-configurar"
               >
-                <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
+                <IconoAviso tipo="error" className="h-3.5 w-3.5 shrink-0" />
                 No hay un buzón de pruebas configurado. Configúralo para poder enviar correos de
                 prueba.
               </p>

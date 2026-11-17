@@ -44,6 +44,11 @@ export const MAPA_ICONO: Record<string, NombreIcono | `@${string}`> = {
  "seguridad": "escudo",
  "tramites": "tramites",
  "traspaso": "@tramite-traspaso",
+ "prenda": "@tramite-prenda",
+ "otros-tramites": "@tramite-otros",
+ "transformacion": "@tramite-transformacion",
+ "novedad": "@tramite-novedad",
+ "persona-nueva": "@persona-nueva",
  "trazabilidad": "ruta",
  "vencidos": "vencido",
  "reportes-detallados": "reporte-detallado",
@@ -52,6 +57,9 @@ export const MAPA_ICONO: Record<string, NombreIcono | `@${string}`> = {
  "log-qx": "log-mensajes",
  "log-ict": "log-llamadas",
  "tipos-tramite": "tipos-tramite",
+ "configuracion-ia": "asistente",
+ "mensajes-muertos": "correo",
+ "pagos": "pago",
  "tiempo": "cronometro",
  "finalizados": "finalizado",
  "en-curso": "avance",
@@ -106,6 +114,7 @@ export const ICONOS_REPORTE: Record<string, string[]> = {
 /** Estado → disco de /assets/kit/estado-{x}.svg. */
 export const ICONO_ESTADO: Record<string, string> = {
  "borrador": "borrador",
+ "pendiente": "pendiente",
  "validacion": "preparado",
  "radicado": "entregado",
  "rechazado": "rechazado",
@@ -123,12 +132,12 @@ export const ICONO_ESTADO: Record<string, string> = {
 
 /** Estados sin disco propio → glifo blanco sobre disco del tono. */
 export const GLIFO_ESTADO: Record<string, NombreIcono> = {
- "pendiente": "espera",
+ "pendiente": "exclamacion",
  "firma": "pluma",
  "finalizado": "finalizado",
  "aprobada": "check",
  "validada": "escudo",
- "fallida": "distinto",
+ "fallida": "cerrar",
  "activa": "encendido",
  "activo": "encendido",
  "invitado": "correo",
@@ -140,7 +149,7 @@ export const GLIFO_ESTADO: Record<string, NombreIcono> = {
  "quipux": "externo",
  "listo": "archivo",
  "generando": "avance",
- "error": "alerta",
+ "error": "cerrar",
  "ok": "check",
  "reintento": "reintento",
  "habilitado": "asistente",
@@ -159,7 +168,7 @@ export const GLIFO_ESTADO: Record<string, NombreIcono> = {
  "pagado": "pesos",
  "cobro": "mazo",
  "aldia": "carro",
- "alerta": "exclamacion",
+ "alerta": "alerta",
  "libre": "candado-abierto",
  "usada": "placa",
  "reservada": "marcador"

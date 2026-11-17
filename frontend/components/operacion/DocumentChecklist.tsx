@@ -36,6 +36,7 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 export type DocumentUploadMode = 'individual' | 'batch';
 
@@ -604,7 +605,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
         onBlur={() => setTipOpen(false)}
         onClick={() => setDetailOpen(true)}
       >
-        <Icono nombre="exclamacion" className="h-4 w-4" />
+        <IconoAviso tipo="info" className="h-4 w-4" />
       </button>
 
       {tipOpen && !detailOpen && (
@@ -657,7 +658,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
                   className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--kit-hover)] text-[color:var(--kit-azul-relleno)]"
                   aria-hidden
                 >
-                  <Icono nombre="exclamacion" className="h-4 w-4" />
+                  <IconoAviso tipo="info" className="h-4 w-4" />
                 </span>
                 <h3
                   id={`ocr-detail-title-${tipo}`}
@@ -879,13 +880,13 @@ export function DocumentSlot({
               de «Ver» y del foco), no en el degradado de marca, y a plena opacidad: el `opacity-70`
               vive en el texto para que el color no salga lavado. `shrink-0` + `mt-px` evitan que se
               deforme o se despegue de la primera línea cuando el texto envuelve. */}
-          <Icono nombre="exclamacion" className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
+          <IconoAviso tipo="info" className="mt-px h-3 w-3 shrink-0" />
           <span className="opacity-70">{instruccion}</span>
         </p>
       )}
       {improntaSoloManual && !readOnly && !attachment && !isAuto && (
         <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
-          <Icono nombre="exclamacion" className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
+          <IconoAviso tipo="info" className="mt-px h-3 w-3 shrink-0" />
           <span className="opacity-70">
             {IMPRONTA_MANUAL_TEXTO}
             {item.obligatorio ? ' Debe cargarla para radicar.' : ''}

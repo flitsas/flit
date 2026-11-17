@@ -11,6 +11,7 @@ import {
 
 import { formatFechaHora } from "@/lib/format/date";
 import { ETIQUETA_PUNTO_CLS, etiquetaKit, type StatusTone } from "@flit/ui/StatusBadge";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 /**
 
  * El reporte de una migración, en el mismo orden en que lo imprime la consola por SSH: de dónde
@@ -124,7 +125,7 @@ function Encabezado({ respuesta }: { respuesta: MigracionRespuesta }) {
   if (origen.dryRun) {
     return (
       <Titular
-        icono={<Icono nombre="exclamacion" className="h-5 w-5" style={{ color: "var(--color-flit-brand)" }} />}
+        icono={<IconoAviso tipo="info" className="h-5 w-5" />}
         texto="Simulación completada"
         // Se nombra el control tal y como está rotulado en pantalla: la versión anterior decía
         // «vuelve a lanzarla sin simulación» y ese botón no existe con ese nombre en ningún sitio.

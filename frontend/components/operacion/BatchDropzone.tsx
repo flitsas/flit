@@ -141,7 +141,7 @@ export function BatchDropzone({ onFiles, busy = false, disabled = false }: Props
           className="inline-flex h-11 items-center justify-center gap-1.5 rounded-xl border bg-card px-6 text-[13px] font-semibold transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60 dark:bg-transparent"
           style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
         >
-          <Icono nombre="carpeta" className="h-4 w-4" />
+          <Icono nombre="archivo-subir" className="h-4 w-4" />
           Seleccionar carpeta
         </button>
       </div>

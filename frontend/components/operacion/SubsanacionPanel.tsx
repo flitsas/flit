@@ -8,6 +8,7 @@ import {
   latestSubsanacionEntry,
   parseSubsanacionObservation,
 } from '@/lib/tramites/subsanacion';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 interface SubsanacionPanelProps {
   statusHistory: StatusHistory[];
@@ -107,7 +108,7 @@ export function SubsanacionPanel({
         role="alert"
         aria-live="polite"
       >
-        <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" />
+        <IconoAviso tipo="error" className="h-4 w-4 shrink-0 mt-0.5" />
         <span>No se pudo cargar el detalle de la subsanación: {error}</span>
       </div>
     );

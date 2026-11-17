@@ -856,7 +856,7 @@ function PanelOperativoKpis({
         }
         cargando={cargando}
         sinDato={sinMediana}
-        ilustracion="procesos"
+        ilustracion="tiempo"
         hint={
           sinMediana
             ? `Ninguna decisión en los últimos ${VENTANA_MEDIANA_DIAS} días`

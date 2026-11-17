@@ -435,7 +435,7 @@ function PersonalizedDocumentSection({
             {file ? (
               <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
             ) : (
-              <Icono nombre="nube-subir" className="h-4 w-4 shrink-0 opacity-60" />
+              <Icono nombre="archivo-subir" className="h-4 w-4 shrink-0 opacity-60" />
             )}
             <span className="min-w-0 truncate font-medium">
               {file ? file.name : "Selecciona el PDF del documento personalizado"}

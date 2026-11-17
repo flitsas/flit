@@ -19,6 +19,7 @@ import type { CompanyListItem } from "@/lib/api/types";
 import { NotificacionBuzonPruebasSection } from "./NotificacionBuzonPruebasSection";
 import { NotificacionVistaPreviaModal } from "./NotificacionVistaPreviaModal";
 import { NotificacionEnviarPruebaModal } from "./NotificacionEnviarPruebaModal";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * Fila del banco de pruebas. Las plantillas vienen del catálogo FLIT; la fila `kyverum` es
@@ -256,7 +257,7 @@ export function NotificacionesBankPanel() {
         if (row.kind === "kyverum") {
           return (
             <span className="inline-flex max-w-[220px] items-start justify-end gap-1.5 text-right text-[11px] text-muted-foreground">
-              <Icono nombre="exclamacion" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <IconoAviso tipo="info" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               El correo lo emite el proveedor; FLIT no controla su contenido.
             </span>
           );
