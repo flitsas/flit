@@ -1,8 +1,10 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import { Building2, FileText, Lock, TriangleAlert } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { INTERRUPTOR_ALERTA_CLS, INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 import { InlineAlert } from "@flit/ui/InlineAlert";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
 import {
@@ -62,7 +64,7 @@ function ListaFuentes({ fuentes }: { fuentes: Fuente[] }) {
   return (
     <ul className="flex flex-wrap gap-2" aria-label="Fuentes habilitadas">
       {ordenarFuentes(fuentes).map((f) => (
-        <li key={f} className="rounded-full bg-[var(--badge-info-bg)] px-3 py-1 text-xs font-semibold text-[var(--badge-info-fg)]">
+        <li key={f} {...etiquetaKit("info")}>
           {nombreFuente(f)}
         </li>
       ))}
@@ -74,14 +76,17 @@ function ContratoSoloLectura({ contrato }: { contrato: NivelContrato }) {
   return (
     <section aria-labelledby="contrato-titulo" className={`${TARJETA_CLS} flex flex-col gap-4`}>
       <div className="flex items-start gap-3">
-        <FileText className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" aria-hidden="true" strokeWidth={1.8} />
+        <Icono nombre="documento" className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" />
         <div>
           <h2 id="contrato-titulo" className="text-lg font-semibold text-flit-primary">
             Lo contratado por tu compañía
           </h2>
-          <p className={AYUDA_CLS}>Solo lectura: el contrato lo administra el backoffice FLIT.</p>
         </div>
+        <span {...etiquetaKit("neutral", { className: "ml-auto" })}>
+          Solo lectura
+        </span>
       </div>
+      <InlineAlert tone="info">FLIT administra tu contrato. Para cambiarlo, escribe a tu ejecutivo de cuenta</InlineAlert>
       <dl className="grid gap-4 sm:grid-cols-[auto_1fr] sm:gap-x-6">
         <dt className={ETIQUETA_CLS}>Fuentes habilitadas</dt>
         <dd>
@@ -209,7 +214,7 @@ function EditorContratoBackoffice() {
 
       {elegida && (
         <div className="flex items-start gap-3">
-          <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" aria-hidden="true" strokeWidth={1.8} />
+          <Icono nombre="empresas" className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" />
           <div>
             <h3 className="text-base font-semibold text-flit-primary">{elegida.nombre}</h3>
             <p className={AYUDA_CLS}>{etiquetaNit(elegida.nit)}</p>
@@ -297,13 +302,11 @@ function EditorContratoBackoffice() {
               aria-labelledby="contrato-ia"
               disabled={ocupado}
               onClick={() => setBorrador({ ...borrador, suspendida: !borrador.suspendida })}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:opacity-50 ${FOCO_CLS} ${
-                borrador.suspendida ? "bg-[var(--color-flit-alert)]" : "bg-[var(--border-strong)]"
-              }`}
+              className={`${INTERRUPTOR_CLS} ${INTERRUPTOR_ALERTA_CLS} ${FOCO_CLS}`}
             >
               <span
                 aria-hidden="true"
-                className={`inline-block h-5 w-5 rounded-full bg-card shadow transition dark:bg-foreground ${borrador.suspendida ? "translate-x-5" : "translate-x-0.5"}`}
+                className={INTERRUPTOR_PERILLA_CLS}
               />
             </button>
           </div>
@@ -381,8 +384,8 @@ function CasillaFuenteContrato({
           className={MARCA_CLS}
         />
         <span className="flex-1">{nombre}</span>
-        {bloqueada && <Lock className="h-3.5 w-3.5 text-muted-foreground" aria-hidden="true" />}
-        {estado === "ya-no-disponible" && <TriangleAlert className="h-3.5 w-3.5 text-[var(--badge-warning-fg)]" aria-hidden="true" />}
+        {bloqueada && <Icono nombre="candado" className="h-3.5 w-3.5 text-muted-foreground" />}
+        {estado === "ya-no-disponible" && <Icono nombre="alerta" className="h-3.5 w-3.5 text-[var(--badge-warning-fg)]" />}
       </label>
       {bloqueada && (
         <span role="tooltip" id={ayudaId} className={TOOLTIP_CLS}>

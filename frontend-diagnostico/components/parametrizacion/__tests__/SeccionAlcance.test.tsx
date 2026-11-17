@@ -104,9 +104,18 @@ describe("SeccionAlcance — impuesto según fuentes_disponibles (HU #13865)", (
     expect(onAlternar).toHaveBeenCalledWith("IMPUESTO_DEPARTAMENTAL");
   });
 
-  it("AC2: sin el impuesto en fuentes_disponibles no aparece aunque esté en fuentes_habilitadas", () => {
-    montar({ habilitadas: ["RUNT", "SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"], disponibles: DISPONIBLES_SIN_IMPUESTO });
-    expect(screen.queryByRole("checkbox", { name: "Impuesto departamental" })).toBeNull();
-    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("value"))).toEqual(["RUNT", "SIMIT_VEHICULO"]);
+  it("AC16 (HU #14562): contratada pero fuera de fuentes_disponibles aparece deshabilitada con su ayuda y no se alterna", () => {
+    const onAlternar = montar({ habilitadas: ["RUNT", "SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"], disponibles: DISPONIBLES_SIN_IMPUESTO });
+    const impuesto = screen.getByRole("checkbox", { name: "Impuesto departamental" });
+    expect(impuesto).toBeDisabled();
+    expect(impuesto).toHaveAccessibleDescription("Disponible cuando la consulta automatizada esté en producción");
+    fireEvent.click(impuesto);
+    expect(onAlternar).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("checkbox").map((c) => c.getAttribute("value"))).toEqual(["RUNT", "SIMIT_VEHICULO", "IMPUESTO_DEPARTAMENTAL"]);
+  });
+
+  it("AC16 (HU #14562): una fuente no contratada no aparece aunque esté disponible", () => {
+    montar({ habilitadas: ["RUNT"], disponibles: DISPONIBLES_SIN_IMPUESTO });
+    expect(screen.queryByRole("checkbox", { name: "SIMIT vehículo" })).toBeNull();
   });
 });

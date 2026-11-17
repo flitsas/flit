@@ -3,6 +3,7 @@ import { ApiError } from "@/lib/api";
 import {
   EmpresaNoElegida,
   aplicarLlenado,
+  cargadorDetalleBackoffice,
   esLlenable,
   listarLotesBackoffice,
   llenarConsultaManual,
@@ -135,5 +136,23 @@ describe("aplicarLlenado — la celda pasa a verde con origen manual", () => {
     g = aplicarLlenado(g, respuestaLlenado("AVALUO", { id: "celda-1-avaluo", estado_lote: "COMPLETADO" }));
     expect(g.vehiculos[0].terminado).toBe(true);
     expect(g.avance.terminados).toBe(1);
+  });
+});
+
+describe("cargadorDetalleBackoffice — HU #14562 (seguridad M2, D19)", () => {
+  it("lee la celda de la grilla del backoffice sin dejarla en la caché del navegador (cache: no-store)", async () => {
+    const fetchMock = simularApi({ [`GET /backoffice/diagnosticos/${LOTE}/grilla`]: () => Response.json(grillaBo()) });
+    const g = grillaBo();
+    const v = g.vehiculos[0];
+    await cargadorDetalleBackoffice(EMPRESA_A)(LOTE, v.id, v.celdas[0].fuente);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(urlDe(fetchMock).searchParams.get("empresa")).toBe(EMPRESA_A);
+    expect(init.cache).toBe("no-store");
+  });
+
+  it("la grilla del backoffice, que se sondea, sigue sin forzar no-store", async () => {
+    const fetchMock = simularApi({ [`GET /backoffice/diagnosticos/${LOTE}/grilla`]: () => Response.json(grillaBo()) });
+    await obtenerGrillaBackoffice(LOTE, EMPRESA_A, 0);
+    expect((fetchMock.mock.calls[0][1] as RequestInit).cache).toBeUndefined();
   });
 });

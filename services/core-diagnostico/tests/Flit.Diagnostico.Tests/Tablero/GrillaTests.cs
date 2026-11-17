@@ -319,6 +319,24 @@ public sealed class GrillaTests
             CreadoEn = DateTimeOffset.UtcNow,
         };
 
+    // HU #14563 AC26 (R-20, D6) — la compañía solo gana la marca: ajustado_por_flit y ajustado_en en el dictamen, dictamen_ajustado
+    // en la fila. Ni autor, ni motivo, ni versión anterior, ni la marca «ajuste» por alertamiento.
+    [Fact]
+    public void R20_dictamen_y_fila_de_compania_solo_suman_la_marca_de_ajuste()
+    {
+        static List<string> Json(Type tipo) =>
+            [.. PropiedadesDe(tipo).Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? p.Name)];
+
+        var dictamen = Json(typeof(global::Flit.Diagnostico.Api.Modulos.Dictamen.DictamenCompaniaDto));
+        dictamen.Should().Contain(["ajustado_por_flit", "ajustado_en"]);
+        dictamen.Should().NotContain(n => n.Contains("motivo") || n.Contains("usuario") || n.Contains("override") || n == "ajuste"
+            || n.Contains("desde_version") || n.Contains("eliminados"));
+        var fila = typeof(FilaVehiculoDto).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? p.Name).ToList();
+        fila.Should().Contain("dictamen_ajustado");
+        fila.Should().NotContain(n => n.Contains("motivo") || n.Contains("override"));
+    }
+
     private static IEnumerable<string?> Cadenas(JsonElement objeto, string propiedad) =>
         objeto.GetProperty(propiedad).EnumerateArray().Select(e => e.GetString());
 

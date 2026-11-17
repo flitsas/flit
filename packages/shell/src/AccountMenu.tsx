@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { LogOut } from "lucide-react";
 import type { AccountLink } from "./account";
+import { ProductEntries } from "./ProductMenu";
+import type { SuiteAppsState } from "./useSuiteApps";
 
 export interface ShellUser {
   email: string;
@@ -25,19 +27,29 @@ function initialsOf(user: ShellUser): string {
 // «rol · empresa» en un solo botón que abre el menú (franja tinta con la persona, opciones y Salir aparte).
 // Salir va a /auth/logout de la app (@flit/auth), que cierra también la sesión del hub y la de los demás productos de
 // este navegador (A-13). Una app que cierra sesión por su cuenta (la sesión antigua de Trámites, B-13) pasa `onLogout`.
+// HU #14562 · D1: con `products`, el menú trae el grupo «Tus productos» (`li.suite-solo-movil`), que el CSS solo muestra
+// a ≤ 640 px, donde el botón ▦ sale de la barra (patrón `solo-movil` de la propuesta UI Kit 2026).
 export function AccountMenu({
   user,
   links = [],
   logoutHref = "/auth/logout",
   onLogout,
+  products,
 }: {
   user: ShellUser;
   links?: AccountLink[];
   logoutHref?: string;
   onLogout?: () => void;
+  products?: { state: SuiteAppsState; productCode: string };
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const request = products?.state.request;
+
+  useEffect(() => {
+    if (open) request?.();
+  }, [open, request]);
   const name = user.displayName || user.email || "—";
   const initials = initialsOf(user);
 
@@ -46,7 +58,12 @@ export function AccountMenu({
     const onPointer = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      // El panel desaparece con el foco dentro: sin esto, el foco cae en <body>.
+      buttonRef.current?.focus();
+    };
     window.addEventListener("pointerdown", onPointer);
     window.addEventListener("keydown", onKey);
     return () => {
@@ -69,8 +86,9 @@ export function AccountMenu({
   );
 
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="suite-ancla">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="Menú de usuario"
@@ -95,8 +113,20 @@ export function AccountMenu({
               <small>{detail}</small>
             </span>
           </div>
-          {links.length > 0 && (
+          {(products || links.length > 0) && (
             <ul>
+              {products && (
+                <li className="suite-solo-movil">
+                  <div role="group" aria-label="Tus productos" className="suite-menu-usuario__productos">
+                    <ProductEntries
+                      productCode={products.productCode}
+                      apps={products.state.apps}
+                      failed={products.state.failed}
+                      onNavigate={() => setOpen(false)}
+                    />
+                  </div>
+                </li>
+              )}
               {links.map(({ label, href, icon: Icon }) => (
                 <li key={href}>
                   <Link href={href} onClick={() => setOpen(false)} className="suite-menu-usuario__entrada">

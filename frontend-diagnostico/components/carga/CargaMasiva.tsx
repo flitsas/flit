@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FileSpreadsheet, RotateCcw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
+import { PasosHorizontal, type EstadoPaso } from "@flit/ui/PasosHorizontal";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { ApiError } from "@/lib/api";
 import {
@@ -15,12 +16,11 @@ import {
   type FilaResumen,
   type ResumenValidacion as Resumen,
 } from "@/lib/carga/api";
-import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ResumenValidacion } from "./ResumenValidacion";
 import { SubidaArchivo } from "./SubidaArchivo";
 import { TABLA_FILAS_ID, TablaFilasCorregibles } from "./TablaFilasCorregibles";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 export interface Analisis {
   /** El archivo analizado, solo en memoria: la confirmación lo reenvía (trae el documento del locatario completo). */
@@ -138,11 +138,14 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
     }
   }
 
+  const paso: 0 | 1 | 2 = !analisis ? 0 : confirmacion.tipo === "confirmando" ? 2 : 1;
+  const estadoPaso = (i: number): EstadoPaso => (i < paso ? "hecho" : i === paso ? "actual" : "pendiente");
+
   let contenido;
   if (!puedeCrear) {
     contenido = (
       <section aria-labelledby="carga-vacio" className={`${TARJETA_CLS} flex flex-col items-center gap-3 py-12 text-center`}>
-        <FileSpreadsheet className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
+        <Icono nombre="reporte-detallado" className="h-10 w-10 text-flit-brand" />
         <h2 id="carga-vacio" className="text-lg font-semibold">
           No tienes permiso para cargar vehículos
         </h2>
@@ -159,6 +162,9 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
     const vigente = resumenVigente(analisis);
     contenido = (
       <>
+        <p className={`${AYUDA_CLS} font-semibold`}>
+          {analisis.archivo.name} · {analisis.resumen.total_filas} filas
+        </p>
         <ResumenValidacion resumen={vigente} onCorregir={corregir} onContinuar={() => void continuar()} confirmando={confirmacion.tipo === "confirmando"} />
         {confirmacion.tipo === "error" && (
           <InlineAlert
@@ -184,7 +190,7 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
         />
         <div className="flex justify-start">
           <button type="button" onClick={() => setAnalisis(null)} className={BOTON_SECUNDARIO_CLS}>
-            <RotateCcw className="h-4 w-4" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-4 w-4" />
             Subir otro archivo
           </button>
         </div>
@@ -200,8 +206,14 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
         tituloId="carga-titulo"
         titulo="Cargar vehículos"
         descripcion={sesion?.empresa.nombre}
-        ilustracion={rutaIlustracion("documentos")}
+        icono="documentos"
       />
+      {puedeCrear && (
+        <PasosHorizontal
+          ariaLabel="Pasos de la carga"
+          pasos={["Subir archivo", "Revisar", "Iniciar"].map((etiqueta, i) => ({ etiqueta, estado: estadoPaso(i) }))}
+        />
+      )}
       {contenido}
     </>
   );

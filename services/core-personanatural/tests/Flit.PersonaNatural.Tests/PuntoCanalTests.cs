@@ -1149,7 +1149,7 @@ public sealed class PuntoCanalTests
             {
                 try
                 {
-                    json = JsonDocument.Parse(texto).RootElement.Clone();
+                    json = JsonElement.Parse(texto);
                 }
                 catch (JsonException ex)
                 {

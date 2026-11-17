@@ -1,4 +1,6 @@
+using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
+using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Derivacion;
 
 namespace Flit.Diagnostico.Api.Modulos.Derivacion;
@@ -12,6 +14,22 @@ namespace Flit.Diagnostico.Api.Modulos.Derivacion;
 /// </summary>
 public static class CierreItemDerivacion
 {
+    /// <summary>
+    /// <see cref="Cerrar"/> con la versión de fila del tablero (HU #14563, ADR-0086 D-1): primero sube la cabecera y la fila
+    /// (<see cref="EscritorCeldas.SubirVersionFilaAsync"/>; orden de bloqueo cabecera → vehículo → ítem) y después cierra el ítem en
+    /// memoria. Debe ir en la transacción del cierre; el llamador guarda. Devuelve la versión de fila.
+    /// </summary>
+    internal static async Task<long> CerrarAsync(
+        DiagnosticoDb db, OperacionDerivacion operacion, ItemDerivacion item, VehiculoDiagnostico vehiculo, ResultadoBorrador resultado, DateTimeOffset ahora,
+        CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(operacion);
+        ArgumentNullException.ThrowIfNull(vehiculo);
+        var version = await EscritorCeldas.SubirVersionFilaAsync(db, operacion.DiagnosticoId, vehiculo.Id, ct).ConfigureAwait(false);
+        Cerrar(operacion, item, vehiculo, resultado, ahora);
+        return version;
+    }
+
     public static void Cerrar(OperacionDerivacion operacion, ItemDerivacion item, VehiculoDiagnostico vehiculo, ResultadoBorrador resultado, DateTimeOffset ahora)
     {
         ArgumentNullException.ThrowIfNull(operacion);

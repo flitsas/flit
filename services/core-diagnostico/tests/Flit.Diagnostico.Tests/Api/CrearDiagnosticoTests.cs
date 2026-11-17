@@ -236,9 +236,9 @@ public sealed class CrearDiagnosticoTests
     {
         var ct = TestContext.Current.CancellationToken;
         await using var api = await ApiDePrueba.SinBaseAsync();
-        var backoffice = Permisos.RolesPorDefecto.Single(r => r.Codigo == "backoffice_diagnostico").Permisos;
+        var backoffice = OperadorBackofficeDePrueba.Slugs;
 
-        var respuesta = await api.Cliente(api.Token(permisos: backoffice, roles: ["backoffice_diagnostico"], tipoEmpresa: "FLIT"))
+        var respuesta = await api.Cliente(api.Token(permisos: backoffice, roles: ["admin_diagnostico"], tipoEmpresa: "FLIT"))
             .PostAsync(Cabeceras.Ruta, Cuerpo(Cabeceras.Json("Lote", "SIMPLE", null, ["RUNT"])), ct);
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.Forbidden);

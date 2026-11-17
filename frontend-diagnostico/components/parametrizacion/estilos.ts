@@ -7,6 +7,6 @@ export const INSIGNIA_CLS =
   "rounded-full border border-[var(--badge-info-border)] bg-[var(--badge-info-bg)] px-2 py-0.5 text-[10px] font-semibold text-[var(--badge-info-fg)]";
 
 export const TOOLTIP_CLS =
-  "pointer-events-none absolute left-0 top-full z-10 mt-1 w-max max-w-64 rounded-xl bg-flit-primary px-3 py-2 text-xs font-medium text-primary-foreground opacity-0 shadow-sm transition group-focus-within:opacity-100 group-hover:opacity-100";
+  "pointer-events-none absolute left-0 top-full z-10 mt-1 w-max max-w-64 rounded-xl bg-flit-primary px-3 py-2 text-xs font-medium text-primary-foreground opacity-0 shadow-[var(--kit-sombra)] transition group-focus-within:opacity-100 group-hover:opacity-100";
 
 export const CAMPO_INVALIDO_CLS = "aria-[invalid=true]:border-[var(--badge-danger-border)]";

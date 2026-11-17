@@ -114,6 +114,16 @@ describe("FormularioLlenadoManual — un formulario por fuente", () => {
     expect(within(d).queryByLabelText("Semáforo")).toBeNull();
   });
 
+  it("HU14562 AC44: el avalúo pide Código Fasecolda, Modelo, Marca y Línea; el valor comercial va en pesos sin decimales", async () => {
+    montar(formulario("AVALUO"));
+    const d = await screen.findByRole("dialog");
+    expect(await within(d).findByLabelText("Código Fasecolda")).toHaveAttribute("inputmode", "numeric");
+    expect(within(d).getByLabelText("Modelo (año)")).toBeInTheDocument();
+    expect(within(d).getByLabelText("Marca")).toBeInTheDocument();
+    expect(within(d).getByLabelText("Línea")).toBeInTheDocument();
+    expect(within(d).getByText("Valor comercial en pesos, sin decimales.")).toBeInTheDocument();
+  });
+
   it("fuente de persona: una sección por persona en error con su documento enmascarado y el esquema de su consulta", async () => {
     const p1 = personaEnError(1, { consulta: "RUNT_PERSONA", documento_enmascarado: "****0101" });
     const p2 = personaEnError(3, { consulta: "RUES", tipo_documento: "N", documento_enmascarado: "****9903" });
@@ -154,6 +164,8 @@ describe("FormularioLlenadoManual — errores: el 422 junto al campo y el 409 co
     fireEvent.change(within(d).getByLabelText("Fuente 1"), { target: { value: "fasecolda" } });
     fireEvent.change(within(d).getByLabelText("Estado de la fuente 1"), { target: { value: "OK" } });
     escribir("Valor de la fuente 1 (pesos)", "48500000");
+    escribir("Código Fasecolda", "01601234");
+    escribir("Modelo (año)", "2020");
   }
 
   it("422 RESULTADO_INVALIDO con campo: el mensaje queda junto a ese campo y no se avisa la celda llenada", async () => {
@@ -204,5 +216,40 @@ describe("FormularioLlenadoManual — errores: el 422 junto al campo y el 409 co
     fireEvent.click(within(dialogo()).getByRole("button", { name: "Cancelar" }));
     expect(onClose).toHaveBeenCalled();
     expect(fetchMock.mock.calls.filter(([, init]) => (init as RequestInit | undefined)?.method === "PUT")).toHaveLength(0);
+  });
+});
+
+describe("HU14562 AC44 — referencia Fasecolda en el llenado del avalúo", () => {
+  async function llenarValorYFuente() {
+    const d = await screen.findByRole("dialog");
+    await within(d).findByLabelText("Valor sugerido (pesos)");
+    escribir("Valor sugerido (pesos)", "48500000");
+    fireEvent.change(within(d).getByLabelText("Fuente principal"), { target: { value: "fasecolda" } });
+    fireEvent.change(within(d).getByLabelText("Fuente 1"), { target: { value: "fasecolda" } });
+    fireEvent.change(within(d).getByLabelText("Estado de la fuente 1"), { target: { value: "OK" } });
+    escribir("Valor de la fuente 1 (pesos)", "48500000");
+  }
+
+  it("sin Código Fasecolda ni Modelo no se envía y cada campo muestra su error", async () => {
+    const { fetchMock } = montar(formulario("AVALUO"), () => Response.json(respuestaLlenado("AVALUO")));
+    await llenarValorYFuente();
+    confirmar();
+    await waitFor(() => esperarErrorJunto(within(dialogo()).getByLabelText("Código Fasecolda"), /obligatorio/i));
+    esperarErrorJunto(within(dialogo()).getByLabelText("Modelo (año)"), /obligatorio/i);
+    expect(llamadas(fetchMock, "PUT", "/backoffice/consultas/celda-1-avaluo/manual")).toHaveLength(0);
+  });
+
+  it("con la referencia válida, el PUT la lleva y un 422 del API sobre ella se muestra en su campo", async () => {
+    const { fetchMock } = montar(formulario("AVALUO"), () =>
+      Response.json({ code: "RESULTADO_INVALIDO", error: "El código Fasecolda no existe.", campo: "resultado.referencia.codigo_fasecolda" }, { status: 422 }),
+    );
+    await llenarValorYFuente();
+    escribir("Código Fasecolda", "01601234");
+    escribir("Modelo (año)", "2020");
+    escribir("Marca", "Marca prueba");
+    confirmar();
+    await waitFor(() => esperarErrorJunto(within(dialogo()).getByLabelText("Código Fasecolda"), /no existe/));
+    const [put] = llamadas(fetchMock, "PUT", "/backoffice/consultas/celda-1-avaluo/manual");
+    expect(JSON.parse(String((put[1] as RequestInit).body)).resultado.referencia).toEqual({ codigo_fasecolda: "01601234", modelo: 2020, marca: "Marca prueba" });
   });
 });

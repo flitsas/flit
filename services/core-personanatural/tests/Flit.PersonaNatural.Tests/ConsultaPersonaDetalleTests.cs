@@ -64,7 +64,7 @@ public sealed class ConsultaPersonaDetalleTests : IAsyncLifetime
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         r.Headers.CacheControl!.NoStore.Should().BeTrue("son datos de un tercero: no se cachean");
         var texto = await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         json.GetProperty("existe").GetBoolean().Should().BeTrue();
         json.GetProperty("nombres").GetString().Should().Be("ANA MARIA");
         json.GetProperty("apellidos").GetString().Should().Be("GOMEZ RUIZ");
@@ -322,7 +322,7 @@ public sealed class ConsultaPersonaDetalleTests : IAsyncLifetime
 
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         var texto = await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        JsonDocument.Parse(texto).RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("existe", "estadoLicencia", "vigencia");
+        JsonElement.Parse(texto).EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("existe", "estadoLicencia", "vigencia");
         texto.Should().NotContainAny("ANA", "GOMEZ", "RUIZ");
     }
 
