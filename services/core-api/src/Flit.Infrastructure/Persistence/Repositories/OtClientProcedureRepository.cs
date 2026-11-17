@@ -45,6 +45,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     /// <see cref="ExecuteOtScopedAsync{T}(Guid,Guid?,Func{Guid,Task{T}},CancellationToken)"/> antes de leer nada
     /// y lo aplica <see cref="BuildAccessibleQuery"/>: es el único punto por donde pasan la bandeja, los contadores,
     /// el detalle y todas las acciones (aprobar, rechazar, revocar, placa…).
+    /// <para>Invariante: es estado mutable de un repositorio scoped (una instancia por petición), válido porque las
+    /// operaciones de la instancia son SECUENCIALES (nunca se invocan dos en paralelo con <c>Task.WhenAll</c>: tampoco
+    /// lo permitiría el <c>DbContext</c>) y cada una lo vuelve a fijar en <c>ExecuteOtScopedAsync</c> antes de leer.</para>
     /// </summary>
     private IReadOnlyList<Guid>? _clientRestriction;
 
@@ -964,7 +967,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         {
             return PlateAssignmentOutcome.Fail(
                 PlateAssignmentFailure.PlateInUseByAnotherProcedure,
-                $"La placa {plate.Trim().ToUpperInvariant()} ya está registrada en el trámite {enUso.ReferenceNumber} ({enUso.Status}). No se puede asignar a otro trámite mientras ese siga abierto.");
+                PlateInUseMessage(plate, enUso));
         }
 
         var assigned = await ExecuteInClientTenantScopeAsync(
@@ -1124,7 +1127,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         {
             return PlateAssignmentOutcome.Fail(
                 PlateAssignmentFailure.PlateInUseByAnotherProcedure,
-                $"La placa {plate.Trim().ToUpperInvariant()} ya está registrada en el trámite {enUso.ReferenceNumber} ({enUso.Status}). No se puede asignar a otro trámite mientras ese siga abierto.");
+                PlateInUseMessage(plate, enUso));
         }
 
         return await ExecuteInClientTenantScopeAsync(
@@ -2019,12 +2022,24 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     && p.Plate == normalized
                     && !TramiteEstado.EstadosQueLiberanPlaca.Contains(p.Status))
                 .OrderBy(p => p.CreatedAt)
-                .Select(p => new PlateHolder(p.Id, p.ReferenceNumber, p.Status))
+                .Select(p => new PlateHolder(p.Id, p.ReferenceNumber, p.Status, p.TenantId))
                 .FirstOrDefaultAsync(cancellationToken),
             cancellationToken);
     }
 
-    private sealed record PlateHolder(Guid Id, string ReferenceNumber, string Status);
+    private sealed record PlateHolder(Guid Id, string ReferenceNumber, string Status, Guid TenantId);
+
+    /// <summary>
+    /// Mensaje de «placa en uso». Si el trámite titular es de una compañía fuera del alcance del usuario, no se revela
+    /// su radicado ni su estado (sería filtrar un trámite que para él no existe).
+    /// </summary>
+    private string PlateInUseMessage(string plate, PlateHolder holder)
+    {
+        var normalized = plate.Trim().ToUpperInvariant();
+        return _clientRestriction is { } restriction && !restriction.Contains(holder.TenantId)
+            ? $"La placa {normalized} ya está registrada en otro trámite abierto. No se puede asignar a otro trámite mientras ese siga abierto."
+            : $"La placa {normalized} ya está registrada en el trámite {holder.ReferenceNumber} ({holder.Status}). No se puede asignar a otro trámite mientras ese siga abierto.";
+    }
 
     private async Task<T> ExecuteCrossTenantReadAsync<T>(
         Func<Task<T>> action,

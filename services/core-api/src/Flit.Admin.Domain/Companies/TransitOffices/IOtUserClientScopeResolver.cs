@@ -19,4 +19,13 @@ public interface IOtUserClientScopeResolver
     /// restricción.
     /// </summary>
     Task<IReadOnlyList<Guid>?> GetRestrictionAsync(Guid transitOfficeId, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Igual que <see cref="GetRestrictionAsync"/> pero para un usuario EXPLÍCITO, sin depender de la petición HTTP. Es
+    /// lo que deben usar los procesos en segundo plano que actúan en nombre de un usuario (p. ej. los lotes de
+    /// consolidados: <c>SolicitanteId</c>), donde el resolver por petición devolvería «sin restricción». Lee el estado
+    /// actual de la base (sin caché). <c>null</c> = sin restricción.
+    /// </summary>
+    Task<IReadOnlyList<Guid>?> GetRestrictionForUserAsync(
+        Guid userId, Guid transitOfficeId, CancellationToken cancellationToken = default);
 }

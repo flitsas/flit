@@ -12,6 +12,10 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// corresponde). El SuperAdmin no es usuario del OT: nunca se restringe. Sin petición HTTP o sin <c>sub</c>
 /// (jobs, integraciones por API key) tampoco hay usuario al que restringir. Cachea por organismo durante la
 /// petición (servicio scoped).
+/// <para>Invariante de seguridad: devuelve <c>null</c> (sin restricción) cuando no hay autenticación ni <c>sub</c>
+/// porque TODAS las rutas del OT exigen autenticación por política; los jobs y las integraciones por API key no son
+/// usuarios del OT. Un proceso en segundo plano que actúa en nombre de un usuario debe usar
+/// <see cref="GetRestrictionForUserAsync"/> con ese usuario, nunca <see cref="GetRestrictionAsync"/>.</para>
 /// </summary>
 internal sealed class HttpOtUserClientScopeResolver : IOtUserClientScopeResolver
 {
@@ -51,6 +55,10 @@ internal sealed class HttpOtUserClientScopeResolver : IOtUserClientScopeResolver
         _cache[transitOfficeId] = restriction;
         return restriction;
     }
+
+    public Task<IReadOnlyList<Guid>?> GetRestrictionForUserAsync(
+        Guid userId, Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+        OtUserClientScopeReader.ReadAsync(_db, userId, transitOfficeId, cancellationToken);
 }
 
 /// <summary>Lectura compartida del alcance de un usuario en un organismo.</summary>
