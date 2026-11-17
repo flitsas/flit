@@ -2,6 +2,7 @@
 // GET /diagnosticos/{id}/vehiculos/{vid}/dictamen. El backoffice lee y reemplaza en
 // /backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen?empresa=. Sin compañía elegida no sale la llamada.
 import { ApiError, apiFetch } from "@/lib/api";
+import type { CuerpoAjusteDictamen } from "@/lib/backoffice/ajusteDictamen";
 import { EmpresaNoElegida } from "@/lib/backoffice/api";
 import { esEmpresaValida, rotuloFuente } from "@/lib/configuracion";
 import { ALERTA_FUENTE_PENDIENTE, ALERTAS_DICTAMEN, EFECTOS_DICTAMEN, rotular } from "@/lib/rotulos";
@@ -41,6 +42,10 @@ export interface Dictamen {
   alertamientos: AlertaDictamen[];
   catalogo_version: number;
   creado_en: string;
+  /** B7 (ADR-0086, D6): la versión vigente la ajustó soporte FLIT. Sin autor ni motivo. Opcional hasta que B7 lo exponga. */
+  ajustado_por_flit?: boolean;
+  /** Fecha del ajuste; solo con ajustado_por_flit. */
+  ajustado_en?: string | null;
 }
 
 export interface DictamenBackoffice extends Dictamen {
@@ -73,14 +78,15 @@ export function obtenerDictamenBackoffice(diagnosticoId: string, vehiculoId: str
   return apiFetch<DictamenBackoffice>(rutaDictamenBackoffice(diagnosticoId, vehiculoId, empresa), { signal });
 }
 
-export function corregirDictamen(
+/**
+ * Ajuste FLIT del dictamen vigente (ADR-0086, D9): el estado completo deseado con `version_esperada`. El cuerpo legado
+ * `{veredicto, confirmado}` se retiró (B-PR6); el cuerpo lo arma `cuerpoAjusteDictamen` (lib/backoffice/ajusteDictamen).
+ */
+export function ajustarDictamen(
   diagnosticoId: string,
   vehiculoId: string,
   empresa: string,
-  veredicto: Dictamen["veredicto"],
+  cuerpo: CuerpoAjusteDictamen,
 ): Promise<DictamenBackoffice> {
-  return apiFetch<DictamenBackoffice>(rutaDictamenBackoffice(diagnosticoId, vehiculoId, empresa), {
-    method: "PUT",
-    body: { veredicto, confirmado: true },
-  });
+  return apiFetch<DictamenBackoffice>(rutaDictamenBackoffice(diagnosticoId, vehiculoId, empresa), { method: "PUT", body: cuerpo });
 }

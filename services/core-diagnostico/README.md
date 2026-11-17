@@ -108,4 +108,12 @@ Esa variable es solo para estas pruebas: no la exportes al correr las de core-ap
 - [ADR-0072](../../docs/decisions/ADR-0072-diagnostico-aislamiento-por-tenant.md): aislamiento por compañía (filtro global y prueba de fuga por GET).
 - [ADR-0073](../../docs/decisions/ADR-0073-diagnostico-acceso-backoffice.md): acceso del backoffice FLIT.
 - [ADR-0074](../../docs/decisions/ADR-0074-diagnostico-puerta-minima-de-plataforma.md): puerta mínima de plataforma.
+- [ADR-0086](../../docs/decisions/ADR-0086-diagnostico-ajuste-flit-dictamen-y-notificaciones.md) (Propuesto, HU #14563):
+  - **B7, ajuste FLIT del dictamen con versiones.** `PUT /backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen` crea una
+    versión nueva del dictamen (motivo obligatorio de 10 a 500 caracteres); la compañía solo ve `ajustado_por_flit` y
+    `ajustado_en`. La cadena completa sale en `GET …/dictamen/versiones` (backoffice, `diagnostico.auditoria.ver`).
+    Migraciones `R7_AjusteDictamen` y `R1_VersionFilaTablero` (versión de fila para que el tablero vea el cambio).
+  - **B8, bandeja de notificaciones.** `GET /notificaciones` con ETag débil y 304, `POST /notificaciones/{nid}/leida` y
+    `POST /notificaciones/leer-todas`. `TrabajadorPurgaNotificaciones` borra las de más de 90 días
+    (`Diagnostico__Notificaciones__RetencionDias`). Migración `R8_Notificaciones`.
 - [Handoff del VPS](../../docs/suite/handoff-vps-diagnostico.md): despliegue en los ambientes.

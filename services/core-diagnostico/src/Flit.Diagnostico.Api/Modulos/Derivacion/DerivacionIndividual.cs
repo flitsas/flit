@@ -90,8 +90,16 @@ internal sealed partial class DerivacionIndividual(
                 break;
         }
 
-        CierreItemDerivacion.Cerrar(operacion, item, vehiculo, resultado, reloj.GetUtcNow());
-        await GuardarCierreAsync(vehiculo).ConfigureAwait(false);
+        // HU #14563 (ADR-0086 D-1): cierre y versión de fila en una transacción; la cabecera se bloquea primero.
+        await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+        {
+            await using var transaccion = await db.Database.BeginTransactionAsync(CancellationToken.None).ConfigureAwait(false);
+            var version = item.Estado is EstadoItemDerivacion.Enviado
+                ? await CierreItemDerivacion.CerrarAsync(db, operacion, item, vehiculo, resultado, reloj.GetUtcNow(), CancellationToken.None).ConfigureAwait(false)
+                : await Consultas.EscritorCeldas.SubirVersionFilaAsync(db, id, vehiculo.Id, CancellationToken.None).ConfigureAwait(false);
+            await GuardarCierreAsync(vehiculo, version).ConfigureAwait(false);
+            await transaccion.CommitAsync(CancellationToken.None).ConfigureAwait(false);
+        }).ConfigureAwait(false);
         LogCierre(logger, item.Id, vid, item.Estado, item.MotivoCodigo);
 
         var tramiteFinal = vehiculo.TramiteId ?? (resultado as ResultadoBorrador.Creado)?.TramiteId ?? Guid.Empty;
@@ -100,9 +108,10 @@ internal sealed partial class DerivacionIndividual(
 
     /// <summary>
     /// Guarda el cierre. Si el procesador tocó el vehículo mientras se llamaba a Trámites (xmin cambió), se relee y se vuelve a
-    /// fijar el trámite una vez: el ítem no puede quedar ENVIADO (bloquearía el vehículo con EN_CURSO).
+    /// fijar el trámite una vez: el ítem no puede quedar ENVIADO (bloquearía el vehículo con EN_CURSO). La recarga trae la versión
+    /// de fila de la base: se vuelve a marcar con la de este cierre (HU #14563).
     /// </summary>
-    private async Task GuardarCierreAsync(VehiculoDiagnostico vehiculo)
+    private async Task GuardarCierreAsync(VehiculoDiagnostico vehiculo, long versionFila)
     {
         try
         {
@@ -120,6 +129,7 @@ internal sealed partial class DerivacionIndividual(
                 vehiculo.TramiteCreadoEn = creadoEn;
             }
 
+            Consultas.EscritorCeldas.MarcarFila(vehiculo, versionFila);
             await db.SaveChangesAsync(CancellationToken.None).ConfigureAwait(false);
         }
     }

@@ -27,8 +27,8 @@ namespace Flit.Diagnostico.Tests.Plataforma;
 /// <item><b>Configuración</b> (resumen, contrato, diagnósticos —listado, grilla, historial, detalle del dictamen—, intentos,
 /// fuentes obligatorias y la lista de empresas): un SuperAdmin de cualquier compañía, o un usuario de la compañía FLIT con
 /// <c>diagnostico.backoffice.ver</c>.</item>
-/// <item><b>Operación FLIT</b> (override del dictamen y llenado manual): solo la compañía FLIT (permiso o SuperAdmin), como
-/// antes.</item>
+/// <item><b>Operación FLIT</b> (override del dictamen, versiones del dictamen y llenado manual): el SuperAdmin de cualquier
+/// compañía, con o sin <c>tenant_type</c> (decisión D23, 2026-11-13); los demás, solo de la compañía FLIT con el permiso.</item>
 /// </list>
 /// Un usuario no FLIT sin SuperAdmin, aunque tenga el permiso, recibe 403; un token de servicio nunca pasa. La matriz corre sin
 /// base: «pasa» es llegar al filtro o al cuerpo del endpoint (400 <c>EMPRESA_REQUERIDA</c>, 503 sin Identidad, 400
@@ -43,7 +43,7 @@ public sealed class PoliticasBackofficeMatrizTests
 {
     private const string Base = Program.Prefijo + BackofficeEndpoints.Grupo;
 
-    /// <summary>Permisos del rol <c>backoffice_diagnostico</c> que tocan las secciones de la matriz.</summary>
+    /// <summary>Permisos de backoffice que tocan las secciones de la matriz (los del operador FLIT que no es SuperAdmin).</summary>
     private static readonly string[] PermisosBackoffice =
     [
         Permisos.BackofficeVer, Permisos.ConfiguracionContratoEditar, Permisos.AuditoriaVer, Permisos.ConsultasLlenar,
@@ -84,6 +84,9 @@ public sealed class PoliticasBackofficeMatrizTests
         new("grilla", HttpMethod.Get, $"{Base}/diagnosticos/{Lote}/grilla", null, false, Senal.EmpresaRequerida),
         new("historial", HttpMethod.Get, $"{Base}/diagnosticos/{Lote}/historial", null, false, Senal.EmpresaRequerida),
         new("detalle (dictamen GET)", HttpMethod.Get, $"{Base}/diagnosticos/{Lote}/vehiculos/{Vehiculo}/dictamen", null, false, Senal.EmpresaRequerida),
+        // HU #14563 hallazgo M3: las versiones traen ajuste_motivo (@pii:low) y el autor; solo las lee la operación FLIT (D23: el
+        // SuperAdmin de cualquier compañía también).
+        new("versiones del dictamen (B7)", HttpMethod.Get, $"{Base}/diagnosticos/{Lote}/vehiculos/{Vehiculo}/dictamen/versiones", null, true, Senal.EmpresaRequerida),
         new("intentos", HttpMethod.Get, $"{Base}/consultas/{Consulta}/intentos", null, false, Senal.EmpresaRequerida),
         new("empresas", HttpMethod.Get, $"{Base}/empresas", null, false, Senal.IdentidadNoConfigurada),
         new("fuentes obligatorias GET", HttpMethod.Get, $"{Base}/fuentes-obligatorias", null, false, Senal.NoDenegada),
@@ -95,11 +98,12 @@ public sealed class PoliticasBackofficeMatrizTests
 
     private static readonly Dictionary<string, Actor> Actores = new Actor[]
     {
-        new("superadmin_no_flit", Configuracion: true, Operacion: false, a => a.Token(permisos: [], roles: ["SuperAdmin"], tipoEmpresa: "CLIENTE")),
+        new("superadmin_no_flit", Configuracion: true, Operacion: true, a => a.Token(permisos: [], roles: ["SuperAdmin"], tipoEmpresa: "CLIENTE")),
+        new("superadmin_sin_tenant_type", Configuracion: true, Operacion: true, a => a.Token(permisos: [], roles: ["SuperAdmin"], tipoEmpresa: null)),
         new("no_flit_con_permiso", Configuracion: false, Operacion: false,
-            a => a.Token(permisos: PermisosBackoffice, roles: ["backoffice_diagnostico"], tipoEmpresa: "RENTING")),
+            a => a.Token(permisos: PermisosBackoffice, roles: ["admin_diagnostico"], tipoEmpresa: "RENTING")),
         new("flit_con_permiso", Configuracion: true, Operacion: true,
-            a => a.Token(permisos: PermisosBackoffice, roles: ["backoffice_diagnostico"], tipoEmpresa: "FLIT")),
+            a => a.Token(permisos: PermisosBackoffice, roles: ["admin_diagnostico"], tipoEmpresa: "FLIT")),
         new("superadmin_flit", Configuracion: true, Operacion: true, a => a.Token(permisos: [], roles: ["SuperAdmin"], tipoEmpresa: "FLIT")),
         new("token_de_servicio", Configuracion: false, Operacion: false,
             a => a.Token(permisos: PermisosBackoffice, roles: ["SuperAdmin"], tipoEmpresa: "FLIT", sujeto: "svc-diagnostico")),
@@ -108,6 +112,7 @@ public sealed class PoliticasBackofficeMatrizTests
     // AC 1, 3, 4, 5 y 6 (punto 1) y AC4 (punto 6) — cada actor contra cada sección del backoffice.
     [Theory]
     [InlineData("superadmin_no_flit")]
+    [InlineData("superadmin_sin_tenant_type")]
     [InlineData("no_flit_con_permiso")]
     [InlineData("flit_con_permiso")]
     [InlineData("superadmin_flit")]
@@ -139,6 +144,7 @@ public sealed class PoliticasBackofficeMatrizTests
     // AC 1, 3 y 5 — GET /sesion: capacidades.backoffice = política de configuración; capacidades.backofficeOperacion = operación FLIT.
     [Theory]
     [InlineData("superadmin_no_flit")]
+    [InlineData("superadmin_sin_tenant_type")]
     [InlineData("no_flit_con_permiso")]
     [InlineData("flit_con_permiso")]
     [InlineData("superadmin_flit")]
@@ -154,13 +160,14 @@ public sealed class PoliticasBackofficeMatrizTests
         var capacidades = (await respuesta.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("capacidades");
         Booleano(capacidades, "backoffice").Should().Be(actor.Configuracion, "backoffice = política de configuración");
         Booleano(capacidades, "backofficeOperacion").Should().Be(actor.Operacion, "backofficeOperacion = política de operación FLIT");
-        if (nombre == "superadmin_no_flit")
+        if (nombre is "superadmin_no_flit" or "superadmin_sin_tenant_type")
         {
-            // Lo que la configuración le abre (contrato, historial e intentos) y lo que sigue siendo de FLIT.
+            // D23: el SuperAdmin tiene todas las capacidades, también las de la operación FLIT.
             Booleano(capacidades, "editarContrato").Should().BeTrue("el contrato es de la política de configuración");
             Booleano(capacidades, "verAuditoria").Should().BeTrue("historial e intentos son de la política de configuración");
-            Booleano(capacidades, "corregirDictamen").Should().BeFalse("el override sigue siendo de FLIT");
-            Booleano(capacidades, "llenarConsultas").Should().BeFalse("el llenado manual sigue siendo de FLIT");
+            Booleano(capacidades, "corregirDictamen").Should().BeTrue("el SuperAdmin pasa la operación FLIT (D23)");
+            Booleano(capacidades, "llenarConsultas").Should().BeTrue("el SuperAdmin pasa la operación FLIT (D23)");
+            Booleano(capacidades, "verVolumetria").Should().BeTrue("el SuperAdmin ve la volumetría (D23)");
         }
     }
 

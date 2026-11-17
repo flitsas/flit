@@ -6,6 +6,18 @@ import type { CapacidadesDiagnostico } from "@/lib/sesion";
 import type { Grilla } from "@/lib/tablero/api";
 import { ID, V1, V2, V3, desdesPedidos, grilla, llamadas, sesion, simularApi } from "@/lib/tablero/__tests__/datos";
 
+/**
+ * Aviso del reintento manual. HU #14562 · m-15 (auditoría): el `status` no lleva aria-label, que reemplazaba al texto
+ * anunciado; se ubica por su contenido («N consulta(s) reenviada(s)»).
+ */
+const avisosReintento = () => screen.queryAllByRole("status").filter((el) => /reenviadas?/.test(el.textContent ?? ""));
+const avisoReintento = () => {
+  const [aviso] = avisosReintento();
+  expect(aviso, "aviso del reintento").toBeDefined();
+  expect(aviso).not.toHaveAttribute("aria-label");
+  return aviso;
+};
+
 // Uso de ejemplo: el tablero /diagnosticos/{id} muestra «Reintentar placa» en cada placa con `pegada` y, encima de la
 // grilla, «Reintentar pegadas (N)» cuando `total_pegadas` > 0 (Punto 3 de la ola 2026-11-11, AC 3, 4, 5 y 9). Ambas acciones
 // exigen la capacidad `reprocesarConsultas`; al usarlas, POST al endpoint, aviso «N consultas reenviadas» y la grilla se
@@ -94,7 +106,7 @@ describe("Punto 3 AC3 — «Reintentar placa» solo en las placas pegadas", () =
     await avanzar();
     await avanzar();
 
-    const aviso = screen.getByRole("status", { name: /resultado del reintento/i });
+    const aviso = avisoReintento();
     expect(aviso).toHaveTextContent("2 consultas reenviadas");
     expect(desdesPedidos(api)).toEqual([0, 12]);
     expect(screen.queryByRole("button", { name: "Reintentar consultas de la placa TST002" })).not.toBeInTheDocument();
@@ -108,7 +120,7 @@ describe("Punto 3 AC3 — «Reintentar placa» solo en las placas pegadas", () =
     });
     fireEvent.click(screen.getByRole("button", { name: "Reintentar consultas de la placa TST002" }));
     await avanzar();
-    expect(screen.getByRole("status", { name: /resultado del reintento/i })).toHaveTextContent("1 consulta reenviada");
+    expect(avisoReintento()).toHaveTextContent("1 consulta reenviada");
   });
 
   it("error: se muestra en el aviso de error y el botón vuelve a quedar disponible", async () => {
@@ -119,7 +131,7 @@ describe("Punto 3 AC3 — «Reintentar placa» solo en las placas pegadas", () =
     fireEvent.click(screen.getByRole("button", { name: "Reintentar consultas de la placa TST002" }));
     await avanzar();
     expect(screen.getByRole("alert")).toHaveTextContent(/no se completó la acción/i);
-    expect(screen.queryByRole("status", { name: /resultado del reintento/i })).not.toBeInTheDocument();
+    expect(avisosReintento()).toHaveLength(0);
     expect(screen.getByRole("button", { name: "Reintentar consultas de la placa TST002" })).toBeEnabled();
   });
 
@@ -158,7 +170,7 @@ describe("Punto 3 AC4/AC5 — «Reintentar pegadas (N)» del lote", () => {
     await avanzar();
     await avanzar();
     expect(llamadas(api, "POST", POR_LOTE)).toHaveLength(1);
-    expect(screen.getByRole("status", { name: /resultado del reintento/i })).toHaveTextContent("5 consultas reenviadas");
+    expect(avisoReintento()).toHaveTextContent("5 consultas reenviadas");
     expect(desdesPedidos(api)).toEqual([0, 12]);
     expect(screen.queryByRole("button", { name: /reintentar las .* placas pegadas/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /reintentar consultas de la placa/i })).not.toBeInTheDocument();

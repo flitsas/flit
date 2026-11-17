@@ -88,7 +88,7 @@ public sealed class ConfiguracionTests : IAsyncLifetime
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         r.Headers.CacheControl!.MaxAge.Should().Be(TimeSpan.FromSeconds(60));
         var crudo = await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        var json = System.Text.Json.JsonDocument.Parse(crudo).RootElement;
+        var json = System.Text.Json.JsonElement.Parse(crudo);
         json.GetProperty("version").GetString().Should().Be("3");
         json.GetProperty("preguntas").EnumerateArray().Select(p => p.GetProperty("pregunta").GetString()).Should().Equal("¿Cuánto tarda?", "¿Es seguro?");
         var banner = json.GetProperty("banners")[0];

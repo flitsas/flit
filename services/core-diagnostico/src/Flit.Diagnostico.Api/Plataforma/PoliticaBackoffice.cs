@@ -11,8 +11,10 @@ namespace Flit.Diagnostico.Api.Plataforma;
 /// dictamen), intentos, fuentes obligatorias y la lista de empresas. Pasa un SuperAdmin de <b>cualquier</b> compañía, o un
 /// usuario de la compañía FLIT (<c>tenant_type=FLIT</c>) con <see cref="Permisos.BackofficeVer"/>. Un usuario de otra
 /// compañía con el permiso pero sin SuperAdmin recibe 403.</item>
-/// <item><see cref="NombreOperacion"/> (operación FLIT): override del dictamen y llenado manual. Sin cambio de regla: solo la
-/// compañía FLIT, con el permiso o SuperAdmin. Un SuperAdmin de otra compañía recibe 403.</item>
+/// <item><see cref="NombreOperacion"/> (operación FLIT): override del dictamen, versiones del dictamen y llenado manual. El
+/// SuperAdmin pasa siempre, sin mirar <c>tenant_type</c> (decisión D23 de la HU #14563, 2026-11-13: el rol
+/// <c>backoffice_diagnostico</c> se retiró y sus capacidades son del SuperAdmin); los demás, solo de la compañía FLIT
+/// (<c>tenant_type=FLIT</c>) con <see cref="Permisos.BackofficeVer"/>. Un usuario de otra compañía con el permiso recibe 403.</item>
 /// </list>
 /// Un token de servicio nunca pasa ninguna: los servicios entran por gRPC. Cada endpoint puede exigir además su permiso.
 /// </summary>
@@ -32,15 +34,15 @@ public static class PoliticaBackoffice
         return PlatformPrincipal.IsSuperAdmin(user) || (EsFlit(user) && TienePermisoVer(user));
     }
 
-    /// <summary>Operación FLIT: no es un servicio, es de la compañía FLIT y tiene el permiso (o es SuperAdmin).</summary>
+    /// <summary>Operación FLIT: no es un servicio y es SuperAdmin (de cualquier compañía, D23) o es de FLIT con el permiso.</summary>
     public static bool CumpleOperacion(ClaimsPrincipal user)
     {
         if (!EsUsuario(user))
             return false;
-        return EsFlit(user) && (PlatformPrincipal.IsSuperAdmin(user) || TienePermisoVer(user));
+        return PlatformPrincipal.IsSuperAdmin(user) || (EsFlit(user) && TienePermisoVer(user));
     }
 
-    /// <summary>La exigen el override del dictamen y el llenado manual, además de su permiso.</summary>
+    /// <summary>La exigen el override del dictamen, las versiones del dictamen y el llenado manual, además de su permiso.</summary>
     public static TBuilder RequiereOperacionFlit<TBuilder>(this TBuilder builder)
         where TBuilder : IEndpointConventionBuilder =>
         builder.RequireAuthorization(NombreOperacion);
