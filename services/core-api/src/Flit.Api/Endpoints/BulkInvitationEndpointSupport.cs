@@ -222,6 +222,8 @@ internal static class BulkInvitationEndpointSupport
         InvitationScopeReasons.CannotInviteToOwnTenant =>
             "El SuperAdmin no puede invitar usuarios a su propio tenant desde la carga masiva (el perfil FLIT no está disponible).",
         InvitationScopeReasons.TargetNotTransitOffice => "El destino no es un organismo de tránsito.",
+        InvitationScopeReasons.ClientScopeExceedsActor =>
+            "Tu alcance de compañías está vacío: no puedes invitar usuarios porque heredarían tu mismo alcance.",
         _ => "No tienes permiso para invitar usuarios de forma masiva en este destino.",
     };
 }

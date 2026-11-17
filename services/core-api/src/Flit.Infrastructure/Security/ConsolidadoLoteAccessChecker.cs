@@ -1,6 +1,7 @@
 using Flit.Infrastructure.Persistence;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Infrastructure.Persistence.Entities.Security;
+using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
@@ -104,6 +105,17 @@ public sealed class ConsolidadoLoteAccessChecker(FlitDbContext db, IMemoryCache 
                 if (contexto.CompaniaLoteId is not { } tenantOt)
                     return false;
                 var esSuperAdmin = string.Equals(contexto.RolSolicitante, AdminRoleCodes.SuperAdmin, StringComparison.Ordinal);
+
+                // Alcance de compañías del solicitante (lee la base por su id; el job no tiene HttpContext). Se evalúa
+                // por ítem y sin caché: si le quitaron el cliente tras crear el lote, el ítem queda omitido.
+                if (!esSuperAdmin && contexto.OrganismoId is { } organismoLote)
+                {
+                    var restriccion = await OtUserClientScopeReader
+                        .ReadAsync(db, contexto.SolicitanteId, organismoLote, ct).ConfigureAwait(false);
+                    if (restriccion is not null && !restriccion.Contains(contexto.CompaniaTramiteId))
+                        return false;
+                }
+
                 return await CacheadoAsync(
                     $"consolidado-lote-acceso:{contexto.BatchId:N}:ot_bandeja",
                     c => esSuperAdmin
