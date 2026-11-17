@@ -778,13 +778,13 @@ function OtInviteUserDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      className="fixed inset-0 z-50 flex items-start justify-center p-4"
       style={{ background: "rgba(22,39,68,0.45)" }}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ot-invite-user-title"
     >
-      <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl bg-card">
+      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl p-6 shadow-2xl bg-card">
         <h2 id="ot-invite-user-title" className="text-base font-bold mb-1 text-foreground">
           Invitar usuario
         </h2>
@@ -792,7 +792,11 @@ function OtInviteUserDialog({
           Perfil <strong>Organismo de Tránsito</strong>. Elige los roles con los que entra el
           usuario.
         </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form
+          id="ot-invite-form"
+          onSubmit={handleSubmit}
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-1"
+        >
           <OtField label="Nombre completo" htmlFor="ot-invite-name">
             <input
               id="ot-invite-name"
@@ -845,38 +849,44 @@ function OtInviteUserDialog({
             <p className="text-xs opacity-60">No hay roles disponibles para invitar.</p>
           )}
           {canSetClientScope && (
-            <ClientScopeFields
-              transitOfficeId={transitOfficeId}
-              value={clientScope}
-              onChange={setClientScope}
-              idPrefix="ot-invite-scope"
-              preferSpecificWhenRestricted
-            />
+            <div
+              className="rounded-xl border px-3 py-2.5"
+              style={{ borderColor: "var(--border)", background: "var(--secondary)" }}
+            >
+              <ClientScopeFields
+                transitOfficeId={transitOfficeId}
+                value={clientScope}
+                onChange={setClientScope}
+                idPrefix="ot-invite-scope"
+                preferSpecificWhenRestricted
+              />
+            </div>
           )}
           {!canSetClientScope && inheritsRestrictedScope && (
             <p className="text-[10px] opacity-70" data-testid="invite-inherits-scope-note">
               El usuario invitado tendrá los mismos clientes que tú gestionas.
             </p>
           )}
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50 disabled:opacity-60 text-foreground"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={busy || missingRole || invalidScope}
-              className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
-            >
-              {busy ? "Enviando…" : "Enviar invitación"}
-            </button>
-          </div>
         </form>
+        <div className="mt-4 flex shrink-0 gap-3 border-t border-[color:var(--di-divider)] pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50 disabled:opacity-60 text-foreground"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="ot-invite-form"
+            disabled={busy || missingRole || invalidScope}
+            className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          >
+            {busy ? "Enviando…" : "Enviar invitación"}
+          </button>
+        </div>
       </div>
     </div>
   );

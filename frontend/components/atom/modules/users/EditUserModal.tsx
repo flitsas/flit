@@ -253,8 +253,31 @@ export function EditUserModal({
       icon={UserCog}
       title="Editar usuario"
       description={user.email}
+      panelClassName={clientScopeSection ? "self-start" : ""}
+      footer={
+        <div className="flex justify-end gap-2">
+          <button
+            type="button"
+            onClick={handleClose}
+            disabled={busy || roleBusy}
+            className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="eu-edit-form"
+            disabled={busy || roleBusy || (!!clientScopeSection && !clientScopeSection.canSave)}
+            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
+            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          >
+            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+            {busy ? "Guardando…" : "Guardar cambios"}
+          </button>
+        </div>
+      }
     >
-      <form onSubmit={handleSubmit} className="space-y-3.5">
+      <form id="eu-edit-form" onSubmit={handleSubmit} className="space-y-3.5 pb-1">
         {profile && (
           // Solo informativo: el perfil lo determina el tenant al que pertenece el usuario, no
           // se cambia desde aquí. Está para que quien edita sepa en qué relación está parado.
@@ -377,7 +400,14 @@ export function EditUserModal({
         )}
 
         {clientScopeSection && (
-          <div data-testid="edit-user-client-scope">{clientScopeSection.content}</div>
+          <div
+            data-testid="edit-user-client-scope"
+            className="rounded-xl border px-3 py-2.5"
+            style={{ borderColor: "var(--border)", background: "var(--secondary)" }}
+          >
+            {clientScopeSection.content}
+            <p className="mt-2 text-[10px] opacity-60">Se aplica al guardar.</p>
+          </div>
         )}
 
         {formError && (
@@ -389,26 +419,6 @@ export function EditUserModal({
             {formError}
           </p>
         )}
-
-        <div className="flex justify-end gap-2 pt-1">
-          <button
-            type="button"
-            onClick={handleClose}
-            disabled={busy || roleBusy}
-            className="rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            disabled={busy || roleBusy || (!!clientScopeSection && !clientScopeSection.canSave)}
-            className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
-          >
-            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
-            {busy ? "Guardando…" : "Guardar cambios"}
-          </button>
-        </div>
       </form>
     </Modal>
   );
