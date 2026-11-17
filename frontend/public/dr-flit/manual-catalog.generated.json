@@ -3259,7 +3259,7 @@
           "paragraphs": [
             "El Resumen reúne, en este orden: Trámite, Vehículo, Titular y actores, Validación de identidad, Información del trámite, Documentos cargados y Valores. Cada sección trae el botón «Editar» para volver a corregirla.",
             "En el portal web, la pantalla de confirmación al enviar no muestra datos personales y sí el estado real de la identidad: aprobada o pendiente.",
-            "En el punto del organismo, el Resumen termina con «Continuar al pago»: ahí no se envía el trámite. Cuando la persona ya está en Pago, el Resumen queda de solo lectura."
+            "En el punto del organismo no hay paso de Resumen: los pasos son Diagnóstico, Actores, Requisitos, Pago y Envío, y «Continuar» en Requisitos lleva directo a Pago. Allí no se envía el trámite desde el Resumen: el valor se ve en Pago."
           ],
           "bullets": [],
           "callouts": []
@@ -3269,7 +3269,7 @@
           "title": "6. Pago en el punto del organismo",
           "paragraphs": [
             "En el punto, el trámite se paga en la caja del organismo. Antes de pagar, todas las personas del trámite deben haber validado su identidad: si falta alguna, la pantalla muestra quién falta y no deja pagar; cuando la última valida, el pago se habilita solo.",
-            "La pantalla muestra lo que se paga: la tarifa del organismo, el valor de FLIT y el total. No hay envío a domicilio: el documento se recoge en el organismo."
+            "La pantalla abre con la tarjeta «Resumen del cobro»: placa, tipo de trámite, la tarifa del organismo, el valor de FLIT y el total a pagar. Debajo está la tarjeta «Pago en caja». No hay envío a domicilio: el documento se recoge en el organismo. El botón «Atrás» regresa a Requisitos."
           ],
           "bullets": [
             "Pulsa «Generar pago en caja». Aparece el ID del trámite (por ejemplo PN-2026-000123), con un botón para copiarlo, el total y «Vale hasta hoy a las 11:59 p. m.».",
@@ -3283,10 +3283,10 @@
         },
         {
           "id": "cierre-punto",
-          "title": "7. Cierre en el punto",
+          "title": "7. Envío (cierre) en el punto",
           "paragraphs": [
-            "Con el pago confirmado, la persona ve «Tu trámite quedó. Recoge en este organismo.», el nombre del organismo, el ID del trámite con su botón de copiar, el valor pagado y el medio. Si ya llegó a FLIT 2, también ve su radicado de FLIT 2.",
-            "Durante los primeros 15 minutos después del cobro en caja, el organismo todavía puede anular un cobro hecho por error; en ese tiempo el cierre dice «Tu trámite está en proceso de registro. Consúltalo después con este código.». Luego el trámite pasa a FLIT 2.",
+            "Con el pago confirmado, la persona ve un círculo verde con el mensaje «¡Tu trámite quedó! Recoge en este organismo.» y una tabla con el ID del trámite, el tipo, el número de radicado (o «En registro» si aún no llega) y el organismo, con el botón «Copiar ID». Más abajo están las tarjetas «Valor pagado» (con el medio) y «Vehículo». Si ya llegó a FLIT 2, la tabla muestra su radicado de FLIT 2.",
+            "Durante los primeros 15 minutos después del cobro en caja, el organismo todavía puede anular un cobro hecho por error; en ese tiempo el cierre dice «Tu trámite está en proceso de registro» (con un reloj en vez del visto bueno) y se consulta después con el ID del trámite. Luego el trámite pasa a FLIT 2.",
             "Si la persona dio un correo propio, le llega un aviso con su ID y el lugar donde recoge. «Consultar trámite» abre la consulta con el ID ya escrito."
           ],
           "bullets": [],

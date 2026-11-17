@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { CierrePunto } from "@/components/punto/CierrePunto";
 import { crearCliente } from "@/lib/api/cliente";
@@ -27,7 +27,7 @@ function montar(rutas: Record<string, Manejador>, extras: { onPagoAnulado?: () =
     return (rutas[clave] ?? (() => json({ code: "no_simulado" }, 404)))();
   }) as unknown as typeof fetch;
   const onTerminar = vi.fn();
-  renderConQuery(<CierrePunto cliente={crearCliente({ fetchImpl })} solicitudId="s-1" tipoCodigo="TIPO_A" onTerminar={onTerminar} {...extras} />);
+  renderConQuery(<CierrePunto cliente={crearCliente({ fetchImpl })} solicitudId="s-1" tipoCodigo="TIPO_A" placa="ABC123" tipoNombre="Traspaso" onTerminar={onTerminar} {...extras} />);
   return { llamadas, onTerminar };
 }
 
@@ -35,13 +35,17 @@ describe("Cierre del punto", () => {
   it("registrado: organismo, ID destacado, radicado FLIT 2.0, valor y medio", async () => {
     const { onTerminar } = montar({ [CIERRE]: () => json(registrado()) });
 
-    expect(await screen.findByText("Tu trámite quedó. Recoge en este organismo.")).toBeInTheDocument();
-    expect(screen.getByText("Tránsito de Prueba")).toBeInTheDocument();
+    expect(await screen.findByText("¡Tu trámite quedó! Recoge en este organismo.")).toBeInTheDocument();
+    expect(within(screen.getByRole("table")).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["ID del trámite", "Tipo", "Nº radicado", "Organismo"]);
+    expect(within(screen.getByRole("table")).getByText("Tránsito de Prueba")).toBeInTheDocument();
+    expect(screen.getByText("Para consultar el estado de tu trámite usa tu ID de trámite en Consultar mi trámite.")).toBeInTheDocument();
     expect(screen.getByTestId("codigo-cierre")).toHaveTextContent("PN-2026-000123");
     expect(screen.getByTestId("radicado-flit2")).toHaveTextContent("TR-2026-000123");
     expect(screen.getByText("Efectivo")).toBeInTheDocument();
     expect(screen.getByText(/366\.000/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Copiar ID/ })).toHaveClass("bg-success");
+    expect(screen.getByRole("heading", { name: "Valor pagado" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Vehículo" })).toHaveTextContent("ABC123 · Traspaso");
 
     fireEvent.click(screen.getByRole("button", { name: "Volver al inicio" }));
     expect(onTerminar).toHaveBeenCalledTimes(1);
@@ -58,11 +62,11 @@ describe("Cierre del punto", () => {
     expect(await screen.findByRole("button", { name: /Copiado/ })).toBeInTheDocument();
   });
 
-  it("sin radicado FLIT 2.0 y sin cobro: no muestra radicado y dice «Sin cobro»", async () => {
+  it("sin radicado FLIT 2.0 y sin cobro: la columna dice «En registro» y el medio dice «Sin cobro»", async () => {
     montar({ [CIERRE]: () => json(registrado({ radicadoFlit2: undefined, medio: "sin_cobro", medioCaja: undefined, valorCop: 0 })) });
 
     await screen.findByTestId("codigo-cierre");
-    expect(screen.queryByTestId("radicado-flit2")).toBeNull();
+    expect(screen.getByTestId("radicado-flit2")).toHaveTextContent("En registro");
     expect(screen.getByText("Sin cobro")).toBeInTheDocument();
   });
 
@@ -77,7 +81,7 @@ describe("Cierre del punto", () => {
 
     expect(await screen.findByText(/Tu trámite está en proceso de registro/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Copiar ID/ })).not.toHaveClass("bg-success");
-    expect(await screen.findByText("Tu trámite quedó. Recoge en este organismo.", {}, { timeout: 8000 })).toBeInTheDocument();
+    expect(await screen.findByText("¡Tu trámite quedó! Recoge en este organismo.", {}, { timeout: 8000 })).toBeInTheDocument();
   }, 15000);
 
   it("rechazado: motivo en rojo con el código para acercarse al organismo", async () => {

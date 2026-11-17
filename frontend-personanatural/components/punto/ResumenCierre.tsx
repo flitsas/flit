@@ -2,9 +2,11 @@
 
 // HU #14465 — Contenido del cierre del canal OT: ID del trámite (código público) con copiar, dónde recogerlo, valor y medio.
 // Lo usan la pantalla de cierre (CierrePunto) y «Consultar mi trámite» del punto cuando el trámite tiene pago.
-import { Check, Copy } from "lucide-react";
+// Diseño: paso 5 del repo de UI (círculo de icono + título grande + tabla con encabezado primary + tarjetas en dos columnas).
+import { Check, Clock, Copy, X } from "lucide-react";
 import { useState } from "react";
 import { boton } from "@/components/landing/estilos";
+import { Card } from "@/components/tramite/piezas";
 import type { CierrePuntoRespuesta } from "@/lib/api/cliente";
 import { formatearPesos } from "@/lib/formato";
 
@@ -19,15 +21,29 @@ export function etiquetaMedio(cierre: Pick<CierrePuntoRespuesta, "medio" | "medi
 }
 
 const TONOS = {
-  registrado: { caja: "bg-success/10 text-success", titulo: "Tu trámite quedó. Recoge en este organismo." },
-  en_registro: { caja: "bg-primary/10 text-primary", titulo: "Tu trámite está en proceso de registro. Consúltalo después con este código." },
-  rechazado: { caja: "bg-alert/10 text-alert", titulo: "No pudimos registrar tu trámite." },
+  registrado: { circulo: "bg-success", texto: "text-success", Icono: Check, titulo: "¡Tu trámite quedó! Recoge en este organismo." },
+  en_registro: { circulo: "bg-primary", texto: "text-primary", Icono: Clock, titulo: "Tu trámite está en proceso de registro" },
+  rechazado: { circulo: "bg-destructive", texto: "text-destructive", Icono: X, titulo: "No pudimos registrar tu trámite." },
 } as const;
 
-export function ResumenCierre({ cierre, titulo = "h3" }: { cierre: CierrePuntoRespuesta; titulo?: "h2" | "h3" }) {
+const CELDA = "border-t border-border p-4 text-center align-middle";
+
+export function ResumenCierre({
+  cierre,
+  titulo = "h3",
+  placa,
+  tipoNombre,
+}: {
+  cierre: CierrePuntoRespuesta;
+  titulo?: "h2" | "h3";
+  /** Si se conocen (el cierre del asistente), completan la columna «Tipo» y la tarjeta «Vehículo». */
+  placa?: string | undefined;
+  tipoNombre?: string | undefined;
+}) {
   const [copiado, setCopiado] = useState(false);
   const tono = TONOS[cierre.estadoCierre] ?? TONOS.en_registro;
   const Titulo = titulo;
+  const Icono = tono.Icono;
   const copiar = async () => {
     try {
       await navigator.clipboard.writeText(cierre.codigoPublico);
@@ -36,53 +52,78 @@ export function ResumenCierre({ cierre, titulo = "h3" }: { cierre: CierrePuntoRe
       setCopiado(false);
     }
   };
+  const radicado = cierre.radicadoFlit2 ?? (cierre.estadoCierre === "rechazado" ? "—" : "En registro");
 
   return (
-    <section aria-label="Cierre del trámite" className="space-y-4">
-      <div
-        role={cierre.estadoCierre === "rechazado" ? "alert" : "status"}
-        className={`rounded-[9px] p-4 ${tono.caja}`}
-        data-estado={cierre.estadoCierre}
-      >
-        <Titulo className="text-xl font-bold">{tono.titulo}</Titulo>
-        {cierre.estadoCierre === "registrado" && <p className="mt-1 text-sm">{cierre.recogeEn.organismo}</p>}
-        {cierre.estadoCierre === "rechazado" && cierre.motivo && <p className="mt-1 text-sm">{cierre.motivo}</p>}
-        {cierre.estadoCierre === "rechazado" && <p className="mt-1 text-sm">Acércate al organismo con este código: {cierre.codigoPublico}</p>}
-      </div>
+    <section aria-label="Cierre del trámite" className="space-y-6">
+      <Card>
+        <div className="flex flex-col items-center text-center">
+          <div
+            role={cierre.estadoCierre === "rechazado" ? "alert" : "status"}
+            className="flex flex-col items-center"
+            data-estado={cierre.estadoCierre}
+          >
+            <span aria-hidden className={`grid h-16 w-16 place-items-center rounded-full ${tono.circulo} text-primary-foreground`}>
+              <Icono className="h-9 w-9" />
+            </span>
+            <Titulo className={`mt-4 text-2xl font-bold leading-tight sm:text-[32px] ${tono.texto}`}>{tono.titulo}</Titulo>
+            {cierre.estadoCierre === "rechazado" && cierre.motivo && <p className="mt-2 text-sm">{cierre.motivo}</p>}
+            {cierre.estadoCierre === "rechazado" && <p className="mt-1 text-sm">Acércate al organismo con este código: {cierre.codigoPublico}</p>}
+          </div>
 
-      <div className="flex flex-wrap items-end gap-6">
-        <div>
-          <p className="text-xs text-muted-foreground">ID del trámite</p>
-          <div className="flex flex-wrap items-center gap-3">
-            <p aria-label="ID del trámite" className="text-3xl font-bold tracking-wider" data-testid="codigo-cierre">
-              {cierre.codigoPublico}
-            </p>
-            <button type="button" className={boton(cierre.estadoCierre === "registrado" ? "positive" : "back", "min-h-11 px-4", "none")} onClick={() => void copiar()}>
-              {copiado ? <Check aria-hidden /> : <Copy aria-hidden />}
-              {copiado ? "Copiado" : "Copiar ID"}
-            </button>
+          <div className="mt-6 w-full overflow-x-auto rounded-[9px] border border-border">
+            <table className="w-full min-w-[600px] text-center text-sm">
+              <thead className="bg-primary text-primary-foreground">
+                <tr>
+                  {["ID del trámite", "Tipo", "Nº radicado", "Organismo"].map((t) => (
+                    <th key={t} scope="col" className="p-4 text-center align-middle font-bold">
+                      {t}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="bg-card">
+                <tr>
+                  <td className={`${CELDA} font-semibold`} data-testid="codigo-cierre">
+                    {cierre.codigoPublico}
+                  </td>
+                  <td className={CELDA}>{tipoNombre || "—"}</td>
+                  <td className={CELDA} data-testid="radicado-flit2">
+                    {radicado}
+                  </td>
+                  <td className={CELDA}>{cierre.recogeEn.organismo}</td>
+                </tr>
+              </tbody>
+            </table>
           </div>
+
+          <button
+            type="button"
+            className={boton(cierre.estadoCierre === "registrado" ? "positive" : "back", "mt-4 min-h-11 px-4", "none")}
+            onClick={() => void copiar()}
+          >
+            {copiado ? <Check aria-hidden /> : <Copy aria-hidden />}
+            {copiado ? "Copiado" : "Copiar ID"}
+          </button>
+
+          <p className="mt-4 max-w-2xl">Para consultar el estado de tu trámite usa tu ID de trámite en Consultar mi trámite.</p>
         </div>
-        {cierre.radicadoFlit2 && (
-          <div>
-            <p className="text-xs text-muted-foreground">Radicado FLIT 2.0</p>
-            <p className="text-xl font-semibold" data-testid="radicado-flit2">
-              {cierre.radicadoFlit2}
-            </p>
-          </div>
+      </Card>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card title="Valor pagado" id="cierre-valor">
+          <p className="text-2xl font-bold">{formatearPesos(cierre.valorCop)}</p>
+          <p className="mt-1 text-sm">
+            Medio: <span className="font-medium">{etiquetaMedio(cierre)}</span>
+          </p>
+        </Card>
+        {placa && (
+          <Card title="Vehículo" id="cierre-vehiculo">
+            <p>{[placa, tipoNombre].filter(Boolean).join(" · ")}</p>
+            <p className="text-xs font-light text-muted-foreground">{cierre.recogeEn.organismo}</p>
+          </Card>
         )}
       </div>
-
-      <dl className="space-y-2 text-sm">
-        <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">Valor pagado</dt>
-          <dd className="font-medium">{formatearPesos(cierre.valorCop)}</dd>
-        </div>
-        <div className="flex justify-between gap-4">
-          <dt className="text-muted-foreground">Medio</dt>
-          <dd className="font-medium">{etiquetaMedio(cierre)}</dd>
-        </div>
-      </dl>
     </section>
   );
 }

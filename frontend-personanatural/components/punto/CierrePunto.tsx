@@ -8,6 +8,7 @@ import { useEffect, useRef, useState } from "react";
 import { ConsultarModal } from "@/components/modales/ConsultarModal";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { boton } from "@/components/landing/estilos";
+import { Btn } from "@/components/tramite/piezas";
 import { ResumenCierre } from "@/components/punto/ResumenCierre";
 import type { CierrePuntoRespuesta, ClientePortal } from "@/lib/api/cliente";
 import { ApiError, mensajeDeFallo } from "@/lib/api/errores";
@@ -19,6 +20,9 @@ export type PropsCierrePunto = {
   cliente: ClientePortal;
   solicitudId: string;
   tipoCodigo: string;
+  /** Para la columna «Tipo» y la tarjeta «Vehículo» de la confirmación (opcionales). */
+  placa?: string | undefined;
+  tipoNombre?: string | undefined;
   /** Sale del wizard (vuelve al inicio del punto). */
   onTerminar: () => void;
   /** La caja anuló el cobro estando en el cierre (409 tras haber mostrado un pago): el asistente vuelve al paso Pago. */
@@ -27,7 +31,7 @@ export type PropsCierrePunto = {
   onRadicado?: (radicado: string) => void;
 };
 
-export function CierrePunto({ cliente, solicitudId, onTerminar, onPagoAnulado, onRadicado }: PropsCierrePunto) {
+export function CierrePunto({ cliente, solicitudId, placa, tipoNombre, onTerminar, onPagoAnulado, onRadicado }: PropsCierrePunto) {
   const [consultando, setConsultando] = useState(false);
   const cierre = useQuery<CierrePuntoRespuesta>({
     queryKey: ["pn", "punto", "cierre", solicitudId],
@@ -51,7 +55,7 @@ export function CierrePunto({ cliente, solicitudId, onTerminar, onPagoAnulado, o
   if (pagoAnulado) return null;
 
   return (
-    <div className="mx-auto max-w-2xl space-y-6 p-4" aria-busy={cierre.isPending}>
+    <div className="space-y-6" aria-busy={cierre.isPending}>
       {cierre.isPending && <MobilityLoader mensaje="Registrando tu trámite…" />}
       {cierre.isError && (
         <div role="alert" className="space-y-3 rounded-[9px] bg-alert/10 p-4 text-alert">
@@ -61,17 +65,13 @@ export function CierrePunto({ cliente, solicitudId, onTerminar, onPagoAnulado, o
           </button>
         </div>
       )}
-      {datos && <ResumenCierre cierre={datos} titulo="h2" />}
+      {datos && <ResumenCierre cierre={datos} titulo="h2" placa={placa} tipoNombre={tipoNombre} />}
 
-      <div className="flex flex-wrap justify-center gap-3">
-        {datos && (
-          <button type="button" className={boton("flit", "h-11 px-8", "none")} onClick={() => setConsultando(true)}>
-            Consultar trámite
-          </button>
-        )}
-        <button type="button" className={boton("institutional", "h-11 px-8", "none")} onClick={onTerminar}>
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        {datos && <Btn onClick={() => setConsultando(true)}>Consultar trámite</Btn>}
+        <Btn tone="secondary" onClick={onTerminar}>
           Volver al inicio
-        </button>
+        </Btn>
       </div>
 
       {datos && (
