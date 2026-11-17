@@ -694,8 +694,7 @@ Nada de esto se corrigió en este documento. Las rutas se verificaron en el comm
    El compose usa `DIAGNOSTICO_DP_CERT_FILE` y `DIAGNOSTICO_DP_CERT_PASSWORD` (`DC:569`, `:1326`). Si un operador sigue el log, crea variables
    que nadie lee. Lo correcto en el contenedor: `Diagnostico__DataProtection__CertificadoRuta` y `__CertificadoClave`.
 9. **Resuelto (2026-11-16).** `IMPUESTO_CONTACTO_*`: el compose ya pasa las 18 variables y el handoff usa los nombres que lee `OpcionesImpuesto.cs:70-73`.
-10. **`handoff-vps-diagnostico.md:282` rompe el arranque.** Propone `IMPUESTO_API_TIMEOUT_SECONDS=300`, y con 300 core-consultas **no
-    arranca** (`OpcionesImpuesto.cs:56-57`). El defecto real es 280 (`DC:702`).
+10. **Resuelto (2026-11-16).** El handoff propone ahora `IMPUESTO_API_TIMEOUT_SECONDS=280`, el defecto real (`DC:702`); con 300 core-consultas no arranca (`OpcionesImpuesto.cs:56-57`).
 11. **Resuelto (2026-11-16).** `IMPUESTO_DEPARTAMENTOS` salió del compose y de `.env.impuesto.example`; el handoff apaga por la tabla `consultas.vehicle_tax_departments`.
 12. **Comentario desfasado en el compose.** `DC:551-555` dice que `Diagnostico__Consultas__Address` enciende juntas todas las fuentes y que
     la simulación se valida en Diagnóstico. Desde ADR-0075, solo sirve para la réplica, y la simulación vive en core-consultas

@@ -279,7 +279,7 @@ No se ponen en ningún ambiente hasta el checklist de abajo. Sin valor en el rep
 ```
 IMPUESTO_API_BASE_URL=
 IMPUESTO_API_PATH=
-IMPUESTO_API_TIMEOUT_SECONDS=300
+IMPUESTO_API_TIMEOUT_SECONDS=280
 IMPUESTO_CONTACTO_CELULAR=
 IMPUESTO_CONTACTO_TELEFONO=
 IMPUESTO_CONTACTO_CORREO=
@@ -321,7 +321,7 @@ Checklist, por ambiente. No se ejecuta en este corte:
 5. Host de DEV/QA y dueño del servicio cerrados.
 6. Variables de arriba puestas. Sin departamentos activos en `consultas.vehicle_tax_departments`, comprobar que la
    fuente no se ofrece.
-7. Migración aplicada. Los organismos candidatos tienen municipio.
+7. Antes de migrar, guardar el estado previo (`SELECT department_code, is_active, deleted_at FROM consultas.vehicle_tax_departments`): la migración `20261117044000` deja activos solo 05, 08 y 11 y su Down no restaura lo encendido por API. Migración aplicada. Los organismos candidatos tienen municipio.
 8. Orden de despliegue: broker (colas y permisos), core-consultas, core-diagnostico.
 9. `scripts/smoke/humo-impuesto.py` contra un vehículo de prueba autorizado, por departamento. Espera una clase, no
    un valor. Si incluye Valle y devuelve sin deuda en blanco, Valle no se enciende.
