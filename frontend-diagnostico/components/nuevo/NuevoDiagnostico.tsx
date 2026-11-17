@@ -50,6 +50,7 @@ export function NuevoDiagnostico() {
   const [masivo, setMasivo] = useState<BorradorMasivo>({ nombre: "", archivo: null });
   const [cabeceraId, setCabeceraId] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [conResultado, setConResultado] = useState(false);
   const [intento, setIntento] = useState(0);
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
 
@@ -129,6 +130,7 @@ export function NuevoDiagnostico() {
         onMasivo={cambiarMasivo}
         onOcupado={setOcupado}
         onCabecera={setCabeceraId}
+        onResultado={setConResultado}
       />
     );
   }
@@ -143,7 +145,8 @@ export function NuevoDiagnostico() {
         descripcion={sesion?.empresa.nombre}
         icono="diagnostico"
         acciones={
-          puedeCrear && (
+          puedeCrear &&
+          !conResultado && (
             <SelectorModo modo={modo} onModo={cambiarModo} bloqueado={bloqueado} explicacion={cabeceraId ? EXPLICACION_CABECERA_CREADA : null} />
           )
         }
@@ -162,14 +165,15 @@ interface CreacionProps {
   onMasivo: (c: Partial<BorradorMasivo>) => void;
   onOcupado: (ocupado: boolean) => void;
   onCabecera: (id: string) => void;
+  onResultado: (activo: boolean) => void;
 }
 
 /** Dueña del estado de parámetros: queda montada al cambiar de modo, así alcance, modo y tipo se conservan. */
-function Creacion({ configuracion, modo, express, onExpress, masivo, onMasivo, onOcupado, onCabecera }: CreacionProps) {
+function Creacion({ configuracion, modo, express, onExpress, masivo, onMasivo, onOcupado, onCabecera, onResultado }: CreacionProps) {
   const p = useParametrizacion(configuracion);
   return modo === "express" ? (
-    <CreacionExpress p={p} configuracion={configuracion} borrador={express} onBorrador={onExpress} onOcupado={onOcupado} />
+    <CreacionExpress p={p} configuracion={configuracion} borrador={express} onBorrador={onExpress} onOcupado={onOcupado} onResultado={onResultado} />
   ) : (
-    <CreacionMasiva p={p} borrador={masivo} onBorrador={onMasivo} onOcupado={onOcupado} onCabecera={onCabecera} />
+    <CreacionMasiva p={p} borrador={masivo} onBorrador={onMasivo} onOcupado={onOcupado} onCabecera={onCabecera} onResultado={onResultado} />
   );
 }

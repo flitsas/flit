@@ -7,6 +7,13 @@ import type { Fuente } from "@/lib/configuracion";
 import type { Alcance, CabeceraEntrada, EstadoDiagnostico, ModoDiagnostico } from "@/lib/diagnosticos/api";
 import { limpiarIdentificador, validarIdentificador, validarLongitudIdentificador } from "@/lib/validation/fieldRules";
 
+/**
+ * Ayuda de formatos de placa del Express (AC15, HU #14562): incluye el motocarro 123ABC. Es solo texto: la validación sigue
+ * siendo la de `lib/validation/fieldRules.ts` y el patrón del backend no cambia (pendiente del Líder Técnico, PR #823).
+ */
+export const AYUDA_FORMATOS_PLACA =
+  "Formatos: carro ABC123, moto ABC12D, motocarro 123ABC, remolque R12345 o maquinaria MC123456; o un VIN de 17 caracteres.";
+
 export interface ExpressEntrada {
   nombre: string | null;
   modo: ModoDiagnostico;

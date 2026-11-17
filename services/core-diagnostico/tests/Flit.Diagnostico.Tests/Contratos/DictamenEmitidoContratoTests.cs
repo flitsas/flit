@@ -53,6 +53,25 @@ public sealed class DictamenEmitidoContratoTests
         mensaje.Should().NotContain("placa").And.NotContain("vin").And.NotContain("documento");
     }
 
+    // HU #14563 AC33 — ajuste_alertamientos es aditivo: solo sale en un ajuste con alertamientos, un consumidor del contrato
+    // anterior sigue leyendo las mismas claves y el AsyncAPI lo declara. Sin motivo ni texto libre.
+    [Fact]
+    public void B7_ajuste_alertamientos_es_opcional_y_aditivo()
+    {
+        var evento = new DictamenEmitido(
+            Guid.CreateVersion7(), Guid.CreateVersion7(), Guid.CreateVersion7(), 2, "BLOQUEADO", 2, "CON_ANALISIS", "TRASPASO_STANDARD", "COMPLETADA",
+            EsOverride: true, AjusteAlertamientos: true);
+
+        var data = JsonSerializer.SerializeToNode(evento, EventEnvelope.JsonOptions)!.AsObject();
+
+        data.Select(p => p.Key).Should().Equal([.. Claves, "ajuste_alertamientos"]);
+        data["ajuste_alertamientos"]!.GetValue<bool>().Should().BeTrue();
+        data.Select(p => p.Key).Should().NotContain(k => k.Contains("motivo", StringComparison.OrdinalIgnoreCase));
+
+        var yaml = File.ReadAllText(Path.Combine(Repo(), "contracts", "asyncapi", "diagnostico-events.v1.yaml"));
+        yaml[yaml.IndexOf("name: diagnostico.dictamen.emitido", StringComparison.Ordinal)..].Should().Contain("ajuste_alertamientos");
+    }
+
     private static string Repo() =>
         Path.GetFullPath(Path.Combine(IgnoreQueryFiltersSoloEnBackofficeTests.RaizDelServicio(), "..", ".."));
 }

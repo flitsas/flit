@@ -108,4 +108,25 @@ describe("DiagnosticoShell", () => {
     expect(await screen.findByText("pantalla base")).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
   });
+
+  it("HU14562 AC50: con la sesión, la campana de avisos aparece en la barra (headerActions) y pide GET /notificaciones", async () => {
+    const fetchMock = vi.fn(async (u: RequestInfo | URL) =>
+      String(u).startsWith("/api/v1/diagnostico/notificaciones")
+        ? Response.json({ no_leidas: 3, items: [], siguiente: null })
+        : Response.json(sesion),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    montar();
+    const banner = await screen.findByRole("banner");
+    expect(await within(banner).findByRole("button", { name: "Avisos, 3 avisos sin leer" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([u]) => String(u) === "/api/v1/diagnostico/notificaciones?limite=20")).toBe(true);
+  });
+
+  it("HU14562 AC50: mientras no hay sesión no se pide la campana", () => {
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    montar();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /^Avisos/ })).toBeNull();
+  });
 });

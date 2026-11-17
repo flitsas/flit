@@ -65,6 +65,25 @@ describe("pestaña Contrato", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it("HU #14562 AC42 (decisión b, R-2): aunque un API lo mandara, la compañía no ve la redacción con IA", () => {
+    const contrato = { ...configuracion().contrato, redaccion_ia_suspendida: true } as ReturnType<typeof configuracion>["contrato"];
+    render(<PestanaContrato contrato={contrato} puedeEditar={false} />);
+
+    const lectura = screen.getByRole("region", { name: "Lo contratado por tu compañía" });
+    expect(within(lectura).queryByText(/redacción/i)).toBeNull();
+    expect(within(lectura).queryByText("Suspendida")).toBeNull();
+    expect(within(lectura).queryByText("Activa")).toBeNull();
+  });
+
+  it("HU #14562 AC42 (negativo): sin el campo (API anterior) no muestra la fila de la redacción ni la inventa", () => {
+    render(<PestanaContrato contrato={configuracion().contrato} puedeEditar={false} />);
+
+    const lectura = screen.getByRole("region", { name: "Lo contratado por tu compañía" });
+    expect(within(lectura).queryByText(/redacción/i)).toBeNull();
+    expect(within(lectura).queryByText("Activa")).toBeNull();
+    expect(within(lectura).queryByText("Suspendida")).toBeNull();
+  });
+
   it("contrato sin fuentes habilitadas muestra el estado vacío", () => {
     render(<PestanaContrato contrato={configuracion({ contrato: { fuentes_habilitadas: [] } }).contrato} puedeEditar={false} />);
 

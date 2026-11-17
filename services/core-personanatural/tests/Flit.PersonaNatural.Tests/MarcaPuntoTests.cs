@@ -36,7 +36,7 @@ public sealed class MarcaPuntoTests
         await using var host = new Anfitrion(new FachadaMarca { Marca = DelOrganismo() });
 
         var r = await host.GetAsync("/punto/marca/AB1");
-        var json = JsonDocument.Parse(await r.Content.ReadAsStringAsync(Ct)).RootElement;
+        var json = JsonElement.Parse(await r.Content.ReadAsStringAsync(Ct));
 
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         json.GetProperty("origen").GetString().Should().Be("organismo");
@@ -94,8 +94,8 @@ public sealed class MarcaPuntoTests
 
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         texto.Should().NotContain("secreto");
-        JsonDocument.Parse(texto).RootElement.GetProperty("origen").GetString().Should().Be("flit");
-        JsonDocument.Parse(texto).RootElement.GetProperty("colores").ValueKind.Should().Be(JsonValueKind.Null);
+        JsonElement.Parse(texto).GetProperty("origen").GetString().Should().Be("flit");
+        JsonElement.Parse(texto).GetProperty("colores").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
     [Fact]
@@ -130,10 +130,10 @@ public sealed class MarcaPuntoTests
     }
 
     private static async Task<int> Version(HttpResponseMessage r) =>
-        JsonDocument.Parse(await r.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("version").GetInt32();
+        JsonElement.Parse(await r.Content.ReadAsStringAsync(Ct)).GetProperty("version").GetInt32();
 
     private static async Task<string?> Origen(HttpResponseMessage r) =>
-        JsonDocument.Parse(await r.Content.ReadAsStringAsync(Ct)).RootElement.GetProperty("origen").GetString();
+        JsonElement.Parse(await r.Content.ReadAsStringAsync(Ct)).GetProperty("origen").GetString();
 
     // HU #14401 — marca de la web de persona natural.
 
@@ -147,7 +147,7 @@ public sealed class MarcaPuntoTests
         await using var host = new Anfitrion(new FachadaMarca { MarcaWeb = DeLaWeb(2) });
 
         var r = await host.GetAsync("/marca/web");
-        var json = JsonDocument.Parse(await r.Content.ReadAsStringAsync(Ct)).RootElement;
+        var json = JsonElement.Parse(await r.Content.ReadAsStringAsync(Ct));
 
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         r.Headers.CacheControl!.NoStore.Should().BeTrue();
@@ -176,7 +176,7 @@ public sealed class MarcaPuntoTests
         (await Origen(sinMarca)).Should().Be("flit");
         conFalla.StatusCode.Should().Be(HttpStatusCode.OK);
         texto.Should().NotContain("secreto");
-        JsonDocument.Parse(texto).RootElement.GetProperty("origen").GetString().Should().Be("flit");
+        JsonElement.Parse(texto).GetProperty("origen").GetString().Should().Be("flit");
     }
 
     [Fact]
@@ -218,7 +218,7 @@ public sealed class MarcaPuntoTests
         };
         await using var host = new Anfitrion(new FachadaMarca { Marca = marca });
 
-        var json = JsonDocument.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct)).RootElement;
+        var json = JsonElement.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct));
 
         var items = json.GetProperty("carrusel").EnumerateArray().ToList();
         items.Should().HaveCount(2);
@@ -234,7 +234,7 @@ public sealed class MarcaPuntoTests
     {
         await using var host = new Anfitrion(new FachadaMarca { Marca = MarcaPuntoRespuesta.Flit });
 
-        var json = JsonDocument.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct)).RootElement;
+        var json = JsonElement.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct));
 
         json.GetProperty("carrusel").ValueKind.Should().Be(JsonValueKind.Array);
         json.GetProperty("carrusel").GetArrayLength().Should().Be(0);
@@ -322,7 +322,7 @@ public sealed class MarcaPuntoTests
         };
         await using var host = new Anfitrion(new FachadaMarca { Marca = marca });
 
-        var json = JsonDocument.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct)).RootElement;
+        var json = JsonElement.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct));
 
         var items = json.GetProperty("banners").EnumerateArray().ToList();
         items.Should().HaveCount(2);
@@ -338,7 +338,7 @@ public sealed class MarcaPuntoTests
     {
         await using var host = new Anfitrion(new FachadaMarca { Marca = MarcaPuntoRespuesta.Flit });
 
-        var json = JsonDocument.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct)).RootElement;
+        var json = JsonElement.Parse(await (await host.GetAsync("/punto/marca/AB1")).Content.ReadAsStringAsync(Ct));
 
         json.GetProperty("banners").ValueKind.Should().Be(JsonValueKind.Array);
         json.GetProperty("banners").GetArrayLength().Should().Be(0);

@@ -95,14 +95,17 @@ internal sealed record CeldaGrillaBackofficeDto(
     }
 }
 
-/// <summary>Un lote en la lista del backoffice (HU #13799): sin datos de vehículos ni de personas.</summary>
+/// <summary>Un lote en la lista del backoffice (HU #13799): sin datos de vehículos ni de personas. Desde HU #14563 (B3) con modo, tipo de trámite y express.</summary>
 internal sealed record DiagnosticoBackofficeDto(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("nombre")] string Nombre,
     [property: JsonPropertyName("estado")] string Estado,
     [property: JsonPropertyName("creado_en")] DateTimeOffset CreadoEn,
     [property: JsonPropertyName("vehiculos")] int Vehiculos,
-    [property: JsonPropertyName("celdas_en_error")] int CeldasEnError)
+    [property: JsonPropertyName("celdas_en_error")] int CeldasEnError,
+    [property: JsonPropertyName("modo")] string? Modo = null,
+    [property: JsonPropertyName("tipo_tramite")] TipoTramiteListadoDto? TipoTramite = null,
+    [property: JsonPropertyName("es_express")] bool EsExpress = false)
 {
     /// <summary>Rótulo del estado del lote (punto 5).</summary>
     [JsonPropertyName("estado_etiqueta")]

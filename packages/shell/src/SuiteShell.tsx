@@ -16,6 +16,7 @@ import { CommandPalette } from "./CommandPalette";
 import { ShellNavProvider } from "./ShellNavContext";
 import type { PlateSearch, SearchAction } from "./search";
 import { ThemeToggle } from "./theme";
+import { useSuiteApps } from "./useSuiteApps";
 
 export type { NavCatalog, NavItem, NavSection, NavViewer } from "./nav";
 export type { ShellUser } from "./AccountMenu";
@@ -117,6 +118,9 @@ export function SuiteShell({
   const home = useMemo(() => ({ href: homeHref, label: `Inicio ${productName}` }), [homeHref, productName]);
   const shellNav = useMemo(() => ({ groups, homeHref }), [groups, homeHref]);
   const accountUser = useMemo(() => ({ ...user, roleLabel: user.roleLabel ?? suiteRoleLabel(roles ?? []) }), [user, roles]);
+  // HU #14562 · D1: una sola carga de me/apps para ▦ y para «Tus productos» del menú de usuario (móvil).
+  const appsState = useSuiteApps(apps, loadApps);
+  const accountProducts = useMemo(() => ({ state: appsState, productCode }), [appsState, productCode]);
 
   // Barra superior del prototipo «Diseño Inteligente» (HU #14479, `.barra`): marca y producto a la izquierda; a la
   // derecha el buscador ancho (Ctrl K), el menú de productos, el tema y el bloque de usuario. Sin campana: la suite
@@ -131,9 +135,9 @@ export function SuiteShell({
       <div className="suite-barra__acciones">
         <CommandPalette groups={groups} home={home} actions={searchActions} plate={plateSearch} />
         {headerActions}
-        <ProductMenu productCode={productCode} apps={apps} loadApps={loadApps} />
+        <ProductMenu productCode={productCode} state={appsState} />
         {themeToggle && <ThemeToggle />}
-        <AccountMenu user={accountUser} links={menuLinks} onLogout={onLogout} />
+        <AccountMenu user={accountUser} links={menuLinks} onLogout={onLogout} products={accountProducts} />
       </div>
     </header>
   );

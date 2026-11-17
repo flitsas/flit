@@ -1315,6 +1315,23 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnName("id")
                         .HasComment("uuid v7 generado por la aplicación.");
 
+                    b.Property<int?>("AjustadoDesdeVersion")
+                        .HasColumnType("integer")
+                        .HasColumnName("ajustado_desde_version")
+                        .HasComment("Versión vigente que reemplazó el override o ajuste FLIT (= version - 1). NULL en las automáticas. [ADR-0086]");
+
+                    b.Property<bool>("AjusteConTramite")
+                        .HasColumnType("boolean")
+                        .HasColumnName("ajuste_con_tramite")
+                        .HasDefaultValueSql("false")
+                        .HasComment("True si el vehículo ya tenía trámite cuando FLIT confirmó el ajuste (confirmar_con_tramite). Solo en ajustes; solo backoffice. [ADR-0084]");
+
+                    b.Property<string>("AjusteMotivo")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("ajuste_motivo")
+                        .HasComment("@pii:low Motivo del ajuste FLIT (texto libre de soporte, 10..500). Solo backoffice; nunca en DTO de compañía, eventos ni logs. [ADR-0086]");
+
                     b.Property<string>("Alertamientos")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -1370,7 +1387,7 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasMaxLength(16)
                         .HasColumnType("character varying(16)")
                         .HasColumnName("redactado_por")
-                        .HasComment("PLANTILLA o LLM.");
+                        .HasComment("PLANTILLA, LLM o MANUAL (textos editados por FLIT; el LLM no los reescribe).");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -1433,15 +1450,27 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         {
                             t.HasComment("Dictamen de un vehículo (clase (a) de ADR-0072, ADR-0077): tenant_id, xmin y FK compuesta al vehículo. Nace vacía, sin borrado lógico.");
 
+                            t.HasCheckConstraint("ck_dictamenes_ajuste", "analisis_override = (ajustado_desde_version IS NOT NULL) AND (ajustado_desde_version IS NULL OR ajustado_desde_version = version - 1)");
+
+                            t.HasCheckConstraint("ck_dictamenes_ajuste_con_tramite", "NOT ajuste_con_tramite OR analisis_override");
+
+                            t.HasCheckConstraint("ck_dictamenes_ajuste_motivo", "ajuste_motivo IS NULL OR (analisis_override AND char_length(btrim(ajuste_motivo)) BETWEEN 10 AND 500)");
+
                             t.HasCheckConstraint("ck_dictamenes_alertamientos", "jsonb_typeof(alertamientos) = 'array'");
 
                             t.HasCheckConstraint("ck_dictamenes_estado_redaccion", "estado_redaccion IN ('PENDIENTE', 'COMPLETADA')");
 
-                            t.HasCheckConstraint("ck_dictamenes_redactado_por", "redactado_por IN ('PLANTILLA', 'LLM')");
+                            t.HasCheckConstraint("ck_dictamenes_manual", "redactado_por <> 'MANUAL' OR (analisis_override AND ajuste_motivo IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_dictamenes_override", "(usuario_override_id IS NULL) = (override_en IS NULL) AND analisis_override = (usuario_override_id IS NOT NULL)");
+
+                            t.HasCheckConstraint("ck_dictamenes_redactado_por", "redactado_por IN ('PLANTILLA', 'LLM', 'MANUAL')");
 
                             t.HasCheckConstraint("ck_dictamenes_veredicto", "veredicto IN ('VIABLE', 'BLOQUEADO')");
 
-                            t.HasCheckConstraint("ck_redaccion", "(estado_redaccion = 'COMPLETADA') = (redactado_por = 'LLM')");
+                            t.HasCheckConstraint("ck_dictamenes_version", "version >= 1");
+
+                            t.HasCheckConstraint("ck_redaccion", "(estado_redaccion = 'COMPLETADA') = (redactado_por IN ('LLM', 'MANUAL'))");
                         });
                 });
 
@@ -2576,6 +2605,99 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Notificaciones.Notificacion", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasComment("uuid v7 generado por la aplicación.");
+
+                    b.Property<DateTimeOffset>("CreadaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creada_en")
+                        .HasComment("Instante del hecho (timestamptz). Base de la retención.");
+
+                    b.Property<string>("Datos")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("datos")
+                        .HasDefaultValueSql("'{}'::jsonb")
+                        .HasComment("@pii:none Solo contadores y códigos (p. ej. {\"creadas\":3,\"fallidas\":1}); el CHECK impide texto libre.");
+
+                    b.Property<Guid>("DiagnosticoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("diagnostico_id")
+                        .HasComment("Lote al que se refiere el aviso.");
+
+                    b.Property<DateTimeOffset?>("LeidaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("leida_en")
+                        .HasComment("Instante en que el destinatario la marcó leída; null si no. Se escribe GREATEST(ahora, creada_en).");
+
+                    b.Property<Guid>("ReferenciaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("referencia_id")
+                        .HasComment("Id del hecho según tipo: evidencias.id (ZIP_*), derivacion_operaciones.id (DERIVACION_TERMINADA), historial_estado_diagnostico.id (LOTE_TERMINADO). Sin FK (polimórfica, ADR-0086).");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id")
+                        .HasComment("Empresa dueña del lote y de la notificación.");
+
+                    b.Property<string>("Tipo")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("tipo")
+                        .HasComment("ZIP_EVIDENCIAS_LISTO, ZIP_EVIDENCIAS_FALLIDO, DERIVACION_TERMINADA o LOTE_TERMINADO (D8: sin DICTAMEN_AJUSTADO).");
+
+                    b.Property<Guid>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id")
+                        .HasComment("@pii:low Destinatario: seudónimo uuid (claim sub); quien disparó el hecho.");
+
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
+                    b.HasKey("Id")
+                        .HasName("pk_notificaciones");
+
+                    b.HasIndex("CreadaEn")
+                        .HasDatabaseName("ix_notificaciones_retencion");
+
+                    b.HasIndex("TenantId", "DiagnosticoId")
+                        .HasDatabaseName("ix_notificaciones_diagnostico");
+
+                    b.HasIndex("TenantId", "UsuarioId")
+                        .HasDatabaseName("ix_notificaciones_no_leidas")
+                        .HasFilter("leida_en IS NULL");
+
+                    b.HasIndex("TenantId", "UsuarioId", "CreadaEn", "Id")
+                        .IsDescending(false, false, true, true)
+                        .HasDatabaseName("ix_notificaciones_bandeja");
+
+                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("TenantId", "UsuarioId", "CreadaEn", "Id"), new[] { "LeidaEn" });
+
+                    b.HasIndex("TenantId", "UsuarioId", "Tipo", "ReferenciaId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_notificaciones_idempotencia");
+
+                    b.ToTable("notificaciones", "diagnostico", t =>
+                        {
+                            t.HasComment("Avisos de la campana de Diagnóstico por usuario (clase (a) de ADR-0072 con excepción de retención de ADR-0086): sin texto, documentos ni PII; el mensaje se arma al leer. Purga física a los 90 días.");
+
+                            t.HasCheckConstraint("ck_notificaciones_datos", "jsonb_typeof(datos) = 'object' AND NOT jsonb_path_exists(datos, 'strict $.* ? (@.type() == \"object\" || @.type() == \"array\" || (@.type() == \"string\" && !(@ like_regex \"^[A-Z0-9_]{1,32}$\")) || (@.type() == \"number\" && (@ < 0 || @ > 100000)))') AND NOT jsonb_path_exists(datos, 'strict $.keyvalue() ? (!(@.key like_regex \"^[a-z_]{1,32}$\"))') AND octet_length(datos::text) <= 512");
+
+                            t.HasCheckConstraint("ck_notificaciones_leida", "leida_en IS NULL OR leida_en >= creada_en");
+
+                            t.HasCheckConstraint("ck_notificaciones_tipo", "tipo IN ('ZIP_EVIDENCIAS_LISTO', 'ZIP_EVIDENCIAS_FALLIDO', 'DERIVACION_TERMINADA', 'LOTE_TERMINADO')");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Reportes.Evidencia", b =>
                 {
                     b.Property<Guid>("Id")
@@ -2890,6 +3012,12 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .HasColumnType("xid")
                         .HasColumnName("xmin");
 
+                    b.Property<long>("VersionTablero")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version_tablero")
+                        .HasDefaultValueSql("0")
+                        .HasComment("Valor de diagnosticos.version_tablero en el último cambio de la FILA (dictamen nuevo o ajustado, trámite creado/omitido/fallido). 0 = sin cambios de fila. Polling ?desde=. [ADR-0086]");
+
                     b.Property<string>("Vin")
                         .HasMaxLength(17)
                         .HasColumnType("character varying(17)")
@@ -2909,6 +3037,9 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .IsUnique()
                         .HasDatabaseName("ux_vehiculo_por_lote");
 
+                    b.HasIndex("TenantId", "DiagnosticoId", "VersionTablero")
+                        .HasDatabaseName("ix_vehiculos_tablero");
+
                     b.ToTable("vehiculos", "diagnostico", t =>
                         {
                             t.HasComment("Vehículos del lote (MOD02, HU #13735): identificador normalizado único por lote y documentos cifrados.");
@@ -2926,6 +3057,8 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                             t.HasCheckConstraint("ck_vehiculos_locatario_doc_origen", "locatario_doc_origen IS NULL OR locatario_doc_origen IN ('DECLARADO_CLIENTE', 'PROVEEDOR')");
 
                             t.HasCheckConstraint("ck_vehiculos_tipo_identificador", "tipo_identificador IN ('PLACA_CARRO', 'PLACA_MOTO', 'PLACA_REMOLQUE', 'PLACA_MAQUINARIA', 'PLACA_MOTOCARRO', 'VIN')");
+
+                            t.HasCheckConstraint("ck_vehiculos_version_tablero", "version_tablero >= 0");
                         });
                 });
 
@@ -3173,6 +3306,17 @@ namespace Flit.Diagnostico.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_dictamenes_vehiculos");
+                });
+
+            modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Notificaciones.Notificacion", b =>
+                {
+                    b.HasOne("Flit.Diagnostico.Api.Modulos.Diagnosticos.CabeceraDiagnostico", null)
+                        .WithMany()
+                        .HasForeignKey("TenantId", "DiagnosticoId")
+                        .HasPrincipalKey("TenantId", "Id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_notificaciones_diagnosticos");
                 });
 
             modelBuilder.Entity("Flit.Diagnostico.Api.Modulos.Reportes.Evidencia", b =>

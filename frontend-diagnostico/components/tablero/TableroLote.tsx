@@ -2,14 +2,12 @@
 
 import { useEffect, useMemo, useRef, useState , type ComponentType } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Icono } from "@flit/ui/Icono";
+import { notFound, useRouter } from "next/navigation";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { INLINE_ALERT_TONES, InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
-import { Migas } from "@/components/comun/Migas";
-import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { accesoNegado } from "@/lib/carga/api";
 import { urlVolverAlListado } from "@/lib/diagnosticos/listado";
@@ -17,7 +15,6 @@ import {
   cerrarPanel,
   mensajeCierre,
   mensajeReenviadas,
-  reintentarPegadas,
   reintentarVehiculo,
   type CeldaGrilla,
   type FilaVehiculo,
@@ -26,11 +23,11 @@ import {
 } from "@/lib/tablero/api";
 import { hayPendientes, marcarReintentada, marcarReprocesada } from "@/lib/tablero/fusionarCeldas";
 import { useGrillaIncremental } from "@/lib/tablero/useGrillaIncremental";
-import { BotonAbrirDictamen, PanelDictamen } from "./PanelDictamen";
+import { PanelDictamen } from "./PanelDictamen";
 import { BotonPdfVehiculo } from "./BotonPdfVehiculo";
 import { BotonReintentar } from "./BotonReintentar";
 import { AccionTramiteFila, ModalTipoTramite } from "./BotonCrearTramite";
-import { BarraSeleccionDerivacion, CasillaDerivacion } from "./BarraSeleccionDerivacion";
+import { CasillaDerivacion } from "./BarraSeleccionDerivacion";
 import { ProgresoDerivacion, type PlacaNoEncolada } from "./ProgresoDerivacion";
 import {
   derivacionDeFila,
@@ -44,12 +41,20 @@ import {
 } from "@/lib/tablero/derivacion";
 import { DescargasLote } from "./DescargasLote";
 import { EstadoGlobal, EstimadoVsConsumido } from "./EstadoGlobal";
-import { GrillaSemaforos } from "./GrillaSemaforos";
-import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { AccionesBloqueLote } from "./AccionesBloqueLote";
+import { CabeceraLote } from "./CabeceraLote";
+import { GrillaLote } from "./GrillaLote";
+import { MetricasLote } from "./MetricasLote";
+import type { FiltroTablero } from "@/lib/tablero/filtrosTablero";
+import { pedirSondeoNotificaciones } from "@/lib/notificaciones/useNotificaciones";
+
+/** «hh:mm» en hora de Colombia (HU #14562 AC26). */
+const HORA = new Intl.DateTimeFormat("es-CO", { hour: "2-digit", minute: "2-digit", hourCycle: "h23", timeZone: "America/Bogota" });
 
 /**
- * Aviso no intrusivo del reintento manual (Punto 3): la paleta `success` de InlineAlert con su propio nombre accesible
- * (InlineAlert no lo admite y anidaría otro `status`). Recibe el foco: el botón pulsado desaparece al dejar de estar pegada.
+ * Aviso no intrusivo del reintento manual (Punto 3): la paleta `success` de InlineAlert (que anidaría otro `status`).
+ * Recibe el foco: el botón pulsado desaparece al dejar de estar pegada. HU #14562 · m-15: sin aria-label, que reemplazaba
+ * al texto anunciado; el lector lee «N consultas reenviadas».
  */
 function AvisoReenviadas({ ref, children }: { ref: React.Ref<HTMLDivElement>; children: React.ReactNode }) {
   const { color, background, border, Icon } = INLINE_ALERT_TONES.success;
@@ -59,7 +64,6 @@ function AvisoReenviadas({ ref, children }: { ref: React.Ref<HTMLDivElement>; ch
       tabIndex={-1}
       role="status"
       aria-live="polite"
-      aria-label="Resultado del reintento"
       className={`flex items-center gap-3 rounded-xl p-3 text-xs font-semibold ${FOCO_CLS}`}
       style={{ background, border: `1px solid ${border}`, color }}
     >
@@ -98,7 +102,7 @@ function Vacio({ titulo, children, Icono = ICONO_VACIO }: { titulo: string; chil
  * Tablero del lote (HU #13748, F04-H2) en /diagnosticos/{id}, a donde navegan la confirmación de la carga y el Express:
  * tarjeta título con el nombre del lote, estado global y avance, la grilla de semáforos con sondeo incremental cada 3 s,
  * «Reprocesar» para el admin en las rojas y «Cerrar panel» cuando el lote terminó con errores. Cuatro estados: cargando,
- * error (con Reintentar; 404 como no encontrado), vacío (sin vehículos o sin permiso) y lleno. Arriba, migas «Diagnósticos ›
+ * error (con Reintentar; el 404 va a la página 404 de la app), vacío (sin vehículos o sin permiso) y lleno. Arriba, migas «Diagnósticos ›
  * {lote}» y «Volver a diagnósticos» al listado con los filtros que traía (?desde=, solo como search params de /, HU #14087).
  * Cada semáforo abre su detalle en una pestaña nueva.
  */
@@ -112,7 +116,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   const puedeDescargar = sesion?.capacidades.descargarReportes ?? false;
   // Punto 4: «Crear trámite» / «Ver trámite #N» solo con la capacidad `derivar` (la API vuelve a exigir el permiso).
   const puedeDerivar = sesion?.capacidades.derivar ?? false;
-  const { grilla, cargando, error, errorSondeo, sondeando, reintentar, reanudar, refrescar, recargar, actualizar } = useGrillaIncremental(diagnosticoId, {
+  const { grilla, cargando, error, errorSondeo, sondeando, actualizadoEn, reintentar, reanudar, refrescar, actualizar } = useGrillaIncremental(diagnosticoId, {
     habilitado: puedeVer,
   });
   const [aviso, setAviso] = useState<string | null>(null);
@@ -120,8 +124,14 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   const [reenviadas, setReenviadas] = useState<string | null>(null);
   const reenviadasRef = useRef<HTMLDivElement>(null);
   const [cerrando, setCerrando] = useState(false);
+  // HU #14562 AC24 (D4): «Cerrar lote» pide confirmación antes de llamar a cerrar-panel.
+  const [confirmandoCierre, setConfirmandoCierre] = useState(false);
   const [dictamen, setDictamen] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
+  // HU #14562 F-05: «Crear trámite» desde el pie del panel del dictamen; el número cambia en cada pedido.
+  const [solicitudTramite, setSolicitudTramite] = useState<{ vehiculoId: string; n: number } | null>(null);
   const volver = urlVolverAlListado(desde);
+  // HU #14562 AC27: tarjeta-filtro activa (exclusiva); null = sin filtro.
+  const [filtro, setFiltro] = useState<FiltroTablero | null>(null);
 
   // Punto 4, masivo (incremento 3): selección por id de vehículo (sobrevive al sondeo incremental), sin preselección.
   const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(() => new Set());
@@ -238,10 +248,12 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
                 diagnosticoId={grilla.id}
                 vehiculo={v}
                 modo={grilla.modo}
+                tramiteAnalizado={grilla.lote?.tipo_tramite?.nombre ?? null}
                 tramitesUrl={tramitesUrl}
                 empresaId={sesion?.empresa.id}
                 onCreado={(vid, tramite) => actualizar((g) => marcarConTramite(g, vid, tramite))}
                 onRefrescar={refrescar}
+                solicitudCrear={solicitudTramite?.vehiculoId === v.id ? solicitudTramite.n : undefined}
               />
             )}
             {puedeDescargar && grilla && <BotonPdfVehiculo diagnosticoId={grilla.id} estadoLote={grilla.estado} vehiculo={v} />}
@@ -259,6 +271,7 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
       : undefined;
 
   async function cerrar() {
+    setConfirmandoCierre(false);
     setCerrando(true);
     setAviso(null);
     try {
@@ -276,6 +289,10 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
     }
   }
 
+  // HU #14562 AC49/AC57: el 404 (no existe o es de otro usuario con visibilidad PROPIOS) es la página 404 de la app, que no
+  // revela si el lote existe.
+  if (puedeVer && error instanceof ApiError && error.status === 404) notFound();
+
   let contenido;
   if (!puedeVer) {
     contenido = (
@@ -285,15 +302,6 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
     );
   } else if (cargando || codigo403) {
     contenido = <VehicleLoader label="Cargando el tablero…" />;
-  } else if (error instanceof ApiError && error.status === 404) {
-    contenido = (
-      <Vacio titulo="No encontramos este diagnóstico" Icono={iconoComo("buscar")}>
-        <p className="max-w-md text-sm text-muted-foreground">Puede que no exista o que no tengas acceso a él.</p>
-        <Link href="/" className={BOTON_SECUNDARIO_CLS}>
-          Volver al inicio
-        </Link>
-      </Vacio>
-    );
   } else if (error || !grilla) {
     contenido = (
       <InlineAlert
@@ -326,9 +334,8 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
           <EstadoGlobal grilla={grilla} sondeando={sondeando} />
         </section>
         <DescargasLote diagnosticoId={diagnosticoId} estadoLote={grilla.estado} puedeDescargar={puedeDescargar} />
-        {reenviadas && (
-          <AvisoReenviadas ref={reenviadasRef}>{reenviadas}</AvisoReenviadas>
-        )}
+        <MetricasLote grilla={grilla} filtro={filtro} onFiltro={setFiltro} />
+        {reenviadas && <AvisoReenviadas ref={reenviadasRef}>{reenviadas}</AvisoReenviadas>}
         {aviso && (
           <InlineAlert tone="error" title="No se completó la acción">
             {aviso}
@@ -341,47 +348,47 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
             inicial={operacion.inicial}
             leerAlInicio={operacion.leerAlInicio}
             noEncoladas={operacion.noEncoladas}
-            onTerminada={() => recargar()}
+            // HU #14562 AC30: la fila derivada llega por su versión de fila en el sondeo incremental, sin ?desde=0.
+            onTerminada={() => {
+              refrescar();
+              // HU #14562 AC51: terminó la creación masiva; la campana sondea de inmediato.
+              pedirSondeoNotificaciones();
+            }}
             onCerrar={() => setOperacion(null)}
           />
         )}
         {errorSondeo != null && (
           <InlineAlert
             tone="warning"
-            title="Se detuvo la actualización automática"
+            title={actualizadoEn ? `Datos desactualizados desde ${HORA.format(actualizadoEn)}` : "Datos desactualizados"}
             action={
               <button type="button" onClick={refrescar} className={BOTON_REINTENTAR_CLS}>
-                Reintentar
+                Actualizar ahora
               </button>
             }
           >
-            {errorSondeo instanceof Error ? errorSondeo.message : "No se pudo leer el avance del lote."}
+            Se detuvo la actualización automática: {errorSondeo instanceof Error ? errorSondeo.message : "no se pudo leer el avance del lote."}
           </InlineAlert>
         )}
         <section aria-label="Grilla del lote" className={`${TARJETA_CLS} flex flex-col gap-4`}>
-          {hayDerivacion && (
-            <BarraSeleccionDerivacion
-              elegibles={elegibles.length}
-              seleccionadas={seleccionadas.length}
-              enviando={encolando}
-              onSeleccionarTodas={() => setSeleccion(new Set(elegibles))}
-              onQuitar={() => setSeleccion(new Set())}
-              onCrear={alCrearMasivo}
-              error={errorMasivo}
-            />
-          )}
-          {puedeReprocesar && (grilla.total_pegadas ?? 0) > 0 && (
-            <BotonReintentar
-              variante="lote"
-              etiqueta={`Reintentar las ${grilla.total_pegadas} placas pegadas del lote`}
-              texto={`Reintentar pegadas (${grilla.total_pegadas})`}
-              reintentar={() => reintentarPegadas(diagnosticoId)}
-              onReintentado={(r) => alReintentar(r)}
-              onError={alFallarReproceso}
-            />
-          )}
-          <GrillaSemaforos
+          <AccionesBloqueLote
+            diagnosticoId={diagnosticoId}
+            hayDerivacion={hayDerivacion}
+            elegibles={elegibles.length}
+            seleccionadas={seleccionadas.length}
+            encolando={encolando}
+            errorMasivo={errorMasivo}
+            onSeleccionarTodas={() => setSeleccion(new Set(elegibles))}
+            onQuitar={() => setSeleccion(new Set())}
+            onCrear={alCrearMasivo}
+            totalPegadas={grilla.total_pegadas ?? 0}
+            puedeReprocesar={puedeReprocesar}
+            onReintentado={(r) => alReintentar(r)}
+            onErrorReintento={alFallarReproceso}
+          />
+          <GrillaLote
             grilla={grilla}
+            filtro={filtro}
             puedeReprocesar={puedeReprocesar}
             onReprocesada={alReprocesar}
             onErrorReproceso={alFallarReproceso}
@@ -399,14 +406,10 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
                   )
                 : undefined
             }
-            accionEncabezado={(v) => (
-              <BotonAbrirDictamen
-                identificador={v.placa || v.vin || v.identificador}
-                onAbrir={(disparador) => setDictamen({ vehiculo: v, disparador })}
-              />
-            )}
+            onAbrirDictamen={(vehiculo, disparador) => setDictamen({ vehiculo, disparador })}
+            onQuitarFiltro={() => setFiltro(null)}
           />
-          <EstimadoVsConsumido estimado={grilla.estimado_consultas} />
+          <EstimadoVsConsumido estimado={grilla.estimado_consultas} plegable />
         </section>
       </>
     );
@@ -414,28 +417,16 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
 
   return (
     <>
-      <CabeceraModulo
-        as="section"
-        aria-labelledby="tablero-titulo"
-        tituloId="tablero-titulo"
-        titulo={grilla?.nombre ?? "Tablero del diagnóstico"}
-        descripcion={sesion?.empresa.nombre}
-        encima={<Migas migas={[{ texto: "Diagnósticos", href: volver }, { texto: grilla?.nombre ?? "Tablero del diagnóstico" }]} />}
-        icono="diagnostico"
-        acciones={
-          <>
-            <Link href={volver} className={BOTON_SECUNDARIO_CLS}>
-              <Icono nombre="izquierda" className="h-4 w-4" />
-              Volver a diagnósticos
-            </Link>
-            {grilla && puedeCerrarPanel(grilla) && (
-              <button type="button" onClick={() => void cerrar()} disabled={cerrando} aria-busy={cerrando} className={BOTON_SECUNDARIO_CLS}>
-                <Icono nombre="portapapeles" className="h-4 w-4" />
-                Cerrar panel
-              </button>
-            )}
-          </>
-        }
+      <CabeceraLote
+        grilla={grilla}
+        empresa={sesion?.empresa.nombre ?? undefined}
+        volver={volver}
+        puedeCerrar={!!grilla && puedeCerrarPanel(grilla)}
+        cerrando={cerrando}
+        confirmando={confirmandoCierre}
+        onPedirCierre={() => setConfirmandoCierre(true)}
+        onCancelarCierre={() => setConfirmandoCierre(false)}
+        onConfirmarCierre={() => void cerrar()}
       />
       {contenido}
       {pidiendoTipoMasivo && (
@@ -459,6 +450,17 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
           puedeCorregir={false}
           onClose={() => setDictamen(null)}
           devolverFocoA={dictamen.disparador}
+          tramiteAnalizado={grilla?.lote?.tipo_tramite?.nombre ?? null}
+          consultas={(grilla?.vehiculos.find((v) => v.id === dictamen.vehiculo.id) ?? dictamen.vehiculo).celdas.map((c) => ({ fuente: c.fuente, estado: c.estado }))}
+          onCrearTramite={
+            puedeDerivar && derivaciones.get(dictamen.vehiculo.id)?.elegible
+              ? () => {
+                  const vehiculoId = dictamen.vehiculo.id;
+                  setDictamen(null);
+                  setSolicitudTramite((s) => ({ vehiculoId, n: (s?.n ?? 0) + 1 }));
+                }
+              : undefined
+          }
         />
       )}
     </>

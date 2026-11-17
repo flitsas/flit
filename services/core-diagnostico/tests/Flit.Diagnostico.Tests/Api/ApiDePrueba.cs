@@ -25,9 +25,9 @@ namespace Flit.Diagnostico.Tests.Api;
 
 /// <summary>
 /// La API de Diagnóstico de verdad (<c>Program.Build</c>) con tokens de producto firmados con una llave propia servida
-/// como JWKS (patrón de Comparendos). Con base: un Postgres real con una base efímera, migrada como al arrancar
-/// (<c>Servicio:MigrateOnStartup=true</c>); sin Postgres se omite en local y falla en CI, también si a CI le falta
-/// <c>ConnectionStrings__Core</c> (HU #13722). Sin base: la cadena apunta a un puerto cerrado, para probar lo que no depende
+/// como JWKS (patrón de Comparendos). Con base: un Postgres real con una base efímera copiada de la plantilla migrada
+/// (<see cref="PlantillaBaseDePrueba"/>) y migrada otra vez al arrancar (<c>Servicio:MigrateOnStartup=true</c>); sin Postgres
+/// se omite en local y falla en CI, también si a CI le falta <c>ConnectionStrings__Core</c> (HU #13722). Sin base: la cadena apunta a un puerto cerrado, para probar lo que no depende
 /// de la base o su ausencia. <c>mapear</c> agrega rutas de prueba antes de arrancar (sondas de fuga, endpoints fantasma).
 /// </summary>
 /// <example>
@@ -75,7 +75,10 @@ public sealed class ApiDePrueba : IAsyncDisposable
     /// <summary>Cadena de conexión de la base efímera (o de la inalcanzable).</summary>
     public string BaseDeDatos { get; }
 
-    /// <summary>Crea una base efímera, arranca la API y aplica sus migraciones como al arrancar.</summary>
+    /// <summary>Plantilla de la que se copió la base efímera; null sin base.</summary>
+    public string? Plantilla { get; private set; }
+
+    /// <summary>Crea una base efímera copia de la plantilla migrada, arranca la API y aplica sus migraciones como al arrancar.</summary>
     public static async Task<ApiDePrueba> ConBaseAsync(Action<WebApplication>? mapear = null, Func<string, string?>? entorno = null, Action<WebApplicationBuilder>? configurar = null)
     {
         entorno ??= Environment.GetEnvironmentVariable;
@@ -88,11 +91,11 @@ public sealed class ApiDePrueba : IAsyncDisposable
         var api = new ApiDePrueba(new NpgsqlConnectionStringBuilder(server) { Database = $"flit_dgn_{Guid.NewGuid():N}"[..30] }.ConnectionString, configurar);
         try
         {
-            await using var admin = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(server) { Database = "postgres" }.ConnectionString);
-            await admin.OpenAsync();
-            await using var create = new NpgsqlCommand($"CREATE DATABASE \"{new NpgsqlConnectionStringBuilder(api.BaseDeDatos).Database}\"", admin);
-            await create.ExecuteNonQueryAsync();
+            // La base nace como copia de la plantilla ya migrada (una vez por huella de migraciones), no vacía.
+            var plantilla = await PlantillaBaseDePrueba.AsegurarAsync(server);
+            await PlantillaBaseDePrueba.CopiarAsync(server, new NpgsqlConnectionStringBuilder(api.BaseDeDatos).Database!, plantilla);
             api._baseCreada = true;
+            api.Plantilla = plantilla;
         }
         catch (NpgsqlException ex) when (!enCi)
         {
@@ -102,6 +105,7 @@ public sealed class ApiDePrueba : IAsyncDisposable
 
         api.App = api.Construir();
         mapear?.Invoke(api.App);
+        // Sobre la copia de la plantilla no queda nada pendiente: se llama igual para mantener probado el camino de arranque.
         await Program.MigrateAsync(api.App);
         await api.App.StartAsync();
         return api;
