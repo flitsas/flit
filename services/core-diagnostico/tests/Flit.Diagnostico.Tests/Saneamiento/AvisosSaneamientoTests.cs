@@ -49,7 +49,7 @@ public sealed class AvisosSaneamientoTests
         aviso.UsuarioId.Should().Be(solicitante);
         aviso.TenantId.Should().Be(empresa.Id);
         aviso.DiagnosticoId.Should().Be(lote.Id);
-        JsonElement.DeepEquals(JsonDocument.Parse(aviso.Datos).RootElement, JsonDocument.Parse(datos).RootElement).Should().BeTrue(aviso.Datos);
+        JsonElement.DeepEquals(JsonElement.Parse(aviso.Datos), JsonElement.Parse(datos)).Should().BeTrue(aviso.Datos);
         aviso.Datos.Should().NotContain("SBN101");
         var evento = (await GestionDePrueba.EventosAsync(empresa, s.Id, ct)).Last();
         aviso.ReferenciaId.Should().Be(evento.Id, "C18/SP-22: la referencia es el evento de la acción");
@@ -148,7 +148,7 @@ public sealed class AvisosSaneamientoTests
         avisos.Should().NotContain(a => a.UsuarioId == flit);
     }
 
-    private static int Cantidad(Notificacion aviso) => JsonDocument.Parse(aviso.Datos).RootElement.GetProperty("cantidad").GetInt32();
+    private static int Cantidad(Notificacion aviso) => JsonElement.Parse(aviso.Datos).GetProperty("cantidad").GetInt32();
 
     private static async Task<List<Notificacion>> AvisosAsync(EmpresaDePrueba empresa, CancellationToken ct)
     {

@@ -450,7 +450,7 @@ public sealed class GestionSaneamientoTests
         historial[0].GetProperty("estado_nuevo").GetString().Should().Be("SOLICITADO");
         historial.Single(e => e.GetProperty("evento").GetString() == "RENGLON_ACTUALIZADO").GetProperty("estado_nuevo").ValueKind.Should().Be(JsonValueKind.Null);
         json.TryGetProperty("solicitado_por_mi", out _).Should().BeFalse("D-22: el tipo de FLIT no lleva solicitado_por_mi");
-        JsonDocument.Parse(await respuesta.Content.ReadAsStringAsync(ct)).RootElement.GetRawText().Should().NotContain("evidencia_referencia").And.NotContain("sha256");
+        JsonElement.Parse(await respuesta.Content.ReadAsStringAsync(ct)).GetRawText().Should().NotContain("evidencia_referencia").And.NotContain("sha256");
     }
 
     // AC44 — dos operadores con la misma version: el segundo recibe 409 VERSION_DESACTUALIZADA; sin version es 422 VERSION_INVALIDA.
@@ -597,7 +597,7 @@ public sealed class GestionSaneamientoTests
 
         bidi.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         var cuerpo = await bidi.Content.ReadAsStringAsync(ct);
-        JsonDocument.Parse(cuerpo).RootElement.GetProperty("code").GetString().Should().Be("TEXTO_INVALIDO");
+        JsonElement.Parse(cuerpo).GetProperty("code").GetString().Should().Be("TEXTO_INVALIDO");
         cuerpo.Should().NotContain("7788", "el error no repite el texto");
         emojis.StatusCode.Should().Be(HttpStatusCode.OK, await emojis.Content.ReadAsStringAsync(ct));
         demasiados.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);

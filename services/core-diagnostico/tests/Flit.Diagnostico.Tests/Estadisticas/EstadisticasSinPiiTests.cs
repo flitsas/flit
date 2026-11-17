@@ -62,14 +62,14 @@ public sealed class EstadisticasSinPiiTests
         {
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-            var hojas = Hojas(JsonDocument.Parse(texto).RootElement).ToList();
+            var hojas = Hojas(JsonElement.Parse(texto)).ToList();
             hojas.Should().NotBeEmpty();
             hojas.Should().NotContain(h => h.Contains(Placa, StringComparison.OrdinalIgnoreCase)
                 || h.Contains(Vin, StringComparison.OrdinalIgnoreCase)
                 || h.Contains(Documento, StringComparison.Ordinal)
                 || h.Contains(creador.ToString(), StringComparison.OrdinalIgnoreCase));
             texto.Should().NotContain("usuario").And.NotContain("placa").And.NotContain("vin\"");
-            JsonDocument.Parse(texto).RootElement.GetProperty("resumen").GetProperty("vehiculos").GetInt32().Should().Be(1, "el vehículo sí cuenta");
+            JsonElement.Parse(texto).GetProperty("resumen").GetProperty("vehiculos").GetInt32().Should().Be(1, "el vehículo sí cuenta");
         }
     }
 

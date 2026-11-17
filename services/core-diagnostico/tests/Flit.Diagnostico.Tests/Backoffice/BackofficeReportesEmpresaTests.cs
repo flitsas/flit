@@ -49,7 +49,7 @@ public sealed class BackofficeReportesEmpresaTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        var pagina = JsonDocument.Parse(texto).RootElement;
+        var pagina = JsonElement.Parse(texto);
         pagina.GetProperty("ambito").GetString().Should().Be("BACKOFFICE_EMPRESA");
         ReportesDePrueba.Claves(pagina).Should().Contain("origen").And.NotContain("empresa_nombre");
         var filas = ReportesDePrueba.Filas(pagina);

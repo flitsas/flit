@@ -83,7 +83,7 @@ public sealed class ReportesBackofficeTests
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
         respuesta.Headers.CacheControl?.NoStore.Should().BeTrue();
-        var pagina = JsonDocument.Parse(texto).RootElement;
+        var pagina = JsonElement.Parse(texto);
         pagina.GetProperty("ambito").GetString().Should().Be("BACKOFFICE_GLOBAL");
         ReportesDePrueba.Claves(pagina)[0].Should().Be("empresa_nombre");
         var filas = ReportesDePrueba.Filas(pagina);
@@ -164,7 +164,7 @@ public sealed class ReportesBackofficeTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        var pagina = JsonDocument.Parse(texto).RootElement;
+        var pagina = JsonElement.Parse(texto);
         ReportesDePrueba.Claves(pagina).Should().Equal(ClavesConsumo);
         var filas = ReportesDePrueba.Filas(pagina);
         filas.Select(f => f.GetProperty("empresa_nombre").GetString()).Should().Equal("Alfa Renting S.A.S.", "Beta Leasing S.A.");
@@ -226,7 +226,7 @@ public sealed class ReportesBackofficeTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        var alfa = ReportesDePrueba.Filas(JsonDocument.Parse(texto).RootElement).Should().ContainSingle().Which;
+        var alfa = ReportesDePrueba.Filas(JsonElement.Parse(texto)).Should().ContainSingle().Which;
         alfa.GetProperty("consultas_exitosas").GetInt32().Should().Be(2, "las 2 RUNT consultadas; la reutilizada no consume");
         alfa.GetProperty("consultas_con_error").GetInt32().Should().Be(1);
         alfa.GetProperty("tasa_exito").GetDouble().Should().Be(0.6667);

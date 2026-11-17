@@ -467,7 +467,7 @@ internal static class CuerpoSaneamiento
         using var lector = new StreamReader(cuerpo);
         var texto = await lector.ReadToEndAsync(ct).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(texto))
-            return JsonDocument.Parse("{}").RootElement.Clone();
+            return JsonElement.Parse("{}");
         try
         {
             using var documento = JsonDocument.Parse(texto);

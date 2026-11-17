@@ -189,10 +189,10 @@ public sealed class CambioPropietarioTests
         CambioDe(grilla, "TST041").Should().Be(JsonValueKind.True);
         CambioDe(grilla, "TST051").Should().Be(JsonValueKind.Null, "cambio_propietario siempre presente, null sin declarado");
         CambioDe(grillaBackoffice, "TST041").Should().Be(JsonValueKind.True);
-        JsonDocument.Parse(listado).RootElement.GetProperty("vehiculos").EnumerateArray()
+        JsonElement.Parse(listado).GetProperty("vehiculos").EnumerateArray()
             .Single(v => v.GetProperty("placa").GetString() == "TST041").GetProperty("cambio_propietario").ValueKind.Should().Be(JsonValueKind.True);
-        JsonDocument.Parse(dictamen).RootElement.GetProperty("cambio_propietario").ValueKind.Should().Be(JsonValueKind.True);
-        JsonDocument.Parse(dictamenBackoffice).RootElement.GetProperty("cambio_propietario").ValueKind.Should().Be(JsonValueKind.True);
+        JsonElement.Parse(dictamen).GetProperty("cambio_propietario").ValueKind.Should().Be(JsonValueKind.True);
+        JsonElement.Parse(dictamenBackoffice).GetProperty("cambio_propietario").ValueKind.Should().Be(JsonValueKind.True);
         logs.Mensajes.Should().NotBeEmpty();
         logs.Mensajes.Should().NotContain(m => m.Contains(OtroDocumento, StringComparison.Ordinal), "SP-3: sin documentos en logs");
     }
@@ -204,7 +204,7 @@ public sealed class CambioPropietarioTests
         var creada = await cliente.PostAsync(
             Cabeceras.Ruta, Configuracion.ConfiguracionOperativaTests.Cuerpo(Cabeceras.Json("Otro lote", "SIMPLE", null, ["RUNT"])), ct);
         creada.StatusCode.Should().Be(HttpStatusCode.Created, await creada.Content.ReadAsStringAsync(ct));
-        var id = JsonDocument.Parse(await creada.Content.ReadAsStringAsync(ct)).RootElement.GetProperty("id").GetGuid();
+        var id = JsonElement.Parse(await creada.Content.ReadAsStringAsync(ct)).GetProperty("id").GetGuid();
         var confirmada = await Lotes.ConfirmarAsync(cliente, id, filas, ct);
         confirmada.StatusCode.Should().Be(HttpStatusCode.Accepted, await confirmada.Content.ReadAsStringAsync(ct));
         return id;
@@ -219,7 +219,7 @@ public sealed class CambioPropietarioTests
     }
 
     private static JsonValueKind CambioDe(string json, string identificador) =>
-        JsonDocument.Parse(json).RootElement.GetProperty("vehiculos").EnumerateArray()
+        JsonElement.Parse(json).GetProperty("vehiculos").EnumerateArray()
             .Single(f => f.GetProperty("identificador").GetString() == identificador).GetProperty("cambio_propietario").ValueKind;
 
     private sealed record FilaVehiculo(bool? Cambio, string? DeclaradoTipo, byte[]? DeclaradoCifrado, string? LocatarioOrigen, bool RuntReutilizado);
