@@ -1,7 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { VehicleTransformationsCard } from '../VehicleTransformationsCard';
+import {
+  areSimultaneousTramitesComplete,
+  getSimultaneousIncompleteMessages,
+  summarizeDeclaredTransformations,
+  VehicleTransformationsCard,
+} from '../VehicleTransformationsCard';
 import type { FieldValue } from '@/lib/api/types/procedure-runtime';
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -346,6 +351,49 @@ describe('VehicleTransformationsCard — carrocería (P2/P3)', () => {
     expect(await screen.findByRole('option', { name: 'SIN CARROCERIA' })).toBeInTheDocument();
   });
 
+  it('una carrocería libre que no está en el catálogo no se inyecta: queda sin selección y obligatoria', async () => {
+    const user = userEvent.setup();
+    render(
+      <VehicleTransformationsCard
+        fieldValues={[
+          ...runtConClase.filter((f) => f.fieldKey !== 'vehicle_body_type'),
+          fv('vehicle_body_type', 'CAMBIO CARROCERIA HATCHBACK'),
+          fv('cambio_carroceria', 'true'),
+        ]}
+        readOnly={false}
+        saving={false}
+        onPatch={vi.fn()}
+      />,
+    );
+    const selector = screen.getByLabelText(/Nueva carrocería/);
+    await waitFor(() => expect(selector).toHaveTextContent('Selecciona…'));
+    expect(screen.getByText('La carrocería recibida no está en el catálogo. Escoge una.')).toBeInTheDocument();
+    expect(screen.getByText('* Obligatorio')).toBeInTheDocument();
+    await user.click(selector);
+    expect(await screen.findByRole('option', { name: 'FURGON' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: /HATCHBACK/ })).not.toBeInTheDocument();
+  });
+
+  it('una carrocería del catálogo se sigue mostrando como elegida', async () => {
+    render(
+      <VehicleTransformationsCard
+        fieldValues={[
+          ...runtConClase.filter((f) => f.fieldKey !== 'vehicle_body_type'),
+          fv('vehicle_body_type', 'FURGON'),
+          fv('cambio_carroceria', 'true'),
+        ]}
+        readOnly={false}
+        saving={false}
+        onPatch={vi.fn()}
+      />,
+    );
+    const selector = screen.getByLabelText(/Nueva carrocería/);
+    expect(selector).toHaveTextContent('FURGON');
+    await waitFor(() => expect(screen.getByText('Validado')).toBeInTheDocument());
+    expect(selector).toHaveTextContent('FURGON');
+    expect(screen.queryByText(/no está en el catálogo/)).not.toBeInTheDocument();
+  });
+
   it('el resumen FUR incluye la carrocería cuando hay cambio declarado', () => {
     const values: FieldValue[] = [
       ...runtConClase.filter((f) => f.fieldKey !== 'vehicle_body_type'),
@@ -445,5 +493,57 @@ describe('VehicleTransformationsCard — modo tipo base (familia OTROS)', () => 
     expect(
       screen.getByText('Trámites Simultáneos — Transformaciones del Vehículo'),
     ).toBeInTheDocument();
+  });
+  describe('vehículo sin carrocería en el RUNT', () => {
+    const conCarroceria = (valor: string): FieldValue[] => [
+      ...runtBase,
+      fv('vehicle_body_type', valor),
+      fv('vehicle_body_type_runt', valor),
+    ];
+    const NOTA = 'El vehículo no tiene carrocería registrada en el RUNT; este cambio no aplica.';
+
+    it.each([['SIN CARROCERIA'], ['sin  carrocería'], ['']])(
+      'con RUNT="%s" el cambio de carrocería queda deshabilitado en No aplica con su nota',
+      (valor) => {
+        renderCard(conCarroceria(valor));
+        const toggle = screen.getByRole('switch', { name: 'Cambio de Carrocería' });
+        expect(toggle).toBeDisabled();
+        expect(toggle).toHaveAttribute('aria-checked', 'false');
+        expect(screen.getByText(NOTA)).toBeInTheDocument();
+        // Color y combustible siguen disponibles.
+        expect(screen.getByRole('switch', { name: 'Cambio de Color' })).toBeEnabled();
+      },
+    );
+
+    it('con carrocería en el RUNT todo sigue igual (habilitado y sin nota)', () => {
+      renderCard(conCarroceria('SEDAN'));
+      expect(screen.getByRole('switch', { name: 'Cambio de Carrocería' })).toBeEnabled();
+      expect(screen.queryByText(NOTA)).not.toBeInTheDocument();
+    });
+
+    it('sin snapshot de carrocería (RUNT sin respuesta) no se asume que no tiene', () => {
+      renderCard(runtBase);
+      expect(screen.getByRole('switch', { name: 'Cambio de Carrocería' })).toBeEnabled();
+    });
+
+    it('dato viejo cambio_carroceria=true: no se pinta la tarjeta ni se exige nueva carrocería', () => {
+      const viejos = [...conCarroceria('SIN CARROCERIA'), fv('cambio_carroceria', 'true')];
+      renderCard(viejos);
+      expect(screen.queryByText('Nueva carrocería *')).not.toBeInTheDocument();
+      expect(screen.getByRole('switch', { name: 'Cambio de Carrocería' })).toHaveAttribute(
+        'aria-checked',
+        'false',
+      );
+      expect(areSimultaneousTramitesComplete(viejos, [])).toBe(true);
+      expect(getSimultaneousIncompleteMessages(viejos, [])).toEqual([]);
+      expect(summarizeDeclaredTransformations(viejos)).toEqual([]);
+    });
+
+    it('con carrocería y cambio_carroceria=true sin valor nuevo sigue siendo obligatorio', () => {
+      const pendiente = [...conCarroceria('SEDAN'), fv('cambio_carroceria', 'true')];
+      expect(getSimultaneousIncompleteMessages(pendiente, [])).toEqual([
+        'Cambio de Carrocería: escoge el nuevo valor.',
+      ]);
+    });
   });
 });
