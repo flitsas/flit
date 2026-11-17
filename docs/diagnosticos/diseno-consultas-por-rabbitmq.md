@@ -31,7 +31,7 @@
 | D4 | Dos tandas de commits con corte directo en `feature/AB-12881-diagnostico-d0-d2`. **A**: todo lo que no enciende consumidores. **B**: encender consumidores y borrar el trabajador de Postgres | §7 y §9 |
 | Sin work items | Commits a nombre de las HUs existentes | §7 |
 | **U1 = b** | Datos personales **en claro, solo lo mínimo**. A la ida, el `*Request` lleva únicamente lo necesario para consultar: placa o VIN, y tipo y número de documento cuando la fuente lo exige. **Nunca** nombres ni direcciones, ni a la ida ni a la vuelta. **Sin cifrado AES-GCM.** Riesgo aceptado: quien tenga usuario en RabbitMQ puede leer placa, VIN, documentos y el resultado minimizado. Retención (completada tras la revisión de seguridad): `.dlq` 7 días (`dlq-7d`), colas principales 24 h (`ttl-*`, Dec. 6) y outbox de Postgres 24 h tras publicarse (Dec. 7). Registro formal del riesgo en ADR-0075 | Q1, Q2, §10, §12 |
-| **U2 = a** | Los reintentos los decide **diagnóstico** (`PoliticaReintentos` 5, 10 y 20 s; re-publica una vez y luego ERROR, según D3). core-consultas consulta **una sola vez** y devuelve OK, o ERROR con el código gRPC. **Efectivo:** 5, 15 y 35 s desde el resultado (§11, fila 2) | Q4 |
+| **U2 = a** | Los reintentos los decide **diagnóstico** (`PoliticaReintentos` 5, 10 y 20 s; re-publica una vez y luego ERROR, según D3). core-consultas consulta **una sola vez** y devuelve OK, o ERROR con el código gRPC. **Efectivo:** 5, 15 y 35 s desde el resultado (§11, fila 2). **Ajuste 2026-11-11 (Punto 3):** 3 reintentos con espera **fija** de 2 min (configurables) y reintento manual de las pegadas (§14) | Q4 |
 | **U3 = a** | La simulación de LOCAL y DEV vive en **core-consultas** (tanda B) | Q6, T10 |
 | **U4 = a** | Reconciliador con margen de 30 min y **pausa** si consultas no devuelve resultados en 10 min. Mientras core-consultas esté caído, no duplica trabajos ni pasa celdas a ERROR. **Completada por Dec. 6** (marca de agua FIFO y TTL) | Q6 |
 | **Dec. 5 = a** | `diagnostico.lote.terminado` se emite en los **tres** caminos de cierre del lote (automático, `CierrePanel` → INCOMPLETO y `LlenadoManual`), desde el punto común de la transición y en la misma transacción | Q8 |
@@ -44,7 +44,7 @@
 **Antes de este cambio** (hasta `3dbb299e7`; el estado actual está en §11). El trabajador de core-diagnostico (`TrabajadorConsultas` → `ProcesadorConsultas`) hace polling de
 `diagnostico.consultas` con `FOR UPDATE SKIP LOCKED` y llama a core-consultas por gRPC. Para eso usa `ClienteConsultas`
 y `Fuente*Real`, con token `platform.consultas` y la cabecera `x-flit-tenant-id`. La política de reintentos
-(`PoliticaReintentos`: 5, 10 y 20 s; `MaxReintentos` 0..3) y la orquestación RUNT → demás (`OrquestadorVehiculo`) viven
+(`PoliticaReintentos`: hasta el ajuste 2026-11-11, 5, 10 y 20 s; desde el Punto 3, espera fija `EsperaReintento` = 2 min; `MaxReintentos` 0..3, por defecto 3) y la orquestación RUNT → demás (`OrquestadorVehiculo`) viven
 en diagnóstico.
 
 **Hechos verificados que condicionan el diseño:**
@@ -218,17 +218,19 @@ ni consumo. El reproceso nunca reutiliza (R-1).
 
 | | 4a. core-consultas **no reintenta**: publica el resultado ERROR con su `grpcStatus` y diagnóstico decide con `PoliticaReintentos` **(DECIDIDA, U2 = a)** | 4b. core-consultas reintenta con el SDK y publica ERROR al agotar |
 |---|---|---|
-| Cómo | El consumidor de resultados de diagnóstico, ante un transitorio (`RED`, `TIMEOUT`, `HTTP_5XX`) con reintentos disponibles: (1) en un **scope propio** registra el intento (`intentos_consulta`), `intentos_auto+1`, PENDIENTE y `disponible_desde`; (2) lanza `ReintentoProgramadoException`, y el SDK lleva el **resultado** a `diagnostico.consultas-resultados.retry.n`, configurado en 5, 10 y 20 s = `PoliticaReintentos.Espera(n)`; (3) cuando el mensaje vuelve, ve la celda PENDIENTE con su intento ya registrado y **publica un trabajo nuevo** (`trabajo_id` nuevo) y confirma. Al agotarse, cierra **ERROR con su `tipo_error`** | El consumidor de core-consultas lanza ante un transitorio y el SDK reintenta. En el último intento publica ERROR. Exige que el SDK le pase al handler el número de intento (cambio extra) |
+| Cómo | El consumidor de resultados de diagnóstico, ante un transitorio (`RED`, `TIMEOUT`, `HTTP_5XX`) con reintentos disponibles: (1) en un **scope propio** registra el intento (`intentos_consulta`), `intentos_auto+1`, PENDIENTE y `disponible_desde`; (2) lanza `ReintentoProgramadoException`, y el SDK lleva el **resultado** a `diagnostico.consultas-resultados.retry.n`, con la espera fija `Diagnostico:Consultas:EsperaReintento` = `PoliticaReintentos.Espera` (2 min por defecto desde el Punto 3; antes 5, 10 y 20 s); (3) cuando el mensaje vuelve, ve la celda PENDIENTE con su intento ya registrado y **publica un trabajo nuevo** (`trabajo_id` nuevo) y confirma. Al agotarse, cierra **ERROR con su `tipo_error`** | El consumidor de core-consultas lanza ante un transitorio y el SDK reintenta. En el último intento publica ERROR. Exige que el SDK le pase al handler el número de intento (cambio extra) |
 | Pros | **core-consultas queda sin estado**: un mensaje produce una ejecución y un resultado. La política, los intentos auditados por ejecución (`RegistroIntentos`) y `MaxReintentos` siguen en diagnóstico **como hoy**. No hace falta tocar el SDK para exponer el intento. Cada reintento queda medido como consumo en core-consultas | Menos mensajes |
 | Contras | Un reintento son dos mensajes (resultado demorado y trabajo nuevo). El retraso usa la cola de reintentos del resultado (es poco intuitivo, así que se documenta) | La política se reparte entre dos servicios. Los intentos intermedios no llegan a diagnóstico. La medición del intento fallido se revierte con la transacción (habría que medir en un scope propio) |
 | Esfuerzo | M | M |
 
-**Esperas efectivas (implementado).** El SDK cuenta los intentos **por mensaje**, y cada reintento de la celda es un
-resultado nuevo. Por eso un resultado demorado siempre entra por `.retry.1` (5 s) y, si la espera de la celda
-(`disponible_desde`) no venció, `ProgramadorReintentos.ReanudarAsync` le da otra vuelta por la cola siguiente
-(`ProgramadorReintentos.cs:110`). Desde el resultado transitorio, el trabajo nuevo sale a los **5 s** (reintento 1),
-**15 s** (5 + 10, reintento 2) o **35 s** (5 + 10 + 20, reintento 3). Con `Diagnostico:Consultas:MaxReintentos` = 1, el
-valor de `appsettings.json`, solo hay un reintento a los 5 s.
+**Esperas efectivas (implementado; ajuste 2026-11-11, Punto 3).** El SDK cuenta los intentos **por mensaje**, y cada
+reintento de la celda es un resultado nuevo. Por eso un resultado demorado siempre entra por `.retry.1` y, si la espera de
+la celda (`disponible_desde`) no venció, `ProgramadorReintentos.ReanudarAsync` le da otra vuelta por la cola siguiente.
+Desde el Punto 3 las tres colas `.retry.1..3` tienen el **mismo** TTL, la espera fija `EsperaReintento`
+(`ProgramadorReintentos.EsperasDe`), así que cada reintento sale a los **2 min** del resultado transitorio (no 5/15/35 s) y
+la segunda y tercera cola solo cubren otra vuelta o un conflicto de concurrencia. `appsettings.json` trae
+`MaxReintentos` = 3, `EsperaReintento` = `00:02:00` y `UmbralPegada` = `00:10:00` (validados al arrancar: 0..3; 1 s..1 h;
+mayor que la espera y hasta 1 día). Antes del ajuste: 5, 15 y 35 s, con `MaxReintentos` = 1.
 
 **Estados de la celda con el bus.** EN_CURSO = trabajo en vuelo (publicado y sin resultado). PENDIENTE con `trabajo_id` =
 reintento programado, a la espera del resultado demorado (`ConsumidorResultados.cs:79`). PENDIENTE diferida = espera a
@@ -510,8 +512,8 @@ sequenceDiagram
   R->>R: pulso + marca de agua de su cola (UUIDv7) · Fijar(empresa del sobre) · ¿trabajo_id vigente? si no → ack sin efecto
   alt ERROR transitorio y PoliticaReintentos permite
     R->>DDB: scope propio: intento + intentos_auto+1 + PENDIENTE
-    R-->>MQ: ReintentoProgramado → resultado a .retry.n (5/10/20 s)
-    MQ->>R: vuelve el resultado demorado (otra vuelta si la espera no venció: efectivo 5/15/35 s)
+    R-->>MQ: ReintentoProgramado → resultado a .retry.n (espera fija, 2 min)
+    MQ->>R: vuelve el resultado demorado (otra vuelta si la espera no venció)
     R->>DDB: TX: trabajo_id nuevo + outbox EnqueueJob (mismo destino) + bandeja
   else final (OK, definitivo o agotado)
     R->>DDB: TX: Mapeo<fuente>(respuesta) · EscritorCeldas.Cerrar · version_tablero
@@ -955,7 +957,7 @@ Desviaciones que reportaron los agentes al implementar, verificadas contra el c�
 | # | Tema | Diseño | Implementado | Dónde |
 |---|---|---|---|---|
 | 1 | Estados de la celda | PENDIENTE mientras el trabajo está en vuelo | **EN_CURSO** = trabajo en vuelo. **PENDIENTE con `trabajo_id`** = reintento programado, que espera su resultado demorado | `PublicadorCeldas.cs:102-108`; `ConsumidorResultados.cs:79` |
-| 2 | Esperas de reintento | 5, 10 y 20 s | El SDK cuenta intentos por mensaje: el resultado demorado entra siempre por `.retry.1` y da vueltas hasta que vence la espera de la celda. Efectivo: **5, 15 y 35 s**. Con `MaxReintentos` = 1 (el valor de `appsettings.json`), solo 5 s | `PoliticaReintentos.cs:41-45`; `ProgramadorReintentos.cs:36,110`; `Modulos.cs:120` |
+| 2 | Esperas de reintento | 5, 10 y 20 s | El SDK cuenta intentos por mensaje: el resultado demorado entra siempre por `.retry.1` y da vueltas hasta que vence la espera de la celda. Hasta el 2026-11-11: efectivo **5, 15 y 35 s** con `MaxReintentos` = 1. **Desde el Punto 3: 3 reintentos, cada uno a 2 min** (espera fija configurable, mismo TTL en las tres colas `.retry.n`) | `PoliticaReintentos.cs` (`Espera`); `ProgramadorReintentos.cs` (`EsperasDe`); `Modulos.cs` (`RetryDelays`) |
 | 3 | Celdas de persona | Un trabajo por celda | `personaId` en el contrato: **un trabajo por persona**, con el mismo `trabajoId`. AsyncAPI 1.1.0 | `PublicadorCeldas.cs:117-121`; `consultas-events.v1.yaml:155` |
 | 4 | `diagnostico.lote.terminado` | Desde `TrasCerrar` (cierre automático) | En los **3 caminos** (automático, `CierrePanel` → INCOMPLETO y `LlenadoManual`), desde el punto común de la transición (Dec. 5) | `RecalculadorEstado.cs:82`; `CierrePanel.cs:57`; `LlenadoManual.cs:149` |
 | 5 | Tope de una ejecución en consultas | No estaba | `Consultas:Diagnostico:TiempoMaximoSegundos` = 90 → ERROR `DeadlineExceeded` (transitorio). Una excepción inesperada → `Internal` (definitivo) | `OpcionesConsumidoresDiagnostico.cs:42`; `EjecutorTrabajo.cs:77,83` |
@@ -1022,6 +1024,29 @@ security-agent sobre `63e0fe89c`.
 | 10 | El TTL de las políticas y `Diagnostico__Consultas__Reconciliador__TtlTrabajo` **iguales** (24 h por defecto) | Log de arranque de core-diagnostico, evento 137280 (`… TTL <valor>`) |
 | 11 | Inventario de usuarios del broker: los 6 de servicio y el administrador | `list_users` y `list_permissions -p flit` (ADR-0075, registro de U1) |
 | 12 | Ratificar las fuentes que pasan a ofrecerse en QA y PDN (SIMIT, RUES y avalúo, §11 fila 8) y su habilitación en el contrato de cada compañía | Pantalla de contrato del backoffice |
+| 13 | **Punto 3 (2026-11-11): cambia el TTL de `diagnostico.consultas-resultados.retry.1..3`** (5/10/20 s → 2 min). El SDK las declara con `x-message-ttl` y RabbitMQ rechaza redeclarar una cola con otros argumentos (`PRECONDITION_FAILED`): el consumidor no arranca. En la ventana del despliegue, con core-diagnostico detenido, comprobar que están vacías y borrarlas (`rabbitmqctl delete_queue -p flit diagnostico.consultas-resultados.retry.1`, `.2` y `.3`); el servicio las recrea al arrancar. Lo mismo cada vez que se cambie `EsperaReintento` | `list_queues -p flit name messages arguments` antes (vacías) y después (TTL 120000) |
 
 Pasos y vuelta atrás detallados: `docs/suite/handoff-vps-diagnostico.md` (§2.2, §2.2.1, §2.3) y
 `docs/suite/handoff-vps-consultas-notificaciones.md` (§9).
+
+## 14. Reintento manual de las celdas pegadas (ajuste 2026-11-11, Punto 3)
+
+Decisiones 3.1–3.4 de `docs/diagnosticos/plan-ajustes-diagnostico-2026-11-11.md`. El reconciliador (§Q6, D3) **no cambia**:
+sigue siendo la red de seguridad; el reintento manual solo adelanta lo que hoy esperaría 30 min o más.
+
+| Tema | Regla | Dónde |
+|---|---|---|
+| Automáticos | Solo transitorios; `MaxReintentos` = 3 y espera **fija** `EsperaReintento` = 2 min (configuración global). Un definitivo va directo a ERROR | `Domain/Consultas/PoliticaReintentos.cs`; `OpcionesConsultas.cs` |
+| «Pegada» | Celda en ERROR, o en PENDIENTE/EN_CURSO con `actualizado_en` hace **más** de `UmbralPegada` (10 min). COMPLETADO y NA nunca. Con la RUNT del vehículo sin completar solo cuenta (y se reencola) la RUNT: las demás esperan su cierre, que las libera o las bloquea (HU #13730) | `Domain/Consultas/CriterioPegada.cs` |
+| Por placa | `POST /diagnosticos/{id}/vehiculos/{vid}/reintentar` → 200 `{ "reencoladas": n }` | `EndpointsReproceso.cs`; `ReintentoPegadas.cs` |
+| Por lote | `POST /diagnosticos/{id}/reintentar-pegadas` → 200 `{ "reencoladas": n }` | ídem |
+| Permiso y alcance | `diagnostico.consultas.reprocesar` (403 sin él). Compañía y visibilidad de `AccesoLote` (404); vehículo que no es del lote, 404 | ídem |
+| Camino | El del reproceso por celda (`Reproceso.PrepararReencolado` + `PublicadorCeldas.PublicarAsync`, misma transacción): PENDIENTE, `intentos_auto = 0` (vuelve a tener sus 3 automáticos), `disponible_desde = ahora`, `reproceso_usuario_id` = el usuario (intento `REPROCESO`, sin reutilizar el dato del día), y un trabajo con **`trabajo_id` nuevo**. Un lote COMPLETADO/INCOMPLETO vuelve a EN_PROCESO con historial REPROCESO | `Reproceso.cs`; `ReintentoPegadas.cs` |
+| Respuesta tardía | La del trabajo anterior trae el `trabajo_id` viejo y `ConsumidorResultados` la descarta (`TRABAJO_NO_VIGENTE`), como ya hacía con el reproceso y la republicación (V6): no se escribió código nuevo de descarte | `ConsumidorResultados.cs` |
+| Idempotencia | La celda reencolada cambió hace menos de 10 min y deja de ser pegada: la segunda pulsación responde `reencoladas: 0` | `CriterioPegada` |
+| Tablero | `GET /diagnosticos/{id}/grilla` lleva `pegada` (bool) en cada fila que viaja y, siempre, `total_pegadas` (placas) y `vehiculos_pegados` (ids) en el lote, porque una placa se pega sin que cambie ninguna celda y el sondeo incremental no la traería | `ConsultaGrilla.cs`; `GrillaDto.cs` |
+| Dictamen | Se recalcula al cerrarse las celdas reencoladas, por el camino de siempre (`PublicadorCeldas.CerrarAsync` → `EmisorDictamen`) | — |
+| Despliegue | Cambia el TTL de las colas `.retry.n`: §13, paso 13 | — |
+
+Riesgo: más reintentos son más consultas pagas al proveedor; vigilar el costo en lotes grandes (cada automático y cada
+reintento manual consume).

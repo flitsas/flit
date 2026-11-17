@@ -56,11 +56,14 @@ describe("PanelDictamen — vacío, carga, error y lleno", () => {
     expect(await screen.findByText("Bloqueado")).toBeInTheDocument();
     expect(screen.getByText("redacción IA pendiente")).toBeInTheDocument();
     const lista = screen.getByRole("list");
-    expect(lista).toHaveTextContent("SOAT_NO_VIGENTE");
-    expect(lista).toHaveTextContent("Efecto: BLOQUEA");
-    expect(lista).toHaveTextContent("Fuente: RUNT");
+    // Punto 5: sin `etiqueta` en la respuesta, el título y la fuente salen del diccionario de respaldo, nunca el código.
+    expect(lista).toHaveTextContent("SOAT no vigente");
+    expect(lista).toHaveTextContent("Efecto: Bloquea el trámite");
+    expect(lista).toHaveTextContent("Fuente: RUNT vehículo");
     expect(lista).toHaveTextContent("El SOAT no está vigente.");
-    expect(lista.textContent?.indexOf("SOAT_NO_VIGENTE")).toBeLessThan(lista.textContent?.indexOf("IMPUESTO") ?? 0);
+    expect(lista).not.toHaveTextContent("SOAT_NO_VIGENTE");
+    expect(lista).not.toHaveTextContent(/BLOQUEA|ADVIERTE|IMPUESTO_DEPARTAMENTAL/);
+    expect(lista.textContent?.indexOf("SOAT no vigente")).toBeLessThan(lista.textContent?.indexOf("Impuesto vehicular pendiente") ?? 0);
     expect(screen.queryByRole("button", { name: "Reemplazar veredicto" })).not.toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "Confirmo el cambio de veredicto" })).not.toBeInTheDocument();
   });
@@ -87,6 +90,66 @@ describe("PanelDictamen — vacío, carga, error y lleno", () => {
     expect(await screen.findByText("Bloqueado")).toBeInTheDocument();
     expect(screen.queryByText("redacción IA pendiente")).not.toBeInTheDocument();
     expect(veces).toBe(2);
+  });
+});
+
+describe("PanelDictamen — Punto 5: rótulos, nunca códigos", () => {
+  it("titula cada alerta con la etiqueta de la API y muestra «Fuente: {fuente_etiqueta}»", async () => {
+    simularApi({
+      [`GET ${RUTA}`]: () =>
+        Response.json({
+          ...LLENO,
+          alertamientos: [
+            {
+              codigo: "SIMIT_PROPIETARIO",
+              etiqueta: "Multas del propietario",
+              texto: "El propietario tiene multas.",
+              efecto: "BLOQUEA",
+              fuente: "SIMIT_PROPIETARIO",
+              fuente_etiqueta: "SIMIT del propietario",
+            },
+          ],
+        }),
+    });
+    pintar();
+    const item = (await screen.findAllByRole("listitem"))[0];
+    expect(item).toHaveTextContent("Multas del propietario");
+    expect(item).toHaveTextContent("Fuente: SIMIT del propietario");
+    expect(item).not.toHaveTextContent("SIMIT_PROPIETARIO");
+  });
+
+  it("un código sin etiqueta ni respaldo dice «Novedad sin clasificar» y deja el aviso técnico", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    simularApi({
+      [`GET ${RUTA}`]: () =>
+        Response.json({
+          ...LLENO,
+          alertamientos: [{ codigo: "REGLA_FUTURA_X", texto: "Texto de la regla.", efecto: "EFECTO_FUTURO", fuente: "FUENTE_FUTURA_Y" }],
+        }),
+    });
+    pintar();
+    const item = (await screen.findAllByRole("listitem"))[0];
+    expect(item).toHaveTextContent("Novedad sin clasificar");
+    expect(item).not.toHaveTextContent("REGLA_FUTURA_X");
+    expect(item).not.toHaveTextContent("EFECTO_FUTURO");
+    expect(item).not.toHaveTextContent("FUENTE_FUTURA_Y");
+    expect(aviso).toHaveBeenCalled();
+    aviso.mockRestore();
+  });
+
+  it("FUENTE_PENDIENTE sin etiqueta se rotula con el nombre de la fuente", async () => {
+    simularApi({
+      [`GET ${RUTA}`]: () =>
+        Response.json({
+          ...LLENO,
+          alertamientos: [{ codigo: "FUENTE_PENDIENTE", texto: "La consulta no terminó.", efecto: "ADVIERTE", fuente: "AVALUO" }],
+        }),
+    });
+    pintar();
+    const item = (await screen.findAllByRole("listitem"))[0];
+    expect(item).toHaveTextContent("Consulta pendiente: Avalúo comercial");
+    expect(item).toHaveTextContent("Efecto: Advertencia");
+    expect(item).not.toHaveTextContent("FUENTE_PENDIENTE");
   });
 });
 

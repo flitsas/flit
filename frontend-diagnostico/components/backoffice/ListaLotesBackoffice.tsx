@@ -17,7 +17,7 @@ import {
   TARJETA_CLS,
 } from "@/components/configuracion/estilos";
 import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
-import { ESTADOS_LOTE } from "@/components/tablero/EstadoGlobal";
+import { ESTADOS_LOTE, vistaEstadoLote } from "@/components/tablero/EstadoGlobal";
 import {
   CABECERA_TABLA_CLS,
   CABECERA_TABLA_ESTILO,
@@ -29,7 +29,9 @@ import { ApiError } from "@/lib/api";
 import { listarLotesBackoffice, type ListaDiagnosticosBackoffice } from "@/lib/backoffice/api";
 import { esEmpresaValida } from "@/lib/configuracion";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
-import { SelectorEmpresa } from "./SelectorEmpresa";
+import { SelectorEmpresaBackoffice } from "./SelectorEmpresaBackoffice";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
+import { rutaIlustracion } from "@flit/ui/ilustraciones";
 
 export interface ListaLotesBackofficeProps {
   /** Valores iniciales tomados de la URL (?empresa=&estado=&con_errores=&pagina=). */
@@ -73,8 +75,9 @@ function Vacio({ titulo, children, Icono = ClipboardList }: { titulo: string; ch
 
 /**
  * Lotes de una compañía para el backoffice FLIT (HU #13802, F06-H5; F06-C6, C14) en /backoffice/diagnosticos: selector
- * explícito de la compañía, filtros por estado y «con errores» y la tabla de lotes (orden de creación, el más reciente
- * primero) con enlace a la grilla de cada uno. Sin compañía elegida no consulta. Los filtros viven en la URL. Cuatro estados:
+ * de la compañía con búsqueda por nombre o NIT (SelectorEmpresaBackoffice, el mismo del editor de contrato; Punto 6 de la
+ * ola 2026-11-11), filtros por estado y «con errores» y la tabla de lotes (orden de creación, el más reciente primero) con
+ * enlace a la grilla de cada uno. Sin compañía elegida no consulta. Los filtros viven en la URL. Cuatro estados:
  * cargando, error con Reintentar (403 a la página 403), vacío (sin compañía o sin lotes con esos filtros) y lleno.
  */
 export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
@@ -121,7 +124,7 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
   if (!hayEmpresa) {
     contenido = (
       <Vacio titulo="Elige una compañía" Icono={Building2}>
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Indica la compañía cuyos lotes de diagnóstico quieres revisar.</p>
+        <p className="max-w-md text-sm text-muted-foreground">Indica la compañía cuyos lotes de diagnóstico quieres revisar.</p>
       </Vacio>
     );
   } else if (carga.tipo === "cargando" || es403) {
@@ -150,14 +153,14 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
   } else if (carga.lista.diagnosticos.length === 0) {
     contenido = (
       <Vacio titulo="Esta compañía no tiene lotes con estos filtros">
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Cambia el estado o quita «Solo lotes con errores».</p>
+        <p className="max-w-md text-sm text-muted-foreground">Cambia el estado o quita «Solo lotes con errores».</p>
       </Vacio>
     );
   } else {
     const { lista } = carga;
     contenido = (
       <div className="flex flex-col gap-3">
-        <div className="overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10">
+        <div className="overflow-x-auto rounded-xl border border-border">
           <table aria-label="Lotes de la compañía" className="w-full min-w-[640px] border-collapse text-sm">
             <thead>
               <tr>
@@ -170,13 +173,13 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
             </thead>
             <tbody>
               {lista.diagnosticos.map((d) => {
-                const estado = ESTADOS_LOTE[d.estado] ?? { texto: d.estado, tono: "neutral" as const };
+                const estado = vistaEstadoLote(d.estado, d.estado_etiqueta);
                 return (
-                  <tr key={d.id} className={`${FILA_TABLA_CLS} bg-white dark:bg-transparent`}>
+                  <tr key={d.id} className={`${FILA_TABLA_CLS} bg-card`}>
                     <td className={CELDA_TABLA_CLS}>
                       <Link
                         href={`/backoffice/diagnosticos/${encodeURIComponent(d.id)}?empresa=${encodeURIComponent(filtros.empresa)}`}
-                        className="text-sm font-semibold text-[var(--flit-brand-ink)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--nav-focus)] dark:text-white"
+                        className="text-sm font-semibold text-[var(--flit-brand-ink)] underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
                       >
                         {d.nombre}
                       </Link>
@@ -210,16 +213,16 @@ export function ListaLotesBackoffice(props: ListaLotesBackofficeProps) {
 
   return (
     <>
-      <section aria-labelledby="lotes-bo-titulo" className={TARJETA_CLS}>
-        <h1 id="lotes-bo-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
-          Backoffice de diagnósticos
-        </h1>
-        <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">
-          Revisa los lotes de una compañía cliente, abre su grilla y llena a mano las celdas en error.
-        </p>
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="lotes-bo-titulo"
+        tituloId="lotes-bo-titulo"
+        titulo="Backoffice de diagnósticos"
+        descripcion="Revisa los lotes de una compañía cliente, abre su grilla y llena a mano las celdas en error."
+        ilustracion={rutaIlustracion("diagnostico")}
+      />
       <section aria-label="Compañía y filtros" className={`${TARJETA_CLS} flex flex-col gap-4`}>
-        <SelectorEmpresa valor={filtros.empresa} onElegir={(empresa) => aplicar({ empresa, pagina: 1 })} />
+        <SelectorEmpresaBackoffice id={`${id}-empresa`} value={filtros.empresa} onChange={(empresa) => aplicar({ empresa: empresa.id, pagina: 1 })} />
         {hayEmpresa && (
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex flex-col gap-1">

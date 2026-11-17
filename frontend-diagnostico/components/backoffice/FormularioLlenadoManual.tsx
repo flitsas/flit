@@ -47,6 +47,7 @@ import {
   type SimitBorrador,
 } from "@/lib/backoffice/esquemasManual";
 import { textoTipoError } from "@/lib/tablero/detalle";
+import { nombreRol } from "@/lib/rotulos";
 
 export interface FormularioLlenadoManualProps {
   consultaId: string;
@@ -91,7 +92,7 @@ const ESTADOS_FUENTE_AVALUO = [
   { valor: "ERROR", nombre: "Error" },
 ] as const;
 
-const BOTON_FILA_CLS = `inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-xs font-semibold text-[var(--flit-brand-ink)] disabled:cursor-not-allowed disabled:opacity-50 dark:text-white ${FOCO_CLS}`;
+const BOTON_FILA_CLS = `inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-xs font-semibold text-[var(--flit-brand-ink)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCO_CLS}`;
 
 /** Cambio de un borrador: el nuevo valor y la ruta del campo editado (su error se borra). */
 type AlCambiar<B> = (borrador: B, campo: string) => void;
@@ -187,7 +188,7 @@ function Fila({ titulo, onQuitar, children }: { titulo: string; onQuitar: () => 
   return (
     <div role="group" aria-label={titulo} className={`${TARJETA_DETALLE_CLS} flex flex-col gap-3`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-flit-primary dark:text-white">{titulo}</span>
+        <span className="text-sm font-semibold text-flit-primary">{titulo}</span>
         <button type="button" onClick={onQuitar} className={BOTON_FILA_CLS}>
           <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
           {`Quitar ${titulo.toLowerCase()}`}
@@ -356,8 +357,6 @@ function FormEsquema({ b, raiz, errores, onChange }: { b: Borrador; raiz: string
   }
 }
 
-const ROL: Record<PersonaEnError["rol"], string> = { PROPIETARIO: "Propietario", LOCATARIO: "Locatario" };
-
 /** Sección de una persona en error: rol, orden, documento enmascarado tal como llega y el formulario de su consulta. */
 function SeccionPersona(props: { persona: PersonaEnError; indice: number; b: Borrador; errores: ErroresCampo; onChange: AlCambiar<Borrador> }) {
   const { persona, indice, b, errores, onChange } = props;
@@ -365,8 +364,8 @@ function SeccionPersona(props: { persona: PersonaEnError; indice: number; b: Bor
   const error = errores[campoPersona];
   return (
     <fieldset id={idDeCampo(campoPersona)} className={`${TARJETA_DETALLE_CLS} flex flex-col gap-3`}>
-      <legend className="px-1 text-sm font-semibold text-flit-primary dark:text-white">
-        {`${ROL[persona.rol]} ${persona.orden} · ${persona.tipo_documento} ${persona.documento_enmascarado}`}
+      <legend className="px-1 text-sm font-semibold text-flit-primary">
+        {`${nombreRol(persona.rol)} ${persona.orden} · ${persona.tipo_documento} ${persona.documento_enmascarado}`}
       </legend>
       <p className={AYUDA_CLS}>
         {`${textoTipoError(persona.tipo_error)}${persona.declarado_por_cliente ? " Documento declarado por el cliente." : ""}`}

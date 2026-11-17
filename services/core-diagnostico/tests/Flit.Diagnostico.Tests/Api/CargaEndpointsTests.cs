@@ -95,7 +95,7 @@ public sealed class CargaEndpointsTests
         var deXlsx = await xlsx.Content.ReadAsStringAsync(ct);
         (await csv.Content.ReadAsStringAsync(ct)).Should().Be(deXlsx);
         (await coma.Content.ReadAsStringAsync(ct)).Should().Be(deXlsx);
-        var resumen = JsonDocument.Parse(deXlsx).RootElement;
+        var resumen = JsonElement.Parse(deXlsx);
         resumen.GetProperty("total_filas").GetInt32().Should().Be(9, "la fila 9 está vacía y no cuenta");
         Fila(resumen, 3).GetProperty("documento_locatario").GetString().Should().Be("****4050", "la celda numérica se lee como texto");
         Fila(resumen, 4).GetProperty("tipo_documento_locatario").GetString().Should().Be("NIT", "la cadena en línea se lee");
@@ -116,7 +116,7 @@ public sealed class CargaEndpointsTests
 
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, $"{nombre} → {texto}");
-            var json = JsonDocument.Parse(texto).RootElement;
+            var json = JsonElement.Parse(texto);
             json.GetProperty("code").GetString().Should().Be("FORMATO_XLS_NO_ADMITIDO");
             json.GetProperty("error").GetString().Should().Be("El formato .xls no se admite: guarde el archivo como .xlsx y vuelva a subirlo");
             texto.Should().NotContain("total_filas", "no se analiza ninguna fila");
@@ -146,7 +146,7 @@ public sealed class CargaEndpointsTests
 
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.UnsupportedMediaType, $"{nombre} → {texto}");
-            var json = JsonDocument.Parse(texto).RootElement;
+            var json = JsonElement.Parse(texto);
             json.GetProperty("code").GetString().Should().Be(codigo, nombre);
             json.GetProperty("error").GetString().Should().NotBeNullOrWhiteSpace().And.ContainAny(".xlsx", ".csv");
         }
@@ -175,7 +175,7 @@ public sealed class CargaEndpointsTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
         externas.Llamadas.Should().Be(httpAntes, "el análisis no llama a ninguna fuente por HTTP");
         api.Catalogos.Llamadas.Should().Be(catalogoAntes, "ni al gRPC de Trámites");
-        var resumen = JsonDocument.Parse(texto).RootElement;
+        var resumen = JsonElement.Parse(texto);
         resumen.GetProperty("validos").GetInt32().Should().Be(4);
         resumen.GetProperty("erroneos").GetInt32().Should().Be(4);
         resumen.GetProperty("duplicados").GetInt32().Should().Be(1);
@@ -273,7 +273,7 @@ public sealed class CargaEndpointsTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        var resumen = JsonDocument.Parse(texto).RootElement;
+        var resumen = JsonElement.Parse(texto);
         Fila(resumen, 2).GetProperty("valida").GetBoolean().Should().BeFalse();
         Errores(Fila(resumen, 2)).Should().Equal("DOCUMENTO_INVALIDO");
         Fila(resumen, 3).GetProperty("valida").GetBoolean().Should().BeTrue();
@@ -301,13 +301,13 @@ public sealed class CargaEndpointsTests
             ct, empresas.B, ["RUNT_LOCATARIO"]);
         var archivo = Bytes("Identificador_Vehiculo;Tipo_Documento_Locatario;Documento_Locatario", "ABC123;CC;1020304050", "XYZ987;;", "DEF456;;", "MAL;;");
 
-        var conEstimado = JsonDocument.Parse(await (await SubirAsync(antes, idAntes, archivo, "a.csv", ct)).Content.ReadAsStringAsync(ct)).RootElement;
+        var conEstimado = JsonElement.Parse(await (await SubirAsync(antes, idAntes, archivo, "a.csv", ct)).Content.ReadAsStringAsync(ct));
         var sinEstimadoTexto = await (await SubirAsync(no, idNo, archivo, "b.csv", ct)).Content.ReadAsStringAsync(ct);
 
         var estimado = conEstimado.GetProperty("estimado_consultas").EnumerateArray()
             .ToDictionary(e => e.GetProperty("fuente").GetString()!, e => e.GetProperty("consultas").GetInt32());
         estimado.Should().Equal(new Dictionary<string, int> { ["RUNT"] = 3, ["RUNT_LOCATARIO"] = 1 });
-        JsonDocument.Parse(sinEstimadoTexto).RootElement.TryGetProperty("estimado_consultas", out _).Should().BeFalse(sinEstimadoTexto);
+        JsonElement.Parse(sinEstimadoTexto).TryGetProperty("estimado_consultas", out _).Should().BeFalse(sinEstimadoTexto);
     }
 
     // HU #13796 AC1 (F05-C13, Q7) — con ANTES_DE_LANZAR y 10 vehículos, SIMIT_PROPIETARIO muestra 10 con minimo=true (las
@@ -328,7 +328,7 @@ public sealed class CargaEndpointsTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        JsonDocument.Parse(texto).RootElement.GetProperty("estimado_consultas").EnumerateArray()
+        JsonElement.Parse(texto).GetProperty("estimado_consultas").EnumerateArray()
             .Select(e => $"{e.GetProperty("fuente").GetString()} {e.GetProperty("consultas").GetInt32()} {e.GetProperty("minimo").GetBoolean()}")
             .Should().Equal(["RUNT 10 False", "SIMIT_VEHICULO 10 False", "SIMIT_PROPIETARIO 10 True"]);
     }
@@ -424,7 +424,7 @@ public sealed class CargaEndpointsTests
         var respuesta = await SubirAsync(cliente, id, csv, "carga.csv", ct);
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        return JsonDocument.Parse(texto).RootElement;
+        return JsonElement.Parse(texto);
     }
 
     /// <summary>Siembra la configuración de la compañía y crea una cabecera SIMPLE en CREADO con RUNT (y el locatario dado).</summary>

@@ -75,6 +75,18 @@ public sealed class VehiculoDiagnostico : IEntidadDeEmpresa
     /// <summary>Posición del vehículo dentro del lote.</summary>
     public int Orden { get; set; }
 
+    /// <summary>
+    /// Borrador creado en Trámites desde este vehículo (Punto 4, ADR-0084: <c>origin=diagnostico</c>, <c>external_ref</c> = id del
+    /// vehículo); null mientras no haya. Se fija una sola vez (R-16) y es la fuente de «Ver trámite #N» y de la elegibilidad.
+    /// </summary>
+    public Guid? TramiteId { get; set; }
+
+    /// <summary>Número del trámite (<c>reference_number</c> de Trámites); lo lee también el índice del ZIP (Punto 8).</summary>
+    public string? TramiteNumero { get; set; }
+
+    /// <summary>Instante en que Diagnóstico registró el trámite.</summary>
+    public DateTimeOffset? TramiteCreadoEn { get; set; }
+
     /// <summary>Token de concurrencia (columna de sistema <c>xmin</c>): el procesador y el usuario no se pisan.</summary>
     public uint Version { get; set; }
 }

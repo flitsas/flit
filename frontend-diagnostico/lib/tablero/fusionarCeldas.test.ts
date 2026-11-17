@@ -109,3 +109,19 @@ describe("fusionarCeldas — HU #14087: documentos de la fila", () => {
     expect(vigente.vehiculos[0].propietarios).toEqual([{ tipo_documento: "C", documento_enmascarado: "****1222" }]);
   });
 });
+
+describe("fusionarCeldas — Punto 3: placas pegadas por tiempo (vehiculos_pegados)", () => {
+  it("marca pegada una fila que no vino en el sondeo si su id está en vehiculos_pegados", () => {
+    const actual = grilla();
+    const cambios = grilla({ vehiculos: [], total_pegadas: 1, vehiculos_pegados: [V2.id] });
+    const r = fusionarCeldas(actual, cambios);
+    expect(r.vehiculos.find((v) => v.id === V2.id)?.pegada).toBe(true);
+    expect(r.vehiculos.find((v) => v.id === V1.id)?.pegada).toBe(false);
+  });
+
+  it("sin la clave vehiculos_pegados conserva el pegada de cada fila", () => {
+    const actual = grilla({ vehiculos: [{ ...V1, pegada: true }, V2, V3] });
+    const r = fusionarCeldas(actual, grilla({ vehiculos: [] }));
+    expect(r.vehiculos.find((v) => v.id === V1.id)?.pegada).toBe(true);
+  });
+});

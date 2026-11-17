@@ -14,8 +14,9 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// Lectura y reemplazo del dictamen vigente para el backoffice FLIT (corte 7). Cuelgan del grupo <c>/backoffice</c>
-/// (<see cref="PoliticaBackoffice"/>: <c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>; empresa explícita en
-/// <c>?empresa=</c>, y el GET queda auditado antes de tocar la fila). El <c>PUT</c> exige además
+/// (<see cref="PoliticaBackoffice"/> de configuración; empresa explícita en <c>?empresa=</c>, y el GET queda auditado antes
+/// de tocar la fila): el GET es el detalle y lo ve también el SuperAdmin de cualquier compañía. El <c>PUT</c> exige además la
+/// política de operación FLIT (<see cref="PoliticaBackoffice.NombreOperacion"/>, ajustes 2026-11-11 punto 1) y
 /// <c>diagnostico.dictamen.override</c>. La escritura de la otra compañía va por <see cref="EscrituraEntreEmpresas"/>.
 /// No vuelve a evaluar, no redacta, no genera PDF y no toca el Excel ni el ZIP.
 /// </summary>
@@ -30,7 +31,8 @@ internal static class OverrideDictamenEndpoints
     {
         ArgumentNullException.ThrowIfNull(backoffice);
         backoffice.MapGet(Ruta, Obtener).WithName("ObtenerDictamenVehiculoBackoffice");
-        backoffice.MapPut(Ruta, Reemplazar).RequirePermiso(Permisos.DictamenOverride).WithName("CorregirDictamenVehiculoBackoffice");
+        backoffice.MapPut(Ruta, Reemplazar).RequiereOperacionFlit().RequirePermiso(Permisos.DictamenOverride)
+            .WithName("CorregirDictamenVehiculoBackoffice");
     }
 
     private static async Task<IResult> Obtener(Guid id, Guid vid, HttpContext http, DiagnosticoDb db, CancellationToken ct)

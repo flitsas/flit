@@ -1,10 +1,12 @@
 using System.Net;
 using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Modulos.Derivacion;
 using Flit.Diagnostico.Tests.Api;
 using FluentAssertions;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -32,7 +34,7 @@ public sealed class FugaEntreEmpresasTests
     public async Task Ningun_endpoint_de_lectura_devuelve_datos_de_otra_empresa(string ruta)
     {
         var escenario = EscenariosDeFuga.Buscar(ruta);
-        await using var api = await ApiDePrueba.ConBaseAsync(EscenariosDeFuga.MapearSondas);
+        await using var api = await ApiDePrueba.ConBaseAsync(EscenariosDeFuga.MapearSondas, configurar: ConDerivacion);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
         var empresas = DosEmpresas.En(api);
@@ -55,7 +57,7 @@ public sealed class FugaEntreEmpresasTests
     [Fact]
     public async Task Todo_endpoint_GET_tiene_escenario_de_fuga()
     {
-        await using var api = await ApiDePrueba.SinBaseAsync();
+        await using var api = await ApiDePrueba.SinBaseAsync(configurar: ConDerivacion);
 
         EscenariosDeFuga.EndpointsSinEscenario(Fuentes(api.App)).Should().BeEmpty("cada GET suma su línea en EscenariosDeFuga.Todos");
     }
@@ -85,6 +87,11 @@ public sealed class FugaEntreEmpresasTests
 
         EscenariosDeFuga.EndpointsSinEscenario(Fuentes(api.App)).Should().BeEmpty();
     }
+
+    // Punto 4 (ADR-0072 (d)8): la derivación está apagada por defecto y sus GET (progreso de operaciones) solo se mapean encendida;
+    // aquí se enciende para que la cobertura de fuga los vea. El consumidor y el reconciliador siguen apagados.
+    private static void ConDerivacion(WebApplicationBuilder b) =>
+        b.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { [$"{OpcionesDerivacion.Seccion}:Habilitada"] = "true" });
 
     private static IEnumerable<EndpointDataSource> Fuentes(WebApplication app) => app.Services.GetServices<EndpointDataSource>();
 }

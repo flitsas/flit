@@ -7,8 +7,9 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// Llenado manual de una celda en ERROR (HU #13800, F06-H3, plan §6.1 fila manual). Cuelga del grupo <c>/backoffice</c>
-/// (<see cref="PoliticaBackoffice"/>: <c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>; empresa explícita en
-/// <c>?empresa=</c>) y exige además <c>diagnostico.consultas.llenar</c> (rol <c>backoffice_diagnostico</c>): el admin y el usuario
+/// (<see cref="PoliticaBackoffice"/>; empresa explícita en <c>?empresa=</c>) y exige además la política de operación FLIT
+/// (<see cref="PoliticaBackoffice.NombreOperacion"/>: un SuperAdmin de otra compañía recibe 403, ajustes 2026-11-11 punto 1)
+/// y <c>diagnostico.consultas.llenar</c> (rol <c>backoffice_diagnostico</c>): el admin y el usuario
 /// de la compañía reciben 403. Va bajo <c>/backoffice/*</c> y no en <c>/consultas/{cid}/manual</c> porque la escritura entre
 /// compañías solo vive en este módulo (<see cref="EscrituraEntreEmpresas"/>, ADR-0073).
 /// <list type="bullet">
@@ -26,8 +27,9 @@ internal static class LlenadoManualEndpoints
 
     public static void Map(RouteGroupBuilder backoffice)
     {
-        backoffice.MapGet(Ruta, Formulario).RequirePermiso(Permisos.ConsultasLlenar).WithName("ObtenerFormularioLlenadoManualBackoffice");
-        backoffice.MapPut(Ruta, Llenar).RequirePermiso(Permisos.ConsultasLlenar).WithName("LlenarConsultaManualBackoffice");
+        backoffice.MapGet(Ruta, Formulario).RequiereOperacionFlit().RequirePermiso(Permisos.ConsultasLlenar)
+            .WithName("ObtenerFormularioLlenadoManualBackoffice");
+        backoffice.MapPut(Ruta, Llenar).RequiereOperacionFlit().RequirePermiso(Permisos.ConsultasLlenar).WithName("LlenarConsultaManualBackoffice");
     }
 
     public static IServiceCollection AddLlenadoManual(this IServiceCollection services)

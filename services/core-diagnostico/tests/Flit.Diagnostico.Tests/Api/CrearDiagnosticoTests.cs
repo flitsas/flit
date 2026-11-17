@@ -54,7 +54,7 @@ public sealed class CrearDiagnosticoTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Created, cuerpo);
-        var json = JsonDocument.Parse(cuerpo).RootElement;
+        var json = JsonElement.Parse(cuerpo);
         var id = json.GetProperty("id").GetGuid();
         json.GetProperty("nombre").GetString().Should().Be("Flota norte");
         json.GetProperty("estado").GetString().Should().Be("CREADO");
@@ -72,7 +72,7 @@ public sealed class CrearDiagnosticoTests
         cabecera.Alcance.Should().Equal(Fuente.Runt, Fuente.SimitVehiculo, Fuente.RuntPropietario, Fuente.SimitPropietario);
         cabecera.EstimadoConsultas.Should().BeNull("el estimado se guarda al confirmar los vehículos (F02-H5)");
         cabecera.UsuarioCreadorId.Should().NotBeEmpty();
-        JsonDocument.Parse(cabecera.Configuracion).RootElement.GetProperty("fuentes_habilitadas").EnumerateArray()
+        JsonElement.Parse(cabecera.Configuracion).GetProperty("fuentes_habilitadas").EnumerateArray()
             .Select(e => e.GetString()).Should().Equal("RUNT", "SIMIT_VEHICULO", "RUNT_PROPIETARIO", "SIMIT_PROPIETARIO");
 
         await using var db = DosEmpresas.Contexto(api.BaseDeDatos, empresas.A.Id);
@@ -104,7 +104,7 @@ public sealed class CrearDiagnosticoTests
 
         var despues = await Cabeceras.LeerAsync(api, empresas.A.Id, id, ct);
         despues.Configuracion.Should().Be(antes, "la cabecera guarda una copia, no una referencia a la configuración");
-        var copia = JsonDocument.Parse(despues.Configuracion).RootElement;
+        var copia = JsonElement.Parse(despues.Configuracion);
         copia.GetProperty("visibilidad_usuario").GetString().Should().Be("EMPRESA");
         copia.GetProperty("estimado_consultas").GetString().Should().Be("NO_MOSTRAR");
         Codigos(copia.GetProperty("fuentes_por_defecto")).Should().Equal("RUNT", "AVALUO");
@@ -132,11 +132,11 @@ public sealed class CrearDiagnosticoTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, texto);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         json.GetProperty("code").GetString().Should().Be(ValidadorCabecera.CodigoFuenteNoDisponible);
         json.GetProperty("campo").GetString().Should().Be("alcance");
         (await Cabeceras.ContarAsync(api, empresas.A.Id, ct)).Should().Be(1, "el 422 no guarda la segunda cabecera");
-        var configuracion = JsonDocument.Parse(await api.Cliente(TokenVer(api, empresas.A.Id)).GetStringAsync(Program.Prefijo + ConfiguracionEndpoints.Ruta, ct)).RootElement;
+        var configuracion = JsonElement.Parse(await api.Cliente(TokenVer(api, empresas.A.Id)).GetStringAsync(Program.Prefijo + ConfiguracionEndpoints.Ruta, ct));
         Codigos(configuracion.GetProperty("fuentes_disponibles")).Should().NotContain("IMPUESTO_DEPARTAMENTAL");
         Codigos(configuracion.GetProperty("contrato").GetProperty("fuentes_habilitadas")).Should().Equal("RUNT", "IMPUESTO_DEPARTAMENTAL");
         var quitar = await api.Cliente(Configuracion.ContratoBackofficeTests.TokenBackoffice(api, Guid.NewGuid()))
@@ -176,7 +176,7 @@ public sealed class CrearDiagnosticoTests
 
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, $"{cuerpo} → {texto}");
-            var json = JsonDocument.Parse(texto).RootElement;
+            var json = JsonElement.Parse(texto);
             json.GetProperty("code").GetString().Should().Be(codigo, cuerpo);
             json.GetProperty("campo").GetString().Should().Be(campo, cuerpo);
             json.GetProperty("error").GetString().Should().NotBeNullOrWhiteSpace();
@@ -223,7 +223,7 @@ public sealed class CrearDiagnosticoTests
 
         var texto = await sin.Content.ReadAsStringAsync(ct);
         sin.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, texto);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         json.GetProperty("code").GetString().Should().Be(ValidadorCabecera.CodigoFuentesObligatoriasFaltantes);
         json.GetProperty("campo").GetString().Should().Be(ValidadorCabecera.CampoAlcance);
         simple.StatusCode.Should().Be(HttpStatusCode.Created, await simple.Content.ReadAsStringAsync(ct));
@@ -287,7 +287,7 @@ public sealed class CrearDiagnosticoTests
         conFuenteDeB.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, "AVALUO está habilitada en B, no en A");
         creada.StatusCode.Should().Be(HttpStatusCode.Created);
         var cabecera = await Cabeceras.LeerAsync(api, empresas.A.Id, id, ct);
-        JsonDocument.Parse(cabecera.Configuracion).RootElement.GetProperty("limite_vehiculos_lote").GetInt32().Should().Be(111);
+        JsonElement.Parse(cabecera.Configuracion).GetProperty("limite_vehiculos_lote").GetInt32().Should().Be(111);
         var textoDeB = await edicionDeB.Content.ReadAsStringAsync(ct);
         edicionDeB.StatusCode.Should().Be(HttpStatusCode.NotFound, textoDeB);
         textoDeB.Should().NotContain("Lote A").And.NotContain(empresas.A.Id.ToString());

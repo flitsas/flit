@@ -78,7 +78,7 @@ internal sealed partial class ServicioConfirmacionVehiculos(
         var cabecera = await db.Set<CabeceraDiagnostico>().SingleOrDefaultAsync(c => c.Id == diagnosticoId, ct).ConfigureAwait(false)
             ?? throw ReglaException.NoEncontrado("El diagnóstico");
         if (cabecera.Estado != EstadoDiagnostico.Creado)
-            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya no está en CREADO: no admite confirmar vehículos.");
+            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya se lanzó: no admite confirmar vehículos.");
         if (await db.Set<VehiculoDiagnostico>().AnyAsync(v => v.DiagnosticoId == diagnosticoId, ct).ConfigureAwait(false))
             throw YaConfirmados();
 

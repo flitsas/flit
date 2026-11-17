@@ -66,7 +66,7 @@ internal static class DiagnosticosBackofficeEndpoints
         if (!string.IsNullOrWhiteSpace(estado))
         {
             if (!CodigosDeEnum.TryLeer<EstadoDiagnostico>(estado, out var filtro))
-                throw new ReglaException(CodigoEstadoInvalido, "estado es CREADO, EN_PROCESO, COMPLETADO o INCOMPLETO.", StatusCodes.Status400BadRequest) { Campo = "estado" };
+                throw new ReglaException(CodigoEstadoInvalido, "El filtro de estado debe ser Sin lanzar, En proceso, Completado o Incompleto.", StatusCodes.Status400BadRequest) { Campo = "estado" };
             cabeceras = cabeceras.Where(c => c.Estado == filtro);
         }
 

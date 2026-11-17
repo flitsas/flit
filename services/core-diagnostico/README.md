@@ -72,6 +72,23 @@ No se mira `ASPNETCORE_ENVIRONMENT`, porque los tres ambientes corren como `Deve
 | `Diagnostico__Consultas__Address` | vacío | URL gRPC de core-consultas (p. ej. `http://core-consultas:8084`). Solo para la réplica diaria de departamentos con impuesto (`ListarDepartamentosImpuesto`); vacía, la réplica queda como está. Un valor que no es URL impide arrancar. |
 | `Diagnostico__Consultas__DeadlineSegundos` | `90` | Deadline de esa llamada a core-consultas; debe ser mayor que 0. |
 
+### Crear trámite desde el diagnóstico (ADR-0084)
+
+Apagado por defecto (`Diagnostico:Derivacion:Habilitada=false`): sin él no hay rutas, la grilla trae `derivacion: null` y no se
+registran consumidor ni reconciliador. Se enciende junto con `Tramites:Derivacion:Habilitada` de core-api. Diseño:
+`docs/diagnosticos/diseno-crear-tramite-desde-diagnostico.md`.
+
+- **Individual** (`POST /diagnosticos/{id}/vehiculos/{vid}/tramite`): síncrono, rpc `CrearBorradorDesdeDiagnostico`.
+- **Masivo** (`POST /diagnosticos/{id}/tramites`, progreso en `GET …/tramites/operaciones[/{opId}]`, `POST …/reintentar-fallidas`):
+  la operación y sus ítems quedan en `diagnostico.derivacion_operaciones` / `diagnostico.derivaciones`. Cada compañía tiene como
+  mucho `CreditoPorCompania` (2) ítems en vuelo: al encolar y al cerrar cada ítem, `DespachadorCredito` libera el siguiente y
+  publica `diagnostico.derivacion.solicitada` (solo ids) a la cola propia `diagnostico.derivaciones`. El consumidor atiende
+  `Concurrencia` (4) mensajes a la vez, revalida el vehículo, pasa por el freno (`TasaPorSegundo` 10, pausa de `PausaSegundos` 30
+  tras `PausaTrasFallos` 5 transitorios seguidos) y reintenta los transitorios a los 30 s y 2 min conservando el crédito
+  (`MaxIntentos` 3; luego FALLIDO, reintentable a mano). `ReconciliadorDerivacion` (60 s) cierra o re-publica una vez los ítems
+  ENVIADO colgados más de 15 min. `ConsumidorHabilitado=false` deja las rutas sin consumidor (lo usan las pruebas).
+- Prueba de carga real (QA): `docs/diagnosticos/prueba-carga-derivacion.md` y `tests/load/diagnostico-derivacion.js`.
+
 ## Pruebas
 
 Corren `Program.Build` real sobre una base efímera de PostgreSQL que crean y borran. Necesitan `ConnectionStrings__Core`

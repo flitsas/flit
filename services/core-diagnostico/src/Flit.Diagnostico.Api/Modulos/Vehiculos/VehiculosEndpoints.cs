@@ -38,7 +38,7 @@ internal static partial class VehiculosEndpoints
         var cabecera = await db.Set<CabeceraDiagnostico>().AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct).ConfigureAwait(false)
             ?? throw ReglaException.NoEncontrado("El diagnóstico");
         if (cabecera.Estado != EstadoDiagnostico.Creado)
-            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya no está en CREADO: no admite revalidar filas.");
+            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya se lanzó: no admite revalidar filas.");
 
         // Las filas llegan como las de la plantilla; sin número de fila, su posición en la hoja (encabezado en la fila 1).
         var filas = cuerpo?.Filas ?? [];
@@ -60,7 +60,7 @@ internal static partial class VehiculosEndpoints
         var cabecera = await db.Set<CabeceraDiagnostico>().AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct).ConfigureAwait(false)
             ?? throw ReglaException.NoEncontrado("El diagnóstico");
         if (cabecera.Estado != EstadoDiagnostico.Creado)
-            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya no está en CREADO: no admite confirmar vehículos.");
+            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya se lanzó: no admite confirmar vehículos.");
 
         var (tabla, formulario) = await CargaEndpoints.LeerArchivoAsync(peticion, configuracion, ct).ConfigureAwait(false);
         var correcciones = formulario[LoteDesdeArchivo.CampoCorrecciones];

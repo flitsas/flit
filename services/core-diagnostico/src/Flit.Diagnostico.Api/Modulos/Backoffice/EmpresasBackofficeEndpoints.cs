@@ -8,9 +8,10 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 /// <summary>
 /// <c>GET /backoffice/empresas</c> (HU #13741, escenarios 15 y 16): las empresas activas con Diagnóstico encendido
 /// (<c>[{ id, nombre, nit }]</c>, ordenadas por nombre) para el selector del editor de contrato. Las da Identidad
-/// (<see cref="IEmpresasPlataforma"/>); Diagnóstico no administra compañías y la ruta es de solo lectura. Misma
-/// autorización que el contrato: política <see cref="PoliticaBackoffice"/> (<c>tenant_type=FLIT</c> +
-/// <c>diagnostico.backoffice.ver</c>) y <c>diagnostico.configuracion.contrato.editar</c>. No lleva empresa explícita: no
+/// (<see cref="IEmpresasPlataforma"/>); Diagnóstico no administra compañías y la ruta es de solo lectura. Política de
+/// configuración del backoffice (<see cref="PoliticaBackoffice"/>: SuperAdmin de cualquier compañía, o FLIT con
+/// <c>diagnostico.backoffice.ver</c>); desde los ajustes 2026-11-11 (punto 6) ya no exige
+/// <c>diagnostico.configuracion.contrato.editar</c>, porque también la usa el listado de diagnósticos. No lleva empresa explícita: no
 /// lee datos de ninguna compañía, solo la lista de la plataforma. Sin Identidad configurada: 503
 /// <see cref="CodigoNoConfigurada"/>; Identidad no responde: 503 <see cref="CodigoNoDisponible"/> con <c>Retry-After</c>.
 /// Nunca una lista vacía que parezca real.
@@ -24,7 +25,7 @@ internal static partial class EmpresasBackofficeEndpoints
     /// <summary>La ruta va en un grupo <c>/backoffice</c> con la política, pero sin el filtro de empresa explícita.</summary>
     public static void Map(RouteGroupBuilder backofficeSinEmpresa)
     {
-        backofficeSinEmpresa.MapGet(Ruta, Listar).RequirePermiso(Permisos.ConfiguracionContratoEditar).WithName("ListarEmpresasBackoffice");
+        backofficeSinEmpresa.MapGet(Ruta, Listar).WithName("ListarEmpresasBackoffice");
     }
 
     private static async Task<IResult> Listar(IEmpresasPlataforma plataforma, ILoggerFactory logs, CancellationToken ct)

@@ -68,16 +68,16 @@ describe("FuentesObligatoriasBackoffice — piso, unilateral y RUNT", () => {
     const fetchMock = simularApi({ [`GET ${RUTA}`]: () => Response.json(SEMILLA) });
     montar();
 
-    expect(await screen.findByRole("region", { name: "Familia TRASPASO" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Tipo TRASPASO_STANDARD" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Tipo TRASPASO_TRANSFERENCIA_DE_DOMINIO" })).toBeInTheDocument();
-    const unilateral = screen.getByRole("region", { name: "Tipo TRASPASO_UNILATERAL" });
+    expect(await screen.findByRole("region", { name: "Familia: Traspaso" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Tipo de trámite: Traspaso estándar" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Tipo de trámite: Traspaso por transferencia de dominio" })).toBeInTheDocument();
+    const unilateral = screen.getByRole("region", { name: "Tipo de trámite: Traspaso unilateral" });
 
     expect(screen.getByText(/sigue siendo obligatorio en todo diagnóstico y no se configura aquí/i)).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "RUNT vehículo" })).toBeNull();
     expect(fetchMock.mock.calls.map(([u]) => String(u)).some((u) => u.includes("tipos-tramite") || u.includes("empresa="))).toBe(false);
 
-    for (const nombre of ["Familia TRASPASO", "Tipo TRASPASO_STANDARD", "Tipo TRASPASO_TRANSFERENCIA_DE_DOMINIO"]) {
+    for (const nombre of ["Familia: Traspaso", "Tipo de trámite: Traspaso estándar", "Tipo de trámite: Traspaso por transferencia de dominio"]) {
       const region = screen.getByRole("region", { name: nombre });
       expect(within(region).getAllByRole("checkbox").map((c) => c.getAttribute("value"))).toEqual(CASILLAS);
       const piso = within(region).getByRole("checkbox", { name: "SIMIT propietario" });
@@ -120,7 +120,7 @@ describe("FuentesObligatoriasBackoffice — guardar", () => {
       [`PUT ${RUTA}`]: () => Response.json({ code: "PISO_NO_DISPENSABLE", error: "No se puede quitar el piso." }, { status: 422 }),
     });
     montar();
-    const standard = await screen.findByRole("region", { name: "Tipo TRASPASO_STANDARD" });
+    const standard = await screen.findByRole("region", { name: "Tipo de trámite: Traspaso estándar" });
     fireEvent.click(within(standard).getByRole("checkbox", { name: "Avalúo comercial" }));
     fireEvent.click(within(standard).getByRole("button", { name: "Guardar" }));
 
@@ -135,9 +135,45 @@ describe("FuentesObligatoriasBackoffice — guardar", () => {
     });
 
     expect(await within(standard).findByRole("alert")).toHaveTextContent(/no se puede quitar el piso/i);
-    const unilateral = screen.getByRole("region", { name: "Tipo TRASPASO_UNILATERAL" });
+    const unilateral = screen.getByRole("region", { name: "Tipo de trámite: Traspaso unilateral" });
     expect(within(unilateral).getByText(/definición guardada con la lista vacía/i)).toBeInTheDocument();
     expect(within(unilateral).queryByRole("alert")).toBeNull();
-    expect(within(screen.getByRole("region", { name: "Familia TRASPASO" })).getByRole("checkbox", { name: "SIMIT propietario" })).toBeChecked();
+    expect(within(screen.getByRole("region", { name: "Familia: Traspaso" })).getByRole("checkbox", { name: "SIMIT propietario" })).toBeChecked();
+  });
+});
+
+describe("FuentesObligatoriasBackoffice — Punto 5: nombres, no códigos", () => {
+  it("titula cada definición con la etiqueta de la API y no pinta el código del tipo ni de la familia", async () => {
+    simularApi({
+      [`GET ${RUTA}`]: () =>
+        Response.json({
+          definiciones: [
+            { familia: "TRASPASO", familia_etiqueta: "Traspasos", tipo_tramite_codigo: null, fuentes: ["SIMIT_PROPIETARIO"] },
+            {
+              familia: null,
+              tipo_tramite_codigo: "TRASPASO_STANDARD",
+              tipo_tramite_etiqueta: "Traspaso de propiedad",
+              fuentes: ["SIMIT_PROPIETARIO"],
+            },
+          ],
+        }),
+    });
+    const { container } = montar();
+    expect(await screen.findByRole("region", { name: "Familia: Traspasos" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Tipo de trámite: Traspaso de propiedad" })).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("TRASPASO_STANDARD");
+    expect(container).not.toHaveTextContent(/TRASPASO\b/);
+  });
+
+  it("un tipo desconocido sin etiqueta dice «Novedad sin clasificar», nunca el código", async () => {
+    const aviso = vi.spyOn(console, "warn").mockImplementation(() => {});
+    simularApi({
+      [`GET ${RUTA}`]: () => Response.json({ definiciones: [{ familia: null, tipo_tramite_codigo: "TIPO_FUTURO_X", fuentes: [] }] }),
+    });
+    const { container } = montar();
+    expect(await screen.findByRole("region", { name: "Tipo de trámite: Novedad sin clasificar" })).toBeInTheDocument();
+    expect(container).not.toHaveTextContent("TIPO_FUTURO_X");
+    expect(aviso).toHaveBeenCalled();
+    aviso.mockRestore();
   });
 });

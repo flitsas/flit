@@ -60,7 +60,7 @@ public sealed class DiagnosticosBackofficeTests
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
         cuerpo.Should().NotContainAny([sinError.Id.ToString(), deB.Id.ToString(), empresas.B.Id.ToString()], "solo el lote de A con errores");
-        var lista = JsonDocument.Parse(cuerpo).RootElement;
+        var lista = JsonElement.Parse(cuerpo);
         lista.GetProperty("empresa").GetGuid().Should().Be(empresas.A.Id);
         lista.GetProperty("total").GetInt32().Should().Be(1);
         lista.GetProperty("pagina").GetInt32().Should().Be(1);
@@ -120,7 +120,7 @@ public sealed class DiagnosticosBackofficeTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var grilla = JsonDocument.Parse(cuerpo).RootElement;
+        var grilla = JsonElement.Parse(cuerpo);
         grilla.GetProperty("id").GetGuid().Should().Be(lote.Id);
         grilla.GetProperty("empresa").GetGuid().Should().Be(empresas.A.Id);
         var celdas = Tablero.CeldasDe(grilla);
@@ -136,7 +136,7 @@ public sealed class DiagnosticosBackofficeTests
         var historial = await api.Cliente(token).GetAsync(Historial(lote.Id, empresas.A.Id), ct);
         var cuerpoHistorial = await historial.Content.ReadAsStringAsync(ct);
         historial.StatusCode.Should().Be(HttpStatusCode.OK, cuerpoHistorial);
-        var ultima = JsonDocument.Parse(cuerpoHistorial).RootElement.GetProperty("transiciones").EnumerateArray().Last();
+        var ultima = JsonElement.Parse(cuerpoHistorial).GetProperty("transiciones").EnumerateArray().Last();
         ultima.GetProperty("disparador").GetString().Should().Be("MANUAL");
         ultima.GetProperty("usuario_id").GetGuid().Should().Be(usuarioBackoffice);
 
@@ -177,7 +177,7 @@ public sealed class DiagnosticosBackofficeTests
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
         cuerpo.Should().NotContainAny(["1098765432", "800111222"]);
-        var fila = JsonDocument.Parse(cuerpo).RootElement.GetProperty("vehiculos").EnumerateArray().Single();
+        var fila = JsonElement.Parse(cuerpo).GetProperty("vehiculos").EnumerateArray().Single();
         var declarado = fila.GetProperty("documento_declarado");
         declarado.GetProperty("rol").GetString().Should().Be("LOCATARIO");
         declarado.GetProperty("tipo_documento").GetString().Should().Be("NIT");

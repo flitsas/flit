@@ -77,7 +77,7 @@ public sealed class SesionTests
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
-        JsonDocument.Parse(cuerpo).RootElement.GetProperty("empresa").GetProperty("id").GetGuid().Should().Be(empresaA);
+        JsonElement.Parse(cuerpo).GetProperty("empresa").GetProperty("id").GetGuid().Should().Be(empresaA);
         cuerpo.Should().NotContain(empresaB.ToString(), "nada de la compañía B");
     }
 

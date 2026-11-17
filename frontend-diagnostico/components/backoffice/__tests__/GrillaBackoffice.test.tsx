@@ -14,12 +14,14 @@ import { EMPRESA_A, LOTE, celdaBo, grillaBo, llamadas, respuestaLlenado, simular
 // consultas/{fuente}?empresa= (HU #14087); en las celdas en ERROR llenables, con la capacidad llenarConsultas, la celda trae
 // «Llenar a mano», que abre FormularioLlenadoManual como modal.
 
-const h = vi.hoisted(() => ({ capacidades: { backoffice: true, llenarConsultas: true } as Record<string, boolean>, replace: vi.fn() }));
+// Perfil FLIT: el llenado manual exige además `backofficeOperacion` (ola 2026-11-11, punto 1; el caso sin ella está en
+// OperacionBackoffice.test.tsx).
+const h = vi.hoisted(() => ({ capacidades: { backoffice: true, backofficeOperacion: true, llenarConsultas: true } as Record<string, boolean>, replace: vi.fn() }));
 vi.mock("@/components/DiagnosticoShell", () => ({ useSesion: () => ({ sesion: sesion(h.capacidades), cargando: false, error: null, recargar: () => {} }) }));
 vi.mock("next/navigation", () => ({ usePathname: () => "/backoffice/diagnosticos", useRouter: () => ({ replace: h.replace, push: vi.fn(), refresh: vi.fn() }) }));
 
 beforeEach(() => {
-  h.capacidades = { backoffice: true, llenarConsultas: true };
+  h.capacidades = { backoffice: true, backofficeOperacion: true, llenarConsultas: true };
   h.replace.mockReset();
 });
 afterEach(() => vi.unstubAllGlobals());

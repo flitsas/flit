@@ -11,7 +11,9 @@ namespace Flit.Diagnostico.Tests.Aislamiento;
 /// (<c>GetDbConnection</c>, <c>SqlQuery</c>, <c>ExecuteSql</c>, <c>FromSql</c>, <c>NpgsqlCommand</c>) solo puede estar en las
 /// colas: <c>Modulos/Trabajos/ColaConsultas.cs</c> (celdas, HU #13727), <c>Modulos/Trabajos/ColaEvidencias.cs</c> (ZIP del lote,
 /// HU #13850) y <c>Modulos/Trabajos/ColaRedaccion.cs</c> (redacción del dictamen, corte 6: solo toca columnas de la cola y
-/// devuelve id, empresa, intentos y lease); todo lo demás pasa por EF con <c>TenantFilter</c>. Las migraciones quedan fuera.
+/// devuelve id, empresa, intentos y lease) y <c>Modulos/Trabajos/ColaDerivacion.cs</c> (Punto 4, incremento 3, ADR-0084: el
+/// candado por compañía del crédito y la búsqueda de ítems colgados del reconciliador, que solo devuelve id y empresa); todo lo
+/// demás pasa por EF con <c>TenantFilter</c>. Las migraciones quedan fuera.
 /// </summary>
 /// <example>
 /// <code>
@@ -21,7 +23,7 @@ namespace Flit.Diagnostico.Tests.Aislamiento;
 public sealed partial class TomaEntreEmpresasSoloEnColaTests
 {
     private static readonly string[] ArchivosPermitidos =
-        ["Modulos/Trabajos/ColaConsultas.cs", "Modulos/Trabajos/ColaEvidencias.cs", "Modulos/Trabajos/ColaRedaccion.cs"];
+        ["Modulos/Trabajos/ColaConsultas.cs", "Modulos/Trabajos/ColaEvidencias.cs", "Modulos/Trabajos/ColaRedaccion.cs", "Modulos/Trabajos/ColaDerivacion.cs"];
 
     [Fact]
     public void Solo_la_cola_usa_SQL_crudo_entre_empresas()

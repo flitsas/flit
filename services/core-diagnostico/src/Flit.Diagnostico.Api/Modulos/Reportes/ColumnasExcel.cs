@@ -1,3 +1,5 @@
+using Flit.Diagnostico.Api.Plataforma;
+
 namespace Flit.Diagnostico.Api.Modulos.Reportes;
 
 /// <summary>
@@ -37,17 +39,8 @@ internal static class ColumnasExcel
     public static readonly IReadOnlyList<string> Fijas = ["Orden", "Identificador", "Tipo de identificador", "Placa", "VIN", "Estado del vehículo"];
 
     /// <summary>Título de cada fuente (código de la base) en los encabezados y en la hoja «Consultas».</summary>
-    public static readonly IReadOnlyDictionary<string, string> Titulos = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["RUNT"] = "RUNT",
-        ["RUNT_PROPIETARIO"] = "RUNT propietarios",
-        ["RUNT_LOCATARIO"] = "RUNT locatarios",
-        ["SIMIT_VEHICULO"] = "SIMIT vehículo",
-        ["SIMIT_PROPIETARIO"] = "SIMIT propietarios",
-        ["SIMIT_LOCATARIO"] = "SIMIT locatarios",
-        ["AVALUO"] = "Avalúo",
-        ["IMPUESTO_DEPARTAMENTAL"] = "Impuesto departamental",
-    };
+    /// <remarks>Son los nombres de fuente de <see cref="RotulosDiagnostico.Fuentes"/> (punto 5): los mismos de la pantalla.</remarks>
+    public static IReadOnlyDictionary<string, string> Titulos => RotulosDiagnostico.Fuentes;
 
     private static readonly string[] DePersonaRunt = [PersonasConsultadas, PersonasConError, Documentos];
 
@@ -66,7 +59,7 @@ internal static class ColumnasExcel
         ["IMPUESTO_DEPARTAMENTAL"] = [TotalAdeudado, VigenciasPendientes],
     };
 
-    public static string Titulo(string fuente) => Titulos.GetValueOrDefault(fuente, fuente);
+    public static string Titulo(string fuente) => RotulosDiagnostico.DeFuente(fuente);
 
     /// <summary>Las columnas de dato de <paramref name="fuente"/> (vacía si solo lleva estado).</summary>
     public static IReadOnlyList<string> DatosDe(string fuente) => DeDato.GetValueOrDefault(fuente, []);

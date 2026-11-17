@@ -53,7 +53,7 @@ public sealed class HistorialLoteTests
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
         cuerpo.Should().NotContainAny(["MANUAL", usuarioBackoffice.ToString()], "la compañía no ve el llenado manual (Q5)");
-        var transiciones = JsonDocument.Parse(cuerpo).RootElement.GetProperty("transiciones").EnumerateArray().ToList();
+        var transiciones = JsonElement.Parse(cuerpo).GetProperty("transiciones").EnumerateArray().ToList();
         transiciones.Select(t => t.GetProperty("disparador").GetString()).Should().Equal(["AUTO", "AUTO", "CIERRE_PANEL", "REPROCESO", "AUTO"]);
         transiciones[^1].GetProperty("usuario_id").ValueKind.Should().Be(JsonValueKind.Null, "el MANUAL va sin usuario");
         transiciones[^1].GetProperty("estado_nuevo").GetString().Should().Be("COMPLETADO", "la transición se conserva, solo cambia cómo se presenta");

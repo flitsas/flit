@@ -38,6 +38,24 @@ channels:
       message:
         $ref: '#/components/messages/DictamenEmitido'
 
+  diagnostico.derivacion.solicitada:
+    description: |
+      Punto 4, incremento 3 (ADR-0084): un ítem de una creación masiva de trámites recibió el crédito de su compañía y espera
+      que el consumidor `diagnostico.derivaciones` del propio Diagnóstico llame a Trámites (rpc CrearBorradorDesdeDiagnostico).
+      Lo publica el despachador de crédito por la outbox, en la misma transacción que deja el ítem ENVIADO (al encolar, al
+      cerrar el ítem anterior de la compañía, al reintentar fallidas o al re-publicar un ítem colgado desde el reconciliador).
+      SOLO ids: ni placa, ni VIN, ni documentos (el documento viaja por gRPC interno al llamar). La empresa va en el sobre.
+      La cola solo acepta mensajes del productor `diagnostico` (user_id validado por el broker); un eventId repetido no repite
+      el efecto (bandeja) y un ítem ya cerrado se confirma sin efecto.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.diagnostico, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: derivacionSolicitada
+      message:
+        $ref: '#/components/messages/DerivacionSolicitada'
+
 components:
   messages:
     LoteTerminado:
@@ -88,3 +106,18 @@ components:
                   tipoTramiteCodigo: { type: string, description: Código de trámite de la cabecera. }
                   estadoRedaccion: { type: string, enum: [PENDIENTE, COMPLETADA] }
                   override: { type: boolean, description: true solo en el reemplazo del backoffice. }
+    DerivacionSolicitada:
+      name: diagnostico.derivacion.solicitada
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [operacionId, itemId, vehiculoId]
+                properties:
+                  operacionId: { type: string, format: uuid, description: Operación «Crear trámite» (diagnostico.derivacion_operaciones). }
+                  itemId: { type: string, format: uuid, description: Ítem de la operación (diagnostico.derivaciones). }
+                  vehiculoId: { type: string, format: uuid, description: Vehículo (external_ref del borrador en Trámites). }

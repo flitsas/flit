@@ -2,6 +2,7 @@
 // contracts/openapi/diagnostico.v1.yaml (esquemas Configuracion, ContratoBackoffice, EdicionOperativa y EdicionContrato):
 // el JSON viaja en snake_case y las fuentes en mayúsculas. La API vuelve a validar cada permiso y cada valor.
 import { apiFetch } from "@/lib/api";
+import { rotular } from "@/lib/rotulos";
 
 export type Fuente =
   | "RUNT"
@@ -79,8 +80,16 @@ export const ESTIMADOS: ReadonlyArray<{ valor: EstimadoConsultas; nombre: string
   { valor: "AL_FINALIZAR", nombre: "Al finalizar el diagnóstico" },
 ];
 
+const NOMBRES_FUENTE = (codigo: string) => FUENTES.find((f) => f.codigo === codigo)?.nombre;
+
+/** Nombre de negocio de una fuente; un código desconocido sale «Novedad sin clasificar», nunca el código (Punto 5). */
 export function nombreFuente(codigo: Fuente): string {
-  return FUENTES.find((f) => f.codigo === codigo)?.nombre ?? codigo;
+  return rotular({ contexto: "fuente", codigo, respaldo: NOMBRES_FUENTE });
+}
+
+/** Nombre de una fuente con la etiqueta de la API (`fuente_etiqueta`) primero y el diccionario local de respaldo. */
+export function rotuloFuente(codigo: string | null | undefined, etiqueta?: string | null): string {
+  return rotular({ contexto: "fuente", codigo, etiqueta, respaldo: NOMBRES_FUENTE });
 }
 
 /** Ordena una lista de fuentes según el enum del contrato (la API no garantiza orden). */

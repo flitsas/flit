@@ -5,6 +5,7 @@
 import { TAMANO_DE_PAGINA_POR_DEFECTO, TAMANOS_DE_PAGINA } from "@flit/ui/usePaginacion";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { EstadoDiagnostico, ModoDiagnostico } from "@/lib/diagnosticos/api";
+import { rotular, TIPOS_TRAMITE } from "@/lib/rotulos";
 
 /** CREADO no es filtrable: los lotes sin lanzar solo salen sin filtro de estado (400 FILTRO_INVALIDO si se pide). */
 export type EstadoFiltrable = Exclude<EstadoDiagnostico, "CREADO">;
@@ -19,6 +20,8 @@ export interface DiagnosticoListado {
   /** null en SIMPLE; si el código ya no está publicado, `nombre` es el código. */
   tipo_tramite: { codigo: string; nombre: string } | null;
   estado: EstadoDiagnostico;
+  /** Punto 5: nombre de negocio del estado (opcional; sin él, el chip local de `etiquetaEstado`). */
+  estado_etiqueta?: string | null;
   /** `nombre` llega «No disponible» si Identidad no responde: se muestra tal cual. */
   usuario_creador: { id: string; nombre: string };
 }
@@ -200,11 +203,22 @@ export function idCorto(id: string): string {
   return id.slice(0, 8).toUpperCase();
 }
 
+/** Nombre del modo; uno desconocido sale «Novedad sin clasificar», nunca el código (Punto 5). */
 export function nombreModo(modo: ModoDiagnostico): string {
-  return MODOS.find((m) => m.valor === modo)?.nombre ?? modo;
+  return rotular({ contexto: "modo del diagnóstico", codigo: modo, respaldo: (c) => MODOS.find((m) => m.valor === c)?.nombre });
 }
 
-/** Chip del estado en el listado: gris sin lanzar, azul en proceso, verde completado, ámbar incompleto. */
-export function etiquetaEstado(estado: EstadoDiagnostico): { texto: string; tono: "neutral" | "info" | "success" | "warning" } {
-  return ETIQUETAS_ESTADO[estado] ?? { texto: estado, tono: "neutral" };
+/**
+ * Chip del estado en el listado: gris sin lanzar, azul en proceso, verde completado, ámbar incompleto. El texto es la etiqueta
+ * de la API si llega (`estado_etiqueta`), si no el local; un estado desconocido, gris «Novedad sin clasificar» (Punto 5).
+ */
+export function etiquetaEstado(estado: EstadoDiagnostico, etiqueta?: string | null): { texto: string; tono: "neutral" | "info" | "success" | "warning" } {
+  const local = ETIQUETAS_ESTADO[estado];
+  const texto = rotular({ contexto: "estado del diagnóstico", codigo: estado, etiqueta, respaldo: (c) => ETIQUETAS_ESTADO[c as EstadoDiagnostico]?.texto });
+  return { texto, tono: local?.tono ?? "neutral" };
+}
+
+/** Nombre del tipo de trámite de una fila. Si el código ya no está publicado la API repite el código: se usa el respaldo. */
+export function nombreTipoTramite(tipo: { codigo: string; nombre: string }): string {
+  return rotular({ contexto: "tipo de trámite", codigo: tipo.codigo, etiqueta: tipo.nombre, respaldo: TIPOS_TRAMITE });
 }

@@ -151,7 +151,7 @@ public sealed class EjecutorCeldaSimitPersonaTests
         var procesador = Motor.Bus(api, maxReintentos: 1);
 
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
-        reloj.Avanzar(PoliticaReintentos.Espera(1));
+        reloj.Avanzar(PoliticaReintentos.EsperaPorDefecto);
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
         var agotada = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST403", Fuente.SimitPropietario, ct);

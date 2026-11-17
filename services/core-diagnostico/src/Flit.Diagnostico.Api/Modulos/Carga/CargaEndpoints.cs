@@ -42,7 +42,7 @@ internal static partial class CargaEndpoints
         var cabecera = await db.Set<CabeceraDiagnostico>().AsNoTracking().SingleOrDefaultAsync(c => c.Id == id, ct).ConfigureAwait(false)
             ?? throw ReglaException.NoEncontrado("El diagnóstico");
         if (cabecera.Estado != EstadoDiagnostico.Creado)
-            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya no está en CREADO: no admite una carga nueva.");
+            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya se lanzó: no admite una carga nueva.");
 
         var (tabla, _) = await LeerArchivoAsync(peticion, configuracion, ct).ConfigureAwait(false);
         var resumen = AnalizadorCarga.Analizar(tabla, Parametros(cabecera));

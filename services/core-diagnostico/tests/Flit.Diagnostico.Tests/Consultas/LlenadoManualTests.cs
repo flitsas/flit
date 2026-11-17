@@ -62,7 +62,7 @@ public sealed class LlenadoManualTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var dto = JsonDocument.Parse(cuerpo).RootElement;
+        var dto = JsonElement.Parse(cuerpo);
         dto.GetProperty("id").GetGuid().Should().Be(celda.Id);
         dto.GetProperty("estado").GetString().Should().Be("COMPLETADO");
         dto.GetProperty("origen").GetString().Should().Be("MANUAL");
@@ -76,7 +76,7 @@ public sealed class LlenadoManualTests
         guardada.TipoError.Should().BeNull();
         guardada.DatoObtenidoEn.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1), "la fecha del dato la fija el servidor");
         guardada.VersionTablero.Should().Be(6);
-        JsonDocument.Parse(guardada.Payload!).RootElement.GetProperty("cantidad_comparendos").GetInt32().Should().Be(1);
+        JsonElement.Parse(guardada.Payload!).GetProperty("cantidad_comparendos").GetInt32().Should().Be(1);
 
         // R-20: el detalle de la compañía de la celda manual es idéntico al de una celda de API con el mismo dato.
         await TableroAyudas.PayloadAsync(empresas.A, lote.Celda("TST702", Fuente.SimitVehiculo), guardada.Payload, ct);
@@ -295,7 +295,7 @@ public sealed class LlenadoManualTests
         var valido = await Llenar(api, token, celda.Id, empresas.A.Id,
             Cuerpo(1, $$"""{"sin_valor_comercial":false,"valor_sugerido":48500000,"fuente_principal":"fasecolda","fuentes":[{{Fasecolda}}]}"""), ct);
         valido.StatusCode.Should().Be(HttpStatusCode.OK, await valido.Content.ReadAsStringAsync(ct));
-        var payload = JsonDocument.Parse((await CeldaAsync(empresas.A, celda.Id, ct)).Payload!).RootElement;
+        var payload = JsonElement.Parse((await CeldaAsync(empresas.A, celda.Id, ct)).Payload!);
         payload.GetProperty("valor_sugerido").GetInt64().Should().Be(48500000);
         payload.GetProperty("fuentes")[0].GetProperty("fecha").GetString().Should().MatchRegex(@"^\d{4}-\d{2}-\d{2}$", "la fecha la fija el servidor");
     }
@@ -363,7 +363,7 @@ public sealed class LlenadoManualTests
         var empresas = DosEmpresas.En(api);
         var (lote, celda, primero, segundo) = await CeldaDePersonasAsync(api, empresas.A, "TST791", ct);
         var token = TokenLlenado(api);
-        var antes = JsonDocument.Parse((await CeldaAsync(empresas.A, celda.Id, ct)).Payload!).RootElement.GetProperty("personas")[0].GetRawText();
+        var antes = JsonElement.Parse((await CeldaAsync(empresas.A, celda.Id, ct)).Payload!).GetProperty("personas")[0].GetRawText();
 
         var ok = await Llenar(api, token, celda.Id, empresas.A.Id, $$"""{"version":2,"personas":[{"persona_id":"{{primero}}","resultado":{{SimitManual}}}]}""", ct);
         ok.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
@@ -380,7 +380,7 @@ public sealed class LlenadoManualTests
         var guardada = await CeldaAsync(empresas.A, celda.Id, ct);
         guardada.Estado.Should().Be(EstadoCelda.Completado);
         guardada.Origen.Should().Be(OrigenCelda.Manual);
-        var personas = JsonDocument.Parse(guardada.Payload!).RootElement.GetProperty("personas");
+        var personas = JsonElement.Parse(guardada.Payload!).GetProperty("personas");
         personas[0].GetRawText().Should().Be(antes, "el resultado de la persona que respondió por API no cambia");
         personas[1].GetProperty("persona_id").GetGuid().Should().Be(segundo);
         personas[1].GetProperty("estado").GetString().Should().Be("OK");
@@ -420,7 +420,7 @@ public sealed class LlenadoManualTests
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
         (await RespuestaFuenteTests.CifradaAsync(api, celda.Id, ct)).Should().BeNull("el dato manual no es respuesta de la fuente");
-        var mapa = JsonDocument.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, dePersonas.Id, ct))!)).RootElement;
+        var mapa = JsonElement.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, dePersonas.Id, ct))!));
         mapa.EnumerateObject().Select(p => p.Name).Should().Equal(["1"], "solo queda la de la persona que respondió por API");
     }
 
@@ -442,7 +442,7 @@ public sealed class LlenadoManualTests
         (await Llenar(api, TokenLlenado(api), dePersonas.Id, empresas.A.Id, $$"""{"version":2,"personas":[{"persona_id":"{{segundo}}","resultado":{{SimitManual}}}]}""", ct))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var mapa = JsonDocument.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, dePersonas.Id, ct))!)).RootElement;
+        var mapa = JsonElement.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, dePersonas.Id, ct))!));
         mapa.EnumerateObject().Select(p => p.Name).Should().Equal(["1"], "la persona llenada a mano queda sin respuesta cruda");
         mapa.GetProperty("1").GetString().Should().Be(ConCrudoUno, "la de la persona que respondió por API queda intacta");
     }
@@ -463,7 +463,7 @@ public sealed class LlenadoManualTests
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
         cuerpo.Should().NotContainAny(["9999900101", "9999900102"], "nunca el documento en claro");
-        var formulario = JsonDocument.Parse(cuerpo).RootElement;
+        var formulario = JsonElement.Parse(cuerpo);
         formulario.GetProperty("id").GetGuid().Should().Be(celda.Id);
         formulario.GetProperty("fuente").GetString().Should().Be("SIMIT_PROPIETARIO");
         formulario.GetProperty("estado").GetString().Should().Be("ERROR");

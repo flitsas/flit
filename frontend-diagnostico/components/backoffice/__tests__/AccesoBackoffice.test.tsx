@@ -29,7 +29,9 @@ function montar(capacidades: Partial<CapacidadesDiagnostico>, permissions: strin
   );
 }
 
-const enlacesBackoffice = () => screen.queryAllByRole("link").filter((a) => a.getAttribute("href") === "/backoffice/diagnosticos");
+// Con dos módulos (diagnósticos y fuentes obligatorias) la entrada del dock es la píldora «Backoffice» que abre su menú, no
+// un enlace directo.
+const enlacesBackoffice = () => screen.queryAllByRole("button", { name: "Backoffice" });
 
 describe("AC4 — el admin de la compañía no ve el backoffice y la ruta muestra la 403", () => {
   it("admin de la compañía: sin entrada de backoffice en el dock y la ruta lleva a /403", async () => {

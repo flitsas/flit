@@ -69,7 +69,7 @@ public sealed class BackofficeEmpresaExplicitaTests
 
         deB.StatusCode.Should().Be(HttpStatusCode.OK, await deB.Content.ReadAsStringAsync(ct));
         var cuerpoB = await deB.Content.ReadAsStringAsync(ct);
-        var resumenB = JsonDocument.Parse(cuerpoB).RootElement;
+        var resumenB = JsonElement.Parse(cuerpoB);
         resumenB.GetProperty("empresa").GetGuid().Should().Be(empresas.B.Id);
         resumenB.GetProperty("diagnosticos").GetInt32().Should().Be(1, "solo los diagnósticos de B");
         resumenB.GetProperty("configuracion").GetBoolean().Should().BeFalse("B no tiene configuración aunque A sí");

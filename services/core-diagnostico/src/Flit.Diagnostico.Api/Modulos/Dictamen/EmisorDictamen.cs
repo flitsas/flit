@@ -122,14 +122,20 @@ internal sealed partial class EmisorDictamen(
 
     /// <summary>
     /// El mismo arreglo, en el mismo orden. <c>codigo</c>, <c>efecto</c> y <c>fuente</c> se conservan. El texto vuelve a la
-    /// plantilla del catálogo para <paramref name="tipoTramiteCodigo"/>; si esa fila no está, se conserva el texto guardado.
+    /// plantilla del catálogo para <paramref name="tipoTramiteCodigo"/> en <paramref name="catalogoVersion"/> (la del dictamen,
+    /// para que un dictamen v1 no tome los textos de v2; una versión desconocida usa la vigente); si esa fila no está, se
+    /// conserva el texto guardado.
     /// </summary>
-    internal static string TextosDePlantilla(string? tipoTramiteCodigo, string alertamientos)
+    internal static string TextosDePlantilla(string? tipoTramiteCodigo, string alertamientos, int catalogoVersion = CatalogoReglasDictamen.Version)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(alertamientos);
         using var documento = JsonDocument.Parse(alertamientos);
         if (documento.RootElement.ValueKind != JsonValueKind.Array)
             throw new InvalidOperationException("Los alertamientos del dictamen no son un arreglo.");
+
+        var filas = CatalogoReglasDictamen.FilasDe(catalogoVersion);
+        if (filas.Count == 0)
+            filas = CatalogoReglasDictamen.Filas;
 
         var lista = new List<AlertaJson>();
         foreach (var item in documento.RootElement.EnumerateArray())
@@ -138,7 +144,7 @@ internal sealed partial class EmisorDictamen(
             var texto = item.GetProperty("texto").GetString() ?? string.Empty;
             var efecto = item.GetProperty("efecto").GetString() ?? string.Empty;
             var fuente = item.GetProperty("fuente").GetString() ?? string.Empty;
-            var plantilla = CatalogoReglasDictamen.Filas.FirstOrDefault(f => f.TipoTramiteCodigo == tipoTramiteCodigo && f.Codigo == codigo);
+            var plantilla = filas.FirstOrDefault(f => f.TipoTramiteCodigo == tipoTramiteCodigo && f.Codigo == codigo);
             if (plantilla is not null)
                 texto = plantilla.PlantillaTexto;
             lista.Add(new AlertaJson(codigo, texto, efecto, fuente));
@@ -254,7 +260,7 @@ internal sealed partial class EmisorDictamen(
         if (!confirmado)
             throw new ReglaException(CodigosDictamen.ConfirmadoRequerido, "Confirma el cambio de veredicto para reemplazarlo.");
         if (veredicto is not ("VIABLE" or "BLOQUEADO"))
-            throw new ReglaException(CodigosDictamen.VeredictoInvalido, "El veredicto debe ser VIABLE o BLOQUEADO.");
+            throw new ReglaException(CodigosDictamen.VeredictoInvalido, "El veredicto debe ser Viable o Bloqueado.");
         if (veredicto == vigente.Veredicto)
             throw ReglaException.Conflicto(CodigosDictamen.VeredictoSinCambio, "El veredicto pedido es el del dictamen vigente.");
 
@@ -268,7 +274,7 @@ internal sealed partial class EmisorDictamen(
             Version = transicion.Nueva.Version,
             Vigente = true,
             Veredicto = veredicto,
-            Alertamientos = TextosDePlantilla(tipoTramiteCodigo, vigente.Alertamientos),
+            Alertamientos = TextosDePlantilla(tipoTramiteCodigo, vigente.Alertamientos, vigente.CatalogoVersion),
             CatalogoVersion = vigente.CatalogoVersion,
             RedactadoPor = "PLANTILLA",
             EstadoRedaccion = "PENDIENTE",

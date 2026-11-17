@@ -144,7 +144,7 @@ public sealed class ConfirmarVehiculosArchivoTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         json.GetProperty("confirmados").GetInt32().Should().Be(1);
         json.GetProperty("invalidos").GetInt32().Should().Be(2);
         (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Select(v => v.IdentificadorNorm).Should().Equal("DEF456");
@@ -194,7 +194,7 @@ public sealed class ConfirmarVehiculosArchivoTests
         {
             var texto = await mala.Content.ReadAsStringAsync(ct);
             mala.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, texto);
-            var error = JsonDocument.Parse(texto).RootElement;
+            var error = JsonElement.Parse(texto);
             error.GetProperty("code").GetString().Should().Be("CORRECCIONES_INVALIDAS");
             error.GetProperty("campo").GetString().Should().Be("correcciones");
         }
