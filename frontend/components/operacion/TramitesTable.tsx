@@ -52,6 +52,7 @@ import {
 import { TramitesListToolbar } from './TramitesListToolbar';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { SoatSoporteAsignado } from './SoatSoporteAsignado';
+import { ImpuestoSoporteAsignado } from './ImpuestoSoporteAsignado';
 import { ImpuestoDepartamentalCheck, useImpuestoPagadoPorFlito } from './ImpuestoDepartamentalCheck';
 import { esErrorFirmaPendiente, mensajeFirmaPendiente } from '@/lib/tramites/firma-pendiente';
 import { CarLoaderModal } from '@/components/atom/CarLoader';
@@ -688,6 +689,8 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
   const [processWarning, setProcessWarning] = useState<string | null>(null);
   /** Bug #13194 (P3) — carga del PDF del SOAT desplegada (se abre sola ante 409 soat_no_vigente). */
   const [soatSoporteAbierto, setSoatSoporteAbierto] = useState(false);
+  /** Carga del PDF del impuesto departamental desplegada (igual que la del SOAT). */
+  const [impuestoSoporteAbierto, setImpuestoSoporteAbierto] = useState(false);
   /** HU #13266 (AC2) — si FLITO ya marcó el impuesto, el check va fijo («Pagado (comprobante cargado)»). */
   const impuestoFlito = useImpuestoPagadoPorFlito(
     processTarget?.id ?? null,
@@ -701,6 +704,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
     setProcessError(null);
     setProcessWarning(null);
     setSoatSoporteAbierto(false);
+    setImpuestoSoporteAbierto(false);
   };
 
   const confirmProcesar = async () => {
@@ -1826,6 +1830,18 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
               onResultado={(r) => {
                 // El soporte ya acredita el SOAT: el error anterior deja de ser cierto.
                 if (r.estado === 'vigente') setProcessError(null);
+              }}
+            />
+            <ImpuestoSoporteAsignado
+              instanceId={processTarget.id}
+              tenantId={isAdmin ? processTarget.tenantId : undefined}
+              abierto={impuestoSoporteAbierto}
+              onToggle={setImpuestoSoporteAbierto}
+              // Con el comprobante de FLITO cargado no se reemplaza (HU #13265): la sección no se ofrece activa.
+              disabled={processActing || !!processWarning || impuestoFlito === 'flito'}
+              onResultado={(r) => {
+                // Con el soporte cargado el gestor ya acredita el pago: el check sale marcado (lo puede desmarcar).
+                if (r.estado === 'registrado') setImpuestoPagado(true);
               }}
             />
             {processError ? (

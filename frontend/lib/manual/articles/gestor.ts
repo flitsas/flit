@@ -543,7 +543,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "Preasignación: radicaste sin placa. Puedes enviar el trámite aunque el actor aún no haya firmado; el correo de validación de identidad le llega igual. El organismo tiene el trámite en su cola de «asignar placa». Tú esperas.",
-          "Asignado: el organismo asignó la placa (recibes correo). Desde aquí la firma es obligatoria: si falta, «Enviar al OT» no deja continuar y se le notifica a la persona. Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
+          "Asignado: el organismo asignó la placa (recibes correo). Desde aquí la firma es obligatoria: si falta, «Enviar al OT» no deja continuar y se le notifica a la persona. Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. En ese mismo modal puedes cargar el PDF del SOAT («Cargar PDF del SOAT») y el del impuesto departamental («Cargar PDF del impuesto departamental»); al cargar el del impuesto, el check «Impuesto departamental pagado» queda marcado. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
           "Entregado: ya está en la cola de decisión del organismo, como cualquier otro trámite.",
           "Rechazado con distintivo «Rechazado preasignación»: el organismo rechazó antes de asignar placa; el motivo está en el detalle. Puedes filtrar estos casos con el atajo «Rechazado desde preasignación» de la búsqueda rápida.",
         ],
