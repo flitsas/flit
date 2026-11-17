@@ -248,8 +248,8 @@ describe("SuperAdminDashboard — franja 3: compañías", () => {
     expect(within(panel).getByText("Sin decididos")).toBeInTheDocument();
   });
 
-  it("solo lista las compañías con trámites, de a 8 por página, y cuenta las demás en palabras", async () => {
-    const muchas = Array.from({ length: 10 }, (_, i) => ({
+  it("solo lista las compañías con trámites, con la paginación estándar (10 por página), y cuenta las demás en palabras", async () => {
+    const muchas = Array.from({ length: 12 }, (_, i) => ({
       ...COMPANIAS.items[0],
       tenantId: `cccccccc-0000-4000-8000-${String(i).padStart(12, "0")}`,
       nombre: `Compañía ${i + 1}`,
@@ -258,13 +258,14 @@ describe("SuperAdminDashboard — franja 3: compañías", () => {
     const user = userEvent.setup();
     renderVista();
     const panel = await screen.findByTestId("panel-companias");
-    expect(await within(panel).findByRole("button", { name: "Ver resumen de Compañía 8" })).toBeInTheDocument();
-    expect(within(panel).queryByRole("button", { name: "Ver resumen de Compañía 9" })).not.toBeInTheDocument();
+    expect(await within(panel).findByRole("button", { name: "Ver resumen de Compañía 10" })).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Ver resumen de Compañía 11" })).not.toBeInTheDocument();
+    expect(within(panel).getByText(/Filas por página/i)).toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: "Ver resumen de Concesionario Dos" })).not.toBeInTheDocument();
     expect(screen.getByTestId("companias-sin-tramites")).toHaveTextContent("1 compañía activa no tiene trámites en el periodo seleccionado.");
 
     await user.click(within(panel).getByRole("button", { name: /siguiente/i }));
-    expect(await within(panel).findByRole("button", { name: "Ver resumen de Compañía 9" })).toBeInTheDocument();
+    expect(await within(panel).findByRole("button", { name: "Ver resumen de Compañía 11" })).toBeInTheDocument();
   });
 
   it.each([

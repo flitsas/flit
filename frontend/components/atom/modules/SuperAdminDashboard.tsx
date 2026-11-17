@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TarjetaMetrica, METRICAS_GRID_CLS } from "@flit/ui/TarjetaMetrica";
+import { usePaginacion } from "@flit/ui/usePaginacion";
 import { DataTable, type DataTableColumn } from "@flit/ui/DataTable";
 import { StatusBadge } from "@flit/ui/StatusBadge";
 import { BarraProgreso } from "@flit/ui/BarraProgreso";
@@ -53,7 +54,6 @@ export const SUPERADMIN_ANTETITULO = "Visión del ecosistema";
 const TODAS = "Todas las compañías";
 const DIAS_REPRESADO = 7;
 /** Filas por página de «Resumen de compañías activas». */
-const FILAS_COMPANIAS = 8;
 
 const ESTADOS_SIN_PROCESO = new Set(["aprobado", "rechazado", "anulado", "revocado"]);
 
@@ -137,7 +137,8 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
   /** BUG #12588 — arranca SIN rango: el total es el universo real. */
   const [range, setRange] = useState<DateRange>(() => sinRango());
   const [organismoId, setOrganismoId] = useState<string | null>(null);
-  const [paginaCompanias, setPaginaCompanias] = useState(1);
+  // HU #13920 — paginación estándar: 10/20/30/50 con «Filas por página», recordado en la sesión.
+  const pgCompanias = usePaginacion("inicio.SuperAdminDashboard.companias");
   const [reloadKey, setReloadKey] = useState(0);
 
   const [overview, setOverview] = useState<Carga<AnalyticsOverviewResponse>>(CARGANDO);
@@ -298,9 +299,9 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
   // (el servidor ya las ordena por activos) y las demás se cuentan en una línea.
   const conTramites = useMemo(() => todasCompanias.filter((c) => c.total > 0), [todasCompanias]);
   const sinTramites = todasCompanias.length - conTramites.length;
-  const paginasCompanias = Math.max(1, Math.ceil(conTramites.length / FILAS_COMPANIAS));
-  const pagina = Math.min(paginaCompanias, paginasCompanias);
-  const filasCompanias = conTramites.slice((pagina - 1) * FILAS_COMPANIAS, pagina * FILAS_COMPANIAS);
+  const paginasCompanias = Math.max(1, Math.ceil(conTramites.length / pgCompanias.pageSize));
+  const pagina = Math.min(pgCompanias.page, paginasCompanias);
+  const filasCompanias = conTramites.slice((pagina - 1) * pgCompanias.pageSize, pagina * pgCompanias.pageSize);
 
   // «Trámites totales», su % de aprobación y el saludo salen de companias-resumen y NO del overview global: el overview
   // sin compañía cuenta también los tenants con perfil de organismo de tránsito (p. ej. Empresa Demo FLIT), que la tabla
@@ -354,8 +355,8 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
   }, []);
   const cambiarRango = useCallback((siguiente: DateRange) => {
     setRange(siguiente);
-    setPaginaCompanias(1);
-  }, []);
+    pgCompanias.setPage(1);
+  }, [pgCompanias]);
 
   const columnasCompanias: DataTableColumn<SuperAdminCompania>[] = [
     {
@@ -641,11 +642,13 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
               onRetry={retry}
               emptyMessage="Ninguna compañía tiene trámites en el periodo seleccionado."
               ariaLabel="Resumen de compañías activas"
-              pagination={
-                conTramites.length > FILAS_COMPANIAS
-                  ? { page: pagina, pageSize: FILAS_COMPANIAS, totalCount: conTramites.length, onPageChange: setPaginaCompanias }
-                  : undefined
-              }
+              pagination={{
+                page: pagina,
+                pageSize: pgCompanias.pageSize,
+                totalCount: conTramites.length,
+                onPageChange: pgCompanias.setPage,
+                onPageSizeChange: pgCompanias.setPageSize,
+              }}
             />
             {companias.status === "ready" && sinTramites > 0 && (
               <p className="mt-3 text-xs text-[color:var(--di-text-tertiary)]" data-testid="companias-sin-tramites">
