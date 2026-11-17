@@ -14,11 +14,11 @@ internal sealed record ParametrosAnalisis(IReadOnlyList<Fuente> Alcance, int Lim
 /// externas. Por fila (<see cref="ValidadorFilaVehiculo"/>, extraída al dominio en HU #13751): <see cref="ValidadorIdentificador"/> (la regla de Trámites, HU #13740) y, aparte, la regla de la
 /// carga para entradas demasiado largas (decisión del usuario 2026-10-21): si el identificador limpio (mayúsculas, solo
 /// A-Z y 0-9, antes de recortar) pasa de 8 caracteres y el validador lo tomó como placa, o de 17 y lo tomó como VIN, la fila
-/// es errónea; nunca se acepta el valor recortado. Después, la forma del documento del locatario
+/// es errónea; nunca se acepta el valor recortado. Después, la forma del documento del propietario actual (HU #14582)
 /// (<see cref="ValidadorDocumentoPersona"/>). Los identificadores válidos repetidos se consolidan en la primera fila y se
 /// cuentan como duplicados. Avisa sin válidos y si los válidos superan el límite del lote (en ambos casos no se puede
 /// continuar). El estimado (<see cref="EstimadorConsultas"/>, HU #13747) solo si la configuración lo muestra antes de
-/// lanzar. El documento del locatario sale siempre enmascarado.
+/// lanzar. El documento del propietario actual sale siempre enmascarado.
 /// </summary>
 /// <example>
 /// <code>
@@ -34,6 +34,7 @@ internal static class AnalizadorCarga
     public const string CodigoSinValidos = "SIN_VALIDOS";
     public const string CodigoLimiteSuperado = "LIMITE_SUPERADO";
     public const string CodigoColumnaRequerida = "COLUMNA_REQUERIDA";
+    public const string CodigoEncabezadoAmbiguo = "ENCABEZADO_AMBIGUO";
 
     public static ResumenValidacionDto Analizar(TablaCarga tabla, ParametrosAnalisis parametros)
     {
@@ -71,8 +72,9 @@ internal static class AnalizadorCarga
                 $"El archivo tiene {validos} vehículos válidos y el límite por lote es {parametros.LimiteVehiculosLote}: divida el archivo o retire vehículos para continuar."));
         }
 
+        // HU #14582: el declarado es el propietario actual y no alimenta al locatario (sus fuentes cuentan 0 antes del RUNT).
         var estimado = parametros.MostrarEstimado
-            ? EstimadorConsultas.Estimar(parametros.Alcance, filas.Where(f => f.Dto.Valida).Select(f => new VehiculoAEstimar(true, f.ConDocumento)))
+            ? EstimadorConsultas.Estimar(parametros.Alcance, filas.Where(f => f.Dto.Valida).Select(_ => new VehiculoAEstimar(true, TieneDocumentoLocatario: false)))
                 .Select(EstimadoFuenteDto.De).ToList()
             : null;
 
@@ -84,7 +86,8 @@ internal static class AnalizadorCarga
     /// <summary>
     /// Posición de las columnas de la plantilla en el encabezado (sin distinguir mayúsculas ni espacios de los extremos); sin
     /// <see cref="PlantillaCarga.ColumnaIdentificador"/> es 422 <see cref="CodigoColumnaRequerida"/>. La usan el análisis y la
-    /// confirmación del lote desde el archivo (HU #13751).
+    /// confirmación del lote desde el archivo (HU #13751). Las cabeceras viejas del locatario valen como alias (HU #14582, C2); un
+    /// archivo con cabeceras nuevas y viejas del documento es 422 <see cref="CodigoEncabezadoAmbiguo"/> (SP-7: no se fusionan).
     /// </summary>
     internal static (int Identificador, int? Tipo, int? Documento) Columnas(TablaCarga tabla)
     {
@@ -95,7 +98,18 @@ internal static class AnalizadorCarga
             {
                 Campo = PlantillaCarga.ColumnaIdentificador,
             };
-        return (identificador, Indice(tabla.Encabezados, PlantillaCarga.ColumnaTipoDocumento), Indice(tabla.Encabezados, PlantillaCarga.ColumnaDocumento));
+        var tipo = Indice(tabla.Encabezados, PlantillaCarga.ColumnaTipoDocumento);
+        var documento = Indice(tabla.Encabezados, PlantillaCarga.ColumnaDocumento);
+        var tipoObsoleto = Indice(tabla.Encabezados, PlantillaCarga.ColumnaTipoDocumentoObsoleta);
+        var documentoObsoleto = Indice(tabla.Encabezados, PlantillaCarga.ColumnaDocumentoObsoleta);
+        if ((tipo is not null || documento is not null) && (tipoObsoleto is not null || documentoObsoleto is not null))
+        {
+            throw new Plataforma.ReglaException(CodigoEncabezadoAmbiguo,
+                $"El archivo trae a la vez las columnas del propietario actual ({PlantillaCarga.ColumnaTipoDocumento}, {PlantillaCarga.ColumnaDocumento}) " +
+                $"y las anteriores del locatario ({PlantillaCarga.ColumnaTipoDocumentoObsoleta}, {PlantillaCarga.ColumnaDocumentoObsoleta}): deje solo una pareja.");
+        }
+
+        return (identificador, tipo ?? tipoObsoleto, documento ?? documentoObsoleto);
     }
 
     /// <summary>Celda de una columna de la fila; null si la columna no existe o la fila es más corta.</summary>
@@ -125,7 +139,7 @@ internal static class AnalizadorCarga
         var dto = new FilaResumenDto(
             leida.Numero, original, fila.Normalizado, tipo is { } c ? CodigosDeEnum.Codigo(c) : null, tipoVisible,
             numeroVisible is null ? null : Enmascarar(numeroVisible), fila.EsValida, [], errores);
-        return new FilaEnCurso(dto, tipo is null ? null : fila.Normalizado, documento.Presente);
+        return new FilaEnCurso(dto, tipo is null ? null : fila.Normalizado);
     }
 
     /// <summary>Columna de la plantilla de cada campo de la fila.</summary>
@@ -149,7 +163,7 @@ internal static class AnalizadorCarga
     }
 
     /// <summary>Fila en análisis: <see cref="Valido"/> es el identificador normalizado si es placa o VIN (clave de duplicados).</summary>
-    private sealed record FilaEnCurso(FilaResumenDto Dto, string? Valido, bool ConDocumento)
+    private sealed record FilaEnCurso(FilaResumenDto Dto, string? Valido)
     {
         public List<int> Duplicadas { get; } = [];
     }

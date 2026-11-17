@@ -189,4 +189,55 @@ public sealed class NotificacionesEndpointsTests
         (await EsquemaR8Tests.ListarAsync(conexion,
             $"SELECT id::text FROM diagnostico.notificaciones WHERE id = '{nid}' AND leida_en IS NULL", ct)).Should().HaveCount(1);
     }
+
+    // HU #14576 H-9 (AC48, AC49) — la bandeja devuelve `datos` (solo contadores y códigos) como objeto JSON: sin `datos.cantidad`
+    // la campana del front descarta los avisos SANEAMIENTO_* (C-14).
+    [Fact]
+    public async Task Bandeja_devuelve_datos_del_aviso_SANEAMIENTO_CERRADO()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await EsquemaR8Tests.AbrirAsync(api, ct);
+        var usuario = Guid.NewGuid();
+        var (empresa, lote) = await EsquemaR8Tests.SembrarLoteAsync(conexion, ct);
+        await EsquemaR8Tests.InsertarAsync(conexion, empresa, lote, Notificacion.SaneamientoCerrado, "{\"cantidad\":2,\"resultado\":\"SANEADO\"}", ct, usuario);
+        var cliente = api.Cliente(api.Token(empresa: empresa, permisos: PermisosLectura, sujeto: usuario.ToString()));
+
+        var respuesta = await cliente.GetAsync(Ruta, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
+        var item = JsonElement.Parse(await respuesta.Content.ReadAsStringAsync(ct)).GetProperty("items")[0];
+        item.GetProperty("tipo").GetString().Should().Be(Notificacion.SaneamientoCerrado);
+        var datos = item.GetProperty("datos");
+        datos.ValueKind.Should().Be(JsonValueKind.Object);
+        datos.GetProperty("cantidad").GetInt32().Should().Be(2);
+        datos.GetProperty("resultado").GetString().Should().Be("SANEADO");
+    }
+
+    // HU #14576 H-9 — los cuatro tipos del saneamiento tienen rótulo propio (no el genérico «Notificación»), sin placa ni motivo, y
+    // llevan al lote; `datos` sale tal cual se guardó.
+    [Theory]
+    [InlineData(Notificacion.SaneamientoTomado, "{\"cantidad\":3}")]
+    [InlineData(Notificacion.SaneamientoCerrado, "{\"cantidad\":1,\"resultado\":\"NO_PROCEDE\"}")]
+    [InlineData(Notificacion.SaneamientoReabierto, "{\"cantidad\":1}")]
+    [InlineData(Notificacion.SaneamientoAnulado, "{\"cantidad\":1}")]
+    public async Task Bandeja_rotula_los_avisos_del_saneamiento(string tipo, string datosGuardados)
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var conexion = await EsquemaR8Tests.AbrirAsync(api, ct);
+        var usuario = Guid.NewGuid();
+        var (empresa, lote) = await EsquemaR8Tests.SembrarLoteAsync(conexion, ct);
+        await EsquemaR8Tests.InsertarAsync(conexion, empresa, lote, tipo, datosGuardados, ct, usuario);
+        var cliente = api.Cliente(api.Token(empresa: empresa, permisos: PermisosLectura, sujeto: usuario.ToString()));
+
+        var item = JsonElement.Parse(await (await cliente.GetAsync(Ruta, ct)).Content.ReadAsStringAsync(ct)).GetProperty("items")[0];
+
+        item.GetProperty("titulo").GetString().Should().StartWith("Saneamiento");
+        item.GetProperty("mensaje").GetString().Should().Contain("saneamiento").And.Contain("«");
+        item.GetProperty("accion").GetProperty("tipo").GetString().Should().Be("VER_LOTE");
+        JsonSerializer.Serialize(item.GetProperty("datos")).Should().Be(datosGuardados);
+    }
 }

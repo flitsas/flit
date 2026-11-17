@@ -83,3 +83,17 @@ describe("HU14562 AC47 auditoría de versiones del dictamen (solo backoffice)", 
     expect(screen.getByRole("status", { name: /cargando/i })).toBeInTheDocument();
   });
 });
+
+// AP-8 (security-fase3 SF-6): el aviso de error no muestra el mensaje del servidor.
+const SECRETO_AP8 = "Npgsql detalle interno 23514 en diagnostico.consultas";
+
+describe("AuditoriaDictamen — AP-8: texto fijo en el error", () => {
+  it("400 con mensaje del servidor: aviso con texto fijo y Reintentar", async () => {
+    simularApi({ [RUTA]: () => Response.json({ code: "OTRO_ERROR", error: SECRETO_AP8 }, { status: 400 }) });
+    montar();
+    const aviso = await screen.findByRole("alert");
+    expect(aviso).toHaveTextContent("Intenta de nuevo en un momento.");
+    expect(aviso).not.toHaveTextContent(SECRETO_AP8);
+    expect(within(aviso).getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+  });
+});

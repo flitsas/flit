@@ -1,4 +1,5 @@
 import { ApiError } from "@/lib/api";
+import { mensajeErrorBackoffice } from "@/lib/backoffice/api";
 
 /** Alertamiento del ajuste FLIT (B7): código del catálogo o AJUSTE_FLIT, texto ≤ 500, efecto y fuente. */
 export interface AlertamientoAjuste {
@@ -114,9 +115,27 @@ const MENSAJES: Readonly<Record<string, string>> = {
   VEHICULO_CON_TRAMITE: "El vehículo ya tiene un trámite creado; el ajuste no lo modifica. Confirma para continuar",
 };
 
-/** AC46: traduce el error del PUT a un mensaje fijo; lo digitado se conserva en el panel. */
+/** AP-8 (SF-6): textos fijos de los 422 por campo del PUT del dictamen (contrato `diagnostico.v1.yaml`). */
+const MENSAJES_422: Readonly<Record<string, string>> = {
+  MOTIVO_REQUERIDO: "Escribe un motivo de entre 10 y 500 caracteres.",
+  VERSION_ESPERADA_INVALIDA: "No se pudo aplicar el ajuste: la versión del dictamen no es válida. Recarga la página.",
+  ALERTAMIENTO_INVALIDO: "Revisa los alertamientos: cada uno necesita un código del catálogo, un efecto, una fuente y un texto de hasta 500 caracteres.",
+  ALERTAMIENTO_CON_DIGITOS: "No escribas secuencias de 6 o más dígitos (pueden ser documentos).",
+  CONFIRMADO_REQUERIDO: "Confirma el ajuste para continuar.",
+  VEREDICTO_INVALIDO: "Elige un veredicto: Viable o Bloqueado.",
+};
+
+/** AP-8 (SF-6): 422 con `campo` y sin texto propio (VALOR_INVALIDO u otro): se señala el campo con un texto genérico. */
+const REVISA_CAMPO = "Revisa este campo.";
+
+/** AC46: traduce el error del PUT a un mensaje fijo, nunca el de la API; lo digitado se conserva en el panel. */
 export function errorAjusteDictamen(error: unknown): ErrorAjuste {
-  const base: ErrorAjuste = { mensaje: "No se pudo aplicar el ajuste. Intenta de nuevo en un momento.", campo: null, ofrecerRecargar: false, pedirConfirmarTramite: false };
+  const base: ErrorAjuste = {
+    mensaje: mensajeErrorBackoffice(error, "No se pudo aplicar el ajuste. Intenta de nuevo en un momento."),
+    campo: null,
+    ofrecerRecargar: false,
+    pedirConfirmarTramite: false,
+  };
   if (!(error instanceof ApiError)) return base;
   const code = error.code ?? "";
   if (MENSAJES[code]) {
@@ -127,6 +146,10 @@ export function errorAjusteDictamen(error: unknown): ErrorAjuste {
       pedirConfirmarTramite: code === "VEHICULO_CON_TRAMITE",
     };
   }
-  if (error.status === 422 && error.campo) return { ...base, mensaje: error.message, campo: error.campo };
+  if (error.status === 422) {
+    const fijo = Object.prototype.hasOwnProperty.call(MENSAJES_422, code) ? MENSAJES_422[code] : undefined;
+    if (fijo) return { ...base, mensaje: fijo, campo: error.campo ?? null };
+    if (error.campo) return { ...base, mensaje: REVISA_CAMPO, campo: error.campo };
+  }
   return base;
 }

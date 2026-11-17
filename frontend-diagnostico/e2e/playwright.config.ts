@@ -11,6 +11,14 @@ import { defineConfig, devices } from "@playwright/test";
  *
  * Las credenciales entran solo por variables de entorno (E2E_USUARIO, E2E_CLAVE, ...; ver cabecera de cada spec).
  * Reportes, trazas y capturas van a .claude/state/ (gitignored). workers ≤ 2 por decisión del usuario (CPU).
+ *
+ * Sesión única por usuario (hallazgo de la corrida del 2026-11-14): el hub invalida la sesión anterior al iniciar otra con el
+ * mismo usuario, así que dos tests en paralelo con E2E_USUARIO (o con el SuperAdmin) se tumban la sesión y la app queda en
+ * bucle de reautenticación («Abriendo Diagnóstico…»). Por eso:
+ *   - los specs de saneamiento y de vehículos declaran `test.describe.configure({ mode: "serial" })` (con
+ *     `fullyParallel: false` los tests de un archivo ya comparten worker; el modo serie lo deja explícito);
+ *   - al correr VARIOS archivos a la vez, usar un solo worker: `E2E_WORKERS=1` o `--workers=1` (el flag de la línea de
+ *     comandos manda sobre E2E_WORKERS). El valor por defecto (2) no cambia para no frenar los specs de un solo archivo.
  */
 const RAIZ = path.resolve(__dirname, "../..");
 const SALIDA = process.env.E2E_SALIDA ?? path.join(RAIZ, ".claude/state/rediseno-diagnostico/evidencias/e2e-local");

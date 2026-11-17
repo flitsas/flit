@@ -1,80 +1,45 @@
 "use client";
 
-import { Suspense } from "react";
-import Link from "next/link";
-import { Icono } from "@flit/ui/Icono";
+import { Suspense, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
-import { CapturaExpress } from "@/components/express/CapturaExpress";
-import { ListadoDiagnosticos } from "@/components/listado/ListadoDiagnosticos";
-import { URL_PLANTILLA } from "@/lib/carga/api";
-import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
-import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
-
-const TITULO_TARJETA_CLS = "text-lg font-semibold text-flit-primary";
+import { Dashboard } from "@/components/estadisticas/Dashboard";
+import { puedeVerReportes, tieneVistaGlobal, type CapacidadesDiagnostico } from "@/lib/sesion";
 
 /**
- * Inicio de Diagnóstico (HU #13732; rediseño del kit 2026, HU #14562 AC13): la tarjeta título con la compañía de la
- * sesión y, con la capacidad crearDiagnosticos, dos tarjetas: Express («Placa o VIN» + «Diagnosticar», que abre
- * /diagnosticos/nuevo en Express con la placa precargada) y Masivo («Nuevo diagnóstico masivo» y «Descargar
- * plantilla»). La API vuelve a exigir el permiso al crear. Con verDiagnosticos, debajo, el listado con sus filtros en la
- * URL; el vacío, la carga y el error los pinta el listado. useSearchParams va bajo Suspense.
+ * Raíz de Diagnóstico = Dashboard (HU #14580, U7, diseño §c C1): entrar al producto (desde el hub o por /) abre los
+ * indicadores para todos los roles. Con la capacidad verEstadisticasGlobales, la vista global con selector de compañía
+ * (Q4); si no, la compañía de la sesión. El listado de siempre vive en /diagnosticos (los enlaces viejos con su query
+ * los redirige next.config.ts). Sin verDiagnosticos ni vista global, la primera ruta que el rol sí puede abrir
+ * (`destinoSinDashboard`); la 403 solo si no tiene ninguna. useSearchParams va bajo Suspense.
  */
-export default function Inicio() {
+/**
+ * Adónde va quien no puede ver el Dashboard (CR-FE-3, U7): /diagnosticos con ver o crear (con solo crear, esa página
+ * muestra las tarjetas Express y Masivo); si no, /reportes con verReportes o la vista global; sin ninguna, la 403.
+ */
+function destinoSinDashboard(capacidades: CapacidadesDiagnostico | undefined): string {
+  if (capacidades?.verDiagnosticos === true || capacidades?.crearDiagnosticos === true) return "/diagnosticos";
+  if (puedeVerReportes(capacidades)) return "/reportes";
+  return "/403?code=SIN_PERMISOS_DIAGNOSTICO";
+}
+
+export default function Raiz() {
+  const router = useRouter();
   const { sesion } = useSesion();
-  const empresa = sesion?.empresa.nombre;
-  const puedeCrear = sesion?.capacidades.crearDiagnosticos ?? false;
-  const puedeVer = sesion?.capacidades.verDiagnosticos ?? false;
+  const capacidades = sesion?.capacidades;
+  const vistaGlobal = tieneVistaGlobal(capacidades);
+  const puedeVer = vistaGlobal || capacidades?.verDiagnosticos === true;
+  const destino = sesion !== null && !puedeVer ? destinoSinDashboard(capacidades) : null;
 
+  useEffect(() => {
+    if (destino) router.replace(destino);
+  }, [destino, router]);
+
+  if (!sesion || !puedeVer) return null;
   return (
-    <>
-      <CabeceraModulo
-        as="section"
-        aria-labelledby="diagnostico-titulo"
-        tituloId="diagnostico-titulo"
-        titulo="Diagnóstico vehicular"
-        descripcion={empresa}
-        icono="diagnostico"
-      />
-
-      {puedeCrear && (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <section aria-labelledby="inicio-express" className={`${TARJETA_CLS} flex flex-col gap-3`}>
-            <div className="flex flex-col gap-1">
-              <h2 id="inicio-express" className={TITULO_TARJETA_CLS}>
-                Diagnóstico Express
-              </h2>
-              <p className={AYUDA_CLS}>Un vehículo, sin crear un lote.</p>
-            </div>
-            <CapturaExpress />
-          </section>
-          <section aria-labelledby="inicio-masivo" className={`${TARJETA_CLS} flex flex-col gap-3`}>
-            <div className="flex flex-col gap-1">
-              <h2 id="inicio-masivo" className={TITULO_TARJETA_CLS}>
-                Diagnóstico masivo
-              </h2>
-              <p className={AYUDA_CLS}>Muchos vehículos desde un archivo.</p>
-            </div>
-            <p className={AYUDA_CLS}>Archivo .xlsx o .csv con la columna Identificador_Vehiculo y, opcional, Documento_Locatario.</p>
-            <div className="mt-auto flex flex-wrap gap-2">
-              <Link href="/diagnosticos/nuevo?modo=masivo" className={BOTON_PRIMARIO_CLS}>
-                <Icono nombre="reporte-detallado" className="h-4 w-4" />
-                Nuevo diagnóstico masivo
-              </Link>
-              <a href={URL_PLANTILLA} download className={BOTON_SECUNDARIO_CLS}>
-                <Icono nombre="nube-bajar" className="h-4 w-4" />
-                Descargar plantilla
-              </a>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {puedeVer && (
-        <Suspense fallback={<VehicleLoader label="Cargando diagnósticos…" />}>
-          <ListadoDiagnosticos puedeCrear={puedeCrear} />
-        </Suspense>
-      )}
-    </>
+    <Suspense fallback={<VehicleLoader label="Cargando el resumen…" />}>
+      <Dashboard vistaGlobal={vistaGlobal} puedeCrear={capacidades?.crearDiagnosticos === true} empresaNombre={sesion.empresa.nombre} />
+    </Suspense>
   );
 }

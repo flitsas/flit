@@ -25,11 +25,20 @@ internal static partial class VehiculosEndpoints
     public const string RutaValidarFilas = DiagnosticosEndpoints.Ruta + "/{id:guid}/carga/validar-filas";
     public const string RutaVehiculos = DiagnosticosEndpoints.Ruta + "/{id:guid}/vehiculos";
 
+    /// <summary>Grilla de placas de la compañía (plan §6.6, HU #14576 AC39): <see cref="ListadoVehiculos"/>.</summary>
+    public const string RutaListado = "/vehiculos";
+
     public static void Map(RouteGroupBuilder api)
     {
         api.MapPost(RutaValidarFilas, ValidarFilas).RequirePermiso(Permisos.DiagnosticosCrear).WithName("ValidarFilasCargaDiagnostico");
-        api.MapPost(RutaVehiculos, Confirmar).RequirePermiso(Permisos.DiagnosticosCrear).DisableAntiforgery().WithName("ConfirmarVehiculosDiagnostico");
+        api.MapGet(RutaListado, Listar).RequirePermiso(Permisos.DiagnosticosVer).WithName("ListarVehiculos");
+        // HU #14582 (SP-5): límite por usuario y por compañía (429 DEMASIADAS_SOLICITUDES).
+        api.MapPost(RutaVehiculos, Confirmar).RequirePermiso(Permisos.DiagnosticosCrear).RequireRateLimiting(LimitesSolicitudes.Confirmacion)
+            .DisableAntiforgery().WithName("ConfirmarVehiculosDiagnostico");
     }
+
+    private static async Task<IResult> Listar(HttpRequest peticion, ListadoVehiculos listado, CancellationToken ct) =>
+        Results.Ok(await listado.ListarAsync(FiltroVehiculos.Leer(peticion.Query), ct).ConfigureAwait(false));
 
     private static async Task<IResult> ValidarFilas(
         Guid id, FilasAValidarDto cuerpo, DiagnosticoDb db, UsuarioActual usuario, ILoggerFactory logs, CancellationToken ct)
@@ -44,7 +53,7 @@ internal static partial class VehiculosEndpoints
         var filas = cuerpo?.Filas ?? [];
         var tabla = new TablaCarga(
             [PlantillaCarga.ColumnaIdentificador, PlantillaCarga.ColumnaTipoDocumento, PlantillaCarga.ColumnaDocumento],
-            [.. filas.Select((f, i) => new FilaLeida(f?.Fila ?? i + 2, [f?.Identificador, f?.TipoDocumentoLocatario, f?.DocumentoLocatario]))]);
+            [.. filas.Select((f, i) => FilaLeida(f, i))]);
         var resumen = AnalizadorCarga.Analizar(tabla, CargaEndpoints.Parametros(cabecera));
         var registro = logs.CreateLogger(typeof(VehiculosEndpoints).FullName!);
         FilasRevalidadas(registro, cabecera.Id, resumen.TotalFilas, resumen.Validos, resumen.Erroneos);
@@ -77,8 +86,7 @@ internal static partial class VehiculosEndpoints
         var resultado = confirmacion.Resultado;
         var porOrden = confirmacion.Vehiculos.ToDictionary(v => v.Orden);
         var vehiculos = resultado.Validos.Select(v => new VehiculoConfirmadoDto(
-            porOrden[v.Orden].Id, v.Orden, v.IdentificadorOriginal, v.IdentificadorNorm, CodigosDeEnum.Codigo(v.Tipo), v.TipoDocumentoLocatario,
-            v.DocumentoLocatario is null ? null : AnalizadorCarga.Enmascarar(v.DocumentoLocatario))).ToList();
+            porOrden[v.Orden].Id, v.Orden, v.IdentificadorOriginal, v.IdentificadorNorm, CodigosDeEnum.Codigo(v.Tipo))).ToList();
         var estimado = confirmacion.MostrarEstimado
             ? resultado.Estimado.Select(EstimadoFuenteDto.De).ToList()
             : null;
@@ -86,6 +94,13 @@ internal static partial class VehiculosEndpoints
             new ResultadoConfirmacionDto(
                 confirmacion.DiagnosticoId, vehiculos.Count, resultado.Invalidos, resultado.Duplicados, resultado.LimiteVehiculosLote, vehiculos, estimado),
             statusCode: StatusCodes.Status202Accepted);
+    }
+
+    /// <summary>La fila como la de la plantilla: sin número, su posición en la hoja; el documento del nombre nuevo o del alias (C1).</summary>
+    private static FilaLeida FilaLeida(FilaCapturadaDto? fila, int indice)
+    {
+        var (tipo, numero) = fila?.Declarado() ?? (null, null);
+        return new FilaLeida(fila?.Fila ?? indice + 2, [fila?.Identificador, tipo, numero]);
     }
 
     [LoggerMessage(EventId = 13752, Level = LogLevel.Information,

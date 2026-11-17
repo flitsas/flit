@@ -12,7 +12,7 @@ namespace Flit.Diagnostico.Api.Modulos.Notificaciones;
 /// así que si el hecho se revierte no queda notificación.
 /// <list type="bullet">
 /// <item>Sin destinatario (<see cref="Guid.Empty"/>) no inserta.</item>
-/// <item>Solo los cuatro tipos de <see cref="Notificacion.Tipos"/> (D8: no hay DICTAMEN_AJUSTADO); otro lanza <see cref="ArgumentException"/>.</item>
+/// <item>Solo los tipos de <see cref="Notificacion.Tipos"/> (D8: no hay DICTAMEN_AJUSTADO; HU #14576 suma los SANEAMIENTO_*); otro lanza <see cref="ArgumentException"/>.</item>
 /// <item>El <c>tenant_id</c> es explícito, el de la fila del hecho, nunca el implícito del contexto.</item>
 /// <item>Idempotente: no agrega si ya existe <c>(tenant, usuario, tipo, referencia)</c> en la base ni si la misma unidad de trabajo
 /// ya tiene una con esa misma clave (para <c>LOTE_TERMINADO</c>, una del mismo lote). El índice único
@@ -24,10 +24,14 @@ namespace Flit.Diagnostico.Api.Modulos.Notificaciones;
 /// </summary>
 internal static class EscritorNotificaciones
 {
-    /// <summary>Agrega la notificación al contexto (sin guardar); true si la agregó.</summary>
+    /// <summary>
+    /// Agrega la notificación al contexto (sin guardar); true si la agregó. <paramref name="existentes"/> son las notificaciones de la
+    /// empresa del aviso cuando el contexto no es de esa empresa (el backoffice pasa <c>DeLaEmpresa&lt;Notificacion&gt;(empresa)</c>,
+    /// HU #14576 SP-22); sin él, las del filtro del contexto.
+    /// </summary>
     public static async Task<bool> AgregarAsync(
         DiagnosticoDb db, Guid tenantId, Guid usuarioId, string tipo, Guid diagnosticoId, Guid referenciaId, DateTimeOffset ahora,
-        CancellationToken ct, string datos = "{}")
+        CancellationToken ct, string datos = "{}", IQueryable<Notificacion>? existentes = null)
     {
         ArgumentNullException.ThrowIfNull(db);
         if (!Notificacion.Tipos.Contains(tipo))
@@ -44,7 +48,7 @@ internal static class EscritorNotificaciones
             && (e.Entity.ReferenciaId == referenciaId || (tipo == Notificacion.LoteTerminado && e.Entity.DiagnosticoId == diagnosticoId)));
         if (pendiente)
             return false;
-        var existe = await db.Set<Notificacion>().AsNoTracking()
+        var existe = await (existentes ?? db.Set<Notificacion>()).AsNoTracking()
             .AnyAsync(n => n.TenantId == tenantId && n.UsuarioId == usuarioId && n.Tipo == tipo && n.ReferenciaId == referenciaId, ct)
             .ConfigureAwait(false);
         if (existe)

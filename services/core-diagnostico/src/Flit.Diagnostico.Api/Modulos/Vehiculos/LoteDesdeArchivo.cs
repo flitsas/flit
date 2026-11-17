@@ -21,11 +21,11 @@ internal sealed class CorreccionFila
 
     public bool TraeTipoDocumento { get; init; }
 
-    public string? TipoDocumentoLocatario { get; init; }
+    public string? TipoDocumentoPropietario { get; init; }
 
     public bool TraeDocumento { get; init; }
 
-    public string? DocumentoLocatario { get; init; }
+    public string? DocumentoPropietario { get; init; }
 }
 
 /// <summary>
@@ -49,12 +49,10 @@ internal static class LoteDesdeArchivo
 
     private const string PropiedadFila = "fila";
     private const string PropiedadIdentificador = "identificador";
-    private const string PropiedadTipo = "tipo_documento_locatario";
-    private const string PropiedadDocumento = "documento_locatario";
-
     /// <summary>
     /// Lee el JSON de <see cref="CampoCorrecciones"/>: un arreglo de objetos con <c>fila</c> (entero, sin repetir) y,
-    /// opcionales, <c>identificador</c>, <c>tipo_documento_locatario</c> y <c>documento_locatario</c> (texto o null).
+    /// opcionales, <c>identificador</c>, <c>tipo_documento_propietario</c> y <c>documento_propietario</c> (texto o null; HU #14582,
+    /// con los de locatario como alias obsoleto: los dos nombres juntos son 400 <c>CAMPOS_EXCLUYENTES</c>).
     /// Vacío o ausente es sin correcciones. Cualquier otra forma es 422 <see cref="CodigoCorreccionesInvalidas"/>.
     /// </summary>
     public static IReadOnlyDictionary<int, CorreccionFila> LeerCorrecciones(string? json)
@@ -86,17 +84,17 @@ internal static class LoteDesdeArchivo
                 }
 
                 var (traeIdentificador, identificador) = Texto(elemento, PropiedadIdentificador);
-                var (traeTipo, tipo) = Texto(elemento, PropiedadTipo);
-                var (traeDocumento, numeroDocumento) = Texto(elemento, PropiedadDocumento);
+                var (traeTipo, tipo) = Documento(elemento, AliasPropietario.CampoTipo, AliasPropietario.CampoTipoObsoleto);
+                var (traeDocumento, numeroDocumento) = Documento(elemento, AliasPropietario.CampoDocumento, AliasPropietario.CampoDocumentoObsoleto);
                 var correccion = new CorreccionFila
                 {
                     Fila = numero,
                     TraeIdentificador = traeIdentificador,
                     Identificador = identificador,
                     TraeTipoDocumento = traeTipo,
-                    TipoDocumentoLocatario = tipo,
+                    TipoDocumentoPropietario = tipo,
                     TraeDocumento = traeDocumento,
-                    DocumentoLocatario = numeroDocumento,
+                    DocumentoPropietario = numeroDocumento,
                 };
                 if (!porFila.TryAdd(numero, correccion))
                     throw Invalidas($"La fila {numero} viene corregida más de una vez.");
@@ -129,12 +127,21 @@ internal static class LoteDesdeArchivo
             if (correcciones.TryGetValue(leida.Numero, out var c))
             {
                 identificador = c.TraeIdentificador ? c.Identificador : identificador;
-                tipo = c.TraeTipoDocumento ? c.TipoDocumentoLocatario : tipo;
-                documento = c.TraeDocumento ? c.DocumentoLocatario : documento;
+                tipo = c.TraeTipoDocumento ? c.TipoDocumentoPropietario : tipo;
+                documento = c.TraeDocumento ? c.DocumentoPropietario : documento;
             }
 
             return new VehiculoCapturado(identificador, tipo, documento);
         })];
+    }
+
+    /// <summary>El campo del documento con su nombre nuevo o su alias obsoleto (C1); los dos juntos, 400 CAMPOS_EXCLUYENTES.</summary>
+    private static (bool Trae, string? Valor) Documento(JsonElement elemento, string propiedad, string obsoleta)
+    {
+        var nuevo = Texto(elemento, propiedad);
+        var viejo = Texto(elemento, obsoleta);
+        var valor = AliasPropietario.Elegir(nuevo.Trae, nuevo.Valor, viejo.Trae, viejo.Valor, propiedad, obsoleta);
+        return (nuevo.Trae || viejo.Trae, valor);
     }
 
     private static (bool Trae, string? Valor) Texto(JsonElement elemento, string propiedad)

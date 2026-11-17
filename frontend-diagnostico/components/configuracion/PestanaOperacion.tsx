@@ -5,6 +5,7 @@ import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { ApiError } from "@/lib/api";
 import {
+  ERRORES_OPERACION,
   ESTIMADOS,
   VISIBILIDADES,
   contratoCambioDespuesDeOperacion,
@@ -17,6 +18,7 @@ import {
   type Fuente,
   type VisibilidadUsuario,
 } from "@/lib/configuracion";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { SelectorSegmentado } from "@flit/ui/SelectorSegmentado";
 import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, ETIQUETA_CLS, MARCA_CLS, OPCION_CLS, TARJETA_CLS } from "./estilos";
 
@@ -103,7 +105,8 @@ export function PestanaOperacion({
         return;
       }
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
-      setEstado({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudo guardar la configuración.", reintentable });
+      // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+      setEstado({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudo guardar la configuración.", ERRORES_OPERACION), reintentable });
     }
   }
 

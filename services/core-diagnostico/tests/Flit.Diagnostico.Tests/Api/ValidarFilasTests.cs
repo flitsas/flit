@@ -111,6 +111,40 @@ public sealed class ValidarFilasTests
         (await Codigo(noCreado, ct)).Should().Be(ServicioCabecera.CodigoNoEditable);
     }
 
+    // CR-5 (review be1-a, HU #14582, contrato C1) — el alias obsoleto *_locatario solo se acepta y se valida como el propietario
+    // actual (eco enmascarado con el nombre nuevo); con los dos nombres de un campo en la misma fila, 400 CAMPOS_EXCLUYENTES con el
+    // nombre nuevo en campo y sin el documento en el cuerpo.
+    [Fact]
+    public async Task Alias_de_locatario_solo_se_acepta_y_con_los_dos_nombres_es_400()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (cliente, id) = await Lotes.CrearAsync(api, DosEmpresas.En(api).A, new ConfiguracionEmpresa(), ct);
+        var conAlias = new Dictionary<string, object?> { ["identificador"] = "ABC123", ["tipo_documento_locatario"] = "CC", ["documento_locatario"] = "1020304050" };
+        var conLosDos = new Dictionary<string, object?>
+        {
+            ["identificador"] = "ABC123", ["documento_propietario"] = "1020304050", ["documento_locatario"] = "1020304050", ["tipo_documento_propietario"] = "CC",
+        };
+
+        var alias = await Lotes.ValidarAsync(cliente, id, [conAlias], ct);
+        var ambos = await Lotes.ValidarAsync(cliente, id, [conLosDos], ct);
+
+        var textoAlias = await alias.Content.ReadAsStringAsync(ct);
+        alias.StatusCode.Should().Be(HttpStatusCode.OK, textoAlias);
+        var fila = Fila(JsonElement.Parse(textoAlias), 2);
+        fila.GetProperty("valida").GetBoolean().Should().BeTrue(textoAlias);
+        fila.GetProperty("tipo_documento_propietario").GetString().Should().Be("CC");
+        fila.GetProperty("documento_propietario").GetString().Should().Be("****4050");
+        textoAlias.Should().NotContain("1020304050").And.NotContain("_locatario", "C1: en las respuestas solo salen los nombres nuevos");
+        var textoAmbos = await ambos.Content.ReadAsStringAsync(ct);
+        ambos.StatusCode.Should().Be(HttpStatusCode.BadRequest, textoAmbos);
+        var error = JsonElement.Parse(textoAmbos);
+        error.GetProperty("code").GetString().Should().Be("CAMPOS_EXCLUYENTES");
+        error.GetProperty("campo").GetString().Should().Be("documento_propietario");
+        textoAmbos.Should().NotContain("1020304050");
+    }
+
     private static JsonElement Fila(JsonElement resumen, int numero) =>
         resumen.GetProperty("filas").EnumerateArray().Single(f => f.GetProperty("fila").GetInt32() == numero);
 

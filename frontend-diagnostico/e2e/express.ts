@@ -18,9 +18,15 @@ export async function lanzarExpress(page: Page, placa: string, nombre?: string) 
   // Con estimado_consultas = ANTES_DE_LANZAR aparece el estimado; si no, el Express se lanza directo.
   await Promise.race([lanzar.waitFor({ state: "visible" }), page.waitForURL(tablero)]);
   if (await lanzar.isVisible()) await lanzar.click();
-  // Pantalla de resultado (AC18): «Ver tablero» evita esperar los 5 s de la redirección automática.
+  // Pantalla de resultado (AC18): la app redirige sola y cualquier foco o clic sobre la pantalla cancela esa redirección
+  // («Detuvimos la redirección…»), así que pulsar «Ver tablero» competía con ella. Se navega al href del enlace.
   const verTablero = page.getByRole("link", { name: "Ver tablero" });
-  await Promise.race([verTablero.waitFor({ state: "visible" }), page.waitForURL(tablero)]);
-  if (await verTablero.isVisible()) await verTablero.click();
-  await page.waitForURL(tablero);
+  const enTablero = () => tablero.test(new URL(page.url()).pathname);
+  await Promise.race([verTablero.waitFor({ state: "visible" }), page.waitForURL(tablero, { waitUntil: "commit" })]);
+  if (!enTablero()) {
+    const href = await verTablero.getAttribute("href", { timeout: 2_000 }).catch(() => null);
+    if (href && !enTablero()) await page.goto(new URL(href, page.url()).href, { waitUntil: "commit" }).catch(() => undefined);
+  }
+  await page.waitForURL(tablero, { waitUntil: "commit" });
+  await page.waitForLoadState("domcontentloaded");
 }

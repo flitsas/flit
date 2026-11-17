@@ -7,6 +7,7 @@ import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { obtenerConfiguracion, type Configuracion } from "@/lib/configuracion";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { accesoNegadoExpress } from "@/lib/express/api";
 import { limpiarIdentificador } from "@/lib/validation/fieldRules";
 import { ZonaArchivo } from "@/components/carga/SubidaArchivo";
@@ -16,7 +17,7 @@ import type { BorradorExpress, BorradorMasivo, ModoCreacion } from "./borradores
 import { CamposExpress } from "./CamposExpress";
 import { CreacionExpress } from "./CreacionExpress";
 import { CreacionMasiva } from "./CreacionMasiva";
-import { DosZonas } from "./DosZonas";
+import { ZonasCreacion } from "./ZonasCreacion";
 import { SelectorModo } from "./SelectorModo";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
@@ -63,7 +64,8 @@ export function NuevoDiagnostico() {
         if (controller.signal.aborted) return;
         const code = accesoNegadoExpress(e);
         if (code) return router.replace(`/403?code=${encodeURIComponent(code)}`);
-        setCarga({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudo cargar la configuración." });
+        // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+        setCarga({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudo cargar la configuración.") });
       });
     return () => controller.abort();
   }, [puedeCrear, intento, router]);
@@ -98,7 +100,7 @@ export function NuevoDiagnostico() {
     );
   } else if (carga.tipo !== "listo") {
     contenido = (
-      <DosZonas
+      <ZonasCreacion
         vehiculos={modo === "express" ? <CamposExpress borrador={express} onCambio={cambiarExpress} disabled /> : <ZonaArchivo archivo={masivo.archivo} onElegir={NOOP} disabled />}
         parametros={
           carga.tipo === "cargando" ? (

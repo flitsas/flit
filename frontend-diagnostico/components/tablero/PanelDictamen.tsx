@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
-import { PanelLateral } from "@flit/ui/PanelLateral";
-import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS } from "@/components/configuracion/estilos";
+import { PanelModal } from "@flit/ui/PanelModal";
+import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
 import { Button } from "@flit/ui/Button";
 import { CamposOverrideDictamen } from "@/components/backoffice/CamposOverrideDictamen";
 import { ChipEstadoCelda } from "@/components/tablero/CeldaSemaforo";
@@ -28,6 +28,7 @@ import {
   rotuloFuenteAlerta,
   type Dictamen,
 } from "@/lib/dictamen/api";
+import { IconoCambioPropietario } from "./IconoCambioPropietario";
 
 export interface PanelDictamenProps {
   diagnosticoId: string;
@@ -52,6 +53,12 @@ export interface PanelDictamenProps {
    * apilar un modal sobre el panel.
    */
   onCrearTramite?: () => void;
+  /**
+   * HU #14577 AC13 (spec-ui §3.1): «Ver deuda y sanear» en el aviso «Vehículo bloqueado», solo en la compañía. Quien pinta
+   * el panel cierra este y abre `PanelDeudaSaneamiento` en su lugar (no se apilan dos paneles, D-15), con el foco de vuelta
+   * al botón de la fila que abrió el dictamen.
+   */
+  onVerDeuda?: () => void;
 }
 
 /** dd/mm/aaaa en la hora de Colombia. Fecha ilegible: el texto crudo. */
@@ -62,48 +69,6 @@ function fechaCorta(iso: string): string {
 }
 
 type Carga = { tipo: "cargando" } | { tipo: "vacio" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; dictamen: Dictamen };
-
-const BOTON_DICTAMEN_CLS = BOTON_SECUNDARIO_CLS.replace("px-4 py-2 text-sm", "px-3 py-1 text-xs");
-
-/** «Dictamen» bajo la placa. Al abrirlo el panel pide el GET; no entra en el sondeo de la grilla. */
-export function BotonAbrirDictamen({ identificador, onAbrir }: { identificador: string; onAbrir: (disparador: HTMLElement) => void }) {
-  return (
-    <button type="button" className={BOTON_DICTAMEN_CLS} aria-label={`Ver dictamen de ${identificador}`} onClick={(e) => onAbrir(e.currentTarget)}>
-      Dictamen
-    </button>
-  );
-}
-
-/**
- * HU #14562 AC28: celda de la columna Dictamen del tablero. El veredicto viene en la fila (`FilaVehiculo.veredicto`, B1), así
- * que las cifras y la columna no piden el dictamen por vehículo; el GET sale solo al abrir el panel. Con `ajustado` (B7, D6)
- * se lee «Ajustado por FLIT», sin autor ni motivo.
- */
-export function BotonDictamenFila({
-  identificador,
-  veredicto,
-  ajustado = false,
-  onAbrir,
-}: {
-  identificador: string;
-  veredicto: { texto: string; tono: "success" | "danger" | "neutral" };
-  ajustado?: boolean;
-  onAbrir: (disparador: HTMLElement) => void;
-}) {
-  return (
-    <div className="flex flex-col items-start gap-1">
-      <button
-        type="button"
-        className={`rounded-full ${FOCO_CLS}`}
-        aria-label={`Ver dictamen de ${identificador}`}
-        onClick={(e) => onAbrir(e.currentTarget)}
-      >
-        <Etiqueta tono={veredicto.tono}>{veredicto.texto}</Etiqueta>
-      </button>
-      {ajustado && <span className={TEXTO_SECUNDARIO_CLS}>Ajustado por FLIT</span>}
-    </div>
-  );
-}
 
 const nombreVeredicto = (veredicto: Dictamen["veredicto"]) => (veredicto === "BLOQUEADO" ? "Bloqueado" : "Viable");
 
@@ -125,7 +90,7 @@ const filasDe = (dictamen: Dictamen): FilaAlertamiento[] =>
 
 /**
  * Panel del dictamen vigente (corte 7; HU #14562 F-05), el mismo en el tablero del lote y en la grilla del backoffice: un
- * `PanelLateral` de 640 px con el tablero visible detrás. No es una ruta y no entra en el sondeo: al abrirse pide el GET.
+ * modal de 640 px (FE-1: `PanelModal`, antes un panel lateral) con el tablero visible detrás. No es una ruta y no entra en el sondeo: al abrirse pide el GET.
  * Cuatro estados: vacío (SIN_DICTAMEN), cargando, error con Reintentar y lleno. En lleno: veredicto (con texto, no solo
  * color), aviso si está bloqueado, trámite analizado, fecha de emisión, versión del catálogo, la marca «Ajustado por FLIT»
  * (D6, sin autor ni motivo), las consultas del vehículo con su estado y cada alertamiento con título, efecto, detalle
@@ -150,6 +115,7 @@ export function PanelDictamen({
   tramiteAnalizado,
   consultas,
   onCrearTramite,
+  onVerDeuda,
 }: PanelDictamenProps) {
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
@@ -159,7 +125,7 @@ export function PanelDictamen({
   const [alertamientos, setAlertamientos] = useState<FilaAlertamiento[] | null>(null);
   const [enviando, setEnviando] = useState(false);
   const [errorAjuste, setErrorAjuste] = useState<ErrorAjuste | null>(null);
-  // PanelLateral devuelve el foco al elemento activo al abrir; si el que abrió es otro, se le devuelve aquí.
+  // El modal devuelve el foco al elemento activo al abrir; si el que abrió es otro, se le devuelve aquí.
   const disparador = useRef(devolverFocoA);
   useEffect(() => {
     const destino = disparador.current;
@@ -255,12 +221,24 @@ export function PanelDictamen({
     const { dictamen } = carga;
     contenido = (
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-flit-primary">
+        <p className="flex flex-wrap items-center gap-1.5 text-sm text-flit-primary">
           Veredicto:{" "}
           <Etiqueta tono={dictamen.veredicto === "BLOQUEADO" ? "danger" : "success"}>{nombreVeredicto(dictamen.veredicto)}</Etiqueta>
+          {/* HU #14585 (contrato 1.6.0 §1.2): cambio de propietario del vehículo, solo con true. */}
+          <IconoCambioPropietario cambio={dictamen.cambio_propietario} />
         </p>
         {dictamen.veredicto === "BLOQUEADO" && (
-          <InlineAlert tone="error" title="Vehículo bloqueado">
+          <InlineAlert
+            tone="error"
+            title="Vehículo bloqueado"
+            action={
+              modo === "compania" && onVerDeuda ? (
+                <button type="button" onClick={onVerDeuda} className={BOTON_SECUNDARIO_CLS}>
+                  Ver deuda y sanear
+                </button>
+              ) : undefined
+            }
+          >
             El vehículo está bloqueado: no se puede crear el trámite hasta resolver los impedimentos que bloquean.
           </InlineAlert>
         )}
@@ -351,11 +329,12 @@ export function PanelDictamen({
   }
 
   return (
-    <PanelLateral
+    <PanelModal
       abierto
       onCerrar={onClose}
       ocupado={enviando}
-      ancho={640}
+      // FE-1 (spec-ui §1.6): con el override editable, el clic en el velo no cierra para no perder lo escrito.
+      cerrarConVelo={!ofreceOverride}
       titulo={`Dictamen · ${identificador}`}
       pie={
         ofreceTramite || ofreceAplicar ? (
@@ -378,6 +357,6 @@ export function PanelDictamen({
       }
     >
       {contenido}
-    </PanelLateral>
+    </PanelModal>
   );
 }

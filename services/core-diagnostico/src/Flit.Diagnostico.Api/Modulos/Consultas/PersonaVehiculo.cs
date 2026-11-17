@@ -42,7 +42,10 @@ public sealed class PersonaVehiculo : IEntidadDeEmpresa
     /// <summary>Número de documento cifrado con <c>IProtectorDocumentoPersona</c>; nunca en claro.</summary>
     public required byte[] DocCifrado { get; init; }
 
-    /// <summary><c>PROVEEDOR</c> (RUNT) o <c>DECLARADO_CLIENTE</c> (locatario declarado sin locatario del proveedor).</summary>
+    /// <summary>
+    /// <c>PROVEEDOR</c> (RUNT). <c>DECLARADO_CLIENTE</c> solo en filas históricas: desde HU #14582 el declarado es el propietario
+    /// actual y no entra como persona (las históricas se conservan porque los intentos las referencian).
+    /// </summary>
     public OrigenDocumento Origen { get; init; }
 
     public DateTimeOffset CreadoEn { get; init; }

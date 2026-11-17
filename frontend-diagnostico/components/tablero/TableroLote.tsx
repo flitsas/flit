@@ -24,10 +24,17 @@ import {
 import { hayPendientes, marcarReintentada, marcarReprocesada } from "@/lib/tablero/fusionarCeldas";
 import { useGrillaIncremental } from "@/lib/tablero/useGrillaIncremental";
 import { PanelDictamen } from "./PanelDictamen";
-import { BotonPdfVehiculo } from "./BotonPdfVehiculo";
-import { BotonReintentar } from "./BotonReintentar";
-import { AccionTramiteFila, ModalTipoTramite } from "./BotonCrearTramite";
-import { CasillaDerivacion } from "./BarraSeleccionDerivacion";
+import { PanelModal } from "@flit/ui/PanelModal";
+import { AuditoriaDictamen } from "@/components/backoffice/AuditoriaDictamen";
+import { AccionesVehiculo } from "./AccionesVehiculo";
+import { AvisoSaneamientoEnCurso, ModalTipoTramite, saneamientoEnCurso } from "./BotonCrearTramite";
+import { CasillaTablero, mensajeSolicitudSaneamiento, seleccionDeFila, type ResultadoSanearVisible } from "./BarraSeleccionTablero";
+import { SANEAMIENTO_SOLICITADO } from "@/components/saneamiento/BotonSanear";
+import { banderaPanelDeuda, filaDeEstado } from "@/components/saneamiento/BanderaPanelDeuda";
+import { PanelDeudaSaneamiento } from "@/components/saneamiento/PanelDeudaSaneamiento";
+import { useRegionVivaPantalla } from "@/components/saneamiento/RegionVivaPantalla";
+import { mensajeErrorSaneamiento, solicitarSaneamientos } from "@/lib/saneamiento/api";
+import { puedeSanear as tieneSanear } from "@/lib/sesion";
 import { ProgresoDerivacion, type PlacaNoEncolada } from "./ProgresoDerivacion";
 import {
   derivacionDeFila,
@@ -45,7 +52,7 @@ import { AccionesBloqueLote } from "./AccionesBloqueLote";
 import { CabeceraLote } from "./CabeceraLote";
 import { GrillaLote } from "./GrillaLote";
 import { MetricasLote } from "./MetricasLote";
-import type { FiltroTablero } from "@/lib/tablero/filtrosTablero";
+import { hayDatosSaneamiento, leerFiltroSaneamiento, type FiltroSaneamiento, type FiltroTablero } from "@/lib/tablero/filtrosTablero";
 import { pedirSondeoNotificaciones } from "@/lib/notificaciones/useNotificaciones";
 
 /** «hh:mm» en hora de Colombia (HU #14562 AC26). */
@@ -106,7 +113,17 @@ function Vacio({ titulo, children, Icono = ICONO_VACIO }: { titulo: string; chil
  * {lote}» y «Volver a diagnósticos» al listado con los filtros que traía (?desde=, solo como search params de /, HU #14087).
  * Cada semáforo abre su detalle en una pestaña nueva.
  */
-export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: string; desde?: string | null }) {
+export function TableroLote({
+  diagnosticoId,
+  desde = null,
+  saneamiento = null,
+}: {
+  diagnosticoId: string;
+  desde?: string | null;
+  /** HU #14577 AC9: valor crudo de `?saneamiento=` (con|sin enciende el chip; p. ej. la campana navega con «con»). */
+  saneamiento?: string | string[] | null;
+}) {
+  const filtroSaneamientoInicial = leerFiltroSaneamiento(saneamiento);
   const router = useRouter();
   const { sesion, tramitesUrl = "" } = useSesion();
   const puedeVer = sesion?.capacidades.verDiagnosticos ?? false;
@@ -116,6 +133,10 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   const puedeDescargar = sesion?.capacidades.descargarReportes ?? false;
   // Punto 4: «Crear trámite» / «Ver trámite #N» solo con la capacidad `derivar` (la API vuelve a exigir el permiso).
   const puedeDerivar = sesion?.capacidades.derivar ?? false;
+  // HU #14577 (E3): bandera y «Sanear (N)» solo con la capacidad `sanear` (la API vuelve a exigir el permiso).
+  const puedeSanear = tieneSanear(sesion?.capacidades);
+  const puedeAuditar = sesion?.capacidades.verAuditoria ?? false;
+  const { anunciar, region: regionViva } = useRegionVivaPantalla();
   const { grilla, cargando, error, errorSondeo, sondeando, actualizadoEn, reintentar, reanudar, refrescar, actualizar } = useGrillaIncremental(diagnosticoId, {
     habilitado: puedeVer,
   });
@@ -127,11 +148,30 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   // HU #14562 AC24 (D4): «Cerrar lote» pide confirmación antes de llamar a cerrar-panel.
   const [confirmandoCierre, setConfirmandoCierre] = useState(false);
   const [dictamen, setDictamen] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
+  // HU #14584 §6.4: auditoría del dictamen desde el menú, solo con verAuditoria (la API vuelve a validar el permiso).
+  const [auditoria, setAuditoria] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
+  // HU #14577 AC13 (PS-2): panel «Deuda y saneamiento» del vehículo; `disparador` recibe el foco al cerrarlo.
+  const [deuda, setDeuda] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
   // HU #14562 F-05: «Crear trámite» desde el pie del panel del dictamen; el número cambia en cada pedido.
   const [solicitudTramite, setSolicitudTramite] = useState<{ vehiculoId: string; n: number } | null>(null);
   const volver = urlVolverAlListado(desde);
   // HU #14562 AC27: tarjeta-filtro activa (exclusiva); null = sin filtro.
   const [filtro, setFiltro] = useState<FiltroTablero | null>(null);
+  // HU #14577 AC9: chip de saneamiento (en la URL, D-09). Una navegación nueva con otro ?saneamiento= manda.
+  const [filtroSaneamiento, setFiltroSaneamiento] = useState<FiltroSaneamiento | null>(filtroSaneamientoInicial);
+  const [filtroSaneamientoPrevio, setFiltroSaneamientoPrevio] = useState(filtroSaneamientoInicial);
+  if (filtroSaneamientoPrevio !== filtroSaneamientoInicial) {
+    setFiltroSaneamientoPrevio(filtroSaneamientoInicial);
+    setFiltroSaneamiento(filtroSaneamientoInicial);
+  }
+  function cambiarFiltroSaneamiento(valor: FiltroSaneamiento | null) {
+    setFiltroSaneamiento(valor);
+    // Sin navegar (no vuelve a pedir la página): el App Router sincroniza replaceState con useSearchParams.
+    const url = new URL(window.location.href);
+    if (valor) url.searchParams.set("saneamiento", valor);
+    else url.searchParams.delete("saneamiento");
+    window.history.replaceState(null, "", `${url.pathname}${url.search}${url.hash}`);
+  }
 
   // Punto 4, masivo (incremento 3): selección por id de vehículo (sobrevive al sondeo incremental), sin preselección.
   const [seleccion, setSeleccion] = useState<ReadonlySet<string>>(() => new Set());
@@ -143,9 +183,24 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   const derivaciones = useMemo(() => new Map((grilla?.vehiculos ?? []).map((v) => [v.id, derivacionDeFila(v)])), [grilla]);
   // Sin la capacidad o con la derivación apagada (`derivacion: null` o backend previo) no hay casillas, barra ni progreso.
   const hayDerivacion = puedeDerivar && [...derivaciones.values()].some((d) => d.conocida);
-  const elegibles = (grilla?.vehiculos ?? []).filter((v) => derivaciones.get(v.id)?.elegible).map((v) => v.id);
+  // HU #14577 §2.6: sin la clave `saneamiento` en las filas (backend previo) no hay chips ni «Sanear (N)».
+  const conDatosSaneamiento = hayDatosSaneamiento(grilla?.vehiculos ?? []);
+  const haySaneamiento = puedeSanear && conDatosSaneamiento;
+  // HU #14577 AC10: la casilla se habilita si la fila es elegible para alguna acción que el usuario tiene.
+  const haySeleccion = hayDerivacion || haySaneamiento;
+  const selecciones = useMemo(
+    () => new Map((grilla?.vehiculos ?? []).map((v) => [v.id, seleccionDeFila(v, { derivar: hayDerivacion, sanear: haySaneamiento })])),
+    [grilla, hayDerivacion, haySaneamiento],
+  );
+  const elegibles = (grilla?.vehiculos ?? []).filter((v) => selecciones.get(v.id)?.habilitada).map((v) => v.id);
   // Una placa que dejó de ser elegible (p. ej. otro usuario creó su trámite) sale de la cuenta sola.
   const seleccionadas = elegibles.filter((id) => seleccion.has(id));
+  // Cada acción cuenta solo los seleccionados elegibles para ella.
+  const seleccionadasDerivar = seleccionadas.filter((id) => selecciones.get(id)?.derivar);
+  const seleccionadasSanear = seleccionadas.filter((id) => selecciones.get(id)?.sanear);
+  const [sanearEnviando, setSanearEnviando] = useState(false);
+  const [errorSanear, setErrorSanear] = useState<string | null>(null);
+  const [resultadoSanear, setResultadoSanear] = useState<ResultadoSanearVisible | null>(null);
 
   useEffect(() => {
     // Al volver a la pantalla se retoma la operación activa del lote (si el backend la expone; un error se ignora).
@@ -168,8 +223,8 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   }
 
   async function encolar(tipo?: string) {
-    if (!grilla || encolando || seleccionadas.length === 0) return;
-    const ids = seleccionadas;
+    if (!grilla || encolando || seleccionadasDerivar.length === 0) return;
+    const ids = seleccionadasDerivar;
     setEncolando(true);
     setErrorMasivo(null);
     try {
@@ -201,6 +256,36 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
       setErrorMasivo(mensajeMasivo(e));
     } finally {
       setEncolando(false);
+    }
+  }
+
+  /** HU #14577 AC11: «Sanear (N)» con POST /saneamientos/solicitudes; resultado parcial con los omitidos. */
+  async function sanearMasivo() {
+    if (!grilla || sanearEnviando || seleccionadasSanear.length === 0) return;
+    const ids = seleccionadasSanear;
+    setSanearEnviando(true);
+    setErrorSanear(null);
+    try {
+      const r = await solicitarSaneamientos(ids);
+      const omitidos = new Set(r.omitidos.map((o) => o.vehiculo_id));
+      const solicitadas = new Set(ids.filter((id) => !omitidos.has(id)));
+      actualizar((g) => ({ ...g, vehiculos: g.vehiculos.map((v) => (solicitadas.has(v.id) ? { ...v, saneamiento: SANEAMIENTO_SOLICITADO } : v)) }));
+      // Las solicitadas salen de la selección; las omitidas quedan marcadas.
+      setSeleccion((s) => new Set([...s].filter((id) => !solicitadas.has(id))));
+      const mensaje = mensajeSolicitudSaneamiento(r);
+      setResultadoSanear((previo) => ({ n: (previo?.n ?? 0) + 1, ...mensaje }));
+      // UA-4: un solo canal. Si queda selección, el foco se queda en «Sanear» y anuncia la región viva; si no, el foco va al
+      // aviso (BarraSeleccionTablero) y ese foco ya lo lee.
+      if (seleccionadas.some((id) => !solicitadas.has(id))) anunciar(mensaje.texto);
+      refrescar();
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 403) {
+        router.replace(`/403?code=${encodeURIComponent(e.code ?? "SIN_PERMISO")}`);
+        return;
+      }
+      setErrorSanear(mensajeErrorSaneamiento(e, "No pudimos solicitar el saneamiento. Intenta de nuevo."));
+    } finally {
+      setSanearEnviando(false);
     }
   }
 
@@ -239,36 +324,38 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
     if (reenviadas) reenviadasRef.current?.focus();
   }, [reenviadas]);
 
+  const actualizarSaneamientoFila = (vehiculoId: string, saneamientoFila: FilaVehiculo["saneamiento"]) =>
+    actualizar((g) => ({ ...g, vehiculos: g.vehiculos.map((f) => (f.id === vehiculoId ? { ...f, saneamiento: saneamientoFila } : f)) }));
+
+  // FE-2 (spec-ui §2.3): las acciones de la fila van en el menú «Acciones» (desplegable + mensajes; UA-1 retiró el chip del saneamiento).
   const accionVehiculo =
-    puedeDescargar || puedeReprocesar || puedeDerivar
-      ? (v: FilaVehiculo) => (
-          <div className="flex flex-col items-start gap-2">
-            {puedeDerivar && grilla && (
-              <AccionTramiteFila
-                diagnosticoId={grilla.id}
-                vehiculo={v}
-                modo={grilla.modo}
-                tramiteAnalizado={grilla.lote?.tipo_tramite?.nombre ?? null}
-                tramitesUrl={tramitesUrl}
-                empresaId={sesion?.empresa.id}
-                onCreado={(vid, tramite) => actualizar((g) => marcarConTramite(g, vid, tramite))}
-                onRefrescar={refrescar}
-                solicitudCrear={solicitudTramite?.vehiculoId === v.id ? solicitudTramite.n : undefined}
-              />
-            )}
-            {puedeDescargar && grilla && <BotonPdfVehiculo diagnosticoId={grilla.id} estadoLote={grilla.estado} vehiculo={v} />}
-            {puedeReprocesar && v.pegada && (
-              <BotonReintentar
-                etiqueta={`Reintentar consultas de la placa ${v.placa || v.vin || v.identificador}`}
-                texto="Reintentar placa"
-                reintentar={() => reintentarVehiculo(diagnosticoId, v.id)}
-                onReintentado={(r) => alReintentar(r, v.id)}
-                onError={alFallarReproceso}
-              />
-            )}
-          </div>
-        )
-      : undefined;
+    // HU #14584 §6.4: «Ver dictamen» vive en el menú de toda fila, así que la columna «Acciones» siempre existe.
+    (v: FilaVehiculo) =>
+          grilla && (
+            <AccionesVehiculo
+              diagnosticoId={grilla.id}
+              vehiculo={v}
+              estadoLote={grilla.estado}
+              modo={grilla.modo}
+              tramiteAnalizado={grilla.lote?.tipo_tramite?.nombre ?? null}
+              tramitesUrl={tramitesUrl}
+              empresaId={sesion?.empresa.id}
+              capacidades={{ sanear: puedeSanear, derivar: puedeDerivar, descargar: puedeDescargar, reprocesar: puedeReprocesar }}
+              conDatosSaneamiento={conDatosSaneamiento}
+              // D-29: «Ver saneamiento» y «Ver deuda» abren PS-2; el foco vuelve al disparador «Acciones» de la fila.
+              onAbrirDeuda={(disparador) => setDeuda({ vehiculo: v, disparador })}
+              onCambioSaneamiento={(saneamiento) => actualizarSaneamientoFila(v.id, saneamiento)}
+              onCreadoTramite={(vid, tramite) => actualizar((g) => marcarConTramite(g, vid, tramite))}
+              onRefrescar={refrescar}
+              onAnunciar={anunciar}
+              solicitudCrear={solicitudTramite?.vehiculoId === v.id ? solicitudTramite.n : undefined}
+              reintentar={() => reintentarVehiculo(diagnosticoId, v.id)}
+              onReintentado={(r) => alReintentar(r, v.id)}
+              onErrorReintento={alFallarReproceso}
+              onVerDictamen={(disparador) => setDictamen({ vehiculo: v, disparador })}
+              onVerAuditoria={puedeAuditar ? (disparador) => setAuditoria({ vehiculo: v, disparador }) : undefined}
+            />
+          );
 
   async function cerrar() {
     setConfirmandoCierre(false);
@@ -292,6 +379,10 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
   // HU #14562 AC49/AC57: el 404 (no existe o es de otro usuario con visibilidad PROPIOS) es la página 404 de la app, que no
   // revela si el lote existe.
   if (puedeVer && error instanceof ApiError && error.status === 404) notFound();
+
+  // HU #14577 AC12: cuántos de los que se van a crear tienen un saneamiento en curso (aviso de la confirmación masiva).
+  const enCursoMasivo = (grilla?.vehiculos ?? []).filter((v) => seleccionadasDerivar.includes(v.id) && saneamientoEnCurso(v)).length;
+  const avisoMasivo = enCursoMasivo > 0 ? <AvisoSaneamientoEnCurso cantidad={enCursoMasivo} /> : undefined;
 
   let contenido;
   if (!puedeVer) {
@@ -373,14 +464,17 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
         <section aria-label="Grilla del lote" className={`${TARJETA_CLS} flex flex-col gap-4`}>
           <AccionesBloqueLote
             diagnosticoId={diagnosticoId}
-            hayDerivacion={hayDerivacion}
+            haySeleccion={haySeleccion}
             elegibles={elegibles.length}
             seleccionadas={seleccionadas.length}
-            encolando={encolando}
-            errorMasivo={errorMasivo}
             onSeleccionarTodas={() => setSeleccion(new Set(elegibles))}
             onQuitar={() => setSeleccion(new Set())}
-            onCrear={alCrearMasivo}
+            crear={hayDerivacion ? { cantidad: seleccionadasDerivar.length, enviando: encolando, onCrear: alCrearMasivo, error: errorMasivo } : undefined}
+            sanear={
+              haySaneamiento
+                ? { cantidad: seleccionadasSanear.length, enviando: sanearEnviando, onSanear: () => void sanearMasivo(), error: errorSanear, resultado: resultadoSanear }
+                : undefined
+            }
             totalPegadas={grilla.total_pegadas ?? 0}
             puedeReprocesar={puedeReprocesar}
             onReintentado={(r) => alReintentar(r)}
@@ -389,25 +483,29 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
           <GrillaLote
             grilla={grilla}
             filtro={filtro}
+            filtroSaneamiento={conDatosSaneamiento ? filtroSaneamiento : null}
+            onFiltroSaneamiento={conDatosSaneamiento ? cambiarFiltroSaneamiento : undefined}
             puedeReprocesar={puedeReprocesar}
             onReprocesada={alReprocesar}
             onErrorReproceso={alFallarReproceso}
             accionVehiculo={accionVehiculo}
-            tituloAccionVehiculo={puedeReprocesar || puedeDerivar ? "Acciones" : "Reporte"}
+            tituloAccionVehiculo="Acciones"
             casillaVehiculo={
-              hayDerivacion
+              haySeleccion
                 ? (v) => (
-                    <CasillaDerivacion
+                    <CasillaTablero
                       vehiculo={v}
-                      derivacion={derivaciones.get(v.id) ?? derivacionDeFila(v)}
+                      seleccion={selecciones.get(v.id) ?? seleccionDeFila(v, { derivar: hayDerivacion, sanear: haySaneamiento })}
                       marcada={seleccion.has(v.id)}
                       onCambiar={cambiarSeleccion}
                     />
                   )
                 : undefined
             }
-            onAbrirDictamen={(vehiculo, disparador) => setDictamen({ vehiculo, disparador })}
-            onQuitarFiltro={() => setFiltro(null)}
+            onQuitarFiltro={() => {
+              setFiltro(null);
+              if (filtroSaneamiento) cambiarFiltroSaneamiento(null);
+            }}
           />
           <EstimadoVsConsumido estimado={grilla.estimado_consultas} plegable />
         </section>
@@ -429,17 +527,32 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
         onConfirmarCierre={() => void cerrar()}
       />
       {contenido}
+      {regionViva}
       {pidiendoTipoMasivo && (
         <ModalTipoTramite
           identificador=""
-          descripcion={`Elige el tipo del borrador para las ${seleccionadas.length} placas seleccionadas.`}
-          textoConfirmar={`Crear trámites (${seleccionadas.length})`}
+          descripcion={`Elige el tipo del borrador para las ${seleccionadasDerivar.length} placas seleccionadas.`}
+          textoConfirmar={`Crear trámites (${seleccionadasDerivar.length})`}
+          aviso={avisoMasivo}
           onClose={() => setPidiendoTipoMasivo(false)}
           onConfirmar={(codigo) => {
             setPidiendoTipoMasivo(false);
             void encolar(codigo);
           }}
         />
+      )}
+      {auditoria && (
+        <PanelModal
+          abierto
+          onCerrar={() => {
+            const { disparador } = auditoria;
+            setAuditoria(null);
+            if (disparador?.isConnected) disparador.focus();
+          }}
+          titulo={`Auditoría del dictamen · ${auditoria.vehiculo.placa || auditoria.vehiculo.vin || auditoria.vehiculo.identificador}`}
+        >
+          <AuditoriaDictamen diagnosticoId={diagnosticoId} vehiculoId={auditoria.vehiculo.id} empresa={sesion?.empresa.id ?? ""} />
+        </PanelModal>
       )}
       {dictamen && (
         <PanelDictamen
@@ -452,6 +565,16 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
           devolverFocoA={dictamen.disparador}
           tramiteAnalizado={grilla?.lote?.tipo_tramite?.nombre ?? null}
           consultas={(grilla?.vehiculos.find((v) => v.id === dictamen.vehiculo.id) ?? dictamen.vehiculo).celdas.map((c) => ({ fuente: c.fuente, estado: c.estado }))}
+          // HU #14577 AC13 / D-15: «Ver deuda y sanear» cierra el dictamen y abre PS-2; al cerrar, el foco vuelve a la fila.
+          onVerDeuda={
+            conDatosSaneamiento
+              ? () => {
+                  const { vehiculo, disparador } = dictamen;
+                  setDictamen(null);
+                  setDeuda({ vehiculo, disparador });
+                }
+              : undefined
+          }
           onCrearTramite={
             puedeDerivar && derivaciones.get(dictamen.vehiculo.id)?.elegible
               ? () => {
@@ -461,6 +584,21 @@ export function TableroLote({ diagnosticoId, desde = null }: { diagnosticoId: st
                 }
               : undefined
           }
+        />
+      )}
+      {deuda && grilla && (
+        <PanelDeudaSaneamiento
+          key={deuda.vehiculo.id}
+          diagnosticoId={grilla.id}
+          vehiculoId={deuda.vehiculo.id}
+          identificador={placaDe(deuda.vehiculo)}
+          puedeSanear={puedeSanear}
+          puedeDescargar={puedeDescargar}
+          devolverFocoA={deuda.disparador}
+          onClose={() => setDeuda(null)}
+          // La fila del tablero sigue al panel (optimista y confirmado); el sondeo trae luego el valor del servidor.
+          onCambioEstado={(estado) => actualizarSaneamientoFila(deuda.vehiculo.id, filaDeEstado(estado))}
+          accionBandera={banderaPanelDeuda(grilla.id, deuda.vehiculo)}
         />
       )}
     </>

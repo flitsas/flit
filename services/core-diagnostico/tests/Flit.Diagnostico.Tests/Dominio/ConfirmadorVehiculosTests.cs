@@ -31,9 +31,9 @@ public sealed class ConfirmadorVehiculosTests
         resultado.Validos.Select(v => (v.Orden, v.IdentificadorNorm, v.Tipo)).Should().Equal(
             (1, "ABC123", TipoIdentificador.PlacaCarro), (2, "9FBTEST1234567890", TipoIdentificador.Vin), (3, "R12345", TipoIdentificador.PlacaRemolque));
         resultado.Validos[0].IdentificadorOriginal.Should().Be("abc-123");
-        resultado.Validos[0].DocumentoLocatario.Should().BeNull("el duplicado no aporta su documento: gana la primera fila");
-        resultado.Validos[1].TipoDocumentoLocatario.Should().Be("NIT");
-        resultado.Validos[1].DocumentoLocatario.Should().Be("900111222");
+        resultado.Validos[0].DocumentoPropietario.Should().BeNull("el duplicado no aporta su documento: gana la primera fila");
+        resultado.Validos[1].TipoDocumentoPropietario.Should().Be("NIT");
+        resultado.Validos[1].DocumentoPropietario.Should().Be("900111222");
         resultado.Invalidos.Should().Be(4, "MAL, AB1234567 (demasiado largo), el documento con letras y el vacío");
         resultado.Duplicados.Should().Be(1);
         resultado.SinValidos.Should().BeFalse();
@@ -61,7 +61,8 @@ public sealed class ConfirmadorVehiculosTests
         var resultado = ConfirmadorVehiculos.Confirmar(
             [new("ABC123", "CC", "1020304050"), new("XYZ987", null, null), new("MAL", "CC", "1")], [Fuente.Runt, Fuente.RuntLocatario], 500);
 
-        resultado.Estimado.Should().Equal(new EstimadoPorFuente(Fuente.Runt, 2), new EstimadoPorFuente(Fuente.RuntLocatario, 1, Minimo: true));
+        resultado.Estimado.Should().Equal([new EstimadoPorFuente(Fuente.Runt, 2), new EstimadoPorFuente(Fuente.RuntLocatario, 0, Minimo: true)],
+            "HU #14582: el declarado no alimenta al locatario; antes del RUNT el locatario cuenta 0 (mínimo)");
     }
 
     [Fact]

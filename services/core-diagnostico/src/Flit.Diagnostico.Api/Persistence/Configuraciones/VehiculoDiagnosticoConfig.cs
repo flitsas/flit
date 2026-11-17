@@ -1,5 +1,6 @@
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
+using Flit.Diagnostico.Domain.Saneamiento;
 using Flit.Diagnostico.Domain.Vehiculos;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
@@ -11,8 +12,8 @@ namespace Flit.Diagnostico.Api.Persistence.Configuraciones;
 /// <c>diagnostico.vehiculos</c> (HU #13735, plan §5, MOD02): vehículos del lote. La base garantiza que el identificador
 /// normalizado no se repite en el lote (<c>ux_vehiculo_por_lote</c>), que va en mayúsculas y sin espacios, que su clase es
 /// conocida (incluida <c>PLACA_MAQUINARIA</c>, R-19) y que el documento del locatario cifrado siempre trae su origen
-/// (<c>ck_locatario_origen</c>, R-3). El declarado que el proveedor reemplaza queda de respaldo en
-/// <c>locatario_declarado_doc_*</c>, con tipo y documento juntos y solo junto al vigente del proveedor (HU #13730b). La FK es compuesta <c>(tenant_id, diagnostico_id)</c> contra el alterno de la cabecera:
+/// (<c>ck_locatario_origen</c>, R-3). El propietario actual declarado (HU #14582) va en <c>propietario_declarado_doc_*</c>, con tipo y
+/// documento juntos, y <c>cambio_propietario</c> solo existe con declarado. La FK es compuesta <c>(tenant_id, diagnostico_id)</c> contra el alterno de la cabecera:
 /// un vehículo no cuelga de un lote de otra empresa ni por SQL directo. El índice único empieza por <c>tenant_id</c> y
 /// cubre la FK. Desviaciones del checklist de datos: ADR-0072.
 /// </summary>
@@ -28,15 +29,16 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
                 "ck_vehiculos_locatario_doc_origen",
                 $"locatario_doc_origen IS NULL OR locatario_doc_origen IN ({CodigosDeEnum.ListaSql<OrigenDocumento>()})");
             t.HasCheckConstraint("ck_locatario_origen", "(locatario_doc_cifrado IS NULL) = (locatario_doc_origen IS NULL)");
-            // Respaldo del declarado (HU #13730b, R-3): tipo y documento juntos, y solo cuando el vigente es del proveedor.
-            t.HasCheckConstraint("ck_vehiculos_locatario_declarado", "(locatario_declarado_doc_tipo IS NULL) = (locatario_declarado_doc_cifrado IS NULL)");
-            t.HasCheckConstraint(
-                "ck_vehiculos_locatario_declarado_con_proveedor",
-                $"locatario_declarado_doc_cifrado IS NULL OR locatario_doc_origen = '{CodigosDeEnum.Codigo(OrigenDocumento.Proveedor)}'");
+            // Propietario actual declarado (HU #14582, schema.md §1): tipo y documento juntos; cambio_propietario solo con declarado.
+            t.HasCheckConstraint("ck_vehiculos_propietario_declarado", "(propietario_declarado_doc_tipo IS NULL) = (propietario_declarado_doc_cifrado IS NULL)");
+            t.HasCheckConstraint("ck_vehiculos_cambio_propietario", "cambio_propietario IS NULL OR propietario_declarado_doc_cifrado IS NOT NULL");
             t.HasCheckConstraint("ck_vehiculos_identificador_norm", @"identificador_norm = upper(identificador_norm) AND identificador_norm !~ '\s'");
             t.HasCheckConstraint("ck_vehiculos_datos_consolidados_objeto", "jsonb_typeof(datos_consolidados) = 'object'");
             // Versión de fila del tablero (HU #14563, ADR-0086 D-1).
             t.HasCheckConstraint("ck_vehiculos_version_tablero", "version_tablero >= 0");
+            // Copia del estado del saneamiento no anulado (HU #14576, ADR-0087): nunca ANULADO (sin saneamiento vigente es null).
+            t.HasCheckConstraint("ck_vehiculos_saneamiento_estado",
+                $"saneamiento_estado IS NULL OR saneamiento_estado IN ('{CodigosDeEnum.Codigo(EstadoSaneamiento.Solicitado)}', '{CodigosDeEnum.Codigo(EstadoSaneamiento.EnGestion)}', '{CodigosDeEnum.Codigo(EstadoSaneamiento.Saneado)}', '{CodigosDeEnum.Codigo(EstadoSaneamiento.NoProcede)}')");
         });
         builder.HasKey(x => x.Id).HasName("pk_vehiculos");
         // Sostiene las FK compuestas de las celdas y los intentos (HU #13723, ADR-0072 (c)).
@@ -60,11 +62,13 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
         builder.Property(x => x.LocatarioDocCifrado).HasComment("@pii:high Documento del locatario cifrado, como el del propietario (R-3).");
         builder.Property(x => x.LocatarioDocOrigen)
             .HasConversion(CodigosDeEnum.Convertidor<OrigenDocumento>()).HasMaxLength(20)
-            .HasComment("PROVEEDOR (autollenado de Intempo) o DECLARADO_CLIENTE (lo declaró el cliente y sigue vigente); null sin documento.");
-        builder.Property(x => x.LocatarioDeclaradoDocTipo).HasMaxLength(8)
-            .HasComment("Tipo del documento del locatario declarado por el cliente que el del proveedor reemplazó (respaldo, R-3).");
-        builder.Property(x => x.LocatarioDeclaradoDocCifrado)
-            .HasComment("@pii:high Documento del locatario declarado por el cliente, cifrado; respaldo cuando el proveedor trae el suyo (R-3).");
+            .HasComment("PROVEEDOR (autollenado de Intempo); DECLARADO_CLIENTE solo en filas anteriores a HU #14582 (S3). Null sin documento.");
+        builder.Property(x => x.PropietarioDeclaradoDocTipo).HasMaxLength(8)
+            .HasComment("Tipo de documento del propietario actual declarado por el cliente (opcional, Express/Masivo). Solo para compararlo con el propietario RUNT; no alimenta consultas.");
+        builder.Property(x => x.PropietarioDeclaradoDocCifrado)
+            .HasComment("@pii:high Documento del propietario actual declarado por el cliente, cifrado con Data Protection (mismo IProtectorDocumentoPersona, HU #13751). Nunca en claro ni en logs.");
+        builder.Property(x => x.CambioPropietario)
+            .HasComment("true si el declarado (homologado) no coincide con ningún propietario RUNT (personas_vehiculo rol PROPIETARIO); false si coincide; null sin declarado o sin RUNT cerrado.");
         builder.Property(x => x.DatosConsolidados)
             .HasColumnType("jsonb").HasDefaultValueSql("'{}'::jsonb").ValueGeneratedNever()
             .HasComment("@pii:low Datos consolidados de las fuentes (objeto JSON), sin documentos en claro.");
@@ -97,6 +101,14 @@ internal sealed class VehiculoDiagnosticoConfig : IEntityTypeConfiguration<Vehic
             .HasDefaultValueSql("0").ValueGeneratedNever()
             .HasComment("Valor de diagnosticos.version_tablero en el último cambio de la FILA (dictamen nuevo o ajustado, trámite creado/omitido/fallido). 0 = sin cambios de fila. Polling ?desde=. [ADR-0086]");
         builder.HasIndex(x => new { x.TenantId, x.DiagnosticoId, x.VersionTablero }).HasDatabaseName("ix_vehiculos_tablero");
+
+        // Saneamiento (HU #14576, ADR-0087): copia del estado para la grilla del lote y la de placas, sin join por fila.
+        builder.Property(x => x.SaneamientoEstado)
+            .HasConversion(CodigosDeEnum.Convertidor<EstadoSaneamiento>()).HasMaxLength(16)
+            .HasComment("Estado del saneamiento no anulado del vehículo (copia); null si no hay. Lo escribe solo EscritorSaneamiento, en la transacción de la transición. [ADR-0087]");
+        builder.HasIndex(x => new { x.TenantId, x.SaneamientoEstado }).HasFilter("saneamiento_estado IS NOT NULL").HasDatabaseName("ix_vehiculos_saneamiento");
+        builder.HasIndex(x => new { x.TenantId, x.IdentificadorNorm }, "ix_vehiculos_identificador_prefijo")
+            .HasOperators("uuid_ops", "varchar_pattern_ops").HasDatabaseName("ix_vehiculos_identificador_prefijo");
 
         // Concurrencia optimista con la columna de sistema xmin: no agrega columnas a la tabla.
         builder.Property(x => x.Version).IsRowVersion();

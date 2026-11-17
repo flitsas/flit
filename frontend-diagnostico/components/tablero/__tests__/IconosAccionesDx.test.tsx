@@ -9,10 +9,10 @@ import { IconoDxCrearTramite } from "@/components/dx/iconos/IconoDxCrearTramite"
 import { IconoDxDescargarZip } from "@/components/dx/iconos/IconoDxDescargarZip";
 import { IconoDxDictamen } from "@/components/dx/iconos/IconoDxDictamen";
 import { IconoDxManual } from "@/components/dx/iconos/IconoDxManual";
-import { BarraSeleccionDerivacion, CasillaDerivacion } from "@/components/tablero/BarraSeleccionDerivacion";
+import { BarraSeleccionTablero, CasillaTablero, seleccionDeFila } from "@/components/tablero/BarraSeleccionTablero";
 import { AccionTramiteFila } from "@/components/tablero/BotonCrearTramite";
 import { DescargasLote } from "@/components/tablero/DescargasLote";
-import { derivacionDeFila, rotuloMotivo } from "@/lib/tablero/derivacion";
+import { rotuloMotivo } from "@/lib/tablero/derivacion";
 import { ID, V1, simularApi } from "@/lib/tablero/__tests__/datos";
 
 // Uso de ejemplo: «Crear trámite» de la fila lleva <IconoDxCrearTramite tamano={16} /> (el mismo del pie del panel), «PDF de
@@ -58,11 +58,17 @@ describe("Íconos de acción de Diagnóstico (HU #14562 · N5, M7 y m-9)", () =>
     const crear = trazos(<IconoDxCrearTramite tamano={16} />);
     const check = trazos(<Icono nombre="check" className="h-4 w-4" />);
     render(
-      <BarraSeleccionDerivacion elegibles={3} seleccionadas={2} enviando={false} onSeleccionarTodas={vi.fn()} onQuitar={vi.fn()} onCrear={vi.fn()} />,
+      <BarraSeleccionTablero
+        elegibles={3}
+        seleccionadas={2}
+        onSeleccionarTodas={vi.fn()}
+        onQuitar={vi.fn()}
+        crear={{ cantidad: 2, enviando: false, onCrear: vi.fn() }}
+      />,
     );
     expect(screen.getByRole("button", { name: "Crear trámites (2)" }).querySelector("svg")!.innerHTML).toBe(crear);
     expect(screen.getByRole("button", { name: "Seleccionar todos los elegibles" }).querySelector("svg")!.innerHTML).toBe(check);
-    expect(fuente("BarraSeleccionDerivacion.tsx")).not.toMatch(/lucide-react/);
+    expect(fuente("BarraSeleccionTablero.tsx")).not.toMatch(/lucide-react/);
   });
 
   it("M7: «PDF de todos (ZIP)» usa IconoDxDescargarZip", () => {
@@ -83,10 +89,10 @@ describe("Íconos de acción de Diagnóstico (HU #14562 · N5, M7 y m-9)", () =>
   });
 });
 
-describe("CasillaDerivacion: motivo accesible (HU #14562 · m-8)", () => {
+describe("CasillaTablero: motivo accesible (HU #14562 · m-8; HU #14577 reemplaza a CasillaDerivacion)", () => {
   it("la casilla deshabilitada lleva el motivo como descripción accesible, no solo en title", () => {
     const vehiculo = { ...V1, elegible_tramite: false, motivo_no_elegible: "NO_VIABLE", tramite: null };
-    render(<CasillaDerivacion vehiculo={vehiculo} derivacion={derivacionDeFila(vehiculo)} marcada={false} onCambiar={vi.fn()} />);
+    render(<CasillaTablero vehiculo={vehiculo} seleccion={seleccionDeFila(vehiculo, { derivar: true, sanear: false })} marcada={false} onCambiar={vi.fn()} />);
     const casilla = screen.getByRole("checkbox", { name: `Seleccionar la placa ${V1.placa}` });
     expect(casilla).toBeDisabled();
     expect(casilla).toHaveAccessibleDescription(rotuloMotivo("NO_VIABLE"));
@@ -95,7 +101,7 @@ describe("CasillaDerivacion: motivo accesible (HU #14562 · m-8)", () => {
 
   it("la casilla elegible no tiene descripción de motivo", () => {
     const vehiculo = { ...V1, elegible_tramite: true, motivo_no_elegible: null, tramite: null };
-    render(<CasillaDerivacion vehiculo={vehiculo} derivacion={derivacionDeFila(vehiculo)} marcada={false} onCambiar={vi.fn()} />);
+    render(<CasillaTablero vehiculo={vehiculo} seleccion={seleccionDeFila(vehiculo, { derivar: true, sanear: false })} marcada={false} onCambiar={vi.fn()} />);
     expect(screen.getByRole("checkbox")).not.toHaveAttribute("aria-describedby");
   });
 });

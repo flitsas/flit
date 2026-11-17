@@ -19,21 +19,27 @@ import { IconoDxRunt } from "@/components/dx/iconos/IconoDxRunt";
 import { IconoDxRuntPersona } from "@/components/dx/iconos/IconoDxRuntPersona";
 import { IconoDxSimit } from "@/components/dx/iconos/IconoDxSimit";
 import { IconoDxSimitPersona } from "@/components/dx/iconos/IconoDxSimitPersona";
-import { enmascararDocumento } from "@/components/comun/DocumentoDeclarado";
-import { nombreFuente, type Fuente } from "@/lib/configuracion";
+import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
+import { nombreFuente, nombreSubfuente, type Fuente } from "@/lib/configuracion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { rutaPaginaDetalle } from "@/lib/tablero/detalle";
 import { FUENTES_TABLA, PILARES, fuentesPedidas } from "@/lib/tablero/pilares";
 import { CeldaSemaforo, type CeldaSemaforoProps } from "./CeldaSemaforo";
-import { nombreRol } from "@/lib/rotulos";
+import { IconoCambioPropietario } from "./IconoCambioPropietario";
+import { CONTENEDOR_TABLA_CLS, FILA_TABLA_HOVER_CLS } from "./vistasDetalle/comun";
 
 /** Cabecera de tabla del UI Kit 2026 (auditoría m-4): 13 px en negrita sobre la barra --table-header-*. */
 const CABECERA_CLS = TABLA_HEADER_CELL_CLS;
+/**
+ * Cabecera agrupada (RUNT, SIMIT) centrada: se **sustituye** el text-left del kit. Añadir text-center detrás no basta,
+ * porque con las dos utilidades en la misma celda gana la que Tailwind emite después en el CSS (text-left), no la del
+ * final del string (E2E acciones-detalle:68, spec-ui §2.6).
+ */
+const CABECERA_GRUPO_CLS = TABLA_HEADER_CELL_CLS.replace(/\btext-left\b/, "text-center");
 const CABECERA_ESTILO = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" } as const;
 /** Separador vertical entre columnas de la cabecera. */
 const SEPARADOR_CLS = "border-l border-card/60";
 const TEXTO_SECUNDARIO_CLS = "text-xs text-muted-foreground";
-const DOCUMENTO_CLS = "whitespace-nowrap font-mono text-xs font-medium text-flit-primary";
 /** Celda de la fila; por debajo de 900 px, renglón de la tarjeta con su `data-label` (HU #14562 AC56). */
 const TD_CLS = `px-3 py-2.5 align-top ${TABLA_MOVIL_CELL_CLS}`;
 
@@ -58,9 +64,9 @@ const ICONO_FUENTE: Readonly<Record<Fuente, IconoFuente>> = {
 };
 
 /** Rótulo de cabecera con su ícono decorativo de 16 px: el nombre accesible sigue siendo el texto. */
-function RotuloConIcono({ Icono: IconoCabecera, children }: { Icono?: IconoFuente; children: ReactNode }) {
+function RotuloConIcono({ Icono: IconoCabecera, centrado = false, children }: { Icono?: IconoFuente; centrado?: boolean; children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5">
+    <span className={`inline-flex items-center gap-1.5${centrado ? " justify-center" : ""}`}>
       {IconoCabecera ? <IconoCabecera tamano={16} className="shrink-0" /> : null}
       {children}
     </span>
@@ -93,7 +99,10 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
   accionVehiculo?: (vehiculo: FilaVehiculo) => ReactNode;
   /** Título de la columna de `accionVehiculo`; por defecto «Reporte» (Punto 3: «Acciones» cuando también hay reintentos). */
   tituloAccionVehiculo?: string;
-  /** Acción bajo la placa (corte 7: «Dictamen»). No entra en el sondeo de la grilla: quien la pinta pide el dictamen al abrirla. */
+  /**
+   * Marcas bajo la placa (backoffice: «Ajustado por FLIT», etiqueta del saneamiento). HU #14584 §6.4: Dictamen y Auditoría ya
+   * no van aquí sino en el menú «Acciones» (`accionVehiculo`).
+   */
   accionEncabezado?: (vehiculo: FilaVehiculo) => ReactNode;
   /**
    * Casilla de selección al inicio de cada fila (Punto 4, masivo: solo con la capacidad `derivar` y la derivación encendida).
@@ -115,15 +124,15 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
  */
 const FIJA_IZQ_CLS = "min-[900px]:sticky z-10";
 const FIJA_DER_CLS = "min-[900px]:sticky min-[900px]:right-0 z-10";
-
-/** «—» con nombre accesible cuando el dato no existe. */
-function SinDato({ etiqueta }: { etiqueta: string }) {
-  return (
-    <span role="img" aria-label={etiqueta} className={TEXTO_SECUNDARIO_CLS}>
-      —
-    </span>
-  );
-}
+/**
+ * M-2 (A6.2): la th de una columna fija es sticky arriba y al costado. Va en z-20, por encima de las th sticky normales (z-10 del
+ * kit), que si no la tapan al desplazar en horizontal porque van después en el DOM. Las celdas fijas del cuerpo siguen en z-10.
+ */
+const CABECERA_FIJA_CLS = `${CABECERA_CLS.replace(/\bz-10\b/, "z-20")} min-[900px]:sticky`;
+/** FE-2 (spec-ui §2.3): la columna de acciones (chip + disparador «Acciones» + mensaje) mide 10rem en th y td. */
+const ANCHO_ACCIONES_CLS = "w-[10rem] min-w-[10rem]";
+/** CR-6: las celdas fijas tienen fondo propio (tapan lo que desplaza debajo); con la fila en hover toman su mismo color. */
+const FONDO_FIJA_CLS = "bg-card group-hover:bg-[var(--table-row-hover)] transition-colors duration-[var(--dx-motion-rapido)] motion-reduce:transition-none";
 
 function EncabezadoVehiculo({
   vehiculo,
@@ -141,10 +150,14 @@ function EncabezadoVehiculo({
     <th
       scope="row"
       data-label="Placa o VIN"
-      className={`${FIJA_IZQ_CLS} ${izquierda} bg-card px-3 py-2.5 text-left align-top font-normal ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
+      className={`${FIJA_IZQ_CLS} ${izquierda} ${FONDO_FIJA_CLS} px-3 py-2.5 text-left align-top font-normal ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
     >
-      <span className="block font-mono text-sm font-bold uppercase tracking-wider text-flit-primary">
-        {vehiculo.placa || vehiculo.vin || vehiculo.identificador}
+      {/* HU #14585 (spec-ui §6.5): el ícono de cambio de propietario a la derecha de la placa, en la misma línea. */}
+      <span className="flex flex-wrap items-center gap-1.5">
+        <span className="font-mono text-sm font-bold uppercase tracking-wider text-flit-primary">
+          {vehiculo.placa || vehiculo.vin || vehiculo.identificador}
+        </span>
+        <IconoCambioPropietario cambio={vehiculo.cambio_propietario} />
       </span>
       <span className={`mt-1 block ${TEXTO_SECUNDARIO_CLS}`}>{`${resueltas} de ${pedidas.size} consultas`}</span>
       {vehiculo.terminado && (
@@ -158,47 +171,10 @@ function EncabezadoVehiculo({
   );
 }
 
-/** Documento que declaró el cliente: tipo y número enmascarado (nunca completo) y su rol. */
-function CeldaDocumentoDeclarado({ vehiculo }: { vehiculo: FilaVehiculo }) {
-  const d = vehiculo.documento_declarado;
-  return (
-    <td data-columna="documento-declarado" data-label="Documento declarado" className={TD_CLS}>
-      {d ? (
-        <span className="flex flex-col gap-0.5">
-          <span className={DOCUMENTO_CLS}>{`${d.tipo_documento} ${enmascararDocumento(d.documento_enmascarado)}`}</span>
-          <span className={TEXTO_SECUNDARIO_CLS}>{nombreRol(d.rol)}</span>
-        </span>
-      ) : (
-        <SinDato etiqueta="Sin documento declarado" />
-      )}
-    </td>
-  );
-}
-
-/** Documentos de los propietarios del vehículo, uno por línea, enmascarados. */
-function CeldaDocumentosPropietario({ vehiculo }: { vehiculo: FilaVehiculo }) {
-  const propietarios = vehiculo.propietarios ?? [];
-  return (
-    <td data-columna="documento-propietario" data-label="Documento del propietario" className={TD_CLS}>
-      {propietarios.length > 0 ? (
-        <ul className="flex flex-col gap-0.5">
-          {propietarios.map((p, i) => (
-            <li key={`${i}-${p.documento_enmascarado}`} className={DOCUMENTO_CLS}>
-              {`${p.tipo_documento} ${enmascararDocumento(p.documento_enmascarado)}`}
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <SinDato etiqueta="Sin documentos del propietario" />
-      )}
-    </td>
-  );
-}
-
 /**
  * Tabla de resultados del lote (HU #13748; rediseño HU #14087), la misma para Express (1 vehículo), Masivo y backoffice. Por
- * fila: placa (o VIN) con su avance «n de m consultas» (m = fuentes pedidas) y el badge «Terminado», el documento declarado y
- * los documentos del propietario. Luego SIEMPRE las 8 fuentes agrupadas por pilar (RUNT, SIMIT, Avalúo comercial, Impuesto
+ * fila: placa (o VIN) con el ícono de cambio de propietario (HU #14585), su avance «n de m consultas» (m = fuentes pedidas) y
+ * el badge «Terminado»; sin columnas de documento (contrato 1.6.0 C5, SP-4/SP-19). Luego SIEMPRE las 8 fuentes agrupadas por pilar (RUNT, SIMIT, Avalúo comercial, Impuesto
  * departamental) en el orden de FUENTES: la no pedida dice «Sin solicitar»; la pedida sin celda todavía, «Sin ejecutar». El
  * usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada semáforo con consulta abre su detalle (HU #13801)
  * en una pestaña nueva (HU #14087), ya sin modal.
@@ -225,19 +201,20 @@ export function GrillaSemaforos({
   const izquierdaPlaca = casillaVehiculo ? "min-[900px]:left-10" : "min-[900px]:left-0";
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-border">
-      <table aria-label="Semáforo de consultas del lote" className={`w-full min-w-[1280px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
+    // Ronda 2 de E2E: mismo patrón que el resto de contenedores desplazables de la ola (región enfocable solo con desborde).
+    <RegionDesplazable nombre="Semáforo de consultas del lote" className={CONTENEDOR_TABLA_CLS}>
+      <table aria-label="Semáforo de consultas del lote" className={`w-full min-w-[1040px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
             {casillaVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${FIJA_IZQ_CLS} min-[900px]:left-0 w-10 align-bottom`} style={CABECERA_ESTILO}>
+              <th scope="col" rowSpan={2} className={`${CABECERA_FIJA_CLS} min-[900px]:left-0 w-10 align-bottom`} style={CABECERA_ESTILO}>
                 <span className="sr-only">Seleccionar</span>
               </th>
             )}
             <th
               scope="col"
               rowSpan={2}
-              className={`${CABECERA_CLS} ${FIJA_IZQ_CLS} ${izquierdaPlaca} ${casillaVehiculo ? SEPARADOR_CLS : ""} align-bottom`}
+              className={`${CABECERA_FIJA_CLS} ${izquierdaPlaca} ${casillaVehiculo ? SEPARADOR_CLS : ""} align-bottom`}
               style={CABECERA_ESTILO}
             >
               Placa o VIN
@@ -247,16 +224,13 @@ export function GrillaSemaforos({
                 Dictamen
               </th>
             )}
-            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
-              Documento declarado
-            </th>
-            <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
-              Documento del propietario
-            </th>
             {PILARES.map((p) =>
               p.fuentes.length > 1 ? (
-                <th key={p.nombre} scope="colgroup" colSpan={p.fuentes.length} className={`${CABECERA_CLS} ${SEPARADOR_CLS}`} style={CABECERA_ESTILO}>
-                  <RotuloConIcono Icono={ICONO_PILAR[p.nombre]}>{p.nombre}</RotuloConIcono>
+                // FE-2 (spec-ui §2.6): «RUNT» y «SIMIT» centrados sobre sus subcolumnas (sin el text-left del kit).
+                <th key={p.nombre} scope="colgroup" colSpan={p.fuentes.length} className={`${CABECERA_GRUPO_CLS} ${SEPARADOR_CLS}`} style={CABECERA_ESTILO}>
+                  <RotuloConIcono Icono={ICONO_PILAR[p.nombre]} centrado>
+                    {p.nombre}
+                  </RotuloConIcono>
                 </th>
               ) : (
                 // Pilar de una sola fuente con su mismo nombre: una cabecera que ocupa los dos niveles, sin repetir el rótulo.
@@ -266,15 +240,22 @@ export function GrillaSemaforos({
               ),
             )}
             {accionVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${FIJA_DER_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
+              <th scope="col" rowSpan={2} className={`${CABECERA_FIJA_CLS} min-[900px]:right-0 ${SEPARADOR_CLS} ${ANCHO_ACCIONES_CLS} align-bottom`} style={CABECERA_ESTILO}>
                 {tituloAccionVehiculo}
               </th>
             )}
           </tr>
           <tr>
             {PILARES_AGRUPADOS.flatMap((p) => p.fuentes).map((f) => (
-              <th key={f} scope="col" className={`${CABECERA_CLS} ${SEPARADOR_CLS} normal-case tracking-normal`} style={CABECERA_ESTILO}>
-                <RotuloConIcono Icono={ICONO_FUENTE[f]}>{nombreFuente(f)}</RotuloConIcono>
+              // aria-label: el nombre completo («RUNT propietario»); el cálculo del nombre recorta el espacio del sr-only.
+              <th key={f} scope="col" aria-label={nombreFuente(f)} className={`${CABECERA_CLS} ${SEPARADOR_CLS} normal-case tracking-normal`} style={CABECERA_ESTILO}>
+                {/* Texto visible sin el prefijo del grupo; el nombre completo para lectores (scope=colgroup se anuncia desigual). */}
+                <RotuloConIcono Icono={ICONO_FUENTE[f]}>
+                  <span>
+                    <span className="sr-only">{nombreFuente(f).slice(0, -nombreSubfuente(f).length)}</span>
+                    {nombreSubfuente(f)}
+                  </span>
+                </RotuloConIcono>
               </th>
             ))}
           </tr>
@@ -283,9 +264,9 @@ export function GrillaSemaforos({
           {vehiculos.map((v) => {
             const porFuente = new Map(v.celdas.map((c) => [c.fuente, c]));
             return (
-              <tr key={v.id} data-vehiculo={v.id} className={`border-t border-[var(--table-row-border)] bg-card ${TABLA_MOVIL_ROW_CLS}`}>
+              <tr key={v.id} data-vehiculo={v.id} className={`group border-t border-[var(--table-row-border)] ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
                 {casillaVehiculo && (
-                  <td data-columna="seleccion" data-label="Seleccionar" className={`${TD_CLS} ${FIJA_IZQ_CLS} min-[900px]:left-0 bg-card`}>
+                  <td data-columna="seleccion" data-label="Seleccionar" className={`${TD_CLS} ${FIJA_IZQ_CLS} min-[900px]:left-0 ${FONDO_FIJA_CLS}`}>
                     {casillaVehiculo(v)}
                   </td>
                 )}
@@ -295,8 +276,6 @@ export function GrillaSemaforos({
                     {dictamenVehiculo(v)}
                   </td>
                 )}
-                <CeldaDocumentoDeclarado vehiculo={v} />
-                <CeldaDocumentosPropietario vehiculo={v} />
                 {FUENTES_TABLA.map((f) => {
                   const solicitada = pedidas.has(f);
                   const celda = solicitada ? porFuente.get(f) : undefined;
@@ -318,7 +297,7 @@ export function GrillaSemaforos({
                   );
                 })}
                 {accionVehiculo && (
-                  <td data-label={tituloAccionVehiculo} className={`${TD_CLS} ${FIJA_DER_CLS} bg-card`}>
+                  <td data-label={tituloAccionVehiculo} className={`${TD_CLS} ${FIJA_DER_CLS} ${ANCHO_ACCIONES_CLS} ${FONDO_FIJA_CLS}`}>
                     {accionVehiculo(v)}
                   </td>
                 )}
@@ -327,6 +306,6 @@ export function GrillaSemaforos({
           })}
         </tbody>
       </table>
-    </div>
+    </RegionDesplazable>
   );
 }

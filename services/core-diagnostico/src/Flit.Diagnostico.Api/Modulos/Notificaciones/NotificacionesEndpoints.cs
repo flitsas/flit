@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Tablero;
@@ -72,11 +73,13 @@ internal static class NotificacionesEndpoints
 
         var filas = await pagina
             .Join(db.Set<CabeceraDiagnostico>(), n => n.DiagnosticoId, c => c.Id,
-                (n, c) => new { n.Id, n.Tipo, n.CreadaEn, n.LeidaEn, n.DiagnosticoId, Lote = c.Nombre })
+                (n, c) => new { n.Id, n.Tipo, n.CreadaEn, n.LeidaEn, n.DiagnosticoId, n.Datos, Lote = c.Nombre })
             .OrderByDescending(f => f.CreadaEn).ThenByDescending(f => f.Id).Take(tope + 1)
             .ToListAsync(ct).ConfigureAwait(false);
 
         // Code review menor 10: el mensaje lleva el nombre del lote, así que el ETag suma un hash de los nombres de la página.
+        // `datos` no entra en el ETag (H-9): se escribe al insertar la fila y nunca se actualiza (solo cambia leida_en), así que una
+        // fila nueva ya mueve total y max creada_en.
         var lotes = HashDeLotes(filas.Take(tope).Select(f => f.Lote));
         var etag = string.Create(CultureInfo.InvariantCulture,
             $"W/\"{noLeidas}-{total}-{maxCreada?.ToUnixTimeMilliseconds() ?? 0}-{maxLeida?.ToUnixTimeMilliseconds() ?? 0}-{antes?.ToString("N") ?? "0"}-{tope}-{lotes}\"");
@@ -88,7 +91,7 @@ internal static class NotificacionesEndpoints
         var hay = filas.Count > tope;
         var items = filas.Take(tope).Select(f => new NotificacionDto(
             f.Id, f.Tipo, f.CreadaEn, f.LeidaEn, f.DiagnosticoId, Titulo(f.Tipo), Mensaje(f.Tipo, f.Lote),
-            new AccionNotificacionDto(Accion(f.Tipo), $"/diagnosticos/{f.DiagnosticoId}"))).ToList();
+            new AccionNotificacionDto(Accion(f.Tipo), $"/diagnosticos/{f.DiagnosticoId}"), Datos(f.Datos))).ToList();
         return Results.Ok(new BandejaNotificacionesDto(noLeidas, items, hay ? items[^1].Id : null));
     }
 
@@ -97,6 +100,18 @@ internal static class NotificacionesEndpoints
     {
         var bytes = System.Text.Encoding.UTF8.GetBytes(string.Join('\u001F', nombres));
         return Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(bytes).AsSpan(0, 8));
+    }
+
+    /// <summary>
+    /// La columna jsonb <c>datos</c> como objeto JSON (HU #14576 H-9). <c>ck_notificaciones_datos</c> ya garantiza un objeto plano de
+    /// contadores y códigos sin PII; null si la columna llega vacía.
+    /// </summary>
+    internal static JsonElement? Datos(string? datos)
+    {
+        if (string.IsNullOrWhiteSpace(datos))
+            return null;
+        using var documento = JsonDocument.Parse(datos);
+        return documento.RootElement.ValueKind == JsonValueKind.Object ? documento.RootElement.Clone() : null;
     }
 
     private static async Task<IResult> LeidaAsync(Guid nid, DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj, CancellationToken ct)
@@ -124,6 +139,10 @@ internal static class NotificacionesEndpoints
         Notificacion.ZipEvidenciasFallido => "No se pudieron generar las evidencias",
         Notificacion.DerivacionTerminada => "Derivación terminada",
         Notificacion.LoteTerminado => "Diagnóstico terminado",
+        Notificacion.SaneamientoTomado => "Saneamiento en gestión",
+        Notificacion.SaneamientoCerrado => "Saneamiento cerrado",
+        Notificacion.SaneamientoReabierto => "Saneamiento reabierto",
+        Notificacion.SaneamientoAnulado => "Saneamiento anulado",
         _ => "Notificación",
     };
 
@@ -133,6 +152,11 @@ internal static class NotificacionesEndpoints
         Notificacion.ZipEvidenciasFallido => $"El ZIP de evidencias del lote «{lote}» no se pudo generar. Puedes pedirlo de nuevo.",
         Notificacion.DerivacionTerminada => $"Terminó la derivación a trámite del lote «{lote}».",
         Notificacion.LoteTerminado => $"El lote «{lote}» terminó sus consultas.",
+        // HU #14576 (SP-23): rótulos fijos sin placa ni motivo; la cantidad y el resultado van en `datos`.
+        Notificacion.SaneamientoTomado => $"FLIT empezó el saneamiento de vehículos del lote «{lote}».",
+        Notificacion.SaneamientoCerrado => $"FLIT cerró el saneamiento de vehículos del lote «{lote}».",
+        Notificacion.SaneamientoReabierto => $"FLIT reabrió el saneamiento de un vehículo del lote «{lote}».",
+        Notificacion.SaneamientoAnulado => $"FLIT anuló el saneamiento de un vehículo del lote «{lote}».",
         _ => $"Lote «{lote}».",
     };
 
@@ -150,7 +174,7 @@ public sealed record BandejaNotificacionesDto(
     [property: JsonPropertyName("items")] IReadOnlyList<NotificacionDto> Items,
     [property: JsonPropertyName("siguiente")] Guid? Siguiente);
 
-/// <summary>Una notificación de la bandeja, sin PII.</summary>
+/// <summary>Una notificación de la bandeja, sin PII. <c>datos</c>: solo contadores y códigos (<c>ck_notificaciones_datos</c>).</summary>
 public sealed record NotificacionDto(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("tipo")] string Tipo,
@@ -159,7 +183,8 @@ public sealed record NotificacionDto(
     [property: JsonPropertyName("diagnostico_id")] Guid DiagnosticoId,
     [property: JsonPropertyName("titulo")] string Titulo,
     [property: JsonPropertyName("mensaje")] string Mensaje,
-    [property: JsonPropertyName("accion")] AccionNotificacionDto Accion);
+    [property: JsonPropertyName("accion")] AccionNotificacionDto Accion,
+    [property: JsonPropertyName("datos")] JsonElement? Datos);
 
 /// <summary>A dónde lleva la notificación.</summary>
 public sealed record AccionNotificacionDto(
