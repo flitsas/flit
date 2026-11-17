@@ -22,6 +22,7 @@ public sealed class UpdateMandateSignerHandler
     private readonly IMandatarioAssociableCompanies? _associable;
     private readonly IMandateSignerIdentityLauncher? _identityLauncher;
     private readonly ISignatureVaultReader? _vaultReader;
+    private readonly IOtUserClientScopeResolver? _clientScope;
 
     public UpdateMandateSignerHandler(
         ITransitOfficeOperationalStatusReader otStatus,
@@ -29,8 +30,10 @@ public sealed class UpdateMandateSignerHandler
         IMandateSignerRepository repository,
         IMandatarioAssociableCompanies? associable = null,
         IMandateSignerIdentityLauncher? identityLauncher = null,
-        ISignatureVaultReader? vaultReader = null)
+        ISignatureVaultReader? vaultReader = null,
+        IOtUserClientScopeResolver? clientScope = null)
     {
+        _clientScope = clientScope;
         _vaultReader = vaultReader;
         _identityLauncher = identityLauncher;
         _associable = associable;
@@ -59,6 +62,25 @@ public sealed class UpdateMandateSignerHandler
         }
 
         IReadOnlyList<Guid> companyIds = command.CompanyTenantIds ?? [];
+
+        // Alcance de compañías del usuario: con 'especificos' solo puede AGREGAR compañías de su alcance (403, nada se guarda).
+        // Lo que el mandatario ya tenía fuera de su alcance el actor no lo ve (no viene en su cuerpo): se conserva, no se
+        // borra por omisión, y no se revalida (no es suyo).
+        var allowedClients = await MandateSignerClientScopeGuard
+            .AllowedAsync(_clientScope, command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
+        var officeCompanies = command.OfficeCompanies;
+        if (allowedClients is not null)
+        {
+            var persistedOwners = signer.CompanyTenantIds.ToHashSet();
+            MandateSignerClientScopeGuard.EnsureWithin(allowedClients, companyIds.Where(id => !persistedOwners.Contains(id)));
+            MandateSignerClientScopeGuard.EnsureWithin(
+                allowedClients, MandateSignerClientScopeGuard.AddedAssociations(officeCompanies, signer.OfficeCompanies));
+
+            companyIds = [.. companyIds.Union(persistedOwners.Where(id => !allowedClients.Contains(id)))];
+            officeCompanies = MandateSignerClientScopeGuard.KeepHiddenAssociations(
+                allowedClients, officeCompanies, signer.OfficeCompanies);
+        }
+
         var companiesToValidate = companyIds;
         var transitOfficeIds = command.TransitOfficeIds;
 
@@ -214,7 +236,7 @@ public sealed class UpdateMandateSignerHandler
                 transitOfficeIds,
                 null, // HU #13131: no se toca la marca histórica de firma física (se conserva tal cual).
                 vaultId,
-                command.OfficeCompanies,
+                officeCompanies,
                 actualizaFirma,
                 // Tras la edición, el organismo bajo el que se editó es el primario. Solo cambia algo
                 // cuando la lista retira al primario anterior; en la edición desde el perfil del

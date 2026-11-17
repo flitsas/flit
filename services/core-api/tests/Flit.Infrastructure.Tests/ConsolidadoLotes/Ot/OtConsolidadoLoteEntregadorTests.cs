@@ -44,6 +44,8 @@ public sealed class OtConsolidadoLoteEntregadorTests
     private readonly IOtClientProcedureRepository _otRepo = Substitute.For<IOtClientProcedureRepository>();
     private readonly IResolvedDocumentMatrixResolver _matriz = Substitute.For<IResolvedDocumentMatrixResolver>();
     private readonly IQuipuxReadOnlyGuard _quipux = Substitute.For<IQuipuxReadOnlyGuard>();
+    private readonly Flit.Admin.Domain.Companies.TransitOffices.IOtUserClientScopeResolver _scope =
+        Substitute.For<Flit.Admin.Domain.Companies.TransitOffices.IOtUserClientScopeResolver>();
     private readonly IConsolidadoLoteAccessChecker _acceso = Substitute.For<IConsolidadoLoteAccessChecker>();
     private readonly IConsolidadoLoteItemProceso _proceso = Substitute.For<IConsolidadoLoteItemProceso>();
     private readonly EntregadorEspia _entregador;
@@ -64,6 +66,8 @@ public sealed class OtConsolidadoLoteEntregadorTests
         _radicado.AttachmentsProtegidosAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns((IReadOnlySet<Guid>)new HashSet<Guid>());
         _acceso.TieneAccesoAsync(Arg.Any<LoteItemContexto>(), Arg.Any<CancellationToken>()).Returns(true);
+        _scope.GetRestrictionForUserAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<Guid>?)null);
         _proceso.MarcarIncluidoAsync(Arg.Any<LoteItemIncluido>(), Arg.Any<CancellationToken>()).Returns(true);
         _proceso.MarcarOmitidoAsync(Arg.Any<LoteItemOmitido>(), Arg.Any<CancellationToken>()).Returns(true);
         _proceso.ReprogramarAsync(Arg.Any<LoteItemReintento>(), Arg.Any<CancellationToken>()).Returns(true);
@@ -104,7 +108,7 @@ public sealed class OtConsolidadoLoteEntregadorTests
             new GenerarConsolidadoMaestroHandler(_repo, merger, _storage, maestroRadicado: _radicado, hotDocsRegenerator: _hotDocs),
             maestroRadicado: _radicado));
         var origen = new OtConsolidadoLoteEntregador(
-            _acceso, new OtClientProcedureConsolidadoContext(_otRepo, _matriz), _entregador, _quipux);
+            _acceso, new OtClientProcedureConsolidadoContext(_otRepo, _matriz), _entregador, _quipux, _scope);
         _handler = new ProcesarItemLoteHandler(
             new LoteItemOrigenPorOrigen([origen]),
             _proceso,
@@ -314,6 +318,41 @@ public sealed class OtConsolidadoLoteEntregadorTests
         _log.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Alcance_ClienteQuitadoAlSolicitanteTrasCrearElLote_SeOmiteAccesoRevocado_SinEntregar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var lote = LoteOt();
+        var t = Instancia(TramiteEstado.Entregado);
+        Wire(t);
+        var item = Item(lote, t);
+        _scope.GetRestrictionForUserAsync(lote.RequestedByUserId, Organismo, Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<Guid>?)[Guid.NewGuid()]); // ya solo otra compañía
+
+        var r = await _handler.HandleAsync(Cmd(lote, item), ct);
+
+        r.Codigo.Should().Be(ConsolidadoLoteOmisiones.AccesoRevocado);
+        _entregador.Peticiones.Should().BeEmpty();
+        _log.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Alcance_ClienteDentroDelAlcanceDelSolicitante_SeEntregaConNormalidad()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var lote = LoteOt();
+        var t = Instancia(TramiteEstado.Entregado);
+        Wire(t);
+        var item = Item(lote, t);
+        _scope.GetRestrictionForUserAsync(lote.RequestedByUserId, Organismo, Arg.Any<CancellationToken>())
+            .Returns((IReadOnlyList<Guid>?)[t.TenantId]);
+
+        var r = await _handler.HandleAsync(Cmd(lote, item), ct);
+
+        r.Codigo.Should().NotBe(ConsolidadoLoteOmisiones.AccesoRevocado);
+        _entregador.Peticiones.Should().NotBeEmpty();
+    }
+
     // ── AC6 — el solicitante pierde el acceso ───────────────────────────────────────────────
 
     [Fact]
@@ -381,7 +420,7 @@ public sealed class OtConsolidadoLoteEntregadorTests
     {
         var ct = TestContext.Current.CancellationToken;
         var origen = new OtConsolidadoLoteEntregador(
-            _acceso, new OtClientProcedureConsolidadoContext(_otRepo, _matriz), _entregador, _quipux);
+            _acceso, new OtClientProcedureConsolidadoContext(_otRepo, _matriz), _entregador, _quipux, _scope);
         origen.Origen.Should().Be("ot_bandeja");
 
         var lote = LoteOt();

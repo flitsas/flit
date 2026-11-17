@@ -36,6 +36,7 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
     private readonly ITransitOfficeOperationalStatusReader _operationalStatus;
     private readonly IMandateTemplateStorage _templateStorage;
     private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
+    private readonly IOtUserClientScopeResolver? _clientScope;
 
     public MandateConfigAdminService(
         FlitDbContext db,
@@ -43,7 +44,8 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         ITransitOfficeOperationalStatusReader operationalStatus,
         IDocumentOcrAnalyzer ocr,
         IMandateTemplateStorage templateStorage,
-        IEffectiveTransitOfficeListResolver? effectiveOffices = null)
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null,
+        IOtUserClientScopeResolver? clientScope = null)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -56,6 +58,8 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
         // Bug #12912 — compañías por OT según la lista efectiva de red. Opcional: sin él (tests que
         // construyen el servicio a mano) se conserva el criterio previo de grant propio.
         _effectiveOffices = effectiveOffices;
+        // Alcance de compañías del usuario OT en curso (null = todas). Solo afecta la vista del organismo.
+        _clientScope = clientScope;
     }
 
     public async Task<IReadOnlyList<MandateOtConfigView>> ListAsync(CancellationToken ct = default)
@@ -976,9 +980,18 @@ internal sealed class MandateConfigAdminService : IMandateConfigAdminService
                 .ToListAsync(ct)
                 .ConfigureAwait(false);
 
-        return visibility == OtCompanyVisibility.DirectOrWithReceivedProcedures
-            ? [.. await OtVisibleCompanies.FilterAsync(_db, officeId, effective, ct).ConfigureAwait(false)]
-            : effective;
+        if (visibility != OtCompanyVisibility.DirectOrWithReceivedProcedures)
+        {
+            return effective;
+        }
+
+        var visibles = await OtVisibleCompanies.FilterAsync(_db, officeId, effective, ct).ConfigureAwait(false);
+
+        // Alcance por usuario: el usuario del OT solo ve (y configura) las compañías que se le asignaron.
+        var restriction = _clientScope is null
+            ? null
+            : await _clientScope.GetRestrictionAsync(officeId, ct).ConfigureAwait(false);
+        return restriction is null ? [.. visibles] : [.. visibles.Intersect(restriction)];
     }
 
     private async Task<T> ExecuteCrossTenantReadAsync<T>(
