@@ -101,6 +101,7 @@ public sealed class SimulacionTests
         var catalogo = File.ReadAllText(Path.Combine(ddl, "27-HU10659-transit-offices-runt-catalog-seed.sql"));
         var municipios = File.ReadAllText(Path.Combine(ddl, "34-transit-offices-city-department-names.sql"));
         // La última migración que fija la lista de activos; solo su Up (el Down restaura la semilla anterior).
+        // Actualizar al crear una migración posterior que cambie los departamentos activos.
         var vigente = File.ReadAllText(Path.Combine(raiz, "services", "core-consultas", "src", "Flit.Consultas.Api", "Persistence", "Migrations", "20261117044000_ImpuestoDepartamentosActivos.cs"));
         var up = vigente[..vigente.IndexOf("void Down(", StringComparison.Ordinal)];
         var activos = Regex.Matches(up, @"'(?<codigo>\d{2})',\s*'[^']+',\s*true,").Select(m => m.Groups["codigo"].Value).ToList();

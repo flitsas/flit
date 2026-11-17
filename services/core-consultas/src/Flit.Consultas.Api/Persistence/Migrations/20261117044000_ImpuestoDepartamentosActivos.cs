@@ -9,6 +9,8 @@ namespace Flit.Consultas.Api.Persistence.Migrations
     /// Solo datos. Decisión del usuario 2026-11-16 (reemplaza P7): la consulta de impuesto queda encendida solo en
     /// 05 Antioquia, 08 Atlántico y 11 Bogotá; el resto se apaga con borrado lógico. Pisa lo que un operador haya
     /// encendido o apagado por API en el ambiente. Los nombres siguen <c>34-transit-offices-city-department-names.sql</c>.
+    /// El Down no restaura lo encendido por API fuera de 05/08/11 ni el estado previo de una fila 05/08/11 del operador:
+    /// antes de aplicar, guardar el estado con <c>SELECT * FROM consultas.vehicle_tax_departments</c>.
     /// </remarks>
     public partial class ImpuestoDepartamentosActivos : Migration
     {
@@ -29,7 +31,8 @@ namespace Flit.Consultas.Api.Persistence.Migrations
 
                 UPDATE consultas.vehicle_tax_departments
                    SET is_active = false, deleted_at = COALESCE(deleted_at, now()), updated_at = now()
-                 WHERE department_code NOT IN ('05', '08', '11');
+                 WHERE department_code NOT IN ('05', '08', '11')
+                   AND (is_active OR deleted_at IS NULL);
                 """);
         }
 

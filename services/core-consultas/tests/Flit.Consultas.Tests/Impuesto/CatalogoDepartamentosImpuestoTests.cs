@@ -48,7 +48,7 @@ public sealed class CatalogoDepartamentosImpuestoTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task La_semilla_enciende_solo_antioquia_atlantico_y_bogota()
+    public async Task Tras_las_migraciones_solo_quedan_activos_antioquia_atlantico_y_bogota()
     {
         var catalogo = Catalogo();
         var activos = await catalogo.ActivosAsync(CancellationToken.None);
@@ -56,6 +56,8 @@ public sealed class CatalogoDepartamentosImpuestoTests : IAsyncLifetime
         foreach (var apagado in new[] { "17", "50", "52", "63", "94" })
             (await catalogo.ActivoAsync(apagado, CancellationToken.None)).Should().BeFalse($"el {apagado} quedó fuera de la lista");
         (await _db.DepartamentosImpuesto.Where(d => !d.IsActive).AllAsync(d => d.DeletedAt != null, CancellationToken.None)).Should().BeTrue();
+        (await _db.DepartamentosImpuesto.Where(d => d.DepartmentCode == "17" || d.DepartmentCode == "63").Select(d => d.UpdatedAt).ToListAsync(CancellationToken.None))
+            .Should().AllBeEquivalentTo(DateTimeOffset.Parse("2025-12-15T16:49:19.862895+00:00"), "ya estaban apagadas: la migración no las toca");
         (await _db.DepartamentosImpuesto.SingleAsync(d => d.DepartmentCode == "05", CancellationToken.None)).Id
             .Should().Be(Guid.Parse("01941215-0000-7000-8000-000000000005"));
     }
