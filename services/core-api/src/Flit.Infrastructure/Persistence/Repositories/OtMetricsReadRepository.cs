@@ -86,7 +86,11 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
                 return new OtOperationalPanelDto(
                     movimiento,
-                    new OtQueueBreakdownDto(porRevisar, esperandoPlaca, enEsperaDelCliente),
+                    new OtQueueBreakdownDto(
+                        porRevisar,
+                        esperandoPlaca,
+                        enEsperaDelCliente,
+                        Prioritarios: pendientes.Count(IsPrioritario)),
                     aging);
             },
             cancellationToken);
@@ -685,6 +689,10 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
         var radicados = new Dictionary<string, int>();
         var aprobados = new Dictionary<string, int>();
         var rechazados = new Dictionary<string, int>();
+        // Rediseño del Inicio (2026-11-17): turno del organismo en DÍAS, por el periodo en que cayó la
+        // decisión — el mismo eje que aprobados y rechazados, para que la gráfica de tiempos y la de
+        // decisiones hablen de los mismos trámites.
+        var diasDecision = new Dictionary<string, List<double>>();
 
         foreach (var row in rows)
         {
@@ -699,6 +707,16 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             }
 
             var key = SeriesBucketKey(decidido, granularidad);
+            if (row.HorasHastaDecision is double horasDecision)
+            {
+                if (!diasDecision.TryGetValue(key, out var lista))
+                {
+                    diasDecision[key] = lista = [];
+                }
+
+                lista.Add(horasDecision / 24d);
+            }
+
             if (row.DecisionStatus == TramiteEstado.Aprobado)
             {
                 Increment(aprobados, key);
@@ -717,7 +735,10 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
                 b.Hasta.ToString("yyyy-MM-dd"),
                 radicados.GetValueOrDefault(b.Key),
                 aprobados.GetValueOrDefault(b.Key),
-                rechazados.GetValueOrDefault(b.Key)))
+                rechazados.GetValueOrDefault(b.Key),
+                diasDecision.TryGetValue(b.Key, out var dias) && dias.Count > 0
+                    ? Math.Round(dias.Average(), 2)
+                    : null))
             .ToList();
 
         static void Increment(Dictionary<string, int> counter, string key) =>
@@ -1214,6 +1235,78 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
 
     // ── Drill-down y catálogo de empresas ─────────────────────────────────────────────────────
 
+    // ── Trámites por cliente corporativo (Inicio del organismo) ──────────────────────────────
+
+    public Task<OtClientsByFamilyDto?> GetClientsByFamilyAsync(
+        Guid otTenantId,
+        OtMetricsFilter filter,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default) =>
+        ExecuteScopedAsync<OtClientsByFamilyDto>(
+            otTenantId,
+            transitOfficeIdOverride,
+            async (transitOfficeId, tenantIds) =>
+            {
+                var (from, to) = BogotaDayRange(filter.From, filter.To);
+
+                // Mismo universo que el informe del periodo: lo que LLEGÓ al organismo en el rango
+                // (entregado o preasignacion, ADR-0059). Un trámite radicado dos veces en el rango
+                // cuenta una sola vez: la tabla cuenta trámites, no radicaciones.
+                var recibidos = await QueryTransitions(transitOfficeId, tenantIds, filter, from, to)
+                    .Where(h => TramiteEstado.EstadosDeLlegadaAlOrganismo.Contains(h.ToStatus))
+                    .Select(h => h.ProcedureInstanceId)
+                    .Distinct()
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                if (recibidos.Count == 0)
+                {
+                    return new OtClientsByFamilyDto([], 0);
+                }
+
+                var instancias = await QueryInstances(transitOfficeId, tenantIds, filter)
+                    .Where(p => recibidos.Contains(p.Id))
+                    .Select(p => new
+                    {
+                        p.TenantId,
+                        Familia = (p.ProcedureType != null ? p.ProcedureType.Family : ""),
+                    })
+                    .ToListAsync(cancellationToken)
+                    .ConfigureAwait(false);
+
+                var names = await ResolveTenantNamesAsync(
+                    instancias.Select(i => i.TenantId).Distinct().ToList(), cancellationToken)
+                    .ConfigureAwait(false);
+
+                var clientes = instancias
+                    .GroupBy(i => i.TenantId)
+                    .Select(g =>
+                    {
+                        var matriculas = g.Count(i => i.Familia == FamiliaMatriculas);
+                        var traspasos = g.Count(i => i.Familia == FamiliaTraspaso);
+                        // «Otros trámites» se queda con todo lo que no es matrícula ni traspaso
+                        // (incluida una familia vacía): así la fila siempre suma su total.
+                        var otros = g.Count() - matriculas - traspasos;
+                        return new OtClientFamilyRowDto(
+                            g.Key,
+                            names.TryGetValue(g.Key, out var n) ? n : "(empresa desconocida)",
+                            matriculas,
+                            traspasos,
+                            otros,
+                            g.Count());
+                    })
+                    .OrderByDescending(c => c.Total)
+                    .ThenBy(c => c.Nombre, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                return new OtClientsByFamilyDto(clientes, instancias.Count);
+            },
+            cancellationToken);
+
+    private const string FamiliaMatriculas = "MATRICULAS";
+
+    private const string FamiliaTraspaso = "TRASPASO";
+
     public Task<IReadOnlyList<OtClientCompanyOptionDto>?> ListClientCompaniesAsync(
         Guid otTenantId,
         Guid? transitOfficeIdOverride = null,
@@ -1350,6 +1443,7 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
             OtDrilldownBuckets.Entre4y7Dias => IsEntre4y7Dias,
             OtDrilldownBuckets.MasDe7Dias => IsMasDe7Dias,
             OtDrilldownBuckets.PrioritariosEstancados => IsPrioritarioEstancado,
+            OtDrilldownBuckets.Prioritarios => IsPrioritario,
             // OtDrilldownBuckets.Pendientes y cualquier otro conocido: la cola completa.
             _ => _ => true,
         };
@@ -1441,6 +1535,8 @@ internal sealed class OtMetricsReadRepository : IOtMetricsReadRepository
     private static bool IsEntre4y7Dias(PendingRow p) => p.DaysWaiting > 3 && p.DaysWaiting <= 7;
 
     private static bool IsMasDe7Dias(PendingRow p) => p.DaysWaiting > 7;
+
+    private static bool IsPrioritario(PendingRow p) => p.Prioritario;
 
     private static bool IsPrioritarioEstancado(PendingRow p) =>
         p.Prioritario && p.DaysWaiting > PrioritarioEstancadoDias;

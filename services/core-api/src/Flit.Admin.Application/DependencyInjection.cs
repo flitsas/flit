@@ -351,6 +351,7 @@ public static class DependencyInjection
         services.AddScoped<OtMetrics.GetOtDrilldownHandler>();
         services.AddScoped<OtMetrics.GetOtReportHandler>();
         services.AddScoped<OtMetrics.ListOtClientCompaniesHandler>();
+        services.AddScoped<OtMetrics.GetOtClientsByFamilyHandler>();
         services.AddScoped<OtMetrics.GetOtReviewersReportHandler>();
         services.AddScoped<OtMetrics.ListOtReviewerOptionsHandler>();
 
