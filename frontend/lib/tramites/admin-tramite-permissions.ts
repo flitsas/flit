@@ -19,16 +19,44 @@ export const ADMIN_TRAMITE_PERMISSIONS = {
 } as const;
 
 /**
- * Estados destino válidos para "Cambiar estado" (HU #12159): todos los estados de negocio
- * conocidos MENOS `aprobado` — el backend rechaza con 422 si `aprobado` aparece como origen o
- * como destino (la aprobación exige el flujo formal del organismo de tránsito). No incluye
- * `subsanacion`: es un estado LEGADO que `TramiteEstado.Todos` (backend) ya excluye de la lista de
- * estados válidos para este endpoint.
+ * Estados destino válidos para "Cambiar estado" (HU #12159): todos los estados de negocio de
+ * `TramiteEstado.Todos` (backend) MENOS `aprobado` — el backend rechaza con 422 si `aprobado` aparece
+ * como origen o como destino (la aprobación exige el flujo formal del organismo de tránsito). No
+ * incluye `subsanacion`: es un estado LEGADO que `TramiteEstado.Todos` ya excluye.
+ *
+ * Van en el orden del ciclo de vida. Incluye los de la ruta de placa (`preasignacion`, `asignado`,
+ * ADR-0059) y `revocado`, que el backend ya aceptaba pero el selector no ofrecía. El cambio queda en el
+ * historial del trámite (tracking) y en el evento `cambio_estado_admin`, igual que los demás.
  */
 export const ADMIN_ESTADO_DESTINO_OPTIONS = [
   'borrador',
   'preparado',
+  'preasignacion',
+  'asignado',
   'entregado',
   'rechazado',
   'anulado',
+  'revocado',
 ] as const;
+
+export type AdminEstadoDestino = (typeof ADMIN_ESTADO_DESTINO_OPTIONS)[number];
+
+/** Familia cuyos tipos piden placa al organismo: la única que recorre la ruta de placa. */
+const FAMILIA_RUTA_PLACA = 'MATRICULAS';
+
+const ESTADOS_SOLO_RUTA_PLACA: readonly string[] = ['preasignacion', 'asignado'];
+
+/**
+ * Opciones del selector «Nuevo estado» para un trámite: excluye el estado actual y, fuera de matrícula,
+ * los de la ruta de placa (solo los alcanza un tipo que pide placa; en un traspaso dejarían el trámite en
+ * un estado que su flujo no tiene). Sin familia conocida se ofrecen todos: el backend no los restringe.
+ */
+export function opcionesEstadoDestinoAdmin(
+  estadoActual: string | null | undefined,
+  familia: string | null | undefined,
+): AdminEstadoDestino[] {
+  const sinRutaPlaca = !!familia && familia.trim().toUpperCase() !== FAMILIA_RUTA_PLACA;
+  return ADMIN_ESTADO_DESTINO_OPTIONS.filter(
+    (e) => e !== estadoActual && !(sinRutaPlaca && ESTADOS_SOLO_RUTA_PLACA.includes(e)),
+  );
+}
