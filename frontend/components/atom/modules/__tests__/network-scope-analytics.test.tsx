@@ -116,7 +116,22 @@ vi.mock("@/lib/api/public-banners", () => ({
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: mocks.usePermissions }));
 
 // Rediseño del Inicio: el Inicio del gestor (con su red y su gate de familia) vive ahora en GestorDashboard.
-import { GestorDashboard as Dashboard } from "@/components/atom/modules/GestorDashboard";
+import { ShellNavProvider } from "@flit/shell/nav-context";
+import type { DockGroup } from "@flit/shell/nav";
+import { GestorDashboard } from "@/components/atom/modules/GestorDashboard";
+
+// Las franjas 2 y 3 del Inicio solo se pintan con «Trámites» en el dock (gate de InicioModulos): el gestor de estas
+// pruebas lo tiene.
+const DOCK_CON_TRAMITES = [
+  { id: "operacion", label: "Operación", side: "left", active: false, items: [{ key: "tramites" }] },
+] as unknown as DockGroup[];
+function Dashboard(props: { onNewTramite: () => void }) {
+  return (
+    <ShellNavProvider value={{ groups: DOCK_CON_TRAMITES, homeHref: "/" }}>
+      <GestorDashboard {...props} />
+    </ShellNavProvider>
+  );
+}
 import { Reportes } from "@/components/atom/modules/Reportes";
 import { DetailedReportPanel } from "@/components/atom/modules/_reportesDetallados/DetailedReportPanel";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";

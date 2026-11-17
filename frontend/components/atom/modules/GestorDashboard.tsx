@@ -21,6 +21,7 @@ import { TramitesApiError, tramitesClient } from "@/lib/api/tramites-client";
 import { ApiError } from "@/lib/api/types";
 import type { AnalyticsOverviewResponse } from "@/lib/api/types";
 import { decodeJwtPayload } from "@/lib/auth/jwt";
+import { useShellNav } from "@flit/shell/nav-context";
 import { useActiveBanners } from "@/hooks/useActiveBanners";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { useFamilyAccess } from "@/hooks/useFamilyAccess";
@@ -34,7 +35,7 @@ import { CarruselInicio } from "@/components/inicio/CarruselInicio";
 import { PanelInicio } from "@/components/inicio/PanelInicio";
 import { GraficoDona } from "@/components/inicio/GraficoDona";
 import { useConteosEstado } from "@/components/inicio/useConteosEstado";
-import { TRAMITES_PATH, tramitesPorAtajo, tramitesPorEstado } from "@/components/inicio/destinos";
+import { TRAMITES_DOCK_KEY, TRAMITES_PATH, tramitesPorAtajo, tramitesPorEstado } from "@/components/inicio/destinos";
 import { FILTRO_CONTROL_CLS, FILTROS_REJILLA_CLS } from "@/components/inicio/filtros-inicio";
 import { isValidOptionalRange, sinRango, type DateRange } from "./_reportes/range";
 
@@ -150,7 +151,14 @@ export function GestorDashboard({ onNewTramite }: { onNewTramite: () => void }) 
   const networkChildTenantId = net.scope.childTenantId;
   const { showsInAggregates } = useFamilyAccess();
   const activeBanners = useActiveBanners();
-  const conteosEstado = useConteosEstado(true);
+  // Gate del dock (como el InicioModulos retirado): sin Trámites en el dock no se piden conteos, firmas ni cola, y las
+  // franjas 2 y 3 no se pintan; quedan el carrusel y los KPIs.
+  const { groups } = useShellNav();
+  const veTramites = useMemo(
+    () => groups.some((g) => g.items.some((e) => e.key === TRAMITES_DOCK_KEY)),
+    [groups],
+  );
+  const conteosEstado = useConteosEstado(veTramites);
   const conteos = conteosEstado.estado === "listo" ? conteosEstado.conteos : null;
 
   const [overview, setOverview] = useState<AnalyticsOverviewResponse | null>(null);
@@ -210,6 +218,7 @@ export function GestorDashboard({ onNewTramite }: { onNewTramite: () => void }) 
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
+      if (!veTramites) return;
       setFirmaStatus("loading");
       if (!isValidOptionalRange(range)) {
         setFirmaError("La fecha inicial no puede ser posterior a la fecha final.");
@@ -256,12 +265,13 @@ export function GestorDashboard({ onNewTramite }: { onNewTramite: () => void }) 
     }
     void load();
     return () => controller.abort();
-  }, [range, reloadKey]);
+  }, [range, reloadKey, veTramites]);
 
   // Franja 3 — cola de gestión: la filtran el estado elegido en la franja 2 y el selector de tipo.
   useEffect(() => {
     const controller = new AbortController();
     async function load() {
+      if (!veTramites) return;
       setColaStatus("loading");
       try {
         const res = await fetchColaInactividad(
@@ -279,7 +289,7 @@ export function GestorDashboard({ onNewTramite }: { onNewTramite: () => void }) 
     }
     void load();
     return () => controller.abort();
-  }, [estado, tipo, reloadKey]);
+  }, [estado, tipo, reloadKey, veTramites]);
 
   const bienvenida = useMemo(
     () => [
@@ -411,6 +421,9 @@ export function GestorDashboard({ onNewTramite }: { onNewTramite: () => void }) 
         </div>
       </div>
 
+      {/* Franjas 2 y 3 — solo con Trámites en el dock. */}
+      {veTramites && (
+      <>
       {/* Franja 2 — estado general; pulsar un estado filtra la cola de gestión. */}
       <PanelInicio
         data-testid="panel-estado-general"
@@ -538,6 +551,8 @@ export function GestorDashboard({ onNewTramite }: { onNewTramite: () => void }) 
           />
         </PanelInicio>
       </div>
+      </>
+      )}
     </div>
   );
 }

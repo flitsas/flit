@@ -62,7 +62,21 @@ vi.mock("@/hooks/useNetworkScope", () => ({
   }),
 }));
 
+import { ShellNavProvider } from "@flit/shell/nav-context";
+import type { DockGroup } from "@flit/shell/nav";
 import { GestorDashboard } from "@/components/atom/modules/GestorDashboard";
+
+// El dock del usuario: con o sin la entrada «Trámites» (TRAMITES_DOCK_KEY), que gobierna las franjas 2 y 3.
+const dock = (entradas: string[]) =>
+  [{ id: "operacion", label: "Operación", side: "left", active: false, items: entradas.map((key) => ({ key })) }] as unknown as DockGroup[];
+
+function renderGestor(entradas: string[] = ["tramites"]) {
+  return render(
+    <ShellNavProvider value={{ groups: dock(entradas), homeHref: "/" }}>
+      <GestorDashboard onNewTramite={() => {}} />
+    </ShellNavProvider>,
+  );
+}
 
 const OVERVIEW: AnalyticsOverviewResponse = {
   tenantId: "11111111-1111-1111-1111-111111111111",
@@ -105,7 +119,7 @@ beforeEach(() => {
 
 describe("Inicio del Gestor — franja 1", () => {
   it("saluda con datos reales: listos para radicar y en subsanación", async () => {
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
 
     expect(await screen.findByText("Hola, Carolina Mendoza")).toBeInTheDocument();
     expect(screen.getByText("Tu operación, sin pausas")).toBeInTheDocument();
@@ -114,7 +128,7 @@ describe("Inicio del Gestor — franja 1", () => {
   });
 
   it("pinta los 3 KPIs por familia y arranca sin rango (BUG #12588)", async () => {
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
 
     const grid = await screen.findByTestId("dashboard-kpi-grid");
     expect(await within(grid).findByText("12")).toBeInTheDocument();
@@ -125,7 +139,7 @@ describe("Inicio del Gestor — franja 1", () => {
   });
 
   it("un KPI vacío se dice en palabras, no con un guion", async () => {
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
 
     const otros = await screen.findByTestId("kpi-otros");
     expect(await within(otros).findByText("Ninguno")).toBeInTheDocument();
@@ -134,7 +148,7 @@ describe("Inicio del Gestor — franja 1", () => {
 
   it("si el overview falla, el KPI dice «Sin datos»", async () => {
     mocks.fetchAnalyticsOverview.mockRejectedValue(new Error("caída"));
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
 
     const grid = await screen.findByTestId("dashboard-kpi-grid");
     expect(await within(grid).findAllByText("Sin datos")).toHaveLength(3);
@@ -143,7 +157,7 @@ describe("Inicio del Gestor — franja 1", () => {
 
   it("sin Ver Traspasos, no hay tarjeta ni opción de Traspasos", async () => {
     sesion(["dashboard.read", "matriculas.read", "otros-tramites.read"]);
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
 
     const grid = await screen.findByTestId("dashboard-kpi-grid");
     expect(within(grid).queryByText("Traspasos")).not.toBeInTheDocument();
@@ -155,12 +169,12 @@ describe("Inicio del Gestor — franja 1", () => {
 
 describe("Inicio del Gestor — estado general y cola", () => {
   it("el total de la franja suma los estados", async () => {
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
     expect(await screen.findByText("20 trámites en total")).toBeInTheDocument();
   });
 
   it("pulsar un estado filtra la cola y «Quitar filtro» la devuelve", async () => {
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
     await waitFor(() => expect(mocks.fetchColaInactividad).toHaveBeenCalledTimes(1));
     expect(mocks.fetchColaInactividad).toHaveBeenLastCalledWith(
       { estado: undefined, familia: undefined, limit: 5 },
@@ -188,7 +202,7 @@ describe("Inicio del Gestor — estado general y cola", () => {
   });
 
   it("el selector de tipo filtra la cola por familia", async () => {
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
     fireEvent.change(await screen.findByRole("combobox", { name: "Filtrar por tipo de trámite" }), {
       target: { value: "traspasos" },
     });
@@ -202,7 +216,7 @@ describe("Inicio del Gestor — estado general y cola", () => {
   });
 
   it("cada fila dice los días sin gestión y abre el trámite", async () => {
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
     const cola = await screen.findByTestId("panel-cola");
 
     expect(await within(cola).findByText("14 días sin gestión")).toBeInTheDocument();
@@ -216,7 +230,7 @@ describe("Inicio del Gestor — estado general y cola", () => {
 
 describe("Inicio del Gestor — trámites por firma", () => {
   it("sin firmas = el atajo sin_firmas de /tramites; con firmas = borradores − sin firmas", async () => {
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
     const panel = await screen.findByTestId("panel-firma");
 
     expect(await within(panel).findByText("Borradores con firmas")).toBeInTheDocument();
@@ -233,12 +247,28 @@ describe("Inicio del Gestor — trámites por firma", () => {
   it("con más borradores que el tope (422) lo dice en palabras, sin cifras", async () => {
     const { TramitesApiError } = await import("@/lib/api/tramites-client");
     mocks.searchInstances.mockRejectedValue(new TramitesApiError(422, "demasiados", null));
-    render(<GestorDashboard onNewTramite={() => {}} />);
+    renderGestor();
     const panel = await screen.findByTestId("panel-firma");
 
     expect(
       await within(panel).findByText("Hay demasiados borradores para contar las firmas; acota el periodo."),
     ).toBeInTheDocument();
     expect(within(panel).queryByText("Borradores con firmas")).not.toBeInTheDocument();
+  });
+});
+
+describe("Inicio del Gestor — gate del dock", () => {
+  it("sin Trámites en el dock: ni conteos, ni firmas, ni cola; quedan el carrusel y los KPIs", async () => {
+    renderGestor(["reportes"]);
+
+    expect(await screen.findByText("Hola, Carolina Mendoza")).toBeInTheDocument();
+    expect(await within(await screen.findByTestId("dashboard-kpi-grid")).findByText("12")).toBeInTheDocument();
+    expect(screen.queryByTestId("panel-estado-general")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("panel-firma")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("panel-cola")).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Ver todos|Ver detalle|Gestionar/ })).not.toBeInTheDocument();
+    expect(mocks.searchEstadoCounts).not.toHaveBeenCalled();
+    expect(mocks.searchInstances).not.toHaveBeenCalled();
+    expect(mocks.fetchColaInactividad).not.toHaveBeenCalled();
   });
 });

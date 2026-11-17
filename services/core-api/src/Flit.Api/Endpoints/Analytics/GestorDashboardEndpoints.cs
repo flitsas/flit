@@ -52,13 +52,21 @@ public static class GestorDashboardEndpoints
         [FromQuery] int? limit = null,
         [FromQuery] Guid? tenantId = null)
     {
+        // La cola devuelve datos POR FILA (radicado, placa, VIN), no un agregado: además del permiso del Inicio exige el
+        // mismo gate que el listado de trámites (`/tramites/instances/search`), que es el Ver por familia (HU #13664).
+        // El listado responde vacío a quien no ve ninguna familia; aquí se corta antes, con 403, para no exponer la ruta.
+        var familias = familyGate.ReadableFamilyCodes();
+        if (familyGate.IsActive && familias is { Count: 0 })
+            return Results.Problem(statusCode: StatusCodes.Status403Forbidden, title: "Forbidden",
+                detail: "No tiene permiso para ver trámites.");
+
         if (!TryResolveTenant(httpContext.User, tenantId, out var tenant, out var error))
             return error!;
 
         var (result, err) = await handler.HandleAsync(
             new GestorDashboardColaInactividadQuery(tenant, estado, familia, limit ?? GestorDashboardColaInactividadHandler.DefaultLimit)
             {
-                AllowedFamilies = familyGate.ReadableFamilyCodes(),
+                AllowedFamilies = familias,
             },
             ct);
         return err is null ? Results.Ok(result) : MapError(err);

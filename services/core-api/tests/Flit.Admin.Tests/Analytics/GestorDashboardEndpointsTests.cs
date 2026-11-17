@@ -126,6 +126,15 @@ public sealed class GestorDashboardEndpointsTests : IClassFixture<GestorDashboar
         _hosts.Repo.Llamadas.Should().Be(0);
     }
 
+    [Fact] // Dato por fila: con el permiso del Inicio pero sin ver ninguna familia de trámites → 403 (gate del listado).
+    public async Task ConEnforcement_ConDashboardSinLecturaDeTramites_403()
+    {
+        var (status, _) = await Get(_hosts.Encendido, Cola, Token(Tenant, Modulo));
+
+        status.Should().Be(HttpStatusCode.Forbidden);
+        _hosts.Repo.Llamadas.Should().Be(0);
+    }
+
     // ── Ver por familia (HU #13664) ────────────────────────────────────────────────────────────────
 
     [Fact]
