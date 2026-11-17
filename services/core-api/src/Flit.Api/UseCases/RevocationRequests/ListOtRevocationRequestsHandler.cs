@@ -1,3 +1,4 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.OtClientProcedures;
 using Flit.Tramites.Application.UseCases.RevocationRequests;
 using Flit.Tramites.Domain.Repositories;
@@ -41,7 +42,8 @@ public sealed record ListOtRevocationRequestsQuery(
 /// </summary>
 public sealed class ListOtRevocationRequestsHandler(
     IOtClientProcedureRepository otRepository,
-    IProcedureRevocationRequestRepository revocationRepo)
+    IProcedureRevocationRequestRepository revocationRepo,
+    IOtUserClientScopeResolver? clientScope = null)
 {
     public async Task<RevocationRequestListResult> HandleAsync(
         ListOtRevocationRequestsQuery query,
@@ -68,6 +70,10 @@ public sealed class ListOtRevocationRequestsHandler(
             RequestedTo = query.RequestedTo,
             // TransitOfficeId del filtro NO se usa aquí a propósito: el alcance del lado OT YA es el
             // organismo resuelto arriba (ver XML doc de RevocationRequestListFilter.TransitOfficeId).
+            // Alcance por usuario: solo las revocatorias de las compañías cliente asignadas (null = todas).
+            ClientTenantIds = clientScope is null
+                ? null
+                : await clientScope.GetRestrictionAsync(transitOfficeId.Value, cancellationToken).ConfigureAwait(false),
             Skip = skip,
             Take = take,
         };

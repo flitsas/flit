@@ -24,6 +24,37 @@ export interface OtUserItem {
   /** HU #10623/#10624: fecha de soft-delete. `null`/ausente en el listado normal;
    *  siempre poblado cuando se listÃ³ con `fetchOtUsers(scope, signal, true)` (onlyDeleted=true). */
   deletedAt?: string | null;
+  /** Alcance de clientes del usuario; ausente = todos. */
+  clientScope?: OtClientScopeSummary;
+}
+
+export type OtClientScopeMode = "todos" | "especificos";
+
+export interface OtClientScopeSummary {
+  mode: OtClientScopeMode;
+  clientCount: number;
+}
+
+export interface OtClientScopeInput {
+  mode: OtClientScopeMode;
+  clientTenantIds: string[];
+}
+
+export interface OtClientCompany {
+  tenantId: string;
+  name: string;
+  nit?: string | null;
+}
+
+/** `actorRestricted`: quien consulta gestiona «Clientes específicos» (sus `items` ya vienen acotados). Falta = false. */
+export interface OtClientCompaniesResponse {
+  items: OtClientCompany[];
+  actorRestricted?: boolean;
+}
+
+export interface OtClientScopeResponse {
+  mode: OtClientScopeMode;
+  clients: { tenantId: string; name: string }[];
 }
 
 export interface OtUserListResponse {
@@ -38,6 +69,8 @@ export interface InviteOtUserRequest {
    * sin él el backend responde 400 `ROLE_REQUIRED`.
    */
   roleIds: string[];
+  /** Compañías cliente que gestiona el invitado. Ausente = todos. */
+  clientScope?: OtClientScopeInput;
 }
 
 export interface InviteOtUserResponse {
@@ -91,6 +124,43 @@ export function fetchOtUsers(
   return apiFetch<OtUserListResponse>(`${base}/users`, {
     query: { ...scopeQuery(scope), onlyDeleted: onlyDeleted || undefined },
     signal,
+  });
+}
+
+/** GET /api/v1/admin/ot/client-companies — compañías cliente visibles del OT (selector de alcance). */
+export function fetchOtClientCompanies(
+  scope?: OtApiScope,
+  signal?: AbortSignal,
+): Promise<OtClientCompaniesResponse> {
+  return apiFetch<OtClientCompaniesResponse>(`${base}/client-companies`, {
+    query: scopeQuery(scope),
+    signal,
+  });
+}
+
+/** GET /api/v1/admin/ot/users/{userId}/client-scope — alcance de clientes vigente del usuario. */
+export function fetchOtUserClientScope(
+  userId: string,
+  scope?: OtApiScope,
+  signal?: AbortSignal,
+): Promise<OtClientScopeResponse> {
+  return apiFetch<OtClientScopeResponse>(`${base}/users/${userId}/client-scope`, {
+    query: scopeQuery(scope),
+    signal,
+  });
+}
+
+/** PUT /api/v1/admin/ot/users/{userId}/client-scope — 204. 400 CLIENT_SCOPE_EMPTY |
+ *  CLIENT_SCOPE_INVALID_CLIENT; 403 CLIENT_SCOPE_SELF. */
+export function setOtUserClientScope(
+  userId: string,
+  body: OtClientScopeInput,
+  scope?: OtApiScope,
+): Promise<void> {
+  return apiFetch<void>(`${base}/users/${userId}/client-scope`, {
+    method: "PUT",
+    body,
+    query: scopeQuery(scope),
   });
 }
 

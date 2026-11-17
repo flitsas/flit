@@ -39,5 +39,16 @@ public sealed class MandateSignerLinkConflictFilter : IEndpointFilter
                 new { code = AssociatedCompanyOutOfScopeException.Code, error = ex.Message },
                 statusCode: StatusCodes.Status403Forbidden);
         }
+        catch (Flit.Admin.Domain.Companies.TransitOffices.OtClientScopeExceedsActorException ex)
+        {
+            // Un usuario del OT con alcance 'especificos' intentó vincular compañías fuera de su alcance: no se guardó nada.
+            return Results.Json(
+                new
+                {
+                    code = Flit.Admin.Domain.Companies.TransitOffices.OtClientScopeExceedsActorException.Code,
+                    error = ex.Message,
+                },
+                statusCode: StatusCodes.Status403Forbidden);
+        }
     }
 }

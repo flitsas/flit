@@ -308,15 +308,20 @@ public static class AdminMandateSignersEndpoints
 
     /// <summary>HU #13178 — <c>?search=</c> (mínimo 2 caracteres), <c>?page=</c>, <c>?pageSize=</c>, <c>?all=true</c> (lista completa, tope 1000).</summary>
     private static async Task<IResult> AssociableCompaniesAsync(
+        Guid transitOfficeId,
         [FromQuery] string? search,
         [FromQuery] int? page,
         [FromQuery] int? pageSize,
         [FromQuery] bool? all,
         [FromServices] IMandatarioAssociableCompanies service,
+        [FromServices] Flit.Admin.Domain.Companies.TransitOffices.IOtUserClientScopeResolver clientScope,
         CancellationToken cancellationToken)
     {
+        // Alcance de compañías del usuario: con 'especificos' solo se ofrecen las compañías de su alcance (null = todas).
+        var restriction = await clientScope.GetRestrictionAsync(transitOfficeId, cancellationToken).ConfigureAwait(false);
         var result = await service
-            .ListForOtAsync(search, page ?? 1, AssociableCompaniesHttp.PageSizeOf(pageSize, all), cancellationToken)
+            .ListForOtAsync(
+                search, page ?? 1, AssociableCompaniesHttp.PageSizeOf(pageSize, all), restriction, cancellationToken)
             .ConfigureAwait(false);
         return AssociableCompaniesHttp.ToResult(result);
     }

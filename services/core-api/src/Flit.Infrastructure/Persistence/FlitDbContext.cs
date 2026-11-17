@@ -73,6 +73,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    public DbSet<OtUserClientScopeEntity> OtUserClientScopes => Set<OtUserClientScopeEntity>();
+
+    public DbSet<OtUserClientScopeClientEntity> OtUserClientScopeClients => Set<OtUserClientScopeClientEntity>();
+
+    public DbSet<OtInvitationClientScopeClientEntity> OtInvitationClientScopeClients => Set<OtInvitationClientScopeClientEntity>();
+
     /// <summary>HU #12407 — bloqueos de OT para cabezas Marca Blanca.</summary>
     public DbSet<TenantTransitOfficeBlock> TenantTransitOfficeBlocks => Set<TenantTransitOfficeBlock>();
 
