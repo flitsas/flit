@@ -24,6 +24,17 @@ internal sealed class SuperAdminDashboardReadRepository : ISuperAdminDashboardRe
     /// <summary>Estados «en proceso»: todo lo que no es aprobado, rechazado ni un final sin resultado.</summary>
     private const string EnProceso = "status NOT IN ('aprobado', 'rechazado', 'anulado', 'revocado')";
 
+    /// <summary>
+    /// Universo de compañías del Inicio: activas y sin perfil de organismo de tránsito, el mismo de las Consultas de
+    /// SuperAdmin. Se aplica a TODAS las lecturas sin <c>@tenant</c>, para que los volúmenes por organismo y el tiempo del
+    /// ecosistema cuadren con «Trámites totales» (la suma de la tabla de compañías). Con <c>@tenant</c> explícito manda
+    /// la compañía pedida.
+    /// </summary>
+    private const string CompaniaDelUniverso = """
+        t.is_active
+                  AND NOT EXISTS (SELECT 1 FROM admin.transit_office_profiles p WHERE p.tenant_id = t.id)
+        """;
+
     private const string InstsCte = $"""
         WITH insts AS (
             SELECT pi.id, pi.tenant_id, pi.status, pi.created_at, pi.transit_office_id,
@@ -32,6 +43,8 @@ internal sealed class SuperAdminDashboardReadRepository : ISuperAdminDashboardRe
             JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
             WHERE pi.deleted_at IS NULL
               AND (@tenant::uuid IS NULL OR pi.tenant_id = @tenant::uuid)
+              AND (@tenant::uuid IS NOT NULL OR EXISTS (
+                    SELECT 1 FROM identity.tenants t WHERE t.id = pi.tenant_id AND {CompaniaDelUniverso}))
               AND (@from::date IS NULL OR pi.created_at::date >= @from::date)
               AND (@to::date   IS NULL OR pi.created_at::date <= @to::date)
               AND {FamilyByType}
@@ -84,29 +97,35 @@ internal sealed class SuperAdminDashboardReadRepository : ISuperAdminDashboardRe
 
     // Compañías: el universo de las Consultas de SuperAdmin (activas y sin perfil de organismo). Represado = en proceso
     // y sin transición (o sin crearse, si no tiene historial) hace más de @stuckDays días.
+    // Un solo recorrido de insts agrupado por compañía (count FILTER) y LEFT JOIN desde companias para que también salgan
+    // las que tienen 0. El último cambio de estado solo se busca para los trámites en proceso.
     private const string CompaniesSql = InstsCte + $"""
         , companias AS (
             SELECT t.id, t.legal_name
             FROM identity.tenants t
-            WHERE t.is_active
-              AND NOT EXISTS (SELECT 1 FROM admin.transit_office_profiles p WHERE p.tenant_id = t.id)
-        ), activos AS (
-            SELECT i.id, i.tenant_id,
-                   coalesce((SELECT max(h.changed_at)
-                             FROM tramites.procedure_instance_status_history h
-                             WHERE h.procedure_instance_id = i.id), i.created_at) AS last_changed_at
+            WHERE {CompaniaDelUniverso}
+        ), agregados AS (
+            SELECT i.tenant_id,
+                   count(*)::int AS total,
+                   count(*) FILTER (WHERE i.{EnProceso})::int AS activos,
+                   count(*) FILTER (WHERE i.status = 'aprobado')::int AS aprobados,
+                   count(*) FILTER (WHERE i.status = 'rechazado')::int AS rechazados,
+                   count(*) FILTER (WHERE i.{EnProceso}
+                       AND coalesce(lh.last_changed_at, i.created_at) < now() - make_interval(days => @stuckDays))::int AS represados
             FROM insts i
-            WHERE i.{EnProceso}
+            LEFT JOIN LATERAL (
+                SELECT max(h.changed_at) AS last_changed_at
+                FROM tramites.procedure_instance_status_history h
+                WHERE h.procedure_instance_id = i.id
+                  AND i.{EnProceso}
+            ) lh ON TRUE
+            GROUP BY i.tenant_id
         )
         SELECT c.id, c.legal_name,
-               (SELECT count(*) FROM insts i WHERE i.tenant_id = c.id)::int,
-               (SELECT count(*) FROM activos a WHERE a.tenant_id = c.id)::int,
-               (SELECT count(*) FROM insts i WHERE i.tenant_id = c.id AND i.status = 'aprobado')::int,
-               (SELECT count(*) FROM insts i WHERE i.tenant_id = c.id AND i.status = 'rechazado')::int,
-               (SELECT count(*) FROM activos a
-                 WHERE a.tenant_id = c.id
-                   AND a.last_changed_at < now() - make_interval(days => @stuckDays))::int
+               coalesce(a.total, 0), coalesce(a.activos, 0), coalesce(a.aprobados, 0),
+               coalesce(a.rechazados, 0), coalesce(a.represados, 0)
         FROM companias c
+        LEFT JOIN agregados a ON a.tenant_id = c.id
         ORDER BY 4 DESC, c.legal_name ASC, c.id ASC;
         """;
 

@@ -215,7 +215,7 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
       return () => controller.abort();
     }
     setCompanias(CARGANDO);
-    fetchSuperAdminCompanias({ from: range.from, to: range.to }, controller.signal)
+    fetchSuperAdminCompanias({ from: range.from, to: range.to, stuckDays: DIAS_REPRESADO }, controller.signal)
       .then((data) => setCompanias({ status: "ready", data }))
       .catch((err) => {
         if (!esAbortado(err, controller.signal))

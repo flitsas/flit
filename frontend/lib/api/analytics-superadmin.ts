@@ -70,11 +70,12 @@ export interface SuperAdminOrganismosResponse {
 
 /** GET /companias-resumen — una fila por compañía activa (gestoras; los organismos de tránsito no salen). */
 export function fetchSuperAdminCompanias(
-  rango: RangoSuperAdmin,
+  rango: RangoSuperAdmin & { stuckDays: number },
   signal?: AbortSignal,
 ): Promise<SuperAdminCompaniasResponse> {
   return apiFetch<SuperAdminCompaniasResponse>(`${base}/companias-resumen`, {
-    query: { from: rango.from || undefined, to: rango.to || undefined },
+    // `stuckDays` viaja SIEMPRE: el texto «más de N días» del Inicio no depende del valor por defecto del servidor.
+    query: { from: rango.from || undefined, to: rango.to || undefined, stuckDays: rango.stuckDays },
     signal,
   });
 }
