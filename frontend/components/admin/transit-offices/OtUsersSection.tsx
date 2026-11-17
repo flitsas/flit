@@ -781,12 +781,14 @@ function OtInviteUserDialog({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${DIALOGO_VELO_CLS}`}
+      className={`fixed inset-0 z-50 flex items-start justify-center p-4 ${DIALOGO_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ot-invite-user-title"
     >
-      <div className={`w-full max-w-md overflow-hidden p-6 ${DIALOGO_PANEL_CLS}`}>
+      <div
+        className={`flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden p-6 ${DIALOGO_PANEL_CLS}`}
+      >
         <FranjaDialogo icono="persona" className="-mx-6 -mt-6 mb-5">
           <div>
             <h2 id="ot-invite-user-title" className={`text-base font-bold mb-1 ${DIALOGO_TITULO_CLS}`}>
@@ -798,7 +800,11 @@ function OtInviteUserDialog({
             </p>
           </div>
         </FranjaDialogo>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form
+          id="ot-invite-form"
+          onSubmit={handleSubmit}
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-1"
+        >
           <OtField label="Nombre completo" htmlFor="ot-invite-name">
             <input
               id="ot-invite-name"
@@ -851,37 +857,43 @@ function OtInviteUserDialog({
             <p className="text-xs opacity-60">No hay roles disponibles para invitar.</p>
           )}
           {canSetClientScope && (
-            <ClientScopeFields
-              transitOfficeId={transitOfficeId}
-              value={clientScope}
-              onChange={setClientScope}
-              idPrefix="ot-invite-scope"
-              preferSpecificWhenRestricted
-            />
+            <div
+              className="rounded-xl border px-3 py-2.5"
+              style={{ borderColor: "var(--border)", background: "var(--secondary)" }}
+            >
+              <ClientScopeFields
+                transitOfficeId={transitOfficeId}
+                value={clientScope}
+                onChange={setClientScope}
+                idPrefix="ot-invite-scope"
+                preferSpecificWhenRestricted
+              />
+            </div>
           )}
           {!canSetClientScope && inheritsRestrictedScope && (
             <p className="text-[10px] opacity-70" data-testid="invite-inherits-scope-note">
               El usuario invitado tendrá los mismos clientes que tú gestionas.
             </p>
           )}
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className={buttonClass({ variant: "secondary", className: "flex-1" })}
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={busy || missingRole || invalidScope}
-              className={buttonClass({ className: "flex-1" })}
-            >
-              {busy ? "Enviando…" : "Enviar invitación"}
-            </button>
-          </div>
         </form>
+        <div className="mt-4 flex shrink-0 gap-3 border-t border-[color:var(--di-divider)] pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className={buttonClass({ variant: "secondary", className: "flex-1" })}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="ot-invite-form"
+            disabled={busy || missingRole || invalidScope}
+            className={buttonClass({ className: "flex-1" })}
+          >
+            {busy ? "Enviando…" : "Enviar invitación"}
+          </button>
+        </div>
       </div>
     </div>
   );

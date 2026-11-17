@@ -304,6 +304,60 @@ describe("OtUsersSection — actor restringido", () => {
     expect(todos).toHaveAccessibleDescription(/solo puedes asignar/i);
   });
 
+  async function openInvite() {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByText("Gina Gestora");
+    await user.click(screen.getByRole("button", { name: /invitar/i }));
+    const dialog = await screen.findByRole("dialog");
+    return { user, dialog };
+  }
+
+  it("invitar restringido: sin interacción no hay error rojo, hay ayuda neutra y el botón sigue deshabilitado", async () => {
+    vi.mocked(fetchOtClientCompanies).mockResolvedValue({
+      items: companies,
+      actorRestricted: true,
+    });
+    const { user, dialog } = await openInvite();
+    await waitFor(() =>
+      expect(within(dialog).getByRole("radio", { name: "Clientes específicos" })).toBeChecked(),
+    );
+    expect(await within(dialog).findByTestId("client-scope-empty-hint")).toBeInTheDocument();
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Enviar invitación" })).toBeDisabled();
+
+    await user.click(await within(dialog).findByRole("checkbox", { name: /Carga Gamma/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Quitar Carga Gamma" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent(
+      /^Elige al menos un cliente\.$/,
+    );
+  });
+
+  it("invitar restringido con 1 sola compañía: queda preseleccionada y se puede quitar", async () => {
+    vi.mocked(fetchOtClientCompanies).mockResolvedValue({
+      items: [companies[0]],
+      actorRestricted: true,
+    });
+    const { user, dialog } = await openInvite();
+    const quitar = await within(dialog).findByRole("button", { name: "Quitar Transportes Alfa" });
+    expect(within(dialog).queryByRole("alert")).not.toBeInTheDocument();
+    await user.click(quitar);
+    expect(
+      within(dialog).queryByRole("button", { name: "Quitar Transportes Alfa" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("editar restringido con 1 compañía: no toca la selección guardada del usuario", async () => {
+    vi.mocked(fetchOtClientCompanies).mockResolvedValue({
+      items: [companies[0]],
+      actorRestricted: true,
+    });
+    const { dialog } = await openEdit("Gina Gestora");
+    await within(dialog).findByRole("radio", { name: "Todos los clientes" });
+    expect(within(dialog).getByRole("radio", { name: "Todos los clientes" })).toBeChecked();
+    expect(within(dialog).queryByRole("button", { name: /^Quitar/ })).not.toBeInTheDocument();
+  });
+
   it("editar: usuario en «Todos» y actor restringido muestra «Todos» marcado pero bloqueado; cambiar a específicos guarda", async () => {
     vi.mocked(fetchOtClientCompanies).mockResolvedValue({
       items: companies,

@@ -3,7 +3,7 @@
 // Alcance de clientes de un usuario del OT: «Todos los clientes» (por defecto) o «Clientes específicos»
 // (selector múltiple con buscador, mínimo 1). Lo usan «Editar usuario» y «Invitar usuario» del hub OT.
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import {
   MultiSelectBuscable,
   type OpcionSeleccionable,
@@ -26,6 +26,8 @@ import {
 
 export const CLIENT_SCOPE_EMPTY_MESSAGE =
   "Elige al menos un cliente o vuelve a «Todos los clientes».";
+export const CLIENT_SCOPE_EMPTY_RESTRICTED_MESSAGE = "Elige al menos un cliente.";
+export const CLIENT_SCOPE_EMPTY_HINT = "Elige los clientes que podrá gestionar.";
 export const CLIENT_SCOPE_ACTOR_RESTRICTED_NOTE =
   "Solo puedes asignar los clientes que tú gestionas.";
 export const CLIENT_SCOPE_EXCEEDS_ACTOR_MESSAGE =
@@ -149,11 +151,34 @@ export function ClientScopeFields({
   const restricted = companies.actorRestricted;
   const noteId = `${idPrefix}-restricted-note`;
 
+  const [touched, setTouched] = useState(false);
+  const preselected = useRef(false);
+
   useEffect(() => {
-    if (preferSpecificWhenRestricted && restricted && value.mode === "todos") {
+    if (!preferSpecificWhenRestricted || !restricted) return;
+    if (value.mode === "todos") {
       onChange({ mode: "especificos", selection: value.selection });
+      return;
     }
-  }, [preferSpecificWhenRestricted, restricted, value.mode, value.selection, onChange]);
+    // Una sola compañía disponible: se preselecciona (una vez; la persona puede quitarla).
+    if (
+      !preselected.current &&
+      !companies.loading &&
+      companies.options.length === 1 &&
+      value.selection.length === 0
+    ) {
+      preselected.current = true;
+      onChange({ mode: "especificos", selection: [companies.options[0]] });
+    }
+  }, [
+    preferSpecificWhenRestricted,
+    restricted,
+    value.mode,
+    value.selection,
+    onChange,
+    companies.loading,
+    companies.options,
+  ]);
   const showEmpty = value.mode === "especificos" && value.selection.length === 0;
 
   return (
@@ -167,7 +192,10 @@ export function ClientScopeFields({
             checked={value.mode === "todos"}
             disabled={restricted}
             aria-describedby={restricted ? noteId : undefined}
-            onChange={() => onChange({ mode: "todos", selection: value.selection })}
+            onChange={() => {
+              setTouched(true);
+              onChange({ mode: "todos", selection: value.selection });
+            }}
             className="h-3.5 w-3.5 accent-flit-brand"
           />
           Todos los clientes
@@ -177,7 +205,10 @@ export function ClientScopeFields({
             type="radio"
             name={name}
             checked={value.mode === "especificos"}
-            onChange={() => onChange({ mode: "especificos", selection: value.selection })}
+            onChange={() => {
+              setTouched(true);
+              onChange({ mode: "especificos", selection: value.selection });
+            }}
             className="h-3.5 w-3.5 accent-flit-brand"
           />
           Clientes específicos
@@ -200,7 +231,10 @@ export function ClientScopeFields({
             genero="m"
             opciones={companies.options}
             seleccion={value.selection}
-            onChange={(selection) => onChange({ mode: "especificos", selection })}
+            onChange={(selection) => {
+              setTouched(true);
+              onChange({ mode: "especificos", selection });
+            }}
             buscarLabel="Buscar cliente por nombre o NIT"
             loading={companies.loading}
             error={companies.error}
@@ -209,14 +243,21 @@ export function ClientScopeFields({
             textoCargando="Cargando clientes…"
             textoError="No se pudo cargar la lista de clientes."
             disabled={disabled}
+            listaClassName="max-h-44"
+            esqueletoCls="h-56"
           />
-          {showEmpty && !companies.loading && !companies.error && (
+          {showEmpty && touched && !companies.loading && !companies.error && (
             <p
               role="alert"
               className="text-[10px] font-medium"
               style={{ color: "var(--destructive)" }}
             >
-              {CLIENT_SCOPE_EMPTY_MESSAGE}
+              {restricted ? CLIENT_SCOPE_EMPTY_RESTRICTED_MESSAGE : CLIENT_SCOPE_EMPTY_MESSAGE}
+            </p>
+          )}
+          {showEmpty && !touched && !companies.loading && !companies.error && (
+            <p className="text-[10px] opacity-70" data-testid="client-scope-empty-hint">
+              {CLIENT_SCOPE_EMPTY_HINT}
             </p>
           )}
         </div>
@@ -302,9 +343,9 @@ export function useOtEditClientScope({
   ) : !initial ? (
     <div className="space-y-1" data-testid="client-scope-loading">
       <p className="text-xs font-semibold">Clientes que gestiona</p>
-      <p role="status" className="text-xs opacity-70">
-        Cargando alcance de clientes…
-      </p>
+      <div role="status" className="h-20 animate-pulse rounded-xl border bg-secondary">
+        <span className="sr-only">Cargando alcance de clientes…</span>
+      </div>
     </div>
   ) : (
     <ClientScopeFields
