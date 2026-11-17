@@ -3,8 +3,9 @@
 // HU #14458 — Buscar el trámite por su ID, ver el desglose y confirmar el cobro en caja. El valor jamás se edita: el servidor
 // cobra el total vigente y, si cambió desde que la caja lo vio, responde 409 `total_cambio` con el nuevo total.
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Check } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { boton } from "@/components/landing/estilos";
+import { Btn, Card } from "@/components/tramite/piezas";
 import { cajaApi, CajaError } from "@/lib/caja/cliente";
 import { mensajeDeCaja, type MensajeDeCaja } from "@/lib/caja/mensajes";
 import { irAlLogin } from "@/lib/caja/navegacion";
@@ -14,7 +15,6 @@ import { nuevaLlave } from "@/lib/idempotencia";
 import { BuscadorCaja } from "./BuscadorCaja";
 import { ConfirmarCobroForm, type DatosDeCobro } from "./ConfirmarCobroForm";
 import { DesgloseCobro } from "./DesgloseCobro";
-import { MensajeCaja } from "./MensajeCaja";
 
 export const CLAVE_COBROS_HOY = ["pn", "caja", "cobros-hoy"] as const;
 
@@ -85,29 +85,42 @@ export function CobrarTramite() {
   }
 
   if (pagado) {
+    const medio = pagado.medioDetalle ? `${ETIQUETA_MEDIO[pagado.medio] ?? pagado.medio} (${pagado.medioDetalle})` : (ETIQUETA_MEDIO[pagado.medio] ?? pagado.medio);
     return (
       <div className="grid gap-4">
-        <MensajeCaja tono="exito">Pago registrado.</MensajeCaja>
-        <section aria-labelledby="titulo-pagado-caja" className="rounded-[9px] border border-border bg-card p-6">
-          <h2 id="titulo-pagado-caja" className="text-xl font-semibold">
-            {pagado.codigo}
-          </h2>
-          <dl className="mt-3 grid gap-1 text-sm">
-            <div className="flex gap-2">
-              <dt className="font-medium">Valor cobrado:</dt>
-              <dd>{formatearPesos(pagado.valorCop)}</dd>
+        <Card>
+          <div className="flex flex-col items-center text-center">
+            <div role="status" className="flex flex-col items-center">
+              <span aria-hidden className="grid h-16 w-16 place-items-center rounded-full bg-success text-primary-foreground">
+                <Check className="h-9 w-9" />
+              </span>
+              <h2 className="mt-4 text-2xl font-bold leading-tight text-success sm:text-[32px]">Pago registrado.</h2>
             </div>
-            <div className="flex gap-2">
-              <dt className="font-medium">Medio:</dt>
-              <dd>{pagado.medioDetalle ? `${ETIQUETA_MEDIO[pagado.medio] ?? pagado.medio} (${pagado.medioDetalle})` : (ETIQUETA_MEDIO[pagado.medio] ?? pagado.medio)}</dd>
+            <div className="mt-6 w-full overflow-x-auto rounded-[9px] border border-border">
+              <table className="w-full min-w-[400px] text-center text-sm">
+                <thead className="bg-primary text-primary-foreground">
+                  <tr>
+                    {["ID del trámite", "Valor cobrado", "Medio"].map((t) => (
+                      <th key={t} scope="col" className="p-4 text-center align-middle font-bold">
+                        {t}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="bg-card">
+                  <tr>
+                    <td className="border-t border-border p-4 text-center align-middle font-semibold">{pagado.codigo}</td>
+                    <td className="border-t border-border p-4 text-center align-middle">{formatearPesos(pagado.valorCop)}</td>
+                    <td className="border-t border-border p-4 text-center align-middle">{medio}</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
-          </dl>
-          <div className="mt-5 flex justify-end">
-            <button type="button" className={boton("flit", "min-h-11 px-6", "none")} onClick={reiniciar}>
-              Cobrar otro trámite
-            </button>
           </div>
-        </section>
+        </Card>
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <Btn onClick={reiniciar}>Cobrar otro trámite</Btn>
+        </div>
       </div>
     );
   }

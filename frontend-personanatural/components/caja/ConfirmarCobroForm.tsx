@@ -3,6 +3,7 @@
 import { Check } from "lucide-react";
 import { useId, useState, type FormEvent } from "react";
 import { boton } from "@/components/landing/estilos";
+import { Card } from "@/components/tramite/piezas";
 import { DETALLE_MEDIO_MAX, MEDIOS_CAJA, PREFACTURA_MAX_BYTES, PREFACTURA_TIPOS, type MedioCaja } from "@/lib/caja/tipos";
 import { MensajeCaja } from "./MensajeCaja";
 
@@ -57,10 +58,8 @@ export function ConfirmarCobroForm({ enviando, mensaje, onConfirmar, onVolver }:
   }
 
   return (
-    <form onSubmit={enviar} noValidate aria-labelledby={`${idBase}-titulo`} className="rounded-[9px] border border-border bg-card p-6">
-      <h2 id={`${idBase}-titulo`} className="mb-4 text-xl font-semibold">
-        Confirmar cobro
-      </h2>
+    <Card title="Confirmar cobro" id="confirmar-cobro">
+    <form onSubmit={enviar} noValidate aria-labelledby="confirmar-cobro-titulo">
 
       <fieldset aria-describedby={errores.medio ? `${idBase}-medio-error` : undefined}>
         <legend className="mb-2 text-sm font-medium">¿Cómo se cobró?</legend>
@@ -154,5 +153,6 @@ export function ConfirmarCobroForm({ enviando, mensaje, onConfirmar, onVolver }:
         </button>
       </div>
     </form>
+    </Card>
   );
 }

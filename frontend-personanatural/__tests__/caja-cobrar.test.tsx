@@ -164,7 +164,9 @@ describe("Caja OT · confirmar el cobro", () => {
     await usuario.click(screen.getByRole("button", { name: "Confirmar cobro" }));
 
     const aviso = await screen.findByText("Pago registrado.");
-    expect(aviso.closest("[role=status]")).toHaveClass("bg-success");
+    expect(aviso.closest("[role=status]")).toBeInTheDocument();
+    expect(aviso).toHaveClass("text-success");
+    expect(screen.getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["ID del trámite", "Valor cobrado", "Medio"]);
     const [url, init] = fetchMock.mock.calls[1] as [string, RequestInit];
     expect(url).toBe("/api/v1/persona-natural/caja/tramites/PN-2026-000123/confirmar");
     expect(init.method).toBe("POST");

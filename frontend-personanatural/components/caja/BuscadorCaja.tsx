@@ -3,6 +3,7 @@
 import { Search } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { boton } from "@/components/landing/estilos";
+import { Card } from "@/components/tramite/piezas";
 import { FORMATO_CODIGO } from "@/lib/caja/tipos";
 import { MensajeCaja } from "./MensajeCaja";
 
@@ -38,10 +39,8 @@ export function BuscadorCaja({ buscando, mensaje, onBuscar, bloqueado = false }:
   const mensajeVisible = formatoInvalido ? ({ texto: "No encontramos ese trámite.", tono: "error" } as const) : mensaje;
 
   return (
-    <form onSubmit={enviar} noValidate aria-labelledby="titulo-buscar-caja" className="rounded-[9px] border border-border bg-card p-6">
-      <h2 id="titulo-buscar-caja" className="mb-4 text-xl font-semibold">
-        Buscar trámite
-      </h2>
+    <Card title="Buscar trámite" id="buscar-caja">
+    <form onSubmit={enviar} noValidate aria-labelledby="buscar-caja-titulo">
       <label htmlFor="id-tramite-caja" className="mb-1 block text-sm font-medium">
         ID del trámite
       </label>
@@ -85,5 +84,6 @@ export function BuscadorCaja({ buscando, mensaje, onBuscar, bloqueado = false }:
         </div>
       )}
     </form>
+    </Card>
   );
 }
