@@ -322,7 +322,7 @@ migración para estos dos esquemas. Cada historial vive en su esquema (`__EFMigr
 servicio no tocan al otro.
 
 **Qué agrega la de consultas.** Crea `consultas.vehicle_tax_departments` y siembra 5 filas (activas 50, 52 y 94; apagadas 17 y 63). La migración `20261117044000_ImpuestoDepartamentosActivos` (2026-11-16) deja activas solo 05 Antioquia, 08 Atlántico y 11 Bogotá y apaga el resto con borrado lógico.
-No tiene datos personales. Con la lista vacía o sin URL, no se consulta nada.
+No tiene datos personales. Sin departamentos activos en la tabla o sin URL, no se consulta nada.
 
 **Conexiones.** Diagnóstico cabe en 20 (handoff §2.4). **core-consultas no cabe con lo que tiene DEV:** tope 10 y pool 8, y los
 nuevos consumidores suman 17 mensajes a la vez (8 + 4 + 4 + 1). Cada consumidor abre la transacción antes del efecto
