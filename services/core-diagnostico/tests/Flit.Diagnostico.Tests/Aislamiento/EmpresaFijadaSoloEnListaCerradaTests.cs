@@ -43,6 +43,8 @@ public sealed partial class EmpresaFijadaSoloEnListaCerradaTests
         Api + "Modulos/Consultas/Bus/ProgramadorReintentos.cs",
         Api + "Modulos/Derivacion/Bus/ConsumidorDerivacion.cs",
         Api + "Modulos/Derivacion/ReintentoDerivacion.cs",
+        // HU #14582 (H-A3): el subcomando de backfill recorre las compañías que le pasa infra y fija cada una en su propio scope.
+        Api + "Modulos/Trabajos/BackfillCambioPropietario.cs",
         Api + "Modulos/Trabajos/ReconciliadorConsultas.cs",
         Api + "Modulos/Trabajos/ReconciliadorDerivacion.cs",
     ];
