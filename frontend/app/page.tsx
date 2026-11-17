@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Shell, type ModuleId } from "@/components/atom/Shell";
-import { Dashboard } from "@/components/atom/modules/Dashboard";
+import { GestorDashboard } from "@/components/atom/modules/GestorDashboard";
+import { SuperAdminDashboard } from "@/components/atom/modules/SuperAdminDashboard";
 import { OtDashboard } from "@/components/atom/modules/OtDashboard";
 import { Tramites } from "@/components/atom/modules/Tramites";
 import { Reportes } from "@/components/atom/modules/Reportes";
@@ -189,8 +190,12 @@ function HomeContent() {
           empresa y consulta endpoints acotados al tenant de la empresa cliente, donde el organismo
           no tiene ni una fila. Cualquier usuario de un organismo (isOtUser) ve su propia cola. */}
       {moduleReady && module === "dashboard" && isOtAdminUser && <OtDashboard />}
-      {moduleReady && module === "dashboard" && !isOtAdminUser && (
-        <Dashboard onNewTramite={() => handleNav("tramites")} />
+      {/* Rediseño de los 3 dashboards: el resto se parte en SuperAdmin (vista del ecosistema) y Gestor (su compañía). */}
+      {moduleReady && module === "dashboard" && !isOtAdminUser && isSuperAdminUser && (
+        <SuperAdminDashboard onNewTramite={() => handleNav("tramites")} />
+      )}
+      {moduleReady && module === "dashboard" && !isOtAdminUser && !isSuperAdminUser && (
+        <GestorDashboard onNewTramite={() => handleNav("tramites")} />
       )}
       {moduleReady && module === "tramites" && <Tramites />}
       {moduleReady && module === "reportes" && <Reportes />}

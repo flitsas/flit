@@ -10,7 +10,7 @@ import {
   ResponsiveContainer,
   CartesianGrid,
 } from "recharts";
-import { Icono, IconoModulo } from "@flit/ui/Icono";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
   fetchActiveModules,
@@ -23,9 +23,7 @@ import { fetchAllCompanies } from "@/lib/api/admin-companies";
 import { ALL_TENANTS, tramitesClient } from "@/lib/api/tramites-client";
 import { getToken } from "@/lib/api/client";
 import { canReadIdentityDashboard, decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
-import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
 import { useActiveBanners } from "@/hooks/useActiveBanners";
-import { bannerAmbientGradient, useDominantColor } from "@/hooks/useDominantColor";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { useFamilyAccess } from "@/hooks/useFamilyAccess";
 import { COPY } from "@/lib/copy/copy-catalog";
@@ -47,6 +45,8 @@ import type {
 } from "@/lib/api/types";
 import type { BiometricValidationStats } from "@/lib/api/types/procedure-runtime";
 import { InicioModulos } from "@/components/inicio/InicioModulos";
+import { CarruselInicio } from "@/components/inicio/CarruselInicio";
+import { FILTRO_CONTROL_CLS, FILTROS_REJILLA_CLS } from "@/components/inicio/filtros-inicio";
 
 /** KPI de volumen del dashboard gestor (HU #12700 / E03). */
 export const DASHBOARD_KPI_TOTAL_LABEL = COPY.E03;
@@ -145,86 +145,6 @@ function buildWelcomeBody(
   return `Tienes ${totalTramites} trámite${totalTramites === 1 ? "" : "s"} en este periodo. Todo sincronizado — sin identidades pendientes de atención.`;
 }
 
-// ── Slides del banner ─────────────────────────────────────────────────────────
-//
-// HU #12242 (Feature #12236): el slide fijo de bienvenida siempre va primero, no es configurable
-// y no puede faltar. Detrás de él van los banners Activos del Administrador (AC1); sin banners
-// activos el carrusel solo muestra el slide fijo (AC3).
-
-/** Fondo del carrusel, IGUAL en todos los slides (welcome y banner) — ver render de `Dashboard`. */
-// UI Kit 2026: el slide fijo es la lámina `.banner-kit__lamina--degradado` del manual, con el contraste AA ya calculado
-// con texto blanco (ui-kit-2026.css), en vez de la tarjeta clara con el círculo turquesa.
-const BRAND_GRADIENT = "linear-gradient(160deg, #007d79 0%, #1670b8 55%, #1d53ff 100%)";
-const esBienvenida = (slide: { type: string }) => slide.type === "welcome";
-
-/**
- * HU #14481 — los dos filtros de la cabecera (Rango de fechas y Compañía) con el `.control` del
- * prototipo: 44 px, contorno de control visible, superficie elevada y la etiqueta como `.campo
- * label` (13 px, 600, sin versalitas). Son átomos compartidos que solo aceptan `className` en la
- * raíz, así que el aspecto se aplica desde aquí a su campo (`>button` del selector de fechas,
- * `input` del buscador de compañía) sin tocarlos.
- */
-const FILTRO_CONTROL_CLS =
-  "[&>label]:text-[0.8125rem] [&>label]:font-semibold [&>label]:normal-case [&>label]:opacity-100 " +
-  "[&>label]:text-[color:var(--di-text-primary)] " +
-  "[&>button]:min-h-10 [&>button]:rounded-[9px] [&>button]:border-[color:var(--di-border-control)] " +
-  "[&>button]:bg-[var(--di-surface-elevated)] [&>button]:text-[color:var(--di-text-primary)] " +
-  "[&_input]:h-10 [&_input]:rounded-[9px] [&_input]:border-[color:var(--di-border-control)] " +
-  "[&_input]:bg-[var(--di-surface-elevated)] [&_input]:text-[color:var(--di-text-primary)]";
-
-/**
- * UI Kit 2026 — rejilla de los filtros de la cabecera, con el mismo hueco que las cifras de abajo. `RangoFechas` es un
- * átomo compartido: su raíz pasa a `display: contents` para que Periodo, Desde y Hasta sean celdas de esta rejilla
- * (Periodo junto a Compañía; Desde y Hasta en la fila siguiente, una columna cada uno) y sus campos toman el control
- * del kit (`TRAMITES_INPUT_CLS`: 40 px, radio 9 px, contorno de control). Sus estados y manejadores no cambian.
- */
-const FILTROS_REJILLA_CLS =
-  "grid grid-cols-2 gap-3 items-end [&>[data-testid=rango-fechas]]:contents " +
-  "[&>[data-testid=rango-fechas]>label]:min-w-0 [&>[data-testid=rango-fechas]>p]:col-span-2 " +
-  "[&>[data-testid=rango-fechas]>label]:text-[0.8125rem] [&>[data-testid=rango-fechas]>label]:font-semibold " +
-  "[&>[data-testid=rango-fechas]>label]:text-[color:var(--di-text-primary)] " +
-  "[&>[data-testid=rango-fechas]_:is(select,input)]:h-10 [&>[data-testid=rango-fechas]_:is(select,input)]:w-full " +
-  "[&>[data-testid=rango-fechas]_:is(select,input)]:min-w-0 [&>[data-testid=rango-fechas]_:is(select,input)]:rounded-[9px] " +
-  "[&>[data-testid=rango-fechas]_:is(select,input)]:border-[color:var(--di-border-control)] " +
-  "[&>[data-testid=rango-fechas]_:is(select,input)]:bg-[var(--di-surface-elevated)] " +
-  "[&>[data-testid=rango-fechas]_:is(select,input)]:px-3 [&>[data-testid=rango-fechas]_:is(select,input)]:text-sm " +
-  "[&>[data-testid=rango-fechas]_:is(select,input)]:text-[color:var(--di-text-primary)] " +
-  "[&>[data-testid=rango-fechas]_:is(select,input)]:focus:border-[color:var(--di-action)]";
-
-type WelcomeSlide = {
-  type: "welcome";
-  title: string;
-  body: string;
-};
-
-type BannerSlide = {
-  type: "banner";
-  id: string;
-  name: string;
-  imageUrl: string;
-  linkUrl: string | null;
-};
-
-type Slide = WelcomeSlide | BannerSlide;
-
-function buildSlides(displayName: string, welcomeBody: string, banners: ActiveBanner[]): Slide[] {
-  const welcome: WelcomeSlide = {
-    type: "welcome",
-    title: `${DASHBOARD_HERO_PREFIX} ${displayName}`,
-    body: welcomeBody,
-  };
-
-  const bannerSlides: BannerSlide[] = banners.map((banner) => ({
-    type: "banner",
-    id: banner.id,
-    name: banner.name,
-    imageUrl: bannerImageUrl(banner.id),
-    linkUrl: banner.linkUrl,
-  }));
-
-  return [welcome, ...bannerSlides];
-}
-
 // ── Componente principal ──────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -281,21 +201,9 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const [activeModulesStatus, setActiveModulesStatus] = useState<UiStatus>("loading");
   const [activeModulesErrorMessage, setActiveModulesErrorMessage] = useState<string>();
 
-  // Banner carousel
-  const [slide, setSlide] = useState(0);
-
-  // Banners Activos (HU #12242, AC1). Un fallo de red ya degrada en silencio dentro del hook
-  // (AC3); aquí solo se filtran, además, los banners cuya imagen falló al cargar (`onError` del
-  // <img>) para que ese slide puntual desaparezca sin romper el resto del carrusel.
+  // Banners Activos (HU #12242, AC1). Un fallo de red ya degrada en silencio dentro del hook (AC3);
+  // los banners cuya imagen falla los retira `CarruselInicio`.
   const activeBanners = useActiveBanners();
-  const [failedBannerIds, setFailedBannerIds] = useState<Set<string>>(new Set());
-  const visibleBanners = useMemo(
-    () => activeBanners.filter((banner) => !failedBannerIds.has(banner.id)),
-    [activeBanners, failedBannerIds],
-  );
-  const markBannerFailed = useCallback((id: string) => {
-    setFailedBannerIds((prev) => (prev.has(id) ? prev : new Set(prev).add(id)));
-  }, []);
 
   // Leer identidad del JWT en cliente (el token solo existe en cliente tras el montaje).
   useEffect(() => {
@@ -466,14 +374,10 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
     () => buildWelcomeBody(biometricStatus, biometricStats, expiringSoonCount, totalTramites),
     [biometricStatus, biometricStats, expiringSoonCount, totalTramites],
   );
-  const slides = useMemo(
-    () => buildSlides(displayName, welcomeBody, visibleBanners),
-    [displayName, welcomeBody, visibleBanners],
+  const bienvenida = useMemo(
+    () => [{ titulo: `${DASHBOARD_HERO_PREFIX} ${displayName}`, cuerpo: welcomeBody }],
+    [displayName, welcomeBody],
   );
-  useEffect(() => {
-    const id = setInterval(() => setSlide((s) => (s + 1) % slides.length), 6000);
-    return () => clearInterval(id);
-  }, [slides.length]);
   const matriculas = categories.find((c) => c.category === "matriculas")?.total ?? 0;
   const traspasos = categories.find((c) => c.category === "traspasos")?.total ?? 0;
   const otros = categories.find((c) => c.category === "otros")?.total ?? 0;
@@ -530,137 +434,15 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
   const comingSoonStatus: UiStatus =
     activeModulesStatus === "ready" ? (comingSoonModules.length > 0 ? "ready" : "empty") : activeModulesStatus;
 
-  // Defensivo: si un banner falla después de posicionar el índice en él (p. ej. `onError` de la
-  // última imagen visible), `slides` puede encoger antes de que el índice se reacomode.
-  const s = slides[slide] ?? slides[0];
-  const bannerColor = useDominantColor(s.type === "banner" ? s.imageUrl : undefined);
-
   return (
     <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-foreground">
       {/* Fila superior: Banner + KPIs — la columna derecha fija el alto; el banner se estira (HU #12725 B.1). */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 shrink-0 items-stretch">
-        {/* Banner carousel */}
-        <div
-          className={`relative md:col-span-2 overflow-hidden flex flex-col justify-between h-full min-h-[200px] max-sm:min-h-[180px] ${
-            esBienvenida(s) ? "rounded-[9px] text-white" : "rounded-2xl text-white"
-          }`}
-          data-testid="dashboard-hero-banner"
-        >
-          {/* Capa de fondo: lámina degradada del kit en el slide de bienvenida; en un banner, el
-              color PROMEDIO de esa misma imagen (así combina con cualquier banner, no solo con
-              el azul/turquesa de marca) — es el respaldo que se ve cuando `object-contain` deja
-              margen (abajo de `md`, ver siguiente bloque); en `md+` es invisible, cubierto por el
-              banner a pantalla completa. */}
-          <div
-            className="absolute inset-0"
-            style={{ background: s.type === "welcome" ? BRAND_GRADIENT : bannerAmbientGradient(bannerColor) }}
-          />
-          {s.type !== "welcome" && (
-            // AC1/AC2 — ajuste adaptable, mismo criterio que Spotify/YouTube/Amazon: con espacio
-            // de sobra (`md:` en adelante, banner a 2/3 de ancho junto a los KPIs) se ajusta
-            // completo al contenedor (object-cover, sesgado a la derecha para no cortar el
-            // texto); en pantallas angostas (abajo de `md`, el banner pasa a ancho completo y el
-            // recorte horizontal sería mucho más agresivo) se ve la imagen COMPLETA sin recortar
-            // (object-contain) sobre el gradiente de fondo.
-            <img
-              src={s.imageUrl}
-              alt={s.name}
-              onError={() => markBannerFailed(s.id)}
-              className="absolute inset-0 h-full w-full object-contain object-center md:object-cover md:object-[80%_center]"
-            />
-          )}
-          {/* Velo para que los controles (puntos/flechas) mantengan contraste sobre cualquier
-              imagen de banner; sobre el gradiente del slide fijo es imperceptible. */}
-          <div
-            className="absolute inset-0"
-            style={{
-              background: esBienvenida(s)
-                ? "transparent"
-                : "linear-gradient(180deg, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)",
-            }}
-          />
-          {s.type === "welcome" && (
-            // Círculo de la lámina del kit (`.banner-kit__lamina::after`): blanco translúcido arriba a la derecha.
-            <div className="absolute -right-[50px] -top-[70px] h-[190px] w-[190px] rounded-full bg-white/[0.14]" />
-          )}
-          {s.type === "welcome" ? (
-            // Lámina del kit (`.banner-kit__lamina`): el chip de 42 px con el ícono de Inicio junto al título y el
-            // texto en flujo, con el pie reservado para los puntos del carrusel, así un aviso largo agranda el banner
-            // en vez de cortarse o montarse sobre ellos.
-            <div className="relative flex flex-1 flex-col justify-center gap-2.5 max-w-[85%] px-6 pt-6 pb-16">
-              <div className="flex min-w-0 items-center gap-3">
-                <span
-                  aria-hidden="true"
-                  className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[9px] bg-white/[0.22]"
-                >
-                  <IconoModulo clave="inicio" size={22} />
-                </span>
-                <h2 className="text-2xl md:text-[1.75rem] font-bold leading-tight line-clamp-2 min-w-0 text-white">{s.title}</h2>
-              </div>
-              <p className="max-w-[58ch] text-sm md:text-base leading-snug line-clamp-3 text-white">{s.body}</p>
-            </div>
-          ) : s.linkUrl ? (
-            // Sin título visible (solo el banner): el enlace cubre toda la imagen — al acercarse,
-            // se opaca un poco y aparece el ícono de enlace; clic en cualquier punto abre el
-            // enlace. El nombre sigue siendo el nombre accesible (aria-label), no texto en pantalla.
-            <a
-              href={s.linkUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              aria-label={s.name}
-              className="group absolute inset-0"
-            >
-              <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/25" />
-              <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary">
-                  <Icono nombre="externo" className="h-5 w-5" />
-                </span>
-              </span>
-            </a>
-          ) : (
-            <span className="sr-only">{s.name}</span>
-          )}
-          {/* Fijos al fondo del contenedor (`absolute inset-x-0 bottom-0`), no distribuidos por
-              flex: con `flex flex-col justify-between` estos controles eran el único hijo "en
-              flujo" cuando el slide es un banner (el enlace de arriba es `absolute inset-0`, o no
-              hay nada más que un `sr-only`), así que `justify-between` los anclaba arriba en vez
-              de abajo (Bug #12584, defecto 2). Al posicionarlos de forma absoluta dejan de
-              depender del alto del contenido vecino. */}
-          <div className="absolute inset-x-0 bottom-0 flex items-center justify-between px-6 pb-5">
-            <div className="flex gap-1">
-              {slides.map((_, i) => (
-                <button
-                  key={i}
-                  onClick={() => setSlide(i)}
-                  aria-label={`Slide ${i + 1}`}
-                  // Puntos del kit (`.banner-kit__punto`): 8 px, el actual de 22 px en blanco pleno.
-                  className={`h-2 rounded-full transition-all ${i === slide ? "bg-current" : "bg-white/50"}`}
-                  style={{ width: i === slide ? 22 : 8 }}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setSlide((v) => (v - 1 + slides.length) % slides.length)}
-                disabled={slides.length <= 1}
-                aria-label="Anterior"
-                // Flecha del kit (`.banner-kit__flecha`): 30 px, blanco translúcido sobre la lámina o la imagen.
-                className="h-[30px] w-[30px] rounded-full grid place-items-center bg-white/[0.22] text-white hover:bg-white/[0.36] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.22] focus-visible:outline-2 focus-visible:outline-white"
-              >
-                <Icono nombre="izquierda" size={18} />
-              </button>
-              <button
-                onClick={() => setSlide((v) => (v + 1) % slides.length)}
-                disabled={slides.length <= 1}
-                aria-label="Siguiente"
-                // Flecha del kit (`.banner-kit__flecha`): 30 px, blanco translúcido sobre la lámina o la imagen.
-                className="h-[30px] w-[30px] rounded-full grid place-items-center bg-white/[0.22] text-white hover:bg-white/[0.36] disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/[0.22] focus-visible:outline-2 focus-visible:outline-white"
-              >
-                <Icono nombre="derecha" size={18} />
-              </button>
-            </div>
-          </div>
-        </div>
+        <CarruselInicio
+          className="md:col-span-2"
+          bienvenida={bienvenida}
+          banners={activeBanners}
+        />
 
         {/* Columna derecha: filtros en fila + KPIs 2×2 (HU #12725 B.1 / D3). */}
         <div
