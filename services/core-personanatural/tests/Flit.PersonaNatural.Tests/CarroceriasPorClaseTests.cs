@@ -110,5 +110,5 @@ public sealed class CarroceriasPorClaseTests
     }
 
     [Fact]
-    public void ElJsonDeEjemploDeFlit2_Compila() => JsonDocument.Parse("[]").RootElement.GetArrayLength().Should().Be(0);
+    public void ElJsonDeEjemploDeFlit2_Compila() => JsonElement.Parse("[]").GetArrayLength().Should().Be(0);
 }

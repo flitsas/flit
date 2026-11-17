@@ -31,7 +31,7 @@ namespace Flit.Admin.Tests.PersonaNatural;
 /// (<c>/api/v1/admin/ot/portal-tarifas</c>). Las reglas de alcance se prueban sin base; los endpoints contra la base con
 /// las migraciones aplicadas (DDL 153 y 181), con el perfil OT sustituido para fijar el organismo del token.
 /// </summary>
-public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class TarifasOtTests(TarifasOtTests.Anfitrion anfitrion) : IClassFixture<TarifasOtTests.Anfitrion>
 {
     private static readonly SymmetricSecurityKey DummyKey = new(Encoding.UTF8.GetBytes(new string('k', 64)));
     private const string Base = AdminOtPortalTarifasEndpoints.BasePath;
@@ -156,14 +156,14 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [Fact]
     public void TodasLasRutasExigenOtAdminOSuperAdmin_YLasDePlataformaSiguenSoloParaSuperAdmin()
     {
-        var rutas = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
+        var rutas = anfitrion.Factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
             .Where(e => e.RoutePattern.RawText!.StartsWith(Base, StringComparison.Ordinal)).ToList();
 
         rutas.Should().HaveCount(4);
         foreach (var ruta in rutas)
             ruta.Metadata.GetOrderedMetadata<IAuthorizeData>().Should().Contain(a => a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy, ruta.RoutePattern.RawText);
 
-        var plataforma = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
+        var plataforma = anfitrion.Factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>()
             .Where(e => e.RoutePattern.RawText!.StartsWith(AdminPlataformaPersonaNaturalEndpoints.BasePath + "/tarifas", StringComparison.Ordinal)).ToList();
         plataforma.Should().NotBeEmpty();
         foreach (var ruta in plataforma)
@@ -175,7 +175,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [InlineData("Gerente")]
     public async Task UnRolQueNoEsOtNiSuperAdmin_RecibeForbidden(string rol)
     {
-        var client = ClientWith(Token(rol, Guid.NewGuid(), Guid.NewGuid()), new PerfilesFalsos());
+        var client = ClientWith(anfitrion, Token(rol, Guid.NewGuid(), Guid.NewGuid()));
 
         (await client.GetAsync($"{Base}?tipoTramiteId={Guid.NewGuid()}", Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await client.PostAsync(Base, Json("{}"), Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -183,14 +183,14 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
 
     [Fact]
     public async Task SinSesion_RecibeUnauthorized() =>
-        (await factory.CreateClient().GetAsync(Base, Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await anfitrion.Factory.CreateClient().GetAsync(Base, Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
     // ── Endpoints contra la base ──────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task AC1_ElAdminDelOrganismoRegistraDerechosYTransformaciones_ParaSuOrganismo()
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
         var client = e.ClienteOt();
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-5));
 
@@ -213,7 +213,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [InlineData("ENVIO_DOCUMENTO")]
     public async Task AC2_ElAdminDelOrganismoNoPuedeCambiarServicioFlitNiEnvio_YNoCambiaNada(string concepto)
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
         var client = e.ClienteOt();
 
         var r = await client.PostAsJsonAsync(Base, new
@@ -231,7 +231,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [Fact]
     public async Task AC3_ElAdminDelOrganismoA_ConElIdentificadorDelOrganismoB_RecibeForbidden_YNoCambiaNada()
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
         var client = e.ClienteOt();
         var cuerpo = new
         {
@@ -257,7 +257,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [Fact]
     public async Task AC3_ElIdentificadorPropioSiSeAcepta()
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
 
         var r = await e.ClienteOt().GetAsync($"{Base}?transitOfficeId={e.Organismo}&tipoTramiteId={e.Tipo}", Ct);
 
@@ -267,7 +267,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [Fact]
     public async Task AC4_ElAdminVeLasDeSuOrganismoYLosGeneralesQueLeAplican_SinPoderEditarEstosUltimos()
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-5));
         var otroTipo = Guid.NewGuid();
         // Valores sembrados por el SuperAdmin: general del tipo, servicio FLIT del organismo, de OTRO organismo, de otro tipo y envío general.
@@ -300,7 +300,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [Fact]
     public async Task AC4_SinTipo_ElAdminDelOrganismoVeSusPreciosYLosGenerales_SinElNombreDeQuienFijoLosGenerales()
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-5));
         await e.SembrarAsync("DERECHOS_TRANSITO", e.Tipo, null, 100_000, hoy, Ct);
         await e.SembrarAsync("DERECHOS_TRANSITO", e.Tipo, e.Organismo, 130_000, hoy, Ct);
@@ -321,7 +321,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [Fact]
     public async Task AC4_ElHistorialTraeQuienHizoCadaCambio_YElMismoDiaReemplaza()
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
         var client = e.ClienteOt();
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-5));
         object Cuerpo(long valor) => new { tipoTramiteId = e.Tipo, vigenteDesde = hoy, valores = new object[] { new { concepto = "DERECHOS_TRANSITO", valorCop = valor } } };
@@ -343,7 +343,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [Fact]
     public async Task Historial_DeUnaTarifaDeOtroOrganismo_RecibeForbidden_YDeUnaInexistente_NotFound()
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
         var ajena = await e.SembrarAsync("DERECHOS_TRANSITO", e.Tipo, e.OtroOrganismo, 1, DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)), Ct);
         var client = e.ClienteOt();
 
@@ -354,7 +354,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [Fact]
     public async Task Tipos_ListaLosTiposHabilitadosParaElPortal()
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
         await e.HabilitarTipoAsync(Ct);
 
         var r = await e.ClienteOt().GetAsync($"{Base}/tipos", Ct);
@@ -367,7 +367,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [Fact]
     public async Task ElSuperAdmin_DebeIndicarElOrganismo_YEscribeTodosLosConceptos()
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
         var admin = e.ClienteSuperAdmin();
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-5));
 
@@ -387,7 +387,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     [Fact]
     public async Task AC5_LosEndpointsDePlataformaFuncionanIgual_ParaElSuperAdmin_YElAdminDelOrganismoSigueSinAcceso()
     {
-        await using var e = await EscenarioOt.CrearAsync(factory, Ct);
+        await using var e = await EscenarioOt.CrearAsync(anfitrion, Ct);
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(-5));
         var plataforma = AdminPlataformaPersonaNaturalEndpoints.BasePath;
         var admin = e.ClienteSuperAdmin(conPermiso: true);
@@ -438,18 +438,29 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
         });
     }
 
-    private static HttpClient ClientWith(WebApplicationFactory<Program> host, string token, IOtProfileRepository perfiles)
+    /// <summary>
+    /// Un solo host para la clase (antes cada cliente hacía <c>WithWebHostBuilder</c> y arrancaba un host que nunca se
+    /// liberaba: era la clase más lenta de Flit.Admin.Tests). El perfil OT falso se comparte; cada escenario registra su
+    /// propio tenant → organismo y un tenant sin registrar no tiene perfil, igual que antes.
+    /// </summary>
+    public sealed class Anfitrion : HostPorClase
     {
-        var client = host.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
-        {
-            s.RemoveAll<IOtProfileRepository>();
-            s.AddScoped(_ => perfiles);
-        })).CreateClient();
+        internal PerfilesFalsos Perfiles { get; } = new();
+
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+            {
+                s.RemoveAll<IOtProfileRepository>();
+                s.AddSingleton<IOtProfileRepository>(Perfiles);
+            }));
+    }
+
+    private static HttpClient ClientWith(Anfitrion host, string token)
+    {
+        var client = host.Factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
     }
-
-    private HttpClient ClientWith(string token, IOtProfileRepository perfiles) => ClientWith(factory, token, perfiles);
 
     private static TarifaPnView Vista(string concepto, Guid? organismo, Guid? id = null) => new(
         id ?? Guid.NewGuid(), concepto, Guid.NewGuid(), "T", "Tipo", organismo, null, null, 1000, DateOnly.FromDateTime(DateTime.UtcNow),
@@ -461,14 +472,18 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
         public static readonly Guid General = Guid.NewGuid();
     }
 
-    private sealed class PerfilesFalsos : IOtProfileRepository
+    /// <summary>Perfil OT falso compartido por la clase: solo los tenants registrados tienen organismo.</summary>
+    internal sealed class PerfilesFalsos : IOtProfileRepository
     {
-        public Guid Tenant { get; init; }
-        public Guid Organismo { get; init; }
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, Guid> _organismos = new();
+
+        public void Registrar(Guid tenant, Guid organismo) => _organismos[tenant] = organismo;
+
+        public void Retirar(Guid tenant) => _organismos.TryRemove(tenant, out _);
 
         public Task<PerfilOt?> GetByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(tenantId == Tenant && Tenant != Guid.Empty
-                ? new PerfilOt { Id = Guid.NewGuid(), TenantId = tenantId, TransitOfficeId = Organismo }
+            Task.FromResult(_organismos.TryGetValue(tenantId, out var organismo)
+                ? new PerfilOt { Id = Guid.NewGuid(), TenantId = tenantId, TransitOfficeId = organismo }
                 : (PerfilOt?)null);
 
         public Task<PerfilOt?> GetByTransitOfficeAsync(Guid transitOfficeId, CancellationToken cancellationToken = default) => Task.FromResult<PerfilOt?>(null);
@@ -515,7 +530,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
     private sealed class EscenarioOt : IAsyncDisposable
     {
         public const string NombreActor = "Actor de precios OT";
-        private readonly WebApplicationFactory<Program> _host;
+        private readonly Anfitrion _host;
         private readonly IServiceScope _scope;
         private readonly string _sufijo = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
@@ -527,14 +542,15 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
         public Guid OtroOrganismo { get; } = Guid.NewGuid();
         public string CodigoTipo => "PN_OT_" + _sufijo;
 
-        private EscenarioOt(WebApplicationFactory<Program> host)
+        private EscenarioOt(Anfitrion host)
         {
             _host = host;
-            _scope = host.Services.CreateScope();
+            _scope = host.Factory.Services.CreateScope();
             Db = _scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+            host.Perfiles.Registrar(TenantOt, Organismo);
         }
 
-        public static async Task<EscenarioOt> CrearAsync(WebApplicationFactory<Program> host, CancellationToken ct)
+        public static async Task<EscenarioOt> CrearAsync(Anfitrion host, CancellationToken ct)
         {
             var e = new EscenarioOt(host);
             foreach (var (id, n) in new[] { (e.Organismo, "A"), (e.OtroOrganismo, "B") })
@@ -556,10 +572,10 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
             return e;
         }
 
-        public HttpClient ClienteOt() => ClientWith(_host, Token("ot_admin", TenantOt, Actor), new PerfilesFalsos { Tenant = TenantOt, Organismo = Organismo });
+        public HttpClient ClienteOt() => ClientWith(_host, Token("ot_admin", TenantOt, Actor));
 
         public HttpClient ClienteSuperAdmin(bool conPermiso = false) =>
-            ClientWith(_host, Token("SuperAdmin", Guid.NewGuid(), Actor, conPermiso), new PerfilesFalsos());
+            ClientWith(_host, Token("SuperAdmin", Guid.NewGuid(), Actor, conPermiso));
 
         /// <summary>Siembra una versión como lo haría el SuperAdmin (por la misma función de versionado).</summary>
         public async Task<Guid> SembrarAsync(string concepto, Guid? tipo, Guid? organismo, long valor, DateOnly desde, CancellationToken ct) =>
@@ -591,6 +607,7 @@ public sealed class TarifasOtTests(WebApplicationFactory<Program> factory) : ICl
             }
             finally
             {
+                _host.Perfiles.Retirar(TenantOt);
                 _scope.Dispose();
             }
         }

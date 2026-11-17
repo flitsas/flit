@@ -24,7 +24,7 @@ namespace Flit.Admin.Tests.Identity;
 /// servidor OIDC real de los tests. Cada prueba arma tipos, pasos, documentos y organismos propios (códigos únicos) y los
 /// retira al terminar; requiere la base con las migraciones aplicadas.
 /// </summary>
-public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class PersonaNaturalDefinicionGrpcTests(PersonaNaturalDefinicionGrpcTests.Anfitrion anfitrion) : IClassFixture<PersonaNaturalDefinicionGrpcTests.Anfitrion>
 {
     private const string Scope = "platform.tramites.persona_natural";
     private const string Portal = "svc-personanatural";
@@ -42,7 +42,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
     public async Task Traspaso_DevuelveSusPasosCamposActoresDocumentosYFlags_DesdeLoQueFlit2YaTiene()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -61,7 +61,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
     public async Task Traspaso_LosPasosVanEnOrden_ConSusSectionTypes_YSoloLosCamposQueDigitaElCiudadano()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -81,7 +81,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
     public async Task Traspaso_LosActoresSalenDelPerfil_ConCopropietariosYBiometriaDeAmbasPartes()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -101,7 +101,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
     public async Task LosDocumentos_SalenConLaPrecedenciaDelOrganismoSobreLaMatrizPorDefecto_ConSuInstruccionYSinBuzonesInformativos()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -124,7 +124,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
     public async Task UnTipoDeUnTitularYUnoDePrenda_TienenSusPropiosActoresYCapacidades_SinCodigoPorTipo()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -143,7 +143,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
     public async Task ElPerfilCrudoNoSale_SoloLasCapacidadesConNombresDelContrato()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -157,7 +157,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
     public async Task LaHuella_EsEstableYCambiaSiCambiaLaMatrizDocumental()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -175,7 +175,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
     public async Task TipoDesconocido_TipoConWizardApagado_YOrganismoNoHabilitado_TienenSuPropioErrorYNadaParcial()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -192,7 +192,7 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
     public async Task ValidaLaEntrada_YElCandadoDeClienteYEmpresaVaPrimero()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var bueno = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
         var ajeno = await ClienteAsync(host, Guid.NewGuid(), ct);
 
@@ -208,13 +208,18 @@ public sealed class PersonaNaturalDefinicionGrpcTests(WebApplicationFactory<Prog
 
     private static async Task<RpcException> Error(Func<Task> llamada) => (await llamada.Should().ThrowAsync<RpcException>()).Which;
 
-    private WebApplicationFactory<Program> Host() =>
-        OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
-        {
-            b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
-            b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
-            b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
-        }).ConEmpresaPersonaNatural();
+    /// <summary>Un host para toda la clase (<see cref="HostPorClase"/>): antes cada prueba arrancaba y destruía el suyo
+    /// (~30 s por prueba en CI). Las pruebas siembran datos con identificadores propios, así que comparten host sin cruzarse.</summary>
+    public sealed class Anfitrion : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
+            {
+                b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
+                b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
+                b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
+            }).ConEmpresaPersonaNatural();
+    }
 
     private static async Task<Cliente> ClienteAsync(WebApplicationFactory<Program> host, Guid empresa, CancellationToken ct)
     {
