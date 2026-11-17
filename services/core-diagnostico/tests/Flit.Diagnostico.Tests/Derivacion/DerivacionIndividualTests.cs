@@ -122,10 +122,10 @@ public sealed class DerivacionIndividualTests
         var empresa = DosEmpresas.En(api).A;
         var lote = await DerivacionDePrueba.SembrarAsync(empresa, ct, vehiculos: [("TST413", true, "VIABLE")]);
         var ruta = DerivacionDePrueba.Ruta(lote.Id, lote.Vehiculos[0].Id);
-        var backoffice = Permisos.RolesPorDefecto.Single(r => r.Codigo == "backoffice_diagnostico").Permisos;
+        var backoffice = OperadorBackofficeDePrueba.Slugs;
 
         var sinPermiso = await api.Cliente(api.Token(empresa: empresa.Id, permisos: [Permisos.DiagnosticosVer, Permisos.DiagnosticosCrear])).PostAsync(ruta, null, ct);
-        var rolBackoffice = await api.Cliente(api.Token(empresa: empresa.Id, permisos: backoffice, roles: ["backoffice_diagnostico"], tipoEmpresa: "FLIT")).PostAsync(ruta, null, ct);
+        var rolBackoffice = await api.Cliente(api.Token(empresa: empresa.Id, permisos: backoffice, roles: ["admin_diagnostico"], tipoEmpresa: "FLIT")).PostAsync(ruta, null, ct);
         var contextoBackoffice = await api.Cliente(DerivacionDePrueba.TokenDerivar(api, empresa)).PostAsync($"{ruta}?empresa={empresa.Id}", null, ct);
 
         sinPermiso.StatusCode.Should().Be(HttpStatusCode.Forbidden);

@@ -41,7 +41,22 @@
     "./Miga": "./src/Miga.tsx",
     "./PasosHorizontal": "./src/PasosHorizontal.tsx",
     "./Pestanas": "./src/Pestanas.tsx",
-    "./iconoComo": "./src/iconoComo.tsx"
+    "./iconoComo": "./src/iconoComo.tsx",
+    "./EstadoVacio": "./src/EstadoVacio.tsx",
+    "./PanelLateral": "./src/PanelLateral.tsx",
+    "./BarraSeleccion": "./src/BarraSeleccion.tsx",
+    "./PaginaExcepcion": "./src/PaginaExcepcion.tsx",
+    "./PantallaResultado": "./src/PantallaResultado.tsx",
+    "./BarraProgreso": "./src/BarraProgreso.tsx",
+    "./ListaDefinicion": "./src/ListaDefinicion.tsx",
+    "./TarjetaPlegable": "./src/TarjetaPlegable.tsx",
+    "./EtiquetaEnProceso": "./src/EtiquetaEnProceso.tsx",
+    "./TablaEditable": "./src/TablaEditable.tsx",
+    "./SelectorSegmentado": "./src/SelectorSegmentado.tsx",
+    "./ZonaArrastre": "./src/ZonaArrastre.tsx",
+    "./NotificacionPersistente": "./src/NotificacionPersistente.tsx",
+    "./useTrampaFoco": "./src/useTrampaFoco.ts",
+    "./useRegionViva": "./src/useRegionViva.ts"
   },
   "scripts": {
     "test": "vitest run"

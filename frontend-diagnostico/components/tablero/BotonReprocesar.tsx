@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { RotateCcw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
 import { ApiError } from "@/lib/api";
 import { mensajeReproceso, reprocesarConsulta, type CeldaGrilla } from "@/lib/tablero/api";
@@ -44,7 +44,7 @@ export function BotonReprocesar({ celda, etiqueta, onReprocesada, onErrorReproce
       onClick={() => void reprocesar()}
       className={`inline-flex items-center gap-1 rounded-full border border-current px-2.5 py-0.5 text-xs font-semibold text-[var(--flit-brand-ink)] transition disabled:cursor-not-allowed disabled:opacity-60 ${FOCO_CLS}`}
     >
-      <RotateCcw className="h-3.5 w-3.5" aria-hidden="true" />
+      <Icono nombre="reintento" className="h-3.5 w-3.5" />
       {enviando ? "Reprocesando…" : "Reprocesar"}
     </button>
   );

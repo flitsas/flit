@@ -216,8 +216,8 @@
     min-width: 0;
   }
 
+  /* HU #14562 · O-3: sin opacity (daba 4,48:1 sobre la franja azul); el texto queda sólido, como el nombre. */
   .suite-menu-usuario__cabeza small {
-    opacity: 0.85;
     font-size: 0.75rem;
   }
 
@@ -965,4 +965,53 @@
   .dock-entrada { align-items: center; gap: 12px; }
   .dock-entrada__glifo { width: 32px; height: 32px; }
   .dock-entrada:hover .dock-entrada__glifo, .dock-entrada[aria-current="page"] .dock-entrada__glifo { color: var(--kit-azul-texto); }
+  /* HU #14562 · D1 (spec-d1-encabezado-movil.md): encabezado a 360 px. Va al final del bloque del kit para que sus reglas
+     ganen a las de arriba (misma capa y especificidad); la media query vieja de 640 px perdía contra `min-width: 240px`
+     y `gap: 16px` del kit. Sin colores nuevos: solo tokens existentes. */
+  .suite-barra { position: relative; }
+  /* La marca encoge, pero nunca a 0: el <img> con max-width en % aportaba 0 de min-content. */
+  .suite-barra__marca { min-width: 44px; }
+  .suite-barra__logo { max-width: 100%; object-fit: contain; object-position: left center; }
+  .suite-barra__acciones { flex: none; }
+  /* Envoltura de un botón de la barra con su panel (`.menu-ancla` de la propuesta). */
+  .suite-ancla { position: relative; }
+  /* Panel de un control propio del producto en la barra (headerActions, p. ej. Avisos de Diagnóstico). */
+  .suite-panel-barra {
+    position: absolute; right: 0; top: calc(100% + 10px); z-index: 50; width: min(24rem, calc(100vw - 16px));
+  }
+  /* Entradas que solo existen en móvil (`li.solo-movil`): el grupo «Tus productos» del menú de usuario. */
+  .suite-solo-movil { display: none; }
+  .suite-menu-usuario .suite-menu-usuario__productos ul { padding: 4px 0; }
+  .suite-menu-usuario__productos { border-bottom: 1px solid var(--di-border); }
+  /* O-1 (auditoría D1–D3): el `li + li` del kit cuenta `li.suite-solo-movil` aunque esté oculto, y pintaba una línea sobre
+     la primera entrada de cuenta («Ayuda») a todos los anchos; en móvil se sumaba al border-bottom del grupo (2 px). La
+     línea entre el grupo y «Ayuda» es solo ese border-bottom; en escritorio el menú queda como antes de D1. */
+  .suite-menu-usuario li.suite-solo-movil + li .suite-menu-usuario__entrada { border-top: 0; }
+  /* O-2: dentro del menú de usuario «Ir al inicio» es una entrada más, sin el borde superior del pie del panel ▦ (que
+     con el radio de 9 px se veía como una pestaña suelta). El radio se conserva: es el del fondo al pasar el ratón. */
+  .suite-menu-usuario__productos .suite-menu-productos__pie { border-top: 0; }
+  .suite-menu-usuario__entrada:focus-visible,
+  .suite-menu-usuario__salir:focus-visible { outline: 2px solid var(--kit-azul-texto); outline-offset: 2px; }
+
+  @media (max-width: 960px) {
+    .suite-usuario { padding: 2px; }
+  }
+
+  @media (max-width: 640px) {
+    .suite-barra { gap: 8px; }
+    .suite-buscar { min-width: 0; width: 44px; padding: 0; }
+    /* Productos sale de la barra: sus entradas pasan al menú de usuario (`.menu-ancla--productos` de la propuesta). */
+    .suite-ancla--productos { display: none; }
+    /* Los menús se anclan a la barra y ocupan el ancho de la pantalla con 8 px a cada lado. */
+    .suite-ancla { position: static; }
+    .suite-menu-usuario, .suite-menu-productos, .suite-panel-barra {
+      left: 8px; right: 8px; width: auto; max-width: none; top: calc(100% + 4px);
+      max-height: calc(100dvh - 80px); overflow-x: clip; overflow-y: auto;
+    }
+    .suite-solo-movil { display: block; }
+    /* O-7: los íconos de los productos y de «Ir al inicio» alineados con los de «Ayuda» (borde izquierdo del contenido
+       del menú). Las entradas conservan su relleno de 12 px y el fondo al pasar el ratón sale hacia el margen del panel. */
+    .suite-menu-usuario .suite-menu-usuario__productos ul { margin-inline: -12px; }
+    .suite-menu-usuario__productos .suite-menu-productos__pie { margin-inline: -12px; padding-inline: 12px; }
+  }
 }

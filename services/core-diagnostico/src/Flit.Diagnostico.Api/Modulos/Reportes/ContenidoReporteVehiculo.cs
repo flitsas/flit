@@ -52,6 +52,13 @@ public sealed record ContenidoReporteVehiculo(
             claves["dictamen/veredicto"] = dictamen.Veredicto;
             claves["dictamen/estado"] = dictamen.Estado;
             claves["dictamen/texto"] = dictamen.Texto;
+            // HU #14563 AC32: la marca «ajustado por FLIT» y la versión del dictamen entran en la huella solo si hay ajuste, así
+            // que los PDF de dictámenes no ajustados conservan su huella.
+            if (dictamen.AjustadoEn is { } ajustado)
+            {
+                claves["dictamen/ajustado_en"] = ajustado.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
+                claves["dictamen/version"] = dictamen.Version.ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
         }
 
         return claves;
@@ -67,8 +74,11 @@ public sealed record ContenidoReporteVehiculo(
     }
 }
 
-/// <summary>Lo que la huella toma del dictamen vigente. Solo veredicto, estado y los textos, en ese orden.</summary>
-public sealed record DictamenEnHuella(string Veredicto, string Estado, string Texto);
+/// <summary>
+/// Lo que la huella toma del dictamen vigente: veredicto, estado y los textos, en ese orden. <see cref="AjustadoEn"/> (HU #14563,
+/// D6) es la fecha del ajuste FLIT (null si no hay); con él la huella suma la marca y <see cref="Version"/>.
+/// </summary>
+public sealed record DictamenEnHuella(string Veredicto, string Estado, string Texto, int Version = 0, DateTimeOffset? AjustadoEn = null);
 
 /// <summary>
 /// Encabezado del reporte de un vehículo (F07-C1/C2): ID del diagnóstico, nombre del lote, empresa (claim <c>company_name</c>

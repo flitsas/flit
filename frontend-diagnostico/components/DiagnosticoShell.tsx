@@ -2,11 +2,12 @@
 
 import { createContext, useCallback, useContext, useEffect, useEffectEvent, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import { ListChecks, Settings, ShieldCheck } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { SuiteShell, type NavCatalog, type ShellUser } from "@flit/shell/SuiteShell";
-import { rutaIlustracion } from "@flit/ui/ilustraciones";
+import { rutaKit } from "@flit/ui/iconos-mapas";
+import { CampanaDiagnostico } from "@/components/dx/campana/CampanaDiagnostico";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { SesionDiagnostico } from "@/lib/sesion";
 
@@ -36,15 +37,15 @@ export function useSesion(): EstadoSesion {
 // presentación. La pantalla 10 (HU #13744) la ve quien puede leer la
 // configuración de su compañía o editar contratos desde el backoffice FLIT; la API vuelve a exigir cada permiso.
 const NAV: NavCatalog = {
-  sections: [{ id: "ajustes", label: "Ajustes", icon: Settings, side: "right", ilustracion: rutaIlustracion("configuracion") }],
+  sections: [{ id: "ajustes", label: "Ajustes", icon: iconoComo("ajustes"), side: "right", ilustracion: rutaKit("modulo/configuracion") }],
   items: [
     {
       key: "configuracion",
       label: "Configuración",
       href: "/configuracion",
       section: "ajustes",
-      icon: Settings,
-      ilustracion: rutaIlustracion("configuracion"),
+      icon: iconoComo("ajustes"),
+      ilustracion: rutaKit("modulo/configuracion"),
       permission: ["diagnostico.configuracion.ver", "diagnostico.configuracion.contrato.editar"],
     },
   ],
@@ -58,10 +59,10 @@ const NAV: NavCatalog = {
  * de la compañía no la lleva.
  */
 const NAV_BACKOFFICE: NavCatalog = {
-  sections: [{ id: "backoffice", label: "Backoffice", icon: ShieldCheck, side: "left", ilustracion: rutaIlustracion("diagnostico") }, ...NAV.sections],
+  sections: [{ id: "backoffice", label: "Backoffice", icon: iconoComo("escudo"), side: "left", ilustracion: rutaKit("modulo/diagnostico") }, ...NAV.sections],
   items: [
-    { key: "backoffice-diagnosticos", label: "Backoffice", href: "/backoffice/diagnosticos", section: "backoffice", icon: ShieldCheck, ilustracion: rutaIlustracion("diagnostico") },
-    { key: "backoffice-fuentes-obligatorias", label: "Fuentes obligatorias", href: "/backoffice/fuentes-obligatorias", section: "backoffice", icon: ListChecks, ilustracion: rutaIlustracion("fuentes-oficiales") },
+    { key: "backoffice-diagnosticos", label: "Backoffice", href: "/backoffice/diagnosticos", section: "backoffice", icon: iconoComo("escudo"), ilustracion: rutaKit("modulo/diagnostico") },
+    { key: "backoffice-fuentes-obligatorias", label: "Fuentes obligatorias", href: "/backoffice/fuentes-obligatorias", section: "backoffice", icon: iconoComo("lista"), ilustracion: rutaKit("modulo/fuentes-oficiales") },
     ...NAV.items,
   ],
 };
@@ -73,7 +74,8 @@ const SIN_PERMISOS = "SIN_PERMISOS_DIAGNOSTICO";
  * Barra y dock de la suite para Diagnóstico. Al abrir pide la sesión del producto: mientras llega muestra el loader de
  * marca; si la API la niega (403: compañía sin Diagnóstico activo, suscripción no verificable o usuario sin permisos)
  * lleva a la página 403, que está fuera del middleware y no vuelve al login; ante cualquier otra falla, el error con
- * Reintentar. La compañía es la de la sesión: una sesión = una compañía, sin selector.
+ * Reintentar. La compañía es la de la sesión: una sesión = una compañía, sin selector. Con la sesión abierta, la
+ * campana de avisos (HU #14562 · AC50) entra por `headerActions`; la firma pública no cambia.
  */
 export function DiagnosticoShell({ user, tramitesUrl, children }: { user: UsuarioShell; tramitesUrl: string; children: ReactNode }) {
   const router = useRouter();
@@ -129,7 +131,10 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
 
   return (
     <SesionContext.Provider value={valor}>
-      <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={estado.sesion?.capacidades.backoffice ? NAV_BACKOFFICE : NAV} user={usuario} accountUrl={tramitesUrl} layout="app">
+      <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={estado.sesion?.capacidades.backoffice ? NAV_BACKOFFICE : NAV} user={usuario} accountUrl={tramitesUrl}
+        layout="app"
+        headerActions={estado.sesion ? <CampanaDiagnostico /> : undefined}
+      >
         <div className="flex min-h-full flex-col gap-4 px-4 pt-6 text-flit-primary md:px-6">{contenido}</div>
       </SuiteShell>
     </SesionContext.Provider>

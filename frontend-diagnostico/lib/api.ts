@@ -22,12 +22,14 @@ export interface RequestOptions {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   signal?: AbortSignal;
+  /** Caché del navegador para esta lectura (p. ej. "no-store" en el detalle de una consulta, D19). Sin ella, la del fetch. */
+  cache?: RequestCache;
 }
 
 export const API_PREFIX = "/api/v1/diagnostico";
 
 export async function apiFetch<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method = "GET", body, signal } = options;
+  const { method = "GET", body, signal, cache } = options;
   if (isReauthenticating()) return waitForReload<T>();
 
   // Un FormData (multipart de la carga masiva) viaja tal cual: el navegador pone el Content-Type con su boundary.
@@ -37,6 +39,7 @@ export async function apiFetch<T>(path: string, options: RequestOptions = {}): P
     headers: body === undefined || multipart ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : multipart ? body : JSON.stringify(body),
     signal,
+    ...(cache ? { cache } : {}),
   });
   if (response.status === 204) return undefined as T;
 

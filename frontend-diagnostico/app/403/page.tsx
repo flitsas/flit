@@ -1,3 +1,4 @@
+import { PaginaExcepcion } from "@flit/ui/PaginaExcepcion";
 import { diagnosticoConfig } from "@/lib/config.server";
 
 // Acceso negado: llega aquí desde @flit/auth (el hub negó el login, ?code=) o desde DiagnosticoShell (la API respondió
@@ -16,15 +17,13 @@ export default async function Forbidden({ searchParams }: { searchParams: Promis
   const { code } = await searchParams;
   const { hubUrl } = diagnosticoConfig();
   return (
-    <main className="flex min-h-full flex-col items-center justify-center gap-4 px-6 py-16 text-center">
-      <h1 className="text-2xl font-semibold text-flit-primary">No tienes acceso</h1>
-      <p className="max-w-md text-muted-foreground">{(code && MESSAGES[code]) ?? "No tienes permiso para abrir esta página."}</p>
-      <a
-        href={`${hubUrl}/?inicio=1`}
-        className="font-semibold text-[var(--flit-brand-ink)] underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
-      >
-        Ir a mis productos
-      </a>
+    <main className="flex min-h-full flex-col items-center justify-center">
+      <PaginaExcepcion
+        codigo={403}
+        titulo="No tienes acceso"
+        mensaje={(code && MESSAGES[code]) ?? "No tienes permiso para abrir esta página."}
+        accion={{ etiqueta: "Ir a mis productos", href: `${hubUrl}/?inicio=1` }}
+      />
     </main>
   );
 }

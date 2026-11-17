@@ -27,7 +27,9 @@ internal sealed record AlertaDictamenDto(
 }
 
 /// <summary>
-/// Dictamen vigente que ve la compañía. No trae override, lease, intentos ni la empresa.
+/// Dictamen vigente que ve la compañía. No trae override, lease, intentos ni la empresa. Desde HU #14563 (D6, P1 = a) trae la
+/// marca <c>ajustado_por_flit</c> y su fecha <c>ajustado_en</c>; nunca el autor, el motivo, la versión anterior ni la marca
+/// <c>ajuste</c> de cada alertamiento.
 /// </summary>
 internal sealed record DictamenCompaniaDto(
     [property: JsonPropertyName("version")] int Version,
@@ -35,7 +37,9 @@ internal sealed record DictamenCompaniaDto(
     [property: JsonPropertyName("estado_redaccion")] string EstadoRedaccion,
     [property: JsonPropertyName("alertamientos")] IReadOnlyList<AlertaDictamenDto> Alertamientos,
     [property: JsonPropertyName("catalogo_version")] int CatalogoVersion,
-    [property: JsonPropertyName("creado_en")] DateTimeOffset CreadoEn);
+    [property: JsonPropertyName("creado_en")] DateTimeOffset CreadoEn,
+    [property: JsonPropertyName("ajustado_por_flit")] bool AjustadoPorFlit = false,
+    [property: JsonPropertyName("ajustado_en")] DateTimeOffset? AjustadoEn = null);
 
 /// <summary>Lo de la compañía más quién reemplazó el veredicto y cuándo. Sigue sin lease, intentos ni texto de cola.</summary>
 internal sealed record DictamenBackofficeDto(
@@ -61,7 +65,20 @@ internal static class ConsultaDictamen
     public static DictamenCompaniaDto Compania(DictamenVehiculo fila)
     {
         ArgumentNullException.ThrowIfNull(fila);
-        return new DictamenCompaniaDto(fila.Version, fila.Veredicto, fila.EstadoRedaccion, Alertas(fila.Alertamientos), fila.CatalogoVersion, fila.CreadoEn);
+        var ajustado = AjustadoPorFlit(fila);
+        return new DictamenCompaniaDto(
+            fila.Version, fila.Veredicto, fila.EstadoRedaccion, Alertas(fila.Alertamientos), fila.CatalogoVersion, fila.CreadoEn,
+            ajustado, ajustado ? fila.OverrideEn : null);
+    }
+
+    /// <summary>
+    /// P1 = a (2026-11-12): la marca «ajustado por FLIT» es <c>ajuste_motivo IS NOT NULL</c>, así que solo la llevan los ajustes
+    /// posteriores al despliegue de B7. D7: un recálculo nace sin motivo y la marca desaparece.
+    /// </summary>
+    public static bool AjustadoPorFlit(DictamenVehiculo fila)
+    {
+        ArgumentNullException.ThrowIfNull(fila);
+        return fila.AjusteMotivo is not null;
     }
 
     /// <summary>DTO de backoffice: el de la compañía y los tres campos de override.</summary>
