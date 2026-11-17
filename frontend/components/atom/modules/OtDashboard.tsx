@@ -64,8 +64,6 @@ export const OT_DASHBOARD_HERO_TITLE = "Tu cola de trabajo";
 /** Antetítulo del slide fijo, del prototipo. */
 export const OT_DASHBOARD_HERO_ANTETITULO = "Control de la operación";
 /** KPIs de la cola (A19 es N/A: no se clonan ni se unifican con COPY.E03). */
-export const OT_KPI_ESPERAN_MI_DECISION = "Esperan mi decisión";
-export const OT_KPI_ENTREGADOS_HOY = "Entregados hoy";
 export const OT_KPI_PENDIENTES_HOY = "Pendientes de hoy";
 export const OT_KPI_PRIORITARIOS = "Trámites prioritarios";
 export const OT_KPI_MAS_DE_7_DIAS = "Sin gestión más de 7 días";
