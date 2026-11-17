@@ -56,6 +56,17 @@ public interface IMandatarioAssociableCompanies
         string? search, int page, int pageSize, CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Igual que la anterior pero limitada a <paramref name="allowedTenantIds"/> cuando quien consulta tiene alcance de
+    /// compañías <c>especificos</c> (<c>null</c> = sin restricción, equivale a la sobrecarga sin filtro).
+    /// </summary>
+    Task<AssociableCompaniesResult> ListForOtAsync(
+        string? search,
+        int page,
+        int pageSize,
+        IReadOnlyCollection<Guid>? allowedTenantIds,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Hijas directas activas de <paramref name="companyTenantId"/> (jerarquía <c>parent_tenant_id</c>). Sin hijas:
     /// lista vacía y <see cref="AssociableCompaniesPage.AplicaSoloASuCompania"/> verdadero.
     /// </summary>

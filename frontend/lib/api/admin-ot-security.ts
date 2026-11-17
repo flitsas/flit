@@ -46,6 +46,12 @@ export interface OtClientCompany {
   nit?: string | null;
 }
 
+/** `actorRestricted`: quien consulta gestiona «Clientes específicos» (sus `items` ya vienen acotados). Falta = false. */
+export interface OtClientCompaniesResponse {
+  items: OtClientCompany[];
+  actorRestricted?: boolean;
+}
+
 export interface OtClientScopeResponse {
   mode: OtClientScopeMode;
   clients: { tenantId: string; name: string }[];
@@ -125,8 +131,8 @@ export function fetchOtUsers(
 export function fetchOtClientCompanies(
   scope?: OtApiScope,
   signal?: AbortSignal,
-): Promise<{ items: OtClientCompany[] }> {
-  return apiFetch<{ items: OtClientCompany[] }>(`${base}/client-companies`, {
+): Promise<OtClientCompaniesResponse> {
+  return apiFetch<OtClientCompaniesResponse>(`${base}/client-companies`, {
     query: scopeQuery(scope),
     signal,
   });

@@ -541,6 +541,11 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           canInviteAdmins={isUserAdmin}
           transitOfficeId={transitOfficeId}
           canSetClientScope={isUserAdmin}
+          // Sin llamar endpoints: la fila propia del listado trae el alcance del Gestor.
+          inheritsRestrictedScope={
+            !isUserAdmin &&
+            users.find((u) => u.id === currentUserId)?.clientScope?.mode === "especificos"
+          }
         />
       )}
       {suspendTarget && (
@@ -696,6 +701,7 @@ function OtInviteUserDialog({
   transitOfficeId,
   canSetClientScope = false,
   canInviteAdmins = true,
+  inheritsRestrictedScope = false,
 }: {
   onConfirm: (
     email: string,
@@ -710,6 +716,8 @@ function OtInviteUserDialog({
   canSetClientScope?: boolean;
   /** HU #13655: quien no es administrador no ofrece roles de administrador. */
   canInviteAdmins?: boolean;
+  /** Gestor OT restringido: el invitado hereda su alcance de clientes (solo nota informativa). */
+  inheritsRestrictedScope?: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -848,7 +856,13 @@ function OtInviteUserDialog({
               value={clientScope}
               onChange={setClientScope}
               idPrefix="ot-invite-scope"
+              preferSpecificWhenRestricted
             />
+          )}
+          {!canSetClientScope && inheritsRestrictedScope && (
+            <p className="text-[10px] opacity-70" data-testid="invite-inherits-scope-note">
+              El usuario invitado tendrá los mismos clientes que tú gestionas.
+            </p>
           )}
           <div className="flex gap-3 pt-2">
             <button

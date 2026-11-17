@@ -26,6 +26,10 @@ import {
 
 export const CLIENT_SCOPE_EMPTY_MESSAGE =
   "Elige al menos un cliente o vuelve a «Todos los clientes».";
+export const CLIENT_SCOPE_ACTOR_RESTRICTED_NOTE =
+  "Solo puedes asignar los clientes que tú gestionas.";
+export const CLIENT_SCOPE_EXCEEDS_ACTOR_MESSAGE =
+  "Solo puedes asignar clientes dentro de los que tú gestionas. Quita los que no te corresponden e inténtalo de nuevo.";
 export const CLIENT_SCOPE_SELF_MESSAGE =
   "No puedes cambiar tu propio alcance de clientes. Pídeselo a otro administrador.";
 
@@ -52,6 +56,7 @@ export function clientScopeErrorMessage(err: unknown): string {
     if (code === "CLIENT_SCOPE_INVALID_CLIENT") {
       return "Alguno de los clientes elegidos ya no pertenece a este organismo. Actualiza la lista e inténtalo de nuevo.";
     }
+    if (code === "CLIENT_SCOPE_EXCEEDS_ACTOR") return CLIENT_SCOPE_EXCEEDS_ACTOR_MESSAGE;
     if (code === "CLIENT_SCOPE_SELF") return CLIENT_SCOPE_SELF_MESSAGE;
     if (err.status === 403) return "No tienes permiso para cambiar el alcance de clientes.";
   }
@@ -62,6 +67,7 @@ interface CompaniesState {
   options: OpcionSeleccionable[];
   loading: boolean;
   error: boolean;
+  actorRestricted: boolean;
   reload: () => void;
 }
 
@@ -69,6 +75,7 @@ function useOtClientCompanies(transitOfficeId: string): CompaniesState {
   const [options, setOptions] = useState<OpcionSeleccionable[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [actorRestricted, setActorRestricted] = useState(false);
   const [tick, setTick] = useState(0);
 
   useEffect(() => {
@@ -87,6 +94,7 @@ function useOtClientCompanies(transitOfficeId: string): CompaniesState {
             codigo: c.nit ?? undefined,
           })),
         );
+        setActorRestricted(res.actorRestricted === true);
         setLoading(false);
       })
       .catch(() => {
@@ -98,7 +106,7 @@ function useOtClientCompanies(transitOfficeId: string): CompaniesState {
   }, [transitOfficeId, tick]);
 
   const reload = useCallback(() => setTick((t) => t + 1), []);
-  return { options, loading, error, reload };
+  return { options, loading, error, actorRestricted, reload };
 }
 
 export interface ClientScopeValue {
@@ -126,15 +134,26 @@ export function ClientScopeFields({
   onChange,
   disabled = false,
   idPrefix,
+  preferSpecificWhenRestricted = false,
 }: {
   transitOfficeId: string;
   value: ClientScopeValue;
   onChange: (next: ClientScopeValue) => void;
   disabled?: boolean;
   idPrefix: string;
+  /** Invitar: si el actor es restringido, el valor por defecto pasa a «Clientes específicos». */
+  preferSpecificWhenRestricted?: boolean;
 }) {
   const companies = useOtClientCompanies(transitOfficeId);
   const name = `${idPrefix}-mode-${useId()}`;
+  const restricted = companies.actorRestricted;
+  const noteId = `${idPrefix}-restricted-note`;
+
+  useEffect(() => {
+    if (preferSpecificWhenRestricted && restricted && value.mode === "todos") {
+      onChange({ mode: "especificos", selection: value.selection });
+    }
+  }, [preferSpecificWhenRestricted, restricted, value.mode, value.selection, onChange]);
   const showEmpty = value.mode === "especificos" && value.selection.length === 0;
 
   return (
@@ -146,6 +165,8 @@ export function ClientScopeFields({
             type="radio"
             name={name}
             checked={value.mode === "todos"}
+            disabled={restricted}
+            aria-describedby={restricted ? noteId : undefined}
             onChange={() => onChange({ mode: "todos", selection: value.selection })}
             className="h-3.5 w-3.5 accent-flit-brand"
           />
@@ -162,6 +183,15 @@ export function ClientScopeFields({
           Clientes específicos
         </label>
       </div>
+      {restricted && (
+        <p
+          id={noteId}
+          className="text-[10px] opacity-70"
+          data-testid="client-scope-restricted-note"
+        >
+          {CLIENT_SCOPE_ACTOR_RESTRICTED_NOTE}
+        </p>
+      )}
       {value.mode === "especificos" && (
         <div className="space-y-1.5">
           <MultiSelectBuscable

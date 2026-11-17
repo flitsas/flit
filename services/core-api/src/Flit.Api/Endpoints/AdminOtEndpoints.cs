@@ -2756,8 +2756,10 @@ public static partial class AdminOtEndpoints
         IReadOnlyList<Guid> invitedClientScope = [];
         if (request.ClientScope is { } requestedScope)
         {
+            // Quien invita y está restringido ('especificos') no puede dar 'todos' ni compañías fuera de las suyas.
             var (scopeStatus, scopeIds) = await clientScopeValidator.HandleAsync(
-                tenantId, null, requestedScope.Mode, requestedScope.ClientTenantIds, cancellationToken).ConfigureAwait(false);
+                tenantId, null, requestedScope.Mode, requestedScope.ClientTenantIds, invitedBy.Value, cancellationToken)
+                .ConfigureAwait(false);
             if (scopeStatus != SetOtUserClientScopeStatus.Ok)
             {
                 return ClientScopeError(scopeStatus);
@@ -2769,6 +2771,23 @@ public static partial class AdminOtEndpoints
             }
 
             invitedClientScope = scopeIds;
+        }
+        else
+        {
+            // Sin clientScope: un invitador restringido (Gestor OT con «Usuarios» delegado o Admin OT restringido) no puede
+            // dejar al invitado en 'todos'; hereda exactamente su alcance. Con alcance huérfano (sin compañías) no hay qué
+            // heredar y se rechaza, porque guardar una lista vacía equivaldría a 'todos'.
+            var (restricted, inherited) = await clientScopeValidator
+                .InheritFromActorAsync(tenantId, invitedBy.Value, cancellationToken).ConfigureAwait(false);
+            if (restricted)
+            {
+                if (inherited.Count == 0)
+                {
+                    return ClientScopeError(SetOtUserClientScopeStatus.ExceedsActor);
+                }
+
+                invitedClientScope = inherited;
+            }
         }
 
         try
@@ -2997,6 +3016,9 @@ public static partial class AdminOtEndpoints
         SetOtUserClientScopeStatus.Self => Results.Json(
             new { error = "CLIENT_SCOPE_SELF", message = "No puedes cambiar tu propio alcance de clientes." },
             statusCode: StatusCodes.Status403Forbidden),
+        SetOtUserClientScopeStatus.ExceedsActor => Results.Json(
+            new { error = OtClientScopeExceedsActorException.Code, message = OtClientScopeExceedsActorException.DefaultMessage },
+            statusCode: StatusCodes.Status403Forbidden),
         SetOtUserClientScopeStatus.UserNotFound => Results.NotFound(
             new { error = "USER_NOT_FOUND", message = "El usuario no pertenece a este organismo." }),
         _ => Results.NoContent(),
@@ -3021,8 +3043,14 @@ public static partial class AdminOtEndpoints
             return scopeError;
         }
 
-        var items = await handler.HandleAsync(tenantId, null, cancellationToken).ConfigureAwait(false);
-        return Results.Ok(new { items = items.Select(c => new { tenantId = c.TenantId, name = c.Name, nit = c.Nit }) });
+        // Con alcance 'especificos' el llamador solo puede repartir SUS compañías: items ya viene recortado a su alcance.
+        var actor = ResolveUserId(httpContext.User) ?? Guid.Empty;
+        var result = await handler.HandleAsync(tenantId, null, actor, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(new
+        {
+            items = result.Items.Select(c => new { tenantId = c.TenantId, name = c.Name, nit = c.Nit }),
+            actorRestricted = result.ActorRestricted,
+        });
     }
 
     private static async Task<IResult> GetUserClientScopeAsync(

@@ -62,6 +62,9 @@ public static class InvitationScopeReasons
 
     /// <summary>Solo un administrador puede repartir roles de administrador.</summary>
     public const string AdminRoleNotAssignable = "ADMIN_ROLE_NOT_ASSIGNABLE";
+
+    /// <summary>El invitador tiene alcance de compañías 'especificos' vacío: no puede transmitir nada a los invitados.</summary>
+    public const string ClientScopeExceedsActor = "CLIENT_SCOPE_EXCEEDS_ACTOR";
 }
 
 /// <param name="Id">Id del rol.</param>
