@@ -76,3 +76,29 @@ export function transformacionesDeclaradas(
       valorNuevo: limpio(a.valorEfectivo) || null,
     }));
 }
+
+/** Clave del snapshot RUNT de la carrocería (la misma que lee `VehicleBodyTypePolicy` en el backend). */
+export const CARROCERIA_RUNT_FIELD_KEY = "vehicle_body_type_runt";
+
+/**
+ * Espejo de `VehicleBodyTypePolicy.SinCarroceria` (backend): vacío, «SIN CARROCERIA» (con o sin
+ * tilde, espacios internos colapsados, sin distinguir mayúsculas) o el guion que el formulario pinta
+ * cuando no hay dato.
+ */
+export function carroceriaEsAusente(valor: string | null | undefined): boolean {
+  const norm = (valor ?? "").trim().toUpperCase().split(/\s+/).filter(Boolean).join(" ");
+  return norm === "" || norm === "SIN CARROCERIA" || norm === "SIN CARROCERÍA" || norm === "-";
+}
+
+/**
+ * ¿El RUNT reporta el vehículo sin carrocería? Solo se evalúa cuando el snapshot
+ * `vehicle_body_type_runt` EXISTE entre los field_values (la consulta respondió y lo guardó): su
+ * ausencia no es ausencia de carrocería, igual que en el backend, donde «el proveedor no respondió»
+ * nunca bloquea. Una moto trae el literal «SIN CARROCERIA».
+ */
+export function vehiculoSinCarroceria(
+  fields: ReadonlyArray<{ fieldKey: string; valueText?: string | null }>,
+): boolean {
+  const snapshot = fields.find((f) => f.fieldKey === CARROCERIA_RUNT_FIELD_KEY);
+  return snapshot !== undefined && carroceriaEsAusente(snapshot.valueText);
+}

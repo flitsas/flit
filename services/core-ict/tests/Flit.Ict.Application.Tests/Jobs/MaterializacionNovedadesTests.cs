@@ -72,6 +72,52 @@ public sealed class MaterializacionNovedadesTests
 
         mensaje.Should().Contain(fragmento).And.EndWith($"({codigo})");
     }
+    [Theory]
+    [InlineData("placa_fuera_de_rango", "no pertenece al rango asignado")]
+    [InlineData("placa_rango_sin_ot", "no se conoce el organismo de tránsito")]
+    public void MensajeError_traduce_los_codigos_de_placa_de_rango_y_conserva_el_codigo(string codigo, string fragmento)
+    {
+        var mensaje = MaterializacionNovedades.MensajeError(codigo);
+
+        mensaje.Should().Contain(fragmento).And.EndWith($"({codigo})");
+    }
+
+    [Fact]
+    public void Warning_de_carroceria_fuera_de_catalogo_es_novedad_visible_con_mensaje_claro()
+    {
+        var master = new ExternalIntegrationMaster { ProcessStatusId = 5 };
+
+        var novedad = MaterializacionNovedades.Mensaje("seed_warning:x;carroceria_warning:fuera_de_catalogo");
+        novedad.Should().NotBeNull();
+        MaterializacionNovedades.Aplicar(master, novedad!);
+
+        novedad.Should().Contain("La carrocería enviada no corresponde al catálogo para la clase del vehículo consultado")
+            .And.Contain("el gestor debe elegirla")
+            .And.Contain("(carroceria_warning:fuera_de_catalogo)")
+            .And.NotContain("seed_warning");
+        master.BusinessCommentsValidation.Should().Contain("el gestor debe elegirla");
+        master.ExternalCommentsValidation.Should().Contain("el gestor debe elegirla");
+        master.ProcessStatusId.Should().Be(5, "el borrador existe: la novedad no cambia el estado");
+    }
+
+    [Fact]
+    public void Warning_de_vehiculo_sin_carroceria_es_novedad_visible_con_mensaje_claro()
+    {
+        var novedad = MaterializacionNovedades.Mensaje("carroceria_warning:vehiculo_sin_carroceria");
+
+        novedad.Should().NotBeNull();
+        novedad.Should().Contain(
+                "El vehículo no tiene carrocería registrada en el RUNT; el cambio de carrocería no aplica y no se incluyó en el trámite")
+            .And.Contain("(carroceria_warning:vehiculo_sin_carroceria)");
+    }
+
+    [Fact]
+    public void Advertencias_sin_texto_propio_se_publican_como_codigo()
+    {
+        MaterializacionNovedades.Mensaje("actors_warning:invalid_document_type")
+            .Should().Be(MaterializacionNovedades.Prefijo + "actors_warning:invalid_document_type");
+    }
+
 
     [Theory]
     [InlineData(null)]

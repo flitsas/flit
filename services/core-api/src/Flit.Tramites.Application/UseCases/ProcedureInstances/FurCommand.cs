@@ -1257,9 +1257,16 @@ public sealed class GenerarFurHandler(
                 FurPrendaObservation.Join(
                     FurTransformationObservations.ComposeDeclaradas(
                         transformaciones,
-                        Get(fv, "vehicle_color"),
-                        Get(fv, "vehicle_fuel"),
-                        Get(fv, "vehicle_body_type")),
+                        // Solo el valor NUEVO: vacío o igual al del RUNT no se declara (ver ValorNuevo).
+                        FurTransformationObservations.ValorNuevo(
+                            Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
+                            transformaciones.Color),
+                        FurTransformationObservations.ValorNuevo(
+                            Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"),
+                            transformaciones.Combustible),
+                        FurTransformationObservations.ValorNuevo(
+                            Get(fv, "vehicle_body_type_runt"), Get(fv, "vehicle_body_type"),
+                            transformaciones.Carroceria)),
                     FurPrendaObservation.Join(
                         FurBlindajeObservation.Compose(blindajeOpcion),
                         FurServicioVinculadoraObservation.Compose(
