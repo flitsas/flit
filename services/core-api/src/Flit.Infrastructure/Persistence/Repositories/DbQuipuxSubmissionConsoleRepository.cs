@@ -24,7 +24,10 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// La rama <c>InMemory</c> (tests) no soporta <c>ExecuteUpdate</c> ni concurrencia real, así que ahí
 /// se hace el equivalente rastreado.</para>
 /// </summary>
-internal sealed class DbQuipuxSubmissionConsoleRepository(FlitDbContext db) : IQuipuxSubmissionConsoleRepository
+internal sealed class DbQuipuxSubmissionConsoleRepository(
+    FlitDbContext db,
+    Flit.Admin.Domain.Companies.TransitOffices.IOtUserClientScopeResolver? clientScope = null)
+    : IQuipuxSubmissionConsoleRepository
 {
     private const string CancelReason = "Cancelado manualmente desde la consola de cola.";
 
@@ -36,10 +39,13 @@ internal sealed class DbQuipuxSubmissionConsoleRepository(FlitDbContext db) : IQ
     {
         // JOIN submission ↔ trámite, filtrado por la secretaría destino. Todos los estados (activa +
         // histórico), del más nuevo al más viejo.
+        // Alcance por usuario del OT: solo trámites de las compañías cliente asignadas (null = todas).
+        var allowed = clientScope is null ? null : (await clientScope.GetRestrictionAsync(transitOfficeId, cancellationToken).ConfigureAwait(false))?.ToList();
         var scoped =
             from s in db.QuipuxSubmissions.AsNoTracking()
             join pi in db.ProcedureInstances.AsNoTracking() on s.ProcedureInstanceId equals pi.Id
             where pi.TransitOfficeId == transitOfficeId
+                && (allowed == null || allowed.Contains(pi.TenantId))
             select new { s, pi };
 
         var total = await scoped.CountAsync(cancellationToken).ConfigureAwait(false);
@@ -219,14 +225,19 @@ internal sealed class DbQuipuxSubmissionConsoleRepository(FlitDbContext db) : IQ
     private async Task<QuipuxSubmission?> LoadScopedAsync(
         Guid submissionId,
         Guid transitOfficeId,
-        CancellationToken cancellationToken) =>
-        await (
+        CancellationToken cancellationToken)
+    {
+        // Alcance por usuario del OT: una submission de una compañía no asignada es inexistente (NotFound).
+        var allowed = clientScope is null ? null : (await clientScope.GetRestrictionAsync(transitOfficeId, cancellationToken).ConfigureAwait(false))?.ToList();
+        return await (
             from s in db.QuipuxSubmissions.AsNoTracking()
             join pi in db.ProcedureInstances.AsNoTracking() on s.ProcedureInstanceId equals pi.Id
             where s.Id == submissionId && pi.TransitOfficeId == transitOfficeId
+                && (allowed == null || allowed.Contains(pi.TenantId))
             select s)
         .FirstOrDefaultAsync(cancellationToken)
         .ConfigureAwait(false);
+    }
 
     /// <summary>
     /// Aplica una transición de estado guardada por <paramref name="expectedStatus"/> y devuelve el

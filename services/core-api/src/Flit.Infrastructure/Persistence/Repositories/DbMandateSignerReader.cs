@@ -23,12 +23,14 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     private readonly ITransitOfficeOperationalStatusReader _otStatus;
     private readonly IdentityVigenciaPorDocumentoResolver _identityResolver;
     private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
+    private readonly IOtUserClientScopeResolver? _clientScope;
 
     public DbMandateSignerReader(
         FlitDbContext context,
         ITransitOfficeOperationalStatusReader? otStatus = null,
         IdentityVigenciaPorDocumentoResolver? identityResolver = null,
-        IEffectiveTransitOfficeListResolver? effectiveOffices = null)
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null,
+        IOtUserClientScopeResolver? clientScope = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
 
@@ -43,6 +45,8 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         // motivo que PlateRangeRepository: los sitios que construyen el reader a mano (tests) conservan
         // el criterio previo de grant propio; por DI llega siempre la implementación real.
         _effectiveOffices = effectiveOffices;
+        // Alcance de compañías del usuario OT en curso (null = todas). Solo afecta la vista del organismo.
+        _clientScope = clientScope;
     }
 
     public Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
@@ -405,6 +409,16 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                             cancellationToken)
                         .ConfigureAwait(false)).ToHashSet();
                     var efectivas = grants.Where(g => g.IsEnabled).Select(g => g.TenantId).ToHashSet();
+
+                    // Alcance por usuario: el usuario del OT solo ve las compañías que se le asignaron.
+                    var restriction = _clientScope is null
+                        ? null
+                        : await _clientScope.GetRestrictionAsync(transitOfficeId, cancellationToken).ConfigureAwait(false);
+                    if (restriction is not null)
+                    {
+                        visible.IntersectWith(restriction);
+                        directGrants = [.. directGrants.Where(g => restriction.Contains(g.TenantId))];
+                    }
 
                     // Un grant directo inhabilitado solo se lista (como no habilitado) si la compañía NO
                     // puede radicar por otra vía: si está en la lista efectiva, decide la regla única

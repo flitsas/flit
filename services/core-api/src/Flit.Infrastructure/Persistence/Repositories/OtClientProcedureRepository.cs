@@ -38,6 +38,15 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     private readonly ILogger<OtClientProcedureRepository> _logger;
     private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
     private readonly Flit.Tramites.Application.Documents.IFurTemplateResolver? _furTemplateResolver;
+    private readonly IOtUserClientScopeResolver? _clientScope;
+
+    /// <summary>
+    /// Alcance de compañías cliente del usuario en curso para la operación actual (<c>null</c> = todas). Lo fija
+    /// <see cref="ExecuteOtScopedAsync{T}(Guid,Guid?,Func{Guid,Task{T}},CancellationToken)"/> antes de leer nada
+    /// y lo aplica <see cref="BuildAccessibleQuery"/>: es el único punto por donde pasan la bandeja, los contadores,
+    /// el detalle y todas las acciones (aprobar, rechazar, revocar, placa…).
+    /// </summary>
+    private IReadOnlyList<Guid>? _clientRestriction;
 
     public OtClientProcedureRepository(
         FlitDbContext context,
@@ -46,8 +55,11 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         IConsolidadoRegeneracionQueue? regeneracionQueue = null,
         ILogger<OtClientProcedureRepository>? logger = null,
         IEffectiveTransitOfficeListResolver? effectiveOffices = null,
-        Flit.Tramites.Application.Documents.IFurTemplateResolver? furTemplateResolver = null)
+        Flit.Tramites.Application.Documents.IFurTemplateResolver? furTemplateResolver = null,
+        IOtUserClientScopeResolver? clientScope = null)
     {
+        // Alcance de compañías cliente por usuario OT. Null en tests que construyen el repo a mano: todas.
+        _clientScope = clientScope;
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _transitionPublisher = transitionPublisher ?? throw new ArgumentNullException(nameof(transitionPublisher));
         _plateRepo = plateRepo;
@@ -358,12 +370,14 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                     {
                         // Todos los 'entregado' dirigidos a este organismo, con o sin grant vigente:
                         // los "sin grant" son precisamente los que la bandeja no muestra (R09).
+                        var allowedForHealth = _clientRestriction?.ToList();
                         var delivered = _context.ProcedureInstances
                             .Include(x => x.ProcedureType)
                             .AsNoTracking()
                             .Where(p => p.DeletedAt == null
                                 && p.Status == TramiteEstado.Entregado
-                                && p.TransitOfficeId == transitOfficeId);
+                                && p.TransitOfficeId == transitOfficeId
+                                && (allowedForHealth == null || allowedForHealth.Contains(p.TenantId)));
 
                         var deliveredTotal = await delivered
                             .CountAsync(cancellationToken).ConfigureAwait(false);
@@ -1878,12 +1892,23 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     /// <c>?status=borrador</c> devuelve vacío por construcción y el detalle de un no entregado da 404,
     /// sin lógica adicional en ninguno de los consumidores.</para>
     /// </summary>
-    private IQueryable<ProcedureInstance> BuildAccessibleQuery(Guid transitOfficeId) =>
-        _context.ProcedureInstances
+    private IQueryable<ProcedureInstance> BuildAccessibleQuery(Guid transitOfficeId)
+    {
+        var query = _context.ProcedureInstances
             .AsNoTracking()
             .Where(p => p.DeletedAt == null
                 && p.TransitOfficeId == transitOfficeId
                 && TramiteEstado.RecibidosPorOrganismo.Contains(p.Status));
+
+        // Alcance por usuario: un trámite de una compañía no asignada es inexistente para quien pregunta (404).
+        if (_clientRestriction is { } restriction)
+        {
+            var allowed = restriction.ToList();
+            query = query.Where(p => allowed.Contains(p.TenantId));
+        }
+
+        return query;
+    }
 
     private async Task<IReadOnlyList<Guid>> ListClientTenantIdsFromReceivedProceduresAsync(
         Guid transitOfficeId,
@@ -1913,6 +1938,15 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
     private async Task<IReadOnlyList<Guid>> ListGrantedClientTenantIdsAsync(
         Guid transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        var granted = await ListGrantedClientTenantIdsCoreAsync(transitOfficeId, cancellationToken)
+            .ConfigureAwait(false);
+        return _clientRestriction is { } restriction ? [.. granted.Intersect(restriction)] : granted;
+    }
+
+    private async Task<IReadOnlyList<Guid>> ListGrantedClientTenantIdsCoreAsync(
+        Guid transitOfficeId,
         CancellationToken cancellationToken) =>
         await ExecuteCrossTenantReadAsync(
             async () => _effectiveOffices is not null
@@ -1941,10 +1975,18 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
 
         if (transitOfficeId is null)
         {
+            _clientRestriction = null;
             return typeof(T) == typeof(PagedResult<OtClientProcedure>)
                 ? (T)(object)PagedResult<OtClientProcedure>.Empty
                 : default!;
         }
+
+        // Alcance de compañías del usuario (null = todas). Se resuelve en cada operación y antes de leer.
+        _clientRestriction = _clientScope is null
+            ? null
+            : await ExecuteCrossTenantReadAsync(
+                () => _clientScope.GetRestrictionAsync(transitOfficeId.Value, cancellationToken),
+                cancellationToken).ConfigureAwait(false);
 
         return await action(transitOfficeId.Value).ConfigureAwait(false);
     }

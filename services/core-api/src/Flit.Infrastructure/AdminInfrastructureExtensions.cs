@@ -362,6 +362,13 @@ public static class AdminInfrastructureExtensions
         // (con o sin canal inverso), para que un sink nuevo no silencie OT al registrarse aparte.
         services.AddScoped<OtWebhookProcedureStateChangeNotifier>();
 
+        // Alcance de compañías cliente por usuario OT (todos|especificos). Servicio único que intersecan la bandeja,
+        // métricas, consultas, reportes del portal, Quipux y mandatos.
+        services.AddHttpContextAccessor();
+        services.AddScoped<IOtUserClientScopeResolver, HttpOtUserClientScopeResolver>();
+        services.AddScoped<IOtUserClientScopeRepository, OtUserClientScopeRepository>();
+        services.AddScoped<Flit.Modules.Security.Domain.Auth.IUserActivationHook, OtInvitationClientScopeActivationHook>();
+
         // HU #10217 — trámites de clientes OT (cross-tenant vía grants).
         services.AddScoped<IOtClientProcedureRepository, OtClientProcedureRepository>();
 

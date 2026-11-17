@@ -19,6 +19,9 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   updateOtUser: vi.fn(),
   deleteOtUser: vi.fn(),
   resendOtInvitation: vi.fn(),
+  fetchOtClientCompanies: vi.fn().mockResolvedValue({ items: [] }),
+  fetchOtUserClientScope: vi.fn().mockResolvedValue({ mode: "todos", clients: [] }),
+  setOtUserClientScope: vi.fn(),
 }));
 
 // El Super Admin lee el catálogo de roles de organismo de tránsito para elegir el rol del invitado.
@@ -186,7 +189,12 @@ describe("OtUsersSection — refactor adminOT", () => {
 
     await waitFor(() =>
       expect(inviteOtUser).toHaveBeenCalledWith(
-        { email: "nuevo@transito.gov.co", fullName: "Nuevo Colaborador", roleIds: ["role-gestor"] },
+        {
+          email: "nuevo@transito.gov.co",
+          fullName: "Nuevo Colaborador",
+          roleIds: ["role-gestor"],
+          clientScope: { mode: "todos", clientTenantIds: [] },
+        },
         { transitOfficeId: "ot-1" },
       ),
     );

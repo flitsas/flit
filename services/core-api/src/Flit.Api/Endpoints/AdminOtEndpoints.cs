@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Security.Claims;
 using Flit.Admin.Application.Auditing;
 using Flit.Admin.Application.OtClientProcedures;
+using Flit.Admin.Application.OtClientScopes;
 using Flit.Admin.Application.OtClientProcedures.ApproveOtClientProcedure;
 using Flit.Admin.Application.OtClientProcedures.GetOtBandejaCounters;
 using Flit.Admin.Application.OtClientProcedures.GetOtBandejaHealth;
@@ -542,6 +543,32 @@ public static partial class AdminOtEndpoints
                 + "eliminados (soft-delete) de ese mismo tenant OT resuelto.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        // Alcance de compañías cliente por usuario del OT (mejora sin HU). Rutas fuera de OtPermissionMap: solo
+        // ot_admin y Super Admin las alcanzan; el Gestor OT con «Usuarios» delegado no cambia alcances.
+        group.MapGet("/client-companies", ListClientCompaniesAsync)
+            .WithName("AdminOtListClientCompanies")
+            .WithSummary("Compañías cliente visibles del OT (selector del alcance de usuarios)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapGet("/users/{userId:guid}/client-scope", GetUserClientScopeAsync)
+            .WithName("AdminOtGetUserClientScope")
+            .WithSummary("Alcance de compañías cliente de un usuario del OT")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status404NotFound);
+
+        group.MapPut("/users/{userId:guid}/client-scope", SetUserClientScopeAsync)
+            .WithName("AdminOtSetUserClientScope")
+            .WithSummary("Define el alcance de compañías cliente de un usuario del OT")
+            .WithDescription("Solo Admin OT y Super Admin; nadie cambia su propio alcance. 400 CLIENT_SCOPE_EMPTY | "
+                + "CLIENT_SCOPE_INVALID_CLIENT, 403 CLIENT_SCOPE_SELF, 404 si el usuario no es del OT. 'todos' borra la lista.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status403Forbidden)
             .Produces(StatusCodes.Status404NotFound);
 
@@ -2649,6 +2676,8 @@ public static partial class AdminOtEndpoints
         InviteOtUserRequest request,
         FlitDbContext db,
         CreateInvitationHandler handler,
+        ValidateOtInvitationClientScopeHandler clientScopeValidator,
+        IOtUserClientScopeRepository clientScopes,
         [FromQuery] Guid? transitOfficeId,
         CancellationToken cancellationToken)
     {
@@ -2723,12 +2752,47 @@ public static partial class AdminOtEndpoints
 
         var roleIds = requestedRoleIds;
 
+        // Alcance de compañías cliente del invitado (opcional; ausente = todos). Solo Admin OT y Super Admin lo fijan.
+        IReadOnlyList<Guid> invitedClientScope = [];
+        if (request.ClientScope is { } requestedScope)
+        {
+            var (scopeStatus, scopeIds) = await clientScopeValidator.HandleAsync(
+                tenantId, null, requestedScope.Mode, requestedScope.ClientTenantIds, cancellationToken).ConfigureAwait(false);
+            if (scopeStatus != SetOtUserClientScopeStatus.Ok)
+            {
+                return ClientScopeError(scopeStatus);
+            }
+
+            if (scopeIds.Count > 0 && !CanManageClientScopes(httpContext.User))
+            {
+                return ClientScopeForbidden();
+            }
+
+            invitedClientScope = scopeIds;
+        }
+
         try
         {
-            var result = await handler.HandleAsync(
-                new CreateInvitationCommand(
-                    tenantId, request.Email, request.FullName ?? string.Empty, roleIds, invitedBy.Value),
-                cancellationToken).ConfigureAwait(false);
+            var command = new CreateInvitationCommand(
+                tenantId, request.Email, request.FullName ?? string.Empty, roleIds, invitedBy.Value);
+
+            // Con alcance de compañías, invitación y alcance se guardan en UNA transacción (el usuario aún no existe: las
+            // compañías quedan ligadas a la invitación y se materializan al activarse la cuenta). Si guardar el alcance falla se
+            // revierte también la invitación: nunca queda una invitación vigente sin su restricción (falla cerrada).
+            var result = invitedClientScope.Count == 0
+                ? await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false)
+                : await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
+                {
+                    var tx = await db.Database.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
+                    await using (tx.ConfigureAwait(false))
+                    {
+                        var created = await handler.HandleAsync(command, cancellationToken).ConfigureAwait(false);
+                        await clientScopes.SetInvitationScopeAsync(
+                            created.InvitationId, invitedClientScope, invitedBy.Value, cancellationToken).ConfigureAwait(false);
+                        await tx.CommitAsync(cancellationToken).ConfigureAwait(false);
+                        return created;
+                    }
+                }).ConfigureAwait(false);
 
             return Results.Created(
                 $"/api/v1/admin/ot/users/invite/{result.InvitationId}",
@@ -2763,6 +2827,7 @@ public static partial class AdminOtEndpoints
     private static async Task<IResult> ListUsersAsync(
         HttpContext httpContext,
         FlitDbContext db,
+        IOtUserClientScopeRepository clientScopes,
         [FromQuery] Guid? transitOfficeId,
         [FromQuery] bool? onlyDeleted,
         CancellationToken cancellationToken)
@@ -2893,7 +2958,135 @@ public static partial class AdminOtEndpoints
                 0L))
             .ToListAsync(cancellationToken).ConfigureAwait(false);
 
-        return Results.Ok(new { data = activeUsers.Concat(usersWithoutRole).Concat(pending).ToList() });
+        // Alcance de compañías cliente: 'todos' salvo quien tiene fila 'especificos' (usuarios) o compañías guardadas en
+        // la invitación (pendientes). Dos consultas agrupadas, sin N+1.
+        var userScopes = await clientScopes.GetSummariesAsync(tenantId, cancellationToken).ConfigureAwait(false);
+        var invitationScopes = await clientScopes.GetInvitationSummariesAsync(tenantId, cancellationToken).ConfigureAwait(false);
+
+        OtClientScopeSummaryDto ScopeOf(string id, IReadOnlyDictionary<Guid, OtUserClientScopeSummary> source) =>
+            Guid.TryParse(id, out var key) && source.TryGetValue(key, out var s)
+                ? new OtClientScopeSummaryDto(s.Mode, s.ClientCount)
+                : new OtClientScopeSummaryDto(OtClientScopeModes.Todos, 0);
+
+        var data = activeUsers.Concat(usersWithoutRole).Select(u => u with { ClientScope = ScopeOf(u.Id, userScopes) })
+            .Concat(pending.Select(u => u with { ClientScope = ScopeOf(u.Id, invitationScopes) }))
+            .ToList();
+
+        return Results.Ok(new { data });
+    }
+
+    private static bool CanManageClientScopes(ClaimsPrincipal user) =>
+        IsSuperAdmin(user) || RequestTenantResolver.HasRole(user, AdminAuthorization.OtAdminRole);
+
+    private static IResult ClientScopeForbidden() =>
+        Results.Json(
+            new { error = "FORBIDDEN_SCOPE", message = "Solo el Admin OT y el Super Admin definen el alcance de clientes." },
+            statusCode: StatusCodes.Status403Forbidden);
+
+    private static IResult ClientScopeError(SetOtUserClientScopeStatus status) => status switch
+    {
+        SetOtUserClientScopeStatus.Empty => Results.Json(
+            new { error = "CLIENT_SCOPE_EMPTY", message = "Elige al menos una compañía cliente." },
+            statusCode: StatusCodes.Status400BadRequest),
+        SetOtUserClientScopeStatus.InvalidClient => Results.Json(
+            new { error = "CLIENT_SCOPE_INVALID_CLIENT", message = "Alguna compañía no es cliente de este organismo." },
+            statusCode: StatusCodes.Status400BadRequest),
+        SetOtUserClientScopeStatus.InvalidMode => Results.Json(
+            new { error = "CLIENT_SCOPE_INVALID_MODE", message = "El alcance debe ser 'todos' o 'especificos'." },
+            statusCode: StatusCodes.Status400BadRequest),
+        SetOtUserClientScopeStatus.Self => Results.Json(
+            new { error = "CLIENT_SCOPE_SELF", message = "No puedes cambiar tu propio alcance de clientes." },
+            statusCode: StatusCodes.Status403Forbidden),
+        SetOtUserClientScopeStatus.UserNotFound => Results.NotFound(
+            new { error = "USER_NOT_FOUND", message = "El usuario no pertenece a este organismo." }),
+        _ => Results.NoContent(),
+    };
+
+    private static async Task<IResult> ListClientCompaniesAsync(
+        HttpContext httpContext,
+        FlitDbContext db,
+        ListOtClientCompaniesHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManageClientScopes(httpContext.User))
+        {
+            return ClientScopeForbidden();
+        }
+
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var items = await handler.HandleAsync(tenantId, null, cancellationToken).ConfigureAwait(false);
+        return Results.Ok(new { items = items.Select(c => new { tenantId = c.TenantId, name = c.Name, nit = c.Nit }) });
+    }
+
+    private static async Task<IResult> GetUserClientScopeAsync(
+        HttpContext httpContext,
+        Guid userId,
+        FlitDbContext db,
+        GetOtUserClientScopeHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManageClientScopes(httpContext.User))
+        {
+            return ClientScopeForbidden();
+        }
+
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var view = await handler.HandleAsync(tenantId, userId, cancellationToken).ConfigureAwait(false);
+        return view is null
+            ? Results.NotFound(new { error = "USER_NOT_FOUND", message = "El usuario no pertenece a este organismo." })
+            : Results.Ok(new
+            {
+                mode = view.Mode,
+                clients = view.Clients.Select(c => new { tenantId = c.TenantId, name = c.Name }),
+            });
+    }
+
+    private static async Task<IResult> SetUserClientScopeAsync(
+        HttpContext httpContext,
+        Guid userId,
+        OtClientScopeBody? body,
+        FlitDbContext db,
+        SetOtUserClientScopeHandler handler,
+        [FromQuery] Guid? transitOfficeId,
+        CancellationToken cancellationToken)
+    {
+        if (!CanManageClientScopes(httpContext.User))
+        {
+            return ClientScopeForbidden();
+        }
+
+        var (tenantId, scopeError) = await ResolveOtUserScopeAsync(
+            httpContext.User, transitOfficeId, db, cancellationToken).ConfigureAwait(false);
+        if (scopeError is not null)
+        {
+            return scopeError;
+        }
+
+        var actor = ResolveUserId(httpContext.User);
+        if (actor is null)
+        {
+            return Results.Unauthorized();
+        }
+
+        var status = await handler.HandleAsync(
+            new SetOtUserClientScopeCommand(tenantId, null, userId, actor.Value, body?.Mode, body?.ClientTenantIds),
+            cancellationToken).ConfigureAwait(false);
+
+        return ClientScopeError(status);
     }
 
     private static async Task<IResult> UpdateUserAsync(
@@ -3364,7 +3557,11 @@ public static partial class AdminOtEndpoints
     private sealed record ValidateImprintSignatureRequest(string Signature);
 
     // HU #13655: RoleIds es obligatorio (400 ROLE_REQUIRED si llega vacío); un solo rol del catálogo TRANSIT_OFFICE.
-    private sealed record InviteOtUserRequest(string Email, string? FullName, Guid[]? RoleIds = null);
+    private sealed record InviteOtUserRequest(
+        string Email, string? FullName, Guid[]? RoleIds = null, OtClientScopeBody? ClientScope = null);
+
+    /// <summary>Alcance de compañías cliente (<c>todos</c> | <c>especificos</c> + compañías). Ausente = todos.</summary>
+    private sealed record OtClientScopeBody(string? Mode, Guid[]? ClientTenantIds);
 
     // HU #10621 — DisplayName/Email opcionales ("no tocar ese campo"); RowVersion obligatorio
     // (concurrencia optimista, AC4 — el valor que el frontend leyó de OtUserDto.RowVersion).
@@ -3390,7 +3587,11 @@ public static partial class AdminOtEndpoints
         DateTimeOffset? CreatedAt,
         bool IsSuspended,
         long RowVersion,
-        DateTimeOffset? DeletedAt = null);
+        DateTimeOffset? DeletedAt = null,
+        OtClientScopeSummaryDto? ClientScope = null);
+
+    /// <summary>Resumen del alcance de compañías del usuario en el listado (<c>todos</c> si no tiene restricción).</summary>
+    private sealed record OtClientScopeSummaryDto(string Mode, int ClientCount);
 }
 
 /// <summary>

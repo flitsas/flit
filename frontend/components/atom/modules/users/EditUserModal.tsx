@@ -51,6 +51,15 @@ export interface EditUserRoleSection {
   tenantId?: string | null;
 }
 
+/** Sección opcional «Clientes que gestiona» (solo canal OT; ausente = no se muestra). */
+export interface EditUserClientScopeSection {
+  content: React.ReactNode;
+  /** false = no se puede guardar (selección vacía). */
+  canSave: boolean;
+  /** Se ejecuta antes de guardar el usuario; lanza `Error` con un mensaje claro si falla. */
+  onSave: () => Promise<void>;
+}
+
 /** HU #13657: aviso previo al cambio de rol. `count = null` = no se pudo consultar cuántos permisos tiene. */
 interface PendingRoleChange {
   roleId: string;
@@ -77,6 +86,8 @@ export interface EditUserModalProps {
   onUpdate: (userId: string, payload: UpdateUserPayload) => Promise<void>;
   /** Cambio de rol en el mismo modal (fuente única). Ausente = no mostrar sección (p. ej. OT). */
   roleSection?: EditUserRoleSection;
+  /** Alcance de clientes del usuario (hub OT). Ausente = no mostrar sección. */
+  clientScopeSection?: EditUserClientScopeSection;
   /** Perfil del usuario que se edita. Se muestra siempre —también cuando no hay sección de
    *  rol— para que quede claro en qué relación está parado quien edita. */
   profile?: UserProfileKind;
@@ -90,6 +101,7 @@ export function EditUserModal({
   onSaved,
   onUpdate,
   roleSection,
+  clientScopeSection,
   profile,
 }: EditUserModalProps) {
   const [displayName, setDisplayName] = useState(user.fullName);
@@ -186,10 +198,21 @@ export function EditUserModal({
       return;
     }
 
+    if (clientScopeSection && !clientScopeSection.canSave) return;
+
     setNameError(null);
     setFormError(null);
     setBusy(true);
     try {
+      // El alcance va primero: si falla no se toca nada más y el rowVersion sigue vigente al reintentar.
+      if (clientScopeSection) {
+        try {
+          await clientScopeSection.onSave();
+        } catch (scopeError) {
+          setFormError(scopeError instanceof Error ? scopeError.message : GENERIC_ERROR);
+          return;
+        }
+      }
       // El correo NO se envía: es el identificador de acceso del usuario y no se cambia desde
       // aquí (el input se muestra en solo lectura).
       await onUpdate(user.id, {
@@ -353,6 +376,10 @@ export function EditUserModal({
           </Field>
         )}
 
+        {clientScopeSection && (
+          <div data-testid="edit-user-client-scope">{clientScopeSection.content}</div>
+        )}
+
         {formError && (
           <p
             role="alert"
@@ -374,7 +401,7 @@ export function EditUserModal({
           </button>
           <button
             type="submit"
-            disabled={busy || roleBusy}
+            disabled={busy || roleBusy || (!!clientScopeSection && !clientScopeSection.canSave)}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
             style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
           >
