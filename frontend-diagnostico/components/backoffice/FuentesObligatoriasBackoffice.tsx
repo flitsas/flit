@@ -1,25 +1,32 @@
 "use client";
 
-import { useEffect, useId, useState } from "react";
-import { ClipboardList, Lock } from "lucide-react";
+import { useEffect, useId, useState, type ReactNode } from "react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
-import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, ETIQUETA_CLS, MARCA_CLS, OPCION_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { TablaEditable, type ColumnaEditable } from "@flit/ui/TablaEditable";
+import { BOTON_REINTENTAR_CLS, MARCA_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { TOOLTIP_CLS } from "@/components/parametrizacion/estilos";
 import { nombreFuente } from "@/lib/configuracion";
+import { mensajeErrorBackoffice } from "@/lib/backoffice/api";
 import {
   FUENTES_CONFIGURABLES,
   guardarFuentesObligatorias,
   listarFuentesObligatorias,
+  tituloDefinicion,
   type DefinicionFuentesObligatorias,
   type FuenteConfigurable,
 } from "@/lib/backoffice/fuentes-obligatorias";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
 /**
  * Configurador de fuentes obligatorias (ADR-0078) en /backoffice/fuentes-obligatorias.
  * Muestra solo las cabeceras que devuelve el GET: una con `fuentes: []` es lista vacía guardada.
  * No resuelve herencia y no llama GET /tipos-tramite. RUNT no tiene casilla.
  * El piso SIMIT_PROPIETARIO y los tres SIMIT del unilateral van bloqueados, enfocables, con el motivo en texto.
+ * HU #14562 · AC48: una TablaEditable de definición (familia o tipo de trámite) × fuentes. Cada fila guarda por su cuenta:
+ * «Sin cambios», «Editado» con Descartar y Guardar, o «Error de guardado» con Reintentar y el motivo debajo de la
+ * tabla (texto fijo por `code`, nunca el mensaje del API: AP-8, SF-6). RUNT vehículo es una columna fija con candado: no es casilla ni viaja en el PUT.
  */
 
 const ALCANCES_PISO = new Set(["TRASPASO", "TRASPASO_STANDARD", "TRASPASO_TRANSFERENCIA_DE_DOMINIO"]);
@@ -29,25 +36,32 @@ const UNILATERAL = "TRASPASO_UNILATERAL";
 const MOTIVO_PISO = "El paz y salvo del propietario es obligatorio en este alcance y no se puede quitar.";
 const MOTIVO_UNILATERAL = "En el traspaso unilateral no se exige el SIMIT y no se puede marcar.";
 
-interface Borrador {
-  clave: string;
-  familia: string | null;
-  tipo_tramite_codigo: string | null;
-  fuentes: FuenteConfigurable[];
-  guardando: boolean;
-  error: string | null;
+/** AP-8 (SF-6): textos fijos de los 422 del PUT (contrato `diagnostico.v1.yaml`); el resto cae en el respaldo fijo. */
+const ERRORES_GUARDADO: Readonly<Record<string, string>> = {
+  FUENTE_DESCONOCIDA: "Una de las fuentes no existe en el catálogo.",
+  FUENTE_RUNT_NO_CONFIGURABLE: "El RUNT del vehículo es fijo: no se configura.",
+  SIMIT_PROHIBIDO_EN_UNILATERAL: "El traspaso unilateral no lleva consultas SIMIT.",
+  PISO_NO_DISPENSABLE: "SIMIT propietario es obligatorio en este traspaso y no se puede quitar.",
+};
+
+/** Casilla de una fuente en la fila: marcada y, si está bloqueada, el motivo en texto. */
+interface Casilla {
+  marcada: boolean;
+  motivo: string | null;
 }
 
-type Carga = { tipo: "cargando" } | { tipo: "error"; error: unknown } | { tipo: "listo"; definiciones: Borrador[] };
+type Fila = {
+  /** Título con el nombre de la familia o del tipo (Punto 5); es también el nombre accesible de la fila. */
+  titulo: string;
+  familia: string | null;
+  tipo_tramite_codigo: string | null;
+  runt: null;
+} & Record<FuenteConfigurable, Casilla>;
+
+type Carga = { tipo: "cargando" } | { tipo: "error"; error: unknown } | { tipo: "listo"; filas: Fila[] };
 
 function codigoAlcance(def: { familia: string | null; tipo_tramite_codigo: string | null }): string {
   return def.familia ?? def.tipo_tramite_codigo ?? "";
-}
-
-function tituloDefinicion(def: { familia: string | null; tipo_tramite_codigo: string | null }): string {
-  if (def.familia) return `Familia ${def.familia}`;
-  if (def.tipo_tramite_codigo) return `Tipo ${def.tipo_tramite_codigo}`;
-  return "Definición";
 }
 
 function motivoBloqueo(alcance: string, fuente: FuenteConfigurable): string | null {
@@ -65,34 +79,106 @@ function fuentesSeleccionadas(alcance: string, fuentes: readonly FuenteConfigura
   return FUENTES_CONFIGURABLES.filter((f) => marcada(alcance, f, fuentes));
 }
 
-function aBorrador(def: DefinicionFuentesObligatorias): Borrador {
+function aFila(def: DefinicionFuentesObligatorias): Fila {
   const alcance = codigoAlcance(def);
   const crudas = (Array.isArray(def.fuentes) ? def.fuentes : []) as readonly string[];
-  const presentes = new Set(FUENTES_CONFIGURABLES.filter((f) => crudas.includes(f)));
-  if (ALCANCES_PISO.has(alcance)) presentes.add("SIMIT_PROPIETARIO");
-  return {
-    clave: def.familia ?? def.tipo_tramite_codigo ?? "sin-alcance",
-    familia: def.familia,
-    tipo_tramite_codigo: def.tipo_tramite_codigo,
-    fuentes: FUENTES_CONFIGURABLES.filter((f) => presentes.has(f)),
-    guardando: false,
-    error: null,
-  };
+  const presentes = FUENTES_CONFIGURABLES.filter((f) => crudas.includes(f));
+  const casillas = Object.fromEntries(
+    FUENTES_CONFIGURABLES.map((f) => [f, { marcada: marcada(alcance, f, presentes), motivo: motivoBloqueo(alcance, f) }]),
+  ) as Record<FuenteConfigurable, Casilla>;
+  return { titulo: tituloDefinicion(def), familia: def.familia, tipo_tramite_codigo: def.tipo_tramite_codigo, runt: null, ...casillas };
 }
+
+const fuentesDeFila = (fila: Fila): FuenteConfigurable[] =>
+  fuentesSeleccionadas(codigoAlcance(fila), FUENTES_CONFIGURABLES.filter((f) => fila[f].marcada));
 
 function Vacio() {
   return (
     <div className="flex flex-col items-center gap-3 py-10 text-center">
-      <ClipboardList className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
+      <Icono nombre="portapapeles" className="h-10 w-10 text-flit-brand" />
       <h2 className="text-lg font-semibold">No hay definiciones guardadas</h2>
-      <p className="max-w-md text-sm text-[var(--nav-texto)]">Esta pantalla solo muestra las cabeceras que ya existen.</p>
+      <p className="max-w-md text-sm text-muted-foreground">Esta pantalla solo muestra las cabeceras que ya existen.</p>
     </div>
   );
 }
 
+function CasillaFuente({
+  fuente,
+  valor,
+  etiqueta,
+  onCambio,
+}: {
+  fuente: FuenteConfigurable;
+  valor: Casilla;
+  etiqueta: string;
+  onCambio: (v: Casilla) => void;
+}) {
+  const tooltipId = `${useId()}-tooltip`;
+  const { motivo } = valor;
+  return (
+    <span className="group relative inline-flex items-center gap-1.5">
+      <input
+        type="checkbox"
+        value={fuente}
+        aria-label={etiqueta}
+        checked={valor.marcada}
+        onChange={() => {
+          if (!motivo) onCambio({ ...valor, marcada: !valor.marcada });
+        }}
+        aria-disabled={motivo ? true : undefined}
+        aria-describedby={motivo ? tooltipId : undefined}
+        className={MARCA_CLS}
+      />
+      {motivo && <Icono nombre="candado" className="h-3.5 w-3.5 text-muted-foreground" />}
+      {motivo && (
+        <span role="tooltip" id={tooltipId} className={TOOLTIP_CLS}>
+          {motivo}
+        </span>
+      )}
+    </span>
+  );
+}
+
+const COLUMNAS: ColumnaEditable<Fila>[] = [
+  {
+    campo: "titulo",
+    titulo: "Definición",
+    mostrar: (fila) => (
+      <span className="flex flex-col gap-0.5">
+        <span>{fila.titulo}</span>
+        {fuentesDeFila(fila).length === 0 && <span className="text-xs font-normal text-muted-foreground">Lista vacía guardada</span>}
+      </span>
+    ),
+  },
+  {
+    campo: "runt",
+    titulo: "RUNT vehículo",
+    mostrar: () => (
+      <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span data-testid="candado-runt" className="inline-flex">
+          <Icono nombre="candado" className="h-4 w-4" />
+        </span>
+        Siempre obligatoria
+      </span>
+    ),
+  },
+  ...FUENTES_CONFIGURABLES.map(
+    (fuente): ColumnaEditable<Fila> => ({
+      campo: fuente,
+      titulo: nombreFuente(fuente),
+      editable: true,
+      editor: (valor, onCambio, etiqueta) => (
+        <CasillaFuente fuente={fuente} valor={valor as Casilla} etiqueta={etiqueta} onCambio={(v) => onCambio(v as Fila[keyof Fila & string])} />
+      ),
+    }),
+  ),
+];
+
 export function FuentesObligatoriasBackoffice() {
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
+  /** Motivo del último error de guardado por fila (título → mensaje); se limpia al guardar bien. */
+  const [errores, setErrores] = useState<Record<string, string>>({});
 
   useEffect(() => {
     const control = new AbortController();
@@ -103,7 +189,7 @@ export function FuentesObligatoriasBackoffice() {
           setCarga({ tipo: "error", error: new Error("La respuesta no trae definiciones.") });
           return;
         }
-        setCarga({ tipo: "listo", definiciones: lista.definiciones.map(aBorrador) });
+        setCarga({ tipo: "listo", filas: lista.definiciones.map(aFila) });
       },
       (error: unknown) => {
         if (!control.signal.aborted) setCarga({ tipo: "error", error });
@@ -112,44 +198,34 @@ export function FuentesObligatoriasBackoffice() {
     return () => control.abort();
   }, [intento]);
 
-  function actualizar(clave: string, cambios: Partial<Borrador>) {
-    setCarga((actual) => {
-      if (actual.tipo !== "listo") return actual;
-      return { tipo: "listo", definiciones: actual.definiciones.map((d) => (d.clave === clave ? { ...d, ...cambios } : d)) };
+  function fijarError(titulo: string, mensaje: string | null) {
+    setErrores((actual) => {
+      const copia = { ...actual };
+      if (mensaje === null) delete copia[titulo];
+      else copia[titulo] = mensaje;
+      return copia;
     });
   }
 
-  function alternar(def: Borrador, fuente: FuenteConfigurable) {
-    if (motivoBloqueo(codigoAlcance(def), fuente) || def.guardando) return;
-    const fuentes = def.fuentes.includes(fuente) ? def.fuentes.filter((f) => f !== fuente) : fuentesSeleccionadas(codigoAlcance(def), [...def.fuentes, fuente]);
-    actualizar(def.clave, { fuentes, error: null });
-  }
-
-  async function guardar(def: Borrador) {
-    const alcance = codigoAlcance(def);
-    actualizar(def.clave, { guardando: true, error: null });
+  async function guardar(fila: Fila) {
     try {
       const guardada = await guardarFuentesObligatorias({
-        familia: def.familia,
-        tipo_tramite_codigo: def.tipo_tramite_codigo,
-        fuentes: fuentesSeleccionadas(alcance, def.fuentes),
+        familia: fila.familia,
+        tipo_tramite_codigo: fila.tipo_tramite_codigo,
+        fuentes: fuentesDeFila(fila),
       });
-      actualizar(def.clave, {
-        guardando: false,
-        error: null,
-        familia: guardada.familia,
-        tipo_tramite_codigo: guardada.tipo_tramite_codigo,
-        fuentes: aBorrador(guardada).fuentes,
-      });
+      const nueva = { ...aFila(guardada), titulo: fila.titulo };
+      fijarError(fila.titulo, null);
+      setCarga((actual) =>
+        actual.tipo === "listo" ? { tipo: "listo", filas: actual.filas.map((f) => (f.titulo === fila.titulo ? nueva : f)) } : actual,
+      );
     } catch (error: unknown) {
-      actualizar(def.clave, {
-        guardando: false,
-        error: error instanceof Error ? error.message : "No se pudo guardar esta definición.",
-      });
+      fijarError(fila.titulo, mensajeErrorBackoffice(error, "No se pudo guardar esta definición.", ERRORES_GUARDADO));
+      throw error;
     }
   }
 
-  let cuerpo: React.ReactNode;
+  let cuerpo: ReactNode;
   if (carga.tipo === "cargando") {
     cuerpo = (
       <section aria-label="Definiciones" className={TARJETA_CLS}>
@@ -175,11 +251,11 @@ export function FuentesObligatoriasBackoffice() {
             </button>
           }
         >
-          {carga.error instanceof Error ? carga.error.message : "Intenta de nuevo en un momento."}
+          {mensajeErrorBackoffice(carga.error, "Intenta de nuevo en un momento.")}
         </InlineAlert>
       </section>
     );
-  } else if (carga.definiciones.length === 0) {
+  } else if (carga.filas.length === 0) {
     cuerpo = (
       <section aria-label="Definiciones" className={TARJETA_CLS}>
         <Vacio />
@@ -187,113 +263,41 @@ export function FuentesObligatoriasBackoffice() {
     );
   } else {
     cuerpo = (
-      <div className="flex flex-col gap-4">
-        {carga.definiciones.map((def) => (
-          <DefinicionCard key={def.clave} def={def} onAlternar={(fuente) => alternar(def, fuente)} onGuardar={() => guardar(def)} />
+      <section aria-label="Definiciones" className={`${TARJETA_CLS} flex flex-col gap-3`}>
+        <TablaEditable
+          etiqueta="Fuentes obligatorias por definición"
+          filas={carga.filas}
+          columnas={COLUMNAS}
+          clave={(f) => f.titulo}
+          onGuardar={guardar}
+        />
+        {Object.entries(errores).map(([titulo, mensaje]) => (
+          <InlineAlert key={titulo} tone="error" title={`No se guardó ${titulo}`}>
+            {mensaje}
+          </InlineAlert>
         ))}
-      </div>
+      </section>
     );
   }
 
   return (
     <>
-      <section aria-labelledby="fuentes-obl-titulo" className={TARJETA_CLS}>
-        <h1 id="fuentes-obl-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
-          Fuentes obligatorias
-        </h1>
-        <p className="mt-1 text-sm font-medium text-[var(--nav-texto)]">
-          Define las fuentes que el alta exige, por familia o por tipo de trámite. La lista es de FLIT y es la misma para todas las compañías.
-        </p>
-        <p className="mt-2 text-sm text-[var(--nav-texto)]">El RUNT del vehículo sigue siendo obligatorio en todo diagnóstico y no se configura aquí.</p>
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="fuentes-obl-titulo"
+        tituloId="fuentes-obl-titulo"
+        titulo="Fuentes obligatorias"
+        descripcion={
+          <>
+            <p>
+              Define las fuentes que el alta exige, por familia o por tipo de trámite. La lista es de FLIT y es la misma para todas las compañías.
+            </p>
+            <p className="mt-2">El RUNT del vehículo sigue siendo obligatorio en todo diagnóstico y no se configura aquí.</p>
+          </>
+        }
+        icono="fuentes-oficiales"
+      />
       {cuerpo}
     </>
-  );
-}
-
-function DefinicionCard({ def, onAlternar, onGuardar }: { def: Borrador; onAlternar: (fuente: FuenteConfigurable) => void; onGuardar: () => void }) {
-  const baseId = useId();
-  const tituloId = `${baseId}-titulo`;
-  const alcance = codigoAlcance(def);
-  const titulo = tituloDefinicion(def);
-  const seleccion = fuentesSeleccionadas(alcance, def.fuentes);
-
-  return (
-    <section aria-labelledby={tituloId} className={`${TARJETA_CLS} flex flex-col gap-4`}>
-      <h2 id={tituloId} className="text-lg font-semibold text-flit-primary dark:text-white">
-        {titulo}
-      </h2>
-      {seleccion.length === 0 && <p className="text-sm text-[var(--nav-texto)]">Definición guardada con la lista vacía.</p>}
-      <fieldset className="flex flex-col gap-2">
-        <legend className={ETIQUETA_CLS}>Fuentes</legend>
-        <ul className="flex flex-col gap-2">
-          {FUENTES_CONFIGURABLES.map((fuente) => (
-            <CasillaFuente
-              key={fuente}
-              id={`${baseId}-${fuente}`}
-              fuente={fuente}
-              marcada={marcada(alcance, fuente, def.fuentes)}
-              motivo={motivoBloqueo(alcance, fuente)}
-              disabled={def.guardando}
-              onAlternar={() => onAlternar(fuente)}
-            />
-          ))}
-        </ul>
-      </fieldset>
-      {def.error && (
-        <InlineAlert tone="error" title="No se guardó esta definición">
-          {def.error}
-        </InlineAlert>
-      )}
-      <div>
-        <button type="button" onClick={onGuardar} disabled={def.guardando} className={BOTON_PRIMARIO_CLS}>
-          {def.guardando ? "Guardando…" : "Guardar"}
-        </button>
-      </div>
-    </section>
-  );
-}
-
-function CasillaFuente({
-  id,
-  fuente,
-  marcada,
-  motivo,
-  disabled,
-  onAlternar,
-}: {
-  id: string;
-  fuente: FuenteConfigurable;
-  marcada: boolean;
-  motivo: string | null;
-  disabled: boolean;
-  onAlternar: () => void;
-}) {
-  const tooltipId = `${id}-tooltip`;
-
-  return (
-    <li className="group relative">
-      <label className={OPCION_CLS}>
-        <input
-          type="checkbox"
-          value={fuente}
-          checked={marcada}
-          onChange={() => {
-            if (!motivo) onAlternar();
-          }}
-          aria-disabled={motivo ? true : undefined}
-          aria-describedby={motivo ? tooltipId : undefined}
-          disabled={disabled}
-          className={MARCA_CLS}
-        />
-        <span className="flex-1">{nombreFuente(fuente)}</span>
-        {motivo && <Lock className="h-3.5 w-3.5 text-[var(--nav-texto)]" aria-hidden="true" />}
-      </label>
-      {motivo && (
-        <span role="tooltip" id={tooltipId} className={TOOLTIP_CLS}>
-          {motivo}
-        </span>
-      )}
-    </li>
   );
 }

@@ -55,7 +55,7 @@ public sealed class ListadoDiagnosticosTests
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var json = JsonDocument.Parse(cuerpo).RootElement;
+        var json = JsonElement.Parse(cuerpo);
         json.GetProperty("pagina").GetInt32().Should().Be(1);
         json.GetProperty("tamano").GetInt32().Should().Be(10, "la paginación estándar del monorepo (HU #13916) arranca en 10 si no se envía tamano");
         json.GetProperty("total").GetInt32().Should().Be(3);
@@ -257,7 +257,7 @@ public sealed class ListadoDiagnosticosTests
             var respuesta = await empresa.Cliente().GetAsync(ListadoDePrueba.Ruta + query, ct);
             var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.BadRequest, $"{query}: {cuerpo}");
-            var json = JsonDocument.Parse(cuerpo).RootElement;
+            var json = JsonElement.Parse(cuerpo);
             json.GetProperty("code").GetString().Should().Be(codigo, query);
             json.GetProperty("campo").GetString().Should().Be(campo, query);
         }
@@ -355,7 +355,7 @@ internal static class ListadoDePrueba
         ArgumentNullException.ThrowIfNull(respuesta);
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        return JsonDocument.Parse(cuerpo).RootElement.Clone();
+        return JsonElement.Parse(cuerpo).Clone();
     }
 
     public static async Task<IReadOnlyList<JsonElement>> DiagnosticosAsync(HttpResponseMessage respuesta, CancellationToken ct) =>

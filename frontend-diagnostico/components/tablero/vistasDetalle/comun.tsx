@@ -1,17 +1,27 @@
 import type { CSSProperties, ReactNode } from "react";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 
 // Piezas comunes de las vistas del detalle de celda (HU #13801), también para la grilla de backoffice (F06-H5). Todo valor
 // visual sale de los tokens de @flit/ui (tokens.css): cabecera de tabla gris de marca, borde de fila y tintas AA.
 
-/** Cabecera de tabla del sistema: barra gris de marca (--table-header-*), versalita de 10px (misma que la grilla). */
-export const CABECERA_TABLA_CLS = "px-3 py-2 text-left text-[10px] font-semibold uppercase tracking-wider";
+/**
+ * «Tabla por defecto» de Diagnóstico (HU #14584/#14585, spec-ui §1; referente: ListadoDiagnosticos). Todas las tablas propias
+ * (listado, grilla del lote, backoffice, saneamiento, vehículos) usan estas recetas en vez de repetir radio, borde o cabecera.
+ */
+/** Contenedor de la tabla: desborde horizontal dentro del bloque, radio del kit (rounded-xl = var(--radius) = 9 px) y borde gris de marca. */
+export const CONTENEDOR_TABLA_CLS = "overflow-x-auto rounded-xl border border-border";
+/** Cabecera de tabla del sistema: barra gris de marca (--table-header-*), versalita de 12 px (T4: piso tipográfico del kit). */
+export const CABECERA_TABLA_CLS = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider";
 export const CABECERA_TABLA_ESTILO: CSSProperties = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" };
-export const CELDA_TABLA_CLS = "px-3 py-2 align-top text-xs text-flit-primary dark:text-white";
+export const CELDA_TABLA_CLS = "px-3 py-2 align-top text-xs text-flit-primary";
 export const FILA_TABLA_CLS = "border-t border-[var(--table-row-border)]";
-export const TEXTO_SECUNDARIO_CLS = "text-xs text-[var(--nav-texto)] dark:text-slate-300";
+/** Fila de la tabla por defecto: superficie de tarjeta y hover --table-row-hover con el token de movimiento (T8). */
+export const FILA_TABLA_HOVER_CLS =
+  "bg-card transition-colors duration-[var(--dx-motion-rapido)] hover:bg-[var(--table-row-hover)] motion-reduce:transition-none";
+export const TEXTO_SECUNDARIO_CLS = "text-xs text-muted-foreground";
 
 /** Tarjeta interna del detalle (borde gris de marca, radio 12px). */
-export const TARJETA_DETALLE_CLS = "rounded-xl border border-[var(--color-flit-gray)] p-4 dark:border-white/10";
+export const TARJETA_DETALLE_CLS = "rounded-xl border border-border p-4";
 
 /** Lista de datos rótulo/valor en dos columnas. */
 export function ListaDatos({ children }: { children: ReactNode }) {
@@ -22,7 +32,7 @@ export function Dato({ rotulo, children }: { rotulo: string; children: ReactNode
   return (
     <div className="flex flex-col gap-0.5">
       <dt className={TEXTO_SECUNDARIO_CLS}>{rotulo}</dt>
-      <dd className="break-all text-sm font-medium text-flit-primary dark:text-white">{children}</dd>
+      <dd className="break-all text-sm font-medium text-flit-primary">{children}</dd>
     </div>
   );
 }
@@ -37,10 +47,7 @@ export function Etiqueta({ tono, children }: { tono: TonoEtiqueta; children: Rea
   // El rojo usa la tinta --badge-pending-fg (AA sobre el fondo tintado), como el semáforo de la grilla.
   const color = tono === "danger" ? "var(--badge-pending-fg)" : `var(--badge-${tono}-fg)`;
   return (
-    <span
-      className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-semibold"
-      style={{ background: `var(--badge-${tono}-bg)`, color, borderColor: `var(--badge-${tono}-border)` }}
-    >
+    <span {...etiquetaKit({ c: `var(--badge-${tono}-border)`, ct: color })}>
       {children}
     </span>
   );
@@ -48,5 +55,5 @@ export function Etiqueta({ tono, children }: { tono: TonoEtiqueta; children: Rea
 
 /** Mensaje de estado vacío dentro del detalle. */
 export function Vacio({ children }: { children: ReactNode }) {
-  return <p className={`${TARJETA_DETALLE_CLS} text-sm text-[var(--nav-texto)] dark:text-slate-300`}>{children}</p>;
+  return <p className={`${TARJETA_DETALLE_CLS} text-sm text-muted-foreground`}>{children}</p>;
 }

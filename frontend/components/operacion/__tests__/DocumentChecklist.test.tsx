@@ -94,10 +94,9 @@ describe('HU #12728 — DocumentSlot cabecera (D.2)', () => {
     ).toBeInTheDocument();
     const nota = screen.getByText('Sube la factura original firmada por el concesionario.')
       .parentElement;
-    const infoIcon = nota?.querySelector('svg.lucide-info');
+    // PDF definitivo de íconos: la información lleva el disco azul con «i» del kit (aviso-info), no el «!» suelto.
+    const infoIcon = nota?.querySelector('img[src$="/aviso-info.svg"]');
     expect(infoIcon).toBeTruthy();
-    // El azul de marca va por token: en una Marca Blanca toma su color de acción.
-    expect(infoIcon?.getAttribute('style')).toMatch(/var\(--color-flit-brand\)/);
     expect(screen.getByText('Sube la factura original firmada por el concesionario.').className).toMatch(
       /opacity-70/,
     );

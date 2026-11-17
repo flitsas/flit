@@ -123,7 +123,7 @@ public sealed class ServicioCabecera(
         solicitud.Modo == ModoDiagnostico.ConAnalisis ? solicitud.TipoTramiteCodigo?.Trim() : null;
 
     private static ReglaException NoEditable() =>
-        ReglaException.Conflicto(CodigoNoEditable, "El diagnóstico ya no está en CREADO: su cabecera no se puede editar.");
+        ReglaException.Conflicto(CodigoNoEditable, "El diagnóstico ya se lanzó: su cabecera no se puede editar.");
 
     /// <summary>Convierte los códigos del cuerpo; un código desconocido es 422 <c>VALOR_FUERA_DE_CONJUNTO</c> con su campo.</summary>
     private static SolicitudCabecera Leer(CabeceraEntradaDto entrada)

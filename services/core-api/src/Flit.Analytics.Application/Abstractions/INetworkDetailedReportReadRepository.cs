@@ -1,3 +1,4 @@
+using Flit.Analytics.Application.CompanyQueries;
 using Flit.Analytics.Application.Dtos;
 
 namespace Flit.Analytics.Application.Abstractions;
@@ -37,6 +38,9 @@ public interface INetworkDetailedReportReadRepository
         NetworkDetailedReportFilter filter,
         Func<NetworkDetailedProcedureRowDto, CancellationToken, Task> onRowAsync,
         CancellationToken ct = default);
+
+    /// <summary>Máximo de actores por rol sobre TODO el filtro de red; define el ancho de las columnas del Excel.</summary>
+    Task<MaxActoresPorRolDto> GetNetworkMaxActoresPorRolAsync(NetworkDetailedReportFilter filter, CancellationToken ct = default);
 
     /// <summary>
     /// HU #14320 — identificadores de TODOS los clientes de la plataforma, para el modo «todas las compañías»

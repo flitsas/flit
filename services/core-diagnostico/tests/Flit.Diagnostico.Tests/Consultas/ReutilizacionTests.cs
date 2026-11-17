@@ -63,7 +63,7 @@ public sealed class ReutilizacionTests
         reutilizada.Estado.Should().Be(EstadoCelda.Completado);
         reutilizada.Origen.Should().Be(OrigenCelda.Api);
         reutilizada.ReutilizadaDeId.Should().Be(original.Id);
-        JsonDocument.Parse(reutilizada.Payload!).RootElement.GetRawText().Should().Be(JsonDocument.Parse(original.Payload!).RootElement.GetRawText());
+        JsonElement.Parse(reutilizada.Payload!).GetRawText().Should().Be(JsonElement.Parse(original.Payload!).GetRawText());
         reutilizada.LeaseHasta.Should().BeNull();
         reutilizada.VersionTablero.Should().BeGreaterThan(0, "pasa por el cierre normal y sube la versión del tablero");
 
@@ -86,8 +86,8 @@ public sealed class ReutilizacionTests
         vNuevo.OrganismoNombre.Should().Be(vOriginal.OrganismoNombre);
         vNuevo.DepartamentoCodigo.Should().Be(vOriginal.DepartamentoCodigo);
         vNuevo.RuntConsultadoEn.Should().BeCloseTo(original.DatoObtenidoEn!.Value, TimeSpan.FromMilliseconds(1), "el RUNT se consultó cuando el original");
-        JsonDocument.Parse(vNuevo.DatosConsolidados).RootElement.GetProperty("vehiculo").GetRawText()
-            .Should().Be(JsonDocument.Parse(vOriginal.DatosConsolidados).RootElement.GetProperty("vehiculo").GetRawText());
+        JsonElement.Parse(vNuevo.DatosConsolidados).GetProperty("vehiculo").GetRawText()
+            .Should().Be(JsonElement.Parse(vOriginal.DatosConsolidados).GetProperty("vehiculo").GetRawText());
         vNuevo.PropietarioDocTipo.Should().Be(vOriginal.PropietarioDocTipo);
         vNuevo.PropietarioDocCifrado.Should().Equal(vOriginal.PropietarioDocCifrado!, "se copia el cifrado, no se descifra para copiar");
         api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(vNuevo.PropietarioDocCifrado!).Should().Be(PropietarioNatural);
@@ -249,14 +249,14 @@ public sealed class ReutilizacionTests
         leasing.LocatarioDocTipo.Should().Be(leasingOriginal.LocatarioDocTipo);
         leasing.LocatarioDocCifrado.Should().Equal(leasingOriginal.LocatarioDocCifrado!);
         protector.Desproteger(leasing.LocatarioDocCifrado!).Should().Be(LocatarioLeasing);
-        leasing.LocatarioDeclaradoDocTipo.Should().Be("CE", "el declarado queda de respaldo con su tipo");
-        protector.Desproteger(leasing.LocatarioDeclaradoDocCifrado!).Should().Be(OtroDeclarado);
+        leasing.PropietarioDeclaradoDocTipo.Should().Be("CE", "HU #14582: el declarado es el propietario actual del vehículo destino");
+        protector.Desproteger(leasing.PropietarioDeclaradoDocCifrado!).Should().Be(OtroDeclarado);
         leasing.PropietarioDocCifrado.Should().Equal(leasingOriginal.PropietarioDocCifrado!);
 
         var natural = await MotorRunt.VehiculoAsync(api, empresa, segundo, "TST001", ct);
-        natural.LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente, "el RUNT original no trajo locatario");
-        protector.Desproteger(natural.LocatarioDocCifrado!).Should().Be(OtroDeclarado, "conserva su propio declarado, no el del otro vehículo");
-        natural.LocatarioDeclaradoDocCifrado.Should().BeNull();
+        natural.LocatarioDocOrigen.Should().BeNull("HU #14582: el RUNT original no trajo locatario y el declarado ya no lo es");
+        natural.LocatarioDocCifrado.Should().BeNull();
+        protector.Desproteger(natural.PropietarioDeclaradoDocCifrado!).Should().Be(OtroDeclarado, "conserva su propio declarado, no el del otro vehículo");
         (await Motor.CeldasAsync(api, empresa.Id, segundo, ct)).Should().OnlyContain(c => c.ReutilizadaDeId != null);
     }
 
@@ -315,11 +315,64 @@ public sealed class ReutilizacionTests
         control!.ReutilizadaDeId.Should().Be(deApi.Celda("TST081", Fuente.SimitVehiculo).Id);
     }
 
+    // CR-2 (review be1-a, HU #14582) — al reutilizar el RUNT del día, si un propietario copiado no se puede descifrar el cierre no
+    // falla: cambio_propietario queda null, como en FijarCambioPropietario.
+    [Fact]
+    public async Task Reutilizar_runt_con_un_propietario_ilegible_deja_el_cambio_en_null_sin_fallar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
+        var original = await TableroAyudas.SembrarAsync(empresa, ct, vehiculos: [new("TST095", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+        var nuevo = await TableroAyudas.SembrarAsync(empresa, ct, vehiculos: [new("TST095", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
+        var destino = nuevo.Vehiculos.Single().Id;
+        await using (var db = empresa.Db())
+        {
+            db.Add(new PersonaVehiculo
+            {
+                VehiculoId = original.Vehiculos.Single().Id,
+                Rol = RolPersona.Propietario,
+                Orden = 1,
+                DocTipo = "CC",
+                DocCifrado = [7, 7, 7, 7],
+                Origen = OrigenDocumento.Proveedor,
+                CreadoEn = DateTimeOffset.UtcNow,
+            });
+            var fila = await db.Set<Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico>().SingleAsync(v => v.Id == destino, ct);
+            fila.PropietarioDeclaradoDocTipo = "CC";
+            fila.PropietarioDeclaradoDocCifrado = protector.Proteger(PropietarioNatural);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var celda = nuevo.Celda("TST095", Fuente.Runt);
+        ResultadoCelda? reutilizada;
+        await using (var db = empresa.Db())
+        {
+            var tomada = new CeldaEnCurso(celda.Id, empresa.Id, celda.DiagnosticoId, celda.VehiculoId, celda.Fuente, celda.TrabajoId);
+            reutilizada = await ReutilizacionMismoDia.BuscarAsync(new ContextoCelda(tomada, db), DateTimeOffset.UtcNow, protector, ct);
+        }
+
+        reutilizada.Should().NotBeNull("hay un RUNT de API del mismo día con la misma placa");
+        reutilizada!.Efectos.Should().NotBeNull();
+        await using (var cierre = empresa.Db())
+        {
+            await FluentActions.Awaiting(() => reutilizada.Efectos!(cierre, 1, ct)).Should().NotThrowAsync("CR-2: el cifrado ilegible no rompe el cierre");
+            await cierre.SaveChangesAsync(ct);
+        }
+
+        await using var lectura = empresa.Db();
+        (await lectura.Set<Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico>().AsNoTracking().SingleAsync(v => v.Id == destino, ct))
+            .CambioPropietario.Should().BeNull();
+    }
+
     private static async Task<ResultadoCelda?> BuscarAsync(ApiDePrueba api, EmpresaDePrueba empresa, CeldaConsulta celda, CancellationToken ct)
     {
         await using var db = empresa.Db();
         var tomada = new CeldaEnCurso(celda.Id, empresa.Id, celda.DiagnosticoId, celda.VehiculoId, celda.Fuente, celda.TrabajoId);
-        return await ReutilizacionMismoDia.BuscarAsync(new ContextoCelda(tomada, db), DateTimeOffset.UtcNow, ct);
+        return await ReutilizacionMismoDia.BuscarAsync(
+            new ContextoCelda(tomada, db), DateTimeOffset.UtcNow, api.App.Services.GetRequiredService<IProtectorDocumentoPersona>(), ct);
     }
 
     /// <summary>API con la fuente RUNT simulada espiada y un reloj manual.</summary>

@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  PLATE_MOTOCARRO_PATTERN,
   PLATE_PATTERN,
   VIN_PATTERN,
   sanitizePlate,
@@ -31,6 +32,8 @@ interface TablaCasos {
   version: number;
   tipos: string[];
   casos: CasoIdentificador[];
+  /** Punto 7.1 (2026-11-11): placa de motocarro 123ABC, aparte porque Trámites la valida fuera de PLATE_PATTERN. */
+  casos_motocarro: CasoIdentificador[];
 }
 
 const RAIZ = path.resolve(__dirname, "../../../..");
@@ -81,6 +84,7 @@ describe("AC1 — Diagnóstico da en cada fila el mismo resultado que el validad
   it("los patrones son los mismos literales que en Trámites", () => {
     expect(VIN_PATTERN.source).toBe(patronDeTramites("VIN_PATTERN"));
     expect(PLATE_PATTERN.source).toBe(patronDeTramites("PLATE_PATTERN"));
+    expect(PLATE_MOTOCARRO_PATTERN.source).toBe(patronDeTramites("PLATE_MOTOCARRO_PATTERN"));
   });
 
   it("sanitizeVin y sanitizePlate limpian como Trámites (mayúsculas, charset y tope)", () => {
@@ -93,6 +97,37 @@ describe("AC1 — Diagnóstico da en cada fila el mismo resultado que el validad
   it("null y undefined son INVALIDO con normalizado vacío", () => {
     expect(validarIdentificador(null)).toEqual({ normalizado: "", tipo: null });
     expect(validarIdentificador(undefined)).toEqual({ normalizado: "", tipo: null });
+  });
+});
+
+describe("Punto 7.1 — placa de motocarro 123ABC (PLACA_MOTOCARRO), alineada con Trámites", () => {
+  it("la tabla trae su lista de motocarro con casos válidos e inválidos y sin tocar «casos»", () => {
+    expect(tabla.casos_motocarro.length).toBeGreaterThanOrEqual(10);
+    expect(new Set(tabla.casos_motocarro.map((c) => c.tipo))).toEqual(new Set(["PLACA_MOTOCARRO", "INVALIDO"]));
+    expect(tabla.casos.some((c) => c.tipo === "PLACA_MOTOCARRO")).toBe(false);
+  });
+
+  it.each(tabla.casos_motocarro.map((c) => [JSON.stringify(c.entrada), c] as const))("entrada %s", (_etiqueta, caso) => {
+    expect(resultadoDeLaApp(caso.entrada)).toEqual({
+      normalizado: caso.normalizado,
+      tipo: caso.tipo,
+      valido: caso.valido,
+    });
+  });
+
+  it("la lista de motocarro no tiene divergencias", () => {
+    expect(divergencias(tabla.casos_motocarro)).toEqual([]);
+  });
+
+  it("123-abc y ' 987 zyx ' son motocarro y no exceden la longitud", () => {
+    expect(validarIdentificador("123-abc")).toEqual({ normalizado: "123ABC", tipo: "PLACA_MOTOCARRO" });
+    expect(validarIdentificador(" 987 zyx ")).toEqual({ normalizado: "987ZYX", tipo: "PLACA_MOTOCARRO" });
+    expect(validarLongitudIdentificador("123-abc")).toBeNull();
+  });
+
+  it("PLATE_PATTERN sigue con sus cuatro ramas: el motocarro va en su patrón aparte", () => {
+    expect(PLATE_PATTERN.test("123ABC")).toBe(false);
+    expect(PLATE_MOTOCARRO_PATTERN.test("123ABC")).toBe(true);
   });
 });
 

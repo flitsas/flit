@@ -152,7 +152,7 @@ public sealed class GetAllCompaniesDetailedProceduresHandler(INetworkDetailedRep
         var result = await repo.GetNetworkProceduresAsync(filter!, safePage, safeSize, ct).ConfigureAwait(false);
         var p = result.Items;
         return (new NetworkAnalyticsOutcome<AllCompaniesDetailedProceduresPageDto>(
-            new AllCompaniesDetailedProceduresPageDto(p.Items, p.TotalCount, p.Page, p.PageSize, p.Summary),
+            new AllCompaniesDetailedProceduresPageDto(p.Items, p.TotalCount, p.Page, p.PageSize, p.Summary, p.MaxActoresPorRol),
             result.ReachedTenantIds), null);
     }
 

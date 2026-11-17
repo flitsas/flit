@@ -1,3 +1,5 @@
+using Flit.Diagnostico.Api.Plataforma;
+
 namespace Flit.Diagnostico.Api.Modulos.Reportes;
 
 /// <summary>
@@ -33,21 +35,19 @@ internal static class ColumnasExcel
     /// <summary>Impuesto departamental (HU #13864, Q6 = a): cantidad de vigencias con <c>pagada=false</c>.</summary>
     public const string VigenciasPendientes = "Vigencias pendientes";
 
+    /// <summary>Propietario actual declarado por el cliente, enmascarado («TIPO ****1234»), o vacío (HU #14582, §1.3).</summary>
+    public const string PropietarioDeclarado = "Propietario actual declarado";
+
+    /// <summary>Sí / No / vacío según <c>cambio_propietario</c> (HU #14582, §1.3).</summary>
+    public const string CambioPropietario = "Cambio de propietario";
+
     /// <summary>Columnas fijas, antes de las fuentes.</summary>
-    public static readonly IReadOnlyList<string> Fijas = ["Orden", "Identificador", "Tipo de identificador", "Placa", "VIN", "Estado del vehículo"];
+    public static readonly IReadOnlyList<string> Fijas =
+        ["Orden", "Identificador", "Tipo de identificador", "Placa", "VIN", PropietarioDeclarado, CambioPropietario, "Estado del vehículo"];
 
     /// <summary>Título de cada fuente (código de la base) en los encabezados y en la hoja «Consultas».</summary>
-    public static readonly IReadOnlyDictionary<string, string> Titulos = new Dictionary<string, string>(StringComparer.Ordinal)
-    {
-        ["RUNT"] = "RUNT",
-        ["RUNT_PROPIETARIO"] = "RUNT propietarios",
-        ["RUNT_LOCATARIO"] = "RUNT locatarios",
-        ["SIMIT_VEHICULO"] = "SIMIT vehículo",
-        ["SIMIT_PROPIETARIO"] = "SIMIT propietarios",
-        ["SIMIT_LOCATARIO"] = "SIMIT locatarios",
-        ["AVALUO"] = "Avalúo",
-        ["IMPUESTO_DEPARTAMENTAL"] = "Impuesto departamental",
-    };
+    /// <remarks>Son los nombres de fuente de <see cref="RotulosDiagnostico.Fuentes"/> (punto 5): los mismos de la pantalla.</remarks>
+    public static IReadOnlyDictionary<string, string> Titulos => RotulosDiagnostico.Fuentes;
 
     private static readonly string[] DePersonaRunt = [PersonasConsultadas, PersonasConError, Documentos];
 
@@ -66,7 +66,7 @@ internal static class ColumnasExcel
         ["IMPUESTO_DEPARTAMENTAL"] = [TotalAdeudado, VigenciasPendientes],
     };
 
-    public static string Titulo(string fuente) => Titulos.GetValueOrDefault(fuente, fuente);
+    public static string Titulo(string fuente) => RotulosDiagnostico.DeFuente(fuente);
 
     /// <summary>Las columnas de dato de <paramref name="fuente"/> (vacía si solo lleva estado).</summary>
     public static IReadOnlyList<string> DatosDe(string fuente) => DeDato.GetValueOrDefault(fuente, []);

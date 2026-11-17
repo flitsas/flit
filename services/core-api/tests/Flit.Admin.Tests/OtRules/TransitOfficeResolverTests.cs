@@ -1,5 +1,8 @@
 using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Infrastructure.OtRules;
+using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Catalogs;
+using Microsoft.EntityFrameworkCore;
 using FluentAssertions;
 using NSubstitute;
 using Xunit;
@@ -95,6 +98,26 @@ public sealed class TransitOfficeResolverTests
             Tenant, "Sabaneta", TestContext.Current.CancellationToken);
 
         match.Should().BeNull();
+    }
+
+    // ── ExistsInCatalogByNameAsync: distingue «no es un OT» de «es un OT pero no está habilitado» ──
+
+    [Fact] // Un OT INACTIVO del catálogo sigue «existiendo»: el catálogo activo no lo ve, la tabla sí.
+    public async Task ExisteEnCatalogo_OtInactivo_SiExiste()
+    {
+        await using var ctx = new FlitDbContext(new DbContextOptionsBuilder<FlitDbContext>()
+            .UseInMemoryDatabase($"ot-runt-{Guid.NewGuid()}").Options);
+        ctx.TransitOffices.Add(new TransitOffice
+        {
+            Id = SabanetaId, Code = "05631000", Name = "Sabaneta", DepartmentCode = "05", CityCode = "05631", IsActive = false,
+        });
+        await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
+        var (grants, catalog) = Setup(catalogName: "Otro");
+        var resolver = new TransitOfficeResolver(grants, catalog, ctx);
+
+        (await resolver.ExistsInCatalogByNameAsync("  SABANETA ", TestContext.Current.CancellationToken)).Should().BeTrue();
+        (await resolver.ExistsInCatalogByNameAsync("Envigado", TestContext.Current.CancellationToken)).Should().BeFalse();
+        (await resolver.ExistsInCatalogByNameAsync("", TestContext.Current.CancellationToken)).Should().BeFalse();
     }
 
     private static (IEffectiveTransitOfficeListResolver, ITransitOfficeCatalog) Setup(string catalogName)

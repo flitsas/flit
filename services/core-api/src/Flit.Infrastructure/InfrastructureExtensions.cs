@@ -31,6 +31,7 @@ using Flit.Tramites.Application.Ocr;
 using Flit.Modules.Improntas.Domain;
 using Flit.Modules.Security.Application;
 using Flit.Modules.Security.Application.Auth;
+using Flit.Modules.Security.Application.Auth.BulkInvitation;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Modules.Security.Domain.Modules;
@@ -316,12 +317,24 @@ public static class InfrastructureExtensions
         services.AddScoped<IRoleChangeOverridesPurger, RoleChangeOverridesPurger>(); // HU #13646
         services.AddScoped<IPermissionAuditReader, PermissionAuditReader>(); // HU #13647
 
+        // Feature #14420 / ADR-0077 — invitación masiva por Excel: topes (BulkInvitations:*), lectura del destino y
+        // roles visibles, y plantilla/parser XLSX. La política y el servicio viven en AddSecurityApplication().
+        services.AddSingleton(
+            configuration.GetSection(BulkInvitationOptions.SectionName).Get<BulkInvitationOptions>()
+            ?? new BulkInvitationOptions());
+        services.AddScoped<IInvitationTargetDirectory, InvitationTargetDirectory>(); // HU #14421
+        services.AddScoped<IBulkInvitationXlsxTemplate, Documents.BulkInvitations.BulkInvitationXlsxTemplate>(); // HU #14422
+        services.AddScoped<IBulkInvitationXlsxParser, Documents.BulkInvitations.BulkInvitationXlsxParser>(); // HU #14422
+
         services.AddSecurityApplication();
 
         // Épica #13216 — HU13389: acceso del OT + scope del tenant cliente + precedencia de la matriz del
         // consolidado maestro, compartido por AdminOtEndpoints y el lote de la bandeja OT.
         services.AddScoped<OtClientProcedures.IOtClientProcedureConsolidadoContext,
             OtClientProcedures.OtClientProcedureConsolidadoContext>();
+        // HU #14547 — misma matriz para el maestro que rearma «Regenerar mandato y consolidado» (admin).
+        services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IConsolidadoMaestroPrecedenciaProvider,
+            OtClientProcedures.ConsolidadoMaestroPrecedenciaProvider>();
 
         // Épica #13216 — HU13390: selección del lote desde la bandeja del OT (origen ot_bandeja), con el
         // universo, los filtros y el orden de la bandeja (lo elige LoteSeleccionResolverPorOrigen).

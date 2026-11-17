@@ -542,6 +542,7 @@ internal static class MotivosDeRechazo
         [OrganismoDestinoInvalido] = "El organismo de destino elegido ya no está disponible. Elija otro organismo.",
         [SubmitGate.IdentidadNoAprobada] = "Falta validar la identidad de alguna de las partes del trámite.",
         [SubmitGate.DocumentosIncompletos] = "Faltan documentos obligatorios del trámite.",
+        [SubmitGate.TipoServicioRequerido] = "Falta indicar el tipo de servicio del vehículo.",
         ["adjunto_invalido"] = "Alguno de los documentos adjuntos no se pudo registrar. Cárguelo de nuevo.",
         [InitialProcedureValidationGate.DuplicateActiveProcedure] = "Esta placa ya tiene un trámite en proceso. No puedes iniciar otro hasta que ese trámite termine o se anule. Puedes ver su estado en «Consultar mi trámite».",
         [VehicleStatePolicy.ErrorCode] = "El vehículo ya se encuentra matriculado: no es válido para este tipo de trámite.",

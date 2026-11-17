@@ -7,7 +7,7 @@
 // moverlo no cambiaba un solo número. Al partir los filtros por pestaña, cada control queda al lado
 // de lo que de verdad gobierna.
 
-import { DateRangePicker } from "@/components/atom/DateRangePicker";
+import { RangoFechas } from "@/components/atom/RangoFechas";
 import {
   TipoTramiteSelect,
   type GrupoTiposTramite,
@@ -103,7 +103,7 @@ export function RangePresets({
             className={`rounded-full border px-3 py-1 text-[11px] font-semibold transition ${
               active
                 ? "border-flit-brand bg-flit-brand/10 text-flit-brand"
-                : "border-[#DFE5ED] text-[#6B7280] hover:border-flit-brand dark:border-white/10 dark:text-white/50"
+                : "border-border text-muted-foreground hover:border-flit-brand"
             }`}
           >
             {preset.label}
@@ -122,12 +122,7 @@ export function DateRangeFields({
   onChange: (range: DateRange) => void;
 }) {
   return (
-    <DateRangePicker
-      value={range}
-      onChange={onChange}
-      label="Rango de fechas"
-      className="min-w-[240px]"
-    />
+    <RangoFechas value={range} onChange={onChange} />
   );
 }
 

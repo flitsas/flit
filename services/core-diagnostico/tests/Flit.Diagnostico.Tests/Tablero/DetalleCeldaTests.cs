@@ -161,7 +161,7 @@ public sealed class DetalleCeldaTests
         var respuesta = await cliente.GetAsync(Tablero.RutaDetalle(lote.Id, vehiculo, "RUNT_LOCATARIO"), ct);
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var persona = JsonDocument.Parse(cuerpo).RootElement.GetProperty("personas").EnumerateArray().Single();
+        var persona = JsonElement.Parse(cuerpo).GetProperty("personas").EnumerateArray().Single();
         persona.GetProperty("documento_enmascarado").GetString().Should().Be("****5678");
         persona.GetProperty("documento").GetString().Should().Be("1012345678");
         persona.GetProperty("declarado_por_cliente").GetBoolean().Should().BeTrue();
@@ -175,7 +175,7 @@ public sealed class DetalleCeldaTests
         propietarios.StatusCode.Should().Be(HttpStatusCode.OK, cuerpoPropietarios);
         cuerpoPropietarios.Should().Contain("79111222").And.Contain("900123456");
         cuerpoPropietarios.Should().NotContainAny([natural.Id.ToString(), juridica.Id.ToString()]);
-        var detalle = JsonDocument.Parse(cuerpoPropietarios).RootElement;
+        var detalle = JsonElement.Parse(cuerpoPropietarios);
         detalle.GetProperty("estado").GetString().Should().Be("ERROR");
         detalle.GetProperty("tipo_error").GetString().Should().Be("PERSONAS_CON_ERROR");
         var personas = detalle.GetProperty("personas").EnumerateArray().ToList();
@@ -242,8 +242,8 @@ public sealed class DetalleCeldaTests
             deApi.StatusCode.Should().Be(HttpStatusCode.OK, cuerpoApi);
             aMano.StatusCode.Should().Be(HttpStatusCode.OK, cuerpoManual);
 
-            Claves(JsonDocument.Parse(cuerpoManual).RootElement).Should().Equal(Claves(JsonDocument.Parse(cuerpoApi).RootElement), $"{fuente}: misma forma");
-            Claves(JsonDocument.Parse(cuerpoManual).RootElement).Should().NotContain(c => Prohibida(c));
+            Claves(JsonElement.Parse(cuerpoManual)).Should().Equal(Claves(JsonElement.Parse(cuerpoApi)), $"{fuente}: misma forma");
+            Claves(JsonElement.Parse(cuerpoManual)).Should().NotContain(c => Prohibida(c));
             cuerpoManual.Should().NotContainAny(["MANUAL", "API", manual.UsuarioManualId!.Value.ToString(), runtManual.UsuarioManualId!.Value.ToString()]);
         }
     }
@@ -314,14 +314,14 @@ public sealed class DetalleCeldaTests
         var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "RUNT", ct);
 
         var respuesta = detalle.GetProperty("respuesta_fuente");
-        JsonElement.DeepEquals(respuesta, JsonDocument.Parse(Cruda).RootElement).Should().BeTrue("el objeto va tal cual, descifrado");
+        JsonElement.DeepEquals(respuesta, JsonElement.Parse(Cruda)).Should().BeTrue("el objeto va tal cual, descifrado");
         respuesta.GetProperty("vehiculo").GetProperty("informacion_general").GetProperty("color").GetString().Should().Be("ROJO FICTICIO");
         detalle.GetProperty("resultado").GetProperty("placa").GetString().Should().Be("TST401", "el resultado normalizado no cambia");
 
         var deLasPersonas = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "RUNT_PROPIETARIO", ct);
         deLasPersonas.GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "en las fuentes de persona va en cada persona");
         var personas = deLasPersonas.GetProperty("personas").EnumerateArray().ToList();
-        JsonElement.DeepEquals(personas[0].GetProperty("respuesta_fuente"), JsonDocument.Parse(CrudaPersona).RootElement).Should().BeTrue();
+        JsonElement.DeepEquals(personas[0].GetProperty("respuesta_fuente"), JsonElement.Parse(CrudaPersona)).Should().BeTrue();
         personas[1].GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "la persona 2 no tiene respuesta guardada");
         deLasPersonas.GetRawText().Should().NotContainAny([primero.Id.ToString(), segundo.Id.ToString()]);
 
@@ -407,11 +407,11 @@ public sealed class DetalleCeldaTests
 
         var conductor = personas[0].GetProperty("respuesta_proveedor");
         conductor.ValueKind.Should().Be(JsonValueKind.Object, "un objeto JSON, no un texto");
-        JsonElement.DeepEquals(conductor, JsonDocument.Parse(ProveedorConductor).RootElement).Should().BeTrue("todas las claves y valores del proveedor, sin quitar ninguno");
+        JsonElement.DeepEquals(conductor, JsonElement.Parse(ProveedorConductor)).Should().BeTrue("todas las claves y valores del proveedor, sin quitar ninguno");
         conductor.GetProperty("licencias").GetArrayLength().Should().Be(3);
         conductor.GetProperty("id_interno").GetString().Should().Be("KY-99999", "ni los identificadores internos se filtran (decisión literal)");
         var rues = personas[1].GetProperty("respuesta_proveedor");
-        JsonElement.DeepEquals(rues, JsonDocument.Parse(ProveedorRues).RootElement).Should().BeTrue();
+        JsonElement.DeepEquals(rues, JsonElement.Parse(ProveedorRues)).Should().BeTrue();
         rues.GetProperty("signature").GetProperty("message").GetString().Should().Be("Certified by Verifik.co");
         personas[0].GetProperty("respuesta_fuente").GetProperty("resultado").GetProperty("respuesta_cruda").GetProperty("json").GetString()
             .Should().Be(ProveedorConductor, "respuesta_fuente se queda como está");
@@ -539,7 +539,7 @@ public sealed class DetalleCeldaTests
         {
             var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.NotFound, $"{respuesta.RequestMessage!.RequestUri}: {cuerpo}");
-            JsonDocument.Parse(cuerpo).RootElement.GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
+            JsonElement.Parse(cuerpo).GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
             cuerpo.Should().NotContainAny(["Lote secreto de B", "TST461", deB.Celdas.Single().Id.ToString(), empresas.B.Id.ToString()]);
         }
 
@@ -594,7 +594,7 @@ public sealed class DetalleCeldaTests
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var detalle = JsonDocument.Parse(cuerpo).RootElement;
+        var detalle = JsonElement.Parse(cuerpo);
         detalle.GetProperty("estado").GetString().Should().Be("COMPLETADO");
         detalle.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null, "es una fuente del vehículo");
         var resultado = detalle.GetProperty("resultado");
@@ -663,7 +663,7 @@ public sealed class DetalleCeldaTests
 
         var proveedor = detalle.GetProperty("respuesta_proveedor");
         proveedor.ValueKind.Should().Be(JsonValueKind.Object, "un objeto JSON, no un texto");
-        JsonElement.DeepEquals(proveedor, JsonDocument.Parse(ProveedorSimit).RootElement).Should().BeTrue("todas las claves y valores del proveedor, sin quitar ninguno");
+        JsonElement.DeepEquals(proveedor, JsonElement.Parse(ProveedorSimit)).Should().BeTrue("todas las claves y valores del proveedor, sin quitar ninguno");
         proveedor.GetProperty("signature").GetProperty("message").GetString().Should().Be("Certified by Verifik.co");
         proveedor.GetProperty("data").GetProperty("multas").GetArrayLength().Should().Be(1);
         detalle.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null, "SIMIT_VEHICULO no tiene personas");
@@ -765,7 +765,7 @@ public sealed class DetalleCeldaTests
         detalle.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "en la celda de persona no se llena");
         var deLaPersona = detalle.GetProperty("personas")[0].GetProperty("respuesta_proveedor");
         deLaPersona.ValueKind.Should().Be(JsonValueKind.Object);
-        JsonElement.DeepEquals(deLaPersona, JsonDocument.Parse(Proveedor).RootElement).Should().BeTrue();
+        JsonElement.DeepEquals(deLaPersona, JsonElement.Parse(Proveedor)).Should().BeTrue();
     }
 
     private static async Task<JsonElement> DetalleAsync(HttpClient cliente, Guid lote, Guid vehiculo, string fuente, CancellationToken ct)
@@ -773,7 +773,7 @@ public sealed class DetalleCeldaTests
         var respuesta = await cliente.GetAsync(Tablero.RutaDetalle(lote, vehiculo, fuente), ct);
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, $"{fuente}: {cuerpo}");
-        return JsonDocument.Parse(cuerpo).RootElement.Clone();
+        return JsonElement.Parse(cuerpo).Clone();
     }
 
     private static async Task<PersonaVehiculo> PersonaAsync(

@@ -55,15 +55,21 @@ public sealed class RegistroManifiestoTests
         raiz.GetProperty("version").GetString().Should().Be("1");
         var slugs = raiz.GetProperty("modules").EnumerateArray()
             .SelectMany(m => m.GetProperty("permissions").EnumerateArray().Select(p => p.GetProperty("slug").GetString()!)).ToList();
-        slugs.Should().HaveCount(13).And.OnlyHaveUniqueItems().And.AllSatisfy(s => s.Should().StartWith("diagnostico."));
+        slugs.Should().HaveCount(17, "13 de la tabla §6.2, los 2 del saneamiento (HU #14576 AC31), diagnostico.reportes.ver (BE-0) y diagnostico.usuarios.gestionar (HU #14587)").And.OnlyHaveUniqueItems().And.AllSatisfy(s => s.Should().StartWith("diagnostico."));
         raiz.GetProperty("modules").EnumerateArray().Should().AllSatisfy(m =>
         {
             m.GetProperty("code").GetString().Should().StartWith("diagnostico_");
             m.GetProperty("name").GetString().Should().NotBeNullOrWhiteSpace();
         });
         var roles = raiz.GetProperty("defaultRoles").EnumerateArray().ToList();
-        roles.Select(r => r.GetProperty("code").GetString()).Should().BeEquivalentTo("usuario_diagnostico", "admin_diagnostico", "backoffice_diagnostico");
+        roles.Select(r => r.GetProperty("code").GetString()).Should().BeEquivalentTo("usuario_diagnostico", "admin_diagnostico");
         roles.SelectMany(r => r.GetProperty("permissions").EnumerateArray().Select(p => p.GetString())).Should().AllSatisfy(p => slugs.Should().Contain(p));
+        // HU #14587 (H-U5): el permiso viaja en el rol admin_diagnostico; ProductManifestStore agrega al rol existente los permisos que le
+        // faltan, así que los admin_diagnostico ya asignados lo reciben sin resiembra.
+        roles.Single(r => r.GetProperty("code").GetString() == "admin_diagnostico").GetProperty("permissions").EnumerateArray()
+            .Select(p => p.GetString()).Should().Contain("diagnostico.usuarios.gestionar");
+        roles.Single(r => r.GetProperty("code").GetString() == "usuario_diagnostico").GetProperty("permissions").EnumerateArray()
+            .Select(p => p.GetString()).Should().NotContain("diagnostico.usuarios.gestionar");
     }
 
     // Escenario 2 — el gateway no responde: reintenta con espera creciente y el servicio sigue sano.
@@ -121,9 +127,18 @@ public sealed class RegistroManifiestoTests
     });
 
     /// <summary>
-    /// Reloj real que anota cada espera de un solo disparo que se le pide (<c>Task.Delay(espera, reloj, ct)</c>), HU #13826:
-    /// la prueba compara la secuencia pedida en vez de los huecos del reloj de pared.
+    /// Reloj real que anota cada espera de un solo disparo que <see cref="RegistroManifiesto"/> le pide
+    /// (<c>Task.Delay(espera, reloj, ct)</c>), HU #13826: la prueba compara la secuencia pedida en vez de los huecos del
+    /// reloj de pared.
     /// </summary>
+    /// <remarks>
+    /// El reloj reemplaza el <see cref="TimeProvider"/> de todo el host y los demás trabajadores también le piden esperas:
+    /// la purga de notificaciones (24 h), las sincronizaciones de catálogos (24 h) y los reconciliadores. Contra la base
+    /// inalcanzable fallan y piden su intervalo; en Linux el puerto 1 rechaza al instante, así que esas esperas caían entre
+    /// los reintentos del manifiesto ({100ms, 1d, 200ms, 400ms} en el CI del PR #892). <c>Task.Delay</c> crea el
+    /// temporizador en la pila de quien espera, así que solo se anota la que pide la máquina de estados de
+    /// <see cref="RegistroManifiesto"/>.
+    /// </remarks>
     private sealed class RelojQueAnotaEsperas : TimeProvider
     {
         private readonly ConcurrentQueue<TimeSpan> _esperas = new();
@@ -132,10 +147,14 @@ public sealed class RegistroManifiestoTests
 
         public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
         {
-            if (period == Timeout.InfiniteTimeSpan && dueTime > TimeSpan.Zero)
+            if (period == Timeout.InfiniteTimeSpan && dueTime > TimeSpan.Zero && LaPideElRegistro())
                 _esperas.Enqueue(dueTime);
             return System.CreateTimer(callback, state, dueTime, period);
         }
+
+        private static bool LaPideElRegistro() =>
+            new StackTrace().GetFrames().Any(f => f.GetMethod()?.DeclaringType is { } tipo
+                && (tipo == typeof(RegistroManifiesto) || tipo.DeclaringType == typeof(RegistroManifiesto)));
     }
 
     private sealed record Llamado(HttpMethod Metodo, Uri? Url, string? Autorizacion, string Cuerpo, TimeSpan Marca);

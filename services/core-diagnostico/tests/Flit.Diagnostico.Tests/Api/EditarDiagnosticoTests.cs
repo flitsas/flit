@@ -44,7 +44,7 @@ public sealed class EditarDiagnosticoTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var json = JsonDocument.Parse(cuerpo).RootElement;
+        var json = JsonElement.Parse(cuerpo);
         json.GetProperty("id").GetGuid().Should().Be(id);
         json.GetProperty("nombre").GetString().Should().Be("Lote renombrado");
         json.GetProperty("modo").GetString().Should().Be("CON_ANALISIS");

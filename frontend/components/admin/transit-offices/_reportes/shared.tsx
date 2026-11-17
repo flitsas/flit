@@ -18,6 +18,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 
 export {
   CSV_EXPORT_VISIBLE,
@@ -30,7 +38,7 @@ export {
 
 export function SubTitle({ children }: { children: ReactNode }) {
   return (
-    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/50">
+    <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
       {children}
     </p>
   );
@@ -55,14 +63,14 @@ export function Tile({
       <p className="text-xl font-semibold tabular-nums" style={accent ? { color: accent } : undefined}>
         {value}
       </p>
-      <p className="text-[11px] text-[#6B7280] dark:text-white/50">{label}</p>
-      {hint && <p className="mt-0.5 text-[10px] text-[#9AA5B4] dark:text-white/35">{hint}</p>}
+      <p className="text-[11px] text-muted-foreground">{label}</p>
+      {hint && <p className="mt-0.5 text-[10px] text-muted-foreground">{hint}</p>}
     </>
   );
 
   if (!onClick) {
     return (
-      <div className="rounded-xl border border-[#DFE5ED] px-3 py-2 dark:border-white/10">{content}</div>
+      <div className="rounded-xl border border-border px-3 py-2">{content}</div>
     );
   }
 
@@ -70,7 +78,7 @@ export function Tile({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-left transition hover:border-flit-brand hover:shadow-sm dark:border-white/10 dark:hover:border-flit-brand"
+      className="rounded-xl border border-border px-3 py-2 text-left transition hover:border-flit-brand hover:bg-[var(--kit-hover)] dark:hover:border-flit-brand"
     >
       {content}
     </button>
@@ -92,18 +100,18 @@ export function Bucket({
   // bloque resaltado sin contenido enseña a ignorar el resaltado cuando sí importa.
   const alerta = Boolean(hot) && value > 0;
   const baseCls = alerta
-    ? "border-amber-300 bg-amber-50 dark:border-amber-500/40 dark:bg-amber-500/10"
-    : "border-[#DFE5ED] dark:border-white/10";
+    ? "border-[color:var(--di-alerta-punto)] bg-[var(--di-warning-soft)]"
+    : "border-border";
 
   const content = (
     <>
       <p
-        className={`text-lg font-semibold tabular-nums ${alerta ? "text-amber-800 dark:text-amber-300" : ""}`}
+        className={`text-lg font-semibold tabular-nums ${alerta ? "text-[color:var(--di-warning)]" : ""}`}
       >
         {value}
       </p>
       <p
-        className={`text-[11px] ${alerta ? "text-amber-700 dark:text-amber-400" : "text-[#6B7280] dark:text-white/50"}`}
+        className={`text-[11px] ${alerta ? "text-[color:var(--di-warning)]" : "text-[color:var(--di-text-tertiary)]"}`}
       >
         {label}
       </p>
@@ -118,7 +126,7 @@ export function Bucket({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-xl border px-3 py-2 text-center transition hover:shadow-sm ${baseCls}`}
+      className={`rounded-xl border px-3 py-2 text-center transition ${baseCls}`}
     >
       {content}
     </button>
@@ -141,14 +149,14 @@ export function Bar({
   onClick?: () => void;
 }) {
   const pct = total === 0 ? 0 : Math.min(100, Math.round((value / total) * 100));
-  const fill = color ?? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))";
+  const fill = color ?? "var(--gradient-brand)";
 
   const content = (
     <>
       <span className="truncate" title={label}>
         {label}
       </span>
-      <span className="h-2 overflow-hidden rounded bg-[#EEF1F5] dark:bg-white/10">
+      <span className="h-2 overflow-hidden rounded bg-secondary">
         <span className="block h-full rounded" style={{ width: `${pct}%`, background: fill }} />
       </span>
       <span className="tabular-nums font-semibold">{suffix ?? value}</span>
@@ -167,7 +175,7 @@ export function Bar({
     <button
       type="button"
       onClick={onClick}
-      className="grid grid-cols-[minmax(8rem,14rem)_1fr_auto] items-center gap-3 rounded-lg text-left text-xs transition hover:bg-[#F5F7FA] dark:hover:bg-white/5"
+      className="grid grid-cols-[minmax(8rem,14rem)_1fr_auto] items-center gap-3 rounded-lg text-left text-xs transition hover:bg-secondary"
     >
       {content}
     </button>
@@ -191,8 +199,8 @@ export function Table({
   return (
     <>
       <div className={CARDLIST_SCROLL}>
-        <table className={`min-w-[34rem] ${CARDLIST_TABLE}`}>
-          <thead>
+        <table className={`min-w-[34rem] ${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`}>
+          <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr className={CARDLIST_HEAD_ROW}>
               {headers.map((h) => (
                 <th key={h} scope="col" className={CARDLIST_TH}>
@@ -201,13 +209,14 @@ export function Table({
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLA_MOVIL_TBODY_CLS}>
             {pg.paginar(rows).map((row) => (
-              <tr key={row.key} className={CARDLIST_ROW}>
+              <tr key={row.key} className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
                 {row.cells.map((cell, i) => (
                   <td
                     key={headers[i]}
-                    className={`${CARDLIST_CELL} ${i === 0 ? "" : "tabular-nums"}`}
+                    data-label={headers[i]}
+                    className={`${CARDLIST_CELL} ${i === 0 ? TABLA_MOVIL_CELL_TITULO_CLS : "tabular-nums"} ${TABLA_MOVIL_CELL_CLS}`}
                   >
                     {cell}
                   </td>

@@ -122,7 +122,7 @@ public sealed class MotivoFalloTests
             fuente = FuentesBus.SimitVehiculo,
             estado = "OK",
             grpcStatus = (string?)null,
-            respuesta = JsonDocument.Parse(JsonFormatter.Default.Format(SimitCaido())).RootElement,
+            respuesta = JsonElement.Parse(JsonFormatter.Default.Format(SimitCaido())),
             duracionMs = 10,
             desdeCache = false,
             motivoFallo = "CREDENCIALES",

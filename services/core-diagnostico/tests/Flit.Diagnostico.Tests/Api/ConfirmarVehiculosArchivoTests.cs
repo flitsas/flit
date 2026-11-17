@@ -53,17 +53,17 @@ public sealed class ConfirmarVehiculosArchivoTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
-        texto.Should().NotContain(Documento).And.Contain("****5432");
+        texto.Should().NotContain(Documento).And.NotContain("****5432", "HU #14582 C5: la confirmación no devuelve documentos");
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
         vehiculos.Select(v => v.IdentificadorNorm).Should().Equal("ABC123", "XYZ987");
         var conDocumento = vehiculos[0];
-        conDocumento.LocatarioDocTipo.Should().Be("CC");
-        conDocumento.LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente);
-        conDocumento.LocatarioDocCifrado.Should().NotBeNullOrEmpty();
-        conDocumento.LocatarioDocCifrado.Should().NotEqual(Encoding.UTF8.GetBytes(Documento));
-        Encoding.UTF8.GetString(conDocumento.LocatarioDocCifrado!).Should().NotContain(Documento);
-        api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(conDocumento.LocatarioDocCifrado!).Should().Be(Documento);
-        vehiculos[1].LocatarioDocCifrado.Should().BeNull();
+        conDocumento.PropietarioDeclaradoDocTipo.Should().Be("CC");
+        conDocumento.LocatarioDocOrigen.Should().BeNull("HU #14582 AC7: el declarado no se guarda como locatario");
+        conDocumento.PropietarioDeclaradoDocCifrado.Should().NotBeNullOrEmpty();
+        conDocumento.PropietarioDeclaradoDocCifrado.Should().NotEqual(Encoding.UTF8.GetBytes(Documento));
+        Encoding.UTF8.GetString(conDocumento.PropietarioDeclaradoDocCifrado!).Should().NotContain(Documento);
+        api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(conDocumento.PropietarioDeclaradoDocCifrado!).Should().Be(Documento);
+        vehiculos[1].PropietarioDeclaradoDocCifrado.Should().BeNull();
         JsonSerializer.Serialize(espia.Entregas).Should().NotContain(Documento);
     }
 
@@ -83,10 +83,10 @@ public sealed class ConfirmarVehiculosArchivoTests
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
         var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
         var xyz = vehiculos.Single(v => v.IdentificadorNorm == "XYZ98A");
-        protector.Desproteger(xyz.LocatarioDocCifrado!).Should().Be("1020304050");
-        xyz.LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente);
+        protector.Desproteger(xyz.PropietarioDeclaradoDocCifrado!).Should().Be("1020304050");
+        xyz.LocatarioDocOrigen.Should().BeNull();
         var vin = vehiculos.Single(v => v.IdentificadorNorm == "9FBTEST1234567890");
-        protector.Desproteger(vin.LocatarioDocCifrado!).Should().Be("900111222");
+        protector.Desproteger(vin.PropietarioDeclaradoDocCifrado!).Should().Be("900111222");
         vehiculos.Should().NotContain(v => v.IdentificadorNorm == "R12345", "su documento lleva letras");
     }
 
@@ -116,10 +116,10 @@ public sealed class ConfirmarVehiculosArchivoTests
         vehiculos.Select(v => (v.Orden, v.IdentificadorNorm)).Should().Equal((1, "ABC123"), (2, "DEF456"), (3, "XYZ987"));
         vehiculos[0].IdentificadorOriginal.Should().Be("abc-123");
         var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
-        protector.Desproteger(vehiculos[0].LocatarioDocCifrado!).Should().Be("5566778899");
-        vehiculos[0].LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente);
-        protector.Desproteger(vehiculos[1].LocatarioDocCifrado!).Should().Be("70707070", "la corrección no trae documento: queda el del archivo");
-        vehiculos[1].LocatarioDocTipo.Should().Be("CC");
+        protector.Desproteger(vehiculos[0].PropietarioDeclaradoDocCifrado!).Should().Be("5566778899");
+        vehiculos[0].LocatarioDocOrigen.Should().BeNull();
+        protector.Desproteger(vehiculos[1].PropietarioDeclaradoDocCifrado!).Should().Be("70707070", "la corrección no trae documento: queda el del archivo");
+        vehiculos[1].PropietarioDeclaradoDocTipo.Should().Be("CC");
     }
 
     // Escenario 3 (F02-C4) — una fila válida del archivo corregida a inválida (o con el documento enmascarado) no se persiste.
@@ -144,7 +144,7 @@ public sealed class ConfirmarVehiculosArchivoTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         json.GetProperty("confirmados").GetInt32().Should().Be(1);
         json.GetProperty("invalidos").GetInt32().Should().Be(2);
         (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Select(v => v.IdentificadorNorm).Should().Equal("DEF456");
@@ -194,7 +194,7 @@ public sealed class ConfirmarVehiculosArchivoTests
         {
             var texto = await mala.Content.ReadAsStringAsync(ct);
             mala.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, texto);
-            var error = JsonDocument.Parse(texto).RootElement;
+            var error = JsonElement.Parse(texto);
             error.GetProperty("code").GetString().Should().Be("CORRECCIONES_INVALIDAS");
             error.GetProperty("campo").GetString().Should().Be("correcciones");
         }

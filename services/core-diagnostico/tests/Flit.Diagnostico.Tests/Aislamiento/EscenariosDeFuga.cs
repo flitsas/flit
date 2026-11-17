@@ -14,6 +14,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Metadata;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Flit.Diagnostico.Tests.Aislamiento;
 
@@ -83,6 +84,14 @@ public static class EscenariosDeFuga
     /// así que con el token de A la URL de B pide la compañía B por parámetro y no debe devolver nada de ella.
     /// </summary>
     public const string RutaSesion = Program.Prefijo + "/sesion";
+
+    /// <summary>
+    /// Usuarios de Diagnóstico de la compañía (HU #14587, ADR-0089). La lista vive en core-api: el doble del gRPC
+    /// (<see cref="Usuarios.UsuariosProductoFalso.PorEmpresa"/>) responde solo las filas de la empresa que core-diagnostico manda en
+    /// <c>x-flit-tenant-id</c>. Con el token de A no aparece ningún usuario ni correo de B (SP-13). El patrón termina en <c>/</c> porque
+    /// la ruta es la raíz del grupo.
+    /// </summary>
+    public const string RutaUsuarios = Program.Prefijo + "/usuarios/";
 
     /// <summary>
     /// Configuración de la compañía (HU #13741): cada empresa siembra su fila con un autor operativo propio, que la lectura
@@ -158,11 +167,98 @@ public static class EscenariosDeFuga
     /// </summary>
     public const string RutaDictamen = Program.Prefijo + DictamenEndpoints.Ruta;
 
+    /// <summary>
+    /// Operaciones «Crear trámite» del lote (Punto 4, incremento 3; ADR-0072 (d)8): cada empresa siembra un lote con un vehículo, una
+    /// operación MASIVA y su ítem; el listado devuelve el id de la operación, y con el token de A el de B responde 404 sin el id de la
+    /// operación ni el del vehículo de B.
+    /// </summary>
+    public const string RutaOperacionesDerivacion = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Derivacion.DerivacionEndpoints.RutaOperaciones;
+
+    /// <summary>
+    /// Detalle de una operación «Crear trámite» (Punto 4, incremento 3): devuelve el id de la operación y el vehículo de su ítem; con
+    /// el token de A el de B responde 404 sin nada de B.
+    /// </summary>
+    public const string RutaOperacionDerivacion = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Derivacion.DerivacionEndpoints.RutaOperacion;
+
+    /// <summary>
+    /// Bandeja de la campana (HU #14563 B8, AC38): cada empresa siembra un lote y una notificación para el usuario de su token; la
+    /// bandeja devuelve el id del lote, y con el token de A no aparece nada del lote de B.
+    /// </summary>
+    public const string RutaNotificaciones = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Notificaciones.NotificacionesEndpoints.Ruta;
+
+    /// <summary>
+    /// Detalle del saneamiento para el cliente (HU #14576 AC26, AC33): cada empresa siembra un lote con un vehículo y su saneamiento;
+    /// el detalle devuelve el id del saneamiento, y con el token de A el de B responde 404 sin nada de B.
+    /// </summary>
+    public const string RutaSaneamiento = Program.Prefijo + DiagnosticosEndpoints.Ruta + "/{id:guid}/vehiculos/{vid:guid}/saneamiento";
+
+    /// <summary>
+    /// Evidencia de un renglón para el cliente (HU #14576 AC47): cada empresa siembra un saneamiento con un renglón cuya evidencia es un
+    /// PDF con un texto exclusivo de la empresa; con el token de A la evidencia de B responde 404 sin ese texto.
+    /// </summary>
+    public const string RutaEvidenciaSaneamiento = RutaSaneamiento + "/renglones/{rid:guid}/evidencia";
+
+    /// <summary>
+    /// Panel de deuda (HU #14576 AC36, BE-C): cada empresa siembra un vehículo terminado; el panel devuelve su id y con el token de A el
+    /// de B responde 404 sin él. El PDF y el Excel del panel siguen el mismo patrón: el PDF lleva la placa exclusiva de la empresa; el
+    /// Excel de un vehículo no lleva placa, así que lo que no cruza es el id de la empresa (como la plantilla).
+    /// </summary>
+    public const string RutaDeuda = Program.Prefijo + DiagnosticosEndpoints.Ruta + "/{id:guid}/vehiculos/{vid:guid}/deuda";
+
+    public const string RutaDeudaPdf = RutaDeuda + "/pdf";
+
+    public const string RutaDeudaExcel = RutaDeuda + "/excel";
+
+    /// <summary>Grilla de placas (HU #14576 AC39, BE-C): devuelve el id del vehículo de la empresa y nada de la otra.</summary>
+    public const string RutaVehiculos = Program.Prefijo + "/vehiculos";
+
+    /// <summary>
+    /// Estadísticas de la compañía (HU #14579, BE-1, E1): solo conteos; el ámbito lleva el id de la empresa del token y nunca el de
+    /// la otra (la URL es la misma para las dos: la compañía sale del token).
+    /// </summary>
+    public const string RutaEstadisticas = Estadisticas.EstadisticasDePrueba.RutaCompania;
+
+    /// <summary>Catálogo de reportes de la compañía (HU #14579, BE-2): no lee datos de ninguna compañía.</summary>
+    public const string RutaCatalogoReportes = Program.Prefijo + "/reportes";
+
+    /// <summary>Reporte en pantalla de la compañía (HU #14579, BE-2): placa y documento completo de la propia, nada de la otra.</summary>
+    public const string RutaReporte = RutaCatalogoReportes + "/{tipo}";
+
     public static IReadOnlyList<EscenarioDeFuga> Todos { get; } =
     [
+        new EscenarioDeFuga(RutaCatalogoReportes, (empresa, _) =>
+            Task.FromResult(new Sembrado(RutaCatalogoReportes, ["vehiculos"], Exclusivos: [empresa.Id.ToString()]))),
+        new EscenarioDeFuga(RutaReporte, async (empresa, ct) =>
+        {
+            var (placa, documento) = DePrueba(empresa);
+            await Reportes.Catalogo.ReportesDePrueba.LoteAsync(empresa, [new(placa, Propietarios: [new("CC", documento)])], ct);
+            return new Sembrado(Reportes.Catalogo.ReportesDePrueba.Ruta("vehiculos"), [placa, documento], Exclusivos: [documento]);
+        }),
+        new EscenarioDeFuga(RutaReporte + "/excel", async (empresa, ct) =>
+        {
+            var (placa, documento) = DePrueba(empresa);
+            await Reportes.Catalogo.ReportesDePrueba.LoteAsync(empresa, [new(placa, Propietarios: [new("CC", documento)])], ct);
+            return new Sembrado(Reportes.Catalogo.ReportesDePrueba.Ruta("vehiculos", sufijo: "/excel"), [placa, documento], Exclusivos: [documento]);
+        }, Reportes.ExcelDePrueba.TextoAsync),
+        new EscenarioDeFuga(RutaReporte + "/pdf", async (empresa, ct) =>
+        {
+            var (placa, documento) = DePrueba(empresa);
+            await Reportes.Catalogo.ReportesDePrueba.LoteAsync(empresa, [new(placa, Propietarios: [new("CC", documento)])], ct);
+            return new Sembrado(Reportes.Catalogo.ReportesDePrueba.Ruta("vehiculos", sufijo: "/pdf"), [placa, documento], Exclusivos: [documento]);
+        }, Reportes.PdfDePrueba.TextoAsync),
         EscenarioDeFuga.Con(RutaSonda, _ => new LecturaBackoffice { EmpresaConsultada = Guid.NewGuid(), UsuarioId = Guid.NewGuid(), Ruta = "/sonda" }, l => l.Id),
         new EscenarioDeFuga(RutaSesion, (empresa, _) =>
             Task.FromResult(new Sembrado($"{RutaSesion}?empresa={empresa.Id}", [empresa.Id.ToString()]))),
+        new EscenarioDeFuga(RutaUsuarios, (empresa, _) =>
+        {
+            var plataforma = (Usuarios.UsuariosProductoFalso)empresa.Api.App.Services
+                .GetRequiredService<Flit.Platform.Grpc.V1.UsuariosProductoService.UsuariosProductoServiceClient>();
+            var usuario = Guid.NewGuid();
+            var fila = Usuarios.UsuariosDePrueba.Fila(usuario);
+            fila.Email = $"fuga.{empresa.Id:N}@empresa.test";
+            plataforma.PorEmpresa[empresa.Id.ToString()] = [fila];
+            return Task.FromResult(new Sembrado(Program.Prefijo + "/usuarios", [usuario.ToString(), fila.Email]));
+        }),
         EscenarioDeFuga.Con(RutaConfiguracion, _ => new ConfiguracionEmpresa { OperativaActualizadaPor = Guid.NewGuid() }, c => c.OperativaActualizadaPor!.Value),
         new EscenarioDeFuga(RutaTiposTramite, (empresa, _) =>
             Task.FromResult(new Sembrado(RutaTiposTramite, ["TRASPASO_STANDARD"], Exclusivos: [empresa.Id.ToString()]))),
@@ -184,6 +280,12 @@ public static class EscenariosDeFuga
             var celda = await Tablero.Tablero.PayloadAsync(empresa, lote.Celdas.Single(),
                 """{"placa":"TST903","clase":"AUTOMOVIL","propietarios":[],"locatarios":0}""", ct);
             return new Sembrado(Tablero.Tablero.RutaDetalle(lote.Id, celda.VehiculoId, "RUNT"), [celda.Id.ToString(), celda.VehiculoId.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaEstadisticas, async (empresa, ct) =>
+        {
+            await Estadisticas.EstadisticasDePrueba.LoteAsync(empresa, Estadisticas.EstadisticasDePrueba.Dia(0), ct, placas: ["TST9E1"]);
+            var hoy = Estadisticas.EstadisticasDePrueba.Hoy;
+            return new Sembrado(Estadisticas.EstadisticasDePrueba.Ruta(hoy, hoy), [empresa.Id.ToString()]);
         }),
         new EscenarioDeFuga(RutaListado, async (empresa, ct) =>
         {
@@ -237,7 +339,111 @@ public static class EscenariosDeFuga
             await db.SaveChangesAsync(ct);
             return new Sembrado($"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote.Id}/vehiculos/{vehiculo}/dictamen", [exclusivo]);
         }),
+        new EscenarioDeFuga(RutaNotificaciones, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST912", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            var usuario = Guid.Parse(new Microsoft.IdentityModel.JsonWebTokens.JsonWebToken(empresa.Token).Subject);
+            await using var db = empresa.Db();
+            db.Add(new global::Flit.Diagnostico.Api.Modulos.Notificaciones.Notificacion
+            {
+                TenantId = empresa.Id,
+                UsuarioId = usuario,
+                Tipo = global::Flit.Diagnostico.Api.Modulos.Notificaciones.Notificacion.LoteTerminado,
+                DiagnosticoId = lote.Id,
+                ReferenciaId = Guid.NewGuid(),
+                CreadaEn = DateTimeOffset.UtcNow,
+            });
+            await db.SaveChangesAsync(ct);
+            return new Sembrado(RutaNotificaciones, [lote.Id.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaSaneamiento, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST913", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            var vehiculo = lote.Vehiculos.Single().Id;
+            var saneamiento = await Saneamiento.SaneamientoDePrueba.SembrarAsync(empresa, lote.Id, vehiculo, global::Flit.Diagnostico.Domain.Saneamiento.EstadoSaneamiento.Solicitado, ct);
+            return new Sembrado(Saneamiento.SaneamientoDePrueba.Ruta(lote.Id, vehiculo), [saneamiento.Id.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaEvidenciaSaneamiento, async (empresa, ct) =>
+        {
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST914", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+            var vehiculo = lote.Vehiculos.Single().Id;
+            var saneamiento = await Saneamiento.SaneamientoDePrueba.SembrarAsync(empresa, lote.Id, vehiculo, global::Flit.Diagnostico.Domain.Saneamiento.EstadoSaneamiento.EnGestion, ct);
+            var exclusivo = $"EVID-{empresa.Id:N}";
+            await using var db = empresa.Db();
+            var archivo = new global::Flit.Diagnostico.Api.Infraestructura.Archivos.ArchivoLocal
+            {
+                Tipo = "PDF", Nombre = "evidencia.pdf", ContentType = "application/pdf",
+                Contenido = System.Text.Encoding.ASCII.GetBytes($"%PDF-1.7\n{exclusivo}\n%%EOF\n"), CreadoEn = DateTimeOffset.UtcNow,
+            };
+            db.Add(archivo);
+            var renglon = new global::Flit.Diagnostico.Api.Modulos.Saneamiento.RenglonSaneamiento
+            {
+                SaneamientoId = saneamiento.Id, Fuente = global::Flit.Diagnostico.Domain.Saneamiento.FuenteSaneamiento.Impuesto,
+                Hallazgo = global::Flit.Diagnostico.Domain.Saneamiento.HallazgoSaneamiento.Deuda, Automatico = true, CreadoPor = Guid.NewGuid(),
+                CreadoEn = DateTimeOffset.UtcNow, EvidenciaReferencia = $"db:{archivo.Id:D}", EvidenciaNombre = "pago.pdf",
+                EvidenciaSha256 = new string('a', 64), EvidenciaTamano = 10, EvidenciaSubidaPor = Guid.NewGuid(), EvidenciaSubidaEn = DateTimeOffset.UtcNow,
+            };
+            db.Add(renglon);
+            await db.SaveChangesAsync(ct);
+            return new Sembrado($"{Saneamiento.SaneamientoDePrueba.Ruta(lote.Id, vehiculo)}/renglones/{renglon.Id}/evidencia", [exclusivo]);
+        }),
+        new EscenarioDeFuga(RutaDeuda, async (empresa, ct) =>
+        {
+            var (lote, vehiculo) = await TerminadoAsync(empresa, ct);
+            return new Sembrado(Saneamiento.DeudaDePrueba.RutaPanel(lote, vehiculo), [vehiculo.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaDeudaPdf, async (empresa, ct) =>
+        {
+            var (lote, vehiculo) = await TerminadoAsync(empresa, ct);
+            return new Sembrado(Saneamiento.DeudaDePrueba.RutaPdf(lote, vehiculo), [PlacaDe(empresa)]);
+        }, Reportes.PdfDePrueba.TextoAsync),
+        new EscenarioDeFuga(RutaDeudaExcel, async (empresa, ct) =>
+        {
+            var (lote, vehiculo) = await TerminadoAsync(empresa, ct);
+            return new Sembrado(Saneamiento.DeudaDePrueba.RutaExcel(lote, vehiculo), ["xl/worksheets/sheet1.xml"], Exclusivos: [empresa.Id.ToString(), vehiculo.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaVehiculos, async (empresa, ct) =>
+        {
+            var (_, vehiculo) = await TerminadoAsync(empresa, ct);
+            return new Sembrado(RutaVehiculos, [vehiculo.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaOperacionesDerivacion, async (empresa, ct) =>
+        {
+            var (lote, operacion, vehiculo) = await OperacionSembradaAsync(empresa, "TST910", ct);
+            return new Sembrado($"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote}/tramites/operaciones", [operacion.ToString()],
+                Exclusivos: [operacion.ToString(), vehiculo.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaOperacionDerivacion, async (empresa, ct) =>
+        {
+            var (lote, operacion, vehiculo) = await OperacionSembradaAsync(empresa, "TST911", ct);
+            return new Sembrado($"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote}/tramites/operaciones/{operacion}", [operacion.ToString(), vehiculo.ToString()]);
+        }),
     ];
+
+    /// <summary>Placa ficticia exclusiva de la empresa (para los escenarios cuyo cuerpo no trae ids).</summary>
+    private static string PlacaDe(EmpresaDePrueba empresa) => "D" + empresa.Id.ToString("N")[..5].ToUpperInvariant();
+
+    /// <summary>Lote con un vehículo terminado (RUNT y SIMIT del vehículo completados) con la placa exclusiva de la empresa.</summary>
+    private static async Task<(Guid Lote, Guid Vehiculo)> TerminadoAsync(EmpresaDePrueba empresa, CancellationToken ct)
+    {
+        var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, nombre: "Lote de deuda", vehiculos:
+            [new(PlacaDe(empresa), [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.SimitVehiculo, EstadoCelda.Completado, 1)])]);
+        return (lote.Id, lote.Vehiculos.Single().Id);
+    }
+
+    /// <summary>Lote con un vehículo y una operación MASIVA con su ítem PENDIENTE, sembrados por el contexto de la empresa.</summary>
+    private static async Task<(Guid Lote, Guid Operacion, Guid Vehiculo)> OperacionSembradaAsync(EmpresaDePrueba empresa, string placa, CancellationToken ct)
+    {
+        var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, vehiculos: [new(placa, [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var ahora = DateTimeOffset.UtcNow;
+        await using var db = empresa.Db();
+        var operacion = global::Flit.Diagnostico.Api.Modulos.Derivacion.OperacionDerivacion.Masiva(empresa.Id, lote.Id, "TRASPASO_STANDARD", Guid.NewGuid(), 1, ahora);
+        db.Add(operacion);
+        db.Add(global::Flit.Diagnostico.Api.Modulos.Derivacion.ItemDerivacion.Pendiente(operacion, vehiculo, 1, ahora));
+        await db.SaveChangesAsync(ct);
+        return (lote.Id, operacion.Id, vehiculo);
+    }
 
     /// <summary>Lote con un vehículo terminado y su ZIP pedido (y generado por la cola si <paramref name="procesar"/>).</summary>
     private static async Task<(Guid Lote, Guid Evidencia)> ZipSembradoAsync(EmpresaDePrueba empresa, string placa, bool procesar, CancellationToken ct)
@@ -250,6 +456,13 @@ public static class EscenariosDeFuga
         if (procesar)
             await Reportes.ZipDePrueba.DrenarAsync(empresa.Api, ct);
         return (lote.Id, pedido.GetProperty("id").GetGuid());
+    }
+
+    /// <summary>Placa y documento ficticios distintos por compañía (derivados de su id).</summary>
+    private static (string Placa, string Documento) DePrueba(EmpresaDePrueba empresa)
+    {
+        var n = Math.Abs(empresa.Id.GetHashCode()) % 1000;
+        return ($"FUG{n:D3}", $"55{Math.Abs(empresa.Id.GetHashCode()):D8}"[..10]);
     }
 
     public static EscenarioDeFuga Buscar(string ruta) => Todos.Single(e => e.Ruta == ruta);

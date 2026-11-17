@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ChevronRight, Download } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Pagination } from "@/components/atom/Pagination";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
@@ -23,6 +23,7 @@ import {
   resultado,
 } from "@/lib/logqx/labels";
 import { bogotaClock, buildXlsx, XLSX_MIME, type XlsxCell } from "@/lib/xlsx";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * Pestaña «Log completo» (HU #11790). Todos los eventos de la radicación, filtrados y paginados EN
@@ -96,7 +97,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-3 border-b border-[#DFE5ED] bg-[#F4F7FC] px-4 py-3 dark:border-white/10 dark:bg-white/5">
+      <div className="flex flex-wrap items-center gap-3 border-b border-border bg-secondary px-4 py-3">
         <label className="inline-flex cursor-pointer select-none items-center gap-2.5 text-[12.5px] font-medium">
           <input
             type="checkbox"
@@ -108,14 +109,15 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
         </label>
 
         {ocultarSinNovedad && data && data.ocultosSinNovedad > 0 && (
-          <span className="rounded-full bg-[#FF4E00]/15 px-2.5 py-1 font-mono text-[11.5px] tabular-nums text-[#C2410C]">
+          <span {...etiquetaKit("neutral", { className: "font-mono tabular-nums" })}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             {data.ocultosSinNovedad.toLocaleString("es-CO")} consultas sin novedad ocultas
           </span>
         )}
 
         <span className="flex-1" />
 
-        <span className="inline-flex overflow-hidden rounded-lg border border-[#D9DEE8] dark:border-white/15">
+        <span className="inline-flex overflow-hidden rounded-lg border border-border">
           <button
             type="button"
             aria-pressed={!soloErrores}
@@ -128,7 +130,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
             type="button"
             aria-pressed={soloErrores}
             onClick={() => cambiar(() => setSoloErrores(true))}
-            className={`border-l border-[#D9DEE8] px-3 py-1.5 text-[12px] dark:border-white/15 ${
+            className={`border-l border-border px-3 py-1.5 text-[12px] ${
               soloErrores ? "bg-flit-brand font-semibold text-white" : "opacity-70"
             }`}
           >
@@ -140,9 +142,9 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
           type="button"
           onClick={() => exportar(data?.data ?? [], submissionId, ocultarSinNovedad, data)}
           disabled={!data || data.data.length === 0}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-[#D9DEE8] px-3 py-1.5 text-[12px] font-medium opacity-80 hover:opacity-100 disabled:opacity-40 dark:border-white/15"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-1.5 text-[12px] font-medium opacity-80 hover:opacity-100 disabled:opacity-40"
         >
-          <Download className="h-3.5 w-3.5" aria-hidden="true" /> Exportar
+          <Icono nombre="nube-bajar" className="h-3.5 w-3.5" /> Exportar
         </button>
       </div>
 
@@ -253,8 +255,8 @@ function FilaEvento({
   return (
     <>
       <tr
-        className={`cursor-pointer bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS} ${
-          abierto ? "shadow-[0_8px_24px_color-mix(in_srgb,var(--color-flit-brand)_18%,transparent)]" : ""
+        className={`cursor-pointer bg-card ${TABLA_ROW_HOVER_CLS} ${
+          abierto ? "bg-[var(--kit-hover)]" : ""
         }`}
         onClick={onToggle}
         tabIndex={0}
@@ -268,10 +270,7 @@ function FilaEvento({
         }}
       >
         <td className={`${tdCls} rounded-l-xl border-l px-3`}>
-          <ChevronRight
-            className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierto ? "rotate-90" : ""}`}
-            aria-hidden="true"
-          />
+          <Icono nombre="derecha" className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierto ? "rotate-90" : ""}`} />
         </td>
         <td className={`${tdCls} whitespace-nowrap font-mono tabular-nums`}>
           {formatFecha(evento.occurredAt)}
@@ -282,9 +281,9 @@ function FilaEvento({
             className={`text-[10px] font-bold uppercase ${
               esError
                 ? evento.outcome === "error_definitivo"
-                  ? "text-[#991B1B]"
-                  : "text-[#C2410C]"
-                : "text-[#15803D]"
+                  ? "text-destructive"
+                  : "text-destructive"
+                : "text-[var(--flit-success-ink)]"
             }`}
           >
             {res.label}
@@ -299,7 +298,7 @@ function FilaEvento({
       </tr>
       {abierto && (
         <tr>
-          <td colSpan={7} className="rounded-xl border bg-[#F4F7FC] p-0 dark:bg-white/[0.03]">
+          <td colSpan={7} className="rounded-xl border bg-secondary p-0">
             <Payloads evento={evento} indice={indice} />
           </td>
         </tr>
@@ -369,7 +368,7 @@ function Payloads({ evento, indice }: { evento: LogQxEvent; indice: number }) {
       {crudo && (
         <pre
           id={`logqx-raw-${indice}`}
-          className={`overflow-x-auto rounded-[9px] border border-[#DFE5ED] bg-white p-3 font-mono text-[11.5px] leading-relaxed opacity-80 dark:border-white/10 dark:bg-[#0B0F14] ${soloUnLado ? "" : "md:col-span-2"}`}
+          className={`overflow-x-auto rounded-[9px] border border-border bg-card p-3 font-mono text-[11.5px] leading-relaxed opacity-80 ${soloUnLado ? "" : "md:col-span-2"}`}
         >
           {JSON.stringify(detalle, null, 2)}
         </pre>
@@ -416,13 +415,12 @@ function Columna({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="min-w-0 overflow-hidden rounded-[9px] border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#0B0F14]">
-      <div className="flex items-center gap-2 border-b border-[#DFE5ED] bg-[#F4F6FA] px-3 py-2 dark:border-white/10 dark:bg-white/5">
+    <div className="min-w-0 overflow-hidden rounded-[9px] border border-border bg-card">
+      <div className="flex items-center gap-2 border-b border-border bg-secondary px-3 py-2 dark:bg-secondary">
         <span
-          className={`rounded px-1.5 py-0.5 font-mono text-[10px] font-bold ${
-            tono === "info" ? "bg-flit-brand/15 text-flit-brand" : "bg-[#16A34A]/15 text-[#15803D]"
-          }`}
+          {...etiquetaKit(tono === "info" ? "info" : "success", { className: "font-mono" })}
         >
+          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
           {etiqueta}
         </span>
         <h4 className="text-[12px] font-semibold opacity-75">{titulo}</h4>
@@ -435,10 +433,10 @@ function Columna({
           <tbody>
             {datos.map(([k, v]) => (
               <tr key={k}>
-                <td className="w-px whitespace-nowrap border-b border-[#DFE5ED] px-3 py-1.5 text-[12px] font-medium opacity-70 last:border-0 dark:border-white/10">
+                <td className="w-px whitespace-nowrap border-b border-border px-3 py-1.5 text-[12px] font-medium opacity-70 last:border-0">
                   {k}
                 </td>
-                <td className="break-all border-b border-[#DFE5ED] px-3 py-1.5 font-mono text-[11.5px] dark:border-white/10">
+                <td className="break-all border-b border-border px-3 py-1.5 font-mono text-[11.5px]">
                   {formatValor(v)}
                 </td>
               </tr>

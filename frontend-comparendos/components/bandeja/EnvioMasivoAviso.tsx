@@ -43,7 +43,7 @@ export function EnvioMasivoAviso({ filas, onCerrar, onHecho }: { filas: FilaBand
   };
 
   return (
-    <Modal
+    <Modal icono="campana"
       open
       onClose={onCerrar}
       busy={ocupado}

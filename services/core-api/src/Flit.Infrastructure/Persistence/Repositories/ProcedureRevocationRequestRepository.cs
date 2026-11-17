@@ -137,6 +137,13 @@ internal sealed class ProcedureRevocationRequestRepository(FlitDbContext db) : I
             query = query.Where(x => x.p.TransitOfficeId == scopeOffice);
         }
 
+        // Alcance por usuario del OT: solo trámites de las compañías cliente asignadas.
+        if (filter.ClientTenantIds is { } allowedClients)
+        {
+            var allowed = allowedClients.ToList();
+            query = query.Where(x => allowed.Contains(x.p.TenantId));
+        }
+
         // Filtro opcional por organismo (solo tiene sentido del lado gestor — ver XML doc del filtro).
         if (filter.TransitOfficeId is { } filterOffice)
         {

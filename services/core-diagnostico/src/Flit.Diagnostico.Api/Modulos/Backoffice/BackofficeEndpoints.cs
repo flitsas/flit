@@ -10,9 +10,10 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// Rutas <c>/backoffice/*</c> del backoffice FLIT (HU #13728, D-16, ADR-0073). Todo el grupo exige
-/// <see cref="PoliticaBackoffice"/> (permiso <c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>) y la empresa
-/// explícita (<see cref="EmpresaExplicita"/>, que además audita cada lectura). Una ruta inexistente bajo
-/// <c>/backoffice/</c> también pasa por la política: 403 a quien no es backoffice FLIT, 404 a quien sí. Existen
+/// la política de configuración de <see cref="PoliticaBackoffice"/> (SuperAdmin de cualquier compañía, o FLIT con
+/// <c>diagnostico.backoffice.ver</c>; ajustes 2026-11-11, punto 1; el override y el llenado manual exigen además la de
+/// operación FLIT) y la empresa explícita (<see cref="EmpresaExplicita"/>, que además audita cada lectura). Una ruta inexistente bajo
+/// <c>/backoffice/</c> también pasa por la política: 403 a quien no la cumple, 404 a quien sí. Existen
 /// <c>GET /backoffice/resumen?empresa=</c> (D0) y <c>GET/PUT /backoffice/empresas/{empresa}/configuracion/contrato</c>
 /// (<see cref="ContratoBackofficeEndpoints"/>, HU #13741) y <c>GET /backoffice/consultas/{consulta}/intentos</c>
 /// (<see cref="IntentosBackofficeEndpoints"/>, HU #13737) y los lotes, la grilla y el historial de una compañía
@@ -37,6 +38,7 @@ public static class BackofficeEndpoints
         DiagnosticosBackofficeEndpoints.Map(backoffice);
         LlenadoManualEndpoints.Map(backoffice);
         OverrideDictamenEndpoints.Map(backoffice);
+        VersionesDictamenEndpoints.Map(backoffice);
 
         // HU #13741 (escenario 15): la lista de empresas de la plataforma no lee datos de ninguna compañía, así que no pide
         // empresa explícita ni se audita como lectura entre compañías; la política del backoffice sí aplica.
@@ -45,6 +47,17 @@ public static class BackofficeEndpoints
         // ADR-0078: el catálogo de fuentes obligatorias es de FLIT, igual que la lista de empresas. La política aplica;
         // no pide ?empresa=, no audita lecturas_backoffice y no abre AutorizarEscrituraDe.
         FuentesObligatoriasBackofficeEndpoints.Map(api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre));
+
+        // HU #14576 (ADR-0087 D-5): la gestión FLIT del saneamiento, en sus dos grupos (A sin empresa explícita y B con ella).
+        SaneamientosBackofficeEndpoints.Map(api);
+
+        // HU #14579, BE-0 (ADR-0088): estadísticas (E2, E3) y reportes (B0–B6) del backoffice, cada uno con sus grupos; E3 y B4–B6 llevan
+        // .SoloEmpresaHabilitada() antes de ConEmpresaExplicita (SP-3). Reciben el grupo raíz de la API, no el de ConEmpresaExplicita.
+        EstadisticasBackofficeEndpoints.Map(api);
+        ReportesBackofficeEndpoints.Map(api);
+
+        // HU #14587 (ADR-0089, contrato-api §3.2): el backoffice de usuarios es solo del SuperAdmin (PoliticaUsuariosBackoffice), con sus grupos.
+        UsuariosBackofficeEndpoints.Map(api);
 
         api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre).MapFallback(() => Results.NotFound());
     }

@@ -63,16 +63,48 @@ public sealed class CargaEndpointsTests
         hoja.Should().NotBeNull("la plantilla es un libro de Excel con una hoja");
         using var lector = new StreamReader(hoja!.Open());
         var xml = await lector.ReadToEndAsync(ct);
-        foreach (var columna in new[] { "Identificador_Vehiculo", "Tipo_Documento_Locatario", "Documento_Locatario" })
+        foreach (var columna in new[] { "Identificador_Vehiculo", "Tipo_Documento_Propietario", "Documento_Propietario" })
             xml.Should().Contain(columna);
+        xml.Should().NotContain("Locatario", "HU #14582 AC6: la plantilla pide el propietario actual");
         xml.IndexOf("Identificador_Vehiculo", StringComparison.Ordinal).Should()
-            .BeLessThan(xml.IndexOf("Tipo_Documento_Locatario", StringComparison.Ordinal), "la obligatoria va primero");
+            .BeLessThan(xml.IndexOf("Tipo_Documento_Propietario", StringComparison.Ordinal), "la obligatoria va primero");
         sinPermiso.StatusCode.Should().Be(HttpStatusCode.Forbidden);
 
         // La plantilla que se descarga se puede subir tal cual: sin filas, el resumen dice que no hay válidos.
         var tabla = LectorXlsx.Leer(bytes);
-        tabla.Encabezados.Should().Equal("Identificador_Vehiculo", "Tipo_Documento_Locatario", "Documento_Locatario");
+        tabla.Encabezados.Should().Equal("Identificador_Vehiculo", "Tipo_Documento_Propietario", "Documento_Propietario");
         tabla.Filas.Should().BeEmpty();
+    }
+
+    // HU #14582 (contrato §1.1, spec-ui §8) — la plantilla trae una segunda hoja «Instrucciones» que explica cada columna; las dos
+    // del documento dicen «Propietario actual (opcional)» y ninguna habla de locatario. La primera hoja sigue siendo la de datos: la
+    // plantilla se sube tal cual.
+    [Fact]
+    public async Task HU14582_plantilla_explica_las_columnas_del_propietario_actual_opcional()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.SinBaseAsync();
+
+        var respuesta = await api.Cliente(Cabeceras.TokenUsuario(api, Guid.NewGuid())).GetAsync(RutaPlantilla, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
+        var bytes = await respuesta.Content.ReadAsByteArrayAsync(ct);
+        using var zip = new ZipArchive(new MemoryStream(bytes), ZipArchiveMode.Read);
+        using (var libro = new StreamReader(zip.GetEntry("xl/workbook.xml")!.Open()))
+        {
+            var xmlLibro = await libro.ReadToEndAsync(ct);
+            xmlLibro.IndexOf("Vehiculos", StringComparison.Ordinal).Should()
+                .BeLessThan(xmlLibro.IndexOf(PlantillaCarga.HojaInstrucciones, StringComparison.Ordinal), "la hoja de datos va primero");
+        }
+
+        var instrucciones = zip.GetEntry("xl/worksheets/sheet2.xml");
+        instrucciones.Should().NotBeNull("la plantilla trae la hoja de instrucciones");
+        using var lector = new StreamReader(instrucciones!.Open());
+        var xml = await lector.ReadToEndAsync(ct);
+        xml.Should().Contain("Identificador_Vehiculo").And.Contain("Tipo_Documento_Propietario").And.Contain("Documento_Propietario");
+        System.Text.RegularExpressions.Regex.Count(xml, @"Propietario actual \(opcional\)").Should().Be(2, "una por cada columna del documento");
+        xml.Should().NotContainEquivalentOf("locatario");
+        LectorXlsx.Leer(bytes).Encabezados.Should().Equal("Identificador_Vehiculo", "Tipo_Documento_Propietario", "Documento_Propietario");
     }
 
     // Escenario 2 (F02-C6) — el mismo contenido en .xlsx y en .csv (punto y coma y coma) da el mismo resumen.
@@ -95,10 +127,10 @@ public sealed class CargaEndpointsTests
         var deXlsx = await xlsx.Content.ReadAsStringAsync(ct);
         (await csv.Content.ReadAsStringAsync(ct)).Should().Be(deXlsx);
         (await coma.Content.ReadAsStringAsync(ct)).Should().Be(deXlsx);
-        var resumen = JsonDocument.Parse(deXlsx).RootElement;
+        var resumen = JsonElement.Parse(deXlsx);
         resumen.GetProperty("total_filas").GetInt32().Should().Be(9, "la fila 9 está vacía y no cuenta");
-        Fila(resumen, 3).GetProperty("documento_locatario").GetString().Should().Be("****4050", "la celda numérica se lee como texto");
-        Fila(resumen, 4).GetProperty("tipo_documento_locatario").GetString().Should().Be("NIT", "la cadena en línea se lee");
+        Fila(resumen, 3).GetProperty("documento_propietario").GetString().Should().Be("****4050", "la celda numérica se lee como texto");
+        Fila(resumen, 4).GetProperty("tipo_documento_propietario").GetString().Should().Be("NIT", "la cadena en línea se lee");
     }
 
     // Escenario 3 (F02-C6) — .xls (por extensión o por firma) responde 422 con el mensaje de guardarlo como .xlsx, sin filas.
@@ -116,7 +148,7 @@ public sealed class CargaEndpointsTests
 
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, $"{nombre} → {texto}");
-            var json = JsonDocument.Parse(texto).RootElement;
+            var json = JsonElement.Parse(texto);
             json.GetProperty("code").GetString().Should().Be("FORMATO_XLS_NO_ADMITIDO");
             json.GetProperty("error").GetString().Should().Be("El formato .xls no se admite: guarde el archivo como .xlsx y vuelva a subirlo");
             texto.Should().NotContain("total_filas", "no se analiza ninguna fila");
@@ -146,7 +178,7 @@ public sealed class CargaEndpointsTests
 
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
             respuesta.StatusCode.Should().Be(HttpStatusCode.UnsupportedMediaType, $"{nombre} → {texto}");
-            var json = JsonDocument.Parse(texto).RootElement;
+            var json = JsonElement.Parse(texto);
             json.GetProperty("code").GetString().Should().Be(codigo, nombre);
             json.GetProperty("error").GetString().Should().NotBeNullOrWhiteSpace().And.ContainAny(".xlsx", ".csv");
         }
@@ -175,7 +207,7 @@ public sealed class CargaEndpointsTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
         externas.Llamadas.Should().Be(httpAntes, "el análisis no llama a ninguna fuente por HTTP");
         api.Catalogos.Llamadas.Should().Be(catalogoAntes, "ni al gRPC de Trámites");
-        var resumen = JsonDocument.Parse(texto).RootElement;
+        var resumen = JsonElement.Parse(texto);
         resumen.GetProperty("validos").GetInt32().Should().Be(4);
         resumen.GetProperty("erroneos").GetInt32().Should().Be(4);
         resumen.GetProperty("duplicados").GetInt32().Should().Be(1);
@@ -273,12 +305,12 @@ public sealed class CargaEndpointsTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        var resumen = JsonDocument.Parse(texto).RootElement;
+        var resumen = JsonElement.Parse(texto);
         Fila(resumen, 2).GetProperty("valida").GetBoolean().Should().BeFalse();
         Errores(Fila(resumen, 2)).Should().Equal("DOCUMENTO_INVALIDO");
         Fila(resumen, 3).GetProperty("valida").GetBoolean().Should().BeTrue();
-        Fila(resumen, 3).GetProperty("tipo_documento_locatario").GetString().Should().Be("CC");
-        Fila(resumen, 3).GetProperty("documento_locatario").GetString().Should().Be("****4433");
+        Fila(resumen, 3).GetProperty("tipo_documento_propietario").GetString().Should().Be("CC");
+        Fila(resumen, 3).GetProperty("documento_propietario").GetString().Should().Be("****4433");
         Errores(Fila(resumen, 4)).Should().Equal("DOCUMENTO_INCOMPLETO");
         texto.Should().NotContain("7766554433").And.NotContain("71A3B2").And.NotContain("55443322");
         logs.Mensajes.Should().NotBeEmpty("la captura de logs funciona");
@@ -301,13 +333,13 @@ public sealed class CargaEndpointsTests
             ct, empresas.B, ["RUNT_LOCATARIO"]);
         var archivo = Bytes("Identificador_Vehiculo;Tipo_Documento_Locatario;Documento_Locatario", "ABC123;CC;1020304050", "XYZ987;;", "DEF456;;", "MAL;;");
 
-        var conEstimado = JsonDocument.Parse(await (await SubirAsync(antes, idAntes, archivo, "a.csv", ct)).Content.ReadAsStringAsync(ct)).RootElement;
+        var conEstimado = JsonElement.Parse(await (await SubirAsync(antes, idAntes, archivo, "a.csv", ct)).Content.ReadAsStringAsync(ct));
         var sinEstimadoTexto = await (await SubirAsync(no, idNo, archivo, "b.csv", ct)).Content.ReadAsStringAsync(ct);
 
         var estimado = conEstimado.GetProperty("estimado_consultas").EnumerateArray()
             .ToDictionary(e => e.GetProperty("fuente").GetString()!, e => e.GetProperty("consultas").GetInt32());
-        estimado.Should().Equal(new Dictionary<string, int> { ["RUNT"] = 3, ["RUNT_LOCATARIO"] = 1 });
-        JsonDocument.Parse(sinEstimadoTexto).RootElement.TryGetProperty("estimado_consultas", out _).Should().BeFalse(sinEstimadoTexto);
+        estimado.Should().Equal(new Dictionary<string, int> { ["RUNT"] = 3, ["RUNT_LOCATARIO"] = 0 }, "HU #14582: el declarado no alimenta al locatario");
+        JsonElement.Parse(sinEstimadoTexto).TryGetProperty("estimado_consultas", out _).Should().BeFalse(sinEstimadoTexto);
     }
 
     // HU #13796 AC1 (F05-C13, Q7) — con ANTES_DE_LANZAR y 10 vehículos, SIMIT_PROPIETARIO muestra 10 con minimo=true (las
@@ -328,7 +360,7 @@ public sealed class CargaEndpointsTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        JsonDocument.Parse(texto).RootElement.GetProperty("estimado_consultas").EnumerateArray()
+        JsonElement.Parse(texto).GetProperty("estimado_consultas").EnumerateArray()
             .Select(e => $"{e.GetProperty("fuente").GetString()} {e.GetProperty("consultas").GetInt32()} {e.GetProperty("minimo").GetBoolean()}")
             .Should().Equal(["RUNT 10 False", "SIMIT_VEHICULO 10 False", "SIMIT_PROPIETARIO 10 True"]);
     }
@@ -424,7 +456,7 @@ public sealed class CargaEndpointsTests
         var respuesta = await SubirAsync(cliente, id, csv, "carga.csv", ct);
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        return JsonDocument.Parse(texto).RootElement;
+        return JsonElement.Parse(texto);
     }
 
     /// <summary>Siembra la configuración de la compañía y crea una cabecera SIMPLE en CREADO con RUNT (y el locatario dado).</summary>

@@ -206,6 +206,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "necesito para",
       "matricula documentos",
       "traspaso documentos",
+      "otros documentos",
+      "varios archivos",
+      "eliminar documento",
     ],
     summary: "Cómo conocer los documentos exigidos, dónde cargarlos y buenas prácticas.",
     blocks: [
@@ -234,6 +237,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Usa el paso Documentos del asistente para subir cada archivo. Formatos típicos: PDF, JPG, PNG.",
           "Un nombre descriptivo ayuda al revisor del organismo. Evita fotos borrosas o PDFs protegidos con contraseña.",
+          "En casi todas las casillas cabe un solo archivo: «Reemplazar archivo» cambia el que había por el nuevo.",
+          "Las casillas «Otro» y «Anexos generales» admiten varios archivos. Cada archivo aparece en su propia fila, con su fecha, el ojo para verlo y «Eliminar». Para sumar uno, pulsa «Agregar otro documento»: el nuevo se añade y los anteriores se quedan. Si cargaste uno por error, elimínalo en su fila; agregar el correcto no lo quita. Todos los archivos de estas casillas van en el consolidado que recibe el organismo.",
           "Impronta: si tu compañía tiene deshabilitada la generación de improntas, el sistema no la genera ni ofrece «Generar impronta». En la casilla de la impronta verás «Cargue la impronta; no se genera automáticamente» y debes adjuntarla tú. Si es obligatoria, no podrás radicar hasta cargarla.",
         ],
         callouts: [
@@ -251,6 +256,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Documento ilegible → vuelve a escanear o fotografiar con buena luz.",
           "Persona equivocada en el mandato → verifica actores antes de adjuntar.",
           "Falta un obligatorio → el asistente bloquea el avance hasta que lo completes.",
+          "El organismo rechazó un archivo de «Otro» → en la subsanación, elimina el archivo errado en su fila y agrega el corregido; si solo agregas el nuevo, el errado sigue en el expediente.",
         ],
       },
     ],
@@ -585,7 +591,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "Preasignación: radicaste sin placa. Puedes enviar el trámite aunque el actor aún no haya firmado; el correo de validación de identidad le llega igual. El organismo tiene el trámite en su cola de «asignar placa». Tú esperas.",
-          "Asignado: el organismo asignó la placa (recibes correo). Desde aquí la firma es obligatoria: si falta, «Enviar al OT» no deja continuar y se le notifica a la persona. Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
+          "Asignado: el organismo asignó la placa (recibes correo). Desde aquí la firma es obligatoria: si falta, «Enviar al OT» no deja continuar y se le notifica a la persona. Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. En ese mismo modal puedes cargar el PDF del SOAT («Cargar PDF del SOAT») y el del impuesto departamental («Cargar PDF del impuesto departamental»); al cargar el del impuesto, el check «Impuesto departamental pagado» queda marcado. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
           "Entregado: ya está en la cola de decisión del organismo, como cualquier otro trámite.",
           "Rechazado con distintivo «Rechazado preasignación»: el organismo rechazó antes de asignar placa; el motivo está en el detalle. Puedes filtrar estos casos con el atajo «Rechazado desde preasignación» de la búsqueda rápida.",
         ],

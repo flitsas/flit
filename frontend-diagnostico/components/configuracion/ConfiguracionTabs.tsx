@@ -2,11 +2,15 @@
 
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { FOCO_CLS } from "./estilos";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
+import { Icono, type NombreIcono } from "@flit/ui/Icono";
 
 export interface Pestana {
   id: string;
   etiqueta: string;
   contenido: ReactNode;
+  /** HU #14562 · F-07: glifo decorativo de la pestaña (maqueta del UI Kit 2026). Opcional. */
+  icono?: NombreIcono;
 }
 
 /**
@@ -37,7 +41,7 @@ export function ConfiguracionTabs({ etiqueta, pestanas }: { etiqueta: string; pe
 
   return (
     <div className="flex flex-col gap-4">
-      <div role="tablist" aria-label={etiqueta} className="flex w-fit gap-1 rounded-full border border-[var(--nav-borde)] bg-[var(--nav-panel-bg)] p-1 dark:border-white/10 dark:bg-white/[0.04]">
+      <div role="tablist" aria-label={etiqueta} className={PESTANAS_LISTA_CLS}>
         {pestanas.map((p, i) => {
           const activo = i === seleccionada;
           return (
@@ -54,10 +58,9 @@ export function ConfiguracionTabs({ etiqueta, pestanas }: { etiqueta: string; pe
               tabIndex={activo ? 0 : -1}
               onClick={() => setActiva(i)}
               onKeyDown={(e) => alPulsar(e, i)}
-              className={`rounded-full px-4 py-2 text-sm font-semibold transition ${FOCO_CLS} ${
-                activo ? "bg-[var(--flit-brand-ink)] text-white shadow-[var(--nav-sombra-activo)]" : "text-[var(--nav-texto)] dark:text-slate-300"
-              }`}
+              className={`${pestanaClass(activo, FOCO_CLS)} inline-flex items-center gap-2`}
             >
+              {p.icono && <Icono nombre={p.icono} className="h-4 w-4 shrink-0" />}
               {p.etiqueta}
             </button>
           );

@@ -10,7 +10,17 @@ internal sealed class ProcedureInstanceAttachmentConfiguration : IEntityTypeConf
     public void Configure(EntityTypeBuilder<ProcedureInstanceAttachment> builder)
     {
         builder.ToTable("procedure_instance_attachments", SchemaNames.Tramites, t =>
-            t.HasTrigger("tr_procedure_instance_attachments_audit"));
+        {
+            t.HasTrigger("tr_procedure_instance_attachments_audit");
+            // Bug #14559 (ADR-0085) — mismos nombres y expresiones que el DDL 196.
+            t.HasCheckConstraint(
+                "ck_procedure_instance_attachments_ocr_status",
+                "ocr_status IS NULL OR ocr_status IN ('verified','rejected','skipped')");
+            t.HasCheckConstraint(
+                "ck_procedure_instance_attachments_ocr_reason",
+                "ocr_reason IS NULL OR (ocr_status IS NOT NULL AND ocr_status IN ('rejected','skipped') AND ocr_reason IN "
+                + "('vin_mismatch','tipo_invalido','no_confirmado','ilegible','excede_tamano','analisis_fallido'))");
+        });
 
         builder.HasKey(x => x.Id);
         builder.Property(x => x.Id).HasDefaultValueSql("uuidv7()");
@@ -35,6 +45,9 @@ internal sealed class ProcedureInstanceAttachmentConfiguration : IEntityTypeConf
         // HU #13172 (Feature #13118) — formato y versión de plantilla con que se emitió el contrato de mandato.
         builder.Property(x => x.MandateFormatCode).HasColumnName("mandate_format_code").HasMaxLength(30);
         builder.Property(x => x.MandateFormatVersion).HasColumnName("mandate_format_version");
+        // Bug #14559 (ADR-0085) — veredicto OCR declarado por el cliente (informativo, nunca compuerta).
+        builder.Property(x => x.OcrStatus).HasColumnName("ocr_status").HasMaxLength(20);
+        builder.Property(x => x.OcrReason).HasColumnName("ocr_reason").HasMaxLength(30);
 
         builder.HasIndex(x => new { x.TenantId, x.ProcedureInstanceId })
             .HasDatabaseName("ix_procedure_instance_attachments_tenant_id_instance");

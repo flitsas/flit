@@ -4,6 +4,7 @@ import {
   buildPersonApiFilters,
   describeIdentityFilter,
   hasActiveValidacionesFilters,
+  splitPersonaODocumentoQuery,
   toUiFilters,
   validateIdentityFilter,
 } from '@/lib/identidad/validaciones-filtros';
@@ -72,6 +73,56 @@ describe('buildPersonApiFilters (AC2 — mismos parámetros de API)', () => {
   it('cualquier filtro aplicado cuenta como activo (vacío con filtros ≠ módulo sin datos)', () => {
     expect(hasActiveValidacionesFilters(EMPTY_VALIDACIONES_FILTERS)).toBe(false);
     expect(hasActiveValidacionesFilters(toUiFilters('', null, [{ fieldId: 'origen', values: ['tramite'] }]))).toBe(true);
+  });
+});
+
+// Ajuste 2026-11-10 (D1=a) — la caja única también busca por radicado: un texto que empieza por
+// «FT» (sin distinguir mayúsculas) viaja como `referenceNumber`, normalizado en mayúsculas, ANTES de
+// la regla del 80 % de dígitos (que hoy convertía «FT1-0000012» en el documento 10000012).
+describe('buscador — radicado FT (ajuste 2026-11-10)', () => {
+  it('«FT1-0000012» se busca como radicado, no como documento', () => {
+    expect(splitPersonaODocumentoQuery('FT1-0000012')).toEqual({
+      name: '',
+      documentNumber: '',
+      referenceNumber: 'FT1-0000012',
+    });
+  });
+
+  it('insensible a mayúsculas, recorta espacios y normaliza a mayúsculas (coincidencia parcial)', () => {
+    expect(splitPersonaODocumentoQuery('  ft1-00000 ').referenceNumber).toBe('FT1-00000');
+    expect(splitPersonaODocumentoQuery('Ft2').referenceNumber).toBe('FT2');
+    expect(splitPersonaODocumentoQuery('ft').referenceNumber).toBe('FT');
+  });
+
+  it('solo dígitos sigue siendo documento y el texto libre sigue siendo nombre', () => {
+    expect(splitPersonaODocumentoQuery('1020445118')).toEqual({
+      name: '',
+      documentNumber: '1020445118',
+      referenceNumber: '',
+    });
+    expect(splitPersonaODocumentoQuery('Ana Compradora')).toEqual({
+      name: 'Ana Compradora',
+      documentNumber: '',
+      referenceNumber: '',
+    });
+  });
+
+  it('un nombre que empieza por «Ft» seguido de letras no se toma por radicado', () => {
+    expect(splitPersonaODocumentoQuery('Ftima Gómez')).toMatchObject({
+      name: 'Ftima Gómez',
+      referenceNumber: '',
+    });
+  });
+
+  it('contrato — llega a la API como `referenceNumber` y cuenta como filtro activo', () => {
+    const ui = toUiFilters('ft1-0000012', null, []);
+    expect(buildPersonApiFilters(ui)).toMatchObject({
+      referenceNumber: 'FT1-0000012',
+      name: undefined,
+      documentNumber: undefined,
+    });
+    expect(hasActiveValidacionesFilters(ui)).toBe(true);
+    expect(buildPersonApiFilters(EMPTY_VALIDACIONES_FILTERS).referenceNumber).toBeUndefined();
   });
 });
 

@@ -5,7 +5,31 @@
 // y no dos implementaciones que se parecen — que es como se llega a que el CSV de un informe
 // neutralice las fórmulas y el del otro no.
 
+import type { MaxActoresPorRol } from "@/lib/api/company-queries";
 import { buildXlsx, type XlsxCell } from "@/lib/xlsx";
+
+/**
+ * Columna que en pantalla es UNA y en el archivo se abre en varios bloques, uno por actor del trámite.
+ *
+ * Las columnas de un mismo `grupo` (p. ej. Comprador, Validación comprador, Intentos comprador…) se
+ * escriben juntas, persona por persona, EN EL SITIO de la primera columna visible del grupo. El
+ * ancho (cuántas personas) lo fija `maxActoresPorRol` sobre todo el filtro, no sobre las filas del
+ * archivo: así todas las partes de un export por lotes salen con las mismas columnas.
+ */
+export interface ExpansionPorBloque<TRow> {
+  grupo: string;
+  /**
+   * Cuántos bloques ocupa esta columna según el máximo del servidor. `0` la omite: sin máximo no se
+   * inventa el ancho de las columnas nuevas. La columna de nombre devuelve al menos 1 incluso sin
+   * máximo, porque «Comprador» siempre existió.
+   */
+  bloques: (max: MaxActoresPorRol | undefined) => number;
+  /** Encabezado del bloque n (1-based): «Comprador», «Comprador 2»… */
+  header: (n: number) => string;
+  width?: number;
+  /** Valor del bloque n de esta fila; `null` si ese actor no existe. */
+  cell: (row: TRow, n: number) => XlsxCell;
+}
 
 /**
  * Una columna de un informe exportable.
@@ -31,6 +55,8 @@ export interface DataColumn<TRow, TSort extends string = string> {
   sort?: TSort;
   numeric?: boolean;
   defaultVisible?: boolean;
+  /** Si está, en el archivo esta columna se abre por actor, en su sitio. */
+  expandirPorBloque?: ExpansionPorBloque<TRow>;
 }
 
 export interface ColumnPreset {
@@ -96,11 +122,72 @@ export function buildCsv<TRow>(
   columns: DataColumn<TRow>[],
   rows: TRow[],
   visibleIds: string[],
+  maxActoresPorRol?: MaxActoresPorRol,
 ): string {
-  const cols = visibleColumns(columns, visibleIds);
-  const header = cols.map((c) => csvCell(c.label)).join(";");
-  const body = rows.map((row) => cols.map((c) => csvCell(c.value(row))).join(";"));
-  return `﻿${[header, ...body].join("\r\n")}`;
+  const salida = planSalida(visibleColumns(columns, visibleIds), maxActoresPorRol);
+  const header = salida.map((c) => csvCell(c.headerCsv)).join(";");
+  const body = rows.map((row) => salida.map((c) => csvCell(c.csv(row))).join(";"));
+  return `\ufeff${[header, ...body].join("\r\n")}`;
+}
+
+interface ColumnaSalida<TRow> {
+  headerCsv: string;
+  headerXlsx: string;
+  width?: number;
+  csv: (row: TRow) => string;
+  xlsx: (row: TRow) => XlsxCell;
+}
+
+/**
+ * Las columnas del archivo, en orden. Las normales van tal cual; las que se abren por actor se
+ * escriben en el sitio de la primera visible de su grupo, persona por persona.
+ *
+ * Sin `maxActoresPorRol` las columnas por actor que no existían antes se omiten: inventar el ancho
+ * desde las filas a mano haría que cada parte de un export por lotes saliera distinta.
+ */
+function planSalida<TRow>(
+  cols: DataColumn<TRow>[],
+  max: MaxActoresPorRol | undefined,
+): ColumnaSalida<TRow>[] {
+  const salida: ColumnaSalida<TRow>[] = [];
+  const yaEscritos = new Set<string>();
+
+  for (const col of cols) {
+    const exp = col.expandirPorBloque;
+    if (!exp) {
+      salida.push({
+        headerCsv: col.label,
+        headerXlsx: col.xlsxHeader ?? col.label,
+        width: col.width,
+        csv: (row) => col.value(row),
+        xlsx: (row) => (col.raw ? col.raw(row) : col.value(row)),
+      });
+      continue;
+    }
+    if (yaEscritos.has(exp.grupo)) continue;
+    yaEscritos.add(exp.grupo);
+
+    const delGrupo = cols.filter((c) => c.expandirPorBloque?.grupo === exp.grupo);
+    const ancho = Math.max(...delGrupo.map((c) => c.expandirPorBloque!.bloques(max)));
+    for (let n = 1; n <= ancho; n += 1) {
+      for (const c of delGrupo) {
+        const e = c.expandirPorBloque!;
+        if (e.bloques(max) < n) continue;
+        salida.push({
+          headerCsv: e.header(n),
+          headerXlsx: e.header(n),
+          width: e.width ?? c.width,
+          csv: (row) => celdaTexto(e.cell(row, n)),
+          xlsx: (row) => e.cell(row, n),
+        });
+      }
+    }
+  }
+  return salida;
+}
+
+function celdaTexto(cell: XlsxCell): string {
+  return cell === null || typeof cell === "object" ? "" : String(cell);
 }
 
 /**
@@ -117,12 +204,13 @@ export function buildWorkbook<TRow>(
   rows: TRow[],
   visibleIds: string[],
   notes?: string[],
+  maxActoresPorRol?: MaxActoresPorRol,
 ): Uint8Array<ArrayBuffer> {
-  const cols = visibleColumns(columns, visibleIds);
+  const salida = planSalida(visibleColumns(columns, visibleIds), maxActoresPorRol);
   return buildXlsx({
     name: sheetName,
-    columns: cols.map((c) => ({ header: c.xlsxHeader ?? c.label, width: c.width })),
-    rows: rows.map((row) => cols.map((c) => (c.raw ? c.raw(row) : c.value(row)))),
+    columns: salida.map((c) => ({ header: c.headerXlsx, width: c.width })),
+    rows: rows.map((row) => salida.map((c) => c.xlsx(row))),
     notes,
   });
 }

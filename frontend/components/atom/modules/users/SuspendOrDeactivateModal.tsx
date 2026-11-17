@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Ban } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ApiError } from "@/lib/api/types";
 
@@ -74,7 +73,7 @@ export function SuspendOrDeactivateModal({
     }
   }
 
-  const accentColor = indefinite ? "var(--color-flit-brand)" : "#FF4E00";
+  const accentColor = indefinite ? "var(--color-flit-brand)" : "var(--destructive)";
   const title = indefinite ? "Desactivar usuario" : "Suspender usuario";
   const submitLabel = busy ? "Aplicando…" : indefinite ? "Desactivar usuario" : "Suspender usuario";
 
@@ -85,7 +84,7 @@ export function SuspendOrDeactivateModal({
       busy={busy}
       size="sm"
       title={title}
-      icon={Ban}
+      icono="distinto"
       iconBg={accentColor}
       description={
         <>
@@ -108,7 +107,7 @@ export function SuspendOrDeactivateModal({
             onChange={(e) => setReason(e.target.value)}
             placeholder="Ej. Incumplimiento de políticas de uso"
             rows={3}
-            className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+            className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:ring-2 focus:ring-ring resize-none"
           />
         </div>
 
@@ -134,7 +133,7 @@ export function SuspendOrDeactivateModal({
               value={endsAt || defaultEndsAt}
               onChange={(e) => setEndsAt(e.target.value)}
               min={new Date().toISOString().slice(0, 16)}
-              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:ring-2 focus:ring-ring"
             />
           </div>
         )}
@@ -143,7 +142,7 @@ export function SuspendOrDeactivateModal({
           <p
             role="alert"
             className="text-xs py-2 px-3 rounded-xl font-medium"
-            style={{ background: "rgba(255,78,0,0.08)", color: "#FF4E00" }}
+            style={{ background: "var(--badge-danger-bg)", color: "var(--destructive)" }}
           >
             {error}
           </p>

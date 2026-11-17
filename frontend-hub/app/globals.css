@@ -8,6 +8,14 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Como en Trámites: un `border` sin color toma el del tema y no `currentColor` (negro en claro, blanco en oscuro),
+   que es lo que pone Tailwind v4 por defecto. Lo usan, por ejemplo, los estados vacíos de @flit/ui. */
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+}
+
 /* Las clases de Tailwind que usan los componentes de @flit/ui también se generan aquí. */
 @source "../../packages/ui/src";
 @source "../../packages/brand/src";

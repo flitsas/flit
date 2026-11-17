@@ -1,7 +1,7 @@
 "use client";
 
+import { INTERRUPTOR_CLS } from "@flit/ui/Interruptor";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { createOtRule, fetchOtRules, updateOtRule } from "@/lib/api/admin-ot";
@@ -12,6 +12,7 @@ import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RuleFormPanel } from "./RuleFormPanel";
+import { iconoComo } from "@flit/ui/iconoComo";
 
 export interface RulesSectionProps {
   /** Oficina OT en scope (SuperAdmin navegando el hub). Mismo patrón que RequirementsSection. */
@@ -101,7 +102,7 @@ export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
               checked={row.isEnabled}
               disabled={togglingId === row.id}
               aria-checked={row.isEnabled}
-              className="h-4 w-8 cursor-pointer accent-flit-brand"
+              className={`${INTERRUPTOR_CLS} appearance-none`}
               onChange={(e) => void handleToggle(row, e.target.checked)}
             />
           </label>
@@ -115,7 +116,7 @@ export function RulesSection({ transitOfficeId }: RulesSectionProps = {}) {
           <RowActions
             actions={[
               {
-                icon: Pencil,
+                icon: iconoComo("lapiz"),
                 label: `Editar regla ${row.name}`,
                 tone: "primary",
                 onClick: () => {

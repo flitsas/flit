@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, type FormEvent } from "react";
-import { AlertTriangle, CheckCircle2, Download, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload } from "@/lib/auth/jwt";
 import { describeImprontaError, generarImpronta } from "@/lib/api/admin-improntas";
@@ -9,6 +9,7 @@ import type { GenerarImprontaRequest, GenerarImprontaResult } from "@/lib/api/ty
 import { digitsOnly } from "@/lib/format/currency";
 import { sanitizePlate } from "@/lib/validation/fieldRules";
 import { IMPRONTA_INPUT_CLS, IMPRONTA_LABEL_CLS, IMPRONTA_SECTION_CLS } from "./improntas-form-styles";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 type SubmitStatus = "idle" | "submitting" | "error" | "success";
 
@@ -109,7 +110,7 @@ export function ImprontaFormPanel() {
         </legend>
 
         <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-placa">
-          Placa <span aria-hidden="true">*</span>
+          Placa <span aria-hidden="true"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
           <input
             id="impronta-placa"
             className={`mt-1 uppercase tracking-widest ${IMPRONTA_INPUT_CLS}`}
@@ -122,13 +123,13 @@ export function ImprontaFormPanel() {
           />
         </label>
         {attempted && placaMissing && (
-          <p id="impronta-placa-error" role="alert" className="text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+          <p id="impronta-placa-error" role="alert" className="text-[11px] font-medium" style={{ color: "var(--destructive)" }}>
             La placa es obligatoria.
           </p>
         )}
 
         <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-documento">
-          Documento del propietario <span aria-hidden="true">*</span>
+          Documento del propietario <span aria-hidden="true"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
           <input
             id="impronta-documento"
             className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
@@ -144,7 +145,7 @@ export function ImprontaFormPanel() {
           />
         </label>
         {attempted && documentoMissing && (
-          <p id="impronta-documento-error" role="alert" className="text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+          <p id="impronta-documento-error" role="alert" className="text-[11px] font-medium" style={{ color: "var(--destructive)" }}>
             El documento del propietario es obligatorio.
           </p>
         )}
@@ -161,7 +162,7 @@ export function ImprontaFormPanel() {
 
         <div>
           <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-org-nombre">
-            Nombre de la organización <span aria-hidden="true">*</span>
+            Nombre de la organización <span aria-hidden="true"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
             <input
               id="impronta-org-nombre"
               className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
@@ -172,7 +173,7 @@ export function ImprontaFormPanel() {
             />
           </label>
           {attempted && orgNombre.trim().length === 0 && (
-            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "var(--destructive)" }}>
               El nombre de la organización es obligatorio.
             </p>
           )}
@@ -180,7 +181,7 @@ export function ImprontaFormPanel() {
 
         <div>
           <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-operador">
-            Operador <span aria-hidden="true">*</span>
+            Operador <span aria-hidden="true"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
             <input
               id="impronta-operador"
               className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
@@ -191,7 +192,7 @@ export function ImprontaFormPanel() {
             />
           </label>
           {attempted && operadorMissing && (
-            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "var(--destructive)" }}>
               El operador es obligatorio.
             </p>
           )}
@@ -206,7 +207,7 @@ export function ImprontaFormPanel() {
           style={{ color: "var(--color-flit-primary)" }}
           data-testid="impronta-loading"
         >
-          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" aria-hidden="true" />
+          <Icono nombre="girador" className="h-3.5 w-3.5 shrink-0 animate-spin" />
           Generando impronta… puede tardar unos segundos porque se consulta un servicio externo
           (RUNT).
         </p>
@@ -217,10 +218,10 @@ export function ImprontaFormPanel() {
           role="alert"
           aria-live="assertive"
           className="flex items-start gap-2 rounded-xl border p-3 text-xs font-medium"
-          style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+          style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           data-testid="impronta-error"
         >
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <IconoAviso tipo="error" className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{errorMessage}</span>
         </div>
       )}
@@ -233,7 +234,7 @@ export function ImprontaFormPanel() {
           style={{ borderColor: "var(--color-flit-tech)", color: "var(--color-flit-primary)" }}
           data-testid="impronta-success"
         >
-          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-tech)" }} aria-hidden="true" />
+          <Icono nombre="check" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-tech)" }} />
           <div className="flex flex-col gap-1">
             <span>
               Impronta generada y descargada. La descarga del PDF se inició en tu navegador.
@@ -263,12 +264,12 @@ export function ImprontaFormPanel() {
         disabled={submitting}
         aria-busy={submitting}
         className="flex w-fit items-center justify-center gap-2 rounded-xl px-6 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-        style={{ background: "linear-gradient(135deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+        style={{ background: "var(--gradient-action)" }}
       >
         {submitting ? (
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+          <Icono nombre="girador" className="h-4 w-4 animate-spin" />
         ) : (
-          <Download className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="nube-bajar" className="h-4 w-4" />
         )}
         {submitting ? "Generando impronta…" : "Generar impronta"}
       </button>

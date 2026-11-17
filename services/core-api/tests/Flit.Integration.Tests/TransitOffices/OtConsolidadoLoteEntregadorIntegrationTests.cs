@@ -191,6 +191,7 @@ public sealed class OtConsolidadoLoteEntregadorIntegrationTests(PostgresDatabase
         services.AddScoped<IOtClientProcedureConsolidadoContext, OtClientProcedureConsolidadoContext>();
         services.AddSingleton<IQuipuxReadOnlyGuard>(guard);
         services.AddScoped<ILoteItemEntregador>(sp => generador.Para(sp.GetRequiredService<FlitDbContext>()));
+        services.AddScoped<Flit.Admin.Domain.Companies.TransitOffices.IOtUserClientScopeResolver, SinAlcance>();
         services.AddScoped<ILoteItemOrigen, OtConsolidadoLoteEntregador>();
         services.AddScoped<LoteItemOrigenPorOrigen>();
         services.AddScoped(sp => new ProcesarItemLoteHandler(
@@ -541,6 +542,15 @@ public sealed class OtConsolidadoLoteEntregadorIntegrationTests(PostgresDatabase
     private sealed class SolicitanteConAcceso : IConsolidadoLoteAccessChecker
     {
         public Task<bool> TieneAccesoAsync(LoteItemContexto contexto, CancellationToken ct = default) => Task.FromResult(true);
+    }
+
+    private sealed class SinAlcance : Flit.Admin.Domain.Companies.TransitOffices.IOtUserClientScopeResolver
+    {
+        public Task<IReadOnlyList<Guid>?> GetRestrictionAsync(Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Guid>?>(null);
+
+        public Task<IReadOnlyList<Guid>?> GetRestrictionForUserAsync(Guid userId, Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<Guid>?>(null);
     }
 
     private sealed class MatrizVacia : IResolvedDocumentMatrixResolver

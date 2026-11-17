@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.1.0"
+  version: "1.1.4"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -277,6 +277,139 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AuthErrorResponse'
+  /api/v1/security/invitations/bulk/template:
+    get:
+      tags: [Security · Invitaciones]
+      operationId: securityBulkInvitationTemplate
+      summary: Plantilla Excel de invitación masiva (Feature #14420 / ADR-0077)
+      description: >
+        Descarga `.xlsx` con columnas Nombre completo, Correo y Rol, y el catálogo de roles
+        asignables al invitador en el destino. SuperAdmin debe indicar `targetTenantId`.
+        AdminCompany opera sobre su propio tenant. Perfil FLIT fuera de v1.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: targetTenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Obligatorio para SuperAdmin (compañía u OT destino).
+      responses:
+        '200':
+          description: Plantilla Excel.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '400':
+          description: TARGET_TENANT_REQUIRED u otro error de parámetros.
+        '401': { description: No autenticado. }
+        '403':
+          description: TARGET_TENANT_OUT_OF_SCOPE / INVITER_NOT_AUTHORIZED / CANNOT_INVITE_TO_OWN_TENANT.
+        '404':
+          description: TARGET_TENANT_NOT_FOUND.
+  /api/v1/security/invitations/bulk:
+    post:
+      tags: [Security · Invitaciones]
+      operationId: securityBulkInvitationSubmit
+      summary: Valida (dryRun) o ejecuta invitación masiva por Excel (Feature #14420)
+      description: >
+        Multipart campo `file` (.xlsx ≤ 1 MB, ≤ 50 filas). `dryRun=true` (default) solo valida;
+        `dryRun=false` revalida y crea invitaciones vía CreateInvitationHandler. Filas inválidas
+        no tumban el lote. Rate limit en dryRun (429). Auditoría `users/bulk_invite` solo en commit.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: dryRun
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+        - name: targetTenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: BulkInvitationReport (dryRun o commit).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkInvitationReport'
+        '400':
+          description: FILE_REQUIRED / INVALID_FILE / TEMPLATE_INVALID / EMPTY_FILE / TOO_MANY_ROWS.
+        '401': { description: No autenticado. }
+        '403':
+          description: Alcance denegado.
+        '404':
+          description: TARGET_TENANT_NOT_FOUND.
+        '413':
+          description: FILE_TOO_LARGE.
+        '429':
+          description: TOO_MANY_REQUESTS (dryRun).
+  /api/v1/admin/ot/users/invite/bulk/template:
+    get:
+      tags: [Admin OT · Usuarios]
+      operationId: adminOtBulkInvitationTemplate
+      summary: Plantilla Excel de invitación masiva OT (Feature #14420)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Obligatorio para SuperAdmin.
+      responses:
+        '200':
+          description: Plantilla Excel.
+          content:
+            application/vnd.openxmlformats-officedocument.spreadsheetml.sheet:
+              schema: { type: string, format: binary }
+        '401': { description: No autenticado. }
+        '403': { description: Sin ot.usuarios.manage o destino fuera de alcance. }
+  /api/v1/admin/ot/users/invite/bulk:
+    post:
+      tags: [Admin OT · Usuarios]
+      operationId: adminOtBulkInvitationSubmit
+      summary: Valida o ejecuta invitación masiva OT por Excel (Feature #14420)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: dryRun
+          in: query
+          required: false
+          schema: { type: boolean, default: true }
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: BulkInvitationReport.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BulkInvitationReport'
+        '401': { description: No autenticado. }
+        '403': { description: Sin permiso o rol administrador rechazado por fila. }
+        '429': { description: TOO_MANY_REQUESTS (dryRun). }
   /api/v1/security/invitations/{invitationId}/resend:
     parameters:
       - name: invitationId
@@ -3704,6 +3837,85 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: No existe un tenant OT vinculado al transitOfficeId indicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/client-companies:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtListClientCompanies
+      summary: Compañías cliente visibles del OT (selector de alcance de usuarios)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Compañías cliente del OT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtClientCompaniesResponse"
+        "403":
+          description: Sin permiso.
+
+  /api/v1/admin/ot/users/{userId}/client-scope:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtGetUserClientScope
+      summary: Alcance de clientes de un usuario del OT
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Alcance vigente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtClientScopeResponse"
+        "403":
+          description: Sin permiso.
+    put:
+      tags: [Admin · OT]
+      operationId: adminOtSetUserClientScope
+      summary: Define el alcance de clientes de un usuario del OT
+      description: >
+        Solo Admin OT y Super Admin. Nadie edita su propio alcance (403 CLIENT_SCOPE_SELF).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtClientScopeRequest"
+      responses:
+        "204":
+          description: Alcance actualizado.
+        "400":
+          description: CLIENT_SCOPE_EMPTY o CLIENT_SCOPE_INVALID_CLIENT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: >
+            CLIENT_SCOPE_SELF, CLIENT_SCOPE_EXCEEDS_ACTOR (el actor tiene alcance `especificos` y pide `todos` o
+            compañías fuera del suyo) o sin permiso.
           content:
             application/json:
               schema:
@@ -7512,9 +7724,9 @@ paths:
       description: >
         Endpoint PROPIO de la vista agrupada: una fila por (tenant, documento Trim+Upper) con el estado
         de la validación más reciente, contador y peor alerta. No altera GET /biometric-validations
-        (Dashboard y Prevalidaciones). Los KPI (`stats`) siguen contando VALIDACIONES. Filtros de
-        semántica de validación (referenceNumber, modalidad, partyRole, provider, score, motivoRechazo)
-        no aplican.
+        (Dashboard y Prevalidaciones). Los KPI (`stats`) siguen contando VALIDACIONES. `referenceNumber`
+        filtra las validaciones por el radicado del trámite ligado antes de agrupar; el resto de filtros de
+        semántica de validación (modalidad, partyRole, provider, score, motivoRechazo) no aplican.
       security:
         - bearerAuth: []
       parameters:
@@ -7561,6 +7773,16 @@ paths:
         - name: standalone
           in: query
           schema: { type: boolean }
+        - name: referenceNumber
+          in: query
+          required: false
+          description: >
+            Número de radicado del trámite ligado a la validación (p. ej. FT1-0001234), por coincidencia
+            parcial e insensible a mayúsculas; los comodines `%` y `_` se tratan como texto literal. Una
+            prevalidación standalone no tiene radicado y no coincide. La fila muestra la validación ligada
+            a ese trámite y el contador y los KPI solo cuentan las validaciones que coinciden. El término
+            se recorta (trim) y se trunca a 100 caracteres.
+          schema: { type: string }
       responses:
         "200":
           description: Personas del tenant + KPIs de validaciones.
@@ -7826,6 +8048,87 @@ paths:
           description: proveedor_error — el proveedor rechazó el reenvío (error definitivo).
         "503":
           description: proveedor_no_disponible — el proveedor no está disponible (error transitorio).
+
+  /api/v1/tramites/biometric-validations/{id}/reconcile:
+    post:
+      operationId: reconciliarBiometricValidation
+      tags: [Tramites, Identidad, Prevalidacion]
+      summary: Reconciliar con Kyverum una validación por su id (trámite o prevalidación)
+      description: >
+        Igual que `POST /instances/{id}/biometric/{validationId}/reconcile`, pero sin trámite en la ruta: sirve
+        para la validación ligada a un trámite y para la prevalidación standalone. Consulta el estado real en
+        Kyverum y lo aplica con la misma lógica que el webhook y el proceso de fondo (aprobado con vigencia y
+        sello y evento de firma; rechazado; expirado deja la frase en la bitácora del trámite, sin evento).
+        Reinicia el presupuesto de sondeo aunque Kyverum aún no resuelva. La usa «Actualizar estado» del
+        detalle de la persona en el módulo Validaciones. Exige `validaciones.manage`.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: X-Tenant-Id
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Estado (posiblemente actualizado) de la validación.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, updated]
+                properties:
+                  status:
+                    type: string
+                    description: Estado FLIT tras reconciliar (enviado|en_proceso|aprobado|rechazado|expirado).
+                  updated:
+                    type: boolean
+                    description: true si la consulta cambió el estado local.
+        "400":
+          description: Falta el header X-Tenant-Id.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: Sin `validaciones.manage` o perfil de organismo de tránsito.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: La validación no existe o es de otra compañía.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: La validación no es del proveedor Kyverum (mock o manual).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: No se pudo guardar el resultado (queda en la bitácora técnica).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: El proveedor rechazó la consulta de estado (definitivo).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: El proveedor de identidad no está disponible (transitorio).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
 
   /api/v1/tramites/biometric-validations/{id}/activate-manual:
     post:
@@ -11872,6 +12175,61 @@ paths:
         "409": { description: "Trámite migrado (solo lectura)." }
 
   # ── Admin · Trámites · Cambiar estado sin restricción de flujo (Feature #12155, HU #12159) ─────
+
+  /api/v1/admin/tramites/{id}/mandato/regenerar:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Regenerar el mandato y los consolidados de un trámite (solo SuperAdmin)
+      operationId: adminTramiteRegenerarMandatoYConsolidado
+      security:
+        - bearerAuth: []
+      description: >
+        HU #14547. Vuelve a generar el contrato de mandato con el mandatario que indica HOY la configuración de
+        Mandatos (prelación de ADR-0066, en cualquier estado no final) y sobrescribe el mandatario del trámite; la
+        bitácora registra el evento `mandato_regenerado_admin` con los ids del firmante anterior y el nuevo. El FUR,
+        la compraventa, la solicitud virtual, los certificados, las escrituras y los personalizados NO se regeneran;
+        el mandato personalizado de la compañía se conserva. Después rearma el consolidado del gestor (sin cascada
+        del FUR, descartando también uno cargado a mano) y el maestro del organismo con su matriz de precedencia. El
+        maestro ya radicado en Quipux se conserva (`maestro.estado=radicado_conservado`). Una vez confirmado el
+        mandato, el fallo de cualquiera de los dos consolidados es un éxito parcial (`consolidado.estado=fallo` /
+        `maestro.estado=fallo`, con aviso `consolidado_fallo` / `maestro_fallo`): ese consolidado queda invalidado
+        para rearmarse al abrirlo, y el maestro se intenta aunque falle el del gestor. Con mandato personalizado de
+        la compañía no se recalcula ni se sobrescribe el mandatario ni se registra `mandato_regenerado_admin`. Solo el rol SuperAdmin: ningún permiso delegable la habilita (los 6 slugs de
+        `admin-tramites-avanzado` no bastan). Sin cuerpo.
+      responses:
+        "200":
+          description: Mandato regenerado; cada consolidado según su `estado` (éxito parcial posible).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RegenerarMandatoYConsolidadoResponse" }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "El usuario no tiene el rol SuperAdmin." }
+        "404":
+          description: "Trámite no encontrado (`error=not_found`)."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/RegenerarMandatoProblem" }
+        "409":
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/RegenerarMandatoProblem" }
+          description: >
+            ProblemDetails con el código estable en `error`: `estado_no_permite_regenerar_mandato` (aprobado,
+            anulado o revocado; no cambia nada), `migrado_solo_lectura` (migrado de V1 en estado final),
+            `organismo_requerido` (sin organismo de tránsito no se puede emitir), `fur_requerido` (sin FUR no se
+            puede armar el consolidado; no cambia nada) o `mandato_no_disponible`. Ninguno deja cambios.
+        "503":
+          description: "`storage_unavailable`: no se pudo guardar el mandato en el almacenamiento de archivos; no cambió nada."
+          content:
+            application/problem+json:
+              schema: { $ref: "#/components/schemas/RegenerarMandatoProblem" }
 
   /api/v1/admin/tramites/{id}/estado:
     parameters:
@@ -17791,6 +18149,69 @@ components:
           enum: [adjunto_bloqueado_flito]
           description: Solo presente cuando el bloqueo es por el adjunto de FLITO (con `not_draft` solo viene detail).
 
+    RegenerarMandatoProblem:
+      type: object
+      description: >
+        HU #14547 — ProblemDetails (RFC 7807) de «Regenerar mandato y consolidado»: mismo shape que limpiar/cargar
+        consolidado más el código estable en `error`. `detail` es un texto fijo en español, sin datos del trámite.
+      required: [status, title, error]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+        error:
+          type: string
+          enum:
+            - not_found
+            - estado_no_permite_regenerar_mandato
+            - migrado_solo_lectura
+            - organismo_requerido
+            - fur_requerido
+            - mandato_no_disponible
+            - storage_unavailable
+    RegenerarMandatoYConsolidadoResponse:
+      type: object
+      description: HU #14547 — resultado de «Regenerar mandato y consolidado».
+      required: [mandato, consolidado, maestro, avisos]
+      properties:
+        mandato:
+          type: object
+          required: [attachmentId, firmanteAnteriorId, firmanteNuevoId, sinFirmar]
+          properties:
+            attachmentId: { type: string, format: uuid, nullable: true, description: "Adjunto `mandato` vigente tras la acción." }
+            firmanteAnteriorId: { type: string, format: uuid, nullable: true, description: "Mandatario que tenía el trámite (id del directorio)." }
+            firmanteNuevoId: { type: string, format: uuid, nullable: true, description: "Mandatario recalculado; null si hoy no resuelve a nadie." }
+            sinFirmar: { type: boolean, description: "El mandato salió con el recuadro «Sin firmar»." }
+        consolidado:
+          type: object
+          required: [estado, attachmentId, generadoEn]
+          properties:
+            estado:
+              type: string
+              enum: [regenerado, fallo]
+              description: "`fallo`: el mandato ya cambió pero el consolidado del gestor no se armó; queda invalidado."
+            attachmentId: { type: string, format: uuid, nullable: true }
+            generadoEn: { type: string, format: date-time, nullable: true }
+        maestro:
+          type: object
+          required: [estado, attachmentId, generadoEn]
+          properties:
+            estado:
+              type: string
+              enum: [regenerado, radicado_conservado, fallo]
+            attachmentId: { type: string, format: uuid, nullable: true }
+            generadoEn: { type: string, format: date-time, nullable: true }
+        avisos:
+          type: array
+          items:
+            type: object
+            required: [codigo, mensaje]
+            properties:
+              codigo:
+                type: string
+                enum: [consolidado_fallo, maestro_radicado_conservado, maestro_fallo, mandato_sin_firmar, mandato_personalizado_conservado, mandato_personalizado_aplicado]
+              mensaje: { type: string, description: "Texto en español, sin datos personales." }
     AttachmentDto:
       type: object
       properties:
@@ -17802,6 +18223,16 @@ components:
         sha256: { type: string }
         source: { type: string, example: user }
         uploadedAt: { type: string, format: date-time }
+        ocrStatus:
+          type: string
+          nullable: true
+          enum: [verified, rejected, skipped]
+          description: Veredicto OCR declarado por el cliente al registrar. Informativo; no es compuerta (ADR-0085, Bug #14559).
+        ocrReason:
+          type: string
+          nullable: true
+          enum: [vin_mismatch, tipo_invalido, no_confirmado, ilegible, excede_tamano, analisis_fallido]
+          description: Código cerrado del motivo, solo con ocrStatus rejected/skipped. Informativo; no es compuerta (ADR-0085).
     PresignAttachmentRequest:
       type: object
       required: [tipo, filename, mimetype, sizeBytes]
@@ -17820,6 +18251,16 @@ components:
         sizeBytes: { type: integer, format: int64 }
         sha256: { type: string }
         storagePath: { type: string }
+        ocrStatus:
+          type: string
+          nullable: true
+          enum: [verified, rejected, skipped]
+          description: Opcional. Veredicto OCR calculado por el cliente; el servidor normaliza (trim + minúsculas) y guarda null si es desconocido, sin 400 (ADR-0085, Bug #14559).
+        ocrReason:
+          type: string
+          nullable: true
+          enum: [vin_mismatch, tipo_invalido, no_confirmado, ilegible, excede_tamano, analisis_fallido]
+          description: Opcional. Código cerrado; se descarta (null) si es desconocido o si ocrStatus no es rejected/skipped (ADR-0085).
     ChecklistItemDto:
       type: object
       properties:
@@ -18002,6 +18443,35 @@ components:
         password:
           type: string
           format: password
+    BulkInvitationReport:
+      type: object
+      description: Reporte efímero de invitación masiva (Feature #14420 / ADR-0077). No se persiste el lote.
+      required: [dryRun, total, valid, created, rejected, notProcessed, rows]
+      properties:
+        dryRun: { type: boolean }
+        total: { type: integer }
+        valid: { type: integer }
+        created: { type: integer }
+        rejected: { type: integer }
+        notProcessed: { type: integer }
+        rows:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkInvitationRowResult'
+    BulkInvitationRowResult:
+      type: object
+      required: [rowNumber, fullName, email, role, status]
+      properties:
+        rowNumber: { type: integer }
+        fullName: { type: string }
+        email: { type: string }
+        role: { type: string, description: Nombre o código del rol tal como vino en el Excel. }
+        status:
+          type: string
+          enum: [valid, created, rejected, not_processed]
+        errorCode: { type: string, nullable: true }
+        errorMessage: { type: string, nullable: true }
+        emailSent: { type: boolean, nullable: true }
     MessageResponse:
       type: object
       required: [message]
@@ -19414,7 +19884,64 @@ components:
           minItems: 1
           maxItems: 1
           items: { type: string, format: uuid }
+        clientScope:
+          $ref: "#/components/schemas/OtClientScopeRequest"
       required: [email, roleIds]
+
+    OtClientScopeRequest:
+      type: object
+      description: >
+        Compañías cliente del OT que gestiona el usuario. Ausente = todos los clientes.
+        `especificos` exige al menos un `clientTenantIds` (400 CLIENT_SCOPE_EMPTY) y todos
+        deben ser clientes del OT (400 CLIENT_SCOPE_INVALID_CLIENT). Quien invita o edita con alcance
+        `especificos` no puede dar `todos` ni compañías fuera de su alcance (403 CLIENT_SCOPE_EXCEEDS_ACTOR);
+        si invita sin `clientScope`, el invitado hereda exactamente el alcance de quien invita.
+      properties:
+        mode: { type: string, enum: [todos, especificos] }
+        clientTenantIds:
+          type: array
+          items: { type: string, format: uuid }
+      required: [mode, clientTenantIds]
+
+    OtClientScopeSummary:
+      type: object
+      properties:
+        mode: { type: string, enum: [todos, especificos] }
+        clientCount: { type: integer }
+      required: [mode, clientCount]
+
+    OtClientScopeResponse:
+      type: object
+      properties:
+        mode: { type: string, enum: [todos, especificos] }
+        clients:
+          type: array
+          items:
+            type: object
+            properties:
+              tenantId: { type: string, format: uuid }
+              name: { type: string }
+            required: [tenantId, name]
+      required: [mode, clients]
+
+    OtClientCompaniesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              tenantId: { type: string, format: uuid }
+              name: { type: string }
+              nit: { type: string, nullable: true }
+            required: [tenantId, name]
+        actorRestricted:
+          type: boolean
+          description: >
+            `true` si quien consulta tiene alcance `especificos`: `items` ya viene limitado a SU alcance (no puede
+            repartir más de lo que ve). `false` = sin restricción, `items` son todas las compañías cliente del OT.
+      required: [items, actorRestricted]
 
     InviteOtUserResponse:
       type: object
@@ -19483,6 +20010,8 @@ components:
             Fecha de eliminación (soft-delete, #10623). `null` en el listado
             normal; siempre poblado cuando se listó con `?onlyDeleted=true`
             (#10624).
+        clientScope:
+          $ref: "#/components/schemas/OtClientScopeSummary"
       required: [id, fullName, email, status, isSuspended, rowVersion]
 
     UpdateOtUserRequest:
@@ -21280,6 +21809,15 @@ components:
             HU #14302 (Épica #14271) — `true` solo si la validación es MANUAL, está aprobada y su carta de identidad ya fue
             generada. Cuando es `true`, la carta se descarga por `GET /api/v1/tramites/instances/{id}/biometric/{validationId}/certificado`.
             No expone la ruta, la serie ni el hash.
+        kyverumVerificationId:
+          type: string
+          nullable: true
+          maxLength: 200
+          description: >
+            Id de la verificación en Kyverum Verify. Solo la envía el detalle por persona
+            (`GET /api/v1/tramites/biometric-validations/by-person/detail`, compañía y red); el resto de
+            endpoints no la incluye. null si el proveedor no es Kyverum, si aún no se envió o si la
+            validación se canceló.
     BiometricValidationsResponse:
       type: object
       required: [validations, provider]

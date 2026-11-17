@@ -7,9 +7,10 @@ namespace Flit.Diagnostico.Domain.Vehiculos;
 /// Replica la regla de Trámites (<c>frontend/lib/validation/fieldRules.ts</c>, decisión del usuario 2026-10-21):
 /// primero se prueba como VIN con <c>sanitizeVin</c> (mayúsculas, solo A-H, J-N, P, R-Z y 0-9, corte a 17) y
 /// <c>VIN_PATTERN</c>; si no casa, como placa con <c>sanitizePlate</c> (mayúsculas, solo A-Z y 0-9, corte a 8) y las
-/// ramas de <c>PLATE_PATTERN</c>. El VIN va primero porque el corte a 8 de la placa convertiría en maquinaria a un VIN
+/// ramas de <c>PLATE_PATTERN</c> y, aparte, <c>PLATE_MOTOCARRO_PATTERN</c> (motocarro <c>123ABC</c>, punto 7.1). El VIN va primero porque el corte a 8 de la placa convertiría en maquinaria a un VIN
 /// que empiece por dos letras y seis dígitos. El normalizado alimenta <c>diagnostico.vehiculos.identificador_norm</c>.
-/// Casos compartidos con el frontend: <c>contracts/fixtures/validacion/identificadores-vehiculo.json</c>.
+/// Casos compartidos con el frontend: <c>contracts/fixtures/validacion/identificadores-vehiculo.json</c> (<c>casos</c> y,
+/// para el motocarro, <c>casos_motocarro</c>).
 /// </summary>
 /// <remarks>
 /// El corte a 8 y a 17 es la máscara de captura de Trámites: una entrada demasiado larga puede quedar válida
@@ -19,6 +20,7 @@ namespace Flit.Diagnostico.Domain.Vehiculos;
 /// <code>
 /// ValidadorIdentificador.Validar(" mc-029.554 ") // → ("MC029554", TipoIdentificador.PlacaMaquinaria)
 /// ValidadorIdentificador.Validar("ABC-123")      // → ("ABC123", TipoIdentificador.PlacaCarro)
+/// ValidadorIdentificador.Validar("123-abc")      // → ("123ABC", TipoIdentificador.PlacaMotocarro)
 /// ValidadorIdentificador.Validar("ABC123456")    // → ("ABC123456", null): ni placa ni VIN
 /// </code>
 /// </example>
@@ -64,6 +66,8 @@ public static partial class ValidadorIdentificador
             return TipoIdentificador.PlacaRemolque;
         if (PlacaMaquinaria().IsMatch(placa))
             return TipoIdentificador.PlacaMaquinaria;
+        if (PlacaMotocarro().IsMatch(placa))
+            return TipoIdentificador.PlacaMotocarro;
         return null;
     }
 
@@ -87,6 +91,11 @@ public static partial class ValidadorIdentificador
 
     [GeneratedRegex(@"^[A-Z]{2}[0-9]{6}\z", RegexOptions.CultureInvariant)]
     private static partial Regex PlacaMaquinaria();
+
+    // PLATE_MOTOCARRO_PATTERN de Trámites (punto 7.1, 2026-11-11): tres dígitos y tres letras. Va aparte de las ramas de
+    // PLATE_PATTERN, como en Trámites; no se cruza con ninguna porque todas empiezan por letra.
+    [GeneratedRegex(@"^[0-9]{3}[A-Z]{3}\z", RegexOptions.CultureInvariant)]
+    private static partial Regex PlacaMotocarro();
 
     // VIN_PATTERN: 17 caracteres sin I, O ni Q. No se valida el dígito verificador.
     [GeneratedRegex(@"^[A-HJ-NPR-Z0-9]{17}\z", RegexOptions.CultureInvariant)]

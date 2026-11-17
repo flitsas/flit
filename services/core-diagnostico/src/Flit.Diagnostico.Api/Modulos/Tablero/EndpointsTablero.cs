@@ -31,7 +31,8 @@ internal static class EndpointsTablero
         api.MapGet(RutaGrilla, Grilla).RequirePermiso(Permisos.DiagnosticosVer).WithName("ObtenerGrillaDiagnostico");
         api.MapPost(RutaCierrePanel, Cerrar).RequirePermiso(Permisos.DiagnosticosVer).WithName("CerrarPanelDiagnostico");
         api.MapGet(RutaHistorial, Historial).RequirePermiso(Permisos.DiagnosticosVer).WithName("ObtenerHistorialDiagnostico");
-        api.MapGet(RutaDetalleCelda, Detalle).RequirePermiso(Permisos.DiagnosticosVer).WithName("ObtenerDetalleCelda");
+        // HU #14563 M2: el detalle trae respuesta_proveedor, respuesta_fuente y personas; no se guarda en caché.
+        api.MapGet(RutaDetalleCelda, Detalle).RequirePermiso(Permisos.DiagnosticosVer).SinCacheEnRespuesta().WithName("ObtenerDetalleCelda");
     }
 
     public static IServiceCollection AddTablero(this IServiceCollection services)
@@ -43,8 +44,11 @@ internal static class EndpointsTablero
         return services;
     }
 
-    private static async Task<IResult> Grilla(Guid id, long? desde, ConsultaGrilla consulta, CancellationToken ct) =>
-        Results.Ok(await consulta.ObtenerAsync(id, desde ?? 0, ct).ConfigureAwait(false));
+    private static async Task<IResult> Grilla(
+        Guid id, long? desde, ConsultaGrilla consulta, Persistence.DiagnosticoDb db,
+        Microsoft.Extensions.Options.IOptions<Derivacion.OpcionesDerivacion> derivacion, CancellationToken ct) =>
+        Results.Ok(await Derivacion.DerivacionEndpoints.CompletarGrillaAsync(
+            await consulta.ObtenerAsync(id, desde ?? 0, ct).ConfigureAwait(false), db, derivacion.Value, ct).ConfigureAwait(false));
 
     private static async Task<IResult> Cerrar(Guid id, CierrePanel cierre, CancellationToken ct) =>
         Results.Ok(await cierre.CerrarAsync(id, ct).ConfigureAwait(false));

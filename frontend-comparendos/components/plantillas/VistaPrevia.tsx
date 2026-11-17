@@ -51,10 +51,10 @@ export function VistaPrevia({ contenido, alto = 560 }: { contenido: Contenido | 
               <span className="font-semibold">Asunto:</span> {resultadoCorreo.asunto}
             </p>
           )}
-          <iframe title="Vista previa del correo" sandbox="" srcDoc={resultadoCorreo.html} className="w-full rounded-xl border border-[#DFE5ED] bg-white" style={{ height: alto }} />
+          <iframe title="Vista previa del correo" sandbox="" srcDoc={resultadoCorreo.html} className="w-full rounded-xl border border-border bg-card" style={{ height: alto }} />
         </>
       )}
-      {pdf && <iframe title="Vista previa del documento" src={pdf} className="w-full rounded-xl border border-[#DFE5ED]" style={{ height: alto }} />}
+      {pdf && <iframe title="Vista previa del documento" src={pdf} className="w-full rounded-xl border border-border" style={{ height: alto }} />}
       <p className="text-[11px] opacity-60">Con datos de ejemplo. El documento real usa los datos del comparendo, la empresa y su representante.</p>
     </div>
   );

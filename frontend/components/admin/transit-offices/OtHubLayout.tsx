@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
@@ -136,7 +136,7 @@ export function OtHubLayout({
           onClick={() => router.push(otHubListPath())}
           className={`mb-4 ${ADMIN_BACK_LINK_CLS}`}
         >
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="izquierda" className="h-4 w-4" />
           Volver al listado de OT
         </button>
       )}
@@ -147,7 +147,7 @@ export function OtHubLayout({
         <div
           role="status"
           data-testid="ot-inactive-banner"
-          className="mt-3 rounded-[10px] border border-[#F5C6C8] bg-[#FDECEC] px-4 py-3 text-sm text-[#8A1C1C] dark:border-red-500/40 dark:bg-red-950/40 dark:text-red-100"
+          className="mt-3 rounded-[10px] border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-4 py-3 text-sm text-destructive"
         >
           Organismo inactivo — puedes consultar y ajustar la configuración; el tenant permanece
           desactivado hasta que lo reactives desde el listado.

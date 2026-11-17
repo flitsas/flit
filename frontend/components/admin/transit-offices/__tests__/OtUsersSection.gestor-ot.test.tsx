@@ -21,6 +21,9 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   updateOtUser: vi.fn(),
   deleteOtUser: vi.fn(),
   resendOtInvitation: vi.fn(),
+  fetchOtClientCompanies: vi.fn().mockResolvedValue({ items: [] }),
+  fetchOtUserClientScope: vi.fn().mockResolvedValue({ mode: "todos", clients: [] }),
+  setOtUserClientScope: vi.fn(),
   cancelOtInvitation: vi.fn(),
   reactivateOtInvitation: vi.fn(),
 }));
@@ -111,7 +114,12 @@ describe("OtUsersSection — Admin OT y el rol Gestor OT (#13655)", () => {
 
     await waitFor(() =>
       expect(inviteOtUser).toHaveBeenCalledWith(
-        { email: "nuevo@transito.gov.co", fullName: "Nuevo Gestor", roleIds: ["r-gestor"] },
+        {
+          email: "nuevo@transito.gov.co",
+          fullName: "Nuevo Gestor",
+          roleIds: ["r-gestor"],
+          clientScope: { mode: "todos", clientTenantIds: [] },
+        },
         expect.anything(),
       ),
     );

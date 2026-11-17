@@ -203,6 +203,28 @@ public sealed class AttachmentsHandlerTests
         instance.Attachments.Should().ContainSingle();
     }
 
+    /// <summary>
+    /// En <c>asignado</c> (ruta de placa) el modal «Enviar al OT» carga el PDF del SOAT y el soporte del
+    /// impuesto departamental; ningún otro documento.
+    /// </summary>
+    [Theory]
+    [InlineData("soat", true)]
+    [InlineData("soat_manual", true)]
+    [InlineData("liquidacion_impuesto", true)]
+    [InlineData(" LIQUIDACION_IMPUESTO ", true)]
+    [InlineData("factura", false)]
+    [InlineData("paz_salvo", false)]
+    [InlineData(null, false)]
+    public void AllowsUploadInState_Asignado_SoloSoatEImpuesto(string? tipo, bool permitido) =>
+        AttachmentRules.AllowsUploadInState(TramiteEstado.Asignado, tipo).Should().Be(permitido);
+
+    [Theory]
+    [InlineData(TramiteEstado.Preasignacion)]
+    [InlineData(TramiteEstado.Entregado)]
+    [InlineData(TramiteEstado.Aprobado)]
+    public void AllowsUploadInState_ImpuestoFueraDeAsignado_NoSePermite(string status) =>
+        AttachmentRules.AllowsUploadInState(status, "liquidacion_impuesto").Should().BeFalse();
+
     [Fact]
     public async Task Upload_RechazadoSinFlag_Returns409()
     {

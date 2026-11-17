@@ -68,7 +68,8 @@ public sealed class NoAplicaTests
         (await MotorRunt.VehiculoAsync(api, empresa, id, "TST005", ct)).Servicio.Should().Be("PUBLICO");
     }
 
-    // AC3 (F03-C6) — con documento del locatario (declarado o del proveedor) sus celdas se consultan.
+    // AC3 (F03-C6) — con documento del locatario del proveedor sus celdas se consultan. Desde la HU #14582 el documento capturado es
+    // del propietario actual declarado y ya no alimenta al locatario: esa fila queda NA igual que la que no trae documento.
     [Fact]
     public async Task Con_documento_de_locatario_sus_celdas_se_consultan()
     {
@@ -85,16 +86,17 @@ public sealed class NoAplicaTests
 
         await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
-        foreach (var conDocumento in new[] { declarado, proveedor })
-        {
-            (await MotorRunt.CeldasDelVehiculoAsync(api, conDocumento.Id, ct)).Should().BeEquivalentTo(
-                ["RUNT COMPLETADO -", "RUNT_LOCATARIO COMPLETADO -", "SIMIT_LOCATARIO COMPLETADO -"]);
-            orden.Should().Contain($"RUNT_LOCATARIO {conDocumento.Id}").And.Contain($"SIMIT_LOCATARIO {conDocumento.Id}");
-        }
+        (await MotorRunt.CeldasDelVehiculoAsync(api, proveedor.Id, ct)).Should().BeEquivalentTo(
+            ["RUNT COMPLETADO -", "RUNT_LOCATARIO COMPLETADO -", "SIMIT_LOCATARIO COMPLETADO -"]);
+        orden.Should().Contain($"RUNT_LOCATARIO {proveedor.Id}").And.Contain($"SIMIT_LOCATARIO {proveedor.Id}");
 
-        orden.Should().NotContain(o => o.EndsWith(sinDocumento.Id.ToString(), StringComparison.Ordinal));
-        (await Motor.CeldasAsync(api, empresa.Id, id, ct)).Where(c => c.VehiculoId == sinDocumento.Id && c.Fuente != Fuente.Runt)
-            .Should().OnlyContain(c => c.Estado == EstadoCelda.Na && c.MotivoNa == MotivoNa.SinDocumentoLocatario);
+        var celdas = await Motor.CeldasAsync(api, empresa.Id, id, ct);
+        foreach (var sinLocatario in new[] { declarado, sinDocumento })
+        {
+            orden.Should().NotContain(o => o.EndsWith(sinLocatario.Id.ToString(), StringComparison.Ordinal));
+            celdas.Where(c => c.VehiculoId == sinLocatario.Id && c.Fuente != Fuente.Runt)
+                .Should().NotBeEmpty().And.OnlyContain(c => c.Estado == EstadoCelda.Na && c.MotivoNa == MotivoNa.SinDocumentoLocatario);
+        }
     }
 
     // AC4 (F03-C8) — RUNT_PROPIETARIO falla: esa celda queda en ERROR con su propio intento y las demás del vehículo siguen.

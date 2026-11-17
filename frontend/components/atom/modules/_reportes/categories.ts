@@ -18,7 +18,7 @@ export const CATEGORY_FAMILY: Record<AnalyticsCategory, ProcedureFamily> = {
 export const CATEGORY_META: Record<AnalyticsCategory, { label: string; color: string }> = {
   matriculas: { label: "Matrículas", color: "var(--color-flit-brand)" },
   traspasos: { label: "Traspasos", color: "var(--color-flit-tech)" },
-  otros: { label: "Otros", color: "#F9AC00" },
+  otros: { label: "Otros", color: "var(--badge-warning-fg)" },
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -45,24 +45,24 @@ export function statusLabel(status: string): string {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  draft: "#59677D",
+  draft: "var(--muted-foreground)",
   submitted: "var(--color-flit-brand)",
-  in_review: "#F9AC00",
-  pending: "#F9AC00",
-  approved: "#8CC63F",
+  in_review: "var(--badge-warning-fg)",
+  pending: "var(--badge-warning-fg)",
+  approved: "var(--flit-success-ink)",
   completed: "var(--color-flit-tech)",
-  rejected: "#FF4E00",
-  cancelled: "#E43D30",
+  rejected: "var(--destructive)",
+  cancelled: "var(--destructive)",
   // Estados N03 (mismos semáforos que sus equivalentes legados).
-  borrador: "#59677D",
-  anulado: "#E43D30",
-  preparado: "#F9AC00",
+  borrador: "var(--muted-foreground)",
+  anulado: "var(--destructive)",
+  preparado: "var(--badge-warning-fg)",
   entregado: "var(--color-flit-brand)",
-  aprobado: "#8CC63F",
-  rechazado: "#FF4E00",
+  aprobado: "var(--flit-success-ink)",
+  rechazado: "var(--destructive)",
 };
 
-const FALLBACK_PALETTE = ["var(--color-flit-brand)", "var(--color-flit-tech)", "#F9AC00", "#8CC63F", "#FF4E00", "#9B8AFB", "#59677D"];
+const FALLBACK_PALETTE = ["var(--color-flit-brand)", "var(--color-flit-tech)", "var(--badge-warning-fg)", "var(--flit-success-ink)", "var(--destructive)", "var(--badge-purple-fg)", "var(--muted-foreground)"];
 
 /** Color estable de un estado; los desconocidos ciclan una paleta por índice. */
 export function statusColor(status: string, index = 0): string {

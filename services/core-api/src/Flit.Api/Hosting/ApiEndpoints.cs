@@ -31,12 +31,19 @@ internal static class ApiEndpoints
                 .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.PersonaNaturalServicioPolicy);
         }
 
+        // ADR-0084 (Punto 4): creación de borradores desde Diagnóstico. APAGADA por defecto (Tramites:Derivacion:Habilitada);
+        // solo la atiende svc-diagnostico con el scope platform.tramites.derivacion.
+        Flit.Api.Derivacion.DerivacionExtensions.MapDerivacionDiagnostico(app);
+        // ADR-0089 (HU #14587): usuarios de Diagnóstico gestionados desde el producto; solo svc-diagnostico con su scope.
+        Flit.Api.Usuarios.UsuariosProductoExtensions.MapUsuariosProducto(app);
+
         // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
         app.MapInternalJwksEndpoints(); // JWKS público del token de usuario (core-ict valida con él)
         app.MapExternalAuthEndpoints(); // HU #13087 (Épica #12737) — POST /api/v1/external/auth/token
         app.MapExternalAttachmentEndpoints(); // HU #13263 (Épica #12741) — POST /api/v1/external/tramites/{id}/adjuntos
         app.MapExternalSyncEndpoints(); // HU #13081 (Épica #12737) — GET /api/v1/external/tramites/sync
         app.MapSecurityEndpoints();
+        app.MapSecurityBulkInvitationEndpoints(); // Feature #14420 (HU #14424) — /security/invitations/bulk*
         app.MapUserUiPreferencesEndpoints();
         app.MapDrFlitEndpoints(); // Épica #12718 — POST /api/v1/dr-flit/chat
         app.MapAdminCompaniesEndpoints();

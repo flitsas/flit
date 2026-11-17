@@ -119,7 +119,7 @@ public sealed class EjecutorPorPersonasTests
         var enEspera = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
         (enEspera.Estado, enEspera.IntentosAuto).Should().Be((EstadoCelda.Pendiente, 1), "el TIMEOUT de una persona se reintenta con backoff");
         MotorPersonas.PersonasDelPayload(enEspera.Payload).Select(p => p.GetProperty("estado").GetString()).Should().Equal("OK", "ERROR", "OK");
-        reloj.Avanzar(PoliticaReintentos.Espera(1));
+        reloj.Avanzar(PoliticaReintentos.EsperaPorDefecto);
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
         var agotada = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
@@ -309,7 +309,7 @@ internal static class MotorPersonas
     public static List<JsonElement> PersonasDelPayload(string? payload)
     {
         payload.Should().NotBeNull("la celda de persona guarda lo que respondió");
-        return [.. JsonDocument.Parse(payload!).RootElement.GetProperty("personas").EnumerateArray().Select(e => e.Clone())];
+        return [.. JsonElement.Parse(payload!).GetProperty("personas").EnumerateArray().Select(e => e.Clone())];
     }
 
     /// <summary>Admin de la compañía con permiso de reproceso (§6.2).</summary>

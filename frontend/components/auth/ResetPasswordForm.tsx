@@ -10,9 +10,18 @@ import { getToken } from "@/lib/api/client";
 import { clearToken } from "@/lib/auth/session";
 import { isPasswordCompliant, PASSWORD_POLICY_HINT } from "@/lib/auth/password-policy";
 import { isPasswordReusedError, PASSWORD_REUSED_MESSAGE } from "@/lib/auth/passwordReusedError";
-
-const INPUT_CLASS =
-  "w-full bg-white border border-slate-200 rounded-xl px-3 py-2.5 text-sm outline-none transition focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20";
+import { Icono } from "@flit/ui/Icono";
+import { INGRESO_ICONO_CLS } from "@flit/ui/Ingreso";
+import {
+  AUTH_ERROR_CLASS,
+  AUTH_HINT_CLASS,
+  AUTH_INPUT_CLASS,
+  AUTH_LABEL_CLASS,
+  AUTH_LINK_BUTTON_CLASS,
+  AUTH_NOTE_CLASS,
+  AUTH_STATUS_CLASS,
+  AUTH_SUBMIT_CLASS,
+} from "./AuthCard";
 
 export function ResetPasswordForm({ token }: { token: string | null }) {
   const [password, setPassword] = useState("");
@@ -24,7 +33,7 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
 
   if (!token) {
     return (
-      <p role="alert" className="text-sm text-flit-alert">
+      <p role="alert" className={AUTH_ERROR_CLASS}>
         El enlace de recuperación es inválido o expiró. Solicita uno nuevo.
       </p>
     );
@@ -32,17 +41,16 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
 
   if (done) {
     return (
-      <div role="status" className="space-y-4">
-        <p className="text-sm text-slate-700">Tu contraseña fue actualizada correctamente.</p>
+      <div role="status" className="grid gap-4">
+        <p className={AUTH_STATUS_CLASS}>Tu contraseña fue actualizada correctamente.</p>
         {hadPriorSession && (
-          <p className="text-xs text-slate-500">
+          <p className={AUTH_NOTE_CLASS}>
             Por tu seguridad, cerramos la sesión que estaba activa en este navegador. Inicia sesión con tu nueva cuenta.
           </p>
         )}
         <Link
           href="/login"
-          className="inline-block rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
-          style={{ background: "var(--color-flit-brand)" }}
+          className={AUTH_LINK_BUTTON_CLASS}
         >
           Ir a iniciar sesión
         </Link>
@@ -86,44 +94,49 @@ export function ResetPasswordForm({ token }: { token: string | null }) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4" aria-label="Restablecer contraseña" noValidate>
+    <form onSubmit={handleSubmit} className="grid gap-4" aria-label="Restablecer contraseña" noValidate>
       <div>
-        <label htmlFor="rp-password" className="block text-sm font-medium text-flit-primary mb-1">
+        <label htmlFor="rp-password" className={AUTH_LABEL_CLASS}>
           Nueva contraseña
         </label>
-        <input
-          id="rp-password"
-          type="password"
-          autoComplete="new-password"
-          className={INPUT_CLASS}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-        <p className="mt-1 text-xs text-slate-500">{PASSWORD_POLICY_HINT}</p>
+        <div className="relative">
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
+          <input
+            id="rp-password"
+            type="password"
+            autoComplete="new-password"
+            className={AUTH_INPUT_CLASS}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+        <p className={AUTH_HINT_CLASS}>{PASSWORD_POLICY_HINT}</p>
       </div>
       <div>
-        <label htmlFor="rp-confirm" className="block text-sm font-medium text-flit-primary mb-1">
+        <label htmlFor="rp-confirm" className={AUTH_LABEL_CLASS}>
           Confirmar contraseña
         </label>
-        <input
-          id="rp-confirm"
-          type="password"
-          autoComplete="new-password"
-          className={INPUT_CLASS}
-          value={confirm}
-          onChange={(e) => setConfirm(e.target.value)}
-        />
+        <div className="relative">
+          <Icono nombre="candado" className={INGRESO_ICONO_CLS} />
+          <input
+            id="rp-confirm"
+            type="password"
+            autoComplete="new-password"
+            className={AUTH_INPUT_CLASS}
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+          />
+        </div>
       </div>
       {error && (
-        <p role="alert" className="text-sm text-flit-alert">
+        <p role="alert" className={AUTH_ERROR_CLASS}>
           {error}
         </p>
       )}
       <button
         type="submit"
         disabled={loading}
-        className="w-full rounded-xl py-3 text-sm font-semibold text-white transition hover:opacity-90 disabled:opacity-60"
-        style={{ background: "var(--color-flit-brand)" }}
+        className={AUTH_SUBMIT_CLASS}
       >
         {loading ? "Guardando…" : "Restablecer contraseña"}
       </button>

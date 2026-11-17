@@ -25,9 +25,9 @@ namespace Flit.Diagnostico.Tests.Api;
 
 /// <summary>
 /// La API de Diagnóstico de verdad (<c>Program.Build</c>) con tokens de producto firmados con una llave propia servida
-/// como JWKS (patrón de Comparendos). Con base: un Postgres real con una base efímera, migrada como al arrancar
-/// (<c>Servicio:MigrateOnStartup=true</c>); sin Postgres se omite en local y falla en CI, también si a CI le falta
-/// <c>ConnectionStrings__Core</c> (HU #13722). Sin base: la cadena apunta a un puerto cerrado, para probar lo que no depende
+/// como JWKS (patrón de Comparendos). Con base: un Postgres real con una base efímera copiada de la plantilla migrada
+/// (<see cref="PlantillaBaseDePrueba"/>) y migrada otra vez al arrancar (<c>Servicio:MigrateOnStartup=true</c>); sin Postgres
+/// se omite en local y falla en CI, también si a CI le falta <c>ConnectionStrings__Core</c> (HU #13722). Sin base: la cadena apunta a un puerto cerrado, para probar lo que no depende
 /// de la base o su ausencia. <c>mapear</c> agrega rutas de prueba antes de arrancar (sondas de fuga, endpoints fantasma).
 /// </summary>
 /// <example>
@@ -75,7 +75,10 @@ public sealed class ApiDePrueba : IAsyncDisposable
     /// <summary>Cadena de conexión de la base efímera (o de la inalcanzable).</summary>
     public string BaseDeDatos { get; }
 
-    /// <summary>Crea una base efímera, arranca la API y aplica sus migraciones como al arrancar.</summary>
+    /// <summary>Plantilla de la que se copió la base efímera; null sin base.</summary>
+    public string? Plantilla { get; private set; }
+
+    /// <summary>Crea una base efímera copia de la plantilla migrada, arranca la API y aplica sus migraciones como al arrancar.</summary>
     public static async Task<ApiDePrueba> ConBaseAsync(Action<WebApplication>? mapear = null, Func<string, string?>? entorno = null, Action<WebApplicationBuilder>? configurar = null)
     {
         entorno ??= Environment.GetEnvironmentVariable;
@@ -88,11 +91,11 @@ public sealed class ApiDePrueba : IAsyncDisposable
         var api = new ApiDePrueba(new NpgsqlConnectionStringBuilder(server) { Database = $"flit_dgn_{Guid.NewGuid():N}"[..30] }.ConnectionString, configurar);
         try
         {
-            await using var admin = new NpgsqlConnection(new NpgsqlConnectionStringBuilder(server) { Database = "postgres" }.ConnectionString);
-            await admin.OpenAsync();
-            await using var create = new NpgsqlCommand($"CREATE DATABASE \"{new NpgsqlConnectionStringBuilder(api.BaseDeDatos).Database}\"", admin);
-            await create.ExecuteNonQueryAsync();
+            // La base nace como copia de la plantilla ya migrada (una vez por huella de migraciones), no vacía.
+            var plantilla = await PlantillaBaseDePrueba.AsegurarAsync(server);
+            await PlantillaBaseDePrueba.CopiarAsync(server, new NpgsqlConnectionStringBuilder(api.BaseDeDatos).Database!, plantilla);
             api._baseCreada = true;
+            api.Plantilla = plantilla;
         }
         catch (NpgsqlException ex) when (!enCi)
         {
@@ -102,6 +105,7 @@ public sealed class ApiDePrueba : IAsyncDisposable
 
         api.App = api.Construir();
         mapear?.Invoke(api.App);
+        // Sobre la copia de la plantilla no queda nada pendiente: se llama igual para mantener probado el camino de arranque.
         await Program.MigrateAsync(api.App);
         await api.App.StartAsync();
         return api;
@@ -134,6 +138,12 @@ public sealed class ApiDePrueba : IAsyncDisposable
         // HU #13727 (ADR-0075): el consumidor de resultados ni el reconciliador corren en las pruebas; cada prueba entrega los
         // resultados con su BusDePrueba (y llama al reconciliador directo).
         ["Diagnostico:Consultas:Bus:ConsumidorHabilitado"] = "false",
+        // Punto 4, incremento 3 (ADR-0084): tampoco el consumidor de diagnostico.derivaciones ni su reconciliador; cada prueba
+        // entrega el evento con DerivacionDePrueba.ConsumirAsync y llama al reconciliador directo.
+        ["Diagnostico:Derivacion:ConsumidorHabilitado"] = "false",
+        // Punto 3 (2026-11-11): el servicio trae 3 reintentos por defecto; las pruebas del motor se escribieron con 1 y lo fijan
+        // aquí (la que necesita otro valor lo pasa a Motor.Bus(api, maxReintentos) o a la configuración).
+        ["Diagnostico:Consultas:MaxReintentos"] = "1",
         // HU #13850: tampoco el trabajador del ZIP; cada prueba llama al empaquetador directo.
         ["Diagnostico:Evidencias:Habilitado"] = "false",
         // Corte 6: el trabajador de redacción no corre en las pruebas; cada prueba llama a la cola directo.
@@ -154,18 +164,19 @@ public sealed class ApiDePrueba : IAsyncDisposable
     /// <summary>
     /// Token de producto firmado con la llave del JWKS de prueba (usuario ficticio; empresa ficticia si no se da). Como el
     /// de Identidad: un <c>role_code</c> por rol, <c>permissions</c> como arreglo JSON y <c>tenant_type</c> si se da
-    /// (HU #13724).
+    /// (HU #13724). <c>sujeto</c> reemplaza el <c>sub</c>: con <c>svc-&lt;código&gt;</c> es un token de servicio.
     /// </summary>
     public string Token(
         string audiencia = ServicioSettings.Codigo,
         Guid? empresa = null,
         IReadOnlyList<string>? permisos = null,
         IReadOnlyList<string>? roles = null,
-        string? tipoEmpresa = null)
+        string? tipoEmpresa = null,
+        string? sujeto = null)
     {
         var claims = new List<Claim>
         {
-            new("sub", Guid.NewGuid().ToString()),
+            new("sub", sujeto ?? Guid.NewGuid().ToString()),
             new("email", "operador@empresa.test"),
             new("tenant_id", (empresa ?? Guid.NewGuid()).ToString()),
             new("company_name", "Empresa de prueba"),

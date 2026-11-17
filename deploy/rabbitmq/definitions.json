@@ -13,14 +13,16 @@
     { "name": "consultas.diagnostico-express", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
     { "name": "consultas.diagnostico-impuesto", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
     { "name": "consultas.diagnostico-impuesto-express", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
-    { "name": "diagnostico.consultas-resultados", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} }
+    { "name": "diagnostico.consultas-resultados", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "diagnostico.derivaciones", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} }
   ],
   "bindings": [
     { "source": "flit.consultas", "vhost": "flit", "destination": "consultas.diagnostico", "destination_type": "queue", "routing_key": "consultas.diagnostico.*", "arguments": {} },
     { "source": "flit.consultas", "vhost": "flit", "destination": "consultas.diagnostico-express", "destination_type": "queue", "routing_key": "consultas.diagnostico-express.*", "arguments": {} },
     { "source": "flit.consultas", "vhost": "flit", "destination": "consultas.diagnostico-impuesto", "destination_type": "queue", "routing_key": "consultas.diagnostico-impuesto.*", "arguments": {} },
     { "source": "flit.consultas", "vhost": "flit", "destination": "consultas.diagnostico-impuesto-express", "destination_type": "queue", "routing_key": "consultas.diagnostico-impuesto-express.*", "arguments": {} },
-    { "source": "flit.consultas", "vhost": "flit", "destination": "diagnostico.consultas-resultados", "destination_type": "queue", "routing_key": "consultas.resultado.diagnostico", "arguments": {} }
+    { "source": "flit.consultas", "vhost": "flit", "destination": "diagnostico.consultas-resultados", "destination_type": "queue", "routing_key": "consultas.resultado.diagnostico", "arguments": {} },
+    { "source": "flit.diagnostico", "vhost": "flit", "destination": "diagnostico.derivaciones", "destination_type": "queue", "routing_key": "diagnostico.derivacion.solicitada", "arguments": {} }
   ],
   "users": [],
   "permissions": [],
@@ -28,7 +30,7 @@
     {
       "vhost": "flit",
       "name": "dlq-7d",
-      "pattern": "^(consultas\\.diagnostico|consultas\\.diagnostico-express|consultas\\.diagnostico-impuesto|consultas\\.diagnostico-impuesto-express|diagnostico\\.consultas-resultados)\\.dlq$",
+      "pattern": "^(consultas\\.diagnostico|consultas\\.diagnostico-express|consultas\\.diagnostico-impuesto|consultas\\.diagnostico-impuesto-express|diagnostico\\.consultas-resultados|diagnostico\\.derivaciones)\\.dlq$",
       "apply-to": "queues",
       "priority": 10,
       "definition": { "message-ttl": 604800000 }
@@ -72,6 +74,14 @@
       "apply-to": "queues",
       "priority": 10,
       "definition": { "message-ttl": 86400000, "dead-letter-exchange": "diagnostico.consultas-resultados.reintentos", "dead-letter-routing-key": "diagnostico.consultas-resultados.dlq" }
+    },
+    {
+      "vhost": "flit",
+      "name": "ttl-diagnostico-derivaciones",
+      "pattern": "^diagnostico\\.derivaciones$",
+      "apply-to": "queues",
+      "priority": 10,
+      "definition": { "message-ttl": 86400000, "dead-letter-exchange": "diagnostico.derivaciones.reintentos", "dead-letter-routing-key": "diagnostico.derivaciones.dlq" }
     }
   ]
 }

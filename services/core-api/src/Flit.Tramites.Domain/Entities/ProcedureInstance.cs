@@ -231,6 +231,14 @@ public sealed class ProcedureInstance
     public Guid? ChannelTransitOfficeId { get; set; }
 
     /// <summary>
+    /// Momento en que, al radicar (salir de borrador), se copió al trámite la firma de baúl de cada parte
+    /// (<see cref="ProcedureInstanceFirmaBaulCopia"/>). No nulo ⇒ FUR, regeneraciones, gate de identidad y
+    /// listado usan SOLO la copia y nunca el baúl en vivo (aunque no hubiera ninguna firma de baúl).
+    /// <c>null</c> ⇒ borrador, o trámite anterior a la mejora: sigue leyendo el baúl en vivo.
+    /// </summary>
+    public DateTimeOffset? FirmaBaulCopiadaAt { get; set; }
+
+    /// <summary>
     /// HU #13402 (Feature #13399, Épica #13039) — valor del parámetro de la compañía «generar
     /// improntas automáticamente» (<c>admin.tenant_operational_policies.generate_improntas</c>)
     /// CONGELADO al crear el trámite. Cambiar o reactivar el parámetro después no altera trámites

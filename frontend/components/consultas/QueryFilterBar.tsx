@@ -115,7 +115,7 @@ export function QueryFilterBar({
       {conditions.map((condition) => (
         <span
           key={condition.fieldId}
-          className="relative inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-[#3355CC] dark:text-[#9DB5FF]"
+          className="relative inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-flit-brand-ink"
         >
           <button
             type="button"
@@ -151,7 +151,7 @@ export function QueryFilterBar({
           type="button"
           disabled={disabled || disponibles.length === 0}
           onClick={() => setEditing(editing === "" ? null : "")}
-          className="rounded-full border border-dashed border-[#DFE5ED] px-3 py-1 text-xs font-semibold text-[#6B7280] hover:border-flit-brand hover:text-flit-brand disabled:opacity-40 dark:border-white/20 dark:text-white/60"
+          className="rounded-full border border-dashed border-border px-3 py-1 text-xs font-semibold text-muted-foreground hover:border-flit-brand hover:text-flit-brand disabled:opacity-40"
           data-testid={`${testIdPrefix}-agregar-filtro`}
         >
           + Filtro
@@ -162,7 +162,7 @@ export function QueryFilterBar({
             fields={disponibles}
             onPick={setEditing}
             testIdPrefix={testIdPrefix}
-            className="absolute left-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-[#DFE5ED] bg-white p-2 shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
+            className="absolute left-0 z-50 mt-2 max-h-[24rem] w-64 overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-[var(--kit-sombra)]"
           />
         )}
       </div>
@@ -206,7 +206,7 @@ export function QueryFieldPicker({
     <div className={className} data-testid={`${testIdPrefix}-campos`}>
       {grupos.map((grupo) => (
         <div key={grupo} className="mb-1.5">
-          <p className="mb-1 rounded-md bg-[#F5F7FA] px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-flit-primary dark:bg-white/[0.06] dark:text-white/75">
+          <p className="mb-1 rounded-md bg-secondary px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-flit-primary dark:text-muted-foreground">
             {grupo}
           </p>
           {fields
@@ -216,7 +216,7 @@ export function QueryFieldPicker({
                 key={field.id}
                 type="button"
                 onClick={() => onPick(field.id)}
-                className="block w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-[#F5F7FA] dark:hover:bg-white/5"
+                className="block w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-secondary"
               >
                 {field.label}
               </button>
@@ -283,12 +283,12 @@ export function ConditionEditor({
     <div
       className={
         anchored
-          ? "absolute left-0 top-full z-50 mt-2 w-80 rounded-2xl border border-[#DFE5ED] bg-white p-3 text-left shadow-2xl dark:border-white/10 dark:bg-[#0B0F14]"
+          ? "absolute left-0 top-full z-50 mt-2 w-80 rounded-2xl border border-border bg-card p-3 text-left shadow-[var(--kit-sombra)]"
           : "text-left"
       }
       data-testid={`${testIdPrefix}-editor-${field.id}`}
     >
-      <p className="mb-2 text-xs font-semibold text-[#0B1F33] dark:text-white">{field.label}</p>
+      <p className="mb-2 text-xs font-semibold text-foreground dark:text-foreground">{field.label}</p>
 
       {field.operators.length > 1 && (
         <select
@@ -319,7 +319,7 @@ export function ConditionEditor({
             data-testid={`${testIdPrefix}-valores-${field.id}`}
           />
           {operator !== "contiene" && valores.length > 0 && (
-            <p className="mt-1 text-[11px] text-[#6B7280] dark:text-white/50">
+            <p className="mt-1 text-[11px] text-muted-foreground">
               {plural(valores.length, "valor", "valores")}
             </p>
           )}
@@ -342,14 +342,14 @@ export function ConditionEditor({
             {grupos.map((bloque, i) => (
               <div key={bloque.titulo ?? `sin-grupo-${i}`}>
                 {bloque.titulo && (
-                  <p className="mt-1.5 px-1.5 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-[#6B7280] first:mt-0 dark:text-white/50">
+                  <p className="mt-1.5 px-1.5 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground first:mt-0">
                     {bloque.titulo}
                   </p>
                 )}
                 {bloque.opciones.map((option) => (
                   <label
                     key={option.value}
-                    className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-[#F5F7FA] dark:hover:bg-white/5"
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-secondary"
                   >
                     <input
                       type="checkbox"
@@ -373,14 +373,14 @@ export function ConditionEditor({
       )}
 
       {field.hint && (
-        <p className="mt-2 text-[11px] leading-snug text-[#6B7280] dark:text-white/50">{field.hint}</p>
+        <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{field.hint}</p>
       )}
 
       <div className="mt-3 flex items-center justify-between gap-2">
         <button
           type="button"
           onClick={onRemove}
-          className="text-[11px] font-semibold text-[#6B7280] hover:text-[#C0392B] dark:text-white/50"
+          className="text-[11px] font-semibold text-muted-foreground hover:text-destructive"
         >
           {value ? "Quitar" : "Cancelar"}
         </button>

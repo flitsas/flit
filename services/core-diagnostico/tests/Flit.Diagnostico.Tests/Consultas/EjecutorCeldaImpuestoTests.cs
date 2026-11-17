@@ -178,7 +178,7 @@ public sealed class EjecutorCeldaImpuestoTests
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
         var enEspera = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
         (enEspera.Estado, enEspera.IntentosAuto).Should().Be((EstadoCelda.Pendiente, 1), "queda el reintento");
-        reloj.Avanzar(PoliticaReintentos.Espera(1));
+        reloj.Avanzar(PoliticaReintentos.EsperaPorDefecto);
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
         grpc.Llamadas.Should().HaveCount(2);
@@ -263,7 +263,7 @@ public sealed class EjecutorCeldaImpuestoTests
         (await procesador.ProcesarLoteAsync(ct)).Should().Be(1, "el impuesto responde TIMEOUT y queda su reintento");
         (await ReplicaImpuesto.SincronizarAsync(api, new CapacidadFalsa(), new RelojManual(), ct))!.Soportados.Should().Be(0, "la capacidad ya no trae el 05");
 
-        reloj.Avanzar(ProgramadorReintentos.Esperas[0]);
+        reloj.Avanzar(PoliticaReintentos.EsperaPorDefecto);
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
         grpc.Llamadas.Should().ContainSingle("la republicación ya no tiene qué consultar");

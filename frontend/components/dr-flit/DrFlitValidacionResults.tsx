@@ -1,6 +1,6 @@
 "use client";
 
-import { ExternalLink, ShieldCheck } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { DrFlitValidacionResult } from "./dr-flit-types";
 
 export function DrFlitValidacionResults({
@@ -35,10 +35,7 @@ export function DrFlitValidacionResults({
               style={{ background: "var(--dr-flit-icon-tint)" }}
               aria-hidden="true"
             >
-              <ShieldCheck
-                className="h-4 w-4"
-                style={{ color: "var(--dr-flit-brand-blue)" }}
-              />
+              <Icono nombre="escudo" className="h-4 w-4" style={{ color: "var(--dr-flit-brand-blue)" }} />
             </span>
             <div className="min-w-0 flex-1">
               <p
@@ -66,11 +63,11 @@ export function DrFlitValidacionResults({
             <button
               type="button"
               onClick={() => onOpen(row.href)}
-              className="inline-flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)]"
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded-full px-3 py-2 text-xs font-semibold text-(--dr-flit-text-inverse) focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)]"
               style={{ background: "var(--dr-flit-gradient-primary)" }}
             >
               Ir a Validaciones
-              <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="externo" className="h-3.5 w-3.5" />
             </button>
             {row.tramiteHref && (
               <button

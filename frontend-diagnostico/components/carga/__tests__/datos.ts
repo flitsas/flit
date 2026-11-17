@@ -12,8 +12,8 @@ export function fila(cambios: Partial<FilaResumen> = {}): FilaResumen {
     identificador: "TST123",
     identificador_norm: "TST123",
     tipo_identificador: "PLACA_CARRO",
-    tipo_documento_locatario: null,
-    documento_locatario: null,
+    tipo_documento_propietario: null,
+    documento_propietario: null,
     valida: true,
     filas_duplicadas: [],
     errores: [],
@@ -30,7 +30,7 @@ export const FILA_ERRONEA = fila({
   errores: [{ campo: "Identificador_Vehiculo", code: "IDENTIFICADOR_INVALIDO", mensaje: "No es una placa ni un VIN válido." }],
 });
 
-export const FILA_CON_LOCATARIO = fila({ fila: 4, identificador: "PRB45A", identificador_norm: "PRB45A", tipo_identificador: "PLACA_MOTO", tipo_documento_locatario: "CC", documento_locatario: "****4050" });
+export const FILA_CON_LOCATARIO = fila({ fila: 4, identificador: "PRB45A", identificador_norm: "PRB45A", tipo_identificador: "PLACA_MOTO", tipo_documento_propietario: "CC", documento_propietario: "****4050" });
 
 export function resumen(cambios: Partial<ResumenValidacion> = {}): ResumenValidacion {
   return {

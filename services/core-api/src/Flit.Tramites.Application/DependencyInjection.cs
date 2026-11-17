@@ -260,6 +260,8 @@ public static class DependencyInjection
         // HU #10860 (ADR-0032) — el consolidado del wizard regenera en cascada el FUR/documentos en
         // caliente vía este puerto, resuelto al mismo GenerarFurHandler (mismo scope/unidad de trabajo).
         services.AddScoped<IExpedienteHotDocumentsRegenerator>(sp => sp.GetRequiredService<GenerarFurHandler>());
+        // HU #14547 — regenerar SOLO el mandato (mandatario recalculado), mismo GenerarFurHandler del scope.
+        services.AddScoped<IMandatoRegenerador>(sp => sp.GetRequiredService<GenerarFurHandler>());
         // Bug #11613 — envoltura trazada de la regeneración en caliente para los flujos internos del OT
         // (aprobar, asignar placa): inspecciona el resultado, loguea a Error y persiste evento.
         services.AddScoped<RegenerarDocumentosTrazadoHandler>();
@@ -269,9 +271,13 @@ public static class DependencyInjection
         // sin depender de que alguien genere el consolidado.
         services.AddScoped<FirmarImprontaManualSiListaHandler>();
         services.AddScoped<BackfillFirmaImprontaManualHandler>();
+        // Copia de la firma de baúl de cada parte al radicar (el trámite radicado ya no lee el baúl en vivo).
+        services.AddScoped<FirmaBaulCopiaCapturer>();
         // HU #12158 — acciones avanzadas del admin sobre el consolidado (limpiar/cargar externo).
         services.AddScoped<LimpiarConsolidadoHandler>();
         services.AddScoped<CargarConsolidadoExternoHandler>();
+        // HU #14547 — «Regenerar mandato y consolidado» (solo SuperAdmin).
+        services.AddScoped<RegenerarMandatoYConsolidadoHandler>();
         // HU #12159 — cambio de estado administrativo (sin TramiteStateMachine, excluye 'aprobado').
         services.AddScoped<AdminCambiarEstadoHandler>();
         // HU #12160 — anulación administrativa (cualquier origen, excluye 'aprobado' y 'revocado').

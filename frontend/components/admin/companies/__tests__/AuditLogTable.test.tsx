@@ -123,4 +123,38 @@ describe("auditLogLabels", () => {
     expect(parseAuditValue('{"a":1}', "x").kind).toBe("complex");
     expect(parseAuditValue(null, "x").kind).toBe("empty");
   });
+
+  describe("filtro «Fechas» (RangoFechas)", () => {
+    it("abre vacío en «Todas las fechas» y muestra todo el historial", () => {
+      renderTable();
+      expect(screen.getByLabelText("Fechas")).toHaveValue("todo");
+      expect(screen.queryByLabelText("Desde")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("row")).toHaveLength(entries.length + 1);
+    });
+
+    it("con el rango lleno se puede cambiar solo el inicio y se conserva el final", async () => {
+      // Bug del primer clic: con las dos fechas marcadas, el calendario fijaba el FINAL y cerraba.
+      renderTable();
+      await userEvent.selectOptions(screen.getByLabelText("Fechas"), "personalizado");
+      fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-03-01" } });
+      fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-03-31" } });
+      expect(screen.getAllByRole("row")).toHaveLength(3); // encabezado + 2 filas de marzo
+
+      fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-03-02" } });
+
+      expect(screen.getByLabelText("Hasta")).toHaveValue("2026-03-31");
+      expect(screen.getByLabelText("Desde")).toHaveValue("2026-03-02");
+      expect(screen.getAllByRole("row")).toHaveLength(2); // encabezado + el del 2 de marzo
+    });
+
+    it("«Todas las fechas» vuelve a mostrar todo", async () => {
+      renderTable();
+      await userEvent.selectOptions(screen.getByLabelText("Fechas"), "personalizado");
+      fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-03-02" } });
+      expect(screen.getAllByRole("row")).toHaveLength(2);
+
+      await userEvent.selectOptions(screen.getByLabelText("Fechas"), "todo");
+      expect(screen.getAllByRole("row")).toHaveLength(entries.length + 1);
+    });
+  });
 });

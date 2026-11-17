@@ -89,9 +89,9 @@ internal static class ActorEndpoints
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden editar actores en borrador o con subsanación activa."),
                 "invalid_rol" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "Rol inválido (use comprador|vendedor)."),
-                "invalid_document_type" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipoDocumento inválido (use CC|CE|NIT|PAS|TI)."),
+                "invalid_document_type" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipoDocumento inválido (use CC|CE|NIT|PAS|TI|PPT)."),
                 "missing_document_number" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "numeroDocumento es obligatorio."),
-                "invalid_document_number" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "numeroDocumento inválido (el pasaporte admite letras y números; el resto solo dígitos)."),
+                "invalid_document_number" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "numeroDocumento inválido (PAS y PPT admiten letras y números; el resto solo dígitos)."),
                 "missing_full_name" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "nombreCompleto es obligatorio."),
                 "invalid_email" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "email inválido."),
                 "rol_not_allowed" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El rol no está permitido para la modalidad del trámite."),
@@ -132,7 +132,7 @@ internal static class ActorEndpoints
             var (result, error) = await handler.HandleAsync(tenantId.Value, tipoDocumento, numeroDocumento, ct);
             return error switch
             {
-                "invalid_document_type" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipoDocumento inválido (use CC|CE|NIT|PAS|TI)."),
+                "invalid_document_type" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "tipoDocumento inválido (use CC|CE|NIT|PAS|TI|PPT)."),
                 "missing_document_number" => Results.Problem(statusCode: 400, title: "Bad Request", detail: "numeroDocumento es obligatorio."),
                 _ => Results.Ok(result)
             };

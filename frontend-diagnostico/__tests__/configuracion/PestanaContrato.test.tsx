@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { PestanaContrato } from "@/components/configuracion/PestanaContrato";
+import { ERRORES_CONTRATO } from "@/lib/configuracion";
 import {
   DISPONIBLES_CON_IMPUESTO,
   DISPONIBLES_SIN_IMPUESTO,
@@ -19,6 +20,7 @@ import {
 
 afterEach(() => vi.unstubAllGlobals());
 
+const SECRETO = "mensaje del servidor que no debe verse";
 const URL_CONTRATO = `/api/v1/diagnostico/backoffice/empresas/${EMPRESA_CLIENTE}/configuracion/contrato`;
 
 /**
@@ -63,6 +65,25 @@ describe("pestaña Contrato", () => {
     expect(screen.queryByText(/redacción/i)).toBeNull();
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("HU #14562 AC42 (decisión b, R-2): aunque un API lo mandara, la compañía no ve la redacción con IA", () => {
+    const contrato = { ...configuracion().contrato, redaccion_ia_suspendida: true } as ReturnType<typeof configuracion>["contrato"];
+    render(<PestanaContrato contrato={contrato} puedeEditar={false} />);
+
+    const lectura = screen.getByRole("region", { name: "Lo contratado por tu compañía" });
+    expect(within(lectura).queryByText(/redacción/i)).toBeNull();
+    expect(within(lectura).queryByText("Suspendida")).toBeNull();
+    expect(within(lectura).queryByText("Activa")).toBeNull();
+  });
+
+  it("HU #14562 AC42 (negativo): sin el campo (API anterior) no muestra la fila de la redacción ni la inventa", () => {
+    render(<PestanaContrato contrato={configuracion().contrato} puedeEditar={false} />);
+
+    const lectura = screen.getByRole("region", { name: "Lo contratado por tu compañía" });
+    expect(within(lectura).queryByText(/redacción/i)).toBeNull();
+    expect(within(lectura).queryByText("Activa")).toBeNull();
+    expect(within(lectura).queryByText("Suspendida")).toBeNull();
   });
 
   it("contrato sin fuentes habilitadas muestra el estado vacío", () => {
@@ -128,7 +149,8 @@ describe("pestaña Contrato", () => {
     render(<PestanaContrato contrato={null} puedeEditar />);
     await elegirEmpresa();
 
-    expect(await screen.findByText(/Diagnóstico no respondió/)).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(await screen.findByText("No se pudo cargar el contrato.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await waitFor(() => expect(screen.getByRole("checkbox", { name: "RUNT vehículo" })).toBeChecked());
   });
@@ -226,7 +248,7 @@ describe("pestaña Contrato — fuentes según fuentes_disponibles (HU #13865)",
       .fn()
       .mockResolvedValueOnce(Response.json(contratoBackoffice({ fuentes_disponibles: DISPONIBLES_CON_IMPUESTO })))
       .mockResolvedValueOnce(
-        Response.json({ code: "FUENTE_NO_DISPONIBLE", error: "La fuente IMPUESTO_DEPARTAMENTAL todavía no se puede habilitar.", campo: null }, { status: 422 }),
+        Response.json({ code: "FUENTE_NO_DISPONIBLE", error: SECRETO, campo: null }, { status: 422 }),
       );
     conEmpresas(fetchMock);
 
@@ -237,7 +259,9 @@ describe("pestaña Contrato — fuentes según fuentes_disponibles (HU #13865)",
 
     const campo = screen.getByRole("group", { name: "Fuentes habilitadas" });
     const alerta = await within(campo).findByRole("alert");
-    expect(alerta).toHaveTextContent("La fuente IMPUESTO_DEPARTAMENTAL todavía no se puede habilitar.");
+    // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API; ahora el texto fijo del code.
+    expect(alerta).toHaveTextContent(ERRORES_CONTRATO.FUENTE_NO_DISPONIBLE);
+    expect(alerta).not.toHaveTextContent(SECRETO);
     expect(campo).toHaveAccessibleDescription(/todavía no se puede habilitar/);
     expect(screen.queryByText("No se guardó el contrato")).toBeNull();
     expect(screen.getByRole("checkbox", { name: "Impuesto departamental" })).toBeChecked();
@@ -399,5 +423,55 @@ describe("pestaña Contrato — escenario 8: listado de empresas no disponible",
     expect(screen.queryByRole("combobox")).toBeNull();
     expect(screen.queryByRole("form", { name: "Editar contrato" })).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+// AP-9 (SF-6): los avisos del contrato salen de textos fijos por `code`; nunca el mensaje del servidor.
+describe("pestaña Contrato — AP-9: avisos con texto fijo", () => {
+  it("un 400 EMPRESA_REQUERIDA al cargar muestra el texto fijo del code", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json({ code: "EMPRESA_REQUERIDA", error: SECRETO }, { status: 400 }));
+    conEmpresas(fetchMock);
+
+    render(<PestanaContrato contrato={null} puedeEditar />);
+    await elegirEmpresa();
+
+    expect(await screen.findByText(ERRORES_CONTRATO.EMPRESA_REQUERIDA)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).toBeNull();
+  });
+
+  it.each([
+    [422, "LIMITE_INVALIDO"],
+    [422, "VALOR_FUERA_DE_CONJUNTO"],
+    [422, "VALOR_INVALIDO"],
+    [400, "CUERPO_INVALIDO"],
+    [403, "CAMPO_NO_EDITABLE"],
+  ] as const)("un %i %s al guardar muestra el texto fijo del code, sin el mensaje del servidor", async (status, code) => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(contratoBackoffice()))
+      .mockResolvedValueOnce(Response.json({ code, error: SECRETO }, { status }));
+    conEmpresas(fetchMock);
+
+    render(<PestanaContrato contrato={null} puedeEditar />);
+    await cargarEmpresa();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar contrato" }));
+
+    expect(await screen.findByText(ERRORES_CONTRATO[code])).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).toBeNull();
+  });
+
+  it("un 422 con un code fuera del contrato al guardar cae en el respaldo fijo", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(Response.json(contratoBackoffice()))
+      .mockResolvedValueOnce(Response.json({ code: "OTRO", error: SECRETO }, { status: 422 }));
+    conEmpresas(fetchMock);
+
+    render(<PestanaContrato contrato={null} puedeEditar />);
+    await cargarEmpresa();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar contrato" }));
+
+    expect(await screen.findByText("No se pudo guardar el contrato.")).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).toBeNull();
   });
 });

@@ -126,12 +126,14 @@ public sealed partial class IctGrpcProcedureDraftClient(
             request.FieldValues.Add(new FieldValue { FieldKey = "vin", ValueText = master.Vin });
         }
 
-        if (!string.IsNullOrWhiteSpace(master.Plate))
+        // En matrícula con plate_assignment_type 2/3/4 la placa la emite el mapper según el tipo (el dígito de
+        // preferencia del tipo 2 NO es una placa); en los demás casos viaja tal cual.
+        if (!string.IsNullOrWhiteSpace(master.Plate) && !IctDraftFieldValuesMapper.PlacaPorTipoDeAsignacion(master))
         {
             request.FieldValues.Add(new FieldValue { FieldKey = "plate", ValueText = master.Plate });
         }
 
-        // Bug #13445 — transformaciones (5/6/7/9, catálogo Tipo Trámite) y prenda viajan como field_values del borrador.
+        // Bug #13445 — transformaciones (5/9/17, catálogo B Tipo de transformación ICT), tipo de servicio (matrícula) y prenda viajan como field_values del borrador.
         request.FieldValues.Add(IctDraftFieldValuesMapper.Map(master));
 
         foreach (var actor in master.Actors)

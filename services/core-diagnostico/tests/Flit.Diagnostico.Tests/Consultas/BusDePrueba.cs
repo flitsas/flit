@@ -175,7 +175,7 @@ public sealed record RespuestaSimulada(IMessage? Respuesta, StatusCode? Error = 
 /// <see cref="ConsumidorResultados"/> real como lo haría el SDK: un scope por mensaje, la transacción abierta antes del efecto y
 /// revertida si lanza, y la bandeja (un <c>eventId</c> repetido no repite el efecto). <see cref="ReintentoProgramadoException"/> (o un
 /// conflicto de concurrencia) lleva el resultado a la «cola de reintentos» con las esperas del consumidor
-/// (<see cref="ProgramadorReintentos.Esperas"/>) medidas con el reloj de la API; agotadas, a <see cref="Muertos"/>. Cualquier otra
+/// (<see cref="ProgramadorReintentos.EsperasDe"/> con la espera configurada) medidas con el reloj de la API; agotadas, a <see cref="Muertos"/>. Cualquier otra
 /// excepción hace fallar la prueba. Los resultados demorados se entregan cuando el reloj alcanza su vencimiento.
 /// </summary>
 /// <example>
@@ -314,7 +314,7 @@ public sealed class BusDePrueba
         }
         catch (Exception ex) when (ex is ReintentoProgramadoException or DbUpdateException)
         {
-            var esperas = ProgramadorReintentos.Esperas;
+            var esperas = ProgramadorReintentos.EsperasDe(_api.App.Services.GetRequiredService<IOptions<OpcionesConsultas>>().Value.EsperaReintento);
             if (intento < esperas.Count)
             {
                 lock (_demorados)

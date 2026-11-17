@@ -15,12 +15,32 @@ public sealed record PersonBiometricValidationsResponse(
     string DocumentType,
     string DocumentNumber,
     string? Name,
-    IReadOnlyList<BiometricValidationDto> Validations,
+    IReadOnlyList<PersonBiometricValidationDto> Validations,
     int Page,
     int PageSize,
     int Total,
     /// <summary>True si TODAS las validaciones de la página (y, si Total ≤ PageSize, del historial) son terminales.</summary>
     bool AllTerminal);
+
+/// <summary>
+/// Validación del detalle por persona: el <see cref="BiometricValidationDto"/> compartido (mismo JSON plano)
+/// más <see cref="KyverumVerificationId"/>, que solo este detalle expone (compañía y red). Se extiende en vez
+/// de añadir el campo al DTO base porque ese lo sirven muchos otros endpoints.
+/// </summary>
+public sealed record PersonBiometricValidationDto : BiometricValidationDto
+{
+    public PersonBiometricValidationDto(BiometricValidationDto validation, string? kyverumVerificationId)
+        : base(validation)
+    {
+        KyverumVerificationId = kyverumVerificationId;
+    }
+
+    /// <summary>
+    /// Id de la verificación en Kyverum Verify (<c>kyverum_verification_id</c>). <c>null</c> si el proveedor no es
+    /// Kyverum, si aún no se envió o si la validación se canceló (la entidad lo limpia).
+    /// </summary>
+    public string? KyverumVerificationId { get; init; }
+}
 
 public sealed class ListPersonBiometricValidationsHandler(IProcedureInstanceRepository repo)
 {
@@ -91,7 +111,7 @@ public sealed class ListPersonBiometricValidationsHandler(IProcedureInstanceRepo
                 .ToList());
     }
 
-    private static BiometricValidationDto Enrich(
+    private static PersonBiometricValidationDto Enrich(
         ProcedureInstanceBiometricValidation v,
         DateTimeOffset now,
         IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureDto>> linkedByIdentity)
@@ -103,12 +123,14 @@ public sealed class ListPersonBiometricValidationsHandler(IProcedureInstanceRepo
             ? linked.Where(p => p.InstanceId != primaryId).ToList()
             : linked;
 
-        return baseDto with
-        {
-            ProcedureInstanceId = v.ProcedureInstanceId,
-            ReferenceNumber = v.ProcedureInstance?.ReferenceNumber,
-            Modalidad = (v.ProcedureInstance != null && v.ProcedureInstance.ProcedureType != null ? v.ProcedureInstance.ProcedureType.Family : ""),
-            LinkedProcedures = linkedOthers,
-        };
+        return new PersonBiometricValidationDto(
+            baseDto with
+            {
+                ProcedureInstanceId = v.ProcedureInstanceId,
+                ReferenceNumber = v.ProcedureInstance?.ReferenceNumber,
+                Modalidad = (v.ProcedureInstance != null && v.ProcedureInstance.ProcedureType != null ? v.ProcedureInstance.ProcedureType.Family : ""),
+                LinkedProcedures = linkedOthers,
+            },
+            v.KyverumVerificationId);
     }
 }

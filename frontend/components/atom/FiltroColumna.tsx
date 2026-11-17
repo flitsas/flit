@@ -19,7 +19,7 @@ import {
   type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { Filter } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import {
   INPUT_CLS,
   PERIODOS,
@@ -39,9 +39,9 @@ const BTN_FOCO =
   "focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2";
 // Normaliza lo que el `<th>` impone (versalita, 10px, negrita) dentro del panel.
 const PANEL_TEXTO = "text-left text-xs font-normal normal-case tracking-normal leading-normal";
-const ETIQUETA = "text-xs font-semibold normal-case tracking-normal text-[#59677D]";
+const ETIQUETA = "text-xs font-semibold normal-case tracking-normal text-muted-foreground";
 const BTN_PRIMARIO = `min-h-9 rounded-xl px-3 py-2 text-xs font-semibold normal-case tracking-normal text-white transition hover:opacity-95 ${BTN_FOCO}`;
-const BTN_SECUNDARIO = `min-h-9 rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs font-semibold normal-case tracking-normal text-[#1E293B] transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:border-white/15 dark:text-white ${BTN_FOCO}`;
+const BTN_SECUNDARIO = `min-h-9 rounded-xl border border-border px-3 py-2 text-xs font-semibold normal-case tracking-normal text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 dark:border-border dark:text-foreground ${BTN_FOCO}`;
 export const MSG_RANGO_INVERTIDO = "La fecha inicial no puede ser posterior a la fecha final.";
 const PANEL_ANCHO = 288;
 const SEP = 6;
@@ -129,7 +129,7 @@ export function EditorColumna({ columna, inicial, onAplicar, onQuitar }: EditorP
             {(columna.opciones ?? []).map((o) => (
               <label
                 key={o.value}
-                className="flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-2 text-xs text-flit-primary hover:bg-[#EFF6FF] dark:text-white dark:hover:bg-white/5"
+                className="flex min-h-9 cursor-pointer items-center gap-2 rounded-lg px-2 text-xs text-flit-primary hover:bg-secondary dark:text-foreground dark:hover:bg-white/5"
               >
                 <input
                   type="checkbox"
@@ -139,7 +139,7 @@ export function EditorColumna({ columna, inicial, onAplicar, onQuitar }: EditorP
                       e.target.checked ? [...prev, o.value] : prev.filter((v) => v !== o.value),
                     )
                   }
-                  className="h-4 w-4 accent-[#557EFF]"
+                  className="h-4 w-4 accent-flit-brand"
                 />
                 {o.label}
               </label>
@@ -155,7 +155,7 @@ export function EditorColumna({ columna, inicial, onAplicar, onQuitar }: EditorP
             {PERIODOS.map((p) => (
               <label
                 key={p}
-                className="flex min-h-8 cursor-pointer items-center gap-2 rounded-lg px-2 text-xs text-flit-primary hover:bg-[#EFF6FF] dark:text-white dark:hover:bg-white/5"
+                className="flex min-h-8 cursor-pointer items-center gap-2 rounded-lg px-2 text-xs text-flit-primary hover:bg-secondary dark:text-foreground dark:hover:bg-white/5"
               >
                 <input
                   type="radio"
@@ -165,7 +165,7 @@ export function EditorColumna({ columna, inicial, onAplicar, onQuitar }: EditorP
                     setPeriodo(p);
                     setError(null);
                   }}
-                  className="h-4 w-4 accent-[#557EFF]"
+                  className="h-4 w-4 accent-flit-brand"
                 />
                 {p}
               </label>
@@ -202,14 +202,14 @@ export function EditorColumna({ columna, inicial, onAplicar, onQuitar }: EditorP
             </div>
           ) : null}
           {error ? (
-            <p role="alert" className="text-xs font-semibold text-[#B91C1C]">
+            <p role="alert" className="text-xs font-semibold text-[var(--badge-danger-fg)]">
               {error}
             </p>
           ) : null}
         </>
       ) : null}
 
-      <div className="flex items-center justify-end gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+      <div className="flex items-center justify-end gap-2 border-t border-border pt-3 dark:border-border">
         <button type="button" onClick={onQuitar} disabled={!inicial} className={BTN_SECUNDARIO}>
           Quitar filtro
         </button>
@@ -343,11 +343,12 @@ function BotonFiltro({
         aria-expanded={open}
         aria-controls={open ? panelId : undefined}
         data-activo={activo ? "true" : undefined}
-        className={`-my-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition hover:bg-white/60 ${BTN_FOCO} ${
-          activo ? "text-[#3B4FD6]" : "text-[#59677D]"
+        className={`-my-2 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition hover:bg-white/10 ${BTN_FOCO} ${
+          // HU #14477 — vive en la cabecera en tinta: hereda su texto claro y, activo, el turquesa que sí se ve encima.
+          activo ? "text-[color:var(--di-highlight-decor)]" : "text-inherit"
         }`}
       >
-        <Filter className={`h-3.5 w-3.5 ${activo ? "fill-current" : ""}`} aria-hidden="true" />
+        <Icono nombre="filtro" className={`h-3.5 w-3.5 ${activo ? "fill-current" : ""}`} />
       </button>
       {open && typeof document !== "undefined"
         ? createPortal(

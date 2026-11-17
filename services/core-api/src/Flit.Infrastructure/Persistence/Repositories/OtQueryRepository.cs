@@ -45,10 +45,13 @@ internal sealed class OtQueryRepository : IOtQueryRepository
     private readonly FlitDbContext _context;
     private readonly OtTenantScope _scope;
 
-    public OtQueryRepository(FlitDbContext context, IEffectiveTransitOfficeListResolver? effectiveOffices = null)
+    public OtQueryRepository(
+        FlitDbContext context,
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null,
+        IOtUserClientScopeResolver? clientScope = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
-        _scope = new OtTenantScope(_context, effectiveOffices);
+        _scope = new OtTenantScope(_context, effectiveOffices, clientScope);
     }
 
     // ── Ejecución ─────────────────────────────────────────────────────────────────────────────

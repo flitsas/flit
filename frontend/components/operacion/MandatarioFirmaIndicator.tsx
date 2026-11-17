@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { UserCheck } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import type { MandateSignerPrevisto } from '@/lib/api/types/procedure-runtime';
@@ -130,11 +130,7 @@ export function MandatarioFirmaIndicator({
         className={`flex items-center gap-2 rounded-xl border px-4 py-3 text-xs ${className ?? ''}`}
         style={{ borderColor: 'var(--badge-info-border)', background: 'var(--badge-info-bg)' }}
       >
-        <UserCheck
-          className="h-4 w-4 shrink-0"
-          style={{ color: 'var(--badge-info-fg)' }}
-          aria-hidden="true"
-        />
+        <Icono nombre="persona" className="h-4 w-4 shrink-0" style={{ color: 'var(--badge-info-fg)' }} />
         <span>
           {fraseQuienFirmara(data.nombre, data.formaFirma)}
           {/* HU #13183 — solo el origen, nunca el nombre de la otra compañía ni su documento. */}

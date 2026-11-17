@@ -197,7 +197,7 @@ Base `/api/v1/admin/ot/portal-caja`:
 
 ## 4. Modelo de datos (conceptual y DDL de referencia; lo materializa el database-agent)
 
-### 4.1 core-api (esquemas `platform`, `security`) — DDL `190-HU14454-producto-caja-rol-ot-caja.sql` (develop ya ocupa 187-188 y la rama de pago el 189)
+### 4.1 core-api (esquemas `platform`, `security`) — DDL `199-HU14454-producto-caja-rol-ot-caja.sql` (develop ya ocupa 187-188 y la rama de pago el 189)
 
 ```sql
 INSERT INTO platform.products (code, name, icon, status, sort_order)
@@ -212,7 +212,7 @@ SELECT 'ot_caja', 'Caja del organismo', 'Cobra en la caja del portal del punto. 
 -- role_permissions: ot_caja -> caja.cobrar (tr_role_permissions_same_product exige el mismo producto)
 ```
 
-Migración EF `20261110110000_HU14454_RolOtCaja` con `[DbContext]`/`[Migration]` inline o `.Designer.cs` (si no, no corre al arrancar). Down: borra rol, permiso, módulo y producto en ese orden.
+Migración EF `20261117140000_HU14454_RolOtCaja` con `[DbContext]`/`[Migration]` inline o `.Designer.cs` (si no, no corre al arrancar). Down: borra rol, permiso, módulo y producto en ese orden.
 
 ### 4.2 BFF (schema `persona_natural`) — migración `20261110120000_CajaOt`
 
@@ -252,8 +252,8 @@ Rutas relativas a `C:\FLIT 2.0\wt-pago-a`. «M» = modificar, «C» = crear. Pru
 
 ### HU #14454 — Backend: perfil Caja limitado a un organismo (5 SP)
 
-- C `services/core-api/src/Flit.Infrastructure/Persistence/Sql/Ddl/190-HU14454-producto-caja-rol-ot-caja.sql`
-- C `services/core-api/src/Flit.Infrastructure/Migrations/20261110110000_HU14454_RolOtCaja.cs` (+ `.Designer.cs` o atributos inline); M `FlitDbContextModelSnapshot.cs`
+- C `services/core-api/src/Flit.Infrastructure/Persistence/Sql/Ddl/199-HU14454-producto-caja-rol-ot-caja.sql`
+- C `services/core-api/src/Flit.Infrastructure/Migrations/20261117140000_HU14454_RolOtCaja.cs` (+ `.Designer.cs` o atributos inline); M `FlitDbContextModelSnapshot.cs`
 - M `services/core-api/src/Flit.Modules.Security.Application/Products/ProductCodes.cs` (`Caja`, `All`); M `tests/Flit.Modules.Security.Application.Tests/Products/ProductCodesTests.cs` (5 códigos)
 - M `services/core-api/src/Flit.Api/Authorization/AdminAuthorization.cs` (`OtCajaRole = "ot_caja"`); M `OtModuleAuthorizationHandler.cs`; C `SoloCajaGuardMiddleware.cs`; M `Flit.Api/Hosting/*` (registro del middleware tras autenticación)
 - C `services/core-api/src/Flit.Api/Endpoints/AdminPortalCajaUsuariosEndpoints.cs`; M `Flit.Api/Hosting/ApiEndpoints.cs`
@@ -339,7 +339,7 @@ Rutas relativas a `C:\FLIT 2.0\wt-pago-a`. «M» = modificar, «C» = crear. Pru
 
 ## 9. Notas operativas
 
-- **Database Agent**: materializar el DDL 190 y la migración del BFF con `checklist-validacion-schema.md`; la migración EF de core-api necesita `Designer.cs` o atributos `[DbContext]/[Migration]` inline (si no, no corre al arrancar); índices y CHECK de §4.2; el backfill de `pagado_en_dia` no aplica (no hay cobros pagados antes de esta entrega).
+- **Database Agent**: materializar el DDL 199 y la migración del BFF con `checklist-validacion-schema.md`; la migración EF de core-api necesita `Designer.cs` o atributos `[DbContext]/[Migration]` inline (si no, no corre al arrancar); índices y CHECK de §4.2; el backfill de `pagado_en_dia` no aplica (no hay cobros pagados antes de esta entrega).
 - **Backend Agent**: orden sugerido #14454, #14456, #14457, #14459, #14461. Cambios compartidos (`ProductCodes`, SDK, `OtModuleAuthorizationHandler`, Identidad) con su suite completa antes del commit; el guardián y `ExtraAudiences` entran en el primer commit.
 - **Frontend Agent**: `frontend-personanatural` suma `@flit/auth` por workspace; `pnpm -r format:check/lint/typecheck/build` antes del push; el hub sigue el modelo de tablas de trámites (sin tarjeta blanca, botón «Acciones», paginación estándar). Textos cortos y accesibles; foco inicial en el campo de ID; Enter busca.
 - **QA Agent**: casos por AC más: usuario solo-caja con token `plataforma` y con JWT heredado; caja del organismo A con ID del B (403 sin datos); dos cajas confirmando a la vez; desactivar con sesión abierta; sesión de 12 h (reloj simulado); logout en equipo compartido; dominio propio del OT redirige al canónico.

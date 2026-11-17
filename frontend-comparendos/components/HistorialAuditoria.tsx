@@ -35,7 +35,7 @@ export function HistorialAuditoria({
   );
   const items = lista.datos?.items ?? [];
   return (
-    <Modal open onClose={onCerrar} title={titulo} size="lg">
+    <Modal icono="reloj" open onClose={onCerrar} title={titulo} size="lg">
       {lista.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
       {lista.estado === "error" && <InlineAlert tone="error">{lista.error}</InlineAlert>}
       {lista.estado === "ready" && items.length === 0 && <p className="text-sm opacity-70">Sin cambios registrados.</p>}

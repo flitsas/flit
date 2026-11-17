@@ -1,5 +1,6 @@
 using System.Data.Common;
 using Flit.Analytics.Application.Abstractions;
+using Flit.Analytics.Application.CompanyQueries;
 using Flit.Analytics.Application.Dtos;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -66,7 +67,7 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
                v.created_by_display_name, v.submitted_at, v.completed_at,
                v.person_document, v.person_full_name, v.has_transformation,
                v.transformation_detail, v.is_leasing, v.payment_type, v.transfer_type,
-               v.channel, v.channel_transit_office_id, v.channel_transit_office_name
+               v.channel, v.channel_transit_office_id, v.channel_transit_office_name, v.actors::text
         """;
 
     private const string RowOrder = "ORDER BY v.created_at DESC, v.id DESC";
@@ -120,9 +121,10 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
 
         var summary = await ReadSummaryAsync(conn, filter, ct).ConfigureAwait(false);
         var reached = summary.ByTenant.Select(t => t.TenantId).OrderBy(t => t).ToList();
+        var maxActores = await ReadMaxActoresAsync(conn, filter, ct).ConfigureAwait(false);
 
         return new NetworkAnalyticsResult<NetworkDetailedProceduresPageDto>(
-            new NetworkDetailedProceduresPageDto(items, total, page, pageSize, summary, scope),
+            new NetworkDetailedProceduresPageDto(items, total, page, pageSize, summary, scope, maxActores),
             reached);
     }
 
@@ -175,6 +177,25 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
     }
 
     // ── lectura ───────────────────────────────────────────────────────────────────────────────
+
+    public async Task<MaxActoresPorRolDto> GetNetworkMaxActoresPorRolAsync(
+        NetworkDetailedReportFilter filter, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filter);
+        if (filter.TenantIds.Count == 0)
+            return default; // AC4: conjunto vacío ⇒ sin consulta.
+
+        var conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
+        return await ReadMaxActoresAsync(conn, filter, ct).ConfigureAwait(false);
+    }
+
+    private static async Task<MaxActoresPorRolDto> ReadMaxActoresAsync(
+        DbConnection conn, NetworkDetailedReportFilter filter, CancellationToken ct)
+    {
+        await using var cmd = CreateCommand(conn, DetailedReportActors.MaxSql(BaseFrom));
+        BindFilter(cmd, filter);
+        return await DetailedReportActors.ReadMaxAsync(cmd, ct).ConfigureAwait(false);
+    }
 
     private static async Task<NetworkDetailedReportSummaryDto> ReadSummaryAsync(
         DbConnection conn, NetworkDetailedReportFilter filter, CancellationToken ct)
@@ -249,7 +270,8 @@ internal sealed class DetailedReportNetworkReadRepository : INetworkDetailedRepo
             reader.IsDBNull(16) ? null : reader.GetString(16),
             reader.GetString(17),
             reader.IsDBNull(18) ? null : reader.GetGuid(18),
-            reader.IsDBNull(19) ? null : reader.GetString(19));
+            reader.IsDBNull(19) ? null : reader.GetString(19),
+            DetailedReportActors.Parse(reader.IsDBNull(20) ? null : reader.GetString(20)));
 
     // ── infraestructura ───────────────────────────────────────────────────────────────────────
 

@@ -21,13 +21,15 @@ internal sealed record ConfirmacionLote(Guid DiagnosticoId, ResultadoConfirmacio
 /// con un solo vehículo. Solo con la cabecera en CREADO (409 <see cref="ServicioCabecera.CodigoNoEditable"/>) y sin
 /// vehículos confirmados antes (409 <see cref="CodigoYaConfirmados"/>); una cabecera de otra compañía responde 404. El
 /// servidor revalida todo (<see cref="ConfirmadorVehiculos"/>): sin válidos o por encima del límite de la copia de
-/// configuración responde 422 sin guardar nada. En una transacción: guarda los válidos (documento del locatario cifrado
-/// con <see cref="IProtectorDocumentoPersona"/> y origen DECLARADO_CLIENTE, R-3), deja el estimado en la cabecera y
+/// configuración responde 422 sin guardar nada. En una transacción: guarda los válidos (el propietario actual declarado, cifrado
+/// con <see cref="IProtectorDocumentoPersona"/> en <c>propietario_declarado_doc_*</c>, HU #14582; nunca como locatario), deja el
+/// estimado en la cabecera, revisa el sondeo de declaraciones por placa (<see cref="AuditoriaSondeoPropietario"/>, SP-5) y
 /// entrega la lista limpia a <see cref="IEncoladorConsultas"/>, que crea las celdas y pasa el lote a EN_PROCESO (HU #13727);
 /// si el encolador falla no queda nada. Los logs solo llevan conteos.
 /// </summary>
 internal sealed partial class ServicioConfirmacionVehiculos(
-    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, IEncoladorConsultas encolador, ILogger<ServicioConfirmacionVehiculos> log)
+    DiagnosticoDb db, UsuarioActual usuario, IProtectorDocumentoPersona protector, IEncoladorConsultas encolador, AuditoriaSondeoPropietario sondeo,
+    ILogger<ServicioConfirmacionVehiculos> log)
 {
     public const string CodigoSinValidos = AnalizadorCarga.CodigoSinValidos;
     public const string CodigoLimiteSuperado = AnalizadorCarga.CodigoLimiteSuperado;
@@ -78,7 +80,7 @@ internal sealed partial class ServicioConfirmacionVehiculos(
         var cabecera = await db.Set<CabeceraDiagnostico>().SingleOrDefaultAsync(c => c.Id == diagnosticoId, ct).ConfigureAwait(false)
             ?? throw ReglaException.NoEncontrado("El diagnóstico");
         if (cabecera.Estado != EstadoDiagnostico.Creado)
-            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya no está en CREADO: no admite confirmar vehículos.");
+            throw ReglaException.Conflicto(ServicioCabecera.CodigoNoEditable, "El diagnóstico ya se lanzó: no admite confirmar vehículos.");
         if (await db.Set<VehiculoDiagnostico>().AnyAsync(v => v.DiagnosticoId == diagnosticoId, ct).ConfigureAwait(false))
             throw YaConfirmados();
 
@@ -105,6 +107,8 @@ internal sealed partial class ServicioConfirmacionVehiculos(
         db.AddRange(vehiculos);
         cabecera.EstimadoConsultas = JsonSerializer.Serialize(resultado.Estimado.ToDictionary(e => CodigosDeEnum.Codigo(e.Fuente), e => e.Consultas));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        // HU #14582 (SP-5): aviso si una placa acumula hoy más declaraciones de propietario que el umbral (solo ids y conteo).
+        await sondeo.RevisarAsync(cabecera, vehiculos, ct).ConfigureAwait(false);
         await encolador.EncolarAsync(
             cabecera.Id, [.. vehiculos.Select(v => new VehiculoAEncolar(v.Id, v.IdentificadorNorm, v.TipoIdentificador))], ct).ConfigureAwait(false);
         return new ConfirmacionLote(cabecera.Id, resultado, vehiculos, parametros.MostrarEstimado);
@@ -112,7 +116,7 @@ internal sealed partial class ServicioConfirmacionVehiculos(
 
     private VehiculoDiagnostico Nuevo(Guid diagnosticoId, VehiculoConfirmado v)
     {
-        var conDocumento = v.DocumentoLocatario is not null;
+        var conDocumento = v.DocumentoPropietario is not null;
         return new VehiculoDiagnostico
         {
             DiagnosticoId = diagnosticoId,
@@ -121,9 +125,10 @@ internal sealed partial class ServicioConfirmacionVehiculos(
             TipoIdentificador = v.Tipo,
             Placa = v.Tipo == TipoIdentificador.Vin ? null : v.IdentificadorNorm,
             Vin = v.Tipo == TipoIdentificador.Vin ? v.IdentificadorNorm : null,
-            LocatarioDocTipo = conDocumento ? v.TipoDocumentoLocatario : null,
-            LocatarioDocCifrado = conDocumento ? protector.Proteger(v.DocumentoLocatario!) : null,
-            LocatarioDocOrigen = conDocumento ? OrigenDocumento.DeclaradoCliente : null,
+            // HU #14582 (C3): el declarado es el propietario actual; no alimenta RUNT_LOCATARIO / SIMIT_LOCATARIO. cambio_propietario
+            // queda null hasta que cierra la celda RUNT (el vehículo es nuevo: aún no tiene RUNT).
+            PropietarioDeclaradoDocTipo = conDocumento ? v.TipoDocumentoPropietario : null,
+            PropietarioDeclaradoDocCifrado = conDocumento ? protector.Proteger(v.DocumentoPropietario!) : null,
             Orden = v.Orden,
         };
     }

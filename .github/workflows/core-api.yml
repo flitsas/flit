@@ -10,6 +10,11 @@ on:
   pull_request:
     branches: [develop, staging, release]
   workflow_dispatch:
+    inputs:
+      runner:
+        description: Etiqueta del pool propio para correr la suite en un solo job (por ejemplo flit-ci). Vacío = GitHub.
+        required: false
+        default: ''
 
 # Un push nuevo al mismo PR (o a la misma rama) cancela la corrida anterior: solo importa la última.
 concurrency:
@@ -57,26 +62,31 @@ jobs:
           # Sin grep -q: con pipefail, -q cierra el pipe en la primera coincidencia, el grep -v muere con SIGPIPE y una lista
           # grande de archivos se leía como «No toca core-api» (las pruebas se saltaban y el check salía verde).
           if [ "$archivos" = TODO ] || echo "$archivos" | grep -v '^services/core-api/src/Flit.Api/Content/dr-flit/' | grep -E \
-               '^(services/core-(api|identity|consultas|personanatural)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-core-api-pruebas\.sh$)' > /dev/null; then
+               '^(services/core-(api|identity|consultas|personanatural)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-(core-api-pruebas|core-api-vps|servicios|limpiar-runner)\.sh$)' > /dev/null; then
             echo "core=true" >> "$GITHUB_OUTPUT"; echo "Toca core-api: corren las pruebas."
           else
             echo "core=false" >> "$GITHUB_OUTPUT"; echo "No toca core-api: se saltan las pruebas."
           fi
 
   # La suite se reparte en carriles que corren en paralelo, cada uno en su runner (antes era un solo
-  # job de ~44 min, con timeout de 45). El camino crítico es «admin» (~22 min) hasta que se aligere su
-  # arnés. Reparto y detalles en .github/scripts/ci-core-api-pruebas.sh.
+  # job de ~44 min, con timeout de 45). El camino crítico es «admin» (histórico ~22–30 min; en runners
+  # lentos llega a ~40). Timeout 55 evita cancelaciones espurias (HU #14494 / PR #830).
+  # Reparto y detalles en .github/scripts/ci-core-api-pruebas.sh.
+  #
+  # En el pool propio (input `runner` o variable de repo RUNNER_CORE_API) corre «pruebas-vps» en su lugar.
   pruebas:
     name: pruebas (${{ matrix.nombre }})
     needs: cambios
-    if: needs.cambios.outputs.core == 'true'
+    if: needs.cambios.outputs.core == 'true' && !(inputs.runner || vars.RUNNER_CORE_API)
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 55
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { nombre: admin, carril: admin, shard: 0 }
+          # admin va en 2 shards por clase (ADMIN_SHARDS): cada uno en su runner de GitHub, con su Postgres.
+          - { nombre: admin-0, carril: admin, shard: 0 }
+          - { nombre: admin-1, carril: admin, shard: 1 }
           - { nombre: integration-0, carril: integration, shard: 0 }
           - { nombre: integration-1, carril: integration, shard: 1 }
           - { nombre: integration-2, carril: integration, shard: 2 }
@@ -130,6 +140,18 @@ jobs:
       - name: Build
         run: dotnet build --no-restore --configuration Release
 
+      # El contenedor de Postgres trae max_connections=100. Las pruebas crean muchas bases propias y cada una
+      # deja su pool de Npgsql abierto: en «admin» se agotaban («too many clients already») desde el minuto ~30
+      # y la suite pasaba de ~30 a más de 65 min esperando conexión (PR #860, que solo llegó a staging). Los
+      # services no aceptan argumentos del servidor, así que se ajusta por ALTER SYSTEM y se reinicia el contenedor.
+      - name: Postgres con más conexiones
+        run: |
+          pg=${{ job.services.postgres.id }}
+          docker exec "$pg" psql -U postgres -c "ALTER SYSTEM SET max_connections = 500;"
+          docker restart "$pg"
+          for i in $(seq 1 30); do docker exec "$pg" pg_isready -U postgres -d flit_dev && break; sleep 2; done
+          docker exec "$pg" psql -U postgres -tAc "SHOW max_connections;"
+
       - name: Apply migrations
         run: |
           dotnet tool install --global dotnet-ef --version 10.0.1
@@ -143,6 +165,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: '4'
+          ADMIN_SHARDS: '2'
           # La cobertura solo se recoge en push: en el PR alarga la corrida sin que nadie la mire.
           COBERTURA: ${{ github.event_name == 'push' && '1' || '' }}
 
@@ -159,7 +182,7 @@ jobs:
   # todo pasó o si el cambio no toca core-api; en rojo si algo falló o se canceló.
   core-api:
     if: always()
-    needs: [cambios, pruebas, aot-publish]
+    needs: [cambios, pruebas, aot-publish, pruebas-vps]
     runs-on: ubuntu-latest
     steps:
       - name: Resultado
@@ -168,16 +191,18 @@ jobs:
           CORE: ${{ needs.cambios.outputs.core }}
           PRUEBAS: ${{ needs.pruebas.result }}
           AOT: ${{ needs.aot-publish.result }}
+          VPS: ${{ needs.pruebas-vps.result }}
+          EN_VPS: ${{ (inputs.runner || vars.RUNNER_CORE_API) && 'true' || 'false' }}
         run: |
-          echo "cambios=$CAMBIOS core=$CORE pruebas=$PRUEBAS aot-publish=$AOT"
+          echo "cambios=$CAMBIOS core=$CORE pruebas=$PRUEBAS aot-publish=$AOT pruebas-vps=$VPS (pool propio: $EN_VPS)"
           [ "$CAMBIOS" = success ] || { echo "::error::falló la detección de cambios"; exit 1; }
           if [ "$CORE" != true ]; then echo "El cambio no toca core-api: no aplica."; exit 0; fi
-          [ "$PRUEBAS" = success ] && [ "$AOT" = success ]
+          if [ "$EN_VPS" = true ]; then [ "$VPS" = success ]; else [ "$PRUEBAS" = success ] && [ "$AOT" = success ]; fi
 
   # No espera a las pruebas: corre en paralelo y solo comprueba que el publish siga funcionando.
   aot-publish:
     needs: cambios
-    if: needs.cambios.outputs.core == 'true'
+    if: needs.cambios.outputs.core == 'true' && !(inputs.runner || vars.RUNNER_CORE_API)
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -194,3 +219,108 @@ jobs:
       - name: Publish (linux-musl-x64, JIT)
         working-directory: services/core-api
         run: dotnet publish src/Flit.Api/Flit.Api.csproj -c Release -r linux-musl-x64 --self-contained -o publish /p:PublishAot=false
+
+  # Pool propio de la 177 (input `runner` o variable RUNNER_CORE_API, p. ej. «flit-ci»): toda la suite en UN job.
+  # La matriz de 6 jobs tumbó la 177 (2026-10-24: 7 compilaciones, 6 Postgres y 6 RabbitMQ a la vez, carga 336).
+  # Aquí se compila una vez, un Postgres por carril (en disco, fsync off) y un RabbitMQ (un vhost por carril), y los carriles
+  # corren como procesos con tope
+  # (.github/scripts/ci-core-api-vps.sh). Un job a la vez por runner: cuántas suites corren juntas lo decide cuántos
+  # runners tiene el grupo. Detalle y mediciones en docs/ci/estado-plan-ci-runners.md.
+  pruebas-vps:
+    name: pruebas (pool propio)
+    needs: cambios
+    if: needs.cambios.outputs.core == 'true' && (inputs.runner || vars.RUNNER_CORE_API)
+    runs-on: ${{ inputs.runner || vars.RUNNER_CORE_API }}
+    timeout-minutes: 60
+    env:
+      UseSharedCompilation: 'false'
+      MSBUILDDISABLENODEREUSE: '1'
+      DOTNET_CLI_USE_MSBUILD_SERVER: '0'
+      # Un heap de GC por proceso y no uno por núcleo: varios testhosts con muchos hosts de la API a la vez.
+      DOTNET_gcServer: '0'
+      # Postgres en DISCO (con fsync off), no en tmpfs: sin swap, la memoria de un tmpfs no se puede liberar y cuenta
+      # contra el tope del slice de runners; con admin creciendo, la 177 entró en thrashing (2026-11-04, runs
+      # 41838341625 y 41850465386). La caché de disco sí es liberable. CI_PG_TMPFS=<tamaño> lo vuelve a poner en RAM.
+      CI_PG_TMPFS: ${{ vars.CI_VPS_PG_TMPFS || '' }}
+      CI_PREFIJO: ci-${{ github.run_id }}-${{ github.run_attempt }}
+    defaults:
+      run:
+        working-directory: services/core-api
+    steps:
+      - uses: actions/checkout@v4
+
+      # .NET en el tool cache del runner (sin permisos sobre /usr/share/dotnet) y limpieza de lo que haya dejado
+      # un job cancelado (servidor de Roslyn, nodos de MSBuild, testhosts, contenedores).
+      - name: Runner propio (.NET y limpieza previa)
+        working-directory: .
+        run: |
+          echo "DOTNET_INSTALL_DIR=$RUNNER_TOOL_CACHE/dotnet" >> "$GITHUB_ENV"
+          echo "CI_PG_CONTENEDOR=$CI_PREFIJO-pg" >> "$GITHUB_ENV"
+          echo "CI_MQ_CONTENEDOR=$CI_PREFIJO-mq" >> "$GITHUB_ENV"
+          .github/scripts/ci-limpiar-runner.sh
+
+      - name: Postgres y RabbitMQ de CI
+        working-directory: .
+        run: .github/scripts/ci-servicios.sh "$CI_PREFIJO"
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: services/core-api/global.json
+
+      - name: Restore
+        run: nice -n 5 dotnet restore
+
+      - name: Build (una sola vez)
+        run: nice -n 5 dotnet build --no-restore --configuration Release
+
+      - name: Apply migrations
+        run: |
+          # En una carpeta del runner y no en ~/.dotnet/tools: los runners comparten HOME.
+          dir="${{ runner.tool_cache }}/dotnet-ef-10.0.1"
+          [ -x "$dir/dotnet-ef" ] || dotnet tool install dotnet-ef --version 10.0.1 --tool-path "$dir"
+          # dotnet-ef murió una vez por señal (exit 139) al arrancar (run 40061241032): reintentar es seguro,
+          # cada migración va en su transacción.
+          for intento in 1 2; do
+            "$dir/dotnet-ef" database update \
+              --project src/Flit.Infrastructure \
+              --startup-project src/Flit.Api \
+              --no-build --configuration Release && break
+            rc=$?
+            if [ "$intento" = 2 ] || [ "$rc" -lt 128 ]; then exit "$rc"; fi
+            echo "::warning::dotnet-ef terminó por señal (exit $rc); se reintenta una vez."
+          done
+
+      - name: Test (carriles en paralelo con tope)
+        run: ../../.github/scripts/ci-core-api-vps.sh
+        env:
+          PARALELO: ${{ vars.CI_VPS_PARALELO || '3' }}
+          XUNIT_HILOS: ${{ vars.CI_VPS_XUNIT_HILOS || '2' }}
+          XUNIT_HILOS_ADMIN: ${{ vars.CI_VPS_XUNIT_HILOS_ADMIN || '4' }}
+          ADMIN_SHARDS: ${{ vars.CI_VPS_ADMIN_SHARDS || '1' }}
+          COBERTURA: ${{ github.event_name == 'push' && '1' || '' }}
+
+      # Lo mismo que «aot-publish» en GitHub, después de las pruebas para no competir con ellas por CPU.
+      - name: Publish (linux-musl-x64, JIT)
+        run: nice -n 5 dotnet publish src/Flit.Api/Flit.Api.csproj -c Release -r linux-musl-x64 --self-contained -o "$RUNNER_TEMP/publish" /p:PublishAot=false
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-api-test-results-vps
+          path: |
+            services/core-api/tests/**/TestResults/
+            services/core-api/TestResults-*.log
+
+      - name: Apagar Postgres y RabbitMQ de CI
+        if: always()
+        working-directory: .
+        run: .github/scripts/ci-servicios.sh --apagar "$CI_PREFIJO"
+
+      - name: Limpieza del runner propio
+        if: always()
+        working-directory: .
+        run: |
+          rm -rf "$RUNNER_TEMP/publish"
+          .github/scripts/ci-limpiar-runner.sh --final

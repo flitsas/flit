@@ -2,6 +2,7 @@
 // contracts/openapi/diagnostico.v1.yaml (esquemas Configuracion, ContratoBackoffice, EdicionOperativa y EdicionContrato):
 // el JSON viaja en snake_case y las fuentes en mayúsculas. La API vuelve a validar cada permiso y cada valor.
 import { apiFetch } from "@/lib/api";
+import { rotular } from "@/lib/rotulos";
 
 export type Fuente =
   | "RUNT"
@@ -20,6 +21,8 @@ export interface NivelContrato {
   fuentes_habilitadas: Fuente[];
   limite_vehiculos_lote: number;
   actualizado_en: string | null;
+  // HU #14562 AC42, decisión b: la compañía no ve `redaccion_ia_suspendida` (R-2). El interruptor vive solo en el contrato
+  // del backoffice (ContratoBackoffice).
 }
 
 export interface NivelOperacion {
@@ -79,8 +82,28 @@ export const ESTIMADOS: ReadonlyArray<{ valor: EstimadoConsultas; nombre: string
   { valor: "AL_FINALIZAR", nombre: "Al finalizar el diagnóstico" },
 ];
 
+const NOMBRES_FUENTE = (codigo: string) => FUENTES.find((f) => f.codigo === codigo)?.nombre;
+
+/** Nombre de negocio de una fuente; un código desconocido sale «Novedad sin clasificar», nunca el código (Punto 5). */
 export function nombreFuente(codigo: Fuente): string {
-  return FUENTES.find((f) => f.codigo === codigo)?.nombre ?? codigo;
+  return rotular({ contexto: "fuente", codigo, respaldo: NOMBRES_FUENTE });
+}
+
+/** Prefijo de grupo de las fuentes que se agrupan bajo «RUNT» o «SIMIT» en la cabecera de la grilla. */
+const PREFIJO_GRUPO = /^(RUNT|SIMIT) /;
+
+/**
+ * Rótulo corto de una subcolumna bajo su grupo en la cabecera agrupada (ola Diagnóstico UX 2026-11-15 · FE-2, spec-ui §2.6):
+ * «RUNT propietario» → «propietario». Las fuentes sin grupo conservan su nombre. Filtros, detalle, reportes y nombres
+ * accesibles siguen con `nombreFuente()`.
+ */
+export function nombreSubfuente(codigo: Fuente): string {
+  return nombreFuente(codigo).replace(PREFIJO_GRUPO, "");
+}
+
+/** Nombre de una fuente con la etiqueta de la API (`fuente_etiqueta`) primero y el diccionario local de respaldo. */
+export function rotuloFuente(codigo: string | null | undefined, etiqueta?: string | null): string {
+  return rotular({ contexto: "fuente", codigo, etiqueta, respaldo: NOMBRES_FUENTE });
 }
 
 /** Ordena una lista de fuentes según el enum del contrato (la API no garantiza orden). */
@@ -165,6 +188,29 @@ export async function listarEmpresasBackoffice(signal?: AbortSignal): Promise<Em
       : [],
   );
 }
+
+/**
+ * AP-9 (SF-6): texto fijo por `code` de GET/PUT /backoffice/empresas/{empresa}/configuracion/contrato (contrato
+ * diagnostico.v1.yaml). Sin los nombres de fuente del servidor: la UI nunca pinta su `message`.
+ */
+export const ERRORES_CONTRATO: Readonly<Record<string, string>> = {
+  EMPRESA_REQUERIDA: "Elige una compañía válida antes de consultar el contrato.",
+  CUERPO_INVALIDO: "No se pudo leer el contrato enviado. Recarga la página e intenta de nuevo.",
+  CAMPO_NO_EDITABLE: "Uno de los campos enviados no se puede editar desde el contrato.",
+  VALOR_FUERA_DE_CONJUNTO: "Uno de los valores del contrato no es válido.",
+  LIMITE_INVALIDO: "El límite de vehículos por lote debe ser un entero mayor que cero.",
+  FUENTE_NO_DISPONIBLE: "Una de las fuentes elegidas todavía no se puede habilitar.",
+  VALOR_INVALIDO: "Los datos del contrato no cumplen una regla de validación.",
+};
+
+/** AP-9 (SF-6): texto fijo por `code` de PUT /configuracion (contrato diagnostico.v1.yaml). */
+export const ERRORES_OPERACION: Readonly<Record<string, string>> = {
+  CUERPO_INVALIDO: "No se pudo leer la configuración enviada. Recarga la página e intenta de nuevo.",
+  CAMPO_NO_EDITABLE: "Uno de los campos enviados no se puede editar desde la operación.",
+  VALOR_FUERA_DE_CONJUNTO: "Uno de los valores de la configuración no es válido.",
+  POR_DEFECTO_FUERA_DE_HABILITADAS: "Las fuentes por defecto deben estar entre las habilitadas en el contrato.",
+  VALOR_INVALIDO: "Los datos de la configuración no cumplen una regla de validación.",
+};
 
 export function obtenerContratoEmpresa(empresa: string, signal?: AbortSignal): Promise<ContratoBackoffice> {
   return apiFetch<ContratoBackoffice>(rutaContrato(empresa), { signal });

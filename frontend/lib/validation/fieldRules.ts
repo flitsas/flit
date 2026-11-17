@@ -97,15 +97,24 @@ export const validatePlate = (value: string): string | null =>
 
 /** ¿El tipo de documento es pasaporte? (admite letras y números). */
 export const isPassport = (docType: string): boolean => docType.trim().toUpperCase() === "PAS";
+/** HU #14499 / ADR-0082 — PAS y PPT admiten letras y números. */
+export const allowsAlphanumericDocNumber = (docType: string): boolean => {
+  const t = docType.trim().toUpperCase();
+  return t === "PAS" || t === "PPT";
+};
 /**
- * Número de documento por tipo: pasaporte admite letras y números; el resto
+ * Número de documento por tipo: PAS/PPT admiten letras y números; el resto
  * (CC, CE, TI, NIT) solo dígitos. Se sanea en onChange según el tipo actual.
  */
 export const sanitizeDocNumber = (v: string, docType: string): string =>
-  isPassport(docType) ? v.replace(/[^A-Za-z0-9]/g, "") : v.replace(/[^0-9]/g, "");
+  allowsAlphanumericDocNumber(docType) ? v.replace(/[^A-Za-z0-9]/g, "") : v.replace(/[^0-9]/g, "");
 export const validateDocNumber = (value: string, docType: string): string | null => {
-  if (isPassport(docType))
-    return /^[A-Za-z0-9]+$/.test(value) ? null : "El pasaporte solo admite letras y números.";
+  if (allowsAlphanumericDocNumber(docType))
+    return /^[A-Za-z0-9]+$/.test(value)
+      ? null
+      : isPassport(docType)
+        ? "El pasaporte solo admite letras y números."
+        : "El PPT solo admite letras y números.";
   return /^[0-9]+$/.test(value) ? null : "El número de documento solo admite dígitos.";
 };
 

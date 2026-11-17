@@ -35,6 +35,41 @@ export const COMPANY_DATE_FIELDS: { value: string; label: string }[] = [
   { value: "actualizacion", label: "Última actualización" },
 ];
 
+/** Rol del actor en el trámite (contrato `ActorValidacionDto`, reportes de identidad). */
+export type RolActor = "comprador" | "vendedor" | "propietario";
+
+export type EstadoValidacion =
+  | "aprobado"
+  | "rechazado"
+  | "en_proceso"
+  | "enviado"
+  | "pendiente_envio"
+  | "error_envio"
+  | "expirado"
+  | "esperando_captura"
+  | "pendiente_revision"
+  | "sin_validacion";
+
+/**
+ * Un actor del trámite con el estado de su validación de identidad. El DTO NO trae cómo se validó:
+ * el usuario nunca ve la fuente.
+ */
+export interface ActorValidacionDto {
+  rol: RolActor;
+  ordinal: number;
+  nombre: string;
+  tipoDocumento: string | null;
+  documento: string | null;
+  estadoValidacion: EstadoValidacion;
+  /** Último rechazo, ya en español y sin nombres de proveedor; `null` si nunca fue rechazado. */
+  motivoRechazo: string | null;
+  /** Total de todos los ciclos. */
+  intentos: number;
+}
+
+/** Máximo de actores por rol sobre TODO el filtro (no sobre la página). */
+export type MaxActoresPorRol = Record<RolActor, number>;
+
 export interface CompanyQueryRow {
   procedureInstanceId: string;
   referenceNumber: string;
@@ -72,9 +107,14 @@ export interface CompanyQueryRow {
   diasHastaEnvio: number | null;
   diasEnOrganismo: number | null;
   devoluciones: number;
+  /** Ausente en un backend anterior: se lee como lista vacía. */
+  actores?: ActorValidacionDto[];
 }
 
-export type CompanyQueryResult = QueryResult<CompanyQueryRow>;
+export type CompanyQueryResult = QueryResult<CompanyQueryRow> & {
+  /** Ausente en un backend anterior: sin él no se exportan las columnas de identidad. */
+  maxActoresPorRol?: MaxActoresPorRol;
+};
 
 /**
  * SuperAdmin no tiene empresa propia y el backend le exige decir cuál mira; el resto de usuarios va

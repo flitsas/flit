@@ -60,7 +60,7 @@ public sealed class DiagnosticosBackofficeTests
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
         cuerpo.Should().NotContainAny([sinError.Id.ToString(), deB.Id.ToString(), empresas.B.Id.ToString()], "solo el lote de A con errores");
-        var lista = JsonDocument.Parse(cuerpo).RootElement;
+        var lista = JsonElement.Parse(cuerpo);
         lista.GetProperty("empresa").GetGuid().Should().Be(empresas.A.Id);
         lista.GetProperty("total").GetInt32().Should().Be(1);
         lista.GetProperty("pagina").GetInt32().Should().Be(1);
@@ -120,7 +120,7 @@ public sealed class DiagnosticosBackofficeTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var grilla = JsonDocument.Parse(cuerpo).RootElement;
+        var grilla = JsonElement.Parse(cuerpo);
         grilla.GetProperty("id").GetGuid().Should().Be(lote.Id);
         grilla.GetProperty("empresa").GetGuid().Should().Be(empresas.A.Id);
         var celdas = Tablero.CeldasDe(grilla);
@@ -136,7 +136,7 @@ public sealed class DiagnosticosBackofficeTests
         var historial = await api.Cliente(token).GetAsync(Historial(lote.Id, empresas.A.Id), ct);
         var cuerpoHistorial = await historial.Content.ReadAsStringAsync(ct);
         historial.StatusCode.Should().Be(HttpStatusCode.OK, cuerpoHistorial);
-        var ultima = JsonDocument.Parse(cuerpoHistorial).RootElement.GetProperty("transiciones").EnumerateArray().Last();
+        var ultima = JsonElement.Parse(cuerpoHistorial).GetProperty("transiciones").EnumerateArray().Last();
         ultima.GetProperty("disparador").GetString().Should().Be("MANUAL");
         ultima.GetProperty("usuario_id").GetGuid().Should().Be(usuarioBackoffice);
 
@@ -151,10 +151,10 @@ public sealed class DiagnosticosBackofficeTests
             .Should().Be(HttpStatusCode.Forbidden, "el historial real exige diagnostico.auditoria.ver");
     }
 
-    // HU #14087 AC4 — la fila de la grilla del backoffice lleva los mismos documentos que la de la compañía: el declarado y los
-    // propietarios, solo tipo y enmascarado; nunca el número en claro.
+    // HU #14582 AC10 (SP-4; reemplaza HU #14087 AC4) — la fila de la grilla del backoffice, como la de la compañía, lleva
+    // cambio_propietario y ningún documento: ni el declarado ni los propietarios, ni enmascarados.
     [Fact]
-    public async Task Grilla_incluye_documentos_enmascarados_de_la_fila()
+    public async Task HU14582_AC10_grilla_lleva_cambio_propietario_sin_documentos()
     {
         var ct = TestContext.Current.CancellationToken;
         await using var api = await ApiDePrueba.ConBaseAsync();
@@ -176,15 +176,10 @@ public sealed class DiagnosticosBackofficeTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        cuerpo.Should().NotContainAny(["1098765432", "800111222"]);
-        var fila = JsonDocument.Parse(cuerpo).RootElement.GetProperty("vehiculos").EnumerateArray().Single();
-        var declarado = fila.GetProperty("documento_declarado");
-        declarado.GetProperty("rol").GetString().Should().Be("LOCATARIO");
-        declarado.GetProperty("tipo_documento").GetString().Should().Be("NIT");
-        declarado.GetProperty("documento_enmascarado").GetString().Should().Be("****2223");
-        fila.GetProperty("propietarios").EnumerateArray()
-            .Select(p => $"{p.GetProperty("tipo_documento").GetString()} {p.GetProperty("documento_enmascarado").GetString()}")
-            .Should().Equal("CC ****5432");
+        cuerpo.Should().NotContainAny(["1098765432", "800111222", "****", "documento_declarado", "\"propietarios\"", "documento_enmascarado"]);
+        var fila = JsonElement.Parse(cuerpo).GetProperty("vehiculos").EnumerateArray().Single();
+        fila.TryGetProperty("cambio_propietario", out var cambio).Should().BeTrue("cambio_propietario siempre presente");
+        cambio.ValueKind.Should().Be(JsonValueKind.Null, "sin declarado no hay comparación");
     }
 
     // AC3 — sin ?empresa= la lista, la grilla y el historial responden 400 EMPRESA_REQUERIDA y nada se audita.

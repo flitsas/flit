@@ -276,6 +276,19 @@ export interface InstanceSummary {
   tienePrenda?: boolean;
   tieneTransformacion?: boolean;
   /**
+   * ADR-0053 (Múltiple Propietario) — algún lado del trámite tiene 2+ propietarios. Marca
+   * informativa de la fila, como prenda y transformación.
+   */
+  multiplesPropietarios?: boolean;
+  /**
+   * ADR-0053 — todos los propietarios de cada lado, principal primero, con la acreditación de CADA
+   * persona. `vendedorNombre`/`compradorNombre` traen solo al principal; con copropietarios la celda
+   * ofrece un desplegable con esta lista. Ausentes en backends anteriores al campo: la celda cae al
+   * nombre único de siempre.
+   */
+  vendedoresActores?: ActorListado[] | null;
+  compradoresActores?: ActorListado[] | null;
+  /**
    * Feature #12276 (HU #12312) — «Confirmado en RUNT». Exactamente uno de tres valores en trámites
    * aprobados; `null`/ausente cuando no aplica. La celda pinta SÍ / NO / — y NADA más: intentos,
    * marcas y motivos son del Historial interno de plataforma, no del gestor.
@@ -392,6 +405,21 @@ export type TramiteCanal = 'tramites' | 'pn_web' | 'pn_punto' | 'integracion' | 
  * No habla de la firma electrónica de la compraventa: ese es otro eje (`signaturePending`).
  */
 export type FirmaParteEstado = 'pendiente' | 'firmado' | 'rechazado';
+
+/**
+ * ADR-0053 — un propietario de un lado en el listado: nombre y acreditación de esa persona.
+ * `firmaEstado` es `null` cuando el tipo no manda a ese lado a validar identidad.
+ */
+export interface ActorListado {
+  nombre: string;
+  firmaEstado: FirmaParteEstado | null;
+  /**
+   * Posición del propietario dentro del lado (1 = principal) y su documento: con ellos la tabla abre
+   * el tracking de identidad de ESA persona. Opcionales para backends anteriores al campo.
+   */
+  ordinal?: number;
+  numeroDocumento?: string | null;
+}
 
 /**
  * Query params de GET /api/v1/tramites/instances (filtros + orden server-side).
@@ -679,7 +707,7 @@ export interface FieldValueInput {
  */
 export type ActorRol = 'comprador' | 'vendedor' | 'locatario';
 
-export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI';
+export type ActorDocumentType = 'CC' | 'CE' | 'NIT' | 'PAS' | 'TI' | 'PPT';
 
 /**
  * Tipo de persona del actor (HU #10542/#10543). Para persona natural, el documento de
@@ -1106,6 +1134,31 @@ export interface ProcedureAttachment {
    * Reemplazar el archivo no es bloqueante; se firmará de nuevo al enviar a OT.
    */
   digitallySigned?: boolean;
+  /**
+   * Bug #14559 — veredicto OCR declarado por el cliente al registrar el adjunto. Informativo, nunca
+   * compuerta (ADR-0085). null/ausente = sin dato (previo al fix, tipo sin OCR o generado) ⇒ «Cargado».
+   */
+  ocrStatus?: AttachmentOcrStatus | null;
+  /** Código cerrado del motivo (solo rejected/skipped). Nunca texto libre del documento (Ley 1581). */
+  ocrReason?: string | null;
+}
+
+/** Bug #14559 — valores persistidos del veredicto OCR del adjunto. */
+export type AttachmentOcrStatus = 'verified' | 'rejected' | 'skipped';
+
+/** Bug #14559 — códigos cerrados del motivo del veredicto OCR (whitelist del backend). */
+export type AttachmentOcrReason =
+  | 'vin_mismatch'
+  | 'tipo_invalido'
+  | 'no_confirmado'
+  | 'ilegible'
+  | 'excede_tamano'
+  | 'analisis_fallido';
+
+/** Bug #14559 — veredicto que el cliente declara en `POST .../attachments/register`. */
+export interface AttachmentOcrVerdict {
+  status: AttachmentOcrStatus;
+  reason?: AttachmentOcrReason;
 }
 
 /**
@@ -1706,6 +1759,11 @@ export interface BiometricValidation {
    * manual aprobada = «certificado en preparación». No aplica a Kyverum (su certificado no cambia).
    */
   cartaDisponible?: boolean;
+  /**
+   * Ajustes 2026-11-10 — id de la verificación en Kyverum Verify (soporte con el proveedor).
+   * `null`/ausente si la validación no llegó a Verify (manual, simulada) o la respuesta es anterior al campo.
+   */
+  kyverumVerificationId?: string | null;
 }
 
 /**
@@ -2065,6 +2123,8 @@ export interface TenantBiometricPersonFilters {
   name?: string;
   documentType?: string;
   documentNumber?: string;
+  /** Ajuste 2026-11-10 (D1=a) — radicado (FT…), coincidencia parcial en servidor. */
+  referenceNumber?: string;
   status?: BiometricEstado;
   createdFrom?: string;
   createdTo?: string;

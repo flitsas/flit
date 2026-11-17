@@ -113,7 +113,7 @@ public static class CajaUsuarios
          where i.Id == invitationId && i.TenantId == tenantId && i.DeletedAt == null && r.Code == CajaOnly.RoleCode
          select i.Id).AnyAsync(ct);
 
-    /// <summary>Id del rol global <c>ot_caja</c> de organismos de tránsito, o <c>null</c> si el DDL 190 no corrió.</summary>
+    /// <summary>Id del rol global <c>ot_caja</c> de organismos de tránsito, o <c>null</c> si el DDL 199 no corrió.</summary>
     public static Task<Guid?> RolCajaIdAsync(FlitDbContext db, CancellationToken ct) =>
         db.Roles.AsNoTracking()
             .Where(r => r.Code == CajaOnly.RoleCode && r.TargetEntityType == "TRANSIT_OFFICE" && r.IsActive && r.DeletedAt == null)

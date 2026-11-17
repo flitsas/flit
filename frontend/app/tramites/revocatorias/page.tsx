@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Undo2 } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { ModuleTitle } from '@/components/atom/modules/ModuleTitle';
 import { UiStateBoundary, type UiStatus } from '@/components/admin/UiStateBoundary';
 import { usePermissions } from '@/hooks/usePermissions';
@@ -113,7 +113,7 @@ export default function RevocatoriasPage() {
         <ModuleTitle title="Revocatorias" />
         <div
           role="alert"
-          className="rounded-2xl border border-[#DFE5ED] bg-white p-6 text-sm text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white"
+          className="rounded-2xl border border-border bg-card p-6 text-sm text-foreground"
         >
           Solo el Administrador de la compañía puede ver las solicitudes de revocatoria.
         </div>
@@ -126,10 +126,10 @@ export default function RevocatoriasPage() {
       <ModuleTitle
         title="Revocatorias"
         subtitle="Trámites con solicitud de revocatoria, en cualquier sub-estado"
-        right={<Undo2 className="h-5 w-5 opacity-60" aria-hidden="true" />}
+        right={<Icono nombre="devolucion" className="h-5 w-5 opacity-60" />}
       />
 
-      <div className="rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]">
+      <div className="rounded-2xl border border-border bg-card p-4">
         <RevocationRequestsFiltersBar
           value={filtros}
           onChange={handleFiltrosChange}

@@ -23,11 +23,18 @@ public static class Program
 {
     public const string Prefijo = "/api/v1/diagnostico";
 
-    public static async Task Main(string[] args)
+    public static async Task<int> Main(string[] args)
     {
+        // HU #14582 (H-A3): `backfill-cambio-propietario --empresa <uuid> [--lote n]` corre el backfill y sale, sin arrancar el host
+        // ni migrar (lo lanza infra por ambiente, con la configuración del servicio por variables de entorno). Un argumento inválido
+        // escribe el uso por stderr y sale con 2, sin traza.
+        if (Modulos.Trabajos.ComandoBackfillCambioPropietario.EsComando(args))
+            return await Modulos.Trabajos.ComandoBackfillCambioPropietario.CorrerAsync(args, () => Build([]), Console.Error, CancellationToken.None).ConfigureAwait(false);
+
         var app = Build(args);
         await MigrateAsync(app).ConfigureAwait(false);
         await app.RunAsync().ConfigureAwait(false);
+        return 0;
     }
 
     internal static WebApplication Build(string[] args, Action<WebApplicationBuilder>? configure = null)
@@ -70,12 +77,24 @@ public static class Program
         builder.Services.AddMotorConsultas(builder.Configuration);
         // HU #13753: Diagnóstico Express (cabecera + un vehículo en una transacción) y su estimado de vista previa.
         builder.Services.AddScoped<Modulos.Express.ServicioExpress>();
+        // HU #14582 (SP-5, B-6, DM-2): límites de solicitudes de Express, confirmación e invitaciones (429 DEMASIADAS_SOLICITUDES)
+        // y la auditoría de sondeo de declaraciones de propietario por placa y día.
+        builder.Services.AddLimitesSolicitudes(builder.Configuration);
+        builder.Services.AddScoped<Modulos.Vehiculos.AuditoriaSondeoPropietario>();
         // HU #13743: tablero del lote (grilla incremental, cierre del panel e historial de estados).
         Modulos.Tablero.EndpointsTablero.AddTablero(builder.Services);
+        // HU #14576 (ADR-0087): saneamiento del cliente (marcar, desmarcar, masivo y detalle).
+        Modulos.Saneamiento.SaneamientoEndpoints.AddSaneamiento(builder.Services);
+        // Punto 4 (ADR-0084): «Crear trámite» individual, apagado por defecto (Diagnostico:Derivacion:Habilitada).
+        Modulos.Derivacion.DerivacionEndpoints.AddDerivacion(builder.Services, builder.Configuration);
         // HU #13746: reproceso de una celda en ERROR (POST /consultas/{cid}/reprocesar).
         Modulos.Consultas.EndpointsReproceso.AddReproceso(builder.Services);
         // HU #13800: llenado manual de una celda en ERROR desde el backoffice (PUT /backoffice/consultas/{cid}/manual).
         Modulos.Backoffice.LlenadoManualEndpoints.AddLlenadoManual(builder.Services);
+        // HU #14579 (ADR-0088): reportes con PII de la compañía y, aparte, los del backoffice (consumo y restricción de {tipo}); las
+        // estadísticas no registran servicios (calculadora estática).
+        Modulos.Reportes.Catalogo.ReportesRegistro.AddReportesCatalogo(builder.Services, builder.Configuration);
+        Modulos.Backoffice.ReportesBackofficeEndpoints.AddServicios(builder.Services);
         // HU #13861 (ADR-0075): lo que sigue en línea con core-consultas, la réplica de departamentos con impuesto.
         builder.Services.AddFuentesConsultas(builder.Configuration);
         // HU #13846: almacén de archivos (file-manager; sin él ni la bandera de pruebas, no arranca) y registro de evidencias con huella.
@@ -84,7 +103,10 @@ public static class Program
         builder.Services.AddRedactorDictamen(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<DiagnosticoDb>(builder.Configuration);
+        // HU #14587 (ADR-0089): usuarios de Diagnóstico delegados en el gRPC de core-api (mismo Diagnostico:Tramites:Address).
+        Modulos.Usuarios.UsuariosEndpoints.AddUsuarios(builder.Services, builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();
+        builder.Services.AddExceptionHandler<Modulos.Usuarios.ManejadorReglasUsuarios>();
         builder.Services.AddProblemDetails();
         AddTokensDeServicio(builder.Services, builder.Configuration);
         builder.Services.AddHttpClient(RegistroManifiesto.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(20));
@@ -109,10 +131,15 @@ public static class Program
         });
 
         var app = builder.Build();
+        // Punto 5 (2026-11-11): un código sin rótulo de negocio deja aviso en el log técnico (sin datos de personas).
+        // Se suelta al detenerse: el estático no debe sobrevivir a la fábrica de logs de este host.
+        var soltarRotulos = RotulosDiagnostico.Conectar(app.Services.GetRequiredService<ILoggerFactory>().CreateLogger("Flit.Diagnostico.Rotulos"));
+        app.Lifetime.ApplicationStopping.Register(soltarRotulos);
         app.UseExceptionHandler();
         app.UseFlitCorrelationId();
         app.UseAuthentication();
         app.UseAuthorization();
+        app.UseRateLimiter();
         // HU #13726: toda ruta de negocio verifica la suscripción de la compañía del token (fail-closed); /health* queda fuera.
         app.UseGuardSuscripcion(Prefijo);
 

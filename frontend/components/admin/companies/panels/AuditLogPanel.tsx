@@ -116,7 +116,7 @@ export function AuditLogPanel({
     <div className="flex flex-col gap-3">
       {status === "loading" ? <CarLoaderModal label="Cargando historial de cambios…" /> : null}
       {errorFiltro ? (
-        <p role="alert" className="text-xs font-semibold text-[#C2410C]">
+        <p role="alert" className="text-xs font-semibold text-destructive">
           {errorFiltro}
         </p>
       ) : null}

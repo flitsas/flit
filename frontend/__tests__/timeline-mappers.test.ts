@@ -63,7 +63,7 @@ describe('timeline-mappers', () => {
     expect(nodes).toHaveLength(2);
     const vendedor = nodes.find((n) => n.label.includes('Vendedor'));
     expect(vendedor?.info.extra).toBe('Acreditado por firma del baúl');
-    expect(vendedor?.color).toBe('#8CC63F');
+    expect(vendedor?.color).toBe('var(--flit-success-ink)');
   });
 
   it('mapIdentidadToTimelineNodes usa estado biométrico cuando hay validación', () => {
