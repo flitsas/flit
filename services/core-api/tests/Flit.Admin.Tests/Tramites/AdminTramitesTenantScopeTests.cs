@@ -75,6 +75,8 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/validaciones-identidad/{ValidationId}/reenviar", RepoMethod.GetByIdAsync },
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/consolidado/limpiar", RepoMethod.GetByIdWithChecklistGraphAsync },
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/consolidado/cargar", RepoMethod.GetByIdWithAttachmentsAsync },
+        // HU #14547 — solo SuperAdmin: un caller que no lo es recibe 403 por rol y el repositorio ni se consulta.
+        { "POST", $"/api/v1/admin/tramites/{ProcedureId}/mandato/regenerar", RepoMethod.NingunoSoloSuperAdmin },
     };
 
     public enum RepoMethod
@@ -82,6 +84,7 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
         GetByIdAsync,
         GetByIdWithChecklistGraphAsync,
         GetByIdWithAttachmentsAsync,
+        NingunoSoloSuperAdmin,
     }
 
     // ── Prueba negativa por ruta ─────────────────────────────────────────────────────────────
@@ -127,6 +130,9 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
                 await repo.Received(1).GetByIdWithAttachmentsAsync(ProcedureId, TenantA, Arg.Any<CancellationToken>());
                 await repo.DidNotReceive().GetByIdWithAttachmentsAsync(ProcedureId, TenantB, Arg.Any<CancellationToken>());
                 break;
+            case RepoMethod.NingunoSoloSuperAdmin:
+                repo.ReceivedCalls().Should().BeEmpty("la ruta es solo del rol SuperAdmin (HU #14547)");
+                break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(repoMethod));
         }
@@ -149,7 +155,7 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
             .ToList();
 
         registered.Should().NotBeEmpty("deben existir rutas de escritura bajo /api/v1/admin/tramites/{id:guid}");
-        registered.Should().HaveCount(6,
+        registered.Should().HaveCount(7,
             "el inventario de esta prueba (Routes()) debe tener una entrada por cada ruta registrada; "
             + "si esto cambia, agrega/retira la ruta en Routes() (Bug #12554)");
     }
