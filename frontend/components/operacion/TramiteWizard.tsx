@@ -4307,7 +4307,7 @@ function ConsultaStep({
         la que recibirá el vehículo cuando radiques la cuenta allí.
       </p>
       <div className="max-w-md">
-        <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de destino *</span>
+        <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de destino <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span></span>
         <TransitOfficeSearchPicker
           offices={secretarias}
           valueId={destinoId}
@@ -4404,7 +4404,7 @@ function ConsultaStep({
             className={`mt-4 grid grid-cols-1 gap-4 ${muestraSelectorDigito ? 'lg:grid-cols-2' : ''}`}
           >
           <div className="min-w-0">
-            <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de tránsito *</span>
+            <span className={`mb-1 block ${WIZARD_LABEL}`}>Secretaría de tránsito <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span></span>
             <TransitOfficeSearchPicker
               offices={secretarias}
               valueId={transitOfficeId}

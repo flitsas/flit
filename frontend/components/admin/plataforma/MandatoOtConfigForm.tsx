@@ -925,7 +925,7 @@ export function MandatoOtConfigForm({
                   onClick={() => pdfRef.current?.click()}
                   className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-[11px] font-semibold text-foreground hover:bg-secondary disabled:opacity-50"
                 >
-                  <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
+                  <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
                   {uploading ? "Subiendo…" : hasCustom ? "Reemplazar PDF" : "Subir PDF"}
                 </button>
                 <button

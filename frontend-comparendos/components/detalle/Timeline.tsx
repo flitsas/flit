@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { MessageSquarePlus } from "lucide-react";
 import { InlineAlert } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { useToast } from "@/components/Toast";
@@ -14,6 +13,9 @@ import { P } from "@/lib/nav";
 import { tienePermiso } from "@/lib/sesion";
 import type { EventoTimeline } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_MAS = iconoComo("mas");
 
 const COLOR_ACTOR: Record<string, string> = {
   Usuario: "var(--color-flit-brand)",
@@ -144,7 +146,7 @@ export function Timeline({
             className={`${BOTON_PRIMARIO_CLS} pointer-events-auto rounded-full`}
             onClick={() => setEscribiendo(true)}
           >
-            <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
+            <ICONO_MAS className="h-3.5 w-3.5" aria-hidden />
             Agregar observación
           </button>
         </div>

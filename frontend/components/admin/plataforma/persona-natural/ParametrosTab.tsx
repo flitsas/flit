@@ -425,7 +425,6 @@ export function ParametrosTab() {
               )}
               <CreateButton
                 type="submit"
-                icon={iconoComo("nube-subir")}
                 label={busy ? "Guardando…" : "Guardar ajustes"}
                 disabled={busy || !hayCambios}
               />

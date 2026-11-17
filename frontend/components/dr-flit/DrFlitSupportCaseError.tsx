@@ -1,7 +1,7 @@
 "use client";
 
-import { Icono } from "@flit/ui/Icono";
 import { DrFlitSupportPanel } from "./DrFlitSupportPanel";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * HU #12930 AC3 — el caso no se pudo radicar. Se ofrecen los canales de soporte como salida de
@@ -26,7 +26,7 @@ export function DrFlitSupportCaseError({
         className="flex items-start gap-2 rounded-[var(--dr-flit-radius-card)] border p-3 text-sm"
         style={{ borderColor: "var(--dr-flit-accent)", background: "var(--dr-flit-card-bg)", color: "var(--dr-flit-text)" }}
       >
-        <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-accent)" }} />
+        <IconoAviso tipo="error" className="mt-0.5 h-4 w-4 shrink-0" />
         {message}
       </p>
       <div className="flex flex-col gap-2">

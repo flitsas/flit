@@ -16,13 +16,16 @@
 // que solo significaba algo el día que se guardó en algo que se reconoce meses después.
 
 import { etiquetaKit } from "@flit/ui/StatusBadge";
-import { CalendarPlus, Lightbulb, type LucideIcon } from "lucide-react";
+import { type LucideIcon } from "lucide-react";
 import { Icono, type NombreIcono } from "@flit/ui/Icono";
 import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import { useMemo, useState, type ComponentType } from "react";
 
 import { Modal } from "@/components/atom/Modal";
 import { RANGE_PRESETS, type SavedQuery } from "@/lib/api/queries";
+
+const ICONO_CALENDARIO = iconoComo("calendario");
+const ICONO_DESTELLO = iconoComo("destello");
 
 /**
  * Cuántos ítems se muestran siempre en la barra lateral, sin scroll ni clics — el mismo tope para
@@ -98,7 +101,7 @@ export function SavedQueryList({
           titulo="Para empezar"
           cuenta={fabrica.length}
           nota="Ábrelas y cámbialas a tu gusto."
-          icono={Lightbulb}
+          icono={ICONO_DESTELLO}
           separado
         >
           <ConsultasConDesborde
@@ -116,7 +119,7 @@ export function SavedQueryList({
             testIdPrefix={testIdPrefix}
             grupoId="fabrica"
             modalTitulo="Para empezar"
-            modalIcono={Lightbulb}
+            modalIcono="destello"
           />
         </Grupo>
       )}
@@ -475,7 +478,7 @@ function Item({
               title={`Programar informe de «${query.nombre}»`}
               className="rounded-md p-1 text-muted-foreground transition hover:bg-flit-brand/10 hover:text-flit-brand"
             >
-              <CalendarPlus className="h-3 w-3" aria-hidden="true" />
+              <ICONO_CALENDARIO className="h-3 w-3" aria-hidden="true" />
             </button>
           )}
           {!query.deFabrica && (

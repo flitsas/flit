@@ -248,7 +248,7 @@ export function DeedsFormPanel({
           <span className="mb-1 block text-xs font-semibold">
             Documento PDF
             {filaRequired ? (
-              <span aria-hidden="true"> *</span>
+              <span aria-hidden="true"> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
             ) : (
               " (opcional: reemplaza el actual)"
             )}
@@ -267,7 +267,7 @@ export function DeedsFormPanel({
             {form.file ? (
               <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
             ) : (
-              <Icono nombre="nube-subir" className="h-4 w-4 shrink-0 opacity-60" />
+              <Icono nombre="archivo-subir" className="h-4 w-4 shrink-0 opacity-60" />
             )}
             <span className="truncate font-medium">
               {form.file

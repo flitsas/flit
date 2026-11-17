@@ -10,7 +10,6 @@ import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_L
 import { PnButton } from "../pn-componentes";
 import { pnErrorMessage } from "../pnErrors";
 import { validarTextoPlano } from "./contenidoReglas";
-import { iconoComo } from "@flit/ui/iconoComo";
 
 export interface PreguntaFormModalProps {
   /** Sin `faq`: alta. */
@@ -58,7 +57,7 @@ export function PreguntaFormModal({ faq, onClose, onSave }: PreguntaFormModalPro
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="pn-faq-form" variant="primary" icon={iconoComo("nube-subir")} loading={busy}>
+          <PnButton type="submit" form="pn-faq-form" variant="primary" loading={busy}>
             Guardar pregunta
           </PnButton>
         </div>

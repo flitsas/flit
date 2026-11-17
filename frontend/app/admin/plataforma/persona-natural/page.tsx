@@ -7,6 +7,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { ADMIN_BACK_LINK_CLS } from "@/components/admin/admin-ui-styles";
 import { PersonaNaturalConsole } from "@/components/admin/plataforma/persona-natural/PersonaNaturalConsole";
 import { usePermissions } from "@/hooks/usePermissions";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * SuperAdmin — Plataforma → Persona Natural (HU #14074, Feature #14070, Épica #14021): tarifas, organismos y tipos,
@@ -29,7 +30,7 @@ export default function AdminPersonaNaturalPage() {
 function NoAccess() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
-      <Icono nombre="alerta" className="h-8 w-8" style={{ color: "var(--destructive)" }} />
+      <IconoAviso tipo="error" className="h-8 w-8" />
       <p className="text-sm font-medium" style={{ color: "var(--color-flit-primary)" }}>
         No tienes permiso para administrar el portal de Persona Natural.
       </p>

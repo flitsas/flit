@@ -706,7 +706,7 @@ function CreateRoleModal({
             <div className="space-y-3">
               {/* HU #13653: sin campo «Código»; el identificador interno lo genera el servidor a partir del nombre. */}
               <div>
-                <label htmlFor="role-target-type" className="text-xs font-semibold block mb-1">Tipo de entidad *</label>
+                <label htmlFor="role-target-type" className="text-xs font-semibold block mb-1">Tipo de entidad <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span></label>
                 <select
                   id="role-target-type"
                   required
@@ -719,7 +719,7 @@ function CreateRoleModal({
                 </select>
               </div>
               <div>
-                <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre *</label>
+                <label htmlFor="role-name" className="text-xs font-semibold block mb-1">Nombre <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span></label>
                 <input id="role-name" value={name} onChange={(e) => { setName(e.target.value); if (fieldError?.field === "name") setFieldError(null); }} placeholder="Supervisor de trámites" className="w-full text-sm px-3 py-2.5 rounded-xl border bg-transparent outline-none focus:border-flit-brand" />
                 {fieldError?.field === "name" && <span role="alert" className="mt-1 block text-xs font-semibold text-destructive">{fieldError.message}</span>}
               </div>

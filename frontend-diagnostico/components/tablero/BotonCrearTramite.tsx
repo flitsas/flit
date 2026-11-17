@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import { ExternalLink, FilePlus2 } from "lucide-react";
+import { ExternalLink } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { Modal } from "@flit/ui/Modal";
 import {
@@ -25,6 +25,9 @@ import {
   rotuloMotivo,
   urlTramite,
 } from "@/lib/tablero/derivacion";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_TRAMITES = iconoComo("tramites");
 
 /** Pastilla compacta de la fila, como «Reintentar placa». */
 const FILA_CLS = `inline-flex items-center gap-1 rounded-full border border-current px-2.5 py-0.5 text-xs font-semibold text-[var(--flit-brand-ink)] transition disabled:cursor-not-allowed disabled:opacity-60 ${FOCO_CLS}`;
@@ -143,7 +146,7 @@ export function ModalTipoTramite({ identificador, onClose, onConfirmar, descripc
             Cancelar
           </button>
           <button type="button" onClick={() => onConfirmar(codigo)} disabled={!hayTipos || !codigo} className={BOTON_PRIMARIO_CLS}>
-            <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+            <ICONO_TRAMITES className="h-4 w-4" aria-hidden="true" />
             {textoConfirmar}
           </button>
         </div>
@@ -272,7 +275,7 @@ export function AccionTramiteFila({ diagnosticoId, vehiculo, modo, tramitesUrl, 
         onClick={alPulsar}
         className={FILA_CLS}
       >
-        <FilePlus2 className="h-3.5 w-3.5" aria-hidden="true" />
+        <ICONO_TRAMITES className="h-3.5 w-3.5" aria-hidden="true" />
         {enviando ? "Creando…" : "Crear trámite"}
       </button>
     );

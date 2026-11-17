@@ -1535,7 +1535,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                     className={controlCls(false)}
                     data-testid="tramites-carga-masiva"
                   >
-                    <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
+                    <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
                     Carga masiva
                   </button>
                 ) : null

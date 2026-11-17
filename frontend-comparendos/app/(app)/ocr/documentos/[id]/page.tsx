@@ -329,7 +329,6 @@ function Formulario({
       )}
       {editable && (
         <button type="button" className={controlCls(sucio)} disabled={ocupado || !sucio} onClick={() => setModal("guardar")}>
-          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
           Guardar cambios
         </button>
       )}
@@ -426,7 +425,7 @@ function Formulario({
                 <span className="flex items-center justify-between gap-2">
                   <span className={faltante ? "text-destructive" : undefined}>
                     {ETIQUETA_CAMPO[c.nombreCampo] ?? c.nombreCampo}
-                    {c.obligatorio && <span aria-hidden> *</span>}
+                    {c.obligatorio && <span aria-hidden> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>}
                     {faltante && <span className="ml-1 font-normal">· falta o no es válido</span>}
                   </span>
                   <span className="flex items-center gap-2 font-normal">

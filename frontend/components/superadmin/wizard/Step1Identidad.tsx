@@ -1,5 +1,6 @@
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import type { WizardIdentity } from '@/hooks/useParametrizationWizard';
+import { Icono } from "@flit/ui/Icono";
 
 interface Step1Props {
   identity: WizardIdentity;
@@ -23,7 +24,7 @@ export function Step1Identidad({ identity, onChange }: Step1Props) {
       <div className="space-y-4">
         <div>
           <label htmlFor="pt-family" className="text-xs font-semibold block mb-1.5">
-            Familia <span style={{ color: 'var(--destructive)' }}>*</span>
+            Familia <span style={{ color: 'var(--destructive)' }}><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
           </label>
           <select
             id="pt-family"
@@ -42,7 +43,7 @@ export function Step1Identidad({ identity, onChange }: Step1Props) {
 
         <div>
           <label htmlFor="pt-code" className="text-xs font-semibold block mb-1.5">
-            Código único <span style={{ color: 'var(--destructive)' }}>*</span>
+            Código único <span style={{ color: 'var(--destructive)' }}><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
           </label>
           <input
             id="pt-code"
@@ -58,7 +59,7 @@ export function Step1Identidad({ identity, onChange }: Step1Props) {
 
         <div>
           <label htmlFor="pt-name" className="text-xs font-semibold block mb-1.5">
-            Nombre <span style={{ color: 'var(--destructive)' }}>*</span>
+            Nombre <span style={{ color: 'var(--destructive)' }}><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
           </label>
           <input
             id="pt-name"

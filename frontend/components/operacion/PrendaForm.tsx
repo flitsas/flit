@@ -23,6 +23,7 @@ import type {
 import { WIZARD_INPUT, WIZARD_SELECT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { WizardCardHeader, WizardFieldToggle, WizardSegmented } from './wizard-atoms';
 import { PRENDA_DECISION_LABELS, PRENDA_OMITIR_AYUDA } from './prenda-decision-labels';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * Reexportada desde la fuente única (`prenda-decision-labels.ts`, HU #13112): `FirmaFurStep` y
@@ -1573,7 +1574,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
         <div className="flex items-center justify-between gap-3 mt-4">
           {saved ? (
             <span className="text-xs font-semibold" style={{ color: 'var(--flit-success-ink)' }} role="status" aria-live="polite">
-              Decisión de prenda guardada ✓
+              <IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />
+              Decisión de prenda guardada
             </span>
           ) : (
             <span className="text-xs opacity-70">{loading ? 'Cargando…' : ''}</span>

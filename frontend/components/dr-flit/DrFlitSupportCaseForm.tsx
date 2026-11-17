@@ -16,6 +16,7 @@ import {
   type DrFlitSupportErrors,
   type DrFlitSupportField,
 } from "./dr-flit-support-case";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 const FREQUENCIES: DrFlitSupportFrequency[] = ["una_vez", "a_veces", "siempre"];
 const PRIORITIES: DrFlitSupportPriority[] = ["Alta", "Media", "Baja"];
@@ -109,7 +110,7 @@ export function DrFlitSupportCaseForm({
   const errorText = (field: DrFlitSupportField) =>
     errors[field] ? (
       <span id={errorId(field)} className="mt-1 flex items-center gap-1 text-xs" style={{ color: "var(--dr-flit-text)" }}>
-        <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--dr-flit-accent)" }} />
+        <IconoAviso tipo="error" className="h-3.5 w-3.5 shrink-0" />
         {errors[field]}
       </span>
     ) : null;
@@ -125,7 +126,7 @@ export function DrFlitSupportCaseForm({
     <div>
       <label htmlFor={fieldId(field)} className="block text-xs font-semibold" style={{ color: "var(--dr-flit-text)" }}>
         {label}
-        {options.required !== false ? <span aria-hidden="true"> *</span> : <span className="font-normal"> (opcional)</span>}
+        {options.required !== false ? <span aria-hidden="true"> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span> : <span className="font-normal"> (opcional)</span>}
       </label>
       <input
         id={fieldId(field)}
@@ -149,7 +150,7 @@ export function DrFlitSupportCaseForm({
     <div>
       <label htmlFor={fieldId(field)} className="block text-xs font-semibold" style={{ color: "var(--dr-flit-text)" }}>
         {label}
-        <span aria-hidden="true"> *</span>
+        <span aria-hidden="true"> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
       </label>
       <textarea
         id={fieldId(field)}
@@ -177,7 +178,7 @@ export function DrFlitSupportCaseForm({
     <fieldset aria-describedby={errors[field] ? errorId(field) : undefined}>
       <legend className="text-xs font-semibold" style={{ color: "var(--dr-flit-text)" }}>
         {legend}
-        <span aria-hidden="true"> *</span>
+        <span aria-hidden="true"> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
       </legend>
       <div className="mt-1.5 flex flex-wrap gap-2">
         {values.map((value, index) => {
@@ -234,7 +235,7 @@ export function DrFlitSupportCaseForm({
 
       {hasErrors ? (
         <p role="alert" className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--dr-flit-accent)", color: "var(--dr-flit-text)" }}>
-          <Icono nombre="alerta" className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-accent)" }} />
+          <IconoAviso tipo="error" className="h-4 w-4 shrink-0" />
           Revisa los campos marcados antes de continuar.
         </p>
       ) : null}
@@ -306,7 +307,7 @@ export function DrFlitSupportCaseForm({
           </div>
           {attachError ? (
             <p role="alert" className="flex items-center gap-1 text-xs" style={{ color: "var(--dr-flit-text)" }}>
-              <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--dr-flit-accent)" }} />
+              <IconoAviso tipo="error" className="h-3.5 w-3.5 shrink-0" />
               {attachError}
             </p>
           ) : null}

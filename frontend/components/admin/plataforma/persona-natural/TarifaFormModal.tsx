@@ -5,7 +5,6 @@
 // campo. Una excepción por organismo se registra eligiendo el organismo sobre el mismo tipo (prevalece sobre el valor
 // general). Al versionar, el ámbito (tipo y organismo) queda fijo y solo se envían los conceptos que cambiaron.
 import { useMemo, useState } from "react";
-import { ReceiptText } from "lucide-react";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { formatFechaCalendario } from "@/lib/format/date";
 import { Modal } from "@/components/atom/Modal";
@@ -28,7 +27,6 @@ import { TARIFAS_API_PLATAFORMA, type TarifasApi, type TarifasModo, type TipoTar
 import { PN_FIELD_ERROR_CLS, PN_HINT_CLS, PN_INPUT_CLS, PN_INPUT_ERROR_CLS, PN_LABEL_CLS } from "./pn-ui";
 import { PnButton } from "./pn-componentes";
 import { pnError } from "./pnErrors";
-import { iconoComo } from "@flit/ui/iconoComo";
 
 export type TarifaFormMode =
   // `tipoTramiteId`: trámite que llega preseleccionado (p. ej. desde «Definir precio» en Medios de pago).
@@ -160,7 +158,7 @@ export function TarifaFormModal({
             : `${grupo?.tipoTramiteNombre ?? "Todos los trámites"} · ${grupo?.organismoNombre ?? "Todos los organismos"}`
           : "Elige el trámite, escribe los valores en pesos y la fecha desde la que rigen."
       }
-      icon={ReceiptText}
+      icono="pago"
       size="xl"
       panelClassName="h-[calc(100dvh-2rem)] min-h-0 overflow-hidden"
       bodyClassName="[scrollbar-gutter:stable] px-1"
@@ -169,7 +167,7 @@ export function TarifaFormModal({
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="pn-tarifa-form" variant="primary" icon={iconoComo("nube-subir")} loading={busy}>
+          <PnButton type="submit" form="pn-tarifa-form" variant="primary" loading={busy}>
             Guardar tarifa
           </PnButton>
         </div>

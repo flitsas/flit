@@ -21,6 +21,7 @@ import {
   INGRESO_ICONO_CLS,
   INGRESO_TITULO_CLS,
 } from "@flit/ui/Ingreso";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * HU #12424 AC2 — datos del 403 `NETWORK_DOMAIN_REQUIRED` (ADR-0060 D3). Vienen tal cual del
@@ -122,7 +123,7 @@ export function Login({
 
       {blocked ? (
         <div className={`${INGRESO_AVISO_CLS} ${aviso} animate-fade-in`} role="alert">
-          <Icono nombre="alerta" className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-danger)]" />
+          <IconoAviso tipo="error" className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="text-sm">
             <p className="font-semibold text-[color:var(--di-danger)]">Acceso Restringido</p>
             <p className="mt-1 text-xs text-[color:var(--di-text-secondary)]">Tu cuenta está bloqueada temporalmente. Contacta a tu administrador para restablecer el acceso.</p>
@@ -133,7 +134,7 @@ export function Login({
         </div>
       ) : roleDeactivated ? (
         <div className={`${INGRESO_AVISO_CLS} ${aviso} animate-fade-in`} role="alert">
-          <Icono nombre="alerta" className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-danger)]" />
+          <IconoAviso tipo="error" className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="text-sm">
             <p className="font-semibold text-[color:var(--di-danger)]">Acceso Restringido</p>
             <p className="mt-1 text-xs text-[color:var(--di-text-secondary)]">Tu rol ha sido desactivado y no puedes ingresar al sistema. Contacta a tu administrador para resolver este problema.</p>
@@ -201,7 +202,7 @@ export function Login({
 
           {error && (
             <p role="alert" className={INGRESO_ERROR_CLS}>
-              <Icono nombre="alerta" className="h-3.5 w-3.5" /> {error}
+              <IconoAviso tipo="error" className="h-3.5 w-3.5" /> {error}
             </p>
           )}
 

@@ -1,7 +1,6 @@
 'use client';
 
 import { type ReactNode, useState } from 'react';
-import { CalendarX } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
@@ -133,7 +132,7 @@ export function VencerIdentidadModal({ row, onClose, onVencida }: VencerIdentida
       onClose={onClose}
       title="Vencer identidad"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={CalendarX}
+      icono="vencido"
       description={row.name}
       size="sm"
       busy={busy}

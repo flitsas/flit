@@ -8,6 +8,7 @@ import type {
   PortalFirmaUrl,
   PortalView,
 } from '@/lib/api/types/procedure-runtime';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 interface Props {
   token: string;
@@ -290,9 +291,7 @@ function DocumentosTask({
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-1.5 min-w-0">
                 {d.subido && (
-                  <span style={{ color: "var(--flit-success-ink)" }} aria-hidden="true">
-                    ✓
-                  </span>
+                  <IconoAviso tipo="ok" className="h-4 w-4 shrink-0" />
                 )}
                 <span className="text-xs font-semibold truncate">{d.label}</span>
                 {d.obligatorio && (

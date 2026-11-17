@@ -332,7 +332,6 @@ function EditorContratoBackoffice() {
 
           <div className="flex justify-end">
             <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
-              <Icono nombre="nube-subir" className="h-4 w-4" />
               {ocupado ? "Guardando…" : "Guardar contrato"}
             </button>
           </div>

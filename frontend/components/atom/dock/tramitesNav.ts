@@ -6,7 +6,6 @@
 //   siempre); Log ICT es solo del SuperAdmin (Bug #13445);
 // - las entradas que dependen del tipo de empresa (organismo de tránsito, cabeza de grupo, AdminCompany) solo se
 //   declaran para quien corresponde, porque el SuperAdmin las vería todas.
-import { BrainCircuit, FolderCog, Webhook, Image as ImageIcon, Monitor, ScrollText } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { NavCatalog, NavIcon, NavItem } from "@flit/shell/nav";
 import { OT_ADM_DOCK, otHubListPath, otHubModulePath } from "@/components/admin/transit-offices/ot-nav";
@@ -108,10 +107,10 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       key: "admin-documentos",
       label: "Documentos",
       href: "",
-      icon: FolderCog,
+      icon: iconoComo("documento"),
       children: [
-        superAdmin("admin-documents", "Documental", "/admin/documents", FolderCog),
-        superAdmin("admin-improntas", "Improntas", "/admin/improntas", iconoComo("identidad")),
+        superAdmin("admin-documents", "Documental", "/admin/documents", iconoComo("documento")),
+        superAdmin("admin-improntas", "Improntas", "/admin/improntas", iconoComo("impronta")),
         // Generación documental (Feature #12201, R12): por módulo accesible, no por rol.
         {
           key: "admin-generacion-documental",
@@ -129,9 +128,9 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       key: "admin-plataforma",
       label: "Plataforma",
       href: "",
-      icon: Monitor,
+      icon: iconoComo("ajustes"),
       children: [
-        superAdmin("admin-tipos-tramite", "Tipos de trámites", "/admin/plataforma/tipos-tramite", iconoComo("lista")),
+        superAdmin("admin-tipos-tramite", "Tipos de trámites", "/admin/plataforma/tipos-tramite", iconoComo("tipos-tramite")),
         {
           key: "admin-confirmacion-runt",
           label: "Confirmación RUNT",
@@ -143,12 +142,12 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         superAdmin("admin-fur", "FUR", "/admin/plataforma/fur", iconoComo("documento")),
         superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", iconoComo("campana")),
         // Feature #13508 / HU #13511 — multi-proveedor OCR y DR. FLIT (solo SuperAdmin).
-        superAdmin("admin-configuracion-ia", "Configuración de IA", "/admin/plataforma/configuracion-ia", BrainCircuit),
+        superAdmin("admin-configuracion-ia", "Configuración de IA", "/admin/plataforma/configuracion-ia", iconoComo("asistente")),
         // Epic #13316 (HU #13358): correos y webhooks que agotaron sus reintentos.
         superAdmin("admin-mensajes-muertos", "Mensajes muertos", "/admin/plataforma/mensajes-muertos", iconoComo("correo")),
         // HU #13420 — parámetros del motor de descarga masiva de consolidados (solo SuperAdmin).
         superAdmin("admin-descarga-masiva", "Descarga masiva", "/admin/plataforma/descarga-masiva", iconoComo("archivo")),
-        superAdmin("admin-banners", "Banners", "/admin/banners", ImageIcon),
+        superAdmin("admin-banners", "Banners", "/admin/banners", iconoComo("megafono")),
         // HU #14074 (Épica #14021) — tarifas, organismos y tipos, parámetros y contenido del portal de Persona Natural.
         // Solo SuperAdmin: la API exige el rol y el permiso `platform.persona_natural.manage` (el SuperAdmin pasa todo);
         // un rol con el permiso pero sin el rol de SuperAdmin no lo ve, igual que la ruta (regla `admin`).
@@ -165,7 +164,7 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       icon: iconoComo("candado"),
       children: [
         { key: "rbac", label: "RBAC Admin", href: "/?m=rbac", icon: iconoComo("candado"), ...navGatingFor("rbac") },
-        { key: "auditoria", label: "Auditoría", href: "/?m=auditoria", icon: ScrollText, ...navGatingFor("auditoria") },
+        { key: "auditoria", label: "Auditoría", href: "/?m=auditoria", icon: iconoComo("portapapeles"), ...navGatingFor("auditoria") },
         superAdmin("admin-jobs", "Procesos periódicos", "/admin/jobs", iconoComo("cronometro")),
       ],
     },
@@ -191,7 +190,7 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       ot(OT_ADM_DOCK.reportes, COPY.B21Reportes, "reportes", iconoComo("reportes")),
       ot(OT_ADM_DOCK.mandatos, "Mandatos", "mandatos", iconoComo("firma")),
       ot(OT_ADM_DOCK.imprintValidation, "Validar impronta", "imprint-validation", iconoComo("identidad")),
-      ot(OT_ADM_DOCK.webhooks, "Webhooks", "webhooks", Webhook),
+      ot(OT_ADM_DOCK.webhooks, "Webhooks", "webhooks", iconoComo("integraciones")),
     );
     // Épica #14297 / HU #14377 — Portal Persona Natural del organismo: solo el ot_admin (por rol, sin permiso delegable).
     if (ctx.isOtAdmin) {
@@ -215,7 +214,7 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
   }
 
   entries.push(
-    { key: "log-qx", label: "Log QX", href: "/?m=log-qx", icon: iconoComo("consulta"), ...navGatingFor("log-qx") },
+    { key: "log-qx", label: "Log QX", href: "/?m=log-qx", icon: iconoComo("log-mensajes"), ...navGatingFor("log-qx") },
     {
       // ICT es contenedor: nombra el sistema y luego qué se quiere de él (HU #11619). Sin permiso propio, como
       // Plataforma: `buildDock` lo muestra solo si le queda algún hijo visible. Log ICT es solo del SuperAdmin;
@@ -225,9 +224,9 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       href: "",
       icon: iconoComo("integraciones"),
       children: [
-        { key: "ict-logs", label: "Log ICT", href: "/?m=ict-logs", icon: iconoComo("integraciones"), ...navGatingFor("ict-logs") },
+        { key: "ict-logs", label: "Log ICT", href: "/?m=ict-logs", icon: iconoComo("log-llamadas"), ...navGatingFor("ict-logs") },
         { key: "ict-trazabilidad", label: "Trazabilidad ICT", href: "/?m=ict-trazabilidad", icon: iconoComo("ruta"), ...navGatingFor("ict-trazabilidad") },
-        { key: "ict-reportes", label: "Reportes ICT", href: "/?m=ict-reportes", icon: iconoComo("reportes"), ...navGatingFor("ict-reportes") },
+        { key: "ict-reportes", label: "Reportes ICT", href: "/?m=ict-reportes", icon: iconoComo("reporte-ict"), ...navGatingFor("ict-reportes") },
       ],
     },
   );
