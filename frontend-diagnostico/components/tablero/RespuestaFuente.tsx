@@ -2,6 +2,7 @@
 
 import { createContext, memo, useCallback, useContext, useId, useMemo, useRef, useState, type ReactNode } from "react";
 import { Icono } from "@flit/ui/Icono";
+import { ListaDefinicion } from "@flit/ui/ListaDefinicion";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
 import {
   CABECERA_TABLA_CLS,
@@ -66,6 +67,8 @@ interface Modo {
   plegableHasta: number;
   /** Clase de la celda de valor. */
   valorCls: string;
+  /** HU #14562 · AC39: los campos del primer nivel van en lista de definición (dl/dt/dd) y no en tabla campo/valor. */
+  listaRaiz: boolean;
 }
 
 const FILTRADO: Modo = {
@@ -75,6 +78,7 @@ const FILTRADO: Modo = {
   enFila: vaEnFila,
   plegableHasta: 1,
   valorCls: VALOR_CLS,
+  listaRaiz: true,
 };
 
 const INTEGRO: Modo = {
@@ -85,6 +89,7 @@ const INTEGRO: Modo = {
   plegableHasta: Number.POSITIVE_INFINITY,
   // La firma y los hashes del proveedor son tokens largos sin espacios: se parten en cualquier punto.
   valorCls: `${VALOR_CLS} [overflow-wrap:anywhere]`,
+  listaRaiz: false,
 };
 
 const ModoLectura = createContext<Modo>(FILTRADO);
@@ -167,6 +172,19 @@ function TablaCampos({ etiqueta, campos }: { etiqueta: string; campos: [string, 
   );
 }
 
+/** Campos del primer nivel como lista de definición, agrupada con el nombre accesible de la respuesta (HU #14562 · AC39). */
+function ListaCampos({ etiqueta, campos }: { etiqueta: string; campos: [string, unknown][] }) {
+  const m = useContext(ModoLectura);
+  return (
+    <div role="group" aria-label={etiqueta} className="rounded-xl border border-border px-3 py-2">
+      <ListaDefinicion
+        columnas={2}
+        items={campos.map(([clave, valor]) => ({ termino: m.etiqueta(clave), valor: <Valor nombre={clave} valor={valor} /> }))}
+      />
+    </div>
+  );
+}
+
 /** Array de objetos → tabla con una columna por clave visible (unión de todas las filas, en orden de aparición). */
 function TablaArreglo({ nombre, items }: { nombre: string; items: Objeto[] }) {
   const m = useContext(ModoLectura);
@@ -245,7 +263,12 @@ function Bloque({ etiqueta, datos, nivel, profundidad }: { etiqueta: string; dat
   const secciones = campos.filter(([, v]) => !m.enFila(v));
   return (
     <div className="flex flex-col gap-3">
-      {filas.length > 0 && <TablaCampos etiqueta={etiqueta} campos={filas} />}
+      {filas.length > 0 &&
+        (profundidad === 0 && m.listaRaiz ? (
+          <ListaCampos etiqueta={etiqueta} campos={filas} />
+        ) : (
+          <TablaCampos etiqueta={etiqueta} campos={filas} />
+        ))}
       {secciones.map(([clave, valor]) => (
         <Subseccion key={clave} nombre={clave} valor={valor} nivel={nivel} profundidad={profundidad} />
       ))}

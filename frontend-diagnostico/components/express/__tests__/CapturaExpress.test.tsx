@@ -21,7 +21,7 @@ function montar() {
 
 const campo = () => screen.getByRole("textbox", { name: "Placa o VIN" });
 const escribir = (valor: string) => fireEvent.change(campo(), { target: { value: valor } });
-const diagnosticar = () => fireEvent.click(screen.getByRole("button", { name: "Diagnosticar" }));
+const diagnosticar = () => fireEvent.click(screen.getByRole("button", { name: "Diagnosticar en línea" }));
 
 describe("CapturaExpress — normalización en pantalla (AC6)", () => {
   it("«tst 123» se muestra como TST123", () => {
@@ -72,5 +72,15 @@ describe("CapturaExpress — valida como hoy antes de abrir la creación (AC6)",
     expect(campo()).not.toHaveAttribute("aria-invalid");
     diagnosticar();
     expect(router.push).toHaveBeenCalledWith("/diagnosticos/nuevo?modo=express&placa=1HGCM82633A004352");
+  });
+});
+
+describe("CapturaExpress — ayuda de formatos de placa con motocarro (AC15, HU #14562)", () => {
+  it("la ayuda del campo lista el motocarro 123ABC junto a los demás formatos", () => {
+    montar();
+    const ayuda = document.getElementById(campo().getAttribute("aria-describedby") ?? "");
+    expect(ayuda).not.toBeNull();
+    for (const formato of ["ABC123", "ABC12D", "123ABC"]) expect(ayuda).toHaveTextContent(formato);
+    expect(ayuda).toHaveTextContent(/motocarro/i);
   });
 });

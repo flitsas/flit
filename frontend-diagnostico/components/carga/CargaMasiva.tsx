@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
+import { PasosHorizontal, type EstadoPaso } from "@flit/ui/PasosHorizontal";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { ApiError } from "@/lib/api";
 import {
@@ -15,7 +16,7 @@ import {
   type FilaResumen,
   type ResumenValidacion as Resumen,
 } from "@/lib/carga/api";
-import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ResumenValidacion } from "./ResumenValidacion";
 import { SubidaArchivo } from "./SubidaArchivo";
 import { TABLA_FILAS_ID, TablaFilasCorregibles } from "./TablaFilasCorregibles";
@@ -137,6 +138,9 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
     }
   }
 
+  const paso: 0 | 1 | 2 = !analisis ? 0 : confirmacion.tipo === "confirmando" ? 2 : 1;
+  const estadoPaso = (i: number): EstadoPaso => (i < paso ? "hecho" : i === paso ? "actual" : "pendiente");
+
   let contenido;
   if (!puedeCrear) {
     contenido = (
@@ -158,6 +162,9 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
     const vigente = resumenVigente(analisis);
     contenido = (
       <>
+        <p className={`${AYUDA_CLS} font-semibold`}>
+          {analisis.archivo.name} · {analisis.resumen.total_filas} filas
+        </p>
         <ResumenValidacion resumen={vigente} onCorregir={corregir} onContinuar={() => void continuar()} confirmando={confirmacion.tipo === "confirmando"} />
         {confirmacion.tipo === "error" && (
           <InlineAlert
@@ -201,6 +208,12 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
         descripcion={sesion?.empresa.nombre}
         icono="documentos"
       />
+      {puedeCrear && (
+        <PasosHorizontal
+          ariaLabel="Pasos de la carga"
+          pasos={["Subir archivo", "Revisar", "Iniciar"].map((etiqueta, i) => ({ etiqueta, estado: estadoPaso(i) }))}
+        />
+      )}
       {contenido}
     </>
   );

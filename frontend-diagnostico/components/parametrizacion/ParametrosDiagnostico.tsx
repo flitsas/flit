@@ -36,7 +36,7 @@ export function ParametrosDiagnostico({ p, nombre, onNombre, disabled = false, c
         compacta
       />
       <SeccionAlcance
-        habilitadas={p.habilitadas}
+        habilitadas={p.contratadas}
         disponibles={p.disponibles}
         seleccionadas={p.seleccionadas}
         obligatorias={p.obligatorias}

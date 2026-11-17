@@ -2,6 +2,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ListaLotesBackoffice } from "@/components/backoffice/ListaLotesBackoffice";
 import { EMPRESA_A, listaLotes, lote, simularApi } from "@/lib/backoffice/__tests__/datos";
+import { BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@flit/ui/table-styles";
 
 // Uso de ejemplo: <ListaLotesBackoffice empresa="" estado={null} conErrores={false} pagina={1} /> en /backoffice/diagnosticos:
 // sin compañía elegida no consulta lotes; la compañía se elige en el selector con búsqueda por nombre o NIT (GET
@@ -102,6 +111,14 @@ describe("ListaLotesBackoffice — AC1: compañía elegida y filtro «con errore
     expect(await screen.findByText(/no tiene lotes con estos filtros/i)).toBeInTheDocument();
   });
 
+  it("HU #14562 AC49 cargando: mientras la API responde, el cargador del kit con texto y ninguna tabla", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => new Promise<Response>(() => {}) });
+    montar({ empresa: EMPRESA_A });
+    expect(await screen.findByRole("status", { name: "Cargando los lotes…" })).toBeInTheDocument();
+    expect(screen.queryByRole("table", { name: /lotes de la compañía/i })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reintentar" })).toBeNull();
+  });
+
   it("falla: aviso con Reintentar", async () => {
     let n = 0;
     conEmpresas({ "GET /backoffice/diagnosticos": () => (++n === 1 ? Response.json({ error: "x" }, { status: 500 }) : Response.json(listaLotes([lote(1)]))) });
@@ -168,5 +185,98 @@ describe("ListaLotesBackoffice — Punto 6: selector de compañía", () => {
     montar();
     expect(await screen.findByText("No hay empresas con Diagnóstico habilitado")).toBeInTheDocument();
     expect(consultas(fetchMock)).toHaveLength(0);
+  });
+
+  it("HU14562 AC43: cada lote muestra «ID · modo · trámite» (B3) y el express se rotula", async () => {
+    conEmpresas({
+      "GET /backoffice/diagnosticos": () =>
+        Response.json(
+          listaLotes([
+            lote(1, { modo: "CON_ANALISIS", tipo_tramite: { codigo: "TRASPASO_STANDARD", nombre: "TRASPASO" }, es_express: false }),
+            lote(2, { modo: "SIMPLE", tipo_tramite: null, es_express: true }),
+          ]),
+        ),
+    });
+    montar({ empresa: EMPRESA_A });
+    const tabla = await screen.findByRole("table", { name: /lotes de la compañía/i });
+    const filas = within(tabla).getAllByRole("row");
+    expect(filas[1]).toHaveTextContent(/00000000-0000-7000-8000-00000000b001 · Con análisis IA · TRASPASO/);
+    expect(filas[2]).toHaveTextContent(/00000000-0000-7000-8000-00000000b002 · Simple · Express/);
+  });
+
+  it("HU14562 AC43: sin modo (API previo a B3) la fila muestra solo el ID, sin inventar", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(3)])) });
+    montar({ empresa: EMPRESA_A });
+    const tabla = await screen.findByRole("table", { name: /lotes de la compañía/i });
+    const fila = within(tabla).getAllByRole("row")[1];
+    expect(fila).toHaveTextContent("00000000-0000-7000-8000-00000000b003");
+    expect(fila).not.toHaveTextContent(/Simple|Con análisis/);
+  });
+
+  it("HU14562 AC43: la cabecera ofrece la acción «Fuentes obligatorias»", async () => {
+    conEmpresas();
+    montar();
+    expect(await screen.findByRole("link", { name: "Fuentes obligatorias" })).toHaveAttribute("href", "/backoffice/fuentes-obligatorias");
+  });
+});
+
+describe("HU14562 AC43 — rediseño de F-08 con el kit", () => {
+  it("cabecera «Lotes por compañía» con la banda de contexto del backoffice", async () => {
+    conEmpresas();
+    montar();
+    expect(await screen.findByRole("heading", { level: 1, name: "Lotes por compañía" })).toBeInTheDocument();
+    expect(screen.getByText("Revisa lotes con errores, reprocesa consultas y llena datos a mano")).toBeInTheDocument();
+    expect(screen.getByRole("note", { name: "Contexto del backoffice" })).toHaveTextContent(
+      "Backoffice FLIT · lo que haces aquí no lo ve la compañía como intervención manual",
+    );
+  });
+
+  it("la tarjeta de lotes dice la compañía elegida y el total de lotes del API", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json({ ...listaLotes([lote(1), lote(2)]), total: 5 }) });
+    montar();
+    await elegir("Transportes", /Transportes A SAS/);
+    const tarjeta = await screen.findByRole("region", { name: "Lotes" });
+    expect(await within(tarjeta).findByRole("heading", { level: 2, name: "Lotes" })).toBeInTheDocument();
+    expect(within(tarjeta).getByText("Transportes A SAS · 5 lotes")).toBeInTheDocument();
+  });
+
+  it("con la compañía solo en la URL dice el total sin inventar el nombre", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json({ ...listaLotes([lote(1)]), total: 1 }) });
+    montar({ empresa: EMPRESA_A });
+    const tarjeta = await screen.findByRole("region", { name: "Lotes" });
+    expect(await within(tarjeta).findByText("1 lote")).toBeInTheDocument();
+  });
+});
+
+
+// HU #14562 AC56 (auditoría M6): por debajo de 900 px los lotes pasan a tarjetas con las recetas TABLA_MOVIL_* del repo.
+describe("ListaLotesBackoffice — HU #14562 AC56: tarjetas por debajo de 900 px", () => {
+  const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
+
+  it("tabla, cabecera, cuerpo y filas llevan las recetas de tarjeta y cada celda su data-label", async () => {
+    conEmpresas({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(1), lote(2)])) });
+    montar({ empresa: EMPRESA_A });
+    const t = await screen.findByRole("table", { name: /lotes de la compañía/i });
+    for (const c of TABLA_MOVIL_TABLE_CLS.split(" ")) expect(clases(t)).toContain(c);
+    for (const c of TABLA_MOVIL_THEAD_CLS.split(" ")) expect(clases(t.querySelector("thead")!)).toContain(c);
+    for (const c of TABLA_MOVIL_TBODY_CLS.split(" ")) expect(clases(t.querySelector("tbody")!)).toContain(c);
+    for (const fila of t.querySelectorAll("tbody tr")) {
+      for (const c of TABLA_MOVIL_ROW_CLS.split(" ")) expect(clases(fila)).toContain(c);
+      const celdas = Array.from(fila.children);
+      expect(celdas.map((td) => td.getAttribute("data-label"))).toEqual(["Lote", "Estado", "Creado", "Vehículos", "Celdas en error"]);
+      for (const td of celdas) for (const c of TABLA_MOVIL_CELL_CLS.split(" ")) expect(clases(td)).toContain(c);
+      for (const c of TABLA_MOVIL_CELL_TITULO_CLS.split(" ")) expect(clases(celdas[0])).toContain(c);
+    }
+  });
+});
+
+// HU #14562 · m-13 (auditoría de UI): el acceso a «Fuentes obligatorias» es un botón secundario del kit, no la píldora de
+// 12 px pensada para «Reintentar».
+describe("ListaLotesBackoffice — HU #14562 m-13", () => {
+  it("«Fuentes obligatorias» usa BOTON_SECUNDARIO_CLS", async () => {
+    conEmpresas();
+    montar();
+    const enlace = await screen.findByRole("link", { name: "Fuentes obligatorias" });
+    expect(enlace.className).toBe(BOTON_SECUNDARIO_CLS);
   });
 });

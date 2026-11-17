@@ -14,6 +14,23 @@ import { lanzarExpress } from "./express";
  *
  * E2E_USUARIO es un usuario de la compañía con diagnosticos.crear, diagnosticos.ver y reportes.descargar. Las credenciales
  * son de usuarios de prueba del ambiente DEV y entran solo por variables de entorno.
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - table «/semáforo de consultas/i»
+ *   - link «Descargar PDF de ${PLACA}»
+ *   - region «Descargas del lote»
+ *   - link «Excel del lote»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
+ *   Del helper express.ts (lanzarExpress):
+ *     - textbox «Placa o VIN»
+ *     - button «Diagnosticar en línea»
+ *     - textbox «Nombre del diagnóstico»
+ *     - button «/^(Continuar|Iniciar diagnóstico)$/»
+ *     - button «Lanzar diagnóstico»
+ *     - link «Ver tablero»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 /** Placa de prueba terminada en 1: la simulación responde con éxito. */
@@ -23,7 +40,7 @@ async function entrar(page: Page, usuario: string, clave: string) {
   await page.goto(`${APP}/`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
   await page.waitForURL(`${APP}/`);
 }
@@ -54,7 +71,7 @@ test.describe("descargas del tablero", () => {
     const [respuestaExcel, descargaExcel] = await Promise.all([
       page.waitForResponse((r) => new URL(r.url()).pathname.endsWith("/excel")),
       page.waitForEvent("download"),
-      page.getByRole("region", { name: "Descargas del lote" }).getByRole("link", { name: "Descargar Excel" }).click(),
+      page.getByRole("region", { name: "Descargas del lote" }).getByRole("link", { name: "Excel del lote" }).click(),
     ]);
     expect(respuestaExcel.status()).toBe(200);
     expect(respuestaExcel.headers()["content-type"]).toContain("spreadsheetml");

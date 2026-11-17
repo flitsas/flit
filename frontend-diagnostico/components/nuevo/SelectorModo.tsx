@@ -1,13 +1,13 @@
 "use client";
 
-import { useId, useRef, type ComponentType, type KeyboardEvent } from "react";
-import { iconoComo } from "@flit/ui/iconoComo";
-import { AYUDA_CLS, ETIQUETA_CLS, FOCO_CLS } from "@/components/configuracion/estilos";
+import { useId } from "react";
+import { SelectorSegmentado } from "@flit/ui/SelectorSegmentado";
+import { AYUDA_CLS } from "@/components/configuracion/estilos";
 import type { ModoCreacion } from "./borradores";
 
-const MODOS: ReadonlyArray<{ valor: ModoCreacion; etiqueta: string; Icono: ComponentType<{ className?: string; "aria-hidden"?: boolean | "true" | "false"; strokeWidth?: number }> }> = [
-  { valor: "express", etiqueta: "Express", Icono: iconoComo("destello") },
-  { valor: "masivo", etiqueta: "Masivo", Icono: iconoComo("reporte-detallado") },
+const MODOS: Array<{ valor: ModoCreacion; label: string }> = [
+  { valor: "express", label: "Express" },
+  { valor: "masivo", label: "Masivo" },
 ];
 
 export interface SelectorModoProps {
@@ -20,78 +20,28 @@ export interface SelectorModoProps {
 }
 
 /**
- * Selector Express | Masivo de la pantalla única (HU #14085), con el patrón WAI-ARIA «Radio Group»: un solo radio en el
- * orden de tabulación (tabindex itinerante) y las flechas mueven el foco y eligen, con vuelta; Inicio y Fin. Bloqueado,
- * los radios siguen enfocables (aria-disabled) para que la explicación se anuncie. Misma pastilla de las pestañas de la
- * configuración: el elegido en la tinta AA del azul de marca con texto blanco.
+ * Selector Express | Masivo de Nuevo diagnóstico (HU #14562, AC16): el SelectorSegmentado del kit 2026 («Tipo de
+ * diagnóstico», radiogroup con tabulación itinerante y flechas). La explicación visible bajo el selector va asociada al
+ * radiogroup con aria-describedby, para que el bloqueo por la cabecera creada se anuncie.
+ * HU #14562 · M10: la asociación la hace el kit (`describedBy`) y el bloqueo usa `bloqueado`, que deja el selector
+ * enfocable (aria-disabled), para que teclado y lector lleguen a él y oigan el motivo.
  */
 export function SelectorModo({ modo, onModo, bloqueado = false, explicacion }: SelectorModoProps) {
   const id = useId();
-  const refs = useRef<Array<HTMLButtonElement | null>>([]);
-  const actual = Math.max(0, MODOS.findIndex((m) => m.valor === modo));
   const descripcionId = `${id}-descripcion`;
-
-  function elegir(indice: number) {
-    refs.current[indice]?.focus();
-    if (!bloqueado) onModo(MODOS[indice].valor);
-  }
-
-  function alPulsar(e: KeyboardEvent<HTMLButtonElement>, indice: number) {
-    const total = MODOS.length;
-    const destino =
-      e.key === "ArrowRight" || e.key === "ArrowDown"
-        ? (indice + 1) % total
-        : e.key === "ArrowLeft" || e.key === "ArrowUp"
-          ? (indice - 1 + total) % total
-          : e.key === "Home"
-            ? 0
-            : e.key === "End"
-              ? total - 1
-              : -1;
-    if (destino < 0) return;
-    e.preventDefault();
-    elegir(destino);
-  }
 
   return (
     <div className="flex flex-col gap-1.5 lg:items-end">
-      <span id={`${id}-etiqueta`} className={ETIQUETA_CLS}>
-        Tipo de diagnóstico
-      </span>
-      <div
-        role="radiogroup"
-        aria-labelledby={`${id}-etiqueta`}
-        aria-describedby={descripcionId}
-        aria-disabled={bloqueado || undefined}
-        className="flex w-fit gap-1 rounded-full border border-input bg-card p-1"
-      >
-        {MODOS.map((m, i) => {
-          const elegido = i === actual;
-          return (
-            <button
-              key={m.valor}
-              ref={(el) => {
-                refs.current[i] = el;
-              }}
-              type="button"
-              role="radio"
-              aria-checked={elegido}
-              aria-disabled={bloqueado || undefined}
-              tabIndex={elegido ? 0 : -1}
-              onClick={() => elegir(i)}
-              onKeyDown={(e) => alPulsar(e, i)}
-              className={`inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition aria-disabled:cursor-not-allowed ${FOCO_CLS} ${
-                elegido
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground aria-disabled:opacity-60"
-              }`}
-            >
-              <m.Icono className="h-4 w-4" aria-hidden="true" />
-              {m.etiqueta}
-            </button>
-          );
-        })}
-      </div>
+      <SelectorSegmentado
+        etiqueta="Tipo de diagnóstico"
+        opciones={MODOS}
+        valor={modo}
+        onCambio={(valor) => {
+          if (!bloqueado) onModo(valor);
+        }}
+        bloqueado={bloqueado}
+        describedBy={descripcionId}
+      />
       <p id={descripcionId} className={`${AYUDA_CLS} max-w-sm lg:text-right`}>
         {explicacion ?? "Express: un vehículo por placa o VIN. Masivo: varios vehículos desde la plantilla Excel."}
       </p>

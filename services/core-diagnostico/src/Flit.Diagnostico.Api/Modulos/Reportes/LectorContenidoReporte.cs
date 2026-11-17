@@ -112,10 +112,14 @@ internal sealed class LectorContenidoReporte(
     {
         var fila = await db.Set<DictamenVehiculo>().AsNoTracking()
             .Where(d => d.VehiculoId == vehiculoId && d.TenantId == cabecera.TenantId && d.Vigente)
-            .Select(d => new { d.Veredicto, d.EstadoRedaccion, d.Alertamientos })
+            .Select(d => new { d.Veredicto, d.EstadoRedaccion, d.Alertamientos, d.Version, Ajustado = d.AjusteMotivo != null, d.OverrideEn })
             .SingleOrDefaultAsync(ct)
             .ConfigureAwait(false);
-        return fila is null ? null : new DictamenEnHuella(fila.Veredicto, fila.EstadoRedaccion, ContenidoReporteVehiculo.TextoDeAlertamientos(fila.Alertamientos));
+        return fila is null
+            ? null
+            : new DictamenEnHuella(
+                fila.Veredicto, fila.EstadoRedaccion, ContenidoReporteVehiculo.TextoDeAlertamientos(fila.Alertamientos), fila.Version,
+                fila.Ajustado ? fila.OverrideEn : null);
     }
 
     /// <summary>El contenido del lote para la compañía del token, con su visibilidad y la empresa del claim.</summary>

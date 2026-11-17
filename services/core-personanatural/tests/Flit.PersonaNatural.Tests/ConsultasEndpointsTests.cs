@@ -65,7 +65,7 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
         var texto = await respuesta.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         json.GetProperty("existe").GetBoolean().Should().BeTrue();
         json.GetProperty("placa").GetString().Should().Be("ABC123");
         json.GetProperty("clase").GetString().Should().Be("AUTOMOVIL");
@@ -98,7 +98,7 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
         var texto = await respuesta.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        JsonDocument.Parse(texto).RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("existe", "estadoLicencia", "vigencia");
+        JsonElement.Parse(texto).EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("existe", "estadoLicencia", "vigencia");
         texto.Should().NotContainAny("NOMBRE-FICTICIO", "1990", DocumentoPropietario, "PYS-FICTICIO");
         _runt.LlamadasConductor.Should().ContainSingle().Which.Documento.Should().Be(new DocumentoConsulta("CC", DocumentoPropietario));
     }
@@ -250,7 +250,7 @@ public sealed class ConsultasEndpointsTests : IAsyncLifetime
 
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
         var texto = await respuesta.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         json.GetProperty("vehiculo").GetProperty("existe").GetBoolean().Should().BeTrue();
         json.GetProperty("vin").GetString().Should().Be("9BWZZZ377VT004251");
         json.GetProperty("numeroMotor").GetString().Should().Be("MOTOR-FICTICIO-1");

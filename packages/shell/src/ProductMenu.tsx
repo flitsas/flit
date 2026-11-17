@@ -3,41 +3,35 @@
 import { createElement, useEffect, useRef, useState } from "react";
 import { House } from "lucide-react";
 import { Icono, IconoModulo } from "@flit/ui/Icono";
-import { appIcon, appTagline, fetchMyApps, type SuiteApp } from "./apps";
+import { appIcon, appTagline, type SuiteApp } from "./apps";
+import type { SuiteAppsState } from "./useSuiteApps";
 
 // Menú de productos (▦, B-10/B-11): la única forma de cambiar de producto. Cada producto abre en su host; la sesión
 // del hub hace que no haya que volver a iniciar sesión. Dice qué se hace ahí («¿En qué quieres trabajar hoy?»), qué es
 // cada producto y en cuál está el usuario; el inicio de la suite queda al pie.
-export function ProductMenu({
-  productCode,
-  apps: given,
-  loadApps = fetchMyApps,
-}: {
-  productCode: string;
-  apps?: SuiteApp[];
-  /** Cómo pedir `me/apps` si no vienen cargados; por defecto, el proxy /api/v1 de la app con su cookie. */
-  loadApps?: (signal: AbortSignal) => Promise<SuiteApp[]>;
-}) {
+// HU #14562 · D1: la carga de `me/apps` vive en `useSuiteApps` (SuiteShell), compartida con el grupo «Tus productos» del
+// menú de usuario, que es donde quedan los productos a ≤ 640 px (este botón se oculta ahí por CSS).
+export function ProductMenu({ productCode, state }: { productCode: string; state: SuiteAppsState }) {
   const [open, setOpen] = useState(false);
-  const [apps, setApps] = useState<SuiteApp[] | null>(given ?? null);
-  const [failed, setFailed] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  const { request } = state;
 
   useEffect(() => {
-    if (!open || apps || failed) return;
-    const controller = new AbortController();
-    loadApps(controller.signal)
-      .then(setApps)
-      .catch(() => !controller.signal.aborted && setFailed(true));
-    return () => controller.abort();
-  }, [open, apps, failed, loadApps]);
+    if (open) request();
+  }, [open, request]);
 
   useEffect(() => {
     if (!open) return;
     const onPointer = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
     };
-    const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      setOpen(false);
+      // El panel desaparece con el foco dentro: sin esto, el foco cae en <body>.
+      buttonRef.current?.focus();
+    };
     window.addEventListener("pointerdown", onPointer);
     window.addEventListener("keydown", onKey);
     return () => {
@@ -46,12 +40,10 @@ export function ProductMenu({
     };
   }, [open]);
 
-  const products = (apps ?? []).filter((app) => app.code !== "plataforma");
-  const home = apps?.find((app) => app.code === "plataforma");
-
   return (
-    <div ref={ref} className="relative">
+    <div ref={ref} className="suite-ancla suite-ancla--productos">
       <button
+        ref={buttonRef}
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-label="Productos"
@@ -70,60 +62,87 @@ export function ProductMenu({
             <p className="suite-menu-productos__titulo">¿En qué quieres trabajar hoy?</p>
             <p className="suite-menu-productos__bajada">Tus productos FLIT, con tu misma cuenta.</p>
           </div>
-          {failed ? (
-            <p className="suite-menu-productos__aviso">No pudimos cargar los productos.</p>
-          ) : apps === null ? (
-            <p className="suite-menu-productos__aviso">Cargando…</p>
-          ) : products.length === 0 ? (
-            <p className="suite-menu-productos__aviso">Tu empresa todavía no tiene productos habilitados.</p>
-          ) : (
-            <ul>
-              {products.map((app) => {
-                const current = app.code === productCode;
-                const tagline = appTagline(app.code);
-                return (
-                  <li key={app.code}>
-                    <a
-                      href={app.url}
-                      aria-current={current ? "page" : undefined}
-                      className={`group suite-menu-productos__entrada ${app.comingSoon ? "suite-menu-productos__entrada--pronto" : ""}`}
-                    >
-                      <ProductGlyph app={app} />
-                      <span className="suite-menu-productos__texto">
-                        <strong>
-                          {app.name}
-                          {current ? (
-                            <span className="suite-menu-productos__pastilla suite-menu-productos__pastilla--aqui">Estás aquí</span>
-                          ) : app.comingSoon ? (
-                            <span className="suite-menu-productos__pastilla">Próximamente</span>
-                          ) : null}
-                        </strong>
-                        {tagline && <small>{tagline}</small>}
-                      </span>
-                      {!current && (
-                        <Icono nombre="derecha" className="h-4 w-4 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
-                      )}
-                    </a>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-          {home && (
-            <a
-              // El inicio del hub con ?inicio=1: sin él, quien tiene un solo producto entraría directo a ese producto
-              // (B-11, opción 4) y no podría volver al hub.
-              href={withHomeFlag(home.url)}
-              aria-current={home.code === productCode ? "page" : undefined}
-              className="suite-menu-productos__pie"
-            >
-              <House className="h-4 w-4" aria-hidden="true" />
-              Ir al inicio
-            </a>
-          )}
+          <ProductEntries productCode={productCode} apps={state.apps} failed={state.failed} />
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Lista de productos con sus 4 estados (cargando, error, vacío, lleno) e «Ir al inicio» al pie. La usan el panel ▦ y el
+ * grupo «Tus productos» del menú de usuario (interno al paquete).
+ */
+export function ProductEntries({
+  productCode,
+  apps,
+  failed,
+  onNavigate,
+}: {
+  productCode: string;
+  apps: SuiteApp[] | null;
+  failed: boolean;
+  onNavigate?: () => void;
+}) {
+  const products = (apps ?? []).filter((app) => app.code !== "plataforma");
+  const home = apps?.find((app) => app.code === "plataforma");
+
+  return (
+    <>
+      {failed ? (
+        <p className="suite-menu-productos__aviso">No pudimos cargar los productos.</p>
+      ) : apps === null ? (
+        <p className="suite-menu-productos__aviso">Cargando…</p>
+      ) : products.length === 0 ? (
+        <p className="suite-menu-productos__aviso">Tu empresa todavía no tiene productos habilitados.</p>
+      ) : (
+        <ul>
+          {products.map((app) => {
+            const current = app.code === productCode;
+            const tagline = appTagline(app.code);
+            return (
+              <li key={app.code}>
+                <a
+                  href={app.url}
+                  onClick={onNavigate}
+                  aria-current={current ? "page" : undefined}
+                  className={`group suite-menu-productos__entrada ${app.comingSoon ? "suite-menu-productos__entrada--pronto" : ""}`}
+                >
+                  <ProductGlyph app={app} />
+                  <span className="suite-menu-productos__texto">
+                    <strong>
+                      {app.name}
+                      {current ? (
+                        <span className="suite-menu-productos__pastilla suite-menu-productos__pastilla--aqui">Estás aquí</span>
+                      ) : app.comingSoon ? (
+                        <span className="suite-menu-productos__pastilla">Próximamente</span>
+                      ) : null}
+                    </strong>
+                    {tagline && <small>{tagline}</small>}
+                  </span>
+                  {!current && (
+                    <Icono nombre="derecha" className="h-4 w-4 shrink-0 opacity-0 transition group-hover:translate-x-0.5 group-hover:opacity-100" />
+                  )}
+                </a>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {home && (
+        <a
+          // El inicio del hub con ?inicio=1: sin él, quien tiene un solo producto entraría directo a ese producto
+          // (B-11, opción 4) y no podría volver al hub.
+          href={withHomeFlag(home.url)}
+          onClick={onNavigate}
+          aria-current={home.code === productCode ? "page" : undefined}
+          className="suite-menu-productos__pie"
+        >
+          <House className="h-4 w-4" aria-hidden="true" />
+          Ir al inicio
+        </a>
+      )}
+    </>
   );
 }
 

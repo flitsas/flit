@@ -7,6 +7,7 @@ import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { SuiteShell, type NavCatalog, type ShellUser } from "@flit/shell/SuiteShell";
 import { rutaKit } from "@flit/ui/iconos-mapas";
+import { CampanaDiagnostico } from "@/components/dx/campana/CampanaDiagnostico";
 import { ApiError, apiFetch } from "@/lib/api";
 import type { SesionDiagnostico } from "@/lib/sesion";
 
@@ -73,7 +74,8 @@ const SIN_PERMISOS = "SIN_PERMISOS_DIAGNOSTICO";
  * Barra y dock de la suite para Diagnóstico. Al abrir pide la sesión del producto: mientras llega muestra el loader de
  * marca; si la API la niega (403: compañía sin Diagnóstico activo, suscripción no verificable o usuario sin permisos)
  * lleva a la página 403, que está fuera del middleware y no vuelve al login; ante cualquier otra falla, el error con
- * Reintentar. La compañía es la de la sesión: una sesión = una compañía, sin selector.
+ * Reintentar. La compañía es la de la sesión: una sesión = una compañía, sin selector. Con la sesión abierta, la
+ * campana de avisos (HU #14562 · AC50) entra por `headerActions`; la firma pública no cambia.
  */
 export function DiagnosticoShell({ user, tramitesUrl, children }: { user: UsuarioShell; tramitesUrl: string; children: ReactNode }) {
   const router = useRouter();
@@ -129,7 +131,10 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
 
   return (
     <SesionContext.Provider value={valor}>
-      <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={estado.sesion?.capacidades.backoffice ? NAV_BACKOFFICE : NAV} user={usuario} accountUrl={tramitesUrl} layout="app">
+      <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={estado.sesion?.capacidades.backoffice ? NAV_BACKOFFICE : NAV} user={usuario} accountUrl={tramitesUrl}
+        layout="app"
+        headerActions={estado.sesion ? <CampanaDiagnostico /> : undefined}
+      >
         <div className="flex min-h-full flex-col gap-4 px-4 pt-6 text-flit-primary md:px-6">{contenido}</div>
       </SuiteShell>
     </SesionContext.Provider>

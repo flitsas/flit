@@ -45,7 +45,7 @@ public sealed class ProveedorOcrAnthropicTests
     {
         var (r, pedido) = await ExtraerAsync(Cuerpo("max_tokens", "{\"numero_comparendo\": {\"valor\": \"D0500"));
         (r.TipoFallo, r.Mensaje).Should().Be((TipoFalloOcr.Ilegible, "La respuesta del modelo quedó cortada (se acabó el límite de tokens)."));
-        JsonDocument.Parse(pedido!).RootElement.GetProperty("max_tokens").GetInt32().Should().Be(16000);
+        JsonElement.Parse(pedido!).GetProperty("max_tokens").GetInt32().Should().Be(16000);
     }
 
     [Fact]

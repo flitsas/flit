@@ -238,6 +238,20 @@ public sealed class EjecutorCeldaAvaluoTests
         (r.Resultado, r.Error?.TipoError).Should().Be(((ResultadoAvaluo?)null, "HTTP_5XX"));
         grpc.Llamadas.Should().ContainSingle().Which.Request.Cilindraje.Should().Be(0, "un dato técnico que el RUNT no trae va en 0");
     }
+    // HU #14563 B6 (AC18) — el avalúo por API no trae referencia Fasecolda: la clave no aparece en el payload (la referencia solo
+    // la pone el llenado manual) y el contrato del payload de API no cambia.
+    [Fact]
+    public async Task B6_Avaluo_por_API_no_trae_referencia_en_el_payload()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var fuente = new AvaluoPorMapeo(new AvaluosGrpcFalso());
+
+        var r = await fuente.ConsultarAsync(Guid.NewGuid(), new SolicitudAvaluo("TST201", null, 2020, null, null, null), ct);
+
+        r.Resultado.Should().NotBeNull();
+        var json = JsonSerializer.Serialize(r.Resultado, EjecutorPorPersonas.Json);
+        json.Should().Contain("\"fuente_principal\"").And.NotContain("referencia");
+    }
 }
 
 /// <summary>Espía de <see cref="IFuenteAvaluo"/> (HU #13795): anota empresa y solicitud y delega en la fuente interna.</summary>

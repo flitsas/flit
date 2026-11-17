@@ -17,10 +17,10 @@ internal sealed record CabeceraIndiceZip(string NombreDiagnostico, DateTimeOffse
 /// <see cref="Veredicto"/> y <see cref="Alertamientos"/> son los del dictamen vigente (null sin dictamen emitido);
 /// <see cref="Tramite"/> es el número del borrador creado desde el diagnóstico (punto 4; null si no hay).
 /// </summary>
-internal sealed record FilaIndiceZip(int Orden, string Identificador, string Estado, string? Archivo, string? Veredicto, string? Alertamientos, string? Tramite);
+internal sealed record FilaIndiceZip(int Orden, string Identificador, string Estado, string? Archivo, string? Veredicto, string? Alertamientos, string? Tramite, bool Ajustado = false);
 
 /// <summary>Lo que el índice lee del dictamen vigente de un vehículo: el veredicto y el JSON de alertamientos (código, efecto, fuente).</summary>
-internal sealed record DictamenDelIndice(string Veredicto, string Alertamientos);
+internal sealed record DictamenDelIndice(string Veredicto, string Alertamientos, bool Ajustado = false);
 
 /// <summary>
 /// Índice del ZIP masivo en Excel (ajustes 2026-11-11, punto 8, decisiones 8.1–8.3): <c>indice.xlsx</c>, una sola hoja. Arriba, el
@@ -76,8 +76,14 @@ internal static class IndiceZip
 
     private static readonly JsonSerializerOptions Json = new() { PropertyNameCaseInsensitive = true };
 
-    /// <summary>Rótulo del veredicto (Viable/Bloqueado); <see cref="DictamenPendiente"/> sin dictamen emitido.</summary>
-    public static string Dictamen(string? veredicto) => veredicto is null ? DictamenPendiente : RotulosDiagnostico.DeVeredicto(veredicto);
+    /// <summary>
+    /// Rótulo del veredicto (Viable/Bloqueado); <see cref="DictamenPendiente"/> sin dictamen emitido. Con ajuste FLIT (HU #14563,
+    /// D6) suma «(ajustado por FLIT)».
+    /// </summary>
+    public static string Dictamen(string? veredicto, bool ajustado = false) =>
+        veredicto is null
+            ? DictamenPendiente
+            : ajustado ? $"{RotulosDiagnostico.DeVeredicto(veredicto)} (ajustado por FLIT)" : RotulosDiagnostico.DeVeredicto(veredicto);
 
     /// <summary>
     /// Rótulos (punto 5) de las reglas con efecto BLOQUEA, en el orden del dictamen y sin repetir, separados por «; »; vacío si el
@@ -119,7 +125,7 @@ internal static class IndiceZip
                 Celda.Of(fila.Estado),
                 Celda.Of(fila.Archivo is null ? FueraDelZip : EnElZip),
                 Celda.Of(fila.Archivo),
-                Celda.Of(Dictamen(fila.Veredicto)),
+                Celda.Of(Dictamen(fila.Veredicto, fila.Ajustado)),
                 Celda.Of(Motivos(fila.Veredicto, fila.Alertamientos)),
                 Celda.Of(fila.Tramite),
             ], (ColumnaArchivo, fila.Archivo));
@@ -148,7 +154,8 @@ internal static class IndiceZip
             {
                 var dictamen = dictamenes.GetValueOrDefault(v.Id);
                 yield return new FilaIndiceZip(
-                    v.Orden, v.Identificador, v.Estado, archivos.GetValueOrDefault(v.Id), dictamen?.Veredicto, dictamen?.Alertamientos, v.Tramite);
+                    v.Orden, v.Identificador, v.Estado, archivos.GetValueOrDefault(v.Id), dictamen?.Veredicto, dictamen?.Alertamientos, v.Tramite,
+                    dictamen?.Ajustado ?? false);
             }
         }
     }

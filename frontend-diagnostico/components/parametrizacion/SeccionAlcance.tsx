@@ -3,7 +3,7 @@
 import { useId } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
-import { nombreFuente, type Fuente } from "@/lib/configuracion";
+import { AYUDA_FUENTE_NO_DISPONIBLE, FUENTES, nombreFuente, type Fuente } from "@/lib/configuracion";
 import { FUENTE_SIEMPRE, GRUPOS, fuentesOfrecidas, type GrupoAlcance } from "@/lib/diagnosticos/api";
 import { AYUDA_CLS, ETIQUETA_CLS, MARCA_CLS, OPCION_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ERROR_CLS, INSIGNIA_CLS, TOOLTIP_CLS } from "./estilos";
@@ -39,6 +39,9 @@ export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obliga
   const errorId = `${id}-error`;
   const ofrecidas = fuentesOfrecidas(habilitadas, disponibles);
   const faltantes = obligatorias.filter((f) => !ofrecidas.includes(f));
+  // Contratadas pero sin consulta automatizada en producción (fuera de fuentes_disponibles): se ven, no se eligen (AC16).
+  const noDisponibles = habilitadas.filter((f) => !ofrecidas.includes(f));
+  const marcadas = ofrecidas.filter((f) => f === FUENTE_SIEMPRE || obligatorias.includes(f) || seleccionadas.includes(f)).length;
   const Titulo = compacta ? "h3" : "h2";
 
   return (
@@ -47,6 +50,9 @@ export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obliga
         <legend className="mb-1">
           <Titulo className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary"}>Alcance</Titulo>
         </legend>
+        <p className={`${AYUDA_CLS} -mt-3 font-semibold`}>
+          {marcadas} de {FUENTES.length} fuentes
+        </p>
         {!compacta && <p className={AYUDA_CLS}>Elige qué fuentes consultar por cada vehículo. Solo ves las que tu compañía tiene contratadas.</p>}
         {faltantes.length > 0 && (
           <InlineAlert tone="warning" title="Fuentes obligatorias no contratadas">
@@ -57,6 +63,7 @@ export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obliga
         <div className={compacta ? "grid gap-3" : "grid gap-4 lg:grid-cols-3"}>
           {GRUPOS.map((g) => {
             const fuentes = g.fuentes.filter((f) => ofrecidas.includes(f));
+            const sinConsulta = g.fuentes.filter((f) => noDisponibles.includes(f));
             const dependencia = DEPENDENCIA[g.grupo];
             const descId = `${id}-${g.grupo}-desc`;
             return (
@@ -67,7 +74,7 @@ export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obliga
                     {dependencia}
                   </p>
                 )}
-                {fuentes.length === 0 ? (
+                {fuentes.length === 0 && sinConsulta.length === 0 ? (
                   <p className={AYUDA_CLS}>Tu contrato no incluye fuentes de este grupo.</p>
                 ) : (
                   <ul className="flex flex-col gap-2">
@@ -86,6 +93,9 @@ export function SeccionAlcance({ habilitadas, disponibles, seleccionadas, obliga
                         />
                       );
                     })}
+                    {sinConsulta.map((fuente) => (
+                      <CasillaNoDisponible key={fuente} id={`${id}-${fuente}`} fuente={fuente} />
+                    ))}
                   </ul>
                 )}
               </fieldset>
@@ -152,6 +162,22 @@ function CasillaFuente({
           {motivoBloqueo}
         </span>
       )}
+    </li>
+  );
+}
+
+/** Fuente contratada sin consulta automatizada todavía: deshabilitada, sin marcar y con la ayuda del contrato (AC16). */
+function CasillaNoDisponible({ id, fuente }: { id: string; fuente: Fuente }) {
+  const ayudaId = `${id}-no-disponible`;
+  return (
+    <li>
+      <label className={`${OPCION_CLS} cursor-not-allowed opacity-70`}>
+        <input type="checkbox" value={fuente} checked={false} disabled readOnly aria-describedby={ayudaId} className={MARCA_CLS} />
+        <span className="flex-1">{nombreFuente(fuente)}</span>
+      </label>
+      <p id={ayudaId} className={`${AYUDA_CLS} mt-1`}>
+        {AYUDA_FUENTE_NO_DISPONIBLE}
+      </p>
     </li>
   );
 }

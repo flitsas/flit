@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
@@ -17,6 +18,7 @@ import { ParametrosDiagnostico } from "@/components/parametrizacion/ParametrosDi
 import type { Parametrizacion } from "@/components/parametrizacion/useParametrizacion";
 import type { BorradorMasivo } from "./borradores";
 import { DosZonas } from "./DosZonas";
+import { ResultadoCreacion } from "./ResultadoCreacion";
 
 type Fase = "editando" | "guardando" | "analizando";
 type Confirmacion = { tipo: "inactivo" } | { tipo: "confirmando" } | { tipo: "error"; mensaje: string; reintentable: boolean };
@@ -31,6 +33,8 @@ export interface CreacionMasivaProps {
   onOcupado: (ocupado: boolean) => void;
   /** Con la cabecera creada la pantalla bloquea el cambio de modo. */
   onCabecera: (id: string) => void;
+  /** Con el resultado a la vista la pantalla oculta el selector Express/Masivo. */
+  onResultado?: (activo: boolean) => void;
 }
 
 /**
@@ -41,7 +45,7 @@ export interface CreacionMasivaProps {
  * reenvía el MISMO archivo con las correcciones y navega al tablero. Con el análisis a la vista los parámetros quedan
  * bloqueados: «Subir otro archivo» los libera. Un 403 de sesión lleva a la página 403.
  */
-export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera }: CreacionMasivaProps) {
+export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera, onResultado }: CreacionMasivaProps) {
   const router = useRouter();
   const id = useId();
   const rejillaRef = useRef<HTMLDivElement>(null);
@@ -53,6 +57,7 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
   const [analisis, setAnalisis] = useState<Analisis | null>(null);
   const [confirmacion, setConfirmacion] = useState<Confirmacion>({ tipo: "inactivo" });
   const [enfocar, setEnfocar] = useState(0);
+  const [iniciado, setIniciado] = useState<{ id: string; vehiculos: number } | null>(null);
   const ocupado = fase !== "editando" || confirmacion.tipo === "confirmando";
 
   useEffect(() => onOcupado(ocupado), [ocupado, onOcupado]);
@@ -145,8 +150,10 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
     if (!analisis || !cabeceraId) return;
     setConfirmacion({ tipo: "confirmando" });
     try {
-      await confirmarVehiculos(cabeceraId, analisis.archivo, correccionesAConfirmar(analisis));
-      router.push(`/diagnosticos/${encodeURIComponent(cabeceraId)}`);
+      const confirmado = await confirmarVehiculos(cabeceraId, analisis.archivo, correccionesAConfirmar(analisis));
+      setConfirmacion({ tipo: "inactivo" });
+      setIniciado({ id: cabeceraId, vehiculos: confirmado.confirmados });
+      onResultado?.(true);
     } catch (e) {
       const code = accesoNegado(e);
       if (code) return irA403(code);
@@ -235,6 +242,8 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
       </>
     ) : null;
 
+  if (iniciado) return <ResultadoCreacion diagnosticoId={iniciado.id} vehiculos={iniciado.vehiculos} />;
+
   return (
     <DosZonas
       rejillaRef={rejillaRef}
@@ -254,8 +263,11 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
                 <p className={AYUDA_CLS}>Para cambiar los parámetros o el archivo, usa «Subir otro archivo».</p>
               </>
             ) : (
-              <div className="flex justify-end">
-                <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Link href="/" className={BOTON_SECUNDARIO_CLS}>
+                  Cancelar
+                </Link>
+                <button type="submit" disabled={ocupado} aria-busy={fase !== "editando" || undefined} className={BOTON_PRIMARIO_CLS}>
                   {fase === "guardando" ? "Guardando…" : fase === "analizando" ? "Analizando…" : "Validar archivo"}
                   <Icono nombre="derecha" className="h-4 w-4" />
                 </button>
