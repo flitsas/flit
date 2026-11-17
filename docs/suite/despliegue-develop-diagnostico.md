@@ -205,7 +205,7 @@ Ya corre en DEV. Lo marcado **nuevo** es lo que este despliegue agrega.
 | `IMPUESTO_API_BASE_URL` **(nuevo)** | Config sensible | No poner en este despliegue | Vacío = no listo | Impuesto real | Vacía | `C/Impuesto/OpcionesImpuesto.cs:35` |
 | `IMPUESTO_API_PATH` **(nuevo)** | Config | No poner en este despliegue | Vacío | Ruta del impuesto | Vacía | `OpcionesImpuesto.cs:36` |
 | `IMPUESTO_API_TIMEOUT_SECONDS` **(nuevo)** | Config | Opcional | 280 | **Con 300 o más, core-consultas no arranca** | `280` | `OpcionesImpuesto.cs:37-38`, `:56-57` |
-| `IMPUESTO_CONTACTO_*` (18 variables) **(nuevo)** | Config sensible | No poner en este despliegue | Vacío | Datos fijos del paso 3. Lista exacta en `.env.impuesto.example:6-23` | Vacías | `OpcionesImpuesto.cs:67-73` |
+| `IMPUESTO_CONTACTO_*` (18 variables) **(nuevo)** | Config sensible | No poner en este despliegue | Vacío | Datos fijos del paso 3. Lista exacta en `.env.impuesto.example:5-22` | Vacías | `OpcionesImpuesto.cs:67-73` |
 
 **Proveedores reales** (`VERIFIK_*`, `KYVERUM_*`, `FASECOLDA_*`, `RUES_*`): ya existen en DEV. Remítase a
 [handoff-vps-consultas-notificaciones.md](handoff-vps-consultas-notificaciones.md). Este despliegue no los cambia.
@@ -693,13 +693,10 @@ Nada de esto se corrigió en este documento. Las rutas se verificaron en el comm
 8. **Nombres errados en el mensaje de arranque.** `D/ServicioSettings.cs:24-25` pide `DIAGNOSTICO_DP_CERTIFICADO_RUTA` y `_CLAVE`.
    El compose usa `DIAGNOSTICO_DP_CERT_FILE` y `DIAGNOSTICO_DP_CERT_PASSWORD` (`DC:569`, `:1326`). Si un operador sigue el log, crea variables
    que nadie lee. Lo correcto en el contenedor: `Diagnostico__DataProtection__CertificadoRuta` y `__CertificadoClave`.
-9. **`IMPUESTO_CONTACTO_*`.** El compose no las pasa (`DC:681-684`). Además, `handoff-vps-diagnostico.md:283-288` usa
-   `IMPUESTO_CONTACTO_DEPARTAMENTO`, `_CIUDAD` y `_DIRECCION`, y el código lee `_DIRECCION_DEPARTAMENTO`, `_DIRECCION_CIUDAD` y
-   `_DIRECCION_COMPLETA` (`OpcionesImpuesto.cs:70-73`). Con los nombres del handoff, quedan vacías sin error.
+9. **Resuelto (2026-11-16).** `IMPUESTO_CONTACTO_*`: el compose ya pasa las 18 variables y el handoff usa los nombres que lee `OpcionesImpuesto.cs:70-73`.
 10. **`handoff-vps-diagnostico.md:282` rompe el arranque.** Propone `IMPUESTO_API_TIMEOUT_SECONDS=300`, y con 300 core-consultas **no
     arranca** (`OpcionesImpuesto.cs:56-57`). El defecto real es 280 (`DC:683`).
-11. **`IMPUESTO_DEPARTAMENTOS` ya no tiene efecto** (ADR-0080). Sigue en `DC:684` y `.env.impuesto.example:5`, y el handoff aún habla de «vaciar la
-    lista» (`:292-293`, `:317`). `OpcionesImpuesto.cs:31` y `:49-63` ya no la leen. Para apagar: la tabla.
+11. **Resuelto (2026-11-16).** `IMPUESTO_DEPARTAMENTOS` salió del compose y de `.env.impuesto.example`; el handoff apaga por la tabla `consultas.vehicle_tax_departments`.
 12. **Comentario desfasado en el compose.** `DC:551-555` dice que `Diagnostico__Consultas__Address` enciende juntas todas las fuentes y que
     la simulación se valida en Diagnóstico. Desde ADR-0075, solo sirve para la réplica, y la simulación vive en core-consultas
     (`ClienteConsultas.cs:19-21`).
