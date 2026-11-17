@@ -105,16 +105,17 @@ public sealed class SuperAdminOperacionFlitTests
             capacidades.GetProperty(capacidad).GetBoolean().Should().BeFalse($"{capacidad}: es de la compañía FLIT");
     }
 
-    // Caso 5 — el manifiesto ya no trae backoffice_diagnostico; usuario y admin quedan con sus permisos de siempre.
+    // Caso 5 — el manifiesto ya no trae backoffice_diagnostico; usuario y admin quedan con sus permisos de siempre, más reportes.ver
+    // (HU #14579) en los dos y usuarios.gestionar (HU #14587) solo en el admin.
     [Fact]
     public void Roles_por_defecto_son_solo_usuario_y_admin()
     {
-        string[] usuario = [Permisos.DiagnosticosCrear, Permisos.DiagnosticosVer, Permisos.ReportesDescargar, Permisos.DerivacionCrear, Permisos.ConfiguracionVer, Permisos.SaneamientoSolicitar];
+        string[] usuario = [Permisos.DiagnosticosCrear, Permisos.DiagnosticosVer, Permisos.ReportesDescargar, Permisos.DerivacionCrear, Permisos.ConfiguracionVer, Permisos.SaneamientoSolicitar, Permisos.ReportesVer];
 
         Permisos.RolesPorDefecto.Select(r => r.Codigo).Should().Equal("usuario_diagnostico", "admin_diagnostico");
         Permisos.RolesPorDefecto.Single(r => r.Codigo == "usuario_diagnostico").Permisos.Should().BeEquivalentTo(usuario);
         Permisos.RolesPorDefecto.Single(r => r.Codigo == "admin_diagnostico").Permisos.Should()
-            .BeEquivalentTo([.. usuario, Permisos.ConfiguracionEditar, Permisos.ConsultasReprocesar]);
+            .BeEquivalentTo([.. usuario, Permisos.ConfiguracionEditar, Permisos.ConsultasReprocesar, Permisos.UsuariosGestionar]);
     }
 
     private static async Task<(HttpStatusCode Estado, string? Codigo)> EnviarAsync(
