@@ -19,6 +19,7 @@ import {
   INGRESO_ICONO_CLS,
   INGRESO_TITULO_CLS,
 } from "@flit/ui/Ingreso";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 // Login del hub (A-06, HU #12991). Mismo diseño (IngresoLayout de @flit/ui, propuesta «Diseño Inteligente», HU #14485) y mensajes que el de Trámites (components/atom/Login.tsx), pero
 // no guarda tokens en el navegador: POST /connect/login abre la sesión del hub (cookie HttpOnly) y se vuelve a la
@@ -97,7 +98,7 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
 
       {panel === "blocked" || panel === "roleDeactivated" ? (
         <div className={`${INGRESO_AVISO_CLS} border border-[color:var(--di-danger)] bg-[color:var(--di-danger-soft)]`} role="alert">
-          <Icono nombre="alerta" className="mt-0.5 h-5 w-5 shrink-0 text-[color:var(--di-danger)]" />
+          <IconoAviso tipo="error" className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="text-sm">
             <p className="font-semibold text-[color:var(--di-danger)]">Acceso Restringido</p>
             <p className="mt-1 text-xs text-[color:var(--di-text-secondary)]">
@@ -157,7 +158,7 @@ export function HubLogin({ returnUrl, navigate = (url) => window.location.assign
 
           {error && (
             <p role="alert" className={INGRESO_ERROR_CLS}>
-              <Icono nombre="alerta" className="h-3.5 w-3.5" /> {error}
+              <IconoAviso tipo="error" className="h-3.5 w-3.5" /> {error}
             </p>
           )}
 

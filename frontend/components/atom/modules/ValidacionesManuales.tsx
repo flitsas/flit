@@ -26,6 +26,7 @@ import { ManualStatusBadge } from './ManualStatusBadge';
 import { ManualReviewDetailModal } from './ManualReviewDetailModal';
 import { useCopiarEnlaceManual } from './CopiarEnlaceManual';
 import { puedeCopiarEnlaceManual } from '@/lib/identity/manual-flow';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * Pestaña «Validaciones manuales» de Validaciones (Épica #13202, HU-C5). Solo Super Admin: quien la monta
@@ -266,7 +267,7 @@ export function ValidacionesManuales({
             color: 'var(--badge-info-fg)',
           }}
         >
-          <Icono nombre="exclamacion" className="mt-0.5 h-4 w-4 shrink-0" />
+          <IconoAviso tipo="info" className="mt-0.5 h-4 w-4 shrink-0" />
           <p className="flex-1">No encontramos esa validación manual.</p>
           <button
             type="button"

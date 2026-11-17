@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, type ChangeEvent } from "react";
-import { Download, UploadCloud } from "lucide-react";
+import { Download } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
@@ -70,7 +71,7 @@ export function ZonaArchivo({ archivo, onElegir, cargando, disabled = false, err
           htmlFor={id}
           className={`flex flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-[var(--flit-brand-ink)] bg-card px-6 py-8 text-center text-[var(--flit-brand-ink)] has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-60 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-ring ${disabled ? "" : "cursor-pointer"} ${FOCO_CLS}`}
         >
-          <UploadCloud className="h-8 w-8" aria-hidden="true" strokeWidth={1.5} />
+          <Icono nombre="archivo-subir" className="h-8 w-8" />
           <span className="text-sm font-semibold">Archivo de vehículos (.xlsx o .csv)</span>
           {archivo && <span className="break-all text-sm font-semibold text-flit-primary">{archivo.name}</span>}
           <span className="text-xs">{archivo ? "Haz clic para cambiarlo." : "Haz clic para elegirlo."} Máximo 5 MB.</span>

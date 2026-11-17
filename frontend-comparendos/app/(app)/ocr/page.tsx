@@ -157,7 +157,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
             arrastrando ? "border-flit-brand bg-secondary dark:bg-flit-brand/10" : "border-border"
           }`}
         >
-          <Icono nombre="nube-subir" className="h-5 w-5 text-flit-brand" />
+          <Icono nombre="archivo-subir" className="h-5 w-5 text-flit-brand" />
           <span className="font-semibold">Arrastra los archivos aquí o haz clic para elegirlos</span>
           <span className="opacity-60">JPG, PNG, TIFF o PDF · máximo 20 MB cada uno</span>
           <input

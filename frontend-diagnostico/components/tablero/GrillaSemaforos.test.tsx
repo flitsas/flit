@@ -168,7 +168,9 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
     const chip = chipDe(td);
     expect(chip).toHaveAttribute("data-tono", tono);
     expect(chip).toHaveTextContent(new RegExp(`^${texto.replace(/[()]/g, "\\$&")}$`));
-    expect(chip.querySelector("svg")).not.toBeNull();
+    // OK y Error llevan el disco del PDF (img aviso-ok / aviso-error); los demás estados, el glifo (svg).
+    const disco = { COMPLETADO: "aviso-ok", ERROR: "aviso-error" }[estado as string];
+    expect(chip.querySelector(disco ? `img[src$="/${disco}.svg"]` : "svg")).not.toBeNull();
     expect(chip.style.background).toBe(fondo);
   });
 

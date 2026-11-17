@@ -91,7 +91,7 @@ function ownershipPanelId(idPrefix: string): string {
  * `title`, que exige pasar el puntero por encima y no existe en táctil.
  *
  * El fondo es el MISMO #557EFF que el círculo que trae dentro el SVG
- * (`public/assets/agregar-copropietario.svg`): los dos azules se funden y el icono se lee como el
+ * (`public/assets/kit/persona-nueva.svg`, «Persona nueva» del PDF de íconos): los dos azules se funden y el icono se lee como el
  * glifo blanco sobre la píldora, sin un círculo recortado dentro de otra forma. `pr-3` y no un
  * padding simétrico porque el icono ya trae su propio margen visual dentro del SVG.
  */
@@ -230,7 +230,7 @@ export function OwnershipTabsBar({
           {/* Decorativo: lo que nombra el botón es el rótulo de al lado. */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/assets/agregar-copropietario.svg"
+            src="/assets/kit/persona-nueva.svg"
             alt=""
             aria-hidden="true"
             width={36}

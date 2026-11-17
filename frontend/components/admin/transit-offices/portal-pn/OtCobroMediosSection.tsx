@@ -6,7 +6,6 @@
 // Siempre se muestra lo último guardado: ante un fallo no se cambia nada y se informa el motivo exacto.
 import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 import { useCallback, useEffect, useId, useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { Store } from "lucide-react";
 import type { IconoComoProps } from "@flit/ui/iconoComo";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
@@ -30,6 +29,8 @@ import type {
   TipoCobro,
 } from "@/lib/api/admin-ot-portal-cobro";
 
+const ICONO_PESOS = iconoComo("pesos");
+
 export const COBRO_ON = "var(--flit-success-ink)";
 export const COBRO_OFF = "var(--border-strong)";
 
@@ -48,8 +49,9 @@ const AYUDA_MEDIO: Record<MedioPago, string> = {
   PIN: "La persona paga en la caja del organismo con un PIN.",
 };
 const ICONO_MEDIO: Record<MedioPago, ComponentType<IconoComoProps>> = {
-  PASARELA: iconoComo("credencial"),
-  PIN: Store,
+  // PDF: Credencial es el documento de identidad; los medios de pago llevan Pago.
+  PASARELA: iconoComo("pago"),
+  PIN: ICONO_PESOS,
 };
 const NOMBRE_CONCEPTO: Record<ConceptoCobro, string> = {
   TRAMITE: "Valor del trámite",

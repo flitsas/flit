@@ -1,9 +1,13 @@
 "use client";
 
-import { CheckSquare, FilePlus2, XSquare } from "lucide-react";
+import { XSquare } from "lucide-react";
 import { BOTON_PRIMARIO_CLS, BOTON_SECUNDARIO_CLS, MARCA_CLS } from "@/components/configuracion/estilos";
 import type { FilaVehiculo } from "@/lib/tablero/api";
 import { rotuloMotivo, type DerivacionFila } from "@/lib/tablero/derivacion";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_CHECK = iconoComo("check");
+const ICONO_TRAMITES = iconoComo("tramites");
 
 /** «1 seleccionada» / «N seleccionadas». */
 export const textoSeleccionadas = (n: number) => (n === 1 ? "1 seleccionada" : `${n} seleccionadas`);
@@ -59,7 +63,7 @@ export function BarraSeleccionDerivacion({ elegibles, seleccionadas, enviando, o
     <div role="group" aria-label="Selección para crear trámites" className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
         <button type="button" onClick={onSeleccionarTodas} disabled={elegibles === 0 || enviando} className={BOTON_SECUNDARIO_CLS}>
-          <CheckSquare className="h-4 w-4" aria-hidden="true" />
+          <ICONO_CHECK className="h-4 w-4" aria-hidden="true" />
           Seleccionar todas las elegibles
         </button>
         <button type="button" onClick={onQuitar} disabled={seleccionadas === 0 || enviando} className={BOTON_SECUNDARIO_CLS}>
@@ -76,7 +80,7 @@ export function BarraSeleccionDerivacion({ elegibles, seleccionadas, enviando, o
           aria-busy={enviando}
           className={`${BOTON_PRIMARIO_CLS} sm:ml-auto`}
         >
-          <FilePlus2 className="h-4 w-4" aria-hidden="true" />
+          <ICONO_TRAMITES className="h-4 w-4" aria-hidden="true" />
           {`Crear trámites (${seleccionadas})`}
         </button>
       </div>

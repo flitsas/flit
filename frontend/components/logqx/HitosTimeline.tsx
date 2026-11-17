@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Cpu } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { LogQxHito, LogQxRadicacion } from "@/lib/api/admin-log-qx";
@@ -13,6 +12,8 @@ import {
   resultado,
   secretaria,
 } from "@/lib/logqx/labels";
+
+const ICONO_PROCESOS = iconoComo("procesos");
 
 /** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
 const ICONO_CERRAR = iconoComo("cerrar");
@@ -212,7 +213,7 @@ function BloqueSondeo({ hito, indice }: { hito: LogQxHito; indice: number }) {
           </p>
           <p className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 font-mono text-[11.5px]">
             <span className="inline-flex items-center gap-1">
-              <Cpu className="h-3 w-3" aria-hidden="true" /> Consulta de estado
+              <ICONO_PROCESOS className="h-3 w-3" aria-hidden="true" /> Consulta de estado
             </span>
             {hito.codigo != null && <span>código {codigoQx(hito.codigo)}</span>}
           </p>

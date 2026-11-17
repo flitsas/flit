@@ -10,6 +10,7 @@ import {
   type Banner,
   type BannerFormInput,
 } from "@/lib/api/admin-banners";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 const INPUT_CLS =
   "w-full rounded-xl border bg-transparent px-3 py-2.5 text-xs outline-none focus:border-flit-brand disabled:opacity-60";
@@ -153,7 +154,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
             className="flex items-start gap-2 rounded-xl border px-3 py-2 text-[11px] font-medium"
             style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           >
-            <Icono nombre="alerta" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            <IconoAviso tipo="error" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{banner}</span>
           </p>
         )}
@@ -241,7 +242,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
           <span className="mb-1 block text-xs font-semibold">
             Imagen del banner
             {fileRequired ? (
-              <span aria-hidden="true"> *</span>
+              <span aria-hidden="true"> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
             ) : (
               " (opcional: reemplaza la actual)"
             )}
@@ -258,7 +259,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
                     : "var(--border)",
             }}
           >
-            <Icono nombre="nube-subir" className="h-4 w-4 shrink-0 opacity-60" />
+            <Icono nombre="archivo-subir" className="h-4 w-4 shrink-0 opacity-60" />
             <span className="truncate font-medium">
               {form.file
                 ? form.file.name

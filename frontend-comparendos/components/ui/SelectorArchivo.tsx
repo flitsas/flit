@@ -36,7 +36,7 @@ export function SelectorArchivo({
         }}
       />
       <button type="button" className={controlCls(false)} disabled={disabled} onClick={() => input.current?.click()}>
-        <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
+        <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
         {archivo ? "Cambiar archivo" : texto}
       </button>
       {archivo ? (

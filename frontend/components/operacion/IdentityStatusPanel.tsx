@@ -21,10 +21,14 @@ import type {
 
 import { formatFechaHora } from '@/lib/format/date';
 import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+import { IconoAviso, avisoComo } from "@flit/ui/IconoAviso";
+
+// Discos de aviso del PDF definitivo (disco verde con check / azul con «i» / rojo con X).
+const AVISO_ERROR = avisoComo("error");
+const AVISO_INFO = avisoComo("info");
 
 /** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
 const ICONO_CERRAR = iconoComo("cerrar");
-const ICONO_EXCLAMACION = iconoComo("exclamacion");
 const ICONO_ALERTA = iconoComo("alerta");
 const ICONO_RELOJ = iconoComo("reloj");
 /**
@@ -278,7 +282,7 @@ export function IdentityStatusPanel({
               role="alert"
               aria-live="polite"
             >
-              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
+              <IconoAviso tipo="error" className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="space-y-1">
                 <p className="font-semibold">No se pudo cargar el historial de identidad.</p>
                 <p className="opacity-80">{error}</p>
@@ -397,7 +401,7 @@ function MotivoNoEnvioRow({ motivo }: { motivo: EnvioValidacionMotivo }) {
   const copy = presentarMotivoNoEnvio(motivo.codigo, parte);
   const bloqueo = !motivo.informativo && copy.naturaleza === 'bloqueo';
   const { color, background, border } = INLINE_ALERT_TONES[bloqueo ? 'error' : 'info'];
-  const Icono = bloqueo ? ICONO_ALERTA : ICONO_EXCLAMACION;
+  const Icono = bloqueo ? AVISO_ERROR : AVISO_INFO;
 
   return (
     <div

@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react";
-import { ImagePlus, Images } from "lucide-react";
+import { Images } from "lucide-react";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { Modal } from "@/components/atom/Modal";
 import {
@@ -14,6 +14,8 @@ import { PORTAL_IMAGE_ACCEPT, validatePortalCarouselLink } from "@/lib/brand/val
 import type { ClienteMarcaPortal } from "./cliente-marca";
 import { useAuthedImage } from "./useAuthedImage";
 import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_ARCHIVO_SUBIR = iconoComo("archivo-subir");
 
 /** Operaciones que necesita el gestor (las cumplen `carrusel` y `banners` del cliente de marca). */
 export interface ApiGestorImagenes {
@@ -161,7 +163,7 @@ export function GestorImagenes({
               className={`${FOCO} inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-semibold text-[color:var(--di-on-accent)] disabled:cursor-not-allowed disabled:opacity-50`}
               style={{ background: "var(--di-accent)" }}
             >
-              <ImagePlus className="h-3.5 w-3.5" aria-hidden /> {config.botonAgregar}
+              <ICONO_ARCHIVO_SUBIR className="h-3.5 w-3.5" aria-hidden /> {config.botonAgregar}
             </button>
             {lleno && (
               <p id={fullId} className="text-xs opacity-70">
@@ -397,8 +399,7 @@ function FormularioImagen({ config, item, busy, onClose, onSubmit }: FormularioP
       onClose={onClose}
       busy={busy}
       size="md"
-      icon={nueva ? ImagePlus : undefined}
-      icono={nueva ? undefined : "lapiz"}
+      icono={nueva ? "archivo-subir" : "lapiz"}
       title={nueva ? config.tituloModalAgregar : config.tituloModalEditar}
     >
       <form onSubmit={(e) => void handleSubmit(e)} noValidate className="flex flex-col gap-4">
@@ -432,7 +433,7 @@ function FormularioImagen({ config, item, busy, onClose, onSubmit }: FormularioP
                 <img src={vistaPrevia} alt="" className="h-16 w-28 shrink-0 rounded-md border bg-card object-contain" style={{ borderColor: BORDE }} />
               ) : (
                 <span aria-hidden className="grid h-16 w-16 shrink-0 place-items-center rounded-lg" style={{ background: "var(--di-accent-soft)", color: "var(--di-action)" }}>
-                  <ImagePlus className="h-7 w-7" />
+                  <ICONO_ARCHIVO_SUBIR className="h-7 w-7" />
                 </span>
               )}
               <div className="flex min-w-0 flex-col items-start gap-1">

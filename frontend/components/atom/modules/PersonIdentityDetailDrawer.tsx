@@ -35,6 +35,7 @@ import {
   DIALOGO_PANEL,
 } from '@/components/operacion/dialogo-propio';
 import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 /**
 
  * Detalle multi-validación por persona (HU #11273 / CF-06 / ADR-0040).
@@ -324,7 +325,7 @@ export function PersonIdentityDetailDrawer({
               style={{ borderColor: 'var(--destructive)', background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
               role="alert"
             >
-              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
+              <IconoAviso tipo="error" className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <p className="font-semibold">No se pudo cargar el historial.</p>
                 <p className="opacity-80">{error}</p>

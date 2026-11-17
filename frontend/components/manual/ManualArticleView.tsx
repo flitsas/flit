@@ -97,7 +97,7 @@ export function ManualArticleView({ article }: { article: ManualArticle }) {
                   className="text-[15px] font-semibold underline-offset-2 hover:underline"
                   style={{ color: "var(--manual-brand)" }}
                 >
-                  {src.kind === "pdf" ? "📄 " : "🔗 "}
+                  <Icono nombre={src.kind === "pdf" ? "documento" : "externo"} className="mr-1 inline-block h-4 w-4 align-text-bottom" />
                   {src.title}
                 </a>
                 {src.ref && (

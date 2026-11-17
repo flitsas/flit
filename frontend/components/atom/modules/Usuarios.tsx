@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import { ShieldOff } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { getUsers, getRoles, assignRole, blockUser, unblockUser, updateUser, deleteUser, restoreUser, resendInvitation, cancelInvitation, reactivateInvitation, TenantUser, TenantRole } from "@/lib/api/security";
@@ -46,13 +45,15 @@ import { isInvitationRow } from "@/lib/users/invitationRow";
 import { superadminClient } from "@/lib/api/superadmin-client";
 
 import { formatFechaHora } from "@/lib/format/date";
+
+const ICONO_CANDADO_ABIERTO = iconoComo("candado-abierto");
 // HU #10623 (AC3/AC4): "Eliminados" solo se ofrece a SuperAdmin. AdminCompany puede
 
 // suspender/desactivar pero NO eliminar; el botón Eliminar y la pestaña Eliminados son SuperAdmin-only.
 const ALL_TABS = [
   { id: "usuarios", label: "Usuarios", icon: iconoComo("usuarios") },
-  { id: "roles", label: "Roles y permisos", icon: iconoComo("escudo") },
-  { id: "clientes-ict", label: "Clientes ICT", icon: iconoComo("rol") },
+  { id: "roles", label: "Roles y permisos", icon: iconoComo("rol") },
+  { id: "clientes-ict", label: "Clientes ICT", icon: iconoComo("empresas") },
   // HU #13200 — clientes de integración EXTERNOS (Flito), solo SuperAdmin.
   { id: "clientes-integracion", label: "Clientes de integración", icon: iconoComo("integraciones") },
   // HU #13654 (Feature #13103): auditoría de permisos individuales, solo Super Admin en el Panel SA.
@@ -295,7 +296,7 @@ export function Usuarios() {
     if (!isInvitationRow(u) && canManageUserLifecycle) {
       if (u.isSuspended) {
         actions.push({
-          icon: ShieldOff,
+          icon: ICONO_CANDADO_ABIERTO,
           label: `Desbloquear usuario ${u.fullName}`,
           onClick: () => void handleUnsuspend(u.id),
         });

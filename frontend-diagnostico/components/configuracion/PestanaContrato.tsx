@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, type FormEvent } from "react";
-import { Building2, FileText, Lock, Save, TriangleAlert } from "lucide-react";
+import { Building2, FileText, Lock, TriangleAlert } from "lucide-react";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { ApiError } from "@/lib/api";
@@ -332,7 +332,6 @@ function EditorContratoBackoffice() {
 
           <div className="flex justify-end">
             <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
-              <Save className="h-4 w-4" aria-hidden="true" />
               {ocupado ? "Guardando…" : "Guardar contrato"}
             </button>
           </div>

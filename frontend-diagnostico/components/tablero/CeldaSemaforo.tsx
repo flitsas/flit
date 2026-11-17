@@ -1,7 +1,8 @@
 "use client";
 
 import type { ComponentType, CSSProperties, ReactNode, SVGProps } from "react";
-import { Check, Clock, LoaderCircle, MinusCircle, X } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
+import { avisoComo } from "@flit/ui/IconoAviso";
 import type { Fuente } from "@/lib/configuracion";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type MotivoNa } from "@/lib/tablero/api";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
@@ -21,10 +22,10 @@ function Punto(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/** Marca de cada tono, como el `.badge::before` de la propuesta: check cielo, punto naranja, equis naranja. */
+/** Marca de cada tono: disco verde con check, punto naranja y disco rojo con X (los discos traen su color). */
 const ICONO_CLS: Partial<Record<Tono, string>> = {
-  success: "h-3.5 w-3.5 text-[var(--di-success-dot)]",
-  danger: "h-3.5 w-3.5 text-[var(--di-alerta-punto)]",
+  success: "h-3.5 w-3.5",
+  danger: "h-3.5 w-3.5",
   warning: "h-2 w-2",
 };
 
@@ -42,12 +43,13 @@ export type EstadoVisible = EstadoCelda | typeof SIN_SOLICITAR;
  * El estado nunca depende solo del color: cada chip lleva icono y texto.
  */
 const ESTADOS: Record<EstadoVisible, { tono: Tono; texto: string; Icono: Icono; animado?: boolean }> = {
-  PENDIENTE: { tono: "neutral", texto: "Sin ejecutar", Icono: Clock },
-  EN_CURSO: { tono: "neutral", texto: "Sin ejecutar", Icono: LoaderCircle, animado: true },
-  COMPLETADO: { tono: "success", texto: "Ejecutado (OK)", Icono: Check },
-  ERROR: { tono: "danger", texto: "Error", Icono: X },
+  PENDIENTE: { tono: "neutral", texto: "Sin ejecutar", Icono: iconoComo("reloj") },
+  EN_CURSO: { tono: "neutral", texto: "Sin ejecutar", Icono: iconoComo("girador"), animado: true },
+  // PDF definitivo: lo positivo lleva el disco verde con check y lo negativo el disco rojo con X.
+  COMPLETADO: { tono: "success", texto: "Ejecutado (OK)", Icono: avisoComo("ok") },
+  ERROR: { tono: "danger", texto: "Error", Icono: avisoComo("error") },
   NA: { tono: "warning", texto: "Novedad", Icono: Punto },
-  SIN_SOLICITAR: { tono: "na", texto: "Sin solicitar", Icono: MinusCircle },
+  SIN_SOLICITAR: { tono: "na", texto: "Sin solicitar", Icono: iconoComo("menos") },
 };
 
 const ESTILOS: Record<Tono, CSSProperties> = {
@@ -112,7 +114,7 @@ function vistaDe(estado: EstadoVisible, conDeuda: boolean): { tono: Tono; texto:
   if (conDeuda && estado === "COMPLETADO")
     return { tono: "warning" as const, texto: "Con deuda", Icono: Punto, animado: false };
   // Punto 5: un estado que el frontend no conoce no rompe el chip ni pinta el código.
-  return ESTADOS[estado] ?? { tono: "neutral", texto: rotular({ contexto: "estado de la celda", codigo: estado }), Icono: Clock };
+  return ESTADOS[estado] ?? { tono: "neutral", texto: rotular({ contexto: "estado de la celda", codigo: estado }), Icono: iconoComo("reloj") };
 }
 
 /**

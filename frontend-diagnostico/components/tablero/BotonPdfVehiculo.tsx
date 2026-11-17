@@ -1,12 +1,14 @@
 "use client";
 
 import { useId } from "react";
-import { FileDown } from "lucide-react";
 import { AYUDA_CLS, BOTON_SECUNDARIO_CLS } from "@/components/configuracion/estilos";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { puedeEmitirPdf, urlPdfVehiculo } from "@/lib/reportes/api";
 import { useDescarga } from "@/lib/reportes/useDescarga";
 import type { FilaVehiculo } from "@/lib/tablero/api";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_NUBE_BAJAR = iconoComo("nube-bajar");
 
 export const AYUDA_PDF_EN_CURSO = "Disponible cuando terminen las consultas de este vehículo";
 export const AYUDA_PDF_NO_DISPONIBLE = "Las consultas no disponibles aparecerán así en el PDF";
@@ -43,12 +45,12 @@ export function BotonPdfVehiculo({ diagnosticoId, estadoLote, vehiculo }: BotonP
           aria-busy={descargando || undefined}
           className={BOTON_SECUNDARIO_CLS}
         >
-          <FileDown className="h-4 w-4" aria-hidden="true" />
+          <ICONO_NUBE_BAJAR className="h-4 w-4" aria-hidden="true" />
           PDF
         </a>
       ) : (
         <button type="button" disabled aria-label={nombre} aria-describedby={idAyuda} className={BOTON_SECUNDARIO_CLS}>
-          <FileDown className="h-4 w-4" aria-hidden="true" />
+          <ICONO_NUBE_BAJAR className="h-4 w-4" aria-hidden="true" />
           PDF
         </button>
       )}

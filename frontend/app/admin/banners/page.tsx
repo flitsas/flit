@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Image as ImageIcon } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
@@ -16,6 +15,10 @@ import { BannerDeleteDialog } from "@/components/admin/banners/BannerDeleteDialo
 import { createBanner, fetchBanners, updateBanner, type Banner, type BannerPagedResult } from "@/lib/api/admin-banners";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { ADMIN_BACK_LINK_CLS } from "@/components/admin/admin-ui-styles";
+import { iconoComo } from "@flit/ui/iconoComo";
+import { IconoAviso } from "@flit/ui/IconoAviso";
+
+const ICONO_MEGAFONO = iconoComo("megafono");
 
 /**
  * Consola admin de banners promocionales (HU #12241, Feature #12236): listado administrable
@@ -39,7 +42,7 @@ export default function AdminBannersPage() {
 function NoAccess() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
-      <Icono nombre="alerta" className="h-8 w-8" style={{ color: "var(--destructive)" }} />
+      <IconoAviso tipo="error" className="h-8 w-8" />
       <p className="text-sm font-medium" style={{ color: "var(--color-flit-primary)" }}>
         No tienes permiso para administrar banners promocionales.
       </p>
@@ -118,7 +121,7 @@ function BannersList() {
       <ModuleTitle
         title="Banners promocionales"
         subtitle="Configura y programa el contenido informativo del carrusel de banners, sin intervención técnica."
-        action={<CreateButton label="Nuevo banner" icon={ImageIcon} onClick={() => setFormTarget("new")} />}
+        action={<CreateButton label="Nuevo banner" icon={ICONO_MEGAFONO} onClick={() => setFormTarget("new")} />}
       />
 
       {/* Sin tarjeta blanca envolvente: mismo lenguaje visual que TramitesTable — la tabla es una

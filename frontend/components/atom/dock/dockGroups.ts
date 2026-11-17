@@ -1,5 +1,4 @@
 import type { ComponentType, CSSProperties } from "react";
-import { FolderCog } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { OT_ADM_DOCK } from "@/components/admin/transit-offices/ot-nav";
 import { COPY } from "@/lib/copy/copy-catalog";
@@ -83,7 +82,7 @@ export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
   identidad: iconoComo("escudo"),
   reportes: iconoComo("reportes"),
   usuarios: iconoComo("usuarios"),
-  administracion: FolderCog,
+  administracion: iconoComo("empresas"),
   administradores: iconoComo("candado"),
   integraciones: iconoComo("consulta"),
 };
