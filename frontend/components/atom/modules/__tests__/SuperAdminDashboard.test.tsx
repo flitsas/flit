@@ -151,6 +151,7 @@ describe("SuperAdminDashboard — franja 1", () => {
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
     expect(mocks.fetchAnalyticsOverview.mock.calls[0][0]).toMatchObject({ from: "", to: "", tenantId: undefined });
     expect(mocks.fetchSuperAdminOrganismos.mock.calls[0][0]).toMatchObject({ tenantId: undefined });
+    expect(mocks.fetchSuperAdminCompanias.mock.calls[0][0]).toMatchObject({ stuckDays: 7 });
     expect(mocks.listTenantBiometricValidations).toHaveBeenCalledWith(
       expect.objectContaining({ createdFrom: undefined, createdTo: undefined }),
       "*",

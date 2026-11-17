@@ -437,6 +437,47 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
             .Represados.Should().Be(0, "el borrador de C1 no se cuenta en C2");
     }
 
+    /// <summary>
+    /// Q56 — coherencia con «Trámites totales»: sin <c>tenantId</c>, los organismos solo cuentan compañías del universo
+    /// (activas y sin perfil OT), igual que el resumen de compañías. X inactiva y C2 con perfil OT salen del volumen de Ot1
+    /// y de la tabla; con <c>tenantId</c> explícito manda la compañía pedida.
+    /// </summary>
+    [PostgresFact]
+    public async Task Q56_sin_compania_excluye_inactivas_y_con_perfil_OT_como_el_resumen()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        int antes;
+        await using (var ctx0 = NewContext())
+            antes = (await new SuperAdminDashboardReadRepository(ctx0).GetOfficesAsync(null, null, null))
+                .Items.Single(o => o.TransitOfficeId == HierarchyScenario.Ot1).Volumen;
+
+        await using (var seed = NewContext())
+        {
+            (await seed.Tenants.SingleAsync(t => t.Id == HierarchyScenario.X)).IsActive = false;
+            seed.TransitOfficeProfiles.Add(new Flit.Infrastructure.Persistence.Entities.Admin.TransitOfficeProfile
+            {
+                Id = Guid.NewGuid(),
+                TenantId = HierarchyScenario.C2,
+                TransitOfficeId = HierarchyScenario.Ot2,
+                OperationMode = "dashboard",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var repo = new SuperAdminDashboardReadRepository(ctx);
+
+        var despues = (await repo.GetOfficesAsync(null, null, null)).Items.Single(o => o.TransitOfficeId == HierarchyScenario.Ot1).Volumen;
+        despues.Should().Be(antes - 2, "los trámites de X (inactiva) y de C2 (perfil OT) salen del universo");
+
+        var companias = await repo.GetCompaniesAsync(null, null, 7);
+        companias.Should().NotContain(r => r.TenantId == HierarchyScenario.X || r.TenantId == HierarchyScenario.C2);
+
+        (await repo.GetOfficesAsync(HierarchyScenario.X, null, null)).Items.Should().ContainSingle()
+            .Which.Volumen.Should().Be(1, "con tenantId explícito manda la compañía pedida");
+    }
+
     private static DbTenantScopeResolver NewResolver(Infrastructure.Persistence.FlitDbContext ctx) =>
         new(ctx, new DbHierarchySwitches(ctx, NullLogger<DbHierarchySwitches>.Instance), NullLogger<DbTenantScopeResolver>.Instance);
 }
