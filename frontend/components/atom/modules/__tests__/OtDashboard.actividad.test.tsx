@@ -168,6 +168,9 @@ describe("OtDashboard — franjas 2 y 3", () => {
     render(<OtDashboard />);
     const panel = await screen.findByTestId("ot-inicio-cola-critica");
 
+    // Sin SLA en el dominio: el título no habla de vencimiento.
+    expect(within(panel).getByRole("heading", { name: "Cola crítica" })).toBeInTheDocument();
+    expect(within(panel).queryByText(/vencimiento/i)).not.toBeInTheDocument();
     await within(panel).findByText("RAD-0006");
     const filas = within(panel).getAllByRole("row").slice(1);
     expect(filas).toHaveLength(5);
