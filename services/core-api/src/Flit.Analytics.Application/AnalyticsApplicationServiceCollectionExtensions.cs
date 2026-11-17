@@ -2,6 +2,7 @@ using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.CompanyQueries;
 using Flit.Analytics.Application.IctQueries;
 using Flit.Analytics.Application.Queries;
+using Flit.Analytics.Application.Queries.GestorDashboard;
 using Flit.Analytics.Application.Queries.Metrics;
 using Flit.Analytics.Application.Queries.Network;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,6 +21,9 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<ExportExecutivePdfHandler>();
         services.AddScoped<GetMonthlyTrendHandler>();
         services.AddScoped<GetDetailedProceduresHandler>(); // Feature #10813 HU #10815
+
+        // Inicio del Gestor (rediseño de los 3 dashboards) — cola de gestión.
+        services.AddScoped<GestorDashboardColaInactividadHandler>();
 
         // HU #12359 (Feature #12257) — estadísticas de la red de una cabeza de grupo (rutas /tramites/network/stats/*).
         services.AddScoped<GetNetworkAnalyticsOverviewHandler>();

@@ -161,6 +161,7 @@ internal static class ApiEndpoints
 
         // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
         app.MapAnalyticsEndpoints();
+        app.MapGestorDashboardEndpoints(); // Inicio del Gestor (rediseño de los 3 dashboards)
         app.MapDashboardActiveModulesEndpoints(); // HU #12251 (Feature #12249) — flags de módulos activos, sin AdminCompanyPolicy
         app.MapDetailedReportEndpoints(); // Feature #10813
         app.MapReportSchedulesEndpoints(); // Reportes2 HU-D

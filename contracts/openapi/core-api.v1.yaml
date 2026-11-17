@@ -9600,6 +9600,79 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/analytics/gestor/cola-inactividad:
+    get:
+      tags: [Analytics · Inicio del Gestor]
+      operationId: gestorDashboardColaInactividad
+      summary: Trámites de la compañía con más días sin movimiento (Inicio del Gestor, «Cola de gestión»)
+      description: >
+        Devuelve hasta `limit` trámites ordenados del más quieto al menos, y el `total` que cumple el filtro.
+        El último movimiento es lo más reciente entre el último cambio de estado, la última actualización y la
+        creación. El tenant sale del claim JWT `tenant_id`; un SuperAdmin debe indicar `tenantId` (no hay vista
+        global). Ver por familia (HU #13664): una familia sin Ver no se lista, y pedirla devuelve la cola vacía.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [borrador, preparado, preasignacion, asignado, entregado, subsanacion, aprobado, rechazado, anulado, revocado]
+          description: Estado del trámite (status crudo, como estado-counts). Sin valor, todos menos los finales (aprobado, anulado, revocado).
+        - name: familia
+          in: query
+          required: false
+          schema: { type: string, enum: [matriculas, traspasos, otros] }
+          description: Familia del tipo de trámite. Sin valor, todas las que el usuario puede ver.
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 5, minimum: 1, maximum: 20 }
+          description: Cuántos trámites devolver (se acota a 1–20).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin (obligatorio para él); cualquier otro usuario solo puede indicar el suyo.
+      responses:
+        "200":
+          description: Cola de gestión.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, estado, familia, diasSinMovimiento]
+                      properties:
+                        id: { type: string, format: uuid }
+                        referencia: { type: string, nullable: true }
+                        placa: { type: string, nullable: true }
+                        vin: { type: string, nullable: true }
+                        estado: { type: string }
+                        familia: { type: string, enum: [matriculas, traspasos, otros] }
+                        diasSinMovimiento: { type: integer, minimum: 0 }
+                  total: { type: integer, minimum: 0 }
+        "400":
+          description: Estado o familia inválidos, o SuperAdmin sin `tenantId`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Sin permiso del Inicio, o `tenantId` de otra compañía.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/analytics/productivity/top:
     get:
       tags: [Analytics · Dashboard]
