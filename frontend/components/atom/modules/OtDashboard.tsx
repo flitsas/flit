@@ -387,6 +387,9 @@ function Kpi({
       cifra={
         numero === null ? (
           <span className="text-3xl" aria-label="Cargando">…</span>
+        ) : numero === 0 ? (
+          // Un KPI vacío se dice en palabras, igual que en el Inicio del gestor.
+          <span className="text-base font-medium">Ninguno</span>
         ) : (
           <span className="text-3xl">{numero}</span>
         )
@@ -559,7 +562,7 @@ function ColaCritica({ params, transitOfficeId }: { params: OtMetricsParams | nu
 
   return (
     <PanelInicio
-      titulo="Cola crítica por vencimiento"
+      titulo="Cola crítica"
       subtitulo="Lo que lleva más tiempo esperando tu decisión"
       icono="vencido"
       data-testid="ot-inicio-cola-critica"
@@ -579,7 +582,7 @@ function ColaCritica({ params, transitOfficeId }: { params: OtMetricsParams | nu
         status={estado === "cargando" ? "loading" : estado === "error" ? "error" : filas.length === 0 ? "empty" : "ready"}
         emptyMessage="No hay trámites esperando tu decisión."
         errorMessage="No se pudo cargar la cola crítica."
-        ariaLabel="Cola crítica por vencimiento"
+        ariaLabel="Cola crítica"
         tarjeta={false}
         minWidth={520}
       />

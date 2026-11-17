@@ -195,6 +195,14 @@ describe("OtDashboard — franja 1: carrusel y cifras de la cola", () => {
     expect(kpis().queryByRole("button", { name: /sin gestión más de 7 días/i })).not.toBeInTheDocument();
   });
 
+  it("un KPI en cero se dice en palabras («Ninguno»), como en el Inicio del gestor", async () => {
+    await renderReady();
+
+    // Solo masDe7Dias está en 0 en el panel de prueba: una sola tarjeta dice «Ninguno» y ninguna pinta un «0».
+    expect(kpis().getAllByText("Ninguno")).toHaveLength(1);
+    expect(kpis().queryByText("0")).not.toBeInTheDocument();
+  });
+
   it("las cifras navegables se alcanzan y activan con el teclado", async () => {
     await renderReady();
 
