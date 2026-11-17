@@ -21,6 +21,9 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   updateOtUser: vi.fn(),
   deleteOtUser: vi.fn(),
   resendOtInvitation: vi.fn(),
+  fetchOtClientCompanies: vi.fn().mockResolvedValue({ items: [] }),
+  fetchOtUserClientScope: vi.fn().mockResolvedValue({ mode: "todos", clients: [] }),
+  setOtUserClientScope: vi.fn(),
   cancelOtInvitation: vi.fn(),
   reactivateOtInvitation: vi.fn(),
 }));

@@ -18,8 +18,19 @@ import {
   resendOtInvitation,
   cancelOtInvitation,
   reactivateOtInvitation,
+  type OtClientScopeInput,
   type OtUserItem,
 } from "@/lib/api/admin-ot-security";
+import {
+  CLIENT_SCOPE_DEFAULT,
+  ClientScopeFields,
+  OtEditUserModal,
+  clientScopeErrorMessage,
+  clientScopeLabel,
+  isClientScopeValid,
+  toClientScopeInput,
+  type ClientScopeValue,
+} from "./OtClientScope";
 // HU #10624 — restaurar (POST /api/v1/superadmin/users/{userId}/restore) es un endpoint
 // genérico SOLO SuperAdmin, sin scope OT: se reutiliza el mismo cliente que Usuarios.tsx.
 import { restoreUser } from "@/lib/api/security";
@@ -33,7 +44,6 @@ import {
 import { usePermissions } from "@/hooks/usePermissions";
 import { createOtBulkInvitationsClient } from "@/lib/api/bulk-invitations-client";
 import { BulkInviteModal } from "@/components/atom/modules/users/BulkInviteModal";
-import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
 import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDialog";
 import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
 import { ResendInvitationButton } from "@/components/atom/modules/users/ResendInvitationButton";
@@ -285,10 +295,15 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     return actions;
   }
 
-  async function handleInvite(email: string, fullName: string, roleIds: string[]) {
+  async function handleInvite(
+    email: string,
+    fullName: string,
+    roleIds: string[],
+    clientScope?: OtClientScopeInput,
+  ) {
     try {
       await inviteOtUser(
-        { email, fullName: fullName || undefined, roleIds },
+        { email, fullName: fullName || undefined, roleIds, ...(clientScope ? { clientScope } : {}) },
         { transitOfficeId },
       );
       show(`Invitación enviada a ${email}.`, "success");
@@ -297,6 +312,8 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     } catch (err) {
       if (err instanceof ApiError && err.status === 400 && errorCodeOf(err.body) === "ROLE_REQUIRED") {
         show(ROLE_REQUIRED_MESSAGE, "error");
+      } else if (err instanceof ApiError && errorCodeOf(err.body)?.startsWith("CLIENT_SCOPE_")) {
+        show(clientScopeErrorMessage(err), "error");
       } else if (err instanceof ApiError && isEmailConflictCode(emailConflictErrorCode(err.body))) {
         // Mensaje unificado (HU #11550) — mismo texto que la ruta Security/AdminCompany
         // (InviteUserModal) para el único código EMAIL_ALREADY_IN_USE (HU #11580).
@@ -377,9 +394,10 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   // estado distintos, y por eso "no se parecía a las otras".
   const usersTable = (
       <UsersTable
-        rows={users.map((u) =>
-          toUserRow(u, { profile: "OT", tenantType: "TRANSIT_OFFICE" }),
-        )}
+        rows={users.map((u) => ({
+          ...toUserRow(u, { profile: "OT", tenantType: "TRANSIT_OFFICE" }),
+          clientScopeLabel: clientScopeLabel(u.clientScope),
+        }))}
         loading={status === "loading"}
         error={status === "error" ? "No se pudo cargar el listado de usuarios." : null}
         onRetry={() => void load()}
@@ -521,6 +539,8 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           onClose={() => setInviteOpen(false)}
           isSuperAdmin={isSuperAdmin}
           canInviteAdmins={isUserAdmin}
+          transitOfficeId={transitOfficeId}
+          canSetClientScope={isUserAdmin}
         />
       )}
       {suspendTarget && (
@@ -532,7 +552,11 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         />
       )}
       {editTarget && (
-        <EditUserModal
+        <OtEditUserModal
+          transitOfficeId={transitOfficeId}
+          // Solo Admin OT y Super Admin; nadie edita su propio alcance.
+          canEditClientScope={isUserAdmin}
+          isSelf={editTarget.id === currentUserId}
           user={{
             id: editTarget.id,
             fullName: editTarget.fullName,
@@ -669,11 +693,21 @@ function OtInviteUserDialog({
   onConfirm,
   onClose,
   isSuperAdmin,
+  transitOfficeId,
+  canSetClientScope = false,
   canInviteAdmins = true,
 }: {
-  onConfirm: (email: string, fullName: string, roleIds: string[]) => Promise<void>;
+  onConfirm: (
+    email: string,
+    fullName: string,
+    roleIds: string[],
+    clientScope?: OtClientScopeInput,
+  ) => Promise<void>;
   onClose: () => void;
   isSuperAdmin: boolean;
+  transitOfficeId: string;
+  /** Solo Admin OT y Super Admin definen el alcance de clientes del invitado. */
+  canSetClientScope?: boolean;
   /** HU #13655: quien no es administrador no ofrece roles de administrador. */
   canInviteAdmins?: boolean;
 }) {
@@ -683,6 +717,7 @@ function OtInviteUserDialog({
   const [roles, setRoles] = useState<TenantRole[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [clientScope, setClientScope] = useState<ClientScopeValue>(CLIENT_SCOPE_DEFAULT);
 
   // El SuperAdmin lee el catálogo global; el ot_admin usa /security/roles, que ya resuelve
   // TRANSIT_OFFICE por su propio tenant.
@@ -721,12 +756,18 @@ function OtInviteUserDialog({
   }, [isSuperAdmin, canInviteAdmins]);
 
   const missingRole = selectedRoleIds.length === 0;
+  const invalidScope = canSetClientScope && !isClientScopeValid(clientScope);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (missingRole) return;
+    if (missingRole || invalidScope) return;
     setBusy(true);
-    await onConfirm(normalizeEmail(email), fullName.trim(), selectedRoleIds);
+    await onConfirm(
+      normalizeEmail(email),
+      fullName.trim(),
+      selectedRoleIds,
+      canSetClientScope ? toClientScopeInput(clientScope) : undefined,
+    );
     setBusy(false);
   }
 
@@ -801,6 +842,14 @@ function OtInviteUserDialog({
           ) : (
             <p className="text-xs opacity-60">No hay roles disponibles para invitar.</p>
           )}
+          {canSetClientScope && (
+            <ClientScopeFields
+              transitOfficeId={transitOfficeId}
+              value={clientScope}
+              onChange={setClientScope}
+              idPrefix="ot-invite-scope"
+            />
+          )}
           <div className="flex gap-3 pt-2">
             <button
               type="button"
@@ -812,7 +861,7 @@ function OtInviteUserDialog({
             </button>
             <button
               type="submit"
-              disabled={busy || missingRole}
+              disabled={busy || missingRole || invalidScope}
               className={buttonClass({ className: "flex-1" })}
             >
               {busy ? "Enviando…" : "Enviar invitación"}
