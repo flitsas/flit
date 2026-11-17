@@ -31,6 +31,7 @@ import {
   permiteGenerar,
   type RegimenSeleccion,
 } from "./transferencia-regimen";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 const FIELD_CLASS =
   "w-full rounded-xl border px-3 py-2 text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
@@ -452,7 +453,7 @@ export function TransferenciaFormPanel() {
           className="rounded-2xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] p-3 text-[11px] text-destructive"
         >
           <p className="flex items-center gap-1.5 font-semibold">
-            <Icono nombre="alerta" className="h-3.5 w-3.5" />
+            <IconoAviso tipo="error" className="h-3.5 w-3.5" />
             No se generó el documento: hay validaciones normativas sin cumplir
           </p>
           <ul className="mt-1 list-disc pl-5">
@@ -474,7 +475,7 @@ export function TransferenciaFormPanel() {
           {resultado.advisories.length > 0 ? (
             <div className="mt-2" data-testid="transferencia-advisories">
               <p className="flex items-center gap-1.5 font-semibold">
-                <Icono nombre="exclamacion" className="h-3.5 w-3.5" />
+                <IconoAviso tipo="alerta" className="h-3.5 w-3.5" />
                 Prevalidaciones pendientes de verificación por el organismo de tránsito (avisos, no
                 errores)
               </p>

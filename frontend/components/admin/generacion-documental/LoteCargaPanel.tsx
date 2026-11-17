@@ -254,7 +254,7 @@ export function LoteCargaPanel() {
           className="mt-3 inline-flex items-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-white transition disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           style={{ background: "var(--color-flit-brand)" }}
         >
-          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
+          <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
           {subiendo ? "Cargando el lote…" : "Cargar y procesar"}
         </button>
 

@@ -28,6 +28,7 @@ import {
   verifyCompanyDomain,
 } from "@/lib/api/domain-client";
 import { ApiError, type TenantDomainResponse, type TenantDomainStatus } from "@/lib/api/types";
+import { avisoComo } from "@flit/ui/IconoAviso";
 
 export type DomainPanelMode = "admin" | "company";
 
@@ -67,7 +68,7 @@ const STATUS_META: Record<TenantDomainStatus, { label: string; Icon: ComponentTy
   pending: { label: "Pendiente de comprobación", Icon: iconoComo("reloj"), color: "var(--badge-warning-fg)" },
   verified: { label: "Comprobado", Icon: iconoComo("escudo"), color: "var(--color-flit-brand)" },
   active: { label: "Activo", Icon: iconoComo("check"), color: "var(--flit-success-ink)" },
-  failed: { label: "Comprobación fallida", Icon: iconoComo("alerta"), color: "var(--destructive)" },
+  failed: { label: "Comprobación fallida", Icon: avisoComo("error"), color: "var(--destructive)" },
 };
 
 const REASON_MESSAGES: Record<string, string> = {

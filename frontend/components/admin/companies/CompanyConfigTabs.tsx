@@ -2,7 +2,6 @@
 
 import { createContext, useContext, useId, useMemo, useRef, useState, type ComponentType, type KeyboardEvent, type ReactNode } from "react";
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
-import { Blocks, FileClock } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -59,8 +58,8 @@ interface TabDef {
 
 const TABS: TabDef[] = [
   // HU #12967 — productos de la suite encendidos para la compañía (estado real, al instante, sin «Guardar todo»).
-  { id: "productos", label: "Productos", icon: Blocks, isConfig: false },
-  { id: "tramites", label: "Trámites", icon: iconoComo("impronta"), isConfig: true },
+  { id: "productos", label: "Productos", icon: iconoComo("rejilla"), isConfig: false },
+  { id: "tramites", label: "Trámites", icon: iconoComo("tramites"), isConfig: true },
   { id: "config", label: "Configuración Empresa", icon: iconoComo("empresas"), isConfig: true },
   // HU #10904 (Feature #10852) — directorio de representantes legales de las compañías representadas.
   // Escrituras y firma/identidad se gestionan desde la ficha de cada representante (no hay baúl
@@ -71,7 +70,7 @@ const TABS: TabDef[] = [
   // compañías: el mandatario es de la empresa, no del organismo.
   { id: "mandatarios", label: "Mandatarios", icon: iconoComo("persona"), isConfig: false },
   // Gestión de usuarios del tenant compañía (SuperAdmin); invite force AdminCompany.
-  { id: "usuarios", label: "Usuarios", icon: iconoComo("rol"), isConfig: false },
+  { id: "usuarios", label: "Usuarios", icon: iconoComo("usuarios"), isConfig: false },
   // HU #14068 (Épica #14021) — integraciones externas de la compañía (Persona Natural); solo SuperAdmin: la ficha
   // inyecta el slot solo para él, y sin slot la pestaña no aparece.
   { id: "integraciones", label: "Integraciones externas", icon: iconoComo("integraciones"), isConfig: false },
@@ -79,7 +78,7 @@ const TABS: TabDef[] = [
   // apiladas bajo las pestañas, visibles en cualquiera; ahora son pestañas propias (solo con slot).
   { id: "hijos", label: "Clientes hijos", icon: iconoComo("integraciones"), isConfig: false },
   { id: "marca", label: "Identidad de marca", icon: iconoComo("destello"), isConfig: false },
-  { id: "historial", label: "Historial de Cambios", icon: FileClock, isConfig: false },
+  { id: "historial", label: "Historial de Cambios", icon: iconoComo("reloj"), isConfig: false },
 ];
 
 export interface CompanyConfigTabsProps {
@@ -299,7 +298,7 @@ export function CompanyConfigTabs({
                 }`}
                 style={{ background: "var(--gradient-action)" }}
               >
-                <Icono nombre="nube-subir" className="h-4 w-4" /> Guardar todo
+                Guardar todo
               </button>
               {pendingChangeCount === 0 && (
                 <span id={`${baseId}-sin-cambios`} className="sr-only">

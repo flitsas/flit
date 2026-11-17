@@ -9,7 +9,6 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { CalendarX, ListTree } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { ActionsMenu, type ActionsMenuItem } from '@/components/atom/ActionsMenu';
@@ -102,6 +101,10 @@ import {
   DIALOGO_PANEL,
 } from '@/components/operacion/dialogo-propio';
 import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { IconoAviso } from "@flit/ui/IconoAviso";
+
+const ICONO_VENCIDO = iconoComo("vencido");
+const ICONO_RUTA = iconoComo("ruta");
 /**
 
  * Módulo ÚNICO de Identidad: validaciones y prevalidaciones viven aquí (antes había una pantalla
@@ -1229,7 +1232,7 @@ function ValidacionesLista({
           role="alert"
           aria-live="polite"
         >
-          <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" />
+          <IconoAviso tipo="error" className="h-4 w-4 shrink-0 mt-0.5" />
           <div className="space-y-2">
             <p className="font-semibold">No se pudieron cargar las validaciones.</p>
             <p className="opacity-80">{error}</p>
@@ -2411,7 +2414,7 @@ function ValidacionRow({
     {
       key: 'proceso',
       label: 'Ver proceso',
-      icon: ListTree,
+      icon: ICONO_RUTA,
       onSelect: onViewProcess,
     },
   ];
@@ -2507,7 +2510,7 @@ function ValidacionRow({
     actionItems.push({
       key: 'vencer',
       label: 'Vencer',
-      icon: CalendarX,
+      icon: ICONO_VENCIDO,
       onSelect: () => onVencerClick(r),
     });
   }

@@ -18,6 +18,8 @@ const AVISO_ERROR = aviso('aviso-error', 'XCircle·kit');
 const AVISO_ALERTA = aviso('aviso-alerta', 'AlertTriangle·kit');
 const AVISO_INFO = aviso('aviso-info', 'Info·kit');
 const AVISO_OK = aviso('aviso-ok', 'CheckCircle·kit');
+// Pendiente (PDF definitivo): disco naranja con «!», distinto del triángulo de alerta.
+const ESTADO_PENDIENTE = aviso('estado-pendiente', 'Clock·kit');
 
 // Aviso en línea reutilizable (dentro de modales, formularios o paneles). Unifica el patrón que el
 // producto ya usaba suelto en varias pantallas —bloque redondeado, fondo tenue del color del tono y
@@ -72,7 +74,7 @@ export const INLINE_ALERT_TONES: Record<
     color: 'var(--badge-pending-fg)',
     background: 'var(--badge-pending-bg)',
     border: 'var(--badge-pending-border)',
-    Icon: AVISO_ALERTA,
+    Icon: ESTADO_PENDIENTE,
   },
 };
 

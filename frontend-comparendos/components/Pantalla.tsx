@@ -13,14 +13,18 @@ const POR_TITULO: ReadonlyArray<[RegExp, Ilustracion]> = [
   [/calendario|horario/i, "calendario"],
   [/organismo/i, "organismos"],
   [/municip|fuentes/i, "fuentes-oficiales"],
-  [/alerta|integraci|ingesta|migraci/i, "integraciones"],
+  // Mismo ícono que la entrada del dock (lib/nav.ts, ILUSTRACION): la cabecera no debe contradecir al menú.
+  [/log de migraci/i, "auditoria"],
+  [/alerta/i, "notificaciones"],
+  [/integraci|ingesta|migraci/i, "integraciones"],
   [/ocr|prompt|paquete/i, "documentos"],
-  [/plantilla|mensaje|correo/i, "notificaciones"],
-  [/representante/i, "firmas"],
+  [/plantilla/i, "generacion-documental"],
   [/empresa|parametrizador/i, "empresas"],
+  [/env[ií]o|mensaje|correo/i, "notificaciones"],
+  [/representante/i, "firmas"],
   [/tipolog|petici/i, "causales"],
   [/monitore|placa/i, "consulta-placa"],
-  [/pago/i, "fur"],
+  [/pago/i, "pagos"],
 ];
 
 function ilustracionPara(titulo: string): Ilustracion {

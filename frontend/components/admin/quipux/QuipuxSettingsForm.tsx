@@ -9,7 +9,6 @@
 // Secretos: la contraseña Quipux y la secret key AWS NUNCA se devuelven (el GET solo dice si
 // hay una cargada). Dejar el campo vacío = "no lo cambies"; escribir algo = reemplazarlo.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { iconoComo } from "@flit/ui/iconoComo";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -522,7 +521,6 @@ export function QuipuxSettingsForm() {
         </p>
         <CreateButton
           label={saving ? "Guardando…" : "Guardar configuración"}
-          icon={iconoComo("nube-subir")}
           disabled={saving}
           onClick={() => void save()}
         />

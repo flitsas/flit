@@ -1,7 +1,6 @@
 "use client";
 
 import { createElement, useEffect, useRef, useState } from "react";
-import { House } from "lucide-react";
 import { Icono, IconoModulo } from "@flit/ui/Icono";
 import { appIcon, appTagline, type SuiteApp } from "./apps";
 import type { SuiteAppsState } from "./useSuiteApps";
@@ -138,7 +137,7 @@ export function ProductEntries({
           aria-current={home.code === productCode ? "page" : undefined}
           className="suite-menu-productos__pie"
         >
-          <House className="h-4 w-4" aria-hidden="true" />
+          <IconoModulo clave="inicio" size={16} />
           Ir al inicio
         </a>
       )}

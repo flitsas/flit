@@ -47,6 +47,7 @@ import type {
 } from "@/lib/api/types";
 import type { BiometricValidationStats } from "@/lib/api/types/procedure-runtime";
 import { InicioModulos } from "@/components/inicio/InicioModulos";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /** KPI de volumen del dashboard gestor (HU #12700 / E03). */
 export const DASHBOARD_KPI_TOTAL_LABEL = COPY.E03;
@@ -593,7 +594,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                   aria-hidden="true"
                   className="grid h-[42px] w-[42px] shrink-0 place-items-center rounded-[9px] bg-white/[0.22]"
                 >
-                  <IconoModulo clave="inicio" size={22} />
+                  <IconoModulo clave="banners" size={22} />
                 </span>
                 <h2 className="text-2xl md:text-[1.75rem] font-bold leading-tight line-clamp-2 min-w-0 text-white">{s.title}</h2>
               </div>
@@ -713,11 +714,11 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
             // del banner; la columna puede quedar más baja que él.
             <div className="grid grid-cols-3 items-start gap-3" data-testid="dashboard-kpi-grid">
               {[
-                // UI Kit 2026: claves del kit con glifo (disco --kit-hover y glifo azul), no los discos sólidos
-                // @tramite-matricula/@tramite-traspaso: placa para matrícula e intercambio para traspaso.
-                { label: "Matrículas", value: matriculas, ilustracion: "preasignacion" as const, family: "MATRICULAS" as const },
-                { label: "Traspasos", value: traspasos, ilustracion: "llamadas" as const, family: "TRASPASO" as const },
-                { label: "Otros Trámites", value: otros, ilustracion: "procesos" as const, family: "OTROS" as const },
+                // PDF definitivo de íconos: las tarjetas de resumen llevan el disco de cada tipo de trámite
+                // (matrícula = carro de frente, traspaso = persona y carro, otros = carro con llave).
+                { label: "Matrículas", value: matriculas, ilustracion: "matricula" as const, family: "MATRICULAS" as const },
+                { label: "Traspasos", value: traspasos, ilustracion: "traspaso" as const, family: "TRASPASO" as const },
+                { label: "Otros Trámites", value: otros, ilustracion: "otros-tramites" as const, family: "OTROS" as const },
               ].filter((k) => showsInAggregates(k.family)).map((k) => {
                 const isError = status === "error";
                 // HU #14481 (propuesta): `TarjetaMetrica` de @flit/ui —etiqueta, cifra en tinta e
@@ -754,7 +755,7 @@ export function Dashboard({ onNewTramite: _onNewTramite }: { onNewTramite: () =>
                           style={{ color: "var(--di-danger)" }}
                           title={errorMessage ?? "No se pudo cargar este indicador."}
                         >
-                          <Icono nombre="alerta" className="h-4 w-4 shrink-0" />
+                          <IconoAviso tipo="error" className="h-4 w-4 shrink-0" />
                           <span>—</span>
                           <span className="sr-only">Error al cargar {k.label.toLowerCase()}</span>
                         </span>

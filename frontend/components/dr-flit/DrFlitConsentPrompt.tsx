@@ -3,6 +3,7 @@
 import { useId, useState } from "react";
 
 import { Icono } from "@flit/ui/Icono";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * HU #12931 — autorización del tratamiento de datos antes de usar el chat con IA o radicar un caso. Es
@@ -89,7 +90,7 @@ export function DrFlitConsentPrompt({
           className="flex items-center gap-2 text-xs"
           style={{ color: "var(--dr-flit-text)" }}
         >
-          <Icono nombre="alerta" className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-accent)" }} />
+          <IconoAviso tipo="error" className="h-4 w-4 shrink-0" />
           {error}
         </p>
       ) : null}

@@ -9,6 +9,7 @@ import type { GenerarImprontaRequest, GenerarImprontaResult } from "@/lib/api/ty
 import { digitsOnly } from "@/lib/format/currency";
 import { sanitizePlate } from "@/lib/validation/fieldRules";
 import { IMPRONTA_INPUT_CLS, IMPRONTA_LABEL_CLS, IMPRONTA_SECTION_CLS } from "./improntas-form-styles";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 type SubmitStatus = "idle" | "submitting" | "error" | "success";
 
@@ -109,7 +110,7 @@ export function ImprontaFormPanel() {
         </legend>
 
         <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-placa">
-          Placa <span aria-hidden="true">*</span>
+          Placa <span aria-hidden="true"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
           <input
             id="impronta-placa"
             className={`mt-1 uppercase tracking-widest ${IMPRONTA_INPUT_CLS}`}
@@ -128,7 +129,7 @@ export function ImprontaFormPanel() {
         )}
 
         <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-documento">
-          Documento del propietario <span aria-hidden="true">*</span>
+          Documento del propietario <span aria-hidden="true"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
           <input
             id="impronta-documento"
             className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
@@ -161,7 +162,7 @@ export function ImprontaFormPanel() {
 
         <div>
           <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-org-nombre">
-            Nombre de la organización <span aria-hidden="true">*</span>
+            Nombre de la organización <span aria-hidden="true"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
             <input
               id="impronta-org-nombre"
               className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
@@ -180,7 +181,7 @@ export function ImprontaFormPanel() {
 
         <div>
           <label className={IMPRONTA_LABEL_CLS} style={{ color: "var(--color-flit-primary)" }} htmlFor="impronta-operador">
-            Operador <span aria-hidden="true">*</span>
+            Operador <span aria-hidden="true"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
             <input
               id="impronta-operador"
               className={`mt-1 ${IMPRONTA_INPUT_CLS}`}
@@ -220,7 +221,7 @@ export function ImprontaFormPanel() {
           style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           data-testid="impronta-error"
         >
-          <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
+          <IconoAviso tipo="error" className="mt-0.5 h-4 w-4 shrink-0" />
           <span>{errorMessage}</span>
         </div>
       )}

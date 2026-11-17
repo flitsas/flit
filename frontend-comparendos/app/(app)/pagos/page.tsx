@@ -162,7 +162,7 @@ function CargaPagos() {
               onChange={(e) => e.target.files?.[0] && subir(e.target.files[0])}
             />
             <button type="button" className={BOTON_PRIMARIO_CLS} disabled={subiendo} onClick={() => input.current?.click()}>
-              <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
+              <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
               {subiendo ? "Procesando…" : "Cargar Excel de pagos"}
             </button>
             <span className="text-xs opacity-70">

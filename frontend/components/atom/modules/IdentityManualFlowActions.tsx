@@ -26,6 +26,7 @@ import {
 import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * HU #13288 (Feature #13280, Épica #13202) — acciones del flujo manual de identidad en el detalle de una
@@ -311,7 +312,7 @@ function ManualFlowConfirmDialog({
               color: 'var(--badge-danger-fg)',
             }}
           >
-            <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
+            <IconoAviso tipo="error" className="mt-0.5 h-4 w-4 shrink-0" />
             <p>{error}</p>
           </div>
         )}

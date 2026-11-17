@@ -96,7 +96,7 @@ function SubirDocumento({ rl, doc, onSubido }: { rl: Representante; doc: (typeof
         )}
         <input ref={input} type="file" accept={doc.acepta} className="hidden" onChange={(e) => e.target.files?.[0] && subir(e.target.files[0])} />
         <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => input.current?.click()}>
-          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
+          <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
           {ocupado ? "Cargando…" : archivoId ? "Reemplazar" : "Cargar"}
         </button>
       </div>

@@ -70,7 +70,7 @@ function EnlaceFormModal({ enlace, onClose, onSave }: { enlace: EnlacePn; onClos
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="pn-enlace-form" variant="primary" icon={iconoComo("nube-subir")} loading={busy}>
+          <PnButton type="submit" form="pn-enlace-form" variant="primary" loading={busy}>
             Guardar enlace
           </PnButton>
         </div>

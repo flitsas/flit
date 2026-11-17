@@ -5,7 +5,6 @@
 // compartido al detalle de trámites. El dashboard original (HU #10247/#10248)
 // se recoloca en la pestaña "Resumen general" sin duplicarse.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ShieldQuestion } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
@@ -35,6 +34,9 @@ import { UsoTab } from "./_reportes/tabs/UsoTab";
 import { ConsultasTab } from "./_reportes/tabs/ConsultasTab";
 import { DetailedReportPanel } from "./_reportesDetallados/DetailedReportPanel";
 import { ADMIN_BRAND_OUTLINE_BTN_CLS } from "@/components/admin/admin-ui-styles";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_CANDADO = iconoComo("candado");
 
 type TabId = "resumen" | "operacion" | "detallados" | "ot" | "uso" | "productividad" | "consultas";
 
@@ -209,7 +211,7 @@ export function Reportes() {
           className="flex flex-col items-center justify-center gap-3 rounded-2xl border p-10 text-center bg-card"
           data-testid="reportes-sin-permisos"
         >
-          <ShieldQuestion className="h-10 w-10 opacity-50" aria-hidden="true" />
+          <ICONO_CANDADO className="h-10 w-10 opacity-50" aria-hidden="true" />
           <p className="text-sm font-medium">No tienes permisos para ver reportes.</p>
           <p className="text-xs opacity-70 max-w-md">
             Pide a tu administrador que te asigne acceso a alguna pestaña de reportes

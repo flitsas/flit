@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useEffectEvent, useId, useRef, useState } from "react";
-import { ExternalLink } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { Modal } from "@flit/ui/Modal";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
@@ -160,7 +160,7 @@ export function ModalTipoTramite({
             Cancelar
           </button>
           <button type="button" onClick={() => onConfirmar(codigo)} disabled={!hayTipos || !codigo} className={BOTON_PRIMARIO_CLS}>
-            {abreEnPestana ? <ExternalLink className="h-4 w-4" aria-hidden="true" /> : <IconoDxCrearTramite tamano={16} />}
+            {abreEnPestana ? <Icono nombre="externo" className="h-4 w-4" /> : <IconoDxCrearTramite tamano={16} />}
             {textoConfirmar}
           </button>
         </div>
@@ -209,7 +209,7 @@ export function ModalConfirmarTramite({ identificador, tramite, onClose, onConfi
             Cancelar
           </button>
           <button ref={confirmarRef} type="button" onClick={onConfirmar} className={BOTON_PRIMARIO_CLS}>
-            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            <Icono nombre="externo" className="h-4 w-4" />
             {`Crear ${sustantivo}`}
           </button>
         </div>
@@ -385,7 +385,7 @@ export function AccionTramiteFila({
         aria-label={`${unir("Ver trámite", numero)} de la placa ${identificador} (se abre en una pestaña nueva)`}
         className={ENLACE_CLS}
       >
-        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="externo" className="h-3.5 w-3.5" />
         {unir("Ver trámite", numero)}
       </a>
     );

@@ -12,6 +12,7 @@ import {
 } from '@/components/operacion/dialogo-propio';
 import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { mensajeErrorFlujoManual, motivoFalloCopiaEnlace } from '@/lib/identity/manual-flow';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * HU #14306 (Feature #14304, Épica #14271) — «Copiar enlace» en la fila de validaciones manuales (solo Super Admin).
@@ -174,7 +175,7 @@ function RegenerarDialog({
               color: 'var(--badge-danger-fg)',
             }}
           >
-            <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
+            <IconoAviso tipo="error" className="mt-0.5 h-4 w-4 shrink-0" />
             <p>{error}</p>
           </div>
         )}
