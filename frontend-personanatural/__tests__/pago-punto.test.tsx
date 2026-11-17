@@ -50,7 +50,7 @@ function montar(rutas: Record<string, Manejador> = {}) {
     return (todas[clave] ?? (() => json({ code: "no_simulado", message: clave }, 404)))(init);
   }) as unknown as typeof fetch;
   const props = { onVolver: vi.fn(), onIrActores: vi.fn(), onPagado: vi.fn() };
-  renderConQuery(<PagoPunto cliente={crearCliente({ fetchImpl })} solicitudId="s-1" tipoCodigo="TIPO_A" {...props} />);
+  renderConQuery(<PagoPunto cliente={crearCliente({ fetchImpl })} solicitudId="s-1" tipoCodigo="TIPO_A" placa="ABC123" tipoNombre="Traspaso" {...props} />);
   return { llamadas, ...props };
 }
 
@@ -66,7 +66,11 @@ describe("Paso Pago del punto · #14451", () => {
 
     expect(await screen.findByText("Tarifa del organismo")).toBeInTheDocument();
     expect(screen.getByText("Servicio FLIT")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Resumen del cobro" })).toBeInTheDocument();
+    expect(screen.getByText("Placa").parentElement).toHaveTextContent("ABC123");
+    expect(screen.getByText("Tipo de Trámite").parentElement).toHaveTextContent("Traspaso");
     expect(screen.getByText("Total a pagar").parentElement).toHaveTextContent("75.000");
+    expect(screen.getByText("Total a pagar").parentElement).toHaveClass("border-t", "text-lg");
     expect(screen.queryByText(/envío|domicilio/i)).toBeNull();
     expect(screen.getByRole("button", { name: "Generar pago en caja" })).toBeEnabled();
     expect(screen.queryByText(/pasarela|tarjeta|PSE/i)).toBeNull();
@@ -151,7 +155,7 @@ describe("Paso Pago del punto · #14451", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("El punto no tiene habilitado el pago en caja.");
     expect(screen.queryByRole("button", { name: /Generar pago/ })).toBeNull();
     expect(screen.queryByRole("button", { name: "Confirmar" })).toBeNull();
-    expect(screen.getByRole("button", { name: "Volver" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Atrás" })).toBeEnabled();
   });
 
   it("si habilitar la caja falla muestra el motivo del servidor y permite reintentar", async () => {
@@ -162,7 +166,7 @@ describe("Paso Pago del punto · #14451", () => {
     expect(screen.getByRole("button", { name: "Generar pago en caja" })).toBeEnabled();
   });
 
-  it("si la consulta falla muestra el error con «Reintentar» y «Volver»", async () => {
+  it("si la consulta falla muestra el error con «Reintentar» y «Atrás»", async () => {
     let falla = true;
     montar({ [GET_PAGO]: () => (falla ? json({ code: "servicio_no_disponible" }, 503) : json(estado())) });
 
@@ -172,10 +176,10 @@ describe("Paso Pago del punto · #14451", () => {
     expect(await screen.findByText("Tarifa del organismo")).toBeInTheDocument();
   });
 
-  it("«Volver» regresa al Resumen", async () => {
+  it("«Atrás» regresa a Requisitos", async () => {
     const { onVolver } = montar();
     await screen.findByText("Tarifa del organismo");
-    fireEvent.click(screen.getByRole("button", { name: "Volver" }));
+    fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
     expect(onVolver).toHaveBeenCalledTimes(1);
   });
 
@@ -283,7 +287,7 @@ describe("Asistente del punto: pago retomado, cobro anulado y barra lateral", ()
   it("con una solicitud reanudada arranca en Pago sin diagnóstico ni actores", async () => {
     const llamadas = montarAsistente({ [GET_PAGO]: () => json(estado()), [INICIAR]: () => json(estado()) });
     expect(await screen.findByRole("button", { name: "Generar pago en caja" })).toBeEnabled();
-    expect(screen.getByText("Paso 5 · Pago", { selector: "h2" })).toBeInTheDocument();
+    expect(screen.getByText("Paso 4 · Pago", { selector: "h2" })).toBeInTheDocument();
     expect(llamadas.some((l) => l.includes("diagnostico") || l.includes("actores"))).toBe(false);
   });
 

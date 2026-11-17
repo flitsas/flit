@@ -4,6 +4,7 @@
 // sondea GET /punto/pago y, según lo que diga el servidor: espera las identidades, muestra el desglose, habilita el cobro en caja,
 // confirma un total $0 o informa el motivo que impide pagar. Al aparecer `pago` (la caja confirmó) avisa con `onPagado`.
 // El selector de medio queda listo para sumar otro medio: hoy `MEDIOS_DE_PAGO` solo trae la caja y la pasarela no se muestra.
+// Diseño: paso 4 del repo de UI (Resumen del cobro + tarjeta de pago + Atrás). El punto no tiene paso Resumen: aquí vive el total.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Check, Copy } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -32,15 +33,18 @@ type Props = {
   cliente: ClientePortal;
   solicitudId: string;
   tipoCodigo: string;
-  /** «Volver»: regresa al Resumen. */
+  /** «Atrás»: regresa a Requisitos. */
   onVolver: () => void;
+  /** Placa y nombre del tipo para «Resumen del cobro» (si no llegan, esas filas no se muestran). */
+  placa?: string | undefined;
+  tipoNombre?: string | undefined;
   /** «Ir a Actores» desde la lista de identidades pendientes. */
   onIrActores: () => void;
   /** El pago quedó confirmado (caja o total $0): sigue el cierre. */
   onPagado: () => void;
 };
 
-export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, onIrActores, onPagado }: Props) {
+export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, placa, tipoNombre, onIrActores, onPagado }: Props) {
   const queryClient = useQueryClient();
   const [medio] = useState<MedioId>(MEDIOS_DE_PAGO[0].id);
   const [falloAccion, setFalloAccion] = useState<string | null>(null);
@@ -69,7 +73,7 @@ export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, onIrActo
           void queryClient.invalidateQueries({ queryKey: claveSolicitud(solicitudId) });
         } catch (error) {
           if (error instanceof ApiError && error.code === "requisitos_incompletos") {
-            return { estado, faltaInfo: "Falta información del trámite. Vuelve al Resumen y a Requisitos para completarla." };
+            return { estado, faltaInfo: "Falta información del trámite. Vuelve a Requisitos para completarla." };
           }
           if (error instanceof ApiError && error.code === "identity_pending") {
             return { estado: { ...estado, identidadesPendientes: error.fallas?.partes ?? [] }, faltaInfo: null };
@@ -118,7 +122,7 @@ export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, onIrActo
 
   const volver = (
     <Btn tone="secondary" onClick={onVolver}>
-      Volver
+      Atrás
     </Btn>
   );
 
@@ -198,52 +202,65 @@ export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, onIrActo
 
   const total = estado.totalCop ?? null;
   const ocupado = generar.isPending || confirmar.isPending;
+  const lineas = estado.desglose ?? [];
 
   return (
-    <Card title="Pago" id="punto-pago">
-      <div className="space-y-4" aria-busy={ocupado}>
-        {estado.desglose && estado.desglose.length > 0 && (
-          <section aria-labelledby="punto-pago-desglose-titulo" className="rounded-[9px] border border-border p-4">
-            <h4 id="punto-pago-desglose-titulo" className="mb-3 text-lg font-bold text-primary">
-              Desglose
-            </h4>
-            <ul className="space-y-3">
-              {estado.desglose.map((linea) => (
-                <li key={linea.codigo} className="flex justify-between gap-4">
-                  <span>{linea.nombre}</span>
-                  <b>{formatearPesos(linea.valorCop)}</b>
-                </li>
-              ))}
-              <li className="flex justify-between gap-4 border-t border-border pt-3 text-lg">
-                <span className="font-bold">Total a pagar</span>
-                <b className="text-primary">{total === null ? "—" : formatearPesos(total)}</b>
-              </li>
-            </ul>
-          </section>
-        )}
+    <div className="space-y-6" aria-busy={ocupado}>
+      <Card title="Resumen del cobro" id="punto-pago">
+        <ul className="space-y-3">
+          {placa && (
+            <li className="flex justify-between gap-4">
+              <span>Placa</span>
+              <b>{placa}</b>
+            </li>
+          )}
+          {tipoNombre && (
+            <li className="flex justify-between gap-4">
+              <span>Tipo de Trámite</span>
+              <b>{tipoNombre}</b>
+            </li>
+          )}
+          {lineas.map((linea) => (
+            <li key={linea.codigo} className="flex justify-between gap-4">
+              <span>{linea.nombre}</span>
+              <b>{formatearPesos(linea.valorCop)}</b>
+            </li>
+          ))}
+          {total !== null && (
+            <li className="flex justify-between gap-4 border-t border-border pt-3 text-lg">
+              <span className="font-bold">Total a pagar</span>
+              <b className="text-primary">{formatearPesos(total)}</b>
+            </li>
+          )}
+        </ul>
+      </Card>
 
-        {estado.bloqueo ? (
-          <Alerta id="punto-pago-bloqueo">{estado.bloqueo.message}</Alerta>
-        ) : (
-          <ZonaDeCobro
-            medio={medio}
-            estado={estado}
-            ocupado={ocupado}
-            generando={generar.isPending}
-            confirmando={confirmar.isPending}
-            onGenerar={() => generar.mutate()}
-            onConfirmar={() => confirmar.mutate()}
-          />
-        )}
+      <Card title={total === 0 ? "Confirmar sin cobro" : "Pago en caja"} id="punto-pago-medio">
+        <div className="space-y-4">
+          {estado.bloqueo ? (
+            <Alerta id="punto-pago-bloqueo">{estado.bloqueo.message}</Alerta>
+          ) : (
+            <ZonaDeCobro
+              medio={medio}
+              estado={estado}
+              ocupado={ocupado}
+              generando={generar.isPending}
+              confirmando={confirmar.isPending}
+              onGenerar={() => generar.mutate()}
+              onConfirmar={() => confirmar.mutate()}
+            />
+          )}
 
-        {falloAccion && <Alerta id="punto-pago-fallo">{falloAccion}</Alerta>}
+          {falloAccion && <Alerta id="punto-pago-fallo">{falloAccion}</Alerta>}
+        </div>
+      </Card>
+
+      <div className="flex flex-wrap items-center justify-end gap-3">
+        <Btn tone="secondary" onClick={onVolver} disabled={ocupado}>
+          Atrás
+        </Btn>
       </div>
-      <div className="mt-4 flex flex-wrap items-center justify-end gap-3">
-        <button type="button" className={boton("back", "min-h-11 px-6", "none")} onClick={onVolver} disabled={ocupado}>
-          Volver
-        </button>
-      </div>
-    </Card>
+    </div>
   );
 }
 
@@ -296,7 +313,7 @@ function ZonaDeCobro({
   }
 
   const cobro = estado.cobro;
-  if (cobro?.estado === "vigente") return <CobroVigente codigo={cobro.codigo} total={estado.totalCop ?? null} />;
+  if (cobro?.estado === "vigente") return <CobroVigente codigo={cobro.codigo} />;
 
   return (
     <div className="space-y-3">
@@ -312,7 +329,7 @@ function ZonaDeCobro({
   );
 }
 
-function CobroVigente({ codigo, total }: { codigo: string; total: number | null }) {
+function CobroVigente({ codigo }: { codigo: string }) {
   const [copiado, setCopiado] = useState(false);
   const copiar = async () => {
     try {
@@ -323,14 +340,11 @@ function CobroVigente({ codigo, total }: { codigo: string; total: number | null 
     }
   };
   return (
-    <section aria-labelledby="punto-pago-caja-titulo" className="space-y-3 rounded-[9px] border border-border p-4">
+    <div className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 id="punto-pago-caja-titulo" className="text-lg font-bold text-primary">
-          Pago en caja
-        </h4>
+        <p className="text-sm">Ve a la caja del organismo y dicta este código:</p>
         <span className="badge-arrow inline-block bg-warning/10 text-xs font-semibold text-warning">Pendiente de pago</span>
       </div>
-      <p className="text-sm">Ve a la caja del organismo y dicta este código:</p>
       <div className="flex flex-wrap items-center gap-3">
         <p aria-label="Código de pago en caja" className="text-3xl font-bold tracking-wider" data-testid="codigo-cobro">
           {codigo}
@@ -340,17 +354,12 @@ function CobroVigente({ codigo, total }: { codigo: string; total: number | null 
           {copiado ? "Copiado" : "Copiar código"}
         </button>
       </div>
-      {total !== null && (
-        <p className="text-sm">
-          Total a pagar: <b>{formatearPesos(total)}</b>
-        </p>
-      )}
       <p className="inline-flex w-fit rounded-full bg-warning px-3 py-1 text-sm font-semibold text-secondary">
         Vale hasta hoy a las 11:59 p. m.
       </p>
       <p role="status" className="text-sm text-muted-foreground">
         Esperando la confirmación de la caja. Esta pantalla avanza sola.
       </p>
-    </section>
+    </div>
   );
 }

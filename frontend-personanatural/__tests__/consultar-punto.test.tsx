@@ -74,6 +74,7 @@ describe("modal Consultar en el punto: retomar el pago", () => {
 
   function montarRetomar(reanudar: () => Response, estado: EstadoRadicado = SIN_ENVIAR) {
     const onRetomarPago = vi.fn();
+    const onCerrar = vi.fn();
     const fetchImpl = vi.fn(async (url: string) => {
       const u = String(url);
       if (u.includes("/punto/pago/cierre/")) return problema(404, "solicitud_no_encontrada");
@@ -81,11 +82,11 @@ describe("modal Consultar en el punto: retomar el pago", () => {
       return json(estado);
     }) as unknown as typeof fetch;
     renderConQuery(
-      <ConsultarModal abierto onCerrar={vi.fn()} cliente={crearCliente({ fetchImpl })} tipos={TIPOS} consultaPunto onRetomarPago={onRetomarPago} />,
+      <ConsultarModal abierto onCerrar={onCerrar} cliente={crearCliente({ fetchImpl })} tipos={TIPOS} consultaPunto onRetomarPago={onRetomarPago} />,
     );
     escribir("abc123", "PN-2026-0001");
     consultar();
-    return { onRetomarPago, fetchImpl: fetchImpl as unknown as ReturnType<typeof vi.fn> };
+    return { onRetomarPago, onCerrar, fetchImpl: fetchImpl as unknown as ReturnType<typeof vi.fn> };
   }
   const pedirRetomar = async (cedula = "1020456789") => {
     fireEvent.click(await screen.findByRole("button", { name: "Retomar el pago" }));
@@ -101,6 +102,21 @@ describe("modal Consultar en el punto: retomar el pago", () => {
     );
     const llamada = fetchImpl.mock.calls.find((c) => String(c[0]) === REANUDAR);
     expect(JSON.parse(String((llamada?.[1] as RequestInit).body))).toEqual({ radicado: "PN-2026-0001", cedula: "1020456789" });
+  });
+
+  it("enviar con Enter (clic sintético en 0,0 del botón) no cierra el modal y sí reanuda", async () => {
+    const { onRetomarPago, onCerrar, fetchImpl } = montarRetomar(() => json(SESION));
+    // El modal ocupa una caja lejos del origen: un clic en 0,0 cae «fuera» de ella (así lo hace el navegador al enviar con Enter).
+    const dialogo = document.querySelector("dialog") as HTMLDialogElement;
+    dialogo.getBoundingClientRect = () => ({ left: 100, top: 80, right: 700, bottom: 600, width: 600, height: 520, x: 100, y: 80, toJSON: () => ({}) });
+    fireEvent.click(await screen.findByRole("button", { name: "Retomar el pago" }), { clientX: 300, clientY: 300 });
+    fireEvent.change(screen.getByLabelText("Cédula de quien radicó"), { target: { value: "1020456789" } });
+    fireEvent.click(screen.getByRole("button", { name: "Continuar" }), { clientX: 0, clientY: 0, detail: 0 });
+    await waitFor(() =>
+      expect(onRetomarPago).toHaveBeenCalledWith({ solicitudId: "s-9", tipoCodigo: "TIPO_A", placa: "ABC123", documento: "1020456789" }),
+    );
+    expect(fetchImpl.mock.calls.some((c) => String(c[0]) === REANUDAR)).toBe(true);
+    expect(onCerrar).not.toHaveBeenCalled();
   });
 
   it("no ofrece retomar si el trámite ya está en revisión del OT", async () => {

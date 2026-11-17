@@ -8,14 +8,12 @@ import { MobilityLoader } from "@/components/MobilityLoader";
 import { boton } from "@/components/landing/estilos";
 import { ActoresPunto } from "@/components/punto/ActoresPunto";
 import { CierrePunto } from "@/components/punto/CierrePunto";
-import { EnvioPunto } from "@/components/punto/EnvioPunto";
 import { PagoPunto } from "@/components/punto/PagoPunto";
 import { RequisitosPunto } from "@/components/punto/RequisitosPunto";
 import { Badge, Card, Nav, Row } from "@/components/tramite/piezas";
 import type { ClientePortal, Diagnostico, ResultadoVehiculoPunto, VehiculoDelTramite } from "@/lib/api/cliente";
 import { mensajeDeFallo } from "@/lib/api/errores";
 import { LogoPortal } from "@/components/marca/MarcaPunto";
-import { recordarVehiculo } from "@/lib/tramite/presentacion";
 import {
   datosTecnicos,
   filasDiagnostico,
@@ -26,17 +24,16 @@ import {
   MENSAJE_REVISANDO_VEHICULO,
 } from "@/lib/tramite/diagnostico";
 
-/** Mismos pasos base del portal (Cascaron / PASOS_BASE), sin Cotizar. */
+/** Los 5 pasos del repo de diseño (STEPS): sin Cotizar ni Resumen. La barra lleva «Envío» y la miga «Confirmación». */
 const PASOS = [
   { id: "diagnostico", titulo: "Diagnóstico", miga: "Diagnóstico" },
   { id: "actores", titulo: "Actores", miga: "Actores" },
   { id: "requisitos", titulo: "Requisitos", miga: "Requisitos" },
-  { id: "resumen", titulo: "Resumen", miga: "Resumen" },
   { id: "pago", titulo: "Pago", miga: "Pago" },
-  { id: "envio", titulo: "Cierre", miga: "Confirmación" },
+  { id: "envio", titulo: "Envío", miga: "Confirmación" },
 ] as const;
 
-type FasePaso = "diagnostico" | "actores" | "requisitos" | "resumen" | "pago" | "envio";
+type FasePaso = "diagnostico" | "actores" | "requisitos" | "pago" | "envio";
 
 type EstadoCarga =
   | { fase: "cargando" }
@@ -153,12 +150,6 @@ export function DiagnosticoPunto({
     tituloRef.current?.focus({ preventScroll: true });
   }, [paso]);
 
-  // El Resumen reutiliza lo que esta consulta ya trajo del vehículo (no vuelve a consultar).
-  const vehiculoConsultado = estado.fase === "listo" ? estado.vehiculo : null;
-  useEffect(() => {
-    if (solicitudIdPunto) recordarVehiculo(solicitudIdPunto, vehiculoConsultado);
-  }, [solicitudIdPunto, vehiculoConsultado]);
-
   const diagnostico = estado.fase === "listo" ? estado.diagnostico : null;
   const vehiculo = estado.fase === "listo" ? estado.vehiculo : null;
   const filas = diagnostico ? filasDiagnostico(diagnostico.requisitos) : [];
@@ -266,9 +257,9 @@ export function DiagnosticoPunto({
               Paso {indicePaso + 1} · {PASOS[indicePaso].titulo}
             </h2>
 
-            {/* Actores permanece montado al ir a Requisitos/Resumen/Envío para no reabrir identidad del vendedor ya validado. */}
+            {/* Actores permanece montado al ir a Requisitos/Pago/Envío para no reabrir identidad del vendedor ya validado. */}
             {(paso === "actores" ||
-              (actoresVisitado && (paso === "requisitos" || paso === "resumen" || paso === "pago" || paso === "envio"))) && (
+              (actoresVisitado && (paso === "requisitos" || paso === "pago" || paso === "envio"))) && (
               <div
                 className={paso === "actores" ? undefined : "hidden"}
                 aria-hidden={paso !== "actores"}
@@ -293,7 +284,7 @@ export function DiagnosticoPunto({
                 tipoCodigo={tipoCodigo}
                 placa={placa}
                 onAtras={() => setPaso("actores")}
-                onContinuarPago={() => setPaso("resumen")}
+                onContinuarPago={() => setPaso("pago")}
                 onAviso={onAviso}
               />
             ) : paso === "requisitos" ? (
@@ -303,17 +294,6 @@ export function DiagnosticoPunto({
                 </p>
                 <Nav onBack={() => setPaso("actores")} onNext={() => setPaso("actores")} nextLabel="Ir a Actores" />
               </Card>
-            ) : paso === "resumen" && solicitudIdPunto ? (
-              <EnvioPunto
-                cliente={cliente}
-                solicitudId={solicitudIdPunto}
-                tipoCodigo={tipoCodigo}
-                paso="resumen"
-                onPaso={setPaso}
-                onAtras={() => setPaso("requisitos")}
-                onIrActores={() => setPaso("actores")}
-                onTerminar={terminar}
-              />
             ) : paso === "pago" && solicitudIdPunto ? (
               <>
                 {avisoPago && (
@@ -325,7 +305,9 @@ export function DiagnosticoPunto({
                   cliente={cliente}
                   solicitudId={solicitudIdPunto}
                   tipoCodigo={tipoCodigo}
-                  onVolver={() => setPaso("resumen")}
+                  placa={placa}
+                  tipoNombre={tipoNombre}
+                  onVolver={() => setPaso("requisitos")}
                   onIrActores={() => setPaso("actores")}
                   onPagado={() => setPaso("envio")}
                 />
@@ -335,6 +317,8 @@ export function DiagnosticoPunto({
                 cliente={cliente}
                 solicitudId={solicitudIdPunto}
                 tipoCodigo={tipoCodigo}
+                placa={placa}
+                tipoNombre={tipoNombre}
                 onTerminar={terminar}
                 onPagoAnulado={pagoAnulado}
                 onRadicado={setRadicadoFlit2}
