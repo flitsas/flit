@@ -1,8 +1,8 @@
 using System.Net;
 using System.Net.Http.Headers;
-using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
+using Flit.Tramites.Domain.Certifications;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure.Consultations;
@@ -57,6 +57,7 @@ internal sealed class KyverumFinesConsultationProvider(
                   $"?documentType={Uri.EscapeDataString(documentType)}" +
                   $"&documentNumber={Uri.EscapeDataString(documentNumber)}";
 
+        HttpStatusCode? estado = null;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -67,21 +68,26 @@ internal sealed class KyverumFinesConsultationProvider(
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var response = await http.SendAsync(request, ct);
+            estado = response.StatusCode;
 
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return NotFound();
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode));
 
-            // Se asume la forma del SIMIT (la fuente última es la misma). Si el proveedor entrega
-            // otra forma, el ajuste vive en este DTO + su mapper, sin tocar el resto del flujo.
-            var payload = await response.Content.ReadFromJsonAsync<FlitFinesResponse>(JsonOptions, ct);
+            // HU #14183: se lee como texto y se deserializa desde ahí (mismo patrón que conductor y RUES)
+            // para conservar el cuerpo tal cual. El semáforo y los comparendos siguen saliendo del mapper.
+            var raw = await response.Content.ReadAsStringAsync(ct);
+            var payload = JsonSerializer.Deserialize<FlitFinesResponse>(raw, JsonOptions);
             if (payload is null)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode));
 
             var mapped = FlitFinesResultMapper.Map(payload);
-            return new ConsultationResult(Key_, mapped.Overall, RebrandChecks(mapped.Checks), mapped.HydratedFields);
+            return new ConsultationResult(Key_, mapped.Overall, RebrandChecks(mapped.Checks), mapped.HydratedFields)
+            {
+                RawPayload = new RawProviderPayload(Key_, RawProviderPayload.PersonSubject, documentNumber, raw, DateTimeOffset.UtcNow),
+            };
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -89,15 +95,15 @@ internal sealed class KyverumFinesConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Timeout());
         }
         catch (HttpRequestException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Red());
         }
         catch (JsonException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(estado));
         }
     }
 
@@ -118,6 +124,9 @@ internal sealed class KyverumFinesConsultationProvider(
             [new ConsultationCheck(FinesCheckFactory.KeyMultas, FinesCheckFactory.LabelMultas, "ok", Key_,
                 "Sin registros SIMIT")],
             []);
+
+    /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
+    private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
 
     // Aviso (warn), no bloqueo: sin respuesta del proveedor de comparendos el trámite puede seguir.
     private static ConsultationResult ProviderUnavailable() =>

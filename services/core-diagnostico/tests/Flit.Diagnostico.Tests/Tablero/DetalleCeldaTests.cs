@@ -1,0 +1,870 @@
+using System.Net;
+using System.Reflection;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using Flit.Diagnostico.Api.Modulos.Configuracion;
+using Flit.Diagnostico.Api.Modulos.Consultas;
+using Flit.Diagnostico.Api.Modulos.Tablero;
+using Flit.Diagnostico.Api.Plataforma;
+using Flit.Diagnostico.Domain.Configuracion;
+using Flit.Diagnostico.Domain.Consultas;
+using Flit.Diagnostico.Domain.Personas;
+using Flit.Diagnostico.Domain.Vehiculos;
+using Flit.Diagnostico.Tests.Aislamiento;
+using Flit.Diagnostico.Tests.Api;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Xunit;
+using static Flit.Diagnostico.Tests.Configuracion.ConfiguracionOperativaTests;
+using RespuestaFuente = Flit.Diagnostico.Tests.Consultas.RespuestaFuenteTests;
+
+namespace Flit.Diagnostico.Tests.Tablero;
+
+/// <summary>
+/// HU #13798 (F06-H1) — <c>GET /diagnosticos/{id}/vehiculos/{vid}/consultas/{fuente}</c>: resultado normalizado de cada
+/// fuente (F06-C1), personas con el documento enmascarado (<c>****</c> + 4 últimos, F06-C2), avalúo «sin valor comercial»,
+/// misma forma para una celda manual y una de API sin origen, usuario manual, proveedor ni transacción (F06-C3/C12) y
+/// aislamiento: otra compañía y PROPIOS de otro usuario 404, sin permiso 403 (F06-C4). PostgreSQL real
+/// (<see cref="ApiDePrueba"/>); lotes y personas sembrados directo con documentos ficticios cifrados.
+/// </summary>
+/// <example>
+/// <code>
+/// dotnet test services/core-diagnostico/tests/Flit.Diagnostico.Tests --no-build --filter FullyQualifiedName~Tablero.DetalleCeldaTests
+/// </code>
+/// </example>
+public sealed class DetalleCeldaTests
+{
+    private const string PayloadRunt =
+        """{"placa":"TST401","vin":"9ZZPRUEBA00000401","servicio":"PARTICULAR","clase":"AUTOMOVIL","organismo":"STRIA PRUEBA","servicio_que_resolvio":"INTEMPO_SIMULADO","id_transaccion":"TX-SECRETA-401","propietarios":[{"tipo_documento":"C","tipo_propiedad":"PROPIA"},{"tipo_documento":"N","tipo_propiedad":"PROPIA"}],"locatarios":0}""";
+
+    private const string PayloadAvaluo =
+        """{"sin_valor_comercial":false,"valor_sugerido":48500000,"fuente_principal":"fasecolda","fuentes":[{"fuente":"fasecolda","estado":"OK","valor":48500000,"muestras":3,"fecha":"2026-10-22"},{"fuente":"mercado_libre","estado":"SIN_DATOS","fecha":"2026-10-22"}]}""";
+
+    private const string PayloadSinValor =
+        """{"sin_valor_comercial":true,"fuentes":[{"fuente":"fasecolda","estado":"SIN_DATOS","fecha":"2026-10-22"},{"fuente":"mercado_libre","estado":"SIN_DATOS","fecha":"2026-10-22"}]}""";
+
+    private static readonly string[] ClavesProhibidas =
+        ["origen", "usuario", "proveedor", "servicio_que_resolvio", "transaccion", "payload", "persona_id", "cifrado", "nombre"];
+
+    /// <summary>
+    /// HU #14087 (página del detalle en pestaña nueva): claves exactas permitidas aunque contengan una prohibida. <c>nombre_diagnostico</c>
+    /// es el nombre del lote (no de una persona); origen, usuario manual y transacción siguen fuera (R-20).
+    /// </summary>
+    /// <para>HU #14153 (decisión del usuario 2026-10-28): <c>respuesta_proveedor</c> es la respuesta íntegra del proveedor por persona
+    /// (contiene «proveedor» en el nombre, no es el código del proveedor que resolvió).</para>
+    private static readonly string[] ClavesPermitidas = ["nombre_diagnostico", "respuesta_proveedor"];
+
+    private static bool Prohibida(string clave) =>
+        !ClavesPermitidas.Any(p => clave == p || clave.EndsWith("/" + p, StringComparison.Ordinal))
+        && ClavesProhibidas.Any(p => clave.Contains(p, StringComparison.OrdinalIgnoreCase));
+
+    // AC1 (F06-C1) — cada fuente devuelve su resultado normalizado: RUNT, SIMIT_VEHICULO (con tope de comparendos), AVALUO y
+    // SIMIT_PROPIETARIO con dos propietarios, una entrada por persona con su resultado. Fuente desconocida: 400.
+    [Fact]
+    public async Task Devuelve_resultado_normalizado_de_cada_fuente()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+        [
+            new("TST401", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1),
+                new(Fuente.Avaluo, EstadoCelda.Pendiente, 1), new(Fuente.SimitPropietario, EstadoCelda.Pendiente, 1),
+                new(Fuente.SimitLocatario, EstadoCelda.Na, 1)]),
+            new("TST402", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+        ]);
+        var vehiculo = lote.Vehiculos.Single(v => v.Placa == "TST401").Id;
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST401", Fuente.Runt), PayloadRunt, ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST401", Fuente.SimitVehiculo), Simit(2, "ROJO"), ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST401", Fuente.Avaluo), PayloadAvaluo, ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST402", Fuente.SimitVehiculo), Simit(150, "ROJO"), ct);
+        var p1 = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 1, "C", "1010101401", ct);
+        var p2 = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 2, "C", "2020202402", ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST401", Fuente.SimitPropietario), Personas(
+            (p1.Id, 1, "SIMIT", "OK", Simit(1, "AMARILLO"), null), (p2.Id, 2, "SIMIT", "OK", Simit(0, "VERDE"), null)), ct);
+        var cliente = empresa.Cliente();
+
+        var runt = await DetalleAsync(cliente, lote.Id, vehiculo, "RUNT", ct);
+        runt.GetProperty("fuente").GetString().Should().Be("RUNT");
+        runt.GetProperty("estado").GetString().Should().Be("COMPLETADO");
+        runt.GetProperty("dato_obtenido_en").ValueKind.Should().Be(JsonValueKind.String);
+        runt.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null, "RUNT es del vehículo");
+        var resultadoRunt = runt.GetProperty("resultado");
+        resultadoRunt.GetProperty("placa").GetString().Should().Be("TST401");
+        resultadoRunt.GetProperty("clase").GetString().Should().Be("AUTOMOVIL");
+        resultadoRunt.GetProperty("propietarios").EnumerateArray().Select(p => p.GetProperty("tipo_documento").GetString()).Should().Equal(["C", "N"]);
+
+        var simit = (await DetalleAsync(cliente, lote.Id, vehiculo, "SIMIT_VEHICULO", ct)).GetProperty("resultado");
+        simit.GetProperty("semaforo").GetString().Should().Be("ROJO");
+        simit.GetProperty("cantidad_comparendos").GetInt32().Should().Be(2);
+        simit.GetProperty("comparendos_truncados").GetBoolean().Should().BeFalse();
+        var comparendo = simit.GetProperty("comparendos")[0];
+        comparendo.GetProperty("numero").GetString().Should().Be("C-0001");
+        comparendo.GetProperty("valor").GetString().Should().Be("500000");
+        comparendo.GetProperty("estado").GetString().Should().Be("PENDIENTE");
+
+        var largo = (await DetalleAsync(cliente, lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST402").Id, "SIMIT_VEHICULO", ct)).GetProperty("resultado");
+        largo.GetProperty("cantidad_comparendos").GetInt32().Should().Be(150, "la cantidad es la real");
+        largo.GetProperty("comparendos").GetArrayLength().Should().Be(DetalleCelda.TopeComparendos, "la lista se corta en el tope");
+        largo.GetProperty("comparendos_truncados").GetBoolean().Should().BeTrue();
+
+        var avaluo = (await DetalleAsync(cliente, lote.Id, vehiculo, "AVALUO", ct)).GetProperty("resultado");
+        avaluo.GetProperty("sin_valor_comercial").GetBoolean().Should().BeFalse();
+        avaluo.GetProperty("valor_sugerido").GetInt64().Should().Be(48_500_000);
+        avaluo.GetProperty("fuente_principal").GetString().Should().Be("fasecolda");
+        avaluo.GetProperty("fuentes").EnumerateArray().Select(f => f.GetProperty("estado").GetString()).Should().Equal(["OK", "SIN_DATOS"]);
+
+        var propietarios = await DetalleAsync(cliente, lote.Id, vehiculo, "SIMIT_PROPIETARIO", ct);
+        propietarios.GetProperty("resultado").ValueKind.Should().Be(JsonValueKind.Null, "el resultado va por persona");
+        var personas = propietarios.GetProperty("personas").EnumerateArray().ToList();
+        personas.Should().HaveCount(2, "una entrada por propietario");
+        personas.Select(p => p.GetProperty("orden").GetInt32()).Should().Equal([1, 2]);
+        personas.Select(p => p.GetProperty("estado").GetString()).Should().Equal(["OK", "OK"]);
+        personas.Select(p => p.GetProperty("resultado").GetProperty("cantidad_comparendos").GetInt32()).Should().Equal([1, 0]);
+        personas[0].GetProperty("resultado").GetProperty("semaforo").GetString().Should().Be("AMARILLO");
+
+        var na = await DetalleAsync(cliente, lote.Id, vehiculo, "SIMIT_LOCATARIO", ct);
+        na.GetProperty("estado").GetString().Should().Be("NA");
+        na.GetProperty("motivo_na").GetString().Should().Be("SIN_DOCUMENTO_LOCATARIO");
+        na.GetProperty("personas").GetArrayLength().Should().Be(0, "el vehículo no tiene locatario");
+
+        var desconocida = await cliente.GetAsync(Tablero.RutaDetalle(lote.Id, vehiculo, "FASECOLDA"), ct);
+        desconocida.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await Tablero.JsonAsync(desconocida, ct)).GetProperty("code").GetString().Should().Be(DetalleCelda.CodigoFuenteInvalida);
+    }
+
+    // AC2 (F06-C2) y AC1 — RUNT_LOCATARIO con locatario declarado: «****» + 4 últimos y declarado_por_cliente=true; RUNT_PROPIETARIO
+    // con un natural en OK y un NIT en ERROR (resultado parcial). Nunca el documento completo.
+    [Fact]
+    public async Task Fuente_de_persona_trae_cada_persona_enmascarada()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST421", [new(Fuente.RuntLocatario, EstadoCelda.Pendiente, 1), new(Fuente.RuntPropietario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var locatario = await PersonaAsync(api, empresa, vehiculo, RolPersona.Locatario, 1, "C", "1012345678", ct, OrigenDocumento.DeclaradoCliente);
+        var natural = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 1, "C", "79111222", ct);
+        var juridica = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 2, "NIT", "900123456-7", ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST421", Fuente.RuntLocatario), Personas(
+            (locatario.Id, 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[{"categoria":"B1","estado":"VIGENTE","vigente_hasta":"2030-01-01"}]}""", null)), ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST421", Fuente.RuntPropietario), Personas(
+            (natural.Id, 1, "RUNT_PERSONA", "OK", """{"inscrito":false,"licencias":[]}""", null),
+            (juridica.Id, 2, "RUES", "ERROR", null, "TIMEOUT")), ct, EstadoCelda.Error, "PERSONAS_CON_ERROR");
+        var cliente = empresa.Cliente();
+
+        var respuesta = await cliente.GetAsync(Tablero.RutaDetalle(lote.Id, vehiculo, "RUNT_LOCATARIO"), ct);
+        var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
+        var persona = JsonDocument.Parse(cuerpo).RootElement.GetProperty("personas").EnumerateArray().Single();
+        persona.GetProperty("documento_enmascarado").GetString().Should().Be("****5678");
+        persona.GetProperty("documento").GetString().Should().Be("1012345678");
+        persona.GetProperty("declarado_por_cliente").GetBoolean().Should().BeTrue();
+        persona.GetProperty("rol").GetString().Should().Be("LOCATARIO");
+        persona.GetProperty("tipo_documento").GetString().Should().Be("C");
+        persona.GetProperty("consulta").GetString().Should().Be("RUNT_PERSONA");
+        persona.GetProperty("resultado").GetProperty("licencias")[0].GetProperty("categoria").GetString().Should().Be("B1");
+
+        var propietarios = await cliente.GetAsync(Tablero.RutaDetalle(lote.Id, vehiculo, "RUNT_PROPIETARIO"), ct);
+        var cuerpoPropietarios = await propietarios.Content.ReadAsStringAsync(ct);
+        propietarios.StatusCode.Should().Be(HttpStatusCode.OK, cuerpoPropietarios);
+        cuerpoPropietarios.Should().Contain("79111222").And.Contain("900123456");
+        cuerpoPropietarios.Should().NotContainAny([natural.Id.ToString(), juridica.Id.ToString()]);
+        var detalle = JsonDocument.Parse(cuerpoPropietarios).RootElement;
+        detalle.GetProperty("estado").GetString().Should().Be("ERROR");
+        detalle.GetProperty("tipo_error").GetString().Should().Be("PERSONAS_CON_ERROR");
+        var personas = detalle.GetProperty("personas").EnumerateArray().ToList();
+        personas.Select(p => p.GetProperty("documento_enmascarado").GetString()).Should().Equal(["****1222", "****4567"]);
+        personas.Select(p => p.GetProperty("declarado_por_cliente").GetBoolean()).Should().Equal([false, false]);
+        personas.Select(p => p.GetProperty("estado").GetString()).Should().Equal(["OK", "ERROR"]);
+        personas[0].GetProperty("resultado").GetProperty("inscrito").GetBoolean().Should().BeFalse();
+        personas[1].GetProperty("tipo_error").GetString().Should().Be("TIMEOUT");
+        personas[1].GetProperty("consulta").GetString().Should().Be("RUES");
+        personas[1].GetProperty("resultado").ValueKind.Should().Be(JsonValueKind.Null);
+
+        EnmascaradorDocumento.Enmascarar("123").Should().Be("****", "un documento corto no se muestra");
+        EnmascaradorDocumento.Enmascarar("1234").Should().Be("****", "con cuatro caracteres o menos se vería completo");
+        EnmascaradorDocumento.Enmascarar(null).Should().Be("****");
+    }
+
+    // AC3 (F06-C1, Q4 = b) — AVALUO COMPLETADO sin valor: sin_valor_comercial=true, sin valor sugerido ni fuente principal.
+    [Fact]
+    public async Task Avaluo_sin_valor_se_lee_sin_valor_comercial()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST431", [new(Fuente.Avaluo, EstadoCelda.Pendiente, 1)])]);
+        await Tablero.PayloadAsync(empresa, lote.Celdas.Single(), PayloadSinValor, ct);
+
+        var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, lote.Vehiculos.Single().Id, "AVALUO", ct);
+
+        detalle.GetProperty("estado").GetString().Should().Be("COMPLETADO", "sin valor no es error");
+        var resultado = detalle.GetProperty("resultado");
+        resultado.GetProperty("sin_valor_comercial").GetBoolean().Should().BeTrue();
+        resultado.GetProperty("valor_sugerido").ValueKind.Should().Be(JsonValueKind.Null);
+        resultado.GetProperty("fuente_principal").ValueKind.Should().Be(JsonValueKind.Null);
+        resultado.GetProperty("fuentes").GetArrayLength().Should().Be(2);
+    }
+
+    // AC4 (F06-C3, F06-C12) — una celda de API y otra llenada a mano tienen exactamente las mismas claves y ninguna trae origen,
+    // usuario manual, proveedor ni transacción.
+    [Fact]
+    public async Task Celda_manual_y_celda_de_API_tienen_la_misma_forma()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+        [
+            new("TST441", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1), new(Fuente.Runt, EstadoCelda.Pendiente, 1)]),
+            new("TST442", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1), new(Fuente.Runt, EstadoCelda.Pendiente, 1)]),
+        ]);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST441", Fuente.SimitVehiculo), Simit(2, "ROJO"), ct);
+        var manual = await Tablero.PayloadAsync(empresa, lote.Celda("TST442", Fuente.SimitVehiculo), Simit(2, "ROJO"), ct, manual: true);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST441", Fuente.Runt), PayloadRunt, ct);
+        var runtManual = await Tablero.PayloadAsync(empresa, lote.Celda("TST442", Fuente.Runt), PayloadRunt.Replace("TST401", "TST442", StringComparison.Ordinal), ct, manual: true);
+        var cliente = empresa.Cliente();
+
+        foreach (var fuente in new[] { "SIMIT_VEHICULO", "RUNT" })
+        {
+            var deApi = await cliente.GetAsync(Tablero.RutaDetalle(lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST441").Id, fuente), ct);
+            var aMano = await cliente.GetAsync(Tablero.RutaDetalle(lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST442").Id, fuente), ct);
+            var cuerpoApi = await deApi.Content.ReadAsStringAsync(ct);
+            var cuerpoManual = await aMano.Content.ReadAsStringAsync(ct);
+            deApi.StatusCode.Should().Be(HttpStatusCode.OK, cuerpoApi);
+            aMano.StatusCode.Should().Be(HttpStatusCode.OK, cuerpoManual);
+
+            Claves(JsonDocument.Parse(cuerpoManual).RootElement).Should().Equal(Claves(JsonDocument.Parse(cuerpoApi).RootElement), $"{fuente}: misma forma");
+            Claves(JsonDocument.Parse(cuerpoManual).RootElement).Should().NotContain(c => Prohibida(c));
+            cuerpoManual.Should().NotContainAny(["MANUAL", "API", manual.UsuarioManualId!.Value.ToString(), runtManual.UsuarioManualId!.Value.ToString()]);
+        }
+    }
+
+    // AC4 (F06-C3, F06-C12) — por reflexión, el DTO (y sus tipos de resultado) no tiene origen, usuario, proveedor, transacción,
+    // payload ni documentos completos; y la respuesta no deja pasar campos del proveedor ni crudos que traiga el payload.
+    [Fact]
+    public async Task Nunca_incluye_payload_crudo_proveedor_ni_transaccion()
+    {
+        var nombres = PropiedadesDe(typeof(DetalleCeldaDto)).Select(p => p.GetCustomAttribute<JsonPropertyNameAttribute>()?.Name ?? p.Name).ToList();
+        nombres.Should().Contain(["resultado", "personas", "documento_enmascarado", "sin_valor_comercial", "comparendos", "licencias", "estado_matricula"],
+            "la reflexión recorre los tipos de resultado");
+        nombres.Should().NotContain(n => Prohibida(n));
+        nombres.Should().Contain(["identificador", "nombre_diagnostico"], "HU #14087: la página del detalle en pestaña nueva se titula sola");
+        // HU #14087 AC8 (decisión del usuario 2026-10-27, enmienda de ADR-0075): la ÚNICA clave nueva permitida es respuesta_fuente
+        // (la respuesta completa de la fuente, en la celda y en cada persona); origen, usuario manual y transacción siguen fuera.
+        nombres.Where(n => n == "respuesta_fuente").Should().HaveCount(2, "en DetalleCeldaDto y en PersonaDetalleDto");
+        // HU #14153 AC6: la respuesta íntegra del proveedor en cada persona;
+        // HU #14183: también a nivel de celda para SIMIT_VEHICULO.
+        nombres.Where(n => n == "respuesta_proveedor").Should().HaveCount(2, "en PersonaDetalleDto Y en DetalleCeldaDto (para SIMIT_VEHICULO)");
+
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST451", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)])]);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST451", Fuente.Runt), PayloadRunt, ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST451", Fuente.SimitVehiculo),
+            """{"semaforo":"VERDE","cantidad_comparendos":0,"comparendos":[],"respuesta_cruda":"CRUDO-SECRETO","transaccion_proveedor_id":"TX-SIMIT-9","nombre_infractor":"NOMBRE FICTICIO"}""", ct);
+        var vehiculo = lote.Vehiculos.Single().Id;
+
+        foreach (var fuente in new[] { "RUNT", "SIMIT_VEHICULO" })
+        {
+            var respuesta = await empresa.Cliente().GetAsync(Tablero.RutaDetalle(lote.Id, vehiculo, fuente), ct);
+            var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
+            respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
+            cuerpo.Should().NotContainAny(["INTEMPO", "TX-SECRETA-401", "servicio_que_resolvio", "id_transaccion", "CRUDO-SECRETO", "TX-SIMIT-9", "NOMBRE FICTICIO", "respuesta_cruda"]);
+        }
+    }
+
+    // HU #14087 AC8 — respuesta_fuente trae el proto-JSON completo de la fuente, descifrado, en la celda del vehículo y en cada
+    // persona (por su orden), con los datos que el resultado normalizado no tiene (color, nombre del propietario).
+    [Fact]
+    public async Task Respuesta_fuente_trae_el_objeto_completo_en_la_celda_y_en_cada_persona()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST461", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.RuntPropietario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var runt = lote.Celda("TST461", Fuente.Runt);
+        var propietarios = lote.Celda("TST461", Fuente.RuntPropietario);
+        var primero = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 1, "C", "9999900461", ct);
+        var segundo = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 2, "C", "9999900462", ct);
+        await Tablero.PayloadAsync(empresa, runt, PayloadRunt, ct);
+        await Tablero.PayloadAsync(empresa, propietarios, Personas(
+            (primero.Id, 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"licencias":[]}""", null),
+            (segundo.Id, 2, "RUNT_PERSONA", "ERROR", null, "TIMEOUT")), ct, EstadoCelda.Error, "PERSONAS_CON_ERROR");
+        const string Cruda = """{"proveedor":"intempo","resultado":"RESULTADO_RUNT_INTEMPO_ENCONTRADO","vehiculo":{"plate":"TST461","informacion_general":{"color":"ROJO FICTICIO","linea":""},"propietarios_actuales":[{"nombre_completo":"PROPIETARIO FICTICIO","tipo_propiedad":0}],"garantias_mobiliarias":[]},"http_status":200}""";
+        const string CrudaPersona = """{"resultado":{"proveedor":"kyverum_runt","desde_cache":false,"campos":[{"clave":"person_full_name","valor_texto":"PERSONA FICTICIA UNO"}]}}""";
+        await RespuestaFuente.GuardarCifradaAsync(api, runt.Id, RespuestaFuente.Cifrar(api, Cruda), ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, propietarios.Id,
+            RespuestaFuente.Cifrar(api, JsonSerializer.Serialize(new Dictionary<string, string> { ["1"] = CrudaPersona })), ct);
+
+        var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "RUNT", ct);
+
+        var respuesta = detalle.GetProperty("respuesta_fuente");
+        JsonElement.DeepEquals(respuesta, JsonDocument.Parse(Cruda).RootElement).Should().BeTrue("el objeto va tal cual, descifrado");
+        respuesta.GetProperty("vehiculo").GetProperty("informacion_general").GetProperty("color").GetString().Should().Be("ROJO FICTICIO");
+        detalle.GetProperty("resultado").GetProperty("placa").GetString().Should().Be("TST401", "el resultado normalizado no cambia");
+
+        var deLasPersonas = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "RUNT_PROPIETARIO", ct);
+        deLasPersonas.GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "en las fuentes de persona va en cada persona");
+        var personas = deLasPersonas.GetProperty("personas").EnumerateArray().ToList();
+        JsonElement.DeepEquals(personas[0].GetProperty("respuesta_fuente"), JsonDocument.Parse(CrudaPersona).RootElement).Should().BeTrue();
+        personas[1].GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "la persona 2 no tiene respuesta guardada");
+        deLasPersonas.GetRawText().Should().NotContainAny([primero.Id.ToString(), segundo.Id.ToString()]);
+
+        // El número en claro va solo en `documento` de su persona; la máscara no se relaja.
+        personas[0].GetProperty("documento_enmascarado").GetString().Should().Be("****0461");
+        personas[1].GetProperty("documento_enmascarado").GetString().Should().Be("****0462");
+        RutasConValor(deLasPersonas, "9999900461", "$").Should().Equal("$.personas[0].documento");
+        RutasConValor(deLasPersonas, "9999900462", "$").Should().Equal("$.personas[1].documento");
+    }
+
+    /// <summary>Rutas de las hojas del JSON cuyo valor contiene <paramref name="valor"/>.</summary>
+    private static IEnumerable<string> RutasConValor(JsonElement nodo, string valor, string ruta)
+    {
+        if (nodo.ValueKind == JsonValueKind.Object)
+            return nodo.EnumerateObject().SelectMany(p => RutasConValor(p.Value, valor, ruta + "." + p.Name));
+        if (nodo.ValueKind == JsonValueKind.Array)
+            return nodo.EnumerateArray().SelectMany((e, i) => RutasConValor(e, valor, ruta + "[" + i.ToString(System.Globalization.CultureInfo.InvariantCulture) + "]"));
+        return nodo.GetRawText().Contains(valor, StringComparison.Ordinal) ? [ruta] : [];
+    }
+
+    // HU #14087 AC8 — sin respuesta guardada (celda manual o de antes del AC8) respuesta_fuente es null; si no se puede descifrar,
+    // también null y el detalle responde 200 (nunca 500).
+    [Fact]
+    public async Task Respuesta_fuente_es_null_sin_respuesta_guardada_o_si_no_se_puede_descifrar()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+        [
+            new("TST471", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1), new(Fuente.SimitPropietario, EstadoCelda.Pendiente, 1)]),
+            new("TST472", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+        ]);
+        var v1 = lote.Vehiculos.Single(v => v.Placa == "TST471").Id;
+        var v2 = lote.Vehiculos.Single(v => v.Placa == "TST472").Id;
+        var persona = await PersonaAsync(api, empresa, v1, RolPersona.Propietario, 1, "C", "9999900471", ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST471", Fuente.SimitVehiculo), Simit(1, "ROJO"), ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST472", Fuente.SimitVehiculo), Simit(1, "ROJO"), ct, manual: true);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST471", Fuente.SimitPropietario), Personas(
+            (persona.Id, 1, "SIMIT", "OK", Simit(0, "VERDE"), null)), ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, lote.Celda("TST471", Fuente.SimitVehiculo).Id, [1, 2, 3, 4], ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, lote.Celda("TST471", Fuente.SimitPropietario).Id, [9, 9, 9], ct);
+
+        var corrupta = await DetalleAsync(empresa.Cliente(), lote.Id, v1, "SIMIT_VEHICULO", ct);
+        var manual = await DetalleAsync(empresa.Cliente(), lote.Id, v2, "SIMIT_VEHICULO", ct);
+        var personaCorrupta = await DetalleAsync(empresa.Cliente(), lote.Id, v1, "SIMIT_PROPIETARIO", ct);
+
+        corrupta.GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "no se pudo descifrar: null, no 500");
+        corrupta.GetProperty("resultado").GetProperty("semaforo").GetString().Should().Be("ROJO");
+        manual.GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null, "la celda manual no tiene respuesta de la fuente");
+        personaCorrupta.GetProperty("personas")[0].GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Null);
+        personaCorrupta.GetProperty("personas")[0].GetProperty("estado").GetString().Should().Be("OK");
+    }
+
+    // HU #14153 AC6 — cada persona de RUNT_PROPIETARIO (conductor y RUES) trae respuesta_proveedor: el JSON de
+    // resultado.respuesta_cruda.json parseado como OBJETO, con todas las claves y valores del proveedor (ids, firma, campos técnicos,
+    // nulos, números y listas) sin quitar ninguno; respuesta_fuente sigue igual (el texto del crudo dentro).
+    [Fact]
+    public async Task HU14153_AC6_Cada_persona_trae_respuesta_proveedor_como_objeto_completo()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST481", [new(Fuente.RuntPropietario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var celda = lote.Celda("TST481", Fuente.RuntPropietario);
+        var natural = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 1, "C", "9999900481", ct);
+        var juridica = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 2, "N", "999990482", ct);
+        await Tablero.PayloadAsync(empresa, celda, Personas(
+            (natural.Id, 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[]}""", null),
+            (juridica.Id, 2, "RUES", "OK", """{"encontrada":true,"estado_matricula":"ACTIVA","ultima_renovacion":"2026-03-31"}""", null)), ct);
+        const string ProveedorConductor = """{"ok":true,"id_interno":"KY-99999","identidad":{"nombreCompleto":"PERSONA FICTICIA DETALLE"},"persona":{"documento":"9999900481","tieneLicencias":true},"licencias":[{"numeroLicencia":"99999000401","estadoLicencia":"ACTIVA","detalleLicencia":[{"categoria":"B1","fechaVencimiento":"2034-01-15"}]},{"numeroLicencia":"99999000402","estadoLicencia":"VENCIDA","detalleLicencia":[{"categoria":"C1","fechaVencimiento":"2022-06-01"}]},{"numeroLicencia":"99999000403","estadoLicencia":"SUSPENDIDA","detalleLicencia":[]}],"multas":null,"fromCache":false,"total":3,"puntaje":1.5}""";
+        const string ProveedorRues = """{"data":{"commercialRegistry":{"NIT":"999990482","legalRepresentatives":{"faculty":"TEXTO FICTICIO","legalRepresentatives":[{"documentNumber":"9999900901","documentType":"CC","name":"PERSONA FICTICIA RL","role":"Representante Legal"}]}},"economicActivities":[{"code":"4923","description":"Transporte de carga por carretera","name":"ciiu_act_econ_pri"}]},"signature":{"dateTime":"October 28, 2026 9:00 AM","message":"Certified by Verifik.co"},"id":"FICTICIO482"}""";
+        await RespuestaFuente.GuardarCifradaAsync(api, celda.Id, RespuestaFuente.Cifrar(api, JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["1"] = ConCrudo("kyverum_runt", "kyverum_runt_conductor", "person", ProveedorConductor),
+            ["2"] = ConCrudo("verifik_rues", "verifik_rues", "company", ProveedorRues),
+        })), ct);
+
+        var personas = (await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "RUNT_PROPIETARIO", ct)).GetProperty("personas").EnumerateArray().ToList();
+
+        var conductor = personas[0].GetProperty("respuesta_proveedor");
+        conductor.ValueKind.Should().Be(JsonValueKind.Object, "un objeto JSON, no un texto");
+        JsonElement.DeepEquals(conductor, JsonDocument.Parse(ProveedorConductor).RootElement).Should().BeTrue("todas las claves y valores del proveedor, sin quitar ninguno");
+        conductor.GetProperty("licencias").GetArrayLength().Should().Be(3);
+        conductor.GetProperty("id_interno").GetString().Should().Be("KY-99999", "ni los identificadores internos se filtran (decisión literal)");
+        var rues = personas[1].GetProperty("respuesta_proveedor");
+        JsonElement.DeepEquals(rues, JsonDocument.Parse(ProveedorRues).RootElement).Should().BeTrue();
+        rues.GetProperty("signature").GetProperty("message").GetString().Should().Be("Certified by Verifik.co");
+        personas[0].GetProperty("respuesta_fuente").GetProperty("resultado").GetProperty("respuesta_cruda").GetProperty("json").GetString()
+            .Should().Be(ProveedorConductor, "respuesta_fuente se queda como está");
+    }
+
+    // HU #14153 AC7 — sin crudo, con un crudo que no es JSON válido o que no es un objeto: respuesta_proveedor = null, el detalle responde
+    // 200 y el log avisa SIN el contenido del crudo.
+    [Fact]
+    public async Task HU14153_AC7_Sin_crudo_o_con_crudo_invalido_respuesta_proveedor_es_null_y_el_log_no_trae_el_contenido()
+    {
+        var logs = new LogsEnMemoria();
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: b =>
+        {
+            b.Logging.AddProvider(logs);
+            b.Logging.AddFilter<LogsEnMemoria>(null, Microsoft.Extensions.Logging.LogLevel.Trace);
+        });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos: [new("TST491", [new(Fuente.RuntPropietario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var celda = lote.Celda("TST491", Fuente.RuntPropietario);
+        var ids = new List<Guid>();
+        for (var orden = 1; orden <= 3; orden++)
+            ids.Add((await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, orden, "C", $"999990049{orden}", ct)).Id);
+        await Tablero.PayloadAsync(empresa, celda, Personas(
+            (ids[0], 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"licencias":[]}""", null),
+            (ids[1], 2, "RUNT_PERSONA", "OK", """{"inscrito":true,"licencias":[]}""", null),
+            (ids[2], 3, "RUNT_PERSONA", "OK", """{"inscrito":true,"licencias":[]}""", null)), ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, celda.Id, RespuestaFuente.Cifrar(api, JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["1"] = """{"resultado":{"proveedor":"kyverum_runt","campos":[]}}""",
+            ["2"] = ConCrudo("kyverum_runt", "kyverum_runt_conductor", "person", "{no es json CRUDO-SECRETO-491"),
+            ["3"] = ConCrudo("kyverum_runt", "kyverum_runt_conductor", "person", """["CRUDO-LISTA-491"]"""),
+        })), ct);
+
+        var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "RUNT_PROPIETARIO", ct);
+
+        var personas = detalle.GetProperty("personas").EnumerateArray().ToList();
+        personas.Should().HaveCount(3);
+        personas.Should().OnlyContain(p => p.GetProperty("respuesta_proveedor").ValueKind == JsonValueKind.Null);
+        personas[0].GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Object, "la respuesta de la fuente sigue llegando");
+        var avisos = logs.Mensajes.Where(m => m.Contains("respuesta_proveedor", StringComparison.Ordinal)).ToList();
+        avisos.Should().HaveCount(2, "se registra el crudo inválido (2) y el que no es objeto (3), no la persona sin crudo");
+        avisos.Should().OnlyContain(m => m.Contains(celda.Id.ToString(), StringComparison.Ordinal));
+        logs.Mensajes.Should().NotContain(m => m.Contains("CRUDO-SECRETO-491", StringComparison.Ordinal) || m.Contains("CRUDO-LISTA-491", StringComparison.Ordinal),
+            "el log nunca lleva el contenido del crudo");
+    }
+
+    /// <summary>La respuesta de una persona (proto-JSON del bus) con <paramref name="json"/> en <c>resultado.respuesta_cruda.json</c>.</summary>
+    private static string ConCrudo(string proveedorResultado, string proveedorCrudo, string tipoSujeto, string json) => JsonSerializer.Serialize(new
+    {
+        resultado = new
+        {
+            proveedor = proveedorResultado,
+            desde_cache = false,
+            respuesta_cruda = new { proveedor = proveedorCrudo, tipo_sujeto = tipoSujeto, json },
+        },
+    });
+
+    // HU #14087 (detalle en pestaña nueva) — el detalle trae identificador (la placa; sin placa, el VIN) y nombre_diagnostico (el
+    // nombre del lote), en las fuentes del vehículo y en las de persona, para que la página se titule sola.
+    [Fact]
+    public async Task Detalle_trae_identificador_placa_o_vin_y_nombre_del_diagnostico()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, nombre: "Lote pestaña nueva", vehiculos:
+        [
+            new("TST481", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.SimitPropietario, EstadoCelda.Pendiente, 1)]),
+            new("TST482", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)]),
+        ]);
+        var conPlaca = lote.Vehiculos.Single(v => v.Placa == "TST481").Id;
+        var sinPlaca = lote.Vehiculos.Single(v => v.Placa == "TST482").Id;
+        await using (var db = empresa.Db())
+        {
+            var vehiculo = await db.Set<Flit.Diagnostico.Api.Modulos.Vehiculos.VehiculoDiagnostico>().SingleAsync(v => v.Id == sinPlaca, ct);
+            vehiculo.IdentificadorOriginal = vehiculo.IdentificadorNorm = "9ZZPRUEBA00000482";
+            vehiculo.Placa = null;
+            vehiculo.Vin = "9ZZPRUEBA00000482";
+            vehiculo.TipoIdentificador = TipoIdentificador.Vin;
+            await db.SaveChangesAsync(ct);
+        }
+
+        var cliente = empresa.Cliente();
+        var runt = await DetalleAsync(cliente, lote.Id, conPlaca, "RUNT", ct);
+        runt.GetProperty("identificador").GetString().Should().Be("TST481", "con placa, la placa");
+        runt.GetProperty("nombre_diagnostico").GetString().Should().Be("Lote pestaña nueva");
+
+        var persona = await DetalleAsync(cliente, lote.Id, conPlaca, "SIMIT_PROPIETARIO", ct);
+        persona.GetProperty("identificador").GetString().Should().Be("TST481", "también en las fuentes de persona");
+        persona.GetProperty("nombre_diagnostico").GetString().Should().Be("Lote pestaña nueva");
+
+        var vin = await DetalleAsync(cliente, lote.Id, sinPlaca, "RUNT", ct);
+        vin.GetProperty("identificador").GetString().Should().Be("9ZZPRUEBA00000482", "sin placa, el VIN");
+        vin.GetProperty("nombre_diagnostico").GetString().Should().Be("Lote pestaña nueva");
+    }
+
+    // AC5 (F06-C4) — el detalle de un diagnóstico de la compañía B pedido por A responde 404 sin datos; un vehículo de otro lote
+    // o una fuente sin celda, también 404.
+    [Fact]
+    public async Task Otra_compania_responde_404()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresas = DosEmpresas.En(api);
+        var deB = await Tablero.SembrarAsync(empresas.B, ct, nombre: "Lote secreto de B", vehiculos: [new("TST461", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
+        await Tablero.PayloadAsync(empresas.B, deB.Celdas.Single(), PayloadRunt.Replace("TST401", "TST461", StringComparison.Ordinal), ct);
+        var propio = await Tablero.SembrarAsync(empresas.A, ct, vehiculos: [new("TST462", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+        var otroPropio = await Tablero.SembrarAsync(empresas.A, ct, vehiculos: [new("TST463", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+        var cliente = empresas.A.Cliente();
+
+        var respuestas = new[]
+        {
+            await cliente.GetAsync(Tablero.RutaDetalle(deB.Id, deB.Vehiculos.Single().Id, "RUNT"), ct),
+            await cliente.GetAsync(Tablero.RutaDetalle(propio.Id, deB.Vehiculos.Single().Id, "RUNT"), ct),
+            await cliente.GetAsync(Tablero.RutaDetalle(propio.Id, otroPropio.Vehiculos.Single().Id, "RUNT"), ct),
+            await cliente.GetAsync(Tablero.RutaDetalle(propio.Id, propio.Vehiculos.Single().Id, "AVALUO"), ct),
+        };
+
+        foreach (var respuesta in respuestas)
+        {
+            var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
+            respuesta.StatusCode.Should().Be(HttpStatusCode.NotFound, $"{respuesta.RequestMessage!.RequestUri}: {cuerpo}");
+            JsonDocument.Parse(cuerpo).RootElement.GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
+            cuerpo.Should().NotContainAny(["Lote secreto de B", "TST461", deB.Celdas.Single().Id.ToString(), empresas.B.Id.ToString()]);
+        }
+
+        (await cliente.GetAsync(Tablero.RutaDetalle(propio.Id, propio.Vehiculos.Single().Id, "RUNT"), ct)).StatusCode
+            .Should().Be(HttpStatusCode.OK, "A sí ve su propia celda");
+    }
+
+    // AC5 (F06-C4, R-21) — con PROPIOS el detalle de un lote de otro usuario responde 404 (el creador y el admin sí lo ven); sin
+    // diagnostico.diagnosticos.ver, 403.
+    [Fact]
+    public async Task Propios_de_otro_usuario_404_y_sin_permiso_403()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        await SembrarAsync(empresa, new ConfiguracionEmpresa { VisibilidadUsuario = VisibilidadUsuario.Propios }, ct);
+        var creador = api.Token(empresa: empresa.Id, permisos: [Permisos.DiagnosticosVer], roles: ["usuario_diagnostico"]);
+        var otro = api.Token(empresa: empresa.Id, permisos: [Permisos.DiagnosticosVer], roles: ["usuario_diagnostico"]);
+        var admin = api.Token(empresa: empresa.Id, permisos: [Permisos.DiagnosticosVer, Permisos.ConfiguracionEditar], roles: ["admin_diagnostico"]);
+        var sinPermiso = api.Token(empresa: empresa.Id, permisos: [Permisos.ConfiguracionVer]);
+        var lote = await Tablero.SembrarAsync(empresa, ct, creador: Tablero.Usuario(creador), vehiculos: [new("TST471", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
+        await Tablero.PayloadAsync(empresa, lote.Celdas.Single(), PayloadRunt.Replace("TST401", "TST471", StringComparison.Ordinal), ct);
+        var ruta = Tablero.RutaDetalle(lote.Id, lote.Vehiculos.Single().Id, "RUNT");
+
+        var ajena = await api.Cliente(otro).GetAsync(ruta, ct);
+        var cuerpo = await ajena.Content.ReadAsStringAsync(ct);
+        ajena.StatusCode.Should().Be(HttpStatusCode.NotFound, cuerpo);
+        cuerpo.Should().NotContain("TST471");
+        (await api.Cliente(creador).GetAsync(ruta, ct)).StatusCode.Should().Be(HttpStatusCode.OK, "el creador ve su celda");
+        (await api.Cliente(admin).GetAsync(ruta, ct)).StatusCode.Should().Be(HttpStatusCode.OK, "el admin ve todas");
+        (await api.Cliente(sinPermiso).GetAsync(ruta, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // HU #13864 AC1 (F09-C9, Q1 = a, R-20) — celda del impuesto COMPLETADO con 350.000 pendientes de 2026 y 2025 pagada: el detalle
+    // trae monto_total y las dos vigencias por año ascendente, con solo las claves del contrato; ni el proveedor inventado ni la
+    // transacción ni el origen ni el departamento del payload llegan al JSON (fuga), y tampoco el servicio del intento.
+    [Fact]
+    public async Task Impuesto_completado_devuelve_monto_y_vigencias_sin_proveedor_ni_transaccion()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.ImpuestoDepartamental], vehiculos:
+            [new("TST481", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)])]);
+        var celda = lote.Celda("TST481", Fuente.ImpuestoDepartamental);
+        await Tablero.PayloadAsync(empresa, celda, ImpuestoDePrueba.ConVigencias, ct);
+        await Tablero.IntentoAsync(empresa, celda, desdeCache: false, ct);
+
+        var respuesta = await empresa.Cliente().GetAsync(Tablero.RutaDetalle(lote.Id, lote.Vehiculos.Single().Id, "IMPUESTO_DEPARTAMENTAL"), ct);
+        var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
+        var detalle = JsonDocument.Parse(cuerpo).RootElement;
+        detalle.GetProperty("estado").GetString().Should().Be("COMPLETADO");
+        detalle.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null, "es una fuente del vehículo");
+        var resultado = detalle.GetProperty("resultado");
+        resultado.ValueKind.Should().Be(JsonValueKind.Object, cuerpo);
+        resultado.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias", "tiene_deuda"]);
+        resultado.GetProperty("tiene_deuda").GetBoolean().Should().BeTrue("un monto positivo sin bandera sigue siendo deuda");
+        resultado.GetProperty("monto_total").GetInt64().Should().Be(350000, "pesos enteros");
+        var vigencias = resultado.GetProperty("vigencias").EnumerateArray().ToList();
+        vigencias.Select(v => v.GetProperty("anio").GetInt32()).Should().Equal([2025, 2026], "por año ascendente");
+        vigencias.Select(v => v.GetProperty("valor").GetInt64()).Should().Equal([180000L, 350000L]);
+        vigencias.Select(v => v.GetProperty("pagada").GetBoolean()).Should().Equal([true, false]);
+        vigencias.Should().AllSatisfy(v => v.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["anio", "valor", "pagada"]));
+        Claves(detalle).Should().NotContain(c => Prohibida(c) || c.Contains("departamento", StringComparison.Ordinal));
+        cuerpo.Should().NotContainAny([ImpuestoDePrueba.ProveedorFicticio, ImpuestoDePrueba.TransaccionFicticia, "INTEMPO", "departamento_codigo", "id_transaccion", "\"API\""]);
+    }
+
+    // HU #13864 AC3 (F09-C9) — celdas del impuesto en N/A: el detalle trae el motivo DEPARTAMENTO_NO_SOPORTADO o SERVICIO_PUBLICO,
+    // sin resultado ni personas (el texto lo pone el frontend con el mismo catálogo de motivos).
+    [Fact]
+    public async Task Impuesto_NA_devuelve_el_motivo()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.ImpuestoDepartamental], vehiculos:
+        [
+            new("TST482", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)]),
+            new("TST483", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)]),
+        ]);
+        await ImpuestoDePrueba.NoAplicaAsync(empresa, lote.Celda("TST482", Fuente.ImpuestoDepartamental), MotivoNa.DepartamentoNoSoportado, ct);
+        await ImpuestoDePrueba.NoAplicaAsync(empresa, lote.Celda("TST483", Fuente.ImpuestoDepartamental), MotivoNa.ServicioPublico, ct);
+
+        foreach (var (placa, motivo) in new[] { ("TST482", "DEPARTAMENTO_NO_SOPORTADO"), ("TST483", "SERVICIO_PUBLICO") })
+        {
+            var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, lote.Vehiculos.Single(v => v.Placa == placa).Id, "IMPUESTO_DEPARTAMENTAL", ct);
+            detalle.GetProperty("estado").GetString().Should().Be("NA");
+            detalle.GetProperty("motivo_na").GetString().Should().Be(motivo);
+            detalle.GetProperty("resultado").ValueKind.Should().Be(JsonValueKind.Null, "N/A no tiene dato");
+            detalle.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null);
+            detalle.GetProperty("dato_obtenido_en").ValueKind.Should().Be(JsonValueKind.Null);
+        }
+    }
+
+    // HU #14183 T3 — SIMIT_VEHICULO trae respuesta_proveedor a nivel de celda (no en personas): el JSON que devolvió
+    // el proveedor (resultado.respuesta_cruda.json de respuesta_fuente) parseado como OBJETO, sin quitar ninguna clave.
+    // Llenado manual → respuesta_proveedor null. Reutilización copia el crudo.
+    [Fact]
+    public async Task HU14183_SimitVehiculo_trae_respuesta_proveedor_a_nivel_de_celda()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST501", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var celda = lote.Celda("TST501", Fuente.SimitVehiculo);
+        await Tablero.PayloadAsync(empresa, celda, Simit(1, "ROJO"), ct);
+
+        const string ProveedorSimit = """{"data":{"multas":[{"estadoCartera":"Cobro coactivo","estadoComparendo":null,"valor":"344728"}],"plate":"TST501","totalMultasPagar":"1"},"signature":{"dateTime":"October 29, 2026","message":"Certified by Verifik.co"},"id":"TEST-501"}""";
+        var crudaFuente = ConCrudo("verifik_simit", "verifik_simit", "vehicle", ProveedorSimit);
+        await RespuestaFuente.GuardarCifradaAsync(api, celda.Id, RespuestaFuente.Cifrar(api, crudaFuente), ct);
+
+        var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "SIMIT_VEHICULO", ct);
+
+        var proveedor = detalle.GetProperty("respuesta_proveedor");
+        proveedor.ValueKind.Should().Be(JsonValueKind.Object, "un objeto JSON, no un texto");
+        JsonElement.DeepEquals(proveedor, JsonDocument.Parse(ProveedorSimit).RootElement).Should().BeTrue("todas las claves y valores del proveedor, sin quitar ninguno");
+        proveedor.GetProperty("signature").GetProperty("message").GetString().Should().Be("Certified by Verifik.co");
+        proveedor.GetProperty("data").GetProperty("multas").GetArrayLength().Should().Be(1);
+        detalle.GetProperty("personas").ValueKind.Should().Be(JsonValueKind.Null, "SIMIT_VEHICULO no tiene personas");
+    }
+
+    // HU #14183 T3 — sin crudo en SIMIT_VEHICULO (llenado manual), respuesta_proveedor = null; la celda responde 200.
+    [Fact]
+    public async Task HU14183_SimitVehiculo_sin_crudo_o_llenado_manual_respuesta_proveedor_es_null()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+        [
+            new("TST502", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+            new("TST503", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+        ]);
+        var v1 = lote.Vehiculos.Single(v => v.Placa == "TST502").Id;
+        var v2 = lote.Vehiculos.Single(v => v.Placa == "TST503").Id;
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST502", Fuente.SimitVehiculo), Simit(0, "VERDE"), ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST503", Fuente.SimitVehiculo), Simit(0, "VERDE"), ct, manual: true);
+        // TST502: sin respuesta cifrada (no hay crudo)
+        // TST503: manual (sin respuesta cifrada)
+
+        var sinCrudo = await DetalleAsync(empresa.Cliente(), lote.Id, v1, "SIMIT_VEHICULO", ct);
+        var manual = await DetalleAsync(empresa.Cliente(), lote.Id, v2, "SIMIT_VEHICULO", ct);
+
+        sinCrudo.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "sin respuesta guardada: null");
+        sinCrudo.GetProperty("resultado").GetProperty("semaforo").GetString().Should().Be("VERDE");
+        manual.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "el llenado manual no tiene crudo del proveedor");
+    }
+
+    // HU #14183 T3 — crudo ausente, que no es JSON o que no es objeto: respuesta_proveedor = null, 200, y el log no lleva el contenido.
+    [Fact]
+    public async Task HU14183_SimitVehiculo_crudo_invalido_respuesta_proveedor_es_null_y_el_log_no_trae_el_contenido()
+    {
+        var logs = new LogsEnMemoria();
+        await using var api = await ApiDePrueba.ConBaseAsync(configurar: b =>
+        {
+            b.Logging.AddProvider(logs);
+            b.Logging.AddFilter<LogsEnMemoria>(null, Microsoft.Extensions.Logging.LogLevel.Trace);
+        });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+        [
+            new("TST504", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+            new("TST505", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+            new("TST506", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)]),
+        ]);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST504", Fuente.SimitVehiculo), Simit(0, "VERDE"), ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST505", Fuente.SimitVehiculo), Simit(0, "VERDE"), ct);
+        await Tablero.PayloadAsync(empresa, lote.Celda("TST506", Fuente.Runt), PayloadRunt, ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, lote.Celda("TST504", Fuente.SimitVehiculo).Id,
+            RespuestaFuente.Cifrar(api, ConCrudo("verifik_simit", "verifik_simit", "vehicle", "{no es json CRUDO-SECRETO-504")), ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, lote.Celda("TST505", Fuente.SimitVehiculo).Id,
+            RespuestaFuente.Cifrar(api, ConCrudo("verifik_simit", "verifik_simit", "vehicle", """["CRUDO-LISTA-505"]""")), ct);
+        await RespuestaFuente.GuardarCifradaAsync(api, lote.Celda("TST506", Fuente.Runt).Id,
+            RespuestaFuente.Cifrar(api, ConCrudo("intempo", "intempo", "vehicle", """{"plate":"TST506"}""")), ct);
+
+        var ilegible = await DetalleAsync(empresa.Cliente(), lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST504").Id, "SIMIT_VEHICULO", ct);
+        var lista = await DetalleAsync(empresa.Cliente(), lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST505").Id, "SIMIT_VEHICULO", ct);
+        var runt = await DetalleAsync(empresa.Cliente(), lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST506").Id, "RUNT", ct);
+
+        ilegible.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null);
+        ilegible.GetProperty("respuesta_fuente").ValueKind.Should().Be(JsonValueKind.Object, "la respuesta de la fuente sigue llegando");
+        lista.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "un JSON que no es objeto queda en null");
+        runt.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "solo SIMIT_VEHICULO llena la celda");
+        var avisos = logs.Mensajes.Where(m => m.Contains("respuesta_proveedor", StringComparison.Ordinal)).ToList();
+        avisos.Should().HaveCount(2, "se registra el crudo inválido y el que no es objeto; RUNT no");
+        logs.Mensajes.Should().NotContain(m => m.Contains("CRUDO-SECRETO-504", StringComparison.Ordinal) || m.Contains("CRUDO-LISTA-505", StringComparison.Ordinal),
+            "el log nunca lleva el contenido del crudo");
+    }
+
+    // HU #14183 T3 — en SIMIT de persona el crudo sigue en personas[].respuesta_proveedor; la celda queda en null.
+    [Fact]
+    public async Task HU14183_SimitPersona_trae_el_crudo_en_la_persona_y_no_en_la_celda()
+    {
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await Tablero.SembrarAsync(empresa, ct, vehiculos:
+            [new("TST507", [new(Fuente.SimitPropietario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var celda = lote.Celda("TST507", Fuente.SimitPropietario);
+        var persona = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, 1, "C", "9999900016", ct);
+        await Tablero.PayloadAsync(empresa, celda, Personas((persona.Id, 1, "SIMIT", "OK", Simit(1, "ROJO"), null)), ct);
+        const string Proveedor = """{"data":{"documentNumber":"9999900016","multas":[{"estadoCartera":"Cobro coactivo","estadoComparendo":null}]},"id":"EJEMPLO-PERSONA"}""";
+        await RespuestaFuente.GuardarCifradaAsync(api, celda.Id, RespuestaFuente.Cifrar(api, JsonSerializer.Serialize(new Dictionary<string, string>
+        {
+            ["1"] = ConCrudo("verifik_simit", "verifik_simit", "person", Proveedor),
+        })), ct);
+
+        var detalle = await DetalleAsync(empresa.Cliente(), lote.Id, vehiculo, "SIMIT_PROPIETARIO", ct);
+
+        detalle.GetProperty("respuesta_proveedor").ValueKind.Should().Be(JsonValueKind.Null, "en la celda de persona no se llena");
+        var deLaPersona = detalle.GetProperty("personas")[0].GetProperty("respuesta_proveedor");
+        deLaPersona.ValueKind.Should().Be(JsonValueKind.Object);
+        JsonElement.DeepEquals(deLaPersona, JsonDocument.Parse(Proveedor).RootElement).Should().BeTrue();
+    }
+
+    private static async Task<JsonElement> DetalleAsync(HttpClient cliente, Guid lote, Guid vehiculo, string fuente, CancellationToken ct)
+    {
+        var respuesta = await cliente.GetAsync(Tablero.RutaDetalle(lote, vehiculo, fuente), ct);
+        var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, $"{fuente}: {cuerpo}");
+        return JsonDocument.Parse(cuerpo).RootElement.Clone();
+    }
+
+    private static async Task<PersonaVehiculo> PersonaAsync(
+        ApiDePrueba api, EmpresaDePrueba empresa, Guid vehiculo, RolPersona rol, int orden, string tipo, string numero, CancellationToken ct,
+        OrigenDocumento origen = OrigenDocumento.Proveedor)
+    {
+        var persona = new PersonaVehiculo
+        {
+            VehiculoId = vehiculo,
+            Rol = rol,
+            Orden = orden,
+            DocTipo = tipo,
+            DocCifrado = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Proteger(numero),
+            Origen = origen,
+            CreadoEn = DateTimeOffset.UtcNow,
+        };
+        await using var db = empresa.Db();
+        db.Add(persona);
+        await db.SaveChangesAsync(ct);
+        return persona;
+    }
+
+    /// <summary>Payload SIMIT normalizado con <paramref name="cantidad"/> comparendos ficticios.</summary>
+    private static string Simit(int cantidad, string semaforo) => JsonSerializer.Serialize(new
+    {
+        semaforo,
+        cantidad_comparendos = cantidad,
+        comparendos = Enumerable.Range(1, cantidad).Select(i => new
+        {
+            numero = $"C-{i:D4}",
+            fecha = "2026-01-02",
+            valor = "500000",
+            estado = "PENDIENTE",
+            organismo = "ORGANISMO PRUEBA",
+        }),
+    });
+
+    /// <summary>Payload de una celda de persona con la forma de <c>EjecutorPorPersonas</c>.</summary>
+    private static string Personas(params (Guid Id, int Orden, string Consulta, string Estado, string? Resultado, string? TipoError)[] personas) =>
+        "{\"personas\":[" + string.Join(",", personas.Select(p =>
+            $$"""{"persona_id":"{{p.Id}}","orden":{{p.Orden}},"consulta":"{{p.Consulta}}","estado":"{{p.Estado}}"{{(p.Resultado is null ? string.Empty : ",\"resultado\":" + p.Resultado)}}{{(p.TipoError is null ? string.Empty : $",\"tipo_error\":\"{p.TipoError}\"")}}{{(p.Estado == "OK" ? ",\"consultado_en\":\"2026-10-22T15:00:00+00:00\"" : string.Empty)}}}""")) + "]}";
+
+    /// <summary>Rutas de todas las claves del JSON (objetos y elementos de listas), ordenadas.</summary>
+    private static List<string> Claves(JsonElement raiz)
+    {
+        var claves = new SortedSet<string>(StringComparer.Ordinal);
+        void Recorrer(JsonElement e, string ruta)
+        {
+            if (e.ValueKind == JsonValueKind.Object)
+            {
+                foreach (var p in e.EnumerateObject())
+                {
+                    claves.Add($"{ruta}/{p.Name}");
+                    Recorrer(p.Value, $"{ruta}/{p.Name}");
+                }
+            }
+            else if (e.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in e.EnumerateArray())
+                    Recorrer(item, $"{ruta}[]");
+            }
+        }
+
+        Recorrer(raiz, string.Empty);
+        return [.. claves];
+    }
+
+    /// <summary>Propiedades del DTO, de los tipos que cuelgan de él y de los tipos derivados de resultado (<c>JsonDerivedType</c>).</summary>
+    private static IEnumerable<PropertyInfo> PropiedadesDe(Type raiz)
+    {
+        var vistos = new HashSet<Type>();
+        var pendientes = new Queue<Type>([raiz]);
+        while (pendientes.Count > 0)
+        {
+            var tipo = pendientes.Dequeue();
+            if (!vistos.Add(tipo))
+                continue;
+            foreach (var derivado in tipo.GetCustomAttributes<JsonDerivedTypeAttribute>())
+                pendientes.Enqueue(derivado.DerivedType);
+            foreach (var propiedad in tipo.GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                if (propiedad.DeclaringType == typeof(object) || propiedad.Name == "EqualityContract")
+                    continue;
+                yield return propiedad;
+                var t = Nullable.GetUnderlyingType(propiedad.PropertyType) ?? propiedad.PropertyType;
+                foreach (var candidato in t.IsGenericType ? t.GetGenericArguments() : [t])
+                {
+                    if (candidato.Assembly == typeof(DetalleCeldaDto).Assembly)
+                        pendientes.Enqueue(candidato);
+                }
+            }
+        }
+    }
+}

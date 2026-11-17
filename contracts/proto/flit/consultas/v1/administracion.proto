@@ -20,6 +20,13 @@ service ConsultasAdminService {
 
   // Consumo de la empresa entre dos fechas, por producto que consultó y fuente (HU #13345). Solo esa empresa.
   rpc ObtenerConsumo(ObtenerConsumoRequest) returns (ObtenerConsumoResponse);
+
+  // Catálogo global de departamentos del impuesto (ADR-0080). No filtra por empresa: la metadata de empresa
+  // solo autentica al administrador. Incluye los apagados.
+  rpc ListarCatalogoDepartamentosImpuesto(ListarCatalogoDepartamentosImpuestoRequest) returns (ListarCatalogoDepartamentosImpuestoResponse);
+
+  // Crea o actualiza un departamento. Solo códigos de la homologación. activo=false lo saca de la lista efectiva.
+  rpc GuardarDepartamentoImpuesto(GuardarDepartamentoImpuestoRequest) returns (GuardarDepartamentoImpuestoResponse);
 }
 
 message ConfiguracionEmpresa {
@@ -59,6 +66,31 @@ message ObtenerConsumoRequest {
 
 message ObtenerConsumoResponse {
   repeated ConsumoAgregado consumos = 1;
+}
+
+message ListarCatalogoDepartamentosImpuestoRequest {}
+
+message ListarCatalogoDepartamentosImpuestoResponse {
+  repeated DepartamentoImpuestoCatalogo departamentos = 1;
+}
+
+message GuardarDepartamentoImpuestoRequest {
+  // Código DIVIPOLA de dos dígitos, de la homologación del impuesto.
+  string codigo = 1;
+  // Nombre del departamento, como lo trae la tabla legada (hasta 50 caracteres).
+  string nombre = 2;
+  // true entra en la lista efectiva. false conserva la fila y la apaga.
+  bool activo = 3;
+}
+
+message GuardarDepartamentoImpuestoResponse {
+  DepartamentoImpuestoCatalogo departamento = 1;
+}
+
+message DepartamentoImpuestoCatalogo {
+  string codigo = 1;
+  string nombre = 2;
+  bool activo = 3;
 }
 
 message ConsumoAgregado {

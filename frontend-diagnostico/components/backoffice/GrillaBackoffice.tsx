@@ -1,0 +1,300 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, ClipboardList, PencilLine, RefreshCw, SearchX } from "lucide-react";
+import { InlineAlert } from "@flit/ui/InlineAlert";
+import { VehicleLoader } from "@flit/ui/Loader";
+import { useSesion } from "@/components/DiagnosticoShell";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import { EstadoGlobal, EstimadoVsConsumido } from "@/components/tablero/EstadoGlobal";
+import { GrillaSemaforos } from "@/components/tablero/GrillaSemaforos";
+import { BotonAbrirDictamen, PanelDictamen } from "@/components/tablero/PanelDictamen";
+import { Etiqueta, TEXTO_SECUNDARIO_CLS } from "@/components/tablero/vistasDetalle/comun";
+import { ApiError } from "@/lib/api";
+import {
+  aplicarLlenado,
+  esLlenable,
+  obtenerGrillaBackoffice,
+  rutaDetalleBackoffice,
+  type CeldaGrillaBackoffice,
+  type GrillaBackoffice as TGrillaBackoffice,
+  type RespuestaLlenado,
+} from "@/lib/backoffice/api";
+import { nombreFuente } from "@/lib/configuracion";
+import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
+import { fusionarCeldas } from "@/lib/tablero/fusionarCeldas";
+import { FormularioLlenadoManual } from "./FormularioLlenadoManual";
+
+export interface GrillaBackofficeProps {
+  diagnosticoId: string;
+  /** Compañía elegida en el selector (viaja como ?empresa= en cada llamada). */
+  empresa: string;
+}
+
+type Carga = { tipo: "cargando" } | { tipo: "error"; error: unknown } | { tipo: "listo"; grilla: TGrillaBackoffice };
+
+interface Llenado {
+  celda: CeldaGrilla;
+  vehiculo: FilaVehiculo;
+  /** Semáforo de la celda: recibe el foco al cerrar el formulario. */
+  disparador: HTMLElement | null;
+}
+
+/** «Llenar a mano» compacto en la celda: el CTA primario de pastilla a la escala de 12px de la grilla. */
+const BOTON_LLENAR_CLS = BOTON_PRIMARIO_CLS.replace("px-5 py-2 text-sm", "px-3 py-1 text-xs");
+
+/** Ruta de la lista de lotes de la compañía elegida. */
+const rutaLista = (empresa: string) => `/backoffice/diagnosticos?empresa=${encodeURIComponent(empresa)}`;
+
+/** Marca de origen manual (texto e icono, nunca solo color). Solo existe en el backoffice (Q5). */
+export function MarcaManual() {
+  return (
+    <Etiqueta tono="info">
+      <PencilLine className="h-3 w-3" aria-hidden="true" />
+      Manual
+    </Etiqueta>
+  );
+}
+
+function Vacio({ titulo, children, Icono = ClipboardList }: { titulo: string; children?: React.ReactNode; Icono?: typeof ClipboardList }) {
+  return (
+    <section aria-labelledby="grilla-bo-vacio" className={`${TARJETA_CLS} flex flex-col items-center gap-3 py-12 text-center`}>
+      <Icono className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
+      <h2 id="grilla-bo-vacio" className="text-lg font-semibold">
+        {titulo}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Grilla de un lote para el backoffice FLIT (HU #13802, F06-H5; F06-C6..C9, C14) en /backoffice/diagnosticos/{id}?empresa=.
+ * Lee GET /backoffice/diagnosticos/{id}/grilla?empresa=&desde= y reutiliza GrillaSemaforos (HU #13748) con la marca «Manual»
+ * en las celdas de origen MANUAL, visible solo aquí (Q5). Cada semáforo abre en una pestaña nueva la página del detalle del
+ * backoffice (HU #14087, con ?empresa=) y, en una celda en ERROR llenable (no RUNT ni impuesto, no bloqueada por el RUNT) y con
+ * la capacidad llenarConsultas, la celda ofrece «Llenar a mano», que abre FormularioLlenadoManual como modal. Al
+ * confirmar, la celda pasa a verde con la marca y el lote se vuelve a leer desde su versión. Cuatro estados: cargando, error
+ * (404 no encontrado en la compañía, 403 a la página 403, otro con Reintentar), vacío (sin vehículos) y lleno.
+ */
+export function GrillaBackoffice({ diagnosticoId, empresa }: GrillaBackofficeProps) {
+  const router = useRouter();
+  const { sesion } = useSesion();
+  const puedeLlenar = sesion?.capacidades.llenarConsultas ?? false;
+  const puedeCorregir = sesion?.capacidades.corregirDictamen ?? false;
+  const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
+  const [intento, setIntento] = useState(0);
+  const [llenado, setLlenado] = useState<Llenado | null>(null);
+  const [dictamen, setDictamen] = useState<{ vehiculo: FilaVehiculo; disparador: HTMLElement | null } | null>(null);
+  const [exito, setExito] = useState<string | null>(null);
+  const [avisoLectura, setAvisoLectura] = useState<string | null>(null);
+  const [leyendo, setLeyendo] = useState(false);
+  const grillaRef = useRef<TGrillaBackoffice | null>(null);
+  const contenedor = useRef<HTMLDivElement>(null);
+
+  const poner = useCallback((grilla: TGrillaBackoffice) => {
+    grillaRef.current = grilla;
+    setCarga({ tipo: "listo", grilla });
+  }, []);
+
+  useEffect(() => {
+    const control = new AbortController();
+    grillaRef.current = null;
+    obtenerGrillaBackoffice(diagnosticoId, empresa, 0, control.signal).then(
+      (grilla) => {
+        if (!control.signal.aborted) poner({ ...grilla, vehiculos: [...grilla.vehiculos].sort((a, b) => a.orden - b.orden) });
+      },
+      (error: unknown) => {
+        if (!control.signal.aborted) setCarga({ tipo: "error", error });
+      },
+    );
+    return () => control.abort();
+  }, [diagnosticoId, empresa, intento, poner]);
+
+  const es403 = carga.tipo === "error" && carga.error instanceof ApiError && carga.error.status === 403;
+  useEffect(() => {
+    if (es403) router.replace("/403?code=SIN_PERMISO_BACKOFFICE");
+  }, [es403, router]);
+
+  /** Lee una vez los cambios desde la versión que se tiene y los fusiona (tras un llenado o un 409). */
+  const releer = useCallback(async () => {
+    const actual = grillaRef.current;
+    if (!actual) return;
+    setLeyendo(true);
+    setAvisoLectura(null);
+    try {
+      const cambios = await obtenerGrillaBackoffice(diagnosticoId, empresa, actual.version);
+      const vigente = grillaRef.current ?? actual;
+      poner(fusionarCeldas(vigente as unknown as Grilla, cambios as unknown as Grilla) as unknown as TGrillaBackoffice);
+    } catch (e) {
+      setAvisoLectura(e instanceof Error ? e.message : "No se pudo volver a leer la grilla.");
+    } finally {
+      setLeyendo(false);
+    }
+  }, [diagnosticoId, empresa, poner]);
+
+  function alLlenar(respuesta: RespuestaLlenado) {
+    const actual = grillaRef.current;
+    const seleccion = llenado;
+    setLlenado(null);
+    if (actual) poner(aplicarLlenado(actual, respuesta));
+    if (seleccion) setExito(`Se llenó a mano ${nombreFuente(seleccion.celda.fuente)} de ${seleccion.vehiculo.identificador}.`);
+    // La versión del lote en memoria sigue siendo la previa: la relectura desde ella trae el estado recalculado y el avance.
+    if (actual) void releer();
+  }
+
+  const origenDe = (celda: CeldaGrilla) => (celda as CeldaGrillaBackoffice).origen ?? null;
+
+  /** «Llenar a mano» en la celda (antes en el pie del modal de detalle): abre FormularioLlenadoManual como modal. */
+  function accionCelda(celda: CeldaGrilla, vehiculo: FilaVehiculo) {
+    if (!puedeLlenar || !esLlenable(celda)) return null;
+    return (
+      <button
+        type="button"
+        aria-label={`Llenar a mano ${nombreFuente(celda.fuente)} de ${vehiculo.identificador}`}
+        className={BOTON_LLENAR_CLS}
+        onClick={(e) => {
+          setExito(null);
+          setLlenado({ celda, vehiculo, disparador: e.currentTarget });
+        }}
+      >
+        <PencilLine className="h-3.5 w-3.5" aria-hidden="true" />
+        Llenar a mano
+      </button>
+    );
+  }
+
+  let contenido: React.ReactNode;
+  let titulo = "Grilla del lote";
+  if (carga.tipo === "cargando" || es403) {
+    contenido = <VehicleLoader label="Cargando la grilla…" />;
+  } else if (carga.tipo === "error") {
+    const { error } = carga;
+    contenido =
+      error instanceof ApiError && error.status === 404 ? (
+        <Vacio titulo="No encontramos este lote en la compañía elegida" Icono={SearchX}>
+          <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Revisa la compañía o vuelve a la lista de sus lotes.</p>
+          <Link href={rutaLista(empresa)} className={BOTON_SECUNDARIO_CLS}>
+            Volver a los lotes
+          </Link>
+        </Vacio>
+      ) : (
+        <InlineAlert
+          tone="error"
+          title="No se pudo cargar la grilla"
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                setCarga({ tipo: "cargando" });
+                setIntento((n) => n + 1);
+              }}
+              className={BOTON_REINTENTAR_CLS}
+            >
+              Reintentar
+            </button>
+          }
+        >
+          {error instanceof Error ? error.message : "Intenta de nuevo en un momento."}
+        </InlineAlert>
+      );
+  } else {
+    const { grilla } = carga;
+    titulo = grilla.nombre;
+    contenido =
+      grilla.avance.vehiculos === 0 ? (
+        <Vacio titulo="Este lote no tiene vehículos">
+          <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">No hay celdas que revisar ni llenar.</p>
+        </Vacio>
+      ) : (
+        <>
+          <section aria-label="Avance del lote" className={TARJETA_CLS}>
+            <EstadoGlobal grilla={grilla as unknown as Grilla} sondeando={false} />
+          </section>
+          {exito && (
+            <InlineAlert tone="success" title="Celda llenada">
+              {exito}
+            </InlineAlert>
+          )}
+          {avisoLectura && (
+            <InlineAlert tone="warning" title="No se pudo volver a leer la grilla">
+              {avisoLectura}
+            </InlineAlert>
+          )}
+          <section aria-label="Grilla del lote" className={`${TARJETA_CLS} flex flex-col gap-4`}>
+            <p className={TEXTO_SECUNDARIO_CLS}>
+              Las celdas con la marca «Manual» se llenaron a mano desde el backoffice. La compañía ve el mismo dato, sin la marca.
+            </p>
+            <div ref={contenedor}>
+              <GrillaSemaforos
+                grilla={grilla as unknown as Grilla}
+                puedeReprocesar={false}
+                hrefDetalle={(celda, v) => rutaDetalleBackoffice(grilla.id, v.id, celda.fuente, empresa)}
+                accionCelda={accionCelda}
+                marcaCelda={(celda) => (origenDe(celda) === "MANUAL" ? <MarcaManual /> : null)}
+                accionEncabezado={(v) => (
+                  <BotonAbrirDictamen
+                    identificador={v.placa || v.vin || v.identificador}
+                    onAbrir={(disparador) => setDictamen({ vehiculo: v, disparador })}
+                  />
+                )}
+              />
+            </div>
+            <EstimadoVsConsumido estimado={grilla.estimado_consultas} />
+          </section>
+        </>
+      );
+  }
+
+  return (
+    <>
+      <section aria-labelledby="grilla-bo-titulo" className={`${TARJETA_CLS} flex flex-wrap items-start justify-between gap-3`}>
+        <div className="min-w-0">
+          <h1 id="grilla-bo-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
+            {titulo}
+          </h1>
+          <p className="mt-1 break-all text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{`Backoffice · Compañía ${empresa}`}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href={rutaLista(empresa)} className={BOTON_SECUNDARIO_CLS}>
+            <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+            Volver a los lotes
+          </Link>
+          {carga.tipo === "listo" && (
+            <button type="button" onClick={() => void releer()} disabled={leyendo} aria-busy={leyendo} className={BOTON_SECUNDARIO_CLS}>
+              <RefreshCw className="h-4 w-4" aria-hidden="true" />
+              Actualizar
+            </button>
+          )}
+        </div>
+      </section>
+      {contenido}
+      {llenado && (
+        <FormularioLlenadoManual
+          consultaId={llenado.celda.id}
+          empresa={empresa}
+          nombreFuente={nombreFuente(llenado.celda.fuente)}
+          identificador={llenado.vehiculo.identificador}
+          onClose={() => setLlenado(null)}
+          onLlenada={alLlenar}
+          onCeldaCambiada={() => void releer()}
+          devolverFocoA={llenado.disparador}
+        />
+      )}
+      {dictamen && (
+        <PanelDictamen
+          diagnosticoId={diagnosticoId}
+          vehiculoId={dictamen.vehiculo.id}
+          identificador={dictamen.vehiculo.placa || dictamen.vehiculo.vin || dictamen.vehiculo.identificador}
+          modo="backoffice"
+          empresa={empresa}
+          puedeCorregir={puedeCorregir}
+          onClose={() => setDictamen(null)}
+          devolverFocoA={dictamen.disparador}
+        />
+      )}
+    </>
+  );
+}

@@ -1,0 +1,876 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Modulos.Configuracion;
+using Flit.Diagnostico.Api.Modulos.Consultas;
+using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Reportes;
+using Flit.Diagnostico.Api.Modulos.Reportes.Marca;
+using Flit.Diagnostico.Api.Modulos.Tablero;
+using Flit.Diagnostico.Api.Plataforma;
+using Flit.Diagnostico.Domain.Configuracion;
+using Flit.Diagnostico.Domain.Consultas;
+using Flit.Diagnostico.Domain.Diagnosticos;
+using Flit.Diagnostico.Domain.Personas;
+using Flit.Diagnostico.Domain.Vehiculos;
+using Flit.Diagnostico.Tests.Aislamiento;
+using Flit.Diagnostico.Tests.Api;
+using Flit.Diagnostico.Tests.Diagnosticos;
+using Flit.Diagnostico.Tests.Plataforma;
+using FluentAssertions;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+using ImpuestoDePrueba = Flit.Diagnostico.Tests.Tablero.ImpuestoDePrueba;
+using TableroAyudas = Flit.Diagnostico.Tests.Tablero.Tablero;
+
+namespace Flit.Diagnostico.Tests.Reportes;
+
+/// <summary>
+/// HU #13848 (F07-H3, F07-C1..C4/C8..C11, R-7, R-20, Q4, Q7) — <c>GET /diagnosticos/{id}/vehiculos/{vid}/pdf</c>: el PDF corporativo
+/// de un vehículo con el membrete FLIT. Las pruebas leen el TEXTO del PDF (<see cref="PdfTextExtractor"/>), no solo el código HTTP:
+/// encabezado con ID, lote, creador, empresa, fecha y «Diagnóstico Simple»; solo las secciones del alcance; 200 con el vehículo
+/// terminado aunque el lote siga EN_PROCESO y 409 <c>VEHICULO_NO_TERMINADO</c> si no; con el lote INCOMPLETO la fuente en ERROR
+/// sale «consulta no disponible»; manual y API dan el mismo texto; sin origen, proveedor ni transacción; documentos «****» + 4;
+/// misma huella → mismos bytes y un cambio de celda invalida el anterior; 404 para otra compañía o PROPIOS ajeno; 403 sin permiso.
+/// Postgres real (base efímera de <see cref="ApiDePrueba"/>); placas TST3## y documentos ficticios cifrados.
+/// </summary>
+/// <example>
+/// <code>
+/// dotnet test services/core-diagnostico/tests/Flit.Diagnostico.Tests --no-build --filter FullyQualifiedName~Reportes.PdfVehiculoTests
+/// </code>
+/// </example>
+public sealed class PdfVehiculoTests
+{
+    private const string PayloadRunt =
+        """{"placa":"TST301","vin":"9ZZPRUEBA00000301","servicio":"PARTICULAR","clase":"AUTOMOVIL","organismo":"STRIA PRUEBA","servicio_que_resolvio":"INTEMPO_SIMULADO","id_transaccion":"TX-SECRETA-301","propietarios":[{"tipo_documento":"C","tipo_propiedad":"PROPIA"}],"locatarios":1}""";
+
+    private const string PayloadSimit =
+        """{"semaforo":"AMARILLO","cantidad_comparendos":1,"comparendos":[{"numero":"TST-C-0301","fecha":"2026-09-30","valor":"468500","estado":"PENDIENTE","organismo":"Organismo de prueba"}],"transaccion_proveedor_id":"TX-SIMIT-301"}""";
+
+    private const string PayloadSimitReprocesado =
+        """{"semaforo":"ROJO","cantidad_comparendos":2,"comparendos":[{"numero":"TST-C-0302","fecha":"2026-10-01","valor":"1200000","estado":"PENDIENTE","organismo":"Organismo de prueba"},{"numero":"TST-C-0303","fecha":"2026-10-02","valor":"604100","estado":"PENDIENTE","organismo":"Organismo de prueba"}]}""";
+
+    private const string PayloadAvaluo =
+        """{"sin_valor_comercial":false,"valor_sugerido":48500000,"fuente_principal":"fasecolda","fuentes":[{"fuente":"fasecolda","estado":"OK","valor":48500000,"muestras":3,"fecha":"2026-10-22"}]}""";
+
+    private const string TituloSimit = "COMPARENDOS DEL VEHÍCULO";
+
+    private const string TituloImpuesto = "IMPUESTO VEHICULAR DEPARTAMENTAL";
+
+    private const string TituloAvaluo = "AVALÚO COMERCIAL";
+
+    private static readonly DateTimeOffset Dato = new(2026, 10, 22, 15, 0, 0, TimeSpan.Zero);
+
+    // AC1 (F07-C1, F07-C2, Q4) — lote Simple con un vehículo terminado: el texto trae el ID, el nombre del lote, el creador de
+    // Identidad, la empresa del claim, la fecha y hora de creación en hora Colombia, «Diagnóstico Simple» y la placa; adjunto
+    // diagnostico-{8}-{placa}.pdf sin caché; el membrete y Poppins son copia fiel de la marca de core-api.
+    [Fact]
+    public async Task Encabezado_trae_id_lote_usuario_empresa_fecha_y_tipo_de_analisis()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var identidad = new UsuariosIdentidadDePrueba();
+        await using var api = await ListadoDePrueba.ArrancarAsync(identidad);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var creador = Guid.NewGuid();
+        identidad.Nombres[creador] = "Ana Prueba";
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, creador: creador, nombre: "Flota octubre",
+            vehiculos: [new("TST301", [new(Fuente.Runt, EstadoCelda.Pendiente, 1)])]);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celdas.Single(), PayloadRunt, ct);
+        await CreadoEnAsync(empresa, lote.Id, new DateTimeOffset(2026, 10, 22, 19, 30, 0, TimeSpan.Zero), ct);
+
+        var respuesta = await api.Cliente(PdfDePrueba.Token(api, empresa.Id)).GetAsync(PdfDePrueba.Ruta(lote.Id, lote.Vehiculos.Single().Id), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await CuerpoSiNoEsPdf(respuesta, ct));
+        respuesta.Content.Headers.ContentType!.MediaType.Should().Be("application/pdf");
+        respuesta.Content.Headers.ContentDisposition!.DispositionType.Should().Be("attachment");
+        respuesta.Content.Headers.ContentDisposition.FileName!.Trim('"').Should().Be($"diagnostico-{lote.Id.ToString()[..8]}-TST301.pdf");
+        respuesta.Headers.CacheControl!.NoStore.Should().BeTrue("lleva documentos enmascarados y datos de la compañía");
+        var texto = await PdfDePrueba.TextoAsync(respuesta, ct);
+        foreach (var esperado in new[]
+                 {
+                     lote.Id.ToString(), "Flota octubre", "Ana Prueba", "Empresa de prueba", "22/10/2026 14:30", "Diagnóstico Simple", "TST301",
+                     "Página 1 de ", "Fecha de generación", "Certificado de Diagnóstico",
+                 })
+            PdfDePrueba.Tiene(texto, esperado).Should().BeTrue($"el texto del PDF trae «{esperado}»: {texto}");
+
+        // Marca FLIT copiada (no referenciada) de core-api: membrete y Poppins idénticos byte a byte.
+        var marca = MarcaCoreApi();
+        BrandingAssets.MembreteHeaderSvg.Should().Be(File.ReadAllText(Path.Combine(marca, "Assets", "membrete-hoja-header.svg")));
+        BrandingAssets.MembreteFooterSvg.Should().Be(File.ReadAllText(Path.Combine(marca, "Assets", "membrete-hoja-footer.svg")));
+        foreach (var fuente in FuentesFlit.Archivos.Append("OFL-LICENSE.txt"))
+        {
+            using var copia = BrandingAssets.Abrir(fuente);
+            using var leida = new MemoryStream();
+            await copia.CopyToAsync(leida, ct);
+            leida.ToArray().Should().Equal(await File.ReadAllBytesAsync(Path.Combine(marca, "Fonts", fuente), ct), $"{fuente} es copia fiel");
+        }
+    }
+
+    // AC2 (F07-C3) — alcance sin AVALUO ni fuentes de persona: no hay sección ni título de avalúo ni de personas; RUNT antes que
+    // SIMIT (orden de la grilla).
+    [Fact]
+    public async Task Solo_pinta_las_secciones_del_alcance_sin_espacios_para_las_demas()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.SimitVehiculo], vehiculos:
+            [new("TST311", [new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1), new(Fuente.Runt, EstadoCelda.Pendiente, 1),
+                new(Fuente.Avaluo, EstadoCelda.Pendiente, 1)])]);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST311", Fuente.Runt), PayloadRunt, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST311", Fuente.SimitVehiculo), PayloadSimit, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST311", Fuente.Avaluo), PayloadAvaluo, ct);
+
+        var texto = await PdfDePrueba.TextoOkAsync(api, PdfDePrueba.Token(api, empresa.Id), lote.Id, lote.Vehiculos.Single().Id, ct);
+
+        texto.Should().NotContainAny(["Avalúo", "avalúo", "Avaluo", "AVALUO", "48.500.000", "fasecolda"], "AVALUO no está en el alcance");
+        texto.Should().NotContainAny(
+            [PdfDePrueba.Plano("PROPIETARIOS"), PdfDePrueba.Plano("LOCATARIOS"), PdfDePrueba.Plano("COMPARENDOS DE LOS")],
+            "ninguna fuente de persona en el alcance");
+        var runt = texto.IndexOf(PdfDePrueba.Plano("INFORMACIÓN DEL VEHÍCULO"), StringComparison.Ordinal);
+        var simit = texto.IndexOf(PdfDePrueba.Plano(TituloSimit), StringComparison.Ordinal);
+        runt.Should().BeGreaterThanOrEqualTo(0, texto);
+        simit.Should().BeGreaterThan(runt, "el orden de las columnas de la grilla");
+        PdfDePrueba.Tiene(texto, "TST-C-0301").Should().BeTrue("la sección SIMIT trae su tabla de comparendos");
+    }
+
+    // AC3 (F07-C4, R-7) — lote EN_PROCESO: el vehículo 1 terminado (COMPLETADO y N/A) descarga su PDF.
+    [Fact]
+    public async Task Vehiculo_terminado_descarga_aunque_el_lote_siga_en_proceso()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await LoteEnProcesoAsync(empresa, ct);
+
+        var respuesta = await api.Cliente(PdfDePrueba.Token(api, empresa.Id))
+            .GetAsync(PdfDePrueba.Ruta(lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST321").Id), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await CuerpoSiNoEsPdf(respuesta, ct));
+        var texto = await PdfDePrueba.TextoAsync(respuesta, ct);
+        PdfDePrueba.Tiene(texto, "TST321").Should().BeTrue();
+        PdfDePrueba.Tiene(texto, "El vehículo está sin el documento del locatario: no hay a quién consultar.").Should().BeTrue("N/A con su motivo en texto");
+        (await CabeceraAsync(empresa, lote.Id, ct)).Estado.Should().Be(EstadoDiagnostico.EnProceso);
+    }
+
+    // AC3 (F07-C4, R-7) — lote EN_PROCESO con el vehículo 2 con celdas PENDIENTE: 409 VEHICULO_NO_TERMINADO, sin PDF ni evidencia.
+    [Fact]
+    public async Task Lote_en_proceso_con_vehiculo_sin_terminar_responde_409()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await LoteEnProcesoAsync(empresa, ct);
+        var sinTerminar = lote.Vehiculos.Single(v => v.Placa == "TST322").Id;
+
+        var respuesta = await api.Cliente(PdfDePrueba.Token(api, empresa.Id)).GetAsync(PdfDePrueba.Ruta(lote.Id, sinTerminar), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var error = await respuesta.Content.ReadFromJsonAsync<JsonElement>(ct);
+        error.GetProperty("code").GetString().Should().Be(EmisionPdf.CodigoVehiculoNoTerminado);
+        await using var db = empresa.Db();
+        (await db.Set<Evidencia>().CountAsync(e => e.VehiculoId == sinTerminar, ct)).Should().Be(0, "no se genera nada");
+    }
+
+    // AC8 (F07-C4, F07-C9, Q7) — lote INCOMPLETO con SIMIT_VEHICULO en ERROR TIMEOUT: 200 y la sección SIMIT dice «No pudimos
+    // obtener esta información.», sin TIMEOUT, causa técnica ni origen.
+    [Fact]
+    public async Task Lote_incompleto_emite_el_pdf_con_consulta_no_disponible()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, estado: EstadoDiagnostico.Incompleto, alcance: [Fuente.Runt, Fuente.SimitVehiculo],
+            vehiculos: [new("TST331", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)])]);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST331", Fuente.Runt), PayloadRunt, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST331", Fuente.SimitVehiculo), """{"detalle":"Timeout del proveedor tras 30 s"}""", ct, EstadoCelda.Error, "TIMEOUT");
+
+        var texto = await PdfDePrueba.TextoOkAsync(api, PdfDePrueba.Token(api, empresa.Id), lote.Id, lote.Vehiculos.Single().Id, ct);
+
+        var simit = PdfDePrueba.Seccion(texto, TituloSimit);
+        PdfDePrueba.Tiene(simit, "No pudimos obtener esta información.").Should().BeTrue(simit);
+        texto.Should().NotContainAny(["TIMEOUT", "Timeout", "timeout", "30 s", "30s", "proveedor"], "sin código de error ni causa técnica");
+        texto.Should().NotContain("rigen", "sin origen");
+    }
+
+    // AC4 (F07-C9, CA 16, R-20) — dos vehículos con el mismo resultado SIMIT, uno llenado a mano: las secciones SIMIT del texto son
+    // idénticas y ningún texto dice manual, operador, proveedor ni transacción.
+    [Fact]
+    public async Task Celda_manual_y_de_api_producen_el_mismo_texto()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.SimitVehiculo], vehiculos:
+        [
+            new("TST341", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+            new("TST342", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+        ]);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST341", Fuente.Runt), PayloadRunt, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST342", Fuente.Runt), PayloadRunt, ct, manual: true);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST341", Fuente.SimitVehiculo), PayloadSimit, ct);
+        var manual = await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST342", Fuente.SimitVehiculo), PayloadSimit, ct, manual: true);
+        await MismaFechaAsync(empresa, lote.Id, ct);
+        var token = PdfDePrueba.Token(api, empresa.Id);
+
+        var deApi = await PdfDePrueba.TextoOkAsync(api, token, lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST341").Id, ct);
+        var aMano = await PdfDePrueba.TextoOkAsync(api, token, lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST342").Id, ct);
+
+        PdfDePrueba.Seccion(aMano, TituloSimit).Should().Be(PdfDePrueba.Seccion(deApi, TituloSimit), "la sección SIMIT es idéntica");
+        PdfDePrueba.Tiene(deApi, "TST-C-0301").Should().BeTrue();
+        foreach (var texto in new[] { deApi, aMano })
+        {
+            texto.Should().NotContainEquivalentOf("manual");
+            texto.Should().NotContainEquivalentOf("operador");
+            texto.Should().NotContainEquivalentOf("proveedor");
+            texto.Should().NotContainEquivalentOf("transacci");
+            texto.Should().NotContain(manual.UsuarioManualId!.Value.ToString());
+        }
+    }
+
+    // R-20 — todas las fuentes, con celdas manuales y payloads que traen proveedor, transacción y nombres: el texto no tiene origen,
+    // usuario manual, proveedor, transacción ni nombres; sí los datos normalizados (prueba de que el PDF no está vacío).
+    [Fact]
+    public async Task Texto_no_contiene_origen_usuario_manual_proveedor_ni_transaccion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance:
+            [Fuente.Runt, Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitVehiculo, Fuente.SimitPropietario, Fuente.SimitLocatario, Fuente.Avaluo],
+            vehiculos:
+            [new("TST351", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.RuntPropietario, EstadoCelda.Pendiente, 1),
+                new(Fuente.RuntLocatario, EstadoCelda.Pendiente, 1), new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1),
+                new(Fuente.SimitPropietario, EstadoCelda.Pendiente, 1), new(Fuente.SimitLocatario, EstadoCelda.Na, 1), new(Fuente.Avaluo, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var propietario = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, "C", "10005678", ct);
+        var locatario = await PersonaAsync(api, empresa, vehiculo, RolPersona.Locatario, "C", "20001234", ct, OrigenDocumento.DeclaradoCliente);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST351", Fuente.Runt), PayloadRunt, ct, manual: true);
+        var manual = await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST351", Fuente.SimitVehiculo), PayloadSimit, ct, manual: true);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST351", Fuente.Avaluo), PayloadAvaluo, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST351", Fuente.RuntPropietario), Personas(
+            (propietario.Id, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","nombre":"NOMBRE FICTICIO","proveedor":"INTEMPO","licencias":[{"categoria":"B1","estado":"VIGENTE","vigente_hasta":"2030-01-01"}]}""")), ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST351", Fuente.RuntLocatario), Personas(
+            (locatario.Id, "RUNT_PERSONA", "OK", """{"inscrito":false,"estado_conductor":null,"licencias":[]}""")), ct, manual: true);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST351", Fuente.SimitPropietario), Personas(
+            (propietario.Id, "SIMIT", "OK", """{"semaforo":"VERDE","cantidad_comparendos":0,"comparendos":[],"id_transaccion":"TX-PERSONA-351"}""")), ct);
+
+        var texto = await PdfDePrueba.TextoOkAsync(api, PdfDePrueba.Token(api, empresa.Id), lote.Id, vehiculo, ct);
+
+        foreach (var titulo in new[] { "INFORMACIÓN DEL VEHÍCULO", "PROPIETARIOS", "LOCATARIOS", TituloSimit,
+                     "COMPARENDOS DE LOS PROPIETARIOS", "COMPARENDOS DE LOS LOCATARIOS", "AVALÚO COMERCIAL", "48.500.000", "B1" })
+            PdfDePrueba.Tiene(texto, titulo).Should().BeTrue($"el PDF trae «{titulo}»: {texto}");
+        texto.Should().NotContainAny(["INTEMPO", "TX-", "servicio_que_resolvio", "NOMBRE FICTICIO", "NOMBREFICTICIO", "PROVEEDOR"]);
+        texto.Should().NotContainAny([manual.UsuarioManualId!.Value.ToString(), propietario.Id.ToString(), locatario.Id.ToString()]);
+        foreach (var prohibido in new[] { "manual", "operador", "proveedor", "transacci", "origen", "backoffice" })
+            texto.Should().NotContainEquivalentOf(prohibido);
+    }
+
+    // AC6 (F07-C10) — el propietario con documento terminado en 5678 sale «****5678» y nunca completo; el locatario declarado con
+    // su rótulo.
+    [Fact]
+    public async Task Documento_sale_completo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.RuntPropietario, Fuente.RuntLocatario], vehiculos:
+            [new("TST361", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.RuntPropietario, EstadoCelda.Pendiente, 1),
+                new(Fuente.RuntLocatario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var propietario = await PersonaAsync(api, empresa, vehiculo, RolPersona.Propietario, "C", "10005678", ct);
+        var locatario = await PersonaAsync(api, empresa, vehiculo, RolPersona.Locatario, "C", "20001234", ct, OrigenDocumento.DeclaradoCliente);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST361", Fuente.Runt), PayloadRunt, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST361", Fuente.RuntPropietario), Personas(
+            (propietario.Id, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[]}""")), ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST361", Fuente.RuntLocatario), Personas(
+            (locatario.Id, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[]}""")), ct);
+
+        var texto = await PdfDePrueba.TextoOkAsync(api, PdfDePrueba.Token(api, empresa.Id), lote.Id, vehiculo, ct);
+
+        PdfDePrueba.Tiene(texto, "10005678").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "20001234").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, PersonaReporte.Declarado).Should().BeTrue("el locatario lo declaró el cliente");
+        texto.Should().NotContainAny(["****5678", "****1234"], "el PDF muestra el número completo");
+    }
+
+    // AC5 (F07-C8) — pedido dos veces sin cambios: los mismos bytes, una sola evidencia y sin regenerar.
+    [Fact]
+    public async Task Misma_huella_devuelve_los_mismos_bytes_sin_regenerar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await LoteSimitAsync(empresa, "TST371", ct);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var cliente = api.Cliente(PdfDePrueba.Token(api, empresa.Id));
+
+        var primero = await PdfDePrueba.BytesOkAsync(cliente, lote.Id, vehiculo, ct);
+        var evidencia = await VigenteAsync(empresa, vehiculo, ct);
+        await Task.Delay(TimeSpan.FromMilliseconds(1100), ct);
+        var segundo = await PdfDePrueba.BytesOkAsync(cliente, lote.Id, vehiculo, ct);
+
+        segundo.Should().Equal(primero, "misma huella: los bytes guardados, sin regenerar (la fecha de generación no cambia)");
+        await using var db = empresa.Db();
+        var todas = await db.Set<Evidencia>().AsNoTracking().Where(e => e.VehiculoId == vehiculo).ToListAsync(ct);
+        todas.Should().ContainSingle().Which.Id.Should().Be(evidencia.Id);
+        todas[0].Tipo.Should().Be(TipoEvidencia.Pdf);
+        todas[0].Estado.Should().Be(EstadoEvidencia.Lista);
+    }
+
+    // AC5 (F07-C8) — un llenado manual y después un reproceso de una celda del vehículo generan cada uno un PDF nuevo con el dato
+    // nuevo e invalidan el anterior (vigente=false, conservado).
+    [Fact]
+    public async Task Llenado_manual_o_reproceso_invalidan_el_pdf_del_vehiculo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await LoteSimitAsync(empresa, "TST381", ct);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        var cliente = api.Cliente(PdfDePrueba.Token(api, empresa.Id));
+
+        var original = await PdfDePrueba.BytesOkAsync(cliente, lote.Id, vehiculo, ct);
+        var primera = await VigenteAsync(empresa, vehiculo, ct);
+
+        await CambiarCeldaAsync(empresa, lote.Celda("TST381", Fuente.SimitVehiculo).Id, PayloadSimitReprocesado, OrigenCelda.Manual, ct);
+        var trasManual = await PdfDePrueba.BytesOkAsync(cliente, lote.Id, vehiculo, ct);
+        var segunda = await VigenteAsync(empresa, vehiculo, ct);
+
+        await CambiarCeldaAsync(empresa, lote.Celda("TST381", Fuente.SimitVehiculo).Id, PayloadSimit, OrigenCelda.Api, ct);
+        var trasReproceso = await PdfDePrueba.BytesOkAsync(cliente, lote.Id, vehiculo, ct);
+        var tercera = await VigenteAsync(empresa, vehiculo, ct);
+
+        trasManual.Should().NotEqual(original);
+        PdfDePrueba.Tiene(PdfDePrueba.Texto(trasManual), "TST-C-0302").Should().BeTrue("el PDF nuevo trae el dato del llenado manual");
+        PdfDePrueba.Tiene(PdfDePrueba.Texto(trasReproceso), "TST-C-0301").Should().BeTrue("el PDF nuevo trae el dato del reproceso");
+        new[] { primera.Id, segunda.Id, tercera.Id }.Should().OnlyHaveUniqueItems("cada cambio de celda genera una evidencia nueva");
+        new[] { primera.Huella, segunda.Huella, tercera.Huella }.Should().OnlyHaveUniqueItems();
+        await using var db = empresa.Db();
+        var todas = await db.Set<Evidencia>().AsNoTracking().Where(e => e.VehiculoId == vehiculo).ToListAsync(ct);
+        todas.Should().HaveCount(3, "las anteriores se conservan");
+        todas.Single(e => e.Vigente).Id.Should().Be(tercera.Id);
+    }
+
+    // AC7 (F07-C11) — desde la compañía A: el PDF de un lote de B, un vehículo de B bajo un lote de A y un vehículo de otro lote de
+    // A responden 404 NO_ENCONTRADO sin datos de B; con PROPIOS, el lote de otro usuario de A también es 404 (el creador sí descarga).
+    [Fact]
+    public async Task Otra_compania_y_propios_ajeno_responden_404()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        var deB = await LoteSimitAsync(empresas.B, "TST391", ct, nombre: "Lote secreto de B");
+        var creador = PdfDePrueba.Token(api, empresas.A.Id);
+        var otro = PdfDePrueba.Token(api, empresas.A.Id);
+        var deA = await LoteSimitAsync(empresas.A, "TST392", ct, creador: TableroAyudas.Usuario(creador));
+        var otroDeA = await LoteSimitAsync(empresas.A, "TST393", ct, creador: TableroAyudas.Usuario(creador));
+        var vehiculoB = deB.Vehiculos.Single().Id;
+
+        foreach (var ruta in new[]
+                 {
+                     PdfDePrueba.Ruta(deB.Id, vehiculoB), PdfDePrueba.Ruta(deA.Id, vehiculoB), PdfDePrueba.Ruta(deA.Id, otroDeA.Vehiculos.Single().Id),
+                 })
+        {
+            var respuesta = await api.Cliente(creador).GetAsync(ruta, ct);
+            var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
+            respuesta.StatusCode.Should().Be(HttpStatusCode.NotFound, $"{ruta}: {cuerpo}");
+            JsonDocument.Parse(cuerpo).RootElement.GetProperty("code").GetString().Should().Be("NO_ENCONTRADO");
+            cuerpo.Should().NotContainAny(["Lote secreto de B", "TST391", "TST-C-0301", vehiculoB.ToString(), empresas.B.Id.ToString()]);
+        }
+
+        await ConfiguracionAsync(empresas.A, ct);
+        var ajena = await api.Cliente(otro).GetAsync(PdfDePrueba.Ruta(deA.Id, deA.Vehiculos.Single().Id), ct);
+        var cuerpoAjeno = await ajena.Content.ReadAsStringAsync(ct);
+        ajena.StatusCode.Should().Be(HttpStatusCode.NotFound, "PROPIOS: el lote es de otro usuario");
+        cuerpoAjeno.Should().NotContainAny(["TST392", "TST-C-0301"]);
+        (await api.Cliente(creador).GetAsync(PdfDePrueba.Ruta(deA.Id, deA.Vehiculos.Single().Id), ct)).StatusCode
+            .Should().Be(HttpStatusCode.OK, "el creador sí descarga su PDF");
+        await using var db = empresas.B.Db();
+        (await db.Set<Evidencia>().CountAsync(ct)).Should().Be(0, "nada se generó para B");
+    }
+
+    // Permiso (F07-C11) — sin diagnostico.reportes.descargar (aunque vea el lote): 403 sin cuerpo y sin generar.
+    [Fact]
+    public async Task Sin_permiso_de_descarga_responde_403()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await LoteSimitAsync(empresa, "TST399", ct);
+        var soloVer = api.Token(empresa: empresa.Id, permisos: [Permisos.DiagnosticosVer], roles: ["usuario_diagnostico"]);
+
+        var respuesta = await api.Cliente(soloVer).GetAsync(PdfDePrueba.Ruta(lote.Id, lote.Vehiculos.Single().Id), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await respuesta.Content.ReadAsStringAsync(ct)).Should().BeEmpty();
+        await using var db = empresa.Db();
+        (await db.Set<Evidencia>().CountAsync(ct)).Should().Be(0);
+    }
+
+    // HU #13864 AC2 (F09-C9, R-20) — lote con RUNT, AVALUO e IMPUESTO_DEPARTAMENTAL y el vehículo terminado: la sección «Impuesto
+    // vehicular departamental» va después del avalúo (orden de la grilla) con «Total adeudado» en el formato de moneda del avalúo y
+    // la grilla Vigencia / Valor / Estado por año («Pagada» / «Pendiente»); otro vehículo sin vigencias dice «No registra vigencias».
+    // Ni el proveedor inventado ni la transacción ni el servicio del intento salen en el texto (fuga).
+    [Fact]
+    public async Task Seccion_de_impuesto_con_total_adeudado_y_vigencias()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.Avaluo, Fuente.ImpuestoDepartamental], vehiculos:
+        [
+            new("TST371", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.Avaluo, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)]),
+            new("TST372", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.Avaluo, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)]),
+        ]);
+        foreach (var placa in new[] { "TST371", "TST372" })
+        {
+            await TableroAyudas.PayloadAsync(empresa, lote.Celda(placa, Fuente.Runt), PayloadRunt.Replace("TST301", placa, StringComparison.Ordinal), ct);
+            await TableroAyudas.PayloadAsync(empresa, lote.Celda(placa, Fuente.Avaluo), PayloadAvaluo, ct);
+        }
+
+        var impuesto = lote.Celda("TST371", Fuente.ImpuestoDepartamental);
+        await TableroAyudas.PayloadAsync(empresa, impuesto, ImpuestoDePrueba.ConVigencias, ct);
+        await TableroAyudas.IntentoAsync(empresa, impuesto, desdeCache: false, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST372", Fuente.ImpuestoDepartamental), ImpuestoDePrueba.SinVigencias, ct);
+        var token = PdfDePrueba.Token(api, empresa.Id);
+
+        var texto = await PdfDePrueba.TextoOkAsync(api, token, lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST371").Id, ct);
+
+        var avaluo = texto.IndexOf(PdfDePrueba.Plano(TituloAvaluo), StringComparison.Ordinal);
+        var titulo = texto.IndexOf(PdfDePrueba.Plano(TituloImpuesto), StringComparison.Ordinal);
+        titulo.Should().BeGreaterThan(avaluo, $"la sección del impuesto va después del avalúo (orden de la grilla): {texto}");
+        avaluo.Should().BeGreaterThanOrEqualTo(0, texto);
+        // La última sección puede partirse entre páginas (pie «Certificado de Diagnóstico … Página X de Y» en medio): se lee sin los pies.
+        var seccion = PdfDePrueba.SinPies(texto[titulo..]);
+        foreach (var esperado in new[] { "Total adeudado", "$ 350.000", "Vigencia", "Valor", "Estado", "$ 180.000", "Pagada", "Pendiente" })
+            PdfDePrueba.Tiene(seccion, esperado).Should().BeTrue($"la sección trae «{esperado}»: {seccion}");
+        PdfDePrueba.Tiene(seccion, "Vigencia Valor Estado 2025 $ 180.000 Pagada 2026 $ 350.000 Pendiente")
+            .Should().BeTrue($"la grilla va por año ascendente, fila a fila: {seccion}");
+        PdfDePrueba.Seccion(texto, TituloAvaluo).Should().NotContain(PdfDePrueba.Plano("Total adeudado"), "el impuesto no se mezcla con el avalúo");
+        texto.Should().NotContainAny([ImpuestoDePrueba.ProveedorFicticio, PdfDePrueba.Plano(ImpuestoDePrueba.ProveedorFicticio), "TX-IMPUESTO", "INTEMPO", "IMPUESTO_DEPARTAMENTAL"]);
+        foreach (var prohibido in new[] { "proveedor", "transacci", "origen" })
+            texto.Should().NotContainEquivalentOf(prohibido);
+
+        var sinVigencias = await PdfDePrueba.TextoOkAsync(api, token, lote.Id, lote.Vehiculos.Single(v => v.Placa == "TST372").Id, ct);
+        var otra = PdfDePrueba.Seccion(sinVigencias, TituloImpuesto);
+        PdfDePrueba.Tiene(otra, "No hay vigencias registradas").Should().BeTrue(otra);
+        PdfDePrueba.Tiene(otra, PdfVehiculo.SinDeuda).Should().BeTrue($"sin deuda no es un monto: {otra}");
+        PdfDePrueba.Tiene(otra, "$ 0").Should().BeFalse($"el cero no se imprime: {otra}");
+    }
+
+    // HU #13864 AC3 (F09-C9) — vehículo con el impuesto en N/A DEPARTAMENTO_NO_SOPORTADO: la sección «Impuesto vehicular
+    // departamental» muestra el motivo con el texto existente y ningún dato del impuesto.
+    [Fact]
+    public async Task Impuesto_NA_muestra_el_motivo_departamento_no_soportado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ListadoDePrueba.ArrancarAsync(new UsuariosIdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.ImpuestoDepartamental], vehiculos:
+            [new("TST373", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)])]);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST373", Fuente.Runt), PayloadRunt.Replace("TST301", "TST373", StringComparison.Ordinal), ct);
+        await ImpuestoDePrueba.NoAplicaAsync(empresa, lote.Celda("TST373", Fuente.ImpuestoDepartamental), MotivoNa.DepartamentoNoSoportado, ct);
+
+        var texto = await PdfDePrueba.TextoOkAsync(api, PdfDePrueba.Token(api, empresa.Id), lote.Id, lote.Vehiculos.Single().Id, ct);
+
+        var seccion = PdfDePrueba.Seccion(texto, TituloImpuesto);
+        PdfDePrueba.Tiene(seccion, ImpuestoDePrueba.TextoDepartamentoNoSoportado).Should().BeTrue(seccion);
+        PdfDePrueba.Tiene(seccion, "Total adeudado").Should().BeFalse("N/A no tiene dato");
+    }
+
+    /// <summary>Lote EN_PROCESO: TST321 terminado (RUNT COMPLETADO y SIMIT_VEHICULO N/A) y TST322 con SIMIT_VEHICULO PENDIENTE.</summary>
+    private static async Task<Tablero.LoteSembrado> LoteEnProcesoAsync(EmpresaDePrueba empresa, CancellationToken ct)
+    {
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.SimitVehiculo], vehiculos:
+        [
+            new("TST321", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.SimitVehiculo, EstadoCelda.Na, 1)]),
+            new("TST322", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)]),
+        ]);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST321", Fuente.Runt), PayloadRunt, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST322", Fuente.Runt), PayloadRunt, ct);
+        return lote;
+    }
+
+    /// <summary>Lote con un vehículo terminado: RUNT y SIMIT_VEHICULO COMPLETADO.</summary>
+    private static async Task<Tablero.LoteSembrado> LoteSimitAsync(EmpresaDePrueba empresa, string placa, CancellationToken ct, string nombre = "Lote del PDF", Guid? creador = null)
+    {
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.SimitVehiculo], nombre: nombre, creador: creador,
+            vehiculos: [new(placa, [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.SimitVehiculo, EstadoCelda.Pendiente, 1)])]);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda(placa, Fuente.Runt), PayloadRunt.Replace("TST301", placa, StringComparison.Ordinal), ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda(placa, Fuente.SimitVehiculo), PayloadSimit, ct);
+        return lote;
+    }
+
+    /// <summary>Reproceso (origen API) o llenado manual de una celda: nuevo payload, nueva fecha y la versión del tablero sube.</summary>
+    private static async Task CambiarCeldaAsync(EmpresaDePrueba empresa, Guid celda, string payload, OrigenCelda origen, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        var fila = await db.Set<CeldaConsulta>().SingleAsync(c => c.Id == celda, ct);
+        fila.Payload = payload;
+        fila.Origen = origen;
+        fila.UsuarioManualId = origen == OrigenCelda.Manual ? Guid.NewGuid() : null;
+        fila.DatoObtenidoEn = DateTimeOffset.UtcNow;
+        fila.VersionTablero += 1;
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task<Evidencia> VigenteAsync(EmpresaDePrueba empresa, Guid vehiculo, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        return await db.Set<Evidencia>().AsNoTracking().SingleAsync(e => e.VehiculoId == vehiculo && e.Vigente, ct);
+    }
+
+    private static async Task<CabeceraDiagnostico> CabeceraAsync(EmpresaDePrueba empresa, Guid lote, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        return await db.Set<CabeceraDiagnostico>().AsNoTracking().SingleAsync(c => c.Id == lote, ct);
+    }
+
+    private static async Task ConfiguracionAsync(EmpresaDePrueba empresa, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        db.Add(new ConfiguracionEmpresa { VisibilidadUsuario = VisibilidadUsuario.Propios });
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task MismaFechaAsync(EmpresaDePrueba empresa, Guid lote, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        await db.Set<CeldaConsulta>().Where(c => c.DiagnosticoId == lote).ExecuteUpdateAsync(s => s.SetProperty(c => c.DatoObtenidoEn, Dato), ct);
+    }
+
+    private static async Task CreadoEnAsync(EmpresaDePrueba empresa, Guid lote, DateTimeOffset creadoEn, CancellationToken ct)
+    {
+        await using var db = empresa.Db();
+        await db.Set<CabeceraDiagnostico>().Where(c => c.Id == lote).ExecuteUpdateAsync(s => s.SetProperty(c => c.CreadoEn, creadoEn), ct);
+    }
+
+    private static async Task<PersonaVehiculo> PersonaAsync(
+        ApiDePrueba api, EmpresaDePrueba empresa, Guid vehiculo, RolPersona rol, string tipo, string numero, CancellationToken ct,
+        OrigenDocumento origen = OrigenDocumento.Proveedor)
+    {
+        var persona = new PersonaVehiculo
+        {
+            VehiculoId = vehiculo,
+            Rol = rol,
+            Orden = 1,
+            DocTipo = tipo,
+            DocCifrado = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Proteger(numero),
+            Origen = origen,
+            CreadoEn = DateTimeOffset.UtcNow,
+        };
+        await using var db = empresa.Db();
+        db.Add(persona);
+        await db.SaveChangesAsync(ct);
+        return persona;
+    }
+
+    /// <summary>Payload de una celda de persona con la forma de <c>EjecutorPorPersonas</c> (una persona, orden 1).</summary>
+    private static string Personas((Guid Id, string Consulta, string Estado, string Resultado) p) =>
+        $$"""{"personas":[{"persona_id":"{{p.Id}}","orden":1,"consulta":"{{p.Consulta}}","estado":"{{p.Estado}}","resultado":{{p.Resultado}},"consultado_en":"2026-10-22T15:00:00+00:00"}]}""";
+
+    private static async Task<string> CuerpoSiNoEsPdf(HttpResponseMessage respuesta, CancellationToken ct) =>
+        respuesta.Content.Headers.ContentType?.MediaType == "application/pdf" ? "(pdf)" : await respuesta.Content.ReadAsStringAsync(ct);
+
+    /// <summary>La carpeta de la marca en core-api (origen de la copia), subiendo desde la salida de las pruebas.</summary>
+    private static string MarcaCoreApi()
+    {
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null; dir = dir.Parent)
+        {
+            var marca = Path.Combine(dir.FullName, "services", "core-api", "src", "Flit.Infrastructure", "Documents", "Branding");
+            if (Directory.Exists(marca))
+                return marca;
+        }
+
+        throw new InvalidOperationException("No se encontró services/core-api/src/Flit.Infrastructure/Documents/Branding desde la salida de las pruebas.");
+    }
+}
+
+/// <summary>
+/// Ayudas del PDF del vehículo (HU #13848): la ruta, un token con <c>reportes.descargar</c> y la lectura del texto del PDF (aplanado,
+/// sin espacios: Skia dibuja glifo a glifo, ver <see cref="PdfTextExtractor.Flatten"/>). También es el lector del cuerpo del escenario
+/// de fuga (<see cref="EscenariosDeFuga.RutaPdfVehiculo"/>): un cuerpo que no es PDF (el 404) se devuelve tal cual.
+/// </summary>
+/// <example>
+/// <code>
+/// var texto = await PdfDePrueba.TextoOkAsync(api, PdfDePrueba.Token(api, empresa.Id), lote.Id, vehiculo, ct);
+/// PdfDePrueba.Tiene(texto, "Diagnóstico Simple").Should().BeTrue();
+/// </code>
+/// </example>
+internal static class PdfDePrueba
+{
+    /// <summary>Marcas aplanadas donde termina una sección: los títulos de sección (diseño v2, en mayúsculas), la nota final y el pie.</summary>
+    private static readonly string[] FinesDeSeccion =
+    [
+        "INFORMACIÓNDELVEHÍCULO", "PROPIETARIOS", "LOCATARIOS", "COMPARENDOSDEL", "AVALÚOCOMERCIAL", "IMPUESTOVEHICULARDEPARTAMENTAL",
+        "NOTA", "CertificadodeDiagnóstico", "Página",
+    ];
+
+    public static string Ruta(Guid id, Guid vehiculo) => $"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{id}/vehiculos/{vehiculo}/pdf";
+
+    public static string Token(ApiDePrueba api, Guid empresa) =>
+        api.Token(empresa: empresa, permisos: [Permisos.DiagnosticosVer, Permisos.ReportesDescargar], roles: ["usuario_diagnostico"]);
+
+    /// <summary>El texto del PDF aplanado; si la respuesta no es un PDF, el cuerpo tal cual.</summary>
+    public static async Task<string> TextoAsync(HttpResponseMessage respuesta, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(respuesta);
+        if (respuesta.Content.Headers.ContentType?.MediaType != "application/pdf")
+            return await respuesta.Content.ReadAsStringAsync(ct);
+        return Texto(await respuesta.Content.ReadAsByteArrayAsync(ct));
+    }
+
+    public static string Texto(byte[] pdf) => PdfTextExtractor.Flatten(PdfTextExtractor.Extract(pdf));
+
+    public static string Plano(string literal) => PdfTextExtractor.Flatten(literal);
+
+    /// <summary>¿Está el literal (aplanado) en el texto aplanado, respetando mayúsculas?</summary>
+    public static bool Tiene(string texto, string literal) => texto.Contains(Plano(literal), StringComparison.Ordinal);
+
+    public static async Task<byte[]> BytesOkAsync(HttpClient cliente, Guid id, Guid vehiculo, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(cliente);
+        var respuesta = await cliente.GetAsync(Ruta(id, vehiculo), ct);
+        var bytes = await respuesta.Content.ReadAsByteArrayAsync(ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, System.Text.Encoding.UTF8.GetString(bytes));
+        respuesta.Content.Headers.ContentType!.MediaType.Should().Be("application/pdf");
+        return bytes;
+    }
+
+    public static async Task<string> TextoOkAsync(ApiDePrueba api, string token, Guid id, Guid vehiculo, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(api);
+        return Texto(await BytesOkAsync(api.Cliente(token), id, vehiculo, ct));
+    }
+
+    /// <summary>El texto aplanado sin los pies de página («Certificado de Diagnóstico … Página X de Y»), para leer una sección partida entre páginas.</summary>
+    public static string SinPies(string texto) =>
+        System.Text.RegularExpressions.Regex.Replace(texto, @"CertificadodeDiagnóstico.*?Página\d+de\d+", string.Empty, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5));
+
+    /// <summary>
+    /// La sección que empieza en <paramref name="titulo"/>, hasta el título de la sección siguiente, la nota o el pie, lo
+    /// que llegue antes.
+    /// </summary>
+    public static string Seccion(string texto, string titulo)
+    {
+        ArgumentNullException.ThrowIfNull(texto);
+        var inicio = texto.IndexOf(Plano(titulo), StringComparison.Ordinal);
+        if (inicio < 0)
+            throw new InvalidOperationException($"El PDF no tiene la sección «{titulo}»: {texto}");
+        var resto = texto[(inicio + Plano(titulo).Length)..];
+        var fin = FinesDeSeccion
+            .Select(m => resto.IndexOf(m, StringComparison.Ordinal)).Where(i => i >= 0).DefaultIfEmpty(resto.Length).Min();
+        return texto.Substring(inicio, Plano(titulo).Length + fin);
+    }
+}
+
+/// <summary>
+/// Diseño v2 del PDF del vehículo (ajuste Caso A, registro diferido 2026-10-27): renderiza <see cref="PdfVehiculo.Generar"/> en
+/// memoria, sin Postgres, y lee su texto. Bloque de identificación (Diagnóstico ID, Placa o VIN, fecha de generación en hora
+/// Colombia dd/MM/yyyy HH:mm:ss) antes de «DATOS DEL DIAGNÓSTICO», sobretítulo «DATOS DEL VEHÍCULO», títulos de sección en
+/// mayúsculas sin el prefijo de la fuente, tablas etiqueta-valor en bloques de 3 columnas (fila de etiquetas y luego fila de
+/// valores), nota final con la placa (o el VIN), el creador y la empresa, y pie «Certificado de Diagnóstico» + «Página X de Y»
+/// sin «Generado el» ni el título del documento. Con <c>FLIT_PDF_MUESTRA</c> apuntando a un archivo, escribe ahí el PDF de
+/// muestra de varias páginas para revisarlo a ojo (nunca dentro del repo).
+/// </summary>
+/// <example>
+/// <code>
+/// dotnet test services/core-diagnostico/tests/Flit.Diagnostico.Tests --no-build --filter FullyQualifiedName~PdfVehiculoDisenoV2Tests
+/// </code>
+/// </example>
+public sealed partial class PdfVehiculoDisenoV2Tests
+{
+    private static readonly Guid Id = Guid.Parse("0192ab34-5c6d-7e8f-9a0b-1c2d3e4f5a6b");
+
+    private static readonly DateTimeOffset GeneradoEn = new(2026, 10, 27, 15, 4, 5, TimeSpan.Zero);
+
+    private const string Vin = "9BWZZZ377VT004251";
+
+    [Fact]
+    public void Version_de_plantilla_es_6() => PdfVehiculo.VersionPlantilla.Should().Be(6);
+
+    /// <summary>Sin fila de dictamen el PDF sigue igual: no hay sección ni aviso de redacción.</summary>
+    [Fact]
+    public void Sin_dictamen_el_pdf_no_trae_el_titulo_ni_la_redaccion_pendiente()
+    {
+        var contenido = Contenido("ABC123");
+        contenido.Dictamen.Should().BeNull();
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn));
+
+        PdfDePrueba.Tiene(texto, "DICTAMEN").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "redacción IA pendiente").Should().BeFalse(texto);
+    }
+
+    /// <summary>
+    /// Pendiente y bloqueado: la palabra, el aviso y los dos párrafos distintos, en ese orden, antes de «DATOS DEL VEHÍCULO».
+    /// </summary>
+    [Fact]
+    public void Dictamen_pendiente_bloqueado_pinta_veredicto_aviso_y_los_dos_parrafos_antes_de_datos_del_vehiculo()
+    {
+        const string primero = "qx17 alfa dictamen bloqueo unico";
+        const string segundo = "qy28 beta dictamen multa unica";
+        var contenido = Contenido("ABC123") with
+        {
+            Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", primero + "\n" + segundo),
+        };
+        var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
+
+        var orden = new[] { "Bloqueado", "redacción IA pendiente", primero, segundo, "DATOS DEL VEHÍCULO" };
+        var desde = 0;
+        foreach (var literal in orden)
+        {
+            var i = texto.IndexOf(PdfDePrueba.Plano(literal), desde, StringComparison.Ordinal);
+            i.Should().BeGreaterThanOrEqualTo(0, $"«{literal}» aparece después del anterior: {texto}");
+            desde = i;
+        }
+    }
+
+    /// <summary>Completada: el mismo párrafo en cada alertamiento sale una vez, sin aviso, y el veredicto se lee «Viable».</summary>
+    [Fact]
+    public void Dictamen_completada_no_repite_el_parrafo_ni_el_aviso_y_lee_viable()
+    {
+        const string mismo = "qz39 gamma dictamen modelo unico";
+        var contenido = Contenido("ABC123") with { Dictamen = new DictamenEnHuella("VIABLE", "COMPLETADA", mismo + "\n" + mismo) };
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn));
+        var plano = PdfDePrueba.Plano(mismo);
+        var cuenta = 0;
+        var desde = 0;
+        while (true)
+        {
+            var i = texto.IndexOf(plano, desde, StringComparison.Ordinal);
+            if (i < 0)
+                break;
+            cuenta++;
+            desde = i + plano.Length;
+        }
+
+        cuenta.Should().Be(1, texto);
+        PdfDePrueba.Tiene(texto, "redacción IA pendiente").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "Viable").Should().BeTrue(texto);
+    }
+
+    /// <summary>La huella no gana claves: sin dictamen ninguna <c>dictamen/</c>; con dictamen solo veredicto, estado y texto.</summary>
+    [Fact]
+    public void Para_huella_sin_dictamen_no_suma_claves_y_con_dictamen_solo_las_tres()
+    {
+        const string textoDictamen = "qw41 delta dictamen huella unica";
+        var sin = Contenido("ABC123");
+        sin.ParaHuella().Keys.Should().NotContain(k => k.StartsWith("dictamen/", StringComparison.Ordinal));
+
+        var con = sin with { Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", textoDictamen) };
+        con.ParaHuella().Keys.Where(k => k.StartsWith("dictamen/", StringComparison.Ordinal))
+            .Should().BeEquivalentTo(["dictamen/veredicto", "dictamen/estado", "dictamen/texto"]);
+        con.ParaHuella()["dictamen/veredicto"].Should().Be("BLOQUEADO");
+        con.ParaHuella()["dictamen/estado"].Should().Be("PENDIENTE");
+        con.ParaHuella()["dictamen/texto"].Should().Be(textoDictamen);
+    }
+
+    [Fact]
+    public void Identificacion_datos_del_diagnostico_secciones_y_nota_en_orden()
+    {
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(Contenido("ABC123"), GeneradoEn));
+
+        var orden = new[]
+        {
+            "Diagnóstico vehicular",
+            $"Diagnóstico ID {Id}", "Placa ABC123", "Fecha de generación 27/10/2026 10:04:05",
+            "DATOS DEL VEHÍCULO", "INFORMACIÓN DEL VEHÍCULO", "Placa VIN Servicio", "PROPIETARIOS", "Propietario 1",
+            "COMPARENDOS DEL VEHÍCULO", "Número Fecha Valor Estado Organismo", "COMPARENDOS DE LOS PROPIETARIOS", "No aplica.",
+            "AVALÚO COMERCIAL", "$ 48.500.000", "IMPUESTO VEHICULAR DEPARTAMENTAL", "Vigencia Valor Estado 2025 $ 180.000 Pagada",
+        };
+        var desde = 0;
+        foreach (var literal in orden)
+        {
+            var i = PdfDePrueba.SinPies(texto).IndexOf(PdfDePrueba.Plano(literal), desde, StringComparison.Ordinal);
+            i.Should().BeGreaterThanOrEqualTo(0, $"«{literal}» aparece después del anterior: {texto}");
+            desde = i;
+        }
+
+        PdfDePrueba.Tiene(texto, "DATOS DEL DIAGNÓSTICO").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "Este documento reúne").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "Consultado el 22/10/2026 10:00 (hora Colombia)").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "Este informe se elaboró a solicitud de Ana Prueba, de Empresa de prueba, para la placa ABC123.").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "NOTA").Should().BeTrue(texto);
+    }
+
+    [Fact]
+    public void Pie_trae_certificado_y_pagina_sin_generado_el_ni_titulo_visible()
+    {
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(Contenido("ABC123"), GeneradoEn));
+
+        PdfDePrueba.Tiene(texto, "Certificado de Diagnóstico").Should().BeTrue(texto);
+        System.Text.RegularExpressions.Regex.IsMatch(texto, @"Página1de[2-9]").Should().BeTrue($"el contenido de muestra ocupa varias páginas: {texto}");
+        texto.Should().NotContainAny([PdfDePrueba.Plano("Generado el"), PdfDePrueba.Plano(PdfVehiculo.Titulo), "RUNT—", "SIMIT—"]);
+    }
+
+    [Fact]
+    public void Sin_placa_identifica_por_vin_en_la_identificacion_y_en_la_nota()
+    {
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(Contenido(null), GeneradoEn));
+
+        PdfDePrueba.Tiene(texto, Vin).Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, $"para el VIN {Vin}").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "No hay información").Should().BeTrue("sin placa la celda Placa queda vacía de dato");
+    }
+
+    /// <summary>
+    /// PDF de muestra para revisión visual: solo con <c>FLIT_PDF_MUESTRA</c> (ruta absoluta del archivo a escribir, fuera del repo).
+    /// Junto al PDF deja un PNG por página (<c>{nombre}-{n}.png</c>) pintado por el mismo motor (Skia), porque los visores basados
+    /// en PyMuPDF pintan en negro los degradados SVG.
+    /// </summary>
+    [Fact]
+    public void Escribe_pdf_de_muestra_si_se_pide()
+    {
+        var destino = Environment.GetEnvironmentVariable("FLIT_PDF_MUESTRA");
+        Assert.SkipWhen(string.IsNullOrWhiteSpace(destino), "Sin FLIT_PDF_MUESTRA: no se escribe el PDF de muestra.");
+        var documento = PdfVehiculo.Documento(ContenidoConDetalle("ABC123"), GeneradoEn);
+        File.WriteAllBytes(destino!, QuestPDF.Fluent.GenerateExtensions.GeneratePdf(documento));
+        var pagina = 0;
+        foreach (var imagen in QuestPDF.Fluent.GenerateExtensions.GenerateImages(documento, new QuestPDF.Infrastructure.ImageGenerationSettings { RasterDpi = 110 }))
+            File.WriteAllBytes(Path.ChangeExtension(destino!, null) + $"-{++pagina}.png", imagen);
+    }
+
+    /// <summary>Contenido ficticio con todas las formas de sección (completada, persona, N/A, pendiente, no disponible).</summary>
+    private static ContenidoReporteVehiculo Contenido(string? placa)
+    {
+        var dato = new DateTimeOffset(2026, 10, 22, 15, 0, 0, TimeSpan.Zero);
+        var encabezado = new EncabezadoReporte(Id, "Flota octubre", "Empresa de prueba", "Ana Prueba",
+            new DateTimeOffset(2026, 10, 22, 19, 30, 0, TimeSpan.Zero), "Diagnóstico Simple", placa ?? Vin, placa is null ? "VIN" : "PLACA", placa, Vin);
+        var comparendos = Enumerable.Range(1, 14)
+            .Select(i => new ComparendoDetalle($"TST-C-{i:0000}", $"2026-09-{i:00}", "468500", i % 3 == 0 ? "PAGADO" : "PENDIENTE", "Organismo de prueba"))
+            .ToList();
+        var propietario = new PersonaReporte(1, "PROPIETARIO", "C", "****5678", false, null, "RUNT_PERSONA", EstadoPersonaReporte.Ok, dato,
+            new ResultadoRuntPersonaDetalle(true, "ACTIVO", [new LicenciaDetalle("B1", "Vigente", "2030-01-01"), new LicenciaDetalle("C1", "Vigente", "2029-06-30")]));
+        return new ContenidoReporteVehiculo(encabezado,
+        [
+            new("RUNT", "POR_VEHICULO", EstadoSeccion.Completado, null, null, dato,
+                new ResultadoRuntDetalle(placa, Vin, "PARTICULAR", "AUTOMOVIL", "STRIA PRUEBA", [new("C", "PROPIA")], 1), null),
+            new("RUNT_PROPIETARIO", "POR_PERSONA", EstadoSeccion.Completado, null, null, dato, null, [propietario]),
+            new("RUNT_LOCATARIO", "POR_PERSONA", EstadoSeccion.Pendiente, null, null, null, null, []),
+            new("SIMIT_VEHICULO", "POR_VEHICULO", EstadoSeccion.Completado, null, null, dato, new ResultadoSimitDetalle("AMARILLO", 16, comparendos, true), null),
+            new("SIMIT_PROPIETARIO", "POR_PERSONA", EstadoSeccion.NoAplica, "SIN_DOCUMENTO", "El vehículo está sin el documento del propietario.", null, null, []),
+            new("SIMIT_LOCATARIO", "POR_PERSONA", EstadoSeccion.NoDisponible, null, SeccionReporte.ConsultaNoDisponible, null, null, []),
+            new("AVALUO", "POR_VEHICULO", EstadoSeccion.Completado, null, null, dato, new ResultadoAvaluoDetalle(false, 48500000, "fasecolda",
+                [new("fasecolda", "OK", 48500000, 3, "2026-10-22"), new("mercado_libre", "OK", 47200000, 12, "2026-10-22")]), null),
+            new("IMPUESTO_DEPARTAMENTAL", "POR_VEHICULO", EstadoSeccion.Completado, null, null, dato,
+                new ResultadoImpuestoDetalle(350000, [new(2025, 180000, true), new(2026, 350000, false)]), null),
+        ]);
+    }
+}

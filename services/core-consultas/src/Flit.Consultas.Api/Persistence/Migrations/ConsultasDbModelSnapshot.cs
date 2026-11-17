@@ -156,6 +156,57 @@ namespace Flit.Consultas.Api.Persistence.Migrations
                     b.ToTable("consumo", "consultas");
                 });
 
+            modelBuilder.Entity("Flit.Consultas.Api.Persistence.DepartamentoConsultaImpuesto", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTimeOffset?>("DeletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<string>("DepartmentCode")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("department_code");
+
+                    b.Property<string>("DepartmentName")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("department_name");
+
+                    b.Property<string>("ExternalRefs")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("external_refs");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_vehicle_tax_departments");
+
+                    b.HasIndex("DepartmentCode")
+                        .IsUnique()
+                        .HasDatabaseName("uq_vehicle_tax_departments_department_code");
+
+                    b.ToTable("vehicle_tax_departments", "consultas", t =>
+                        {
+                            t.HasComment("Catálogo global de departamentos con consulta de impuesto. Sin tenant_id: ADR-0080. Lista efectiva: is_active y deleted_at nulo.");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Consultas.Api.Persistence.ValidacionKyverum", b =>
                 {
                     b.Property<Guid>("ValidacionId")
