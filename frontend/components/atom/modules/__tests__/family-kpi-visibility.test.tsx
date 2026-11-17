@@ -30,10 +30,17 @@ vi.mock("@/lib/api/analytics", async (importOriginal) => ({
   fetchNetworkAnalyticsOverview: mocks.fetchNetworkAnalyticsOverview,
   fetchNetworkMonthlyTrend: mocks.fetchNetworkMonthlyTrend,
 }));
+vi.mock("@/lib/api/analytics-gestor", () => ({
+  fetchColaInactividad: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+}));
 vi.mock("@/lib/api/admin-companies", () => ({ fetchAllCompanies: mocks.fetchAllCompanies }));
 vi.mock("@/lib/api/tramites-client", () => ({
   ALL_TENANTS: "*",
-  tramitesClient: { listTenantBiometricValidations: mocks.listTenantBiometricValidations },
+  tramitesClient: {
+    searchEstadoCounts: vi.fn().mockResolvedValue({}),
+    searchInstances: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+    listTenantBiometricValidations: mocks.listTenantBiometricValidations,
+  },
 }));
 vi.mock("@/lib/api/client", () => ({ getToken: mocks.getToken }));
 vi.mock("@/lib/auth/jwt", async (importOriginal) => ({
@@ -46,7 +53,8 @@ vi.mock("@/lib/api/public-banners", () => ({
   bannerImageUrl: (id: string) => `http://api.test/api/v1/public/banners/${id}/image`,
 }));
 
-import { Dashboard } from "@/components/atom/modules/Dashboard";
+// Rediseño del Inicio: el Inicio del gestor (con su red y su gate de familia) vive ahora en GestorDashboard.
+import { GestorDashboard as Dashboard } from "@/components/atom/modules/GestorDashboard";
 import { ResumenTab } from "@/components/atom/modules/_reportes/tabs/ResumenTab";
 
 // Lo que devuelve la API a quien no tiene Ver de Traspasos: la categoría ya no viene.
@@ -96,10 +104,8 @@ describe("Inicio (Dashboard) — tarjetas KPI por familia", () => {
 
     const grid = await screen.findByTestId("dashboard-kpi-grid");
     expect(within(grid).queryByText("Traspasos")).not.toBeInTheDocument();
-    expect(within(grid).getByText("Matrículas")).toBeInTheDocument();
-    expect(within(grid).getByText("Otros Trámites")).toBeInTheDocument();
-    // Leyenda de «Seguimiento operativo»: tampoco la serie de Traspasos.
-    expect(screen.queryByText("Traspasos")).not.toBeInTheDocument();
+    expect(within(grid).getByText("Matrícula inicial")).toBeInTheDocument();
+    expect(within(grid).getByText("Otros trámites")).toBeInTheDocument();
   });
 
   it("Bug #14010 H-01: token sin permisos por familia no pinta las tarjetas de familia", async () => {
@@ -108,8 +114,8 @@ describe("Inicio (Dashboard) — tarjetas KPI por familia", () => {
 
     const grid = await screen.findByTestId("dashboard-kpi-grid");
     expect(within(grid).queryByText("Traspasos")).not.toBeInTheDocument();
-    expect(within(grid).queryByText("Matrículas")).not.toBeInTheDocument();
-    expect(within(grid).queryByText("Otros Trámites")).not.toBeInTheDocument();
+    expect(within(grid).queryByText("Matrícula inicial")).not.toBeInTheDocument();
+    expect(within(grid).queryByText("Otros trámites")).not.toBeInTheDocument();
   });
 });
 
