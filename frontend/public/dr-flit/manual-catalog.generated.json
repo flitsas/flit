@@ -791,7 +791,8 @@
           "title": "3. El detalle del trámite",
           "paragraphs": [
             "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
-            "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora."
+            "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora.",
+            "El panel del vehículo muestra también el Canal por el que entró el trámite y, si llegó del punto de atención de un organismo, el «OT del punto». En un trámite en borrador los verás en la barra superior del asistente. Son datos de solo lectura: los pone el sistema al crear el trámite."
           ],
           "bullets": [],
           "callouts": []
@@ -934,7 +935,7 @@
           "paragraphs": [],
           "bullets": [
             "Preasignación: radicaste sin placa. Puedes enviar el trámite aunque el actor aún no haya firmado; el correo de validación de identidad le llega igual. El organismo tiene el trámite en su cola de «asignar placa». Tú esperas.",
-            "Asignado: el organismo asignó la placa (recibes correo). Desde aquí la firma es obligatoria: si falta, «Enviar al OT» no deja continuar y se le notifica a la persona. Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
+            "Asignado: el organismo asignó la placa (recibes correo). Desde aquí la firma es obligatoria: si falta, «Enviar al OT» no deja continuar y se le notifica a la persona. Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. En ese mismo modal puedes cargar el PDF del SOAT («Cargar PDF del SOAT») y el del impuesto departamental («Cargar PDF del impuesto departamental»); al cargar el del impuesto, el check «Impuesto departamental pagado» queda marcado. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
             "Entregado: ya está en la cola de decisión del organismo, como cualquier otro trámite.",
             "Rechazado con distintivo «Rechazado preasignación»: el organismo rechazó antes de asignar placa; el motivo está en el detalle. Puedes filtrar estos casos con el atajo «Rechazado desde preasignación» de la búsqueda rápida."
           ],
@@ -1372,7 +1373,7 @@
       "href": "/manual/1-gestor/14-reportes-detallados",
       "audience": "Gestor",
       "sectionId": "gestor",
-      "summary": "Qué es la pestaña Reportes Detallados, cuándo usarla frente a las demás pestañas y cómo entrar.",
+      "summary": "Qué es la pestaña Reportes Detallados, cuándo usarla frente a las demás pestañas, cómo entrar y cómo ver de qué canal salió cada trámite.",
       "primarySource": false,
       "blocks": [
         {
@@ -1415,8 +1416,28 @@
           "callouts": []
         },
         {
+          "id": "canal",
+          "title": "4. De qué canal salió cada trámite",
+          "paragraphs": [
+            "La columna Canal dice por dónde entró cada trámite. La pone el sistema al crearlo y no se puede cambiar.",
+            "Los trámites antiguos que no tienen este dato aparecen como Trámites."
+          ],
+          "bullets": [
+            "Trámites: lo creó un gestor en el producto Trámites.",
+            "Persona Natural Web: llegó del portal Persona Natural.",
+            "Persona Natural OT: llegó del punto de atención de un organismo de tránsito. La fila muestra además cuál organismo.",
+            "Integración: llegó por la integración con terceros.",
+            "Aplicación: reservado para más adelante; por ahora no trae trámites.",
+            "Para filtrar, elige el canal en el selector Canal y pulsa Buscar. Si eliges Persona Natural OT aparece «OT del punto», para ver solo los de un organismo.",
+            "«OT del punto» es distinto del filtro «Organismo de tránsito», que busca por el organismo del trámite.",
+            "Si no hay resultados verás «No hay trámites con ese canal.».",
+            "Cada compañía ve solo sus trámites. El Super Admin puede elegir «Todas las compañías» para comparar los canales entre empresas; la tabla muestra entonces la compañía de cada fila."
+          ],
+          "callouts": []
+        },
+        {
           "id": "consejos",
-          "title": "4. Consejos",
+          "title": "5. Consejos",
           "paragraphs": [],
           "bullets": [
             "Acota primero el rango de fechas: la grilla puede crecer rápido si tu compañía maneja mucho volumen.",
