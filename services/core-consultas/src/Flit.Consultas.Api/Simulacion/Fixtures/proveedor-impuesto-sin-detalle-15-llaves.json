@@ -1,0 +1,17 @@
+{
+  "currentCertificationPeriod": "",
+  "currentConsultationDate": "",
+  "currentVehicleCommercialAppraisal": "",
+  "lastPaymentMadeYear": "",
+  "lastPaymentMadeDate": "",
+  "lastPaymentMadeAmountPaid": "",
+  "pendingValidity": "",
+  "pendingDebtTaxes": false,
+  "pendingVehicleTaxValue": "",
+  "pendingPenalties": "",
+  "pendingInterestLate": "",
+  "pendingSystematization": "",
+  "pendingTotalToPay": "",
+  "idAttachedTaxSettlementConsolidated": "",
+  "observationError": { "descriptionError": "Vehiculo CANCELADO", "descriptionErrorDevelopment": "TRAZA-INTERNA-NO-COPIAR", "typeError": 3 }
+}

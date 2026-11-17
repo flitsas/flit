@@ -52,6 +52,10 @@ public sealed record CertificationBundle(
 /// <para><b>PII</b>: el payload del RUES incluye nombres y documentos de representantes legales dentro
 /// del texto de facultades. Va marcado <c>@pii:high</c>, se sanitiza antes de escribir y no se vuelca
 /// en trazas, logs, PRs ni comentarios.</para>
+/// <para><b>HU #14153</b>: el proveedor entrega aquí el cuerpo HTTP <b>tal cual</b>; lo sanea quien lo persiste en Trámites
+/// (<c>RawPayloadSanitizer</c> en la ingesta canónica). Los de conductor (<c>kyverum_runt_conductor</c>, <c>verifik_conductor</c>)
+/// no producen <c>Certifications</c>, así que Trámites no los persiste; core-consultas lo reenvía sin sanear solo a quien pide
+/// <c>incluir_respuesta_cruda</c> (Diagnóstico lo guarda cifrado).</para>
 /// </remarks>
 public sealed record RawProviderPayload(
     string ProviderKey,

@@ -1,0 +1,19 @@
+{
+  "eventId": "0192f3a0-0000-7000-8000-000000000103",
+  "type": "diagnostico.lote.terminado",
+  "version": 1,
+  "occurredAt": "2026-10-26T15:10:00+00:00",
+  "tenantId": "0192f3a0-0000-7000-8000-0000000000e1",
+  "producer": "diagnostico",
+  "correlationId": "corr-fixture-lote",
+  "data": {
+    "diagnosticoId": "0192f3a0-0000-7000-8000-000000000401",
+    "estado": "COMPLETADO",
+    "esExpress": false,
+    "version": 42,
+    "terminadoEn": "2026-10-26T15:10:00+00:00",
+    "vehiculos": 200,
+    "celdas": { "COMPLETADO": 1500, "ERROR": 80, "NA": 20 },
+    "erroresPorTipo": { "TIMEOUT": 3 }
+  }
+}

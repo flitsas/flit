@@ -1,0 +1,14 @@
+{
+  "eventId": "0192f3a0-0000-7000-8000-000000000a01",
+  "type": "diagnostico.derivacion.solicitada",
+  "version": 1,
+  "occurredAt": "2026-11-11T15:10:00+00:00",
+  "tenantId": "0192f3a0-0000-7000-8000-0000000000e1",
+  "producer": "diagnostico",
+  "correlationId": "corr-fixture-derivacion",
+  "data": {
+    "operacionId": "0192f3a0-0000-7000-8000-000000000a11",
+    "itemId": "0192f3a0-0000-7000-8000-000000000a21",
+    "vehiculoId": "0192f3a0-0000-7000-8000-000000000a31"
+  }
+}
