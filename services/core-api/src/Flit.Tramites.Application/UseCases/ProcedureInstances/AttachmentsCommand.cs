@@ -111,6 +111,17 @@ public static class AttachmentRules
     };
 
     /// <summary>
+    /// Soporte del impuesto departamental que se puede cargar con el trámite en <c>asignado</c>, igual que la
+    /// evidencia de SOAT: es la sección «Cargar PDF del impuesto departamental» del modal «Enviar al OT». Es el
+    /// mismo código que carga FLITO por la API externa (<see cref="ExternalAttachmentRules.LiquidacionImpuesto"/>),
+    /// así que «gana quien carga primero» (HU #13265) aplica igual.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ImpuestoEvidenceTipos = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ExternalAttachmentRules.LiquidacionImpuesto,
+    };
+
+    /// <summary>
     /// HU #12046 — tipos que admiten VARIOS adjuntos a la vez. Son bolsas por definición: su nombre no
     /// designa un documento concreto sino "lo demás", así que subir uno nuevo no puede retirar el anterior.
     /// <para>Para todos los demás la casilla es UNA: el checklist mapea tipo → un adjunto, el consolidado
@@ -145,13 +156,15 @@ public static class AttachmentRules
     public static bool IsSoatEvidenceTipo(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && SoatEvidenceTipos.Contains(tipo.Trim());
 
+    public static bool IsImpuestoEvidenceTipo(string? tipo) =>
+        !string.IsNullOrWhiteSpace(tipo) && ImpuestoEvidenceTipos.Contains(tipo.Trim());
 
     /// <summary>
     /// ¿Se permite cargar este tipo de adjunto en este estado? Regla general: editable como
     /// borrador (<see cref="TramiteEstado.PermiteEdicionDatos"/> — borrador, rechazado+flag, o
     /// legado <c>subsanacion</c>). Excepción de la ruta de placa (ADR-0059): la evidencia de SOAT
-    /// se puede cargar con el trámite en <c>asignado</c>, que es donde el gestor gestiona SOAT e
-    /// impuestos antes de «Enviar al OT».
+    /// y el soporte del impuesto departamental se pueden cargar con el trámite en <c>asignado</c>, que es
+    /// donde el gestor gestiona SOAT e impuestos antes de «Enviar al OT».
     /// <para>La Licencia de Tránsito que emite el OT NO pasa por aquí: tiene su propio gate de estado
     /// en <see cref="AdjuntarLicenciaTransitoHandler"/>, que acepta <c>entregado</c> y <c>aprobado</c>.</para>
     /// </summary>
@@ -161,7 +174,7 @@ public static class AttachmentRules
         bool subsanacionActiva = false) =>
         TramiteEstado.PermiteEdicionDatos(status, subsanacionActiva)
         || (string.Equals(status, TramiteEstado.Asignado, StringComparison.OrdinalIgnoreCase)
-            && IsSoatEvidenceTipo(tipo));
+            && (IsSoatEvidenceTipo(tipo) || IsImpuestoEvidenceTipo(tipo)));
 
     /// <summary>
     /// Valida tipo/mime/size de un adjunto. Devuelve el código de error (compartido con el contrato
