@@ -149,6 +149,8 @@ import {
 import {
   isPlateDigitDecisionRequired,
   isPlateDigitUndecided,
+  placaQueFijaSecretaria,
+  PLATE_SOURCE_ICT,
   toPlateDigitFieldValues,
   toPlateDigitUiValue,
 } from '@/lib/tramites/plate-digit-preference';
@@ -3623,6 +3625,19 @@ function ConsultaStep({
   const vehiculoConPlacaRunt = placaRunt !== '';
 
   /**
+   * Placa ENTREGADA por la integración (ICT, `source === 'ict'`): el vehículo ya llega con placa, así
+   * que tampoco se ofrece el dígito ni aplica el gate HU #11628. Es una señal APARTE de la del RUNT:
+   * NO activa la Ruta Corta ni fija el organismo (`organismoFijadoPorRunt`), porque en ICT el
+   * organismo viene de la transacción y no del RUNT.
+   */
+  const placaIct = fieldValues.find(
+    (f) => f.fieldKey === 'plate' && f.source === PLATE_SOURCE_ICT,
+  )?.valueText?.trim() ?? '';
+  const vehiculoConPlacaIct = placaIct !== '' && !vehiculoConPlacaRunt;
+  /** Tipo 4: la placa está reservada en el rango de este organismo; la secretaría no se cambia. */
+  const placaFijaSecretaria = vehiculoConPlacaIct ? placaQueFijaSecretaria(fieldValues) : null;
+
+  /**
    * HU5 (registro diferido 2026-11-09) — grupo de placa de la clase consultada, por listas exactas
    * (MOTO, REMOLQUE). Remolque no lleva dígito (decisión D2): sin selector y sin el gate de la HU
    * #11628. Maquinaria la define el catálogo del backend y aquí todavía no hay trámite creado para
@@ -3635,7 +3650,8 @@ function ConsultaStep({
     grupoPlacaPreview,
     fieldValues.find((f) => f.fieldKey === 'vehicle_class')?.valueText,
   );
-  const muestraSelectorDigito = muestraDigitoPlaca && grupoPlacaPideDigito(grupoPlacaPaso1);
+  const muestraSelectorDigito =
+    muestraDigitoPlaca && !vehiculoConPlacaIct && grupoPlacaPideDigito(grupoPlacaPaso1);
   // HU10 — moto y motocarro: el dígito es el primer número de la placa.
   const digitoPrimerNumeroPaso1 = grupoPlacaPaso1 === 'MOTO' || grupoPlacaPaso1 === 'MOTOCARRO';
 
@@ -4135,7 +4151,17 @@ function ConsultaStep({
           : []),
       ])
       .then(() => onRefresh())
-      .catch(() => setError('No se pudo guardar el organismo de tránsito. Reintenta.'));
+      .catch((err: unknown) => {
+        // Un 4xx del backend (p. ej. organismo fijado por placa de rango) trae su propio mensaje.
+        const status = (err as { status?: unknown } | null)?.status;
+        const claro =
+          err instanceof Error && typeof status === 'number' && status >= 400 && status < 500;
+        setError(
+          claro && err.message
+            ? err.message
+            : 'No se pudo guardar el organismo de tránsito. Reintenta.',
+        );
+      });
   };
 
   /**
@@ -4363,7 +4389,9 @@ function ConsultaStep({
       data-testid="ruta-matricula"
       data-ruta={rutaCorta ? 'corta' : 'larga'}
     >
-      {rutaCorta
+      {vehiculoConPlacaIct
+        ? `El vehículo llega con la placa ${placaIct} enviada por la integración. Llegará al organismo listo para su decisión.`
+        : rutaCorta
         ? 'El vehículo ya tiene placa asignada según el RUNT. Llegará al organismo listo para su decisión.'
         : 'El vehículo no tiene placa. El organismo de tránsito la asignará en Preasignación.'}
     </p>
@@ -4431,10 +4459,23 @@ function ConsultaStep({
                 if (digitoPlaca) handleDigitoPlaca('');
                 handleOrganismo(id);
               }}
-              disabled={readOnly || secretariasLoading || secretarias.length === 0}
+              disabled={
+                readOnly ||
+                secretariasLoading ||
+                secretarias.length === 0 ||
+                placaFijaSecretaria !== null
+              }
               loading={secretariasLoading}
               describedBy="consulta-secretaria-aviso"
             />
+            {placaFijaSecretaria !== null && (
+              <p
+                className="mt-1.5 text-xs font-medium leading-tight"
+                data-testid="secretaria-fijada-por-placa"
+              >
+                {`La placa ${placaFijaSecretaria} es del rango de este organismo; no se puede cambiar la secretaría.`}
+              </p>
+            )}
             {/* Aviso ámbar mientras falta: sin secretaría la consulta no se habilita, y el botón
                 deshabilitado por sí solo no dice por qué. */}
             {!transitOfficeId && secretarias.length > 0 && (

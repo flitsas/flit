@@ -19,7 +19,10 @@ import { WizardCardHeader, WizardFieldToggle } from './wizard-atoms';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
 // Misma regla de «hay transformación» que aplica el detalle del OT al revisarla (HU #11931).
-import { valorCambiado as isChanged } from '@/lib/tramites/transformaciones-vehiculo';
+import {
+  valorCambiado as isChanged,
+  vehiculoSinCarroceria,
+} from '@/lib/tramites/transformaciones-vehiculo';
 
 /** DocTipo de soporte por subtrámite (whitelist AttachmentRules + RF33 factura_carroceria). */
 const DOC_TIPO_BY_KEY: Record<SubtramiteKey, string> = {
@@ -86,6 +89,9 @@ function soporteDoc(key: SubtramiteKey): { codigo: string; nombre: string; title
   const nombre = SOPORTE_HINT[key];
   return { codigo, nombre, title: catalogDocumentTitle(codigo, nombre) };
 }
+
+const NOTA_SIN_CARROCERIA =
+  'El vehículo no tiene carrocería registrada en el RUNT; este cambio no aplica.';
 
 const SUBTITULO_SIMULTANEOS =
   'Declara un cambio de color, combustible o carrocería frente al RUNT.';
@@ -160,7 +166,11 @@ export function VehicleTransformationsCard({
 
   const bodyworkRunt = byKey('vehicle_body_type_runt') || byKey('vehicle_body_type');
   const bodyworkEff = byKey('vehicle_body_type');
-  const bodyworkActive = byKey('cambio_carroceria') === 'true' || isChanged(bodyworkRunt, bodyworkEff);
+  // Sin carrocería en el RUNT el cambio no se ofrece (salvo cuando ES el trámite: ese lo bloquea el
+  // backend). Un `cambio_carroceria=true` heredado de datos viejos tampoco lo activa ni lo exige.
+  const sinCarroceria = soloSubtramite !== 'carroceria' && vehiculoSinCarroceria(fieldValues);
+  const bodyworkActive =
+    !sinCarroceria && (byKey('cambio_carroceria') === 'true' || isChanged(bodyworkRunt, bodyworkEff));
   const vehicleClassRaw = byKey('vehicle_class') || byKey('vehicle_class_runt');
 
   const hasVehicle = [
@@ -283,6 +293,7 @@ export function VehicleTransformationsCard({
       active: bodyworkActive,
       bodyworkCatalog: true,
       vehicleClass: vehicleClassRaw,
+      noAplica: sinCarroceria,
       onToggle: (on) => void setBodywork(on),
       onSelect: pickBodywork,
     },
@@ -381,7 +392,8 @@ export function VehicleTransformationsCard({
                 label={s.optionLabel}
                 checked={s.active}
                 onChange={(on) => s.onToggle(on)}
-                disabled={disabled}
+                disabled={disabled || s.noAplica === true}
+                description={s.noAplica ? NOTA_SIN_CARROCERIA : undefined}
               />
               {s.active && renderCard(s)}
             </div>
@@ -432,6 +444,8 @@ interface SubtramiteItem {
   bodyworkCatalog?: boolean;
   vehicleClass?: string;
   emptyMessage?: string;
+  /** El cambio no se ofrece para este vehículo (interruptor deshabilitado en «No aplica»). */
+  noAplica?: boolean;
   /** Qué documento adjuntar y por qué (HU nota informativa de transformaciones). */
   nota: DocumentoSugerido;
   onToggle: (on: boolean) => void;
@@ -471,12 +485,23 @@ function SubtramiteDocCard({
   const selectId = `tramite-simultaneo-${item.key}-valor`;
   const changed = isChanged(item.runtValue, item.effectiveValue);
   const selectValue = changed ? item.effectiveValue : '';
-  const valueMissing = !changed;
+  // Carrocería: un valor guardado que no está en el catálogo de la clase (p. ej. texto libre de una
+  // integración) no cuenta como elegido; el gestor tiene que escoger uno del catálogo.
+  const [carroceriaVerificada, setCarroceriaVerificada] = useState<{
+    valor: string;
+    ok: boolean;
+  } | null>(null);
+  const fueraDeCatalogo =
+    !!item.bodyworkCatalog &&
+    changed &&
+    carroceriaVerificada?.valor === selectValue.trim() &&
+    !carroceriaVerificada.ok;
+  const valueMissing = !changed || fueraDeCatalogo;
   const selectOptions = excludeRunt(
     mergeOption(item.options ?? [], selectValue),
     item.runtValue,
   );
-  const done = changed;
+  const done = changed && !fueraDeCatalogo;
   const busy = uploading || deleting;
 
   return (
@@ -556,6 +581,7 @@ function SubtramiteDocCard({
             invalid={valueMissing}
             placeholder="Selecciona…"
             onChange={item.onSelect}
+            onCatalogoVerificado={(valor, ok) => setCarroceriaVerificada({ valor, ok })}
           />
         ) : (item.options ?? []).length === 0 && item.emptyMessage ? (
           <p className="text-xs opacity-70">{item.emptyMessage}</p>
@@ -573,10 +599,12 @@ function SubtramiteDocCard({
         )}
         {valueMissing && (
           <p className="text-[11px] font-medium" style={{ color: 'var(--destructive)' }}>
-            Escoge un valor distinto al del RUNT.
+            {fueraDeCatalogo
+              ? 'La carrocería recibida no está en el catálogo. Escoge una.'
+              : 'Escoge un valor distinto al del RUNT.'}
           </p>
         )}
-        {changed && (
+        {changed && !fueraDeCatalogo && (
           <p className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--color-flit-brand)' }}>
             <span className="opacity-70">{up(item.runtValue)}</span>
             <ArrowRight aria-hidden="true" className="h-3 w-3" />
@@ -685,7 +713,8 @@ export function summarizeDeclaredTransformations(fieldValues: FieldValue[]): str
   const bodyworkRunt = byKey('vehicle_body_type_runt') || byKey('vehicle_body_type');
   const bodyworkEff = byKey('vehicle_body_type');
   const bodyworkActive =
-    byKey('cambio_carroceria') === 'true' || isChanged(bodyworkRunt, bodyworkEff);
+    !vehiculoSinCarroceria(fieldValues) &&
+    (byKey('cambio_carroceria') === 'true' || isChanged(bodyworkRunt, bodyworkEff));
 
   const changes: string[] = [];
   if (colorActive && isChanged(colorRunt, colorEff)) changes.push(`Color: ${up(colorEff)}`);
@@ -774,6 +803,10 @@ export function getSimultaneousIncompleteMessages(
     // En modo tipo base solo se evalúa el subtrámite del tipo: los otros dos no pueden estar
     // activos (el PATCH los rechaza) y mirarlos solo podría bloquear el paso por un residuo.
     if (soloSubtramite && s.key !== soloSubtramite) continue;
+    // Sin carrocería en el RUNT el cambio no aplica: ni se pide ni cuenta como obligatorio.
+    if (s.key === 'carroceria' && soloSubtramite !== 'carroceria' && vehiculoSinCarroceria(fieldValues)) {
+      continue;
+    }
     const runt = byKey(s.runtKey) || byKey(s.runtFallback);
     const eff = byKey(s.effKey);
     const active = s.key === soloSubtramite || byKey(s.flag) === 'true' || isChanged(runt, eff);
