@@ -351,3 +351,64 @@ Rutas relativas a `C:\FLIT 2.0\wt-pago-a`. «M» = modificar, «C» = crear. Pru
 1. **Ventana de anulación: 15 minutos.** Un cobro en caja no se radica de inmediato: la solicitud queda `pagada` y se radica cuando vence `Caja:VentanaAnulacionMinutos` (por defecto 15) contados desde `pagado_en`. Mientras tanto el administrador del OT puede anularla desde su hub. El total $0 (`sin_cobro`) se radica de inmediato. Un trabajo en segundo plano del BFF radica las vencidas; `GET /punto/pago` y `GET /punto/pago/cierre` también lo intentan. El cierre muestra «en registro» durante la ventana.
 2. **Ingreso de la caja: Opción A** (producto OIDC `caja` con la pantalla de login de FLIT, sin marca del OT).
 3. **Piezas compartidas: sí** (Identidad, SDK `ExtraAudiences`, `OtModuleAuthorizationHandler`), con revisión del Líder Técnico en el PR y suites completas de cada pieza.
+
+## 11. Revisión 2026-11-17: la caja es un módulo de FLIT 2.0
+
+Decisión del PO; ver «Revisión 2026-11-17» del ADR-0082 (Propuesto). **Reemplaza** §1 (portal, sesión OIDC `caja`), §2.1, §3.1 (rutas HTTP del BFF), §5 y §6 (guardián «no entra a FLIT 2.0»), y las decisiones 2 y 3 de §10. Siguen vigentes §2.3, §3.2 a §3.5 (con lo de abajo), §4 y §8.
+
+### 11.1 Flujo
+```mermaid
+sequenceDiagram
+  participant U as Cajero / Admin OT (FLIT 2.0)
+  participant C as core-api /api/v1/ot/caja
+  participant B as BFF (gRPC CajaAdminService)
+  U->>C: GET tramites/{codigo} (JWT normal)
+  C->>C: rol ot_caja o Admin OT; organismo y actor del token; tope de fallidas
+  C->>B: BuscarTramite(organismo, codigo, actor)
+  B-->>C: trámite
+  U->>C: POST tramites/{codigo}/confirmar (multipart + Idempotency-Key)
+  C->>B: ConfirmarCobro(...)
+  B-->>C: cobro (auditoría cashier_event)
+  U->>C: POST cobros/{id}/anular (solo Admin OT / SuperAdmin)
+  C->>B: AnularCobro(...) (ventana 15 min)
+```
+
+### 11.2 Contrato core-api (mismo JSON que el BFF de §3.1; `PortalCaja:Habilitado=false` por defecto, 404 si apagado)
+| Método | Ruta | Quién | Notas |
+|---|---|---|---|
+| GET | `/api/v1/ot/caja/tramites/{codigo}` | `ot_caja`, Admin OT | tope de fallidas por usuario |
+| POST | `/api/v1/ot/caja/tramites/{codigo}/confirmar` | `ot_caja`, Admin OT | multipart `medio`, `medioDetalle`, `totalVistoCop`, `prefactura` ≤ 5 MB; `Idempotency-Key`; bloqueo de concurrencia |
+| GET | `/api/v1/ot/caja/cobros?date&page&pageSize` | `ot_caja`, Admin OT | `{ fecha, totalDiaCop, items, total, ... }`; `anulado` no suma |
+| POST | `/api/v1/ot/caja/cobros/{cobroId}/anular` | solo Admin OT / SuperAdmin | ventana 15 min; `ot_caja` recibe 403 |
+
+Errores: los de §3.1 (la falta de sesión es el 401 estándar). SuperAdmin envía `?transitOfficeId=`; organismo ajeno 403.
+
+### 11.3 gRPC
+`CajaAdminService` (BFF, scope `platform.personanatural.caja`, solo `svc-tramites`) suma `BuscarTramite` y `ConfirmarCobro` a `ListarCobros` y `AnularCobro`.
+
+### 11.4 Guardián
+`SoloCajaGuardMiddleware`: si el único rol es `ot_caja`, permite solo `/api/v1/ot/caja/*`, `/api/v1/me*` y rutas de sesión (login, refresh, logout); el resto 403. Se elimina `CAJA_ONLY` de Identidad.
+
+### 11.5 Archivos
+**Crear**
+- `services/core-api/src/Flit.Api/Endpoints/OtCajaEndpoints.cs` (+ registro en `Hosting/ApiEndpoints.cs`)
+- `services/core-api/src/Flit.Admin.Application/Plataforma/PersonaNatural/Caja/{BuscarTramiteCajaHandler,ConfirmarCobroCajaHandler,ListarCobrosCajaHandler,AnularCobroCajaHandler}.cs`
+- `frontend/app/(app)/caja/page.tsx`, `frontend/components/caja/*` (buscador, detalle, confirmar, tabla de cobros, anular), `frontend/lib/caja/*`; entrada del dock en `dockGroups.ts` y `DOCK_ITEM_GROUP` (registro doble)
+- Pruebas: `Flit.Api.Tests/.../OtCajaEndpointsTests.cs`, Vitest del módulo
+- Artículo en `frontend/lib/manual/` vía `flit-manual-updater`
+
+**Modificar**
+- `contracts/openapi/core-api.v1.yaml`; `contracts/proto/flit/personanatural/v1/personanatural.proto`
+- `services/core-personanatural/.../Caja/` (servicio gRPC con los 4 RPC)
+- `SoloCajaGuardMiddleware.cs` (lista blanca nueva) y su prueba; `OtModuleAuthorizationHandler.cs`
+- `services/core-identity/.../OidcPrincipalFactory.cs` y `Auth/Login/*` (quitar `CAJA_ONLY` y `CajaOnlyTests`)
+- `services/core-api/src/Flit.Api/appsettings.json` (flag y scope)
+
+**Retirar**
+- `frontend-personanatural`: ruta `/o/{codigo}/caja`, componentes, sesión OIDC `caja`, proxy `/api/v1/persona-natural/caja/*`
+- BFF: `Caja/CajaEndpoints.cs`, `CajaPolicy`, `CajeroDeSesion`, `IResolverCajero` (+ `ResolverCajeroGrpc`, `ResolverCajeroNoConfigurado`), flag HTTP `PersonaNatural:Caja:Habilitado`
+- core-api: `ExtraAudiences` del SDK y su prueba (si no hay otro uso); RPC `ResolverUsuarioCaja` si queda sin consumidor
+- Se conservan las filas del DDL 199 (producto, módulo, permiso, rol `ot_caja`).
+
+### 11.6 Notas
+Infra: ya no se requiere `Suite:Oidc` ni host para `caja`; el scope `platform.personanatural.caja` sigue en `svc-tramites`. QA: `ot_caja` recibe 403 fuera de la lista blanca y el Admin OT no anula fuera de ventana. Security: revisar separación de funciones y la lista blanca. Frontend: tablas estándar (`table-styles`, `usePaginacion`, `ActionsMenu`) y guardián de diseño.

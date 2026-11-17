@@ -147,3 +147,35 @@ Enumeración de IDs con tope por usuario y por IP; sesión sin fijación (PKCE +
 ## Decisiones posteriores (2026-11-10)
 
 El usuario eligió la Opción A, aceptó tocar Identidad, el SDK y `OtModuleAuthorizationHandler` (revisión del Líder Técnico en el PR) y fijó una ventana de anulación de 15 minutos antes de radicar el cobro en caja. Detalle en `docs/design/EPICA-14210-caja-ot-diseno-y-contratos.md` §10. El ADR sigue en **Propuesto** hasta que lo acepte el Líder Técnico.
+
+## Revisión 2026-11-17: la caja pasa a ser un módulo de FLIT 2.0
+
+**Estado:** Propuesto. Si el Líder Técnico la acepta, reemplaza las decisiones 1 a 5 y «Decisiones posteriores» (portal propio, sesión OIDC `caja`, `CAJA_ONLY`). Se mantienen la decisión 6 (apagado por defecto) y la ventana de 15 min. Al aceptarla conviene emitir ADR nuevo con `Supersedes: ADR-0082`.
+
+### Contexto del cambio
+El PO decidió que la caja no sea un portal aparte sino un módulo «Caja» dentro de FLIT 2.0 (`frontend/`, dock), con el diseño y las tablas estándar. El cajero ya es un usuario del organismo; separar su sesión, login y frontend añadía superficie (OIDC `caja`, audiencia extra, guardianes) sin beneficio funcional.
+
+### Decisión
+1. Módulo «Caja» en FLIT 2.0 visible para `ot_caja` (solo ese módulo; login normal y JWT heredado) y para el Admin OT (cobra, ve y anula; además administra usuarios de caja). El SuperAdmin sigue anulando desde la administración del organismo.
+2. core-api expone `/api/v1/ot/caja/*` (buscar, confirmar, listar, anular), resuelve organismo y actor del token y llama al BFF por gRPC `CajaAdminService` (`BuscarTramite`, `ConfirmarCobro`, `ListarCobros`, `AnularCobro`; scope `platform.personanatural.caja`, solo `svc-tramites`). El BFF sigue siendo el dueño del dato de cobro.
+3. Se retiran la ruta `/o/{codigo}/caja` del portal, sus componentes, la sesión OIDC `caja`, las rutas HTTP `/api/v1/persona-natural/caja/*` del BFF y la audiencia extra. Se conservan las filas del DDL (producto, módulo, permiso, rol `ot_caja`).
+4. El guardián pasa de «solo-caja no entra a FLIT 2.0» a «solo-caja solo usa `/api/v1/ot/caja/*`, `/api/v1/me*` y rutas de sesión». Se elimina `CAJA_ONLY`.
+5. Se mantienen: tope de búsquedas fallidas por usuario, `Idempotency-Key`, bloqueo de concurrencia, prefactura ≤ 5 MB, ventana de anulación de 15 min y auditoría `cashier_event`.
+
+### Alternativas consideradas
+| Opción | Pros | Contras | Esfuerzo |
+|---|---|---|---|
+| A. Seguir en el portal | Ya diseñado; sesión aislada con tope de 12 h; FLIT 2.0 cerrado al cajero | Dos frontends y dos diseños; guardianes en tres capas; login con marca del hub; superficie OIDC extra | M (hecho) |
+| B. Convivir ambas | Transición gradual | Dos caminos de cobro, doble superficie y pruebas; riesgo de divergir en reglas de anulación | L |
+| C. Mover a FLIT 2.0 (decidida por el PO) | Un solo frontend y diseño; sin OIDC `caja`, audiencia extra ni `CAJA_ONLY`; permisos por rol estándar; el BFF queda solo con gRPC | El cajero recibe un JWT de FLIT 2.0 (más poderoso); depende del guardián de rutas; se pierde el tope de 12 h; hay que retirar código ya construido | M |
+
+### Consecuencias
+- Positivas: menos código y superficie de autenticación; reutiliza dock, tablas y guardián de diseño; autorización centralizada en core-api.
+- Negativas: se retira trabajo hecho en portal y BFF; el guardián pasa a lista blanca de rutas y deben correr las suites completas de core-api e Identidad.
+
+### Riesgos de seguridad
+- **Superficie:** el JWT del cajero sirve en todo core-api. Mitigación: lista blanca con denegación por defecto en `SoloCajaGuardMiddleware`; prueba de que cada endpoint existente da 403 a `ot_caja`; `OtModuleAuthorizationHandler` niega el rol único `ot_caja` fuera del módulo.
+- **Separación de funciones:** el Admin OT cobra y anula, así que puede anular su propio cobro. Mitigación: motivo obligatorio, auditoría con actor en `cashier_event`, ventana de 15 min, `ot_caja` nunca anula (403) y reporte de anulaciones por actor. Endurecer (que anule otro admin) queda para el PO.
+- **Sesión:** desaparece el tope absoluto de 12 h; rige la expiración de FLIT 2.0. Escalar al Líder Técnico si `ot_caja` requiere vida de refresh menor. Desactivar al usuario sigue cortando el acceso en el siguiente request.
+- **Aislamiento entre organismos:** organismo y actor salen del token, nunca del cliente; Admin OT ajeno 403; SuperAdmin envía `transitOfficeId`.
+- **Enumeración y prefactura:** se conservan el tope de fallidas, la respuesta de búsqueda sin PII y el almacén y retención de la prefactura; validar tipo y tamaño en core-api y en el BFF.
