@@ -44,8 +44,22 @@ public sealed class OtUserClientScopeTests
 
     private sealed class FakeScope(IReadOnlyList<Guid>? restriction) : IOtUserClientScopeResolver
     {
+        public Task<IReadOnlyList<Guid>?> GetRestrictionForUserAsync(Guid userId, Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(restriction);
+
         public Task<IReadOnlyList<Guid>?> GetRestrictionAsync(Guid transitOfficeId, CancellationToken cancellationToken = default) =>
             Task.FromResult(restriction);
+    }
+
+    private sealed class MutableScope(IReadOnlyList<Guid>? initial) : IOtUserClientScopeResolver
+    {
+        public IReadOnlyList<Guid>? Restriction { get; set; } = initial;
+
+        public Task<IReadOnlyList<Guid>?> GetRestrictionAsync(Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Restriction);
+
+        public Task<IReadOnlyList<Guid>?> GetRestrictionForUserAsync(Guid userId, Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(Restriction);
     }
 
     // ── Default: todos no cambia nada ───────────────────────────────────────────────
@@ -139,6 +153,59 @@ public sealed class OtUserClientScopeTests
         // Mismo usuario, la siguiente petición: ya sin la compañía B.
         await using var after = NewContext(db);
         (await Repo(after, new FakeScope([ClientA])).GetByIdAsync(OtTenant, ProcB, Ct)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ResolverPorUsuarioExplicito_FuncionaSinHttpContext_ElDePeticionNoRestringe()
+    {
+        var db = SeedDb(scopeFor: UserX, scopeClients: [ClientA]);
+        await using var ctx = NewContext(db);
+        var resolver = Resolver(ctx, null); // job en segundo plano: sin HttpContext
+
+        (await resolver.GetRestrictionAsync(Office, Ct)).Should().BeNull("sin usuario HTTP no hay a quién restringir");
+        (await resolver.GetRestrictionForUserAsync(UserX, Office, Ct)).Should().BeEquivalentTo([ClientA]);
+        (await resolver.GetRestrictionForUserAsync(AdminUser, Office, Ct)).Should().BeNull("sin fila = todos");
+    }
+
+    [Fact]
+    public async Task LaRestriccionSeReevaluaEnCadaOperacion_AunConLaMismaInstanciaDelRepositorio()
+    {
+        var db = SeedDb();
+        await using var ctx = NewContext(db);
+        var scope = new MutableScope([ClientA, ClientB]);
+        var repo = Repo(ctx, scope);
+
+        (await repo.GetByIdAsync(OtTenant, ProcB, Ct)).Should().NotBeNull();
+        scope.Restriction = [ClientA];
+        (await repo.GetByIdAsync(OtTenant, ProcB, Ct)).Should().BeNull("la restricción no queda pegada de la operación anterior");
+        scope.Restriction = null;
+        (await repo.GetByIdAsync(OtTenant, ProcB, Ct)).Should().NotBeNull();
+    }
+
+    [Theory]
+    [InlineData(true, false)] // alcance solo A: el titular (B) está fuera ⇒ mensaje genérico
+    [InlineData(false, true)] // sin restricción ⇒ se informa el radicado
+    public async Task PlacaEnUso_NoRevelaElRadicadoDeUnTramiteFueraDelAlcance(bool restringido, bool incluyeRadicado)
+    {
+        var db = SeedDb();
+        await using (var seed = NewContext(db))
+        {
+            (await seed.ProcedureInstances.SingleAsync(p => p.Id == ProcB, Ct)).Plate = "ABC123";
+            await seed.SaveChangesAsync(Ct);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new OtClientProcedureRepository(
+            ctx, new NullTramiteTransitionPublisher(), new PlateRangeRepository(ctx),
+            clientScope: new FakeScope(restringido ? [ClientA] : null));
+
+        var result = await repo.AssignPlateAsync(OtTenant, ProcA, "ABC123", AdminUser, OtTransitionSource.OtAdmin, cancellationToken: Ct);
+
+        result.Failure.Should().Be(PlateAssignmentFailure.PlateInUseByAnotherProcedure);
+        if (incluyeRadicado)
+            result.Detail.Should().Contain("R-B");
+        else
+            result.Detail.Should().NotContain("R-B").And.NotContain(TramiteEstado.Entregado);
     }
 
     [Fact]

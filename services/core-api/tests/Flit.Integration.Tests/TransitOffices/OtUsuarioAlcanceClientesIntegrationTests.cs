@@ -29,6 +29,9 @@ public sealed class OtUsuarioAlcanceClientesIntegrationTests(PostgresDatabaseFix
 
     private sealed class FakeScope(IReadOnlyList<Guid>? restriction) : IOtUserClientScopeResolver
     {
+        public Task<IReadOnlyList<Guid>?> GetRestrictionForUserAsync(Guid userId, Guid transitOfficeId, CancellationToken cancellationToken = default) =>
+            Task.FromResult(restriction);
+
         public Task<IReadOnlyList<Guid>?> GetRestrictionAsync(Guid transitOfficeId, CancellationToken cancellationToken = default) =>
             Task.FromResult(restriction);
     }
