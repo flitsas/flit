@@ -106,7 +106,7 @@ describe("PaginaDetalleConsulta — la ruta, el título, las migas y el volver",
     const migas = screen.getByRole("navigation", { name: "Migas de pan" });
     const items = within(migas).getAllByRole("listitem");
     expect(items.map((i) => i.textContent?.replace("›", "").trim())).toEqual(["Diagnósticos", "Lote de prueba", "TST001", "SIMIT vehículo"]);
-    expect(within(migas).getByRole("link", { name: "Diagnósticos" })).toHaveAttribute("href", "/");
+    expect(within(migas).getByRole("link", { name: "Diagnósticos" })).toHaveAttribute("href", "/diagnosticos");
     expect(within(migas).getByRole("link", { name: "Lote de prueba" })).toHaveAttribute("href", `/diagnosticos/${ID}`);
     expect(within(items[3]).getByText("SIMIT vehículo")).toHaveAttribute("aria-current", "page");
   });
@@ -221,7 +221,7 @@ describe("PaginaDetalleConsulta — HU #14087 AC7: auditoría de consulta (se qu
   it("novedad: chip «Novedad» con su motivo", async () => {
     const { pagina } = await pintarDetalle(detalle("RUNT_LOCATARIO", { estado: "NA", motivo_na: "SIN_DOCUMENTO_LOCATARIO", dato_obtenido_en: null, personas: [] }));
     expect(within(auditoria(pagina)).getByText("Novedad")).toBeInTheDocument();
-    expect(auditoria(pagina)).toHaveTextContent(/sin el documento del locatario/i);
+    expect(auditoria(pagina)).toHaveTextContent(/El RUNT no reporta locatario/);
   });
 
   it("por persona: rol, documento enmascarado tal cual, consultado_en y estado mapeado", async () => {

@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { ListadoDiagnosticos } from "@/components/listado/ListadoDiagnosticos";
 import { diagnostico, lista } from "@/lib/diagnosticos/__tests__/datosListado";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
+import { esperarCabecera12px, esperarTablaPorDefecto } from "@/components/comun/__tests__/tablaPorDefecto";
 import {
   TABLA_MOVIL_CELL_CLS,
   TABLA_MOVIL_CELL_TITULO_CLS,
@@ -18,7 +19,7 @@ import {
 
 const h = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
+  usePathname: () => "/diagnosticos",
   useSearchParams: () => h.params,
   useRouter: () => ({ replace: h.replace, push: h.push, refresh: vi.fn() }),
 }));
@@ -136,13 +137,13 @@ describe("ListadoDiagnosticos — AC2: filtros en la URL y vuelta a la página 1
     expect(consultas(fetchMock)[0]).toMatchObject({ pagina: "3" });
 
     fireEvent.change(screen.getByLabelText("Estado"), { target: { value: "COMPLETADO" } });
-    expect(h.replace).toHaveBeenLastCalledWith("/?estado=COMPLETADO", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?estado=COMPLETADO", { scroll: false });
 
     const antes = consultas(fetchMock).length;
     fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Flota" } });
     // Espera de 300 ms al escribir: no consulta en cada tecla.
     expect(consultas(fetchMock).length).toBe(antes);
-    await waitFor(() => expect(h.replace).toHaveBeenLastCalledWith("/?estado=COMPLETADO&nombre=Flota", { scroll: false }), { timeout: 2000 });
+    await waitFor(() => expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?estado=COMPLETADO&nombre=Flota", { scroll: false }), { timeout: 2000 });
 
     await waitFor(() => expect(within(screen.getByRole("table", { name: "Diagnósticos de la compañía" })).queryByText("Flota de prueba 001")).toBeNull());
     expect(consultas(fetchMock).at(-1)).toEqual({ estado: "COMPLETADO", nombre: "Flota", pagina: "1", tamano: "10" });
@@ -168,7 +169,7 @@ describe("ListadoDiagnosticos — AC2: filtros en la URL y vuelta a la página 1
     await tabla();
     const nav = screen.getByRole("navigation", { name: "Paginación de diagnósticos" });
     fireEvent.click(within(nav).getByRole("button", { name: "Página 2" }));
-    expect(h.replace).toHaveBeenLastCalledWith("/?pagina=2", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?pagina=2", { scroll: false });
   });
 
   it("400 con campo marca el filtro: RANGO_INVALIDO deja Hasta inválido con el mensaje junto al campo", async () => {
@@ -262,7 +263,7 @@ describe("ListadoDiagnosticos — AC5 (negativo): sin resultados con filtros vs 
     expect(screen.queryByText("Aún no tienes diagnósticos")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
-    expect(h.replace).toHaveBeenLastCalledWith("/", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos", { scroll: false });
     await waitFor(() => expect(consultas(fetchMock).at(-1)).toEqual({ pagina: "1", tamano: "10" }));
     expect(screen.getByLabelText("Estado")).toHaveValue("");
     expect(screen.getByLabelText("Nombre")).toHaveValue("");
@@ -341,9 +342,9 @@ describe("ListadoDiagnosticos — rediseño del kit 2026 (HU #14562 AC13)", () =
     expect(within(tipo).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Todos", "Simple", "Con Análisis IA"]);
     expect(within(tipo).getByRole("radio", { name: "Todos" })).toHaveAttribute("aria-checked", "true");
     fireEvent.click(within(tipo).getByRole("radio", { name: "Con Análisis IA" }));
-    expect(h.replace).toHaveBeenLastCalledWith("/?modo=CON_ANALISIS", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?modo=CON_ANALISIS", { scroll: false });
     fireEvent.click(within(tipo).getByRole("radio", { name: "Todos" }));
-    expect(h.replace).toHaveBeenLastCalledWith("/", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos", { scroll: false });
   });
 
   it("con filtros aplicados, «Limpiar» en la barra de filtros los retira de la URL; sin filtros no aparece", async () => {
@@ -352,7 +353,7 @@ describe("ListadoDiagnosticos — rediseño del kit 2026 (HU #14562 AC13)", () =
     render(<ListadoDiagnosticos />);
     await tabla();
     fireEvent.click(within(screen.getByRole("group", { name: "Filtros del listado" })).getByRole("button", { name: "Limpiar" }));
-    expect(h.replace).toHaveBeenLastCalledWith("/", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos", { scroll: false });
     await waitFor(() => expect(screen.queryByRole("button", { name: "Limpiar" })).toBeNull());
   });
 
@@ -392,5 +393,16 @@ describe("ListadoDiagnosticos — HU #14562 AC56: tarjetas por debajo de 900 px"
     const fila = (await tabla()).querySelector("tbody tr")!;
     expect(clases(fila)).toContain("motion-reduce:transition-none");
     expect(clases(fila)).toContain("duration-[var(--dx-motion-rapido)]");
+  });
+});
+
+// HU #14585 (spec-ui §1, A7.1): el listado principal es el referente de la tabla por defecto (contenedor centralizado y
+// cabecera de 12 px). Uso de ejemplo: esperarTablaPorDefecto(await tabla()).
+describe("ListadoDiagnosticos — HU #14585: referente de la tabla por defecto", () => {
+  it("contenedor CONTENEDOR_TABLA_CLS, cabecera de 12 px y hover de fila", async () => {
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    esperarTablaPorDefecto(await tabla());
+    esperarCabecera12px();
   });
 });

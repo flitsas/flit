@@ -6,7 +6,7 @@ import { VehicleLoader } from "@flit/ui/Loader";
 import { BOTON_REINTENTAR_CLS } from "@/components/configuracion/estilos";
 import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
 import { Etiqueta, TEXTO_SECUNDARIO_CLS } from "@/components/tablero/vistasDetalle/comun";
-import { obtenerVersionesDictamen, type AlertamientoVersion, type VersionDictamen } from "@/lib/backoffice/api";
+import { mensajeErrorBackoffice, obtenerVersionesDictamen, type AlertamientoVersion, type VersionDictamen } from "@/lib/backoffice/api";
 import { CODIGO_AJUSTE_FLIT } from "@/lib/backoffice/ajusteDictamen";
 import { rotuloAlerta } from "@/lib/dictamen/api";
 import { EFECTOS_DICTAMEN } from "@/lib/rotulos";
@@ -43,8 +43,8 @@ function ListaAlertas({ etiqueta, alertas, conAjuste }: { etiqueta: string; aler
 }
 
 /**
- * Auditoría del dictamen de un vehículo (HU #14562 · AC47, D6/D7). Solo existe en el backoffice: ninguna pantalla de la
- * compañía muestra autor, motivo ni versiones anteriores. Versiones de la más nueva a la más vieja, con origen, usuario,
+ * Auditoría del dictamen de un vehículo (HU #14562 · AC47, D6/D7). Solo operación FLIT: la abren el backoffice y, desde
+ * HU #14584 §6.4, el menú «Acciones» del tablero cuando la sesión trae verAuditoria (la API valida el permiso). Versiones de la más nueva a la más vieja, con origen, usuario,
  * motivo, fecha, alertamientos agregados o editados, eliminados y la marca «Superado por recálculo». Cuatro estados.
  */
 export function AuditoriaDictamen({ diagnosticoId, vehiculoId, empresa }: AuditoriaDictamenProps) {
@@ -83,7 +83,7 @@ export function AuditoriaDictamen({ diagnosticoId, vehiculoId, empresa }: Audito
           </button>
         }
       >
-        {carga.error instanceof Error ? carga.error.message : "Intenta de nuevo en un momento."}
+        {mensajeErrorBackoffice(carga.error, "Intenta de nuevo en un momento.")}
       </InlineAlert>
     );
   if (carga.versiones.length === 0) return <p className={TEXTO_SECUNDARIO_CLS}>Este vehículo aún no tiene dictamen.</p>;

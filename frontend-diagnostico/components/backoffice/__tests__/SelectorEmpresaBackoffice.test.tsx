@@ -165,3 +165,24 @@ describe("SelectorEmpresaBackoffice — N-1: contraste del «sin resultados»", 
     expect(vacio.className).not.toMatch(/\bopacity-/);
   });
 });
+
+// AP-8 (security-fase3 SF-6): el aviso de error del listado de empresas no muestra el mensaje del servidor.
+const SECRETO_AP8 = "Npgsql detalle interno 23514 en diagnostico.consultas";
+
+describe("SelectorEmpresaBackoffice — AP-8: textos fijos", () => {
+  it("503 IDENTIDAD_NO_DISPONIBLE: texto fijo de Identidad, no el mensaje de la API", async () => {
+    simularApi({ "GET /backoffice/empresas": () => Response.json({ code: "IDENTIDAD_NO_DISPONIBLE", error: SECRETO_AP8 }, { status: 503 }) });
+    render(<SelectorEmpresaBackoffice value="" onChange={vi.fn()} />);
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("Identidad no respondió. Intenta de nuevo en un momento.");
+    expect(alerta).not.toHaveTextContent(SECRETO_AP8);
+  });
+
+  it("400 con mensaje del servidor: texto genérico fijo", async () => {
+    simularApi({ "GET /backoffice/empresas": () => Response.json({ code: "OTRO_ERROR", error: SECRETO_AP8 }, { status: 400 }) });
+    render(<SelectorEmpresaBackoffice value="" onChange={vi.fn()} />);
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("Intenta de nuevo en un momento.");
+    expect(alerta).not.toHaveTextContent(SECRETO_AP8);
+  });
+});

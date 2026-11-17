@@ -70,6 +70,7 @@ public sealed class ExpressEndpointsTests
         vehiculos[0].TipoIdentificador.Should().Be(TipoIdentificador.PlacaCarro);
         vehiculos[0].Orden.Should().Be(1);
         vehiculos[0].LocatarioDocCifrado.Should().BeNull();
+        vehiculos[0].PropietarioDeclaradoDocCifrado.Should().BeNull();
         espia.Entregas.Should().ContainSingle();
         espia.Entregas[0].DiagnosticoId.Should().Be(id);
         espia.Entregas[0].EnTransaccion.Should().BeTrue();
@@ -134,8 +135,8 @@ public sealed class ExpressEndpointsTests
             (Express("9FBTEST12345678901"), ValidadorFilaVehiculo.CodigoIdentificadorDemasiadoLargo, "identificador"),
             (Express("   "), ValidadorFilaVehiculo.CodigoIdentificadorRequerido, "identificador"),
             (Express(null), ValidadorFilaVehiculo.CodigoIdentificadorRequerido, "identificador"),
-            (Express("ABC123", tipo: "CC", documento: "12AB34"), ValidadorDocumentoPersona.CodigoNumeroInvalido, "documento_locatario"),
-            (Express("ABC123", tipo: "XX", documento: "123456"), ValidadorDocumentoPersona.CodigoTipoInvalido, "tipo_documento_locatario"),
+            (Express("ABC123", tipo: "CC", documento: "12AB34"), ValidadorDocumentoPersona.CodigoNumeroInvalido, "documento_propietario"),
+            (Express("ABC123", tipo: "XX", documento: "123456"), ValidadorDocumentoPersona.CodigoTipoInvalido, "tipo_documento_propietario"),
         ];
         foreach (var (cuerpo, codigo, campo) in casos)
         {
@@ -186,7 +187,8 @@ public sealed class ExpressEndpointsTests
         textoCon.Should().NotContain("1020304050");
         var jsonCon = JsonElement.Parse(textoCon);
         jsonCon.GetProperty("mostrar_estimado").GetBoolean().Should().BeTrue();
-        Estimado(jsonCon).Should().Equal(new Dictionary<string, int> { ["RUNT"] = 1, ["RUNT_LOCATARIO"] = 1 });
+        Estimado(jsonCon).Should().Equal(new Dictionary<string, int> { ["RUNT"] = 1, ["RUNT_LOCATARIO"] = 0 },
+            "HU #14582: el declarado no alimenta al locatario; antes del RUNT cuenta 0");
         var textoSin = await sinDocumento.Content.ReadAsStringAsync(ct);
         sinDocumento.StatusCode.Should().Be(HttpStatusCode.OK, textoSin);
         Estimado(JsonElement.Parse(textoSin)).Should().Equal(new Dictionary<string, int> { ["RUNT"] = 1, ["RUNT_LOCATARIO"] = 0 });
@@ -226,17 +228,57 @@ public sealed class ExpressEndpointsTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Created, texto);
-        texto.Should().NotContain(Documento).And.Contain("****4050");
+        texto.Should().NotContain(Documento).And.NotContain("****4050").And.NotContain("documento", "HU #14582 C5: la respuesta no lleva documentos");
         var id = JsonElement.Parse(texto).GetProperty("id").GetGuid();
         var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
-        vehiculo.LocatarioDocTipo.Should().Be("CC");
-        vehiculo.LocatarioDocOrigen.Should().Be(OrigenDocumento.DeclaradoCliente);
-        vehiculo.LocatarioDocCifrado.Should().NotBeNullOrEmpty();
-        Encoding.UTF8.GetString(vehiculo.LocatarioDocCifrado!).Should().NotContain(Documento);
-        api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(vehiculo.LocatarioDocCifrado!).Should().Be(Documento);
+        vehiculo.PropietarioDeclaradoDocTipo.Should().Be("CC");
+        vehiculo.LocatarioDocOrigen.Should().BeNull("HU #14582 AC7: el declarado en Express es el propietario actual");
+        vehiculo.PropietarioDeclaradoDocCifrado.Should().NotBeNullOrEmpty();
+        Encoding.UTF8.GetString(vehiculo.PropietarioDeclaradoDocCifrado!).Should().NotContain(Documento);
+        api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(vehiculo.PropietarioDeclaradoDocCifrado!).Should().Be(Documento);
         JsonSerializer.Serialize(espia.Entregas).Should().NotContain(Documento, "el encolador no recibe documentos");
         logs.Mensajes.Should().NotBeEmpty();
         logs.Mensajes.Should().NotContain(m => m.Contains(Documento, StringComparison.Ordinal), "ningún log lleva el documento");
+    }
+
+    // CR-5 (review be1-a, HU #14582, contrato C1) — Express con solo el alias *_locatario: 201 y el declarado queda como propietario
+    // actual; con el nombre nuevo y el alias del mismo campo, 400 CAMPOS_EXCLUYENTES con el nombre nuevo en campo, sin el documento y
+    // sin crear nada.
+    [Fact]
+    public async Task Alias_de_locatario_solo_se_acepta_y_con_los_dos_nombres_es_400()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        await SembrarAsync(empresa, new ConfiguracionEmpresa(), ct);
+        using var cliente = api.Cliente(Cabeceras.TokenUsuario(api, empresa.Id));
+        const string Documento = "1020304050";
+        var conAlias = JsonSerializer.Deserialize<Dictionary<string, object?>>(Express("ABC123"))!;
+        conAlias.Remove("tipo_documento_propietario");
+        conAlias.Remove("documento_propietario");
+        conAlias["tipo_documento_locatario"] = "CC";
+        conAlias["documento_locatario"] = Documento;
+        var conLosDos = JsonSerializer.Deserialize<Dictionary<string, object?>>(Express("XYZ987", tipo: "CC", documento: Documento))!;
+        conLosDos["tipo_documento_locatario"] = "CC";
+
+        var alias = await cliente.PostAsync(Ruta, Cuerpo(JsonSerializer.Serialize(conAlias)), ct);
+        var ambos = await cliente.PostAsync(Ruta, Cuerpo(JsonSerializer.Serialize(conLosDos)), ct);
+
+        var textoAlias = await alias.Content.ReadAsStringAsync(ct);
+        alias.StatusCode.Should().Be(HttpStatusCode.Created, textoAlias);
+        var id = JsonElement.Parse(textoAlias).GetProperty("id").GetGuid();
+        var vehiculo = (await Lotes.VehiculosAsync(api, empresa.Id, id, ct)).Single();
+        vehiculo.PropietarioDeclaradoDocTipo.Should().Be("CC");
+        api.App.Services.GetRequiredService<IProtectorDocumentoPersona>().Desproteger(vehiculo.PropietarioDeclaradoDocCifrado!).Should().Be(Documento);
+        vehiculo.LocatarioDocCifrado.Should().BeNull("el alias no es un locatario");
+        var textoAmbos = await ambos.Content.ReadAsStringAsync(ct);
+        ambos.StatusCode.Should().Be(HttpStatusCode.BadRequest, textoAmbos);
+        var error = JsonElement.Parse(textoAmbos);
+        error.GetProperty("code").GetString().Should().Be("CAMPOS_EXCLUYENTES");
+        error.GetProperty("campo").GetString().Should().Be("tipo_documento_propietario");
+        textoAmbos.Should().NotContain(Documento);
+        (await Cabeceras.ContarAsync(api, empresa.Id, ct)).Should().Be(1, "el 400 no crea cabecera");
     }
 
     // R-6 (F01-C12) — el backoffice FLIT no tiene diagnostico.diagnosticos.crear: 403 en el express y en su estimado.
@@ -298,8 +340,8 @@ public sealed class ExpressEndpointsTests
                 ["por_propietario"] = [],
                 ["por_locatario"] = porLocatario ?? [],
             },
-            ["tipo_documento_locatario"] = tipo,
-            ["documento_locatario"] = documento,
+            ["tipo_documento_propietario"] = tipo,
+            ["documento_propietario"] = documento,
         };
         if (nombre is not null)
             json["nombre"] = nombre;

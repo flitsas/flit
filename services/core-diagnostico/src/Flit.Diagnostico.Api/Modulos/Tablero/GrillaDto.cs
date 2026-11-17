@@ -78,9 +78,10 @@ public sealed record UsuarioCreadorGrillaDto(
     [property: JsonPropertyName("nombre")] string? Nombre);
 
 /// <summary>
-/// Una fila de la grilla: el vehículo, sus celdas (solo las cambiadas desde <c>desde</c>) y sus documentos actuales (HU #14087):
-/// el declarado por el cliente (null si no hay) y los propietarios del RUNT en su orden (vacío si aún no hay), enmascarados.
-/// <c>pegada</c> (Punto 3, 2026-11-11): la placa tiene alguna celda que «Reintentar placa» reencolaría.
+/// Una fila de la grilla: el vehículo, sus celdas (solo las cambiadas desde <c>desde</c>) y <c>cambio_propietario</c> (HU #14582:
+/// true, false o null, persistido; ningún documento viaja, ni enmascarado, SP-4).
+/// <c>pegada</c> (Punto 3, 2026-11-11): la placa tiene alguna celda que «Reintentar placa» reencolaría. <c>saneamiento</c> (HU #14576):
+/// estado del saneamiento no anulado, si se puede marcar y por qué no; la grilla del backoffice no lo lleva.
 /// </summary>
 public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("id")] Guid Id,
@@ -91,33 +92,19 @@ public sealed record FilaVehiculoDto(
     [property: JsonPropertyName("vin")] string? Vin,
     [property: JsonPropertyName("terminado")] bool Terminado,
     [property: JsonPropertyName("celdas")] IReadOnlyList<CeldaGrillaDto> Celdas,
-    [property: JsonPropertyName("documento_declarado")] DocumentoDeclaradoDto? DocumentoDeclarado,
-    [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios,
+    [property: JsonPropertyName("cambio_propietario")] bool? CambioPropietario,
     [property: JsonPropertyName("pegada")] bool Pegada,
     [property: JsonPropertyName("derivacion")] Derivacion.DerivacionFilaDto? Derivacion = null,
     [property: JsonPropertyName("veredicto")] string? Veredicto = null,
     [property: JsonPropertyName("dictamen_ajustado")] bool DictamenAjustado = false,
-    [property: JsonPropertyName("version")] long Version = 0)
+    [property: JsonPropertyName("version")] long Version = 0,
+    [property: JsonPropertyName("saneamiento")] Saneamiento.SaneamientoFilaDto? Saneamiento = null)
 {
     /// <summary>Rótulo del tipo de identificador (punto 5): «Placa de carro», «Placa de motocarro», «VIN»…</summary>
     [JsonPropertyName("tipo_identificador_etiqueta")]
     public string TipoIdentificadorEtiqueta => RotulosDiagnostico.DeTipoIdentificador(TipoIdentificador);
 }
 
-/// <summary>
-/// El documento que declaró el cliente para el vehículo (HU #14087; hoy el locatario de la captura masiva o Express): rol
-/// (<c>PROPIETARIO</c> o <c>LOCATARIO</c>), tipo y número enmascarado (<c>****</c> + 4 últimos). Es el origen del DOCUMENTO,
-/// que la compañía ya ve; el origen de la celda (API/MANUAL) sigue sin viajar (R-20).
-/// </summary>
-public sealed record DocumentoDeclaradoDto(
-    [property: JsonPropertyName("rol")] string Rol,
-    [property: JsonPropertyName("tipo_documento")] string TipoDocumento,
-    [property: JsonPropertyName("documento_enmascarado")] string DocumentoEnmascarado);
-
-/// <summary>Un propietario que trajo el RUNT (HU #14087): tipo y número enmascarado; nunca el número en claro.</summary>
-public sealed record PropietarioGrillaDto(
-    [property: JsonPropertyName("tipo_documento")] string TipoDocumento,
-    [property: JsonPropertyName("documento_enmascarado")] string DocumentoEnmascarado);
 
 /// <summary>
 /// Una celda del semáforo: fuente, estado, motivo de N/A, tipo de error y la fecha y hora del dato (D-10; en la reutilizada,

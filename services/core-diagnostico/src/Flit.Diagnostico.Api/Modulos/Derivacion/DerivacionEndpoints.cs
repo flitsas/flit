@@ -113,13 +113,13 @@ internal static class DerivacionEndpoints
             return;
         api.MapPost(Ruta, Crear)
             .RequirePermiso(Permisos.DerivacionCrear)
-            .AddEndpointFilter(SinBackoffice)
+            .SinBackoffice(CodigoDesdeBackoffice, MensajeDesdeBackoffice)
             .WithName("CrearTramiteDesdeVehiculo");
 
         // Incremento 3: masivo, progreso y reintentar fallidas.
         api.MapPost(RutaMasivo, CrearMasivo)
             .RequirePermiso(Permisos.DerivacionCrear)
-            .AddEndpointFilter(SinBackoffice)
+            .SinBackoffice(CodigoDesdeBackoffice, MensajeDesdeBackoffice)
             .WithName("CrearTramitesDesdeDiagnostico");
         api.MapGet(RutaOperaciones, (Guid id, bool? ultima, ProgresoOperacion progreso, CancellationToken ct) => progreso.ListarAsync(id, ultima ?? false, ct))
             .RequirePermiso(Permisos.DiagnosticosVer)
@@ -129,7 +129,7 @@ internal static class DerivacionEndpoints
             .WithName("LeerOperacionDerivacion");
         api.MapPost(RutaReintentarFallidas, (Guid id, Guid opId, ProgresoOperacion progreso, CancellationToken ct) => progreso.ReintentarFallidasAsync(id, opId, ct))
             .RequirePermiso(Permisos.DerivacionCrear)
-            .AddEndpointFilter(SinBackoffice)
+            .SinBackoffice(CodigoDesdeBackoffice, MensajeDesdeBackoffice)
             .WithName("ReintentarFallidasDerivacion");
     }
 
@@ -191,11 +191,8 @@ internal static class DerivacionEndpoints
         }
     }
 
-    /// <summary>Desde el backoffice (empresa explícita) no se deriva, ni siquiera un SuperAdmin con el permiso.</summary>
-    private static async ValueTask<object?> SinBackoffice(EndpointFilterInvocationContext contexto, EndpointFilterDelegate siguiente) =>
-        contexto.HttpContext.Request.Query.ContainsKey(EmpresaExplicita.Parametro)
-            ? throw ReglaException.Prohibido(CodigoDesdeBackoffice, "Desde el backoffice no se crean trámites.")
-            : await siguiente(contexto).ConfigureAwait(false);
+    /// <summary>Desde el backoffice (empresa explícita) no se deriva, ni siquiera un SuperAdmin con el permiso (filtro común, brief C7).</summary>
+    private const string MensajeDesdeBackoffice = "Desde el backoffice no se crean trámites.";
 
     public const string CodigoCuerpoInvalido = "CUERPO_INVALIDO";
 }

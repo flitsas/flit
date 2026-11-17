@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
-import Inicio from "@/app/(app)/page";
+import Inicio from "@/app/(app)/diagnosticos/page";
 import Forbidden from "@/app/403/page";
 import NotFound from "@/app/not-found";
 
@@ -71,10 +71,15 @@ describe("sin formulario propio", () => {
         join("components", "listado"),
         // Pantalla única de creación (HU #14085): placa o VIN, documento del locatario y archivo de vehículos.
         join("components", "nuevo"),
-        // Punto 4 (crear trámite masivo): casillas de selección de placas del tablero, no de credenciales.
-        join("components", "tablero", "BarraSeleccionDerivacion.tsx"),
+        // Punto 4 (crear trámite masivo) y HU #14577 (sanear en bloque): casillas de selección de placas del tablero, no de credenciales.
+        join("components", "tablero", "BarraSeleccionTablero.tsx"),
         // HU #14562 AC28: búsqueda por placa o VIN del tablero, no de credenciales.
         join("components", "tablero", "BuscadorGrilla.tsx"),
+        // HU #14577 PS-3: filtros (placa, fechas) y casillas de selección de la grilla de placas del inicio, no de credenciales.
+        join("components", "vehiculos"),
+        // HU #14580: periodo del Dashboard y filtros de Reportes (fechas y prefijo de placa), no de credenciales.
+        join("components", "estadisticas"),
+        join("components", "reportes"),
       ];
       if (!conCampos.some((carpeta) => archivo.includes(carpeta))) expect(codigo, archivo).not.toMatch(/<input\b/);
       expect(codigo, archivo).not.toMatch(/autoComplete=["'](username|current-password)["']/);

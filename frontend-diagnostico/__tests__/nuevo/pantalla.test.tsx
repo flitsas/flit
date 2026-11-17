@@ -6,7 +6,8 @@ import { DISPONIBLES_CON_IMPUESTO } from "@/components/parametrizacion/__tests__
 import { ID, archivo, configuracion, diagnostico, llamadas, montarNuevo, resumen, type Navegacion } from "./datos";
 
 // Uso de ejemplo: /diagnosticos/nuevo?modo=masivo abre la pantalla única de creación (HU #14085) con el selector
-// Express | Masivo, la zona Vehículos a la izquierda y la zona Parámetros (sticky) a la derecha desde 1024 px.
+// Express | Masivo y, desde la ola UX 2026-11-15 (FE-3), una sola columna: Parámetros arriba (en horizontal), Vehículos
+// debajo y al final la barra con el estimado y la acción.
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({
@@ -38,19 +39,43 @@ describe("Pantalla única — selector y zonas (AC1)", () => {
     expect(screen.getByRole("region", { name: "Vehículos" })).toContainElement(screen.getByRole("textbox", { name: "Placa o VIN" }));
   });
 
-  it("en ≥1024 px las zonas van en dos columnas con Parámetros sticky; en móvil se apilan sin desbordar", async () => {
+  it("FE-3: una columna con Parámetros arriba y sin sticky, Vehículos debajo y la acción al final; sin desbordar en móvil", async () => {
     montarNuevo(navegacion);
     await screen.findByRole("textbox", { name: "Nombre del diagnóstico" });
     const vehiculos = screen.getByRole("region", { name: "Vehículos" });
     const parametros = screen.getByRole("region", { name: "Parámetros" });
     const rejilla = vehiculos.parentElement as HTMLElement;
     expect(rejilla).toBe(parametros.parentElement);
-    expect(rejilla.className).toMatch(/(^|\s)grid(\s|$)/);
-    expect(rejilla.className).toMatch(/lg:grid-cols-/);
-    expect(parametros.className).toMatch(/lg:sticky/);
+    expect(rejilla.className).not.toMatch(/grid-cols-/);
+    expect(parametros.className).not.toMatch(/sticky/);
+    expect(parametros.compareDocumentPosition(vehiculos) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const accion = screen.getByRole("button", { name: /iniciar diagnóstico|continuar/i });
+    expect(vehiculos.compareDocumentPosition(accion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(parametros.contains(accion)).toBe(false);
     // Sin ancho mínimo propio en las columnas: en móvil se apilan y no generan scroll horizontal.
     expect(vehiculos.className).toContain("min-w-0");
     expect(parametros.className).toContain("min-w-0");
+  });
+
+  it("FE-3: dentro de Parámetros, Información general, Modo y Alcance lado a lado desde md (3 columnas desde xl), en ese orden", async () => {
+    montarNuevo(navegacion);
+    await screen.findByRole("textbox", { name: "Nombre del diagnóstico" });
+    const parametros = screen.getByRole("region", { name: "Parámetros" });
+    const info = within(parametros).getByRole("heading", { name: "Información general" });
+    const modo = within(parametros).getByRole("heading", { name: "Modo" });
+    const alcance = within(parametros).getByRole("heading", { name: "Alcance" });
+    expect(info.compareDocumentPosition(modo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(modo.compareDocumentPosition(alcance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const rejilla = parametros.querySelector("[data-disposicion='horizontal']") as HTMLElement;
+    expect(rejilla).not.toBeNull();
+    for (const c of ["grid", "grid-cols-1", "md:grid-cols-2", "xl:grid-cols-[minmax(14rem,1fr)_minmax(16rem,1fr)_minmax(0,2fr)]"]) {
+      expect(rejilla.className.split(/\s+/)).toContain(c);
+    }
+    // Alcance ocupa el ancho de la tableta y su tercio (doble) en xl; sus grupos van en 3 columnas desde sm.
+    const seccionAlcance = alcance.closest("[data-zona='alcance']") as HTMLElement;
+    expect(seccionAlcance.className).toContain("md:col-span-2");
+    expect(seccionAlcance.className).toContain("xl:col-span-1");
+    expect(seccionAlcance.querySelector(".sm\\:grid-cols-3")).not.toBeNull();
   });
 
   it("?modo=masivo abre en Masivo con la plantilla, la zona de archivo y «Validar archivo»", async () => {
@@ -78,10 +103,19 @@ describe("Pantalla única — selector y zonas (AC1)", () => {
     });
     expect(await screen.findByRole("status", { name: "Cargando la parametrización…" })).toBeInTheDocument();
     expect(await screen.findByText("No se pudo cargar la parametrización")).toBeInTheDocument();
-    expect(screen.getByText(/diagnóstico no respondió/i)).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(screen.getByText("No se pudo cargar la configuración.")).toBeInTheDocument();
     falla = false;
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByRole("textbox", { name: "Nombre del diagnóstico" })).toBeInTheDocument();
+  });
+
+  it("AP-9: un 4xx al leer la configuración muestra el respaldo fijo, nunca el mensaje del servidor", async () => {
+    montarNuevo(navegacion, {
+      rutas: { "GET /configuracion": () => Response.json({ code: "OTRO", error: "mensaje del servidor que no debe verse" }, { status: 422 }) },
+    });
+    expect(await screen.findByText("No se pudo cargar la configuración.")).toBeInTheDocument();
+    expect(screen.queryByText("mensaje del servidor que no debe verse")).not.toBeInTheDocument();
   });
 
   it("un 403 de sesión al leer la configuración lleva a /403 con su código", async () => {

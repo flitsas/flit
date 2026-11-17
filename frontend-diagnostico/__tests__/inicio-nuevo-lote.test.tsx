@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
-import Inicio from "@/app/(app)/page";
+import Inicio from "@/app/(app)/diagnosticos/page";
 import { sesion } from "@/__tests__/configuracion/datos";
 
 // Uso de ejemplo (HU #14085): la tarjeta del título del inicio trae «Placa o VIN» + «Diagnosticar», que valida y abre

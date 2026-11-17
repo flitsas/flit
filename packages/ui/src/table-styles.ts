@@ -95,3 +95,45 @@ export const TABLA_MOVIL_CELL_TITULO_CLS =
   'max-[900px]:text-sm max-[900px]:font-semibold';
 /** En una fila a todo el ancho (vacío, expandida, `colSpan`) y en su `<td>`: ocupa la rejilla entera. */
 export const TABLA_MOVIL_FILA_ANCHA_CLS = 'max-[900px]:col-span-full max-[900px]:block';
+
+/*
+ * HU #14577 · hallazgo E2E H-10 — las mismas tarjetas, pero según el ancho del CONTENEDOR (container query de
+ * Tailwind 4) y no del viewport. Para tablas que viven en una columna angosta de un diseño a dos columnas, donde a
+ * 1280 px de pantalla la tabla tiene ≈680 px y no cabe aunque el viewport sea ancho (la gestión de un saneamiento).
+ * El envoltorio lleva {@link TABLA_CONTENEDOR_WRAP_CLS}; por debajo de 80rem de contenedor, cada fila es una tarjeta
+ * a todo el ancho (una por renglón: los controles editables necesitan el ancho de la tarjeta, no la rejilla de 300px)
+ * y cada celda deja caer su valor a la línea de abajo si no cabe junto a la etiqueta. Solo CSS; no reordena el DOM.
+ */
+/** En el envoltorio de la tabla: lo vuelve contenedor de consulta (`container-type: inline-size`). */
+export const TABLA_CONTENEDOR_WRAP_CLS = '@container';
+/** En la `<table>`: deja de ser tabla y anula cualquier ancho mínimo. */
+export const TABLA_CONTENEDOR_TABLE_CLS = '@max-[80rem]:block @max-[80rem]:min-w-0! @max-[80rem]:w-full!';
+/** En el `<thead>`: solo para lectores de pantalla. */
+export const TABLA_CONTENEDOR_THEAD_CLS = '@max-[80rem]:sr-only';
+/** En el `<tbody>`: una tarjeta por fila, a todo el ancho. */
+export const TABLA_CONTENEDOR_TBODY_CLS = '@max-[80rem]:grid @max-[80rem]:grid-cols-1 @max-[80rem]:gap-2.5';
+/** En el `<tr>` de datos: la tarjeta. */
+export const TABLA_CONTENEDOR_ROW_CLS =
+  '@max-[80rem]:block @max-[80rem]:rounded-xl @max-[80rem]:border @max-[80rem]:border-[color:var(--di-border)] ' +
+  '@max-[80rem]:bg-[var(--di-surface-elevated)] @max-[80rem]:px-3.5 @max-[80rem]:pt-1 @max-[80rem]:pb-2 ' +
+  '@max-[80rem]:hover:border-[color:var(--di-border-control)]';
+/** En cada celda (con `data-label`): etiqueta a la izquierda y valor a la derecha, o debajo si no cabe. */
+export const TABLA_CONTENEDOR_CELL_CLS =
+  '@max-[80rem]:flex @max-[80rem]:flex-wrap @max-[80rem]:items-center @max-[80rem]:justify-between @max-[80rem]:gap-x-3 ' +
+  '@max-[80rem]:gap-y-1 @max-[80rem]:rounded-none! @max-[80rem]:border-0! @max-[80rem]:px-0 @max-[80rem]:py-[5px] ' +
+  '@max-[80rem]:text-right @max-[80rem]:text-[0.8125rem] @max-[80rem]:bg-transparent @max-[80rem]:before:shrink-0 ' +
+  '@max-[80rem]:before:text-left @max-[80rem]:before:text-xs @max-[80rem]:before:font-medium ' +
+  '@max-[80rem]:before:text-[color:var(--di-text-tertiary)] @max-[80rem]:before:content-[attr(data-label)]';
+/** Además, en la primera celda: título de la tarjeta, con un divisor debajo. */
+export const TABLA_CONTENEDOR_CELL_TITULO_CLS =
+  '@max-[80rem]:mb-1 @max-[80rem]:shadow-[inset_0_-1px_0_var(--di-divider)] @max-[80rem]:py-2.5 ' +
+  '@max-[80rem]:text-sm @max-[80rem]:font-semibold';
+/** En una fila a todo el ancho (vacío) y en su `<td>`. */
+export const TABLA_CONTENEDOR_FILA_ANCHA_CLS = '@max-[80rem]:col-span-full @max-[80rem]:block';
+/**
+ * HU #14577 · hallazgo E2E H-13 — además de {@link TABLA_CONTENEDOR_CELL_CLS}, en una celda que en ese renglón no tiene
+ * nada que mostrar (la de acciones de `TablaEditable` sin «Guardar», «Descartar» ni «Reintentar»): en la tarjeta no se
+ * pinta la línea con la etiqueta sola. En la tabla ancha la celda sigue, para no descuadrar las columnas ni la cabecera
+ * que lee el lector de pantalla. Va con `!` porque la receta de celda pone `flex` en la misma variante.
+ */
+export const TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS = '@max-[80rem]:hidden!';

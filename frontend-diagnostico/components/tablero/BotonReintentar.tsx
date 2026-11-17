@@ -27,7 +27,8 @@ const FILA_CLS = `inline-flex items-center gap-1 rounded-full border border-curr
  * «Reprocesar» de una celda: cargando con aria-busy y deshabilitado mientras responde (no se pulsa dos veces), y el resultado
  * o el error los muestra quien lo pinta. Solo se pinta con la capacidad `reprocesarConsultas`; la API vuelve a exigirla (403).
  */
-export function BotonReintentar({ etiqueta, texto, reintentar, onReintentado, onError, variante = "fila" }: BotonReintentarProps) {
+/** Lógica del reintento, sin presentación (FE-2: la usan este botón y el menú «Acciones» del tablero). */
+export function useReintento({ reintentar, onReintentado, onError }: Pick<BotonReintentarProps, "reintentar" | "onReintentado" | "onError">) {
   const [enviando, setEnviando] = useState(false);
 
   async function alPulsar() {
@@ -41,6 +42,12 @@ export function BotonReintentar({ etiqueta, texto, reintentar, onReintentado, on
       setEnviando(false);
     }
   }
+
+  return { enviando, alPulsar };
+}
+
+export function BotonReintentar({ etiqueta, texto, reintentar, onReintentado, onError, variante = "fila" }: BotonReintentarProps) {
+  const { enviando, alPulsar } = useReintento({ reintentar, onReintentado, onError });
 
   return (
     <button

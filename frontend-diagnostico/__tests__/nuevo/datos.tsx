@@ -36,8 +36,6 @@ export function expressCreado(cambios: Partial<ExpressCreado> = {}): ExpressCrea
       identificador: "TST123",
       identificador_norm: "TST123",
       tipo_identificador: "PLACA_CARRO",
-      tipo_documento_locatario: null,
-      documento_locatario: null,
     },
     ...cambios,
   };

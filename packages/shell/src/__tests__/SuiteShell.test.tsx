@@ -229,3 +229,20 @@ describe("independencia de los productos", () => {
     }
   });
 });
+
+// Hallazgo E2E H-13 (HU #14577, capturas C-10-gestion-1023 y -360): el lanzador flotante del dock tapaba el botón que
+// recibía el foco o que se traía a la vista (WCAG 2.2 · 2.4.11, foco no oculto). El colchón `pb-28` solo libera el final
+// del contenido; `scroll-pb-28` hace que el foco y `scrollIntoView` dejen el elemento por encima del dock en cualquier
+// punto del scroll. Uso de ejemplo: <SuiteShell layout="app" …/> → `[data-shell-scroll]` con pb-28 y scroll-pb-28.
+describe("SuiteShell — el dock no tapa lo que recibe el foco (H-13)", () => {
+  it("layout app: el contenedor con scroll reserva el alto del dock al final y al traer un elemento a la vista", () => {
+    const { container } = render(
+      <SuiteShell productCode="tramites" productName="Trámites" nav={nav} user={user} layout="app">
+        x
+      </SuiteShell>,
+    );
+    const scroll = container.querySelector("[data-shell-scroll]") as HTMLElement;
+    expect(scroll.classList).toContain("pb-28");
+    expect(scroll.classList).toContain("scroll-pb-28");
+  });
+});

@@ -28,7 +28,7 @@ export function ResultadoCreacion({ diagnosticoId, vehiculos }: ResultadoCreacio
       titulo={tituloIniciado(vehiculos)}
       mensaje="Las consultas ya están en curso. Puedes seguirlas en el tablero del lote."
       primaria={{ etiqueta: "Ver tablero", href: tablero, enlace: Link }}
-      secundaria={{ etiqueta: "Volver", href: "/", enlace: Link }}
+      secundaria={{ etiqueta: "Volver", href: "/diagnosticos", enlace: Link }}
       redireccion={{ segundos: 5, destino: "el tablero del lote", onNavegar: () => router.push(tablero) }}
     />
   );

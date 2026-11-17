@@ -49,11 +49,35 @@ describe("HU14562 AC46 errores del PUT del dictamen", () => {
     expect(e.pedirConfirmarTramite).toBe(code === "VEHICULO_CON_TRAMITE");
   });
 
-  it("P3: 422 por secuencia de 6 o más dígitos se asigna al campo del alertamiento", () => {
-    const e = errorAjusteDictamen(new ApiError(422, "El texto no puede llevar secuencias de 6 o más dígitos", "VALOR_INVALIDO", "alertamientos[0].texto"));
+  // AP-8 (SF-6): reescrito; antes usaba VALOR_INVALIDO y afirmaba el mensaje de la API. El contrato da
+  // ALERTAMIENTO_CON_DIGITOS para P3 y el texto es fijo (el mismo de la validación local).
+  it("P3: 422 ALERTAMIENTO_CON_DIGITOS se asigna al campo del alertamiento con texto fijo", () => {
+    const e = errorAjusteDictamen(new ApiError(422, "detalle del servidor", "ALERTAMIENTO_CON_DIGITOS", "alertamientos[0].texto"));
     expect(e.campo).toBe("alertamientos[0].texto");
-    expect(e.mensaje).toMatch(/6 o más dígitos/);
+    expect(e.mensaje).toBe("No escribas secuencias de 6 o más dígitos (pueden ser documentos).");
     expect(e.ofrecerRecargar).toBe(false);
+  });
+
+  it.each([
+    ["MOTIVO_REQUERIDO", "motivo", "Escribe un motivo de entre 10 y 500 caracteres."],
+    ["VERSION_ESPERADA_INVALIDA", "version_esperada", "No se pudo aplicar el ajuste: la versión del dictamen no es válida. Recarga la página."],
+    ["ALERTAMIENTO_INVALIDO", "alertamientos", "Revisa los alertamientos: cada uno necesita un código del catálogo, un efecto, una fuente y un texto de hasta 500 caracteres."],
+    ["CONFIRMADO_REQUERIDO", "confirmado", "Confirma el ajuste para continuar."],
+    ["VEREDICTO_INVALIDO", "veredicto", "Elige un veredicto: Viable o Bloqueado."],
+  ])("AP-8: 422 %s → texto fijo del contrato junto al campo, nunca el mensaje de la API", (code, campo, mensaje) => {
+    const e = errorAjusteDictamen(new ApiError(422, "detalle del servidor", code, campo));
+    expect(e).toEqual({ mensaje, campo, ofrecerRecargar: false, pedirConfirmarTramite: false });
+  });
+
+  it("AP-8: 422 VALOR_INVALIDO (o un code sin texto) con campo → «Revisa este campo.» junto al campo", () => {
+    const e = errorAjusteDictamen(new ApiError(422, "La clave «x» no existe", "VALOR_INVALIDO", "alertamientos[0].x"));
+    expect(e).toEqual({ mensaje: "Revisa este campo.", campo: "alertamientos[0].x", ofrecerRecargar: false, pedirConfirmarTramite: false });
+  });
+
+  it("AP-8: 500 con mensaje del servidor → el texto base fijo", () => {
+    const e = errorAjusteDictamen(new ApiError(500, "detalle del servidor", "ERROR_INTERNO"));
+    expect(e.mensaje).toBe("No se pudo aplicar el ajuste. Intenta de nuevo en un momento.");
+    expect(e.campo).toBeNull();
   });
 
   it("un error desconocido no inventa mensaje de dominio", () => {
