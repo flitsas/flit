@@ -321,7 +321,7 @@ No use `conexiones` menor que el `Maximum Pool Size` de la cadena.
 migración para estos dos esquemas. Cada historial vive en su esquema (`__EFMigrationsHistory`). Las migraciones de un
 servicio no tocan al otro.
 
-**Qué agrega la de consultas.** Crea `consultas.vehicle_tax_departments` y siembra 5 filas: activas 50, 52 y 94; apagadas 17 y 63.
+**Qué agrega la de consultas.** Crea `consultas.vehicle_tax_departments` y siembra 5 filas (activas 50, 52 y 94; apagadas 17 y 63). La migración `20261117044000_ImpuestoDepartamentosActivos` (2026-11-16) deja activas solo 05 Antioquia, 08 Atlántico y 11 Bogotá y apaga el resto con borrado lógico.
 No tiene datos personales. Con la lista vacía o sin URL, no se consulta nada.
 
 **Conexiones.** Diagnóstico cabe en 20 (handoff §2.4). **core-consultas no cabe con lo que tiene DEV:** tope 10 y pool 8, y los
@@ -695,7 +695,7 @@ Nada de esto se corrigió en este documento. Las rutas se verificaron en el comm
    que nadie lee. Lo correcto en el contenedor: `Diagnostico__DataProtection__CertificadoRuta` y `__CertificadoClave`.
 9. **Resuelto (2026-11-16).** `IMPUESTO_CONTACTO_*`: el compose ya pasa las 18 variables y el handoff usa los nombres que lee `OpcionesImpuesto.cs:70-73`.
 10. **`handoff-vps-diagnostico.md:282` rompe el arranque.** Propone `IMPUESTO_API_TIMEOUT_SECONDS=300`, y con 300 core-consultas **no
-    arranca** (`OpcionesImpuesto.cs:56-57`). El defecto real es 280 (`DC:683`).
+    arranca** (`OpcionesImpuesto.cs:56-57`). El defecto real es 280 (`DC:702`).
 11. **Resuelto (2026-11-16).** `IMPUESTO_DEPARTAMENTOS` salió del compose y de `.env.impuesto.example`; el handoff apaga por la tabla `consultas.vehicle_tax_departments`.
 12. **Comentario desfasado en el compose.** `DC:551-555` dice que `Diagnostico__Consultas__Address` enciende juntas todas las fuentes y que
     la simulación se valida en Diagnóstico. Desde ADR-0075, solo sirve para la réplica, y la simulación vive en core-consultas
