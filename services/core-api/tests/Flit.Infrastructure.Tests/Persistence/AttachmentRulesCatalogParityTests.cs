@@ -109,6 +109,18 @@ public sealed partial class AttachmentRulesCatalogParityTests
             "los tipos de evidencia de SOAT deben existir en el catálogo de documentos");
     }
 
+    /// <summary>El soporte del impuesto que se carga en <c>asignado</c>: misma guarda que el SOAT.</summary>
+    [Fact]
+    public void ImpuestoEvidenceTipos_OnlyNamesSeededCatalogCodes()
+    {
+        var desconocidos = AttachmentRules.ImpuestoEvidenceTipos
+            .Where(code => !SeededCodes.Value.Contains(code))
+            .ToList();
+
+        desconocidos.Should().BeEmpty(
+            "el soporte del impuesto departamental debe existir en el catálogo de documentos");
+    }
+
     /// <summary>
     /// El código retirado no puede volver por la puerta de atrás: ni en las reglas ni sembrado en un
     /// DDL. Es camelCase, forma que el generador de códigos actual no produce (slug en MAYÚSCULAS),
