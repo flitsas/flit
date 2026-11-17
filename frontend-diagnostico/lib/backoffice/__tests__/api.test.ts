@@ -7,6 +7,7 @@ import {
   esLlenable,
   listarLotesBackoffice,
   llenarConsultaManual,
+  mensajeErrorBackoffice,
   obtenerFormularioManual,
   obtenerGrillaBackoffice,
   traducirErrorLlenado,
@@ -91,15 +92,17 @@ describe("esLlenable — «Llenar a mano» solo en celdas en ERROR no bloqueadas
 });
 
 describe("traducirErrorLlenado — el 422 va junto al campo, el 409 como aviso", () => {
-  it("422 RESULTADO_INVALIDO con campo → error de campo con el mensaje de la API", () => {
+  // AP-8 (SF-6): reescrito; antes afirmaba que el error de campo llevaba el mensaje de la API. Ahora es texto fijo.
+  it("422 RESULTADO_INVALIDO con campo → error de campo con texto fijo, no el mensaje de la API", () => {
     const e = traducirErrorLlenado(new ApiError(422, "El valor debe ser mayor que cero.", "RESULTADO_INVALIDO", "resultado.fuentes[0].valor"));
-    expect(e).toEqual({ tipo: "CAMPO", campo: "resultado.fuentes[0].valor", mensaje: "El valor debe ser mayor que cero.", recargarGrilla: false });
+    expect(e).toEqual({ tipo: "CAMPO", campo: "resultado.fuentes[0].valor", mensaje: "Revisa este dato: no cumple lo que pide esta fuente.", recargarGrilla: false });
   });
 
-  it("422 PERSONA_NO_EN_ERROR con campo → error de campo de la persona", () => {
+  it("422 PERSONA_NO_EN_ERROR con campo → error de campo de la persona con texto fijo", () => {
     const e = traducirErrorLlenado(new ApiError(422, "La persona no está en error.", "PERSONA_NO_EN_ERROR", "personas[0].persona_id"));
     expect(e.tipo).toBe("CAMPO");
     expect(e.campo).toBe("personas[0].persona_id");
+    expect(e.mensaje).toBe("Esta persona ya no está en error: no se llena a mano.");
   });
 
   it("409 CELDA_MODIFICADA → aviso que pide recargar la grilla", () => {
@@ -119,6 +122,74 @@ describe("traducirErrorLlenado — el 422 va junto al campo, el 409 como aviso",
   it("422 FUENTE_NO_ADMITE_MANUAL y 403 → aviso", () => {
     expect(traducirErrorLlenado(new ApiError(422, "x", "FUENTE_NO_ADMITE_MANUAL")).tipo).toBe("AVISO");
     expect(traducirErrorLlenado(new ApiError(403, "x")).mensaje).toMatch(/permiso/i);
+  });
+});
+
+// AP-8 (security-fase3 SF-6): la UI nunca muestra el mensaje de un error del servidor ni de un Error cualquiera.
+const SECRETO = "Npgsql detalle interno 23514 en diagnostico.consultas";
+
+describe("traducirErrorLlenado — AP-8: textos fijos, nunca el mensaje del servidor", () => {
+  it("409 con un code desconocido → aviso fijo que recarga la grilla, sin el mensaje de la API", () => {
+    const e = traducirErrorLlenado(new ApiError(409, SECRETO, "OTRO_CONFLICTO"));
+    expect(e).toEqual({
+      tipo: "AVISO",
+      mensaje: "La celda cambió mientras la llenabas. La grilla se vuelve a leer; ábrela de nuevo si sigue en error.",
+      recargarGrilla: true,
+    });
+  });
+
+  it("409 sin code → el mismo aviso fijo", () => {
+    expect(traducirErrorLlenado(new ApiError(409, SECRETO)).mensaje).not.toContain(SECRETO);
+  });
+
+  it("500 de la API → aviso genérico fijo", () => {
+    const e = traducirErrorLlenado(new ApiError(500, SECRETO, "ERROR_INTERNO"));
+    expect(e).toEqual({ tipo: "AVISO", mensaje: "No se pudo llenar la consulta. Intenta de nuevo en un momento.", recargarGrilla: false });
+  });
+
+  it("422 con campo pero con un code fuera del contrato → aviso genérico, sin el mensaje", () => {
+    const e = traducirErrorLlenado(new ApiError(422, SECRETO, "OTRO", "resultado.x"));
+    expect(e.tipo).toBe("AVISO");
+    expect(e.mensaje).toBe("No se pudo llenar la consulta. Intenta de nuevo en un momento.");
+  });
+
+  it("un Error cualquiera (red, TypeError) → aviso genérico fijo", () => {
+    expect(traducirErrorLlenado(new TypeError(SECRETO)).mensaje).toBe("No se pudo llenar la consulta. Intenta de nuevo en un momento.");
+  });
+
+  it("EmpresaNoElegida (error propio del front, texto fijo) conserva su mensaje", () => {
+    expect(traducirErrorLlenado(new EmpresaNoElegida()).mensaje).toBe("Elige una compañía antes de consultar el backoffice.");
+  });
+});
+
+describe("mensajeErrorBackoffice — AP-8: traductor común del backoffice", () => {
+  const RESPALDO = "Intenta de nuevo en un momento.";
+
+  it("ApiError con un code del catálogo de la pantalla → el texto fijo de ese code", () => {
+    expect(mensajeErrorBackoffice(new ApiError(422, SECRETO, "PISO_NO_DISPENSABLE"), RESPALDO, { PISO_NO_DISPENSABLE: "Texto fijo." })).toBe("Texto fijo.");
+  });
+
+  it("ApiError 403 sin code del catálogo → texto fijo de permiso", () => {
+    expect(mensajeErrorBackoffice(new ApiError(403, SECRETO), RESPALDO)).toBe("No tienes permiso para esta acción.");
+  });
+
+  it.each([
+    ["ApiError 500", new ApiError(500, SECRETO, "ERROR_INTERNO")],
+    ["ApiError 422 con code fuera del catálogo", new ApiError(422, SECRETO, "OTRO", "campo")],
+    ["Error", new Error(SECRETO)],
+    ["TypeError de red", new TypeError(SECRETO)],
+    ["un valor que no es Error", SECRETO],
+    ["undefined", undefined],
+  ] as const)("%s → el respaldo fijo de la pantalla", (_n, error) => {
+    expect(mensajeErrorBackoffice(error, RESPALDO)).toBe(RESPALDO);
+  });
+
+  it("un code heredado de Object.prototype no se toma como del catálogo", () => {
+    expect(mensajeErrorBackoffice(new ApiError(422, SECRETO, "toString"), RESPALDO, {})).toBe(RESPALDO);
+  });
+
+  it("EmpresaNoElegida conserva su texto fijo del front", () => {
+    expect(mensajeErrorBackoffice(new EmpresaNoElegida(), RESPALDO)).toBe("Elige una compañía antes de consultar el backoffice.");
   });
 });
 

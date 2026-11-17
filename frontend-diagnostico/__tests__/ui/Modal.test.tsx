@@ -210,3 +210,36 @@ describe("Modal: gestión de foco (HU #14562 · M2)", () => {
     expect(screen.getByText("Ver más")).toHaveFocus();
   });
 });
+
+// Ola Diagnóstico UX 2026-11-15 · FE-1 (spec-ui §1.3): `size="panel"` es aditivo; los cinco tamaños previos, que usa
+// Trámites al reexportar el Modal, no cambian.
+describe("Modal: tamaños (FE-1)", () => {
+  const panelDe = (size?: "sm" | "md" | "lg" | "xl" | "2xl" | "panel") => {
+    const { unmount } = render(
+      <Modal open onClose={vi.fn()} title="T" size={size}>
+        <p>x</p>
+      </Modal>,
+    );
+    const clases = (screen.getByRole("dialog").firstElementChild as HTMLElement).className.split(/\s+/);
+    unmount();
+    return clases.filter((c) => c.startsWith("max-w-"));
+  };
+
+  it.each([
+    ["sm", "max-w-md"],
+    ["md", "max-w-lg"],
+    ["lg", "max-w-2xl"],
+    ["xl", "max-w-4xl"],
+    ["2xl", "max-w-6xl"],
+  ] as const)("size=%s conserva %s", (size, clase) => {
+    expect(panelDe(size)).toEqual([clase]);
+  });
+
+  it("sin size sigue siendo md (max-w-lg)", () => {
+    expect(panelDe()).toEqual(["max-w-lg"]);
+  });
+
+  it("size=panel mide 640 px exactos (max-w-[640px])", () => {
+    expect(panelDe("panel")).toEqual(["max-w-[640px]"]);
+  });
+});

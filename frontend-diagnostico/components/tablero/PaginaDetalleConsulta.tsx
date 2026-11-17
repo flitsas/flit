@@ -63,7 +63,7 @@ export function PaginaDetalleConsulta({
   vehiculoId,
   fuente,
   cargar = obtenerDetalleCelda,
-  rutaListado = "/",
+  rutaListado = "/diagnosticos",
   rutaDiagnostico = `/diagnosticos/${encodeURIComponent(loteId)}`,
   backoffice = false,
   nota,

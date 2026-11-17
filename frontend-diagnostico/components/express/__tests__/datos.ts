@@ -21,8 +21,6 @@ export function expressCreado(cambios: Partial<ExpressCreado> = {}): ExpressCrea
       identificador: "ABC123",
       identificador_norm: "ABC123",
       tipo_identificador: "PLACA_CARRO",
-      tipo_documento_locatario: null,
-      documento_locatario: null,
     },
     ...cambios,
   };

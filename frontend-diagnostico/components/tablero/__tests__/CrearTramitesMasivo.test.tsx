@@ -401,3 +401,59 @@ describe("HU #14562 AC32 — selección y acciones en bloque", () => {
     expect(within(panel()).getByText(/creando trámites/i)).toBeInTheDocument();
   });
 });
+
+// Uso de ejemplo (HU #14577 AC12, spec-ui §2.5): en la confirmación masiva (modal del tipo del lote Simple), si alguno de los
+// seleccionados elegibles para crear tiene saneamiento SOLICITADO o EN_GESTION, el aviso dice cuántos; no bloquea.
+describe("HU #14577 AC12 — aviso de saneamiento en curso en la creación masiva", () => {
+  const TIPOS_MASIVO = () =>
+    Response.json({ tipos: [{ codigo: "TRASPASO", nombre: "Traspaso", familia: "TRASPASO", fuentesObligatorias: [] }] });
+  const conSaneamiento = (estados: Record<string, "SOLICITADO" | "EN_GESTION" | "SANEADO" | null>): Grilla => {
+    const g = lote({ modo: "SIMPLE" });
+    return {
+      ...g,
+      vehiculos: g.vehiculos.map((v) =>
+        v.id in estados ? { ...v, saneamiento: { estado: estados[v.id], elegible: false, motivo_no_elegible: estados[v.id] ? "YA_SOLICITADO" : null } } : v,
+      ),
+    };
+  };
+
+  it("uno de los dos seleccionados en curso: «1 de los vehículos seleccionados tiene un saneamiento en curso» y crea igual", async () => {
+    const api = await montar({
+      [GRILLA]: () => Response.json(conSaneamiento({ "vehiculo-1": "EN_GESTION", "vehiculo-4": "SANEADO" })),
+      "GET /tipos-tramite": TIPOS_MASIVO,
+      [MASIVO]: encolada(),
+      [PROGRESO]: () => Response.json(progreso()),
+    });
+    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todos los elegibles/i }));
+    fireEvent.click(botonMasivo());
+    await avanzar();
+    const dialogo = screen.getByRole("dialog", { name: /tipo de trámite/i });
+    expect(within(dialogo).getByRole("alert")).toHaveTextContent("Saneamiento en curso");
+    expect(dialogo).toHaveTextContent("1 de los vehículos seleccionados tiene un saneamiento en curso. Puedes crear los trámites igual.");
+    fireEvent.change(within(dialogo).getByLabelText(/tipo de trámite/i), { target: { value: "TRASPASO" } });
+    fireEvent.click(within(dialogo).getByRole("button", { name: /crear trámites \(2\)/i }));
+    await avanzar();
+    expect(llamadas(api, "POST", RUTA_MASIVO)).toHaveLength(1);
+  });
+
+  it("los dos en curso: plural «2 de los vehículos seleccionados tienen…»", async () => {
+    await montar({
+      [GRILLA]: () => Response.json(conSaneamiento({ "vehiculo-1": "SOLICITADO", "vehiculo-4": "EN_GESTION" })),
+      "GET /tipos-tramite": TIPOS_MASIVO,
+    });
+    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todos los elegibles/i }));
+    fireEvent.click(botonMasivo());
+    await avanzar();
+    expect(screen.getByRole("dialog", { name: /tipo de trámite/i })).toHaveTextContent(
+      "2 de los vehículos seleccionados tienen un saneamiento en curso. Puedes crear los trámites igual.",
+    );
+  });
+
+  it("ninguno en curso (SANEADO o sin saneamiento): sin aviso", async () => {
+    await montar({ [GRILLA]: () => Response.json(conSaneamiento({ "vehiculo-1": "SANEADO", "vehiculo-4": null })), "GET /tipos-tramite": TIPOS_MASIVO });
+    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todos los elegibles/i }));
+    fireEvent.click(botonMasivo());
+    await avanzar();
+    expect(screen.getByRole("dialog", { name: /tipo de trámite/i })).not.toHaveTextContent(/saneamiento en curso/i);
+  });
+});

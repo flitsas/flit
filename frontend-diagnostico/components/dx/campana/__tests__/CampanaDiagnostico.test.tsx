@@ -260,3 +260,18 @@ describe("HU14562 m-7 y m-1 campana", () => {
     expect(clases).toContain("motion-reduce:transition-none");
   });
 });
+
+describe("HU14577 AC39 avisos del saneamiento en la campana", () => {
+  it("pinta los tipos nuevos y «Ver lote» lleva al tablero con el filtro «Con saneamiento» por query", async () => {
+    const tomado = aviso(30, { tipo: "SANEAMIENTO_TOMADO" as never, datos: { cantidad: 3 } });
+    const otro = aviso(31);
+    simularApi({ [`GET ${RUTA}`]: bandejas(bandeja([tomado, otro])) });
+    render(<CampanaDiagnostico />);
+    const panel = await abrir();
+    const [item, item2] = within(panel).getAllByRole("listitem");
+    expect(item).toHaveTextContent("Saneamiento en gestión");
+    expect(item).toHaveTextContent("FLIT empezó el saneamiento de 3 vehículos del lote «Lote flota norte».");
+    expect(within(item).getByRole("link", { name: /^Ver lote/ })).toHaveAttribute("href", `/diagnosticos/${LOTE}?saneamiento=con`);
+    expect(within(item2).getByRole("link", { name: /^Ver lote/ })).toHaveAttribute("href", `/diagnosticos/${LOTE}`);
+  });
+});

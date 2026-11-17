@@ -17,7 +17,7 @@ import { expect, test } from "@playwright/test";
  * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
  * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
  *   - button «/ingresar|iniciar sesión/i»
- *   - heading «Diagnóstico vehicular»
+ *   - heading «Dashboard» (ola 2026-11-15, FE-4: «/» aterriza en el Dashboard) · heading «Diagnóstico vehicular» (ya no en «/»)
  *   - heading «No tienes acceso»
  *   - etiqueta «/correo|usuario/i»
  *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
@@ -47,7 +47,9 @@ test.describe("entrada desde el hub", () => {
     // Escenario 2: tras el login del hub vuelve a Diagnóstico con la sesión iniciada.
     await iniciarSesionEnElHub(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
     await page.waitForURL(`${APP}/`);
-    await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
+    // Ola 2026-11-15 (FE-4): entrar al producto abre el Dashboard para todos los roles; el listado está en /diagnosticos.
+    await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toHaveCount(0);
 
     // Escenario 3: en el subdominio no hay campos de usuario ni contraseña.
     await expect(page.locator('input[type="password"], input[autocomplete="username"]')).toHaveCount(0);
@@ -67,5 +69,6 @@ test.describe("entrada desde el hub", () => {
     await expect(page.getByRole("heading", { level: 1, name: "No tienes acceso" })).toBeVisible();
     await expect(page.getByText(/Diagnóstico no está habilitado/)).toBeVisible();
     await expect(page.getByRole("heading", { name: "Diagnóstico vehicular" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toHaveCount(0);
   });
 });

@@ -33,6 +33,9 @@ public static class OidcDefaults
         ["platform.tramites.persona_natural"] = ServiceAudiences.Tramites,
         // ADR-0084 (Punto 4): creación de borradores de trámite desde Diagnóstico Vehicular (solo svc-diagnostico).
         ["platform.tramites.derivacion"] = ServiceAudiences.Tramites,
+        // ADR-0089 (HU #14587): usuarios de Diagnóstico gestionados desde el producto; los atiende core-api (solo svc-diagnostico).
+        ["platform.usuarios.diagnostico"] = ServiceAudiences.Tramites,
+        ["platform.usuarios.diagnostico.conteos"] = ServiceAudiences.Tramites,
         // HU #14050 (Épica #14021): lectura por pull de las solicitudes radicadas en core-personanatural (la usa core-api, svc-tramites).
         ["platform.personanatural.leer"] = ServiceAudiences.PersonaNatural,
     };

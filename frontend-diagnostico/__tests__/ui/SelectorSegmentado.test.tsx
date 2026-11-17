@@ -106,3 +106,34 @@ describe("SelectorSegmentado: describedBy, etiquetadoPor y bloqueado (HU #14562 
     for (const radio of screen.getAllByRole("radio")) expect(radio).toBeDisabled();
   });
 });
+
+// HU #14583 (spec-ui §3, A3.1–A3.3): la opción marcada va en la tinta del aplicativo (--kit-tinta, #162744 por token) con
+// texto --di-on-accent; en oscuro, aro interior de 2 px --di-heading para el contraste no textual (1.4.11). Sin hex.
+describe("SelectorSegmentado: opción marcada en tinta (HU #14583)", () => {
+  it("A3.3: solo la opción con aria-checked=true lleva la tinta, el texto on-accent y el aro oscuro", () => {
+    render(<SelectorSegmentado etiqueta="Tipo" opciones={[...opciones]} valor="express" onCambio={vi.fn()} />);
+    const marcada = screen.getByRole("radio", { name: "Express" });
+    for (const c of ["bg-[color:var(--kit-tinta)]", "text-[color:var(--di-on-accent)]", "dark:shadow-[inset_0_0_0_2px_var(--di-heading)]"])
+      expect(marcada.className).toContain(c);
+    expect(marcada.className).not.toContain("bg-[var(--di-surface)]");
+    expect(marcada.className).not.toContain("shadow-[var(--kit-sombra)]");
+    for (const nombre of ["Todos", "Masivo"]) {
+      const otra = screen.getByRole("radio", { name: nombre });
+      expect(otra.className).not.toContain("--kit-tinta");
+      expect(otra.className).toContain("text-[color:var(--di-text-secondary)]");
+    }
+  });
+
+  it("A3.1: ninguna clase de las opciones usa un color literal", () => {
+    render(<SelectorSegmentado etiqueta="Tipo" opciones={[...opciones]} valor="todos" onCambio={vi.fn()} />);
+    for (const radio of screen.getAllByRole("radio")) expect(radio.className).not.toMatch(/#[0-9a-f]{3,8}\b|rgb\(/i);
+  });
+
+  it("bloqueado: la marcada conserva tinta y texto blanco (solo baja la opacidad)", () => {
+    render(<SelectorSegmentado etiqueta="Tipo" opciones={[...opciones]} valor="express" onCambio={vi.fn()} bloqueado />);
+    const marcada = screen.getByRole("radio", { name: "Express" });
+    expect(marcada.className).toContain("bg-[color:var(--kit-tinta)]");
+    expect(marcada.className).toContain("aria-disabled:opacity-60");
+    expect(marcada.className).not.toContain("aria-disabled:hover:bg-transparent");
+  });
+});

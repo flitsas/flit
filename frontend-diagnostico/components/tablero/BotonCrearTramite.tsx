@@ -6,13 +6,14 @@ import { InlineAlert } from "@flit/ui/InlineAlert";
 import { Modal } from "@flit/ui/Modal";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
 import {
+  ACCION_FILA_CLS,
   AYUDA_CLS,
   BOTON_PRIMARIO_CLS,
   BOTON_REINTENTAR_CLS,
   BOTON_SECUNDARIO_CLS,
   CAMPO_CLS,
   ETIQUETA_CLS,
-  FOCO_CLS,
+  ENLACE_ACCION_CLS,
 } from "@/components/configuracion/estilos";
 import { IconoDxCrearTramite } from "@/components/dx/iconos/IconoDxCrearTramite";
 import { ApiError } from "@/lib/api";
@@ -28,11 +29,30 @@ import {
   urlTramite,
 } from "@/lib/tablero/derivacion";
 
-/** Pastilla compacta de la fila, como «Reintentar placa». */
-const FILA_CLS = `inline-flex items-center gap-1 rounded-full border border-current px-2.5 py-0.5 text-xs font-semibold text-[var(--flit-brand-ink)] transition disabled:cursor-not-allowed disabled:opacity-60 ${FOCO_CLS}`;
-const ENLACE_CLS = `inline-flex items-center gap-1 rounded-full text-xs font-semibold text-[var(--flit-brand-ink)] underline underline-offset-2 ${FOCO_CLS}`;
+/** Pastilla compacta de la fila, como «Reintentar placa» (compartida con la bandera de saneamiento, HU #14577). */
+const FILA_CLS = ACCION_FILA_CLS;
 
 type EstadoTipos = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; tipos: TipoTramite[] };
+
+/** Saneamiento en curso (SOLICITADO o EN_GESTION): la confirmación de crear trámite lo avisa (spec-ui §2.5, HU #14577 AC12). */
+export const saneamientoEnCurso = (v: Pick<FilaVehiculo, "saneamiento">): boolean =>
+  v.saneamiento?.estado === "SOLICITADO" || v.saneamiento?.estado === "EN_GESTION";
+
+/**
+ * Aviso «Saneamiento en curso» arriba del cuerpo de la confirmación (spec-ui §2.5, HU #14577 AC12). No bloquea ni mueve el
+ * foco inicial del modal. Sin `cantidad`, el de una placa; con `cantidad`, el de la creación masiva.
+ */
+export function AvisoSaneamientoEnCurso({ cantidad }: { cantidad?: number }) {
+  const texto =
+    cantidad === undefined
+      ? "Este vehículo tiene un saneamiento en curso. Puedes crear el trámite igual."
+      : `${cantidad} de los vehículos seleccionados ${cantidad === 1 ? "tiene" : "tienen"} un saneamiento en curso. Puedes crear los trámites igual.`;
+  return (
+    <InlineAlert tone="warning" title="Saneamiento en curso">
+      {texto}
+    </InlineAlert>
+  );
+}
 
 export interface ModalTipoTramiteProps {
   identificador: string;
@@ -48,6 +68,8 @@ export interface ModalTipoTramiteProps {
   ayuda?: string;
   /** El borrador se abre en una pestaña nueva al confirmar: el botón lleva el ícono de enlace externo. */
   abreEnPestana?: boolean;
+  /** HU #14577 AC12: aviso arriba del cuerpo (p. ej. `<AvisoSaneamientoEnCurso />`). No bloquea. */
+  aviso?: React.ReactNode;
 }
 
 /**
@@ -63,6 +85,7 @@ export function ModalTipoTramite({
   titulo = "Tipo de trámite",
   ayuda = "El borrador queda en Trámites para que lo completes allí.",
   abreEnPestana = false,
+  aviso,
 }: ModalTipoTramiteProps) {
   const id = useId();
   const [intento, setIntento] = useState(0);
@@ -166,7 +189,14 @@ export function ModalTipoTramite({
         </div>
       }
     >
-      {cuerpo}
+      {aviso ? (
+        <div className="flex flex-col gap-3">
+          {aviso}
+          {cuerpo}
+        </div>
+      ) : (
+        cuerpo
+      )}
     </Modal>
   );
 }
@@ -177,6 +207,8 @@ export interface ModalConfirmarTramiteProps {
   tramite?: string | null;
   onClose: () => void;
   onConfirmar: () => void;
+  /** HU #14577 AC12: aviso arriba del cuerpo (p. ej. `<AvisoSaneamientoEnCurso />`). No bloquea ni cambia el foco inicial. */
+  aviso?: React.ReactNode;
 }
 
 /** «traspaso» para el título y el botón («¿Crear el traspaso…?», «Crear traspaso»); otro nombre o ninguno, «trámite». */
@@ -190,7 +222,7 @@ function sustantivoTramite(tramite?: string | null): string {
  * de {placa}?», la etiqueta Viable «para {trámite}» y el aviso de que se abre en una pestaña nueva. El tipo es el del lote,
  * así que no se pide.
  */
-export function ModalConfirmarTramite({ identificador, tramite, onClose, onConfirmar }: ModalConfirmarTramiteProps) {
+export function ModalConfirmarTramite({ identificador, tramite, onClose, onConfirmar, aviso }: ModalConfirmarTramiteProps) {
   const sustantivo = sustantivoTramite(tramite);
   const confirmarRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
@@ -216,6 +248,7 @@ export function ModalConfirmarTramite({ identificador, tramite, onClose, onConfi
       }
     >
       <div className="flex flex-col gap-3">
+        {aviso}
         <p className="flex flex-wrap items-center gap-2 text-sm text-flit-primary">
           <span {...etiquetaKit("success")}>Viable</span>
           {tramite && <span>{`para ${tramite}`}</span>}
@@ -270,7 +303,19 @@ type Mensaje = { tono: "info" | "error"; texto: string };
  * acción, con el motivo en lenguaje de negocio. El resultado (creado, «ya tenía trámite», error de negocio o de permiso) se
  * anuncia en la propia fila. La API vuelve a exigir el permiso (403).
  */
-export function AccionTramiteFila({
+export interface UseAccionTramiteProps extends AccionTramiteFilaProps {
+  /** Al cancelar un modal, el foco vuelve aquí (el botón de la fila o el disparador «Acciones»). */
+  focoAlCancelar: () => HTMLElement | null;
+  /** El trámite quedó en la fila tras crear (o tras el 409): quien pinta mueve el foco si hace falta. */
+  onTramiteListo?: () => void;
+}
+
+/**
+ * Lógica de la acción de trámite de una fila, sin presentación (FE-2: la usan `AccionTramiteFila` y el menú «Acciones»
+ * del tablero). Devuelve el estado (trámite, elegibilidad, en vuelo, mensaje), `alPulsar` y los `modales` (tipo /
+ * confirmación) que quien la usa pinta fuera del menú. Atiende `solicitudCrear` (atajo del pie del dictamen, F-05).
+ */
+export function useAccionTramite({
   diagnosticoId,
   vehiculo,
   modo,
@@ -280,24 +325,24 @@ export function AccionTramiteFila({
   onRefrescar,
   tramiteAnalizado,
   solicitudCrear,
-}: AccionTramiteFilaProps) {
+  focoAlCancelar,
+  onTramiteListo,
+}: UseAccionTramiteProps) {
   const derivacion = derivacionDeFila(vehiculo);
   const identificador = vehiculo.placa || vehiculo.vin || vehiculo.identificador;
   const [enviando, setEnviando] = useState(false);
   const [pidiendoTipo, setPidiendoTipo] = useState(false);
   const [confirmando, setConfirmando] = useState(false);
   const [mensaje, setMensaje] = useState<Mensaje | null>(null);
-  // Tras crear (o tras el 409), el foco pasa al enlace en cuanto la fila trae el trámite.
-  const enfocarEnlace = useRef(false);
-  const botonRef = useRef<HTMLButtonElement>(null);
-  const enlaceRef = useRef<HTMLAnchorElement>(null);
+  // Tras crear (o tras el 409), se avisa en cuanto la fila trae el trámite.
+  const avisarListo = useRef(false);
 
   const tramite = derivacion.tramite;
+  const tramiteListo = useEffectEvent(() => onTramiteListo?.());
   useEffect(() => {
-    // El botón pulsado desaparece al crear el borrador: el foco pasa al enlace que lo reemplaza.
-    if (enfocarEnlace.current && tramite) {
-      enlaceRef.current?.focus();
-      enfocarEnlace.current = false;
+    if (avisarListo.current && tramite) {
+      avisarListo.current = false;
+      tramiteListo();
     }
   }, [tramite]);
 
@@ -317,7 +362,7 @@ export function AccionTramiteFila({
         tono: "info",
         texto: `${unir(resultado.ya_existia ? "La placa ya tenía el trámite" : "Se creó el borrador del trámite", numero)}.`,
       });
-      enfocarEnlace.current = true;
+      avisarListo.current = true;
       onCreado(vehiculo.id, resultado.tramite);
     } catch (e) {
       pestana?.close();
@@ -328,7 +373,7 @@ export function AccionTramiteFila({
       const conflicto = e instanceof ApiError && e.status === 409;
       setMensaje({ tono: conflicto ? "info" : "error", texto: mensajeCrearTramite(e) });
       if (conflicto) {
-        enfocarEnlace.current = true;
+        avisarListo.current = true;
         onRefrescar();
       }
     } finally {
@@ -339,13 +384,13 @@ export function AccionTramiteFila({
   // HU #14562 AC37: Simple pide el tipo y sigue con «Ir al wizard»; Con análisis IA confirma «Crear traspaso». Los dos
   // abren el borrador en una pestaña nueva. Sin modo (API anterior), crea directo y pide el tipo solo si la API lo exige.
   function alPulsar() {
+    if (enviando) return;
     if (modo === "SIMPLE") setPidiendoTipo(true);
     else if (modo === "CON_ANALISIS") setConfirmando(true);
     else void crear();
   }
 
-  // HU #14562 F-05: el atajo del panel del dictamen abre el mismo flujo de la fila (modales AC37). El foco que quedó en el
-  // botón del dictamen lo toma el modal; al cancelarlo, vuelve al botón «Crear trámite» de la fila.
+  // HU #14562 F-05: el atajo del panel del dictamen abre el mismo flujo de la fila (modales AC37).
   const atenderSolicitud = useEffectEvent(() => {
     if (derivacion.elegible && !tramite && !enviando && !pidiendoTipo && !confirmando) alPulsar();
   });
@@ -360,7 +405,7 @@ export function AccionTramiteFila({
   function cerrarModal() {
     setPidiendoTipo(false);
     setConfirmando(false);
-    botonRef.current?.focus();
+    focoAlCancelar()?.focus();
   }
 
   function confirmarTipo(codigo: string) {
@@ -373,62 +418,8 @@ export function AccionTramiteFila({
     void crear(undefined, abrirPestana());
   }
 
-  let accion = null;
-  if (tramite) {
-    const numero = numeroVisible(tramite);
-    accion = (
-      <a
-        ref={enlaceRef}
-        href={urlTramite(tramitesUrl, tramite, empresaId)}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label={`${unir("Ver trámite", numero)} de la placa ${identificador} (se abre en una pestaña nueva)`}
-        className={ENLACE_CLS}
-      >
-        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
-        {unir("Ver trámite", numero)}
-      </a>
-    );
-  } else if (derivacion.elegible) {
-    accion = (
-      <button
-        ref={botonRef}
-        type="button"
-        aria-label={`Crear trámite para la placa ${identificador}`}
-        aria-busy={enviando}
-        disabled={enviando}
-        onClick={alPulsar}
-        className={FILA_CLS}
-      >
-        {/* HU #14562 · N5: el mismo glifo de «Crear trámite» que el pie del panel del dictamen. */}
-        <IconoDxCrearTramite tamano={16} className="h-3.5 w-3.5" />
-        {enviando ? "Creando…" : "Crear trámite"}
-      </button>
-    );
-  } else if (derivacion.conocida) {
-    accion = (
-      <p className="max-w-[12rem] text-xs text-muted-foreground">
-        <span className="sr-only">{`No se puede crear trámite para la placa ${identificador}: `}</span>
-        {rotuloMotivo(derivacion.motivo)}
-      </p>
-    );
-  }
-
-  if (!accion && !mensaje) return null;
-
-  return (
-    <div className="flex flex-col items-start gap-1">
-      {accion}
-      {mensaje && (
-        <p
-          role={mensaje.tono === "error" ? "alert" : "status"}
-          aria-label={`Resultado de crear trámite para la placa ${identificador}`}
-          className="max-w-[14rem] text-xs font-semibold"
-          style={{ color: mensaje.tono === "error" ? "var(--badge-danger-fg)" : "var(--badge-success-fg)" }}
-        >
-          {mensaje.texto}
-        </p>
-      )}
+  const modales = (
+    <>
       {pidiendoTipo && (
         <ModalTipoTramite
           identificador={identificador}
@@ -436,13 +427,106 @@ export function AccionTramiteFila({
           ayuda="Abriremos el wizard de Trámites en una pestaña nueva con el borrador, para que lo completes allí."
           textoConfirmar="Ir al wizard"
           abreEnPestana
+          aviso={saneamientoEnCurso(vehiculo) ? <AvisoSaneamientoEnCurso /> : undefined}
           onClose={cerrarModal}
           onConfirmar={confirmarTipo}
         />
       )}
       {confirmando && (
-        <ModalConfirmarTramite identificador={identificador} tramite={tramiteAnalizado} onClose={cerrarModal} onConfirmar={confirmarTramite} />
+        <ModalConfirmarTramite
+          identificador={identificador}
+          tramite={tramiteAnalizado}
+          aviso={saneamientoEnCurso(vehiculo) ? <AvisoSaneamientoEnCurso /> : undefined}
+          onClose={cerrarModal}
+          onConfirmar={confirmarTramite}
+        />
       )}
+    </>
+  );
+
+  const numero = tramite ? numeroVisible(tramite) : "";
+  return {
+    identificador,
+    derivacion,
+    tramite,
+    /** «Ver trámite #N» (o «Ver trámite» sin número). */
+    textoVer: unir("Ver trámite", numero),
+    nombreVer: `${unir("Ver trámite", numero)} de la placa ${identificador} (se abre en una pestaña nueva)`,
+    urlVer: tramite ? urlTramite(tramitesUrl, tramite, empresaId) : null,
+    nombreCrear: `Crear trámite para la placa ${identificador}`,
+    motivo: rotuloMotivo(derivacion.motivo),
+    enviando,
+    mensaje,
+    alPulsar,
+    modales,
+  };
+}
+
+/** Mensaje de resultado de crear trámite bajo la acción de la fila. */
+export function MensajeTramite({ mensaje, identificador }: { mensaje: { tono: "info" | "error"; texto: string } | null; identificador: string }) {
+  if (!mensaje) return null;
+  return (
+    <p
+      role={mensaje.tono === "error" ? "alert" : "status"}
+      aria-label={`Resultado de crear trámite para la placa ${identificador}`}
+      className="max-w-[14rem] text-xs font-semibold"
+      style={{ color: mensaje.tono === "error" ? "var(--badge-danger-fg)" : "var(--badge-success-fg)" }}
+    >
+      {mensaje.texto}
+    </p>
+  );
+}
+
+export function AccionTramiteFila(props: AccionTramiteFilaProps) {
+  const botonRef = useRef<HTMLButtonElement>(null);
+  const enlaceRef = useRef<HTMLAnchorElement>(null);
+  const a = useAccionTramite({
+    ...props,
+    focoAlCancelar: () => botonRef.current,
+    // El botón pulsado desaparece al crear el borrador: el foco pasa al enlace que lo reemplaza.
+    onTramiteListo: () => enlaceRef.current?.focus(),
+  });
+
+  let accion = null;
+  if (a.tramite && a.urlVer) {
+    accion = (
+      <a ref={enlaceRef} href={a.urlVer} target="_blank" rel="noopener noreferrer" aria-label={a.nombreVer} className={ENLACE_ACCION_CLS}>
+        <ExternalLink className="h-3.5 w-3.5" aria-hidden="true" />
+        {a.textoVer}
+      </a>
+    );
+  } else if (a.derivacion.elegible) {
+    accion = (
+      <button
+        ref={botonRef}
+        type="button"
+        aria-label={a.nombreCrear}
+        aria-busy={a.enviando}
+        disabled={a.enviando}
+        onClick={a.alPulsar}
+        className={FILA_CLS}
+      >
+        {/* HU #14562 · N5: el mismo glifo de «Crear trámite» que el pie del panel del dictamen. */}
+        <IconoDxCrearTramite tamano={16} className="h-3.5 w-3.5" />
+        {a.enviando ? "Creando…" : "Crear trámite"}
+      </button>
+    );
+  } else if (a.derivacion.conocida) {
+    accion = (
+      <p className="max-w-[12rem] text-xs text-muted-foreground">
+        <span className="sr-only">{`No se puede crear trámite para la placa ${a.identificador}: `}</span>
+        {a.motivo}
+      </p>
+    );
+  }
+
+  if (!accion && !a.mensaje) return null;
+
+  return (
+    <div className="flex flex-col items-start gap-1">
+      {accion}
+      <MensajeTramite mensaje={a.mensaje} identificador={a.identificador} />
+      {a.modales}
     </div>
   );
 }

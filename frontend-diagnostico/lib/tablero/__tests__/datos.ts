@@ -32,8 +32,7 @@ export function vehiculo(n: number, celdas: CeldaGrilla[], cambios: Partial<Fila
     placa,
     vin: null,
     terminado: celdas.every((c) => c.estado === "COMPLETADO" || c.estado === "NA"),
-    documento_declarado: null,
-    propietarios: [],
+    cambio_propietario: null,
     celdas,
     ...cambios,
   };

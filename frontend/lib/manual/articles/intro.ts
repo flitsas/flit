@@ -8,14 +8,14 @@ export const INTRO_ARTICLES: ManualArticle[] = [
     audience: "Todos",
     sectionId: "introduccion",
     keywords: ["bienvenida", "manual", "ayuda", "documentacion", "inicio", "centro", "flit"],
-    summary: `Portal de documentación operativa de FLIT para ${COPY.A06}, ${COPY.A05}, Administración de compañía y Super Admin.`,
+    summary: `Portal de documentación operativa de FLIT para ${COPY.A06}, ${COPY.A05}, Administración de compañía, Super Admin y Diagnóstico vehicular.`,
     blocks: [
       {
         id: "para-que",
         title: "1. ¿Para qué sirve este manual?",
         paragraphs: [
           "Bienvenido al ecosistema de FLIT. Este portal está diseñado para que resuelvas dudas sobre el uso de la plataforma en segundos, sin depender de una llamada a soporte en cada paso.",
-          `Documenta las acciones del ${COPY.A06} (empresa cliente que radica trámites vehiculares), del Gestor de ${COPY.A05} (OT), del Administrador de compañía (consola, red de clientes, marca) y del equipo FLIT (Super Admin: compañías, plataforma, integraciones, RBAC). Cada artículo indica «Aplica para» y DR. FLIT solo sugiere los de tu perfil.`,
+          `Documenta las acciones del ${COPY.A06} (empresa cliente que radica trámites vehiculares), del Gestor de ${COPY.A05} (OT), del Administrador de compañía (consola, red de clientes, marca) y del equipo FLIT (Super Admin: compañías, plataforma, integraciones, RBAC), además del producto Diagnóstico vehicular y su saneamiento. Cada artículo indica «Aplica para» y DR. FLIT solo sugiere los de tu perfil.`,
         ],
         media: [
           {
@@ -31,7 +31,7 @@ export const INTRO_ARTICLES: ManualArticle[] = [
         title: "2. Pasos rápidos para navegar",
         paragraphs: [],
         bullets: [
-          `Utiliza el menú lateral izquierdo para explorar Introducción, Normativa (la resolución que respalda a FLIT), ${COPY.A06}, ${COPY.A05}, Administración de compañía y Super Admin.`,
+          `Utiliza el menú lateral izquierdo para explorar Introducción, Normativa (la resolución que respalda a FLIT), ${COPY.A06}, ${COPY.A05}, Administración de compañía, Super Admin y Diagnóstico vehicular.`,
           "Si buscas algo específico (ej. «cómo crear un trámite» o «preasignación de placas»), usa la barra de Búsqueda en la parte superior (⌘ K / Ctrl K).",
           "Si el artículo es largo, usa la tabla de contenidos «En este artículo» a la derecha para saltar a la sección que necesitas.",
         ],

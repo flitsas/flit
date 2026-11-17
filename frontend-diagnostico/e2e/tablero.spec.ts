@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { lanzarExpress } from "./express";
+import { abrirDictamenDesdeAcciones, celdaDictamen } from "./ola-ux-comun";
 
 /**
  * HU #13748 (F04-H2) — tablero del lote con semáforos y sondeo incremental.
@@ -25,9 +26,10 @@ import { lanzarExpress } from "./express";
  *   - button «/reprocesar/i»
  *   - button «/^Vehículos: \d+$/»
  *   - columnheader «Dictamen»
- *   - button «Ver dictamen de ${PLACA}»
+ *   - menuitem «Ver dictamen de ${PLACA}» dentro de button «Acciones de la placa ${PLACA}» (oleada 2026-11-16, spec-ui §6.4:
+ *     sale de la columna Placa; la columna Dictamen queda como dato td[data-columna=dictamen])
  *   - dialog «Dictamen · ${PLACA}»
- *   - button «Cerrar»
+ *   - button «Cerrar» (ola 2026-11-15, FE-1: el dictamen es ahora un modal de 640 px, el mismo dialog con el mismo nombre)
  *   - dialog (sin nombre)
  *   - link «new RegExp(`^Ver detalle de SIMIT vehículo de ${PLACA}`)»
  *   - heading «SIMIT vehículo · ${PLACA}»
@@ -70,12 +72,13 @@ const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 const PLACA = process.env.E2E_PLACA_EXPRESS ?? "TST101";
 
 async function entrar(page: Page, usuario: string, clave: string) {
-  await page.goto(`${APP}/`);
+  // Ola 2026-11-15 (FE-4): «/» es el Dashboard; el listado y la tarjeta «Placa o VIN» viven en /diagnosticos.
+  await page.goto(`${APP}/diagnosticos`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
   await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
-  await page.waitForURL(`${APP}/`);
+  await page.waitForURL(`${APP}/diagnosticos`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
 }
 
@@ -108,14 +111,15 @@ test.describe("tablero del lote", () => {
     // AC6: ningún indicador de dato manual.
     await expect(grilla.getByText(/manual/i)).toHaveCount(0);
 
-    // HU #14562 AC27/AC28: tarjeta-filtro «Vehículos» y columna Dictamen; el dictamen abre un panel lateral con «Cerrar».
+    // HU #14562 AC27/AC28: tarjeta-filtro «Vehículos» y columna Dictamen. Ola 2026-11-15 (FE-1): el dictamen abre el modal
+    // de la suite (antes panel lateral) con el mismo nombre y «Cerrar»; el ancho lo mide modal-paneles.spec.ts.
     await expect(page.getByRole("button", { name: /^Vehículos: \d+$/ })).toBeVisible();
     await expect(grilla.getByRole("columnheader", { name: "Dictamen" })).toBeVisible();
-    const dictamen = grilla.getByRole("button", { name: `Ver dictamen de ${PLACA}` });
-    await expect(dictamen).toHaveText(/Viable|Bloqueado|Pendiente/);
-    await dictamen.click();
-    const panel = page.getByRole("dialog", { name: `Dictamen · ${PLACA}` });
-    await expect(panel).toBeVisible();
+    // Oleada 2026-11-16 (spec-ui §6.4): la columna conserva el veredicto como dato (sin botón) y el panel se abre desde «Acciones».
+    await expect(celdaDictamen(page, PLACA)).toHaveText(/Viable|Bloqueado|Pendiente/);
+    await expect(celdaDictamen(page, PLACA).getByRole("button")).toHaveCount(0);
+    await expect(grilla.getByRole("button", { name: `Ver dictamen de ${PLACA}` })).toHaveCount(0);
+    const { dialogo: panel } = await abrirDictamenDesdeAcciones(page, PLACA);
     await panel.getByRole("button", { name: "Cerrar" }).click();
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
@@ -187,7 +191,8 @@ test.describe("tablero del lote", () => {
     // «Volver al diagnóstico» lleva al tablero del lote.
     await pestana.getByRole("link", { name: "Volver al diagnóstico" }).click();
     await expect(pestana).toHaveURL(/\/diagnosticos\/[0-9a-f-]{36}$/i);
-    await expect(pestana.getByRole("link", { name: "Volver a diagnósticos" })).toHaveAttribute("href", "/");
+    // Ola 2026-11-15 (FE-4): el listado vive en /diagnosticos («/» es el Dashboard).
+    await expect(pestana.getByRole("link", { name: "Volver a diagnósticos" })).toHaveAttribute("href", "/diagnosticos");
     await pestana.close();
   });
 });

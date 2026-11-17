@@ -85,10 +85,11 @@ function BarraVisible({
       <div className="ml-auto flex flex-wrap items-center gap-2">
         {acciones}
         {onQuitar ? (
+          // H-4 (WCAG 1.4.3): en claro, --di-action sobre el velo --di-accent-soft da 4,4:1; --kit-azul-hover, 5,5:1.
           <button
             type="button"
             onClick={onQuitar}
-            className="min-h-9 rounded-full px-3 text-sm font-semibold text-[color:var(--di-action)] underline underline-offset-[3px] hover:bg-[color:var(--kit-hover)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
+            className="min-h-9 rounded-full px-3 text-sm font-semibold text-[color:var(--kit-azul-hover)] underline underline-offset-[3px] hover:bg-[color:var(--kit-hover)] dark:text-[color:var(--di-action)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
           >
             {etiquetaQuitar}
           </button>

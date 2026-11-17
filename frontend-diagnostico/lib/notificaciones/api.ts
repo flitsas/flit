@@ -7,7 +7,24 @@ import { isReauthenticating, reauthenticate } from "@flit/auth/client";
  * va opcional.
  * D8: no existe aviso de dictamen ajustado, por eso no está en `TipoNotificacion`.
  */
-export type TipoNotificacion = "ZIP_EVIDENCIAS_LISTO" | "ZIP_EVIDENCIAS_FALLIDO" | "DERIVACION_TERMINADA" | "LOTE_TERMINADO";
+export type TipoNotificacion =
+  | "ZIP_EVIDENCIAS_LISTO"
+  | "ZIP_EVIDENCIAS_FALLIDO"
+  | "DERIVACION_TERMINADA"
+  | "LOTE_TERMINADO"
+  // Saneamiento (HU #14577, plan §4.5): solo `datos.cantidad` y, en el cierre, `datos.resultado` (SP-23).
+  | "SANEAMIENTO_TOMADO"
+  | "SANEAMIENTO_CERRADO"
+  | "SANEAMIENTO_REABIERTO"
+  | "SANEAMIENTO_ANULADO";
+
+/** Avisos del saneamiento: al abrirlos, el tablero del lote llega con el filtro «Con saneamiento» (spec-ui §7.2). */
+export const TIPOS_SANEAMIENTO: ReadonlySet<TipoNotificacion> = new Set<TipoNotificacion>([
+  "SANEAMIENTO_TOMADO",
+  "SANEAMIENTO_CERRADO",
+  "SANEAMIENTO_REABIERTO",
+  "SANEAMIENTO_ANULADO",
+]);
 
 export interface NotificacionDiagnostico {
   id: string;
@@ -48,7 +65,7 @@ async function fallar(respuesta: Response): Promise<never> {
   throw new ApiError(respuesta.status, mensaje);
 }
 
-const TIPOS: ReadonlySet<string> = new Set<TipoNotificacion>(["ZIP_EVIDENCIAS_LISTO", "ZIP_EVIDENCIAS_FALLIDO", "DERIVACION_TERMINADA", "LOTE_TERMINADO"]);
+const TIPOS: ReadonlySet<string> = new Set<TipoNotificacion>(["ZIP_EVIDENCIAS_LISTO", "ZIP_EVIDENCIAS_FALLIDO", "DERIVACION_TERMINADA", "LOTE_TERMINADO", ...TIPOS_SANEAMIENTO]);
 
 /** Borde del contrato: una respuesta sin la forma de la bandeja es un error; los ítems de tipo desconocido se descartan. */
 export function validarBandeja(datos: unknown): RespuestaNotificaciones {

@@ -1,8 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type CSSProperties, type FocusEvent, type ReactNode } from "react";
 import { cn } from "./cn";
 import {
+  TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS,
+  TABLA_CONTENEDOR_CELL_CLS,
+  TABLA_CONTENEDOR_CELL_TITULO_CLS,
+  TABLA_CONTENEDOR_FILA_ANCHA_CLS,
+  TABLA_CONTENEDOR_ROW_CLS,
+  TABLA_CONTENEDOR_TABLE_CLS,
+  TABLA_CONTENEDOR_TBODY_CLS,
+  TABLA_CONTENEDOR_THEAD_CLS,
+  TABLA_CONTENEDOR_WRAP_CLS,
   TABLA_MOVIL_CELL_CLS,
   TABLA_MOVIL_CELL_TITULO_CLS,
   TABLA_MOVIL_FILA_ANCHA_CLS,
@@ -40,6 +49,21 @@ import {
  *
  * Observación 3 del code review: mientras la fila guarda, la tabla ignora los cambios de sus campos y le pasa
  * `guardando` al `editor` (quinto argumento) para que el control propio quede de solo lectura.
+ *
+ * Saneamiento (spec-ui §8, FE-0): `guardado="automatico"` es aditivo; sin la prop, todo es como antes. En automático no hay
+ * Guardar ni Descartar: cada celda editable guarda al salir de ella (si la fila tiene cambios) y las columnas con
+ * `guardarAlCambiarMs` guardan ese tiempo después del último cambio (salir de la celda adelanta el guardado). Un cambio que
+ * llega mientras guarda se conserva y se envía al terminar, sobre la fila nueva que mande el padre (versión al día). Si el
+ * guardado falla, lo digitado se conserva aunque el padre pase otro objeto fila con la misma clave (D-69). Tras
+ * un guardado la celda de estado dice `rotuloGuardado` (por defecto «Guardado») en tono success hasta el siguiente
+ * cambio, el foco no se mueve y la columna «Acciones» solo muestra «Reintentar» en error.
+ *
+ * HU #14577 · hallazgo E2E H-10: `apilado="contenedor"` (aditivo; por defecto "pantalla", el de siempre) pasa a tarjetas
+ * según el ancho del envoltorio (container query, recetas `TABLA_CONTENEDOR_*`) y no del viewport, para tablas que viven
+ * en una columna angosta de un diseño a dos columnas. Solo cambian clases; marcado, foco y guardado son los mismos.
+ *
+ * HU #14577 · hallazgo E2E H-13: en ese modo, la celda «Acciones» de un renglón sin botones se oculta en la tarjeta
+ * (`TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS`); en la tabla ancha sigue, con su cabecera. El modo "pantalla" no cambia.
  */
 export type EstadoFilaEditable = "sin_cambios" | "editado" | "guardando" | "error";
 
@@ -69,7 +93,57 @@ export interface ColumnaEditable<F> {
   ) => ReactNode;
   /** Presentación de una celda no editable. */
   mostrar?: (fila: F) => ReactNode;
+  /** Solo en guardado automático: guarda N ms después del último cambio (selectores). Sin ella, guarda al salir del campo. */
+  guardarAlCambiarMs?: number;
 }
+
+/** "pantalla" (por defecto): tarjetas por debajo de 900 px de viewport. "contenedor": por el ancho del envoltorio (H-10). */
+export type ApiladoTabla = "pantalla" | "contenedor";
+
+/** Recetas de tarjeta de cada modo de apilado. */
+interface RecetasApilado {
+  envoltorio: string;
+  tabla: string;
+  cabecera: string;
+  cuerpo: string;
+  fila: string;
+  celda: string;
+  celdaTitulo: string;
+  filaAncha: string;
+  /** Se suma a `celda` cuando la celda no tiene nada en ese renglón (H-13). Vacía: la celda se pinta igual. */
+  celdaSinContenido: string;
+}
+
+/** Barra de cabecera del sistema (tokens.css): fondo y tinta de la tabla por defecto. */
+const ESTILO_CABECERA: CSSProperties = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" };
+
+const RECETAS: Record<ApiladoTabla, RecetasApilado> = {
+  pantalla: {
+    envoltorio: "",
+    tabla: TABLA_MOVIL_TABLE_CLS,
+    cabecera: TABLA_MOVIL_THEAD_CLS,
+    cuerpo: TABLA_MOVIL_TBODY_CLS,
+    fila: TABLA_MOVIL_ROW_CLS,
+    celda: TABLA_MOVIL_CELL_CLS,
+    celdaTitulo: TABLA_MOVIL_CELL_TITULO_CLS,
+    filaAncha: TABLA_MOVIL_FILA_ANCHA_CLS,
+    celdaSinContenido: "",
+  },
+  contenedor: {
+    envoltorio: TABLA_CONTENEDOR_WRAP_CLS,
+    tabla: TABLA_CONTENEDOR_TABLE_CLS,
+    cabecera: TABLA_CONTENEDOR_THEAD_CLS,
+    cuerpo: TABLA_CONTENEDOR_TBODY_CLS,
+    fila: TABLA_CONTENEDOR_ROW_CLS,
+    celda: TABLA_CONTENEDOR_CELL_CLS,
+    celdaTitulo: TABLA_CONTENEDOR_CELL_TITULO_CLS,
+    filaAncha: TABLA_CONTENEDOR_FILA_ANCHA_CLS,
+    celdaSinContenido: TABLA_CONTENEDOR_CELDA_SIN_CONTENIDO_CLS,
+  },
+};
+
+/** "boton" (por defecto): Guardar y Descartar por fila. "automatico": guarda al salir del campo o tras `guardarAlCambiarMs`. */
+export type ModoGuardado = "boton" | "automatico";
 
 export interface TablaEditableProps<F> {
   etiqueta: string;
@@ -89,6 +163,12 @@ export interface TablaEditableProps<F> {
   errorFila?: (fila: F) => string | null | undefined;
   vacio?: ReactNode;
   className?: string;
+  /** Por defecto "boton" (el de siempre). */
+  guardado?: ModoGuardado;
+  /** Solo en guardado automático: rótulo visible tras guardar con éxito (tono success). Por defecto «Guardado». */
+  rotuloGuardado?: string;
+  /** Cuándo pasa a tarjetas: por el viewport ("pantalla", por defecto) o por el ancho de su envoltorio ("contenedor"). */
+  apilado?: ApiladoTabla;
 }
 
 const TEXTO_ESTADO: Record<EstadoFilaEditable, string> = {
@@ -137,9 +217,25 @@ interface FilaEditableProps<F> {
   rotulos?: Partial<Record<EstadoFilaEditable, string>>;
   error: string | null | undefined;
   anunciar: (texto: string) => void;
+  automatico: boolean;
+  rotuloGuardado: string;
+  recetas: RecetasApilado;
 }
 
-function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlado, rotulos, error, anunciar }: FilaEditableProps<F>) {
+function FilaEditable<F>({
+  fila,
+  id,
+  columnas,
+  onGuardar,
+  onDescartar,
+  controlado,
+  rotulos,
+  error,
+  anunciar,
+  automatico,
+  rotuloGuardado,
+  recetas,
+}: FilaEditableProps<F>) {
   const [borrador, setBorrador] = useState<F>(fila);
   const [estado, setEstado] = useState<EstadoFilaEditable>("sin_cambios");
   const [filaPrevia, setFilaPrevia] = useState<F>(fila);
@@ -154,23 +250,44 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
   // Fallos de guardado: un segundo fallo seguido cambia la firma del anuncio aunque el texto sea el mismo.
   const [fallos, setFallos] = useState(0);
   const errorId = useId();
+  // Guardado automático: el último borrador (el temporizador lo lee después del render), los campos cambiados desde que
+  // empezó el último guardado, si hay un cambio esperando a que termine el guardado en curso y el temporizador.
+  const borradorRef = useRef<F>(borrador);
+  const cambios = useRef<Partial<F>>({});
+  // D-69: los campos que viajan en el guardado en curso. Si falla, vuelven a `cambios` y sobreviven a una fila nueva del
+  // padre con la misma clave, así «Reintentar» reenvía lo digitado.
+  const enCurso = useRef<Partial<F>>({});
+  const pendiente = useRef(false);
+  const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const estadoActual = useRef<EstadoFilaEditable>(estado);
+  const [guardarPronto, setGuardarPronto] = useState(false);
+  const [guardadaVisible, setGuardadaVisible] = useState(false);
 
-  // M12: si el padre cambia la fila y no hay edición pendiente, el borrador toma el valor nuevo.
+  // M12: si el padre cambia la fila y no hay edición pendiente, el borrador toma el valor nuevo. En automático, además, lo
+  // que el usuario cambió después del último guardado se conserva sobre la fila nueva (p. ej. con su versión al día).
   if (fila !== filaPrevia) {
     setFilaPrevia(fila);
-    if (estado === "sin_cambios") setBorrador(fila);
+    if (automatico) setBorrador({ ...fila, ...enCurso.current, ...cambios.current });
+    else if (estado === "sin_cambios") setBorrador(fila);
   }
 
   const control = controlado == null ? null : typeof controlado === "string" ? { estado: controlado } : controlado;
   const visible = control?.estado ?? estado;
-  const texto = control?.texto ?? rotulos?.[visible] ?? TEXTO_ESTADO[visible];
-  const tono = control?.tono ?? TONO_ESTADO[visible];
+  const recienGuardadaVisible = automatico && guardadaVisible && !control && visible === "sin_cambios";
+  const texto = recienGuardadaVisible ? rotuloGuardado : (control?.texto ?? rotulos?.[visible] ?? TEXTO_ESTADO[visible]);
+  const tono = recienGuardadaVisible ? "success" : (control?.tono ?? TONO_ESTADO[visible]);
   const guardando = visible === "guardando" || estado === "guardando";
+
+  useEffect(() => {
+    borradorRef.current = borrador;
+    estadoActual.current = estado;
+  });
 
   useEffect(() => {
     montada.current = true;
     return () => {
       montada.current = false;
+      if (temporizador.current) clearTimeout(temporizador.current);
     };
   }, []);
 
@@ -193,35 +310,100 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
     }
     if (anuncioPrevio.current === firma) return;
     anuncioPrevio.current = firma;
-    const rotulo = recienGuardada.current && !controladaFila && visible === "sin_cambios" ? TEXTO_GUARDADO : texto;
+    const rotulo = recienGuardada.current && !controladaFila && visible === "sin_cambios" ? (automatico ? rotuloGuardado : TEXTO_GUARDADO) : texto;
     recienGuardada.current = false;
     anunciar(`${id}: ${rotulo}${error && visible === "error" ? `. ${error}` : ""}`);
-  }, [firma, controladaFila, visible, texto, error, id, anunciar]);
+  }, [firma, controladaFila, visible, texto, error, id, anunciar, automatico, rotuloGuardado]);
 
-  const cambiar = (campo: keyof F & string, valor: F[keyof F & string]) => {
-    // Observación 3: lo que llegue mientras guarda no entra al borrador (no viajaría en el guardado en curso).
-    if (guardando) return;
-    setBorrador((b) => ({ ...b, [campo]: valor }));
-    setEstado("editado");
+  const cancelarTemporizador = () => {
+    if (temporizador.current) clearTimeout(temporizador.current);
+    temporizador.current = null;
   };
 
   const guardar = useCallback(async (reintento = false) => {
-    if (estado === "guardando") return;
+    if (estadoActual.current === "guardando") return;
+    cancelarTemporizador();
+    const enviado = borradorRef.current;
+    enCurso.current = { ...enCurso.current, ...cambios.current };
+    cambios.current = {};
+    pendiente.current = false;
+    estadoActual.current = "guardando";
     setDesdeReintentar(reintento);
+    setGuardadaVisible(false);
     setEstado("guardando");
     try {
-      await onGuardar(borrador);
+      await onGuardar(enviado);
+      enCurso.current = {};
       if (!montada.current) return;
-      if (focoEnFila(filaRef.current)) enfocar.current = "estado";
+      if (automatico && pendiente.current) {
+        // Llegó un cambio mientras guardaba: sale en cuanto el padre pinte la fila nueva (efecto de abajo).
+        pendiente.current = false;
+        estadoActual.current = "editado";
+        setEstado("editado");
+        setGuardarPronto(true);
+        return;
+      }
+      // Automático: el usuario ya está en otro campo; el foco no se mueve.
+      if (!automatico && focoEnFila(filaRef.current)) enfocar.current = "estado";
       recienGuardada.current = true;
+      if (automatico) setGuardadaVisible(true);
+      estadoActual.current = "sin_cambios";
       setEstado("sin_cambios");
     } catch {
+      // D-69: lo enviado vuelve a ser cambio pendiente (lo digitado después, si lo hay, manda sobre él).
+      cambios.current = { ...enCurso.current, ...cambios.current };
+      enCurso.current = {};
       if (!montada.current) return;
       if (focoEnFila(filaRef.current)) enfocar.current = "reintentar";
       setFallos((n) => n + 1);
+      estadoActual.current = "error";
       setEstado("error");
     }
-  }, [borrador, estado, onGuardar]);
+  }, [automatico, onGuardar]);
+
+  // Automático: el cambio que esperaba al guardado anterior sale después del render, ya con la fila nueva del padre.
+  useEffect(() => {
+    if (!guardarPronto) return;
+    setGuardarPronto(false);
+    void guardar();
+  }, [guardarPronto, guardar]);
+
+  const cambiar = (columna: ColumnaEditable<F>, valor: F[keyof F & string]) => {
+    const campo = columna.campo;
+    if (guardando) {
+      // Observación 3: en el modo de botón, lo que llegue mientras guarda no entra al borrador (no viajaría en el
+      // guardado en curso). En automático se conserva y se envía al terminar el guardado propio de la fila.
+      if (!automatico || estadoActual.current !== "guardando") return;
+      cambios.current = { ...cambios.current, [campo]: valor };
+      pendiente.current = true;
+      const siguiente = { ...borradorRef.current, [campo]: valor };
+      borradorRef.current = siguiente;
+      setBorrador(siguiente);
+      return;
+    }
+    if (automatico) cambios.current = { ...cambios.current, [campo]: valor };
+    const siguiente = { ...borradorRef.current, [campo]: valor };
+    borradorRef.current = siguiente;
+    estadoActual.current = "editado";
+    setBorrador(siguiente);
+    setGuardadaVisible(false);
+    setEstado("editado");
+    if (automatico && columna.guardarAlCambiarMs !== undefined) {
+      cancelarTemporizador();
+      temporizador.current = setTimeout(() => {
+        temporizador.current = null;
+        void guardar();
+      }, columna.guardarAlCambiarMs);
+    }
+  };
+
+  /** Automático: salir de la celda (a otro lado, no dentro de ella) guarda si hay cambios y adelanta el temporizador. */
+  const alSalirDeCelda = (e: FocusEvent<HTMLTableCellElement>) => {
+    const destino = e.relatedTarget as Node | null;
+    if (destino && e.currentTarget.contains(destino)) return;
+    if (estadoActual.current !== "editado") return;
+    void guardar();
+  };
 
   const descartar = () => {
     if (guardando) return;
@@ -231,17 +413,25 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
     onDescartar?.(fila);
   };
 
+  // H-13: qué botones lleva la celda «Acciones»; sin ninguno, en tarjeta no se pinta su línea.
+  const conGuardarDescartar =
+    !automatico &&
+    (controladaFila ? estado === "editado" || (estado === "guardando" && !desdeReintentar) : visible === "editado" || visible === "guardando") &&
+    visible !== "error";
+  const conReintentar = visible === "error";
+  const conAcciones = conGuardarDescartar || conReintentar;
+
   return (
-    <tr ref={filaRef} aria-label={id} className={`border-b border-[color:var(--di-divider)] ${TABLA_MOVIL_ROW_CLS}`}>
+    <tr ref={filaRef} aria-label={id} className={`border-b border-[color:var(--di-divider)] ${recetas.fila}`}>
       {columnas.map((c, i) => {
         const etiquetaCampo = `${c.titulo} de ${id}`;
         const valor = borrador[c.campo];
         // Concatenadas sin `cn`: como en DataTable, la receta de título se suma a la de celda sin que una borre a la otra.
-        const celdaMovil = i === 0 ? `${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}` : TABLA_MOVIL_CELL_CLS;
+        const celdaMovil = i === 0 ? `${recetas.celda} ${recetas.celdaTitulo}` : recetas.celda;
         let contenido: ReactNode;
         if (c.editable) {
           contenido = c.editor ? (
-            c.editor(valor, (v) => cambiar(c.campo, v), etiquetaCampo, borrador, guardando)
+            c.editor(valor, (v) => cambiar(c, v), etiquetaCampo, borrador, guardando)
           ) : (
             <input
               type="text"
@@ -249,7 +439,7 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
               value={valor == null ? "" : String(valor)}
               readOnly={guardando}
               aria-readonly={guardando ? "true" : undefined}
-              onChange={(e) => cambiar(c.campo, e.target.value as F[keyof F & string])}
+              onChange={(e) => cambiar(c, e.target.value as F[keyof F & string])}
               className="min-h-9 w-full rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface)] px-2 text-sm text-[color:var(--di-text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
             />
           );
@@ -266,17 +456,23 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
             {contenido}
           </th>
         ) : (
-          <td key={c.campo} data-label={c.titulo} className={`px-3 py-2 text-sm text-[color:var(--di-text-primary)] ${celdaMovil}`}>
+          <td
+            key={c.campo}
+            data-label={c.titulo}
+            className={`px-3 py-2 text-sm text-[color:var(--di-text-primary)] ${celdaMovil}`}
+            onBlur={automatico && c.editable ? alSalirDeCelda : undefined}
+          >
             {contenido}
           </td>
         );
       })}
-      <td data-label="Estado" className={`px-3 py-2 text-xs font-semibold ${TABLA_MOVIL_CELL_CLS}`}>
+      <td data-label="Estado" className={`px-3 py-2 text-xs font-semibold ${recetas.celda}`}>
+        {/* Foco (H-6, WCAG 2.4.7): sin `focus:outline-none`, que en Tailwind 4 anula el contorno de focus-visible. */}
         <span
           ref={estadoRef}
           tabIndex={-1}
           data-tono={tono}
-          className={cn(CLASE_TONO[tono], "focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--di-action)]")}
+          className={cn(CLASE_TONO[tono], "focus-visible:outline-2 focus-visible:outline-[var(--di-action)]")}
         >
           {texto}
         </span>
@@ -286,10 +482,9 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
           </span>
         ) : null}
       </td>
-      <td data-label="Acciones" className={`px-3 py-2 ${TABLA_MOVIL_CELL_CLS}`}>
+      <td data-label="Acciones" className={`px-3 py-2 ${recetas.celda}${!conAcciones && recetas.celdaSinContenido ? ` ${recetas.celdaSinContenido}` : ""}`}>
         <div className="flex flex-wrap items-center gap-2">
-          {(controladaFila ? estado === "editado" || (estado === "guardando" && !desdeReintentar) : visible === "editado" || visible === "guardando") &&
-          visible !== "error" ? (
+          {conGuardarDescartar ? (
             <>
               <button
                 type="button"
@@ -317,7 +512,7 @@ function FilaEditable<F>({ fila, id, columnas, onGuardar, onDescartar, controlad
               </button>
             </>
           ) : null}
-          {visible === "error" ? (
+          {conReintentar ? (
             <button
               ref={reintentarRef}
               type="button"
@@ -348,40 +543,47 @@ export function TablaEditable<F>({
   errorFila,
   vacio = "Sin filas",
   className,
+  guardado = "boton",
+  rotuloGuardado = TEXTO_GUARDADO,
+  apilado = "pantalla",
 }: TablaEditableProps<F>) {
+  const recetas = RECETAS[apilado];
   // N3: cada anuncio lleva su número; el nodo se vuelve a montar y el lector lo lee aunque el texto se repita.
   const [anuncio, setAnuncio] = useState<{ texto: string; n: number }>({ texto: "", n: 0 });
   const anunciar = useCallback((texto: string) => setAnuncio((a) => ({ texto, n: a.n + 1 })), []);
-  const cabecera = "px-3 py-2 text-left text-xs font-semibold text-[color:var(--di-text-secondary)]";
+  // HU #14585: cabecera de la tabla por defecto de Diagnóstico, la misma receta del sistema (barra --table-header-*,
+  // versalita de 12 px). En tarjetas el thead sigue sr-only por su receta de apilado.
+  const cabecera = "px-3 py-2 text-left text-xs font-semibold uppercase tracking-wider";
   return (
     <div
       className={cn(
         "overflow-x-auto rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface)]",
+        recetas.envoltorio,
         className,
       )}
     >
-      <table aria-label={etiqueta} className={`w-full border-collapse ${TABLA_MOVIL_TABLE_CLS}`}>
-        <thead className={`bg-[var(--di-surface-sunken)] ${TABLA_MOVIL_THEAD_CLS}`}>
+      <table aria-label={etiqueta} className={`w-full border-collapse ${recetas.tabla}`}>
+        <thead className={recetas.cabecera}>
           <tr>
             {columnas.map((c) => (
-              <th key={c.campo} scope="col" className={cabecera}>
+              <th key={c.campo} scope="col" className={cabecera} style={ESTILO_CABECERA}>
                 {c.titulo}
               </th>
             ))}
-            <th scope="col" className={cabecera}>
+            <th scope="col" className={cabecera} style={ESTILO_CABECERA}>
               Estado
             </th>
-            <th scope="col" className={cabecera}>
+            <th scope="col" className={cabecera} style={ESTILO_CABECERA}>
               Acciones
             </th>
           </tr>
         </thead>
-        <tbody className={TABLA_MOVIL_TBODY_CLS}>
+        <tbody className={recetas.cuerpo}>
           {filas.length === 0 ? (
-            <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
+            <tr className={recetas.filaAncha}>
               <td
                 colSpan={columnas.length + 2}
-                className={`px-3 py-6 text-center text-sm text-[color:var(--di-text-tertiary)] ${TABLA_MOVIL_FILA_ANCHA_CLS}`}
+                className={`px-3 py-6 text-center text-sm text-[color:var(--di-text-tertiary)] ${recetas.filaAncha}`}
               >
                 {vacio}
               </td>
@@ -399,6 +601,9 @@ export function TablaEditable<F>({
                 rotulos={rotulosEstado}
                 error={errorFila?.(f)}
                 anunciar={anunciar}
+                automatico={guardado === "automatico"}
+                rotuloGuardado={rotuloGuardado}
+                recetas={recetas}
               />
             ))
           )}

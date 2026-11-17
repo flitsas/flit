@@ -9,7 +9,9 @@ import { SuiteShell, type NavCatalog, type ShellUser } from "@flit/shell/SuiteSh
 import { rutaKit } from "@flit/ui/iconos-mapas";
 import { CampanaDiagnostico } from "@/components/dx/campana/CampanaDiagnostico";
 import { ApiError, apiFetch } from "@/lib/api";
-import type { SesionDiagnostico } from "@/lib/sesion";
+import { ResumenSaneamientosContext, useSondeoResumenSaneamientos } from "@/lib/backoffice/useResumenSaneamientos";
+import { mensajeErrorFijo } from "@/lib/errores";
+import { puedeGestionarSaneamiento, puedeGestionarUsuarios, puedeVerReportes, type CapacidadesDiagnostico, type SesionDiagnostico } from "@/lib/sesion";
 
 export interface UsuarioShell extends ShellUser {
   permissions: string[];
@@ -62,10 +64,91 @@ const NAV_BACKOFFICE: NavCatalog = {
   sections: [{ id: "backoffice", label: "Backoffice", icon: iconoComo("escudo"), side: "left", ilustracion: rutaKit("modulo/diagnostico") }, ...NAV.sections],
   items: [
     { key: "backoffice-diagnosticos", label: "Backoffice", href: "/backoffice/diagnosticos", section: "backoffice", icon: iconoComo("escudo"), ilustracion: rutaKit("modulo/diagnostico") },
+    // «Saneamientos» (HU #14577, spec-ui §1.4) entra aquí por `navBackoffice`, solo con gestionarSaneamiento.
     { key: "backoffice-fuentes-obligatorias", label: "Fuentes obligatorias", href: "/backoffice/fuentes-obligatorias", section: "backoffice", icon: iconoComo("lista"), ilustracion: rutaKit("modulo/fuentes-oficiales") },
     ...NAV.items,
   ],
 };
+
+/**
+ * Dock del backoffice con la entrada «Saneamientos» (HU #14577 AC24/AC25), después de «Backoffice» y antes de «Fuentes
+ * obligatorias». Solo con la capacidad gestionarSaneamiento: se filtra al armar el catálogo, no con `permission`. Lleva la
+ * insignia de solicitudes sin tomar (0 o desconocido: sin insignia). La API vuelve a exigir el permiso en cada ruta.
+ */
+function navBackoffice(gestionar: boolean, solicitados: number | null): NavCatalog {
+  if (!gestionar) return NAV_BACKOFFICE;
+  const [primera, ...resto] = NAV_BACKOFFICE.items;
+  return {
+    ...NAV_BACKOFFICE,
+    items: [
+      primera,
+      {
+        key: "backoffice-saneamientos",
+        label: "Saneamientos",
+        href: "/backoffice/saneamientos",
+        section: "backoffice",
+        icon: iconoComo("pago"),
+        ilustracion: rutaKit("modulo/diagnostico"),
+        descripcion: "Solicitudes de las compañías",
+        ...(solicitados !== null ? { badge: solicitados } : {}),
+        badgeTexto: "solicitudes sin tomar",
+      },
+      ...resto,
+    ],
+  };
+}
+
+/**
+ * «Diagnósticos» y «Reportes» del dock (HU #14580, spec-ui §6, V4): dos secciones de una sola entrada, así que cada una
+ * es un enlace directo, a la izquierda y delante de «Backoffice». «Diagnósticos» con verDiagnosticos o crearDiagnosticos;
+ * «Reportes» con verReportes o la vista global (verEstadisticasGlobales, Q4). Se filtran al armar el catálogo con las
+ * capacidades de GET /sesion; la API vuelve a exigir cada permiso. El Dashboard es el botón de inicio (/), no una entrada.
+ */
+function navOperacion(capacidades: CapacidadesDiagnostico | undefined): NavCatalog {
+  const sections: NavCatalog["sections"] = [];
+  const items: NavCatalog["items"] = [];
+  if (capacidades?.verDiagnosticos || capacidades?.crearDiagnosticos) {
+    sections.push({ id: "diagnosticos", label: "Diagnósticos", icon: iconoComo("consulta"), side: "left", ilustracion: rutaKit("modulo/diagnostico") });
+    items.push({ key: "diagnosticos", label: "Diagnósticos", href: "/diagnosticos", section: "diagnosticos", icon: iconoComo("consulta"), ilustracion: rutaKit("modulo/diagnostico") });
+  }
+  if (puedeVerReportes(capacidades)) {
+    sections.push({ id: "reportes", label: "Reportes", icon: iconoComo("reportes"), side: "left", ilustracion: rutaKit("modulo/reportes") });
+    items.push({ key: "reportes", label: "Reportes", href: "/reportes", section: "reportes", icon: iconoComo("reportes"), ilustracion: rutaKit("modulo/reportes") });
+  }
+  return { sections, items };
+}
+
+/**
+ * «Usuarios» (HU #14588, spec-ui §9, A9.4): sección de una sola entrada (enlace directo a /usuarios) con la ilustración
+ * de colaboradores del kit, solo con la capacidad gestionarUsuarios (se filtra al armar el catálogo). Va entre Backoffice
+ * y Configuración; la API vuelve a exigir el permiso en cada ruta.
+ */
+const SECCION_USUARIOS: NavCatalog["sections"][number] = {
+  id: "usuarios",
+  label: "Usuarios",
+  icon: iconoComo("usuarios"),
+  side: "right",
+  ilustracion: rutaKit("modulo/colaboradores"),
+};
+const ENTRADA_USUARIOS: NavCatalog["items"][number] = {
+  key: "usuarios",
+  label: "Usuarios",
+  href: "/usuarios",
+  section: "usuarios",
+  icon: iconoComo("usuarios"),
+  ilustracion: rutaKit("modulo/colaboradores"),
+};
+
+/** Catálogo completo en orden: Diagnósticos · Reportes · (Backoffice) · (Usuarios) · Configuración. */
+function catalogoDock(base: NavCatalog, capacidades: CapacidadesDiagnostico | undefined): NavCatalog {
+  const operacion = navOperacion(capacidades);
+  const usuarios = puedeGestionarUsuarios(capacidades);
+  const ajustes = base.sections.findIndex((s) => s.id === "ajustes");
+  const corte = ajustes < 0 ? base.sections.length : ajustes;
+  const sections = usuarios ? [...base.sections.slice(0, corte), SECCION_USUARIOS, ...base.sections.slice(corte)] : base.sections;
+  const items = usuarios ? [...base.items, ENTRADA_USUARIOS] : base.items;
+  return { sections: [...operacion.sections, ...sections], items: [...operacion.items, ...items] };
+}
 
 /** Código de la 403 cuando la API niega el acceso sin decir por qué (usuario sin ningún permiso diagnostico.*). */
 const SIN_PERMISOS = "SIN_PERMISOS_DIAGNOSTICO";
@@ -95,7 +178,8 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
           irA403(e.code || SIN_PERMISOS);
           return;
         }
-        setEstado({ sesion: null, cargando: false, error: e instanceof Error ? e.message : "No se pudo abrir Diagnóstico." });
+        // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+        setEstado({ sesion: null, cargando: false, error: mensajeErrorFijo(e, "No se pudo abrir Diagnóstico.") });
       });
     return () => controller.abort();
   }, [intento]);
@@ -107,6 +191,14 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
 
   const valor = useMemo(() => ({ ...estado, recargar, tramitesUrl }), [estado, recargar, tramitesUrl]);
   const usuario = useMemo(() => ({ ...user, tenantName: estado.sesion?.empresa.nombre || user.tenantName }), [user, estado.sesion]);
+  const backoffice = estado.sesion?.capacidades.backoffice === true;
+  const gestionarSaneamiento = backoffice && puedeGestionarSaneamiento(estado.sesion?.capacidades);
+  const resumen = useSondeoResumenSaneamientos(gestionarSaneamiento);
+  const capacidades = estado.sesion?.capacidades;
+  const nav = useMemo(
+    () => catalogoDock(backoffice ? navBackoffice(gestionarSaneamiento, resumen.solicitados) : NAV, capacidades),
+    [backoffice, gestionarSaneamiento, resumen.solicitados, capacidades],
+  );
 
   let contenido: ReactNode = children;
   if (estado.cargando) contenido = <VehicleLoader label="Abriendo Diagnóstico…" />;
@@ -131,12 +223,16 @@ export function DiagnosticoShell({ user, tramitesUrl, children }: { user: Usuari
 
   return (
     <SesionContext.Provider value={valor}>
-      <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={estado.sesion?.capacidades.backoffice ? NAV_BACKOFFICE : NAV} user={usuario} accountUrl={tramitesUrl}
+      <ResumenSaneamientosContext.Provider value={resumen}>
+      <SuiteShell productCode="diagnostico" productName="Diagnóstico" nav={nav} user={usuario} accountUrl={tramitesUrl}
         layout="app"
+        // HU #14583 (spec-ui §9): solo Diagnóstico reparte el dock mitad y mitad; los demás productos no pasan el prop.
+        dockDistribucion="equilibrada"
         headerActions={estado.sesion ? <CampanaDiagnostico /> : undefined}
       >
         <div className="flex min-h-full flex-col gap-4 px-4 pt-6 text-flit-primary md:px-6">{contenido}</div>
       </SuiteShell>
+      </ResumenSaneamientosContext.Provider>
     </SesionContext.Provider>
   );
 }

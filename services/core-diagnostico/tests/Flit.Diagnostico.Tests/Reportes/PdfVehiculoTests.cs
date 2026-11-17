@@ -154,7 +154,7 @@ public sealed class PdfVehiculoTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await CuerpoSiNoEsPdf(respuesta, ct));
         var texto = await PdfDePrueba.TextoAsync(respuesta, ct);
         PdfDePrueba.Tiene(texto, "TST321").Should().BeTrue();
-        PdfDePrueba.Tiene(texto, "El vehículo está sin el documento del locatario: no hay a quién consultar.").Should().BeTrue("N/A con su motivo en texto");
+        PdfDePrueba.Tiene(texto, "El RUNT no reporta locatario").Should().BeTrue("N/A con su motivo en texto");
         (await CabeceraAsync(empresa, lote.Id, ct)).Estado.Should().Be(EstadoDiagnostico.EnProceso);
     }
 

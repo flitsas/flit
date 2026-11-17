@@ -5,23 +5,24 @@ namespace Flit.Diagnostico.Domain.Vehiculos;
 
 /// <summary>
 /// Vehículo tal como llega a la confirmación del lote (HU #13751), sin confiar en lo que el cliente ya validó: el
-/// identificador y, si se declaró, el documento del locatario. <see cref="ToString"/> no revela el documento.
+/// identificador y, si se declaró, el documento del propietario actual (HU #14582). <see cref="ToString"/> no revela el documento.
 /// </summary>
-public sealed record VehiculoCapturado(string? Identificador, string? TipoDocumentoLocatario, string? DocumentoLocatario)
+public sealed record VehiculoCapturado(string? Identificador, string? TipoDocumentoPropietario, string? DocumentoPropietario)
 {
     public override string ToString() =>
-        $"VehiculoCapturado {{ Identificador = {Identificador}, TipoDocumentoLocatario = {TipoDocumentoLocatario}, DocumentoLocatario = {(DocumentoLocatario is null ? "null" : "****")} }}";
+        $"VehiculoCapturado {{ Identificador = {Identificador}, TipoDocumentoPropietario = {TipoDocumentoPropietario}, DocumentoPropietario = {(DocumentoPropietario is null ? "null" : "****")} }}";
 }
 
 /// <summary>
 /// Vehículo válido del lote, en el orden de la captura (1, 2, ...): el identificador escrito, el normalizado, su clase y el
-/// documento del locatario declarado (en claro solo en memoria, hasta cifrarlo). <see cref="ToString"/> no revela el documento.
+/// documento del propietario actual declarado (HU #14582; en claro solo en memoria, hasta cifrarlo). <see cref="ToString"/> no
+/// revela el documento.
 /// </summary>
 public sealed record VehiculoConfirmado(
-    int Orden, string IdentificadorOriginal, string IdentificadorNorm, TipoIdentificador Tipo, string? TipoDocumentoLocatario, string? DocumentoLocatario)
+    int Orden, string IdentificadorOriginal, string IdentificadorNorm, TipoIdentificador Tipo, string? TipoDocumentoPropietario, string? DocumentoPropietario)
 {
     public override string ToString() =>
-        $"VehiculoConfirmado {{ Orden = {Orden}, IdentificadorNorm = {IdentificadorNorm}, Tipo = {Tipo}, TipoDocumentoLocatario = {TipoDocumentoLocatario}, DocumentoLocatario = {(DocumentoLocatario is null ? "null" : "****")} }}";
+        $"VehiculoConfirmado {{ Orden = {Orden}, IdentificadorNorm = {IdentificadorNorm}, Tipo = {Tipo}, TipoDocumentoPropietario = {TipoDocumentoPropietario}, DocumentoPropietario = {(DocumentoPropietario is null ? "null" : "****")} }}";
 }
 
 /// <summary>
@@ -63,7 +64,7 @@ public static class ConfirmadorVehiculos
         var duplicados = 0;
         foreach (var capturado in capturados)
         {
-            var fila = ValidadorFilaVehiculo.Validar(capturado?.Identificador, capturado?.TipoDocumentoLocatario, capturado?.DocumentoLocatario);
+            var fila = ValidadorFilaVehiculo.Validar(capturado?.Identificador, capturado?.TipoDocumentoPropietario, capturado?.DocumentoPropietario);
             if (!fila.EsValida || fila.Tipo is not { } tipo)
             {
                 invalidos++;
@@ -81,7 +82,9 @@ public static class ConfirmadorVehiculos
                 validos.Count + 1, fila.Original.Trim(), fila.Normalizado, tipo, documento?.Tipo, documento?.Numero));
         }
 
-        var estimado = EstimadorConsultas.Estimar(alcance, validos.Select(v => new VehiculoAEstimar(true, v.DocumentoLocatario is not null)));
+        // HU #14582 (contrato §1.1): el declarado es el propietario actual y no alimenta al locatario; antes del RUNT el locatario
+        // no se conoce y sus fuentes cuentan 0 (mínimo).
+        var estimado = EstimadorConsultas.Estimar(alcance, validos.Select(_ => new VehiculoAEstimar(true, TieneDocumentoLocatario: false)));
         return new ResultadoConfirmacion(validos, invalidos, duplicados, limiteVehiculosLote, estimado);
     }
 }

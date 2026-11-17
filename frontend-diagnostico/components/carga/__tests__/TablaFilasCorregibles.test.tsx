@@ -1,8 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { TablaFilasCorregibles } from "@/components/carga/TablaFilasCorregibles";
-import type { FilaResumen } from "@/lib/carga/api";
+import { ERRORES_CARGA, type FilaResumen } from "@/lib/carga/api";
 import { FILA_ERRONEA, ID, cuerpoDe, fila, llamadas, resumen, ruta, simularApi } from "./datos";
+
+const SECRETO = "mensaje del servidor que no debe verse";
 
 // Uso de ejemplo: <TablaFilasCorregibles diagnosticoId={id} filas={erroneas} onFilaRevalidada={(f, capturada) => ...} />
 // deja editar cada fila errónea; 300 ms después de la última tecla la valida en pantalla con fieldRules y, si pasa, la
@@ -32,7 +34,7 @@ describe("TablaFilasCorregibles — corregir ahora (AC 4)", () => {
 
     await waitFor(() => expect(within(filaDe()).getByText("Corregida")).toBeInTheDocument());
     const [llamada] = llamadas(api, "POST", ruta("/carga/validar-filas"));
-    expect(cuerpoDe(llamada)).toEqual({ filas: [{ fila: 3, identificador: "tst124", tipo_documento_locatario: null, documento_locatario: null }] });
+    expect(cuerpoDe(llamada)).toEqual({ filas: [{ fila: 3, identificador: "tst124", tipo_documento_propietario: null, documento_propietario: null }] });
     expect(onFilaRevalidada).toHaveBeenCalledWith(
       expect.objectContaining({ fila: 3, valida: true }),
       expect.objectContaining({ fila: 3, identificador: "tst124" }),
@@ -88,21 +90,21 @@ describe("TablaFilasCorregibles — corregir ahora (AC 4)", () => {
       fila: 6,
       identificador: "TST125",
       valida: false,
-      tipo_documento_locatario: "CC",
-      documento_locatario: "****12AB",
-      errores: [{ campo: "Documento_Locatario", code: "DOCUMENTO_INVALIDO", mensaje: "El documento solo admite dígitos." }],
+      tipo_documento_propietario: "CC",
+      documento_propietario: "****12AB",
+      errores: [{ campo: "Documento_Propietario", code: "DOCUMENTO_INVALIDO", mensaje: "El documento solo admite dígitos." }],
     });
-    const api = simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json(resumen({ filas: [fila({ fila: 6, identificador: "TST125", tipo_documento_locatario: "CC", documento_locatario: "****4050" })] })) });
+    const api = simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json(resumen({ filas: [fila({ fila: 6, identificador: "TST125", tipo_documento_propietario: "CC", documento_propietario: "****4050" })] })) });
     montar([conDoc]);
     expect(within(filaDe(6)).getByText("CC ****12AB")).toBeInTheDocument();
-    const documento = screen.getByLabelText("Documento del locatario de la fila 6") as HTMLInputElement;
+    const documento = screen.getByLabelText("Documento del propietario actual de la fila 6") as HTMLInputElement;
     expect(documento.value).toBe("");
 
     fireEvent.change(documento, { target: { value: "1020304050" } });
 
     await waitFor(() => expect(within(filaDe(6)).getByText("Corregida")).toBeInTheDocument());
     const [llamada] = llamadas(api, "POST", ruta("/carga/validar-filas"));
-    expect(cuerpoDe(llamada)).toEqual({ filas: [{ fila: 6, identificador: "TST125", tipo_documento_locatario: "CC", documento_locatario: "1020304050" }] });
+    expect(cuerpoDe(llamada)).toEqual({ filas: [{ fila: 6, identificador: "TST125", tipo_documento_propietario: "CC", documento_propietario: "1020304050" }] });
     expect(localStorage.length + sessionStorage.length).toBe(0);
   });
 });
@@ -189,6 +191,20 @@ describe("TablaFilasCorregibles sobre TablaEditable (HU #14562 · M12)", () => {
     expect(campo).toHaveFocus();
     expect(campo).toHaveValue("TST124");
   });
+
+  it.each([
+    ["409 DIAGNOSTICO_NO_EDITABLE", 409, "DIAGNOSTICO_NO_EDITABLE"],
+    ["404 NO_ENCONTRADO", 404, "NO_ENCONTRADO"],
+    ["422 con un code fuera del contrato", 422, "OTRO"],
+  ] as const)("AP-9: el %s da un motivo fijo, nunca el mensaje del servidor", async (_n, status, code) => {
+    const texto = code === "OTRO" ? "No se pudo revalidar la fila." : ERRORES_CARGA[code];
+    simularApi({ [`POST ${ruta("/carga/validar-filas")}`]: () => Response.json({ code, error: SECRETO }, { status }) });
+    montar();
+    fireEvent.change(identificador(), { target: { value: "TST124" } });
+    const reintentar = await within(filaDe()).findByRole("button", { name: "Reintentar Fila 3" });
+    expect(reintentar).toHaveAccessibleDescription(texto);
+    expect(document.body).not.toHaveTextContent(SECRETO);
+  });
 });
 
 // HU #14562 · M6 (AC56): la tabla de Carga es la TablaEditable del kit, así que por debajo de 900 px pasa a tarjetas y cada
@@ -203,9 +219,21 @@ describe("TablaFilasCorregibles: tarjetas por debajo de 900 px (HU #14562 · M6)
       "Fila",
       "Identificador",
       "Tipo de documento",
-      "Documento del locatario",
+      "Documento del propietario actual",
       "Estado",
       "Acciones",
     ]);
+  });
+});
+
+// HU #14585 (spec-ui §7, A7.1): la tabla de filas corregibles usa el contenedor de la tabla por defecto (CONTENEDOR_TABLA_CLS).
+// Uso de ejemplo: <TablaFilasCorregibles diagnosticoId={id} filas={[FILA_ERRONEA]} onFilaRevalidada={…} />.
+describe("TablaFilasCorregibles — HU #14585: contenedor de la tabla por defecto", () => {
+  it("el contenedor de TablaEditable lleva el radio del kit (rounded-xl) y el borde de marca del listado principal", () => {
+    render(<TablaFilasCorregibles diagnosticoId={ID} filas={[FILA_ERRONEA]} onFilaRevalidada={vi.fn()} />);
+    const contenedor = screen.getByRole("table", { name: "Filas con errores" }).parentElement!;
+    expect(contenedor.className).toContain("rounded-xl");
+    expect(contenedor.className).toContain("border-border");
+    expect(contenedor.className).not.toContain("rounded-[9px]");
   });
 });

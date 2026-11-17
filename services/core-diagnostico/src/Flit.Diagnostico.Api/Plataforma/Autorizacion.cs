@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Flit.Platform.Sdk.Authentication;
 using Flit.Platform.Sdk.Tenancy;
+using Flit.Diagnostico.Api.Modulos.Backoffice;
 using Microsoft.AspNetCore.Authorization;
 
 namespace Flit.Diagnostico.Api.Plataforma;
@@ -47,7 +48,8 @@ public static class AutorizacionExtensions
             .AddPolicy(PoliticaUsuario, p => p.RequireAuthenticatedUser().RequireAssertion(c =>
                 !PlatformPrincipal.IsService(c.User)
                 && (PlatformPrincipal.IsSuperAdmin(c.User) || c.User.FindAll("permissions").Any(claim => EsDelManifiesto(claim.Value)))))
-            .AddPoliticaBackoffice();
+            .AddPoliticaBackoffice()
+            .AddPoliticaUsuariosBackoffice();
         return services;
     }
 

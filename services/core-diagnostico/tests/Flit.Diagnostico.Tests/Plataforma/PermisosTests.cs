@@ -23,13 +23,16 @@ public sealed partial class PermisosTests
         ["usuario_diagnostico"] =
         [
             "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.reportes.descargar",
-            "diagnostico.derivacion.crear", "diagnostico.configuracion.ver",
+            "diagnostico.derivacion.crear", "diagnostico.configuracion.ver", "diagnostico.saneamiento.solicitar",
+            "diagnostico.reportes.ver",
         ],
         ["admin_diagnostico"] =
         [
             "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.reportes.descargar",
             "diagnostico.derivacion.crear", "diagnostico.configuracion.ver", "diagnostico.configuracion.editar",
-            "diagnostico.consultas.reprocesar",
+            "diagnostico.consultas.reprocesar", "diagnostico.saneamiento.solicitar", "diagnostico.reportes.ver",
+            // HU #14587 (contrato-api §3.1, SP-17): gestionar usuarios de Diagnóstico, solo el admin.
+            "diagnostico.usuarios.gestionar",
         ],
     };
 
@@ -39,6 +42,12 @@ public sealed partial class PermisosTests
         "diagnostico.reportes.descargar", "diagnostico.derivacion.crear", "diagnostico.configuracion.ver",
         "diagnostico.configuracion.editar", "diagnostico.configuracion.contrato.editar", "diagnostico.consultas.reprocesar",
         "diagnostico.consultas.llenar", "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver",
+        // HU #14576 AC31 (plan saneamiento §5.1): solicitar va a los dos roles; gestionar a ninguno.
+        "diagnostico.saneamiento.solicitar", "diagnostico.saneamiento.gestionar",
+        // HU #14579, BE-0 (O8 = D-1, SP-1): ver reportes en pantalla va a los dos roles; exportar sigue con reportes.descargar.
+        "diagnostico.reportes.ver",
+        // HU #14587 (contrato-api §3.1, SP-17): módulo Usuarios, solo admin_diagnostico.
+        "diagnostico.usuarios.gestionar",
     ];
 
     private static List<string> Slugs => Permisos.Modulos.SelectMany(m => m.Permisos).Select(p => p.Slug).ToList();
@@ -49,7 +58,7 @@ public sealed partial class PermisosTests
     {
         var slugs = Slugs;
 
-        slugs.Should().OnlyHaveUniqueItems().And.BeEquivalentTo(SlugsDelPlan, "son los 13 slugs de la tabla §6.2");
+        slugs.Should().OnlyHaveUniqueItems().And.BeEquivalentTo(SlugsDelPlan, "son los 13 slugs de la tabla §6.2, los 2 del saneamiento y el de reportes (BE-0)");
         slugs.Should().AllSatisfy(s => FormatoSlug().IsMatch(s).Should().BeTrue($"«{s}» sigue diagnostico.<modulo>.<accion>"));
         Permisos.Modulos.Should().AllSatisfy(m =>
         {
@@ -82,11 +91,34 @@ public sealed partial class PermisosTests
         string[] backoffice =
         [
             "diagnostico.backoffice.ver", "diagnostico.configuracion.contrato.editar", "diagnostico.consultas.llenar",
-            "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver",
+            "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver", "diagnostico.saneamiento.gestionar",
         ];
 
         Permisos.RolesPorDefecto.Select(r => r.Codigo).Should().NotContain("backoffice_diagnostico");
         Permisos.RolesPorDefecto.Should().AllSatisfy(r => r.Permisos.Should().NotContain(backoffice, r.Codigo));
+    }
+
+    // HU #14579, BE-0 (contrato-api §0 «Manifiesto») — reportes.ver en el módulo de diagnósticos con su nombre; descargar cambia de nombre visible.
+    [Fact]
+    public void BE0_reportes_ver_en_el_modulo_diagnosticos_y_nombre_nuevo_de_descargar()
+    {
+        var diagnosticos = Permisos.Modulos.Single(m => m.Codigo == "diagnostico_diagnosticos").Permisos;
+
+        diagnosticos.Should().Contain(("diagnostico.reportes.ver", "Ver reportes de la compañía (con datos personales)"));
+        diagnosticos.Should().Contain(("diagnostico.reportes.descargar", "Descargar reportes, exportaciones y evidencias"));
+        Permisos.ReportesVer.Should().Be("diagnostico.reportes.ver");
+    }
+
+    // HU #14587 (contrato-api §3.1, SP-17) — permiso nuevo en su módulo diagnostico_usuarios, solo en admin_diagnostico.
+    [Fact]
+    public void HU14587_usuarios_gestionar_en_su_modulo_y_solo_en_admin_diagnostico()
+    {
+        var modulo = Permisos.Modulos.Single(m => m.Codigo == "diagnostico_usuarios");
+
+        modulo.Nombre.Should().Be("Diagnóstico · Usuarios");
+        modulo.Permisos.Should().Equal(("diagnostico.usuarios.gestionar", "Gestionar los usuarios de Diagnóstico de la compañía"));
+        Permisos.RolesPorDefecto.Single(r => r.Codigo == "admin_diagnostico").Permisos.Should().Contain("diagnostico.usuarios.gestionar");
+        Permisos.RolesPorDefecto.Single(r => r.Codigo == "usuario_diagnostico").Permisos.Should().NotContain("diagnostico.usuarios.gestionar");
     }
 
     [GeneratedRegex(@"^diagnostico(\.[a-z]+){2,3}$", RegexOptions.CultureInvariant)]

@@ -89,6 +89,12 @@ export interface InlineAlertProps {
   id?: string;
   /** Compacta el padding/gap para usarlo debajo de un campo de formulario denso. */
   compact?: boolean;
+  /**
+   * Región viva (por defecto `true`, el comportamiento de siempre). Con `false` el aviso es contenido estático, sin `role`
+   * ni `aria-live`: para los avisos de resultado que ya se anuncian por la región viva de la pantalla o que reciben el
+   * foco, así el lector no los lee dos veces (HU #14577, hueco H-7).
+   */
+  vivo?: boolean;
 }
 
 export function InlineAlert({
@@ -99,6 +105,7 @@ export function InlineAlert({
   className = '',
   id,
   compact = false,
+  vivo = true,
 }: InlineAlertProps) {
   const { color, background, border, Icon } = INLINE_ALERT_TONES[tone];
   const interrumpe = tone === 'error' || tone === 'warning' || tone === 'pending';
@@ -106,8 +113,8 @@ export function InlineAlert({
   return (
     <div
       id={id}
-      role={interrumpe ? 'alert' : 'status'}
-      aria-live={interrumpe ? 'assertive' : 'polite'}
+      role={vivo ? (interrumpe ? 'alert' : 'status') : undefined}
+      aria-live={vivo ? (interrumpe ? 'assertive' : 'polite') : undefined}
       className={`flex items-start ${compact ? 'gap-1.5 rounded-[9px] p-1.5' : 'gap-3 rounded-[9px] px-4 py-3'} ${className}`.trim()}
       style={{ background, border: `1px solid ${border}` }}
     >

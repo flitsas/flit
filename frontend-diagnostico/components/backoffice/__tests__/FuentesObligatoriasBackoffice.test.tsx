@@ -142,9 +142,11 @@ describe("FuentesObligatoriasBackoffice — guardar", () => {
       fuentes: ["SIMIT_PROPIETARIO", "AVALUO"],
     });
 
+    // AP-8 (SF-6): reescrito; antes afirmaba el mensaje de la API («No se puede quitar el piso.»). Ahora, texto fijo por code.
     const aviso = await screen.findByRole("alert");
     expect(aviso).toHaveTextContent(/Traspaso estándar/);
-    expect(aviso).toHaveTextContent(/no se puede quitar el piso/i);
+    expect(aviso).toHaveTextContent("SIMIT propietario es obligatorio en este traspaso y no se puede quitar.");
+    expect(aviso).not.toHaveTextContent(/quitar el piso/i);
     expect(within(standard).getByText("Error de guardado")).toBeInTheDocument();
     expect(casilla(standard, "Avalúo comercial")).toBeChecked();
     const unilateral = fila("Tipo de trámite: Traspaso unilateral");
@@ -268,5 +270,40 @@ describe("FuentesObligatoriasBackoffice — HU #14562 M6: tarjetas por debajo de
     expect(etiquetas).toContain("Avalúo comercial");
     expect(etiquetas.slice(-2)).toEqual(["Estado", "Acciones"]);
     expect(etiquetas.every((e) => !!e)).toBe(true);
+  });
+});
+
+// AP-8 (security-fase3 SF-6): ni la carga ni el guardado muestran el mensaje del servidor.
+const SECRETO_AP8 = "Npgsql detalle interno 23514 en diagnostico.consultas";
+
+describe("FuentesObligatoriasBackoffice — AP-8: textos fijos", () => {
+  it("400 al cargar: aviso con texto fijo, sin el mensaje de la API", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ code: "OTRO_ERROR", error: SECRETO_AP8 }, { status: 400 }) });
+    montar();
+    const aviso = await screen.findByRole("alert");
+    expect(aviso).toHaveTextContent("Intenta de nuevo en un momento.");
+    expect(aviso).not.toHaveTextContent(SECRETO_AP8);
+  });
+
+  it.each([
+    ["FUENTE_DESCONOCIDA", "Una de las fuentes no existe en el catálogo."],
+    ["FUENTE_RUNT_NO_CONFIGURABLE", "El RUNT del vehículo es fijo: no se configura."],
+    ["SIMIT_PROHIBIDO_EN_UNILATERAL", "El traspaso unilateral no lleva consultas SIMIT."],
+    ["PISO_NO_DISPENSABLE", "SIMIT propietario es obligatorio en este traspaso y no se puede quitar."],
+    ["DEFINICION_AMBIGUA", "No se pudo guardar esta definición."],
+    ["ERROR_INTERNO", "No se pudo guardar esta definición."],
+  ])("guardar con %s: el aviso de la fila lleva un texto fijo", async (code, texto) => {
+    simularApi({
+      [`GET ${RUTA}`]: () => Response.json(SEMILLA),
+      [`PUT ${RUTA}`]: () => Response.json({ code, error: SECRETO_AP8 }, { status: code === "ERROR_INTERNO" ? 500 : 422 }),
+    });
+    montar();
+    await screen.findByRole("table", { name: "Fuentes obligatorias por definición" });
+    const standard = fila("Tipo de trámite: Traspaso estándar");
+    fireEvent.click(casilla(standard, "Avalúo comercial"));
+    fireEvent.click(boton(standard, "Guardar"));
+    const aviso = await screen.findByRole("alert");
+    expect(aviso).toHaveTextContent(texto);
+    expect(aviso).not.toHaveTextContent(SECRETO_AP8);
   });
 });

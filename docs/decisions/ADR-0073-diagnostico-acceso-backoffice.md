@@ -5,6 +5,7 @@
 **Deciders**: Líder Técnico FLIT (aceptación exclusiva humana, regla FLIT 15). Redactado durante la implementación de la HU #13728.
 **Tags**: arquitectura, backend, seguridad, multi-tenant, auditoría
 **Épica / Feature / HU**: #12881 / #13715 / #13728 (F00.1-H5); vía de escritura: #13716 / #13741 (F00.2-H2) · **Plan**: `docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md` D-16, D-01, §6.2, RD-3 · **Relacionados**: ADR-0069, ADR-0072
+**Enmendado por ADR-0088 (Propuesto)**: [ADR-0088](ADR-0088-diagnostico-estadisticas-y-reportes-en-vivo.md) (HU #14579). (1) Grupo A (sin empresa explícita, precedente de ADR-0087): se suman `/backoffice/estadisticas/global`, `/backoffice/reportes` y `/backoffice/reportes/{tipo}/global[/excel|/pdf]`, con una fila de `lecturas_backoffice` por empresa del resultado en el mismo guardado. (2) En las rutas con `?empresa=` de estadísticas y reportes (E3, B4–B6), `SoloEmpresaHabilitada` valida antes de `ConEmpresaExplicita` que la empresa tenga Diagnóstico activo: si no, 404 `EMPRESA_NO_ENCONTRADA` sin auditar. (3) Punto 3 de este ADR: en esas rutas la fila de `lecturas_backoffice` registra el **intento** autorizado (se escribe antes de validar el filtro, el tope 422 o el freno 429); la **entrega** queda en `accesos_reporte`. Este ADR sigue en Propuesto.
 
 ## Contexto
 

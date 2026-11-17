@@ -55,7 +55,7 @@ public sealed class SimulacionBusTests(AnfitrionBusSimulado bus) : IClassFixture
             {
                 Opciones = new OpcionesConsulta(),
                 Placa = new Placa { Valor = "TST20Z" },
-                DepartamentoCodigo = "50",
+                DepartamentoCodigo = "11",
                 Documento = new DocumentoIdentidad { Tipo = "CC", Numero = "999999" },
             }, esExpress: true);
 
