@@ -53,6 +53,16 @@ const cabeceraEstandar = (src: string) =>
 /** Fila-tarjeta que se eleva con sombra azul al pasar el puntero. */
 const filaEstandar = (src: string) => /TABLA_ROW_HOVER_CLS/.test(src) || /CARDLIST_ROW\b/.test(src);
 
+/**
+ * Excepción aprobada por Samuel (2026-11-17, rediseño del Inicio en 3 dashboards): las colas del Inicio son un
+ * ADELANTO de los 5 trámites más urgentes con un enlace «Ver todos» a la lista paginada. Paginarlas pintaría un pie
+ * «Mostrando 1–5 de 5» sin uso. Se exime solo esa tabla por archivo; cualquier otra DataTable del archivo sí paga.
+ */
+const ADELANTOS_SIN_PAGINACION: Record<string, number> = {
+  "components/atom/modules/GestorDashboard.tsx": 1, // «Cola de gestión» (top 5 por inactividad)
+  "components/atom/modules/OtDashboard.tsx": 1, // «Cola crítica» (top 5 por días en espera)
+};
+
 const usaPaginacionEstandar = (src: string) =>
   /<(Pagination|PageNav|OtTablePagination)\b/.test(src) || /\bpagination=\{/.test(src);
 
@@ -97,7 +107,7 @@ describe("HU #13920 — paginación estándar de toda tabla", () => {
 
   it("todo DataTable recibe `pagination`", () => {
     const fuera = ARCHIVOS.filter((a) => {
-      const tablas = (a.src.match(/<DataTable\b/g) ?? []).length;
+      const tablas = (a.src.match(/<DataTable\b/g) ?? []).length - (ADELANTOS_SIN_PAGINACION[a.rel] ?? 0);
       const paginadas = (a.src.match(/\bpagination=\{/g) ?? []).length;
       return tablas > paginadas;
     }).map((a) => `${a.rel} — <DataTable> sin pagination`);

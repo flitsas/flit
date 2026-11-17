@@ -19,6 +19,7 @@ import { Icono } from "@flit/ui/Icono";
 import { buttonClass } from "@flit/ui/Button";
 import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { DataTable, type DataTableColumn } from "@flit/ui/DataTable";
+import { usePaginacion } from "@flit/ui/usePaginacion";
 import { Pestanas } from "@flit/ui/Pestanas";
 import { BarraProgreso } from "@flit/ui/BarraProgreso";
 import { StatusBadge, type StatusBadgeTone } from "@flit/ui/StatusBadge";
@@ -721,6 +722,8 @@ function ResolucionesDeFamilia({ periodo, familia }: { periodo: OtMetricsParams 
 
 /** Quién le radicó al organismo en el periodo, por familia. Mismo universo que el informe. */
 function ClientesCorporativos({ periodo }: { periodo: OtMetricsParams | null }) {
+  // HU #13920 — un organismo puede tener muchos clientes: paginación estándar (10/20/30/50, «Filas por página»).
+  const pg = usePaginacion("inicio.OtDashboard.clientes");
   const cargar = useMemo(
     () => (periodo ? (signal: AbortSignal): Promise<OtClientsByFamily> => fetchOtClientsByFamily(periodo, signal) : null),
     [periodo],
@@ -746,7 +749,7 @@ function ClientesCorporativos({ periodo }: { periodo: OtMetricsParams | null }) 
     >
       <DataTable
         columns={columnas}
-        rows={filas}
+        rows={pg.paginar(filas)}
         getRowKey={(r) => r.clientTenantId}
         status={!periodo || estado === "cargando" ? "loading" : estado === "error" ? "error" : filas.length === 0 ? "empty" : "ready"}
         emptyMessage="Ningún cliente radicó trámites en el periodo."
@@ -754,6 +757,13 @@ function ClientesCorporativos({ periodo }: { periodo: OtMetricsParams | null }) 
         ariaLabel="Trámites por cliente corporativo"
         tarjeta={false}
         minWidth={520}
+        pagination={{
+          page: pg.page,
+          pageSize: pg.pageSize,
+          totalCount: filas.length,
+          onPageChange: pg.setPage,
+          onPageSizeChange: pg.setPageSize,
+        }}
       />
     </PanelInicio>
   );
