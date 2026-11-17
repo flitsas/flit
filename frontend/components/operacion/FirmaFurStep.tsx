@@ -38,7 +38,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { actorsOrderedByOrdinal, identityStatusForActor } from '@/lib/tramites/ownership-share';
-import { esPlacaAsignadaPorOt } from '@/lib/tramites/plate-digit-preference';
+import { esPlacaAsignadaPorOt, PLATE_SOURCE_ICT } from '@/lib/tramites/plate-digit-preference';
 import { grupoPlacaDesdeFormatoFur, grupoPlacaPideDigito, type GrupoPlaca } from '@/lib/tramites/plate-format';
 import { AvisoDigitoPlacaOt } from './AvisoDigitoPlacaOt';
 
@@ -943,6 +943,8 @@ export function PlacaPreasignadaSection({
   const vinTienePlacaRunt = placa !== '' && plateSource === 'consultation';
   // Borrador anterior a la Epic #12550 con una placa elegida por el gestor desde el inventario.
   const placaElegida = placa !== '' && plateSource === 'user';
+  // Placa entregada por la integración (ICT): solo lectura, sin dígito ni opción de quitarla.
+  const placaIct = placa !== '' && plateSource === PLATE_SOURCE_ICT;
   // Registro diferido 2026-11-09 (HU 3) — placa que asignó el organismo en Preasignación
   // (`source: 'ot'`, o placa con source vacío de las asignadas antes de marcar el origen). Se ve en
   // el asistente en solo lectura (enlace directo a /tramites/{id}); desde el listado, un trámite ya
@@ -1010,6 +1012,15 @@ export function PlacaPreasignadaSection({
         El vehículo ya tiene la placa <span className="font-mono font-semibold">{placa}</span>{' '}
         asignada según el RUNT. Llegará al organismo listo para su decisión; la placa y el organismo no
         se pueden modificar.
+      </p>,
+    );
+  }
+
+  if (placaIct) {
+    return shell(
+      <p className="mt-2 text-xs opacity-80" data-testid="fur-placa-ict">
+        El vehículo llega con la placa <span className="font-mono font-semibold">{placa}</span>{' '}
+        enviada por la integración. Llegará al organismo listo para su decisión.
       </p>,
     );
   }
