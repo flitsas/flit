@@ -513,6 +513,188 @@ public sealed class OtUserClientScopeTests
         (await ctx.OtUserClientScopes.CountAsync(Ct)).Should().Be(0);
     }
 
+    // ── Un actor restringido no puede ampliar (política 1) ─────────────────────────────────────────
+
+    [Theory]
+    [InlineData(OtClientScopeModes.Todos, false)] // 'todos' amplía: prohibido
+    [InlineData(OtClientScopeModes.Especificos, true)] // incluye ClientB, fuera de su alcance
+    public async Task Set_ActorRestringido_NoPuedeAmpliar_403(string mode, bool incluyeClientB)
+    {
+        var db = SeedDb(usuarios: true, scopeFor: AdminUser, scopeClients: [ClientA]);
+        await using (var ctx = NewContext(db))
+        {
+            var handler = new SetOtUserClientScopeHandler(new OtUserClientScopeRepository(ctx), new FakeScope([ClientA]));
+
+            var status = await handler.HandleAsync(
+                new SetOtUserClientScopeCommand(
+                    OtTenant, null, UserX, AdminUser, mode, incluyeClientB ? [ClientA, ClientB] : []), Ct);
+
+            status.Should().Be(SetOtUserClientScopeStatus.ExceedsActor);
+        }
+
+        await using var verify = NewContext(db);
+        (await verify.OtUserClientScopes.CountAsync(s => s.UserId == UserX, Ct)).Should().Be(0, "no se guardó nada");
+        (await verify.UserPermissionAudits.CountAsync(Ct)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Set_ActorRestringido_PuedeDarUnSubconjuntoDeSuAlcance()
+    {
+        var db = SeedDb(usuarios: true, scopeFor: AdminUser, scopeClients: [ClientA, ClientB]);
+        await using (var ctx = NewContext(db))
+        {
+            var handler = new SetOtUserClientScopeHandler(new OtUserClientScopeRepository(ctx), new FakeScope([ClientA, ClientB]));
+
+            (await handler.HandleAsync(
+                new SetOtUserClientScopeCommand(OtTenant, null, UserX, AdminUser, OtClientScopeModes.Especificos, [ClientA]), Ct))
+                .Should().Be(SetOtUserClientScopeStatus.Ok);
+        }
+
+        await using var verify = NewContext(db);
+        var userXScope = await verify.OtUserClientScopes.AsNoTracking().SingleAsync(s => s.UserId == UserX, Ct);
+        (await verify.OtUserClientScopeClients.Where(c => c.ScopeId == userXScope.Id).Select(c => c.ClientTenantId).ToListAsync(Ct))
+            .Should().BeEquivalentTo([ClientA]);
+    }
+
+    [Fact]
+    public async Task Set_ActorConAlcanceVacio_NoPuedeDarNada()
+    {
+        var db = SeedDb(usuarios: true);
+        await using var ctx = NewContext(db);
+        var handler = new SetOtUserClientScopeHandler(new OtUserClientScopeRepository(ctx), new FakeScope([]));
+
+        (await handler.HandleAsync(
+            new SetOtUserClientScopeCommand(OtTenant, null, UserX, AdminUser, OtClientScopeModes.Especificos, [ClientA]), Ct))
+            .Should().Be(SetOtUserClientScopeStatus.ExceedsActor);
+        (await handler.HandleAsync(
+            new SetOtUserClientScopeCommand(OtTenant, null, UserX, AdminUser, OtClientScopeModes.Todos, []), Ct))
+            .Should().Be(SetOtUserClientScopeStatus.ExceedsActor);
+    }
+
+    [Theory]
+    [InlineData(false)] // sin resolver
+    [InlineData(true)] // resolver sin restricción (Admin OT sin alcance / Super Admin)
+    public async Task Set_ActorSinRestriccion_NadaCambia(bool conResolver)
+    {
+        var db = SeedDb(usuarios: true);
+        await using var ctx = NewContext(db);
+        var handler = new SetOtUserClientScopeHandler(
+            new OtUserClientScopeRepository(ctx), conResolver ? new FakeScope(null) : null);
+
+        (await handler.HandleAsync(
+            new SetOtUserClientScopeCommand(OtTenant, null, UserX, AdminUser, OtClientScopeModes.Especificos, [ClientA, ClientB]), Ct))
+            .Should().Be(SetOtUserClientScopeStatus.Ok);
+        (await handler.HandleAsync(
+            new SetOtUserClientScopeCommand(OtTenant, null, UserX, AdminUser, OtClientScopeModes.Todos, []), Ct))
+            .Should().Be(SetOtUserClientScopeStatus.Ok);
+    }
+
+    // ── Invitación: el actor restringido no amplía y el invitado hereda su alcance (políticas 1 y 2) ───
+
+    [Fact]
+    public async Task Invitacion_ActorRestringido_NoPuedeDarTodosNiFueraDeSuAlcance()
+    {
+        var db = SeedDb(usuarios: true);
+        await using var ctx = NewContext(db);
+        var validator = new ValidateOtInvitationClientScopeHandler(new OtUserClientScopeRepository(ctx), new FakeScope([ClientA]));
+
+        (await validator.HandleAsync(OtTenant, null, "todos", [], AdminUser, Ct)).Status
+            .Should().Be(SetOtUserClientScopeStatus.ExceedsActor);
+        (await validator.HandleAsync(OtTenant, null, "especificos", [ClientA, ClientB], AdminUser, Ct)).Status
+            .Should().Be(SetOtUserClientScopeStatus.ExceedsActor);
+
+        var (status, ids) = await validator.HandleAsync(OtTenant, null, "especificos", [ClientA], AdminUser, Ct);
+        status.Should().Be(SetOtUserClientScopeStatus.Ok);
+        ids.Should().BeEquivalentTo([ClientA]);
+    }
+
+    [Fact]
+    public async Task Invitacion_ActorSinRestriccion_ConservaElComportamientoDeSiempre()
+    {
+        var db = SeedDb(usuarios: true);
+        await using var ctx = NewContext(db);
+        var validator = new ValidateOtInvitationClientScopeHandler(new OtUserClientScopeRepository(ctx), new FakeScope(null));
+
+        (await validator.HandleAsync(OtTenant, null, "todos", [], AdminUser, Ct)).Status.Should().Be(SetOtUserClientScopeStatus.Ok);
+        (await validator.HandleAsync(OtTenant, null, "especificos", [ClientA, ClientB], AdminUser, Ct)).Status
+            .Should().Be(SetOtUserClientScopeStatus.Ok);
+    }
+
+    [Fact]
+    public async Task Invitacion_SinClientScope_ElInvitadoHeredaExactamenteElAlcanceDelInvitador()
+    {
+        var db = SeedDb(usuarios: true);
+        await using var ctx = NewContext(db);
+
+        var restringido = await new ValidateOtInvitationClientScopeHandler(
+                new OtUserClientScopeRepository(ctx), new FakeScope([ClientA, ClientA]))
+            .InheritFromActorAsync(OtTenant, AdminUser, Ct);
+        var libre = await new ValidateOtInvitationClientScopeHandler(
+                new OtUserClientScopeRepository(ctx), new FakeScope(null))
+            .InheritFromActorAsync(OtTenant, AdminUser, Ct);
+        var huerfano = await new ValidateOtInvitationClientScopeHandler(
+                new OtUserClientScopeRepository(ctx), new FakeScope([]))
+            .InheritFromActorAsync(OtTenant, AdminUser, Ct);
+        var sinResolver = await new ValidateOtInvitationClientScopeHandler(new OtUserClientScopeRepository(ctx))
+            .InheritFromActorAsync(OtTenant, AdminUser, Ct);
+
+        restringido.Restricted.Should().BeTrue();
+        restringido.ClientTenantIds.Should().BeEquivalentTo([ClientA]);
+        libre.Restricted.Should().BeFalse("el invitado queda en 'todos', como siempre");
+        huerfano.Restricted.Should().BeTrue();
+        huerfano.ClientTenantIds.Should().BeEmpty("alcance huérfano: el endpoint lo rechaza (fail-closed)");
+        sinResolver.Restricted.Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Activacion_InvitacionSinCompanias_DeUnInvitadorRestringido_HeredaSuAlcance()
+    {
+        var db = SeedDb(scopeFor: AdminUser, scopeClients: [ClientA]);
+        var newUser = Guid.NewGuid();
+
+        await using (var ctx = NewContext(db))
+        {
+            var data = new ActivationData(Guid.NewGuid(), "n@n.test", "N", "hash", OtTenant, [Guid.NewGuid()], AdminUser, DateTimeOffset.UtcNow);
+            await new OtInvitationClientScopeActivationHook(ctx).OnUserCreatedAsync(data, newUser, Ct);
+            await ctx.SaveChangesAsync(Ct);
+        }
+
+        await using var ctx2 = NewContext(db);
+        (await Resolver(ctx2, Principal(newUser, "ot_gestor")).GetRestrictionAsync(Office, Ct))
+            .Should().BeEquivalentTo([ClientA], "nunca queda en 'todos' si quien lo invitó está restringido");
+    }
+
+    // ── Compañías elegibles: ya recortadas al alcance de quien llama (política 4) ───────────────────
+
+    [Fact]
+    public async Task CompaniasCliente_ActorRestringido_ItemsLimitadosYActorRestrictedTrue()
+    {
+        var db = SeedDb(usuarios: true);
+        await using var ctx = NewContext(db);
+
+        var result = await new ListOtClientCompaniesHandler(new OtUserClientScopeRepository(ctx), new FakeScope([ClientA]))
+            .HandleAsync(OtTenant, null, AdminUser, Ct);
+
+        result.ActorRestricted.Should().BeTrue();
+        result.Items.Select(i => i.TenantId).Should().BeEquivalentTo([ClientA]);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CompaniasCliente_ActorSinRestriccion_TodasYActorRestrictedFalse(bool conResolver)
+    {
+        var db = SeedDb(usuarios: true);
+        await using var ctx = NewContext(db);
+
+        var result = await new ListOtClientCompaniesHandler(
+                new OtUserClientScopeRepository(ctx), conResolver ? new FakeScope(null) : null)
+            .HandleAsync(OtTenant, null, AdminUser, Ct);
+
+        result.ActorRestricted.Should().BeFalse();
+        result.Items.Select(i => i.TenantId).Should().BeEquivalentTo([ClientA, ClientB]);
+    }
+
     // ── Soporte ─────────────────────────────────────────────────────────────────────
 
     private static OtClientProcedureRepository Repo(FlitDbContext ctx, IOtUserClientScopeResolver? scope) =>

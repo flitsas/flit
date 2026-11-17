@@ -37,8 +37,16 @@ public sealed class MandatarioAssociableCompanies : IMandatarioAssociableCompani
         _hierarchy = hierarchy ?? throw new ArgumentNullException(nameof(hierarchy));
     }
 
+    public Task<AssociableCompaniesResult> ListForOtAsync(
+        string? search, int page, int pageSize, CancellationToken cancellationToken = default) =>
+        ListForOtAsync(search, page, pageSize, null, cancellationToken);
+
     public async Task<AssociableCompaniesResult> ListForOtAsync(
-        string? search, int page, int pageSize, CancellationToken cancellationToken = default)
+        string? search,
+        int page,
+        int pageSize,
+        IReadOnlyCollection<Guid>? allowedTenantIds,
+        CancellationToken cancellationToken)
     {
         if (!TryParseSearch(search, out var term))
         {
@@ -46,7 +54,8 @@ public sealed class MandatarioAssociableCompanies : IMandatarioAssociableCompani
         }
 
         var all = await _directory.ListAsync(cancellationToken).ConfigureAwait(false);
-        var candidates = DeduplicateByNit(all.Where(c => c.IsActive))
+        var allowed = allowedTenantIds?.ToHashSet();
+        var candidates = DeduplicateByNit(all.Where(c => c.IsActive && (allowed is null || allowed.Contains(c.Id))))
             .Select(c => new AssociableCompany(c.Id, c.Name, c.Nit))
             .ToList();
 
