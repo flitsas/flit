@@ -26,8 +26,8 @@ import {
   permiteRegenerarMandato,
 } from '@/lib/tramites/regenerar-mandato';
 import {
-  ADMIN_ESTADO_DESTINO_OPTIONS,
   ADMIN_TRAMITE_PERMISSIONS,
+  opcionesEstadoDestinoAdmin,
 } from '@/lib/tramites/admin-tramite-permissions';
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
 
@@ -145,7 +145,7 @@ interface ModalBaseProps {
 
 /** AC3 — Cambiar estado (HU #12159): selector de destino (excluye 'aprobado') + motivo opcional. */
 function CambiarEstadoModal({ open, onClose, item, tenantId, onSuccess, onError }: ModalBaseProps) {
-  const opciones = ADMIN_ESTADO_DESTINO_OPTIONS.filter((e) => e !== item.estado);
+  const opciones = opcionesEstadoDestinoAdmin(item.estado, item.modalidad);
   const [toStatus, setToStatus] = useState('');
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
