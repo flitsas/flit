@@ -166,7 +166,7 @@ describe("SuperAdminDashboard — franja 1", () => {
     // Suma de la tabla: 3 aprobados / (3 + 1 rechazado) = 75 %.
     expect(total).toHaveTextContent(/75\s%\saprobación/);
     await waitFor(() => expect(screen.getByTestId("kpi-tiempo-ecosistema")).toHaveTextContent("2,5 días"));
-    expect(screen.getByTestId("kpi-tiempo-ecosistema")).toHaveTextContent("De radicación a resolución");
+    expect(screen.getByTestId("kpi-tiempo-ecosistema")).toHaveTextContent("hasta que el organismo aprueba o rechaza");
     await waitFor(() => expect(screen.getByTestId("kpi-validaciones")).toHaveTextContent("14"));
   });
 
@@ -248,24 +248,20 @@ describe("SuperAdminDashboard — franja 3: compañías", () => {
     expect(within(panel).getByText("Sin decididos")).toBeInTheDocument();
   });
 
-  it("solo lista las compañías con trámites, con la paginación estándar (10 por página), y cuenta las demás en palabras", async () => {
-    const muchas = Array.from({ length: 12 }, (_, i) => ({
+  it("muestra solo las 5 compañías con más trámites activos y cuenta el resto en palabras", async () => {
+    const muchas = Array.from({ length: 7 }, (_, i) => ({
       ...COMPANIAS.items[0],
       tenantId: `cccccccc-0000-4000-8000-${String(i).padStart(12, "0")}`,
       nombre: `Compañía ${i + 1}`,
     }));
     mocks.fetchSuperAdminCompanias.mockResolvedValue({ ...COMPANIAS, items: [...muchas, COMPANIAS.items[1]] });
-    const user = userEvent.setup();
     renderVista();
     const panel = await screen.findByTestId("panel-companias");
-    expect(await within(panel).findByRole("button", { name: "Ver resumen de Compañía 10" })).toBeInTheDocument();
-    expect(within(panel).queryByRole("button", { name: "Ver resumen de Compañía 11" })).not.toBeInTheDocument();
-    expect(within(panel).getByText(/Filas por página/i)).toBeInTheDocument();
-    expect(within(panel).queryByRole("button", { name: "Ver resumen de Concesionario Dos" })).not.toBeInTheDocument();
+    expect(await within(panel).findByRole("button", { name: "Ver resumen de Compañía 5" })).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: "Ver resumen de Compañía 6" })).not.toBeInTheDocument();
+    expect(within(panel).queryByText(/Filas por página/i)).not.toBeInTheDocument();
+    expect(screen.getByTestId("companias-otras")).toHaveTextContent("2 compañías más tienen trámites en el periodo");
     expect(screen.getByTestId("companias-sin-tramites")).toHaveTextContent("1 compañía activa no tiene trámites en el periodo seleccionado.");
-
-    await user.click(within(panel).getByRole("button", { name: /siguiente/i }));
-    expect(await within(panel).findByRole("button", { name: "Ver resumen de Compañía 11" })).toBeInTheDocument();
   });
 
   it.each([

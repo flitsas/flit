@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { TarjetaMetrica, METRICAS_GRID_CLS } from "@flit/ui/TarjetaMetrica";
-import { usePaginacion } from "@flit/ui/usePaginacion";
 import { DataTable, type DataTableColumn } from "@flit/ui/DataTable";
 import { StatusBadge } from "@flit/ui/StatusBadge";
 import { BarraProgreso } from "@flit/ui/BarraProgreso";
@@ -41,7 +40,7 @@ import type { AnalyticsOverviewResponse, CompanyListItem, MonthlyTrendPoint } fr
  *
  * Fuentes:
  * - «Trámites totales», «Distribución de operaciones» (sin organismo) y el saludo: `/analytics/overview`.
- * - «Tiempo promedio ecosistema», las tarjetas por organismo y la distribución de UN organismo:
+ * - «Tiempo de respuesta del organismo», las tarjetas por organismo y la distribución de UN organismo:
  *   `/analytics/superadmin/organismos` (lo de `/analytics/ot-metrics` no sirve aquí: no tiene vista global y exige rango).
  * - «Validaciones y firmas»: el total de validaciones biométricas del rango (vista global con `ALL_TENANTS`).
  * - «Resumen de compañías activas»: `/analytics/superadmin/companias-resumen`.
@@ -51,6 +50,8 @@ import type { AnalyticsOverviewResponse, CompanyListItem, MonthlyTrendPoint } fr
  */
 
 export const SUPERADMIN_ANTETITULO = "Visión del ecosistema";
+/** Compañías del adelanto «Resumen de compañías activas». */
+export const TOP_COMPANIAS = 5;
 const TODAS = "Todas las compañías";
 const DIAS_REPRESADO = 7;
 /** Filas por página de «Resumen de compañías activas». */
@@ -137,8 +138,6 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
   /** BUG #12588 — arranca SIN rango: el total es el universo real. */
   const [range, setRange] = useState<DateRange>(() => sinRango());
   const [organismoId, setOrganismoId] = useState<string | null>(null);
-  // HU #13920 — paginación estándar: 10/20/30/50 con «Filas por página», recordado en la sesión.
-  const pgCompanias = usePaginacion("inicio.SuperAdminDashboard.companias");
   const [reloadKey, setReloadKey] = useState(0);
 
   const [overview, setOverview] = useState<Carga<AnalyticsOverviewResponse>>(CARGANDO);
@@ -299,9 +298,10 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
   // (el servidor ya las ordena por activos) y las demás se cuentan en una línea.
   const conTramites = useMemo(() => todasCompanias.filter((c) => c.total > 0), [todasCompanias]);
   const sinTramites = todasCompanias.length - conTramites.length;
-  const paginasCompanias = Math.max(1, Math.ceil(conTramites.length / pgCompanias.pageSize));
-  const pagina = Math.min(pgCompanias.page, paginasCompanias);
-  const filasCompanias = conTramites.slice((pagina - 1) * pgCompanias.pageSize, pagina * pgCompanias.pageSize);
+  // Decisión de Samuel (2026-11-17): el Inicio muestra un ADELANTO, las 5 con más trámites activos (el servidor ya
+  // las ordena así). Para cualquier otra, el selector de Compañía de la cabecera filtra toda la vista.
+  const filasCompanias = conTramites.slice(0, TOP_COMPANIAS);
+  const otrasConTramites = conTramites.length - filasCompanias.length;
 
   // «Trámites totales», su % de aprobación y el saludo salen de companias-resumen y NO del overview global: el overview
   // sin compañía cuenta también los tenants con perfil de organismo de tránsito (p. ej. Empresa Demo FLIT), que la tabla
@@ -355,8 +355,7 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
   }, []);
   const cambiarRango = useCallback((siguiente: DateRange) => {
     setRange(siguiente);
-    pgCompanias.setPage(1);
-  }, [pgCompanias]);
+  }, []);
 
   const columnasCompanias: DataTableColumn<SuperAdminCompania>[] = [
     {
@@ -447,7 +446,7 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
             />
             <TarjetaMetrica
               icono="tiempo"
-              etiqueta="Tiempo promedio ecosistema"
+              etiqueta="Tiempo de respuesta del organismo"
               cifra={
                 organismos.status === "ready"
                   ? tiempoEcosistema === null
@@ -458,7 +457,7 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
                     : "…"
               }
               title={organismos.status === "error" ? organismos.error : undefined}
-              pie="De radicación a resolución"
+              pie="Promedio desde que se radica hasta que el organismo aprueba o rechaza"
               data-testid="kpi-tiempo-ecosistema"
             />
             <TarjetaMetrica
@@ -628,7 +627,7 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
           <PanelInicio
             titulo="Resumen de compañías activas"
             icono="empresas"
-            subtitulo="Pulsa una compañía para ver su detalle"
+            subtitulo="Las 5 con más trámites activos. Pulsa una para ver su detalle."
             data-testid="panel-companias"
           >
             <DataTable
@@ -642,14 +641,13 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
               onRetry={retry}
               emptyMessage="Ninguna compañía tiene trámites en el periodo seleccionado."
               ariaLabel="Resumen de compañías activas"
-              pagination={{
-                page: pagina,
-                pageSize: pgCompanias.pageSize,
-                totalCount: conTramites.length,
-                onPageChange: pgCompanias.setPage,
-                onPageSizeChange: pgCompanias.setPageSize,
-              }}
             />
+            {companias.status === "ready" && otrasConTramites > 0 && (
+              <p className="mt-3 text-xs text-[color:var(--di-text-tertiary)]" data-testid="companias-otras">
+                {numero(otrasConTramites)} {otrasConTramites === 1 ? "compañía más tiene" : "compañías más tienen"} trámites
+                en el periodo: búscalas en el selector de Compañía.
+              </p>
+            )}
             {companias.status === "ready" && sinTramites > 0 && (
               <p className="mt-3 text-xs text-[color:var(--di-text-tertiary)]" data-testid="companias-sin-tramites">
                 {numero(sinTramites)} {sinTramites === 1 ? "compañía activa no tiene" : "compañías activas no tienen"} trámites

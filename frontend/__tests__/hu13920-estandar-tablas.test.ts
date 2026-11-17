@@ -54,13 +54,14 @@ const cabeceraEstandar = (src: string) =>
 const filaEstandar = (src: string) => /TABLA_ROW_HOVER_CLS/.test(src) || /CARDLIST_ROW\b/.test(src);
 
 /**
- * Excepción aprobada por Samuel (2026-11-17, rediseño del Inicio en 3 dashboards): las colas del Inicio son un
- * ADELANTO de los 5 trámites más urgentes con un enlace «Ver todos» a la lista paginada. Paginarlas pintaría un pie
- * «Mostrando 1–5 de 5» sin uso. Se exime solo esa tabla por archivo; cualquier otra DataTable del archivo sí paga.
+ * Excepción aprobada por Samuel (2026-11-17, rediseño del Inicio en 3 dashboards): las tablas del Inicio son un
+ * ADELANTO de 5 filas (las colas más urgentes, las compañías y los clientes con más trámites) que remite a la lista
+ * completa. Paginarlas pintaría un pie «Mostrando 1–5 de 5» sin uso. Se exime solo ese número de tablas por archivo.
  */
 const ADELANTOS_SIN_PAGINACION: Record<string, number> = {
   "components/atom/modules/GestorDashboard.tsx": 1, // «Cola de gestión» (top 5 por inactividad)
-  "components/atom/modules/OtDashboard.tsx": 1, // «Cola crítica» (top 5 por días en espera)
+  "components/atom/modules/OtDashboard.tsx": 2, // «Cola crítica» y «Trámites por Cliente Corporativo» (top 5)
+  "components/atom/modules/SuperAdminDashboard.tsx": 1, // «Resumen de compañías activas» (top 5 por activos)
 };
 
 const usaPaginacionEstandar = (src: string) =>

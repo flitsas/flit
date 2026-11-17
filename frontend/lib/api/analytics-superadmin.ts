@@ -55,7 +55,7 @@ export interface SuperAdminOrganismo {
 }
 
 /**
- * `tiempoPromedioDias` es el «Tiempo promedio ecosistema — De radicación a resolución»: el promedio de TODAS las
+ * `tiempoPromedioDias` es el «Tiempo de respuesta del organismo» (radicación → aprobación o rechazo): el promedio de TODAS las
  * decisiones (aprobado/rechazado), cada una medida desde la última radicación ('entregado') anterior. Equivale al
  * promedio de las tarjetas ponderado por sus decididos.
  */

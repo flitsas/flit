@@ -245,6 +245,24 @@ describe("OtDashboard — franjas 2 y 3", () => {
     expect(fetchOtRejectionReasons).toHaveBeenCalledTimes(2);
   });
 
+  it("trámites por cliente corporativo: solo los 5 que más radicaron, de mayor a menor, y el resto en palabras", async () => {
+    const siete = Array.from({ length: 7 }, (_, i) => ({
+      clientTenantId: `t-${i}`,
+      nombre: `Cliente ${i + 1}`,
+      matriculas: i + 1,
+      traspasos: 0,
+      otros: 0,
+      total: i + 1,
+    }));
+    fetchOtClientsByFamily.mockResolvedValue({ total: 28, clientes: siete });
+    render(<OtDashboard />);
+    const panel = await screen.findByTestId("ot-inicio-clientes");
+    expect(await within(panel).findByText("Cliente 7")).toBeInTheDocument();
+    expect(within(panel).getByText("Cliente 3")).toBeInTheDocument();
+    expect(within(panel).queryByText("Cliente 2")).not.toBeInTheDocument();
+    expect(within(panel).getByTestId("ot-inicio-clientes-otros")).toHaveTextContent("2 clientes más radicaron trámites en el periodo");
+  });
+
   it("trámites por cliente corporativo: una fila por empresa con su reparto por familia", async () => {
     render(<OtDashboard />);
     const panel = await screen.findByTestId("ot-inicio-clientes");

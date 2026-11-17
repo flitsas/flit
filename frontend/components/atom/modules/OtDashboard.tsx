@@ -10,7 +10,7 @@
 // Tres franjas, en el orden del prototipo (`OtView`), con el diseño del UI Kit 2026:
 //  1. Carrusel + cifras de la cola. Las cifras describen el AHORA y no las mueve el rango de fechas.
 //  2. Tiempos de gestión (en DÍAS, sin meta: no hay SLA en el dominio) + cola crítica (lo que lleva más esperando).
-//  3. Resoluciones y causales de rechazo + trámites por cliente corporativo.
+//  3. Aprobados, rechazados y causales de rechazo + trámites por cliente corporativo.
 // El rango de fechas gobierna solo las franjas 2 (tiempos) y 3.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -19,7 +19,6 @@ import { Icono } from "@flit/ui/Icono";
 import { buttonClass } from "@flit/ui/Button";
 import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { DataTable, type DataTableColumn } from "@flit/ui/DataTable";
-import { usePaginacion } from "@flit/ui/usePaginacion";
 import { Pestanas } from "@flit/ui/Pestanas";
 import { BarraProgreso } from "@flit/ui/BarraProgreso";
 import { StatusBadge, type StatusBadgeTone } from "@flit/ui/StatusBadge";
@@ -92,7 +91,10 @@ function sinPermisoDeCola(): boolean {
 /** Abre el detalle de un bloque de la cola. */
 type AbrirBloque = (bucket: OtDrilldownBucket, label: string) => void;
 
-/** Familias del filtro de resoluciones. `""` es «Todos». */
+/** Clientes del adelanto «Trámites por Cliente Corporativo». */
+export const TOP_CLIENTES = 5;
+
+/** Familias del filtro de aprobados y rechazados. `""` es «Todos». */
 type Familia = "" | "MATRICULAS" | "TRASPASO" | "OTROS";
 
 const FAMILIAS: { id: Familia | "todos"; label: string }[] = [
@@ -245,7 +247,7 @@ export function OtDashboard() {
         <>
           {!rangoValido && (
             <p role="status" className="text-sm text-muted-foreground">
-              Elige un rango de fechas completo para ver los tiempos, las resoluciones y los clientes.
+              Elige un rango de fechas completo para ver los tiempos, los aprobados y rechazados, y los clientes.
             </p>
           )}
 
@@ -600,7 +602,7 @@ function ColaCritica({ params, transitOfficeId }: { params: OtMetricsParams | nu
 function Resoluciones({ periodo }: { periodo: OtMetricsParams | null }) {
   const [familia, setFamilia] = useState<Familia | "todos">("todos");
   return (
-    <PanelInicio titulo="Resoluciones y causales de rechazo" icono="causal" data-testid="ot-inicio-resoluciones">
+    <PanelInicio titulo="Aprobados, rechazados y causales" icono="causal" data-testid="ot-inicio-resoluciones">
       <Pestanas
         ariaLabel="Tipo de trámite"
         active={familia}
@@ -633,7 +635,7 @@ function ResolucionesDeFamilia({ periodo, familia }: { periodo: OtMetricsParams 
 
   if (!periodo || resumen.estado === "cargando") return <Esqueleto filas={3} />;
   if (resumen.estado === "error") {
-    return <FalloPanel texto={resumen.motivo ?? "No se pudieron cargar las resoluciones."} />;
+    return <FalloPanel texto={resumen.motivo ?? "No se pudieron cargar los aprobados y rechazados."} />;
   }
 
   const r = resumen.dato;
@@ -722,14 +724,16 @@ function ResolucionesDeFamilia({ periodo, familia }: { periodo: OtMetricsParams 
 
 /** Quién le radicó al organismo en el periodo, por familia. Mismo universo que el informe. */
 function ClientesCorporativos({ periodo }: { periodo: OtMetricsParams | null }) {
-  // HU #13920 — un organismo puede tener muchos clientes: paginación estándar (10/20/30/50, «Filas por página»).
-  const pg = usePaginacion("inicio.OtDashboard.clientes");
   const cargar = useMemo(
     () => (periodo ? (signal: AbortSignal): Promise<OtClientsByFamily> => fetchOtClientsByFamily(periodo, signal) : null),
     [periodo],
   );
   const { dato, estado, motivo } = useRecurso(claveDe(periodo, "clientes"), cargar);
-  const filas = dato?.clientes ?? [];
+  // Decisión de Samuel (2026-11-17): el Inicio muestra un ADELANTO, los 5 clientes con más trámites radicados en el
+  // periodo; el resto se cuenta en una línea (el detalle por cliente vive en Reportes).
+  const todos = useMemo(() => [...(dato?.clientes ?? [])].sort((a, b) => b.total - a.total), [dato]);
+  const filas = todos.slice(0, TOP_CLIENTES);
+  const otros = todos.length - filas.length;
 
   const numero = (v: number) => <span className="tabular-nums">{v}</span>;
   const columnas: DataTableColumn<OtClientFamilyRow>[] = [
@@ -743,13 +747,13 @@ function ClientesCorporativos({ periodo }: { periodo: OtMetricsParams | null }) 
   return (
     <PanelInicio
       titulo="Trámites por Cliente Corporativo"
-      subtitulo="Volumen radicado en el periodo, por tipo de trámite"
+      subtitulo="Los 5 clientes que más radicaron en el periodo, por tipo de trámite"
       icono="empresas"
       data-testid="ot-inicio-clientes"
     >
       <DataTable
         columns={columnas}
-        rows={pg.paginar(filas)}
+        rows={filas}
         getRowKey={(r) => r.clientTenantId}
         status={!periodo || estado === "cargando" ? "loading" : estado === "error" ? "error" : filas.length === 0 ? "empty" : "ready"}
         emptyMessage="Ningún cliente radicó trámites en el periodo."
@@ -757,14 +761,13 @@ function ClientesCorporativos({ periodo }: { periodo: OtMetricsParams | null }) 
         ariaLabel="Trámites por cliente corporativo"
         tarjeta={false}
         minWidth={520}
-        pagination={{
-          page: pg.page,
-          pageSize: pg.pageSize,
-          totalCount: filas.length,
-          onPageChange: pg.setPage,
-          onPageSizeChange: pg.setPageSize,
-        }}
       />
+      {estado !== "cargando" && otros > 0 && (
+        <p className="mt-3 text-xs text-[color:var(--di-text-tertiary)]" data-testid="ot-inicio-clientes-otros">
+          {otros} {otros === 1 ? "cliente más radicó" : "clientes más radicaron"} trámites en el periodo; el detalle está en
+          Reportes.
+        </p>
+      )}
     </PanelInicio>
   );
 }
