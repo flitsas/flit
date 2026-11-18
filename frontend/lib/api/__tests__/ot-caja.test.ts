@@ -69,4 +69,20 @@ describe("otCajaApi", () => {
     const error = (await otCajaApi.confirmar({ codigo: "PN-2026-000123", medio: "efectivo", totalVistoCop: 1, llave: "l" }).catch((e: unknown) => e)) as CajaError;
     expect(error.sinRespuestaDefinitiva).toBe(true);
   });
+
+  it("cobros pasa el `usuario` de core-api a `pagadoPorNombre` para la columna Usuario", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        json(200, {
+          fecha: "2026-11-17",
+          totalDiaCop: 150,
+          total: 1,
+          items: [{ cobroId: "c1", codigo: "PN-2026-000052", valorCop: 150, medio: "efectivo", usuario: "Cajero Prueba Uno", estado: "pagado", anulable: true, rowVersion: 1 }],
+        }),
+      ),
+    );
+    const lista = await otCajaApi.cobros({ page: 1, pageSize: 10 });
+    expect(lista.items[0].pagadoPorNombre).toBe("Cajero Prueba Uno");
+  });
 });

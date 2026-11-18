@@ -188,8 +188,20 @@ export interface OtCajaApi {
 export const otCajaApi: OtCajaApi = {
   tramite: (codigo, signal) => pedir<TramiteParaCobrar>(`${OT_CAJA_BASE}/tramites/${encodeURIComponent(codigo)}`, { signal }),
   confirmar: confirmarCobro,
-  cobros: (f, signal) =>
-    pedir<CajaCobroLista>(`${OT_CAJA_BASE}/cobros`, { query: { date: f.date, page: f.page, pageSize: f.pageSize }, signal }),
+  cobros: async (f, signal) => {
+    const lista = await pedir<CajaCobroLista>(`${OT_CAJA_BASE}/cobros`, {
+      query: { date: f.date, page: f.page, pageSize: f.pageSize },
+      signal,
+    });
+    // /api/v1/ot/caja/cobros manda quién cobró en `usuario`; la tabla compartida con la administración lee `pagadoPorNombre`.
+    return {
+      ...lista,
+      items: lista.items.map((c) => {
+        const usuario = (c as CajaCobro & { usuario?: string | null }).usuario;
+        return { ...c, pagadoPorNombre: c.pagadoPorNombre ?? usuario ?? null };
+      }),
+    };
+  },
   anular: (c, motivo) =>
     pedir<unknown>(`${OT_CAJA_BASE}/cobros/${encodeURIComponent(c.cobroId)}/anular`, {
       method: "POST",
