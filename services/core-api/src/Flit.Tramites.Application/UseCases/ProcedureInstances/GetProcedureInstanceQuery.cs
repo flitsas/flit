@@ -82,7 +82,12 @@ public sealed record ProcedureInstanceEventDto(
     string? RevocationDecisionReason = null,
     // reenvio_validacion_admin (HU #13821) — correo que tenía la persona antes de corregirlo en el reenvío
     // (null si no cambió), para que el tracking muestre «anterior → nuevo». En claro, igual que CorreoDestino.
-    string? CorreoAnterior = null);
+    string? CorreoAnterior = null,
+    // documento_cargado_admin (Bug #14604) — campos APLANADOS (el `tipo` del payload chocaría con el discriminador `Tipo`).
+    string? DocumentoTipo = null,
+    string? DocumentoFilename = null,
+    string? EstadoAlMomento = null,
+    string? Observacion = null);
 
 /// <summary>
 /// HU #12575 (Feature #12565, AC1) — sub-estado ACTIVO de revocatoria sobre un trámite
@@ -245,6 +250,8 @@ public sealed class GetProcedureInstanceHandler(
         // "Revocado desde Aprobado" del historial de estados, sin el motivo del OT.
         "revocatoria_aprobada",
         "revocatoria_rechazada",
+        // Bug #14604 — carga administrativa de un documento en cualquier estado (AdminCargarDocumentoHandler.EventoTipo).
+        "documento_cargado_admin",
     };
 
     public async Task<(ProcedureInstanceDetailDto? Result, string? Error)> HandleAsync(
@@ -538,6 +545,22 @@ public sealed class GetProcedureInstanceHandler(
                     RevocationDecisionReason: decisionReason,
                     CreatedByEmail: decidedByEmail,
                     CreatedByCompania: createdByCompania);
+            }
+
+            // documento_cargado_admin (Bug #14604) — payload: { tipo, filename, attachmentId, previousAttachmentIds,
+            // estado, observacion }; se aplana en el DTO porque `tipo` choca con el discriminador del evento.
+            if (e.Tipo == "documento_cargado_admin")
+            {
+                static string? Str(JsonElement o, string name) =>
+                    o.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+                return new ProcedureInstanceEventDto(
+                    e.Tipo, e.CreatedAt, createdByName,
+                    CreatedByEmail: e.CreatedBy is { } uploader && emails.TryGetValue(uploader, out var uem) ? uem : null,
+                    CreatedByCompania: createdByCompania,
+                    DocumentoTipo: Str(payload, "tipo"),
+                    DocumentoFilename: Str(payload, "filename"),
+                    EstadoAlMomento: Str(payload, "estado"),
+                    Observacion: Str(payload, "observacion"));
             }
 
             // reenvio_validacion_admin

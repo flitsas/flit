@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedFrom": "frontend/lib/manual (pnpm manual:export)",
-  "articleCount": 67,
+  "articleCount": 68,
   "articles": [
     {
       "slug": "0-introduccion/1-bienvenida",
@@ -879,6 +879,8 @@
           "paragraphs": [
             "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
             "Dentro del trámite abierto, en cualquier estado, cada cambio queda registrado: fecha y hora de Colombia, quién lo hizo (su nombre y su compañía, o Sistema), el dato, el valor anterior y el nuevo. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. En borrador o en subsanación está en el acordeón «Expediente — Trazabilidad cronológica» del resumen, del más reciente al más antiguo. En los demás estados, la sección Expediente usa esa misma lista. «Línea de Tiempo del Trámite» conserva sus tarjetas: el título es el dato, y dentro van gestor, correo, empresa, rol, fecha y hora, y el detalle con el valor anterior y el nuevo. La tarjeta de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice y puedes pulsar «Reintentar». «Ver más» trae el resto. El recuadro «Estado del trámite», si lo abres sin entrar al detalle, solo muestra el estado y los actos administrativos.",
+            "Si el equipo FLIT actualizó un documento del trámite, la línea de tiempo muestra «Documento actualizado por el administrador» con el estado en que estaba el trámite, la observación y un bloque con el documento, el archivo nuevo y el archivo anterior, cada uno con «Ver». El archivo reemplazado no se pierde: aparece como «Versión anterior» en «Ver documentos».",
+            "Los documentos se abren en una pestaña nueva del navegador, a pantalla completa. Si el documento trae un aviso (por ejemplo «Documento final» del consolidado), aparece unos segundos en la pantalla donde estabas. Si no se puede abrir o ver, el aviso sale en la pantalla con «Descargar». Si tu navegador bloquea las ventanas emergentes, el documento se muestra en la misma pantalla.",
             "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora.",
             "El panel del vehículo muestra también el Canal por el que entró el trámite y, si llegó del punto de atención de un organismo, el «OT del punto». En un trámite en borrador los verás en la barra superior del asistente. Son datos de solo lectura: los pone el sistema al crear el trámite.",
             "Si el trámite llegó del punto de atención ya pagado, el mismo panel muestra «Pagado en caja» con el valor, el medio (efectivo, datáfono, transferencia u otro) y la fecha, o «Sin cobro» si el total era $0. Ese trámite no se vuelve a cobrar."
@@ -1717,7 +1719,9 @@
           "paragraphs": [
             "Abre un trámite para ver el expediente, organizado en acordeones independientes que puedes tener abiertos a la vez: vehículo, propietario y actores; transformaciones declaradas (si el vehículo cambió color, combustible o carrocería frente a lo que dice RUNT, aquí ves el antes y el después); documentos del gestor («Ver documentos»), consolidado («Ver consolidado») y el historial. El panel «Pendientes antes de decidir» lista lo que falta (por ejemplo SOAT vigente cuando la regla aplica).",
             "«Línea de Tiempo del Trámite», o el chip de estado, muestra cada cambio en tarjetas, también lo ocurrido cuando el trámite todavía estaba en borrador. El título de la tarjeta es el dato. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. Dentro van gestor, correo, empresa, rol, fecha y hora de Colombia, y el detalle con el valor anterior y el nuevo. La de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice. Solo lo ves en un trámite que ya puedes abrir: un borrador que no te corresponde no llega a esta bandeja.",
-            "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio."
+            "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio.",
+            "Si el equipo FLIT actualizó un documento, en la línea de tiempo verás «Documento actualizado por el administrador» con la observación y un bloque con el documento, el archivo nuevo y el archivo anterior, cada uno con «Ver». En los documentos del trámite, el reemplazado aparece como «Versión anterior».",
+            "Los documentos y el consolidado se abren en una pestaña nueva del navegador, a pantalla completa; el documento que abres queda marcado como revisado igual que antes. Si no se puede abrir o ver, el aviso sale en la pantalla con «Descargar»."
           ],
           "bullets": [
             "Aprobar: opcionalmente adjunta la Licencia de Tránsito (PDF). El sistema la analiza con OCR y te dice si parece una LT y si la placa/VIN leídos coinciden con el trámite; el análisis nunca bloquea. Si hay varios mandatarios válidos, eliges uno de los que te muestra el sistema. La LT también se puede adjuntar después desde la fila aprobada («Adjuntar LT»).",
@@ -3532,6 +3536,97 @@
               "variant": "info",
               "title": null,
               "text": "Si ves «Certificado en preparación», la carta aún no está lista. La aprobación sigue vigente: vuelve a intentarlo en unos minutos. Si al descargar aparece un mensaje de que aún no está disponible, también se resuelve intentando de nuevo."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/12-actualizar-documento",
+      "title": "Actualizar un documento de un trámite en cualquier estado",
+      "href": "/manual/4-superadmin/12-actualizar-documento",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Cómo el equipo FLIT reemplaza un documento de un trámite sin pasarlo a Borrador: qué queda como versión anterior, cómo se ve en la línea de tiempo y qué pasa con el consolidado.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es y quién lo puede hacer",
+          "paragraphs": [
+            "«Actualizar documento» permite cargar o reemplazar un documento de un trámite en cualquier estado: Borrador, Preparado, Asignado, Entregado, Aprobado, Anulado o Revocado. Ya no hace falta pasar el trámite a Borrador, subir el archivo y volver a moverlo.",
+            "Solo lo tiene el Super Admin de FLIT. El gestor sigue subiendo documentos como siempre, solo en Borrador o en Subsanación."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "pasos",
+          "title": "2. Paso a paso",
+          "paragraphs": [
+            "Paso 1. En Trámites, busca el trámite y abre «Acciones» en su fila.",
+            "Paso 2. Elige «Actualizar documento». La ventana muestra el radicado y el estado actual del trámite.",
+            "Paso 3. En «Tipo de documento» elige uno de los que pide ese tipo de trámite. Si ya hay un archivo de ese tipo, verás «El documento actual quedará como versión anterior».",
+            "Paso 4. Elige el archivo (PDF, JPG, PNG o WEBP, hasta 20 MB).",
+            "Paso 5. Escribe la observación: por qué actualizas el documento. Es obligatoria (hasta 1.000 caracteres) y el botón no se activa sin ella.",
+            "Paso 6. Pulsa «Actualizar documento». Verás «Documento actualizado.» y el trámite sigue en el mismo estado."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si otro proceso ya cargó ese mismo documento al mismo tiempo, el sistema te lo avisa y no reemplaza nada: vuelve a abrir el trámite y revisa antes de intentarlo de nuevo."
+            }
+          ]
+        },
+        {
+          "id": "anterior",
+          "title": "3. Qué pasa con el archivo anterior",
+          "paragraphs": [
+            "El archivo anterior no se borra: queda como «Versión anterior» y se puede ver y descargar en «Ver documentos», en el detalle del trámite y en la vista del organismo de tránsito.",
+            "El documento que cuenta para el trámite (el que va al consolidado y el que ve el organismo como vigente) es siempre el nuevo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "trazabilidad",
+          "title": "4. Trazabilidad en la línea de tiempo",
+          "paragraphs": [
+            "Cada actualización queda en «Línea de Tiempo del Trámite» como «Documento actualizado por el administrador», con fecha y hora, quién lo hizo, el estado en que estaba el trámite y la observación.",
+            "La tarjeta incluye el bloque «Documento» (por ejemplo, Improntas), «Archivo nuevo» y «Archivo anterior», cada uno con «Ver» para abrirlo. Si era la primera vez que se cargaba ese tipo, dice «No había un archivo anterior».",
+            "La misma tarjeta la ven la compañía y el organismo de tránsito en su línea de tiempo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "consolidado",
+          "title": "5. El consolidado",
+          "paragraphs": [
+            "No tienes que hacer nada: al abrir «Ver consolidado» después de la actualización, el consolidado se vuelve a generar con el documento nuevo, también en Aprobado, Anulado o Revocado.",
+            "En un trámite en estado final verás el aviso «Documento final»: es su expediente definitivo y solo se vuelve a generar si un administrador actualiza un documento.",
+            "Los trámites migrados de FLIT 1 en estado final conservan su consolidado original."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "ver",
+          "title": "6. Cómo se ven los documentos",
+          "paragraphs": [
+            "Al pulsar el ojo o «Ver», el documento se abre en una pestaña nueva del navegador, a pantalla completa. Mientras carga verás el carrito de FLIT.",
+            "Si el documento trae un aviso (por ejemplo «Documento final»), aparece unos segundos en la pantalla donde estabas, abajo a la derecha.",
+            "Si el archivo no se puede abrir o no se puede ver en el navegador, el aviso aparece en la pantalla actual con el botón «Descargar»."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Si el navegador bloquea las ventanas emergentes de FLIT, el documento se muestra en la misma pantalla, como antes. Para verlo en pestaña nueva, permite las ventanas emergentes de FLIT."
             }
           ]
         }

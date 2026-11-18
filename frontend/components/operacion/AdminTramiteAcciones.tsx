@@ -12,6 +12,7 @@ import {
   SeccionVacia,
 } from '@/components/operacion/detalle/primitivos';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { AdminCargarDocumentoModal } from './AdminCargarDocumentoModal';
 import {
   ReenviarValidacionIdentidadModal,
   mensajeTodosFirmaron,
@@ -868,6 +869,7 @@ export function useAdminTramiteAcciones({
   const [estadoOpen, setEstadoOpen] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
   const [consolidadoOpen, setConsolidadoOpen] = useState(false);
+  const [cargarDocOpen, setCargarDocOpen] = useState(false);
   const [reenviarOpen, setReenviarOpen] = useState(false);
   const [reasignarOpen, setReasignarOpen] = useState(false);
   const [consultarRuntOpen, setConsultarRuntOpen] = useState(false);
@@ -902,6 +904,16 @@ export function useAdminTramiteAcciones({
         ? 'Este trámite ya está Anulado.'
         : 'Un trámite Aprobado no se puede anular.',
       onSelect: () => setAnularOpen(true),
+    });
+  }
+  // Bug #14604 — habilitada en TODOS los estados (entregado, aprobado, anulado, revocado...): la
+  // observación obligatoria deja la trazabilidad; no hace falta pasar el trámite a borrador.
+  if (puede(ADMIN_TRAMITE_PERMISSIONS.cargarDocumento)) {
+    items.push({
+      key: 'admin-cargar-documento',
+      label: 'Actualizar documento',
+      icon: iconoComo("archivo"),
+      onSelect: () => setCargarDocOpen(true),
     });
   }
   const canLimpiar = puede(ADMIN_TRAMITE_PERMISSIONS.limpiarConsolidado);
@@ -965,6 +977,14 @@ export function useAdminTramiteAcciones({
       <AnularModal
         open={anularOpen}
         onClose={() => setAnularOpen(false)}
+        item={item}
+        tenantId={tenantId}
+        onSuccess={onSuccess}
+        onError={onError}
+      />
+      <AdminCargarDocumentoModal
+        open={cargarDocOpen}
+        onClose={() => setCargarDocOpen(false)}
         item={item}
         tenantId={tenantId}
         onSuccess={onSuccess}

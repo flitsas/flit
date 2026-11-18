@@ -8,10 +8,13 @@ import type { GenerarConsolidadoResult } from '@/lib/api/types/procedure-runtime
  * documento es el DEFINITIVO del trámite, para avisarlo (AC4 de #12786, AC3 de #12787).
  */
 
-/** Copy del aviso de documento final (estado aprobado/anulado/revocado). */
+/**
+ * Copy del aviso de documento final (estado aprobado/anulado/revocado). Bug #14604 — ya no dice «no se
+ * regenera»: si el administrador actualiza un documento, el consolidado se reconstruye al abrirlo.
+ */
 export const COPY_DOCUMENTO_FINAL_TITULO = 'Documento final';
 export const COPY_DOCUMENTO_FINAL_DETALLE =
-  'El trámite está en un estado final: este es el expediente definitivo y ya no se regenera.';
+  'El trámite está en un estado final: este es su expediente definitivo. Solo se vuelve a generar si un administrador actualiza un documento.';
 
 /**
  * `true` si la entrega sirvió el PDF definitivo del trámite. Se acepta la bandera explícita o
