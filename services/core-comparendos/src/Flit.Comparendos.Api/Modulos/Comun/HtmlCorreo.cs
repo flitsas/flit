@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Flit.Comparendos.Domain.Modelo;
 
 namespace Flit.Comparendos.Api.Modulos.Comun;
 
@@ -71,6 +72,16 @@ public static class HtmlCorreo
         sb.Append("</td></tr></table></body></html>");
         return sb.ToString();
     }
+
+    /// <summary>
+    /// HU #14621: el marco de un correo del sistema a la gente de la empresa según el conjunto de plantillas de la empresa (el canal
+    /// FlitSmtp/Renting solo es el transporte): con la cabecera de FLIT, o el marco neutro sin rastro de FLIT en Renting (su cabecera
+    /// es la de los avisos al conductor y no sirve para esto).
+    /// </summary>
+    public static string DeEmpresa(ConjuntoPlantillas conjunto, string titulo, string cuerpoHtml, string? empresa, string recursos) =>
+        conjunto == ConjuntoPlantillas.Renting
+            ? Envolver(titulo, cuerpoHtml, empresa is null ? null : $"{empresa} · Correo automático, no lo respondas.", marcaFlit: false)
+            : Flit($"<h2 style=\"margin:0 0 12px;font-size:17px\">{WebUtility.HtmlEncode(titulo)}</h2>{cuerpoHtml}", empresa, recursos, cierre: false);
 
     private static void Imagen(StringBuilder sb, string url, string alt) =>
         sb.Append("<tr><td style=\"padding:0;line-height:0;background:#ffffff\"><img src=\"").Append(WebUtility.HtmlEncode(url)).Append("\" alt=\"")

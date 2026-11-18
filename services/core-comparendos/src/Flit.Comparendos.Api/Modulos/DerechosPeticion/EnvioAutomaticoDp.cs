@@ -442,7 +442,7 @@ public sealed partial class EnvioAutomaticoDp(
             Plantilla = "comparendos.resumen_envio_automatico_dp",
             Para = para,
             Asunto = "Derechos de petición automáticos: hay comparendos sin enviar",
-            Html = HtmlCorreo.Envolver("Derechos de petición automáticos", cuerpo, marcaFlit: marcaFlit),
+            Html = HtmlCorreo.DeEmpresa(config.ConjuntoPlantillas, "Derechos de petición automáticos", cuerpo, config.EmpresaNombre, $"{correo.AppUrl}/assets/correo"),
             Canal = CanalCorreo.FlitSmtp,
             RemitenteNombre = marcaFlit ? "FLIT Comparendos" : config.RemitenteNombre ?? config.EmpresaNombre,
         }, ct).ConfigureAwait(false);
