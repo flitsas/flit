@@ -395,6 +395,9 @@ export interface ConfiguracionEmpresa {
   correosAlertaOperativa: string[];
   /** Con DV («900123456-8»); sale en el membrete de los documentos ({{empresa.nit}}). */
   empresaNit: string | null;
+  /** Envío automático de derechos de petición (Epic #14606): apagado por defecto; solo lo enciende el SuperAdmin. */
+  dpAutomaticoActivo?: boolean;
+  dpAutomaticoTopeDiario?: number;
 }
 
 export interface AuditoriaConfiguracion {
@@ -421,6 +424,8 @@ export interface Tipologia {
   activo: boolean;
   habilitada: boolean | null;
   empresasHabilitadas: number | null;
+  /** Marcada para el envío automático en la empresa elegida; null si no se pidió con empresa. */
+  automatizable?: boolean | null;
 }
 
 export interface Representante {
@@ -499,6 +504,8 @@ export interface VersionPlantilla {
   variablesUsadas: string[];
   notaCambio: string | null;
   publicadaEn: string | null;
+  /** Cuándo un abogado aprobó el texto de esta versión (Epic #14606); null si nadie lo aprobó. */
+  revisadaJuridicamenteEn?: string | null;
 }
 
 export interface VariablePlantilla {
