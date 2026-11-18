@@ -84,9 +84,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # admin va en 2 shards por clase (ADMIN_SHARDS): cada uno en su runner de GitHub, con su Postgres.
+          # admin va en 4 shards por clase (ADMIN_SHARDS), repartidos por tiempo (.github/ci/tiempos-admin.tsv): cada uno en su
+          # runner de GitHub, con su Postgres. Con 2 la parte de pruebas no bajaba de ~7,5 min por shard.
           - { nombre: admin-0, carril: admin, shard: 0 }
           - { nombre: admin-1, carril: admin, shard: 1 }
+          - { nombre: admin-2, carril: admin, shard: 2 }
+          - { nombre: admin-3, carril: admin, shard: 3 }
           - { nombre: integration-0, carril: integration, shard: 0 }
           - { nombre: integration-1, carril: integration, shard: 1 }
           - { nombre: integration-2, carril: integration, shard: 2 }
@@ -174,7 +177,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: '4'
-          ADMIN_SHARDS: '2'
+          ADMIN_SHARDS: '4'
           # La cobertura solo se recoge en push: en el PR alarga la corrida sin que nadie la mire.
           COBERTURA: ${{ github.event_name == 'push' && '1' || '' }}
 

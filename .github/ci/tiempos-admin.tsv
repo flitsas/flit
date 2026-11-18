@@ -1,4 +1,3 @@
-Flit.Admin.Tests.PersonaNatural.AdminPortalCajaTests	439.3
 Flit.Admin.Tests.PersonaNatural.PersonaNaturalRadicacionPostgresTests	153.1
 Flit.Admin.Tests.Identity.SessionPolicyEndpointTests	73.4
 Flit.Admin.Tests.Identity.IdentityHostSurvivalTests	69.6
@@ -14,6 +13,7 @@ Flit.Admin.Tests.Derivacion.CrearBorradorDesdeDiagnosticoPostgresTests	36.9
 Flit.Admin.Tests.Authorization.OtPermissionEnforcementTests	33.2
 Flit.Admin.Tests.Identity.IctServiceTokenTests	33.0
 Flit.Admin.Tests.Integrations.ExternalAccessLogTests	30.8
+Flit.Admin.Tests.PersonaNatural.AdminPortalCajaTests	30.0
 Flit.Admin.Tests.Notifications.AdminPlataformaNotificacionesEnviosEndpointTests	29.7
 Flit.Admin.Tests.PersonaNatural.OtCajaTests	28.2
 Flit.Admin.Tests.Authorization.FamilyPermissionEnforcementTests	27.5
