@@ -14,6 +14,7 @@ import { GENERACION_DOCUMENTAL_BASE_PATH } from "@/components/admin/generacion-d
 import { OT_ADMIN_SPA_OMIT } from "@/lib/nav/modules";
 import { navGatingFor, otHubNavGating, type OtHubDelegableTab } from "@/lib/nav/module-access";
 import { COPY } from "@/lib/copy/copy-catalog";
+import { OT_ADMIN_ROLE, OT_CAJA_ROLE } from "@/lib/auth/jwt";
 import {
   DOCK_GROUP_ICON,
   DOCK_GROUP_LABEL,
@@ -201,6 +202,12 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
         icon: iconoComo("persona"),
       });
     }
+  }
+
+  // Feature #14453 — Caja del organismo: la persona de caja (`ot_caja`) y el Admin OT. Se declara solo para usuarios de un
+  // organismo (el SuperAdmin no usa el módulo: anula desde la administración del organismo) y filtra por rol.
+  if (ctx.isOtUser) {
+    entries.push({ key: "caja", label: "Caja", href: "/caja", icon: iconoComo("pago"), roles: [OT_CAJA_ROLE, OT_ADMIN_ROLE] });
   }
 
   // (La tabla de acceso declara el requisito de rol de «mi-empresa» / «admin-network» —AdminCompany—; aquí se decide con

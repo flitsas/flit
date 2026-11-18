@@ -56,25 +56,6 @@ describe("Login (Feature #10113 — login real)", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/acceso restringido/i));
   });
 
-  // HU #14454 AC2 — usuario solo-caja: error normal del formulario, no el panel de bloqueo.
-  it("403 CAJA_ONLY → mensaje del portal de caja, sin panel de bloqueo", async () => {
-    loginMock.mockRejectedValue(
-      Object.assign(new Error("403"), {
-        status: 403,
-        body: { code: "CAJA_ONLY", message: "Su usuario solo puede cobrar en el portal de caja." },
-      }),
-    );
-    render(<Login onAuthenticated={vi.fn()} />);
-
-    fillCreds();
-    fireEvent.click(screen.getByRole("button", { name: /iniciar sesión/i }));
-
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("Su usuario solo puede cobrar en el portal de caja."),
-    );
-    expect(screen.queryByText(/acceso restringido/i)).not.toBeInTheDocument();
-  });
-
   // HU #10511 AC1 — todos los roles del usuario están inactivos.
   it("todos los roles desactivados (403 ALL_ROLES_INACTIVE) → mensaje específico de rol desactivado", async () => {
     loginMock.mockRejectedValue(

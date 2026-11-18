@@ -88,9 +88,6 @@ export function Login({
         // HU #10511 — todos los roles del usuario fueron desactivados: mensaje
         // distinto al de bloqueo temporal (HU #10170), para no confundir la causa.
         setRoleDeactivated(true);
-      } else if (apiErr.body?.code === "CAJA_ONLY") {
-        // HU #14454 AC2 — usuario solo-caja: no es un bloqueo, se indica el portal correcto.
-        setError("Su usuario solo puede cobrar en el portal de caja.");
       } else if (apiErr.status === 403) {
         // Cuenta bloqueada temporalmente (HU #10170): panel de acceso restringido.
         setBlocked(true);

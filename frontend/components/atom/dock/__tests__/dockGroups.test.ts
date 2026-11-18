@@ -45,7 +45,8 @@ describe("catálogo de Trámites", () => {
       { isOtUser: true, isOtAdmin: true, otTransitOfficeId: "ot-1" },
       { roles: ["ot_admin"], modules: ["tramites", "reportes", "usuarios"] },
     );
-    expect(groups.map((g) => g.label)).toEqual(["Trámites", "Reportes", "Usuarios", "Administración"]);
+    // Feature #14453 — el Admin OT ve además Caja (píldora directa).
+    expect(groups.map((g) => g.label)).toEqual(["Trámites", "Caja", "Reportes", "Usuarios", "Administración"]);
     expect(groups.find((g) => g.id === "administracion")?.items.map((i) => i.label)).toEqual([
       "Documentos",
       "Mandatos",
@@ -66,6 +67,32 @@ describe("catálogo de Trámites", () => {
 
     const gestor = dock({ isOtUser: true, isOtAdmin: false, otTransitOfficeId: "ot-1" }, { roles: ["gestor_ot"], modules: ["tramites"] });
     expect(gestor.flatMap((g) => g.items).map((i) => i.key)).not.toContain(OT_ADM_DOCK.portalPersonaNatural);
+  });
+
+  // Feature #14453 — módulo Caja en el dock: solo `ot_caja` y Admin OT, ítem único con ruta /caja.
+  describe("Caja del organismo", () => {
+    const ot = { isOtUser: true, otTransitOfficeId: "ot-1" };
+    const entradaCaja = (groups: ReturnType<typeof dock>) => groups.flatMap((g) => g.items).find((i) => i.key === "caja");
+
+    it("la persona de caja (ot_caja) ve SOLO Caja, con su ruta y su grupo", () => {
+      const groups = dock(ot, { roles: ["ot_caja"], modules: [] });
+      expect(groups.map((g) => g.label)).toEqual(["Caja"]);
+      expect(groups[0].items.map((i) => i.label)).toEqual(["Caja"]);
+      expect(entradaCaja(groups)?.href).toBe("/caja");
+      expect(DOCK_ITEM_GROUP.caja).toBe("caja");
+    });
+
+    it("el Admin OT la ve además de lo suyo", () => {
+      const groups = dock({ ...ot, isOtAdmin: true }, { roles: ["ot_admin"], modules: ["tramites"] });
+      expect(entradaCaja(groups)?.href).toBe("/caja");
+      expect(groups.length).toBeGreaterThan(1);
+    });
+
+    it("otro rol del organismo, un gestor de empresa y el SuperAdmin no la ven", () => {
+      expect(entradaCaja(dock(ot, { roles: ["gestor_ot"], modules: ["tramites"] }))).toBeUndefined();
+      expect(entradaCaja(dock({ isAdminCompany: true }, { roles: ["AdminCompany"], modules: ["tramites"] }))).toBeUndefined();
+      expect(entradaCaja(dock({}, { isSuperAdmin: true }))).toBeUndefined();
+    });
   });
 
   it("usuario OT sin organismo resuelto todavía: sus pestañas esperan (no hay a dónde llevarlas)", () => {
@@ -168,6 +195,7 @@ describe("catálogo de Trámites", () => {
   it("HU #12723 — cada agrupador declara lado izquierdo o derecho del inicio", () => {
     expect(DOCK_GROUP_SIDE).toEqual({
       tramites: "left",
+      caja: "left",
       identidad: "left",
       reportes: "left",
       usuarios: "right",

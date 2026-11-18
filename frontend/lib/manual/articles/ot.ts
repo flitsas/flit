@@ -888,4 +888,86 @@ export const OT_ARTICLES: ManualArticle[] = [
       },
     ],
   },
+  {
+    slug: "2-ot/15-portal-de-caja",
+    title: "Caja: cobrar un trámite del punto desde FLIT 2.0",
+    audience: "Organismo de Tránsito",
+    sectionId: "ot",
+    keywords: [
+      "caja",
+      "modulo caja",
+      "portal de caja",
+      "caja del organismo",
+      "usuario de caja",
+      "cobrar tramite",
+      "id del tramite",
+      "confirmar cobro",
+      "pago registrado",
+      "prefactura",
+      "cobros del dia",
+      "anular cobro",
+      "este tramite ya fue pagado",
+      "no encontramos ese tramite",
+      "la caja no esta habilitada",
+    ],
+    summary:
+      "Cómo el organismo cobra desde FLIT 2.0 un trámite que la persona inició en el punto: quién entra, qué ve, cómo cobra, cómo revisa los cobros del día y cómo anula el administrador del organismo.",
+    blocks: [
+      {
+        id: "entrar",
+        title: "1. Quién entra y qué ve",
+        paragraphs: [
+          "La caja es un módulo de FLIT 2.0 llamado «Caja», en el menú de abajo. No hay un portal aparte: la persona de caja entra por el inicio de sesión de siempre, con el correo y la contraseña de su usuario. Su administrador del organismo la crea en la pestaña «Caja» del hub del organismo y le llega una invitación para definir su contraseña.",
+          "Si tu único rol es el de caja, el menú muestra solo «Caja» y al entrar llegas directo a ella. El administrador del organismo ve «Caja» además de sus módulos de siempre, y puede cobrar, ver los cobros del día y anular. El Super Admin no usa este módulo: anula desde la administración del organismo.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si ves «La caja no está habilitada para tu organismo», pide al administrador de FLIT que la habilite.",
+          },
+        ],
+      },
+      {
+        id: "cobrar",
+        title: "2. Cobrar un trámite",
+        paragraphs: ["En la pestaña «Cobrar», cada cobro se hace con el ID del trámite que la persona generó en el punto. Sigue estos pasos:"],
+        bullets: [
+          "Escribe el ID que te muestra la persona (por ejemplo PN-2026-000123) y pulsa «Buscar».",
+          "Revisa el tipo de trámite, lo que se paga y el total. El total no se puede cambiar: es el que calcula la plataforma en ese momento.",
+          "Elige el medio con que pagó: efectivo, datáfono, transferencia u otro (en «Otro», escribe cuál).",
+          "Si tienes la prefactura, adjúntala (PDF, JPG o PNG de hasta 5 MB). Es opcional.",
+          "Pulsa «Confirmar cobro». Verás «Pago registrado.» y la pantalla de la persona pasa sola al cierre. Para seguir, pulsa «Cobrar otro trámite».",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            title: "Si el total cambió",
+            text: "Si el precio cambió desde que buscaste el trámite, la pantalla muestra el total nuevo y te pide confirmar otra vez. Cobra siempre el total que muestra la pantalla.",
+          },
+        ],
+      },
+      {
+        id: "mensajes",
+        title: "3. Mensajes frecuentes",
+        paragraphs: ["Si la búsqueda no deja cobrar, la pantalla dice por qué:"],
+        bullets: [
+          "«No encontramos ese trámite.»: revisa el ID con la persona.",
+          "«Este trámite ya fue pagado.» (en amarillo): no lo cobres otra vez.",
+          "«Este trámite no es de este organismo.»: la persona debe pagar en el organismo donde lo inició.",
+          "«El pago en caja de este trámite venció.»: el ID vale solo el día en que se generó; la persona debe generarlo de nuevo en el punto.",
+          "«Este trámite no tiene el pago en caja habilitado.»: el trámite no se paga en caja.",
+          "«Demasiadas búsquedas sin resultado. Espere N minutos.»: si buscas varios ID que no existen seguidos, la caja se bloquea unos minutos por seguridad y te dice cuánto esperar.",
+        ],
+      },
+      {
+        id: "cobros-dia",
+        title: "4. Cobros del día y anulaciones",
+        paragraphs: [
+          "La pestaña «Cobros del día» lista lo que se cobró en tu organismo, con el ID, el valor, el medio, la fecha y hora, quién cobró y el estado, y el total del día. Los cobros anulados aparecen marcados y tachados, y no suman al total. La tabla se pagina de 10, 20, 30 o 50 filas.",
+          "El administrador del organismo puede elegir otro día y anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Si el cobro ya no se puede anular porque el trámite ya llegó a FLIT 2.0, la opción aparece deshabilitada con su motivo. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
+          "Si eres de caja y te equivocaste en un cobro, avisa al administrador de tu organismo: solo él puede anularlo.",
+        ],
+      },
+    ],
+  },
 ];
