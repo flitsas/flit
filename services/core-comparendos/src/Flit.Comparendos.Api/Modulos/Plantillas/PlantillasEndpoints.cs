@@ -223,8 +223,11 @@ public static class PlantillasEndpoints
         var v = await db.PlantillaVersiones.FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La versión");
         if (v.Estado != EstadoPlantillaVersion.Publicada)
             throw ReglaException.Conflicto("VERSION_NO_PUBLICADA", "Solo se aprueba una versión publicada: publícala primero.");
+        // Aprobar de nuevo una versión ya aprobada conserva la primera aprobación (fecha, quién y nota): no se reescribe la historia.
+        if (v.RevisadaJuridicamenteEn is not null)
+            return Results.Ok(Dto(v));
         (v.RevisadaJuridicamenteEn, v.RevisadaJuridicamentePor, v.NotaRevisionJuridica, v.ActualizadoEn, v.ActualizadoPor) = (reloj.Ahora, usuario.Id, pedido.Nota.Trim(), reloj.Ahora, usuario.Id);
-        auditoria.Registrar(null, "plantilla", v.PlantillaId, "REVISION_JURIDICA", new CambioCampo("version_revisada", null, v.NumeroVersion));
+        auditoria.Registrar(null, "plantilla", v.PlantillaId, "REVISION_JURIDICA", new CambioCampo("revisada_juridicamente_en", null, reloj.Ahora), new CambioCampo("version_revisada", null, v.NumeroVersion));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Results.Ok(Dto(v));
     }
