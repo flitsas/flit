@@ -93,7 +93,7 @@ public sealed class ServicioDp(
 
         var datos = new DatosDeSeleccion(
             c.CodigoInfraccion, c.FechaImposicion, c.FechaNotificacion, c.EsFotomulta, c.Activo, c.Pagado, c.TieneDp,
-            PropietarioEsPersonaJuridica: c.TipoDocumentoInfractor == TipoDocumento.NIT, situacion.DescuentoVigente);
+            PropietarioEsPersonaJuridica: PropietarioJuridico.Es(c.TipoDocumentoInfractor, c.NumeroDocumentoInfractor, c.NitConsultado), situacion.DescuentoVigente);
         var disponibles = candidatas.Select(t => t.Codigo).ToHashSet(StringComparer.Ordinal);
         return new SelectorTipologiaDp(ReglasDpAutomatico.V1).Decidir(datos, hoy, disponibles);
     }

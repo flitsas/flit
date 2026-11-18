@@ -106,6 +106,31 @@ public sealed class DecisionDpTests(ApiConFuente api) : IClassFixture<ApiConFuen
         (await DecisionAsync(empresa, id, automatico: true)).GetProperty("elegida").GetString().Should().Be("DCI");
     }
 
+    /// <summary>HU #14618: fotomulta de agente reciente-vencida de un dueño al que la fuente no le trajo el tipo de documento.</summary>
+    private async Task<JsonElement> DecisionConTipoAsync(string numero, TipoDocumento? tipo, string? documento, string? nitConsultado)
+    {
+        var fotomulta = Item(numero, fotomulta: true) with { FechaImposicion = Hoy.AddDays(-90), FechaNotificacion = Hoy.AddDays(-80) };
+        var (empresa, id) = await EmpresaConComparendoAsync(fotomulta, "DLL");
+        await api.EnDbAsync(db => db.Comparendos.Where(c => c.Id == id).ExecuteUpdateAsync(u => u
+            .SetProperty(c => c.TipoDocumentoInfractor, tipo).SetProperty(c => c.NumeroDocumentoInfractor, documento).SetProperty(c => c.NitConsultado, nitConsultado)));
+        return await DecisionAsync(empresa, id);
+    }
+
+    [Fact]
+    public async Task HU14618_Tipo_NIT_o_tipo_vacio_con_el_NIT_consultado_son_persona_juridica_y_el_resto_no()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        static bool AplicaDll(JsonElement d) => d.GetProperty("aplicables").EnumerateArray().Any(a => a.GetProperty("codigo").GetString() == "DLL");
+
+        AplicaDll(await DecisionConTipoAsync("PJ-1", TipoDocumento.NIT, "890903938", "890903938")).Should().BeTrue("tipo NIT");
+        var vacioConEvidencia = await DecisionConTipoAsync("PJ-2", null, "890903938", "890903938");
+        AplicaDll(vacioConEvidencia).Should().BeTrue("tipo vacío y el número es el NIT consultado");
+        vacioConEvidencia.GetProperty("elegida").GetString().Should().Be("DLL");
+        AplicaDll(await DecisionConTipoAsync("PJ-3", null, "123456789", "890903938")).Should().BeFalse("tipo vacío sin evidencia: no se asume");
+        AplicaDll(await DecisionConTipoAsync("PJ-4", null, null, "890903938")).Should().BeFalse("tipo vacío y sin número");
+        AplicaDll(await DecisionConTipoAsync("PJ-5", TipoDocumento.CC, "890903938", "890903938")).Should().BeFalse("una persona natural no cambia aunque el número coincida");
+    }
+
     [Fact]
     public async Task Un_comparendo_pagado_no_es_elegible_pero_muestra_lo_que_se_podria_alegar()
     {
