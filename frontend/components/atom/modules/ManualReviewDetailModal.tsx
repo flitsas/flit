@@ -133,14 +133,26 @@ function contarNoVerificadas(detail: ManualDetail): number {
   return [fotos.rostro, fotos.anverso, fotos.reverso].filter((f) => f?.estado === 'no_verificada').length;
 }
 
+/** «Aprobada por X el DD/MM/YYYY HH:mm»; solo con datos, nunca «null». */
+function textoRevision(verbo: 'Aprobada' | 'Rechazada', detail: ManualDetail): string | null {
+  const quien = detail.reviewedBy?.trim();
+  const cuando = detail.reviewedAt ? formatFechaHora(detail.reviewedAt) : '';
+  if (!quien && !cuando) return null;
+  return `${verbo}${quien ? ` por ${quien}` : ''}${cuando ? ` el ${cuando}` : ''}`;
+}
+
 /** Lo primero que lee quien abre el detalle: en qué va el caso y qué sigue. */
 function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCapturas: boolean }) {
   if (detail.status === 'aprobado') {
+    const revision = textoRevision('Aprobada', detail);
     return (
       <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-2.5 text-sm ${MANUAL_AVISO.success}`}>
-        <p className="flex items-center gap-2 font-semibold">
-          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> Identidad aprobada
-        </p>
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-semibold">
+            <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> Identidad aprobada
+          </p>
+          {revision && <p className="mt-0.5 pl-6 text-xs">{revision}</p>}
+        </div>
         <CertificadoIdentidadAccion
           validation={{ id: detail.id, status: 'aprobado', provider: 'manual', cartaDisponible: detail.cartaDisponible }}
         />
@@ -148,10 +160,12 @@ function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCaptu
     );
   }
   if (detail.status === 'rechazado') {
+    const revision = textoRevision('Rechazada', detail);
     return (
       <div className={`${MANUAL_AVISO_BASE} ${MANUAL_AVISO.danger}`}>
         <XCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
         <div className="min-w-0">
+          {revision && <p className="text-xs">{revision}</p>}
           {detail.rejectionReasonCode && (
             <>
               <p className="text-xs">Motivo del rechazo</p>

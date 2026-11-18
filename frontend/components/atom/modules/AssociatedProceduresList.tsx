@@ -1,10 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ExternalLink } from 'lucide-react';
 import type { LinkedProcedureRef } from '@/lib/api/types/procedure-runtime';
 import { FLIT } from '@/lib/flit-design-tokens';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
+import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { getToken } from '@/lib/api/client';
+import { hrefTramite } from '@/lib/tramites/href-tramite';
 
 export type AssociatedProcedureItem = {
   instanceId: string;
@@ -31,6 +34,11 @@ export function AssociatedProceduresList({
    * vista propia de la cabeza, así que se muestra sin enlace.
    */
   linkable = true,
+  /**
+   * Compañía dueña de los trámites. El Super Admin ve validaciones de todas las compañías: con ella el enlace
+   * lleva `?t=` y el trámite se abre en el tenant correcto. Ausente = enlace sin `?t=`.
+   */
+  tenantId,
 }: {
   procedures: AssociatedProcedureItem[];
   ariaLabel?: string;
@@ -39,8 +47,15 @@ export function AssociatedProceduresList({
   collapsible?: boolean;
   defaultOpen?: boolean;
   linkable?: boolean;
+  tenantId?: string | null;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // ¿SuperAdmin? Se resuelve del JWT tras montar, igual que LOG QX y el listado de trámites.
+  const [esAdmin, setEsAdmin] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
+  }, []);
 
   if (procedures.length === 0) return null;
 
@@ -54,7 +69,7 @@ export function AssociatedProceduresList({
         return (
           <li key={p.instanceId}>
             <ProcedureLinkTag
-              href={linkable ? `/tramites/${p.instanceId}` : undefined}
+              href={linkable ? hrefTramite(p.instanceId, tenantId, esAdmin) : undefined}
               className={
                 compact
                   ? 'block truncate underline'

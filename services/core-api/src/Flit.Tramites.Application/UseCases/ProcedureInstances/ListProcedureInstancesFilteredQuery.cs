@@ -339,7 +339,11 @@ public sealed class ListProcedureInstancesFilteredHandler(
                     baulDeE,
                     conPrenda.Contains(e.Id),
                     revocacionesActivas.GetValueOrDefault(e.Id),
-                    exentas.Contains(e.Id));
+                    exentas.Contains(e.Id),
+                    // ADR-0053 — igual que el listado sin filtros: sin este set el desplegable de copropietarios
+                    // pintaba «Sin firma» aunque la identidad estuviera aprobada (Bug #14603).
+                    IdentityApprovalResolver.ApprovedActorsFromKeys(
+                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salidaActores) ? salidaActores : null));
             })
             .ToList();
 

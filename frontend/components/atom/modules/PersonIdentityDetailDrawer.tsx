@@ -399,6 +399,7 @@ export function PersonIdentityDetailDrawer({
                     trackingTick={trackingTick}
                     soloConsulta={soloConsulta}
                     red={esRed}
+                    tenantId={tenantId}
                     onManualChanged={() => {
                       void load();
                       // La lista de abajo y el contador de «Validaciones manuales» se actualizan al instante.
@@ -423,6 +424,7 @@ function ValidationAccordionItem({
   trackingTick,
   soloConsulta = false,
   red = false,
+  tenantId,
   onManualChanged,
   onVerEnManuales,
 }: {
@@ -434,6 +436,8 @@ function ValidationAccordionItem({
   soloConsulta?: boolean;
   /** Persona de una compañía hija: la bitácora se lee por la ruta de red (el mandatario es solo consulta, no red). */
   red?: boolean;
+  /** Compañía de la persona: el enlace a los trámites asociados lleva `?t=` para el Super Admin. */
+  tenantId?: string;
   index: number;
   total: number;
   defaultOpen: boolean;
@@ -524,7 +528,7 @@ function ValidationAccordionItem({
           ) : null}
 
           {associated.length > 0 && (
-            <AssociatedProceduresList procedures={associated} collapsible linkable={!soloConsulta} />
+            <AssociatedProceduresList procedures={associated} collapsible linkable={!soloConsulta} tenantId={tenantId} />
           )}
 
           {v.status === 'rechazado' && motivoRechazo && (
