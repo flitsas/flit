@@ -5,7 +5,6 @@ import { Search } from "lucide-react";
 import { useId, useState } from "react";
 import { boton } from "@/components/landing/estilos";
 import { MobilityLoader } from "@/components/MobilityLoader";
-import { ResumenCierre } from "@/components/punto/ResumenCierre";
 import { portal, type CierrePuntoRespuesta, type ClientePortal, type EstadoRadicado, type TipoTramite } from "@/lib/api/cliente";
 import { ApiError, mensajeDe } from "@/lib/api/errores";
 import { useBloqueo } from "@/lib/api/useBloqueo";
@@ -18,6 +17,8 @@ import {
   soloDigitos,
 } from "@/lib/entradas";
 import { formatearFechaHora } from "@/lib/formato";
+import { descargarPdf } from "@/lib/punto/comprobantePdf";
+import { MENSAJE_EN_PROCESO, pasosDeCierre, titularDeCierre } from "@/lib/punto/seguimiento";
 import { CLASE_MENSAJE, CLASE_TITULAR, esAprobado, titularDe } from "@/lib/radicados/presentacion";
 import { ModalFlit } from "./ModalFlit";
 import { RadicadoTracking } from "./RadicadoTracking";
@@ -51,6 +52,21 @@ export interface RetomarPagoDatos {
 const ESTADO_SIN_ENVIAR = "pendiente_validacion";
 
 const MENSAJE_FALTA_PLACA = "Para consultar este trámite necesitas ingresar la placa.";
+
+/**
+ * Un trámite ya registrado en FLIT 2.0 tiene seguimiento real (revisión, aprobación, rechazo): se pide con la placa y el radicado que
+ * informa el cierre. Si esa consulta no responde, se muestra lo que sabe el cierre (en proceso).
+ */
+async function conSeguimientoReal(cliente: ClientePortal, cierre: CierrePuntoRespuesta): Promise<EstadoRadicado | CierrePuntoRespuesta> {
+  if (cierre.estadoCierre !== "registrado" || !cierre.radicadoFlit2 || !cierre.placa) return cierre;
+  try {
+    const estado = await cliente.radicados.consultar({ placa: cierre.placa, radicado: cierre.radicadoFlit2 });
+    // El catálogo de tipos no se conoce aquí: se muestra el nombre que ya informó el cierre.
+    return cierre.tipoTramite ? { ...estado, tipoTramite: cierre.tipoTramite } : estado;
+  } catch {
+    return cierre;
+  }
+}
 
 /** Modal «Consultar mi trámite» (diseño UI): placa + radicado o cédula, y tracking de 5 pasos. */
 export function ConsultarModal({ abierto, onCerrar, cliente = portal, tipos = [], radicadoInicial = "", consultaPunto = false, onRetomarPago }: Props) {
@@ -97,7 +113,8 @@ function ContenidoConsulta({
       if (!clasificado) throw new Error("Datos incompletos");
       if (esCodigo && "radicado" in clasificado) {
         try {
-          return await cliente.punto.pago.cierrePorCodigo(clasificado.radicado);
+          const cierre = await cliente.punto.pago.cierrePorCodigo(clasificado.radicado);
+          return await conSeguimientoReal(cliente, cierre);
         } catch (error) {
           // Sin pago (404 uniforme; 403 y 409 por compatibilidad): se cae a la consulta de siempre, que sí pide la placa.
           if (!(error instanceof ApiError) || (error.status !== 404 && error.status !== 403 && error.status !== 409)) throw error;
@@ -170,12 +187,7 @@ function ContenidoConsulta({
         )}
         {consulta.isSuccess &&
           ("estadoCierre" in consulta.data ? (
-            <div className="mt-6">
-              <ResumenCierre cierre={consulta.data} />
-              <button type="button" onClick={onCerrar} className={boton("flit", "mx-auto mt-4 flex h-11 px-10", "none")}>
-                Entendido
-              </button>
-            </div>
+            <ResultadoCierreConsulta cierre={consulta.data} onCerrar={onCerrar} />
           ) : (
             <>
               <ResultadoConsulta resultado={consulta.data} tipos={tipos} onCerrar={onCerrar} />
@@ -189,6 +201,40 @@ function ContenidoConsulta({
   );
 }
 
+/** Consulta por código de un trámite con pago en el punto (mismo diseño que el resultado de Lovable). */
+function ResultadoCierreConsulta({ cierre, onCerrar }: { cierre: CierrePuntoRespuesta; onCerrar: () => void }) {
+  const titular = titularDeCierre(cierre.estadoCierre);
+  const rechazado = cierre.estadoCierre === "rechazado";
+  return (
+    <section aria-label="Resultado de la consulta" className="mt-6">
+      <h2 className={`text-center text-2xl font-bold ${CLASE_TITULAR[titular.tono]}`}>{titular.texto}</h2>
+      <RadicadoTracking pasos={pasosDeCierre(cierre.estadoCierre)} />
+      <dl className="space-y-2 text-sm">
+        {[
+          ["ID del trámite", cierre.codigoPublico],
+          ["Placa asociada", cierre.placa ?? "—"],
+          ["Tipo de trámite", cierre.tipoTramite ?? "—"],
+        ].map(([k, v]) => (
+          <div key={k} className="flex justify-between gap-4">
+            <dt className="text-foreground/70">{k}</dt>
+            <dd className="text-right font-medium">{v}</dd>
+          </div>
+        ))}
+      </dl>
+      {rechazado ? (
+        <p role="note" className="mt-4 rounded-[9px] border border-alert bg-alert/10 p-4 text-sm text-alert">
+          <b>Causal de rechazo:</b> {cierre.motivo ?? "El organismo no pudo registrar el trámite."} Acércate al organismo con este código: {cierre.codigoPublico}
+        </p>
+      ) : (
+        <p className={`mt-4 rounded-lg p-4 text-sm ${CLASE_MENSAJE[titular.tono]}`}>{MENSAJE_EN_PROCESO}</p>
+      )}
+      <button type="button" onClick={onCerrar} className={boton("flit", "mx-auto mt-4 flex h-11 px-10", "none")}>
+        Entendido
+      </button>
+    </section>
+  );
+}
+
 function ResultadoConsulta({ resultado, tipos, onCerrar }: { resultado: EstadoRadicado; tipos: readonly TipoTramite[]; onCerrar: () => void }) {
   const titular = titularDe(resultado);
   const nombreTipo = tipos.find((t) => t.code === resultado.tipoTramite)?.name ?? resultado.tipoTramite;
@@ -197,7 +243,7 @@ function ResultadoConsulta({ resultado, tipos, onCerrar }: { resultado: EstadoRa
 
   return (
     <section aria-label="Resultado de la consulta">
-      <h3 className={`mt-6 text-center text-2xl font-bold ${CLASE_TITULAR[titular.tono]}`}>{titular.texto}</h3>
+      <h2 className={`mt-6 text-center text-2xl font-bold ${CLASE_TITULAR[titular.tono]}`}>{titular.texto}</h2>
       <RadicadoTracking pasos={pasos} />
       <dl className="space-y-2 text-sm">
         {[
@@ -221,13 +267,25 @@ function ResultadoConsulta({ resultado, tipos, onCerrar }: { resultado: EstadoRa
       )}
 
       {esAprobado(resultado) && (
-        <div className="mt-4 flex flex-col items-center gap-1">
-          <button type="button" disabled aria-describedby="comprobante-pendiente" className={boton("flit", "h-11 px-6", "none")}>
+        <div className="mt-4 flex justify-center">
+          <button
+            type="button"
+            className={boton("positive", "h-11 px-6", "none")}
+            onClick={() =>
+              descargarPdf(`comprobante-${resultado.radicado}.pdf`, [
+                "FLIT - Comprobante del trámite",
+                "",
+                `ID del trámite: ${resultado.radicado}`,
+                `Placa: ${resultado.placa ?? "—"}`,
+                `Tipo de trámite: ${nombreTipo}`,
+                `Organismo: ${resultado.organismo}`,
+                `Estado: ${titular.texto}`,
+                ...pasos.map((p) => `${p.titulo}: ${p.fecha ?? "Sin fecha"}`),
+              ])
+            }
+          >
             Descargar comprobante
           </button>
-          <p id="comprobante-pendiente" className="text-xs text-foreground/70">
-            El comprobante estará disponible próximamente.
-          </p>
         </div>
       )}
 
@@ -289,7 +347,7 @@ function RetomarPago({
 
   if (!abierto) {
     return (
-      <button type="button" onClick={() => setAbierto(true)} className={boton("institutional", "mx-auto mt-4 flex h-11 px-10", "none")}>
+      <button type="button" onClick={() => setAbierto(true)} className={boton("flit", "mx-auto mt-4 flex h-11 px-10", "none")}>
         Retomar el pago
       </button>
     );
@@ -333,7 +391,7 @@ function RetomarPago({
           </p>
         )}
       </div>
-      <button type="submit" className={boton("institutional", "mx-auto flex h-11 px-10", "none")} disabled={!puedeEnviar}>
+      <button type="submit" className={boton("flit", "mx-auto flex h-11 px-10", "none")} disabled={!puedeEnviar}>
         Continuar
       </button>
     </form>

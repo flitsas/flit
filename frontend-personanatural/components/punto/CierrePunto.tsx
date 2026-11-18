@@ -4,14 +4,14 @@
 // llama a /radicar. Muestra el ID del trámite (código público) y dónde recogerlo; mientras el registro en FLIT 2.0 está en
 // curso sondea hasta que quede registrado o rechazado.
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
-import { ConsultarModal } from "@/components/modales/ConsultarModal";
+import { useEffect, useRef } from "react";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { boton } from "@/components/landing/estilos";
 import { Btn } from "@/components/tramite/piezas";
-import { ResumenCierre } from "@/components/punto/ResumenCierre";
+import { lineasComprobante, ResumenCierre } from "@/components/punto/ResumenCierre";
 import type { CierrePuntoRespuesta, ClientePortal } from "@/lib/api/cliente";
 import { ApiError, mensajeDeFallo } from "@/lib/api/errores";
+import { descargarPdf } from "@/lib/punto/comprobantePdf";
 
 /** Cada cuánto se vuelve a preguntar mientras el trámite está en registro. */
 export const INTERVALO_SONDEO_CIERRE_MS = 3000;
@@ -32,7 +32,6 @@ export type PropsCierrePunto = {
 };
 
 export function CierrePunto({ cliente, solicitudId, placa, tipoNombre, onTerminar, onPagoAnulado, onRadicado }: PropsCierrePunto) {
-  const [consultando, setConsultando] = useState(false);
   const cierre = useQuery<CierrePuntoRespuesta>({
     queryKey: ["pn", "punto", "cierre", solicitudId],
     queryFn: ({ signal }) => cliente.punto.pago.cierre({ signal }),
@@ -78,21 +77,13 @@ export function CierrePunto({ cliente, solicitudId, placa, tipoNombre, onTermina
       {datos && <ResumenCierre cierre={datos} titulo="h2" placa={placa} tipoNombre={tipoNombre} radicaEn={radicaEn} />}
 
       <div className="flex flex-wrap items-center justify-end gap-3">
-        {datos && <Btn onClick={() => setConsultando(true)}>Consultar trámite</Btn>}
+        {datos && datos.estadoCierre !== "rechazado" && (
+          <Btn onClick={() => descargarPdf(`comprobante-${datos.codigoPublico}.pdf`, lineasComprobante(datos, placa, tipoNombre))}>Descargar comprobante</Btn>
+        )}
         <Btn tone="secondary" onClick={onTerminar}>
           Volver al inicio
         </Btn>
       </div>
-
-      {datos && (
-        <ConsultarModal
-          abierto={consultando}
-          onCerrar={() => setConsultando(false)}
-          cliente={cliente}
-          radicadoInicial={datos.codigoPublico}
-          consultaPunto
-        />
-      )}
     </div>
   );
 }

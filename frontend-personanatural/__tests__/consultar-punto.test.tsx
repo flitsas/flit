@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { ConsultarModal } from "@/components/modales/ConsultarModal";
 import { crearCliente, type EstadoRadicado } from "@/lib/api/cliente";
@@ -147,5 +147,100 @@ describe("modal Consultar en el punto: retomar el pago", () => {
     await pedirRetomar();
     expect(await screen.findByText(/sigue su curso/)).toBeInTheDocument();
     expect(onRetomarPago).not.toHaveBeenCalled();
+  });
+});
+
+describe("modal Consultar en el punto: resultado por estado (diseño de referencia)", () => {
+  const CIERRE = (extra: Record<string, unknown> = {}) => ({
+    estadoCierre: "registrado",
+    codigoPublico: "PN-2026-0001",
+    radicadoFlit2: "TR-2026-000123",
+    valorCop: 366000,
+    medio: "caja",
+    medioCaja: "efectivo",
+    pagadoEn: "2026-10-27T15:00:00+00:00",
+    recogeEn: { organismo: "Tránsito de Prueba" },
+    tipoTramite: "Traspaso",
+    placa: "ABC123",
+    ...extra,
+  });
+  const APROBADO: EstadoRadicado = {
+    ...ESTADO,
+    macroEstado: { codigo: "finalizado", etiqueta: "Finalizado", indice: 3 },
+    mensaje: "Tu trámite ha sido aprobado satisfactoriamente por el Organismo de Tránsito.",
+    pasos: ESTADO.pasos.map((p) => ({ ...p, estado: "done" as const, fecha: p.fecha ?? "2026-10-24T15:51:00Z" })),
+  };
+  const estados = (el: HTMLElement) => within(el).getAllByRole("listitem").map((i) => i.getAttribute("data-status"));
+  const dato = (k: string) => screen.getByText(k).nextSibling;
+
+  function montarCierre(cierre: Record<string, unknown>, consultarRadicado: () => Response = () => problema(404, "no_simulado")) {
+    return montar((url) => (url.includes("/punto/pago/cierre/") ? json(cierre) : consultarRadicado()), true);
+  }
+
+  it("en registro: «en proceso» en warning, Enviado al OT actual, Tipo «Traspaso» (no «—») y mensaje de Lovable", async () => {
+    montarCierre(CIERRE({ estadoCierre: "en_registro", radicadoFlit2: undefined }));
+    escribir("", "PN-2026-0001");
+    consultar();
+
+    const titular = await screen.findByRole("heading", { name: "Tu trámite está en proceso" });
+    expect(titular).toHaveClass("text-warning");
+    expect(estados(screen.getByRole("list", { name: "Tracking del radicado" }))).toEqual(["done", "done", "current", "pending", "pending"]);
+    expect(dato("ID del trámite")).toHaveTextContent("PN-2026-0001");
+    expect(dato("Placa asociada")).toHaveTextContent("ABC123");
+    expect(dato("Tipo de trámite")).toHaveTextContent("Traspaso");
+    expect(screen.getByText(/aún no presenta respuesta por parte del Organismo de Tránsito/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Entendido" })).toBeInTheDocument();
+  });
+
+  it("registrado con seguimiento real aprobado: título aprobado, pasos completos y comprobante descargable", async () => {
+    montarCierre(CIERRE(), () => json(APROBADO));
+    escribir("", "PN-2026-0001");
+    consultar();
+
+    const titular = await screen.findByRole("heading", { name: "Tu trámite ha sido aprobado" });
+    expect(titular).toHaveClass("text-success");
+    expect(estados(screen.getByRole("list", { name: "Tracking del radicado" })).every((e) => e === "done")).toBe(true);
+    expect(dato("Tipo de trámite")).toHaveTextContent("Traspaso");
+    expect(screen.getByRole("button", { name: "Descargar comprobante" })).toBeEnabled();
+  });
+
+  it("registrado con seguimiento real en revisión: título «en proceso»", async () => {
+    montarCierre(CIERRE(), () => json(ESTADO));
+    escribir("", "PN-2026-0001");
+    consultar();
+
+    expect(await screen.findByRole("heading", { name: "Tu trámite está en proceso" })).toHaveClass("text-warning");
+    expect(estados(screen.getByRole("list", { name: "Tracking del radicado" }))).toEqual(["done", "done", "done", "current", "pending"]);
+  });
+
+  it("registrado cuyo seguimiento real no responde: muestra lo del cierre (en proceso) con el Tipo del cierre", async () => {
+    montarCierre(CIERRE());
+    escribir("", "PN-2026-0001");
+    consultar();
+
+    expect(await screen.findByRole("heading", { name: "Tu trámite está en proceso" })).toBeInTheDocument();
+    expect(dato("Tipo de trámite")).toHaveTextContent("Traspaso");
+  });
+
+  it("rechazado al registrar: título en alert, Enviado al OT rechazado y causal real", async () => {
+    montarCierre(CIERRE({ estadoCierre: "rechazado", radicadoFlit2: undefined, motivo: "La placa ya tiene un trámite en curso." }));
+    escribir("", "PN-2026-0001");
+    consultar();
+
+    const titular = await screen.findByRole("heading", { name: "Tu trámite ha sido rechazado" });
+    expect(titular).toHaveClass("text-alert");
+    expect(estados(screen.getByRole("list", { name: "Tracking del radicado" }))).toEqual(["done", "done", "rejected", "pending", "pending"]);
+    expect(screen.getByRole("note")).toHaveTextContent("Causal de rechazo: La placa ya tiene un trámite en curso.");
+  });
+
+  it("«Retomar el pago» usa el estilo del botón principal (flit) en un trámite pendiente de pago", async () => {
+    const SIN_ENVIAR: EstadoRadicado = { ...ESTADO, macroEstado: { codigo: "pendiente_validacion", etiqueta: "Pendiente", indice: 0 } };
+    const fetchImpl = vi.fn(async (url: string) => (String(url).includes("/punto/pago/cierre/") ? problema(404, "solicitud_no_encontrada") : json(SIN_ENVIAR))) as unknown as typeof fetch;
+    renderConQuery(<ConsultarModal abierto onCerrar={vi.fn()} cliente={crearCliente({ fetchImpl })} tipos={TIPOS} consultaPunto onRetomarPago={vi.fn()} />);
+    escribir("abc123", "PN-2026-0001");
+    consultar();
+
+    expect(await screen.findByRole("heading", { name: "Tu trámite está en proceso" })).toHaveClass("text-warning");
+    expect(await screen.findByRole("button", { name: "Retomar el pago" })).toHaveClass("bg-primary");
   });
 });

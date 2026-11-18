@@ -76,7 +76,7 @@ describe("Cierre del punto · hora de envío al organismo", () => {
   it("ya registrado no pide el estado ni muestra la hora", async () => {
     const llamadas = montar({ [CIERRE]: () => json({ ...enRegistro, estadoCierre: "registrado", radicadoFlit2: "TR-1" }) });
 
-    await screen.findByText("¡Tu trámite quedó! Recoge en este organismo.");
+    await screen.findByRole("heading", { name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
     expect(llamadas).not.toContain(ESTADO);
     expect(screen.queryByTestId("radica-en")).not.toBeInTheDocument();
   });

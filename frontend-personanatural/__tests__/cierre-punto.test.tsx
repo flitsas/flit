@@ -16,6 +16,8 @@ const registrado = (extra: Record<string, unknown> = {}) => ({
   medioCaja: "efectivo",
   pagadoEn: "2026-10-27T15:00:00+00:00",
   recogeEn: { organismo: "Tránsito de Prueba" },
+  tipoTramite: "Traspaso",
+  placa: "ABC123",
   ...extra,
 });
 
@@ -32,34 +34,87 @@ function montar(rutas: Record<string, Manejador>, extras: { onPagoAnulado?: () =
 }
 
 describe("Cierre del punto", () => {
-  it("registrado: organismo, ID destacado, radicado FLIT 2.0, valor y medio", async () => {
-    const { onTerminar } = montar({ [CIERRE]: () => json(registrado()) });
+  it("registrado: título de éxito, tabla, seguimiento, tarjetas y botones del diseño", async () => {
+    const resumen = {
+      actores: [
+        { parte: "Vendedor", nombre: "Juan Pérez" },
+        { parte: "Comprador", nombre: "María Rodríguez" },
+      ],
+      valorVenta: 45000000,
+      tienePrenda: true,
+      decisionPrenda: "levantar",
+      documentos: [{ nombre: "paz-y-salvo.pdf" }, { nombre: "impronta.png" }],
+      desglose: [
+        { nombre: "Derechos de tránsito", valorCop: 300000 },
+        { nombre: "Servicio FLIT", valorCop: 66000 },
+      ],
+      correoEnviado: true,
+    };
+    const { onTerminar } = montar({ [CIERRE]: () => json(registrado({ resumen })) });
 
-    expect(await screen.findByText("¡Tu trámite quedó! Recoge en este organismo.")).toBeInTheDocument();
+    const titulo = await screen.findByRole("heading", { name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" });
+    expect(titulo).toHaveClass("text-success");
+    expect(screen.queryByText("¡Tu trámite quedó! Recoge en este organismo.")).toBeNull();
     expect(within(screen.getByRole("table")).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["ID del trámite", "Tipo", "Nº radicado", "Organismo"]);
     expect(within(screen.getByRole("table")).getByText("Tránsito de Prueba")).toBeInTheDocument();
-    expect(screen.getByText("Para consultar el estado de tu trámite usa tu ID de trámite en Consultar mi trámite.")).toBeInTheDocument();
     expect(screen.getByTestId("codigo-cierre")).toHaveTextContent("PN-2026-000123");
+    expect(screen.getByTestId("tipo-cierre")).toHaveTextContent("Traspaso");
     expect(screen.getByTestId("radicado-flit2")).toHaveTextContent("TR-2026-000123");
-    expect(screen.getByText("Efectivo")).toBeInTheDocument();
-    expect(screen.getByText(/366\.000/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Copiar ID/ })).toHaveClass("bg-success");
-    expect(screen.getByRole("heading", { name: "Valor pagado" })).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Vehículo" })).toHaveTextContent("ABC123 · Traspaso");
+    // Seguimiento de 5 pasos, «Enviado al OT» como actual.
+    const pasos = within(screen.getByRole("list", { name: "Tracking del radicado" })).getAllByRole("listitem");
+    expect(pasos.map((p) => p.getAttribute("data-status"))).toEqual(["done", "done", "current", "pending", "pending"]);
+    expect(pasos[2]).toHaveTextContent("Enviado al OT");
+    expect(screen.getByText(/utiliza tu ID de trámite o el número de radicado\. También hemos enviado una copia de esta confirmación a tu correo electrónico registrado\./)).toBeInTheDocument();
+    // Sin «Copiar ID» ni «Consultar trámite».
+    expect(screen.queryByRole("button", { name: /Copiar ID/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Consultar trámite" })).toBeNull();
+    // Tarjetas con datos reales.
+    expect(screen.getByRole("region", { name: "Vehículo" })).toHaveTextContent("ABC123");
+    expect(screen.getByRole("region", { name: "Actores" })).toHaveTextContent("Vendedor: Juan Pérez");
+    expect(screen.getByRole("region", { name: "Actores" })).toHaveTextContent("Comprador: María Rodríguez");
+    const condiciones = screen.getByRole("region", { name: "Condiciones Comerciales" });
+    expect(condiciones).toHaveTextContent(/Venta: .*45\.000\.000/);
+    expect(condiciones).toHaveTextContent("Prenda: Sí · levantar");
+    expect(condiciones).toHaveTextContent("paz-y-salvo.pdf, impronta.png");
+    const total = screen.getByRole("region", { name: "Valor Total del Trámite" });
+    expect(total).toHaveTextContent(/366\.000/);
+    expect(total).toHaveTextContent(/Derechos de tránsito: .*300\.000/);
+    expect(total).toHaveTextContent(/Servicio FLIT: .*66\.000/);
+    const pago = screen.getByRole("region", { name: "Pago en caja" });
+    expect(within(pago).getByTestId("medio-cierre")).toHaveTextContent("Efectivo");
+    expect(within(pago).getByText("Pagado en caja")).toHaveClass("text-success");
+    const docs = screen.getByRole("region", { name: "Documentos cargados del traspaso" });
+    expect(within(docs).getAllByText("Cargado")).toHaveLength(2);
 
+    expect(screen.getByRole("button", { name: "Descargar comprobante" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Volver al inicio" }));
     expect(onTerminar).toHaveBeenCalledTimes(1);
   });
 
-  it("copiar ID escribe el código público en el portapapeles", async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+  it("sin correo enviado omite la frase de la copia al correo; sin resumen no pinta tarjetas vacías", async () => {
     montar({ [CIERRE]: () => json(registrado()) });
 
-    fireEvent.click(await screen.findByRole("button", { name: /Copiar ID/ }));
+    await screen.findByTestId("codigo-cierre");
+    expect(screen.getByText(/utiliza tu ID de trámite o el número de radicado\./)).not.toHaveTextContent("correo electrónico");
+    expect(screen.queryByRole("region", { name: "Actores" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Condiciones Comerciales" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Documentos cargados del traspaso" })).toBeNull();
+  });
 
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith("PN-2026-000123"));
-    expect(await screen.findByRole("button", { name: /Copiado/ })).toBeInTheDocument();
+  it("«Descargar comprobante» genera un PDF en el navegador", async () => {
+    const crear = vi.fn(() => "blob:comprobante");
+    Object.defineProperty(URL, "createObjectURL", { value: crear, configurable: true });
+    Object.defineProperty(URL, "revokeObjectURL", { value: vi.fn(), configurable: true });
+    const clic = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
+    montar({ [CIERRE]: () => json(registrado()) });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Descargar comprobante" }));
+
+    expect(crear).toHaveBeenCalledTimes(1);
+    const blob = (crear.mock.calls[0] as unknown as [Blob])[0];
+    expect(blob.type).toBe("application/pdf");
+    expect(clic).toHaveBeenCalled();
+    clic.mockRestore();
   });
 
   it("sin radicado FLIT 2.0 y sin cobro: la columna dice «En registro» y el medio dice «Sin cobro»", async () => {
@@ -67,7 +122,7 @@ describe("Cierre del punto", () => {
 
     await screen.findByTestId("codigo-cierre");
     expect(screen.getByTestId("radicado-flit2")).toHaveTextContent("En registro");
-    expect(screen.getByText("Sin cobro")).toBeInTheDocument();
+    expect(screen.getByTestId("medio-cierre")).toHaveTextContent("Sin cobro");
   });
 
   it("muestra «Registrando tu trámite…» mientras carga", async () => {
@@ -75,13 +130,16 @@ describe("Cierre del punto", () => {
     expect(await screen.findByText("Registrando tu trámite…")).toBeInTheDocument();
   });
 
-  it("en_registro: informa y sondea hasta que queda registrado", async () => {
+  it("en_registro: informa, mantiene «Enviado al OT» pendiente y sondea hasta que queda registrado", async () => {
     let n = 0;
     montar({ [CIERRE]: () => json(++n === 1 ? registrado({ estadoCierre: "en_registro", radicadoFlit2: undefined }) : registrado()) });
 
-    expect(await screen.findByText(/Tu trámite está en proceso de registro/)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /Copiar ID/ })).not.toHaveClass("bg-success");
-    expect(await screen.findByText("¡Tu trámite quedó! Recoge en este organismo.", {}, { timeout: 8000 })).toBeInTheDocument();
+    const aviso = await screen.findByRole("heading", { name: "Tu trámite está en proceso de registro" });
+    expect(aviso).toHaveClass("text-warning");
+    expect(screen.getByTestId("radicado-flit2")).toHaveTextContent("En registro");
+    const pasos = within(screen.getByRole("list", { name: "Tracking del radicado" })).getAllByRole("listitem");
+    expect(pasos.map((p) => p.getAttribute("data-status"))).toEqual(["done", "done", "current", "pending", "pending"]);
+    expect(await screen.findByRole("heading", { name: "¡Muchas gracias, tu trámite se ha enviado con éxito!" }, { timeout: 8000 })).toBeInTheDocument();
   }, 15000);
 
   it("rechazado: motivo en rojo con el código para acercarse al organismo", async () => {
@@ -103,33 +161,6 @@ describe("Cierre del punto", () => {
     expect(llamadas.filter((l) => l === CIERRE)).toHaveLength(2);
   });
 
-  it("«Consultar trámite» abre Consultar con el código precargado y usa /cierre/{codigo} sin pedir placa", async () => {
-    const { llamadas } = montar({
-      [CIERRE]: () => json(registrado()),
-      "GET /punto/pago/cierre/PN-2026-000123": () => json(registrado()),
-    });
-    fireEvent.click(await screen.findByRole("button", { name: "Consultar trámite" }));
-
-    const dialogo = await screen.findByRole("dialog");
-    expect(dialogo).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
-
-    await waitFor(() => expect(llamadas).toContain("GET /punto/pago/cierre/PN-2026-000123"));
-    expect(llamadas.some((l) => l.includes("/radicados/consulta"))).toBe(false);
-  });
-
-  it("Consultar sin pago (404 del cierre) cae a la consulta de siempre con la placa", async () => {
-    const { llamadas } = montar({
-      [CIERRE]: () => json(registrado()),
-      "POST /radicados/consulta": () => json({ code: "x" }, 404),
-    });
-    fireEvent.click(await screen.findByRole("button", { name: "Consultar trámite" }));
-    await screen.findByRole("dialog");
-    fireEvent.change(screen.getByLabelText("Placa"), { target: { value: "abc123" } });
-    fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
-
-    await waitFor(() => expect(llamadas).toContain("POST /radicados/consulta"));
-  });
 });
 
 describe("Cierre del punto: pago anulado y radicado", () => {

@@ -772,6 +772,23 @@ export interface CierrePuntoRespuesta {
   medioCaja?: string | null;
   pagadoEn: string;
   recogeEn: { organismo: string };
+  /** Nombre del tipo de trámite (de la definición congelada) y placa del vehículo. */
+  tipoTramite?: string | null;
+  placa?: string | null;
+  /** Solo en el cierre de la sesión del trámite (no en la consulta por código). */
+  resumen?: ResumenCierrePunto | null;
+}
+
+/** Resumen de la confirmación final: partes por nombre (sin documentos), condiciones, adjuntos por nombre y desglose cobrado. */
+export interface ResumenCierrePunto {
+  actores: { parte: string; nombre: string }[];
+  valorVenta?: number | null;
+  tienePrenda?: boolean | null;
+  decisionPrenda?: string | null;
+  documentos: { nombre: string }[];
+  desglose: { nombre: string; valorCop: number }[];
+  /** Verdadero si el correo de confirmación ya salió hacia quien radicó. */
+  correoEnviado: boolean;
 }
 
 export interface CajaHabilitadaPunto {

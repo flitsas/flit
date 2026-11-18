@@ -1,5 +1,8 @@
 using System.Net;
+using System.Text.Json;
+using Flit.PersonaNatural.Api.Adjuntos;
 using Flit.PersonaNatural.Api.Cotizaciones;
+using Flit.PersonaNatural.Api.Definiciones;
 using Flit.PersonaNatural.Api.Identidad;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
@@ -40,14 +43,39 @@ public sealed record CierrePunto(
     string Medio,
     string? MedioCaja,
     DateTimeOffset PagadoEn,
-    RecogeEnOrganismo RecogeEn);
+    RecogeEnOrganismo RecogeEn,
+    string? TipoTramite = null,
+    string? Placa = null,
+    ResumenCierrePunto? Resumen = null);
+
+/// <summary>Parte del trámite para la confirmación: rol legible y nombre (nunca el documento). Habeas Data.</summary>
+public sealed record ActorCierre(string Parte, string Nombre);
+
+/// <summary>Documento adjunto del trámite, solo por nombre de archivo.</summary>
+public sealed record DocumentoCierre(string Nombre);
+
+/// <summary>Línea del desglose cobrado (la congelada al habilitar el pago).</summary>
+public sealed record LineaCierre(string Nombre, long ValorCop);
+
+/// <summary>
+/// Resumen para la confirmación final (solo en el cierre de la sesión del trámite, no en la consulta por código).
+/// Aditivo: sin datos personales más allá del nombre de las partes.
+/// </summary>
+public sealed record ResumenCierrePunto(
+    IReadOnlyList<ActorCierre> Actores,
+    decimal? ValorVenta,
+    bool? TienePrenda,
+    string? DecisionPrenda,
+    IReadOnlyList<DocumentoCierre> Documentos,
+    IReadOnlyList<LineaCierre> Desglose,
+    bool CorreoEnviado);
 
 /// <summary>
 /// Cierre del paso Pago del punto (Feature CIERRE OT; HU #14464). Una sola llamada devuelve en qué quedó el trámite pagado.
 /// Sin pago confirmado responde 409 <c>pago_pendiente</c>.
 /// </summary>
 public sealed class CierrePuntoService(
-    PersonaNaturalDb db, SesionService sesiones, RadicacionDePagadasService radicacion, ICorreoDeCierre correo, BloqueoConsultaCierre bloqueo)
+    PersonaNaturalDb db, PersonaService personas, SesionService sesiones, RadicacionDePagadasService radicacion, ICorreoDeCierre correo, BloqueoConsultaCierre bloqueo)
 {
     public const string CodigoPagoPendiente = "pago_pendiente";
     public const string CodigoNoEncontrado = "no_encontrado";
@@ -115,13 +143,14 @@ public sealed class CierrePuntoService(
         if (cobro is null)
             throw new ReglaDeNegocioException(StatusCodes.Status409Conflict, CodigoPagoPendiente, "Pago pendiente", "El trámite aún no tiene un pago confirmado.");
 
+        var correoEnviado = cobro.CorreoCierreEnviadoEn is not null;
         if (reintentar)
         {
             // Pagada sin radicar (FLIT 2.0 no respondió) y correo que no salió: cada consulta lo reintenta; nada de esto bloquea el cierre.
             if (s.Estado == EstadoSolicitud.Pagada && await radicacion.IntentarRadicarSiVencioAsync(s.Id, ct).ConfigureAwait(false))
                 s = await db.Set<SolicitudTramite>().AsNoTracking().FirstAsync(x => x.Id == s.Id, ct).ConfigureAwait(false);
             if (cobro.CorreoCierreEnviadoEn is null)
-                await correo.EnviarSiCorrespondeAsync(s.Id, ct).ConfigureAwait(false);
+                correoEnviado = await correo.EnviarSiCorrespondeAsync(s.Id, ct).ConfigureAwait(false);
         }
 
         string estado;
@@ -145,10 +174,47 @@ public sealed class CierrePuntoService(
                 break;
         }
 
+        var nombreTipo = DefinicionesService.Leer(s.DefinicionSnapshot)?.Name is { Length: > 0 } n ? n : s.TipoTramiteCodigo;
+        var resumen = reintentar ? await ResumenAsync(s, cobro, correoEnviado, ct).ConfigureAwait(false) : null;
         return new CierrePunto(
             estado, s.CodigoPublico, radicado, motivo, cobro.ValorCop ?? 0, cobro.Medio ?? string.Empty, cobro.MedioCaja,
-            cobro.PagadoEn ?? cobro.UpdatedAt, new RecogeEnOrganismo(s.OrganismoNombre));
+            cobro.PagadoEn ?? cobro.UpdatedAt, new RecogeEnOrganismo(s.OrganismoNombre), nombreTipo, s.Placa, resumen);
     }
+
+    private async Task<ResumenCierrePunto> ResumenAsync(SolicitudTramite s, CobroSolicitud cobro, bool correoEnviado, CancellationToken ct)
+    {
+        var etiquetas = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var r in RolesPunto.Desde(s.DefinicionSnapshot))
+            etiquetas[r.Rol] = r.Etiqueta;
+        var actores = (await personas.LeerAsync(s.Id, "cierre_resumen", ct).ConfigureAwait(false))
+            .Where(p => !string.IsNullOrWhiteSpace(p.Nombre))
+            .Select(p => new ActorCierre(etiquetas.TryGetValue(p.Parte, out var e) && !string.IsNullOrWhiteSpace(e) ? e : p.Parte, p.Nombre!.Trim()))
+            .ToList();
+        var datos = DatosSolicitud.Leer(s.Datos);
+        var documentos = await db.Set<Adjunto>().AsNoTracking()
+            .Where(a => a.SolicitudId == s.Id && a.Tipo != AdjuntosService.TipoPrefacturaCaja)
+            .OrderBy(a => a.CreatedAt).Select(a => new DocumentoCierre(a.NombreArchivo)).ToListAsync(ct).ConfigureAwait(false);
+        return new ResumenCierrePunto(actores, datos.Comercial?.Valor, datos.Prenda?.Tiene, datos.Prenda?.Decision, documentos, LeerDesglose(cobro.Lineas), correoEnviado);
+    }
+
+    private static List<LineaCierre> LeerDesglose(string? lineas)
+    {
+        if (string.IsNullOrWhiteSpace(lineas))
+            return [];
+        try
+        {
+            var leidas = JsonSerializer.Deserialize<List<LineaLeida>>(lineas, JsonLineas) ?? [];
+            return [.. leidas.Where(l => !string.IsNullOrWhiteSpace(l.Nombre)).Select(l => new LineaCierre(l.Nombre!, l.ValorCop))];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
+    private static readonly JsonSerializerOptions JsonLineas = new(JsonSerializerDefaults.Web);
+
+    private sealed record LineaLeida(string? Nombre, long ValorCop);
 
     /// <summary>Solo se muestra un motivo escrito en lenguaje claro; códigos o textos técnicos se reemplazan por uno genérico.</summary>
     internal static string MotivoLegible(string? motivo)
