@@ -17,7 +17,11 @@ public sealed class ProductosDePrueba : IProductosHabilitados
 {
     public ConcurrentDictionary<Guid, bool> Apagadas { get; } = new();
 
-    public Task<bool> ComparendosHabilitadoAsync(Guid tenant, CancellationToken ct) => Task.FromResult(!Apagadas.ContainsKey(tenant));
+    /// <summary>Empresas para las que Identidad "falla" (lanza), para probar que una empresa rota no frena a las demás.</summary>
+    public ConcurrentDictionary<Guid, bool> Fallan { get; } = new();
+
+    public Task<bool> ComparendosHabilitadoAsync(Guid tenant, CancellationToken ct) =>
+        Fallan.ContainsKey(tenant) ? throw new InvalidOperationException("Identidad no responde (prueba).") : Task.FromResult(!Apagadas.ContainsKey(tenant));
 }
 
 /// <summary>Identidad falsa para los usuarios: devuelve los que se le pongan, por empresa.</summary>
@@ -29,7 +33,7 @@ public sealed class UsuariosDePrueba : IUsuariosEmpresa
         Task.FromResult<IReadOnlyList<UsuarioConPermiso>>(PorEmpresa.GetValueOrDefault(tenant) ?? []);
 }
 
-public sealed class ApiConProductos : ApiConFuente
+public class ApiConProductos : ApiConFuente
 {
     public ProductosDePrueba Productos { get; } = new();
 
