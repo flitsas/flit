@@ -406,6 +406,10 @@ public static class DependencyInjection
         // HU #10540 (R09) — diagnóstico de bandeja OT (entregados con/sin grant).
         services.AddScoped<GetOtBandejaHealthHandler>();
         services.AddScoped<GetOtBandejaCountersHandler>();
+        services.AddScoped<Flit.Admin.Application.OtClientScopes.SetOtUserClientScopeHandler>();
+        services.AddScoped<Flit.Admin.Application.OtClientScopes.ValidateOtInvitationClientScopeHandler>();
+        services.AddScoped<Flit.Admin.Application.OtClientScopes.GetOtUserClientScopeHandler>();
+        services.AddScoped<Flit.Admin.Application.OtClientScopes.ListOtClientCompaniesHandler>();
 
         // HU #10221 — motor de reglas AND/OR.
         services.AddScoped<CreateOtRuleHandler>();

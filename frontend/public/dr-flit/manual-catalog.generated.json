@@ -1664,7 +1664,7 @@
       "href": "/manual/2-ot/4-usuarios",
       "audience": "Organismo de Tránsito",
       "sectionId": "ot",
-      "summary": "Invitar y administrar cuentas del perfil OT (Administrador OT y Gestor OT) y ajustar sus permisos.",
+      "summary": "Invitar y administrar cuentas del perfil OT (Administrador OT y Gestor OT), ajustar sus permisos y elegir qué clientes gestiona cada uno.",
       "primarySource": false,
       "blocks": [
         {
@@ -1719,8 +1719,37 @@
           ]
         },
         {
+          "id": "clientes-que-gestiona",
+          "title": "4. Clientes que gestiona una persona",
+          "paragraphs": [
+            "Por defecto, cada persona de tu organismo ve y gestiona los trámites de todas las compañías cliente. Puedes limitarla a algunas: desde ese momento solo ve esas compañías en la bandeja de trámites, el Inicio, los reportes, las consultas, los lotes, las revocatorias y los mandatarios. Aplica a cualquier rol, también a otro Administrador OT.",
+            "Esta opción es del Administrador OT y del Super Admin. Un Gestor OT, aunque tenga habilitado el módulo Usuarios, no la ve."
+          ],
+          "bullets": [
+            "1. Dock → Usuarios; en la fila de la persona abre «Acciones» → «Editar usuario».",
+            "2. En «Clientes que gestiona» elige «Todos los clientes» o «Clientes específicos».",
+            "3. Con «Clientes específicos», busca por nombre o NIT y marca una o más compañías. Si no marcas ninguna ves «Elige al menos un cliente o vuelve a «Todos los clientes».» y no puedes guardar.",
+            "4. Guarda. El cambio aplica de inmediato: si le quitas un cliente, deja de ver sus trámites aunque los estuviera gestionando, y los consolidados pendientes de ese cliente en sus lotes ya no se entregan.",
+            "Al invitar a alguien también eliges sus clientes en «Clientes que gestiona»; por defecto queda en «Todos los clientes».",
+            "En la tabla, debajo del rol de cada persona, ves «Todos los clientes» o cuántos clientes tiene asignados.",
+            "Una compañía nueva que empiece a trabajar con tu organismo la ven solo quienes están en «Todos los clientes»; a los demás debes asignársela."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "No puedes cambiar tus propios clientes: al editarte ves «No puedes cambiar tu propio alcance de clientes. Pídeselo a otro administrador.». Pídeselo a otro Administrador OT o al Super Admin."
+            },
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Si a ti te asignaron clientes específicos, solo puedes repartir esos mismos clientes: «Todos los clientes» aparece deshabilitado con el aviso «Solo puedes asignar los clientes que tú gestionas.». Las personas que invites quedan con tus mismos clientes, y al registrar o editar un mandatario solo puedes asociarle tus compañías (las asociaciones que ya tenía con otras compañías se conservan)."
+            }
+          ]
+        },
+        {
           "id": "auditoria-permisos",
-          "title": "4. Auditoría de permisos",
+          "title": "5. Auditoría de permisos",
           "paragraphs": [
             "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas y el botón «Invitar usuario») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
             "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar»."
@@ -1730,7 +1759,7 @@
         },
         {
           "id": "seguridad",
-          "title": "5. Seguridad",
+          "title": "6. Seguridad",
           "paragraphs": [
             "Suspender temporalmente, desactivar indefinidamente, eliminar o restaurar una cuenta ya no lo hace el organismo: son acciones exclusivas del equipo FLIT (Super Admin). Tú, como administrador del organismo, invitas, editas datos y cancelas invitaciones pendientes; para lo demás, escala el caso a FLIT."
           ],

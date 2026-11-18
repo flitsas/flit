@@ -31,6 +31,12 @@ public sealed class RevocationRequestListFilter
     /// </summary>
     public Guid? TransitOfficeId { get; init; }
 
+    /// <summary>
+    /// Alcance de compañías cliente del usuario del OT (solo lado OT): si viene, se listan únicamente las
+    /// solicitudes de trámites de esos tenants. <c>null</c> = sin restricción.
+    /// </summary>
+    public IReadOnlyList<Guid>? ClientTenantIds { get; init; }
+
     /// <summary>Filas a saltar (paginación 0-based, mismo estilo que <c>ProcedureInstanceListRequest</c>).</summary>
     public int Skip { get; init; }
 

@@ -23,12 +23,14 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     private readonly ITransitOfficeOperationalStatusReader _otStatus;
     private readonly IdentityVigenciaPorDocumentoResolver _identityResolver;
     private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
+    private readonly IOtUserClientScopeResolver? _clientScope;
 
     public DbMandateSignerReader(
         FlitDbContext context,
         ITransitOfficeOperationalStatusReader? otStatus = null,
         IdentityVigenciaPorDocumentoResolver? identityResolver = null,
-        IEffectiveTransitOfficeListResolver? effectiveOffices = null)
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null,
+        IOtUserClientScopeResolver? clientScope = null)
     {
         _context = context ?? throw new ArgumentNullException(nameof(context));
 
@@ -43,6 +45,8 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
         // motivo que PlateRangeRepository: los sitios que construyen el reader a mano (tests) conservan
         // el criterio previo de grant propio; por DI llega siempre la implementación real.
         _effectiveOffices = effectiveOffices;
+        // Alcance de compañías del usuario OT en curso (null = todas). Solo afecta la vista del organismo.
+        _clientScope = clientScope;
     }
 
     public Task<IReadOnlyList<MandateSignerItem>> ListByOtAsync(
@@ -112,11 +116,18 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                     .Select(c => c.CompanyTenantId)
                     .ToHashSet();
 
+                // Alcance por usuario: las compañías ASOCIADAS fuera del alcance del usuario no se le muestran (se conservan al
+                // editar; ver UpdateMandateSignerHandler). Sin restricción, todas como siempre.
+                var restriccion = _clientScope is null
+                    ? null
+                    : await _clientScope.GetRestrictionAsync(transitOfficeId, cancellationToken).ConfigureAwait(false);
+                var asociablesVisibles = restriccion?.ToHashSet();
+
                 IReadOnlyList<MandateSignerItem> recortados =
                 [
                     .. items
                         .Where(s => s.CompanyTenantIds.Count == 0 || s.CompanyTenantIds.Any(visibles.Contains))
-                        .Select(s => RecortarAlOrganismo(s, transitOfficeId, visibles)),
+                        .Select(s => RecortarAlOrganismo(s, transitOfficeId, visibles, asociablesVisibles)),
                 ];
                 return recortados;
             },
@@ -126,7 +137,8 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
     private static MandateSignerItem RecortarAlOrganismo(
         MandateSignerItem s,
         Guid transitOfficeId,
-        HashSet<Guid> visibles) =>
+        HashSet<Guid> visibles,
+        HashSet<Guid>? asociablesVisibles = null) =>
         new()
         {
             Id = s.Id,
@@ -156,8 +168,11 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 .. s.OfficeCompanies
                     .Where(o => o.TransitOfficeId == transitOfficeId)
                     // HU #13179 — las asociadas son compañías de FLIT que el OT ya ve por nombre y NIT en la sección de
-                    // mandatarios; no se recortan por la visibilidad de la bandeja.
-                    .Select(o => o),
+                    // mandatarios; no se recortan por la visibilidad de la bandeja, SÍ por el alcance de compañías del usuario.
+                    .Select(o => asociablesVisibles is null
+                        ? o
+                        : new MandateSignerOfficeCompanies(
+                            o.TransitOfficeId, [.. o.AssociatedCompanyTenantIds.Where(asociablesVisibles.Contains)])),
             ],
         };
 
@@ -196,11 +211,17 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                 var originBySigner = await LoadOriginsAsync([signer.Id], null, null, cancellationToken)
                     .ConfigureAwait(false);
 
+                // Compañías asociadas vigentes por organismo: la edición con alcance por usuario las necesita para conservar
+                // las que el actor no ve.
+                var associatedBySigner = await LoadOfficeCompaniesAsync([signer.Id], cancellationToken)
+                    .ConfigureAwait(false);
+
                 return new MandateSignerItem
                 {
                     Origin = originBySigner.GetValueOrDefault(signer.Id, MandateSignerOriginRules.Organismo),
                     Id = signer.Id,
                     TransitOfficeId = signer.TransitOfficeId,
+                    OfficeCompanies = associatedBySigner.GetValueOrDefault(signer.Id, []),
                     TransitOfficeIds = officesBySigner.GetValueOrDefault(signer.Id, []),
                     PhysicalSignatureOfficeIds = physicalBySigner.GetValueOrDefault(signer.Id, []),
                     FullName = signer.FullName,
@@ -405,6 +426,16 @@ internal sealed class DbMandateSignerReader : IMandateSignerReader
                             cancellationToken)
                         .ConfigureAwait(false)).ToHashSet();
                     var efectivas = grants.Where(g => g.IsEnabled).Select(g => g.TenantId).ToHashSet();
+
+                    // Alcance por usuario: el usuario del OT solo ve las compañías que se le asignaron.
+                    var restriction = _clientScope is null
+                        ? null
+                        : await _clientScope.GetRestrictionAsync(transitOfficeId, cancellationToken).ConfigureAwait(false);
+                    if (restriction is not null)
+                    {
+                        visible.IntersectWith(restriction);
+                        directGrants = [.. directGrants.Where(g => restriction.Contains(g.TenantId))];
+                    }
 
                     // Un grant directo inhabilitado solo se lista (como no habilitado) si la compañía NO
                     // puede radicar por otra vía: si está en la lista efectiva, decide la regla única

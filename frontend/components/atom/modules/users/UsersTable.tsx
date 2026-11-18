@@ -44,6 +44,8 @@ export interface UserRow {
   status: "active" | "inactive" | "pending" | "cancelled";
   isSuspended: boolean;
   createdAt: string | null;
+  /** Alcance de clientes (solo canal OT), p. ej. «Todos los clientes» o «3 clientes». */
+  clientScopeLabel?: string | null;
   /** Clave de React: un usuario con N roles produce N filas con el mismo id. */
   rowKey: string;
 }
@@ -381,6 +383,11 @@ export function UsersTable({
                     </td>
                     <td className={CELDA} style={CELDA_STYLE}>
                       <RoleCell roleCode={row.roleCode} roleName={row.role} />
+                      {row.clientScopeLabel ? (
+                        <p className="mt-0.5 truncate text-[10px] opacity-60" data-testid="user-client-scope">
+                          {row.clientScopeLabel}
+                        </p>
+                      ) : null}
                     </td>
                     <td className={CELDA} style={CELDA_STYLE}>
                       <StatusBadge label={badge.label} tone={badge.tone} />
