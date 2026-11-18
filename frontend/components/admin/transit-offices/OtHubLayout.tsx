@@ -9,6 +9,7 @@ import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-office-tenants";
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isOtUser, isSuperAdmin } from "@/lib/auth/jwt";
+import { esSoloCaja } from "@/lib/auth/solo-caja";
 import { OtTabBar } from "@/components/admin/transit-offices/OtTabBar";
 import { ADMIN_BACK_LINK_CLS } from "@/components/admin/admin-ui-styles";
 import {
@@ -71,8 +72,18 @@ export function OtHubLayout({
   }, []);
 
   useEffect(() => {
+    const claims = decodeJwtPayload(getToken());
+    // Persona de caja (solo `ot_caja`): la API le niega el perfil del organismo. Su organismo es el de su token y, si la URL
+    // trae otro, se le lleva al suyo sin pedir nada.
+    if (esSoloCaja(claims)) {
+      const propio = typeof claims?.tenant_id === "string" && claims.tenant_id ? claims.tenant_id : null;
+      if (propio && propio !== transitOfficeId) {
+        router.replace(`${otHubModulePath(propio, activeTab)}${window.location.search}`);
+      }
+      return;
+    }
     const controller = new AbortController();
-    const superAdmin = isSuperAdmin(decodeJwtPayload(getToken()));
+    const superAdmin = isSuperAdmin(claims);
     void fetchOtProfile(controller.signal, { transitOfficeId: transitOfficeId })
       .then((profile) => {
         if (controller.signal.aborted) {
@@ -91,6 +102,14 @@ export function OtHubLayout({
   }, [activeTab, router, transitOfficeId]);
 
   useEffect(() => {
+    const claims = decodeJwtPayload(getToken());
+    // La persona de caja no puede listar el catálogo de organismos (403): el subtítulo sale del nombre de su token.
+    if (esSoloCaja(claims)) {
+      const nombre = typeof claims?.tenant_name === "string" ? claims.tenant_name : undefined;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- el token solo existe en el navegador
+      setOfficeLabel(nombre);
+      return;
+    }
     const controller = new AbortController();
     void fetchTransitOffices(undefined, controller.signal)
       .then((catalog) => {

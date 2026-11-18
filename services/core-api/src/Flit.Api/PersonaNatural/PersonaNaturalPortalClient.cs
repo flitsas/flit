@@ -1,6 +1,7 @@
 using System.Text.Json;
 using Flit.PersonaNatural.Grpc.V1;
 using Flit.Platform.Sdk.Grpc;
+using Flit.Tramites.Domain.Tramites.PersonaNatural;
 using Grpc.Core;
 
 namespace Flit.Api.PersonaNatural;
@@ -83,7 +84,11 @@ internal sealed record SolicitudPortal(
     IReadOnlyList<ParteSolicitudPortal> Partes,
     IReadOnlyList<AdjuntoSolicitudPortal> Adjuntos,
     string IdempotencyKey,
-    string CorrelationId);
+    string CorrelationId,
+    // HU #14469 — pago confirmado en caja del punto (canal pn_punto); null en la web o si el portal no lo mandó o vino ilegible.
+    PagoPortalTramite? Pago = null,
+    // HU #14469 — el portal mandó un pago que no se pudo leer (valor, medio, fecha o cobro inválidos): se avisa en el log.
+    bool PagoIlegible = false);
 
 /// <summary>
 /// Resultado de leer una solicitud: la solicitud, o la razón estable por la que no se puede leer
@@ -151,6 +156,11 @@ internal sealed class GrpcPersonaNaturalPortalClient(RadicacionService.Radicacio
             [.. r.Adjuntos.Select(a => new AdjuntoSolicitudPortal(
                 Guid.TryParse(a.Id, out var id) ? id : Guid.Empty, a.Tipo, a.Referencia, a.Sha256, a.TamanoBytes, a.MimeType, a.NombreArchivo))],
             r.IdempotencyKey,
-            r.CorrelationId);
+            r.CorrelationId,
+            LeerPago(r),
+            r.Pago is not null && LeerPago(r) is null);
     }
+
+    private static PagoPortalTramite? LeerPago(ObtenerSolicitudParaRadicarResponse r) =>
+        r.Pago is null ? null : PagoPortalTramite.Crear(r.Pago.ValorCop, r.Pago.Medio, r.Pago.MedioCaja, r.Pago.MedioDetalle, r.Pago.PagadoEn, r.Pago.CobroId);
 }

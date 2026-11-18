@@ -36,6 +36,11 @@ export interface NavItem {
   superAdminOnly?: boolean;
   /** Un nivel de submenú (p. ej. Administradores → Plataforma → Mandatos). Un contenedor lleva `href: ""`. */
   children?: NavItem[];
+  /**
+   * Con `children`: el contenedor es un submenú que se despliega DENTRO del mismo panel (botón con ▸/▾ y `aria-expanded`), en
+   * lugar de una sección con título siempre abierta. Sin esto, el comportamiento es el de siempre.
+   */
+  desplegable?: boolean;
 }
 
 /** El orden del dock sale de `sections`, nunca del orden de `items` (guía §2, Contrato A). */
@@ -63,6 +68,8 @@ export interface DockEntry {
   descripcion?: string;
   active: boolean;
   children?: DockEntry[];
+  /** Submenú desplegable dentro del panel (ver `NavItem.desplegable`). */
+  desplegable?: boolean;
 }
 
 export interface DockGroup {
@@ -126,6 +133,7 @@ export function buildDock(catalog: NavCatalog, viewer: NavViewer, pathname: stri
     descripcion: it.descripcion,
     active: it.key === activeKey,
     children: it.children?.length ? it.children.map(toEntry) : undefined,
+    ...(it.desplegable ? { desplegable: true } : {}),
   });
 
   return catalog.sections

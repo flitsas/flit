@@ -152,6 +152,7 @@ internal sealed class PortalHost : IAsyncDisposable
             ["Captcha:SecretKey"] = "secreto-de-captcha",
             ["Pii:Cifrado:Llaves:1"] = "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
             ["Abuso:LimiteIpPorMinuto"] = "10000",
+            ["Caja:RadicacionArranqueSegundos"] = "3600", // el trabajo de fondo no corre solo en las pruebas: se invoca a mano
         };
         foreach (var (clave, valor) in ajustes)
             settings[clave] = valor;

@@ -19,6 +19,7 @@ import { type JwtPayload, hasPermission, hasRoleCode, isOtUser, isSuperAdmin } f
 // como literales para que este módulo no dependa de constantes en tiempo de carga.
 const ADMIN_COMPANY_ROLE = "AdminCompany";
 const OT_ADMIN_ROLE = "ot_admin";
+const OT_CAJA_ROLE = "ot_caja";
 /**
  * Slugs de los módulos del organismo de tránsito (Anexo A, `OtPermissionMap.cs`). El `ot_admin` los tiene todos; los
  * demás roles del organismo (p. ej. Gestor OT, HU #13655) los reciben por rol o como permiso individual del Admin OT.
@@ -269,13 +270,15 @@ export const ROUTE_ACCESS: readonly RouteAccessRule[] = [
       },
     }),
   ),
-  // Épica #14297 — Portal Persona Natural del organismo: solo ot_admin o SuperAdmin, por rol y sin permiso delegable.
+  // Épica #14297 — Portal Persona Natural del organismo: ot_admin o SuperAdmin, por rol y sin permiso delegable. La persona
+  // de caja (`ot_caja`) también entra, pero la página solo le muestra la pestaña Caja (PortalPnAccess) y la API sigue siendo
+  // la autoridad: solo le deja `/api/v1/ot/caja/*`.
   {
     id: PORTAL_PN_MODULE_ID,
     pattern: /^\/admin\/transit-offices\/[^/]+\/portal-persona-natural(\/|$)/,
     requirement: {
       transitOfficeUser: true,
-      rolesAny: [OT_ADMIN_ROLE],
+      rolesAny: [OT_ADMIN_ROLE, OT_CAJA_ROLE],
       api: { kind: "policy", policy: "OtAdminOrSuperAdmin", source: "services/core-api/src/Flit.Api/Endpoints/AdminOtPortalMarcaEndpoints.cs" },
     },
   },

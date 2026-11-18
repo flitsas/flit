@@ -39,9 +39,25 @@ export interface TipoCobro {
   medios: MedioDeTipo[];
 }
 
+/** Tiempo para anular un cobro de caja: por organismo, 0..`maxMinutos` (15 por defecto). 0 = se radica al cobrar. */
+export interface CajaAnulacion {
+  minutos: number;
+  porDefecto: boolean;
+  maxMinutos: number;
+}
+
+export interface CambioCajaAnulacion {
+  minutosAntes: number;
+  minutosDespues: number;
+  actorNombre: string | null;
+  cambiadoEn: string;
+}
+
 export interface CobroPortal {
   medios: MedioBandera[];
   tipos: TipoCobro[];
+  /** Solo el portal del OT lo trae. */
+  cajaAnulacion?: CajaAnulacion;
 }
 
 export interface CambioMedio {
@@ -61,6 +77,9 @@ export interface CobroApi {
   obtener: (signal?: AbortSignal) => Promise<CobroPortal>;
   guardarMedio: (cambio: CambioMedio) => Promise<unknown>;
   guardarSwitch: (cambio: CambioSwitch) => Promise<unknown>;
+  /** Solo en el portal del OT: sin estos métodos la pantalla no ofrece el tiempo de anulación. */
+  guardarCajaAnulacion?: (minutos: number) => Promise<CajaAnulacion>;
+  historialCajaAnulacion?: (signal?: AbortSignal) => Promise<CambioCajaAnulacion[]>;
 }
 
 export interface OtCobroScope {
@@ -68,8 +87,27 @@ export interface OtCobroScope {
   transitOfficeId?: string;
 }
 
-function crearApi(base: string, query: Record<string, string>): CobroApi {
+function crearApi(base: string, query: Record<string, string>, conCajaAnulacion = false): CobroApi {
+  const caja: Partial<CobroApi> = conCajaAnulacion
+    ? {
+        guardarCajaAnulacion: async (minutos) => {
+          const r = await apiFetch<Partial<CajaAnulacion> & { cajaAnulacion?: CajaAnulacion }>(
+            `${base}/caja-anulacion`,
+            { method: "PUT", query, body: { minutos } },
+          );
+          return (r.cajaAnulacion ?? r) as CajaAnulacion;
+        },
+        historialCajaAnulacion: async (signal) =>
+          (
+            await apiFetch<{ items: CambioCajaAnulacion[] }>(`${base}/caja-anulacion/historial`, {
+              query,
+              signal,
+            })
+          ).items,
+      }
+    : {};
   return {
+    ...caja,
     obtener: (signal) => apiFetch<CobroPortal>(base, { query, signal }),
     guardarMedio: (cambio) =>
       apiFetch<unknown>(`${base}/medios`, { method: "PUT", query, body: cambio }),
@@ -82,6 +120,7 @@ export function crearCobroApiOt(scope?: OtCobroScope): CobroApi {
   return crearApi(
     OT_PORTAL_COBRO_BASE,
     scope?.transitOfficeId ? { transitOfficeId: scope.transitOfficeId } : {},
+    true,
   );
 }
 

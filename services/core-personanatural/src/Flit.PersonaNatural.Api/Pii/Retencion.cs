@@ -9,7 +9,9 @@ namespace Flit.PersonaNatural.Api.Pii;
 /// se vacían, la solicitud queda cancelada (ya no se puede reanudar), se revocan sus sesiones y queda la traza en
 /// <c>acceso_pii_log</c>. Es idempotente: una solicitud ya cancelada no vuelve a entrar.
 /// </summary>
-public sealed class RetencionService(PersonaNaturalDb db, TimeProvider reloj, IEnumerable<Flit.PersonaNatural.Api.Solicitudes.ILimpiadorDeSolicitud> limpiadores)
+public sealed class RetencionService(
+    PersonaNaturalDb db, TimeProvider reloj, IEnumerable<Flit.PersonaNatural.Api.Solicitudes.ILimpiadorDeSolicitud> limpiadores,
+    Flit.PersonaNatural.Api.Adjuntos.IAlmacenAdjuntos almacen, Microsoft.Extensions.Options.IOptions<Flit.PersonaNatural.Api.Caja.CajaOptions> cajaOpciones)
 {
     public const string ActorRetencion = "retencion";
     public const string AccionAnonimizada = "anonimizada_por_retencion";
@@ -47,6 +49,46 @@ public sealed class RetencionService(PersonaNaturalDb db, TimeProvider reloj, IE
         var sesiones = await db.Set<SesionTramite>().Where(s => s.ExpiraEn < limite || (s.Revocada && s.CreatedAt < limite)).ExecuteDeleteAsync(ct).ConfigureAwait(false);
         var cuotas = await db.Set<CuotaConsulta>().Where(c => c.Dia < dia).ExecuteDeleteAsync(ct).ConfigureAwait(false);
         return intentos + sesiones + cuotas;
+    }
+
+    /// <summary>Prefacturas huérfanas que un ciclo barre como máximo.</summary>
+    public const int LoteHuerfanas = 100;
+
+    /// <summary>
+    /// Barre las prefacturas de caja que quedaron sin cobro: un adjunto <c>prefactura_caja</c> más viejo que
+    /// <c>Caja:PrefacturaHuerfanaHoras</c> (24 h por defecto) que ningún cobro referencia (una confirmación que falló después de guardar el
+    /// archivo, o un proceso que murió a medias). La prefactura puede traer datos personales, así que sale del almacenamiento y de la base.
+    /// Un cobro pagado o anulado que la referencia la protege. Es idempotente y devuelve cuántas barrió.
+    /// </summary>
+    public async Task<int> PurgarPrefacturasHuerfanasAsync(CancellationToken ct)
+    {
+        var horas = Math.Max(1, cajaOpciones.Value.PrefacturaHuerfanaHoras);
+        var limite = reloj.GetUtcNow() - TimeSpan.FromHours(horas);
+        var huerfanas = await db.Set<Adjunto>().AsNoTracking()
+            .Where(a => a.Tipo == Flit.PersonaNatural.Api.Adjuntos.AdjuntosService.TipoPrefacturaCaja && a.CreatedAt < limite
+                && !db.Set<CobroSolicitud>().Any(c => c.PrefacturaAdjuntoId == a.Id))
+            .OrderBy(a => a.CreatedAt).Take(LoteHuerfanas).Select(a => new { a.Id, a.StoragePath }).ToListAsync(ct).ConfigureAwait(false);
+
+        var barridas = 0;
+        foreach (var huerfana in huerfanas)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                await almacen.EliminarAsync(huerfana.StoragePath, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException and not Npgsql.NpgsqlException)
+            {
+                // El objeto huérfano lo recupera la limpieza del almacenamiento; la fila sí se borra para no reintentar eternamente.
+            }
+
+            // Se vuelve a comprobar en el DELETE: si entre la lectura y aquí un cobro la tomó, no se borra.
+            barridas += await db.Set<Adjunto>()
+                .Where(a => a.Id == huerfana.Id && !db.Set<CobroSolicitud>().Any(c => c.PrefacturaAdjuntoId == a.Id))
+                .ExecuteDeleteAsync(ct).ConfigureAwait(false);
+        }
+
+        return barridas;
     }
 
     private async Task<int> AnonimizarLoteAsync(ConfiguracionRetencion config, CancellationToken ct)
@@ -132,6 +174,9 @@ public sealed partial class RetencionJob(IServiceScopeFactory scopes, IConfigura
                 var depurados = await retencion.PurgarEfimerosAsync(stoppingToken).ConfigureAwait(false);
                 if (depurados > 0)
                     EfimerosDepurados(logger, depurados);
+                var huerfanas = await retencion.PurgarPrefacturasHuerfanasAsync(stoppingToken).ConfigureAwait(false);
+                if (huerfanas > 0)
+                    PrefacturasHuerfanas(logger, huerfanas);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
             {
@@ -151,6 +196,9 @@ public sealed partial class RetencionJob(IServiceScopeFactory scopes, IConfigura
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Retención: {Total} filas efímeras depuradas (intentos, sesiones vencidas, cuotas)")]
     private static partial void EfimerosDepurados(ILogger logger, int total);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Retención: {Total} prefacturas de caja sin cobro barridas")]
+    private static partial void PrefacturasHuerfanas(ILogger logger, int total);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Retención: el ciclo falló y se reintenta en el siguiente")]
     private static partial void CicloFallido(ILogger logger, Exception ex);
