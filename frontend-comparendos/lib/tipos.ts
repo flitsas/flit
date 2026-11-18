@@ -508,6 +508,9 @@ export interface VersionPlantilla {
   publicadaEn: string | null;
   /** Cuándo un abogado aprobó el texto de esta versión (Epic #14606); null si nadie lo aprobó. */
   revisadaJuridicamenteEn?: string | null;
+  /** Quién aprobó el texto (nombre o correo) y la nota que dejó (Epic #14606, HU #14616). */
+  revisadaPor?: string | null;
+  notaRevisionJuridica?: string | null;
 }
 
 export interface VariablePlantilla {
