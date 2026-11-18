@@ -8,7 +8,7 @@ import { useState } from "react";
 import { boton } from "@/components/landing/estilos";
 import { Card } from "@/components/tramite/piezas";
 import type { CierrePuntoRespuesta } from "@/lib/api/cliente";
-import { formatearPesos } from "@/lib/formato";
+import { formatearHora12, formatearPesos } from "@/lib/formato";
 
 const MEDIOS: Record<string, string> = { caja: "Caja", sin_cobro: "Sin cobro" };
 const MEDIOS_CAJA: Record<string, string> = { efectivo: "Efectivo", datafono: "Datáfono", transferencia: "Transferencia", otro: "Otro" };
@@ -33,12 +33,15 @@ export function ResumenCierre({
   titulo = "h3",
   placa,
   tipoNombre,
+  radicaEn,
 }: {
   cierre: CierrePuntoRespuesta;
   titulo?: "h2" | "h3";
   /** Si se conocen (el cierre del asistente), completan la columna «Tipo» y la tarjeta «Vehículo». */
   placa?: string | undefined;
   tipoNombre?: string | undefined;
+  /** Cuándo se envía al organismo el trámite que sigue en registro (ISO); sin él no se muestra la hora. */
+  radicaEn?: string | null | undefined;
 }) {
   const [copiado, setCopiado] = useState(false);
   const tono = TONOS[cierre.estadoCierre] ?? TONOS.en_registro;
@@ -67,6 +70,11 @@ export function ResumenCierre({
               <Icono className="h-9 w-9" />
             </span>
             <Titulo className={`mt-4 text-2xl font-bold leading-tight sm:text-[32px] ${tono.texto}`}>{tono.titulo}</Titulo>
+            {cierre.estadoCierre === "en_registro" && formatearHora12(radicaEn) && (
+              <p className="mt-2 text-sm" data-testid="radica-en">
+                Se envía al organismo a las {formatearHora12(radicaEn)}
+              </p>
+            )}
             {cierre.estadoCierre === "rechazado" && cierre.motivo && <p className="mt-2 text-sm">{cierre.motivo}</p>}
             {cierre.estadoCierre === "rechazado" && <p className="mt-1 text-sm">Acércate al organismo con este código: {cierre.codigoPublico}</p>}
           </div>

@@ -739,6 +739,10 @@ export interface PagoConfirmadoPunto {
   medio: string;
   medioCaja?: string | null;
   pagadoEn: string;
+  /** Pagado en caja y todavía no enviado al organismo (la ventana para anular sigue abierta). */
+  enRegistro?: boolean;
+  /** Cuándo se envía al organismo (ISO). Con ventana 0 coincide con el cobro. */
+  radicaEn?: string | null;
 }
 
 export interface EstadoPagoPunto {

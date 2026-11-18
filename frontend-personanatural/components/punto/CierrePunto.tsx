@@ -40,6 +40,16 @@ export function CierrePunto({ cliente, solicitudId, placa, tipoNombre, onTermina
     retry: false,
   });
   const datos = cierre.data;
+  // La hora de envío al organismo viene en el estado del pago (`pago.radicaEn`); solo se pide mientras el trámite sigue en registro.
+  const enRegistro = datos?.estadoCierre === "en_registro";
+  const estadoPago = useQuery({
+    queryKey: ["pn", "punto", "pago-estado", solicitudId],
+    queryFn: ({ signal }) => cliente.punto.pago.estado({ signal }),
+    enabled: enRegistro,
+    retry: false,
+  });
+  const pagoDelEstado = estadoPago.data?.pago;
+  const radicaEn = enRegistro && pagoDelEstado?.enRegistro ? (pagoDelEstado.radicaEn ?? null) : null;
   // Tras haber mostrado un pago, un 409 es que la caja lo anuló: no queda nada que mostrar aquí.
   const pagoAnulado = Boolean(onPagoAnulado) && datos !== undefined && cierre.error instanceof ApiError && cierre.error.status === 409;
   const avisoAnulado = useRef(false);
@@ -65,7 +75,7 @@ export function CierrePunto({ cliente, solicitudId, placa, tipoNombre, onTermina
           </button>
         </div>
       )}
-      {datos && <ResumenCierre cierre={datos} titulo="h2" placa={placa} tipoNombre={tipoNombre} />}
+      {datos && <ResumenCierre cierre={datos} titulo="h2" placa={placa} tipoNombre={tipoNombre} radicaEn={radicaEn} />}
 
       <div className="flex flex-wrap items-center justify-end gap-3">
         {datos && <Btn onClick={() => setConsultando(true)}>Consultar trámite</Btn>}
