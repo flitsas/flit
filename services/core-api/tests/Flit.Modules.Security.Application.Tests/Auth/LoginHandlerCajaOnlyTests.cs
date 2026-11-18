@@ -46,15 +46,16 @@ public sealed class LoginHandlerCajaOnlyTests
             });
 
     [Fact]
-    public async Task UsuarioSoloCaja_NoRecibeElJwtHeredado()
+    public async Task UsuarioSoloCaja_YaNoSeRechaza_RecibeElJwtHeredadoConSuRolOtCaja()
     {
         Usuario("ot_caja");
 
-        var act = () => _handler.HandleAsync(new LoginCommand("caja@ot.test", "Clave1!"), CancellationToken.None);
+        var result = await _handler.HandleAsync(new LoginCommand("caja@ot.test", "Clave1!"), CancellationToken.None);
 
-        await act.Should().ThrowAsync<CajaOnlyAccountException>();
-        _jwtTokenIssuer.DidNotReceiveWithAnyArgs().IssueToken(
-            default, default!, default, default!, default!, default!, default!, default, default!, default!, default!);
+        result.AccessToken.Should().Be("jwt");
+        _jwtTokenIssuer.Received(1).IssueToken(
+            Arg.Any<Guid>(), "caja@ot.test", Arg.Any<Guid>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(), Arg.Any<string>(),
+            Arg.Any<bool>(), Arg.Is<IReadOnlyList<UserRoleSnapshot>>(r => r.Count == 1 && r[0].Code == "ot_caja"), Arg.Any<IReadOnlyList<string>>(), Arg.Any<string>());
     }
 
     [Theory]
