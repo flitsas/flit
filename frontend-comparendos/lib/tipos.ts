@@ -94,6 +94,8 @@ export interface Organismo {
   correosRadicacion: string[];
   permiteCambioContraventor: boolean;
   activoPlataforma: boolean;
+  /** La secretaría recibe derechos de petición por correo (Epic #14606, HU #14611); apagado por defecto. */
+  admiteDpPorCorreo?: boolean;
 }
 
 export interface EventoTimeline {
