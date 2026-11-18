@@ -51,7 +51,7 @@ async function cargarDatos(empresaId: string, signal: AbortSignal): Promise<Dato
 /** Panel de la pantalla: misma receta que la bandeja (`rounded-2xl border border-border bg-card`), con título, descripción y estado. */
 function Panel({ titulo, descripcion, estado, children }: { titulo: string; descripcion: string; estado?: ReactNode; children: ReactNode }) {
   return (
-    <section aria-label={titulo} className="min-w-0 max-w-6xl rounded-2xl border border-border bg-card">
+    <section aria-label={titulo} className="min-w-0 rounded-2xl border border-border bg-card">
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-border px-4 py-3 sm:px-5">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-flit-primary">{titulo}</h3>
@@ -61,6 +61,16 @@ function Panel({ titulo, descripcion, estado, children }: { titulo: string; desc
       </header>
       <div className="flex min-w-0 flex-col gap-4 px-4 py-4 sm:px-5">{children}</div>
     </section>
+  );
+}
+
+/** Sub-bloque del panel: título pequeño y contenido alineado arriba, con fondo suave; las celdas de una fila miden lo mismo. */
+function Celda({ titulo, children, ancha = false }: { titulo: string; children: ReactNode; ancha?: boolean }) {
+  return (
+    <div className={`flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-secondary/40 p-3 ${ancha ? "md:col-span-2 xl:col-span-1" : ""}`}>
+      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</h4>
+      {children}
+    </div>
   );
 }
 
@@ -115,8 +125,8 @@ function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresa
           Esta empresa no tiene el módulo de derechos de petición, así que el envío automático no puede encenderse.
         </InlineAlert>
       )}
-      <div className="flex max-w-3xl flex-col gap-5 md:flex-row md:items-start md:gap-8">
-        <div className="min-w-0 md:w-80 md:shrink-0">
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+        <Celda titulo="Estado">
           <Interruptor
             activo={encendido}
             onCambio={alternar}
@@ -124,14 +134,12 @@ function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresa
             etiqueta="Enviar solos los derechos de petición"
             ayuda="Se guarda al cambiarlo. Empieza apagado."
           />
-        </div>
-        <div className="flex min-w-0 flex-col gap-1">
-          <label htmlFor="tope-diario" className="text-[11px] font-semibold text-muted-foreground">
-            Tope diario de envíos
-          </label>
-          <div className="flex items-stretch gap-2">
+        </Celda>
+        <Celda titulo="Tope diario de envíos">
+          <div className="flex flex-wrap items-stretch gap-2">
             <input
               id="tope-diario"
+              aria-label="Tope diario de envíos"
               className={`${INPUT_CLS} !w-40 shrink-0`}
               type="number"
               inputMode="numeric"
@@ -152,8 +160,15 @@ function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresa
               {ocupado ? "Guardando…" : "Guardar"}
             </button>
           </div>
-          <span className="whitespace-nowrap text-[11px] text-muted-foreground">De {TOPE_MINIMO} a {TOPE_MAXIMO} por día</span>
-        </div>
+          <span className="text-[11px] text-muted-foreground">De {TOPE_MINIMO} a {TOPE_MAXIMO} por día</span>
+        </Celda>
+        <Celda titulo="Cómo funciona" ancha>
+          <ul className="flex list-disc flex-col gap-1 pl-4 text-xs text-muted-foreground">
+            <li>Una corrida por día hábil.</li>
+            <li>No toca comparendos pagados ni inactivos.</li>
+            <li>Lo que pase del tope sigue el siguiente día hábil.</li>
+          </ul>
+        </Celda>
       </div>
       {invalido && !sinModulo && <InlineAlert tone="warning" compact>{invalido}</InlineAlert>}
       {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
