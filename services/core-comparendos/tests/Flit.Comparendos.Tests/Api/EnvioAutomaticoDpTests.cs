@@ -495,6 +495,31 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
     }
 
     [Fact]
+    public async Task El_ultimo_resultado_del_trabajo_se_ve_y_una_empresa_saltada_por_producto_no_pasa_en_silencio()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        async Task<ResultadoCiclo?> UltimoAsync() => await api.EnDbAsync(db => db.TrabajosProgramados.Where(t => t.Tipo == TipoTrabajo.EnvioAutomaticoDp).Select(t => t.UltimoResultado).SingleAsync());
+        var sana = await EmpresaListaAsync();
+        await ComparendosAsync(sana, "AUTO-RES-SANA", 1);
+        var sinProducto = await EmpresaListaAsync();
+        await ComparendosAsync(sinProducto, "AUTO-RES-SINPROD", 1);
+
+        await CorrerAsync(sana);
+        (await UltimoAsync()).Should().Be(ResultadoCiclo.Exitoso);
+
+        api.Productos.Apagadas[sinProducto] = true;
+        await CorrerAsync(sinProducto);
+        (await UltimoAsync()).Should().Be(ResultadoCiclo.Fallido, "la única empresa pedida se saltó: se ve en la pantalla de Trabajos, no en silencio");
+        (await DpsAsync(sinProducto)).Should().BeEmpty();
+
+        // Si Identidad "no responde" de verdad (gRPC no disponible) pasa lo mismo: ProductosHabilitadosIdentidad devuelve false.
+        api.Productos.Apagadas.Clear();
+        await CorrerAsync(sinProducto);
+        (await UltimoAsync()).Should().Be(ResultadoCiclo.Exitoso);
+        (await DpsAsync(sinProducto)).Should().ContainSingle();
+    }
+
+    [Fact]
     public async Task Una_empresa_que_falla_no_frena_a_las_demas()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
