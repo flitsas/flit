@@ -42,6 +42,12 @@ internal static class IctPlacaCarroceria
     /// </summary>
     internal const string WarningVehiculoSinCarroceria = "carroceria_warning:vehiculo_sin_carroceria";
 
+    /// <summary>
+    /// Aviso (el borrador SÍ se crea): el color enviado (transformación 5) no está en el catálogo de colores.
+    /// El código es contrato con core-ict: no cambiarlo.
+    /// </summary>
+    internal const string WarningColorFueraDeCatalogo = "color_warning:fuera_de_catalogo";
+
     /// <summary>Tipo de asignación de placa que declara core-ict (2/3/4), o <c>null</c> si no vino o es inválido.</summary>
     internal static int? TipoPlaca(CreateDraftFromIctRequest request)
     {
@@ -127,6 +133,20 @@ internal static class IctPlacaCarroceria
         return buscada.Length == 0
             ? null
             : catalogo.FirstOrDefault(c => NormalizarTexto(c.Name) == buscada);
+    }
+
+    /// <summary>
+    /// Transformación 5 (cambio de color): color del catálogo cuyo nombre coincide EXACTO con el enviado, salvo
+    /// mayúsculas y espacios de más; <c>null</c> si no hay coincidencia o el enviado está vacío.
+    /// </summary>
+    internal static VehicleColorEntry? CoincidenciaColor(
+        string? enviado, IReadOnlyList<VehicleColorEntry> catalogo)
+    {
+        ArgumentNullException.ThrowIfNull(catalogo);
+        var buscado = NormalizarTexto(enviado);
+        return buscado.Length == 0
+            ? null
+            : catalogo.FirstOrDefault(c => NormalizarTexto(c.Name) == buscado);
     }
 
     private static string? ValorDe(CreateDraftFromIctRequest request, string key) =>
