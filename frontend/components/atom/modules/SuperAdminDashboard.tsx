@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { TarjetaMetrica, METRICAS_GRID_CLS } from "@flit/ui/TarjetaMetrica";
+import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { DataTable, type DataTableColumn } from "@flit/ui/DataTable";
 import { StatusBadge } from "@flit/ui/StatusBadge";
 import { BarraProgreso } from "@flit/ui/BarraProgreso";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { CarruselInicio } from "@/components/inicio/CarruselInicio";
 import { PanelInicio } from "@/components/inicio/PanelInicio";
+import { ModalOrganismos } from "@/components/inicio/ModalOrganismos";
 import { BarrasApiladas } from "@/components/inicio/BarrasApiladas";
 import { GraficoArea } from "@/components/inicio/GraficoArea";
 import type { SerieGrafica } from "@/components/inicio/graficos-kit";
@@ -50,6 +51,8 @@ import type { AnalyticsOverviewResponse, CompanyListItem, MonthlyTrendPoint } fr
  */
 
 export const SUPERADMIN_ANTETITULO = "Visión del ecosistema";
+/** Organismos que se ven sin desplegar «Rendimiento por Organismo de Tránsito» (los de más volumen). */
+export const TOP_ORGANISMOS = 5;
 /** Compañías del adelanto «Resumen de compañías activas». */
 export const TOP_COMPANIAS = 5;
 const TODAS = "Todas las compañías";
@@ -77,6 +80,8 @@ const numero = (n: number) => n.toLocaleString("es-CO");
 
 /** «1 día», «2,5 días». */
 export function formatoDias(dias: number): string {
+  // Un organismo que decide el mismo día da 0: «0 días» se leía como falta de dato.
+  if (dias < 1) return "Menos de 1 día";
   const texto = dias.toLocaleString("es-CO", { maximumFractionDigits: 1 });
   return `${texto} ${dias === 1 ? "día" : "días"}`;
 }
@@ -139,6 +144,7 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
   const [range, setRange] = useState<DateRange>(() => sinRango());
   const [organismoId, setOrganismoId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [modalOrganismos, setModalOrganismos] = useState(false);
 
   const [overview, setOverview] = useState<Carga<AnalyticsOverviewResponse>>(CARGANDO);
   const [organismos, setOrganismos] = useState<Carga<SuperAdminOrganismosResponse>>(CARGANDO);
@@ -274,6 +280,19 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
   const listaOrganismos = useMemo(() => organismos.data?.items ?? [], [organismos.data]);
   const organismoActivo = listaOrganismos.find((o) => o.transitOfficeId === organismoId) ?? null;
   const maxVolumen = Math.max(1, ...listaOrganismos.map((o) => o.volumen));
+  // Decisión de Samuel (2026-11-18): con muchos organismos la rejilla se partía en filas cojas. Se ven los 5 de más
+  // volumen en una fila y «Ver los N organismos» abre un modal con la tabla completa (buscar, ordenar, elegir). El
+  // elegido (que filtra la distribución) se sigue viendo aunque no esté entre los 5: toma el lugar del quinto.
+  const organismosOrdenados = useMemo(
+    () => [...listaOrganismos].sort((a, b) => b.volumen - a.volumen || a.nombre.localeCompare(b.nombre, "es")),
+    [listaOrganismos],
+  );
+  const organismosVisibles = useMemo(() => {
+    const top = organismosOrdenados.slice(0, TOP_ORGANISMOS);
+    const elegido = organismosOrdenados.find((o) => o.transitOfficeId === organismoId);
+    // El elegido fuera del top ocupa el lugar del quinto: la fila sigue siendo una sola, sin uno suelto debajo.
+    return elegido && !top.includes(elegido) ? [...top.slice(0, TOP_ORGANISMOS - 1), elegido] : top;
+  }, [organismosOrdenados, organismoId]);
 
   const filasOperaciones = useMemo(() => {
     const fuente = organismoActivo ? organismoActivo.distribucion : distribucionDesdeOverview(overview.data);
@@ -492,8 +511,12 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
           emptyMessage="Ningún organismo de tránsito recibió trámites en el periodo seleccionado."
           skeletonRows={2}
         >
-          <div className={METRICAS_GRID_CLS} data-testid="organismos-grid">
-            {listaOrganismos.map((o) => (
+          <div
+            id="organismos-grid"
+            className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5"
+            data-testid="organismos-grid"
+          >
+            {organismosVisibles.map((o) => (
               <TarjetaMetrica
                 key={o.transitOfficeId}
                 etiqueta={o.nombre}
@@ -524,6 +547,26 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
               />
             ))}
           </div>
+          {organismosOrdenados.length > TOP_ORGANISMOS && (
+            <button
+              type="button"
+              onClick={() => setModalOrganismos(true)}
+              aria-haspopup="dialog"
+              className="mt-3 text-sm font-medium text-[color:var(--di-action)] underline underline-offset-2"
+              data-testid="organismos-ver-todos"
+            >
+              Ver los {organismosOrdenados.length} organismos
+            </button>
+          )}
+          <ModalOrganismos
+            abierto={modalOrganismos}
+            onCerrar={() => setModalOrganismos(false)}
+            organismos={organismosOrdenados}
+            alcance={etiquetaCompania}
+            elegidoId={organismoId}
+            onElegir={setOrganismoId}
+            formatoDias={formatoDias}
+          />
         </UiStateBoundary>
       </PanelInicio>
 
