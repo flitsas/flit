@@ -78,7 +78,7 @@ describe("pantalla del envío automático de DP (HU #14614)", () => {
   it("(a) nace apagada y con el tope por defecto", async () => {
     simular();
     await abrir();
-    const interruptor = screen.getByRole("switch", { name: "Apagado" });
+    const interruptor = screen.getByRole("switch", { name: "Enviar solos los derechos de petición" });
     expect(interruptor.getAttribute("aria-checked")).toBe("false");
     expect((interruptor as HTMLButtonElement).disabled).toBe(false);
     expect((screen.getByLabelText(/Tope diario/) as HTMLInputElement).value).toBe("50");
@@ -88,7 +88,7 @@ describe("pantalla del envío automático de DP (HU #14614)", () => {
   it("(a) sin el módulo de DP el interruptor está deshabilitado y se explica", async () => {
     simular({ modulo: false });
     await abrir();
-    expect((screen.getByRole("switch", { name: "Apagado" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("switch", { name: "Enviar solos los derechos de petición" }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText(/no tiene el módulo de derechos de petición/)).toBeTruthy();
     expect((screen.getByRole("button", { name: "Guardar" }) as HTMLButtonElement).disabled).toBe(true);
   });
@@ -104,15 +104,37 @@ describe("pantalla del envío automático de DP (HU #14614)", () => {
     expect(puts()).toHaveLength(0);
   });
 
-  it("un tope válido con el interruptor encendido manda activo y topeDiario", async () => {
+  it("el interruptor se guarda solo: PUT inmediato con el tope ya guardado y aviso", async () => {
     simular();
     await abrir();
-    fireEvent.click(screen.getByRole("switch", { name: "Apagado" }));
+    fireEvent.click(screen.getByRole("switch", { name: "Enviar solos los derechos de petición" }));
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()[0][0]).toBe("/admin/empresas/e1/envio-automatico-dp");
+    expect(puts()[0][1]).toMatchObject({ method: "PUT", body: { activo: true, topeDiario: 50 } });
+    await screen.findByText("Envío automático encendido.");
+  });
+
+  it("si el PUT del interruptor falla, vuelve a su estado y muestra el error en español", async () => {
+    simular({
+      alPut: () => {
+        throw new ApiError(409, "crudo", "CAPACIDAD_DP_INACTIVA");
+      },
+    });
+    await abrir();
+    const interruptor = screen.getByRole("switch", { name: "Enviar solos los derechos de petición" });
+    fireEvent.click(interruptor);
+    await screen.findByText(/no tiene el módulo de derechos de petición/);
+    expect(interruptor.getAttribute("aria-checked")).toBe("false");
+  });
+
+  it("Guardar es solo del tope: con un tope válido manda el tope y el interruptor como está guardado", async () => {
+    simular();
+    await abrir();
     fireEvent.change(screen.getByLabelText(/Tope diario/), { target: { value: "80" } });
     fireEvent.click(screen.getByRole("button", { name: "Guardar" }));
     await waitFor(() => expect(puts()).toHaveLength(1));
-    expect(puts()[0][0]).toBe("/admin/empresas/e1/envio-automatico-dp");
-    expect(puts()[0][1]).toMatchObject({ method: "PUT", body: { activo: true, topeDiario: 80 } });
+    expect(puts()[0][1]).toMatchObject({ method: "PUT", body: { activo: false, topeDiario: 80 } });
+    await screen.findByText("Tope diario guardado.");
   });
 
   it("solo lista las tipologías con regla automática", async () => {
@@ -328,7 +350,7 @@ describe("acciones en un solo menú y bloque de envío en una fila (HU #14620)",
   it("AC4: interruptor, tope y Guardar comparten una fila que se apila en pantallas chicas", async () => {
     simular();
     await abrir();
-    const interruptor = screen.getByRole("switch", { name: "Apagado" });
+    const interruptor = screen.getByRole("switch", { name: "Enviar solos los derechos de petición" });
     const fila = interruptor.closest("div.flex-col")!;
     expect(fila.className).toContain("md:flex-row");
     expect(fila.contains(screen.getByLabelText(/Tope diario/))).toBe(true);
@@ -341,7 +363,8 @@ describe("acciones en un solo menú y bloque de envío en una fila (HU #14620)",
     const panel = screen.getByRole("region", { name: "Envío automático de la empresa" });
     expect(panel.className).toContain("bg-card");
     expect(panel.className).toContain("border-border");
-    expect(within(panel).getAllByText("Apagado").length).toBeGreaterThan(1); // distintivo del encabezado + etiqueta del interruptor
+    expect(within(panel).getAllByText("Apagado")).toHaveLength(1); // el estado se dice una sola vez (distintivo del encabezado)
+    expect(panel.className).toContain("max-w-6xl");
     expect(screen.getByRole("region", { name: "Tipologías que se envían solas" }).className).toContain("bg-card");
   });
 });
