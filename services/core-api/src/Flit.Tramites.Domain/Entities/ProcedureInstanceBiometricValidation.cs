@@ -746,6 +746,13 @@ public static class BiometricRules
     public const int ThresholdAprobacion = 60;
     public const int TokenTtlHoras = 24;
 
+    /// <summary>
+    /// Vigencia del registro de una validación de Kyverum Verify (30 días, pedido del PO 18/11/2026): la misma del
+    /// enlace de captura en Verify. Antes era <see cref="TokenTtlHoras"/> (24 h) y FLIT daba por vencida la
+    /// validación aunque el enlace siguiera sirviendo. El flujo manual conserva sus 24 h.
+    /// </summary>
+    public const int KyverumTokenTtlHoras = 720;
+
     public const string ParteComprador = "comprador";
     public const string ParteVendedor = "vendedor";
 
