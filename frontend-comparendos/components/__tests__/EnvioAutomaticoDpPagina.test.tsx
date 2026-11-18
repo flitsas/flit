@@ -56,6 +56,13 @@ async function abrir() {
   await screen.findByText("Envío automático de la empresa");
 }
 
+/** Abre el menú «Acciones» de la fila DPR (el kit lo pinta en un portal, fuera de la tabla). */
+async function abrirMenu() {
+  fireEvent.click(await screen.findByRole("button", { name: /^Acciones de DPR/ }));
+  return screen.findByRole("menu");
+}
+const opcion = (menu: HTMLElement, nombre: string | RegExp) => within(menu).queryByRole("menuitem", { name: nombre });
+
 const puts = () => apiFetch.mock.calls.filter(([ruta, op]) => ruta !== "/plantillas/vista-previa" && (op?.method === "PUT" || op?.method === "POST"));
 
 URL.createObjectURL = () => "blob:vista-previa";
@@ -124,7 +131,7 @@ describe("pantalla del envío automático de DP (HU #14614)", () => {
     });
     await abrir();
     await screen.findByText("A mano");
-    fireEvent.click(screen.getByRole("button", { name: "Activar envío automático" }));
+    fireEvent.click(opcion(await abrirMenu(), "Activar envío automático")!);
     await screen.findByText(/todavía no está aprobado por el abogado/);
     expect(document.body.textContent).not.toContain("TIPOLOGIA_SIN_REVISION_JURIDICA");
     expect(document.body.textContent).not.toContain("texto crudo de la API");
@@ -137,7 +144,7 @@ describe("pantalla del envío automático de DP (HU #14614)", () => {
     simular();
     await abrir();
     await screen.findByText("Texto sin aprobar");
-    fireEvent.click(screen.getByRole("button", { name: "Aprobar texto" }));
+    fireEvent.click(opcion(await abrirMenu(), "Aprobar texto")!);
     const dialogo = await screen.findByRole("dialog");
     const confirmar = within(dialogo).getByRole("button", { name: "Aprobar texto" }) as HTMLButtonElement;
     expect(confirmar.disabled).toBe(true);
@@ -163,8 +170,12 @@ describe("«Activar envío automático» explica su bloqueo y deja destrabarlo (
   it("AC1: tipología no habilitada → botón bloqueado con la razón visible", async () => {
     simular({ habilitada: false, aprobada: true });
     await abrir();
-    await screen.findByText("Primero habilítala para esta empresa");
-    expect((screen.getByRole("button", { name: "Activar envío automático" }) as HTMLButtonElement).disabled).toBe(true);
+    const menu = await abrirMenu();
+    const activar = opcion(menu, /^Activar envío automático/)!;
+    expect(activar.getAttribute("aria-disabled")).toBe("true");
+    expect(within(menu).getByText(/Primero habilítala para esta empresa/)).toBeTruthy();
+    fireEvent.click(activar);
+    expect(puts()).toHaveLength(0);
   });
 
   it("AC2: «Habilitar para esta empresa» llama al PUT existente con {habilitada:true} y refresca la fila", async () => {
@@ -176,20 +187,25 @@ describe("«Activar envío automático» explica su bloqueo y deja destrabarlo (
       return ruta === "/admin/tipologias" ? r.map((t: { id: string }) => (t.id === "t1" ? { ...t, habilitada } : t)) : r;
     });
     await abrir();
-    fireEvent.click(await screen.findByRole("button", { name: "Habilitar para esta empresa" }));
+    fireEvent.click(opcion(await abrirMenu(), "Habilitar para esta empresa")!);
     await waitFor(() => expect(puts()).toHaveLength(1));
     expect(puts()[0][0]).toBe("/admin/empresas/e1/tipologias/t1");
     expect(puts()[0][1]).toMatchObject({ method: "PUT", body: { habilitada: true } });
-    await waitFor(() => expect((screen.getByRole("button", { name: "Activar envío automático" }) as HTMLButtonElement).disabled).toBe(false));
-    expect(screen.queryByText("Primero habilítala para esta empresa")).toBeNull();
+    await waitFor(async () => {
+      const menu = await abrirMenu();
+      expect(opcion(menu, "Activar envío automático")?.getAttribute("aria-disabled")).toBeNull();
+      expect(opcion(menu, "Habilitar para esta empresa")).toBeNull();
+    });
   });
 
   it("AC3: habilitada pero sin texto aprobado → «Primero aprueba el texto» y el botón sigue bloqueado", async () => {
     simular({ habilitada: true, aprobada: false });
     await abrir();
-    await screen.findByText("Primero aprueba el texto");
-    expect((screen.getByRole("button", { name: "Activar envío automático" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByRole("button", { name: "Habilitar para esta empresa" })).toBeNull();
+    const menu = await abrirMenu();
+    expect(within(menu).getByText(/Primero aprueba el texto/)).toBeTruthy();
+    expect(opcion(menu, /^Activar envío automático/)!.getAttribute("aria-disabled")).toBe("true");
+    expect(opcion(menu, "Habilitar para esta empresa")).toBeNull();
+    expect(opcion(menu, "Aprobar texto")!.getAttribute("aria-disabled")).toBeNull();
   });
 
   it("AC4: nombres sin ambigüedad y errores del contrato en español", async () => {
@@ -201,15 +217,16 @@ describe("«Activar envío automático» explica su bloqueo y deja destrabarlo (
       },
     });
     await abrir();
-    fireEvent.click(await screen.findByRole("button", { name: "Habilitar para esta empresa" }));
+    fireEvent.click(opcion(await abrirMenu(), "Habilitar para esta empresa")!);
     await screen.findByText(/desactivada en el catálogo/);
     expect(document.body.textContent).not.toContain("TIPOLOGIA_INACTIVA");
     cleanup();
     apiFetch.mockReset();
     simular({ automatizable: true, aprobada: true });
     await abrir();
-    await screen.findByRole("button", { name: "Volver a enviar a mano" });
-    expect(screen.queryByRole("button", { name: "Enviar sola" })).toBeNull();
+    const menu = await abrirMenu();
+    expect(opcion(menu, "Volver a enviar a mano")).toBeTruthy();
+    expect(opcion(menu, /Enviar sola/)).toBeNull();
   });
 });
 
@@ -223,7 +240,7 @@ describe("«Aprobar texto» deja ver el documento y el correo, y registra quién
   async function abrirAprobar() {
     await abrir();
     await screen.findByText("Texto sin aprobar");
-    fireEvent.click(screen.getByRole("button", { name: "Aprobar texto" }));
+    fireEvent.click(opcion(await abrirMenu(), "Aprobar texto")!);
     return screen.findByRole("dialog");
   }
 
@@ -270,5 +287,51 @@ describe("«Aprobar texto» deja ver el documento y el correo, y registra quién
     await abrir();
     await screen.findByText("Texto aprobado");
     expect(screen.getByText(/Aprobado por Ana Abogada el 02 de nov de 2026 · «Texto conforme»/)).toBeTruthy();
+  });
+});
+
+describe("acciones en un solo menú y bloque de envío en una fila (HU #14620)", () => {
+  beforeEach(() => {
+    apiFetch.mockReset();
+  });
+  afterEach(cleanup);
+
+  it("AC1: la fila tiene UN solo botón «Acciones» y no botones sueltos de acción", async () => {
+    simular();
+    await abrir();
+    await screen.findByText("Texto sin aprobar");
+    expect(screen.getAllByRole("button", { name: /^Acciones de / })).toHaveLength(1);
+    for (const n of ["Aprobar texto", "Habilitar para esta empresa", "Activar envío automático"]) expect(screen.queryByRole("button", { name: n })).toBeNull();
+  });
+
+  it("AC2: el menú trae las opciones según el estado y cada bloqueada dice su razón", async () => {
+    simular({ habilitada: false });
+    await abrir();
+    const menu = await abrirMenu();
+    expect(opcion(menu, "Aprobar texto")).toBeTruthy();
+    expect(opcion(menu, "Habilitar para esta empresa")).toBeTruthy();
+    expect(within(menu).getByText(/Activar envío automático · Primero habilítala para esta empresa/)).toBeTruthy();
+  });
+
+  it("AC3: el menú se abre y se cierra con el teclado (Escape devuelve el foco al botón)", async () => {
+    simular();
+    await abrir();
+    const boton = await screen.findByRole("button", { name: /^Acciones de DPR/ });
+    fireEvent.click(boton);
+    await screen.findByRole("menu");
+    expect(boton.getAttribute("aria-expanded")).toBe("true");
+    fireEvent.keyDown(screen.getByRole("menu"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    expect(document.activeElement).toBe(boton);
+  });
+
+  it("AC4: interruptor, tope y Guardar comparten una fila que se apila en pantallas chicas", async () => {
+    simular();
+    await abrir();
+    const interruptor = screen.getByRole("switch", { name: "Apagado" });
+    const fila = interruptor.closest("div.flex-col")!;
+    expect(fila.className).toContain("md:flex-row");
+    expect(fila.contains(screen.getByLabelText(/Tope diario/))).toBe(true);
+    expect(fila.contains(screen.getByRole("button", { name: "Guardar" }))).toBe(true);
   });
 });
