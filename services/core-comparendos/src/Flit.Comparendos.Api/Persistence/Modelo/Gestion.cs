@@ -196,6 +196,9 @@ public sealed class DerechoPeticion : Auditada
     public Guid? RespuestaRegistradaPor { get; set; }
     public DateTimeOffset? RespuestaRegistradaEn { get; set; }
     public Guid EnviadoPor { get; set; }
+
+    /// <summary>Epic #14606: lo envió el trabajo automático, no una persona (<see cref="EnviadoPor"/> queda vacío); los reportes de productividad no lo cuentan como de nadie.</summary>
+    public bool EnvioAutomatico { get; set; }
     public string? LegacyV1Id { get; set; }
 }
 

@@ -165,6 +165,8 @@ export function ejecucionManual(tipo: string): { texto: string; correos: boolean
       return { texto: "Envía el cierre a los destinatarios de reportes de cada empresa. Una empresa no lo recibe dos veces el mismo día.", correos: true, porEmpresa: true };
     case "ReintentoContraventor":
       return { texto: "Vuelve a consultar el conductor de los comparendos pendientes o con error (hasta 3 intentos por comparendo).", correos: false, porEmpresa: true };
+    case "EnvioAutomaticoDp":
+      return { texto: "Envía ya los derechos de petición que les tocan hoy a las empresas con el envío automático encendido, sin esperar su hora. Sale correo real a los organismos de tránsito y respeta el tope diario de cada empresa.", correos: true, porEmpresa: true };
     case "SincronizacionOrganismos":
       return { texto: "Trae de la plataforma el catálogo de organismos de tránsito.", correos: false, porEmpresa: false };
     default:

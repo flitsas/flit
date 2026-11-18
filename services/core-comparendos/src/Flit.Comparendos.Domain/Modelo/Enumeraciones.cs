@@ -183,6 +183,9 @@ public enum TipoComunicacion
     ReporteSemanal,
     ReporteMensual,
     ExportacionLista,
+
+    /// <summary>Epic #14606, HU #14610: resumen diario de lo que el envío automático de DP omitió (una vez al día por empresa).</summary>
+    ResumenEnvioAutomaticoDp,
 }
 
 /// <summary>Solo correo en la primera entrega; WhatsApp y SMS quedan en el backlog [Excel C11].</summary>
@@ -297,6 +300,9 @@ public enum TipoTrabajo
 
     /// <summary>Réplica diaria del catálogo de organismos de tránsito de la plataforma (S-66, HU #13459).</summary>
     SincronizacionOrganismos,
+
+    /// <summary>Envío automático de derechos de petición (Epic #14606, HU #14609): una corrida por día hábil, con tope por empresa.</summary>
+    EnvioAutomaticoDp,
 }
 
 public enum Disparo
@@ -368,6 +374,8 @@ public enum TipoEventoTimeline
     DpBloqueadoSinRl,
     DpRespuestaRegistrada,
     DpFavorableAutomatico,
+    DpAutomaticoOmitido,
+    DpEnviandoSinReaccion,
     PagoRegistrado,
     CobroCoactivoDetectado,
     NotaManual,
