@@ -185,8 +185,8 @@ public sealed class PortalCobroTests(PortalCobroTests.Anfitrion anfitrion) : ICl
         var ot = todas.Where(e => e.RoutePattern.RawText!.StartsWith(BaseOt, StringComparison.Ordinal)).ToList();
         var plataforma = todas.Where(e => e.RoutePattern.RawText!.StartsWith(BasePlataforma, StringComparison.Ordinal)).ToList();
 
-        ot.Should().HaveCount(3);
-        plataforma.Should().HaveCount(3);
+        ot.Should().HaveCount(5);
+        plataforma.Should().HaveCount(5);
         foreach (var ruta in ot)
             ruta.Metadata.GetOrderedMetadata<IAuthorizeData>().Should().Contain(a => a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy, ruta.RoutePattern.RawText);
         foreach (var ruta in plataforma)

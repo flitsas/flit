@@ -197,7 +197,7 @@ public sealed class OtCajaTests : IClassFixture<OtCajaTests.Host>
 
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = (await JsonAsync(r)).RootElement;
-        json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("codigo", "valorCop", "medio", "medioDetalle", "pagadoEn", "mensaje");
+        json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo("codigo", "valorCop", "medio", "medioDetalle", "pagadoEn", "anulableHasta", "mensaje");
         (json.GetProperty("codigo").GetString(), json.GetProperty("valorCop").GetInt64(), json.GetProperty("medio").GetString(), json.GetProperty("mensaje").GetString())
             .Should().Be(("PN-2026-000101", 366_000L, "otro", "Pago registrado."));
         json.GetProperty("medioDetalle").GetString().Should().Be("Nequi");
