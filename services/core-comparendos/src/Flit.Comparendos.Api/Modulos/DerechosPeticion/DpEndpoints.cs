@@ -66,6 +66,7 @@ public static class DpEndpoints
     {
         var c = await acceso.ParaOperarAsync(id, ct).ConfigureAwait(false);
         var p = await servicio.PrepararAsync(c, pedido.TipologiaId, masivo: false, reintento: false, ct).ConfigureAwait(false);
+        var correo = await servicio.CorreoVistaPreviaAsync(c, p, ct).ConfigureAwait(false);
         return Results.Ok(new
         {
             puedeEnviar = p.Bloqueos.Count == 0,
@@ -80,6 +81,7 @@ public static class DpEndpoints
             representante = p.Representante is { } r ? new { r.Nombres, r.Cargo, r.NumeroDocumento } : null,
             anexos = p.Anexos.Select(a => ServicioDp.EtiquetaAnexo(a.Nombre)).Prepend("Derecho de petición (PDF)"),
             estadoLegal = p.EstadoLegal.ToString(),
+            correo = correo is { } k ? new { asunto = k.Asunto, html = k.Html } : null,
         });
     }
 
