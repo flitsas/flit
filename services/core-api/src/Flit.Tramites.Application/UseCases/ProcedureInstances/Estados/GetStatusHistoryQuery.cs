@@ -416,10 +416,6 @@ public static class StatusHistoryModificacionLectura
     private const string TipoDocumentoCargadoAdmin = "documento_cargado_admin";
 
     /// <summary>
-    /// Bug #14604 — la línea de Modificaciones debe decir QUÉ se cargó y EN QUÉ ESTADO estaba el trámite, no solo
-    /// la observación: «archivo.pdf · Reemplaza a: anterior.pdf · Estado del trámite: Entregado · Observación: …».
-    /// </summary>
-    /// <summary>
     /// Bug #14604 — adjunto nuevo y el que estaba antes, para abrirlos desde la línea de tiempo. El anterior
     /// sale de <c>replacedAttachmentIds</c> (lo que se veía en la casilla); en eventos viejos, de
     /// <c>previousAttachmentIds</c>. Sin <c>attachmentId</c> válido no hay bloque.
@@ -460,6 +456,10 @@ public static class StatusHistoryModificacionLectura
         return null;
     }
 
+    /// <summary>
+    /// Bug #14604 — la línea de Modificaciones debe decir QUÉ se cargó y EN QUÉ ESTADO estaba el trámite, no solo
+    /// la observación: «archivo.pdf · Reemplaza a: anterior.pdf · Estado del trámite: Entregado · Observación: …».
+    /// </summary>
     private static string DetalleDocumentoCargadoAdmin(JsonElement root, string observacion)
     {
         var partes = new List<string>(4);
