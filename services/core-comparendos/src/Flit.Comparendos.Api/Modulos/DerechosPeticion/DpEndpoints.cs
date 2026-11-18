@@ -17,6 +17,7 @@ public static class DpEndpoints
     {
         var g = api.MapGroup("/comparendos/{id:guid}/dp").RequireCapacidad(Capacidad.DerechosPeticion);
         g.MapGet("/tipologias", Tipologias).RequirePermiso(Permisos.DpGenerar);
+        g.MapGet("/decision", Decision).RequirePermiso(Permisos.DpGenerar);
         g.MapPost("/vista-previa", VistaPrevia).RequirePermiso(Permisos.DpGenerar);
         g.MapGet("/vista-previa.pdf", VistaPreviaPdf).RequirePermiso(Permisos.DpGenerar);
         g.MapPost("", Enviar).RequirePermiso(Permisos.DpEnviar);
@@ -32,6 +33,33 @@ public static class DpEndpoints
         {
             x.Tipologia.Id, x.Tipologia.Codigo, x.Tipologia.Nombre, x.Tipologia.DescripcionJuridica, x.Tipologia.EstadosLegalesPermitidos, x.Tipologia.PermiteMasivo, procede = x.Procede,
         }));
+    }
+
+    /// <summary>
+    /// HU #14608: qué tipologías se pueden alegar contra el comparendo, cuál se elegiría y por qué. Con <c>automatico=true</c>
+    /// responde lo que haría el envío automático (solo tipologías automatizables con revisión jurídica). No envía nada.
+    /// </summary>
+    private static async Task<IResult> Decision(Guid id, bool? automatico, AccesoComparendo acceso, ServicioDp servicio, ComparendosDb db, CancellationToken ct)
+    {
+        var c = await acceso.ParaLeerAsync(id, ct).ConfigureAwait(false);
+        var decision = await servicio.DecidirAsync(c, automatico == true, ct).ConfigureAwait(false);
+        var codigos = decision.Aplicables.Select(a => a.Codigo).ToList();
+        var tipologias = await db.Tipologias.AsNoTracking().Where(t => codigos.Contains(t.Codigo)).ToDictionaryAsync(t => t.Codigo, ct).ConfigureAwait(false);
+        return Results.Ok(new
+        {
+            elegible = decision.EsElegible,
+            elegida = decision.Elegida,
+            tipologiaIdElegida = decision.Elegida is { } e && tipologias.TryGetValue(e, out var te) ? te.Id : (Guid?)null,
+            motivo = decision.Motivo?.ToString(),
+            aplicables = decision.Aplicables.Select(a => new
+            {
+                codigo = a.Codigo,
+                nombre = tipologias.GetValueOrDefault(a.Codigo)?.Nombre,
+                tipologiaId = tipologias.TryGetValue(a.Codigo, out var t) ? t.Id : (Guid?)null,
+                razon = a.Razon,
+                disponible = a.Disponible,
+            }),
+        });
     }
 
     private static async Task<IResult> VistaPrevia(Guid id, PedidoDp pedido, AccesoComparendo acceso, ServicioDp servicio, Reloj reloj, CancellationToken ct)
