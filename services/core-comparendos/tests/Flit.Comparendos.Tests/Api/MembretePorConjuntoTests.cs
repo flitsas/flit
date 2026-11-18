@@ -31,7 +31,8 @@ public sealed class MembretePorConjuntoTests
             flit.Should().Contain("flit-cabecera.png").And.Contain("flit-logo.png").And.Contain("soporte@flitsas.com").And.NotContain("Cordialmente");
 
             var renting = Html(tipo, ConjuntoPlantillas.Renting);
-            renting.Should().NotContain("renting-cabecera.jpg", "la cabecera de Renting es la del aviso al conductor («Fotomulta pendiente de pago»)").And.NotContain("renting-pie.jpg");
+            renting.Should().Contain("renting-cabecera-dp.jpg").And.Contain("Correo automático, no lo respondas.");
+            renting.Should().NotContain("renting-cabecera.jpg", "esa es la del aviso al conductor («Fotomulta pendiente de pago»)").And.NotContain("renting-pie.jpg").And.NotContain("tramitesvehiculos");
             renting.ToLowerInvariant().Should().NotContain("flit", $"{tipo} en Renting no lleva rastro de FLIT");
         }
     }
@@ -51,7 +52,7 @@ public sealed class MembretePorConjuntoTests
         flit.Should().Contain("flit-cabecera.png").And.Contain("Gestora de Ejemplo S.A.S.").And.Contain("Resumen").And.NotContain("Cordialmente");
 
         var renting = HtmlCorreo.DeEmpresa(ConjuntoPlantillas.Renting, "Resumen", "<p>Cuerpo</p>", "Gestora de Ejemplo S.A.S.", Recursos);
-        renting.Should().Contain("Resumen");
+        renting.Should().Contain("Resumen").And.Contain("renting-cabecera-dp.jpg").And.NotContain("renting-cabecera.jpg").And.NotContain("renting-pie.jpg");
         renting.ToLowerInvariant().Should().NotContain("flit");
     }
 }

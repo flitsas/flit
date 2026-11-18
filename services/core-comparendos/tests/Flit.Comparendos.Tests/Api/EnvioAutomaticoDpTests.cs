@@ -544,7 +544,7 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         api.Reloj.Hoy(Hoy.AddDays(1));
         await CorrerAsync(empresa);
         var renting = await ResumenAsync();
-        renting.Should().NotContain("flit-cabecera.png").And.Contain("Derechos de petici");
+        renting.Should().Contain("renting-cabecera-dp.jpg").And.NotContain("renting-cabecera.jpg").And.NotContain("flit-cabecera.png").And.Contain("Derechos de petici");
         renting.ToLowerInvariant().Should().NotContain("flit");
     }
 
