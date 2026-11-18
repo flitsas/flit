@@ -1,0 +1,14 @@
+flowchart TD
+    A["Entras a Diagnóstico"] --> B["Dashboard (Inicio Diagnóstico)\nperiodo: últimos 30 días, máximo un año"]
+    B --> C{"¿Tienes la vista global de FLIT?"}
+    C -- "No: usuario o administrador\nde la compañía" --> D["Resumen de tu compañía\nsin selector de compañía"]
+    C -- "Sí: equipo FLIT" --> E["«Todas las compañías» por defecto\ncon «Compañías con más uso»"]
+    E --> F["Selector «Compañía»:\nresumen de una sola compañía"]
+    D --> G["«Reportes» del dock"]
+    E --> G
+    G --> H["4 reportes de la compañía\n(FLIT suma «Consumo por compañía»)"]
+    H --> I["Tabla en pantalla: 25, 50 o 100 filas\naviso de datos personales (Ley 1581)"]
+    I --> J{"¿Tu rol puede descargar reportes?"}
+    J -- "No" --> K["Solo ves la tabla"]
+    J -- "Sí" --> L["«Exportar Excel» / «Exportar PDF»\ntodo el filtro, hasta el máximo del formato"]
+    L --> M["Cada consulta y descarga queda\nregistrada con tu usuario"]

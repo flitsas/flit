@@ -116,14 +116,21 @@ internal static class DiagnosticosBackofficeEndpoints
                 l.EsExpress))]));
     }
 
-    private static async Task<IResult> Grilla(Guid id, long? desde, HttpContext http, DiagnosticoDb db, IProtectorDocumentoPersona protector, CancellationToken ct)
+    private static async Task<IResult> Grilla(Guid id, long? desde, HttpContext http, DiagnosticoDb db, CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
         var version = desde ?? 0;
         ConsultaGrilla.ValidarDesde(version);
         var cabecera = await CabeceraAsync(db, empresa, id, ct).ConfigureAwait(false);
-        var grilla = await ConsultaGrilla.LeerAsync(new LecturaDeLaEmpresa(db, empresa), cabecera, version, protector, ct).ConfigureAwait(false);
-        return Results.Ok(GrillaBackofficeDto.De(empresa, grilla));
+        var grilla = await ConsultaGrilla.LeerAsync(new LecturaDeLaEmpresa(db, empresa), cabecera, version, ct).ConfigureAwait(false);
+        // HU #14576 AC35: el saneamiento no anulado de las filas de la página, para enlazar a su gestión.
+        var vehiculos = grilla.Vehiculos.Select(v => v.Id).ToList();
+        var saneamientos = (await db.DeLaEmpresa<Saneamiento.Saneamiento>(empresa)
+                .Where(s => s.DiagnosticoId == id && vehiculos.Contains(s.VehiculoId) && s.Estado != Domain.Saneamiento.EstadoSaneamiento.Anulado)
+                .Select(s => new { s.VehiculoId, s.Id, s.Estado })
+                .ToListAsync(ct).ConfigureAwait(false))
+            .ToDictionary(s => s.VehiculoId, s => new SaneamientoFilaBackofficeDto(CodigosDeEnum.Codigo(s.Estado), s.Id));
+        return Results.Ok(GrillaBackofficeDto.De(empresa, grilla, saneamientos));
     }
 
     private static async Task<IResult> Historial(Guid id, HttpContext http, DiagnosticoDb db, CancellationToken ct)

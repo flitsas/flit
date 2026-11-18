@@ -3,6 +3,7 @@ using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Tablero;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Domain.Consultas;
+using Flit.Diagnostico.Domain.Personas;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 
@@ -40,7 +41,8 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Bus;
 /// </example>
 internal sealed partial class PublicadorCeldas(
     DiagnosticoDb db, IPlatformOutbox outbox, IEnumerable<IConstructorSolicitud> constructores, IEnumerable<IEjecutorCelda> ejecutores,
-    IProtectorRespuestaFuente protector, TimeProvider reloj, EmisorDictamen emisor, ILogger<PublicadorCeldas> log)
+    IProtectorRespuestaFuente protector, TimeProvider reloj, EmisorDictamen emisor, ILogger<PublicadorCeldas> log,
+    IProtectorDocumentoPersona documentos)
 {
     private readonly Dictionary<Guid, bool> _express = [];
 
@@ -60,7 +62,7 @@ internal sealed partial class PublicadorCeldas(
         var contexto = new ContextoCelda(CeldaEnCurso.De(celda), db);
         // HU #13739 (D-10): el dato de hoy de la misma compañía se copia sin mensaje; HU #13746 (R-1): el reproceso nunca reutiliza.
         if (celda.ReprocesoUsuarioId is null
-            && await ReutilizacionMismoDia.BuscarAsync(contexto, ahora, ct).ConfigureAwait(false) is { } reutilizado)
+            && await ReutilizacionMismoDia.BuscarAsync(contexto, ahora, documentos, ct).ConfigureAwait(false) is { } reutilizado)
         {
             Reutilizada(log, celda.Id, celda.Fuente, reutilizado.ReutilizadaDeId!.Value);
             await CerrarAsync(celda, reutilizado, RegistroIntentos.CrearTodos(contexto.Celda, ahora, ahora, reutilizado), versionTablero, ct, recalcular)
@@ -145,9 +147,12 @@ internal sealed partial class PublicadorCeldas(
             throw new InvalidOperationException("El cierre de una celda exige la transacción de quien la cierra.");
 
         var ahora = reloj.GetUtcNow();
+        // HU #14576 (H-8): el UPDATE de la versión bloquea la fila de la cabecera hasta el commit y pone en fila los cierres del
+        // lote. Va ANTES de la foto: así las hermanas (y el recálculo del lote, que usa las seguidas) se leen ya confirmadas por el
+        // cierre anterior. Con la foto primero, dos celdas que cerraban a la vez se veían EN_CURSO y ninguna veía el flanco.
+        var version = versionTablero ?? await EscritorCeldas.SubirVersionTableroAsync(db, celda.DiagnosticoId, ct).ConfigureAwait(false);
         // La foto va antes de aplicar y de las celdas que este cierre publique: el «después» solo cambia esta celda.
         var foto = await emisor.PrepararAsync(celda, ct).ConfigureAwait(false);
-        var version = versionTablero ?? await EscritorCeldas.SubirVersionTableroAsync(db, celda.DiagnosticoId, ct).ConfigureAwait(false);
         var reprocesoDeLaRunt = celda.ReprocesoUsuarioId;
         EscritorCeldas.Aplicar(celda, resultado, version, ahora);
         if (intentos.Count > 0)

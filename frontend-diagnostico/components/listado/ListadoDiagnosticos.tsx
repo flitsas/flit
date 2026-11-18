@@ -22,8 +22,10 @@ import {
   CABECERA_TABLA_CLS,
   CABECERA_TABLA_ESTILO,
   CELDA_TABLA_CLS,
+  CONTENEDOR_TABLA_CLS,
   Etiqueta,
   FILA_TABLA_CLS,
+  FILA_TABLA_HOVER_CLS,
 } from "@/components/tablero/vistasDetalle/comun";
 import {
   destinoConFiltros,
@@ -190,7 +192,7 @@ export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boole
     const { lista } = carga;
     contenido = (
       <div className="flex flex-col gap-3">
-        <div className="overflow-x-auto rounded-xl border border-border">
+        <div className={CONTENEDOR_TABLA_CLS}>
           <table aria-label="Diagnósticos de la compañía" className={`w-full min-w-[940px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
             <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
@@ -213,7 +215,7 @@ export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boole
                       if ((e.target as HTMLElement).closest("a")) return;
                       router.push(destino);
                     }}
-                    className={`${FILA_TABLA_CLS} cursor-pointer bg-card transition-colors duration-[var(--dx-motion-rapido)] hover:bg-[var(--table-row-hover)] motion-reduce:transition-none ${TABLA_MOVIL_ROW_CLS}`}
+                    className={`${FILA_TABLA_CLS} ${FILA_TABLA_HOVER_CLS} cursor-pointer ${TABLA_MOVIL_ROW_CLS}`}
                   >
                     <td data-label="ID" className={`${CELDA_CLS} font-mono tabular-nums`}>
                       <span title={d.id}>{idCorto(d.id)}</span>

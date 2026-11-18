@@ -34,6 +34,8 @@ internal static class ApiEndpoints
         // ADR-0084 (Punto 4): creación de borradores desde Diagnóstico. APAGADA por defecto (Tramites:Derivacion:Habilitada);
         // solo la atiende svc-diagnostico con el scope platform.tramites.derivacion.
         Flit.Api.Derivacion.DerivacionExtensions.MapDerivacionDiagnostico(app);
+        // ADR-0089 (HU #14587): usuarios de Diagnóstico gestionados desde el producto; solo svc-diagnostico con su scope.
+        Flit.Api.Usuarios.UsuariosProductoExtensions.MapUsuariosProducto(app);
 
         // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
         app.MapInternalJwksEndpoints(); // JWKS público del token de usuario (core-ict valida con él)

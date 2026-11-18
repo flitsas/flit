@@ -65,7 +65,8 @@ internal static partial class OverrideDictamenEndpoints
         var empresa = EmpresaExplicita.De(http);
         await ExigirLoteYVehiculoAsync(db, empresa, id, vid, ct).ConfigureAwait(false);
         var fila = await VigenteAsync(db, empresa, vid, seguir: false, ct).ConfigureAwait(false);
-        return Results.Ok(ConsultaDictamen.Backoffice(fila));
+        var cambio = await ConsultaDictamen.CambioPropietarioAsync(db.DeLaEmpresa<VehiculoDiagnostico>(empresa), vid, ct).ConfigureAwait(false);
+        return Results.Ok(ConsultaDictamen.Backoffice(fila, cambio));
     }
 
     private static async Task<IResult> Reemplazar(
@@ -115,7 +116,8 @@ internal static partial class OverrideDictamenEndpoints
             }
 
             await transaccion.CommitAsync(ct).ConfigureAwait(false);
-            return ConsultaDictamen.Backoffice(fila);
+            var cambio = await ConsultaDictamen.CambioPropietarioAsync(db.DeLaEmpresa<VehiculoDiagnostico>(empresa), vid, ct).ConfigureAwait(false);
+            return ConsultaDictamen.Backoffice(fila, cambio);
         }).ConfigureAwait(false);
         return Results.Ok(dto);
     }

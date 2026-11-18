@@ -9,7 +9,10 @@ namespace Flit.Diagnostico.Domain.Consultas;
 /// <param name="Servicio">Servicio del vehículo según el RUNT (<c>PARTICULAR</c>, <c>PUBLICO</c>, ...); null si no lo trajo.</param>
 /// <param name="DepartamentoCodigo">Departamento derivado del organismo; null si el organismo no está en la réplica.</param>
 /// <param name="DepartamentoSoportado">Verdadero si <c>departamentos_impuesto</c> tiene el departamento con <c>soportado=true</c>.</param>
-/// <param name="OrigenDocumentoLocatario">Origen del documento del locatario guardado; null si el vehículo no tiene ninguno.</param>
+/// <param name="OrigenDocumentoLocatario">
+/// Origen del documento del locatario guardado; null si el vehículo no tiene ninguno. Desde HU #14582 solo lo fija el RUNT
+/// (<c>PROVEEDOR</c>): el documento que declara el cliente es el propietario actual y nunca alimenta al locatario.
+/// </param>
 public sealed record HechosAplicabilidad(string? Servicio, string? DepartamentoCodigo, bool DepartamentoSoportado, OrigenDocumento? OrigenDocumentoLocatario);
 
 /// <summary>

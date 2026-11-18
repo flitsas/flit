@@ -53,6 +53,14 @@ public sealed class SesionTests
         capacidades.GetProperty("editarConfiguracion").GetBoolean().Should().BeFalse();
         capacidades.GetProperty("reprocesarConsultas").GetBoolean().Should().BeFalse();
         capacidades.GetProperty("backoffice").GetBoolean().Should().BeFalse();
+        // HU #14576: sin los permisos del saneamiento no marca ni gestiona.
+        capacidades.GetProperty("sanear").GetBoolean().Should().BeFalse();
+        capacidades.GetProperty("gestionarSaneamiento").GetBoolean().Should().BeFalse();
+        // HU #14587 (§3.1): sin diagnostico.usuarios.gestionar no gestiona usuarios.
+        capacidades.GetProperty("gestionarUsuarios").GetBoolean().Should().BeFalse();
+        var admin = await Sesion(api, api.Token(roles: ["admin_diagnostico"], permisos: [.. PermisosUsuario, "diagnostico.usuarios.gestionar"], tipoEmpresa: "CLIENTE"), ct);
+        admin.GetProperty("capacidades").GetProperty("gestionarUsuarios").GetBoolean().Should().BeTrue();
+        Cadenas(admin, "permisos").Should().Contain("diagnostico.usuarios.gestionar");
 
         // El mismo permiso de backoffice solo da la capacidad con tenant_type=FLIT (§6.2, D-16).
         var cliente = await Sesion(api, api.Token(roles: ["backoffice_diagnostico"], permisos: ["diagnostico.backoffice.ver"], tipoEmpresa: "CLIENTE"), ct);

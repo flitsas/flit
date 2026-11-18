@@ -351,7 +351,7 @@ export function textoTipoError(codigo: string | null): string {
 const MOTIVOS_NA: Record<MotivoNa, string> = {
   SERVICIO_PUBLICO: "El vehículo es de servicio público: esta consulta no aplica.",
   DEPARTAMENTO_NO_SOPORTADO: "El departamento del vehículo todavía no está soportado.",
-  SIN_DOCUMENTO_LOCATARIO: "El vehículo está sin el documento del locatario: no hay a quién consultar.",
+  SIN_DOCUMENTO_LOCATARIO: "El RUNT no reporta locatario: no hay a quién consultar.",
 };
 
 /** Texto del motivo de una N/A. */

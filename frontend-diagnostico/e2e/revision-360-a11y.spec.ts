@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { lanzarExpress } from "./express";
+import { abrirDictamenDesdeAcciones, disparadorAcciones, itemDictamen } from "./ola-ux-comun";
 
 /**
  * Revisión local del rediseño UI Kit 2026 (HU #14562): 360x800 (sin scroll horizontal, controles alcanzables, texto sin
@@ -32,7 +33,8 @@ function rutaAxe(): string {
 }
 const AXE = rutaAxe();
 
-async function entrar(page: Page, usuario: string, clave: string, destino = "/") {
+// Ola 2026-11-15 (FE-4): «/» es el Dashboard; por defecto se entra al listado (/diagnosticos).
+async function entrar(page: Page, usuario: string, clave: string, destino = "/diagnosticos") {
   await page.goto(`${APP}${destino}`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
@@ -142,7 +144,30 @@ test.describe("revisión 360 + axe (usuario de compañía)", () => {
 
     await test.step("listado", async () => {
       await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
+      // HU #14577 AC20: «Diagnósticos» es ahora una pestaña y comparte nombre con el h2 de su panel; se distinguen por rol.
+      const pestanas = page.getByRole("tablist", { name: "Vista del inicio" });
+      await expect(pestanas.getByRole("tab", { name: "Diagnósticos" })).toHaveAttribute("aria-selected", "true");
+      await expect(page.getByRole("tabpanel", { name: "Diagnósticos" }).getByRole("heading", { level: 2, name: "Diagnósticos" })).toBeVisible();
       await revisarPantalla(page, "01-listado");
+      await pestanas.getByRole("tab", { name: "Vehículos" }).click();
+      await expect(page.getByRole("tabpanel", { name: "Vehículos" }).getByRole("heading", { level: 2, name: "Vehículos" })).toBeVisible();
+      await revisarPantalla(page, "01b-listado-vehiculos");
+      await pestanas.getByRole("tab", { name: "Diagnósticos" }).click();
+      await expect(pestanas.getByRole("tab", { name: "Diagnósticos" })).toHaveAttribute("aria-selected", "true");
+    });
+    await test.step("dashboard (ola 2026-11-15, FE-5)", async () => {
+      await page.goto(`${APP}/`);
+      await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
+      await revisarPantalla(page, "00-dashboard");
+      await page.goto(`${APP}/diagnosticos`);
+    });
+    await test.step("reportes (ola 2026-11-15, FE-6)", async () => {
+      await page.goto(`${APP}/reportes`);
+      const titulo = page.getByRole("heading", { level: 1, name: "Reportes" });
+      // Sin verReportes la ruta lleva a la 403: se registra y se sigue.
+      if (await titulo.isVisible({ timeout: 15_000 }).catch(() => false)) await revisarPantalla(page, "00b-reportes");
+      else guardar("360-00b-reportes", { hallazgo: "E2E_USUARIO no ve /reportes (sin verReportes)", url: page.url() });
+      await page.goto(`${APP}/diagnosticos`);
     });
     await test.step("campana de avisos", async () => {
       const campana = page.getByRole("button", { name: /^Avisos/ });
@@ -166,16 +191,16 @@ test.describe("revisión 360 + axe (usuario de compañía)", () => {
     });
     let detalleUrl: string | null = null;
     await test.step("tablero", async () => {
-      await page.goto(`${APP}/`);
+      await page.goto(`${APP}/diagnosticos`);
       await lanzarExpress(page, PLACA, `E2E revision 360 ${Date.now()}`);
       const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
       await expect(grilla).toBeVisible();
       await expect(grilla.locator("[data-celda][data-estado]").first()).toHaveAttribute("data-estado", "COMPLETADO", { timeout: 60_000 });
       await revisarPantalla(page, "05-tablero");
-      const dictamen = grilla.getByRole("button", { name: `Ver dictamen de ${PLACA}` });
+      // Oleada 2026-11-16 (spec-ui §6.4): «Ver dictamen» es un ítem del menú «Acciones» de la fila (antes botón de la columna).
+      const dictamen = disparadorAcciones(page, PLACA);
       if (await dictamen.count()) {
-        await dictamen.click();
-        await expect(page.getByRole("dialog", { name: `Dictamen · ${PLACA}` })).toBeVisible();
+        await abrirDictamenDesdeAcciones(page, PLACA);
         await revisarPantalla(page, "06-tablero-panel-dictamen");
         await page.keyboard.press("Escape");
         guardar("teclado-dictamen-escape-360", { cerrado: (await page.getByRole("dialog").count()) === 0 });
@@ -239,6 +264,8 @@ test.describe("teclado en escritorio (1280)", () => {
     test.setTimeout(240_000);
     await entrar(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
     await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
+    // HU #14577 AC20: el orden de tab del inicio cruza la lista de pestañas; se arranca en «Diagnósticos».
+    await expect(page.getByRole("tablist", { name: "Vista del inicio" }).getByRole("tab", { name: "Diagnósticos" })).toHaveAttribute("aria-selected", "true");
     const resultado: Revision = {};
     resultado.listado = await ordenDeTab(page);
     await page.goto(`${APP}/diagnosticos/nuevo?modo=masivo`);
@@ -246,7 +273,8 @@ test.describe("teclado en escritorio (1280)", () => {
     await page.goto(`${APP}/configuracion`);
     resultado.configuracion = await ordenDeTab(page, 20);
 
-    await page.goto(`${APP}/`);
+    // La campana está en el shell; se vuelve al listado porque lanzarExpress parte de la tarjeta «Placa o VIN».
+    await page.goto(`${APP}/diagnosticos`);
     const campana = page.getByRole("button", { name: /^Avisos/ }).first();
     await campana.waitFor({ state: "visible", timeout: 15_000 }).catch(() => undefined);
     if (await campana.count()) {
@@ -265,9 +293,13 @@ test.describe("teclado en escritorio (1280)", () => {
     const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
     await expect(grilla).toBeVisible();
     resultado.tablero = await ordenDeTab(page, 30);
-    const dictamen = grilla.getByRole("button", { name: `Ver dictamen de ${PLACA}` });
+    // Oleada 2026-11-16: se llega al dictamen con teclado desde «Acciones» (Enter abre el menú y el foco va al primer ítem,
+    // «Ver dictamen»; Enter lo activa). El foco debe volver a «Acciones».
+    const dictamen = disparadorAcciones(page, PLACA);
     if (await dictamen.count()) {
       await dictamen.focus();
+      await page.keyboard.press("Enter");
+      await expect(itemDictamen(page, PLACA)).toBeFocused();
       await page.keyboard.press("Enter");
       const panel = page.getByRole("dialog", { name: `Dictamen · ${PLACA}` });
       await expect(panel).toBeVisible();

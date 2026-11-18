@@ -681,8 +681,8 @@
     font-size: 0.875rem;
   }
 
+  /* H-3 (WCAG 1.4.3): sin opacidad. Blanco al 85 % sobre --kit-azul-relleno daba 4,49:1; opaco, 5,6:1. */
   .dock-menu__cabeza-texto small {
-    opacity: 0.85;
     font-size: 0.75rem;
   }
 
@@ -1039,5 +1039,32 @@
        del menú). Las entradas conservan su relleno de 12 px y el fondo al pasar el ratón sale hacia el margen del panel. */
     .suite-menu-usuario .suite-menu-usuario__productos ul { margin-inline: -12px; }
     .suite-menu-usuario__productos .suite-menu-productos__pie { margin-inline: -12px; padding-inline: 12px; }
+  }
+
+  /* Insignia del dock (saneamiento, spec-ui §1.4): pendientes de una entrada, de su grupo y del lanzador móvil.
+     --kit-rojo con --di-on-action vale lo mismo en claro y oscuro (6,4:1); --di-danger en oscuro no llega a 4,5:1 con
+     blanco. 12 px, el piso del sistema. El número es aria-hidden: el nombre del control lleva el real. Sin animación. */
+  .dock-insignia {
+    flex: none;
+    min-width: 1.25rem;
+    height: 1.25rem;
+    margin-left: auto;
+    padding: 0 0.25rem;
+    border-radius: 999px;
+    background: var(--kit-rojo);
+    color: var(--di-on-action);
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.25rem;
+    font-variant-numeric: tabular-nums;
+    text-align: center;
+    box-shadow: 0 0 0 2px var(--di-surface-elevated);
+  }
+  /* En la píldora y el lanzador, en la esquina superior derecha (los dos ya son contenedores posicionados). */
+  .dock-insignia--flotante {
+    position: absolute;
+    top: -2px;
+    right: -2px;
+    margin-left: 0;
   }
 }

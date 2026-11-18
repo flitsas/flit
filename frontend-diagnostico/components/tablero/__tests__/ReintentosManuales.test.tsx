@@ -5,6 +5,7 @@ import TableroDiagnostico from "@/app/(app)/diagnosticos/[id]/page";
 import type { CapacidadesDiagnostico } from "@/lib/sesion";
 import type { Grilla } from "@/lib/tablero/api";
 import { ID, V1, V2, V3, desdesPedidos, grilla, llamadas, sesion, simularApi } from "@/lib/tablero/__tests__/datos";
+import { accionFila, accionesEnTodas, quizaAccionFila } from "./menuFila";
 
 /**
  * Aviso del reintento manual. HU #14562 · m-15 (auditoría): el `status` no lleva aria-label, que reemplazaba al texto
@@ -77,15 +78,15 @@ afterEach(() => {
 describe("Punto 3 AC3 — «Reintentar placa» solo en las placas pegadas", () => {
   it("aparece en cada placa con pegada=true, con la placa en el nombre accesible, y no en la que no está pegada", async () => {
     await montar({ [GRILLA]: () => Response.json(conPegadas()) });
-    const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
-    expect(within(tabla).getByRole("button", { name: "Reintentar consultas de la placa TST002" })).toBeEnabled();
-    expect(within(tabla).getByRole("button", { name: "Reintentar consultas de la placa TST003" })).toBeInTheDocument();
-    expect(within(tabla).queryByRole("button", { name: "Reintentar consultas de la placa TST001" })).not.toBeInTheDocument();
+    // FE-2: «Reintentar consultas» es un ítem del menú «Acciones» de la fila.
+    expect(quizaAccionFila("TST002", "Reintentar consultas de la placa TST002")).not.toHaveAttribute("aria-disabled");
+    expect(quizaAccionFila("TST003", "Reintentar consultas de la placa TST003")).not.toBeNull();
+    expect(quizaAccionFila("TST001", "Reintentar consultas de la placa TST001")).toBeNull();
   });
 
   it("sin `pegada` ni `total_pegadas` en la respuesta (backend previo) no hay ninguna acción de reintento", async () => {
     await montar({ [GRILLA]: () => Response.json(grilla()) });
-    expect(screen.queryByRole("button", { name: /reintentar consultas de la placa/i })).not.toBeInTheDocument();
+    expect(accionesEnTodas(/reintentar consultas de la placa/i)).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /reintentar pegadas/i })).not.toBeInTheDocument();
   });
 
@@ -95,11 +96,11 @@ describe("Punto 3 AC3 — «Reintentar placa» solo en las placas pegadas", () =
       [GRILLA]: enOrden(conPegadas(), grilla({ version: 13, vehiculos: [{ ...V2, pegada: false }], total_pegadas: 1 })),
       [`POST ${POR_PLACA}`]: () => new Promise<Response>((r) => (responder = r)),
     });
-    const boton = screen.getByRole("button", { name: "Reintentar consultas de la placa TST002" });
-    fireEvent.click(boton);
+    fireEvent.click(accionFila("TST002", "Reintentar consultas de la placa TST002"));
     await avanzar();
-    expect(boton).toBeDisabled();
-    expect(boton).toHaveAttribute("aria-busy", "true");
+    const boton = accionFila("TST002", "Reintentar consultas de la placa TST002");
+    expect(boton).toHaveAttribute("aria-disabled", "true");
+    expect(boton).toHaveTextContent("Reintentando…");
     expect(llamadas(api, "POST", POR_PLACA)).toHaveLength(1);
 
     responder(Response.json({ reencoladas: 2 }));
@@ -109,8 +110,8 @@ describe("Punto 3 AC3 — «Reintentar placa» solo en las placas pegadas", () =
     const aviso = avisoReintento();
     expect(aviso).toHaveTextContent("2 consultas reenviadas");
     expect(desdesPedidos(api)).toEqual([0, 12]);
-    expect(screen.queryByRole("button", { name: "Reintentar consultas de la placa TST002" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reintentar consultas de la placa TST003" })).toBeInTheDocument();
+    expect(quizaAccionFila("TST002", "Reintentar consultas de la placa TST002")).toBeNull();
+    expect(quizaAccionFila("TST003", "Reintentar consultas de la placa TST003")).not.toBeNull();
   });
 
   it("singular: «1 consulta reenviada»", async () => {
@@ -118,7 +119,7 @@ describe("Punto 3 AC3 — «Reintentar placa» solo en las placas pegadas", () =
       [GRILLA]: () => Response.json(conPegadas()),
       [`POST ${POR_PLACA}`]: () => Response.json({ reencoladas: 1 }),
     });
-    fireEvent.click(screen.getByRole("button", { name: "Reintentar consultas de la placa TST002" }));
+    fireEvent.click(accionFila("TST002", "Reintentar consultas de la placa TST002"));
     await avanzar();
     expect(avisoReintento()).toHaveTextContent("1 consulta reenviada");
   });
@@ -128,11 +129,11 @@ describe("Punto 3 AC3 — «Reintentar placa» solo en las placas pegadas", () =
       [GRILLA]: () => Response.json(conPegadas()),
       [`POST ${POR_PLACA}`]: () => Response.json({ error: "Falla interna" }, { status: 500 }),
     });
-    fireEvent.click(screen.getByRole("button", { name: "Reintentar consultas de la placa TST002" }));
+    fireEvent.click(accionFila("TST002", "Reintentar consultas de la placa TST002"));
     await avanzar();
     expect(screen.getByRole("alert")).toHaveTextContent(/no se completó la acción/i);
     expect(avisosReintento()).toHaveLength(0);
-    expect(screen.getByRole("button", { name: "Reintentar consultas de la placa TST002" })).toBeEnabled();
+    expect(quizaAccionFila("TST002", "Reintentar consultas de la placa TST002")).not.toHaveAttribute("aria-disabled");
   });
 
   it("un 403 se explica como falta de permiso", async () => {
@@ -140,7 +141,7 @@ describe("Punto 3 AC3 — «Reintentar placa» solo en las placas pegadas", () =
       [GRILLA]: () => Response.json(conPegadas()),
       [`POST ${POR_PLACA}`]: () => Response.json({ code: "SIN_PERMISO", error: "x" }, { status: 403 }),
     });
-    fireEvent.click(screen.getByRole("button", { name: "Reintentar consultas de la placa TST002" }));
+    fireEvent.click(accionFila("TST002", "Reintentar consultas de la placa TST002"));
     await avanzar();
     expect(screen.getByRole("alert")).toHaveTextContent(/no tienes permiso para reintentar consultas/i);
   });
@@ -173,7 +174,7 @@ describe("Punto 3 AC4/AC5 — «Reintentar pegadas (N)» del lote", () => {
     expect(avisoReintento()).toHaveTextContent("5 consultas reenviadas");
     expect(desdesPedidos(api)).toEqual([0, 12]);
     expect(screen.queryByRole("button", { name: /reintentar las .* placas pegadas/i })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /reintentar consultas de la placa/i })).not.toBeInTheDocument();
+    expect(accionesEnTodas(/reintentar consultas de la placa/i)).toHaveLength(0);
   });
 
   it("AC5: mientras responde queda deshabilitado (no se puede pulsar dos veces)", async () => {
@@ -206,7 +207,7 @@ describe("Punto 3 AC9 — sin la capacidad reprocesarConsultas no hay reintentos
   it("con placas pegadas y total_pegadas > 0, el usuario sin permiso no ve ninguna de las dos acciones", async () => {
     await montar({ [GRILLA]: () => Response.json(conPegadas()) }, USUARIO);
     expect(screen.getByRole("table", { name: /semáforo de consultas/i })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /reintentar consultas de la placa/i })).not.toBeInTheDocument();
+    expect(accionesEnTodas(/reintentar consultas de la placa/i)).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /reintentar las .* placas pegadas/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/reintentar pegadas/i)).not.toBeInTheDocument();
   });

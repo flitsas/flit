@@ -6,6 +6,7 @@ import type { CapacidadesDiagnostico } from "@/lib/sesion";
 import type { FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { EMPRESA } from "@/__tests__/configuracion/datos";
 import { ID, V1, grilla, llamadas, sesion, simularApi } from "@/lib/tablero/__tests__/datos";
+import { accionFila, disparadorDe } from "./menuFila";
 
 // Uso de ejemplo: en el tablero /diagnosticos/{id}, la fila elegible ofrece «Crear trámite» (HU #14562 AC37, spec 05).
 // En un lote Simple, el modal «Crear trámite para {placa}» pide el tipo y continúa con «Ir al wizard». En un lote Con
@@ -77,7 +78,8 @@ function loteIa(): Grilla {
 
 const creado = (numero = "57") => () => Response.json({ tramite: { id: TRAMITE_ID, numero }, ya_existia: false }, { status: 201 });
 const tabla = () => screen.getByRole("table", { name: /semáforo de consultas/i });
-const botonFila = () => within(tabla()).getByRole("button", { name: "Crear trámite para la placa TST001" });
+// FE-2: «Crear trámite» es un ítem del menú «Acciones» de la fila; al cancelar, el foco vuelve a su disparador.
+const botonFila = () => accionFila("TST001", "Crear trámite para la placa TST001");
 
 /** Pestaña que abre el navegador: la URL del borrador se le asigna cuando el POST responde. */
 function pestanaFalsa() {
@@ -126,7 +128,7 @@ describe("HU #14562 AC37 — lote Simple: «Crear trámite para {placa}» pide e
     expect(JSON.parse(String(init.body))).toEqual({ tipo_tramite_codigo: "UNILATERAL" });
     expect(pestana.location.href).toBe(URL_TRAMITE);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(within(tabla()).getByRole("link", { name: /ver trámite #58 de la placa TST001/i })).toHaveAttribute("href", URL_TRAMITE);
+    expect(accionFila("TST001", /ver trámite #58 de la placa TST001/i)).toHaveAttribute("href", URL_TRAMITE);
   });
 
   it("Cancelar cierra el modal sin crear nada ni abrir pestañas y devuelve el foco al botón de la fila", async () => {
@@ -139,7 +141,7 @@ describe("HU #14562 AC37 — lote Simple: «Crear trámite para {placa}» pide e
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(abrir).not.toHaveBeenCalled();
     expect(llamadas(api, "POST", RUTA_CREAR)).toHaveLength(0);
-    expect(botonFila()).toHaveFocus();
+    expect(disparadorDe("TST001")).toHaveFocus();
   });
 });
 
@@ -169,7 +171,7 @@ describe("HU #14562 AC37 — lote IA con veredicto Viable: «Crear traspaso» ab
     expect(cuerpo === undefined || JSON.parse(String(cuerpo)).tipo_tramite_codigo === undefined).toBe(true);
     expect(pestana.location.href).toBe(URL_TRAMITE);
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(within(tabla()).getByRole("link", { name: /ver trámite #57 de la placa TST001/i })).toBeInTheDocument();
+    expect(accionFila("TST001", /ver trámite #57 de la placa TST001/i)).toBeInTheDocument();
   });
 
   it("si la API rechaza la creación, cierra la pestaña vacía y deja el motivo en la fila", async () => {
@@ -193,7 +195,7 @@ describe("HU #14562 AC37 — lote IA con veredicto Viable: «Crear traspaso» ab
     await avanzar();
     fireEvent.click(within(screen.getByRole("dialog", { name: "¿Crear el traspaso de TST001?" })).getByRole("button", { name: "Crear traspaso" }));
     await avanzar();
-    expect(within(tabla()).getByRole("link", { name: /ver trámite #59 de la placa TST001/i })).toHaveAttribute("href", URL_TRAMITE);
+    expect(accionFila("TST001", /ver trámite #59 de la placa TST001/i)).toHaveAttribute("href", URL_TRAMITE);
   });
 });
 
@@ -203,7 +205,8 @@ describe("HU #14562 F-05 — «Crear trámite» desde el pie del panel del dicta
   const RUTA_DICTAMEN = `GET /diagnosticos/${ID}/vehiculos/vehiculo-1/dictamen`;
   const VIABLE = { version: 1, veredicto: "VIABLE", estado_redaccion: "LISTA", alertamientos: [], catalogo_version: 1, creado_en: "2026-11-12T15:00:00Z" };
   const abrirPanel = async () => {
-    fireEvent.click(within(tabla()).getByRole("button", { name: "Ver dictamen de TST001" }));
+    // HU #14584 §6.4: el panel del dictamen se abre con «Ver dictamen» del menú «Acciones» de la fila.
+    fireEvent.click(accionFila("TST001", "Ver dictamen de TST001"));
     await avanzar();
     return screen.getByRole("dialog", { name: "Dictamen · TST001" });
   };
@@ -237,5 +240,48 @@ describe("HU #14562 F-05 — «Crear trámite» desde el pie del panel del dicta
     const panel = await abrirPanel();
     expect(within(panel).getByText("Viable")).toBeInTheDocument();
     expect(within(panel).queryByRole("button", { name: /crear trámite/i })).toBeNull();
+  });
+});
+
+// Uso de ejemplo (HU #14577 AC12, spec-ui §2.5): si la fila tiene saneamiento SOLICITADO o EN_GESTION, la confirmación de
+// «Crear trámite» lleva arriba el aviso «Saneamiento en curso»; no bloquea y el foco inicial del modal no cambia.
+describe("HU #14577 AC12 — aviso de saneamiento en curso en «Crear trámite» (individual)", () => {
+  const conSaneamiento = (g: Grilla, estado: "SOLICITADO" | "EN_GESTION" | "SANEADO" | "NO_PROCEDE" | null): Grilla => ({
+    ...g,
+    vehiculos: g.vehiculos.map((v) => ({ ...v, saneamiento: { estado, elegible: estado === null, motivo_no_elegible: estado ? "YA_SOLICITADO" : null } })),
+  });
+  const AVISO = "Este vehículo tiene un saneamiento en curso. Puedes crear el trámite igual.";
+
+  it.each(["SOLICITADO", "EN_GESTION"] as const)("lote IA, %s: el aviso arriba del cuerpo y «Crear traspaso» sigue con el foco y confirma", async (estado) => {
+    pestanaFalsa();
+    const api = await montar({ [GRILLA]: () => Response.json(conSaneamiento(loteIa(), estado)), [CREAR]: creado("59") });
+    fireEvent.click(botonFila());
+    await avanzar();
+    const dialogo = screen.getByRole("dialog", { name: "¿Crear el traspaso de TST001?" });
+    const aviso = within(dialogo).getByRole("alert");
+    expect(aviso).toHaveTextContent("Saneamiento en curso");
+    expect(aviso).toHaveTextContent(AVISO);
+    const confirmar = within(dialogo).getByRole("button", { name: "Crear traspaso" });
+    expect(confirmar).toHaveFocus();
+    fireEvent.click(confirmar);
+    await avanzar();
+    expect(llamadas(api, "POST", RUTA_CREAR)).toHaveLength(1);
+  });
+
+  it("lote Simple, EN_GESTION: el modal del tipo también lleva el aviso", async () => {
+    await montar({ [GRILLA]: () => Response.json(conSaneamiento(loteSimple(), "EN_GESTION")), "GET /tipos-tramite": () => Response.json(TIPOS) });
+    fireEvent.click(botonFila());
+    await avanzar();
+    const dialogo = screen.getByRole("dialog", { name: "Crear trámite para TST001" });
+    expect(dialogo).toHaveTextContent(AVISO);
+    expect(within(dialogo).getByLabelText("Tipo de trámite")).toHaveFocus();
+  });
+
+  it.each(["SANEADO", "NO_PROCEDE", null] as const)("con %s la confirmación no muestra el aviso", async (estado) => {
+    await montar({ [GRILLA]: () => Response.json(conSaneamiento(loteIa(), estado)) });
+    fireEvent.click(botonFila());
+    await avanzar();
+    const dialogo = screen.getByRole("dialog", { name: "¿Crear el traspaso de TST001?" });
+    expect(dialogo).not.toHaveTextContent(/saneamiento en curso/i);
   });
 });

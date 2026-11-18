@@ -1,6 +1,9 @@
+using System.Security.Cryptography;
 using System.Text.Json.Nodes;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
+using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
+using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
 using Microsoft.EntityFrameworkCore;
 
@@ -15,7 +18,9 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// recalcula el estado del lote), con un intento <c>desde_cache=true</c>, sin mensaje y sin consumo. En RUNT copia además los datos del
 /// vehículo, los documentos cifrados (<see cref="DocumentosVehiculo.Copiar"/>, sin descifrar) y las personas del vehículo de
 /// origen (<see cref="DocumentosVehiculo.CopiarPersonas"/>, HU #13790). Copia también la respuesta completa cifrada de la celda
-/// original (HU #14087 AC8), los mismos bytes: en las de persona va por orden, que es como casan las personas.
+/// original (HU #14087 AC8), los mismos bytes: en las de persona va por orden, que es como casan las personas. En RUNT, con el
+/// protector de documentos, recalcula <c>cambio_propietario</c> con el declarado del vehículo DESTINO (HU #14582, SP-5): descifra
+/// una vez los propietarios copiados; el resultado del origen nunca se copia.
 /// <para>
 /// Reglas: la búsqueda filtra por <c>tenant_id</c> de forma EXPLÍCITA, además del filtro global del contexto de la celda (el
 /// publicador también corre fuera de una petición), y la FK compuesta <c>fk_consultas_consultas_reutilizada_de</c> impide apuntar a una
@@ -33,7 +38,7 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// </summary>
 /// <example>
 /// <code>
-/// var resultado = await ReutilizacionMismoDia.BuscarAsync(contexto, reloj.GetUtcNow(), ct)
+/// var resultado = await ReutilizacionMismoDia.BuscarAsync(contexto, reloj.GetUtcNow(), documentos, ct)
 ///     ?? await ejecutor.EjecutarAsync(contexto, ct);
 /// </code>
 /// </example>
@@ -41,11 +46,13 @@ internal static class ReutilizacionMismoDia
 {
     /// <summary>
     /// El resultado copiado de la celda vigente de hoy, listo para cerrar la celda; null si no hay ninguna (entonces se llama a
-    /// la fuente).
+    /// la fuente). <paramref name="documentos"/> descifra los propietarios copiados para recalcular <c>cambio_propietario</c> (HU #14582).
     /// </summary>
-    public static async Task<ResultadoCelda?> BuscarAsync(ContextoCelda contexto, DateTimeOffset ahora, CancellationToken ct)
+    public static async Task<ResultadoCelda?> BuscarAsync(
+        ContextoCelda contexto, DateTimeOffset ahora, IProtectorDocumentoPersona documentos, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(contexto);
+        ArgumentNullException.ThrowIfNull(documentos);
         var celda = contexto.Celda;
         var db = contexto.Db;
         var empresa = celda.TenantId;
@@ -106,6 +113,25 @@ internal static class ReutilizacionMismoDia
                 var deOrigen = await DocumentosVehiculo.PersonasDelVehiculoAsync(dbCierre, empresa, deVehiculo.Id, token).ConfigureAwait(false);
                 var copia = DocumentosVehiculo.CopiarPersonas(destino, deVehiculo, deOrigen, ahora);
                 await DocumentosVehiculo.RegistrarPersonasAsync(dbCierre, destino, copia, token).ConfigureAwait(false);
+                // HU #14582 (SP-5): con el declarado del destino; los propietarios copiados se descifran solo si hay declarado. Un
+                // cifrado ilegible no rompe el cierre: el resultado queda null, como en FijarCambioPropietario (CR-2).
+                if (destino.PropietarioDeclaradoDocCifrado is not null)
+                {
+                    List<(string Tipo, string Numero)>? propietarios;
+                    try
+                    {
+                        propietarios = [.. copia.Where(p => p.Rol == RolPersona.Propietario).Select(p => (p.DocTipo, documentos.Desproteger(p.DocCifrado)))];
+                    }
+                    catch (CryptographicException)
+                    {
+                        propietarios = null;
+                    }
+
+                    if (propietarios is null)
+                        destino.CambioPropietario = null;
+                    else
+                        DocumentosVehiculo.FijarCambioPropietario(destino, propietarios, documentos, MetricasDiagnostico.OrigenReutilizacion);
+                }
             })
             : null;
         return new ResultadoCelda(EstadoCelda.Completado, original.Payload, null, OrigenCelda.Api, original.DatoObtenidoEn, null, efectos)

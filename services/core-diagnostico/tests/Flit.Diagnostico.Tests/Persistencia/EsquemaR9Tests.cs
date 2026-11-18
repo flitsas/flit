@@ -84,7 +84,15 @@ public sealed class EsquemaR9Tests
             .Should().ThrowAsync<PostgresException>()).Which;
         error.MessageText.Should().Contain("R9_AjusteConTramite");
         (await ColumnaAsync(conexion, ct)).Should().Be("boolean:NO:false", "el rollback fallido no tocó la columna");
-        (await db.Database.GetPendingMigrationsAsync(ct)).Should().BeEmpty();
+        await RollbackBloqueado.DebeDetenerseEnAsync(db, "20261113070402_R9_AjusteConTramite", ct);
+        (await ContarConTramiteAsync(conexion, vehiculo, ct)).Should().Be(1, "la versión con trámite sigue en la auditoría");
+    }
+
+    private static async Task<long> ContarConTramiteAsync(NpgsqlConnection conexion, Guid vehiculo, CancellationToken ct)
+    {
+        await using var comando = new NpgsqlCommand("SELECT count(*) FROM diagnostico.dictamenes WHERE vehiculo_id = @v AND ajuste_con_tramite", conexion);
+        comando.Parameters.AddWithValue("v", vehiculo);
+        return Convert.ToInt64(await comando.ExecuteScalarAsync(ct), System.Globalization.CultureInfo.InvariantCulture);
     }
 
     private static async Task InsertarAsync(

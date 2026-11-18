@@ -8,7 +8,7 @@ import { useBrand } from "@flit/brand/BrandProvider";
 import { suiteAccountLinks, suiteRoleLabel, type AccountLink } from "./account";
 import { AccountMenu, type ShellUser } from "./AccountMenu";
 import type { SuiteApp } from "./apps";
-import { Dock } from "./dock/Dock";
+import { Dock, type DistribucionDock } from "./dock/Dock";
 import { DockMobile } from "./dock/DockMobile";
 import { buildDock, isActive, type NavCatalog, type NavViewer } from "./nav";
 import { ProductMenu } from "./ProductMenu";
@@ -23,6 +23,7 @@ export type { ShellUser } from "./AccountMenu";
 export type { AccountLink } from "./account";
 export type { SuiteApp } from "./apps";
 export type { PlateSearch, SearchAction } from "./search";
+export type { DistribucionDock } from "./dock/Dock";
 
 const NO_LINKS: AccountLink[] = [];
 
@@ -73,6 +74,8 @@ export interface SuiteShellProps {
    * propios (Trámites, cuyas pantallas ya los traen y usan ese contenedor para lo pegajoso).
    */
   layout?: "page" | "app";
+  /** Reparto del dock de escritorio (HU #14583, opt-in): `lados` por defecto; `equilibrada` mitad y mitad. */
+  dockDistribucion?: DistribucionDock;
   children: React.ReactNode;
 }
 
@@ -101,6 +104,7 @@ export function SuiteShell({
   overlay,
   footer,
   layout = "page",
+  dockDistribucion,
   children,
 }: SuiteShellProps) {
   const pathname = usePathname() ?? "/";
@@ -152,6 +156,7 @@ export function SuiteShell({
         homeIconSrc={homeIconSrc}
         homeActive={homeActive}
         scrollRef={app ? scrollRef : undefined}
+        distribucion={dockDistribucion}
       />
       <DockMobile groups={groups} homeIconSrc={homeIconSrc} scrollRef={app ? scrollRef : undefined} />
     </>
@@ -169,7 +174,7 @@ export function SuiteShell({
               páginas (`.app-bg`) se apaga aquí para que se vea el de la propuesta. */}
           <div
             ref={scrollRef}
-            className="absolute inset-0 overflow-y-auto pb-28 [&_.app-bg]:bg-transparent [&_.app-bg]:bg-none"
+            className="absolute inset-0 overflow-y-auto pb-28 scroll-pb-28 [&_.app-bg]:bg-transparent [&_.app-bg]:bg-none"
             data-shell-scroll
           >
             {/* Sin contenedor centrado: cada página conserva su propio ancho y relleno (decisión de producto, HU #14479). */}

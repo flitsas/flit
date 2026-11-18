@@ -125,13 +125,13 @@ export function consultaListado(f: FiltrosListado): string {
   return q.toString();
 }
 
-/** URL del inicio con los filtros: omite la página 1 y el tamaño por defecto. */
+/** URL del listado (/diagnosticos) con los filtros: omite la página 1 y el tamaño por defecto. */
 export function urlListado(f: FiltrosListado): string {
   const q = parametros(f);
   if (f.pagina > 1) q.set("pagina", String(f.pagina));
   if (f.tamano !== TAMANO_POR_DEFECTO) q.set("tamano", String(f.tamano));
   const texto = q.toString();
-  return texto ? `/?${texto}` : "/";
+  return texto ? `/diagnosticos?${texto}` : "/diagnosticos";
 }
 
 /**
@@ -139,16 +139,16 @@ export function urlListado(f: FiltrosListado): string {
  * filtros, el destino tal cual. La carga de vehículos (lote sin lanzar) no tiene «volver»: va sin ?desde=.
  */
 export function destinoConFiltros(destino: string, f: FiltrosListado): string {
-  const consulta = urlListado(f).replace(/^\/\??/, "");
+  const consulta = urlListado(f).split("?")[1] ?? "";
   return consulta && !destino.endsWith("/carga") ? `${destino}?desde=${encodeURIComponent(consulta)}` : destino;
 }
 
 /**
- * «Volver a diagnósticos» del tablero (HU #14087): reconstruye SOLO los filtros conocidos del listado como search params de /.
+ * «Volver a diagnósticos» del tablero (HU #14087): reconstruye SOLO los filtros conocidos del listado como search params de /diagnosticos.
  * El valor de ?desde= nunca se usa como URL (sin open redirect): lo que no es un filtro válido se descarta.
  */
 export function urlVolverAlListado(desde: string | null | undefined): string {
-  return desde ? urlListado(filtrosDesdeUrl(new URLSearchParams(desde))) : "/";
+  return desde ? urlListado(filtrosDesdeUrl(new URLSearchParams(desde))) : "/diagnosticos";
 }
 
 /** Algún filtro activo (la página y el tamaño no cuentan): separa «sin resultados» de «compañía sin diagnósticos». */
