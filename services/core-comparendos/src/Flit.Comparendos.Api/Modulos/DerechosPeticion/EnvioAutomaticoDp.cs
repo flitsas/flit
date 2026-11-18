@@ -45,6 +45,20 @@ public sealed partial class EnvioAutomaticoDp(
     /// <summary>Un DP en «Enviando» más de este tiempo sin que el correo reaccione se marca para revisión.</summary>
     public static readonly TimeSpan EsperaReaccion = TimeSpan.FromHours(2);
 
+    /// <summary>Errores seguidos (sin ningún envío exitoso en medio) tras los cuales se corta la corrida de la empresa: casi seguro es un servicio caído.</summary>
+    public const int MaxErroresConsecutivos = 5;
+
+    /// <summary>
+    /// ¿Es la carrera esperada con otro envío del mismo comparendo? Solo la violación del índice único DEL COMPARENDO, o el aborto
+    /// de Postgres al cruzarse candados (40P01) o por serialización (40001). Cualquier otra restricción (p. ej. la del radicado) es
+    /// un error real y no se disfraza de «ya tiene DP».
+    /// </summary>
+    internal static bool EsCarreraDeComparendo(Exception ex) => ex is DbUpdateException { InnerException: PostgresException pg } ? EsCarrera(pg) : ex is PostgresException directa && EsCarrera(directa);
+
+    private static bool EsCarrera(PostgresException pg) =>
+        pg.SqlState is PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure
+        || (pg.SqlState == PostgresErrorCodes.UniqueViolation && pg.ConstraintName == "ix_derecho_peticion_comparendo_id");
+
     public bool Atiende(TipoTrabajo tipo) => tipo == TipoTrabajo.EnvioAutomaticoDp;
 
     public async Task EjecutarAsync(SolicitudTrabajo solicitud, CancellationToken ct)
@@ -62,7 +76,7 @@ public sealed partial class EnvioAutomaticoDp(
                 var r = await EmpresaAsync(tenant, ct).ConfigureAwait(false);
                 LogResumen(logger, tenant, r.Enviados, r.Omitidos.Count, r.Rescatados, r.TopeAlcanzado);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 // Una empresa que falla no frena a las demás.
                 db.ChangeTracker.Clear();
@@ -72,7 +86,7 @@ public sealed partial class EnvioAutomaticoDp(
     }
 
     /// <summary>Lo que pasó en una empresa en esta corrida.</summary>
-    public sealed record ResultadoEmpresa(int Enviados, IReadOnlyList<Omision> Omitidos, int Rescatados, bool TopeAlcanzado);
+    public sealed record ResultadoEmpresa(int Enviados, IReadOnlyList<Omision> Omitidos, int Rescatados, bool TopeAlcanzado, bool Detenido = false);
 
     /// <summary>Un comparendo que no se envió y por qué (queda en su línea de tiempo).</summary>
     public sealed record Omision(Guid ComparendoId, string Numero, string Codigo, string Motivo);
@@ -88,7 +102,7 @@ public sealed partial class EnvioAutomaticoDp(
         // Sin ninguna tipología habilitada, automatizable y con texto publicado y aprobado por el abogado no hay nada que decidir.
         if (!await HayTipologiaAutomaticaAsync(tenant, ct).ConfigureAwait(false))
         {
-            await AvisarOmisionesAsync(tenant, omitidos, [], rescatados, ct).ConfigureAwait(false);
+            await AvisarOmisionesAsync(tenant, omitidos, [], rescatados, detenido: false, ct).ConfigureAwait(false);
             return new ResultadoEmpresa(0, omitidos, rescatados, false);
         }
 
@@ -104,6 +118,8 @@ public sealed partial class EnvioAutomaticoDp(
 
         var enviados = 0;
         var topeAlcanzado = false;
+        var detenido = false;
+        var erroresSeguidos = 0;
         foreach (var id in candidatos)
         {
             Proceso resultado;
@@ -111,15 +127,23 @@ public sealed partial class EnvioAutomaticoDp(
             {
                 resultado = await ProcesarComparendoAsync(tenant, id, inicioHoy, ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 // Un comparendo que falla no frena a los demás ni deja la corrida muda cada día: queda anotado y sigue el siguiente.
                 db.ChangeTracker.Clear();
                 LogComparendo(logger, id, ex);
                 var detalle = ex is ReglaException r ? $" ({r.Message})" : string.Empty;
                 var numero = await db.Comparendos.AsNoTracking().Where(x => x.Id == id).Select(x => x.Numero).FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? string.Empty;
+                erroresSeguidos++;
                 resultado = new Proceso(EstadoProceso.Omitido, [], new Omision(id, numero, "ERROR_ENVIO", $"ocurrió un error al preparar o enviar el documento{detalle}; el equipo técnico lo revisará."));
                 await RegistrarOmisionAsync(resultado.Omision!, ct).ConfigureAwait(false);
+                if (erroresSeguidos >= MaxErroresConsecutivos)
+                {
+                    // Falla sistémica (almacén de archivos, PDF, correo...): no se sigue golpeando comparendo por comparendo.
+                    omitidos.Add(resultado.Omision!);
+                    detenido = true;
+                    break;
+                }
             }
 
             if (resultado.Estado is EstadoProceso.TopeAlcanzado or EstadoProceso.Apagado)
@@ -131,6 +155,7 @@ public sealed partial class EnvioAutomaticoDp(
             if (resultado.Estado == EstadoProceso.Enviado)
             {
                 enviados++;
+                erroresSeguidos = 0;
                 await DespacharAsync(resultado.Comunicaciones, ct).ConfigureAwait(false);
             }
             else if (resultado.Omision is not null)
@@ -139,8 +164,8 @@ public sealed partial class EnvioAutomaticoDp(
             }
         }
 
-        await AvisarOmisionesAsync(tenant, omitidos, bloqueados, rescatados, ct).ConfigureAwait(false);
-        return new ResultadoEmpresa(enviados, omitidos, rescatados, topeAlcanzado);
+        await AvisarOmisionesAsync(tenant, omitidos, bloqueados, rescatados, detenido, ct).ConfigureAwait(false);
+        return new ResultadoEmpresa(enviados, omitidos, rescatados, topeAlcanzado, detenido);
     }
 
     private async Task<bool> HayTipologiaAutomaticaAsync(Guid tenant, CancellationToken ct)
@@ -289,7 +314,7 @@ public sealed partial class EnvioAutomaticoDp(
                 // Entre la evaluación y el envío alguien lo envió, lo pagó o lo inactivó: ya no corresponde, no es un error.
                 return Proceso.Saltado;
             }
-            catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation or PostgresErrorCodes.DeadlockDetected or PostgresErrorCodes.SerializationFailure })
+            catch (Exception ex) when (EsCarreraDeComparendo(ex))
             {
                 // Una persona lo envió a la vez (índice único) o Postgres abortó a uno de los dos en el cruce de candados: regla de
                 // negocio, no un fallo. La transacción se descarta entera y el comparendo se revisa en la siguiente corrida.
@@ -360,9 +385,9 @@ public sealed partial class EnvioAutomaticoDp(
     /// Resumen de lo omitido (y de los DP sin reacción) para los encargados de la empresa: a sus correos de alerta operativa
     /// o, si no tiene, a quienes gestionan representantes. Máximo uno por empresa y día, aunque el trabajo corra varias veces.
     /// </summary>
-    private async Task AvisarOmisionesAsync(Guid tenant, List<Omision> omitidos, List<OrganismoBloqueado> bloqueados, int rescatados, CancellationToken ct)
+    private async Task AvisarOmisionesAsync(Guid tenant, List<Omision> omitidos, List<OrganismoBloqueado> bloqueados, int rescatados, bool detenido, CancellationToken ct)
     {
-        if (omitidos.Count == 0 && rescatados == 0 && bloqueados.Count == 0)
+        if (omitidos.Count == 0 && rescatados == 0 && bloqueados.Count == 0 && !detenido)
             return;
         var inicioHoy = new DateTimeOffset(reloj.Hoy.ToDateTime(TimeOnly.MinValue), Domain.Tiempo.ColombiaTime.Offset).ToUniversalTime();
         if (await db.Comunicaciones.AnyAsync(x => x.TenantId == tenant && x.Tipo == TipoComunicacion.ResumenEnvioAutomaticoDp && x.CreadoEn >= inicioHoy, ct).ConfigureAwait(false))
@@ -386,7 +411,8 @@ public sealed partial class EnvioAutomaticoDp(
                 + string.Concat(bloqueados.Take(5).Select(b => $"<li><b>{b.Comparendos}</b> en {WebUtility.HtmlEncode(b.Nombre)}: para que salgan, {WebUtility.HtmlEncode(b.Correccion)}.</li>")) + (bloqueados.Count > 5 ? "<li>…</li>" : string.Empty) + "</ul>"
             : string.Empty;
         var rescate = rescatados > 0 ? $"<p>Además, {rescatados} derecho(s) de petición llevan horas sin confirmación de envío; revísalos en el Centro de Mensajes antes de reintentar.</p>" : string.Empty;
-        var cuerpo = $"{intro}{sinCanal}{rescate}<p><a href=\"{correo.AppUrl}/comparendos\">Ver los comparendos</a></p>";
+        var parada = detenido ? "<p><b>El envío automático se detuvo por errores repetidos.</b> Revisa que el servicio de archivos y de correo estén funcionando; mañana volverá a intentar con los comparendos que quedaron.</p>" : string.Empty;
+        var cuerpo = $"{parada}{intro}{sinCanal}{rescate}<p><a href=\"{correo.AppUrl}/comparendos\">Ver los comparendos</a></p>";
         var marcaFlit = config.ConjuntoPlantillas == ConjuntoPlantillas.Flit;
         var enviados = await correo.RegistrarAsync(new CorreoNuevo
         {
@@ -411,7 +437,7 @@ public sealed partial class EnvioAutomaticoDp(
             {
                 await despachador.DespacharAsync(id, ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 // El ciclo del despachador lo reintenta; el DP ya quedó registrado.
                 LogDespacho(logger, id, ex);
