@@ -8,6 +8,7 @@ using Flit.Comparendos.Api.Modulos.Plantillas;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Api.Plataforma;
+using Flit.Comparendos.Domain.Dp;
 using Flit.Comparendos.Domain.Modelo;
 using Flit.Comparendos.Domain.Plazos;
 using Microsoft.EntityFrameworkCore;
@@ -58,6 +59,43 @@ public sealed class ServicioDp(
                                  where h.TenantId == c.TenantId && h.Habilitada
                                  select t).ToListAsync(ct).ConfigureAwait(false);
         return habilitadas.Select(t => (t, t.EstadosLegalesPermitidos.Contains(estado))).OrderByDescending(x => x.Item2).ThenBy(x => x.t.Codigo).ToList();
+    }
+
+    /// <summary>
+    /// HU #14608 (Epic #14606): qué tipología de derecho de petición aplica a un comparendo según las reglas de V1 y cuál se
+    /// elegiría. Una tipología solo está disponible si la empresa la tiene habilitada y procede en el estado legal de hoy;
+    /// con <paramref name="soloAutomatizables"/> (lo que haría el envío automático) además debe estar marcada como
+    /// automatizable y su plantilla publicada tener revisión jurídica de un abogado. No envía ni guarda nada.
+    /// </summary>
+    public async Task<DecisionDp> DecidirAsync(Comparendo c, bool soloAutomatizables, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        var hoy = reloj.Hoy;
+        var situacion = (await calendario.MotorAsync(ct).ConfigureAwait(false)).Evaluar(Plazos.Fechas(c), hoy);
+        var candidatas = (await TipologiasAsync(c, ct).ConfigureAwait(false)).Where(x => x.Procede).Select(x => x.Tipologia).ToList();
+
+        if (soloAutomatizables && candidatas.Count > 0)
+        {
+            var conjunto = (await capacidades.DeAsync(c.TenantId, ct).ConfigureAwait(false)).ConjuntoPlantillas;
+            var automatizables = await db.TipologiasEmpresa.AsNoTracking()
+                .Where(h => h.TenantId == c.TenantId && h.Habilitada && h.Automatizable)
+                .Select(h => h.TipologiaId).ToListAsync(ct).ConfigureAwait(false);
+            var revisadas = new List<TipologiaDp>();
+            foreach (var t in candidatas.Where(t => automatizables.Contains(t.Id)))
+            {
+                var version = await plantillas.PublicadaAsync(conjunto, TipoPlantilla.DpDocumento, t.Id, ct).ConfigureAwait(false);
+                if (version?.RevisadaJuridicamenteEn is not null)
+                    revisadas.Add(t);
+            }
+
+            candidatas = revisadas;
+        }
+
+        var datos = new DatosDeSeleccion(
+            c.CodigoInfraccion, c.FechaImposicion, c.FechaNotificacion, c.EsFotomulta, c.Activo, c.Pagado, c.TieneDp,
+            PropietarioEsPersonaJuridica: c.TipoDocumentoInfractor == TipoDocumento.NIT, situacion.DescuentoVigente);
+        var disponibles = candidatas.Select(t => t.Codigo).ToHashSet(StringComparer.Ordinal);
+        return new SelectorTipologiaDp(ReglasDpAutomatico.V1).Decidir(datos, hoy, disponibles);
     }
 
     /// <summary>Bloqueos de §6.8 en su orden, advertencias que no bloquean (S-54) y lo que se adjuntaría.</summary>
