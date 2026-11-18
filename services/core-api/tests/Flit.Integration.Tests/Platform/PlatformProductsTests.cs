@@ -42,7 +42,8 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
         await using var ctx = NewContext();
         var products = await new ProductCatalogRepository(ctx).ListAsync();
 
-        products.Select(p => p.Code).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico");
+        // `caja` (DDL 199) existe porque el rol ot_caja es de ese producto; no es una app de la suite (ListMyApps la excluye, ADR-0082).
+        products.Select(p => p.Code).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "caja");
         products.Should().OnlyContain(p => p.IsActive);
         products.Single(p => p.Code == "tramites").Name.Should().Be("Trámites");
     }
@@ -99,8 +100,8 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
                     await cmd.ExecuteNonQueryAsync();
                 }
 
-                // Cuatro del catálogo + `demo`, que el DDL 119 vuelve a sembrar: sin duplicados.
-                (await ctx.Set<ProductEntity>().CountAsync()).Should().Be(5);
+                // Cuatro del catálogo + `caja` (DDL 199) + `demo`, que el DDL 119 vuelve a sembrar: sin duplicados.
+                (await ctx.Set<ProductEntity>().CountAsync()).Should().Be(6);
             }
             finally
             {

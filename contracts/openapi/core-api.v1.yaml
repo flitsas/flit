@@ -15805,7 +15805,7 @@ paths:
               schema: { $ref: "#/components/schemas/VentanaAnulacionCaja" }
         "400": { description: "ventana_anulacion_invalida (nula o fuera de 0..max) o PORTAL_COBRO_ORGANISMO_REQUERIDO." }
         "401": { description: Sin sesión. }
-        "403": { description: Sin alcance sobre el organismo, o rol ot_caja. }
+        "403": { description: "Sin alcance sobre el organismo, o rol ot_caja." }
         "404": { description: PORTAL_COBRO_ORGANISMO_NO_EXISTE. }
   /api/v1/admin/ot/portal-cobro/caja-anulacion/historial:
     get:
@@ -15824,7 +15824,7 @@ paths:
               schema: { $ref: "#/components/schemas/HistorialVentanaAnulacionCaja" }
         "400": { description: PORTAL_COBRO_ORGANISMO_REQUERIDO. }
         "401": { description: Sin sesión. }
-        "403": { description: Sin alcance sobre el organismo, o rol ot_caja. }
+        "403": { description: "Sin alcance sobre el organismo, o rol ot_caja." }
   /api/v1/admin/plataforma/persona-natural/cobro/caja-anulacion:
     put:
       tags: ["Admin · Plataforma · Persona Natural · Cobro"]

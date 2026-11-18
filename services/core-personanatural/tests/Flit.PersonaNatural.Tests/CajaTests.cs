@@ -79,7 +79,7 @@ public sealed class CajaTests : IAsyncLifetime
 
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         var texto = await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
-        var json = JsonDocument.Parse(texto).RootElement;
+        var json = JsonElement.Parse(texto);
         json.GetProperty("codigo").GetString().Should().Be(codigo);
         json.GetProperty("tipoTramite").GetProperty("codigo").GetString().Should().Be("TRASPASO_STANDARD");
         json.GetProperty("tipoTramite").GetProperty("nombre").GetString().Should().Be("Traspaso");
@@ -996,7 +996,7 @@ public sealed class CajaTests : IAsyncLifetime
 
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         var pagadoEn = _host.Reloj.GetUtcNow();
-        var cuerpo = JsonDocument.Parse(await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement;
+        var cuerpo = JsonElement.Parse(await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
         cuerpo.GetProperty("anulableHasta").GetDateTimeOffset().Should().Be(pagadoEn.AddMinutes(10));
         var item = (await Lista()).Items.Single();
         item.Anulable.Should().BeTrue();
@@ -1017,7 +1017,7 @@ public sealed class CajaTests : IAsyncLifetime
         var r = await Confirmar(codigo, Ana, "efectivo", ventanaMinutos: 0);
 
         r.StatusCode.Should().Be(HttpStatusCode.OK);
-        JsonDocument.Parse(await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement.GetProperty("anulableHasta").ValueKind.Should().Be(JsonValueKind.Null);
+        JsonElement.Parse(await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).GetProperty("anulableHasta").ValueKind.Should().Be(JsonValueKind.Null);
         var item = (await Lista()).Items.Single();
         item.Anulable.Should().BeFalse();
         item.AnulableHasta.Should().BeEmpty();
