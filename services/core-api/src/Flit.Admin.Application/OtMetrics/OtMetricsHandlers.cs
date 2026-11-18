@@ -147,6 +147,20 @@ public sealed class GetOtReportHandler(IOtMetricsReadRepository repository)
             descending);
 }
 
+/// <summary>
+/// Trámites por cliente corporativo (Inicio del organismo): cuánto le radicó cada empresa en el
+/// periodo, por familia. Mismo universo que el informe del periodo.
+/// </summary>
+public sealed class GetOtClientsByFamilyHandler(IOtMetricsReadRepository repository)
+{
+    public Task<OtClientsByFamilyDto?> HandleAsync(
+        Guid otTenantId,
+        OtMetricsFilter filter,
+        Guid? transitOfficeIdOverride,
+        CancellationToken cancellationToken = default) =>
+        repository.GetClientsByFamilyAsync(otTenantId, filter, transitOfficeIdOverride, cancellationToken);
+}
+
 /// <summary>Empresas cliente del organismo para el filtro del reporte.</summary>
 public sealed class ListOtClientCompaniesHandler(IOtMetricsReadRepository repository)
 {

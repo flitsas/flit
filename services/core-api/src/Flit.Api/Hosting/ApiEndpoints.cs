@@ -161,6 +161,7 @@ internal static class ApiEndpoints
 
         // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
         app.MapAnalyticsEndpoints();
+        app.MapGestorDashboardEndpoints(); // Inicio del Gestor (rediseño de los 3 dashboards)
         app.MapDashboardActiveModulesEndpoints(); // HU #12251 (Feature #12249) — flags de módulos activos, sin AdminCompanyPolicy
         app.MapDetailedReportEndpoints(); // Feature #10813
         app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
@@ -171,6 +172,7 @@ internal static class ApiEndpoints
         app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
         app.MapCompanyQueriesEndpoints(); // Consultas propias de la empresa
         app.MapSuperAdminQueriesEndpoints(); // Consultas de SuperAdmin sobre todas las compañías
+        app.MapSuperAdminDashboardEndpoints(); // Inicio del SuperAdmin: compañías y organismos (rediseño de los 3 dashboards)
         app.MapIctQueriesEndpoints(); // Consultas propias de la empresa sobre sus pre-trámites de ICT
         app.MapIctReportsEndpoints(); // Reportes de ICT en vivo (HU #11617)
         app.MapUsageEventsEndpoints(); // Reportes2 HU-A
