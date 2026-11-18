@@ -1771,6 +1771,16 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 ChangedAt = p.ChangedAt,
                 ActorNombre = StatusHistoryModificacionLectura.NombreActor(p.Campo, p.CreatedBy, nombre),
                 ActorCompania = StatusHistoryModificacionLectura.CompaniaActor(p.Campo, p.CreatedBy, compania),
+                Documento = p.Documento is { } d
+                    ? new OtDocumentoActualizado
+                    {
+                        Tipo = d.Tipo,
+                        AttachmentId = d.AttachmentId,
+                        Filename = d.Filename,
+                        AnteriorAttachmentId = d.AnteriorAttachmentId,
+                        AnteriorFilename = d.AnteriorFilename,
+                    }
+                    : null,
             };
         }).ToList();
 

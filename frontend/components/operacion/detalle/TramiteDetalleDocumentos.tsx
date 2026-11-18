@@ -17,6 +17,7 @@ import {
 import { documentLabel } from '@/lib/tramites/document-labels';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
+import { soloHistoricos, soloVigentes } from '@/lib/documents/vigencia';
 import { formatFechaHora } from '@/lib/format/date';
 import {
   ATTACHMENT_SOURCE_LABELS,
@@ -154,6 +155,45 @@ function AdjuntoRow({
 }
 
 /**
+ * Bug #14604 — versiones anteriores de documentos (reemplazadas por una carga del administrador).
+ * Colapsable y sin contar para el checklist: solo se pueden abrir/descargar, con su fecha de carga.
+ */
+function VersionesAnteriores({
+  historicos,
+  onDownload,
+}: {
+  historicos: ProcedureAttachment[];
+  onDownload: (attachment: ProcedureAttachment) => void;
+}) {
+  if (historicos.length === 0) return null;
+  return (
+    <details className="rounded-xl border border-border px-3 py-2">
+      <summary className="cursor-pointer text-xs font-semibold text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand">
+        Versiones anteriores ({historicos.length})
+      </summary>
+      <ul className="mt-2 flex flex-col gap-2" aria-label="Versiones anteriores de documentos">
+        {historicos.map((a) => (
+          <li
+            key={a.id}
+            className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-border"
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-medium text-foreground">
+                {documentLabel(a.tipo)} · {a.filename}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Versión anterior · Cargado el {formatFechaHora(a.uploadedAt)}
+              </span>
+            </span>
+            <DownloadButton filename={a.filename} onClick={() => onDownload(a)} />
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+/**
  * HU #12411 — fila de un adjunto de la red: metadatos + «Ver» y «Descargar» (nada más). Los dos
  * botones llevan el nombre del archivo en su nombre accesible para que, navegando por lista de
  * botones, «Ver soat.pdf» y «Ver fur.pdf» sean distinguibles.
@@ -278,6 +318,8 @@ function TramiteDetalleDocumentosConsulta({ instanceId, tenantId }: SeccionDetal
     );
   }
 
+  const historicosConsulta = soloHistoricos(attachments);
+
   if (attachments.length === 0) {
     return (
       <TarjetaDetalle titulo={titulo} accion={<RotuloSoloConsulta />}>
@@ -293,7 +335,7 @@ function TramiteDetalleDocumentosConsulta({ instanceId, tenantId }: SeccionDetal
           className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
           aria-label="Documentos del trámite (solo consulta)"
         >
-          {attachments.map((a) => (
+          {soloVigentes(attachments).map((a) => (
             <ConsultaRow
               key={a.id}
               attachment={a}
@@ -303,6 +345,11 @@ function TramiteDetalleDocumentosConsulta({ instanceId, tenantId }: SeccionDetal
           ))}
         </ul>
       </TarjetaDetalle>
+
+      <VersionesAnteriores
+        historicos={historicosConsulta}
+        onDownload={(att) => void preview.download(att)}
+      />
 
       {/* 403/404 de alcance: solo texto. 503 audit_unavailable: texto + «Reintentar». */}
       <AvisoDescargaFallida preview={preview} />
@@ -374,7 +421,10 @@ function TramiteDetalleDocumentosPropio({ instanceId, tenantId }: SeccionDetalle
   const checklistDocTipos = new Set(
     checklist.map((i) => i.docTipo?.toLowerCase()).filter(Boolean),
   );
-  const otrosAdjuntos = attachments.filter(
+  const vigentes = soloVigentes(attachments);
+  // Bug #14604 — versiones anteriores: se ven y se descargan, pero no cuentan como el documento vigente.
+  const historicos = soloHistoricos(attachments);
+  const otrosAdjuntos = vigentes.filter(
     (a) => a.source !== 'system' && !checklistDocTipos.has(a.tipo.toLowerCase()),
   );
   const isEmpty = checklist.length === 0 && otrosAdjuntos.length === 0;
@@ -423,7 +473,7 @@ function TramiteDetalleDocumentosPropio({ instanceId, tenantId }: SeccionDetalle
         ) : (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Requisitos del trámite">
             {checklist.map((item) => {
-              const attachment = findAttachmentByDocTipo(attachments, item.docTipo);
+              const attachment = findAttachmentByDocTipo(vigentes, item.docTipo);
               return (
                 <RequisitoRow
                   key={item.key}
@@ -450,6 +500,8 @@ function TramiteDetalleDocumentosPropio({ instanceId, tenantId }: SeccionDetalle
           </ul>
         </TarjetaDetalle>
       ) : null}
+
+      <VersionesAnteriores historicos={historicos} onDownload={(att) => void preview.download(att)} />
 
       {/* Fallo de una descarga directa: el visor no llega a abrirse, así que el aviso va aquí (mismo
           patrón que TramiteDetalleModal / TramiteDocumentosModal). */}

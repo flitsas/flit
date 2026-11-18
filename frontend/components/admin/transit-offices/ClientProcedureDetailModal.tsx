@@ -23,6 +23,7 @@ import { OtDetalleActores } from "./detalle/OtDetalleActores";
 import { OtDetalleShell } from "./detalle/OtDetalleShell";
 import { OtDetalleTramiteVehiculo } from "./detalle/OtDetalleTramiteVehiculo";
 import { OtDetalleDocumentos } from "./detalle/OtDetalleDocumentos";
+import { useOtVisorArchivo } from "./detalle/useOtVisorArchivo";
 import { OtCargando } from "./detalle/OtDetallePrimitivos";
 import { pendientesDelTramite } from "./detalle/ot-detalle-pendientes";
 import {
@@ -84,6 +85,7 @@ function modificacionesComoTarjetas(filas: OtClientProcedureModificacion[]) {
     changedByUserId: null,
     changedByName: m.actorNombre ?? null,
     changedByCompania: m.actorCompania ?? null,
+    documento: m.documento ?? null,
   }));
   return mapModificacionesToTimelineNodes(rows);
 }
@@ -220,6 +222,8 @@ export function ClientProcedureDetailModal({
   }, [open, procedure, scope, initialSection, initialPanel]);
 
   const row = detail ?? procedure;
+  // Bug #14604 — «Ver» del archivo nuevo o anterior de un documento actualizado, desde la línea de tiempo.
+  const visorArchivo = useOtVisorArchivo(procedure?.id ?? "", scope);
   if (!open || !row) return null;
 
   const alternar = (id: OtDetalleSeccionId) =>
@@ -474,6 +478,7 @@ export function ClientProcedureDetailModal({
             <TimelineTrackPanel
               title="Línea de tiempo del trámite"
               nodes={timelineNodes}
+              onVerDocumento={(a) => void visorArchivo.abrir(a)}
               emptyMessage={
                 row.modificaciones != null
                   ? "Todavía no hay modificaciones"
@@ -481,6 +486,7 @@ export function ClientProcedureDetailModal({
               }
             />
           )}
+          {visorArchivo.visor}
         </div>
       ) : null}
 

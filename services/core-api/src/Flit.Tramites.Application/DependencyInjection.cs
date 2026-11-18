@@ -276,6 +276,8 @@ public static class DependencyInjection
         // HU #12158 — acciones avanzadas del admin sobre el consolidado (limpiar/cargar externo).
         services.AddScoped<LimpiarConsolidadoHandler>();
         services.AddScoped<CargarConsolidadoExternoHandler>();
+        services.AddScoped<AdminDocumentoTiposHandler>(); // Bug #14604 — tipos de documento que el admin puede cargar
+        services.AddScoped<AdminCargarDocumentoHandler>(); // Bug #14604 — carga administrativa de documentos en cualquier estado
         // HU #14547 — «Regenerar mandato y consolidado» (solo SuperAdmin).
         services.AddScoped<RegenerarMandatoYConsolidadoHandler>();
         // HU #12159 — cambio de estado administrativo (sin TramiteStateMachine, excluye 'aprobado').

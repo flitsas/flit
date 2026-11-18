@@ -37,6 +37,7 @@ import { OT_BLUE, OT_GREEN } from "./ot-detalle-visual";
 
 import { formatFechaHora } from "@/lib/format/date";
 import { COPY } from "@/lib/copy/copy-catalog";
+import { soloHistoricos, soloVigentes } from "@/lib/documents/vigencia";
 export interface OtDetalleDocumentosProps {
 
   /** ID del trámite de cliente OT. */
@@ -439,7 +440,10 @@ export function OtDetalleDocumentos({
               <OtVacio mensaje="Este trámite no tiene documentos adjuntos." />
             ) : null}
             <ul className="grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
-            {attachments.map((att) => (
+            {[
+              ...soloVigentes(attachments).map((att) => ({ att, anterior: false })),
+              ...soloHistoricos(attachments).map((att) => ({ att, anterior: true })),
+            ].map(({ att, anterior }) => (
               <li
                 key={att.id}
                 className="flex items-center gap-2 rounded-xl border border-border px-3 py-2"
@@ -465,7 +469,7 @@ export function OtDetalleDocumentos({
                     {att.filename}
                   </span>
                   <span className="block truncate text-[10px] opacity-60">
-                    {[att.tipo, formatSize(att.sizeBytes), att.uploadedAt && formatDate(att.uploadedAt)]
+                    {[anterior ? "Versión anterior" : null, att.tipo, formatSize(att.sizeBytes), att.uploadedAt && formatDate(att.uploadedAt)]
                       .filter(Boolean)
                       .join(" · ")}
                   </span>

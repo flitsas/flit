@@ -172,12 +172,13 @@ public sealed class AdminTramiteAuthorizationTests
         "AdminTramiteCargarConsolidado",
         "AdminTramiteReenviarValidacion",
         "AdminTramiteReasignarGestor",
+        "AdminTramiteCargarDocumento", // Bug #14604
     ];
 
-    // ── Catálogo — exactamente los 6 slugs esperados por la HU, sin duplicados ──
+    // ── Catálogo — exactamente los 7 slugs esperados (6 de la HU #12157 + Bug #14604), sin duplicados ──
 
     [Fact]
-    public void Catalog_ContainsExactlySixExpectedSlugs()
+    public void Catalog_ContainsExactlySevenExpectedSlugs()
     {
         AdminTramiteAuthorization.AllSlugs.Should().BeEquivalentTo(ExpectedSlugs);
 

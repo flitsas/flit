@@ -379,6 +379,8 @@ export interface OtProcedureAttachment {
   sha256: string;
   source: string;
   uploadedAt: string;
+  /** Bug #14604 — versión anterior reemplazada por una carga del admin (ausente = vigente). */
+  isHistorico?: boolean;
 }
 
 /** Genera (o regenera) el expediente consolidado de un trámite de cliente OT. */
