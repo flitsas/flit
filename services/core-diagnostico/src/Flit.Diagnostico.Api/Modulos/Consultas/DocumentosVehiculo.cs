@@ -1,6 +1,8 @@
+using System.Security.Cryptography;
 using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
+using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
@@ -12,11 +14,11 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// Documentos de persona que trae el RUNT del vehículo (HU #13730, F03-C5, D-02, R-3, plan §9.3): el del propietario y, si la
 /// respuesta trae locatario, el del locatario, cifrados con <see cref="IProtectorDocumentoPersona"/> antes de tocar la entidad.
 /// Solo se guardan tipo y número cifrado: el RUNT normalizado ya no trae nombres (<see cref="Mapeos.MapperIntempo"/>). La precedencia
-/// del locatario es la de <see cref="ResolucionLocatario"/>: el del proveedor reemplaza al declarado con origen
-/// <c>PROVEEDOR</c> y el declarado pasa, tal como estaba cifrado, a <c>locatario_declarado_doc_*</c> (respaldo, HU #13730b);
-/// si no viene, se conserva el que había y el respaldo queda vacío. En estas columnas (D2) va el primero que informa el proveedor;
-/// TODAS las personas van a <c>personas_vehiculo</c> (<see cref="Personas"/>, HU #13790). Nada de esto se loguea ni sale en
-/// excepciones.
+/// del locatario es la de <see cref="ResolucionLocatario"/>: el del proveedor reemplaza al guardado con origen <c>PROVEEDOR</c>;
+/// si no viene, se conserva el que había. En estas columnas (D2) va el primero que informa el proveedor; TODAS las personas van a
+/// <c>personas_vehiculo</c> (<see cref="Personas"/>, HU #13790). Desde HU #14582 el documento que captura el cliente es el
+/// propietario actual declarado (<c>propietario_declarado_doc_*</c>): no es locatario ni persona, y en la misma transacción se fija
+/// <c>cambio_propietario</c> (<see cref="FijarCambioPropietario"/>). Nada de esto se loguea ni sale en excepciones.
 /// </summary>
 /// <example>
 /// <code>
@@ -67,19 +69,12 @@ internal static class DocumentosVehiculo
             ReemplazarLocatario(destino, tipo, (byte[])locatario.Clone());
     }
 
-    /// <summary>El locatario que trae el proveedor reemplaza al guardado (<see cref="ResolucionLocatario"/>); el declarado pasa al respaldo.</summary>
+    /// <summary>El locatario que trae el proveedor reemplaza al guardado (<see cref="ResolucionLocatario"/>).</summary>
     private static void ReemplazarLocatario(VehiculoDiagnostico vehiculo, string tipo, byte[] cifrado)
     {
         var decision = ResolucionLocatario.Resolver(vehiculo.LocatarioDocOrigen, proveedorLoTrae: true);
         if (!decision.Reemplazar)
             return;
-
-        // El declarado no se pierde (HU #13730b): sus bytes ya cifrados pasan al respaldo antes de reemplazarlo.
-        if (ResolucionLocatario.RespaldarDeclarado(vehiculo.LocatarioDocOrigen, proveedorLoTrae: true))
-        {
-            vehiculo.LocatarioDeclaradoDocTipo = vehiculo.LocatarioDocTipo;
-            vehiculo.LocatarioDeclaradoDocCifrado = vehiculo.LocatarioDocCifrado;
-        }
 
         vehiculo.LocatarioDocTipo = tipo;
         vehiculo.LocatarioDocCifrado = cifrado;
@@ -90,8 +85,7 @@ internal static class DocumentosVehiculo
     /// Todas las personas del vehículo que trae el RUNT (HU #13790, F05-C3, decisión Q1), cifradas, para la transacción que cierra
     /// la celda: cada propietario y cada locatario del proveedor (<see cref="VehiculoRunt.Locatarios"/> ya es la unión de
     /// <c>lessee[]</c> y <c>locatarios[]</c>; aquí no se repite el mismo tipo y número), con orden 1, 2, 3… en el orden del
-    /// proveedor. Si el proveedor no trae locatario y el vehículo tiene uno declarado por el cliente, ese entra como LOCATARIO 1
-    /// con origen <c>DECLARADO_CLIENTE</c> y los mismos bytes cifrados de su columna. Se llama DESPUÉS de <see cref="Aplicar"/>.
+    /// proveedor. El declarado por el cliente ya no entra como persona (HU #14582 AC7): el locatario sale solo del RUNT.
     /// </summary>
     public static IReadOnlyList<PersonaVehiculo> Personas(VehiculoDiagnostico vehiculo, VehiculoRunt runt, IProtectorDocumentoPersona protector, DateTimeOffset ahora)
     {
@@ -107,17 +101,50 @@ internal static class DocumentosVehiculo
         var locatarios = SinRepetir(runt.Locatarios.Select(l => (l.TipoDocumento, l.NumeroDocumento)));
         personas.AddRange(locatarios.Select((l, i) =>
             Nueva(vehiculo, RolPersona.Locatario, i + 1, l.Tipo, protector.Proteger(l.Numero), OrigenDocumento.Proveedor, ahora)));
-
-        if (locatarios.Count == 0 && Declarado(vehiculo, ahora) is { } declarado)
-            personas.Add(declarado);
         return personas;
+    }
+
+    /// <summary>
+    /// Fija <c>cambio_propietario</c> (HU #14582, contrato §1.5, SP-1/SP-3) con <see cref="ComparacionPropietario"/>: el propietario
+    /// actual declarado del vehículo (se descifra aquí, una vez) frente a <paramref name="propietariosRunt"/>, en claro y solo en
+    /// memoria. Sin declarado queda null; si el declarado no se puede descifrar, también null. Se llama en la transacción que cierra
+    /// la celda RUNT (la consultada, la reprocesada y la reutilizada del mismo día) y en el backfill; las lecturas solo leen la columna.
+    /// No loguea nada: los propietarios con un tipo fuera de la tabla de sinónimos solo suman al contador
+    /// <see cref="MetricasDiagnostico.TiposNoHomologados"/> con <paramref name="origen"/> como única etiqueta (CR-4, §1.4).
+    /// </summary>
+    public static void FijarCambioPropietario(
+        VehiculoDiagnostico vehiculo, IReadOnlyList<(string Tipo, string Numero)> propietariosRunt, IProtectorDocumentoPersona protector,
+        string origen = MetricasDiagnostico.OrigenCierre)
+    {
+        ArgumentNullException.ThrowIfNull(vehiculo);
+        ArgumentNullException.ThrowIfNull(propietariosRunt);
+        ArgumentNullException.ThrowIfNull(protector);
+        MetricasDiagnostico.ContarTiposNoHomologados(origen, propietariosRunt.Count(p => HomologacionTipoDocumento.Canonico(p.Tipo) is null));
+        if (vehiculo.PropietarioDeclaradoDocTipo is not { } tipo || vehiculo.PropietarioDeclaradoDocCifrado is not { } cifrado)
+        {
+            vehiculo.CambioPropietario = null;
+            return;
+        }
+
+        string numero;
+        try
+        {
+            numero = protector.Desproteger(cifrado);
+        }
+        catch (CryptographicException)
+        {
+            vehiculo.CambioPropietario = null;
+            return;
+        }
+
+        vehiculo.CambioPropietario = ComparacionPropietario.Comparar((tipo, numero), propietariosRunt);
     }
 
     /// <summary>
     /// Las personas del vehículo <paramref name="destino"/> copiadas de las de <paramref name="origen"/> al reutilizar su RUNT
     /// del mismo día (HU #13790, AC3, F05-C11): mismo rol, orden, tipo, origen y bytes cifrados, sin descifrar. Como en
-    /// <see cref="Copiar"/>, el locatario declarado del origen nunca se copia: si el origen no tiene locatario del proveedor, entra
-    /// el declarado del propio destino. Si el origen se cerró antes de existir la tabla (D2, sin filas), se toman sus columnas
+    /// <see cref="Copiar"/>, solo se copian las del proveedor: las históricas DECLARADO_CLIENTE del origen no
+    /// (HU #14582). Si el origen se cerró antes de existir la tabla (D2, sin filas), se toman sus columnas
     /// <c>propietario_doc_*</c> y el locatario del proveedor. Se llama DESPUÉS de <see cref="Copiar"/>.
     /// </summary>
     public static IReadOnlyList<PersonaVehiculo> CopiarPersonas(
@@ -146,8 +173,6 @@ internal static class DocumentosVehiculo
             }
         }
 
-        if (!personas.Exists(p => p.Rol == RolPersona.Locatario) && Declarado(destino, ahora) is { } declarado)
-            personas.Add(declarado);
         return personas;
     }
 
@@ -188,11 +213,6 @@ internal static class DocumentosVehiculo
     private static List<(string Tipo, string Numero)> SinRepetir(IEnumerable<(string Tipo, string Numero)> documentos) =>
         documentos.Select(d => (Tipo: d.Tipo.Trim(), Numero: d.Numero.Trim())).Distinct().ToList();
 
-    /// <summary>El locatario declarado vigente del vehículo como persona (mismos bytes cifrados); null si no hay o no es el declarado.</summary>
-    private static PersonaVehiculo? Declarado(VehiculoDiagnostico vehiculo, DateTimeOffset ahora) =>
-        vehiculo.LocatarioDocOrigen == OrigenDocumento.DeclaradoCliente && vehiculo.LocatarioDocTipo is { } tipo && vehiculo.LocatarioDocCifrado is { } cifrado
-            ? Nueva(vehiculo, RolPersona.Locatario, 1, tipo, (byte[])cifrado.Clone(), OrigenDocumento.DeclaradoCliente, ahora)
-            : null;
 
     private static PersonaVehiculo Nueva(
         VehiculoDiagnostico vehiculo, RolPersona rol, int orden, string tipo, byte[] cifrado, OrigenDocumento origen, DateTimeOffset ahora) => new()

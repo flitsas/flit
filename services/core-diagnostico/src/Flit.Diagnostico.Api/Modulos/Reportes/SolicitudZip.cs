@@ -131,7 +131,7 @@ internal sealed partial class SolicitudZip(
     {
         var evidencia = await LeerAsync(diagnosticoId, evidenciaId, ct).ConfigureAwait(false);
         if (evidencia is not { Estado: EstadoEvidencia.Lista, ArchivoRef: { } referencia })
-            throw ReglaException.Conflicto(CodigoNoLista, "El ZIP todavía no está listo: consulta su estado y descárgalo cuando esté LISTA.");
+            throw ReglaException.Conflicto(CodigoNoLista, "El ZIP todavía no está listo: consulta su estado y descárgalo cuando esté listo.");
         var contenido = await almacen.AbrirAsync(referencia, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("El archivo del ZIP");
         return (contenido, EmpaquetadorZip.NombreArchivo(evidencia.DiagnosticoId));
     }

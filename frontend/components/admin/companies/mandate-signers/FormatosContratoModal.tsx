@@ -1,8 +1,8 @@
 "use client";
 
-import { FileText } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import type { CompanyTransitOfficeOption } from "@/lib/api/admin-mandate-signers";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * HU #13174 — formato de contrato de mandato que cada organismo de tránsito aplica a la compañía.
@@ -19,17 +19,17 @@ export function FormatosContratoModal({
     <Modal
       open
       onClose={onClose}
-      icon={FileText}
+      icono="documento"
       iconBg="var(--color-flit-brand)"
       title="Formatos de contrato"
-      titleClassName="text-base font-bold text-flit-primary dark:text-white"
+      titleClassName="text-base font-bold text-flit-primary"
       size="md"
     >
       <div className="space-y-3 text-xs" data-testid="formatos-contrato-compania">
-        <p className="text-[#59677D] dark:text-white/65">
+        <p className="text-muted-foreground">
           Formato con el que se redacta el contrato de mandato de tu compañía en cada organismo de tránsito.
         </p>
-        <ul className="divide-y divide-[#E3EAF5] overflow-hidden rounded-xl border border-[#E3EAF5] dark:divide-white/10 dark:border-white/10">
+        <ul className="divide-y divide-border overflow-hidden rounded-xl border border-border">
           {offices
             .filter((o) => o.formatName)
             .map((o) => (
@@ -37,11 +37,11 @@ export function FormatosContratoModal({
                 key={o.transitOfficeId}
                 className="flex flex-col gap-0.5 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
               >
-                <span className="font-medium text-flit-primary dark:text-white">{o.name}</span>
+                <span className="font-medium text-flit-primary">{o.name}</span>
                 <span
-                  className="w-fit rounded-full px-2.5 py-0.5 text-xs font-semibold"
-                  style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10%, transparent)", color: "#3F5FD0" }}
+                  {...etiquetaKit("info", { className: "w-fit" })}
                 >
+                  <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                   {o.formatName}
                 </span>
               </li>

@@ -218,7 +218,8 @@ public sealed class RuntPersonLookupHandler(
             Fines: null);
     }
 
-    // Mapeo documentType FLIT → Verifik: CC→CC, CE→CE, PAS→PA, TI→PPT, NIT→null (no soportado)
+    // Mapeo documentType FLIT → Verifik: CC→CC, CE→CE, PAS→PA, TI→PPT (alias de integración),
+    // PPT nativo→PPT (HU #14501 / ADR-0082; no confundir con el alias de TI), NIT→null.
     private static string? MapDocumentType(string documentType) =>
         documentType.ToUpperInvariant() switch
         {
@@ -226,6 +227,7 @@ public sealed class RuntPersonLookupHandler(
             "CE" => "CE",
             "PAS" => "PA",
             "TI" => "PPT",
+            "PPT" => "PPT",
             "NIT" => null,
             _ => documentType
         };

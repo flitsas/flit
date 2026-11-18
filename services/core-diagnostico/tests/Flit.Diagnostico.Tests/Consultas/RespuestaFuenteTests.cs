@@ -102,7 +102,7 @@ public sealed class RespuestaFuenteTests
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
         celda.Estado.Should().Be(EstadoCelda.Completado);
         var personas = MotorPersonas.PersonasDelPayload(celda.Payload);
-        var mapa = JsonDocument.Parse(Descifrar(api, (await CifradaAsync(api, celda.Id, ct))!)).RootElement;
+        var mapa = JsonElement.Parse(Descifrar(api, (await CifradaAsync(api, celda.Id, ct))!));
         mapa.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["1", "2", "3"], "una respuesta por persona, por su orden");
         foreach (var persona in personas)
         {
@@ -137,9 +137,9 @@ public sealed class RespuestaFuenteTests
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST301", Fuente.RuntPropietario, ct);
         var cifrada = (await CifradaAsync(api, celda.Id, ct))!;
         Encoding.UTF8.GetString(cifrada).Should().NotContainAny(["FICTICIA DOBLE", "licencias", "legalRepresentatives"], "va cifrada, nunca en claro");
-        var mapa = JsonDocument.Parse(Descifrar(api, cifrada)).RootElement;
+        var mapa = JsonElement.Parse(Descifrar(api, cifrada));
         var crudas = mapa.EnumerateObject()
-            .Select(p => JsonDocument.Parse(p.Value.GetString()!).RootElement.GetProperty("resultado").GetProperty("respuesta_cruda"))
+            .Select(p => JsonElement.Parse(p.Value.GetString()!).GetProperty("resultado").GetProperty("respuesta_cruda"))
             .ToList();
         crudas.Should().HaveCount(trabajos.Count, "cada persona guarda su respuesta con el crudo del proveedor");
         foreach (var cruda in crudas)
@@ -147,10 +147,10 @@ public sealed class RespuestaFuenteTests
             var proveedor = cruda.GetProperty("proveedor").GetString();
             var json = cruda.GetProperty("json").GetString()!;
             if (proveedor == "verifik_rues")
-                json.Should().Be(ConsultasSimuladas.CrudoRues(JsonDocument.Parse(json).RootElement.GetProperty("data").GetProperty("commercialRegistry").GetProperty("NIT").GetString()!),
+                json.Should().Be(ConsultasSimuladas.CrudoRues(JsonElement.Parse(json).GetProperty("data").GetProperty("commercialRegistry").GetProperty("NIT").GetString()!),
                     "el texto exacto del proveedor");
             else
-                json.Should().Be(ConsultasSimuladas.CrudoConductor(JsonDocument.Parse(json).RootElement.GetProperty("persona").GetProperty("documento").GetString()!));
+                json.Should().Be(ConsultasSimuladas.CrudoConductor(JsonElement.Parse(json).GetProperty("persona").GetProperty("documento").GetString()!));
         }
 
         crudas.Select(c => c.GetProperty("proveedor").GetString()).Should().Contain("kyverum_runt_conductor");

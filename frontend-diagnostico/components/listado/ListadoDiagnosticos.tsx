@@ -3,18 +3,29 @@
 import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ClipboardList, SearchX } from "lucide-react";
+import { EstadoVacio } from "@flit/ui/EstadoVacio";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Pagination } from "@flit/ui/Pagination";
-import { BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@flit/ui/table-styles";
+import { BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, FOCO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { fechaDelDato } from "@/components/tablero/CeldaSemaforo";
 import {
   CABECERA_TABLA_CLS,
   CABECERA_TABLA_ESTILO,
   CELDA_TABLA_CLS,
+  CONTENEDOR_TABLA_CLS,
   Etiqueta,
   FILA_TABLA_CLS,
+  FILA_TABLA_HOVER_CLS,
 } from "@/components/tablero/vistasDetalle/comun";
 import {
   destinoConFiltros,
@@ -25,6 +36,7 @@ import {
   idCorto,
   listarDiagnosticos,
   nombreModo,
+  nombreTipoTramite,
   traducirErrorListado,
   urlListado,
   type ErrorListado,
@@ -37,20 +49,14 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorListado } | { t
 
 const COLUMNAS = ["ID", "Nombre", "Creado", "Modalidad", "Tipo", "Trámite", "Estado", "Creador"] as const;
 
+/** Celda del listado; por debajo de 900 px, renglón de la tarjeta con su columna en `data-label` (HU #14562 AC56). */
+const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
+
 /** HU #14087: modalidad del lote según `es_express`; «Tipo» (Simple / Con análisis IA) sigue aparte. */
 const modalidad = (esExpress: boolean) => (esExpress ? "Express" : "Masivo");
 
-const TEXTO_SECUNDARIO = "max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300";
-
-function Vacio({ titulo, Icono, children }: { titulo: string; Icono: typeof ClipboardList; children?: ReactNode }) {
-  return (
-    <div className="flex flex-col items-center gap-3 py-10 text-center">
-      <Icono className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
-      <h3 className="text-lg font-semibold">{titulo}</h3>
-      {children}
-    </div>
-  );
-}
+const IconoBuscar = iconoComo("buscar");
+const IconoPortapapeles = iconoComo("portapapeles");
 
 /**
  * Listado de diagnósticos de la compañía en el inicio (HU #13852, F08-H2; F08-C1/C2/C5/C6/C7), debajo de la captura
@@ -58,9 +64,10 @@ function Vacio({ titulo, Icono, children }: { titulo: string; Icono: typeof Clip
  * Tabla con ID corto, nombre, fecha (hora Colombia), modalidad (Express o Masivo, HU #14087), tipo, trámite, chip de estado («Sin lanzar» para CREADO) y creador
  * tal como llega («No disponible» incluido). Clic en la fila o Enter en su enlace abre el tablero, o la carga de vehículos
  * si el lote está sin lanzar. Cuatro estados: cargando, error (400 con campo junto a su filtro, 403 a la página de acceso
- * negado, el resto con Reintentar), vacío (compañía sin diagnósticos, distinto de filtros sin resultados) y lleno.
+ * negado, el resto con Reintentar), vacío (compañía sin diagnósticos, distinto de filtros sin resultados) y lleno. Por debajo
+ * de 900 px cada diagnóstico es una tarjeta (recetas TABLA_MOVIL_*, HU #14562 AC56), con el nombre de título.
  */
-export function ListadoDiagnosticos() {
+export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boolean }) {
   const router = useRouter();
   const params = useSearchParams();
   const clave = params.toString();
@@ -120,7 +127,7 @@ export function ListadoDiagnosticos() {
 
   let contenido: ReactNode;
   if (carga.tipo === "cargando" || acceso) {
-    contenido = <VehicleLoader label="Cargando los diagnósticos…" />;
+    contenido = <VehicleLoader label="Cargando diagnósticos…" />;
   } else if (carga.tipo === "error" && carga.error.tipo === "CAMPO") {
     contenido = (
       <InlineAlert tone="warning" title="Revisa los filtros">
@@ -131,38 +138,63 @@ export function ListadoDiagnosticos() {
     contenido = (
       <InlineAlert
         tone="error"
-        title="No se pudieron cargar los diagnósticos"
+        title="No pudimos cargar el listado"
         action={
           <button type="button" onClick={reintentar} className={BOTON_REINTENTAR_CLS}>
             Reintentar
           </button>
         }
       >
-        {carga.error.tipo === "AVISO" ? carga.error.mensaje : "Intenta de nuevo en un momento."}
+        {carga.error.tipo === "AVISO" ? carga.error.mensaje : "Revisa tu conexión. Tus diagnósticos siguen procesándose."}
       </InlineAlert>
     );
   } else if (carga.lista.diagnosticos.length === 0 && hayFiltros(filtros)) {
     contenido = (
-      <Vacio titulo="No hay diagnósticos con estos filtros" Icono={SearchX}>
-        <p className={TEXTO_SECUNDARIO}>Cambia las fechas, el tipo, el estado o el nombre, o quita los filtros.</p>
-        <button type="button" onClick={limpiar} className={BOTON_SECUNDARIO_CLS}>
-          Limpiar filtros
-        </button>
-      </Vacio>
+      <EstadoVacio
+        anunciar
+        nivelTitulo={3}
+        icono={<IconoBuscar className="h-7 w-7" aria-hidden="true" strokeWidth={1.5} />}
+        titulo="Ningún diagnóstico coincide"
+        mensaje="Prueba con otro rango de fechas o quita algún filtro."
+        acciones={[
+          <button key="limpiar" type="button" onClick={limpiar} className={BOTON_SECUNDARIO_CLS}>
+            Limpiar filtros
+          </button>,
+        ]}
+      />
     );
   } else if (carga.lista.diagnosticos.length === 0) {
     contenido = (
-      <Vacio titulo="Todavía no hay diagnósticos" Icono={ClipboardList}>
-        <p className={TEXTO_SECUNDARIO}>Aquí verás los diagnósticos vehiculares de tu compañía cuando empiecen a registrarse.</p>
-      </Vacio>
+      <EstadoVacio
+        nivelTitulo={3}
+        icono={<IconoPortapapeles className="h-7 w-7" aria-hidden="true" strokeWidth={1.5} />}
+        titulo="Aún no tienes diagnósticos"
+        mensaje={
+          puedeCrear
+            ? "Diagnostica un vehículo con su placa o carga un archivo con tu flota."
+            : "Aquí verás los diagnósticos vehiculares de tu compañía cuando empiecen a registrarse."
+        }
+        acciones={
+          puedeCrear
+            ? [
+                <Link key="express" href="/diagnosticos/nuevo?modo=express" className={BOTON_PRIMARIO_CLS}>
+                  Diagnosticar un vehículo
+                </Link>,
+                <Link key="masivo" href="/diagnosticos/nuevo?modo=masivo" className={BOTON_SECUNDARIO_CLS}>
+                  Cargar archivo
+                </Link>,
+              ]
+            : undefined
+        }
+      />
     );
   } else {
     const { lista } = carga;
     contenido = (
       <div className="flex flex-col gap-3">
-        <div className="overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10">
-          <table aria-label="Diagnósticos de la compañía" className="w-full min-w-[940px] border-collapse text-sm">
-            <thead>
+        <div className={CONTENEDOR_TABLA_CLS}>
+          <table aria-label="Diagnósticos de la compañía" className={`w-full min-w-[940px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
+            <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
                 {COLUMNAS.map((t) => (
                   <th key={t} scope="col" className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
@@ -171,10 +203,10 @@ export function ListadoDiagnosticos() {
                 ))}
               </tr>
             </thead>
-            <tbody>
+            <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {lista.diagnosticos.map((d) => {
                 const destino = destinoConFiltros(destinoDiagnostico(d), filtros);
-                const estado = etiquetaEstado(d.estado);
+                const estado = etiquetaEstado(d.estado, d.estado_etiqueta);
                 return (
                   <tr
                     key={d.id}
@@ -183,35 +215,43 @@ export function ListadoDiagnosticos() {
                       if ((e.target as HTMLElement).closest("a")) return;
                       router.push(destino);
                     }}
-                    className={`${FILA_TABLA_CLS} cursor-pointer bg-white transition-colors hover:bg-[var(--color-flit-gray)]/40 dark:bg-transparent dark:hover:bg-white/[0.06]`}
+                    className={`${FILA_TABLA_CLS} ${FILA_TABLA_HOVER_CLS} cursor-pointer ${TABLA_MOVIL_ROW_CLS}`}
                   >
-                    <td className={`${CELDA_TABLA_CLS} font-mono tabular-nums`}>
+                    <td data-label="ID" className={`${CELDA_CLS} font-mono tabular-nums`}>
                       <span title={d.id}>{idCorto(d.id)}</span>
                     </td>
-                    <td className={CELDA_TABLA_CLS}>
+                    <td data-label="Nombre" className={`${CELDA_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>
                       <Link
                         href={destino}
-                        className={`text-sm font-semibold text-[var(--flit-brand-ink)] underline-offset-4 hover:underline dark:text-white ${FOCO_CLS}`}
+                        className={`text-sm font-semibold text-[var(--flit-brand-ink)] underline-offset-4 hover:underline ${FOCO_CLS}`}
                       >
                         {d.nombre}
                       </Link>
                     </td>
-                    <td className={`${CELDA_TABLA_CLS} whitespace-nowrap tabular-nums`}>{fechaDelDato(d.creado_en)}</td>
-                    <td className={CELDA_TABLA_CLS}>{modalidad(d.es_express)}</td>
-                    <td className={CELDA_TABLA_CLS}>{nombreModo(d.modo)}</td>
-                    <td className={CELDA_TABLA_CLS}>
+                    <td data-label="Creado" className={`${CELDA_CLS} whitespace-nowrap tabular-nums`}>
+                      {fechaDelDato(d.creado_en)}
+                    </td>
+                    <td data-label="Modalidad" className={CELDA_CLS}>
+                      {modalidad(d.es_express)}
+                    </td>
+                    <td data-label="Tipo" className={CELDA_CLS}>
+                      {nombreModo(d.modo)}
+                    </td>
+                    <td data-label="Trámite" className={CELDA_CLS}>
                       {d.tipo_tramite ? (
-                        d.tipo_tramite.nombre
+                        nombreTipoTramite(d.tipo_tramite)
                       ) : (
                         <span role="img" aria-label="Sin trámite">
                           —
                         </span>
                       )}
                     </td>
-                    <td className={CELDA_TABLA_CLS}>
+                    <td data-label="Estado" className={CELDA_CLS}>
                       <Etiqueta tono={estado.tono}>{estado.texto}</Etiqueta>
                     </td>
-                    <td className={CELDA_TABLA_CLS}>{d.usuario_creador.nombre}</td>
+                    <td data-label="Creador" className={CELDA_CLS}>
+                      {d.usuario_creador.nombre}
+                    </td>
                   </tr>
                 );
               })}
@@ -233,10 +273,10 @@ export function ListadoDiagnosticos() {
 
   return (
     <section aria-labelledby="listado-diagnosticos-titulo" className={`${TARJETA_CLS} flex flex-col gap-4`}>
-      <h2 id="listado-diagnosticos-titulo" className="text-lg font-semibold text-flit-primary dark:text-white">
+      <h2 id="listado-diagnosticos-titulo" className="text-lg font-semibold text-flit-primary">
         Diagnósticos
       </h2>
-      <FiltrosListado valor={filtros} error={errorCampo} onCambiar={aplicar} />
+      <FiltrosListado valor={filtros} error={errorCampo} onCambiar={aplicar} onLimpiar={hayFiltros(filtros) ? limpiar : undefined} />
       <div>{contenido}</div>
     </section>
   );

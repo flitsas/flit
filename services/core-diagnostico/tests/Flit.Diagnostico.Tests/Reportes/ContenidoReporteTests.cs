@@ -6,6 +6,7 @@ using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Reportes;
 using Flit.Diagnostico.Api.Modulos.Tablero;
+using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Catalogos;
@@ -130,6 +131,38 @@ public sealed class ContenidoReporteTests
         Texto(aMano).Should().NotContainAny(["MANUAL", "\"API\"", manual.UsuarioManualId!.Value.ToString()]);
     }
 
+    // HU #14563 B6 AC18 (CF-23) + hallazgo M1 (R-20, opción a) — avalúo llenado a mano con referencia Fasecolda: la referencia
+    // revela el llenado manual, así que no sale en el contenido del reporte de la compañía ni en su PDF; el valor sí.
+    [Fact]
+    public async Task B6_AC18_Referencia_Fasecolda_no_sale_en_el_contenido_ni_en_el_PDF()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.Avaluo], vehiculos:
+            [new("TST921", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.Avaluo, EstadoCelda.Pendiente, 1)])]);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST921", Fuente.Runt), PayloadRunt, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST921", Fuente.Avaluo),
+            """{"sin_valor_comercial":false,"valor_sugerido":52000000,"fuente_principal":"fasecolda","fuentes":[{"fuente":"fasecolda","estado":"OK","valor":52000000,"fecha":"2026-11-13"}],"referencia":{"codigo_fasecolda":"01601234","marca":"MARCA PRUEBA","linea":"LINEA PRUEBA","modelo":2020}}""",
+            ct, manual: true);
+
+        await using var db = empresa.Db();
+        var contenido = await Lector(api, db, new UsuariosIdentidadDePrueba())
+            .VehiculoAsync(Usuario(empresa.Id), lote.Id, lote.Vehiculos.Single().Id, ct);
+
+        var avaluo = contenido.Secciones.Single(s => s.Fuente == "AVALUO").Resultado;
+        var json = JsonSerializer.Serialize(avaluo, avaluo!.GetType());
+        json.Should().NotContain("referencia").And.NotContain("codigo_fasecolda").And.NotContain("01601234");
+        json.Should().Contain("\"valor_sugerido\":52000000");
+
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, Dato));
+        PdfDePrueba.Tiene(texto, "Código Fasecolda").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "01601234").Should().BeFalse();
+        PdfDePrueba.Tiene(texto, "MARCA PRUEBA").Should().BeFalse();
+        PdfDePrueba.Tiene(texto, "LINEA PRUEBA").Should().BeFalse();
+    }
+
     // AC3 (F07-C10) — RUNT_LOCATARIO con un locatario declarado: tipo de documento, «****» y los cuatro últimos, rótulo de
     // declarado y sin nombre; RUNT_PROPIETARIO en ERROR por una persona: esa persona y la sección «consulta no disponible», sin
     // TIMEOUT. Nada del documento completo ni del id interno de la persona en el contenido; la máscara entra en la huella.
@@ -188,6 +221,54 @@ public sealed class ContenidoReporteTests
         huella.Values.Should().NotContain(v => v != null && v.Contains("12345678", StringComparison.Ordinal));
     }
 
+    // HU #14582 (contrato §1.3, schema.md §2) — contenido del lote: cada vehículo trae su propietario actual declarado enmascarado
+    // («TIPO ****1234») y el cambio_propietario persistido; la persona histórica DECLARADO_CLIENTE no entra en la sección del
+    // locatario del Excel. El declarado completo no llega al contenido ni a la huella.
+    [Fact]
+    public async Task HU14582_lote_trae_el_declarado_enmascarado_el_cambio_y_sin_locatario_declarado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, alcance: [Fuente.Runt, Fuente.RuntLocatario], vehiculos:
+            [new("TST931", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.RuntLocatario, EstadoCelda.Pendiente, 1)]),
+             new("TST932", [new(Fuente.Runt, EstadoCelda.Pendiente, 1), new(Fuente.RuntLocatario, EstadoCelda.Pendiente, 1)])]);
+        var vehiculo = lote.Vehiculos.Single(v => v.Placa == "TST931").Id;
+        var historico = await PersonaAsync(api, empresa, vehiculo, RolPersona.Locatario, 1, "CC", "1012340000", ct, OrigenDocumento.DeclaradoCliente);
+        var deRunt = await PersonaAsync(api, empresa, vehiculo, RolPersona.Locatario, 2, "NIT", "900555444", ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST931", Fuente.Runt), PayloadRunt, ct);
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST931", Fuente.RuntLocatario), Personas(
+            (historico.Id, 1, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[]}""", null),
+            (deRunt.Id, 2, "RUNT_PERSONA", "OK", """{"inscrito":true,"estado_conductor":"ACTIVO","licencias":[]}""", null)), ct);
+        var protector = api.App.Services.GetRequiredService<IProtectorDocumentoPersona>();
+        await using (var escritura = empresa.Db())
+        {
+            var fila = await escritura.Set<VehiculoDiagnostico>().SingleAsync(v => v.Id == vehiculo, ct);
+            fila.PropietarioDeclaradoDocTipo = "CC";
+            fila.PropietarioDeclaradoDocCifrado = protector.Proteger("1020304050");
+            fila.CambioPropietario = true;
+            await escritura.SaveChangesAsync(ct);
+        }
+
+        await using var db = empresa.Db();
+        var delLote = await Lector(api, db, new UsuariosIdentidadDePrueba()).LoteAsync(Usuario(empresa.Id), lote.Id, ct);
+
+        var conDeclarado = delLote.Vehiculos.Single(v => v.Placa == "TST931");
+        conDeclarado.PropietarioDeclarado.Should().Be("CC ****4050");
+        conDeclarado.CambioPropietario.Should().BeTrue();
+        var locatarios = conDeclarado.Secciones.Single(s => s.Fuente == "RUNT_LOCATARIO").Personas;
+        locatarios.Should().ContainSingle("la persona histórica DECLARADO_CLIENTE no se pinta como locatario")
+            .Which.DocumentoEnmascarado.Should().Be("****5444");
+        locatarios!.Should().OnlyContain(p => !p.DeclaradoPorCliente && p.RotuloDeclarado == null);
+        var sinDeclarado = delLote.Vehiculos.Single(v => v.Placa == "TST932");
+        sinDeclarado.PropietarioDeclarado.Should().BeNull();
+        sinDeclarado.CambioPropietario.Should().BeNull();
+        var huella = delLote.ParaHuella();
+        huella.Values.Should().Contain(v => v != null && v.Contains("****4050", StringComparison.Ordinal), "el declarado enmascarado entra en la huella");
+        huella.Values.Should().NotContain(v => v != null && (v.Contains("1020304050", StringComparison.Ordinal) || v.Contains("1012340000", StringComparison.Ordinal)));
+    }
+
     // AC1 (F07-C3) y Q7 — N/A con su motivo en código y en texto; una fuente del vehículo en ERROR sale «consulta no disponible»
     // sin tipo de error, causa ni fecha del intento.
     [Fact]
@@ -210,7 +291,7 @@ public sealed class ContenidoReporteTests
         var na = contenido.Secciones.Single(s => s.Fuente == "SIMIT_LOCATARIO");
         na.Estado.Should().Be(EstadoSeccion.NoAplica);
         na.MotivoNa.Should().Be("SIN_DOCUMENTO_LOCATARIO");
-        na.Leyenda.Should().Be("El vehículo está sin el documento del locatario: no hay a quién consultar.");
+        na.Leyenda.Should().Be("El RUNT no reporta locatario");
         na.Resultado.Should().BeNull();
         na.Personas.Should().BeEmpty();
         var error = contenido.Secciones.Single(s => s.Fuente == "SIMIT_VEHICULO");

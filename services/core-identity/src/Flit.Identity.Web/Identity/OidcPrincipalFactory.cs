@@ -44,6 +44,10 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
     /// </summary>
     public async Task<OidcGrant> ForUserAsync(ClaimsPrincipal source, string product, IEnumerable<string> scopes, CancellationToken ct)
     {
+        // La caja del organismo es un módulo de FLIT 2.0 (ADR-0082), no un producto con sesión propia: ya no se emiten tokens del producto caja.
+        if (string.Equals(product, ProductCodes.Caja, StringComparison.Ordinal))
+            return OidcGrant.Denied(ProductNotEnabled);
+
         var email = source.FindFirstValue(Claims.Email);
         var userId = source.FindFirstValue(Claims.Subject);
         var user = string.IsNullOrWhiteSpace(email) ? null : await users.FindByEmailAsync(email, ct).ConfigureAwait(false);
@@ -69,9 +73,10 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
         }
         else
         {
-            // HU #14454 (ADR-0082): quien solo tiene ot_caja trabaja en el portal de caja. Ni el hub ni Trámites le emiten token:
-            // el hub no exige rol y el tenant del OT pasaría OtModulePolicy por su tipo de entidad.
-            if (product != ProductCodes.Caja && CajaOnly.IsCajaOnly(user.ActiveRoles.Select(r => r.Code)))
+            // La caja ya no es un portal con sesión propia (ADR-0082): quien solo tiene ot_caja usa FLIT 2.0 con el JWT heredado (login normal),
+            // donde conserva su rol ot_caja y core-api lo limita a la caja. Un token OIDC de producto NO lleva ese rol (los roles son los del
+            // producto), así que no se le emite: el tenant del OT pasaría OtModulePolicy por su tipo de entidad sin que nada lo reconociera solo-caja.
+            if (CajaOnly.IsCajaOnly(user.ActiveRoles.Select(r => r.Code)))
                 return OidcGrant.Denied(CajaOnly.DeniedCode);
 
             var grant = await access.ResolveAsync(user.UserId, user.TenantId, product, ct).ConfigureAwait(false);

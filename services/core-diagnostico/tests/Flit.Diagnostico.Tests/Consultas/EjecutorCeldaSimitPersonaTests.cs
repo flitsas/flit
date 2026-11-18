@@ -151,7 +151,7 @@ public sealed class EjecutorCeldaSimitPersonaTests
         var procesador = Motor.Bus(api, maxReintentos: 1);
 
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
-        reloj.Avanzar(PoliticaReintentos.Espera(1));
+        reloj.Avanzar(PoliticaReintentos.EsperaPorDefecto);
         await MotorRunt.ProcesarTodoAsync(procesador, ct);
 
         var agotada = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST403", Fuente.SimitPropietario, ct);
@@ -201,8 +201,9 @@ public sealed class EjecutorCeldaSimitPersonaTests
             .Should().Contain(e => e.Fuente == Fuente.SimitLocatario, "la celda tiene ejecutor: el NA es por la regla, no por falta de adaptador");
     }
 
-    // AC5 (F05-C14, R-3) — el locatario declarado y el NIT del propietario: core-consultas rechaza con un mensaje que trae el
-    // número; la celda queda en ERROR y ni los logs, ni intentos_consulta (mensaje_error incluido), ni el payload lo contienen.
+    // AC5 (F05-C14, R-3) — el NIT del propietario: core-consultas rechaza con un mensaje que trae el número; la celda queda en ERROR
+    // y ni los logs, ni intentos_consulta (mensaje_error incluido), ni el payload lo contienen. Desde la HU #14582 el documento
+    // capturado es del propietario actual declarado y ya no alimenta al locatario: no se consulta, pero tampoco puede filtrarse.
     [Fact]
     public async Task Ningun_log_ni_intento_contiene_el_documento()
     {
@@ -222,17 +223,19 @@ public sealed class EjecutorCeldaSimitPersonaTests
 
         await MotorRunt.ProcesarTodoAsync(Motor.Bus(api), ct);
 
-        grpc.Llamadas.Select(l => l.Numero).Should().BeEquivalentTo([RuntSimitPersonas.Financiera, RuntSimitPersonas.Declarado]);
-        var locatario = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST405", Fuente.SimitLocatario, ct);
-        (locatario.Estado, locatario.TipoError).Should().Be((EstadoCelda.Error, "ESTADO_NO_OK"));
-        var intento = (await MotorPersonas.IntentosAsync(empresa, locatario.Id, ct)).Should().ContainSingle().Subject;
+        grpc.Llamadas.Select(l => l.Numero).Should().BeEquivalentTo([RuntSimitPersonas.Financiera], "el declarado ya no es locatario (HU #14582)");
+        var propietario = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST405", Fuente.SimitPropietario, ct);
+        (propietario.Estado, propietario.TipoError).Should().Be((EstadoCelda.Error, "ESTADO_NO_OK"));
+        var intento = (await MotorPersonas.IntentosAsync(empresa, propietario.Id, ct)).Should().ContainSingle().Subject;
         intento.MensajeError.Should().NotBeNullOrEmpty();
+        var locatario = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST405", Fuente.SimitLocatario, ct);
+        (locatario.Estado, locatario.MotivoNa).Should().Be((EstadoCelda.Na, (MotivoNa?)MotivoNa.SinDocumentoLocatario));
 
         string[] documentos = [RuntSimitPersonas.Declarado, RuntSimitPersonas.Financiera, RuntSimitPersonas.FinancieraConDv];
         logs.Mensajes.Should().NotBeEmpty().And.OnlyContain(m => !documentos.Any(d => m.Contains(d, StringComparison.Ordinal)));
         var filas = (await FilasAsync(api, "SELECT row_to_json(i)::text FROM diagnostico.intentos_consulta i WHERE fuente IN ('SIMIT_PROPIETARIO', 'SIMIT_LOCATARIO')", ct))
             .Concat(await FilasAsync(api, "SELECT coalesce(payload::text, '') FROM diagnostico.consultas WHERE fuente IN ('SIMIT_PROPIETARIO', 'SIMIT_LOCATARIO')", ct)).ToList();
-        filas.Should().HaveCount(4, "dos intentos y dos celdas");
+        filas.Should().HaveCount(3, "un intento (la celda NA no deja) y dos celdas");
         filas.Should().OnlyContain(f => !documentos.Any(d => f.Contains(d, StringComparison.Ordinal)));
     }
 

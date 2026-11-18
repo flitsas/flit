@@ -135,6 +135,12 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             .Take(pageSize)
             .ToList();
 
+        // Validación de identidad por persona: se arma para TODO el filtro (no solo la página) porque
+        // el máximo de actores por rol define el ancho del Excel y tiene que ser el mismo en todas las
+        // partes de un export por lotes.
+        var actoresPorTramite = await LoadActoresAsync(matched, cancellationToken).ConfigureAwait(false);
+        var maxActores = ActorValidacionBuilder.Maximos(actoresPorTramite.Values);
+
         var cobertura = Engine.BuildCoverage(definition, rows, matched, condiciones, from, to);
 
         var empresas = await ResolveTenantNamesAsync(
@@ -148,8 +154,9 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             Desde: desde,
             Hasta: hasta,
             TotalPeriodoAnterior: anterior,
-            Filas: ordered.Select(r => ToDto(r, empresas)).ToList(),
-            Cobertura: cobertura);
+            Filas: ordered.Select(r => ToDto(r, empresas, actoresPorTramite)).ToList(),
+            Cobertura: cobertura,
+            MaxActoresPorRol: maxActores);
     }
 
     // ── Carga ─────────────────────────────────────────────────────────────────────────────────
@@ -559,7 +566,10 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
 
     // ── Proyección ────────────────────────────────────────────────────────────────────────────
 
-    private static CompanyQueryRowDto ToDto(CompanyRow row, IReadOnlyDictionary<Guid, string> empresas) =>
+    private static CompanyQueryRowDto ToDto(
+        CompanyRow row,
+        IReadOnlyDictionary<Guid, string> empresas,
+        IReadOnlyDictionary<Guid, IReadOnlyList<ActorValidacionDto>> actores) =>
         new(
             ProcedureInstanceId: row.Instance.Id,
             ReferenceNumber: row.Instance.ReferenceNumber,
@@ -594,7 +604,76 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
                 ? Math.Round((enviado - row.Instance.CreatedAt).TotalDays, 2)
                 : null,
             DiasEnOrganismo: row.DiasEnOrganismo,
-            Devoluciones: row.Devoluciones);
+            Devoluciones: row.Devoluciones,
+            Actores: actores.GetValueOrDefault(row.Instance.Id) ?? []);
+
+    // ── Validación de identidad por persona ───────────────────────────────────────────────────
+
+    /// <summary>
+    /// Actores con su validación para los trámites dados, en tres consultas por lote (actores, validaciones y
+    /// conteo de intentos en la bitácora). Ver <see cref="ActorValidacionBuilder"/> para las reglas de enlace.
+    /// </summary>
+    private async Task<Dictionary<Guid, IReadOnlyList<ActorValidacionDto>>> LoadActoresAsync(
+        IReadOnlyList<CompanyRow> filas, CancellationToken cancellationToken)
+    {
+        var resultado = new Dictionary<Guid, IReadOnlyList<ActorValidacionDto>>();
+        if (filas.Count == 0)
+        {
+            return resultado;
+        }
+
+        var ids = filas.Select(f => f.Instance.Id).ToList();
+
+        var actores = await _context.ProcedureInstanceActors
+            .AsNoTracking()
+            .Where(a => ids.Contains(a.ProcedureInstanceId))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var validaciones = await _context.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.ProcedureInstanceId != null && ids.Contains(v.ProcedureInstanceId.Value))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var validacionIds = validaciones.Select(v => v.Id).ToList();
+        var intentos = new Dictionary<Guid, int>();
+        var conAuditoria = new HashSet<Guid>();
+
+        if (validacionIds.Count > 0)
+        {
+            var bitacora = await _context.IdentityValidationAudits
+                .AsNoTracking()
+                .Where(a => a.ValidationId != null && validacionIds.Contains(a.ValidationId.Value))
+                .Select(a => new { ValidationId = a.ValidationId!.Value, a.Stage, a.Outcome })
+                .ToListAsync(cancellationToken)
+                .ConfigureAwait(false);
+
+            foreach (var e in bitacora)
+            {
+                conAuditoria.Add(e.ValidationId);
+                if (ActorValidacionBuilder.CuentaComoIntento(e.Stage, e.Outcome))
+                {
+                    intentos[e.ValidationId] = intentos.GetValueOrDefault(e.ValidationId) + 1;
+                }
+            }
+        }
+
+        var actoresPorTramite = actores.ToLookup(a => a.ProcedureInstanceId);
+        var validacionesPorTramite = validaciones.ToLookup(v => v.ProcedureInstanceId!.Value);
+
+        foreach (var fila in filas)
+        {
+            resultado[fila.Instance.Id] = ActorValidacionBuilder.Build(
+                fila.Instance.Modalidad,
+                actoresPorTramite[fila.Instance.Id].ToList(),
+                validacionesPorTramite[fila.Instance.Id].ToList(),
+                intentos,
+                conAuditoria);
+        }
+
+        return resultado;
+    }
 
     // ── Resolución de nombres ─────────────────────────────────────────────────────────────────
 

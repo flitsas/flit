@@ -73,16 +73,17 @@ public sealed class OidcCajaOnlyPrincipalTests
         grant.DeniedCode.Should().Be("CAJA_ONLY");
     }
 
-    [Fact]
-    public async Task UsuarioSoloCaja_RecibeTokenDelProductoCaja()
+    [Theory]
+    [InlineData("ot_caja")]
+    [InlineData("gestor_ot")]
+    public async Task NadieRecibeTokenDelProductoCaja_YaNoHayPortalDeCaja(string rol)
     {
-        Usuario("ot_caja");
+        Usuario(rol);
 
         var grant = await _factory.ForUserAsync(Sesion(), "caja", ["openid"], CancellationToken.None);
 
-        grant.DeniedCode.Should().BeNull();
-        grant.Principal!.FindFirstValue("product").Should().Be("caja");
-        grant.Principal.FindAll(OpenIddictConstants.Claims.Role).Select(c => c.Value).Should().Equal("ot_caja");
+        grant.Principal.Should().BeNull();
+        grant.DeniedCode.Should().Be(OidcPrincipalFactory.ProductNotEnabled);
     }
 
     [Theory]
@@ -106,17 +107,5 @@ public sealed class OidcCajaOnlyPrincipalTests
         var grant = await _factory.ForUserAsync(Sesion(), "tramites", ["openid"], CancellationToken.None);
 
         grant.DeniedCode.Should().BeNull();
-    }
-
-    [Fact]
-    public async Task UsuarioQueNoEsDeCaja_NoRecibeTokenDelProductoCaja()
-    {
-        _access.ResolveAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), "caja", Arg.Any<CancellationToken>()).Returns(new ProductAccess(true, [], []));
-        Usuario("gestor_ot");
-
-        var grant = await _factory.ForUserAsync(Sesion(), "caja", ["openid"], CancellationToken.None);
-
-        grant.Principal.Should().BeNull();
-        grant.DeniedCode.Should().Be(OidcPrincipalFactory.ProductRoleRequired);
     }
 }

@@ -1,3 +1,5 @@
+using Flit.Api.Endpoints;
+using System.Globalization;
 using Flit.PersonaNatural.Grpc.V1;
 using Flit.Platform.Sdk;
 using Flit.Platform.Sdk.Grpc;
@@ -11,6 +13,32 @@ internal sealed record CajaCobroResumen(
     bool Anulable, string MotivoNoAnulable, string AnuladoEn, string AnuladoPorNombre, string AnulacionMotivo, long RowVersion);
 
 internal sealed record CajaCobrosLista(IReadOnlyList<CajaCobroResumen> Items, int Total, long TotalDiaCop);
+
+/// <summary>El trámite que la caja va a cobrar (lo que el portal permite ver; el organismo lo completa core-api).</summary>
+internal sealed record CajaTramite(
+    string Codigo, string TipoCodigo, string TipoNombre, IReadOnlyList<CajaLinea> Lineas, long TotalCop, string VersionTarifa, DateTimeOffset VenceEn);
+
+internal sealed record CajaLinea(string Concepto, long ValorCop);
+
+/// <summary>Lo que core-api manda a confirmar: el usuario y el organismo salen del JWT, nunca del cliente.</summary>
+internal sealed record CajaConfirmacion(
+    Guid OrganismoId, string Codigo, Guid UsuarioId, string UsuarioNombre, string Medio, string Detalle, long? TotalVisto, string Llave,
+    byte[]? Prefactura, string? PrefacturaTipo, string? PrefacturaNombre, string IpHash);
+
+internal sealed record CajaCobroConfirmado(string Codigo, long ValorCop, string Medio, string? MedioDetalle, DateTimeOffset PagadoEn);
+
+/// <summary>
+/// El portal rechazó la operación con un código estable (<c>no_encontrado</c>, <c>ya_pagado</c>, <c>total_cambio</c>, <c>demasiados_intentos</c>...).
+/// <see cref="Extras"/> trae los datos de apoyo (<c>totalActualCop</c>, <c>retryAfterSegundos</c>).
+/// </summary>
+internal sealed class CajaPortalRechazoException(string code, string mensaje, int estadoHttp, IReadOnlyDictionary<string, string> extras) : Exception(mensaje)
+{
+    public string Code { get; } = code;
+
+    public int EstadoHttp { get; } = estadoHttp;
+
+    public IReadOnlyDictionary<string, string> Extras { get; } = extras;
+}
 
 /// <summary>Resultado de anular: <see cref="Razon"/> es <c>null</c> si salió bien, o la razón del portal (<c>cobro_no_anulable</c>, <c>cobro_no_encontrado</c>).</summary>
 internal sealed record CajaAnulacionResultado(string? Razon, string Estado)
@@ -31,6 +59,12 @@ internal interface ICajaAdminClient
     Task<CajaCobrosLista> ListarAsync(Guid organismoId, string? fecha, int pagina, int tamano, CancellationToken ct);
 
     Task<CajaAnulacionResultado> AnularAsync(Guid organismoId, Guid cobroId, string motivo, Guid actorUserId, string actorNombre, long rowVersion, CancellationToken ct);
+
+    /// <summary>Busca el trámite por su ID en la caja del organismo. Lanza <see cref="CajaPortalRechazoException"/> si el portal lo rechaza.</summary>
+    Task<CajaTramite> BuscarAsync(Guid organismoId, string codigo, Guid usuarioId, string ipHash, CancellationToken ct);
+
+    /// <summary>Confirma el cobro. Lanza <see cref="CajaPortalRechazoException"/> si el portal lo rechaza.</summary>
+    Task<CajaCobroConfirmado> ConfirmarAsync(CajaConfirmacion pedido, CancellationToken ct);
 }
 
 /// <summary>
@@ -88,6 +122,82 @@ internal sealed class GrpcCajaAdminClient(CajaAdminService.CajaAdminServiceClien
         }
     }
 
+    public async Task<CajaTramite> BuscarAsync(Guid organismoId, string codigo, Guid usuarioId, string ipHash, CancellationToken ct)
+    {
+        try
+        {
+            var r = await client.BuscarTramiteAsync(
+                new BuscarTramiteRequest { OrganismoId = organismoId.ToString(), Codigo = codigo, UsuarioId = usuarioId.ToString(), IpHash = ipHash },
+                Empresa(), cancellationToken: ct).ConfigureAwait(false);
+            return new CajaTramite(
+                r.Codigo, r.TipoTramiteCodigo, r.TipoTramiteNombre, [.. r.Lineas.Select(l => new CajaLinea(l.Concepto, l.ValorCop))], r.TotalCop, r.VersionTarifa,
+                DateTimeOffset.Parse(r.VenceEn, CultureInfo.InvariantCulture));
+        }
+        catch (RpcException ex)
+        {
+            throw Traducir(ex);
+        }
+    }
+
+    public async Task<CajaCobroConfirmado> ConfirmarAsync(CajaConfirmacion pedido, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(pedido);
+        var request = new ConfirmarCobroRequest
+        {
+            OrganismoId = pedido.OrganismoId.ToString(),
+            Codigo = pedido.Codigo,
+            UsuarioId = pedido.UsuarioId.ToString(),
+            UsuarioNombre = pedido.UsuarioNombre,
+            MedioCaja = pedido.Medio,
+            Detalle = pedido.Detalle,
+            IdempotencyKey = pedido.Llave,
+            IpHash = pedido.IpHash,
+        };
+        if (pedido.TotalVisto is { } visto)
+            request.TotalVisto = visto;
+        if (pedido.Prefactura is { Length: > 0 } archivo)
+        {
+            request.Prefactura = Google.Protobuf.ByteString.CopyFrom(archivo);
+            request.PrefacturaContentType = pedido.PrefacturaTipo ?? string.Empty;
+            request.PrefacturaNombre = pedido.PrefacturaNombre ?? string.Empty;
+        }
+
+        try
+        {
+            var r = await client.ConfirmarCobroAsync(request, Empresa(), cancellationToken: ct).ConfigureAwait(false);
+            return new CajaCobroConfirmado(
+                r.Codigo, r.ValorCop, r.Medio, r.MedioDetalle.Length == 0 ? null : r.MedioDetalle, DateTimeOffset.Parse(r.PagadoEn, CultureInfo.InvariantCulture));
+        }
+        catch (RpcException ex)
+        {
+            throw Traducir(ex);
+        }
+    }
+
+    /// <summary>
+    /// Un rechazo del portal con código estable (<c>ErrorInfo.reason</c>) es una respuesta para la caja; cualquier otro fallo (servicio
+    /// caído, deadline, permisos del token de servicio) es «portal no disponible».
+    /// </summary>
+    private static Exception Traducir(RpcException ex)
+    {
+        var reason = PlatformRpcErrors.Reason(ex);
+        var http = ex.StatusCode switch
+        {
+            StatusCode.InvalidArgument => 400,
+            StatusCode.PermissionDenied => 403,
+            StatusCode.NotFound => 404,
+            StatusCode.FailedPrecondition => 409,
+            StatusCode.ResourceExhausted => 429,
+            StatusCode.Unavailable when reason == "almacenamiento_no_disponible" => 502,
+            _ => 0,
+        };
+        if (reason is null || http == 0)
+            return new CajaPortalNoDisponibleException(ex);
+
+        var extras = ex.GetRpcStatus()?.GetDetail<Google.Rpc.ErrorInfo>()?.Metadata.ToDictionary(m => m.Key, m => m.Value) ?? [];
+        return new CajaPortalRechazoException(reason, ex.Status.Detail, http, extras);
+    }
+
     private static CajaCobroResumen Mapear(CobroResumen c) => new(
         c.CobroId, c.Codigo, c.ValorCop, c.Medio, c.MedioDetalle, c.PagadoEn, c.PagadoPorNombre, c.Estado,
         c.Anulable, c.MotivoNoAnulable, c.AnuladoEn, c.AnuladoPorNombre, c.AnulacionMotivo, c.RowVersion);
@@ -120,6 +230,7 @@ internal static class CajaAdminExtensions
         var deadline = TimeSpan.FromSeconds(Math.Max(1, configuration.GetValue(PersonaNaturalConsumidorExtensions.ClaveDeadline, 15)));
         services.AddFlitGrpcClient<CajaAdminService.CajaAdminServiceClient>(configuration, direccion, ScopeCaja, o => o.Deadline = deadline);
         services.AddScoped<ICajaAdminClient, GrpcCajaAdminClient>();
+        services.AddScoped<IActorCajaStore, EfActorCajaStore>(); // organismo y nombre del actor de la caja (/api/v1/ot/caja)
         return services;
     }
 }

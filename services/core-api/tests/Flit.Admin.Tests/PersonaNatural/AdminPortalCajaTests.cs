@@ -29,7 +29,7 @@ namespace Flit.Admin.Tests.PersonaNatural;
 /// <summary>
 /// HU #14454, #14455 y #14461 (Feature #14453, Épica #14210, ADR-0082) contra la base real: «Usuarios de caja» (rol fijo
 /// <c>ot_caja</c>, alcance por organismo), el guardián de asignación genérica, la resolución del usuario de caja que usa el portal y
-/// «Cobros de caja» (fachada hacia el portal, con el cliente gRPC reemplazado por un doble). Requiere la base con el DDL 190.
+/// «Cobros de caja» (fachada hacia el portal, con el cliente gRPC reemplazado por un doble). Requiere la base con el DDL 199.
 /// </summary>
 public sealed class AdminPortalCajaTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
@@ -568,5 +568,11 @@ public sealed class AdminPortalCajaTests : IClassFixture<WebApplicationFactory<P
             Anulaciones.Add(new AnulacionLlamada(organismoId, cobroId, motivo, actorUserId, actorNombre, rowVersion));
             return Task.FromResult(Resultado);
         }
+
+        public Task<CajaTramite> BuscarAsync(Guid organismoId, string codigo, Guid usuarioId, string ipHash, CancellationToken ct) =>
+            throw new NotSupportedException("Lo cubre OtCajaTests.");
+
+        public Task<CajaCobroConfirmado> ConfirmarAsync(CajaConfirmacion pedido, CancellationToken ct) =>
+            throw new NotSupportedException("Lo cubre OtCajaTests.");
     }
 }

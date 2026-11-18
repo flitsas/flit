@@ -53,14 +53,14 @@ const WIZARD_STEP_COLUMNS: DataTableColumn<WizardStep>[] = [
       <span className="inline-flex items-center gap-2">
         <span
           className="font-semibold"
-          style={{ color: step.abandonmentPct >= 30 ? "#FF4E00" : step.abandonmentPct >= 10 ? "#F9AC00" : "#8CC63F" }}
+          style={{ color: step.abandonmentPct >= 30 ? "var(--destructive)" : step.abandonmentPct >= 10 ? "var(--badge-warning-fg)" : "var(--flit-success-ink)" }}
         >
           {formatPct(step.abandonmentPct)}
         </span>
-        <span className="h-1.5 w-16 rounded-full bg-[#DFE5ED] dark:bg-[#1E2A3C] overflow-hidden">
+        <span className="h-1.5 w-16 rounded-full bg-flit-gray overflow-hidden">
           <span
             className="block h-full rounded-full"
-            style={{ width: `${Math.min(100, step.abandonmentPct)}%`, background: "#FF4E00" }}
+            style={{ width: `${Math.min(100, step.abandonmentPct)}%`, background: "var(--destructive)" }}
           />
         </span>
       </span>
@@ -93,15 +93,17 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
     >
       {usage.data && (
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3 max-w-xl">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4 max-w-xl">
             <KpiCard
               label="Duración media del wizard"
+              icono="tiempo"
               value={formatDurationMs(usage.data.current.avgWizardDurationMs)}
               tooltip="Promedio del tiempo total desde que se abre el wizard hasta radicar el trámite."
               color="var(--color-flit-brand)"
             />
             <KpiCard
               label="Duración mediana del wizard"
+              icono="tiempo"
               value={formatDurationMs(usage.data.current.medianWizardDurationMs)}
               tooltip="Mediana del tiempo total del wizard: la mitad de los trámites se radica en este tiempo o menos."
               color="var(--color-flit-tech)"
@@ -109,7 +111,7 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
           </div>
 
           <section aria-labelledby="wizard-steps-title">
-            {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+            {/* Bug #13055 — tabla homologada con el modelo de trámites; desde la HU #14477 la tarjeta la pone DataTable. */}
             <h2
               id="wizard-steps-title"
               className="text-sm font-bold mb-3"
@@ -137,7 +139,7 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
           </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="modulos-title">
+            <section className="rounded-2xl p-5 bg-card border" aria-labelledby="modulos-title">
               <h2 id="modulos-title" className="text-sm font-bold mb-3" title="Eventos de apertura de módulo y accesos a la API, agrupados por módulo.">
                 Módulos más usados
               </h2>
@@ -154,7 +156,7 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
               />
             </section>
 
-            <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="documentos-title">
+            <section className="rounded-2xl p-5 bg-card border" aria-labelledby="documentos-title">
               <h2
                 id="documentos-title"
                 className="text-sm font-bold mb-3"
@@ -169,14 +171,14 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
                   value: d.replacements,
                   hint: `${formatInt(d.uploads)} cargas totales`,
                 }))}
-                color="#F9AC00"
+                color="var(--badge-warning-fg)"
                 emptyMessage="Sin reemplazos de documentos en el periodo."
                 testId="documentos-reemplazados"
               />
             </section>
           </div>
 
-          <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="heatmap-title">
+          <section className="rounded-2xl p-5 bg-card border" aria-labelledby="heatmap-title">
             <h2 id="heatmap-title" className="text-sm font-bold mb-3" title="Eventos registrados por día de la semana y hora, en hora de Bogotá.">
               Horas pico de uso
             </h2>

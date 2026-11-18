@@ -2,7 +2,8 @@
 
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
-import { DETALLE_OVERLAY_STYLE, DETALLE_SHEET_CLASS } from './detalle-visual';
+import { MODAL_VELO_CLS } from '@flit/ui/Modal';
+import { DETALLE_SHEET_CLASS } from './detalle-visual';
 
 /**
  * Shell del modal Detalle — NO es el átomo Modal blanco (anti-patrón spec flit-detalle-tramite).
@@ -104,8 +105,7 @@ export function DetalleTramiteShell({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center p-4"
-      style={DETALLE_OVERLAY_STYLE}
+      className={`fixed inset-0 z-[1100] flex items-center justify-center p-4 ${MODAL_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}

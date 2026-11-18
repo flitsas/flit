@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Modal } from "@flit/ui/Modal";
@@ -47,6 +47,7 @@ import {
   type SimitBorrador,
 } from "@/lib/backoffice/esquemasManual";
 import { textoTipoError } from "@/lib/tablero/detalle";
+import { nombreRol } from "@/lib/rotulos";
 
 export interface FormularioLlenadoManualProps {
   consultaId: string;
@@ -91,7 +92,7 @@ const ESTADOS_FUENTE_AVALUO = [
   { valor: "ERROR", nombre: "Error" },
 ] as const;
 
-const BOTON_FILA_CLS = `inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-xs font-semibold text-[var(--flit-brand-ink)] disabled:cursor-not-allowed disabled:opacity-50 dark:text-white ${FOCO_CLS}`;
+const BOTON_FILA_CLS = `inline-flex items-center gap-1 self-start rounded-full px-2 py-1 text-xs font-semibold text-[var(--flit-brand-ink)] disabled:cursor-not-allowed disabled:opacity-50 ${FOCO_CLS}`;
 
 /** Cambio de un borrador: el nuevo valor y la ruta del campo editado (su error se borra). */
 type AlCambiar<B> = (borrador: B, campo: string) => void;
@@ -187,9 +188,9 @@ function Fila({ titulo, onQuitar, children }: { titulo: string; onQuitar: () => 
   return (
     <div role="group" aria-label={titulo} className={`${TARJETA_DETALLE_CLS} flex flex-col gap-3`}>
       <div className="flex items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-flit-primary dark:text-white">{titulo}</span>
+        <span className="text-sm font-semibold text-flit-primary">{titulo}</span>
         <button type="button" onClick={onQuitar} className={BOTON_FILA_CLS}>
-          <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="papelera" className="h-3.5 w-3.5" />
           {`Quitar ${titulo.toLowerCase()}`}
         </button>
       </div>
@@ -201,7 +202,7 @@ function Fila({ titulo, onQuitar, children }: { titulo: string; onQuitar: () => 
 function Agregar({ texto, onClick, deshabilitado }: { texto: string; onClick: () => void; deshabilitado?: boolean }) {
   return (
     <button type="button" onClick={onClick} disabled={deshabilitado} className={BOTON_FILA_CLS}>
-      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+      <Icono nombre="mas" className="h-3.5 w-3.5" />
       {texto}
     </button>
   );
@@ -242,6 +243,7 @@ function FormSimit({ b, raiz, errores, onChange }: { b: SimitBorrador; raiz: str
 function FormAvaluo({ b, raiz, errores, onChange }: { b: AvaluoBorrador; raiz: string; errores: ErroresCampo; onChange: AlCambiar<AvaluoBorrador> }) {
   const fuente = (i: number, clave: keyof AvaluoBorrador["fuentes"][number]) => (v: string) =>
     onChange({ ...b, fuentes: b.fuentes.map((f, j) => (j === i ? { ...f, [clave]: v } : f)) }, `${raiz}.fuentes[${i}].${clave}`);
+  const ref = (clave: keyof AvaluoBorrador["referencia"]) => (v: string) => onChange({ ...b, referencia: { ...b.referencia, [clave]: v } }, `${raiz}.referencia.${clave}`);
   return (
     <div className="flex flex-col gap-3">
       <Marca
@@ -256,6 +258,7 @@ function FormAvaluo({ b, raiz, errores, onChange }: { b: AvaluoBorrador; raiz: s
           <Texto
             campo={`${raiz}.valor_sugerido`}
             etiqueta="Valor sugerido (pesos)"
+            ayuda="Valor comercial en pesos, sin decimales."
             numerico
             valor={b.valor_sugerido}
             errores={errores}
@@ -271,6 +274,15 @@ function FormAvaluo({ b, raiz, errores, onChange }: { b: AvaluoBorrador; raiz: s
             onChange={(v) => onChange({ ...b, fuente_principal: v as AvaluoBorrador["fuente_principal"] }, `${raiz}.fuente_principal`)}
           />
         </div>
+      )}
+      {!b.sin_valor_comercial && (
+        <fieldset className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <legend className="mb-1 text-sm font-semibold text-flit-primary">Referencia Fasecolda</legend>
+          <Texto campo={`${raiz}.referencia.codigo_fasecolda`} etiqueta="Código Fasecolda" ayuda="8 dígitos." numerico valor={b.referencia.codigo_fasecolda} errores={errores} onChange={ref("codigo_fasecolda")} />
+          <Texto campo={`${raiz}.referencia.modelo`} etiqueta="Modelo (año)" numerico valor={b.referencia.modelo} errores={errores} onChange={ref("modelo")} />
+          <Texto campo={`${raiz}.referencia.marca`} etiqueta="Marca" valor={b.referencia.marca} errores={errores} onChange={ref("marca")} />
+          <Texto campo={`${raiz}.referencia.linea`} etiqueta="Línea" valor={b.referencia.linea} errores={errores} onChange={ref("linea")} />
+        </fieldset>
       )}
       <p className={AYUDA_CLS}>La fecha del dato la pone el servidor.</p>
       {b.fuentes.map((f, i) => (
@@ -356,8 +368,6 @@ function FormEsquema({ b, raiz, errores, onChange }: { b: Borrador; raiz: string
   }
 }
 
-const ROL: Record<PersonaEnError["rol"], string> = { PROPIETARIO: "Propietario", LOCATARIO: "Locatario" };
-
 /** Sección de una persona en error: rol, orden, documento enmascarado tal como llega y el formulario de su consulta. */
 function SeccionPersona(props: { persona: PersonaEnError; indice: number; b: Borrador; errores: ErroresCampo; onChange: AlCambiar<Borrador> }) {
   const { persona, indice, b, errores, onChange } = props;
@@ -365,8 +375,8 @@ function SeccionPersona(props: { persona: PersonaEnError; indice: number; b: Bor
   const error = errores[campoPersona];
   return (
     <fieldset id={idDeCampo(campoPersona)} className={`${TARJETA_DETALLE_CLS} flex flex-col gap-3`}>
-      <legend className="px-1 text-sm font-semibold text-flit-primary dark:text-white">
-        {`${ROL[persona.rol]} ${persona.orden} · ${persona.tipo_documento} ${persona.documento_enmascarado}`}
+      <legend className="px-1 text-sm font-semibold text-flit-primary">
+        {`${nombreRol(persona.rol)} ${persona.orden} · ${persona.tipo_documento} ${persona.documento_enmascarado}`}
       </legend>
       <p className={AYUDA_CLS}>
         {`${textoTipoError(persona.tipo_error)}${persona.declarado_por_cliente ? " Documento declarado por el cliente." : ""}`}
@@ -525,7 +535,7 @@ export function FormularioLlenadoManual({ consultaId, empresa, nombreFuente, ide
   }
 
   return (
-    <Modal
+    <Modal icono="lapiz"
       open
       onClose={onClose}
       busy={enviando}

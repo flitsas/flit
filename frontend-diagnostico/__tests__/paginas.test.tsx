@@ -3,7 +3,7 @@ import { join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
-import Inicio from "@/app/(app)/page";
+import Inicio from "@/app/(app)/diagnosticos/page";
 import Forbidden from "@/app/403/page";
 import NotFound from "@/app/not-found";
 
@@ -71,6 +71,15 @@ describe("sin formulario propio", () => {
         join("components", "listado"),
         // Pantalla única de creación (HU #14085): placa o VIN, documento del locatario y archivo de vehículos.
         join("components", "nuevo"),
+        // Punto 4 (crear trámite masivo) y HU #14577 (sanear en bloque): casillas de selección de placas del tablero, no de credenciales.
+        join("components", "tablero", "BarraSeleccionTablero.tsx"),
+        // HU #14562 AC28: búsqueda por placa o VIN del tablero, no de credenciales.
+        join("components", "tablero", "BuscadorGrilla.tsx"),
+        // HU #14577 PS-3: filtros (placa, fechas) y casillas de selección de la grilla de placas del inicio, no de credenciales.
+        join("components", "vehiculos"),
+        // HU #14580: periodo del Dashboard y filtros de Reportes (fechas y prefijo de placa), no de credenciales.
+        join("components", "estadisticas"),
+        join("components", "reportes"),
       ];
       if (!conCampos.some((carpeta) => archivo.includes(carpeta))) expect(codigo, archivo).not.toMatch(/<input\b/);
       expect(codigo, archivo).not.toMatch(/autoComplete=["'](username|current-password)["']/);
@@ -126,7 +135,7 @@ describe("pantalla base con los paquetes de la suite", () => {
 
     const titulo = await screen.findByRole("heading", { level: 1, name: "Diagnóstico vehicular" });
     expect(titulo.closest("section")).toHaveTextContent("Transportes Prueba SAS");
-    expect(await screen.findByText("Todavía no hay diagnósticos")).toBeInTheDocument();
+    expect(await screen.findByText("Aún no tienes diagnósticos")).toBeInTheDocument();
   });
 
   it("el CSS global importa los tokens, el shell y el loader de @flit/ui", () => {
@@ -134,5 +143,21 @@ describe("pantalla base con los paquetes de la suite", () => {
     expect(css).toContain('@import "@flit/ui/tokens.css"');
     expect(css).toContain('@import "@flit/ui/loader.css"');
     expect(css).toContain('@import "@flit/shell/shell.css"');
+  });
+});
+
+describe("F-11 páginas de excepción con el kit (AC49/AC57, HU #14562)", () => {
+  it("la 404 muestra el código 404, su título y la acción para volver al inicio", () => {
+    render(<NotFound />);
+    expect(screen.getByText("404")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1, name: "Esta página no existe" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Volver al inicio" })).toHaveAttribute("href", "/");
+  });
+
+  it("la 403 muestra el código 403 con su mensaje y la acción al hub", async () => {
+    render(await Forbidden({ searchParams: Promise.resolve({}) }));
+    expect(screen.getByText("403")).toBeInTheDocument();
+    expect(screen.getByText("No tienes permiso para abrir esta página.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ir a mis productos" })).toHaveAttribute("href", "https://dev.flitsas.online/?inicio=1");
   });
 });

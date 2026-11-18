@@ -21,7 +21,7 @@ namespace Flit.Admin.Tests.Identity;
 /// gRPC, de punta a punta con el servidor OIDC real de los tests. Cada prueba arma sus propios organismos, tipos y tarifas
 /// (con códigos únicos) y los retira al terminar; requiere la base con las migraciones aplicadas (DDL 153).
 /// </summary>
-public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class PersonaNaturalCotizacionGrpcTests(PersonaNaturalCotizacionGrpcTests.Anfitrion anfitrion) : IClassFixture<PersonaNaturalCotizacionGrpcTests.Anfitrion>
 {
     private const string Scope = "platform.tramites.persona_natural";
     private const string Portal = "svc-personanatural";
@@ -31,7 +31,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task ListarOrganismos_DevuelveSoloLosHabilitadosParaPersonaNatural()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.PrecioBaseAsync(e.TipoElegible, null, ct); // HU #14391: sin un tipo con precio el organismo no se ofrece
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
@@ -46,7 +46,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task ListarOrganismos_NoOfreceUnOrganismoHabilitadoQueDejoDeEstarActivoPorFlit()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.PrecioBaseAsync(e.TipoElegible, null, ct); // HU #14391: sin un tipo con precio el organismo no se ofrece
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
@@ -63,7 +63,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task ListarTipos_ConOrganismo_SoloOfreceLosElegiblesConTarifaVigente_YSinOrganismoTodosConMotivo()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 100_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 50_000, ct);
@@ -86,7 +86,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_DevuelveLasDosLineasYElTotal_ConElSubtituloDelServicioFlit()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 185_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 181_000, ct);
@@ -105,7 +105,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_LaExcepcionDelOrganismoMandaSobreElValorGeneral()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 100_000, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, e.Organismo, 120_000, ct);
@@ -122,7 +122,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_LasTransformacionesSoloSumanSiElTipoLasPermite_YElEnvioSuma()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         foreach (var tipo in new[] { e.TipoElegible, e.TipoSinTransformaciones })
         {
@@ -147,7 +147,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_DesdeLaLandingYDesdeElPago_DaElMismoTotal()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 77_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 33_000, ct);
@@ -164,7 +164,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_SinTarifaVigente_RespondeTarifaNoVigente()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
 
@@ -177,7 +177,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_TipoNoHabilitado_TipoDesconocidoYOrganismoSinGrant_TienenSuPropioError()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoApagado, null, 1, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoApagado, null, 1, ct);
@@ -195,7 +195,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task Cotizar_ValidaLaEntrada_YElCandadoVaPrimero()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         var bueno = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
         var ajeno = await ClienteAsync(host, Guid.NewGuid(), ct);
 
@@ -209,7 +209,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task ListaBlanca_UnTipoElegibleSinHabilitarNoSeOfreceNiSeCotiza_AunConTarifa_YAlHabilitarloSi()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoSinListaBlanca, null, 10_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoSinListaBlanca, null, 5_000, ct);
@@ -237,7 +237,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14391_AC1_UnTipoSinPrecioPropioNiGeneral_NoSeOfrece_AunqueOtroOrganismoLoTenga()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.PrecioBaseAsync(e.TipoSinTarifa, e.OrganismoSinGrant, ct); // precio propio de OTRO organismo: a este no le sirve
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
@@ -251,7 +251,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14391_AC4_UnTipoConValorGeneralYSinPrecioPropio_SeOfreceYSeCobraElGeneral()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.PrecioBaseAsync(e.TipoElegible, null, ct); // general: derechos 100.000 + servicio 50.000
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
@@ -267,7 +267,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14391_AC2_UnOrganismoSinNingunTipoConPrecio_NoSeOfrece_YConUnoSi()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         // El único precio es de un tipo que el portal no ofrece (apagado) y otro solo con derechos: ningún tipo ofrecible.
         await e.PrecioBaseAsync(e.TipoApagado, null, ct);
@@ -287,7 +287,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14391_AC2_ElPrecioPropioDelOrganismoBasta_SinValorGeneral()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.PrecioBaseAsync(e.TipoElegible, e.Organismo, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
@@ -302,7 +302,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14391_AC5_UnPrecioRecienRegistradoOCerrado_SeReflejaEnLaSiguienteConsulta()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
         var organismos = () => cliente.ListarOrganismosAsync(new ListarOrganismosRequest(), cancellationToken: ct).ResponseAsync;
@@ -323,7 +323,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14391_UnPrecioReemplazadoElMismoDia_NoSeOfreceNiSeCobra_ElVigenteEsElNuevo()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.PrecioBaseAsync(e.TipoElegible, e.Organismo, ct);
         await e.ReemplazarDerechosAsync(e.TipoElegible, e.Organismo, 200_000, ct);
@@ -367,7 +367,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14395_AC4_SinMedio_LaRespuestaEsLaDeSiempre_AunConBanderasYSwitchesApagados()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 185_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 181_000, ct);
@@ -391,7 +391,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14395_AC2_ConMedio_SumaSoloLosConceptosEncendidos_YSinConfiguracionCobraComoHoy()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 185_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 181_000, ct);
@@ -418,7 +418,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14395_AC1_ListarMediosPago_SoloLosConBanderaYAlMenosUnConceptoEncendido()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.TarifaAsync("DERECHOS_TRANSITO", e.TipoElegible, null, 185_000, ct);
         await e.TarifaAsync("SERVICIO_FLIT", e.TipoElegible, null, 181_000, ct);
@@ -450,7 +450,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14395_AC5_UnaBanderaOUnSwitchRecienGuardados_SeReflejanEnLaSiguienteConsulta()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.PrecioBaseAsync(e.TipoElegible, null, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
@@ -467,7 +467,7 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
     public async Task HU14395_UnMedioApagadoOSinConceptos_NoSeCotiza_ConElErrorEstable()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.PrecioBaseAsync(e.TipoElegible, null, ct);
         var cliente = await ClienteAsync(host, PlatformTenants.PersonaNatural, ct);
@@ -501,13 +501,18 @@ public sealed class PersonaNaturalCotizacionGrpcTests(WebApplicationFactory<Prog
 
     private static async Task<RpcException> Error(Func<Task> llamada) => (await llamada.Should().ThrowAsync<RpcException>()).Which;
 
-    private WebApplicationFactory<Program> Host() =>
-        OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
-        {
-            b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
-            b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
-            b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
-        }).ConEmpresaPersonaNatural();
+    /// <summary>Un host para toda la clase (<see cref="HostPorClase"/>): antes cada prueba arrancaba y destruía el suyo
+    /// (~30 s por prueba en CI). Las pruebas siembran datos con identificadores propios, así que comparten host sin cruzarse.</summary>
+    public sealed class Anfitrion : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
+            {
+                b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
+                b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
+                b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
+            }).ConEmpresaPersonaNatural();
+    }
 
     private static async Task<Cliente> ClienteAsync(WebApplicationFactory<Program> host, Guid empresa, CancellationToken ct)
     {

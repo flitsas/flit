@@ -25,14 +25,20 @@ internal sealed class OtTenantScope
 
     private readonly FlitDbContext _context;
     private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
+    private readonly IOtUserClientScopeResolver? _clientScope;
 
     /// <param name="context">Contexto EF.</param>
     /// <param name="effectiveOffices">
     /// Bug #12912 — cálculo inverso de la lista efectiva (red Concesión / Marca Blanca). Sin él (repos
     /// construidos a mano en tests) el alcance es el criterio previo: solo grant propio habilitado.
     /// </param>
-    public OtTenantScope(FlitDbContext context, IEffectiveTransitOfficeListResolver? effectiveOffices = null)
+    /// <param name="clientScope">Alcance de compañías del usuario OT en curso (null en tests: sin restricción por usuario).</param>
+    public OtTenantScope(
+        FlitDbContext context,
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null,
+        IOtUserClientScopeResolver? clientScope = null)
     {
+        _clientScope = clientScope;
         _context = context ?? throw new ArgumentNullException(nameof(context));
         _effectiveOffices = effectiveOffices;
     }
@@ -64,6 +70,14 @@ internal sealed class OtTenantScope
             {
                 var tenantIds = await ListClientTenantIdsAsync(transitOfficeId.Value, cancellationToken)
                     .ConfigureAwait(false);
+
+                // Alcance por usuario: interseccion con las companias asignadas (null = todas). Punto unico de metricas, consultas y reportes del OT.
+                var restriction = await GetClientRestrictionAsync(transitOfficeId.Value, cancellationToken)
+                    .ConfigureAwait(false);
+                if (restriction is not null)
+                {
+                    tenantIds = [.. tenantIds.Intersect(restriction)];
+                }
 
                 return await action(transitOfficeId.Value, tenantIds).ConfigureAwait(false);
             },
@@ -118,6 +132,12 @@ internal sealed class OtTenantScope
             .FilterAsync(_context, transitOfficeId, scopeTenantIds, cancellationToken)
             .ConfigureAwait(false);
     }
+
+    /// <summary>Compañías permitidas al usuario en curso en el organismo; <c>null</c> = todas.</summary>
+    public Task<IReadOnlyList<Guid>?> GetClientRestrictionAsync(Guid transitOfficeId, CancellationToken cancellationToken) =>
+        _clientScope is null
+            ? Task.FromResult<IReadOnlyList<Guid>?>(null)
+            : _clientScope.GetRestrictionAsync(transitOfficeId, cancellationToken);
 
     public async Task<Guid?> ResolveTransitOfficeIdAsync(
         Guid otTenantId,

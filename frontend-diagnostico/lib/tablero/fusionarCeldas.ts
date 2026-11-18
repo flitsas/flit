@@ -14,9 +14,11 @@ function fusionarVehiculo(actual: FilaVehiculo, recibido: FilaVehiculo): FilaVeh
     return nueva && nueva.version >= anterior.version ? nueva : anterior;
   };
   const conocidas = new Set(actual.celdas.map((c) => c.fuente));
+  // HU #14562 AC30 (H1): con versión de fila, una fila atrasada no pisa los datos de fila (veredicto, derivación, marca).
+  const atrasada = actual.version != null && recibido.version != null && recibido.version < actual.version;
   return {
     ...actual,
-    ...recibido,
+    ...(atrasada ? {} : recibido),
     celdas: [...actual.celdas.map(vigente), ...recibido.celdas.filter((c) => !conocidas.has(c.fuente))],
   };
 }
@@ -35,7 +37,17 @@ export function fusionarCeldas(actual: Grilla | null, cambios: Grilla): Grilla {
     ...cambios.vehiculos.filter((v) => !conocidos.has(v.id)),
   ].sort(porOrden);
 
-  return { ...cambios, vehiculos };
+  // HU #14563 B1/B2: conteos y lote viajan en cada delta; un backend que no los manda conserva los que ya se tenían (AC31).
+  const cabecera: Grilla = { ...cambios, conteos: cambios.conteos ?? actual.conteos, lote: cambios.lote ?? actual.lote };
+  if (!cabecera.conteos) delete cabecera.conteos;
+  if (!cabecera.lote) delete cabecera.lote;
+
+  // Punto 3: la lista de pegadas viaja siempre y manda sobre el `pegada` de cada fila (las que se pegan solo por tiempo no se reenvían).
+  if (cambios.vehiculos_pegados) {
+    const pegados = new Set(cambios.vehiculos_pegados);
+    return { ...cabecera, vehiculos: vehiculos.map((v) => ({ ...v, pegada: pegados.has(v.id) })) };
+  }
+  return { ...cabecera, vehiculos };
 }
 
 const SIN_TERMINAR: ReadonlySet<CeldaGrilla["estado"]> = new Set(["PENDIENTE", "EN_CURSO"]);
@@ -64,5 +76,19 @@ export function marcarReprocesada(grilla: Grilla, celdaId: string): Grilla {
           }
         : v,
     ),
+  };
+}
+
+/**
+ * Reintento manual optimista (Punto 3): la placa (o todas, sin `vehiculoId`) deja de estar pegada y el contador del lote
+ * baja, para que la acción desaparezca al instante; el refresco inmediato trae enseguida el estado del servidor.
+ */
+export function marcarReintentada(grilla: Grilla, vehiculoId?: string): Grilla {
+  if (!vehiculoId) return { ...grilla, total_pegadas: 0, vehiculos: grilla.vehiculos.map((v) => (v.pegada ? { ...v, pegada: false } : v)) };
+  const estaba = grilla.vehiculos.some((v) => v.id === vehiculoId && v.pegada);
+  return {
+    ...grilla,
+    total_pegadas: estaba ? Math.max(0, (grilla.total_pegadas ?? 0) - 1) : grilla.total_pegadas,
+    vehiculos: grilla.vehiculos.map((v) => (v.id === vehiculoId ? { ...v, pegada: false } : v)),
   };
 }

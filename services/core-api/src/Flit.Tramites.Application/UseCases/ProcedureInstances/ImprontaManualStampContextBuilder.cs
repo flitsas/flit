@@ -26,6 +26,9 @@ public static class ImprontaManualStampContextBuilder
         CancellationToken ct = default)
     {
         vaultPolicy ??= NullSignatureVaultPolicy.Instance;
+        // Trámite radicado ⇒ la firma de baúl sale de la copia tomada al radicar (misma regla que el FUR).
+        if (repo is not null)
+            vaultPolicy = await FirmaBaulCopias.EfectivaAsync(repo, vaultPolicy, instance, ct).ConfigureAwait(false);
 
         var fv = instance.FieldValues
             .ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);

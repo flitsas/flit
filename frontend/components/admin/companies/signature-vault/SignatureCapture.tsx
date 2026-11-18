@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
-import { Eraser, PenLine, Upload } from "lucide-react";
+import { Eraser } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 // Captura del artefacto de firma (ADR D9 · v1): dibujo en pantalla (canvas nativo,
 // sin librería externa) o carga de un PNG. Ambos modos reducen la firma a un data URL
@@ -125,16 +127,16 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
     <div className="space-y-3">
       <div role="radiogroup" aria-label="Método de captura de la firma" className="flex gap-2">
         <ModeButton active={mode === "draw"} disabled={disabled} onClick={() => switchMode("draw")}>
-          <PenLine className="h-3.5 w-3.5" /> Dibujar en pantalla
+          <Icono nombre="lapiz" className="h-3.5 w-3.5" /> Dibujar en pantalla
         </ModeButton>
         <ModeButton active={mode === "upload"} disabled={disabled} onClick={() => switchMode("upload")}>
-          <Upload className="h-3.5 w-3.5" /> Cargar PNG
+          <Icono nombre="archivo-subir" className="h-3.5 w-3.5" /> Cargar PNG
         </ModeButton>
       </div>
 
       {/* El canvas se mantiene montado para conservar el trazo; se oculta en modo carga. */}
       <div className={mode === "draw" ? "space-y-2" : "hidden"}>
-        <div className="overflow-hidden rounded-xl border-2 border-dashed" style={{ borderColor: "#DFE5ED" }}>
+        <div className="overflow-hidden rounded-xl border-2 border-dashed" style={{ borderColor: "var(--border)" }}>
           <canvas
             ref={canvasRef}
             width={760}
@@ -159,8 +161,9 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
             <Eraser className="h-3.5 w-3.5" /> Limpiar
           </button>
           {value && mode === "draw" && (
-            <span className="text-xs font-semibold" style={{ color: "#0a8f8b" }}>
-              ✓ Firma capturada
+            <span className="text-xs font-semibold" style={{ color: "var(--flit-success-ink)" }}>
+              <IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />
+              Firma capturada
             </span>
           )}
         </div>
@@ -175,7 +178,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
           className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed py-8 text-xs font-semibold"
           style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
         >
-          <Upload className="h-6 w-6" />
+          <Icono nombre="archivo-subir" className="h-6 w-6" />
           Selecciona un archivo PNG con la firma
           <input
             id="sv-upload"
@@ -197,7 +200,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
       </div>
 
       {(uploadError || error) && (
-        <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
           {uploadError ?? error}
         </p>
       )}
@@ -224,7 +227,7 @@ function ModeButton({
       disabled={disabled}
       onClick={onClick}
       className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold transition disabled:opacity-50"
-      style={active ? { background: "var(--color-flit-brand)", borderColor: "var(--color-flit-brand)", color: "#fff" } : { borderColor: "#DFE5ED" }}
+      style={active ? { background: "var(--color-flit-brand)", borderColor: "var(--color-flit-brand)", color: "var(--di-on-accent)" } : { borderColor: "var(--border)" }}
     >
       {children}
     </button>

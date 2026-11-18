@@ -1,20 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
-import { Building2, FileText, Lock, Save, TriangleAlert } from "lucide-react";
+import { useRef, useState, type FormEvent } from "react";
+import { Icono } from "@flit/ui/Icono";
+import { INTERRUPTOR_ALERTA_CLS, INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 import { InlineAlert } from "@flit/ui/InlineAlert";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { VehicleLoader } from "@flit/ui/Loader";
-import { SearchableSelect, type SearchableSelectOption } from "@flit/ui/SearchableSelect";
 import { ApiError } from "@/lib/api";
 import {
   AVISO_FUENTE_YA_NO_DISPONIBLE,
+  ERRORES_CONTRATO,
   AYUDA_FUENTE_NO_DISPONIBLE,
-  CODIGO_IDENTIDAD_NO_CONFIGURADA,
   FUENTES,
   estaDisponible,
   etiquetaNit,
   guardarContratoEmpresa,
-  listarEmpresasBackoffice,
   nombreFuente,
   obtenerContratoEmpresa,
   ordenarFuentes,
@@ -23,6 +23,7 @@ import {
   type Fuente,
   type NivelContrato,
 } from "@/lib/configuracion";
+import { mensajeErrorFijo } from "@/lib/errores";
 import {
   AYUDA_CLS,
   BOTON_PRIMARIO_CLS,
@@ -35,6 +36,7 @@ import {
   TARJETA_CLS,
 } from "./estilos";
 import { TOOLTIP_CLS } from "@/components/parametrizacion/estilos";
+import { SelectorEmpresaBackoffice } from "@/components/backoffice/SelectorEmpresaBackoffice";
 
 /** Código del 422 al habilitar una fuente que el backend no declara disponible (HU #13863). */
 const CODIGO_FUENTE_NO_DISPONIBLE = "FUENTE_NO_DISPONIBLE";
@@ -42,9 +44,10 @@ const CODIGO_FUENTE_NO_DISPONIBLE = "FUENTE_NO_DISPONIBLE";
 /**
  * Pestaña Contrato. Lo contratado por la compañía del token va siempre en solo lectura. Con la capacidad editarContrato
  * (backoffice FLIT: permiso diagnostico.configuracion.contrato.editar y tenant_type=FLIT) se suma el editor del contrato
- * de la empresa elegida en el selector de empresas (GET /backoffice/empresas, HU #13741; escenarios 7 y 8): se busca por
- * nombre o NIT, sin escribir su identificador, y el editor no se abre sin una empresa elegida. Solo ese perfil pide la
- * lista: un admin de compañía nunca llama al endpoint.
+ * de la empresa elegida en el selector de empresas (SelectorEmpresaBackoffice, compartido con el listado de diagnósticos
+ * del backoffice; GET /backoffice/empresas, HU #13741; escenarios 7 y 8): se busca por nombre o NIT, sin escribir su
+ * identificador, y el editor no se abre sin una empresa elegida. Solo ese perfil pide la lista: un admin de compañía nunca
+ * llama al endpoint.
  * La disponibilidad de cada fuente sale solo de `fuentes_disponibles` del contrato (HU #13865, gate Q7 = a): una no
  * disponible y no habilitada queda bloqueada con su ayuda; una habilitada que dejó de estar disponible se conserva
  * marcada, con aviso, y se puede quitar.
@@ -63,7 +66,7 @@ function ListaFuentes({ fuentes }: { fuentes: Fuente[] }) {
   return (
     <ul className="flex flex-wrap gap-2" aria-label="Fuentes habilitadas">
       {ordenarFuentes(fuentes).map((f) => (
-        <li key={f} className="rounded-full bg-[var(--badge-info-bg)] px-3 py-1 text-xs font-semibold text-[var(--badge-info-fg)]">
+        <li key={f} {...etiquetaKit("info")}>
           {nombreFuente(f)}
         </li>
       ))}
@@ -75,21 +78,24 @@ function ContratoSoloLectura({ contrato }: { contrato: NivelContrato }) {
   return (
     <section aria-labelledby="contrato-titulo" className={`${TARJETA_CLS} flex flex-col gap-4`}>
       <div className="flex items-start gap-3">
-        <FileText className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" aria-hidden="true" strokeWidth={1.8} />
+        <Icono nombre="documento" className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" />
         <div>
-          <h2 id="contrato-titulo" className="text-lg font-semibold text-flit-primary dark:text-white">
+          <h2 id="contrato-titulo" className="text-lg font-semibold text-flit-primary">
             Lo contratado por tu compañía
           </h2>
-          <p className={AYUDA_CLS}>Solo lectura: el contrato lo administra el backoffice FLIT.</p>
         </div>
+        <span {...etiquetaKit("neutral", { className: "ml-auto" })}>
+          Solo lectura
+        </span>
       </div>
+      <InlineAlert tone="info">FLIT administra tu contrato. Para cambiarlo, escribe a tu ejecutivo de cuenta</InlineAlert>
       <dl className="grid gap-4 sm:grid-cols-[auto_1fr] sm:gap-x-6">
         <dt className={ETIQUETA_CLS}>Fuentes habilitadas</dt>
         <dd>
           <ListaFuentes fuentes={contrato.fuentes_habilitadas} />
         </dd>
         <dt className={ETIQUETA_CLS}>Límite de vehículos por lote</dt>
-        <dd className="text-sm font-semibold text-flit-primary dark:text-white">{contrato.limite_vehiculos_lote}</dd>
+        <dd className="text-sm font-semibold text-flit-primary">{contrato.limite_vehiculos_lote}</dd>
       </dl>
     </section>
   );
@@ -100,12 +106,6 @@ type Carga =
   | { tipo: "cargando" }
   | { tipo: "error"; mensaje: string }
   | { tipo: "listo"; contrato: ContratoBackoffice };
-
-type Listado =
-  | { tipo: "cargando" }
-  | { tipo: "error"; noConfigurado: boolean; mensaje: string }
-  | { tipo: "vacio" }
-  | { tipo: "listo"; empresas: EmpresaBackoffice[] };
 
 type Guardado = { tipo: "inactivo" } | { tipo: "guardando" } | { tipo: "guardado"; recortadas: Fuente[] } | { tipo: "error"; mensaje: string; reintentable: boolean };
 
@@ -120,8 +120,6 @@ function borradorDe(c: ContratoBackoffice): Borrador {
 }
 
 function EditorContratoBackoffice() {
-  const [listado, setListado] = useState<Listado>({ tipo: "cargando" });
-  const [intentoListado, setIntentoListado] = useState(0);
   const [elegida, setElegida] = useState<EmpresaBackoffice | null>(null);
   const [carga, setCarga] = useState<Carga>({ tipo: "vacio" });
   const [borrador, setBorrador] = useState<Borrador | null>(null);
@@ -130,34 +128,6 @@ function EditorContratoBackoffice() {
   const [errorFuentes, setErrorFuentes] = useState<string | null>(null);
   const empresaCargada = useRef("");
   const peticion = useRef<AbortController | null>(null);
-
-  useEffect(() => {
-    const controller = new AbortController();
-    listarEmpresasBackoffice(controller.signal).then(
-      (empresas) => {
-        if (!controller.signal.aborted) setListado(empresas.length > 0 ? { tipo: "listo", empresas } : { tipo: "vacio" });
-      },
-      (e: unknown) => {
-        if (controller.signal.aborted) return;
-        setListado({
-          tipo: "error",
-          noConfigurado: e instanceof ApiError && e.code === CODIGO_IDENTIDAD_NO_CONFIGURADA,
-          mensaje: e instanceof Error ? e.message : "Intenta de nuevo en un momento.",
-        });
-      },
-    );
-    return () => controller.abort();
-  }, [intentoListado]);
-
-  const opciones = useMemo<SearchableSelectOption[]>(
-    () => (listado.tipo === "listo" ? listado.empresas.map((e) => ({ value: e.id, label: e.nombre, hint: etiquetaNit(e.nit) })) : []),
-    [listado],
-  );
-
-  function reintentarListado() {
-    setListado({ tipo: "cargando" });
-    setIntentoListado((n) => n + 1);
-  }
 
   async function cargar(id: string) {
     peticion.current?.abort();
@@ -174,14 +144,12 @@ function EditorContratoBackoffice() {
       setCarga({ tipo: "listo", contrato });
     } catch (e) {
       if (controller.signal.aborted) return;
-      setCarga({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudo cargar el contrato." });
+      // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+      setCarga({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudo cargar el contrato.", ERRORES_CONTRATO) });
     }
   }
 
-  function alElegir(id: string) {
-    if (listado.tipo !== "listo") return;
-    const empresa = listado.empresas.find((e) => e.id === id);
-    if (!empresa) return;
+  function alElegir(empresa: EmpresaBackoffice) {
     setElegida(empresa);
     void cargar(empresa.id);
   }
@@ -209,12 +177,12 @@ function EditorContratoBackoffice() {
     } catch (e) {
       if (e instanceof ApiError && e.status === 422 && e.code === CODIGO_FUENTE_NO_DISPONIBLE) {
         // El error es del campo Fuentes habilitadas (el 422 del contrato no trae `campo`): se muestra sobre él.
-        setErrorFuentes(e.message);
+        setErrorFuentes(ERRORES_CONTRATO[CODIGO_FUENTE_NO_DISPONIBLE]);
         setGuardado({ tipo: "inactivo" });
         return;
       }
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
-      setGuardado({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudo guardar el contrato.", reintentable });
+      setGuardado({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudo guardar el contrato.", ERRORES_CONTRATO), reintentable });
     }
   }
 
@@ -233,49 +201,25 @@ function EditorContratoBackoffice() {
   return (
     <section aria-labelledby="backoffice-titulo" className={`${TARJETA_CLS} flex flex-col gap-5`}>
       <div>
-        <h2 id="backoffice-titulo" className="text-lg font-semibold text-flit-primary dark:text-white">
+        <h2 id="backoffice-titulo" className="text-lg font-semibold text-flit-primary">
           Contrato de una empresa (backoffice FLIT)
         </h2>
         <p className={AYUDA_CLS}>Busca la empresa por nombre o NIT para ver y editar su contrato.</p>
       </div>
 
-      {listado.tipo === "cargando" && <VehicleLoader label="Cargando empresas…" />}
-      {listado.tipo === "error" && (
-        <InlineAlert
-          tone="error"
-          title={listado.noConfigurado ? "El listado de empresas no está configurado" : "No se pudo cargar el listado de empresas"}
-          action={
-            listado.noConfigurado ? undefined : (
-              <button type="button" onClick={reintentarListado} className={BOTON_REINTENTAR_CLS}>
-                Reintentar
-              </button>
-            )
-          }
-        >
-          {listado.noConfigurado ? "Diagnóstico no tiene configurada la conexión con Identidad. Avisa a soporte FLIT." : listado.mensaje}
-        </InlineAlert>
-      )}
-      {listado.tipo === "vacio" && <p className={AYUDA_CLS}>No hay empresas con Diagnóstico habilitado</p>}
-      {listado.tipo === "listo" && (
-        <SearchableSelect
-          id="contrato-empresa"
-          label="Empresa"
-          options={opciones}
-          value={elegida?.id ?? ""}
-          onChange={alElegir}
-          placeholder="Busca por nombre o NIT"
-          noResultsLabel="Ninguna empresa coincide"
-          disabled={ocupado}
-          className="max-w-xl"
-        />
-      )}
+      <SelectorEmpresaBackoffice
+        id="contrato-empresa"
+        value={elegida?.id ?? ""}
+        onChange={alElegir}
+        disabled={ocupado}
+        avisoSinElegir="Todavía no has elegido una empresa."
+      />
 
-      {listado.tipo === "listo" && !elegida && <p className={AYUDA_CLS}>Todavía no has elegido una empresa.</p>}
       {elegida && (
         <div className="flex items-start gap-3">
-          <Building2 className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" aria-hidden="true" strokeWidth={1.8} />
+          <Icono nombre="empresas" className="mt-0.5 h-5 w-5 shrink-0 text-flit-brand" />
           <div>
-            <h3 className="text-base font-semibold text-flit-primary dark:text-white">{elegida.nombre}</h3>
+            <h3 className="text-base font-semibold text-flit-primary">{elegida.nombre}</h3>
             <p className={AYUDA_CLS}>{etiquetaNit(elegida.nit)}</p>
           </div>
         </div>
@@ -347,7 +291,7 @@ function EditorContratoBackoffice() {
             )}
           </div>
 
-          <div className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-flit-gray)] px-4 py-3 dark:border-white/15">
+          <div className="flex items-center justify-between gap-4 rounded-xl border border-border px-4 py-3">
             <div>
               <p id="contrato-ia" className={ETIQUETA_CLS}>
                 Suspender la redacción con IA
@@ -361,13 +305,11 @@ function EditorContratoBackoffice() {
               aria-labelledby="contrato-ia"
               disabled={ocupado}
               onClick={() => setBorrador({ ...borrador, suspendida: !borrador.suspendida })}
-              className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition disabled:opacity-50 ${FOCO_CLS} ${
-                borrador.suspendida ? "bg-[var(--color-flit-alert)]" : "bg-[var(--color-flit-gray)] dark:bg-white/20"
-              }`}
+              className={`${INTERRUPTOR_CLS} ${INTERRUPTOR_ALERTA_CLS} ${FOCO_CLS}`}
             >
               <span
                 aria-hidden="true"
-                className={`inline-block h-5 w-5 rounded-full bg-white shadow transition ${borrador.suspendida ? "translate-x-5" : "translate-x-0.5"}`}
+                className={INTERRUPTOR_PERILLA_CLS}
               />
             </button>
           </div>
@@ -396,7 +338,6 @@ function EditorContratoBackoffice() {
 
           <div className="flex justify-end">
             <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
-              <Save className="h-4 w-4" aria-hidden="true" />
               {ocupado ? "Guardando…" : "Guardar contrato"}
             </button>
           </div>
@@ -446,8 +387,8 @@ function CasillaFuenteContrato({
           className={MARCA_CLS}
         />
         <span className="flex-1">{nombre}</span>
-        {bloqueada && <Lock className="h-3.5 w-3.5 text-[var(--nav-texto)]" aria-hidden="true" />}
-        {estado === "ya-no-disponible" && <TriangleAlert className="h-3.5 w-3.5 text-[var(--badge-warning-fg)]" aria-hidden="true" />}
+        {bloqueada && <Icono nombre="candado" className="h-3.5 w-3.5 text-muted-foreground" />}
+        {estado === "ya-no-disponible" && <Icono nombre="alerta" className="h-3.5 w-3.5 text-[var(--badge-warning-fg)]" />}
       </label>
       {bloqueada && (
         <span role="tooltip" id={ayudaId} className={TOOLTIP_CLS}>

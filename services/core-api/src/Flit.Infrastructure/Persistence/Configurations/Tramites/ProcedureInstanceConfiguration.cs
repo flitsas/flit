@@ -243,6 +243,9 @@ internal sealed class ProcedureInstanceConfiguration : IEntityTypeConfiguration<
             .HasColumnName("channel_transit_office_id")
             .Metadata.SetAfterSaveBehavior(PropertySaveBehavior.Throw);
 
+        // Copia de la firma de baúl al radicar (195-firma-baul-copia-al-radicar): marca «ya se copió».
+        builder.Property(x => x.FirmaBaulCopiadaAt).HasColumnName("firma_baul_copiada_at");
+
         // HU #13402 — parámetro «generar improntas» de la compañía congelado al crear el trámite
         // (boolean NOT NULL DEFAULT true; las filas previas quedan true). Va en el INSERT y nunca en
         // un UPDATE: la política de la compañía cambia, el trámite en curso no.

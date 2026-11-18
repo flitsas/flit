@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeft, Network } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import Link from "next/link";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -219,7 +219,7 @@ function CompanyDetail() {
   return (
     <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
       <button type="button" onClick={() => router.push(backHref)} className={ADMIN_BACK_LINK_CLS}>
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> {backLabel}
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" /> {backLabel}
       </button>
 
       {managingChild && company && <AdminChildContextBanner childName={company.razonSocial} />}
@@ -236,7 +236,7 @@ function CompanyDetail() {
         action={
           showNetworkLink ? (
             <Link href={`/admin/companies/${tenantId}/children`} className={ADMIN_BRAND_OUTLINE_BTN_CLS}>
-              <Network className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="integraciones" className="h-3.5 w-3.5" />
               Panel de red
             </Link>
           ) : undefined
@@ -254,7 +254,7 @@ function CompanyDetail() {
               {isNew && (
                 <div
                   className="mb-3 rounded-xl border px-3 py-2 text-xs"
-                  style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+                  style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
                   role="status"
                 >
                   Esta compañía aún no tiene configuración. Define los valores y pulsa

@@ -21,27 +21,14 @@ using Xunit;
 
 namespace Flit.PersonaNatural.Tests;
 
-/// <summary>Resolutor de cajeros de prueba: quién está activo y de qué organismo; cuenta las preguntas (no hay caché).</summary>
-internal sealed class ResolverCajeroFalso : IResolverCajero
-{
-    public Dictionary<Guid, Cajero> Activos { get; } = [];
-    public int Llamadas;
-
-    public Task<Cajero?> ResolverAsync(Guid tenantId, Guid usuarioId, CancellationToken ct)
-    {
-        Interlocked.Increment(ref Llamadas);
-        return Task.FromResult(Activos.TryGetValue(usuarioId, out var c) ? c : null);
-    }
-}
-
 /// <summary>
-/// Feature #14453 — portal de caja del organismo (BFF): autenticación y organismo (ADR-0082), HU #14456 (buscar), #14457
-/// (confirmar), #14459 (lista del día) y #14461 (administrar cobros por gRPC). Sobre el host real, una base efímera propia y un
-/// esquema de autenticación de prueba que arma el principal desde cabeceras (sin firmar JWT).
+/// Feature #14453 — caja del organismo en el BFF (ADR-0082), ahora SOLO por gRPC (<c>CajaAdminService</c>, token de svc-tramites): HU #14456
+/// (buscar), #14457 (confirmar), #14459 (lista del día) y #14461 (listar y anular). Sobre el host real, una base efímera propia y un
+/// esquema de autenticación de prueba que arma el principal desde cabeceras (sin firmar JWT). Los helpers <c>Enviar</c>/<c>Confirmar</c>
+/// llaman al gRPC y devuelven una <see cref="HttpResponseMessage"/> con los mismos códigos que core-api traduce al front.
 /// </summary>
 public sealed class CajaTests : IAsyncLifetime
 {
-    private const string Ruta = "/api/v1/persona-natural/caja";
     private static readonly Guid OrganismoA = Guid.Parse(PortalHost.Organismo);
     private static readonly Guid OrganismoB = Guid.Parse("0199b7e0-0000-7000-8000-0000000000b2");
     private static readonly Guid Empresa = PlatformTenants.PersonaNatural;
@@ -50,7 +37,6 @@ public sealed class CajaTests : IAsyncLifetime
     private static readonly Cajero Beto = new(Guid.Parse("00000000-0000-0000-0000-00000000a002"), "Beto Caja", OrganismoA, "AB1", "Tránsito de Prueba");
     private static readonly Cajero Carla = new(Guid.Parse("00000000-0000-0000-0000-00000000b001"), "Carla Caja", OrganismoB, "ZZ9", "Otro Tránsito");
 
-    private readonly ResolverCajeroFalso _resolver = new();
     private readonly AlmacenEnMemoria _almacen = new();
     private PortalHost _host = null!;
     private bool _iniciado;
@@ -66,12 +52,9 @@ public sealed class CajaTests : IAsyncLifetime
 
     private async Task IniciarAsync(bool habilitado = true, params (string Clave, string Valor)[] ajustes)
     {
-        foreach (var c in new[] { Ana, Beto, Carla })
-            _resolver.Activos[c.UsuarioId] = c;
         (string, string)[] todos = [("Caja:Habilitado", habilitado ? "true" : "false"), .. ajustes];
         _host = await PortalHost.IniciarAsync("pncajafix", (servicios, _) =>
         {
-            servicios.AddSingleton<IResolverCajero>(_resolver);
             servicios.AddSingleton<IAlmacenAdjuntos>(_almacen);
             servicios.AddAuthentication().AddScheme<AuthenticationSchemeOptions, EsquemaDeAutenticacionDePrueba>(EsquemaDeAutenticacionDePrueba.Nombre, _ => { });
             servicios.PostConfigure<AuthenticationOptions>(o =>
@@ -84,112 +67,6 @@ public sealed class CajaTests : IAsyncLifetime
         _host.Definiciones.PorCodigo["TRASPASO_STANDARD"] = DefinicionesDePrueba.Traspaso();
     }
 
-    // ── Autenticación y organismo ────────────────────────────────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task SinToken_Responde401SinSesion()
-    {
-        await IniciarAsync();
-
-        var r = await _host.EnviarAsync(HttpMethod.Get, $"{Ruta}/sesion");
-
-        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await PortalHost.CodigoAsync(r)).Should().Be("sin_sesion");
-        r.Headers.CacheControl!.NoStore.Should().BeTrue();
-        _resolver.Llamadas.Should().Be(0);
-    }
-
-    [Theory]
-    [InlineData("otro-producto", "ot_caja", "caja")]
-    [InlineData("caja", "ot_admin", "caja")]
-    [InlineData("caja", "ot_caja", "personanatural")]
-    public async Task UnTokenQueNoEsDeCaja_Responde403SinPermiso_YNoPreguntaPorElUsuario(string producto, string rol, string audiencia)
-    {
-        await IniciarAsync();
-
-        var r = await Enviar(HttpMethod.Get, "/sesion", Ana, producto: producto, rol: rol, audiencia: audiencia);
-
-        r.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await PortalHost.CodigoAsync(r)).Should().Be("sin_permiso");
-        _resolver.Llamadas.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task UnTokenDeServicioNoEsUnaCaja()
-    {
-        await IniciarAsync();
-
-        var r = await Enviar(HttpMethod.Get, "/sesion", Ana, sub: "svc-tramites");
-
-        r.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-    }
-
-    [Fact]
-    public async Task UnUsuarioDesactivadoPierdeElAccesoEnLaSiguientePeticion_SinCache()
-    {
-        await IniciarAsync();
-        (await Enviar(HttpMethod.Get, "/sesion", Ana)).StatusCode.Should().Be(HttpStatusCode.OK);
-
-        _resolver.Activos.Remove(Ana.UsuarioId);
-        var r = await Enviar(HttpMethod.Get, "/sesion", Ana);
-
-        r.StatusCode.Should().Be(HttpStatusCode.Forbidden);
-        (await PortalHost.CodigoAsync(r)).Should().Be("sin_permiso");
-        _resolver.Llamadas.Should().Be(2, "se pregunta en cada petición");
-    }
-
-    [Fact]
-    public async Task ElOrganismoSalePorElResolutor_NuncaDelCliente()
-    {
-        await IniciarAsync();
-        var codigo = await CrearAsync(organismo: OrganismoB);
-
-        // Carla pide con cabeceras y consulta que intentan elegir el organismo A: se ignoran.
-        var sesion = await Enviar(HttpMethod.Get, "/sesion?organismoId=" + OrganismoA, Carla, extra: [("X-Organismo-Id", OrganismoA.ToString())]);
-        var busqueda = await Enviar(HttpMethod.Get, $"/tramites/{codigo}?organismoId={OrganismoA}", Carla, extra: [("X-Organismo-Id", OrganismoA.ToString())]);
-
-        var json = (await PortalHost.JsonAsync(sesion)).RootElement;
-        json.GetProperty("organismo").GetProperty("id").GetGuid().Should().Be(OrganismoB);
-        json.GetProperty("usuario").GetProperty("nombre").GetString().Should().Be("Carla Caja");
-        json.GetProperty("expiraEn").GetDateTimeOffset().Should().Be(_host.Reloj.GetUtcNow().AddMinutes(-1).AddHours(12));
-        busqueda.StatusCode.Should().Be(HttpStatusCode.OK, "es el organismo B de Carla, no el A del cliente");
-    }
-
-    [Fact]
-    public async Task UnTokenConMasDe12HorasDeSesion_Responde401()
-    {
-        await IniciarAsync();
-
-        var r = await Enviar(HttpMethod.Get, "/sesion", Ana, iat: _host.Reloj.GetUtcNow().AddHours(-12).AddMinutes(-1));
-
-        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await PortalHost.CodigoAsync(r)).Should().Be("sin_sesion");
-        (await Enviar(HttpMethod.Get, "/sesion", Ana, iat: _host.Reloj.GetUtcNow().AddHours(-11))).StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [Fact]
-    public async Task ConLaCajaApagada_NoExisteNingunaRutaDeCaja()
-    {
-        await IniciarAsync(habilitado: false);
-
-        var r = await Enviar(HttpMethod.Get, "/sesion", Ana);
-
-        r.StatusCode.Should().Be(HttpStatusCode.NotFound);
-        _host.App.Services.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>().Get(JwtBearerDefaults.AuthenticationScheme)
-            .TokenValidationParameters.ValidAudiences?.Should().NotContain("caja", "con la caja apagada el BFF solo acepta aud=personanatural");
-    }
-
-    [Fact]
-    public async Task ConLaCajaEncendida_ElBffAceptaLaAudienciaCaja_ConfigurandoElJwt()
-    {
-        await IniciarAsync();
-
-        var jwt = _host.App.Services.GetRequiredService<IOptionsMonitor<JwtBearerOptions>>().Get(JwtBearerDefaults.AuthenticationScheme).TokenValidationParameters;
-
-        jwt.ValidAudiences.Should().Contain("caja");
-        jwt.ValidAudience.Should().Be("personanatural");
-    }
-
     // ── HU #14456: buscar el trámite por su ID ───────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -198,7 +75,7 @@ public sealed class CajaTests : IAsyncLifetime
         await IniciarAsync();
         var codigo = await CrearAsync();
 
-        var r = await Enviar(HttpMethod.Get, $"/tramites/{codigo.ToLowerInvariant()}", Ana);
+        var r = await Buscar(codigo.ToLowerInvariant(), Ana);
 
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         var texto = await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
@@ -206,7 +83,6 @@ public sealed class CajaTests : IAsyncLifetime
         json.GetProperty("codigo").GetString().Should().Be(codigo);
         json.GetProperty("tipoTramite").GetProperty("codigo").GetString().Should().Be("TRASPASO_STANDARD");
         json.GetProperty("tipoTramite").GetProperty("nombre").GetString().Should().Be("Traspaso");
-        json.GetProperty("organismo").GetProperty("nombre").GetString().Should().Be("Tránsito de Prueba");
         json.GetProperty("totalCop").GetInt64().Should().Be(366_000);
         json.GetProperty("lineas").GetArrayLength().Should().Be(2);
         json.GetProperty("lineas")[0].GetProperty("concepto").GetString().Should().Be("Valor del Servicio de tránsito");
@@ -220,8 +96,8 @@ public sealed class CajaTests : IAsyncLifetime
     {
         await IniciarAsync();
 
-        var inexistente = await Enviar(HttpMethod.Get, "/tramites/PN-2026-999999", Ana);
-        var malo = await Enviar(HttpMethod.Get, "/tramites/DROP-TABLE", Ana);
+        var inexistente = await Buscar("PN-2026-999999", Ana);
+        var malo = await Buscar("DROP-TABLE", Ana);
 
         foreach (var r in new[] { inexistente, malo })
         {
@@ -239,7 +115,7 @@ public sealed class CajaTests : IAsyncLifetime
         await IniciarAsync();
         var codigo = await CrearAsync(organismo: OrganismoB);
 
-        var r = await Enviar(HttpMethod.Get, $"/tramites/{codigo}", Ana);
+        var r = await Buscar(codigo, Ana);
 
         r.StatusCode.Should().Be(HttpStatusCode.Forbidden);
         var json = (await PortalHost.JsonAsync(r)).RootElement;
@@ -255,7 +131,7 @@ public sealed class CajaTests : IAsyncLifetime
         var codigo = await CrearAsync();
         (await Confirmar(codigo, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var r = await Enviar(HttpMethod.Get, $"/tramites/{codigo}", Beto);
+        var r = await Buscar(codigo, Beto);
 
         r.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await PortalHost.CodigoAsync(r)).Should().Be("ya_pagado");
@@ -268,7 +144,7 @@ public sealed class CajaTests : IAsyncLifetime
         var codigo = await CrearAsync();
 
         _host.Reloj.Avanzar(TimeSpan.FromDays(1));
-        var r = await Enviar(HttpMethod.Get, $"/tramites/{codigo}", Ana);
+        var r = await Buscar(codigo, Ana);
 
         r.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await PortalHost.CodigoAsync(r)).Should().Be("cobro_vencido");
@@ -283,7 +159,7 @@ public sealed class CajaTests : IAsyncLifetime
         await IniciarAsync();
         var codigo = await CrearAsync(estado: estado, habilitado: habilitado);
 
-        var r = await Enviar(HttpMethod.Get, $"/tramites/{codigo}", Ana);
+        var r = await Buscar(codigo, Ana);
 
         r.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await PortalHost.CodigoAsync(r)).Should().Be("no_habilitado");
@@ -296,7 +172,7 @@ public sealed class CajaTests : IAsyncLifetime
         var codigo = await CrearAsync();
         _host.Medios.MedioDisponible = false;
 
-        var r = await Enviar(HttpMethod.Get, $"/tramites/{codigo}", Ana);
+        var r = await Buscar(codigo, Ana);
 
         r.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await PortalHost.CodigoAsync(r)).Should().Be("no_habilitado");
@@ -307,10 +183,10 @@ public sealed class CajaTests : IAsyncLifetime
     {
         await IniciarAsync();
         var codigo = await CrearAsync();
-        (await Enviar(HttpMethod.Get, $"/tramites/{codigo}", Ana)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Buscar(codigo, Ana)).StatusCode.Should().Be(HttpStatusCode.OK);
 
         _host.Medios.Derechos = 200_000;
-        var json = (await PortalHost.JsonAsync(await Enviar(HttpMethod.Get, $"/tramites/{codigo}", Ana))).RootElement;
+        var json = (await PortalHost.JsonAsync(await Buscar(codigo, Ana))).RootElement;
 
         json.GetProperty("totalCop").GetInt64().Should().Be(381_000);
     }
@@ -320,9 +196,9 @@ public sealed class CajaTests : IAsyncLifetime
     {
         await IniciarAsync();
         for (var i = 0; i < 10; i++)
-            (await Enviar(HttpMethod.Get, $"/tramites/PN-2026-9000{i:D2}", Ana)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+            (await Buscar($"PN-2026-9000{i:D2}", Ana)).StatusCode.Should().Be(HttpStatusCode.NotFound);
 
-        var bloqueada = await Enviar(HttpMethod.Get, "/tramites/PN-2026-900099", Ana);
+        var bloqueada = await Buscar("PN-2026-900099", Ana);
 
         bloqueada.StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         (await PortalHost.CodigoAsync(bloqueada)).Should().Be("demasiados_intentos");
@@ -332,12 +208,12 @@ public sealed class CajaTests : IAsyncLifetime
 
         // El tope es POR usuario: otra caja del mismo organismo sigue buscando.
         var existente = await CrearAsync();
-        (await Enviar(HttpMethod.Get, $"/tramites/{existente}", Beto)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Buscar(existente, Beto)).StatusCode.Should().Be(HttpStatusCode.OK);
         // Un trámite real tampoco se encuentra mientras dure el bloqueo (ni siquiera uno bueno).
-        (await Enviar(HttpMethod.Get, $"/tramites/{existente}", Ana)).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        (await Buscar(existente, Ana)).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
 
         _host.Reloj.Avanzar(TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(1));
-        (await Enviar(HttpMethod.Get, $"/tramites/{existente}", Ana)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Buscar(existente, Ana)).StatusCode.Should().Be(HttpStatusCode.OK);
     }
 
     [Fact]
@@ -348,7 +224,7 @@ public sealed class CajaTests : IAsyncLifetime
         (await Confirmar(pagado, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.OK);
 
         for (var i = 0; i < 15; i++)
-            (await Enviar(HttpMethod.Get, $"/tramites/{pagado}", Ana)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+            (await Buscar(pagado, Ana)).StatusCode.Should().Be(HttpStatusCode.Conflict);
     }
 
     [Fact]
@@ -357,8 +233,8 @@ public sealed class CajaTests : IAsyncLifetime
         await IniciarAsync();
         var codigo = await CrearAsync();
 
-        await Enviar(HttpMethod.Get, $"/tramites/{codigo}", Ana);
-        await Enviar(HttpMethod.Get, "/tramites/PN-2026-999999", Ana);
+        await Buscar(codigo, Ana);
+        await Buscar("PN-2026-999999", Ana);
 
         await using var db = _host.NuevaDb();
         var eventos = await db.Set<EventoCaja>().OrderBy(e => e.CreadoEn).ToListAsync(TestContext.Current.CancellationToken);
@@ -386,7 +262,6 @@ public sealed class CajaTests : IAsyncLifetime
         json.GetProperty("codigo").GetString().Should().Be(codigo);
         json.GetProperty("valorCop").GetInt64().Should().Be(366_000);
         json.GetProperty("medio").GetString().Should().Be("efectivo");
-        json.GetProperty("mensaje").GetString().Should().Be("Pago registrado.");
         await using var db = _host.NuevaDb();
         var c = await db.Set<CobroSolicitud>().SingleAsync(x => x.Codigo == codigo, TestContext.Current.CancellationToken);
         (c.Estado, c.ValorCop, c.Medio, c.MedioCaja, c.PagadoPorId, c.PagadoPorNombre).Should().Be(("pagado", 366_000L, "caja", "efectivo", Ana.UsuarioId, "Ana Caja"));
@@ -481,9 +356,8 @@ public sealed class CajaTests : IAsyncLifetime
 
         var ejecutable = await Confirmar(codigo, Ana, "efectivo", prefactura: ("prefactura.pdf", Archivos.Ejecutable()));
         var webp = await Confirmar(codigo, Ana, "efectivo", prefactura: ("prefactura.webp", Archivos.Webp()));
-        var vacia = await Confirmar(codigo, Ana, "efectivo", prefactura: ("prefactura.pdf", Array.Empty<byte>()));
 
-        foreach (var r in new[] { ejecutable, webp, vacia })
+        foreach (var r in new[] { ejecutable, webp })
         {
             r.StatusCode.Should().Be(HttpStatusCode.BadRequest);
             (await PortalHost.CodigoAsync(r)).Should().Be("prefactura_invalida");
@@ -539,10 +413,8 @@ public sealed class CajaTests : IAsyncLifetime
         await IniciarAsync();
         var codigo = await CrearAsync();
 
-        using var form = Formulario("efectivo", totalVisto: null);
-        form.Add(new StringContent("1"), "valorCop");
-        form.Add(new StringContent("1"), "totalCop");
-        var r = await Enviar(HttpMethod.Post, $"/tramites/{codigo}/confirmar", Ana, contenido: form, llave: "k-valor");
+        // El contrato gRPC no trae ningún valor del cliente: sin total visto se cobra el total del servidor.
+        var r = await Confirmar(codigo, Ana, "efectivo", totalVisto: null, llave: "k-valor");
 
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         (await PortalHost.JsonAsync(r)).RootElement.GetProperty("valorCop").GetInt64().Should().Be(366_000);
@@ -656,24 +528,17 @@ public sealed class CajaTests : IAsyncLifetime
         (await Confirmar(a2, Beto, "otro", "Nequi")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await Confirmar(b1, Carla, "datafono")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var json = (await PortalHost.JsonAsync(await Enviar(HttpMethod.Get, "/cobros/hoy", Ana))).RootElement;
+        var lista = await Lista();
 
-        json.GetProperty("fecha").GetString().Should().Be("2026-10-27");
-        json.GetProperty("totalDiaCop").GetInt64().Should().Be(732_000);
-        json.GetProperty("total").GetInt32().Should().Be(2);
-        json.GetProperty("pagina").GetInt32().Should().Be(1);
-        json.GetProperty("tamano").GetInt32().Should().Be(10);
-        var items = json.GetProperty("items");
-        items.GetArrayLength().Should().Be(2);
-        items[0].GetProperty("codigo").GetString().Should().Be(a2, "el más reciente primero");
-        items[0].GetProperty("valorCop").GetInt64().Should().Be(366_000);
-        items[0].GetProperty("medio").GetString().Should().Be("otro");
-        items[0].GetProperty("medioDetalle").GetString().Should().Be("Nequi");
-        items[0].GetProperty("hora").GetString().Should().Be("12:30");
-        items[0].GetProperty("usuario").GetString().Should().Be("Beto Caja");
-        items[0].GetProperty("estado").GetString().Should().Be("pagado");
-        items[1].GetProperty("usuario").GetString().Should().Be("Ana Caja");
-        items.EnumerateArray().Select(i => i.GetProperty("codigo").GetString()).Should().NotContain(b1);
+        lista.TotalDiaCop.Should().Be(732_000);
+        lista.Total.Should().Be(2);
+        lista.Items.Should().HaveCount(2);
+        var primero = lista.Items[0];
+        primero.Codigo.Should().Be(a2, "el más reciente primero");
+        (primero.ValorCop, primero.Medio, primero.MedioDetalle, primero.PagadoPorNombre, primero.Estado).Should().Be((366_000L, "otro", "Nequi", "Beto Caja", "pagado"));
+        DateTimeOffset.Parse(primero.PagadoEn, System.Globalization.CultureInfo.InvariantCulture).ToOffset(TimeSpan.FromHours(-5)).ToString("HH:mm").Should().Be("12:30");
+        lista.Items[1].PagadoPorNombre.Should().Be("Ana Caja");
+        lista.Items.Select(i => i.Codigo).Should().NotContain(b1);
     }
 
     [Fact]
@@ -692,17 +557,16 @@ public sealed class CajaTests : IAsyncLifetime
             _host.Reloj.Avanzar(TimeSpan.FromMinutes(1));
         }
 
-        var pagina1 = (await PortalHost.JsonAsync(await Enviar(HttpMethod.Get, "/cobros/hoy?pagina=1&tamano=2", Ana))).RootElement;
-        var pagina2 = (await PortalHost.JsonAsync(await Enviar(HttpMethod.Get, "/cobros/hoy?pagina=2&tamano=2", Ana))).RootElement;
-        var enorme = (await PortalHost.JsonAsync(await Enviar(HttpMethod.Get, "/cobros/hoy?tamano=5000", Ana))).RootElement;
+        var pagina1 = await Lista(pagina: 1, tamano: 2);
+        var pagina2 = await Lista(pagina: 2, tamano: 2);
+        var ayerLista = await Lista(fecha: "2026-10-27");
 
-        pagina1.GetProperty("fecha").GetString().Should().Be("2026-10-28");
-        pagina1.GetProperty("total").GetInt32().Should().Be(3);
-        pagina1.GetProperty("totalDiaCop").GetInt64().Should().Be(3 * 366_000);
-        pagina1.GetProperty("items").GetArrayLength().Should().Be(2);
-        pagina2.GetProperty("items").GetArrayLength().Should().Be(1);
-        pagina2.GetProperty("items")[0].GetProperty("codigo").GetString().Should().Be(hoy[0]);
-        enorme.GetProperty("tamano").GetInt32().Should().Be(50);
+        pagina1.Total.Should().Be(3);
+        pagina1.TotalDiaCop.Should().Be(3 * 366_000);
+        pagina1.Items.Should().HaveCount(2);
+        pagina2.Items.Should().ContainSingle().Which.Codigo.Should().Be(hoy[0]);
+        ayerLista.Items.Should().ContainSingle().Which.Codigo.Should().Be(ayer);
+        CajaListaService.Paginar(null, 5000).Tamano.Should().Be(50);
     }
 
     [Fact]
@@ -713,9 +577,9 @@ public sealed class CajaTests : IAsyncLifetime
         var codigo = await CrearAsync();
         (await Confirmar(codigo, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        (await PortalHost.JsonAsync(await Enviar(HttpMethod.Get, "/cobros/hoy", Ana))).RootElement.GetProperty("total").GetInt32().Should().Be(1);
+        (await Lista()).Total.Should().Be(1);
         _host.Reloj.Avanzar(TimeSpan.FromHours(2)); // 01:00 en Colombia del 28
-        (await PortalHost.JsonAsync(await Enviar(HttpMethod.Get, "/cobros/hoy", Ana))).RootElement.GetProperty("total").GetInt32().Should().Be(0);
+        (await Lista()).Total.Should().Be(0);
     }
 
     [Fact]
@@ -729,12 +593,11 @@ public sealed class CajaTests : IAsyncLifetime
         var cobro = await CobroIdAsync(a1);
 
         await AnularComoAdminAsync(cobro);
-        var json = (await PortalHost.JsonAsync(await Enviar(HttpMethod.Get, "/cobros/hoy", Ana))).RootElement;
+        var lista = await Lista();
 
-        json.GetProperty("total").GetInt32().Should().Be(2);
-        json.GetProperty("totalDiaCop").GetInt64().Should().Be(366_000, "el anulado no suma");
-        json.GetProperty("items").EnumerateArray().Select(i => (i.GetProperty("codigo").GetString(), i.GetProperty("estado").GetString()))
-            .Should().BeEquivalentTo([(a1, "anulado"), (a2, "pagado")]);
+        lista.Total.Should().Be(2);
+        lista.TotalDiaCop.Should().Be(366_000, "el anulado no suma");
+        lista.Items.Select(i => (i.Codigo, i.Estado)).Should().BeEquivalentTo([(a1, "anulado"), (a2, "pagado")]);
     }
 
     [Fact]
@@ -747,7 +610,7 @@ public sealed class CajaTests : IAsyncLifetime
         await AnularComoAdminAsync(cobro);
 
         // Anulado: la solicitud está en pendiente_pago pero sin cobro habilitado hasta que la persona lo genere otra vez.
-        var r = await Enviar(HttpMethod.Get, $"/tramites/{codigo}", Ana);
+        var r = await Buscar(codigo, Ana);
 
         r.StatusCode.Should().Be(HttpStatusCode.Conflict);
         (await PortalHost.CodigoAsync(r)).Should().Be("no_habilitado");
@@ -865,56 +728,83 @@ public sealed class CajaTests : IAsyncLifetime
         ex.Which.StatusCode.Should().Be(StatusCode.Unimplemented);
     }
 
+    // ── Caja como módulo de FLIT 2.0: BuscarTramite y ConfirmarCobro por gRPC ────────────────────────────────────────
+
+    [Fact]
+    public async Task Grpc_BuscarYConfirmar_SoloSvcTramitesConElScope_UnaCajaOUnTokenAjenoNuncaPasa()
+    {
+        await IniciarAsync();
+        var codigo = await CrearAsync();
+        var buscar = new BuscarTramiteRequest { OrganismoId = OrganismoA.ToString(), Codigo = codigo, UsuarioId = Ana.UsuarioId.ToString() };
+        var confirmar = new ConfirmarCobroRequest
+        {
+            OrganismoId = OrganismoA.ToString(), Codigo = codigo, UsuarioId = Ana.UsuarioId.ToString(), UsuarioNombre = "Ana Caja", MedioCaja = "efectivo", IdempotencyKey = "k-1",
+        };
+
+        foreach (var cabeceras in new[] { CabecerasServicio(sub: "svc-notificaciones"), CabecerasServicio(scope: "platform.personanatural.leer"), CabecerasServicio(aud: "tramites") })
+        {
+            var b = await FluentActions.Awaiting(() => Cliente().BuscarTramiteAsync(buscar, cabeceras, cancellationToken: TestContext.Current.CancellationToken).ResponseAsync).Should().ThrowAsync<RpcException>();
+            var c = await FluentActions.Awaiting(() => Cliente().ConfirmarCobroAsync(confirmar, cabeceras, cancellationToken: TestContext.Current.CancellationToken).ResponseAsync).Should().ThrowAsync<RpcException>();
+            b.Which.StatusCode.Should().Be(StatusCode.PermissionDenied);
+            c.Which.StatusCode.Should().Be(StatusCode.PermissionDenied);
+        }
+
+        var sinToken = await FluentActions.Awaiting(() => Cliente().BuscarTramiteAsync(buscar, CabecerasServicio(sub: null), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync).Should().ThrowAsync<RpcException>();
+        sinToken.Which.StatusCode.Should().Be(StatusCode.Unauthenticated);
+        await using var db = _host.NuevaDb();
+        (await db.Set<CobroSolicitud>().CountAsync(c => c.Estado == "pagado", TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Grpc_BuscarYConfirmar_ConIdsInvalidos_SonInvalidArgument_SinTocarElTope()
+    {
+        await IniciarAsync();
+
+        async Task<StatusCode> Codigo(Func<Task> llamada) => (await FluentActions.Awaiting(llamada).Should().ThrowAsync<RpcException>()).Which.StatusCode;
+        var ct = TestContext.Current.CancellationToken;
+
+        (await Codigo(() => Cliente().BuscarTramiteAsync(new BuscarTramiteRequest { OrganismoId = "x", Codigo = "PN-2026-000101", UsuarioId = Ana.UsuarioId.ToString() }, CabecerasServicio(), cancellationToken: ct).ResponseAsync))
+            .Should().Be(StatusCode.InvalidArgument);
+        (await Codigo(() => Cliente().BuscarTramiteAsync(new BuscarTramiteRequest { OrganismoId = OrganismoA.ToString(), Codigo = "PN-2026-000101", UsuarioId = "no" }, CabecerasServicio(), cancellationToken: ct).ResponseAsync))
+            .Should().Be(StatusCode.InvalidArgument);
+        (await Codigo(() => Cliente().ConfirmarCobroAsync(new ConfirmarCobroRequest { OrganismoId = Guid.Empty.ToString(), UsuarioId = Ana.UsuarioId.ToString() }, CabecerasServicio(), cancellationToken: ct).ResponseAsync))
+            .Should().Be(StatusCode.InvalidArgument);
+        await using var db = _host.NuevaDb();
+        (await db.Set<EventoCaja>().CountAsync(ct)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Grpc_LaHuellaDeLaIp_SeFirmaDeNuevoConLaLlaveDelBff_YLaIpNuncaSeGuarda()
+    {
+        await IniciarAsync();
+        var codigo = await CrearAsync();
+        var hashQueMandaCoreApi = HashDeIp("203.0.113.9");
+
+        (await Buscar(codigo, Ana)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Confirmar(codigo, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        await using var db = _host.NuevaDb();
+        var eventos = await db.Set<EventoCaja>().ToListAsync(TestContext.Current.CancellationToken);
+        eventos.Should().NotBeEmpty().And.OnlyContain(e => e.IpHuella != null && e.IpHuella.Length == 64 && e.IpHuella != hashQueMandaCoreApi);
+    }
+
+    [Fact]
+    public async Task Grpc_UnaPrefacturaDe4_5MB_PasaElLimiteDeMensajeDeGrpc_YUnaDeMasDe5MB_SeRechazaPorTamano()
+    {
+        await IniciarAsync();
+        var grande = await CrearAsync();
+        var enorme = await CrearAsync();
+
+        var ok = await Confirmar(grande, Ana, "efectivo", prefactura: ("p.pdf", Archivos.Pdf(4_500_000)));
+        var rechazada = await Confirmar(enorme, Ana, "efectivo", prefactura: ("p.pdf", Archivos.Pdf(5 * 1024 * 1024 + 1000)));
+
+        ok.StatusCode.Should().Be(HttpStatusCode.OK, "el tope por defecto de gRPC es 4 MB y la prefactura puede llegar a 5");
+        rechazada.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await PortalHost.CodigoAsync(rechazada)).Should().Be("prefactura_invalida");
+        _almacen.Archivos.Should().HaveCount(1);
+    }
+
     // ── Revisiones de seguridad y de código de la Feature #14453 ─────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task Sesion_SinAuthTime_AunqueTengaUnIatReciente_Responde401SinSesion_FailClosed()
-    {
-        await IniciarAsync();
-
-        var r = await Enviar(HttpMethod.Get, "/sesion", Ana, soloIat: true);
-
-        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        (await PortalHost.CodigoAsync(r)).Should().Be("sin_sesion");
-        _resolver.Llamadas.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task Sesion_ElIatRenovadoPorUnRefreshNoEstiraElTope_MandaElAuthTime()
-    {
-        await IniciarAsync();
-        var inicio = _host.Reloj.GetUtcNow().AddHours(-13).ToUnixTimeSeconds();
-
-        // iat reciente (como el de un refresh) pero la sesión empezó hace 13 h.
-        var vencida = await Enviar(HttpMethod.Get, "/sesion", Ana, soloIat: true, extra: [("x-test-claim", $"auth_time={inicio}")]);
-        var vigente = await Enviar(HttpMethod.Get, "/sesion", Ana, soloIat: true, extra: [("x-test-claim", $"auth_time={_host.Reloj.GetUtcNow().AddHours(-11).ToUnixTimeSeconds()}")]);
-
-        vencida.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-        vigente.StatusCode.Should().Be(HttpStatusCode.OK);
-    }
-
-    [Theory]
-    [InlineData("no-es-numero")]
-    [InlineData("0")]
-    [InlineData("-5")]
-    public async Task Sesion_ConUnAuthTimeInvalido_Responde401(string valor)
-    {
-        await IniciarAsync();
-
-        var r = await Enviar(HttpMethod.Get, "/sesion", Ana, soloIat: true, extra: [("x-test-claim", $"auth_time={valor}")]);
-
-        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
-
-    [Fact]
-    public async Task Sesion_ConUnAuthTimeEnElFuturoLejano_Responde401()
-    {
-        await IniciarAsync();
-
-        var r = await Enviar(HttpMethod.Get, "/sesion", Ana, soloIat: true, extra: [("x-test-claim", $"auth_time={_host.Reloj.GetUtcNow().AddHours(2).ToUnixTimeSeconds()}")]);
-
-        r.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
-    }
 
     [Fact]
     public async Task Confirmar_ConCodigosQueNoExisten_ComparteElTopeDeBusquedasFallidas_Responde429()
@@ -934,7 +824,7 @@ public sealed class CajaTests : IAsyncLifetime
         int.Parse(bloqueada.Headers.GetValues("Retry-After").Single()).Should().BeInRange(1, 300);
         // El tope es el mismo que el de GET: un trámite real tampoco se encuentra mientras dure el bloqueo.
         var existente = await CrearAsync();
-        (await Enviar(HttpMethod.Get, $"/tramites/{existente}", Ana)).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
+        (await Buscar(existente, Ana)).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         (await Confirmar(existente, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.TooManyRequests);
         (await Confirmar(existente, Beto, "efectivo")).StatusCode.Should().Be(HttpStatusCode.OK, "el tope es por usuario");
     }
@@ -969,7 +859,7 @@ public sealed class CajaTests : IAsyncLifetime
     {
         await IniciarAsync();
 
-        var respuestas = await Task.WhenAll(Enumerable.Range(0, 30).Select(i => Enviar(HttpMethod.Get, $"/tramites/PN-2026-9{i:D5}", Ana)));
+        var respuestas = await Task.WhenAll(Enumerable.Range(0, 30).Select(i => Buscar($"PN-2026-9{i:D5}", Ana)));
 
         respuestas.Count(r => r.StatusCode == HttpStatusCode.NotFound).Should().Be(10, "el tope se aplica aunque lleguen todas a la vez");
         respuestas.Count(r => r.StatusCode == HttpStatusCode.TooManyRequests).Should().Be(20);
@@ -995,21 +885,6 @@ public sealed class CajaTests : IAsyncLifetime
         ex.Which.Estado.Should().Be(429);
         ex.Which.Codigo.Should().Be("demasiados_intentos");
         await _host.EnScopeAsync(sp => sp.GetRequiredService<CajaTopeBusquedas>().ReservarAsync(usuarios[4], "198.51.100.7", TestContext.Current.CancellationToken));
-    }
-
-    [Fact]
-    public async Task Confirmar_UnaPrefacturaQueDesbordaElCuerpo_Responde413_SinLlegarAlAlmacen()
-    {
-        await IniciarAsync(ajustes: ("Caja:PrefacturaMaxBytes", "2048"));
-        var codigo = await CrearAsync();
-
-        var r = await Confirmar(codigo, Ana, "efectivo", prefactura: ("grande.pdf", Archivos.Pdf(3 * 1024 * 1024)));
-
-        r.StatusCode.Should().Be(HttpStatusCode.RequestEntityTooLarge);
-        (await PortalHost.CodigoAsync(r)).Should().Be("prefactura_invalida");
-        _almacen.Archivos.Should().BeEmpty();
-        await using var db = _host.NuevaDb();
-        (await db.Set<CobroSolicitud>().CountAsync(c => c.Estado == "pagado", TestContext.Current.CancellationToken)).Should().Be(0);
     }
 
     [Fact]
@@ -1143,53 +1018,104 @@ public sealed class CajaTests : IAsyncLifetime
     }
 
     private Task<HttpResponseMessage> Confirmar(
-        string codigo, Cajero usuario, string? medio, string? detalle = null, long? totalVisto = 366_000, string? llave = null, (string Nombre, byte[] Bytes)? prefactura = null)
+        string codigo, Cajero usuario, string? medio, string? detalle = null, long? totalVisto = 366_000, string? llave = null, (string Nombre, byte[] Bytes)? prefactura = null,
+        string ip = "203.0.113.9")
     {
-        var form = Formulario(medio, detalle, totalVisto, prefactura);
-        return Enviar(HttpMethod.Post, $"/tramites/{codigo}/confirmar", usuario, contenido: form, llave: llave ?? $"k-{Guid.NewGuid():N}");
-    }
-
-    private static MultipartFormDataContent Formulario(string? medio, string? detalle = null, long? totalVisto = 366_000, (string Nombre, byte[] Bytes)? prefactura = null)
-    {
-        var form = new MultipartFormDataContent();
-        if (medio is not null)
-            form.Add(new StringContent(medio), "medio");
-        if (detalle is not null)
-            form.Add(new StringContent(detalle), "medioDetalle");
+        var pedido = new ConfirmarCobroRequest
+        {
+            OrganismoId = usuario.OrganismoId.ToString(),
+            Codigo = codigo,
+            UsuarioId = usuario.UsuarioId.ToString(),
+            UsuarioNombre = usuario.Nombre,
+            MedioCaja = medio ?? string.Empty,
+            Detalle = detalle ?? string.Empty,
+            IdempotencyKey = llave ?? $"k-{Guid.NewGuid():N}",
+            IpHash = HashDeIp(ip),
+        };
         if (totalVisto is { } t)
-            form.Add(new StringContent(t.ToString(System.Globalization.CultureInfo.InvariantCulture)), "totalVistoCop");
+            pedido.TotalVisto = t;
         if (prefactura is { } p)
         {
-            var archivo = new ByteArrayContent(p.Bytes);
-            archivo.Headers.ContentType = new MediaTypeHeaderValue("application/octet-stream");
-            form.Add(archivo, "prefactura", p.Nombre);
+            pedido.Prefactura = Google.Protobuf.ByteString.CopyFrom(p.Bytes);
+            pedido.PrefacturaNombre = p.Nombre;
+            pedido.PrefacturaContentType = "application/octet-stream";
         }
 
-        return form;
+        return Llamar(async () =>
+        {
+            var r = await Cliente().ConfirmarCobroAsync(pedido, CabecerasServicio(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync;
+            return new Dictionary<string, object?>
+            {
+                ["codigo"] = r.Codigo, ["valorCop"] = r.ValorCop, ["medio"] = r.Medio, ["medioDetalle"] = r.MedioDetalle.Length == 0 ? null : r.MedioDetalle,
+                ["pagadoEn"] = DateTimeOffset.Parse(r.PagadoEn, System.Globalization.CultureInfo.InvariantCulture),
+            };
+        });
     }
 
-    /// <summary>Una petición de caja con el principal de prueba (producto, rol, audiencia, empresa y <c>iat</c> de hace un minuto).</summary>
-    private async Task<HttpResponseMessage> Enviar(
-        HttpMethod metodo, string ruta, Cajero usuario, HttpContent? contenido = null, string? llave = null, string producto = "caja", string rol = "ot_caja",
-        string audiencia = "caja", string? sub = null, DateTimeOffset? iat = null, (string Nombre, string Valor)[]? extra = null, bool soloIat = false)
+    /// <summary>La búsqueda por gRPC; devuelve el mismo JSON que core-api le arma al front (menos el organismo, que pone core-api).</summary>
+    private Task<HttpResponseMessage> Buscar(string codigo, Cajero usuario, string ip = "203.0.113.9") => Llamar(async () =>
     {
-        using var peticion = new HttpRequestMessage(metodo, Ruta + ruta) { Content = contenido };
-        peticion.Headers.Add("x-test-sub", sub ?? usuario.UsuarioId.ToString());
-        peticion.Headers.Add("x-test-aud", audiencia);
-        peticion.Headers.Add("x-test-claim", $"product={producto}");
-        peticion.Headers.Add("x-test-claim", $"role={rol}");
-        peticion.Headers.Add("x-test-claim", $"tenant_id={Empresa}");
-        // Inicio de sesión: auth_time (el BFF NO acepta iat, que se renueva en cada refresh). soloIat simula un token que solo trae iat.
-        var inicio = (iat ?? _host.Reloj.GetUtcNow().AddMinutes(-1)).ToUnixTimeSeconds();
-        peticion.Headers.Add("x-test-claim", $"iat={inicio}");
-        if (!soloIat)
-            peticion.Headers.Add("x-test-claim", $"auth_time={inicio}");
-        if (llave is not null && llave.Length > 0)
-            peticion.Headers.Add("Idempotency-Key", llave);
-        foreach (var (nombre, valor) in extra ?? [])
-            peticion.Headers.Add(nombre, valor);
-        return await _host.Http.SendAsync(peticion, TestContext.Current.CancellationToken);
+        var r = await Cliente().BuscarTramiteAsync(
+            new BuscarTramiteRequest { OrganismoId = usuario.OrganismoId.ToString(), Codigo = codigo, UsuarioId = usuario.UsuarioId.ToString(), IpHash = HashDeIp(ip) },
+            CabecerasServicio(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync;
+        return new Dictionary<string, object?>
+        {
+            ["codigo"] = r.Codigo,
+            ["tipoTramite"] = new { codigo = r.TipoTramiteCodigo, nombre = r.TipoTramiteNombre },
+            ["lineas"] = r.Lineas.Select(l => new { concepto = l.Concepto, valorCop = l.ValorCop }).ToList(),
+            ["totalCop"] = r.TotalCop,
+            ["versionTarifa"] = r.VersionTarifa,
+            ["venceEn"] = DateTimeOffset.Parse(r.VenceEn, System.Globalization.CultureInfo.InvariantCulture),
+        };
+    });
+
+    /// <summary>La lista del día del organismo por gRPC (sin fecha = hoy en Colombia).</summary>
+    private Task<ListarCobrosResponse> Lista(int pagina = 0, int tamano = 0, string fecha = "", Guid? organismo = null) =>
+        Cliente().ListarCobrosAsync(
+            new ListarCobrosRequest { OrganismoId = (organismo ?? OrganismoA).ToString(), Fecha = fecha, Pagina = pagina, Tamano = tamano },
+            CabecerasServicio(), cancellationToken: TestContext.Current.CancellationToken).ResponseAsync;
+
+    /// <summary>Lo que core-api manda como huella de la IP: SHA-256 hexadecimal.</summary>
+    private static string HashDeIp(string ip) => Convert.ToHexStringLower(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(ip)));
+
+    /// <summary>Ejecuta la llamada gRPC y la expresa como la respuesta HTTP equivalente: mismo código de error, mismos extras y <c>Retry-After</c>.</summary>
+    private static async Task<HttpResponseMessage> Llamar(Func<Task<Dictionary<string, object?>>> llamada)
+    {
+        try
+        {
+            var cuerpo = await llamada();
+            return Json(HttpStatusCode.OK, cuerpo);
+        }
+        catch (RpcException ex)
+        {
+            var info = ex.GetRpcStatus()?.GetDetail<Google.Rpc.ErrorInfo>();
+            var cuerpo = new Dictionary<string, object?> { ["code"] = info?.Reason ?? "sin_reason", ["message"] = ex.Status.Detail };
+            foreach (var (k, v) in info?.Metadata ?? new Google.Protobuf.Collections.MapField<string, string>())
+            {
+                if (k != "retryAfterSegundos")
+                    cuerpo[k] = long.TryParse(v, out var n) ? n : v;
+            }
+
+            var http = ex.StatusCode switch
+            {
+                StatusCode.InvalidArgument => HttpStatusCode.BadRequest,
+                StatusCode.PermissionDenied => HttpStatusCode.Forbidden,
+                StatusCode.NotFound => HttpStatusCode.NotFound,
+                StatusCode.FailedPrecondition => HttpStatusCode.Conflict,
+                StatusCode.ResourceExhausted => HttpStatusCode.TooManyRequests,
+                _ => HttpStatusCode.InternalServerError,
+            };
+            var r = Json(http, cuerpo);
+            if (info?.Metadata.TryGetValue("retryAfterSegundos", out var espera) == true)
+                r.Headers.Add("Retry-After", espera);
+            return r;
+        }
     }
+
+    private static readonly JsonSerializerOptions OpcionesJson = new(JsonSerializerDefaults.Web);
+
+    private static HttpResponseMessage Json(HttpStatusCode estado, object cuerpo) =>
+        new(estado) { Content = new StringContent(JsonSerializer.Serialize(cuerpo, OpcionesJson), System.Text.Encoding.UTF8, "application/json") };
 
     /// <summary>Una solicitud del punto lista para cobrar en caja (o en otro estado) con su cobro habilitado; devuelve su ID <c>PN-AAAA-NNNNNN</c>.</summary>
     private async Task<string> CrearAsync(Guid? organismo = null, string estado = "pendiente_pago", bool habilitado = true)

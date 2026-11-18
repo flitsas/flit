@@ -6,9 +6,9 @@ export function AdminChildContextBanner({ childName }: { childName: string }) {
     <div
       className="mb-4 rounded-xl border px-4 py-3 text-xs font-medium"
       style={{
-        borderColor: "#F9AC00",
-        background: "rgba(249,172,0,0.12)",
-        color: "#8a6000",
+        borderColor: "var(--badge-warning-border)",
+        background: "var(--badge-warning-bg)",
+        color: "var(--badge-warning-fg)",
       }}
       role="status"
       aria-live="polite"

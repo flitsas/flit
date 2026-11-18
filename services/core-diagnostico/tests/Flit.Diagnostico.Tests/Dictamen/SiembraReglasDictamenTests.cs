@@ -13,12 +13,15 @@ namespace Flit.Diagnostico.Tests.Dictamen;
 public sealed class SiembraReglasDictamenTests
 {
     [Fact]
-    public void Proyecta_42_filas_de_la_version_1_todas_vigentes()
+    public void Proyecta_42_filas_de_la_version_1_y_54_de_la_version_2()
     {
+        // Punto 2 (2026-11-11): la siembra suma v2 sin tocar v1; los dictámenes ya emitidos conservan su versión.
         var filas = ProyectorReglasDictamen.Proyectar();
 
-        filas.Should().HaveCount(42);
-        filas.Should().OnlyContain(f => f.CatalogoVersion == CatalogoReglasDictamen.Version && f.Vigente);
+        filas.Should().HaveCount(96);
+        filas.Count(f => f.CatalogoVersion == 1).Should().Be(42);
+        filas.Count(f => f.CatalogoVersion == CatalogoReglasDictamen.Version).Should().Be(54);
+        filas.Should().OnlyContain(f => f.Vigente);
     }
 
     [Fact]
@@ -34,8 +37,8 @@ public sealed class SiembraReglasDictamenTests
     {
         var filas = ProyectorReglasDictamen.Proyectar();
 
-        filas.Should().HaveCount(CatalogoReglasDictamen.Filas.Count);
-        foreach (var esperada in CatalogoReglasDictamen.Filas)
+        filas.Should().HaveCount(CatalogoReglasDictamen.Historico.Count);
+        foreach (var esperada in CatalogoReglasDictamen.Historico)
         {
             var fila = filas.Should().ContainSingle(f =>
                 f.CatalogoVersion == esperada.CatalogoVersion
@@ -62,17 +65,18 @@ public sealed class SiembraReglasDictamenTests
     }
 
     [Fact]
-    public void Soat_y_rtm_bloquean_y_prenda_impuesto_y_fuente_advierten_en_los_tres_tramites()
+    public void Soat_y_rtm_bloquean_salvo_rtm_unilateral_y_prenda_impuesto_y_fuente_advierten_en_los_tres_tramites()
     {
-        var filas = ProyectorReglasDictamen.Proyectar();
+        var filas = ProyectorReglasDictamen.Proyectar().Where(f => f.CatalogoVersion == CatalogoReglasDictamen.Version).ToList();
 
         CatalogoReglasDictamen.TiposTramite.Should().HaveCount(3);
         foreach (var tipo in CatalogoReglasDictamen.TiposTramite)
         {
             filas.Should().ContainSingle(f => f.TipoTramiteCodigo == tipo && f.Codigo == "SOAT_NO_VIGENTE")
                 .Which.Efecto.Should().Be("BLOQUEA");
+            // Ola 2026-11-11 (V4): en el unilateral la RTM no se valida (art. 5.3.2.2) y advierte.
             filas.Should().ContainSingle(f => f.TipoTramiteCodigo == tipo && f.Codigo == "RTM_NO_VIGENTE")
-                .Which.Efecto.Should().Be("BLOQUEA");
+                .Which.Efecto.Should().Be(tipo == "TRASPASO_UNILATERAL" ? "ADVIERTE" : "BLOQUEA");
             filas.Should().ContainSingle(f => f.TipoTramiteCodigo == tipo && f.Codigo == "PRENDA")
                 .Which.Efecto.Should().Be("ADVIERTE");
             filas.Should().ContainSingle(f => f.TipoTramiteCodigo == tipo && f.Codigo == "IMPUESTO")
@@ -88,8 +92,8 @@ public sealed class SiembraReglasDictamenTests
         var primera = ProyectorReglasDictamen.Proyectar();
         var segunda = ProyectorReglasDictamen.Proyectar();
 
-        primera.Should().HaveCount(42);
-        segunda.Should().HaveCount(42);
+        primera.Should().HaveCount(96);
+        segunda.Should().HaveCount(96);
         foreach (var fila in primera)
         {
             var otra = segunda.Should().ContainSingle(f =>

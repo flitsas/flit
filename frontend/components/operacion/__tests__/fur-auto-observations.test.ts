@@ -43,6 +43,38 @@ describe('furAutoObservations', () => {
     expect(furAutoObservations(fields({ vehicle_color: 'ROJO' }))).toEqual([]);
   });
 
+  it.each([
+    ['cambio_color', 'vehicle_color', 'ROJO'],
+    ['cambio_carroceria', 'vehicle_body_type', 'SIN CARROCERIA'],
+    ['cambio_combustible', 'vehicle_fuel', 'GASOLINA'],
+  ])('con %s=true pero valor efectivo igual al RUNT no escribe la línea', (flag, key, valor) => {
+    expect(
+      furAutoObservations(fields({ [flag]: 'true', [`${key}_runt`]: valor, [key]: valor })),
+    ).toEqual([]);
+  });
+
+  it.each([
+    ['cambio_color', 'vehicle_color', 'ROJO'],
+    ['cambio_carroceria', 'vehicle_body_type', 'SIN CARROCERIA'],
+    ['cambio_combustible', 'vehicle_fuel', 'GASOLINA'],
+  ])('con %s=true y valor efectivo vacío no escribe la línea', (flag, key, valor) => {
+    expect(
+      furAutoObservations(fields({ [flag]: 'true', [`${key}_runt`]: valor, [key]: '' })),
+    ).toEqual([]);
+  });
+
+  it('con la bandera en true y un valor nuevo distinto sí escribe la línea', () => {
+    expect(
+      furAutoObservations(
+        fields({
+          cambio_carroceria: 'true',
+          vehicle_body_type_runt: 'SEDAN',
+          vehicle_body_type: 'CAMIONETA',
+        }),
+      ),
+    ).toEqual(['Carroceria nueva(NUEVA CARROCERIA: CAMIONETA)']);
+  });
+
   it('acumula color, combustible y carrocería en el orden del backend', () => {
     expect(
       furAutoObservations(

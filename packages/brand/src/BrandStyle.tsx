@@ -43,7 +43,7 @@ export function BrandStyle({ brand }: { brand: Brand }) {
     `:root{--brand-primary:${primary};--brand-secondary:${secondary};--brand-on-primary:${onPrimary};` +
     `--brand-accent:${light.accent};--brand-bg:${light.bg};--brand-tint:${light.tint};--brand-ink:${light.ink};}` +
     `.dark{--brand-primary:${dark.primary};--brand-secondary:${dark.secondary};--brand-on-primary:${dark.onPrimary};` +
-    `--brand-accent:${darkAccent};--brand-ink:${dark.secondary};}`;
+    `--brand-accent:${darkAccent};--brand-ink:${dark.secondary};--brand-bg:initial;}`;
 
   // Children de texto (NO dangerouslySetInnerHTML): los valores ya pasaron por
   // `isValidHexColor` línea arriba, así que no hay entrada sin sanear en el DOM.

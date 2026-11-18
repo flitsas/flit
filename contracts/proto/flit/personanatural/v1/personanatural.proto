@@ -131,6 +131,13 @@ message AdjuntoSolicitud {
 service CajaAdminService {
   rpc ListarCobros(ListarCobrosRequest) returns (ListarCobrosResponse);
   rpc AnularCobro(AnularCobroRequest) returns (AnularCobroResponse); // FAILED_PRECONDITION reason=cobro_no_anulable | NOT_FOUND reason=cobro_no_encontrado
+  // La caja del organismo es un modulo de FLIT 2.0 (core-api /api/v1/ot/caja): core-api resuelve el organismo y el usuario desde el JWT
+  // y el BFF solo verifica que el tramite sea de ESE organismo. Errores: status gRPC + ErrorInfo.reason con el mismo codigo estable de la
+  // caja (no_encontrado, otro_organismo, ya_pagado, cobro_vencido, no_habilitado, total_cambio, medio_invalido, detalle_requerido,
+  // prefactura_invalida, idempotency_key_requerida, idempotency_key_reutilizada, demasiados_intentos). ErrorInfo.metadata trae los extras:
+  // totalActualCop (total_cambio) y retryAfterSegundos (demasiados_intentos, RESOURCE_EXHAUSTED).
+  rpc BuscarTramite(BuscarTramiteRequest) returns (BuscarTramiteResponse);
+  rpc ConfirmarCobro(ConfirmarCobroRequest) returns (ConfirmarCobroResponse);
 }
 message ListarCobrosRequest { string organismo_id = 1; string fecha = 2; /* AAAA-MM-DD Colombia; vacio = hoy */ int32 pagina = 3; int32 tamano = 4; }
 message CobroResumen {
@@ -142,3 +149,22 @@ message CobroResumen {
 message ListarCobrosResponse { repeated CobroResumen items = 1; int32 total = 2; int64 total_dia_cop = 3; }
 message AnularCobroRequest { string organismo_id = 1; string cobro_id = 2; string motivo = 3; /* 10..300 */ string actor_user_id = 4; string actor_nombre = 5; int64 row_version = 6; }
 message AnularCobroResponse { string cobro_id = 1; string estado = 2; }
+// ip_hash: SHA-256 hexadecimal de la IP del cajero (la IP en claro no viaja); el BFF la firma de nuevo con su llave antes de guardarla.
+message BuscarTramiteRequest { string organismo_id = 1; string codigo = 2; string usuario_id = 3; string ip_hash = 4; }
+message LineaCobroCaja { string concepto = 1; int64 valor_cop = 2; }
+message BuscarTramiteResponse {
+  string codigo = 1; string tipo_tramite_codigo = 2; string tipo_tramite_nombre = 3; repeated LineaCobroCaja lineas = 4;
+  int64 total_cop = 5; string version_tarifa = 6; string vence_en = 7; // ISO 8601
+}
+message ConfirmarCobroRequest {
+  string organismo_id = 1; string codigo = 2; string usuario_id = 3; string usuario_nombre = 4;
+  string medio_caja = 5; // efectivo | datafono | transferencia | otro
+  string detalle = 6; // obligatorio y <= 120 con medio otro
+  optional int64 total_visto = 7; // solo se COMPARA; el BFF cobra siempre su propio total
+  string idempotency_key = 8; // <= 100
+  bytes prefactura = 9; // opcional, <= 5 MB, PDF/JPG/PNG validado por firma
+  string prefactura_content_type = 10; // informativo
+  string prefactura_nombre = 11;
+  string ip_hash = 12;
+}
+message ConfirmarCobroResponse { string codigo = 1; int64 valor_cop = 2; string medio = 3; string medio_detalle = 4; string pagado_en = 5; }

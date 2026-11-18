@@ -1,7 +1,8 @@
 'use client';
 
 import { Children, Fragment, isValidElement, useEffect, useRef, useState, type ReactNode } from 'react';
-import { Check, Clock, Copy, Download, FileSignature, FileText, Star } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
+import { EditarSeccionButton, type DestinoEdicion } from './EditarSeccionButton';
 import type {
   BiometricParte,
   BiometricValidation,
@@ -10,7 +11,7 @@ import type {
   ProcedureActor,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
-import { estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
+import { ESTADO_ICONO, type EstadoTramite, estadoChipClass, estadoChipStyle, estadoLabelConOrigen } from '@/lib/tramites/estados';
 import { actorsOrderedByOrdinal, validationsForActor, isCoveredByVaultForActor } from '@/lib/tramites/ownership-share';
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import { COPY } from '@/lib/copy/copy-catalog';
@@ -174,9 +175,14 @@ interface Props {
    * en la misma rejilla de tres columnas, no envueltas: envolverlas las volvería una sola celda.
    */
   extrasSlot?: ReactNode;
+  /**
+   * Botón «Editar» por tarjeta: lleva al paso donde se captura cada sección. Solo llega en un
+   * borrador editable; ausente, el resumen se ve como siempre (solo lectura).
+   */
+  resolverEdicion?: ResolverEdicion;
 }
 
-const BORDER = '#DFE5ED';
+const BORDER = 'var(--border)';
 const BLUE = 'var(--color-flit-brand)';
 
 // `ResumenDisclosure` desapareció: transformaciones y prenda eran las últimas que lo usaban y ahora
@@ -201,20 +207,45 @@ function Field({ label, value }: { label: string; value?: string | null }) {
  * pide. Lo que sigue siendo genuinamente secundario y largo (mandatario, transformaciones, prenda)
  * se queda en `ResumenDisclosure`.
  */
+/**
+ * Secciones del resumen que se capturan en otro paso del asistente. Las usa el botón «Editar» de
+ * cada tarjeta: el resumen no sabe qué paso es cuál, así que le pregunta al asistente por la sección.
+ */
+export type SeccionResumen =
+  | 'vehiculo'
+  | 'transformaciones'
+  | 'prenda'
+  | 'documentos'
+  | 'vendedor'
+  | 'comprador'
+  | 'locatario';
+
+export type { DestinoEdicion };
+
+/**
+ * A qué paso llevar para corregir una sección, o `null` si no aplica (trámite bloqueado o sin ese
+ * paso). Con `null` la tarjeta no pinta el botón, en vez de ofrecer un salto que no lleva a nada.
+ */
+export type ResolverEdicion = (seccion: SeccionResumen) => DestinoEdicion | null;
+
 export function ResumenCard({
   title,
   children,
   className = '',
+  editar = null,
 }: {
   title: string;
   children: ReactNode;
   className?: string;
+  /** Destino del botón «Editar»; sin él la tarjeta queda en solo lectura, como siempre. */
+  editar?: DestinoEdicion | null;
 }) {
   return (
     <section aria-label={title} className={`${WIZARD_CARD} h-full ${className}`}>
       <div className="mb-3 flex items-center gap-2">
         <span className="h-4 w-1 shrink-0 rounded-full" style={{ background: BLUE }} aria-hidden="true" />
         <WizardCardHeader title={title} level="h4" className="" />
+        {editar ? <EditarSeccionButton title={title} destino={editar} /> : null}
       </div>
       {children}
     </section>
@@ -254,11 +285,11 @@ function PrendaDocumentoVerButton({
               .finally(() => setBusy(false));
           }}
         >
-          <Download className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <Icono nombre="nube-bajar" className="h-3.5 w-3.5 shrink-0" />
           {busy ? 'Abriendo…' : 'Ver'}
         </button>
         {error ? (
-          <span className="text-xs" style={{ color: '#FF4E00' }} role="alert">
+          <span className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
             {error}
           </span>
         ) : null}
@@ -293,7 +324,7 @@ function IdentidadStatusBanner({
           style={{ background: 'var(--color-flit-brand)', color: 'white' }}
           aria-hidden
         >
-          <FileSignature className="h-5 w-5" />
+          <Icono nombre="firma" className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
           <p className="text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
@@ -311,7 +342,7 @@ function IdentidadStatusBanner({
     return (
       <div
         className="flex items-center gap-3 rounded-xl p-3"
-        style={{ background: 'rgba(140,198,63,0.12)', border: '1px solid rgba(140,198,63,0.4)' }}
+        style={{ background: 'var(--badge-success-bg)', border: '1px solid var(--badge-success-border)' }}
         role="status"
         aria-live="polite"
         data-testid="identidad-verificada"
@@ -322,7 +353,7 @@ function IdentidadStatusBanner({
           style={{ background: 'var(--flit-success-ink)', color: 'white' }}
           aria-hidden
         >
-          <Check className="h-5 w-5" />
+          <Icono nombre="check" className="h-5 w-5" />
         </span>
         <div className="space-y-0.5">
           {/* Copy Flit 2.0 · S4. El puntaje se retira por decisión de producto: el número no le
@@ -345,21 +376,21 @@ function IdentidadStatusBanner({
   return (
     <div
       className="flex items-center gap-3 rounded-xl p-3"
-      style={{ background: '#EEF5FF', border: '1px solid #DFE5ED' }}
+      style={{ background: 'var(--surface-sunken)', border: '1px solid var(--border)' }}
       role="status"
       aria-live="polite"
       data-testid="identidad-pendiente"
     >
       <span
         className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full"
-        style={{ background: '#59677D', color: 'white' }}
+        style={{ background: 'var(--muted-foreground)', color: 'var(--card)' }}
         aria-hidden
       >
-        <Clock className="h-5 w-5" />
+        <Icono nombre="reloj" className="h-5 w-5" />
       </span>
       <div className="space-y-0.5">
         {/* Copy Flit 2.0 · S4. */}
-        <p className="text-xs font-bold" style={{ color: '#59677D' }}>
+        <p className="text-xs font-bold" style={{ color: 'var(--muted-foreground)' }}>
           Validación de identidad pendiente.
         </p>
         <p className="text-xs opacity-70">
@@ -442,7 +473,7 @@ function CertificadoIdButton({
             : 'Disponible cuando la validación esté aprobada'
         }
       >
-        <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        <Icono nombre="documento" className="h-3.5 w-3.5 shrink-0" />
         {busy ? 'Abriendo…' : label}
       </button>
       {!aprobado && (
@@ -451,7 +482,7 @@ function CertificadoIdButton({
         </span>
       )}
       {error && (
-        <span className="text-xs" style={{ color: '#FF4E00' }} role="alert">
+        <span className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
           {error}
         </span>
       )}
@@ -609,7 +640,7 @@ function CapturaLinkCopy({ link, label }: { link: string; label: string }) {
         style={{ background: WIZARD_CTA_GRADIENT }}
         aria-label="Copiar enlace"
       >
-        {copied ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
+        {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Icono nombre="copiar" className="h-3 w-3" />}
         {copied ? 'Copiado' : 'Copiar'}
       </button>
     </div>
@@ -697,7 +728,9 @@ export default function MatriculaResumen({
   prioritario,
   onPrioritarioChange,
   extrasSlot,
+  resolverEdicion,
 }: Props) {
+  const editar = (seccion: SeccionResumen) => resolverEdicion?.(seccion) ?? null;
   const tone = estadoChipStyle(status).color;
   const soatEstado = (soat?.estado ?? '').toLowerCase();
   const soatLabel =
@@ -849,7 +882,7 @@ export default function MatriculaResumen({
       const titulo = `${rotuloBase} ${ordinal}`;
       const pendiente = firma(rol) && !!instanceId && identidadPendiente(bio, firmaBaul);
       return (
-        <ResumenCard key={`${rol}-${ordinal}`} title={titulo}>
+        <ResumenCard key={`${rol}-${ordinal}`} title={titulo} editar={editar(rol)}>
           <div className="space-y-4">
             <ActorBlock
               actor={resumenActor}
@@ -957,10 +990,10 @@ export default function MatriculaResumen({
                             background: 'var(--badge-warning-bg)',
                             color: 'var(--badge-warning-fg)',
                           }
-                        : { borderColor: BORDER, color: '#59677D' }
+                        : { borderColor: BORDER, color: 'var(--muted-foreground)' }
                     }
                   >
-                    <Star className="h-3.5 w-3.5" fill={prioritario ? 'currentColor' : 'none'} aria-hidden="true" />
+                    <Icono nombre="medalla" className="h-3.5 w-3.5" />
                     Trámite Prioritario
                   </button>
                 ) : null}
@@ -986,6 +1019,8 @@ export default function MatriculaResumen({
                 ) : null}
                 <StatusBadge
                   label={estadoLabelConOrigen(status, rejectedFrom)}
+                  className={estadoChipClass(status)}
+                  icono={ESTADO_ICONO[status as EstadoTramite]}
                   bg={estadoChipStyle(status).bg}
                   color={estadoChipStyle(status).color}
                   border={estadoChipStyle(status).border}
@@ -1021,7 +1056,11 @@ export default function MatriculaResumen({
           dejando el hueco al lado. Preguntar por el NÚMERO de partes le da a los dos el mismo trato
           y no cambia nada donde solo hay una. */}
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2 items-stretch">
-        <ResumenCard title="Vehículo" className={vehiculoAncho ? 'lg:col-span-2' : ''}>
+        <ResumenCard
+          title="Vehículo"
+          className={vehiculoAncho ? 'lg:col-span-2' : ''}
+          editar={editar('vehiculo')}
+        >
           {placa ? (
             <div className="mb-3 flex flex-wrap items-center gap-3">
               <span className="font-mono text-2xl font-bold tracking-widest" style={{ color: tone }}>
@@ -1060,7 +1099,7 @@ export default function MatriculaResumen({
         {vendedorMultiple ? (
           renderCopropietarios('vendedor', vendedorActores, rotulo('vendedor', 'Vendedor'))
         ) : vendedor ? (
-          <ResumenCard title={rotulo('vendedor', 'Vendedor')}>
+          <ResumenCard title={rotulo('vendedor', 'Vendedor')} editar={editar('vendedor')}>
             <div className="space-y-4">
               <ActorBlock
                 actor={vendedor}
@@ -1084,7 +1123,7 @@ export default function MatriculaResumen({
         {compradorMultiple ? (
           renderCopropietarios('comprador', compradorActores, rotulo('comprador', 'Comprador'))
         ) : comprador || (!vendedor && partesTxt) ? (
-          <ResumenCard title={rotulo('comprador', 'Comprador')}>
+          <ResumenCard title={rotulo('comprador', 'Comprador')} editar={editar('comprador')}>
             {comprador ? (
               <div className="space-y-4">
                 <ActorBlock
@@ -1117,7 +1156,7 @@ export default function MatriculaResumen({
             propietario, y el DDL 88 llega a abortar el arranque si alguien mete al locatario en
             `biometricActors`. Se muestran sus datos, que es lo que el expediente necesita. */}
         {locatario ? (
-          <ResumenCard title={rotulo('locatario', 'Locatario')}>
+          <ResumenCard title={rotulo('locatario', 'Locatario')} editar={editar('locatario')}>
             <ActorBlock
               actor={locatario}
               bio={null}
@@ -1150,7 +1189,11 @@ export default function MatriculaResumen({
           const cells: ReactNode[] = [];
           if (transformaciones.length > 0) {
             cells.push(
-              <ResumenCard key="transformaciones" title="Transformaciones">
+              <ResumenCard
+                key="transformaciones"
+                title="Transformaciones"
+                editar={editar('transformaciones')}
+              >
                 <div
                   className="grid grid-cols-1 gap-3 sm:grid-cols-2"
                   aria-label="Transformaciones declaradas"
@@ -1185,6 +1228,7 @@ export default function MatriculaResumen({
             cells.push(
               <ResumenCard
                 key={`${p.decisionLabel}-${idx}`}
+                editar={editar('prenda')}
                 title={
                   prendas.length > 1
                     ? `Prenda / gravamen (${idx + 1} de ${prendas.length})`

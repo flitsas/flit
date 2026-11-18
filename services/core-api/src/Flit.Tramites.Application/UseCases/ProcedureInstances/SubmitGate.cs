@@ -34,6 +34,7 @@ public static class SubmitGate
     public const string FurRequerido = "fur_requerido";
     public const string OrganismoRequerido = "organismo_requerido";
     public const string ImprontaRequerida = "impronta_requerida";
+    public const string TipoServicioRequerido = "tipo_servicio_requerido";
 
     /// <summary>
     /// Evalúa el gate de preparación (RF03). La instancia debe traer cargado el grafo del wizard
@@ -83,8 +84,36 @@ public static class SubmitGate
             errors.Add(IdentidadNoAprobada);
         if (exigeImpronta && !TieneAdjuntoImpronta(instance))
             errors.Add(ImprontaRequerida);
+        // Matrícula INICIAL: el tipo de servicio (casilla 18 del FUR) es obligatorio y debe ser del catálogo.
+        // Antes solo lo exigía el botón «Continuar» del frontend; ICT/API directa lo omitían.
+        if (EsMatriculaInicial(instance) && !TipoServicioValido(instance))
+            errors.Add(TipoServicioRequerido);
 
         return errors;
+    }
+
+    /// <summary>
+    /// Matrícula inicial (la que crea el vehículo y deja al gestor elegir el servicio). NO incluye cancelación ni
+    /// rematrícula, que son de la familia MATRICULAS pero no eligen servicio; traspaso lo hidrata el RUNT.
+    /// </summary>
+    internal static bool EsMatriculaInicial(ProcedureInstance instance) =>
+        instance.TypeCode is { } code
+        && (code.Equals("MATRICULA_NUEVA", StringComparison.OrdinalIgnoreCase)
+            || code.Equals("MATRICULA_LEASING", StringComparison.OrdinalIgnoreCase)
+            || code.Equals("MATRICULA_INICIAL", StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>
+    /// <c>vehicle_service</c> presente y reconocible: uno de los códigos del catálogo
+    /// (<see cref="VehicleServiceTypeCode.All"/>, sin distinguir mayúsculas) o un texto del RUNT que
+    /// <see cref="VehicleServiceTypeCode.Resolve"/> normaliza a uno de ellos. Vacío o basura ⇒ inválido
+    /// (a diferencia de <c>Resolve</c>, que trata el vacío como PARTICULAR para no cambiar el FUR).
+    /// </summary>
+    internal static bool TipoServicioValido(ProcedureInstance instance)
+    {
+        var raw = instance.FieldValues
+            .FirstOrDefault(f => string.Equals(f.FieldKey, VehicleFieldKeys.Service, StringComparison.OrdinalIgnoreCase))
+            ?.ValueText;
+        return !string.IsNullOrWhiteSpace(raw) && VehicleServiceTypeCode.Resolve(raw) is not null;
     }
 
     /// <summary>

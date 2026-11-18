@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
-import { CircleDot, RotateCcw, ShieldCheck, UserCog } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { getAccessibleModules, type AccessibleModule } from "@/lib/api/security";
 import {
   INVITATION_PENDING_MESSAGE,
@@ -39,6 +40,7 @@ import { mensajeVigencia } from "@/lib/auth/vigencia";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import { UiStateBoundary } from "@flit/ui/UiStateBoundary";
+import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 
 // HU #13652 (Feature #13103 F-D1, Épica #12753) — sección COMPARTIDA «Permisos por módulo».
 // La usa el Panel SA (`mode="superadmin"`) y la reutilizará F-D2 en las fichas del Admin de Compañía y del
@@ -86,7 +88,7 @@ export const PII_WARNING =
   "Este permiso da acceso a datos personales protegidos por la Ley 1581 de 2012. Confirma que el usuario lo requiere para su función.";
 const VIGENCIA_FALLBACK = "El cambio se aplicará la próxima vez que la persona inicie sesión.";
 
-const ORIGIN_ICON = { inherited: ShieldCheck, individual: UserCog, partial: CircleDot } as const;
+const ORIGIN_ICON = { inherited: iconoComo("escudo"), individual: iconoComo("rol"), partial: iconoComo("punto") } as const;
 
 type LoadState =
   | { status: "loading" }
@@ -118,7 +120,7 @@ function OriginBadge({ origin }: { origin: PermissionOrigin }) {
   const Icon = ORIGIN_ICON[origin];
   return (
     <span
-      className="inline-flex items-center gap-1 rounded-full border border-[#DFE5ED] px-2 py-0.5 text-[10px] font-semibold text-flit-primary dark:border-white/20 dark:text-white"
+      className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-[10px] font-semibold text-flit-primary dark:border-white/20 dark:text-white"
       data-origin={origin}
     >
       <Icon className="h-3 w-3" aria-hidden="true" />
@@ -142,7 +144,7 @@ function PiiConfirmDialog({
   const [checked, setChecked] = useState(false);
   const checkId = useId();
   return (
-    <Modal open onClose={onCancel} size="sm" icon={ShieldCheck} title={`Otorgar «${permissionName}»`} busy={busy}>
+    <Modal open onClose={onCancel} size="sm" icono="escudo" title={`Otorgar «${permissionName}»`} busy={busy}>
       <div className="flex flex-col gap-4">
         <InlineAlert tone="warning">{PII_WARNING}</InlineAlert>
         <div className="flex items-center gap-2">
@@ -163,7 +165,7 @@ function PiiConfirmDialog({
             type="button"
             onClick={onCancel}
             disabled={busy}
-            className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
+            className="rounded-lg border border-border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
           >
             Cancelar
           </button>
@@ -368,7 +370,7 @@ export function ModulePermissionsSection({
   const serviceViews = sortServiceTypeModules(views.filter(isServiceTypeModule));
 
   const renderModule = (m: ModuleView) => (
-    <li key={m.id} className="rounded-xl border border-[#DFE5ED] p-3 dark:border-white/15" data-testid={`module-${m.code}`}>
+    <li key={m.id} className="rounded-xl border border-border p-3 dark:border-white/15" data-testid={`module-${m.code}`}>
       <div className="flex flex-wrap items-center gap-2">
         <h3 className="text-sm font-semibold text-flit-primary dark:text-white">{m.name}</h3>
         <OriginBadge origin={m.origin} />
@@ -382,7 +384,7 @@ export function ModulePermissionsSection({
               disabled={controlsOff || (mode === "admin" && m.actions.length > 0 && m.actions.every((a) => a.outOfCap === true))}
               onClick={() => void setModule(m, "allow")}
               aria-label={`Habilitar el módulo ${m.name} completo`}
-              className="rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+              className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
               style={{ color: "var(--permiso-habilitado)" }}
             >
               Habilitar módulo
@@ -392,7 +394,7 @@ export function ModulePermissionsSection({
               disabled={controlsOff}
               onClick={() => void setModule(m, "deny")}
               aria-label={`Denegar el módulo ${m.name} completo`}
-              className="rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+              className="rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
               style={{ color: "var(--permiso-deshabilitado)" }}
             >
               Denegar módulo
@@ -403,9 +405,9 @@ export function ModulePermissionsSection({
                 disabled={controlsOff}
                 onClick={() => void moduleBackToRole(m)}
                 aria-label={`Volver el módulo ${m.name} a lo que dicta el rol`}
-                className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-[11px] font-semibold disabled:opacity-50"
               >
-                <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                <Icono nombre="reintento" className="h-3 w-3" />
                 Volver al rol
               </button>
             )}
@@ -413,7 +415,7 @@ export function ModulePermissionsSection({
         )}
       </div>
 
-      <ul className="mt-2 flex flex-col divide-y divide-[#DFE5ED] dark:divide-white/10">
+      <ul className="mt-2 flex flex-col divide-y divide-border">
         {(() => {
           // HU #13666: par Ver / Crear por tipo de servicio (módulos tramites-matriculas/-traspasos/-otros).
           const pair = findFamilyPair(m.actions);
@@ -439,19 +441,11 @@ export function ModulePermissionsSection({
               aria-label={`${a.name}, módulo ${m.name}`}
               disabled={controlsOff || (mode === "admin" && a.outOfCap === true)}
               onClick={() => void toggleAction(a)}
-              className="relative h-5 w-9 shrink-0 rounded-full border transition disabled:opacity-50"
-              style={{
-                background: a.enabled ? "var(--permiso-habilitado)" : "transparent",
-                borderColor: a.enabled ? "var(--permiso-habilitado)" : "var(--permiso-deshabilitado)",
-              }}
+              className={INTERRUPTOR_CLS}
             >
               <span
                 aria-hidden="true"
-                className="absolute top-0.5 h-3.5 w-3.5 rounded-full bg-white transition-all"
-                style={{
-                  left: a.enabled ? "1.15rem" : "0.15rem",
-                  background: a.enabled ? "#FFFFFF" : "var(--permiso-deshabilitado)",
-                }}
+                className={INTERRUPTOR_PERILLA_CLS}
               />
             </button>
             <span className="min-w-0 flex-1 text-xs">
@@ -482,9 +476,9 @@ export function ModulePermissionsSection({
                 disabled={controlsOff}
                 onClick={() => void backToRole(a)}
                 aria-label={`Volver ${a.name} a lo que dicta el rol`}
-                className="inline-flex items-center gap-1 rounded-lg border border-[#DFE5ED] px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-[10px] font-semibold disabled:opacity-50"
               >
-                <RotateCcw className="h-3 w-3" aria-hidden="true" />
+                <Icono nombre="reintento" className="h-3 w-3" />
                 Volver al rol
               </button>
             )}

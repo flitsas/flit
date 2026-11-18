@@ -1,5 +1,6 @@
 using Flit.Api.Grpc;
 using Flit.Ict.Grpc.Contracts;
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Identity;
 using Flit.Integration.Tests.MarcaBlanca;
 using Flit.Integration.Tests.Postgres;
@@ -120,7 +121,79 @@ public sealed class IctOrchestrationPrecomputedVehicleIntegrationTests(PostgresD
         (await FieldValueAsync(instanceId, "cambio_carroceria")).Should().Be("true", "la siembra no pisa lo que vino de ICT");
     }
 
+    [PostgresFact]
+    public async Task CreateDraftFromIct_MatriculaConServicioPublico_ElRuntNoLoReemplaza()
+    {
+        // ICT declara PUBLICO; la consulta RUNT precalculada devuelve «Particular» y el preflight la hidrata.
+        await SeedTenantAsync();
+        await using (var ctx = NewContext())
+        {
+            // Sin política la familia MATRICULAS nace bloqueada (procedure_family_blocked).
+            ctx.TenantOperationalPolicies.Add(new TenantOperationalPolicy
+            {
+                Id = Guid.NewGuid(),
+                TenantId = TenantSeed.LoneId,
+                AllowInitialRegistration = true,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await ctx.SaveChangesAsync();
+        }
+
+        var request = RequestMatricula("ict-servicio-matricula", "PUBLICO");
+
+        var reply = await InvokeCreateAsync(request, new CountingChain());
+
+        reply.ProcedureInstanceId.Should().NotBeNullOrEmpty("error: {0}", reply.ErrorCode);
+        var instanceId = Guid.Parse(reply.ProcedureInstanceId);
+        (await FieldValueAsync(instanceId, "vehicle_brand")).Should().Be("MARCA IT", "el preflight sí hidrata el resto");
+        (await FieldValueAsync(instanceId, "vehicle_service")).Should().Be("PUBLICO");
+    }
+
+    [PostgresFact]
+    public async Task CreateDraftFromIct_Traspaso_SigueTomandoElServicioDelRunt()
+    {
+        await SeedTenantAsync();
+        var request = Request("ict-servicio-traspaso", PrecomputedConServicio(Placa, "VehiclePlate"));
+
+        var reply = await InvokeCreateAsync(request, new CountingChain());
+
+        var instanceId = Guid.Parse(reply.ProcedureInstanceId);
+        (await FieldValueAsync(instanceId, "vehicle_service")).Should().Be("Particular");
+    }
+
     // ── invocación ───────────────────────────────────────────────────────────
+
+    private static PrecomputedVehicleConsultation PrecomputedConServicio(string identificador, string kind)
+    {
+        var p = Precomputed(horasAtras: 1);
+        p.SnapshotJson = PreflightVehicleSnapshotJson.Serialize(new PreflightVehicleSnapshot(
+            [new PreflightCheckDto("soat", "SOAT", "ok", "kyverum_runt", null)],
+            [
+                new HydratedField("vehicle_brand", "MARCA IT", null),
+                new HydratedField("vehicle_service", "Particular", null),
+            ],
+            ["kyverum_runt"]));
+        p.Kind = kind;
+        p.QueriedPlate = kind == "VehiclePlate" ? identificador : string.Empty;
+        p.QueriedVin = kind == "VehicleVin" ? identificador : string.Empty;
+        return p;
+    }
+
+    private static CreateDraftFromIctRequest RequestMatricula(string externalRef, string servicio)
+    {
+        const string vin = "9BWZZZ377VT004251";
+        var request = new CreateDraftFromIctRequest
+        {
+            TenantId = TenantSeed.LoneId.ToString(),
+            ProcedureTypeCode = "MATRICULA_NUEVA",
+            Origin = "ict",
+            ExternalRef = externalRef,
+            PrecomputedVehicle = PrecomputedConServicio(vin, "VehicleVin"),
+        };
+        request.FieldValues.Add(new FieldValue { FieldKey = "vin", ValueText = vin });
+        request.FieldValues.Add(new FieldValue { FieldKey = "vehicle_service", ValueText = servicio });
+        return request;
+    }
 
     private async Task<DraftReply> InvokeCreateAsync(CreateDraftFromIctRequest request, CountingChain chain)
     {

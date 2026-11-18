@@ -57,6 +57,29 @@ internal static class PdfTextExtractor
         return Regex.Replace(text.ToString(), @"[ \t]+", " ", RegexOptions.None, TimeSpan.FromSeconds(5));
     }
 
+    /// <summary>Texto plano de cada página, en el orden del archivo (HU #14579, BE-3: el aviso va en el pie de cada página).</summary>
+    public static IReadOnlyList<string> ExtractPages(byte[] pdf)
+    {
+        ArgumentNullException.ThrowIfNull(pdf);
+        var objects = ReadObjects(pdf);
+        var paginas = new List<string>();
+        foreach (var page in objects.Values.Where(o => o.Dictionary.Contains("/Type /Page") || o.Dictionary.Contains("/Type/Page"))
+                     .Where(o => !o.Dictionary.Contains("/Type /Pages") && !o.Dictionary.Contains("/Type/Pages")))
+        {
+            var fonts = ReadFonts(page, objects);
+            var text = new StringBuilder();
+            foreach (var contentId in References(page.Dictionary, "Contents"))
+            {
+                if (objects.TryGetValue(contentId, out var content) && content.Data is not null)
+                    text.Append(ReadContentStream(Encoding.Latin1.GetString(content.Data), fonts));
+            }
+
+            paginas.Add(text.ToString());
+        }
+
+        return paginas;
+    }
+
     /// <summary>
     /// Texto sin ningún espacio. <b>Es la forma en la que hay que comparar.</b> Skia dibuja el PDF
     /// glifo a glifo, posicionando cada uno con su propio operador, de modo que el flujo de

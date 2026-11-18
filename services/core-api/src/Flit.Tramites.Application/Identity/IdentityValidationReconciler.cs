@@ -81,13 +81,16 @@ public static class IdentityValidationReconciler
                 }
 
             case "expirado":
-                // Expiró en Kyverum sin resolución: se marca expirado (no es un resultado → sin evento Completed).
+                // Expiró en Kyverum sin resolución: se marca expirado (no es un resultado → sin evento Completed,
+                // cuyos consumidores encadenan la firma). Sí deja la frase en la bitácora del trámite; la auditoría
+                // de identidad (stage=reconcile, outcome=expirado) la escribe cada caller tras persistir.
                 if (v.Status is BiometricEstados.Expirado or BiometricEstados.Aprobado or BiometricEstados.Rechazado)
                     return false;
                 v.Status = BiometricEstados.Expirado;
                 v.ProviderStatus = status.Status;
                 v.ProviderPayload = status.RawPayloadSanitized;
                 v.UpdatedAt = now;
+                await applier.EncolarFraseExpiradaAsync(v, now, ct);
                 return true;
 
             default:

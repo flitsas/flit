@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { Download } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, usePaginacion } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -47,7 +47,7 @@ function Log() {
             className={controlCls(false)}
             onClick={() => apiDownload("/admin/log-migracion/excel", "log-migracion.xlsx", query).catch((e: unknown) => toast.show(e instanceof Error ? e.message : "No se pudo exportar.", "error"))}
           >
-            <Download className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
             Exportar a Excel
           </button>
         }

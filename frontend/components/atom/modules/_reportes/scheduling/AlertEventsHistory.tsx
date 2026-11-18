@@ -1,7 +1,9 @@
 "use client";
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
-import { Check } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
 import {
@@ -12,6 +14,14 @@ import {
   CARDLIST_TABLE,
   CARDLIST_TH,
 } from "@/components/atom/table-cardlist";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -80,7 +90,7 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
   return (
     <div data-testid="alert-events-history" className="space-y-3">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h4 className="text-sm font-bold text-flit-primary dark:text-slate-100">Historial de disparos</h4>
+        <h4 className="text-sm font-bold text-flit-primary">Historial de disparos</h4>
         <select
           aria-label="Filtrar por alerta"
           value={ruleId}
@@ -88,7 +98,7 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
             setPage(1);
             setRuleId(e.target.value);
           }}
-          className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs text-flit-primary dark:text-slate-100"
+          className="rounded-xl border border-input bg-background px-3 py-1.5 text-xs text-flit-primary"
         >
           <option value="">Todas las alertas</option>
           {rules.map((r) => (
@@ -106,8 +116,8 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
       >
         {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
         <div className={CARDLIST_SCROLL}>
-          <table className={CARDLIST_TABLE} aria-label="Historial de disparos de alertas">
-            <thead>
+          <table className={`${CARDLIST_TABLE} ${TABLA_MOVIL_TABLE_CLS}`} aria-label="Historial de disparos de alertas">
+            <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr className={CARDLIST_HEAD_ROW}>
                 <th scope="col" className={CARDLIST_TH}>Fecha</th>
                 <th scope="col" className={CARDLIST_TH}>Alerta</th>
@@ -118,33 +128,32 @@ export function AlertEventsHistory({ rules, tenantId, otTransitOfficeId }: Alert
                 <th scope="col" className={CARDLIST_TH}>Acción</th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {events.map((e) => (
-                <tr key={e.id} data-testid="alert-event-row" className={CARDLIST_ROW}>
-                  <td className={`${CARDLIST_CELL} whitespace-nowrap`}>{formatDateTime(e.triggeredAt)}</td>
-                  <td className={CARDLIST_CELL}>{e.ruleName}</td>
-                  <td className={`${CARDLIST_CELL} text-right font-semibold`} style={{ color: "var(--color-flit-brand)" }}>
+                <tr key={e.id} data-testid="alert-event-row" className={`${CARDLIST_ROW} ${TABLA_MOVIL_ROW_CLS}`}>
+                  <td data-label="Fecha" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>{formatDateTime(e.triggeredAt)}</td>
+                  <td data-label="Alerta" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{e.ruleName}</td>
+                  <td data-label="Valor" className={`${CARDLIST_CELL} text-right font-semibold ${TABLA_MOVIL_CELL_CLS}`} style={{ color: "var(--color-flit-brand)" }}>
                     {e.metricValue}
                   </td>
-                  <td className={`${CARDLIST_CELL} text-right`}>{e.threshold}</td>
-                  <td className={CARDLIST_CELL}>{e.notified ? "Sí" : "No"}</td>
-                  <td className={`${CARDLIST_CELL} max-w-[320px] truncate`} title={e.message ?? undefined}>
+                  <td data-label="Umbral" className={`${CARDLIST_CELL} text-right ${TABLA_MOVIL_CELL_CLS}`}>{e.threshold}</td>
+                  <td data-label="Notificada" className={`${CARDLIST_CELL} ${TABLA_MOVIL_CELL_CLS}`}>{e.notified ? "Sí" : "No"}</td>
+                  <td data-label="Detalle" className={`${CARDLIST_CELL} max-w-[320px] truncate ${TABLA_MOVIL_CELL_CLS}`} title={e.message ?? undefined}>
                     {e.message ?? "—"}
                   </td>
-                  <td className={`${CARDLIST_CELL} whitespace-nowrap`}>
+                  <td data-label="Acción" className={`${CARDLIST_CELL} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>
                     {e.acknowledgedAt ? (
                       <span
-                        className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold"
-                        style={{ background: "color-mix(in srgb, var(--color-flit-brand) 10.2%, transparent)", color: "var(--color-flit-brand)" }}
+                        {...etiquetaKit("success")}
                       >
-                        <Check className="h-3 w-3" aria-hidden="true" /> Reconocida
+                        <Icono nombre="check" className="h-3 w-3" /> Reconocida
                       </span>
                     ) : (
                       <RowActions
                         className="justify-start"
                         actions={[
                           {
-                            icon: Check,
+                            icon: iconoComo("check"),
                             label: `Reconocer disparo de ${e.ruleName}`,
                             tone: "primary",
                             onClick: () => void handleAck(e.id),

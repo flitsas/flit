@@ -277,8 +277,13 @@ export const OT_ARTICLES: ManualArticle[] = [
       "auditoria de permisos",
       "filtrar usuarios",
       "buscar usuario",
+      "clientes que gestiona",
+      "clientes especificos",
+      "todos los clientes",
+      "restringir clientes",
+      "alcance de clientes",
     ],
-    summary: "Invitar y administrar cuentas del perfil OT (Administrador OT y Gestor OT) y ajustar sus permisos.",
+    summary: "Invitar y administrar cuentas del perfil OT (Administrador OT y Gestor OT), ajustar sus permisos y elegir qué clientes gestiona cada uno.",
     blocks: [
       {
         id: "alcance",
@@ -327,8 +332,35 @@ export const OT_ARTICLES: ManualArticle[] = [
         ],
       },
       {
+        id: "clientes-que-gestiona",
+        title: "4. Clientes que gestiona una persona",
+        paragraphs: [
+          "Por defecto, cada persona de tu organismo ve y gestiona los trámites de todas las compañías cliente. Puedes limitarla a algunas: desde ese momento solo ve esas compañías en la bandeja de trámites, el Inicio, los reportes, las consultas, los lotes, las revocatorias y los mandatarios. Aplica a cualquier rol, también a otro Administrador OT.",
+          "Esta opción es del Administrador OT y del Super Admin. Un Gestor OT, aunque tenga habilitado el módulo Usuarios, no la ve.",
+        ],
+        bullets: [
+          "1. Dock → Usuarios; en la fila de la persona abre «Acciones» → «Editar usuario».",
+          "2. En «Clientes que gestiona» elige «Todos los clientes» o «Clientes específicos».",
+          "3. Con «Clientes específicos», busca por nombre o NIT y marca una o más compañías. Si no marcas ninguna ves «Elige al menos un cliente o vuelve a «Todos los clientes».» y no puedes guardar.",
+          "4. Guarda. El cambio aplica de inmediato: si le quitas un cliente, deja de ver sus trámites aunque los estuviera gestionando, y los consolidados pendientes de ese cliente en sus lotes ya no se entregan.",
+          "Al invitar a alguien también eliges sus clientes en «Clientes que gestiona»; por defecto queda en «Todos los clientes».",
+          "En la tabla, debajo del rol de cada persona, ves «Todos los clientes» o cuántos clientes tiene asignados.",
+          "Una compañía nueva que empiece a trabajar con tu organismo la ven solo quienes están en «Todos los clientes»; a los demás debes asignársela.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "No puedes cambiar tus propios clientes: al editarte ves «No puedes cambiar tu propio alcance de clientes. Pídeselo a otro administrador.». Pídeselo a otro Administrador OT o al Super Admin.",
+          },
+          {
+            variant: "warning",
+            text: "Si a ti te asignaron clientes específicos, solo puedes repartir esos mismos clientes: «Todos los clientes» aparece deshabilitado con el aviso «Solo puedes asignar los clientes que tú gestionas.». Las personas que invites quedan con tus mismos clientes, y al registrar o editar un mandatario solo puedes asociarle tus compañías (las asociaciones que ya tenía con otras compañías se conservan).",
+          },
+        ],
+      },
+      {
         id: "auditoria-permisos",
-        title: "4. Auditoría de permisos",
+        title: "5. Auditoría de permisos",
         paragraphs: [
           "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas, con buscador, selectores de perfil, rol y estado, un embudo en cada columna para filtrarla, y el botón «Invitar usuario»; ver «Tablas: cómo leerlas y moverte entre páginas») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
           "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar».",
@@ -336,7 +368,7 @@ export const OT_ARTICLES: ManualArticle[] = [
       },
       {
         id: "seguridad",
-        title: "5. Seguridad",
+        title: "6. Seguridad",
         paragraphs: [
           "Suspender temporalmente, desactivar indefinidamente, eliminar o restaurar una cuenta ya no lo hace el organismo: son acciones exclusivas del equipo FLIT (Super Admin). Tú, como administrador del organismo, invitas, editas datos y cancelas invitaciones pendientes; para lo demás, escala el caso a FLIT.",
         ],
@@ -819,7 +851,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         title: "4. Caja: usuarios y cobros",
         paragraphs: [
           "En el punto, la persona paga en la caja de tu organismo con el ID de su trámite. La pestaña «Caja» tiene dos partes: «Usuarios de caja», para decidir quién cobra, y «Cobros de caja», para revisar lo cobrado y corregir errores.",
-          "Un usuario de caja solo entra al portal de caja de tu organismo: no ve FLIT 2 ni los trámites de otros organismos. Crea uno por cada persona que cobra, así queda registrado quién hizo cada cobro.",
+          "Un usuario de caja entra a FLIT 2 con su correo y su contraseña y solo ve el módulo «Caja» del menú: no ve los demás módulos ni los trámites de otros organismos. Tú, como administrador, también ves «Caja» en el menú y puedes cobrar desde ahí. Crea un usuario por cada persona que cobra, así queda registrado quién hizo cada cobro.",
         ],
         bullets: [
           "Crear un usuario de caja: pulsa «Crear usuario», escribe el nombre y el correo y guarda. Le llega una invitación para definir su contraseña; mientras no la use, aparece como «Invitación pendiente» y puedes reenviarla desde «Acciones».",
@@ -882,42 +914,53 @@ export const OT_ARTICLES: ManualArticle[] = [
   },
   {
     slug: "2-ot/15-portal-de-caja",
-    title: "Portal de caja del organismo: cobrar un trámite del punto",
+    title: "Caja: cobrar un trámite del punto desde FLIT 2.0",
     audience: "Organismo de Tránsito",
     sectionId: "ot",
     keywords: [
+      "caja",
+      "modulo caja",
       "portal de caja",
       "caja del organismo",
+      "usuario de caja",
       "cobrar tramite",
       "id del tramite",
       "confirmar cobro",
       "pago registrado",
       "prefactura",
       "cobros del dia",
+      "anular cobro",
       "este tramite ya fue pagado",
       "no encontramos ese tramite",
-      "cerrar sesion caja",
+      "la caja no esta habilitada",
     ],
     summary:
-      "Cómo la caja del organismo cobra un trámite que la persona inició en el punto: buscar por ID, revisar el total, registrar el medio y ver los cobros del día.",
+      "Cómo el organismo cobra desde FLIT 2.0 un trámite que la persona inició en el punto: quién entra, qué ve, cómo cobra, cómo revisa los cobros del día y cómo anula el administrador del organismo.",
     blocks: [
       {
         id: "entrar",
-        title: "1. Entrar a la caja",
+        title: "1. Quién entra y qué ve",
         paragraphs: [
-          "La caja se abre desde el enlace del punto de tu organismo, en la dirección terminada en «/caja». Inicia sesión con el correo y la contraseña de tu usuario de caja. La sesión dura como máximo 12 horas; al terminar el turno usa «Cerrar sesión», sobre todo si el equipo es compartido.",
+          "La caja es un módulo de FLIT 2.0 llamado «Caja», en el menú de abajo. No hay un portal aparte: la persona de caja entra por el inicio de sesión de siempre, con el correo y la contraseña de su usuario. Su administrador del organismo la crea en la pestaña «Caja» del hub del organismo y le llega una invitación para definir su contraseña.",
+          "Si tu único rol es el de caja, el menú muestra solo «Caja» y al entrar llegas directo a ella. El administrador del organismo ve «Caja» además de sus módulos de siempre, y puede cobrar, ver los cobros del día y anular. El Super Admin no usa este módulo: anula desde la administración del organismo.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si ves «La caja no está habilitada para tu organismo», pide al administrador de FLIT que la habilite.",
+          },
         ],
       },
       {
         id: "cobrar",
         title: "2. Cobrar un trámite",
-        paragraphs: ["Cada cobro se hace con el ID del trámite que la persona generó en el punto. Sigue estos pasos:"],
+        paragraphs: ["En la pestaña «Cobrar», cada cobro se hace con el ID del trámite que la persona generó en el punto. Sigue estos pasos:"],
         bullets: [
-          "Escribe el ID que te muestra la persona (por ejemplo PN-2026-000123) y busca.",
+          "Escribe el ID que te muestra la persona (por ejemplo PN-2026-000123) y pulsa «Buscar».",
           "Revisa el tipo de trámite, lo que se paga y el total. El total no se puede cambiar: es el que calcula la plataforma en ese momento.",
           "Elige el medio con que pagó: efectivo, datáfono, transferencia u otro (en «Otro», escribe cuál).",
           "Si tienes la prefactura, adjúntala (PDF, JPG o PNG de hasta 5 MB). Es opcional.",
-          "Pulsa «Confirmar cobro». Verás «Pago registrado.» y la pantalla de la persona pasa sola al cierre.",
+          "Pulsa «Confirmar cobro». Verás «Pago registrado.» y la pantalla de la persona pasa sola al cierre. Para seguir, pulsa «Cobrar otro trámite».",
         ],
         callouts: [
           {
@@ -933,17 +976,20 @@ export const OT_ARTICLES: ManualArticle[] = [
         paragraphs: ["Si la búsqueda no deja cobrar, la pantalla dice por qué:"],
         bullets: [
           "«No encontramos ese trámite.»: revisa el ID con la persona.",
-          "«Este trámite ya fue pagado.»: no lo cobres otra vez.",
+          "«Este trámite ya fue pagado.» (en amarillo): no lo cobres otra vez.",
           "«Este trámite no es de este organismo.»: la persona debe pagar en el organismo donde lo inició.",
           "«El pago en caja de este trámite venció.»: el ID vale solo el día en que se generó; la persona debe generarlo de nuevo en el punto.",
-          "Si buscas varios ID que no existen seguidos, la caja se bloquea unos minutos por seguridad y te dice cuánto esperar.",
+          "«Este trámite no tiene el pago en caja habilitado.»: el trámite no se paga en caja.",
+          "«Demasiadas búsquedas sin resultado. Espere N minutos.»: si buscas varios ID que no existen seguidos, la caja se bloquea unos minutos por seguridad y te dice cuánto esperar.",
         ],
       },
       {
         id: "cobros-dia",
-        title: "4. Cobros del día",
+        title: "4. Cobros del día y anulaciones",
         paragraphs: [
-          "«Cobros del día» lista lo que se cobró hoy en tu organismo, con el ID, el valor, el medio, la hora y quién cobró, y el total del día. Los cobros anulados aparecen marcados y no suman. Si te equivocaste en un cobro, avisa al administrador de tu organismo: solo el administrador puede anularlo, y únicamente durante los 15 minutos siguientes.",
+          "La pestaña «Cobros del día» lista lo que se cobró en tu organismo, con el ID, el valor, el medio, la fecha y hora, quién cobró y el estado, y el total del día. Los cobros anulados aparecen marcados y tachados, y no suman al total. La tabla se pagina de 10, 20, 30 o 50 filas.",
+          "El administrador del organismo puede elegir otro día y anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Si el cobro ya no se puede anular porque el trámite ya llegó a FLIT 2.0, la opción aparece deshabilitada con su motivo. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
+          "Si eres de caja y te equivocaste en un cobro, avisa al administrador de tu organismo: solo él puede anularlo.",
         ],
       },
     ],

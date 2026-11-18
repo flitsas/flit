@@ -11,6 +11,7 @@ using Flit.Diagnostico.Domain.Catalogos;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Personas;
+using Flit.Diagnostico.Domain.Vehiculos;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Diagnostico.Api.Modulos.Reportes;
@@ -43,12 +44,9 @@ internal sealed class LectorContenidoReporte(
     ICatalogoTiposTramite catalogo)
 {
     /// <summary>Texto de cada motivo de N/A (los mismos del detalle de celda de la interfaz).</summary>
-    public static readonly IReadOnlyDictionary<MotivoNa, string> TextoMotivoNa = new Dictionary<MotivoNa, string>
-    {
-        [MotivoNa.ServicioPublico] = "El vehículo es de servicio público: esta consulta no aplica.",
-        [MotivoNa.DepartamentoNoSoportado] = "El departamento del vehículo todavía no está soportado.",
-        [MotivoNa.SinDocumentoLocatario] = "El vehículo está sin el documento del locatario: no hay a quién consultar.",
-    };
+    /// <remarks>Sale de <see cref="RotulosDiagnostico.MotivosNa"/> (punto 5): el mismo texto de <c>motivo_na_etiqueta</c> en la API.</remarks>
+    public static readonly IReadOnlyDictionary<MotivoNa, string> TextoMotivoNa =
+        Enum.GetValues<MotivoNa>().ToDictionary(m => m, RotulosDiagnostico.DeMotivoNa);
 
     /// <summary>El contenido del vehículo para la compañía del token, con su visibilidad y la empresa del claim.</summary>
     public async Task<ContenidoReporteVehiculo> VehiculoAsync(UsuarioActual usuario, Guid diagnosticoId, Guid vehiculoId, CancellationToken ct)
@@ -115,10 +113,14 @@ internal sealed class LectorContenidoReporte(
     {
         var fila = await db.Set<DictamenVehiculo>().AsNoTracking()
             .Where(d => d.VehiculoId == vehiculoId && d.TenantId == cabecera.TenantId && d.Vigente)
-            .Select(d => new { d.Veredicto, d.EstadoRedaccion, d.Alertamientos })
+            .Select(d => new { d.Veredicto, d.EstadoRedaccion, d.Alertamientos, d.Version, Ajustado = d.AjusteMotivo != null, d.OverrideEn })
             .SingleOrDefaultAsync(ct)
             .ConfigureAwait(false);
-        return fila is null ? null : new DictamenEnHuella(fila.Veredicto, fila.EstadoRedaccion, ContenidoReporteVehiculo.TextoDeAlertamientos(fila.Alertamientos));
+        return fila is null
+            ? null
+            : new DictamenEnHuella(
+                fila.Veredicto, fila.EstadoRedaccion, ContenidoReporteVehiculo.TextoDeAlertamientos(fila.Alertamientos), fila.Version,
+                fila.Ajustado ? fila.OverrideEn : null);
     }
 
     /// <summary>El contenido del lote para la compañía del token, con su visibilidad y la empresa del claim.</summary>
@@ -137,19 +139,35 @@ internal sealed class LectorContenidoReporte(
         var vehiculosDelLote = db.Set<VehiculoDiagnostico>().AsNoTracking().Where(v => v.DiagnosticoId == cabecera.Id && v.TenantId == cabecera.TenantId);
         var vehiculos = await vehiculosDelLote
             .OrderBy(v => v.Orden)
-            .Select(v => new IdentificacionLeida(v.Id, v.Orden, v.IdentificadorNorm, v.TipoIdentificador, v.Placa, v.Vin))
+            .Select(v => new
+            {
+                Identificacion = new IdentificacionLeida(v.Id, v.Orden, v.IdentificadorNorm, v.TipoIdentificador, v.Placa, v.Vin),
+                v.PropietarioDeclaradoDocTipo,
+                v.PropietarioDeclaradoDocCifrado,
+                v.CambioPropietario,
+            })
             .ToListAsync(ct).ConfigureAwait(false);
         var celdas = (await Celdas(cabecera, null).ToListAsync(ct).ConfigureAwait(false)).ToLookup(c => c.VehiculoId);
+        // HU #14582 (§1.3, schema.md §2): las personas históricas DECLARADO_CLIENTE no se pintan como locatario en el Excel.
         var personas = (await db.Set<PersonaVehiculo>().AsNoTracking()
                 .Where(p => p.TenantId == cabecera.TenantId && vehiculosDelLote.Any(v => v.Id == p.VehiculoId))
+                .Where(p => !(p.Rol == RolPersona.Locatario && p.Origen == OrigenDocumento.DeclaradoCliente))
                 .OrderBy(p => p.Rol).ThenBy(p => p.Orden)
                 .ToListAsync(ct).ConfigureAwait(false))
             .ToLookup(p => p.VehiculoId);
         var encabezado = await EncabezadoAsync(cabecera, empresa, ct).ConfigureAwait(false);
 
-        return new ContenidoReporteLote(encabezado, [.. vehiculos.Select(v => new VehiculoReporte(
-            v.Id, v.Orden, v.Identificador, CodigosDeEnum.Codigo(v.Tipo), v.Placa, v.Vin,
-            Secciones(cabecera, [.. celdas[v.Id]], [.. personas[v.Id]])))]);
+        return new ContenidoReporteLote(encabezado, [.. vehiculos.Select(f =>
+        {
+            var v = f.Identificacion;
+            // El declarado se descifra solo para enmascararlo (como las personas); el número en claro no llega al contenido.
+            var declarado = f.PropietarioDeclaradoDocTipo is { } tipo && f.PropietarioDeclaradoDocCifrado is { } cifrado
+                ? $"{tipo} {EnmascaradorDocumento.EnmascararCifrado(protector, cifrado)}"
+                : null;
+            return new VehiculoReporte(
+                v.Id, v.Orden, v.Identificador, CodigosDeEnum.Codigo(v.Tipo), v.Placa, v.Vin,
+                Secciones(cabecera, [.. celdas[v.Id]], [.. personas[v.Id]]), declarado, f.CambioPropietario);
+        })]);
     }
 
     /// <summary>La cabecera debe existir en la empresa del contexto: una de otra compañía pasada a mano no se lee (404).</summary>

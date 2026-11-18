@@ -16,6 +16,8 @@ internal static class FurCompraventaCopropiedad
         ("C.E.", ["CE", "E", "C.E."]),
         ("T.I", ["TI", "T", "T.I"]),
         ("P.A", ["PA", "P", "PAS", "P.A"]),
+        // HU #14500 — etiqueta legible; la casilla tipológica del FUR no se marca (ADR-0082).
+        ("PPT", ["PPT"]),
     ];
 
     public static List<DocumentParte> DelRol(IEnumerable<DocumentParte> partes, string rol) =>

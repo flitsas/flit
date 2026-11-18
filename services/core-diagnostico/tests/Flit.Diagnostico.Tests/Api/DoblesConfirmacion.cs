@@ -84,7 +84,7 @@ public sealed class LogsEnMemoria : ILoggerProvider
 /// <summary>Ayudas de las pruebas de validar-filas y confirmación (HU #13751).</summary>
 internal static class Lotes
 {
-    private static readonly string[] ColumnasCsv = ["identificador", "tipo_documento_locatario", "documento_locatario"];
+    private static readonly string[] ColumnasCsv = ["identificador", "tipo_documento_propietario", "documento_propietario"];
 
     public static string RutaValidar(Guid id) => $"{Cabeceras.Ruta}/{id}/carga/validar-filas";
 
@@ -96,8 +96,8 @@ internal static class Lotes
         var json = new Dictionary<string, object?>
         {
             ["identificador"] = identificador,
-            ["tipo_documento_locatario"] = tipo,
-            ["documento_locatario"] = documento,
+            ["tipo_documento_propietario"] = tipo,
+            ["documento_propietario"] = documento,
         };
         if (fila is { } n)
             json["fila"] = n;
@@ -130,7 +130,7 @@ internal static class Lotes
     /// <summary>.csv con el encabezado de la plantilla, separado por punto y coma; una línea por fila (null es celda vacía).</summary>
     public static byte[] Csv(IEnumerable<Dictionary<string, object?>> filas)
     {
-        var lineas = new List<string> { "Identificador_Vehiculo;Tipo_Documento_Locatario;Documento_Locatario" };
+        var lineas = new List<string> { "Identificador_Vehiculo;Tipo_Documento_Propietario;Documento_Propietario" };
         lineas.AddRange(filas.Select(f => string.Join(';',
             ColumnasCsv.Select(c => Celda(f.GetValueOrDefault(c) as string)))));
         return System.Text.Encoding.UTF8.GetBytes(string.Join("\n", lineas) + "\n");

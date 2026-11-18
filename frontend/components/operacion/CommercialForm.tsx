@@ -12,6 +12,7 @@ import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-s
 import { WizardCardHeader } from './wizard-atoms';
 import { InlineAlert, INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { cn } from '@/lib/utils';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type CommercialFormHandle = WizardStepFormHandle;
@@ -36,7 +37,7 @@ interface Props {
 const CAUSAL_POR_DEFECTO = 'COMPRAVENTA' as const;
 
 const INPUT_BASE = WIZARD_INPUT;
-const REQUIRED_LABEL = 'text-xs font-medium text-[#59677D] dark:text-white/70 mb-1.5 flex items-center gap-1.5';
+const REQUIRED_LABEL = 'text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5';
 
 const EMPTY: CommercialData = {
   valorVenta: null,
@@ -214,7 +215,7 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
             <div>
               <label htmlFor="comercial-valor" className={REQUIRED_LABEL}>
                 Valor de venta <span className="font-normal opacity-70">($)</span>
-                <span style={{ color: '#FF4E00' }} aria-label="obligatorio">
+                <span style={{ color: 'var(--destructive)' }} aria-label="obligatorio">
                   *
                 </span>
               </label>
@@ -260,7 +261,8 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
               role="status"
               aria-live="polite"
             >
-              Datos comerciales guardados ✓
+              <IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />
+              Datos comerciales guardados
             </span>
           ) : (
             <span className="text-xs opacity-70">{loading ? 'Cargando…' : ''}</span>

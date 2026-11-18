@@ -270,7 +270,14 @@ class ClienteDeServicio(unittest.TestCase):
         cliente = clientes["svc-diagnostico"]
         self.assertEqual(cliente["Secret"], "")
         self.assertEqual(
-            sorted(cliente["Scopes"]), sorted(["platform.manifest", "platform.identidad.read", "platform.tramites.catalogos", "platform.identidad.empresas"])
+            sorted(cliente["Scopes"]),
+            sorted([
+                "platform.manifest", "platform.identidad.read", "platform.tramites.catalogos", "platform.identidad.empresas",
+                # ADR-0084 (P4): el rpc CrearBorradorDesdeDiagnostico de core-api exige este scope.
+                "platform.tramites.derivacion",
+                # HU #14587: UsuariosProductoService de core-api (autogestión de usuarios de Diagnóstico y sus conteos).
+                "platform.usuarios.diagnostico", "platform.usuarios.diagnostico.conteos",
+            ]),
         )
 
     def test_variables_de_diagnostico_sin_valores_en_el_ejemplo(self):

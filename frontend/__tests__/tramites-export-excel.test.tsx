@@ -149,6 +149,10 @@ describe('HU #12104 — AC3: las celdas compuestas se despliegan en columnas', (
       'vendedorFirma',
       'comprador',
       'compradorFirma',
+      // Ajuste 2026-11-10 (D2=a) — Gestor entra al default: la celda apila compañía y persona, y en
+      // el archivo salen en dos columnas.
+      'compania',
+      'gestor',
       'tramite',
       'estado',
       'paso',

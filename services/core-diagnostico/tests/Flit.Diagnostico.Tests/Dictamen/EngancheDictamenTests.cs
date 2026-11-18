@@ -108,6 +108,24 @@ public sealed class EngancheDictamenTests
     }
 
     [Fact]
+    public void El_override_de_un_dictamen_v1_conserva_las_plantillas_de_v1()
+    {
+        // Punto 2 (2026-11-11): los dictámenes emitidos con el catálogo 1 no se reescriben con los textos de v2.
+        const string tipo = "TRASPASO_STANDARD";
+        const string guardado = "[{\"codigo\":\"SIMIT_VEHICULO\",\"texto\":\"texto del modelo\",\"efecto\":\"ADVIERTE\",\"fuente\":\"SIMIT_VEHICULO\"}]";
+        var v1 = CatalogoReglasDictamen.FilasDe(1).Single(f => f.TipoTramiteCodigo == tipo && f.Codigo == "SIMIT_VEHICULO");
+        var v2 = CatalogoReglasDictamen.FilasDe(2).Single(f => f.TipoTramiteCodigo == tipo && f.Codigo == "SIMIT_VEHICULO");
+
+        var deV1 = EmisorDictamen.TextosDePlantilla(tipo, guardado, 1);
+        var deV2 = EmisorDictamen.TextosDePlantilla(tipo, guardado, 2);
+
+        Texto(deV1, 0).Should().Be(v1.PlantillaTexto);
+        Efecto(deV1, 0).Should().Be("ADVIERTE", "el efecto guardado no se recalcula");
+        Texto(deV2, 0).Should().Be(v2.PlantillaTexto);
+        v1.PlantillaTexto.Should().NotBe(v2.PlantillaTexto);
+    }
+
+    [Fact]
     public void La_version_nace_en_1_y_la_siguiente_apaga_la_vigente()
     {
         var primera = EmisorDictamen.SiguienteVersion(null);

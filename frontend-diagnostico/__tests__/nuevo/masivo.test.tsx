@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { ERRORES_CARGA } from "@/lib/carga/api";
+import { ERRORES_CABECERA } from "@/lib/diagnosticos/api";
 import { ID, TIPOS, archivo, correccionesDe, cuerpoDe, diagnostico, fila, formularioDe, indiceDe, llamadas, montarNuevo, resumen, type Navegacion } from "./datos";
 
 // Uso de ejemplo: /diagnosticos/nuevo?modo=masivo (HU #14085): el usuario escribe el nombre, elige fuentes y modo, elige
@@ -21,6 +23,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 const navegacion = nav as unknown as Navegacion;
+const SECRETO = "mensaje del servidor que no debe verse";
 type Rutas = NonNullable<Parameters<typeof montarNuevo>[1]>["rutas"];
 
 const CREADO = () => Response.json(diagnostico(), { status: 201 });
@@ -71,7 +74,8 @@ describe("Masivo — un solo paso (AC3)", () => {
     expect(await screen.findByRole("region", { name: "Resumen de validación" })).toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "Identificador de la fila 3" })).toBeInTheDocument();
     const estimado = screen.getByRole("region", { name: "Estimado de consultas" });
-    expect(screen.getByRole("region", { name: "Parámetros" })).toContainElement(estimado);
+    // FE-3: el estimado va en la barra final de la pantalla (S5), no dentro de Parámetros.
+    expect(document.querySelector("[data-parte='pie-creacion']")).toContainElement(estimado);
     expect(nav.push).not.toHaveBeenCalled();
   });
 
@@ -86,7 +90,7 @@ describe("Masivo — un solo paso (AC3)", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "Identificador de la fila 3" }), { target: { value: "TST124" } });
     await waitFor(() => expect(within(region).getByText("Válidos").nextSibling).toHaveTextContent("3"));
     fireEvent.click(screen.getByRole("button", { name: /continuar solo con los válidos/i }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID}`));
+    expect(await screen.findByRole("heading", { name: "Diagnóstico iniciado con 2 vehículos" })).toBeInTheDocument();
     const [confirmacion] = llamadas(api, "POST", `/diagnosticos/${ID}/vehiculos`);
     expect(formularioDe(confirmacion).get("archivo")).toBe(subido);
     expect(correccionesDe(confirmacion)).toEqual([{ fila: 3, identificador: "TST124" }]);
@@ -111,16 +115,28 @@ describe("Masivo — validaciones en pantalla (AC4)", () => {
     fireEvent.change(await nombre(), { target: { value: "Flota norte" } });
     validar();
     expect(await screen.findByText(/elige el archivo de vehículos/i)).toBeInTheDocument();
-    expect(screen.getByLabelText(/archivo de vehículos/i)).toHaveAttribute("aria-invalid", "true");
+    // ZonaArrastre del kit (HU #14562 AC10): el error queda asociado a «Elegir archivo».
+    expect(screen.getByRole("button", { name: /elegir archivo/i })).toHaveAccessibleDescription(/elige el archivo de vehículos/i);
     expect(llamadas(api, "POST", "/diagnosticos")).toHaveLength(0);
   });
 
-  it("un formato no admitido se rechaza con el mensaje de siempre, sin llamar a la API", async () => {
+  it("un formato no admitido lo rechaza la ZonaArrastre del kit, sin llamar a la API", async () => {
     const api = montar();
     await nombre();
     elegir(archivo("flota.pdf", "application/pdf"));
-    expect(await screen.findByText(/formato no admitido: sube el archivo en \.xlsx o \.csv/i)).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent(/formato no admitido.*\.xlsx.*\.csv/i);
     expect(llamadas(api, "POST", "/diagnosticos")).toHaveLength(0);
+  });
+
+  it("FE-3: «Validar archivo» queda al final, después de la zona de archivo, y envía el formulario de Parámetros", async () => {
+    montar();
+    await nombre();
+    const vehiculos = screen.getByRole("region", { name: "Vehículos" });
+    const validarBoton = screen.getByRole("button", { name: "Validar archivo" });
+    expect(vehiculos.compareDocumentPosition(validarBoton) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const form = screen.getByRole("form", { name: "Parámetros del diagnóstico masivo" });
+    expect(form.contains(validarBoton)).toBe(false);
+    expect(validarBoton).toHaveAttribute("form", form.id);
   });
 
   it("nombre vacío o de 151 caracteres: error en el campo y no crea la cabecera", async () => {
@@ -221,16 +237,18 @@ describe("Masivo — errores de la API y reintento con PUT (AC4)", () => {
     expect(within(screen.getByRole("radiogroup", { name: "Tipo de diagnóstico" })).getByRole("radio", { name: "Masivo" })).toHaveAttribute("aria-checked", "true");
   });
 
-  it("archivo rechazado (422) muestra el motivo de la API; el siguiente intento usa PUT /diagnosticos/{id} y no otro POST", async () => {
+  // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API; ahora el texto fijo del code del contrato.
+  it("AP-9: archivo rechazado (422) muestra el texto fijo del code; el siguiente intento usa PUT /diagnosticos/{id} y no otro POST", async () => {
     let veces = 0;
     const api = montar({
       [`POST ${RUTA_CARGA}`]: () =>
-        ++veces === 1 ? Response.json({ code: "FORMATO_XLS", error: "Guarda el archivo como .xlsx." }, { status: 422 }) : ANALISIS(),
+        ++veces === 1 ? Response.json({ code: "FORMATO_XLS_NO_ADMITIDO", error: SECRETO }, { status: 422 }) : ANALISIS(),
       [`PUT /diagnosticos/${ID}`]: () => Response.json(diagnostico()),
     });
     await preparar();
     validar();
-    expect(await screen.findByText("Guarda el archivo como .xlsx.")).toBeInTheDocument();
+    expect(await screen.findByText(ERRORES_CARGA.FORMATO_XLS_NO_ADMITIDO)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
     expect(screen.getByText("No se pudo analizar el archivo")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
 
@@ -256,7 +274,8 @@ describe("Masivo — errores de la API y reintento con PUT (AC4)", () => {
     });
     const subido = await preparar();
     validar();
-    expect(await screen.findByText(/diagnóstico no respondió/i)).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(await screen.findByText("No se pudo analizar el archivo.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     await screen.findByRole("region", { name: "Resumen de validación" });
     expect(llamadas(api, "POST", "/diagnosticos")).toHaveLength(1);
@@ -270,12 +289,40 @@ describe("Masivo — errores de la API y reintento con PUT (AC4)", () => {
     let veces = 0;
     montar({
       [`POST ${RUTA_CARGA}`]: () => (++veces === 1 ? new Response("", { status: 500 }) : ANALISIS()),
-      [`PUT /diagnosticos/${ID}`]: () => Response.json({ code: "DIAGNOSTICO_NO_EDITABLE", error: "El diagnóstico ya no se puede editar." }, { status: 409 }),
+      [`PUT /diagnosticos/${ID}`]: () => Response.json({ code: "DIAGNOSTICO_NO_EDITABLE", error: SECRETO }, { status: 409 }),
     });
     await preparar();
     validar();
     fireEvent.click(await screen.findByRole("button", { name: "Reintentar" }));
-    expect(await screen.findByText("El diagnóstico ya no se puede editar.")).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API.
+    expect(await screen.findByText(ERRORES_CABECERA.DIAGNOSTICO_NO_EDITABLE)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+  });
+
+  it("AP-9: un 503 CATALOGO_NO_DISPONIBLE al guardar la cabecera muestra el texto fijo del code", async () => {
+    montar({ "POST /diagnosticos": () => Response.json({ code: "CATALOGO_NO_DISPONIBLE", error: SECRETO }, { status: 503 }) });
+    await preparar();
+    validar();
+    expect(await screen.findByText(ERRORES_CABECERA.CATALOGO_NO_DISPONIBLE)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+  });
+
+  it("AP-9: un 500 al guardar la cabecera cae en el respaldo fijo", async () => {
+    montar({ "POST /diagnosticos": () => Response.json({ error: SECRETO }, { status: 500 }) });
+    await preparar();
+    validar();
+    expect(await screen.findByText("No se pudo guardar el diagnóstico.")).toBeInTheDocument();
+  });
+
+  it("AP-9: un 422 LIMITE_SUPERADO al confirmar muestra el texto fijo del code, sin el mensaje del servidor", async () => {
+    montar({ [`POST /diagnosticos/${ID}/vehiculos`]: () => Response.json({ code: "LIMITE_SUPERADO", error: SECRETO, campo: "vehiculos" }, { status: 422 }) });
+    await preparar();
+    validar();
+    await screen.findByRole("region", { name: "Resumen de validación" });
+    fireEvent.click(screen.getByRole("button", { name: /continuar solo con los válidos/i }));
+    expect(await screen.findByText(ERRORES_CARGA.LIMITE_SUPERADO)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reintentar" })).not.toBeInTheDocument();
   });
 
   it("un 403 de sesión en la subida lleva a la página 403 con su código", async () => {
@@ -294,7 +341,46 @@ describe("Masivo — errores de la API y reintento con PUT (AC4)", () => {
     fireEvent.click(screen.getByRole("button", { name: /continuar solo con los válidos/i }));
     expect(await screen.findByText("No se confirmaron los vehículos")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID}`));
+    expect(await screen.findByRole("heading", { name: "Diagnóstico iniciado con 2 vehículos" })).toBeInTheDocument();
     expect(llamadas(api, "POST", `/diagnosticos/${ID}/vehiculos`)).toHaveLength(2);
+  });
+});
+
+describe("Masivo — resultado «Diagnóstico iniciado con N vehículos» (AC18, AC19, AC16)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"], shouldAdvanceTime: true });
+  });
+  afterEach(() => vi.useRealTimers());
+
+  it("AC18: al confirmar muestra el resultado con los N confirmados, oculta el selector y a los 5 s navega al tablero", async () => {
+    montar({ [`POST /diagnosticos/${ID}/vehiculos`]: CONFIRMADO });
+    await preparar();
+    validar();
+    await screen.findByRole("region", { name: "Resumen de validación" });
+    fireEvent.click(screen.getByRole("button", { name: /continuar solo con los válidos/i }));
+    expect(await screen.findByRole("heading", { name: "Diagnóstico iniciado con 2 vehículos" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver tablero" })).toHaveAttribute("href", `/diagnosticos/${ID}`);
+    expect(screen.queryByRole("radiogroup", { name: "Tipo de diagnóstico" })).toBeNull();
+    expect(nav.push).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID}`);
+  });
+
+  it("AC19: «Quedarme aquí» detiene la redirección del masivo", async () => {
+    montar({ [`POST /diagnosticos/${ID}/vehiculos`]: CONFIRMADO });
+    await preparar();
+    validar();
+    await screen.findByRole("region", { name: "Resumen de validación" });
+    fireEvent.click(screen.getByRole("button", { name: /continuar solo con los válidos/i }));
+    fireEvent.click(await screen.findByRole("button", { name: "Quedarme aquí" }));
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("AC16: el pie del masivo ofrece Cancelar hacia el inicio", async () => {
+    montar();
+    await nombre();
+    // FE-3: Cancelar va en la barra final, fuera de Parámetros. FE-4: vuelve a /diagnosticos.
+    expect(within(document.querySelector("[data-parte='pie-creacion']") as HTMLElement).getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/diagnosticos");
   });
 });

@@ -8,16 +8,22 @@ import { useBrand } from "@flit/brand/BrandProvider";
 import { suiteAccountLinks, suiteRoleLabel, type AccountLink } from "./account";
 import { AccountMenu, type ShellUser } from "./AccountMenu";
 import type { SuiteApp } from "./apps";
-import { Dock } from "./dock/Dock";
+import { Dock, type DistribucionDock } from "./dock/Dock";
 import { DockMobile } from "./dock/DockMobile";
 import { buildDock, isActive, type NavCatalog, type NavViewer } from "./nav";
 import { ProductMenu } from "./ProductMenu";
+import { CommandPalette } from "./CommandPalette";
+import { ShellNavProvider } from "./ShellNavContext";
+import type { PlateSearch, SearchAction } from "./search";
 import { ThemeToggle } from "./theme";
+import { useSuiteApps } from "./useSuiteApps";
 
 export type { NavCatalog, NavItem, NavSection, NavViewer } from "./nav";
 export type { ShellUser } from "./AccountMenu";
 export type { AccountLink } from "./account";
 export type { SuiteApp } from "./apps";
+export type { PlateSearch, SearchAction } from "./search";
+export type { DistribucionDock } from "./dock/Dock";
 
 const NO_LINKS: AccountLink[] = [];
 
@@ -51,6 +57,12 @@ export interface SuiteShellProps {
   onLogout?: () => void;
   /** Interruptor claro/oscuro de la suite (por defecto, sí). */
   themeToggle?: boolean;
+  /**
+   * Buscador Ctrl K (HU #14480). Las secciones salen solas del catálogo filtrado; aquí van las acciones rápidas del
+   * producto (rutas que ya existen) y a dónde lleva una placa. Cada una nombra la entrada del dock de la que depende.
+   */
+  searchActions?: SearchAction[];
+  plateSearch?: PlateSearch;
   /** Controles propios del producto en la barra, antes del menú de productos. */
   headerActions?: React.ReactNode;
   /** Capa flotante sobre el contenido (p. ej. un asistente). */
@@ -62,6 +74,8 @@ export interface SuiteShellProps {
    * propios (Trámites, cuyas pantallas ya los traen y usan ese contenedor para lo pegajoso).
    */
   layout?: "page" | "app";
+  /** Reparto del dock de escritorio (HU #14583, opt-in): `lados` por defecto; `equilibrada` mitad y mitad. */
+  dockDistribucion?: DistribucionDock;
   children: React.ReactNode;
 }
 
@@ -84,10 +98,13 @@ export function SuiteShell({
   accountLinks = NO_LINKS,
   onLogout,
   themeToggle = true,
+  searchActions,
+  plateSearch,
   headerActions,
   overlay,
   footer,
   layout = "page",
+  dockDistribucion,
   children,
 }: SuiteShellProps) {
   const pathname = usePathname() ?? "/";
@@ -102,28 +119,29 @@ export function SuiteShell({
   const homeActive = isActive(homeHref.split("?")[0], pathname) && !groups.some((g) => g.active);
   const app = layout === "app";
   const menuLinks = useMemo(() => [...suiteAccountLinks(accountUrl), ...accountLinks], [accountUrl, accountLinks]);
+  const home = useMemo(() => ({ href: homeHref, label: `Inicio ${productName}` }), [homeHref, productName]);
+  const shellNav = useMemo(() => ({ groups, homeHref }), [groups, homeHref]);
   const accountUser = useMemo(() => ({ ...user, roleLabel: user.roleLabel ?? suiteRoleLabel(roles ?? []) }), [user, roles]);
+  // HU #14562 · D1: una sola carga de me/apps para ▦ y para «Tus productos» del menú de usuario (móvil).
+  const appsState = useSuiteApps(apps, loadApps);
+  const accountProducts = useMemo(() => ({ state: appsState, productCode }), [appsState, productCode]);
 
-  // La barra de siempre de Trámites (logo, tema, rol/empresa/nombre, avatar y ⋮), con lo que agrega la suite: el nombre
-  // del producto junto al logo y el menú de productos (▦).
+  // Barra superior del prototipo «Diseño Inteligente» (HU #14479, `.barra`): marca y producto a la izquierda; a la
+  // derecha el buscador ancho (Ctrl K), el menú de productos, el tema y el bloque de usuario. Sin campana: la suite
+  // todavía no tiene un dato real de avisos que mostrar.
   const header = (
-    <header
-      className={`z-40 flex items-center justify-between border-b border-[var(--color-flit-gray)] px-4 py-3 md:px-6 dark:border-white/[0.08] ${
-        app ? "shrink-0" : "sticky top-0 bg-[var(--color-flit-bg)]/90 backdrop-blur dark:bg-[#05060A]/90"
-      }`}
-    >
-      <Link href={homeHref} className="flex items-center gap-3" aria-label={`${brand.platformName} — ${productName}`}>
-        <BrandLogo variant="dark" className="h-10 w-auto dark:hidden" />
-        <BrandLogo variant="white" className="hidden h-10 w-auto dark:block" />
-        <span className="hidden border-l border-[var(--color-flit-gray)] pl-3 text-sm font-semibold sm:inline dark:border-white/10">
-          {productName}
-        </span>
+    <header className={`suite-barra z-40 ${app ? "shrink-0" : "sticky top-0"}`}>
+      <Link href={homeHref} className="suite-barra__marca" aria-label={`${brand.platformName} — ${productName}`}>
+        <BrandLogo variant="dark" className="suite-barra__logo dark:hidden" />
+        <BrandLogo variant="white" className="suite-barra__logo hidden dark:block" />
+        <span className="suite-barra__producto">{productName}</span>
       </Link>
-      <div className="flex items-center gap-3">
-        {themeToggle && <ThemeToggle />}
+      <div className="suite-barra__acciones">
+        <CommandPalette groups={groups} home={home} actions={searchActions} plate={plateSearch} />
         {headerActions}
-        <ProductMenu productCode={productCode} apps={apps} loadApps={loadApps} />
-        <AccountMenu user={accountUser} links={menuLinks} onLogout={onLogout} />
+        <ProductMenu productCode={productCode} state={appsState} />
+        {themeToggle && <ThemeToggle />}
+        <AccountMenu user={accountUser} links={menuLinks} onLogout={onLogout} products={accountProducts} />
       </div>
     </header>
   );
@@ -138,6 +156,7 @@ export function SuiteShell({
         homeIconSrc={homeIconSrc}
         homeActive={homeActive}
         scrollRef={app ? scrollRef : undefined}
+        distribucion={dockDistribucion}
       />
       <DockMobile groups={groups} homeIconSrc={homeIconSrc} scrollRef={app ? scrollRef : undefined} />
     </>
@@ -145,11 +164,20 @@ export function SuiteShell({
 
   if (app) {
     return (
-      <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:bg-[#05060A] dark:text-white">
+      <ShellNavProvider value={shellNav}>
+      <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--di-surface)] text-[var(--color-flit-primary)] dark:text-white">
         {header}
         <main className="relative min-h-0 flex-1 overflow-hidden">
-          {/* Colchón inferior para que el dock no tape el final del contenido (guía §4.3). */}
-          <div ref={scrollRef} className="absolute inset-0 overflow-y-auto pb-28" data-shell-scroll>
+          {/* UI Kit 2026: fondo plano --di-surface, sin los círculos decorativos del diseño anterior. Sin `isolate` ni
+              z-index negativo en el main: los paneles fijos de las páginas (Dr. FLIT, z-50) deben quedar sobre la barra. */}
+          {/* Colchón inferior para que el dock no tape el final del contenido (guía §4.3). El fondo propio de las
+              páginas (`.app-bg`) se apaga aquí para que se vea el de la propuesta. */}
+          <div
+            ref={scrollRef}
+            className="absolute inset-0 overflow-y-auto pb-28 scroll-pb-28 [&_.app-bg]:bg-transparent [&_.app-bg]:bg-none"
+            data-shell-scroll
+          >
+            {/* Sin contenedor centrado: cada página conserva su propio ancho y relleno (decisión de producto, HU #14479). */}
             {children}
           </div>
           {dock}
@@ -157,11 +185,13 @@ export function SuiteShell({
         </main>
         {footer}
       </div>
+      </ShellNavProvider>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:bg-[#05060A] dark:text-white">
+    <ShellNavProvider value={shellNav}>
+    <div className="min-h-screen bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:text-white">
       {header}
       {/* Colchón para que el dock fijo no tape el final del contenido (guía §4.3). */}
       <main className="mx-auto max-w-screen-2xl px-4 pb-28 pt-6">{children}</main>
@@ -169,5 +199,6 @@ export function SuiteShell({
       {overlay}
       {footer}
     </div>
+    </ShellNavProvider>
   );
 }

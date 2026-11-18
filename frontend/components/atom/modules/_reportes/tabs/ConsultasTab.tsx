@@ -7,6 +7,7 @@
 // cobertura, export que recorre todas las páginas— sobre otro catálogo. La pregunta que resuelve es
 // la de una gestora: «pegué las cuarenta placas de esta flota, ¿por qué salieron treinta y siete?».
 
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useMemo } from "react";
 import { QueryConsole } from "@/components/consultas/QueryConsole";
 import type { QuerySource, SavedQuery } from "@/lib/api/queries";
@@ -32,6 +33,7 @@ import {
   defaultCompanyQueryColumns,
   estadoEmpresa,
 } from "../consultas/company-columns";
+import { renderCeldaIdentidad } from "../consultas/ActoresValidacionCell";
 
 export interface ConsultasTabProps {
   /** Solo SuperAdmin: la compañía que se está mirando. El resto va con la suya. */
@@ -108,7 +110,7 @@ export function ConsultasTab({
   if (needsCompany && !superAdmin) {
     return (
       <div
-        className="rounded-2xl border border-[#DFE5ED] p-8 text-center dark:border-white/10"
+        className="rounded-2xl border border-border p-8 text-center"
         data-testid="empresa-query-sin-compania"
       >
         <p className="text-sm font-medium">Selecciona una compañía para consultar sus trámites.</p>
@@ -132,15 +134,13 @@ export function ConsultasTab({
         renderCell={(columnId, fila) =>
           columnId === "estado" ? (
             <span
-              className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-              style={{
-                background: `${estadoEmpresa(fila.status).color}1A`,
-                color: estadoEmpresa(fila.status).color,
-              }}
+              {...etiquetaKit({ c: estadoEmpresa(fila.status).color })}
             >
               {estadoEmpresa(fila.status).label}
             </span>
-          ) : null
+          ) : (
+            renderCeldaIdentidad(columnId, fila)
+          )
         }
       />
     );
@@ -158,15 +158,13 @@ export function ConsultasTab({
       renderCell={(columnId, fila) =>
         columnId === "estado" ? (
           <span
-            className="rounded-full px-2 py-0.5 text-[11px] font-semibold"
-            style={{
-              background: `${estadoEmpresa(fila.status).color}1A`,
-              color: estadoEmpresa(fila.status).color,
-            }}
+            {...etiquetaKit({ c: estadoEmpresa(fila.status).color })}
           >
             {estadoEmpresa(fila.status).label}
           </span>
-        ) : null
+        ) : (
+          renderCeldaIdentidad(columnId, fila)
+        )
       }
     />
   );

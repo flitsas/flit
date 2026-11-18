@@ -208,7 +208,7 @@ public sealed class ResultadosTests
         bus.Demorados.Should().Be(1, "el resultado espera en la cola de reintentos");
         (await bus.ProcesarLoteAsync(ct)).Should().Be(0, "antes de la espera no se publica nada");
 
-        reloj.Avanzar(ProgramadorReintentos.Esperas[0]);
+        reloj.Avanzar(PoliticaReintentos.EsperaPorDefecto);
         (await bus.ProcesarLoteAsync(ct)).Should().Be(1, "vencida la espera, sale un trabajo nuevo");
 
         bus.Atendidos.Select(t => t.TrabajoId).Should().OnlyHaveUniqueItems().And.HaveCount(2);

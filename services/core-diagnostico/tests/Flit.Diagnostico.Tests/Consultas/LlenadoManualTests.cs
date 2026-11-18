@@ -4,6 +4,7 @@ using System.Text.Json;
 using Flit.Diagnostico.Api;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
@@ -62,7 +63,7 @@ public sealed class LlenadoManualTests
 
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
-        var dto = JsonDocument.Parse(cuerpo).RootElement;
+        var dto = JsonElement.Parse(cuerpo);
         dto.GetProperty("id").GetGuid().Should().Be(celda.Id);
         dto.GetProperty("estado").GetString().Should().Be("COMPLETADO");
         dto.GetProperty("origen").GetString().Should().Be("MANUAL");
@@ -76,7 +77,7 @@ public sealed class LlenadoManualTests
         guardada.TipoError.Should().BeNull();
         guardada.DatoObtenidoEn.Should().BeCloseTo(DateTimeOffset.UtcNow, TimeSpan.FromMinutes(1), "la fecha del dato la fija el servidor");
         guardada.VersionTablero.Should().Be(6);
-        JsonDocument.Parse(guardada.Payload!).RootElement.GetProperty("cantidad_comparendos").GetInt32().Should().Be(1);
+        JsonElement.Parse(guardada.Payload!).GetProperty("cantidad_comparendos").GetInt32().Should().Be(1);
 
         // R-20: el detalle de la compañía de la celda manual es idéntico al de una celda de API con el mismo dato.
         await TableroAyudas.PayloadAsync(empresas.A, lote.Celda("TST702", Fuente.SimitVehiculo), guardada.Payload, ct);
@@ -295,7 +296,7 @@ public sealed class LlenadoManualTests
         var valido = await Llenar(api, token, celda.Id, empresas.A.Id,
             Cuerpo(1, $$"""{"sin_valor_comercial":false,"valor_sugerido":48500000,"fuente_principal":"fasecolda","fuentes":[{{Fasecolda}}]}"""), ct);
         valido.StatusCode.Should().Be(HttpStatusCode.OK, await valido.Content.ReadAsStringAsync(ct));
-        var payload = JsonDocument.Parse((await CeldaAsync(empresas.A, celda.Id, ct)).Payload!).RootElement;
+        var payload = JsonElement.Parse((await CeldaAsync(empresas.A, celda.Id, ct)).Payload!);
         payload.GetProperty("valor_sugerido").GetInt64().Should().Be(48500000);
         payload.GetProperty("fuentes")[0].GetProperty("fecha").GetString().Should().MatchRegex(@"^\d{4}-\d{2}-\d{2}$", "la fecha la fija el servidor");
     }
@@ -363,7 +364,7 @@ public sealed class LlenadoManualTests
         var empresas = DosEmpresas.En(api);
         var (lote, celda, primero, segundo) = await CeldaDePersonasAsync(api, empresas.A, "TST791", ct);
         var token = TokenLlenado(api);
-        var antes = JsonDocument.Parse((await CeldaAsync(empresas.A, celda.Id, ct)).Payload!).RootElement.GetProperty("personas")[0].GetRawText();
+        var antes = JsonElement.Parse((await CeldaAsync(empresas.A, celda.Id, ct)).Payload!).GetProperty("personas")[0].GetRawText();
 
         var ok = await Llenar(api, token, celda.Id, empresas.A.Id, $$"""{"version":2,"personas":[{"persona_id":"{{primero}}","resultado":{{SimitManual}}}]}""", ct);
         ok.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
@@ -380,7 +381,7 @@ public sealed class LlenadoManualTests
         var guardada = await CeldaAsync(empresas.A, celda.Id, ct);
         guardada.Estado.Should().Be(EstadoCelda.Completado);
         guardada.Origen.Should().Be(OrigenCelda.Manual);
-        var personas = JsonDocument.Parse(guardada.Payload!).RootElement.GetProperty("personas");
+        var personas = JsonElement.Parse(guardada.Payload!).GetProperty("personas");
         personas[0].GetRawText().Should().Be(antes, "el resultado de la persona que respondió por API no cambia");
         personas[1].GetProperty("persona_id").GetGuid().Should().Be(segundo);
         personas[1].GetProperty("estado").GetString().Should().Be("OK");
@@ -420,7 +421,7 @@ public sealed class LlenadoManualTests
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
         (await RespuestaFuenteTests.CifradaAsync(api, celda.Id, ct)).Should().BeNull("el dato manual no es respuesta de la fuente");
-        var mapa = JsonDocument.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, dePersonas.Id, ct))!)).RootElement;
+        var mapa = JsonElement.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, dePersonas.Id, ct))!));
         mapa.EnumerateObject().Select(p => p.Name).Should().Equal(["1"], "solo queda la de la persona que respondió por API");
     }
 
@@ -442,7 +443,7 @@ public sealed class LlenadoManualTests
         (await Llenar(api, TokenLlenado(api), dePersonas.Id, empresas.A.Id, $$"""{"version":2,"personas":[{"persona_id":"{{segundo}}","resultado":{{SimitManual}}}]}""", ct))
             .StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var mapa = JsonDocument.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, dePersonas.Id, ct))!)).RootElement;
+        var mapa = JsonElement.Parse(RespuestaFuenteTests.Descifrar(api, (await RespuestaFuenteTests.CifradaAsync(api, dePersonas.Id, ct))!));
         mapa.EnumerateObject().Select(p => p.Name).Should().Equal(["1"], "la persona llenada a mano queda sin respuesta cruda");
         mapa.GetProperty("1").GetString().Should().Be(ConCrudoUno, "la de la persona que respondió por API queda intacta");
     }
@@ -463,7 +464,7 @@ public sealed class LlenadoManualTests
         var cuerpo = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, cuerpo);
         cuerpo.Should().NotContainAny(["9999900101", "9999900102"], "nunca el documento en claro");
-        var formulario = JsonDocument.Parse(cuerpo).RootElement;
+        var formulario = JsonElement.Parse(cuerpo);
         formulario.GetProperty("id").GetGuid().Should().Be(celda.Id);
         formulario.GetProperty("fuente").GetString().Should().Be("SIMIT_PROPIETARIO");
         formulario.GetProperty("estado").GetString().Should().Be("ERROR");
@@ -476,6 +477,163 @@ public sealed class LlenadoManualTests
         persona.GetProperty("consulta").GetString().Should().Be("SIMIT");
         persona.GetProperty("tipo_error").GetString().Should().Be("TIMEOUT");
         (await api.Cliente(empresas.A.Token).GetAsync(Ruta(celda.Id, empresas.A.Id), ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    private const string ReferenciaB6 =
+        """{"codigo_fasecolda":"01601234","marca":"MARCA PRUEBA","linea":"LINEA PRUEBA","modelo":2020}""";
+
+    private static readonly DateOnly HoyB6 = new(2026, 11, 13);
+
+    private static string AvaluoConReferencia(string referencia = ReferenciaB6, string valor = "52000000", string extra = "") =>
+        $$"""{"sin_valor_comercial":false,"valor_sugerido":{{valor}},"fuentes":[],"referencia":{{referencia}}{{extra}}}""";
+
+    // HU #14563 B6 AC18 (CF-23) — avalúo con referencia Fasecolda: el valor entra como fasecolda OK, fuente_principal = fasecolda
+    // y la referencia queda en el payload (cuerpo aditivo: sin_valor_comercial, valor_sugerido y fuentes siguen igual).
+    [Fact]
+    public void B6_AC18_Validador_con_referencia_pone_fasecolda_OK_y_fuente_principal()
+    {
+        var payload = JsonElement.Parse(ValidadorResultadoManual.Vehiculo(Fuente.Avaluo, JsonElement.Parse(AvaluoConReferencia()), HoyB6));
+
+        payload.GetProperty("sin_valor_comercial").GetBoolean().Should().BeFalse();
+        payload.GetProperty("valor_sugerido").GetInt64().Should().Be(52_000_000);
+        payload.GetProperty("fuente_principal").GetString().Should().Be("fasecolda");
+        var fuente = payload.GetProperty("fuentes").EnumerateArray().Should().ContainSingle().Subject;
+        fuente.GetProperty("fuente").GetString().Should().Be("fasecolda");
+        fuente.GetProperty("estado").GetString().Should().Be("OK");
+        fuente.GetProperty("valor").GetInt64().Should().Be(52_000_000);
+        fuente.GetProperty("fecha").GetString().Should().Be("2026-11-13", "la fecha la fija el servidor");
+        var referencia = payload.GetProperty("referencia");
+        referencia.GetProperty("codigo_fasecolda").GetString().Should().Be("01601234");
+        referencia.GetProperty("marca").GetString().Should().Be("MARCA PRUEBA");
+        referencia.GetProperty("linea").GetString().Should().Be("LINEA PRUEBA");
+        referencia.GetProperty("modelo").GetInt32().Should().Be(2020);
+
+        // Marca y línea son opcionales; una fuente fasecolda OK enviada con el mismo valor se respeta, sin duplicarla, y las
+        // demás fuentes se conservan.
+        var minimo = JsonElement.Parse(ValidadorResultadoManual.Vehiculo(Fuente.Avaluo, JsonElement.Parse(
+            """{"sin_valor_comercial":false,"valor_sugerido":52000000,"fuente_principal":"fasecolda","fuentes":[{"fuente":"mercado_libre","estado":"SIN_DATOS"},{"fuente":"fasecolda","estado":"OK","valor":52000000}],"referencia":{"codigo_fasecolda":"01601234","modelo":2027}}"""), HoyB6));
+        minimo.GetProperty("fuentes").EnumerateArray().Select(f => f.GetProperty("fuente").GetString()).Should().Equal("mercado_libre", "fasecolda");
+        minimo.GetProperty("referencia").TryGetProperty("marca", out _).Should().BeFalse();
+        minimo.GetProperty("referencia").GetProperty("modelo").GetInt32().Should().Be(2027, "el año actual + 1 es válido");
+
+        // Sin referencia, el avalúo manual sigue igual que antes (compatible): no aparece la clave.
+        var sinReferencia = ValidadorResultadoManual.Vehiculo(Fuente.Avaluo, JsonElement.Parse(
+            """{"sin_valor_comercial":false,"valor_sugerido":48500000,"fuente_principal":"mercado_libre","fuentes":[{"fuente":"mercado_libre","estado":"OK","valor":48500000}]}"""), HoyB6);
+        sinReferencia.Should().NotContain("referencia");
+    }
+
+    // HU #14563 B6 AC19 (CF-23) — cuerpo inválido del avalúo con referencia: 422 RESULTADO_INVALIDO con el campo señalado.
+    [Theory]
+    [InlineData("""{"marca":"MARCA PRUEBA","modelo":2020}""", "52000000", "", "resultado.referencia.codigo_fasecolda")]
+    [InlineData("""{"codigo_fasecolda":"1601234","modelo":2020}""", "52000000", "", "resultado.referencia.codigo_fasecolda")]
+    [InlineData("""{"codigo_fasecolda":"016012345","modelo":2020}""", "52000000", "", "resultado.referencia.codigo_fasecolda")]
+    [InlineData("""{"codigo_fasecolda":"0160123A","modelo":2020}""", "52000000", "", "resultado.referencia.codigo_fasecolda")]
+    [InlineData("""{"codigo_fasecolda":16012345,"modelo":2020}""", "52000000", "", "resultado.referencia.codigo_fasecolda")]
+    [InlineData("""{"codigo_fasecolda":"01601234"}""", "52000000", "", "resultado.referencia.modelo")]
+    [InlineData("""{"codigo_fasecolda":"01601234","modelo":1949}""", "52000000", "", "resultado.referencia.modelo")]
+    [InlineData("""{"codigo_fasecolda":"01601234","modelo":2028}""", "52000000", "", "resultado.referencia.modelo")]
+    [InlineData("""{"codigo_fasecolda":"01601234","modelo":"2020"}""", "52000000", "", "resultado.referencia.modelo")]
+    [InlineData("""{"codigo_fasecolda":"01601234","modelo":2020}""", "null", "", "resultado.valor_sugerido")]
+    [InlineData("""{"codigo_fasecolda":"01601234","modelo":2020}""", "52000000.5", "", "resultado.valor_sugerido")]
+    [InlineData("""{"codigo_fasecolda":"01601234","modelo":2020}""", "0", "", "resultado.valor_sugerido")]
+    [InlineData("""{"codigo_fasecolda":"01601234","modelo":2020}""", "-1", "", "resultado.valor_sugerido")]
+    [InlineData("""{"codigo_fasecolda":"01601234","modelo":2020,"version_fasecolda":3}""", "52000000", "", "resultado.referencia.version_fasecolda")]
+    [InlineData("""{"codigo_fasecolda":"01601234","modelo":2020}""", "52000000", ",\"fuente_principal\":\"mercado_libre\"", "resultado.fuente_principal")]
+    [InlineData("\"01601234\"", "52000000", "", "resultado.referencia")]
+    public void B6_AC19_Avaluo_con_referencia_invalido_responde_422_con_el_campo(string referencia, string valor, string extra, string campo)
+    {
+        var cuerpo = JsonElement.Parse(AvaluoConReferencia(referencia, valor, extra));
+
+        var error = FluentActions.Invoking(() => ValidadorResultadoManual.Vehiculo(Fuente.Avaluo, cuerpo, HoyB6))
+            .Should().Throw<ReglaException>().Which;
+
+        error.Codigo.Should().Be(ValidadorResultadoManual.CodigoInvalido);
+        error.Campo.Should().Be(campo);
+    }
+
+    // HU #14563 B6 AC19 — con referencia, la fuente fasecolda enviada no puede contradecir el valor ni el estado, y no se puede
+    // marcar «sin valor comercial».
+    [Theory]
+    [InlineData("[{\"fuente\":\"fasecolda\",\"estado\":\"OK\",\"valor\":1000}]", "resultado.fuentes[0].valor")]
+    [InlineData("[{\"fuente\":\"fasecolda\",\"estado\":\"SIN_DATOS\"}]", "resultado.fuentes[0].estado")]
+    public void B6_AC19_Fuente_fasecolda_contradice_la_referencia_responde_422(string fuentes, string campo)
+    {
+        var cuerpo = JsonElement.Parse(
+            $$"""{"sin_valor_comercial":false,"valor_sugerido":52000000,"fuentes":{{fuentes}},"referencia":{{ReferenciaB6}}}""");
+
+        FluentActions.Invoking(() => ValidadorResultadoManual.Vehiculo(Fuente.Avaluo, cuerpo, HoyB6))
+            .Should().Throw<ReglaException>().Which.Campo.Should().Be(campo);
+
+        var sinValor = JsonElement.Parse($$"""{"sin_valor_comercial":true,"fuentes":[],"referencia":{{ReferenciaB6}}}""");
+        FluentActions.Invoking(() => ValidadorResultadoManual.Vehiculo(Fuente.Avaluo, sinValor, HoyB6))
+            .Should().Throw<ReglaException>().Which.Campo.Should().Be("resultado.sin_valor_comercial");
+    }
+
+    // HU #14563 B6 AC18 + AC19 (CF-23, PostgreSQL real) — PUT manual del avalúo con referencia: un cuerpo inválido responde 422 y
+    // no cambia la celda; el válido la deja COMPLETADO con fasecolda, el dictamen del vehículo se recalcula y queda el intento
+    // MANUAL con el usuario. Hallazgo M1 (R-20, opción a): la referencia revela el llenado manual, así que el detalle de la compañía
+    // no la trae (mismas claves que una celda consultada por API) y solo la ve el backoffice en la lectura de la celda.
+    [Fact]
+    public async Task B6_AC18_Avaluo_manual_con_referencia_Fasecolda_completa_recalcula_el_dictamen_y_deja_intento_MANUAL()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        var lote = await TableroAyudas.SembrarAsync(empresas.A, ct, vehiculos:
+            [new("TST781", [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.Avaluo, EstadoCelda.Error, 1)])],
+            modo: ModoDiagnostico.ConAnalisis, tipoTramiteCodigo: "TRASPASO_STANDARD");
+        var celda = lote.Celda("TST781", Fuente.Avaluo);
+        var token = TokenLlenado(api);
+
+        (string Cuerpo, string Campo)[] invalidos =
+        [
+            (Cuerpo(1, AvaluoConReferencia("""{"codigo_fasecolda":"123","modelo":2020}""")), "resultado.referencia.codigo_fasecolda"),
+            (Cuerpo(1, AvaluoConReferencia("""{"codigo_fasecolda":"01601234","modelo":1900}""")), "resultado.referencia.modelo"),
+            (Cuerpo(1, AvaluoConReferencia(valor: "1.5")), "resultado.valor_sugerido"),
+            (Cuerpo(1, AvaluoConReferencia("""{"codigo_fasecolda":"01601234","modelo":2020,"color":"ROJO"}""")), "resultado.referencia.color"),
+        ];
+        foreach (var (invalido, campo) in invalidos)
+        {
+            var rechazo = await Llenar(api, token, celda.Id, empresas.A.Id, invalido, ct);
+            rechazo.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, campo);
+            (await TableroAyudas.JsonAsync(rechazo, ct)).GetProperty("campo").GetString().Should().Be(campo);
+        }
+
+        var intacta = await CeldaAsync(empresas.A, celda.Id, ct);
+        intacta.Estado.Should().Be(EstadoCelda.Error, "ningún cuerpo inválido cambia la celda");
+        intacta.Payload.Should().Be(celda.Payload);
+
+        var respuesta = await Llenar(api, token, celda.Id, empresas.A.Id, Cuerpo(1, AvaluoConReferencia()), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await respuesta.Content.ReadAsStringAsync(ct));
+        var guardada = await CeldaAsync(empresas.A, celda.Id, ct);
+        guardada.Estado.Should().Be(EstadoCelda.Completado);
+        var payload = JsonElement.Parse(guardada.Payload!);
+        payload.GetProperty("fuente_principal").GetString().Should().Be("fasecolda");
+        payload.GetProperty("fuentes").EnumerateArray().Should().ContainSingle(f =>
+            f.GetProperty("fuente").GetString() == "fasecolda" && f.GetProperty("estado").GetString() == "OK" && f.GetProperty("valor").GetInt64() == 52_000_000);
+
+        var detalle = await TableroAyudas.JsonAsync(
+            await empresas.A.Cliente().GetAsync(TableroAyudas.RutaDetalle(lote.Id, celda.VehiculoId, "AVALUO"), ct), ct);
+        detalle.GetProperty("resultado").TryGetProperty("referencia", out _).Should().BeFalse("M1: la compañía no ve la referencia Fasecolda");
+        detalle.GetRawText().Should().NotContainAny(["codigo_fasecolda", "01601234", "MARCA PRUEBA", "LINEA PRUEBA"]);
+        detalle.GetProperty("resultado").GetProperty("fuente_principal").GetString().Should().Be("fasecolda");
+
+        var formulario = await TableroAyudas.JsonAsync(await api.Cliente(token).GetAsync(Ruta(celda.Id, empresas.A.Id), ct), ct);
+        var referencia = formulario.GetProperty("referencia");
+        referencia.GetProperty("codigo_fasecolda").GetString().Should().Be("01601234", "el backoffice sí ve la referencia");
+        referencia.GetProperty("marca").GetString().Should().Be("MARCA PRUEBA");
+        referencia.GetProperty("linea").GetString().Should().Be("LINEA PRUEBA");
+        referencia.GetProperty("modelo").GetInt32().Should().Be(2020);
+
+        var intento = (await IntentosAsync(empresas.A, celda.Id, ct)).Should().ContainSingle().Subject;
+        intento.Disparador.Should().Be(DisparadorIntento.Manual);
+        intento.UsuarioId.Should().Be(TableroAyudas.Usuario(token));
+
+        await using var db = empresas.A.Db();
+        (await db.Set<DictamenVehiculo>().AsNoTracking().Where(d => d.VehiculoId == celda.VehiculoId && d.Vigente).ToListAsync(ct))
+            .Should().ContainSingle("el llenado manual cierra el vehículo y recalcula su dictamen");
     }
 
     private static string TokenLlenado(ApiDePrueba api) =>

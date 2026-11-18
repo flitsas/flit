@@ -101,7 +101,7 @@ public sealed class RadicacionTests : IAsyncLifetime
         r.StatusCode.Should().Be(HttpStatusCode.Accepted, "el pago está en otra épica: el comprobante no es requisito");
         await using var db = _host.NuevaDb();
         var payload = (await db.Set<OutboxMessage>().SingleAsync(TestContext.Current.CancellationToken)).Payload;
-        var data = JsonDocument.Parse(payload).RootElement.GetProperty("data");
+        var data = JsonElement.Parse(payload).GetProperty("data");
         data.GetProperty("adjuntos").EnumerateArray().Select(a => a.GetProperty("tipo").GetString()).Should().NotContain("comprobante_pago");
         data.GetProperty("comprobantePagoId").ValueKind.Should().Be(JsonValueKind.Null);
     }
@@ -120,7 +120,7 @@ public sealed class RadicacionTests : IAsyncLifetime
         payload.Should().NotContain("example.org").And.NotContain("3001234567", "ni correo ni celular");
         payload.Should().NotContain("compraventa.pdf").And.NotContain("pago.png", "ni nombres originales de archivo");
         payload.Should().NotContain("ABC123", "ni la placa: core-api la pide por RPC");
-        var sobre = JsonDocument.Parse(payload).RootElement;
+        var sobre = JsonElement.Parse(payload);
         sobre.GetProperty("type").GetString().Should().Be("tramites.persona_natural.radicacion_solicitada");
         sobre.GetProperty("version").GetInt32().Should().Be(1);
         sobre.GetProperty("producer").GetString().Should().Be("personanatural");
@@ -191,7 +191,7 @@ public sealed class RadicacionTests : IAsyncLifetime
         detalle.StatusCode.Should().Be(HttpStatusCode.OK);
         var texto = await detalle.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
         texto.Should().NotContain(Vendedor).And.NotContain(Comprador).And.NotContain("secreto").And.NotContain("Persona de Prueba").And.NotContain("compraventa.pdf").And.NotContain("pago.png");
-        var actores = JsonDocument.Parse(texto).RootElement.GetProperty("actores").EnumerateArray().ToList();
+        var actores = JsonElement.Parse(texto).GetProperty("actores").EnumerateArray().ToList();
         actores.Should().HaveCount(2);
         actores.Should().OnlyContain(a => a.GetProperty("numeroDocumento").ValueKind == JsonValueKind.Null && a.GetProperty("correo").ValueKind == JsonValueKind.Null);
     }
@@ -598,7 +598,7 @@ public sealed class RadicacionTests : IAsyncLifetime
         q.TotalCop.Should().Be(366_000);
         q.AmbitoOrganismoId.Should().BeNull("la solicitud vino por la web");
         q.VersionTarifa.Should().Be("v:185000:181000:True");
-        JsonDocument.Parse(q.Lineas).RootElement.EnumerateArray().Select(l => (l.GetProperty("codigo").GetString(), l.GetProperty("valorCop").GetInt64()))
+        JsonElement.Parse(q.Lineas).EnumerateArray().Select(l => (l.GetProperty("codigo").GetString(), l.GetProperty("valorCop").GetInt64()))
             .Should().Equal(("DERECHOS_TRANSITO", 185_000L), ("SERVICIO_FLIT", 181_000L));
         _host.Medios.UltimosAdicionales.Should().Equal("CAMBIO_COLOR");
     }

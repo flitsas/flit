@@ -69,7 +69,7 @@ public sealed record InstanceSummaryDto(
     string? GestorNombre = null,
     string Fuente = TramiteFuente.Dashboard,  // dashboard | integracion | migrado (ver TramiteFuente)
                                               // Cómo queda ACREDITADA cada parte (ajuste del PO): pendiente | firmado |
-                                              // rechazado, por validación de identidad o firma del baúl — NO por la firma
+                                              // rechazado (solo VID propia rechazada), por validación de identidad o firma del baúl — NO por la firma
                                               // electrónica de la compraventa. null = no aplica (vendedor en matrícula).
     string? FirmaVendedorEstado = null,
     string? FirmaCompradorEstado = null,
@@ -109,7 +109,26 @@ public sealed record InstanceSummaryDto(
                                               // que muestra la fila). Se deriva de columnas de la instancia y de los adjuntos
                                               // que el grafo del listado YA carga (Include de Attachments en la misma consulta
                                               // dividida): cero consultas por fila. Aditivo (default null).
-    ConsolidadoVigenciaDto? ConsolidadoWizard = null);
+    ConsolidadoVigenciaDto? ConsolidadoWizard = null,
+                                              // ADR-0053 (Múltiple Propietario) — TODOS los actores de cada lado, principal
+                                              // primero (orden por `Ordinal`), con la acreditación de CADA persona. Las
+                                              // columnas de un solo nombre siguen trayendo al principal para no romper a sus
+                                              // consumidores; la tabla usa estas listas para el desplegable de copropietarios.
+                                              // Salen del grafo que el listado YA carga: cero consultas extra. Aditivo.
+    IReadOnlyList<ActorListadoDto>? VendedoresActores = null,
+    IReadOnlyList<ActorListadoDto>? CompradoresActores = null,
+                                              // Marca informativa de la fila: algún lado tiene 2+ propietarios.
+    bool MultiplesPropietarios = false);
+
+/// <summary>
+/// ADR-0053 — un propietario de un lado en el listado: su nombre y cómo está acreditado
+/// (<c>firmado</c> | <c>rechazado</c> | <c>pendiente</c>, mismos valores que <c>FirmaVendedorEstado</c>).
+/// <c>FirmaEstado</c> es <c>null</c> cuando el tipo no manda a ese lado a validar identidad.
+/// <c>Ordinal</c> y <c>NumeroDocumento</c> identifican a la persona dentro del lado: con ellos la
+/// tabla abre el tracking de identidad de ESE propietario (mismo emparejamiento que el Resumen:
+/// por ordinal de la validación y, en validaciones antiguas sin ordinal, por documento).
+/// </summary>
+public sealed record ActorListadoDto(string Nombre, string? FirmaEstado, int Ordinal = 1, string? NumeroDocumento = null);
 
 /// <summary>
 /// Lista las instancias de un tenant (más recientes primero, cap del repo) y las mapea a
@@ -206,19 +225,55 @@ public sealed class ListProcedureInstancesHandler(
         // para que `canSubmit` de la fila coincida con el del wizard.
         var exentas = await ResolverExentasAsync(instances, quipuxCanalReader, ct).ConfigureAwait(false);
 
+        // Radicados con la firma de baúl copiada al radicar: su baúl sale de la copia (una consulta en lote), nunca
+        // del baúl en vivo. Borradores y anteriores a la mejora siguen con `firmaBaul`.
+        var baulPorTramite = await ResolverBaulPorTramiteAsync(repo, instances, ct).ConfigureAwait(false);
+
         return instances
-            .Select(e => ToSummary(
-                e,
-                IdentityApprovalResolver.ApprovedPartiesFromKeys(
-                    e, identidadKeys, now, firmaBaul, protegidasKeys, salidas.TryGetValue(e.Id, out var salida) ? salida : null),
-                nombres.GetValueOrDefault(e.TenantId),
-                // HU #12162 — mismo id EFECTIVO usado para resolver el lote de arriba.
-                gestores.GetValueOrDefault(e.GestorEfectivoUserId),
-                firmaBaul,
-                conPrenda.Contains(e.Id),
-                revocacionesActivas.GetValueOrDefault(e.Id),
-                exentas.Contains(e.Id)))
+            .Select(e =>
+            {
+                var baulDeE = baulPorTramite.TryGetValue(e.Id, out var baulCopiado) ? baulCopiado : firmaBaul;
+                return ToSummary(
+                    e,
+                    IdentityApprovalResolver.ApprovedPartiesFromKeys(
+                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salida) ? salida : null),
+                    nombres.GetValueOrDefault(e.TenantId),
+                    // HU #12162 — mismo id EFECTIVO usado para resolver el lote de arriba.
+                    gestores.GetValueOrDefault(e.GestorEfectivoUserId),
+                    baulDeE,
+                    conPrenda.Contains(e.Id),
+                    revocacionesActivas.GetValueOrDefault(e.Id),
+                    exentas.Contains(e.Id),
+                    // ADR-0053 — misma comprobación, actor por actor, para el desplegable de copropietarios.
+                    IdentityApprovalResolver.ApprovedActorsFromKeys(
+                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salidaActores) ? salidaActores : null));
+            })
             .ToList();
+    }
+
+    /// <summary>
+    /// Trámites ya radicados con la firma de baúl COPIADA al radicar: su mapa de «baúl vigente» sale de la copia (UNA
+    /// consulta en lote), nunca del baúl en vivo. Los borradores y los anteriores a la mejora no aparecen aquí y siguen
+    /// con el mapa en vivo.
+    /// </summary>
+    internal static async Task<IReadOnlyDictionary<Guid, IReadOnlyDictionary<string, bool>>> ResolverBaulPorTramiteAsync(
+        IProcedureInstanceRepository repo, IEnumerable<ProcedureInstance> instances, CancellationToken ct)
+    {
+        var conCopia = instances.Where(i => i.FirmaBaulCopiadaAt is not null).ToList();
+        var resultado = new Dictionary<Guid, IReadOnlyDictionary<string, bool>>();
+        if (conCopia.Count == 0)
+            return resultado;
+
+        var copias = await repo.ListFirmaBaulCopiasPorInstanciasAsync(conCopia.Select(i => i.Id).ToList(), ct)
+            .ConfigureAwait(false);
+        foreach (var e in conCopia)
+        {
+            IReadOnlyList<ProcedureInstanceFirmaBaulCopia> deE =
+                copias is not null && copias.TryGetValue(e.Id, out var lista) ? lista : [];
+            resultado[e.Id] = FirmaBaulCopias.ToVigenciaKeys(e.TenantId, deE);
+        }
+
+        return resultado;
     }
 
     /// <summary>
@@ -279,14 +334,18 @@ public sealed class ListProcedureInstancesHandler(
         IReadOnlyDictionary<string, bool>? firmaBaulPorPersona = null,
         bool prendaVigente = false,
         string? revocationRequestStatus = null,
-        bool firmaExenta = false)
+        bool firmaExenta = false,
+        IReadOnlySet<ProcedureInstanceActor>? actoresAprobados = null)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
-        var buyer = e.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, BuyerActorType, StringComparison.OrdinalIgnoreCase));
-        // HU #11020 — el vendedor solo existe en traspaso; en matrícula queda null y la columna sale vacía.
-        var seller = e.Actors.FirstOrDefault(a =>
-            string.Equals(a.ActorType, SellerActorType, StringComparison.OrdinalIgnoreCase));
+        // ADR-0053 — un lado puede tener hasta 4 propietarios. Se ordena por `Ordinal` para que el
+        // principal (1) quede primero: antes se tomaba el primero que llegara en el grafo, que no
+        // garantiza ser el principal.
+        var buyers = ActoresDelLado(e, BuyerActorType);
+        // HU #11020 — el vendedor solo existe en traspaso; en matrícula queda vacío y la columna sale vacía.
+        var sellers = ActoresDelLado(e, SellerActorType);
+        var buyer = buyers.FirstOrDefault();
+        var seller = sellers.FirstOrDefault();
 
         var modalidad = e.Family;
         var modalidadCode = ProcedureFamilyCodes.ToCode(modalidad);
@@ -355,8 +414,46 @@ public sealed class ListProcedureInstancesHandler(
             Flit.Tramites.Domain.RuntConfirmation.RuntConfirmedColumn.Derive(e.Status, e.RuntConfirmedAt, e.RuntAttempts, e.RuntFlag),
             revocationRequestStatus,
             RejectedFrom: e.RejectedFrom,
-            ConsolidadoWizard: ConsolidadoVigenciaProyeccion.Wizard(e));
+            ConsolidadoWizard: ConsolidadoVigenciaProyeccion.Wizard(e),
+            VendedoresActores: ActoresListado(e, partesIdentidad, SellerActorType, sellers, actoresAprobados, firmaBaulPorPersona ?? EmptyFirmaBaul),
+            CompradoresActores: ActoresListado(e, partesIdentidad, BuyerActorType, buyers, actoresAprobados, firmaBaulPorPersona ?? EmptyFirmaBaul),
+            MultiplesPropietarios: sellers.Count > 1 || buyers.Count > 1);
     }
+
+    /// <summary>
+    /// ADR-0053 — propietarios de un lado con la acreditación de cada uno; <c>null</c> si el lado no
+    /// tiene actores con nombre. La firma de cada persona sale de <paramref name="actoresAprobados"/>
+    /// (misma comprobación que la parte, actor por actor) y, si no está acreditada, del mismo criterio
+    /// de rechazo/pendiente que la columna de la parte (<see cref="DeriveFirmaActor"/>).
+    /// </summary>
+    private static List<ActorListadoDto>? ActoresListado(
+        ProcedureInstance e,
+        IReadOnlyList<string> partesIdentidad,
+        string parte,
+        List<ProcedureInstanceActor> actores,
+        IReadOnlySet<ProcedureInstanceActor>? actoresAprobados,
+        IReadOnlyDictionary<string, bool> firmaBaulPorPersona)
+    {
+        var aplica = PartesDeclaradas.Incluye(partesIdentidad, parte);
+        var lista = actores
+            .Where(a => !string.IsNullOrWhiteSpace(a.FullName))
+            .Select(a => new ActorListadoDto(
+                a.FullName.Trim(),
+                aplica
+                    ? DeriveFirmaActor(e, parte, a, actoresAprobados?.Contains(a) == true, firmaBaulPorPersona)
+                    : null,
+                a.Ordinal,
+                string.IsNullOrWhiteSpace(a.DocumentNumber) ? null : a.DocumentNumber.Trim()))
+            .ToList();
+        return lista.Count > 0 ? lista : null;
+    }
+
+    /// <summary>Actores de un lado (rol), principal primero.</summary>
+    private static List<ProcedureInstanceActor> ActoresDelLado(ProcedureInstance e, string rol) =>
+        e.Actors
+            .Where(a => string.Equals(a.ActorType, rol, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(a => a.Ordinal)
+            .ToList();
 
     /// <summary>
     /// Estado de "Firmado" de UNA parte (ajuste del PO sobre la HU #11056). La columna acredita a la
@@ -365,9 +462,13 @@ public sealed class ListProcedureInstancesHandler(
     /// <list type="number">
     ///   <item><b>firmado</b> — identidad aprobada y vigente, o firma del baúl vigente. Lo positivo
     ///   gana: una identidad aprobada acredita a la parte aunque su baúl esté caducado.</item>
-    ///   <item><b>rechazado</b> — identidad rechazada/expirada, o firma del baúl vencida.</item>
-    ///   <item><b>pendiente</b> — no hay nada hecho todavía.</item>
+    ///   <item><b>rechazado</b> — SOLO una VID propia rechazada/expirada del sujeto actual. Un baúl
+    ///   vencido o inactivo ya NO produce «Rechazado»: no es un rechazo de nadie, es la ausencia de firma.</item>
+    ///   <item><b>pendiente</b> — no hay nada hecho todavía, o solo hay un baúl vencido/inactivo (el front lo
+    ///   pinta «Sin firma»).</item>
     /// </list>
+    /// Los trámites ya radicados no leen el baúl en vivo: su mapa sale de la copia tomada al radicar
+    /// (<see cref="FirmaBaulCopias"/>), de modo que el baúl que vence después no les quita la firma.
     /// <c>null</c> = NO APLICA: el tipo no manda a esta parte a validar identidad — el vendedor en
     /// matrícula inicial y, desde ADR-0051, el comprador en <c>TRASPASO_UNILATERAL</c>, donde el
     /// locatario formaliza a su nombre y el único que acredita es el propietario.
@@ -414,6 +515,22 @@ public sealed class ListProcedureInstancesHandler(
         var actor = e.Actors.FirstOrDefault(a =>
             string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
 
+        return DeriveFirmaActor(e, parte, actor, identidadAprobadaPartes.Contains(parte), firmaBaulPorPersona);
+    }
+
+    /// <summary>
+    /// Acreditación de UN actor de la parte, con la precedencia de <see cref="DeriveFirmaParte"/>:
+    /// <paramref name="acreditado"/> (identidad aprobada) o baúl vigente → firmado; VID propia rechazada/expirada
+    /// → rechazado (un baúl vencido/inactivo ya no rechaza); si no, pendiente. La usa la columna de la parte (con su principal y el
+    /// veredicto «todos firman») y el desplegable de copropietarios (ADR-0053, actor por actor).
+    /// </summary>
+    private static string DeriveFirmaActor(
+        ProcedureInstance e,
+        string parte,
+        ProcedureInstanceActor? actor,
+        bool acreditado,
+        IReadOnlyDictionary<string, bool> firmaBaulPorPersona)
+    {
         // Sujeto de identidad ACTUAL de esta parte (el representante legal cuando el actor es jurídico).
         // Se resuelve una sola vez y se reusa para el baúl y para filtrar las validaciones propias: ambos
         // deben acreditar/rechazar a la persona que hoy ocupa el rol, no a quien lo ocupó antes.
@@ -434,7 +551,7 @@ public sealed class ListProcedureInstancesHandler(
                 baulVigente = vigente;
         }
 
-        if (identidadAprobadaPartes.Contains(parte) || baulVigente == true)
+        if (acreditado || baulVigente == true)
             return FirmaParteEstados.Firmado;
 
         // Rechazo explícito de la identidad de ESTA parte: la fila MÁS RECIENTE cuyo rol y documento
@@ -446,7 +563,8 @@ public sealed class ListProcedureInstancesHandler(
             .FirstOrDefault();
         var rechazada = ultimaPropia?.Status is BiometricEstados.Rechazado or BiometricEstados.Expirado;
 
-        return rechazada || baulVigente == false
+        // Un baúl vencido/inactivo (baulVigente == false) ya NO rechaza: solo una VID propia rechazada/expirada.
+        return rechazada
             ? FirmaParteEstados.Rechazado
             : FirmaParteEstados.Pendiente;
     }

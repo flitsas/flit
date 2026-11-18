@@ -14,7 +14,9 @@ internal static class KyverumRuntDocType
         "TI" or "T" => "T",
         "CE" or "E" => "E",
         "NIT" or "N" => "N",
-        "PAS" or "PA" or "PPT" or "P" => "P",
+        "PAS" or "PA" or "P" => "P",
+        // HU #14501 / ADR-0082 — PPT nativo no es pasaporte; omitir tipo (Kyverum prueba C,T,E,Y,P).
+        "PPT" => null,
         _ => null,
     };
 }

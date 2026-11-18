@@ -7,9 +7,9 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// Llenado manual de una celda en ERROR (HU #13800, F06-H3, plan §6.1 fila manual). Cuelga del grupo <c>/backoffice</c>
-/// (<see cref="PoliticaBackoffice"/>: <c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>; empresa explícita en
-/// <c>?empresa=</c>) y exige además <c>diagnostico.consultas.llenar</c> (rol <c>backoffice_diagnostico</c>): el admin y el usuario
-/// de la compañía reciben 403. Va bajo <c>/backoffice/*</c> y no en <c>/consultas/{cid}/manual</c> porque la escritura entre
+/// (<see cref="PoliticaBackoffice"/>; empresa explícita en <c>?empresa=</c>) y exige además la política de operación FLIT
+/// (<see cref="PoliticaBackoffice.NombreOperacion"/>: el SuperAdmin de cualquier compañía o un usuario de FLIT con el permiso,
+/// decisión D23) y <c>diagnostico.consultas.llenar</c>: el admin y el usuario de la compañía reciben 403. Va bajo <c>/backoffice/*</c> y no en <c>/consultas/{cid}/manual</c> porque la escritura entre
 /// compañías solo vive en este módulo (<see cref="EscrituraEntreEmpresas"/>, ADR-0073).
 /// <list type="bullet">
 /// <item><c>GET /backoffice/consultas/{consulta}/manual?empresa=</c>: el formulario (<see cref="FormularioManualDto"/>): versión,
@@ -26,8 +26,10 @@ internal static class LlenadoManualEndpoints
 
     public static void Map(RouteGroupBuilder backoffice)
     {
-        backoffice.MapGet(Ruta, Formulario).RequirePermiso(Permisos.ConsultasLlenar).WithName("ObtenerFormularioLlenadoManualBackoffice");
-        backoffice.MapPut(Ruta, Llenar).RequirePermiso(Permisos.ConsultasLlenar).WithName("LlenarConsultaManualBackoffice");
+        // HU #14563 M2: la lectura de la celda trae personas (enmascaradas) y la referencia del avalúo; no se guarda en caché.
+        backoffice.MapGet(Ruta, Formulario).RequiereOperacionFlit().RequirePermiso(Permisos.ConsultasLlenar).SinCacheEnRespuesta()
+            .WithName("ObtenerFormularioLlenadoManualBackoffice");
+        backoffice.MapPut(Ruta, Llenar).RequiereOperacionFlit().RequirePermiso(Permisos.ConsultasLlenar).WithName("LlenarConsultaManualBackoffice");
     }
 
     public static IServiceCollection AddLlenadoManual(this IServiceCollection services)

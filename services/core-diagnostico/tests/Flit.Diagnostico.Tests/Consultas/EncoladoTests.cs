@@ -50,7 +50,7 @@ public sealed class EncoladoTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.Accepted, texto);
-        JsonDocument.Parse(texto).RootElement.GetProperty("confirmados").GetInt32().Should().Be(3);
+        JsonElement.Parse(texto).GetProperty("confirmados").GetInt32().Should().Be(3);
         var vehiculos = await Lotes.VehiculosAsync(api, empresa.Id, id, ct);
         var celdas = await Motor.CeldasAsync(api, empresa.Id, id, ct);
         celdas.Should().HaveCount(3).And.OnlyContain(c =>

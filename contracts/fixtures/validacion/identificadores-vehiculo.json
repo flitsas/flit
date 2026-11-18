@@ -39,5 +39,20 @@
     { "entrada": "9FBTEST12345678O90", "normalizado": "9FBTEST1234567890", "tipo": "VIN", "valido": true, "nota": "truncado/I-O-Q: 18 caracteres con una O; al quitar la O quedan 17 y es un VIN válido" },
     { "entrada": "AB123456CDEFGHJKL", "normalizado": "AB123456CDEFGHJKL", "tipo": "VIN", "valido": true, "nota": "orden: VIN antes que placa; si fuera placa primero, el corte a 8 daría la maquinaria AB123456" },
     { "entrada": "AB1234567", "normalizado": "AB123456", "tipo": "PLACA_MAQUINARIA", "valido": true, "nota": "truncado: 9 caracteres se cortan a 8 (sanitizePlate) y queda una maquinaria válida (riesgo en carga masiva)" }
+  ],
+  "descripcion_motocarro": "Punto 7.1 (ola 2026-11-11): placa de motocarro (MOTOCARRO, MOTOTRICICLO, TRICIMOTO) 123ABC, tres dígitos y tres letras, tipo PLACA_MOTOCARRO. Va en esta lista aparte y no en «casos» porque Trámites la valida fuera de PLATE_PATTERN (PLATE_MOTOCARRO_PATTERN de frontend/lib/validation/fieldRules.ts) y su test de la tabla compartida exige version 1 y las cuatro ramas de PLATE_PATTERN. La consumen ValidadorIdentificadorTests (.NET) y frontend-diagnostico/lib/validation. Misma limpieza que «casos»: mayúsculas, solo A-Z y 0-9, corte a 8. Todos los valores son inventados.",
+  "tipos_motocarro": ["PLACA_MOTOCARRO", "INVALIDO"],
+  "casos_motocarro": [
+    { "entrada": "123ABC", "normalizado": "123ABC", "tipo": "PLACA_MOTOCARRO", "valido": true, "nota": "motocarro: tres dígitos y tres letras" },
+    { "entrada": "456xyz", "normalizado": "456XYZ", "tipo": "PLACA_MOTOCARRO", "valido": true, "nota": "minúsculas" },
+    { "entrada": " 789 qwe ", "normalizado": "789QWE", "tipo": "PLACA_MOTOCARRO", "valido": true, "nota": "espacios alrededor y en medio" },
+    { "entrada": "321-dfg", "normalizado": "321DFG", "tipo": "PLACA_MOTOCARRO", "valido": true, "nota": "guion y minúsculas" },
+    { "entrada": "000.zzz", "normalizado": "000ZZZ", "tipo": "PLACA_MOTOCARRO", "valido": true, "nota": "punto como separador" },
+    { "entrada": "\t654rty\n", "normalizado": "654RTY", "tipo": "PLACA_MOTOCARRO", "valido": true, "nota": "tabulador y salto de línea" },
+    { "entrada": "12ABC", "normalizado": "12ABC", "tipo": "INVALIDO", "valido": false, "nota": "dos dígitos y tres letras" },
+    { "entrada": "1234ABC", "normalizado": "1234ABC", "tipo": "INVALIDO", "valido": false, "nota": "cuatro dígitos y tres letras" },
+    { "entrada": "123AB", "normalizado": "123AB", "tipo": "INVALIDO", "valido": false, "nota": "tres dígitos y dos letras" },
+    { "entrada": "123ABCD", "normalizado": "123ABCD", "tipo": "INVALIDO", "valido": false, "nota": "tres dígitos y cuatro letras" },
+    { "entrada": "12A3BC", "normalizado": "12A3BC", "tipo": "INVALIDO", "valido": false, "nota": "letras y dígitos mezclados" }
   ]
 }

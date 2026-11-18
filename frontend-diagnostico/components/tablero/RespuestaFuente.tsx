@@ -1,7 +1,8 @@
 "use client";
 
 import { createContext, memo, useCallback, useContext, useId, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { ListaDefinicion } from "@flit/ui/ListaDefinicion";
 import { FOCO_CLS } from "@/components/configuracion/estilos";
 import {
   CABECERA_TABLA_CLS,
@@ -46,12 +47,12 @@ const CHEQUEOS = "chequeos";
 /** Avisa al contenedor de que un plegable cambió, para que el botón «Expandir/Contraer todo» diga lo correcto. */
 const AlCambiarPlegable = createContext<() => void>(() => {});
 
-const CAMPO_CLS = "px-3 py-2 align-top text-left text-xs font-medium text-[var(--nav-texto)] dark:text-slate-300";
+const CAMPO_CLS = "px-3 py-2 align-top text-left text-xs font-medium text-muted-foreground";
 const VALOR_CLS = `${CELDA_TABLA_CLS} whitespace-pre-wrap break-words`;
-const CONTENEDOR_TABLA_CLS = "overflow-x-auto rounded-xl border border-[var(--color-flit-gray)] dark:border-white/10";
-const TITULO_CLS = "text-xs font-semibold text-flit-primary dark:text-white";
+const CONTENEDOR_TABLA_CLS = "overflow-x-auto rounded-xl border border-border";
+const TITULO_CLS = "text-xs font-semibold text-flit-primary";
 /** Botón secundario compacto (mismos tokens que BOTON_SECUNDARIO_CLS, a la escala de 12px del detalle). */
-const BOTON_PLEGAR_CLS = `inline-flex items-center justify-center self-end rounded-full border border-[var(--color-flit-gray)] bg-white px-3 py-1 text-xs font-semibold text-flit-primary transition dark:border-white/15 dark:bg-transparent dark:text-white ${FOCO_CLS}`;
+const BOTON_PLEGAR_CLS = `inline-flex items-center justify-center self-end rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-flit-primary transition ${FOCO_CLS}`;
 const SUMMARY_CLS = `flex cursor-pointer list-none items-center gap-1 rounded-lg py-0.5 [&::-webkit-details-marker]:hidden ${FOCO_CLS}`;
 
 /** Cómo se leen los datos: filtrado (respuesta de la fuente, HU #14087) o íntegro (respuesta del proveedor, HU #14154). */
@@ -66,6 +67,8 @@ interface Modo {
   plegableHasta: number;
   /** Clase de la celda de valor. */
   valorCls: string;
+  /** HU #14562 · AC39: los campos del primer nivel van en lista de definición (dl/dt/dd) y no en tabla campo/valor. */
+  listaRaiz: boolean;
 }
 
 const FILTRADO: Modo = {
@@ -75,6 +78,7 @@ const FILTRADO: Modo = {
   enFila: vaEnFila,
   plegableHasta: 1,
   valorCls: VALOR_CLS,
+  listaRaiz: true,
 };
 
 const INTEGRO: Modo = {
@@ -85,6 +89,7 @@ const INTEGRO: Modo = {
   plegableHasta: Number.POSITIVE_INFINITY,
   // La firma y los hashes del proveedor son tokens largos sin espacios: se parten en cualquier punto.
   valorCls: `${VALOR_CLS} [overflow-wrap:anywhere]`,
+  listaRaiz: false,
 };
 
 const ModoLectura = createContext<Modo>(FILTRADO);
@@ -167,6 +172,19 @@ function TablaCampos({ etiqueta, campos }: { etiqueta: string; campos: [string, 
   );
 }
 
+/** Campos del primer nivel como lista de definición, agrupada con el nombre accesible de la respuesta (HU #14562 · AC39). */
+function ListaCampos({ etiqueta, campos }: { etiqueta: string; campos: [string, unknown][] }) {
+  const m = useContext(ModoLectura);
+  return (
+    <div role="group" aria-label={etiqueta} className="rounded-xl border border-border px-3 py-2">
+      <ListaDefinicion
+        columnas={2}
+        items={campos.map(([clave, valor]) => ({ termino: m.etiqueta(clave), valor: <Valor nombre={clave} valor={valor} /> }))}
+      />
+    </div>
+  );
+}
+
 /** Array de objetos → tabla con una columna por clave visible (unión de todas las filas, en orden de aparición). */
 function TablaArreglo({ nombre, items }: { nombre: string; items: Objeto[] }) {
   const m = useContext(ModoLectura);
@@ -226,7 +244,7 @@ function Subseccion({ nombre, valor, nivel, profundidad }: { nombre: string; val
     <section aria-labelledby={id}>
       <details open={profundidad === 0} onToggle={alCambiar} className="group flex flex-col">
         <summary className={SUMMARY_CLS}>
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-flit-primary transition-transform group-open:rotate-90 dark:text-white" aria-hidden="true" />
+          <Icono nombre="derecha" className="h-3.5 w-3.5 shrink-0 text-flit-primary transition-transform group-open:rotate-90" />
           <Titulo nivel={nivel} id={id}>
             {titulo}
           </Titulo>
@@ -245,7 +263,12 @@ function Bloque({ etiqueta, datos, nivel, profundidad }: { etiqueta: string; dat
   const secciones = campos.filter(([, v]) => !m.enFila(v));
   return (
     <div className="flex flex-col gap-3">
-      {filas.length > 0 && <TablaCampos etiqueta={etiqueta} campos={filas} />}
+      {filas.length > 0 &&
+        (profundidad === 0 && m.listaRaiz ? (
+          <ListaCampos etiqueta={etiqueta} campos={filas} />
+        ) : (
+          <TablaCampos etiqueta={etiqueta} campos={filas} />
+        ))}
       {secciones.map(([clave, valor]) => (
         <Subseccion key={clave} nombre={clave} valor={valor} nivel={nivel} profundidad={profundidad} />
       ))}
@@ -257,7 +280,7 @@ function Bloque({ etiqueta, datos, nivel, profundidad }: { etiqueta: string; dat
 function Raiz({ datos, etiqueta, nivel }: { datos: unknown; etiqueta: string; nivel: number }) {
   if (esObjeto(datos)) return <Bloque etiqueta={etiqueta} datos={datos} nivel={nivel} profundidad={0} />;
   return (
-    <div className="flex flex-col gap-3 text-xs text-flit-primary dark:text-white">
+    <div className="flex flex-col gap-3 text-xs text-flit-primary">
       <Valor nombre={etiqueta} valor={datos} />
     </div>
   );

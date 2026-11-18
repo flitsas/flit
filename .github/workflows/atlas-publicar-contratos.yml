@@ -53,7 +53,10 @@ jobs:
           # enriquecido: corrige el cuerpo del registro (arreglo de filas, lo que core-ict ya lee; ATLAS-ADR-0037 de Atlas),
           # que oasdiff ve como incompatible frente a release. Quitarlo cuando la 1.1.0 esté en release.
           - { contrato: core-ict, aplicativo: flit2-core-ict, tipo: openapi, ruta: contracts/openapi/core-ict.v1.yaml, ruleset: compartible, lint: error, breaking: advertencia }
-          - { contrato: diagnostico, aplicativo: flit2-core-diagnostico, tipo: openapi, ruta: contracts/openapi/diagnostico.v1.yaml, ruleset: interno, lint: advertencia }
+          # diagnostico: breaking como advertencia solo para la 1.1.0. Agrega PLACA_MOTOCARRO al enum tipo_identificador de
+          # las respuestas (placa 123ABC, ajustes de Diagnóstico 2026-11-11, P7), que oasdiff ve como incompatible. El único
+          # consumidor es frontend-diagnostico, que se actualiza en el mismo PR. Quitarlo cuando la 1.1.0 esté en release.
+          - { contrato: diagnostico, aplicativo: flit2-core-diagnostico, tipo: openapi, ruta: contracts/openapi/diagnostico.v1.yaml, ruleset: interno, lint: advertencia, breaking: advertencia }
           - { contrato: external-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/external-api.v1.json, ruleset: compartible, lint: advertencia }
           - { contrato: platform, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/platform.v1.yaml, ruleset: interno, lint: advertencia }
           - { contrato: python-ml, aplicativo: flit2-python-ml, tipo: openapi, ruta: contracts/openapi/python-ml.v1.yaml, ruleset: interno, lint: advertencia }

@@ -97,8 +97,62 @@ internal static class AdminConsolidadoEndpoints
         .Produces(StatusCodes.Status404NotFound)
         .Produces(StatusCodes.Status409Conflict);
 
+        // POST /api/v1/admin/tramites/{id}/mandato/regenerar — HU #14547: vuelve a emitir el mandato con el mandatario
+        // que indica HOY la configuración de Mandatos y rearma los dos consolidados. SOLO el rol SuperAdmin: la política
+        // de rol es propia de la ruta porque RequirePermission solo hace bypass y no excluye a nadie (R5).
+        group.MapPost("/{id:guid}/mandato/regenerar", async (
+            Guid id,
+            [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
+            RegenerarMandatoYConsolidadoHandler handler,
+            CancellationToken ct) =>
+        {
+            if (tenantId is null || tenantId == Guid.Empty)
+                return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, ResolveUserId(http.User), ct);
+            return error switch
+            {
+                null => Results.Ok(result),
+                "not_found" => Problem(404, "Not Found", "not_found", "Procedure instance not found."),
+                RegenerarMandatoYConsolidadoHandler.EstadoNoPermite => Problem(409, "Conflict", error,
+                    "El trámite está aprobado, anulado o revocado: su documentación es definitiva y el mandato no se regenera."),
+                "migrado_solo_lectura" => Problem(409, "Conflict", error, "Trámite migrado (solo lectura): no se regenera el mandato."),
+                "organismo_requerido" => Problem(409, "Conflict", error,
+                    "El organismo de tránsito del trámite no está seleccionado o no está activo en el sistema."),
+                SubmitGate.FurRequerido => Problem(409, "Conflict", error, "Debe generar el FUR antes del consolidado."),
+                "sin_adjuntos" => Problem(409, "Conflict", error, "No hay adjuntos para consolidar."),
+                "adjunto_no_disponible" => Problem(409, "Conflict", error, "Un adjunto del expediente no está disponible en almacenamiento."),
+                "mimetype_no_soportado" => Problem(409, "Conflict", error, "Un adjunto tiene un formato no soportado para el consolidado."),
+                "storage_unavailable" => Problem(503, "Service Unavailable", error,
+                    "No se pudo guardar el documento en el almacenamiento de archivos. Intenta de nuevo en unos minutos."),
+                _ => Problem(409, "Conflict", error, "No se pudo regenerar el mandato y el consolidado."),
+            };
+        })
+        .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+        .WithName("AdminTramiteRegenerarMandatoYConsolidado")
+        .WithSummary("Regenera el mandato (mandatario recalculado) y los consolidados de un trámite — solo SuperAdmin")
+        .Produces<RegenerarMandatoYConsolidadoResult>(StatusCodes.Status200OK)
+        .Produces(StatusCodes.Status400BadRequest)
+        .Produces(StatusCodes.Status401Unauthorized)
+        .Produces(StatusCodes.Status403Forbidden)
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict)
+        .Produces(StatusCodes.Status503ServiceUnavailable);
+
         return app;
     }
+
+    /// <summary>
+    /// Mismo shape de error que limpiar/cargar (ProblemDetails con <c>title</c> y <c>detail</c>) más el código estable en
+    /// <c>error</c>, para que el cliente distinga los 409 sin leer el texto (HU #14547).
+    /// </summary>
+    private static IResult Problem(int status, string title, string codigo, string detail) =>
+        Results.Problem(
+            statusCode: status,
+            title: title,
+            detail: detail,
+            extensions: new Dictionary<string, object?> { ["error"] = codigo });
 
     /// <summary>Usuario autenticado (claim <c>sub</c>), para la trazabilidad en <c>ProcedureInstanceEvent</c>.</summary>
     private static Guid? ResolveUserId(System.Security.Claims.ClaimsPrincipal user)

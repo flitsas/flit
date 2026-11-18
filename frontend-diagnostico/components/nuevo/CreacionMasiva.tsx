@@ -1,12 +1,14 @@
 "use client";
 
 import { useEffect, useId, useRef, useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, RotateCcw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { ApiError } from "@/lib/api";
-import { accesoNegado, analizarCarga, confirmarVehiculos, type FilaCapturada, type FilaResumen, type ResumenValidacion as Resumen } from "@/lib/carga/api";
-import { crearDiagnostico, editarDiagnostico, type Diagnostico } from "@/lib/diagnosticos/api";
+import { ERRORES_CARGA, accesoNegado, analizarCarga, confirmarVehiculos, type FilaCapturada, type FilaResumen, type ResumenValidacion as Resumen } from "@/lib/carga/api";
+import { ERRORES_CABECERA, crearDiagnostico, editarDiagnostico, type Diagnostico } from "@/lib/diagnosticos/api";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { correccionesAConfirmar, resumenVigente, type Analisis } from "@/components/carga/CargaMasiva";
 import { EstimadoConsultas } from "@/components/carga/EstimadoConsultas";
 import { ResumenValidacion } from "@/components/carga/ResumenValidacion";
@@ -16,7 +18,8 @@ import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_C
 import { ParametrosDiagnostico } from "@/components/parametrizacion/ParametrosDiagnostico";
 import type { Parametrizacion } from "@/components/parametrizacion/useParametrizacion";
 import type { BorradorMasivo } from "./borradores";
-import { DosZonas } from "./DosZonas";
+import { ZonasCreacion } from "./ZonasCreacion";
+import { ResultadoCreacion } from "./ResultadoCreacion";
 
 type Fase = "editando" | "guardando" | "analizando";
 type Confirmacion = { tipo: "inactivo" } | { tipo: "confirmando" } | { tipo: "error"; mensaje: string; reintentable: boolean };
@@ -31,6 +34,8 @@ export interface CreacionMasivaProps {
   onOcupado: (ocupado: boolean) => void;
   /** Con la cabecera creada la pantalla bloquea el cambio de modo. */
   onCabecera: (id: string) => void;
+  /** Con el resultado a la vista la pantalla oculta el selector Express/Masivo. */
+  onResultado?: (activo: boolean) => void;
 }
 
 /**
@@ -41,7 +46,7 @@ export interface CreacionMasivaProps {
  * reenvía el MISMO archivo con las correcciones y navega al tablero. Con el análisis a la vista los parámetros quedan
  * bloqueados: «Subir otro archivo» los libera. Un 403 de sesión lleva a la página 403.
  */
-export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera }: CreacionMasivaProps) {
+export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera, onResultado }: CreacionMasivaProps) {
   const router = useRouter();
   const id = useId();
   const rejillaRef = useRef<HTMLDivElement>(null);
@@ -53,6 +58,7 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
   const [analisis, setAnalisis] = useState<Analisis | null>(null);
   const [confirmacion, setConfirmacion] = useState<Confirmacion>({ tipo: "inactivo" });
   const [enfocar, setEnfocar] = useState(0);
+  const [iniciado, setIniciado] = useState<{ id: string; vehiculos: number } | null>(null);
   const ocupado = fase !== "editando" || confirmacion.tipo === "confirmando";
 
   useEffect(() => onOcupado(ocupado), [ocupado, onOcupado]);
@@ -93,7 +99,8 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
     } catch (e) {
       setFase("editando");
       if (p.aplicarErrorApi(e)) setEnfocar((n) => n + 1);
-      else setErrorCabecera(e instanceof Error ? e.message : "No se pudo guardar el diagnóstico.");
+      // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor.
+      else setErrorCabecera(mensajeErrorFijo(e, "No se pudo guardar el diagnóstico.", ERRORES_CABECERA));
       return;
     }
     setCabeceraId(guardado.id);
@@ -106,7 +113,7 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
       const code = accesoNegado(e);
       if (code) return irA403(code);
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
-      setErrorArchivo({ mensaje: e instanceof Error ? e.message : "No se pudo analizar el archivo.", reintentable });
+      setErrorArchivo({ mensaje: mensajeErrorFijo(e, "No se pudo analizar el archivo.", ERRORES_CARGA), reintentable });
     } finally {
       setFase("editando");
     }
@@ -145,13 +152,15 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
     if (!analisis || !cabeceraId) return;
     setConfirmacion({ tipo: "confirmando" });
     try {
-      await confirmarVehiculos(cabeceraId, analisis.archivo, correccionesAConfirmar(analisis));
-      router.push(`/diagnosticos/${encodeURIComponent(cabeceraId)}`);
+      const confirmado = await confirmarVehiculos(cabeceraId, analisis.archivo, correccionesAConfirmar(analisis));
+      setConfirmacion({ tipo: "inactivo" });
+      setIniciado({ id: cabeceraId, vehiculos: confirmado.confirmados });
+      onResultado?.(true);
     } catch (e) {
       const code = accesoNegado(e);
       if (code) return irA403(code);
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
-      setConfirmacion({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudieron confirmar los vehículos.", reintentable });
+      setConfirmacion({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudieron confirmar los vehículos.", ERRORES_CARGA), reintentable });
     }
   }
 
@@ -173,10 +182,10 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
     analisis && vigente ? (
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className={AYUDA_CLS}>
-          Archivo analizado: <span className="break-all font-semibold text-flit-primary dark:text-white">{analisis.archivo.name}</span>
+          Archivo analizado: <span className="break-all font-semibold text-flit-primary">{analisis.archivo.name}</span>
         </p>
         <button type="button" onClick={subirOtro} disabled={ocupado} className={BOTON_SECUNDARIO_CLS}>
-          <RotateCcw className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="reintento" className="h-4 w-4" />
           Subir otro archivo
         </button>
       </div>
@@ -235,14 +244,27 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
       </>
     ) : null;
 
+  if (iniciado) return <ResultadoCreacion diagnosticoId={iniciado.id} vehiculos={iniciado.vehiculos} />;
+
   return (
-    <DosZonas
+    <ZonasCreacion
       rejillaRef={rejillaRef}
       vehiculos={vehiculos}
       despuesVehiculos={despuesVehiculos}
       parametros={
         <form id={`${id}-form`} onSubmit={alEnviar} noValidate aria-label="Parámetros del diagnóstico masivo" className="flex flex-col gap-4">
-          <ParametrosDiagnostico p={p} nombre={borrador.nombre} onNombre={(nombre) => onBorrador({ nombre })} disabled={ocupado || analisis !== null}>
+          <ParametrosDiagnostico
+            p={p}
+            nombre={borrador.nombre}
+            onNombre={(nombre) => onBorrador({ nombre })}
+            disabled={ocupado || analisis !== null}
+            disposicion="horizontal"
+          />
+        </form>
+      }
+      // FE-3 (spec-ui §3.2, S5): estimado, avisos y acción al final de la pantalla; el submit sigue asociado al formulario.
+      pie={
+        <div className="flex w-full flex-col gap-3">
             {errorCabecera && (
               <InlineAlert tone="error" title="No se guardó el diagnóstico">
                 {errorCabecera}
@@ -254,15 +276,17 @@ export function CreacionMasiva({ p, borrador, onBorrador, onOcupado, onCabecera 
                 <p className={AYUDA_CLS}>Para cambiar los parámetros o el archivo, usa «Subir otro archivo».</p>
               </>
             ) : (
-              <div className="flex justify-end">
-                <button type="submit" disabled={ocupado} className={BOTON_PRIMARIO_CLS}>
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                <Link href="/diagnosticos" className={BOTON_SECUNDARIO_CLS}>
+                  Cancelar
+                </Link>
+                <button type="submit" form={`${id}-form`} disabled={ocupado} aria-busy={fase !== "editando" || undefined} className={BOTON_PRIMARIO_CLS}>
                   {fase === "guardando" ? "Guardando…" : fase === "analizando" ? "Analizando…" : "Validar archivo"}
-                  <ArrowRight className="h-4 w-4" aria-hidden="true" />
+                  <Icono nombre="derecha" className="h-4 w-4" />
                 </button>
               </div>
             )}
-          </ParametrosDiagnostico>
-        </form>
+        </div>
       }
     />
   );

@@ -46,6 +46,21 @@ describe('PlacaPreasignadaSection (Epic #12550, HU #12650)', () => {
     expect(screen.queryByRole('button', { name: /Quitar placa|Cambiar/ })).not.toBeInTheDocument();
   });
 
+  it('placa de la integración (source ict): solo lectura, sin dígito, sin aviso de reglas ni botón de quitar', async () => {
+    render(
+      <PlacaPreasignadaSection instanceId="i" plateValue="ABC123" plateSource="ict" readOnly={false} />,
+    );
+    const nota = await screen.findByTestId('fur-placa-ict');
+    expect(nota).toHaveTextContent(
+      'El vehículo llega con la placa ABC123 enviada por la integración. Llegará al organismo listo para su decisión.',
+    );
+    expect(screen.queryByText(/antes del cambio de reglas/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Quitar placa/i })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/Dígito de preferencia de placa/i)).not.toBeInTheDocument();
+    expect(screen.queryByTestId('fur-placa-asignada-ot')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('fur-placa-ruta-corta')).not.toBeInTheDocument();
+  });
+
   it('AC2 — Ruta Larga: dígito de preferencia editable y NINGUNA placa del inventario', async () => {
     render(<PlacaPreasignadaSection instanceId="i" plateValue="" plateSource="" readOnly={false} />);
     expect(await screen.findByTestId('fur-placa-ruta-larga')).toHaveTextContent(/El organismo de tránsito la asignará en Preasignación/);

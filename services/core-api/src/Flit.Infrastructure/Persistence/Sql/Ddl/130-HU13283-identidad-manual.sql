@@ -17,8 +17,19 @@
 -- Idempotente (IF NOT EXISTS / DROP CONSTRAINT IF EXISTS) y reversible (Down en la migración).
 -- Riesgo Habeas Data: las imágenes del flujo manual se conservan sin purga por decisión del PO (pendiente validación legal).
 
-ALTER TABLE tramites.procedure_instance_biometric_validations
-    ALTER COLUMN status TYPE varchar(40);
+-- Solo si aún no es varchar(40): la vista analytics.v_procedure_detail_report (DDL 189) lee status, y PostgreSQL rechaza
+-- ALTER COLUMN ... TYPE sobre una columna usada por una vista aunque el tipo no cambie. Así el script sigue idempotente.
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'tramites' AND table_name = 'procedure_instance_biometric_validations'
+          AND column_name = 'status' AND data_type = 'character varying' AND character_maximum_length = 40
+    ) THEN
+        ALTER TABLE tramites.procedure_instance_biometric_validations
+            ALTER COLUMN status TYPE varchar(40);
+    END IF;
+END $$;
 
 ALTER TABLE tramites.procedure_instance_biometric_validations
     ADD COLUMN IF NOT EXISTS approval_origin text,

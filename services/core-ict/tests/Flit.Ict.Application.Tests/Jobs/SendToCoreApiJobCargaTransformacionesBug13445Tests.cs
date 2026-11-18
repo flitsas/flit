@@ -68,9 +68,9 @@ public sealed class SendToCoreApiJobCargaTransformacionesBug13445Tests
     }
 
     [Fact]
-    public async Task LoteConTransformaciones7y6_ElBorradorLlevaCambioColorYCambioCarroceria()
+    public async Task LoteConTransformaciones5y17_ElBorradorLlevaCambioColorYCambioCarroceria()
     {
-        var masterId = await PersistirMasterConTransformacionesAsync(7, 6);
+        var masterId = await PersistirMasterConTransformacionesAsync(5, 17);
 
         await using var lectura = NuevoContexto();
         lectura.ChangeTracker.Entries().Should().BeEmpty("el job carga en un scope nuevo");
@@ -86,13 +86,13 @@ public sealed class SendToCoreApiJobCargaTransformacionesBug13445Tests
     [Fact]
     public async Task LoadMasterForDraft_CargaTransformacionesActoresDesdeBd()
     {
-        var masterId = await PersistirMasterConTransformacionesAsync(6, 7, 8);
+        var masterId = await PersistirMasterConTransformacionesAsync(5, 17, 8);
 
         await using var lectura = NuevoContexto();
         var master = await SendToCoreApiJob.LoadMasterForDraftAsync(
             lectura, masterId, TestContext.Current.CancellationToken);
 
-        master!.Transformations.Select(t => t.IdTransformationType).Should().BeEquivalentTo([6, 7, 8]);
+        master!.Transformations.Select(t => t.IdTransformationType).Should().BeEquivalentTo([5, 17, 8]);
         master.Actors.Should().HaveCount(1);
     }
 

@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { notFound, useRouter } from "next/navigation";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
@@ -21,6 +21,8 @@ import {
   type ErrorDetalle,
 } from "@/lib/tablero/detalle";
 import { VistaDetalleCelda } from "./DetalleCelda";
+import { ChipEstadoCelda } from "./CeldaSemaforo";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorDetalle; causa: unknown } | { tipo: "listo"; detalle: Detalle };
 
@@ -49,9 +51,10 @@ export interface PaginaDetalleConsultaProps {
 
 /**
  * Página del detalle de una consulta (HU #14087), que el semáforo de la grilla abre en una pestaña nueva en vez del modal:
- * tarjeta título con migas «Diagnósticos › {nombre_diagnostico} › {fuente} · {identificador}», h1 «{fuente} ·
- * {identificador}» y «Volver al diagnóstico»; debajo, a ancho completo, la «Auditoría de consulta» y la «Respuesta de la
- * fuente» (VistaDetalleCelda). Cuatro estados: cargando (loader de @flit/ui), error (404 o fuente desconocida → no
+ * tarjeta título con migas de 4 niveles «Diagnósticos › {nombre_diagnostico} › {identificador} › {fuente}» (HU #14562 ·
+ * AC39), h1 «{fuente} · {identificador}» con el chip de estado y «Volver al diagnóstico»; debajo, a ancho completo, la «Auditoría de consulta» y la «Respuesta de la
+ * fuente» (VistaDetalleCelda). Cuatro estados: cargando (loader de @flit/ui), error (404 → página 404 en la compañía y no
+ * disponible en el backoffice; fuente desconocida → no
  * disponible; 403 → página 403 o sin permiso; otro con Reintentar), vacío (lo dice VistaDetalleCelda: sin ejecutar, sin
  * personas o sin campos) y lleno. Sin la capacidad verDiagnosticos de la sesión no se pide nada, como en el tablero.
  */
@@ -60,7 +63,7 @@ export function PaginaDetalleConsulta({
   vehiculoId,
   fuente,
   cargar = obtenerDetalleCelda,
-  rutaListado = "/",
+  rutaListado = "/diagnosticos",
   rutaDiagnostico = `/diagnosticos/${encodeURIComponent(loteId)}`,
   backoffice = false,
   nota,
@@ -105,6 +108,10 @@ export function PaginaDetalleConsulta({
   const detalle = carga.tipo === "listo" ? carga.detalle : null;
   const titulo = detalle?.identificador ? `${nombre} · ${detalle.identificador}` : nombre;
 
+  // HU #14562 AC49/AC57: en la compañía, el 404 (no existe o el lote es de otro usuario con PROPIOS) es la página 404 de la
+  // app. En el backoffice se queda en la tarjeta: ahí dice que el lote no está en la compañía elegida.
+  if (!backoffice && causa instanceof ApiError && causa.status === 404) notFound();
+
   let contenido: ReactNode;
   if (!valida) {
     contenido = (
@@ -143,25 +150,38 @@ export function PaginaDetalleConsulta({
 
   return (
     <>
-      <section aria-labelledby="detalle-consulta-titulo" className={`${TARJETA_CLS} flex flex-wrap items-start justify-between gap-3`}>
-        <div className="flex min-w-0 flex-col gap-2">
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="detalle-consulta-titulo"
+        tituloId="detalle-consulta-titulo"
+        tituloClassName="break-all"
+        titulo={titulo}
+        encima={
           <Migas
             migas={[
               { texto: "Diagnósticos", href: rutaListado },
               { texto: detalle?.nombre_diagnostico || "Diagnóstico", href: rutaDiagnostico },
-              { texto: titulo },
+              ...(detalle?.identificador ? [{ texto: detalle.identificador }] : []),
+              { texto: nombre },
             ]}
           />
-          <h1 id="detalle-consulta-titulo" className="break-all text-2xl font-semibold text-flit-primary dark:text-white">
-            {titulo}
-          </h1>
-          {detalle && nota?.(detalle)}
-        </div>
-        <Link href={rutaDiagnostico} className={BOTON_SECUNDARIO_CLS}>
-          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
-          Volver al diagnóstico
-        </Link>
-      </section>
+        }
+        debajo={
+          detalle && (
+            <div className="flex flex-col items-start gap-2">
+              <ChipEstadoCelda estado={detalle.estado} />
+              {nota?.(detalle)}
+            </div>
+          )
+        }
+        icono="diagnostico"
+        acciones={
+          <Link href={rutaDiagnostico} className={BOTON_SECUNDARIO_CLS}>
+            <Icono nombre="izquierda" className="h-4 w-4" />
+            Volver al diagnóstico
+          </Link>
+        }
+      />
       <section aria-label="Detalle de la consulta" className={TARJETA_CLS}>
         {contenido}
       </section>

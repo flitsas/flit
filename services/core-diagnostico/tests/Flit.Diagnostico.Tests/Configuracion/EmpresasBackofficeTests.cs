@@ -56,7 +56,7 @@ public sealed class EmpresasBackofficeTests
 
         var texto = await respuesta.Content.ReadAsStringAsync(ct);
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK, texto);
-        var lista = JsonDocument.Parse(texto).RootElement;
+        var lista = JsonElement.Parse(texto);
         lista.ValueKind.Should().Be(JsonValueKind.Array);
         lista.EnumerateArray().Select(e => e.GetProperty("id").GetGuid()).Should().Equal([alfa, media, zeta], "ordenadas por nombre; un id que no es uuid se descarta");
         lista[0].GetProperty("nombre").GetString().Should().Be("Álamo Renting de Prueba");
@@ -84,9 +84,10 @@ public sealed class EmpresasBackofficeTests
         identidad.Productos.Should().BeEmpty();
     }
 
-    // Escenario 16 — compañía FLIT sin diagnostico.configuracion.contrato.editar (o un admin de compañía): 403.
+    // Ajustes 2026-11-11, punto 6 AC4 — la lista ya no exige diagnostico.configuracion.contrato.editar: basta la política de
+    // configuración del backoffice. FLIT con solo diagnostico.backoffice.ver: 200; un admin de compañía sigue en 403.
     [Fact]
-    public async Task Sin_permiso_contrato_responde_403()
+    public async Task Sin_permiso_contrato_FLIT_con_backoffice_ver_responde_200_y_admin_de_compania_403()
     {
         var ct = TestContext.Current.CancellationToken;
         var identidad = new EmpresasFalso();
@@ -94,10 +95,12 @@ public sealed class EmpresasBackofficeTests
         var sinContrato = api.Token(permisos: [Permisos.BackofficeVer, Permisos.ConfiguracionVer], roles: ["backoffice_diagnostico"], tipoEmpresa: "FLIT");
         var adminDeCompania = api.Token(permisos: [Permisos.ConfiguracionVer, Permisos.ConfiguracionEditar], roles: ["admin_diagnostico"]);
 
-        foreach (var token in new[] { sinContrato, adminDeCompania })
-            (await api.Cliente(token).GetAsync(Url, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
-
+        (await api.Cliente(adminDeCompania).GetAsync(Url, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         identidad.Productos.Should().BeEmpty();
+
+        var respuesta = await api.Cliente(sinContrato).GetAsync(Url, ct);
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await respuesta.Content.ReadAsStringAsync(ct));
+        identidad.Productos.Should().Equal("diagnostico");
     }
 
     // Escenario 16 — sin Diagnostico:Identidad:Address: 503 IDENTIDAD_NO_CONFIGURADA, nunca una lista vacía.

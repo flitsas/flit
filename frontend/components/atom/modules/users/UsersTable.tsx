@@ -12,6 +12,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import type { RowAction } from "@/components/atom/RowActions";
 import { RowActionsMenu, destructivasAlFinal } from "@/components/atom/RowActionsMenu";
@@ -48,6 +49,8 @@ export interface UserRow {
   status: "active" | "inactive" | "pending" | "cancelled";
   isSuspended: boolean;
   createdAt: string | null;
+  /** Alcance de clientes (solo canal OT), p. ej. «Todos los clientes» o «3 clientes». */
+  clientScopeLabel?: string | null;
   /** Clave de React: un usuario con N roles produce N filas con el mismo id. */
   rowKey: string;
 }
@@ -129,7 +132,7 @@ const FILTRABLES: Record<string, string> = {
 };
 
 const CELDA = "border-y px-4 py-3";
-const CELDA_STYLE = { borderColor: "#DFE5ED" };
+const CELDA_STYLE = { borderColor: "var(--border)" };
 
 export interface UsersTableProps {
   rows: UserRow[];
@@ -375,7 +378,7 @@ export function UsersTable({
           role="alert"
           data-testid="ui-error"
           className="space-y-3 py-12 text-center text-sm"
-          style={{ color: "#FF4E00" }}
+          style={{ color: "var(--destructive)" }}
         >
           <p>{error}</p>
           {onRetry && (
@@ -385,7 +388,7 @@ export function UsersTable({
               className="rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
               style={{
                 background:
-                  "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))",
+                  "var(--gradient-action)",
               }}
             >
               Reintentar
@@ -401,7 +404,7 @@ export function UsersTable({
       )}
 
       {!loading && !error && rows.length > 0 && (
-        <div className="overflow-x-auto">
+        <div className={`overflow-x-auto ${TABLA_TARJETA_CLS}`}>
           <table
             aria-label="Usuarios"
             className="text-xs"
@@ -447,7 +450,7 @@ export function UsersTable({
                 return (
                   <tr
                     key={row.rowKey}
-                    className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                    className={`bg-card ${TABLA_ROW_HOVER_CLS}`}
                   >
                     <td className={`${CELDA} rounded-l-xl border-l`} style={CELDA_STYLE}>
                       <p className="truncate font-semibold">{row.fullName}</p>
@@ -472,6 +475,11 @@ export function UsersTable({
                     </td>
                     <td className={CELDA} style={CELDA_STYLE}>
                       <RoleCell roleCode={row.roleCode} roleName={row.role} />
+                      {row.clientScopeLabel ? (
+                        <p className="mt-0.5 truncate text-[10px] opacity-60" data-testid="user-client-scope">
+                          {row.clientScopeLabel}
+                        </p>
+                      ) : null}
                     </td>
                     <td className={CELDA} style={CELDA_STYLE}>
                       <StatusBadge label={badge.label} tone={badge.tone} />

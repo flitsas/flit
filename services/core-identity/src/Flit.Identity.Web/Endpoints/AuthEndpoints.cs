@@ -69,13 +69,6 @@ public static class AuthEndpoints
                     new ErrorResponse("ALL_ROLES_INACTIVE", "Todos los roles asignados al usuario están inactivos."),
                     statusCode: StatusCodes.Status403Forbidden);
             }
-            catch (CajaOnlyAccountException)
-            {
-                // HU #14454 (ADR-0082) — el usuario solo-caja no abre FLIT 2.0 con el JWT heredado.
-                return Results.Json(
-                    new ErrorResponse(CajaOnly.DeniedCode, "Su usuario solo puede cobrar en el portal de caja."),
-                    statusCode: StatusCodes.Status403Forbidden);
-            }
         });
 
         // HU #10169 AC1/AC2 — solicitud de recuperación. Siempre 202 genérico (anti-enumeración).

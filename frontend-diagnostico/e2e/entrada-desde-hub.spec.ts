@@ -13,12 +13,21 @@ import { expect, test } from "@playwright/test";
  *
  * Las credenciales son de usuarios de prueba del ambiente DEV y entran solo por variables de entorno.
  * El formulario que se llena es el del HUB: Diagnóstico no tiene uno propio.
+ *
+ * Lista congelada (HU #14562 · AC55): nombres accesibles y atributos data-* de los que depende este spec.
+ * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
+ *   - button «/ingresar|iniciar sesión/i»
+ *   - heading «Dashboard» (ola 2026-11-15, FE-4: «/» aterriza en el Dashboard) · heading «Diagnóstico vehicular» (ya no en «/»)
+ *   - heading «No tienes acceso»
+ *   - etiqueta «/correo|usuario/i»
+ *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
+ *   - texto «/Diagnóstico no está habilitado/»
  */
 const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 
 async function iniciarSesionEnElHub(page: import("@playwright/test").Page, usuario: string, clave: string) {
   await page.getByLabel(/correo|usuario/i).fill(usuario);
-  await page.getByLabel(/contraseña/i).fill(clave);
+  await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
 }
 
@@ -30,14 +39,17 @@ test.describe("entrada desde el hub", () => {
 
     // Escenario 1: el navegador termina en el authorize del hub, con client_id (aud) diagnostico y PKCE.
     await page.waitForURL((url) => !url.href.startsWith(APP));
-    const authorize = page.url();
+    // El authorize del hub redirige a /login?returnUrl=/connect/authorize?...: los parámetros llegan codificados.
+    const authorize = decodeURIComponent(page.url());
     expect(authorize).toContain("client_id=diagnostico");
     expect(authorize).toContain("code_challenge_method=S256");
 
     // Escenario 2: tras el login del hub vuelve a Diagnóstico con la sesión iniciada.
     await iniciarSesionEnElHub(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
     await page.waitForURL(`${APP}/`);
-    await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
+    // Ola 2026-11-15 (FE-4): entrar al producto abre el Dashboard para todos los roles; el listado está en /diagnosticos.
+    await expect(page.getByRole("heading", { level: 1, name: "Dashboard" })).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toHaveCount(0);
 
     // Escenario 3: en el subdominio no hay campos de usuario ni contraseña.
     await expect(page.locator('input[type="password"], input[autocomplete="username"]')).toHaveCount(0);
@@ -51,9 +63,12 @@ test.describe("entrada desde el hub", () => {
     await iniciarSesionEnElHub(page, process.env.E2E_USUARIO_SUSPENDIDO!, process.env.E2E_CLAVE_SUSPENDIDO!);
 
     // Escenario 4: la compañía tiene Diagnóstico suspendido → la 403, nunca la pantalla base, y sin volver al login.
-    await page.waitForURL(`${APP}/403?code=PRODUCTO_NO_HABILITADO`);
+    // Lo normal es que el hub niegue el token (OidcPrincipalFactory, PRODUCT_NOT_ENABLED); el guard de la API
+    // (PRODUCTO_NO_HABILITADO) solo responde si el token se emitió antes de la suspensión. Las dos son la misma 403.
+    await page.waitForURL(new RegExp(`^${APP.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/403\\?code=(PRODUCT_NOT_ENABLED|PRODUCTO_NO_HABILITADO)$`));
     await expect(page.getByRole("heading", { level: 1, name: "No tienes acceso" })).toBeVisible();
     await expect(page.getByText(/Diagnóstico no está habilitado/)).toBeVisible();
     await expect(page.getByRole("heading", { name: "Diagnóstico vehicular" })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toHaveCount(0);
   });
 });

@@ -13,20 +13,31 @@ export interface PaginationProps {
   /**
    * Cambio de «Filas por página». Con este manejador se muestra el selector (el estándar: todas las
    * tablas lo llevan, Bug #13055); el cambio debe volver a la página 1 — `usePaginacion` ya lo hace.
-   * Las opciones son SIEMPRE {@link TAMANOS_DE_PAGINA} (HU #13916): ninguna tabla elige las suyas.
+   * Las opciones son {@link TAMANOS_DE_PAGINA} (HU #13916), salvo que la tabla pase `pageSizeOptions` porque su contrato
+   * fija otros tamaños (excepción Q3 de la ola Diagnóstico UX).
    */
   onPageSizeChange?: (pageSize: number) => void;
+  /**
+   * Opciones de «Filas por página». Aditiva (ola Diagnóstico UX, decisión Q3 del orquestador): solo para tablas cuyo
+   * contrato fija otros tamaños (reportes de Diagnóstico, 25/50/100). Sin ella, {@link TAMANOS_DE_PAGINA}.
+   */
+  pageSizeOptions?: readonly number[];
   /** Nombre accesible de la navegación; distingue varias paginaciones en una misma pantalla. */
   ariaLabel?: string;
   /** Qué se cuenta, para la línea vacía («Sin representantes que mostrar»). Default: «registros». */
   noun?: string;
 }
 
-/** Mismo selector que el listado de trámites (control de 36 px, borde neutro). */
-const SELECT_CLS =
-  "inline-flex h-9 shrink-0 items-center rounded-xl border border-[#DFE5ED] bg-white px-3 text-xs " +
-  "font-semibold text-[#1E293B] transition hover:bg-[#EFF6FF] focus:outline-none focus-visible:ring-2 " +
-  "focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:border-white/15 dark:bg-[#0B0F14] dark:text-white";
+/**
+ * Selector de «Filas por página» con el `.control` del kit (radio 9, borde de línea, foco azul con la sombra del kit), en
+ * la densidad de 36 px del pie. Exportado para las tablas que arman su propio pie (p. ej. /tramites).
+ */
+export const PAGINACION_SELECT_CLS =
+  "inline-flex h-9 shrink-0 items-center rounded-[9px] border border-[color:var(--di-border-control)] " +
+  "bg-[var(--di-surface-elevated)] px-3 text-sm font-semibold text-[color:var(--di-text-primary)] transition " +
+  "hover:border-[color:var(--di-action)] focus:outline-none focus:border-[color:var(--di-action)] " +
+  "focus:shadow-[var(--kit-sombra)] focus-visible:ring-2 focus-visible:ring-[var(--di-action)]";
+const SELECT_CLS = PAGINACION_SELECT_CLS;
 
 /**
  * Paginación ESTÁNDAR de las tablas FLIT (Bug #13055): la misma del listado de trámites.
@@ -43,6 +54,7 @@ export function Pagination({
   onPageChange,
   className = "",
   onPageSizeChange,
+  pageSizeOptions,
   ariaLabel = "Paginación",
   noun = "registros",
 }: PaginationProps) {
@@ -52,13 +64,13 @@ export function Pagination({
   const to = Math.min(actual * pageSize, totalCount);
   // Un tamaño que no está en la lista (una pantalla con tamaño propio) se ofrece igual, para que el
   // selector no mienta sobre lo que se está mostrando.
-  const estandar: readonly number[] = TAMANOS_DE_PAGINA;
+  const estandar: readonly number[] = pageSizeOptions && pageSizeOptions.length > 0 ? pageSizeOptions : TAMANOS_DE_PAGINA;
   const opciones = estandar.includes(pageSize) ? estandar : [...estandar, pageSize].sort((a, b) => a - b);
 
   return (
-    <div className={`flex flex-wrap items-center justify-between gap-4 ${className}`}>
+    <div className={`kit-paginacion flex flex-wrap items-center justify-between gap-4 ${className}`}>
       {onPageSizeChange ? (
-        <label className="flex items-center gap-2 pt-3 text-xs opacity-70">
+        <label className="flex items-center gap-2 pt-4 text-[0.8125rem] text-[color:var(--di-text-tertiary)]">
           Filas por página
           <select
             value={pageSize}

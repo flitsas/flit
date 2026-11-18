@@ -16,7 +16,8 @@ namespace Flit.Diagnostico.Api.Modulos.Backoffice;
 
 /// <summary>
 /// Lotes de UNA compañía para el backoffice FLIT (HU #13799, F06-H2, F06-C5/C6/C7). Cuelgan del grupo <c>/backoffice</c>:
-/// <see cref="PoliticaBackoffice"/> (<c>diagnostico.backoffice.ver</c> + <c>tenant_type=FLIT</c>) y la empresa explícita en
+/// la política de configuración de <see cref="PoliticaBackoffice"/> (<see cref="PoliticaBackoffice.CumpleConfiguracion"/>: SuperAdmin
+/// de cualquier compañía, o <c>tenant_type=FLIT</c> con <c>diagnostico.backoffice.ver</c>) y la empresa explícita en
 /// <c>?empresa=</c> (sin ella, 400 <c>EMPRESA_REQUERIDA</c>; con ella, la lectura queda en <c>lecturas_backoffice</c> antes de leer).
 /// Toda lectura va por <see cref="LecturaEntreEmpresas"/> con esa empresa: un lote de otra compañía responde 404.
 /// <list type="bullet">
@@ -52,6 +53,7 @@ internal static class DiagnosticosBackofficeEndpoints
         int? tamano,
         HttpContext http,
         DiagnosticoDb db,
+        Flit.Diagnostico.Domain.Catalogos.ICatalogoTiposTramite catalogo,
         CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
@@ -66,7 +68,7 @@ internal static class DiagnosticosBackofficeEndpoints
         if (!string.IsNullOrWhiteSpace(estado))
         {
             if (!CodigosDeEnum.TryLeer<EstadoDiagnostico>(estado, out var filtro))
-                throw new ReglaException(CodigoEstadoInvalido, "estado es CREADO, EN_PROCESO, COMPLETADO o INCOMPLETO.", StatusCodes.Status400BadRequest) { Campo = "estado" };
+                throw new ReglaException(CodigoEstadoInvalido, "El filtro de estado debe ser Sin lanzar, En proceso, Completado o Incompleto.", StatusCodes.Status400BadRequest) { Campo = "estado" };
             cabeceras = cabeceras.Where(c => c.Estado == filtro);
         }
 
@@ -85,22 +87,50 @@ internal static class DiagnosticosBackofficeEndpoints
                 c.Nombre,
                 c.Estado,
                 c.CreadoEn,
+                c.Modo,
+                c.TipoTramiteCodigo,
+                c.EsExpress,
                 Vehiculos = vehiculos.Count(v => v.DiagnosticoId == c.Id),
                 Errores = errores.Count(e => e.DiagnosticoId == c.Id),
             })
             .ToListAsync(ct).ConfigureAwait(false);
+        // HU #14563 B3: los nombres de trámite con UNA llamada al catálogo por página (caché de 5 min); si no responde, el código.
+        IReadOnlyDictionary<string, string> tipos = new Dictionary<string, string>();
+        if (lotes.Any(l => l.TipoTramiteCodigo is not null))
+        {
+            try
+            {
+                tipos = (await catalogo.ListarAsync(ct).ConfigureAwait(false))
+                    .GroupBy(t => t.Codigo, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Nombre, StringComparer.Ordinal);
+            }
+            catch (Flit.Diagnostico.Domain.Catalogos.CatalogoTiposTramiteNoDisponibleException)
+            {
+                // El nombre queda en el código.
+            }
+        }
+
         return Results.Ok(new ListaDiagnosticosBackofficeDto(empresa, numero, porPagina, total,
-            [.. lotes.Select(l => new DiagnosticoBackofficeDto(l.Id, l.Nombre, CodigosDeEnum.Codigo(l.Estado), l.CreadoEn, l.Vehiculos, l.Errores))]));
+            [.. lotes.Select(l => new DiagnosticoBackofficeDto(
+                l.Id, l.Nombre, CodigosDeEnum.Codigo(l.Estado), l.CreadoEn, l.Vehiculos, l.Errores, CodigosDeEnum.Codigo(l.Modo),
+                l.TipoTramiteCodigo is { } codigo ? new TipoTramiteListadoDto(codigo, tipos.GetValueOrDefault(codigo, codigo)) : null,
+                l.EsExpress))]));
     }
 
-    private static async Task<IResult> Grilla(Guid id, long? desde, HttpContext http, DiagnosticoDb db, IProtectorDocumentoPersona protector, CancellationToken ct)
+    private static async Task<IResult> Grilla(Guid id, long? desde, HttpContext http, DiagnosticoDb db, CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
         var version = desde ?? 0;
         ConsultaGrilla.ValidarDesde(version);
         var cabecera = await CabeceraAsync(db, empresa, id, ct).ConfigureAwait(false);
-        var grilla = await ConsultaGrilla.LeerAsync(new LecturaDeLaEmpresa(db, empresa), cabecera, version, protector, ct).ConfigureAwait(false);
-        return Results.Ok(GrillaBackofficeDto.De(empresa, grilla));
+        var grilla = await ConsultaGrilla.LeerAsync(new LecturaDeLaEmpresa(db, empresa), cabecera, version, ct).ConfigureAwait(false);
+        // HU #14576 AC35: el saneamiento no anulado de las filas de la página, para enlazar a su gestión.
+        var vehiculos = grilla.Vehiculos.Select(v => v.Id).ToList();
+        var saneamientos = (await db.DeLaEmpresa<Saneamiento.Saneamiento>(empresa)
+                .Where(s => s.DiagnosticoId == id && vehiculos.Contains(s.VehiculoId) && s.Estado != Domain.Saneamiento.EstadoSaneamiento.Anulado)
+                .Select(s => new { s.VehiculoId, s.Id, s.Estado })
+                .ToListAsync(ct).ConfigureAwait(false))
+            .ToDictionary(s => s.VehiculoId, s => new SaneamientoFilaBackofficeDto(CodigosDeEnum.Codigo(s.Estado), s.Id));
+        return Results.Ok(GrillaBackofficeDto.De(empresa, grilla, saneamientos));
     }
 
     private static async Task<IResult> Historial(Guid id, HttpContext http, DiagnosticoDb db, CancellationToken ct)

@@ -14,8 +14,8 @@ describe("ResumenValidacion — conteos (AC 3)", () => {
     render(<ResumenValidacion resumen={resumen({ validos: 7, erroneos: 2, duplicados: 3, total_filas: 12 })} onContinuar={vi.fn()} />);
     const region = screen.getByRole("region", { name: "Resumen de validación" });
     expect(within(region).getByText("Válidos").nextSibling).toHaveTextContent("7");
-    expect(within(region).getByText("Erróneos").nextSibling).toHaveTextContent("2");
-    expect(within(region).getByText("Duplicados").nextSibling).toHaveTextContent("3");
+    expect(within(region).getByText("Con error").nextSibling).toHaveTextContent("2");
+    expect(within(region).getByText("Duplicados consolidados").nextSibling).toHaveTextContent("3");
     expect(region).toHaveTextContent(/12 filas leídas/i);
   });
 
@@ -90,5 +90,21 @@ describe("EstimadoConsultas — antes de lanzar (AC 7)", () => {
     expect(container).toBeEmptyDOMElement();
     rerender(<EstimadoConsultas estimado={[]} />);
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+describe("ResumenValidacion — límite del lote (AC20, AC21)", () => {
+  it("AC21: «Límite del lote» cuenta solo los válidos frente al límite, con su barra de progreso", () => {
+    render(<ResumenValidacion resumen={resumen({ validos: 7, erroneos: 2, duplicados: 1, limite_vehiculos_lote: 500 })} onContinuar={vi.fn()} />);
+    const region = screen.getByRole("region", { name: "Resumen de validación" });
+    expect(within(region).getByText("Límite del lote").nextSibling).toHaveTextContent("7 de 500");
+    const barra = within(region).getByRole("progressbar");
+    expect(barra).toHaveAttribute("aria-valuenow", "7");
+    expect(barra).toHaveAttribute("aria-valuemax", "500");
+  });
+
+  it("AC20: avisa que la validación no dispara consultas externas", () => {
+    render(<ResumenValidacion resumen={resumen()} onContinuar={vi.fn()} />);
+    expect(screen.getByText(/la validación no dispara consultas externas/i)).toBeInTheDocument();
   });
 });

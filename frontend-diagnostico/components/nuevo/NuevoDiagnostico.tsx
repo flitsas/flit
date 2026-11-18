@@ -2,11 +2,12 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FilePlus2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { obtenerConfiguracion, type Configuracion } from "@/lib/configuracion";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { accesoNegadoExpress } from "@/lib/express/api";
 import { limpiarIdentificador } from "@/lib/validation/fieldRules";
 import { ZonaArchivo } from "@/components/carga/SubidaArchivo";
@@ -16,8 +17,9 @@ import type { BorradorExpress, BorradorMasivo, ModoCreacion } from "./borradores
 import { CamposExpress } from "./CamposExpress";
 import { CreacionExpress } from "./CreacionExpress";
 import { CreacionMasiva } from "./CreacionMasiva";
-import { DosZonas } from "./DosZonas";
+import { ZonasCreacion } from "./ZonasCreacion";
 import { SelectorModo } from "./SelectorModo";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; configuracion: Configuracion };
 
@@ -49,6 +51,7 @@ export function NuevoDiagnostico() {
   const [masivo, setMasivo] = useState<BorradorMasivo>({ nombre: "", archivo: null });
   const [cabeceraId, setCabeceraId] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const [conResultado, setConResultado] = useState(false);
   const [intento, setIntento] = useState(0);
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
 
@@ -61,7 +64,8 @@ export function NuevoDiagnostico() {
         if (controller.signal.aborted) return;
         const code = accesoNegadoExpress(e);
         if (code) return router.replace(`/403?code=${encodeURIComponent(code)}`);
-        setCarga({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudo cargar la configuración." });
+        // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+        setCarga({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudo cargar la configuración.") });
       });
     return () => controller.abort();
   }, [puedeCrear, intento, router]);
@@ -87,16 +91,16 @@ export function NuevoDiagnostico() {
   if (!puedeCrear) {
     contenido = (
       <section aria-labelledby="nuevo-vacio" className={`${TARJETA_CLS} flex flex-col items-center gap-3 py-12 text-center`}>
-        <FilePlus2 className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
+        <Icono nombre="archivo-subir" className="h-10 w-10 text-flit-brand" />
         <h2 id="nuevo-vacio" className="text-lg font-semibold">
           No tienes permiso para crear diagnósticos
         </h2>
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-muted-foreground">Pídele acceso al administrador de tu compañía.</p>
       </section>
     );
   } else if (carga.tipo !== "listo") {
     contenido = (
-      <DosZonas
+      <ZonasCreacion
         vehiculos={modo === "express" ? <CamposExpress borrador={express} onCambio={cambiarExpress} disabled /> : <ZonaArchivo archivo={masivo.archivo} onElegir={NOOP} disabled />}
         parametros={
           carga.tipo === "cargando" ? (
@@ -128,23 +132,27 @@ export function NuevoDiagnostico() {
         onMasivo={cambiarMasivo}
         onOcupado={setOcupado}
         onCabecera={setCabeceraId}
+        onResultado={setConResultado}
       />
     );
   }
 
   return (
     <>
-      <section aria-labelledby="nuevo-titulo" className={`${TARJETA_CLS} flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between`}>
-        <div>
-          <h1 id="nuevo-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
-            Nuevo diagnóstico
-          </h1>
-          {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{sesion.empresa.nombre}</p>}
-        </div>
-        {puedeCrear && (
-          <SelectorModo modo={modo} onModo={cambiarModo} bloqueado={bloqueado} explicacion={cabeceraId ? EXPLICACION_CABECERA_CREADA : null} />
-        )}
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="nuevo-titulo"
+        tituloId="nuevo-titulo"
+        titulo="Nuevo diagnóstico"
+        descripcion={sesion?.empresa.nombre}
+        icono="diagnostico"
+        acciones={
+          puedeCrear &&
+          !conResultado && (
+            <SelectorModo modo={modo} onModo={cambiarModo} bloqueado={bloqueado} explicacion={cabeceraId ? EXPLICACION_CABECERA_CREADA : null} />
+          )
+        }
+      />
       {contenido}
     </>
   );
@@ -159,14 +167,15 @@ interface CreacionProps {
   onMasivo: (c: Partial<BorradorMasivo>) => void;
   onOcupado: (ocupado: boolean) => void;
   onCabecera: (id: string) => void;
+  onResultado: (activo: boolean) => void;
 }
 
 /** Dueña del estado de parámetros: queda montada al cambiar de modo, así alcance, modo y tipo se conservan. */
-function Creacion({ configuracion, modo, express, onExpress, masivo, onMasivo, onOcupado, onCabecera }: CreacionProps) {
+function Creacion({ configuracion, modo, express, onExpress, masivo, onMasivo, onOcupado, onCabecera, onResultado }: CreacionProps) {
   const p = useParametrizacion(configuracion);
   return modo === "express" ? (
-    <CreacionExpress p={p} configuracion={configuracion} borrador={express} onBorrador={onExpress} onOcupado={onOcupado} />
+    <CreacionExpress p={p} configuracion={configuracion} borrador={express} onBorrador={onExpress} onOcupado={onOcupado} onResultado={onResultado} />
   ) : (
-    <CreacionMasiva p={p} borrador={masivo} onBorrador={onMasivo} onOcupado={onOcupado} onCabecera={onCabecera} />
+    <CreacionMasiva p={p} borrador={masivo} onBorrador={onMasivo} onOcupado={onOcupado} onCabecera={onCabecera} onResultado={onResultado} />
   );
 }

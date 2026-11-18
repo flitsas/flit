@@ -30,7 +30,7 @@ namespace Flit.Admin.Tests.PersonaNatural;
 /// que todas las pruebas de esta clase corren en serie y cada una retira lo que creó (las versiones son historial inmutable por
 /// trigger: solo un superusuario, la base de pruebas, puede retirarlas).
 /// </summary>
-public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class ContenidoPnTests(ContenidoPnTests.Anfitrion anfitrion) : IClassFixture<ContenidoPnTests.Anfitrion>
 {
     private const string Scope = "platform.tramites.persona_natural";
     private const string Portal = "svc-personanatural";
@@ -90,7 +90,7 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
     public async Task AC1_AC4_ElPortalSoloVeLasPreguntasActivasPublicadas_EnElOrdenConfigurado_YElBorradorNoSeVe()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = AnfitrionGrpc(out _);
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var p1 = (await e.FaqAsync("Primera", "Respuesta 1", null, e.Actor, ct)).Valor!;
         var p2 = (await e.FaqAsync("Segunda", "Respuesta 2", null, e.Actor, ct)).Valor!;
@@ -115,7 +115,7 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
     public async Task AC1_UnaListaDeOrdenQueNoTraeTodasLasPreguntasSeRechaza_YElTextoInvalidoNoSeGuarda()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = AnfitrionGrpc(out _);
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var p1 = (await e.FaqAsync("Primera", "Respuesta", null, e.Actor, ct)).Valor!;
         await e.FaqAsync("Segunda", "Respuesta", null, e.Actor, ct);
@@ -130,7 +130,7 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
     public async Task AC4_AlPublicarQuedaConFechaUsuarioYLaVersionAnteriorSigueConsultable_YSinCambiosNoPublica()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = AnfitrionGrpc(out _);
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.FaqAsync("Pregunta uno", "Respuesta uno", null, e.Actor, ct);
         var v1 = (await e.Contenido.PublicarAsync(e.Actor, ct)).Valor!;
@@ -161,7 +161,7 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
     public async Task AC2_UnBannerSinTextoAlternativoOConImagenInvalidaSeRechaza()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = AnfitrionGrpc(out _);
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
 
         (await e.BannerAsync(Datos(texto: "  ", imagen: Imagen(Png)), e.Actor, ct)).Error.Should().Be(ContenidoPnErrores.BannerInvalido);
@@ -179,7 +179,7 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
     public async Task AC2_ElPortalMuestraElBannerSoloDentroDeSuVigencia()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = AnfitrionGrpc(out _);
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var ahora = DateTimeOffset.UtcNow;
         var siempre = (await e.BannerAsync(Datos(titulo: "Siempre", imagen: Imagen(Png)), e.Actor, ct)).Valor!;
@@ -202,7 +202,7 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
     public async Task AC2_ReemplazarLaImagenConservaLosDemasDatos_YDesactivarOReordenarQuedaAuditado()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = AnfitrionGrpc(out _);
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         var b = (await e.BannerAsync(Datos(titulo: "Uno", imagen: Imagen(Png)), e.Actor, ct)).Valor!;
         var otra = Png.Concat(new byte[] { 9, 9, 9 }).ToArray();
@@ -229,7 +229,7 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
     public async Task AC3_UnEnlaceLegalSinDocumentoSePublicaSinValor_YConDocumentoViajaConSuUrl()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = AnfitrionGrpc(out _);
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, ct);
         await e.FaqAsync("Para tener algo que publicar", "ok", null, e.Actor, ct);
         e.EnlacesTocados = true;
@@ -253,7 +253,8 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
     public async Task AC5_ObtenerConfiguracionPortal_DevuelveSoloLoPublicadoYVigente_SinBorradorNiParametrosDeProteccion()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = AnfitrionGrpc(out var almacenamiento);
+        var host = anfitrion.Factory;
+        var almacenamiento = anfitrion.Almacen;
         await using var e = await Escenario.CrearAsync(host, ct);
         var ahora = DateTimeOffset.UtcNow;
         var faq = (await e.FaqAsync("Pregunta publicada", "Respuesta publicada", null, e.Actor, ct)).Valor!;
@@ -298,7 +299,7 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
     public async Task AC5_ElCandadoVaPrimero_YUnaEmpresaAjenaNoLeeNada()
     {
         var ct = TestContext.Current.CancellationToken;
-        using var host = AnfitrionGrpc(out _);
+        var host = anfitrion.Factory;
         var ajeno = await ClienteAsync(host, Guid.NewGuid(), ct);
 
         var error = (await FluentActions.Awaiting(() => ajeno.ObtenerConfiguracionPortalAsync(new ObtenerConfiguracionPortalRequest(), cancellationToken: ct).ResponseAsync)
@@ -317,21 +318,25 @@ public sealed class ContenidoPnTests(WebApplicationFactory<Program> factory) : I
     private static ImagenSubidaPn Imagen(byte[] bytes, string contentType = "image/png") =>
         new("banner.png", contentType, bytes.Length, new MemoryStream(bytes));
 
-    private WebApplicationFactory<Program> AnfitrionGrpc(out AlmacenEnMemoria almacenamiento)
+    /// <summary>Un host para toda la clase (<see cref="HostPorClase"/>): antes cada prueba arrancaba y destruía el suyo
+    /// (~30 s por prueba en CI). Las pruebas siembran datos con identificadores propios, así que comparten host sin cruzarse. El almacén de imágenes en memoria es
+    /// del fixture: cada prueba solo mira las imágenes que ella subió.</summary>
+    public sealed class Anfitrion : HostPorClase
     {
-        var almacen = new AlmacenEnMemoria();
-        almacenamiento = almacen;
-        return OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
-        {
-            b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
-            b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
-            b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
-            b.ConfigureServices(s =>
+        internal AlmacenEnMemoria Almacen { get; } = new();
+
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
             {
-                s.RemoveAll<IBannerImageStorage>();
-                s.AddSingleton<IBannerImageStorage>(almacen);
-            });
-        }).ConEmpresaPersonaNatural();
+                b.UseSetting("PersonaNatural:Fachada:Habilitada", "true");
+                b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Secret", OidcServerTests.ServiceSecret);
+                b.UseSetting($"Suite:Oidc:ServiceClients:{Portal}:Scopes:0", Scope);
+                b.ConfigureServices(s =>
+                {
+                    s.RemoveAll<IBannerImageStorage>();
+                    s.AddSingleton<IBannerImageStorage>(Almacen);
+                });
+            }).ConEmpresaPersonaNatural();
     }
 
     private static async Task<Cliente> ClienteAsync(WebApplicationFactory<Program> host, Guid empresa, CancellationToken ct)

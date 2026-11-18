@@ -11,22 +11,33 @@ import { respuestaFuenteRunt } from "@/lib/tablero/__tests__/datosDetalle";
 // el diccionario de etiquetasRespuesta (desconocidos humanizados); valores: enums traducidos, Sí/No, «—» para vacío/null y
 // «Sin registros» para listas vacías; los textos de la fuente, tal cual.
 
+// HU #14562 · AC39: el primer nivel es una lista de definición (role="group" con el nombre de la respuesta, dt/dd); los niveles
+// anidados siguen en tabla campo/valor. Los ayudantes leen las dos formas.
+const esLista = (el: HTMLElement) => el.querySelector(":scope > dl, dl") !== null && el.getAttribute("role") === "group";
 const filaDe = (tabla: HTMLElement, campo: string) => {
+  if (esLista(tabla)) {
+    const dt = Array.from(tabla.querySelectorAll("dt")).find((t) => t.textContent === campo);
+    if (!dt?.parentElement) throw new Error(`Sin término ${campo}`);
+    return dt.parentElement;
+  }
   const fila = within(tabla)
     .getAllByRole("row")
     .find((r) => r.querySelector("th[scope='row']")?.textContent === campo);
   if (!fila) throw new Error(`Sin fila ${campo}`);
   return fila;
 };
-const valorDe = (tabla: HTMLElement, campo: string) => within(filaDe(tabla, campo)).getByRole("cell");
-const rotulos = (tabla: HTMLElement) => within(tabla).getAllByRole("rowheader").map((r) => r.textContent);
+const valorDe = (tabla: HTMLElement, campo: string): HTMLElement =>
+  esLista(tabla) ? (filaDe(tabla, campo).querySelector("dd") as HTMLElement) : within(filaDe(tabla, campo)).getByRole("cell");
+const rotulos = (tabla: HTMLElement) =>
+  esLista(tabla) ? Array.from(tabla.querySelectorAll("dt")).map((t) => t.textContent) : within(tabla).getAllByRole("rowheader").map((r) => r.textContent);
+const raiz = () => screen.getByRole("group", { name: "Respuesta de la fuente" });
 
 describe("RespuestaFuente — nombres de campo en español", () => {
-  it("objeto → tabla campo/valor con las etiquetas del diccionario y las desconocidas humanizadas", () => {
+  it("objeto → lista de definición (AC39) con las etiquetas del diccionario y las desconocidas humanizadas", () => {
     render(<RespuestaFuente datos={{ plate: "TST001", vin: "9ZZPRUEBA00000001", document_type: "C", cilidraje: "1600", no_motor: "M-1", campo_nuevo_libre: "x" }} etiqueta="Respuesta de la fuente" />);
-    const tabla = screen.getByRole("table", { name: "Respuesta de la fuente" });
-    expect(within(tabla).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Campo", "Valor"]);
-    for (const c of within(tabla).getAllByRole("columnheader")) expect(c).toHaveAttribute("scope", "col");
+    const tabla = raiz();
+    expect(tabla.querySelector("dl")).not.toBeNull();
+    expect(screen.queryByRole("table", { name: "Respuesta de la fuente" })).not.toBeInTheDocument();
     expect(rotulos(tabla)).toEqual(["Placa", "VIN", "Tipo de documento", "Cilindraje", "N.º de motor", "Campo nuevo libre"]);
     expect(valorDe(tabla, "Placa").textContent).toBe("TST001");
     expect(tabla.textContent).not.toMatch(/plate|document_type|cilidraje|no_motor|campo_nuevo_libre/);
@@ -55,7 +66,7 @@ describe("RespuestaFuente — valores internos traducidos; los de la fuente, tal
         etiqueta="Respuesta de la fuente"
       />,
     );
-    const tabla = screen.getByRole("table", { name: "Respuesta de la fuente" });
+    const tabla = raiz();
     expect(valorDe(tabla, "Inscrito").textContent).toBe("Sí");
     expect(valorDe(tabla, "Encontrada").textContent).toBe("No");
     expect(valorDe(tabla, "Estado del conductor").textContent).toBe("—");
@@ -117,7 +128,7 @@ describe("RespuestaFuente — sin la auditoría del proveedor ni campos internos
         etiqueta="Respuesta de la fuente"
       />,
     );
-    expect(rotulos(screen.getByRole("table", { name: "Respuesta de la fuente" }))).toEqual(["Placa"]);
+    expect(rotulos(raiz())).toEqual(["Placa"]);
     const texto = document.body.textContent ?? "";
     expect(texto).not.toMatch(/PROVEEDOR-FICTICIO|Proveedor|Semáforo|caché|Consultado|Estado HTTP|Duración|Errores|serial|99|P1|VP1|05/i);
     expect(within(screen.getByRole("table", { name: "Direcciones" })).getAllByRole("columnheader").map((c) => c.textContent)).toEqual(["Ciudad"]);
@@ -168,7 +179,7 @@ describe("RespuestaFuente — respuesta completa grande y profunda (RUNT Intempo
 
   it("sin auditoría del proveedor en el primer nivel; vehículo traducido y anidados con contador", () => {
     pintar();
-    expect(screen.queryByRole("table", { name: "Respuesta de la fuente" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "Respuesta de la fuente" })).not.toBeInTheDocument();
     const vehiculo = screen.getByRole("region", { name: "Vehículo" });
     expect(valorDe(within(vehiculo).getByRole("table", { name: "Vehículo" }), "Placa").textContent).toBe("TST001");
     const general = within(vehiculo).getByRole("region", { name: "Información general" });

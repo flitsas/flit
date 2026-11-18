@@ -1,4 +1,5 @@
 using Flit.Analytics.Application.CompanyQueries;
+using Flit.Infrastructure.Documents;
 using Flit.Infrastructure.Documents.Reports;
 using Flit.Queries.Domain.Time;
 
@@ -63,8 +64,6 @@ internal static class CompanyQueryReportColumns
         ["estado"] = new("Estado", 14, r => Text(Label(EstadoLabel, r.Status))),
         ["prioritario"] = new("Prioritario", 11, r => Text(SiNo(r.Prioritario))),
         ["radicado_por"] = new("Radicado por", 22, r => Text(r.RadicadoPor)),
-        ["comprador"] = new("Comprador", 26, r => TextOrEmpty(r.Comprador)),
-        ["vendedor"] = new("Vendedor", 26, r => TextOrEmpty(r.Vendedor)),
         ["prenda"] = new("Prenda", 9, r => Text(SiNo(r.TienePrenda))),
         ["acreedor_prenda"] = new("Acreedor", 24, r => TextOrEmpty(r.AcreedorPrenda)),
         ["licencia_transito"] = new("LT cargada", 12, r => Text(SiNo(r.TieneLicenciaTransito))),
@@ -91,23 +90,107 @@ internal static class CompanyQueryReportColumns
     /// Construye la hoja de un informe de consulta: solo las columnas de <paramref name="columnIds"/>
     /// que existan en el catálogo, en ese orden — un id desconocido (columna retirada del producto
     /// después de guardar la consulta) se ignora en vez de reventar el informe completo.
+    ///
+    /// <para><b>Validación de identidad por rol (contrato v3).</b> Los ids <c>comprador</c>/<c>vendedor</c> (los de
+    /// siempre) y <c>validacion_*</c>/<c>intentos_*</c>/<c>motivo_*</c> de cada rol se escriben como UN bloque por
+    /// persona EN EL LUGAR de la primera columna pedida de ese rol: <c>Comprador</c>, <c>Validación comprador</c>,
+    /// <c>Intentos comprador</c>, <c>Motivo rechazo comprador</c>; desde el segundo actor con número. Solo salen los
+    /// campos pedidos: una consulta vieja con solo <c>comprador</c> sale con <c>Comprador</c>, <c>Comprador 2</c>…
+    /// (nombres). El grupo comprador incluye al propietario (matrícula y «otros»). Mínimo 1 bloque por rol;
+    /// <paramref name="maxActores"/> (el máximo de TODO el filtro) fija el ancho, igual en todas las partes.</para>
     /// </summary>
     public static TabularWorkbookWriter.Sheet BuildSheet(
-        string sheetName, IReadOnlyList<string> columnIds, IReadOnlyList<CompanyQueryRowDto> rows)
+        string sheetName, IReadOnlyList<string> columnIds, IReadOnlyList<CompanyQueryRowDto> rows,
+        MaxActoresPorRolDto maxActores = default)
     {
-        var ids = columnIds.Count == 0 ? DefaultColumns : columnIds;
-        var columns = ids.Where(Definitions.ContainsKey).Select(id => Definitions[id]).ToList();
-        if (columns.Count == 0)
-            columns = DefaultColumns.Select(id => Definitions[id]).ToList();
+        var segments = BuildSegments(columnIds.Count == 0 ? DefaultColumns : columnIds, maxActores);
+        if (segments.Count == 0)
+            segments = BuildSegments(DefaultColumns, maxActores);
 
-        var sheetColumns = columns
-            .Select(c => new TabularWorkbookWriter.Column(c.Header, c.Width))
-            .ToList();
+        var sheetColumns = segments.SelectMany(s => s.Columns).ToList();
         var dataRows = rows
-            .Select(r => (IReadOnlyList<TabularWorkbookWriter.Cell>)columns.Select(c => c.Cell(r)).ToList())
+            .Select(r => (IReadOnlyList<TabularWorkbookWriter.Cell>)segments.SelectMany(s => s.Cells(r)).ToList())
             .ToList();
 
         return new TabularWorkbookWriter.Sheet(sheetName, sheetColumns, dataRows);
+    }
+
+    /// <summary>Un tramo contiguo de la hoja: una columna del catálogo o el bloque de un rol.</summary>
+    private sealed record Segment(
+        IReadOnlyList<TabularWorkbookWriter.Column> Columns,
+        Func<CompanyQueryRowDto, IReadOnlyList<TabularWorkbookWriter.Cell>> Cells);
+
+    private static List<Segment> BuildSegments(IReadOnlyList<string> ids, MaxActoresPorRolDto maxActores)
+    {
+        var segments = new List<Segment>();
+        var emitidos = new HashSet<ActoresExcelColumns.Grupo>();
+
+        foreach (var id in ids)
+        {
+            if (RolDeId(id) is { } grupo)
+            {
+                // Un solo bloque por rol, en el lugar de la primera columna pedida de ese rol.
+                if (emitidos.Add(grupo))
+                    segments.Add(BloqueDeRol(grupo, CamposDe(ids, grupo), maxActores));
+                continue;
+            }
+
+            if (Definitions.TryGetValue(id, out var def))
+                segments.Add(new Segment(
+                    [new TabularWorkbookWriter.Column(def.Header, def.Width)],
+                    r => [def.Cell(r)]));
+        }
+
+        return segments;
+    }
+
+    private static Segment BloqueDeRol(
+        ActoresExcelColumns.Grupo grupo, ActoresExcelColumns.Campos campos, MaxActoresPorRolDto max)
+    {
+        var headers = ActoresExcelColumns.Headers(max, grupo, campos);
+        var widths = ActoresExcelColumns.Widths(max, grupo, campos);
+        var columns = headers.Select((h, i) => new TabularWorkbookWriter.Column(h, widths[i])).ToList();
+
+        return new Segment(columns, r => ActoresExcelColumns
+            .CellsTyped(r.Actores, max, grupo, campos,
+                grupo == ActoresExcelColumns.Grupo.Comprador ? r.Comprador : r.Vendedor)
+            .Select(c => c.Number is int n
+                ? TabularWorkbookWriter.Cell.Of(n)
+                : TabularWorkbookWriter.Cell.Of(c.Text))
+            .ToList());
+    }
+
+    /// <summary>Ids de las columnas de validación por rol (company-columns.ts) y los dos ids de siempre.</summary>
+    internal const string ColumnaComprador = "comprador";
+    internal const string ColumnaValidacionComprador = "validacion_comprador";
+    internal const string ColumnaIntentosComprador = "intentos_comprador";
+    internal const string ColumnaMotivoComprador = "motivo_comprador";
+    internal const string ColumnaVendedor = "vendedor";
+    internal const string ColumnaValidacionVendedor = "validacion_vendedor";
+    internal const string ColumnaIntentosVendedor = "intentos_vendedor";
+    internal const string ColumnaMotivoVendedor = "motivo_vendedor";
+
+    private static ActoresExcelColumns.Grupo? RolDeId(string id) => id switch
+    {
+        ColumnaComprador or ColumnaValidacionComprador or ColumnaIntentosComprador or ColumnaMotivoComprador
+            => ActoresExcelColumns.Grupo.Comprador,
+        ColumnaVendedor or ColumnaValidacionVendedor or ColumnaIntentosVendedor or ColumnaMotivoVendedor
+            => ActoresExcelColumns.Grupo.Vendedor,
+        _ => null,
+    };
+
+    private static ActoresExcelColumns.Campos CamposDe(IReadOnlyList<string> ids, ActoresExcelColumns.Grupo grupo)
+    {
+        var comprador = grupo == ActoresExcelColumns.Grupo.Comprador;
+        var campos = ActoresExcelColumns.Campos.None;
+        if (ids.Contains(comprador ? ColumnaComprador : ColumnaVendedor)) campos |= ActoresExcelColumns.Campos.Nombre;
+        if (ids.Contains(comprador ? ColumnaValidacionComprador : ColumnaValidacionVendedor))
+            campos |= ActoresExcelColumns.Campos.Validacion;
+        if (ids.Contains(comprador ? ColumnaIntentosComprador : ColumnaIntentosVendedor))
+            campos |= ActoresExcelColumns.Campos.Intentos;
+        if (ids.Contains(comprador ? ColumnaMotivoComprador : ColumnaMotivoVendedor))
+            campos |= ActoresExcelColumns.Campos.Motivo;
+        return campos;
     }
 
     private static string Label(Dictionary<string, string> map, string value) =>

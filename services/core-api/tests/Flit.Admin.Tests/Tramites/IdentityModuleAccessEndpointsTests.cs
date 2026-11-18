@@ -62,6 +62,8 @@ public sealed class IdentityModuleAccessEndpointsTests
         { "POST", "/api/v1/tramites/biometric-validations" },
         { "PATCH", $"/api/v1/tramites/biometric-validations/{Registro}" },
         { "POST", $"/api/v1/tramites/biometric-validations/{Registro}/resend" },
+        // L1 (actualizar estado con Verify desde el módulo): escritura, exige validaciones.manage (D1).
+        { "POST", $"/api/v1/tramites/biometric-validations/{Registro}/reconcile" },
         { "POST", $"/api/v1/tramites/identity-validation/stuck/{Registro}/requeue" },
         { "POST", "/api/v1/tramites/identity-validation/stuck/requeue-all" },
     };
@@ -81,6 +83,8 @@ public sealed class IdentityModuleAccessEndpointsTests
         { "POST", "/api/v1/tramites/biometric-validations" },
         { "PATCH", $"/api/v1/tramites/biometric-validations/{Registro}" },
         { "POST", $"/api/v1/tramites/biometric-validations/{Registro}/resend" },
+        // L1 (actualizar estado con Verify desde el módulo): escritura, exige validaciones.manage (D1).
+        { "POST", $"/api/v1/tramites/biometric-validations/{Registro}/reconcile" },
         { "POST", $"/api/v1/tramites/identity-validation/stuck/{Registro}/requeue" },
         { "POST", "/api/v1/tramites/identity-validation/stuck/requeue-all" },
     };

@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
   iniciarBiometric: vi.fn(),
   simulateBiometric: vi.fn(),
   getActors: vi.fn(),
+  reconcileBiometric: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -18,10 +19,12 @@ vi.mock('@/lib/api/tramites-client', () => ({
     iniciarBiometric: mocks.iniciarBiometric,
     simulateBiometric: mocks.simulateBiometric,
     getActors: mocks.getActors,
+    reconcileBiometric: mocks.reconcileBiometric,
   },
 }));
 
 import { BiometricStep } from '@/components/operacion/BiometricStep';
+import { WizardReadOnlyProvider } from '@/components/operacion/WizardReadOnlyContext';
 
 const INSTANCE = 'inst-1';
 
@@ -594,5 +597,71 @@ describe('BiometricStep — recuadro de identidad de la parte', () => {
     ).toBeInTheDocument();
     // Sin actor ni validación, no hay dato para el recuadro: no se pinta nada falso.
     expect(screen.queryByText(/— Comprador$/)).not.toBeInTheDocument();
+  });
+});
+
+// Regresión: «Actualizar estado» del wizard (`ReconcileAction`) pasa a usar el hook compartido
+// `useReconcileIdentity` SIN cambio visible: aparece a los 15 s, se oculta en solo lectura, llama a la
+// ruta del trámite y conserva los textos.
+// Uso de ejemplo: render(<BiometricStep instanceId="inst-1" modalidad="matricula_inicial" />) con una
+// validación kyverum en_proceso → a los 15 s aparece el botón de reconciliar.
+describe('BiometricStep — ReconcileAction (regresión del hook compartido)', () => {
+  const NOMBRE = 'Actualizar estado de la validación consultando al proveedor';
+
+  async function montarYEsperar15s(readOnly = false) {
+    mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO], provider: 'kyverum' });
+    vi.useFakeTimers();
+    render(
+      <WizardReadOnlyProvider readOnly={readOnly}>
+        <BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />
+      </WizardReadOnlyProvider>,
+    );
+    await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+    expect(screen.queryByRole('button', { name: NOMBRE })).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(14000); });
+    expect(screen.queryByRole('button', { name: NOMBRE })).not.toBeInTheDocument();
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+    vi.useRealTimers();
+  }
+
+  it('aparece a los 15 s y llama a la ruta del trámite; updated=false muestra «aún no resuelve»', async () => {
+    try {
+      await montarYEsperar15s();
+      mocks.reconcileBiometric.mockResolvedValue({ status: 'en_proceso', updated: false });
+      const boton = screen.getByRole('button', { name: NOMBRE });
+      expect(boton).toHaveTextContent('Actualizar estado');
+      await userEvent.setup().click(boton);
+      await waitFor(() => expect(mocks.reconcileBiometric).toHaveBeenCalledWith(INSTANCE, EN_PROCESO.id));
+      const info = await screen.findByText(
+        'El proveedor aún no resuelve la validación. Intenta de nuevo en unos segundos.',
+      );
+      expect(info.closest('[role="status"]')).not.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('un error del proveedor muestra su detail (o el texto por defecto) como alerta', async () => {
+    try {
+      await montarYEsperar15s();
+      mocks.reconcileBiometric.mockRejectedValueOnce(new Error('Proveedor caído.'));
+      await userEvent.setup().click(screen.getByRole('button', { name: NOMBRE }));
+      expect(await screen.findByText('Proveedor caído.')).toBeInTheDocument();
+      mocks.reconcileBiometric.mockRejectedValueOnce('x');
+      await userEvent.setup().click(screen.getByRole('button', { name: NOMBRE }));
+      expect(await screen.findByText('No se pudo actualizar el estado.')).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('en solo lectura no aparece ni a los 15 s', async () => {
+    try {
+      await montarYEsperar15s(true);
+      expect(screen.queryByRole('button', { name: NOMBRE })).not.toBeInTheDocument();
+      expect(mocks.reconcileBiometric).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

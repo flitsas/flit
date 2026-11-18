@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Settings } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
@@ -10,6 +10,7 @@ import { PestanaContrato } from "@/components/configuracion/PestanaContrato";
 import { PestanaOperacion } from "@/components/configuracion/PestanaOperacion";
 import { BOTON_REINTENTAR_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { obtenerConfiguracion, type Configuracion } from "@/lib/configuracion";
+import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
 type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo: "listo"; configuracion: Configuracion };
 
@@ -51,11 +52,11 @@ export default function ConfiguracionPagina() {
   if (!verConfiguracion && !editarContrato) {
     contenido = (
       <section aria-labelledby="configuracion-vacio" className={`${TARJETA_CLS} flex flex-col items-center gap-3 py-12 text-center`}>
-        <Settings className="h-10 w-10 text-flit-brand" aria-hidden="true" strokeWidth={1.5} />
+        <Icono nombre="ajustes" className="h-10 w-10 text-flit-brand" />
         <h2 id="configuracion-vacio" className="text-lg font-semibold">
           No tienes acceso a la configuración
         </h2>
-        <p className="max-w-md text-sm text-[var(--nav-texto)] dark:text-slate-300">Pídele acceso al administrador de tu compañía.</p>
+        <p className="max-w-md text-sm text-muted-foreground">Pídele acceso al administrador de tu compañía.</p>
       </section>
     );
   } else if (verConfiguracion && carga.tipo === "cargando") {
@@ -77,17 +78,19 @@ export default function ConfiguracionPagina() {
   } else {
     const configuracion = carga.tipo === "listo" ? carga.configuracion : null;
     const pestanas: Pestana[] = [
-      { id: "contrato", etiqueta: "Contrato", contenido: <PestanaContrato contrato={configuracion?.contrato ?? null} puedeEditar={editarContrato} /> },
+      { id: "contrato", etiqueta: "Contrato", icono: "documento", contenido: <PestanaContrato contrato={configuracion?.contrato ?? null} puedeEditar={editarContrato} /> },
     ];
     if (configuracion)
       pestanas.push({
         id: "operacion",
         etiqueta: "Operación",
+        icono: "ajustes",
         contenido: (
           <PestanaOperacion
             configuracion={configuracion}
             puedeEditar={capacidades?.editarConfiguracion ?? false}
             onGuardado={alGuardar}
+            onRecargar={reintentar}
           />
         ),
       });
@@ -96,12 +99,14 @@ export default function ConfiguracionPagina() {
 
   return (
     <>
-      <section aria-labelledby="configuracion-titulo" className={TARJETA_CLS}>
-        <h1 id="configuracion-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
-          Configuración
-        </h1>
-        {sesion?.empresa.nombre && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{sesion.empresa.nombre}</p>}
-      </section>
+      <CabeceraModulo
+        as="section"
+        aria-labelledby="configuracion-titulo"
+        tituloId="configuracion-titulo"
+        titulo="Configuración"
+        descripcion={sesion?.empresa.nombre}
+        icono="configuracion"
+      />
       {contenido}
     </>
   );

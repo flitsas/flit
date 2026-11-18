@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type {
   ReportSchedule,
   ReportScheduleInput,
@@ -42,10 +42,10 @@ interface ScheduleFormProps {
 }
 
 const inputClass =
-  "w-full rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 " +
-  "px-3 py-2 text-sm text-flit-primary dark:text-slate-100 outline-none focus:ring-2 focus:ring-flit-brand/40";
+  "w-full rounded-xl border border-border bg-card " +
+  "px-3 py-2 text-sm text-flit-primary outline-none focus:ring-2 focus:ring-flit-brand/40";
 
-const labelClass = "block text-xs font-semibold text-flit-primary dark:text-slate-200 mb-1";
+const labelClass = "block text-xs font-semibold text-flit-primary mb-1";
 
 /** Tipos que el backend solo entrega en Excel (espejo de SchedulingValidation): "consulta" y los
  * 4 propios de ICT — un detalle fila a fila no tiene una versión PDF con sentido. */
@@ -128,9 +128,9 @@ export function ScheduleForm({
     <form
       onSubmit={handleSubmit}
       data-testid="schedule-form"
-      className="rounded-2xl border border-slate-200 dark:border-slate-700 p-4 space-y-3"
+      className="rounded-2xl border border-border p-4 space-y-3"
     >
-      <h4 className="text-sm font-bold text-flit-primary dark:text-slate-100">
+      <h4 className="text-sm font-bold text-flit-primary">
         {initial ? "Editar informe programado" : "Nuevo informe programado"}
       </h4>
 
@@ -154,7 +154,7 @@ export function ScheduleForm({
               <span className={labelClass}>Tipo de informe</span>
               <p
                 data-testid="schedule-consulta-locked"
-                className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-flit-primary dark:text-slate-100"
+                className="rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-flit-primary"
               >
                 Consulta personalizada — {consultaQueryName}
               </p>
@@ -248,7 +248,7 @@ export function ScheduleForm({
         <div>
           <label htmlFor="schedule-format" className={labelClass}>Formato</label>
           {isExcelOnly ? (
-            <p className="rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 px-3 py-2 text-sm text-flit-primary dark:text-slate-100">
+            <p className="rounded-xl border border-border bg-secondary px-3 py-2 text-sm text-flit-primary">
               Excel
             </p>
           ) : (
@@ -263,7 +263,7 @@ export function ScheduleForm({
               ))}
             </select>
           )}
-          <p className="mt-1 text-[11px] text-slate-500 dark:text-slate-400">
+          <p className="mt-1 text-[11px] text-muted-foreground">
             {isConsulta
               ? "El resultado de la consulta va como Excel adjunto (hasta 5.000 filas)."
               : isExcelOnly
@@ -278,7 +278,7 @@ export function ScheduleForm({
         <RecipientsInput value={recipients} onChange={setRecipients} />
       </div>
 
-      <label className="flex items-center gap-2 text-sm text-flit-primary dark:text-slate-200">
+      <label className="flex items-center gap-2 text-sm text-flit-primary">
         <input
           type="checkbox"
           checked={isActive}
@@ -289,7 +289,7 @@ export function ScheduleForm({
       </label>
 
       {error && (
-        <p role="alert" data-testid="schedule-form-error" className="text-xs font-medium text-red-600 dark:text-red-400">
+        <p role="alert" data-testid="schedule-form-error" className="text-xs font-medium text-destructive">
           {error}
         </p>
       )}
@@ -302,13 +302,13 @@ export function ScheduleForm({
           className="flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
           style={{ background: "var(--color-flit-brand)" }}
         >
-          {saving && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />}
+          {saving && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
           {initial ? "Guardar cambios" : "Crear informe"}
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-xl border border-slate-200 dark:border-slate-700 px-4 py-2 text-xs font-semibold text-flit-primary dark:text-slate-200"
+          className="rounded-xl border border-border px-4 py-2 text-xs font-semibold text-flit-primary"
         >
           Cancelar
         </button>

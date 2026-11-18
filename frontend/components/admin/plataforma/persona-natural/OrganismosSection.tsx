@@ -6,7 +6,6 @@
 // confirmación. La lista trae solo los organismos activos en FLIT (y los ya habilitados que dejaron de serlo, marcados
 // «Ya no está activo en FLIT», que solo se pueden apagar).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { EyeOff, Power } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { InlineAlert } from "@/components/atom/InlineAlert";
@@ -217,7 +216,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
             onChange={(next) => (next ? void encender(o) : setApagando(o))}
           />
           {o.activoEnFlit === false && (
-            <span className="max-w-[240px] text-xs text-[#59677D] dark:text-white/70">
+            <span className="max-w-[240px] text-xs text-muted-foreground">
               {o.habilitado ? "Solo puedes dejar de ofrecerlo." : "No se puede ofrecer."}
             </span>
           )}
@@ -244,7 +243,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
             label={`${o.canalPuntoEncendido ? "Apagar" : "Encender"} el canal del punto de ${o.nombre}`}
             onChange={(next) => (next ? void encenderCanal(o) : setApagandoCanal(o))}
           />
-          <span className="text-xs text-[#59677D] dark:text-white/70">{o.canalPuntoEncendido ? "Encendido" : "Apagado"}</span>
+          <span className="text-xs text-muted-foreground">{o.canalPuntoEncendido ? "Encendido" : "Apagado"}</span>
           {o.canalPuntoEncendido === true && (
             <PnLinkButton onClick={() => setEnlace(o)} ariaLabel={`Enlace y QR de ${o.nombre}`}>
               Enlace y QR
@@ -341,7 +340,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
       {apagando && (
         <PnConfirmDialog
           title="Dejar de ofrecer este organismo"
-          icon={EyeOff}
+          icono="ojo-tachado"
           tone="danger"
           confirmLabel="Dejar de ofrecer"
           onClose={() => setApagando(null)}
@@ -360,7 +359,7 @@ export function OrganismosSection({ onIrATarifas, onCambio }: OrganismosSectionP
       {apagandoCanal && (
         <PnConfirmDialog
           title="Apagar el canal del punto"
-          icon={Power}
+          icono="encendido"
           tone="danger"
           confirmLabel="Apagar canal"
           onClose={() => setApagandoCanal(null)}

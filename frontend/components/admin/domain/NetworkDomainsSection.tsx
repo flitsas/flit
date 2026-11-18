@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Power, RefreshCw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { DomainRegisterForm } from "@/components/admin/domain/DomainRegisterForm";
 import { DomainStatusPanel } from "@/components/admin/domain/DomainStatusPanel";
@@ -47,7 +47,7 @@ export function NetworkDomainsSection({ tenantId }: { tenantId: string }) {
   }, [refresh]);
 
   return (
-    <section className="rounded-2xl border bg-white/60 p-4 dark:bg-[#0B0F14]/60" aria-labelledby="domain-admin-title">
+    <section className="rounded-2xl border bg-card/60 p-4" aria-labelledby="domain-admin-title">
       <div className="mb-3">
         <h2 id="domain-admin-title" className="text-sm font-bold" style={{ color: "var(--color-flit-primary)" }}>
           Dominios de la red
@@ -67,7 +67,7 @@ export function NetworkDomainsSection({ tenantId }: { tenantId: string }) {
       />
 
       {network?.products.map((product) => (
-        <div key={product} className="mt-6 border-t pt-6" style={{ borderColor: "#DFE5ED" }}>
+        <div key={product} className="mt-6 border-t pt-6" style={{ borderColor: "var(--border)" }}>
           <DomainEditor
             tenantId={tenantId}
             purpose={product}
@@ -171,7 +171,7 @@ function ActivationCard({ tenantId, network, onRefresh, onActivated }: Activatio
   }
 
   return (
-    <div className="mt-6 rounded-xl border p-4" style={{ borderColor: "#DFE5ED" }}>
+    <div className="mt-6 rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
       <h3 className="text-xs font-bold" style={{ color: "var(--color-flit-primary)" }}>
         Activación de la red
       </h3>
@@ -183,7 +183,7 @@ function ActivationCard({ tenantId, network, onRefresh, onActivated }: Activatio
       </p>
 
       {error && (
-        <p role="alert" className="mt-2 text-xs font-medium" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="mt-2 text-xs font-medium" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}
@@ -195,9 +195,9 @@ function ActivationCard({ tenantId, network, onRefresh, onActivated }: Activatio
             onClick={() => setConfirming(true)}
             disabled={!ready}
             className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
-            <Power className="h-3.5 w-3.5" aria-hidden /> Activar red
+            <Icono nombre="encendido" className="h-3.5 w-3.5" /> Activar red
           </button>
         )}
         <button
@@ -205,15 +205,15 @@ function ActivationCard({ tenantId, network, onRefresh, onActivated }: Activatio
           onClick={onRefresh}
           className="inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-xs font-semibold"
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Actualizar estado
+          <Icono nombre="reintento" className="h-3.5 w-3.5" /> Actualizar estado
         </button>
       </div>
 
-      <Modal open={confirming} onClose={() => setConfirming(false)} busy={activating} size="sm" icon={Power} title="Activar la red">
+      <Modal open={confirming} onClose={() => setConfirming(false)} busy={activating} size="sm" icono="encendido" title="Activar la red">
         <p className="text-sm opacity-80">
           {`Los usuarios de esta red dejarán de poder iniciar sesión por el dominio de FLIT y deberán entrar por ${hubHost ?? "su dominio principal"}.`}
         </p>
-        <p className="mt-2 text-sm font-medium" style={{ color: "#8a6000" }} role="note">
+        <p className="mt-2 text-sm font-medium" style={{ color: "var(--badge-warning-fg)" }} role="note">
           Avísales antes. El login por el dominio nuevo puede tardar hasta 5 minutos en quedar disponible.
         </p>
 
@@ -231,7 +231,7 @@ function ActivationCard({ tenantId, network, onRefresh, onActivated }: Activatio
             onClick={() => void handleActivate()}
             disabled={activating}
             className="flex-1 rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
             {activating ? "Activando…" : "Activar"}
           </button>

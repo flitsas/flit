@@ -4,7 +4,6 @@
 // (editar, activar o desactivar, subir y bajar), orden editable y los cuatro estados. La imagen del borrador se
 // descarga con la sesión del administrador (el endpoint exige Authorization).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ArrowDown, ArrowUp, EyeOff, ImageIcon, Pencil } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -31,6 +30,9 @@ import { pnErrorMessage } from "../pnErrors";
 import { BannerFormModal } from "./BannerFormModal";
 import { BannerImagen } from "./BannerImagen";
 import { moverId } from "./PreguntasSection";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_MEGAFONO = iconoComo("megafono");
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   { id: "banner", label: "Banner", tipo: "texto" },
@@ -135,9 +137,9 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
   function actionsFor(b: BannerPn, indice: number): RowAction[] {
     const n = `«${b.titulo}»`;
     return [
-      { icon: Pencil, label: `Editar el banner ${n}`, tone: "primary", onClick: () => setForm({ banner: b }) },
-      { icon: ArrowUp, label: `Subir el banner ${n}`, disabled: ocupado || indice === 0, disabledTitle: "Ya es el primero", onClick: () => void mover(b, -1) },
-      { icon: ArrowDown, label: `Bajar el banner ${n}`, disabled: ocupado || indice === banners.length - 1, disabledTitle: "Ya es el último", onClick: () => void mover(b, 1) },
+      { icon: iconoComo("lapiz"), label: `Editar el banner ${n}`, tone: "primary", onClick: () => setForm({ banner: b }) },
+      { icon: iconoComo("arriba"), label: `Subir el banner ${n}`, disabled: ocupado || indice === 0, disabledTitle: "Ya es el primero", onClick: () => void mover(b, -1) },
+      { icon: iconoComo("abajo"), label: `Bajar el banner ${n}`, disabled: ocupado || indice === banners.length - 1, disabledTitle: "Ya es el último", onClick: () => void mover(b, 1) },
     ];
   }
 
@@ -146,7 +148,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
     {
       key: "imagen",
       header: "Imagen",
-      render: (b) => <BannerImagen key={b.imagenSha256} id={b.id} alt={b.textoAlternativo} className="h-12 w-24 rounded-lg border border-[#DFE5ED] object-cover" />,
+      render: (b) => <BannerImagen key={b.imagenSha256} id={b.id} alt={b.textoAlternativo} className="h-12 w-24 rounded-lg border border-border object-cover" />,
     },
     {
       key: "banner",
@@ -159,7 +161,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
       render: (b) => (
         <>
           <span className="block font-semibold">{b.titulo}</span>
-          <span className="block text-xs text-[#59677D] dark:text-white/70">Descripción: {b.textoAlternativo}</span>
+          <span className="block text-xs text-muted-foreground">Descripción: {b.textoAlternativo}</span>
         </>
       ),
     },
@@ -198,7 +200,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
         contador={status === "ready" || status === "empty" ? `${plural(banners.length, "banner", "banners")} · ${plural(banners.filter((b) => b.activo).length, "visible", "visibles")}` : undefined}
         titulo="Banners"
         descripcion="Imágenes destacadas del portal, en este orden (usa las flechas para subir o bajar). Usa JPG, PNG o WEBP de hasta 2 MB. Los ocultos o vencidos no aparecen."
-        accion={<CreateButton label="Nuevo banner" icon={ImageIcon} onClick={nuevo} />}
+        accion={<CreateButton label="Nuevo banner" icon={ICONO_MEGAFONO} onClick={nuevo} />}
       />
       {status === "loading" ? (
         <CarLoaderModal label="Cargando banners…" />
@@ -229,7 +231,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
       {ocultando && (
         <PnConfirmDialog
           title="Ocultar este banner"
-          icon={EyeOff}
+          icono="ojo-tachado"
           tone="danger"
           confirmLabel="Ocultar"
           onClose={() => setOcultando(null)}

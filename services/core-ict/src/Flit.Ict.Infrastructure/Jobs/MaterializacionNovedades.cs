@@ -19,7 +19,20 @@ namespace Flit.Ict.Infrastructure.Jobs;
 /// </remarks>
 internal static class MaterializacionNovedades
 {
-    private static readonly string[] PrefijosVisibles = ["actors_warning:", "commercial_warning:", "preflight_warning:"];
+    private static readonly string[] PrefijosVisibles =
+        ["actors_warning:", "commercial_warning:", "preflight_warning:", "carroceria_warning:"];
+
+    /// <summary>
+    /// Texto en español de las advertencias visibles que lo ameritan (el resto se publica como código). Se
+    /// conserva el código entre paréntesis para trazabilidad. Sin PII.
+    /// </summary>
+    private static readonly Dictionary<string, string> TextoDeAdvertencia = new(StringComparer.Ordinal)
+    {
+        ["carroceria_warning:fuera_de_catalogo"] =
+            "La carrocería enviada no corresponde al catálogo para la clase del vehículo consultado; el gestor debe elegirla",
+        ["carroceria_warning:vehiculo_sin_carroceria"] =
+            "El vehículo no tiene carrocería registrada en el RUNT; el cambio de carrocería no aplica y no se incluyó en el trámite",
+    };
 
     /// <summary>Prefijo del texto que se agrega a los comentarios del master.</summary>
     internal const string Prefijo = "borrador creado en FLIT con novedades: ";
@@ -52,10 +65,40 @@ internal static class MaterializacionNovedades
         }
 
         // Tope para que el mensaje del webhook (message_validation varchar(500)) nunca falle por longitud.
-        var mensaje = Prefijo + string.Join(", ", visibles);
+        var mensaje = Prefijo + string.Join(", ", visibles.Select(v =>
+            TextoDeAdvertencia.TryGetValue(v, out var texto) ? $"{texto} ({v})" : v));
         return mensaje.Length <= MaxLongitud ? mensaje : mensaje[..MaxLongitud];
     }
 
+
+    /// <summary>
+    /// Mensaje claro para los códigos de error FATALES de core-api al crear el borrador por el organismo de
+    /// tránsito (gate de creación y OT derivado del RUNT). El código original se conserva entre paréntesis
+    /// para trazabilidad (sin PII). Null si el código no es uno de estos (se usa tal cual).
+    /// </summary>
+    internal static string? MensajeError(string? errorCode)
+    {
+        var texto = errorCode?.Trim() switch
+        {
+            "ot_runt_no_habilitado" =>
+                "El organismo de tránsito del vehículo según el RUNT no está activo o no está habilitado para la compañía",
+            "ot_not_permitted" =>
+                "El organismo de tránsito no está habilitado para la compañía",
+            "OT_NOT_AUTHORIZED_FOR_TYPE" =>
+                "El organismo de tránsito no está habilitado u operativo para este tipo de trámite",
+            "tenant_inactive" =>
+                "La compañía u organismo de tránsito no está activo",
+            "network_inactive" =>
+                "La red del organismo de tránsito no está activa",
+            "placa_fuera_de_rango" =>
+                "La placa enviada no pertenece al rango asignado por el organismo de tránsito a la compañía o ya no está disponible",
+            "placa_rango_sin_ot" =>
+                "No se pudo validar la placa del rango porque no se conoce el organismo de tránsito del trámite",
+            _ => null,
+        };
+
+        return texto is null ? null : $"{texto} ({errorCode!.Trim()})";
+    }
     /// <summary>Longitud máxima del mensaje (deja margen dentro de message_validation varchar(500)).</summary>
     internal const int MaxLongitud = 400;
 

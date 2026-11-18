@@ -1,17 +1,9 @@
 'use client';
 
-import { useId, type Ref } from 'react';
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronsRight,
-  Clock,
-  Download,
-  FileArchive,
-  Loader2,
-  Network,
-  XCircle,
-} from 'lucide-react';
+import { useId, type ComponentType, type Ref } from 'react';
+import { ChevronsRight } from "lucide-react";
+import { Icono as IconoKit } from "@flit/ui/Icono";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
 import type { StatusTone } from '@/components/atom/StatusBadge';
 import { MENSAJE_REINTENTAR_DESCARGA } from '@/lib/api/consolidado-lotes-client';
 import {
@@ -114,12 +106,12 @@ export function textoEstadoLote(lote: LoteConsolidados, expirado: boolean): stri
   }
 }
 
-const ICONO: Record<StatusTone, typeof Clock> = {
-  info: Clock,
-  warning: AlertTriangle,
-  success: CheckCircle2,
-  danger: XCircle,
-  neutral: FileArchive,
+const ICONO: Record<StatusTone, ComponentType<IconoComoProps>> = {
+  info: iconoComo("reloj"),
+  warning: iconoComo("alerta"),
+  success: iconoComo("check"),
+  danger: iconoComo("cerrar"),
+  neutral: iconoComo("archivo"),
 };
 
 /** Icono del tono (check success / alerta warning / X danger / reloj info / archivo neutral), decorativo. */
@@ -217,7 +209,7 @@ export function LoteDescargaAlertCard({
       // sobre el contenido y el tinte de `--badge-*-bg` es translúcido. Sombra = token `shadow.card`
       // de flit_design_tokens.json. Al minimizar se desliza a la derecha en ~200 ms solo si el
       // sistema permite movimiento (prefers-reduced-motion).
-      className={`rounded-xl border bg-card px-3 py-2 text-xs shadow-[0_8px_24px_rgba(22,39,68,0.08)] motion-safe:transition-[transform,opacity] motion-safe:duration-200 motion-safe:ease-out motion-reduce:transition-none ${
+      className={`rounded-xl border bg-card px-3 py-2 text-xs shadow-[var(--shadow-card)] motion-safe:transition-[transform,opacity] motion-safe:duration-200 motion-safe:ease-out motion-reduce:transition-none ${
         minimizado ? 'pointer-events-none translate-x-[calc(100%+1.5rem)] opacity-0' : 'translate-x-0 opacity-100'
       } ${className ?? ''}`}
       style={{
@@ -265,7 +257,7 @@ export function LoteDescargaAlertCard({
             data-testid="lote-alcance-red"
             className="mt-1 inline-flex max-w-full items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 text-xs font-semibold text-flit-brand"
           >
-            <Network className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <IconoKit nombre="integraciones" className="h-3 w-3 shrink-0" />
             <span className="sr-only">Alcance: </span>
             <span className="truncate" title={alcance}>
               {alcance}
@@ -282,7 +274,7 @@ export function LoteDescargaAlertCard({
                 aria-valuemin={0}
                 aria-valuemax={lote.total}
                 aria-valuenow={lote.procesados}
-                className="h-1 w-full overflow-hidden rounded-full bg-flit-gray dark:bg-white/10"
+                className="h-1 w-full overflow-hidden rounded-full bg-flit-gray dark:bg-secondary"
               >
                 <div
                   className="h-full rounded-full transition-[width]"
@@ -314,7 +306,7 @@ export function LoteDescargaAlertCard({
                   className="-mr-1 inline-flex shrink-0 items-center gap-1 rounded-full px-1.5 py-0.5 font-semibold transition hover:bg-[var(--badge-danger-bg)] focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-wait disabled:opacity-60"
                   style={{ color: 'var(--badge-danger-fg)' }}
                 >
-                  {cancelando ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+                  {cancelando ? <IconoKit nombre="girador" className="h-3.5 w-3.5 animate-spin" /> : null}
                   Cancelar
                 </button>
               ) : null}
@@ -329,7 +321,7 @@ export function LoteDescargaAlertCard({
         {conPartes ? (
           <ul
             aria-label="Partes de la descarga"
-            className="mt-1.5 max-h-24 divide-y divide-flit-gray overflow-y-auto border-t border-flit-gray dark:divide-white/10 dark:border-white/10"
+            className="mt-1.5 max-h-24 divide-y divide-flit-gray overflow-y-auto border-t border-flit-gray dark:divide-white/10 dark:border-border"
           >
             {partesConPdf.map((parte) => {
               const descargando = descargandoParte === parte.numero;
@@ -347,9 +339,9 @@ export function LoteDescargaAlertCard({
                     className="inline-flex shrink-0 items-center gap-1 rounded-full border border-flit-brand/40 px-2 py-0.5 font-semibold text-flit-brand transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-wait disabled:opacity-60"
                   >
                     {descargando ? (
-                      <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+                      <IconoKit nombre="girador" className="h-3.5 w-3.5 animate-spin" />
                     ) : (
-                      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                      <IconoKit nombre="nube-bajar" className="h-3.5 w-3.5" />
                     )}
                     Descargar
                   </button>

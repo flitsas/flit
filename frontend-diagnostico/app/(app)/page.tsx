@@ -1,43 +1,45 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { useSesion } from "@/components/DiagnosticoShell";
-import { TARJETA_CLS } from "@/components/configuracion/estilos";
-import { CapturaExpress } from "@/components/express/CapturaExpress";
-import { ListadoDiagnosticos } from "@/components/listado/ListadoDiagnosticos";
+import { Dashboard } from "@/components/estadisticas/Dashboard";
+import { puedeVerReportes, tieneVistaGlobal, type CapacidadesDiagnostico } from "@/lib/sesion";
 
 /**
- * Pantalla base de Diagnóstico (HU #13732): la tarjeta título con la compañía de la sesión. El shell solo la muestra con
- * la sesión cargada; el loader, el error y la 403 los resuelve él. Con la capacidad crearDiagnosticos la tarjeta trae
- * además «Placa o VIN» + «Diagnosticar» y «Carga masiva» (HU #14085), que abren la pantalla única /diagnosticos/nuevo en
- * Express (con la placa precargada) o en Masivo; la API vuelve a exigir el permiso al crear. Con verDiagnosticos, debajo,
- * el listado de diagnósticos de la compañía con sus filtros en la URL (HU #13852, decisión Q6); el vacío lo pinta el
- * listado cuando la compañía no tiene diagnósticos. useSearchParams va bajo Suspense.
+ * Raíz de Diagnóstico = Dashboard (HU #14580, U7, diseño §c C1): entrar al producto (desde el hub o por /) abre los
+ * indicadores para todos los roles. Con la capacidad verEstadisticasGlobales, la vista global con selector de compañía
+ * (Q4); si no, la compañía de la sesión. El listado de siempre vive en /diagnosticos (los enlaces viejos con su query
+ * los redirige next.config.ts). Sin verDiagnosticos ni vista global, la primera ruta que el rol sí puede abrir
+ * (`destinoSinDashboard`); la 403 solo si no tiene ninguna. useSearchParams va bajo Suspense.
  */
-export default function Inicio() {
+/**
+ * Adónde va quien no puede ver el Dashboard (CR-FE-3, U7): /diagnosticos con ver o crear (con solo crear, esa página
+ * muestra las tarjetas Express y Masivo); si no, /reportes con verReportes o la vista global; sin ninguna, la 403.
+ */
+function destinoSinDashboard(capacidades: CapacidadesDiagnostico | undefined): string {
+  if (capacidades?.verDiagnosticos === true || capacidades?.crearDiagnosticos === true) return "/diagnosticos";
+  if (puedeVerReportes(capacidades)) return "/reportes";
+  return "/403?code=SIN_PERMISOS_DIAGNOSTICO";
+}
+
+export default function Raiz() {
+  const router = useRouter();
   const { sesion } = useSesion();
-  const empresa = sesion?.empresa.nombre;
-  const puedeCrear = sesion?.capacidades.crearDiagnosticos ?? false;
-  const puedeVer = sesion?.capacidades.verDiagnosticos ?? false;
+  const capacidades = sesion?.capacidades;
+  const vistaGlobal = tieneVistaGlobal(capacidades);
+  const puedeVer = vistaGlobal || capacidades?.verDiagnosticos === true;
+  const destino = sesion !== null && !puedeVer ? destinoSinDashboard(capacidades) : null;
 
+  useEffect(() => {
+    if (destino) router.replace(destino);
+  }, [destino, router]);
+
+  if (!sesion || !puedeVer) return null;
   return (
-    <>
-      <section aria-labelledby="diagnostico-titulo" className={`${TARJETA_CLS} flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between`}>
-        <div>
-          <h1 id="diagnostico-titulo" className="text-2xl font-semibold text-flit-primary dark:text-white">
-            Diagnóstico vehicular
-          </h1>
-          {empresa && <p className="mt-1 text-sm font-medium text-[var(--nav-texto)] dark:text-slate-300">{empresa}</p>}
-        </div>
-        {puedeCrear && <CapturaExpress />}
-      </section>
-
-      {puedeVer && (
-        <Suspense fallback={<VehicleLoader label="Cargando los diagnósticos…" />}>
-          <ListadoDiagnosticos />
-        </Suspense>
-      )}
-    </>
+    <Suspense fallback={<VehicleLoader label="Cargando el resumen…" />}>
+      <Dashboard vistaGlobal={vistaGlobal} puedeCrear={capacidades?.crearDiagnosticos === true} empresaNombre={sesion.empresa.nombre} />
+    </Suspense>
   );
 }

@@ -7,42 +7,55 @@ namespace Flit.Diagnostico.Domain.Consultas;
 public sealed record DecisionReintento(bool Reintentar, DateTimeOffset? DisponibleDesde, int IntentosAuto);
 
 /// <summary>
-/// Reintentos automáticos de una celda (HU #13737, F03-H6, D-12): solo de errores transitorios
-/// (<see cref="ClasificadorErrores"/>), con backoff exponencial <c>5 s × 2^(n−1)</c> (n = número del reintento: 5, 10 y 20
-/// segundos) y hasta <see cref="MaxReintentos"/>, que es configuración global de la aplicación en [0, 3] (por defecto 1).
-/// <c>intentos_auto</c> cuenta los reintentos ya programados: un transitorio con <c>intentos_auto</c> menor que el máximo vuelve a
-/// la cola; un definitivo, o los reintentos agotados, dejan la celda en ERROR reprocesable (el reproceso es F03-H8). El instante
-/// lo da quien llama (reloj inyectable): la política no duerme ni mira el reloj del sistema.
+/// Reintentos automáticos de una celda (HU #13737, F03-H6, D-12; ajuste 2026-11-11 Punto 3, decisión 3.1): solo de errores
+/// transitorios (<see cref="ClasificadorErrores"/>), con una espera FIJA entre intentos (<see cref="Espera"/>, por defecto
+/// <see cref="EsperaPorDefecto"/> = 2 min, configurable en [<see cref="EsperaMinima"/>, <see cref="EsperaMaxima"/>]) y hasta
+/// <see cref="MaxReintentos"/>, que es configuración global de la aplicación en [0, 3] (por defecto 3). <c>intentos_auto</c> cuenta
+/// los reintentos ya programados: un transitorio con <c>intentos_auto</c> menor que el máximo vuelve a la cola; un definitivo, o
+/// los reintentos agotados, dejan la celda en ERROR reprocesable (reproceso por celda, F03-H8, o reintento manual de las pegadas,
+/// <see cref="CriterioPegada"/>). El instante lo da quien llama (reloj inyectable): la política no duerme ni mira el reloj del
+/// sistema.
 /// </summary>
 /// <example>
 /// <code>
-/// var decision = new PoliticaReintentos(opciones.MaxReintentos).Decidir(resultado.TipoError, celda.IntentosAuto, reloj.GetUtcNow());
+/// var decision = new PoliticaReintentos(opciones.MaxReintentos, opciones.EsperaReintento).Decidir(resultado.TipoError, celda.IntentosAuto, reloj.GetUtcNow());
 /// </code>
 /// </example>
 public sealed class PoliticaReintentos
 {
     public const int Minimo = 0;
     public const int Maximo = 3;
-    public const int PorDefecto = 1;
+    public const int PorDefecto = 3;
 
-    private static readonly TimeSpan Base = TimeSpan.FromSeconds(5);
+    /// <summary>Espera entre intentos por defecto (Punto 3, decisión 3.1).</summary>
+    public static readonly TimeSpan EsperaPorDefecto = TimeSpan.FromMinutes(2);
+
+    /// <summary>Espera mínima permitida.</summary>
+    public static readonly TimeSpan EsperaMinima = TimeSpan.FromSeconds(1);
+
+    /// <summary>Espera máxima permitida (muy por debajo del TTL de 24 h de la cola de resultados).</summary>
+    public static readonly TimeSpan EsperaMaxima = TimeSpan.FromHours(1);
 
     public PoliticaReintentos(int maxReintentos)
+        : this(maxReintentos, EsperaPorDefecto)
+    {
+    }
+
+    public PoliticaReintentos(int maxReintentos, TimeSpan espera)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(maxReintentos, Minimo);
         ArgumentOutOfRangeException.ThrowIfGreaterThan(maxReintentos, Maximo);
+        ArgumentOutOfRangeException.ThrowIfLessThan(espera, EsperaMinima);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(espera, EsperaMaxima);
         MaxReintentos = maxReintentos;
+        Espera = espera;
     }
 
     /// <summary>Reintentos automáticos permitidos por celda.</summary>
     public int MaxReintentos { get; }
 
-    /// <summary>Espera antes del reintento número <paramref name="reintento"/> (1, 2, 3…): 5 s × 2^(n−1).</summary>
-    public static TimeSpan Espera(int reintento)
-    {
-        ArgumentOutOfRangeException.ThrowIfLessThan(reintento, 1);
-        return Base * Math.Pow(2, reintento - 1);
-    }
+    /// <summary>Espera fija antes de cada reintento.</summary>
+    public TimeSpan Espera { get; }
 
     /// <param name="tipoError">Código del error con que terminó la ejecución.</param>
     /// <param name="intentosAuto">Reintentos ya programados para la celda.</param>
@@ -53,7 +66,6 @@ public sealed class PoliticaReintentos
         if (ClasificadorErrores.Clasificar(tipoError) != ClaseError.Transitorio || intentosAuto >= MaxReintentos)
             return new DecisionReintento(false, null, intentosAuto);
 
-        var reintento = intentosAuto + 1;
-        return new DecisionReintento(true, ahora + Espera(reintento), reintento);
+        return new DecisionReintento(true, ahora + Espera, intentosAuto + 1);
     }
 }
