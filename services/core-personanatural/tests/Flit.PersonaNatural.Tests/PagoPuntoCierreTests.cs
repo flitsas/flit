@@ -108,8 +108,10 @@ public sealed partial class PagoPuntoTests
     }
 
     [Fact]
-    public async Task HU14464_ElCierreNoLlevaDatosPersonalesDeLasPartes()
+    public async Task HU14464_ElCierreSoloLlevaElNombreDeLasPartes_SinDocumentoNiContacto()
     {
+        // Cambio del PO (2026-11-18, diseño de Lovable): la confirmación muestra la tarjeta «Actores» con el nombre de las
+        // partes. Documento, correo y teléfono siguen sin viajar.
         await IniciarAsync();
         var (id, token) = await EnPagoAsync();
         await Pago(HttpMethod.Post, "/caja", token);
@@ -117,7 +119,8 @@ public sealed partial class PagoPuntoTests
 
         var cuerpo = await (await Pago(HttpMethod.Get, "/cierre", token)).Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
 
-        foreach (var dato in new[] { "Persona de Prueba", Vendedor, Comprador, "example.org", "3001234567", "ABC123" })
+        cuerpo.Should().Contain("Persona de Prueba");
+        foreach (var dato in new[] { Vendedor, Comprador, "example.org", "3001234567" })
             cuerpo.Should().NotContain(dato);
     }
 
@@ -136,8 +139,12 @@ public sealed partial class PagoPuntoTests
         var porRadicado = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, "/cierre/TR-2026-000124", null))).RootElement;
         var delTramite = (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, "/cierre", token))).RootElement;
 
-        porCodigo.GetRawText().Should().Be(delTramite.GetRawText());
-        porRadicado.GetRawText().Should().Be(delTramite.GetRawText());
+        // La consulta por código o radicado es el mismo cierre SIN el resumen (nombres de las partes, documentos): ese solo
+        // viaja en la sesión del trámite.
+        porCodigo.TryGetProperty("resumen", out _).Should().BeFalse();
+        delTramite.TryGetProperty("resumen", out _).Should().BeTrue();
+        SinResumen(porCodigo).Should().Be(SinResumen(delTramite));
+        SinResumen(porRadicado).Should().Be(SinResumen(delTramite));
         porCodigo.GetProperty("estadoCierre").GetString().Should().Be("registrado");
     }
 
@@ -470,4 +477,8 @@ public sealed partial class PagoPuntoTests
                 id, new DatosPersona("vendedor", 1, "CC", Vendedor, "Persona de Prueba", correo, "3001234567", null), TestContext.Current.CancellationToken);
             return true;
         });
+
+    /// <summary>El cierre sin la propiedad <c>resumen</c>, para comparar la consulta pública con el de la sesión.</summary>
+    private static string SinResumen(JsonElement cierre) =>
+        JsonSerializer.Serialize(cierre.EnumerateObject().Where(p => p.Name != "resumen").ToDictionary(p => p.Name, p => p.Value));
 }
