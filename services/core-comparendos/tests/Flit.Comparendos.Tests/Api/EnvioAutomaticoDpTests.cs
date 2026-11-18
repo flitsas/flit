@@ -36,6 +36,7 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         api.Ganchos.Limpiar();
         api.Productos.Apagadas.Clear();
         api.Productos.Fallan.Clear();
+        api.Productos.Expiran.Clear();
         return ValueTask.CompletedTask;
     }
 
@@ -398,6 +399,11 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         (await ArchivosAsync(empresa) - antesJob).Should().Be(delta, "el trabajo no deja ni más ni menos archivos que un envío manual");
     }
 
+    /// <remarks>
+    /// OJO: esta prueba NO garantiza que se ejerza el camino del deadlock (40P01) ni del índice único: pasa igual si el cruce nunca
+    /// ocurre en las 20 vueltas. Lo que prueba es el resultado observable (un solo DP, el manual nunca da 5xx, el trabajo no falla).
+    /// El índice único y el candado ajeno se ejercen de forma determinista en las dos pruebas de «contención» de más arriba.
+    /// </remarks>
     [Fact]
     public async Task Envio_manual_y_trabajo_sobre_el_mismo_comparendo_dejan_un_solo_dp_y_el_manual_nunca_da_5xx()
     {
@@ -502,6 +508,106 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
 
         (await DpsAsync(rota)).Should().BeEmpty();
         (await DpsAsync(sana)).Should().ContainSingle("la otra empresa se procesó igual");
+    }
+
+    [Fact]
+    public async Task Un_timeout_de_una_empresa_no_tumba_a_las_demas_pero_una_cancelacion_real_si_se_propaga()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var lenta = await EmpresaListaAsync();
+        await ComparendosAsync(lenta, "AUTO-LENTA", 1);
+        var normal = await EmpresaListaAsync();
+        await ComparendosAsync(normal, "AUTO-NORMAL", 1);
+        api.Productos.Expiran[lenta] = true;
+
+        await CorrerAsync(null);
+
+        (await DpsAsync(lenta)).Should().BeEmpty();
+        (await DpsAsync(normal)).Should().ContainSingle("el timeout de otra empresa (TaskCanceledException sin cancelación) no la frena");
+
+        using var cancelada = new CancellationTokenSource();
+        await cancelada.CancelAsync();
+        await using var scope = api.App.Services.CreateAsyncScope();
+        var ejecutor = scope.ServiceProvider.GetServices<IEjecutorTrabajo>().OfType<EnvioAutomaticoDp>().Single();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ejecutor.EjecutarAsync(new SolicitudTrabajo(TipoTrabajo.EnvioAutomaticoDp, Disparo.Programado, normal), cancelada.Token));
+    }
+
+    [Fact]
+    public async Task Una_colision_de_radicado_es_un_error_real_no_un_falso_ya_tiene_dp()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = await EmpresaListaAsync();
+        await AlertasAsync(empresa);
+        var ids = await ComparendosAsync(empresa, "AUTO-RADICADO", 3);
+        var ordenados = ids.OrderBy(x => x.Key).Select(x => x.Value).ToList();
+        var dci = await TipologiaAsync("DCI");
+        // Un DP ya existente (p. ej. migrado de V1) tiene justo el radicado que le tocaría al siguiente envío: la reserva no lo ve.
+        var momento = new DateTimeOffset(2026, 11, 18, 10, 15, 7, 123, TimeSpan.FromHours(-5));
+        api.Reloj.En(momento);
+        await api.EnDbAsync(async db =>
+        {
+            db.DerechosPeticion.Add(new DerechoPeticion
+            {
+                Id = Guid.CreateVersion7(), TenantId = empresa, ComparendoId = ordenados[0], TipologiaId = dci, PlantillaVersionId = Guid.NewGuid(),
+                Radicado = ServicioDp.FormatoRadicado("DCI", momento), OrganismoTransitoId = Guid.Parse(Organismo), DocumentoArchivoId = Guid.NewGuid(), EnviadoPor = Guid.NewGuid(), CreadoEn = momento.ToUniversalTime(), Estado = EstadoDp.Enviado,
+            });
+            (await db.Comparendos.SingleAsync(c => c.Id == ordenados[0])).TieneDp = true;
+            await db.SaveChangesAsync();
+            return 0;
+        });
+
+        // El trabajo va primero (su reserva de radicado se revierte con su transacción): la colisión es un ERROR_ENVIO anotado, no un Saltado silencioso.
+        await CorrerAsync(empresa);
+        (await DpsAsync(empresa)).Should().ContainSingle("solo queda el DP sembrado: los dos del trabajo chocaron con el radicado");
+        var errores = await api.EnDbAsync(db => db.Timeline.Where(t => t.TenantId == empresa && t.Tipo == TipoEventoTimeline.DpAutomaticoOmitido).Select(t => t.Datos).ToListAsync());
+        errores.Should().HaveCount(2).And.OnlyContain(d => d!.Contains("ERROR_ENVIO"));
+
+        // Manual: es un error del servidor de verdad, no un 409 YA_TIENE_DP mentiroso.
+        var manual = await EnviarManualAsync(empresa, ordenados[1]);
+        ((int)manual.StatusCode).Should().BeGreaterThanOrEqualTo(500);
+        (await DpsAsync(empresa)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Cinco_errores_seguidos_cortan_la_corrida_con_una_sola_alerta_clara()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = await EmpresaListaAsync();
+        await AlertasAsync(empresa);
+        await ComparendosAsync(empresa, "AUTO-SISTEMICO", 20);
+        var llamadas = 0;
+        api.Ganchos.AlArmarDp = () =>
+        {
+            Interlocked.Increment(ref llamadas);
+            throw new InvalidOperationException("El servicio de archivos no responde (prueba).");
+        };
+
+        await CorrerAsync(empresa);
+
+        llamadas.Should().Be(EnvioAutomaticoDp.MaxErroresConsecutivos, "se corta al llegar al límite, no se intentan los 20");
+        (await DpsAsync(empresa)).Should().BeEmpty();
+        (await api.EnDbAsync(db => db.Timeline.CountAsync(t => t.TenantId == empresa && t.Tipo == TipoEventoTimeline.DpAutomaticoOmitido))).Should().Be(EnvioAutomaticoDp.MaxErroresConsecutivos);
+        var resumenes = await api.EnDbAsync(db => db.Comunicaciones.AsNoTracking().Where(c => c.TenantId == empresa && c.Tipo == TipoComunicacion.ResumenEnvioAutomaticoDp).ToListAsync());
+        resumenes.Should().ContainSingle();
+        await using var scope = api.App.Services.CreateAsyncScope();
+        var cuerpo = await scope.ServiceProvider.GetRequiredService<Flit.Comparendos.Api.Modulos.Comun.RegistroArchivos>().LeerAsync(resumenes[0].CuerpoHtmlArchivoId, TestContext.Current.CancellationToken);
+        System.Text.Encoding.UTF8.GetString(cuerpo!.Value.Contenido).Should().Contain("se detuvo por errores repetidos");
+    }
+
+    [Fact]
+    public async Task Un_envio_exitoso_reinicia_el_contador_de_errores_seguidos()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = await EmpresaListaAsync();
+        await ComparendosAsync(empresa, "AUTO-INTERCALADO", 20);
+        var llamadas = 0;
+        // 4 fallos y 1 éxito, una y otra vez: nunca hay 5 seguidos.
+        api.Ganchos.AlArmarDp = () => Interlocked.Increment(ref llamadas) % 5 == 0 ? Task.CompletedTask : throw new InvalidOperationException("Falla intermitente (prueba).");
+
+        await CorrerAsync(empresa);
+
+        llamadas.Should().Be(20, "no se cortó");
+        (await DpsAsync(empresa)).Should().HaveCount(4);
     }
 
     [Fact]
@@ -732,6 +838,8 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         var segundo = Stopwatch.StartNew();
         await CorrerAsync(conOrganismo);
         segundo.Stop();
+        (await api.EnDbAsync(db => db.Timeline.CountAsync(t => t.TenantId == conOrganismo && t.Tipo == TipoEventoTimeline.DpAutomaticoOmitido))).Should().Be(2000, "el segundo día no agrega anotaciones");
+        segundo.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
 
         // Con firma: sale el tope (50) y el resto espera.
         var rlId = await api.EnDbAsync(db => db.RepresentantesLegales.Where(r => r.TenantId == conOrganismo).Select(r => r.Id).SingleAsync());
