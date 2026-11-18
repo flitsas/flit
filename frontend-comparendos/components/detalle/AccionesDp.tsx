@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
+import { PanelAlegar } from "@/components/detalle/PanelAlegar";
 import { useToast } from "@/components/Toast";
 import { Datos } from "@/components/ui/Acordeon";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
@@ -249,8 +250,14 @@ export function AccionesDp({ ctx }: { ctx: ContextoDetalle }) {
   if (!capacidades(ctx.sesion).derechosPeticion) return null;
 
   if (!d.dp) {
-    if (!d.activo || d.pagado || !tienePermiso(ctx.sesion, P.dpGenerar)) return null;
-    return <GenerarDp ctx={ctx} />;
+    if (!tienePermiso(ctx.sesion, P.dpGenerar)) return null;
+    // Inactivo o pagado: no se puede generar, pero el panel explica por qué en vez de dejar el bloque vacío.
+    return (
+      <div className="flex flex-col gap-4">
+        <PanelAlegar ctx={ctx} />
+        {d.activo && !d.pagado && <GenerarDp ctx={ctx} />}
+      </div>
+    );
   }
 
   const reintentar = async () => {

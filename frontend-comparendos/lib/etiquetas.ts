@@ -127,6 +127,7 @@ export const TRABAJO: Record<string, string> = {
   ReporteSemanal: "Reporte semanal",
   ReporteMensual: "Reporte mensual",
   SincronizacionOrganismos: "Réplica de organismos de tránsito",
+  EnvioAutomaticoDp: "Envío automático de derechos de petición",
 };
 
 export const TIPO_ALERTA: Record<string, string> = {
