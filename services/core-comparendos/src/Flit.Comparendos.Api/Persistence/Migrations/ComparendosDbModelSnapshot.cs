@@ -2984,6 +2984,39 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.ToTable("organismo_transito_alias", "comparendos");
                 });
 
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.OrganismoTransitoDp", b =>
+                {
+                    b.Property<Guid>("OrganismoTransitoId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("organismo_transito_id");
+
+                    b.Property<DateTimeOffset?>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid?>("ActualizadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actualizado_por");
+
+                    b.Property<bool>("AdmiteDpPorCorreo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("admite_dp_por_correo");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid?>("CreadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por");
+
+                    b.HasKey("OrganismoTransitoId")
+                        .HasName("pk_organismo_transito_dp");
+
+                    b.ToTable("organismo_transito_dp", "comparendos");
+                });
+
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.Pago", b =>
                 {
                     b.Property<Guid>("Id")

@@ -27,6 +27,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
     public DbSet<OrganismoTransito> OrganismosTransito => Set<OrganismoTransito>();
     public DbSet<OrganismoTransitoAlias> OrganismosTransitoAlias => Set<OrganismoTransitoAlias>();
     public DbSet<PermisoOtEmpresa> PermisosOtEmpresa => Set<PermisoOtEmpresa>();
+    public DbSet<OrganismoTransitoDp> OrganismosTransitoDp => Set<OrganismoTransitoDp>();
     public DbSet<MunicipioFuente> MunicipiosFuente => Set<MunicipioFuente>();
     public DbSet<TipologiaDp> Tipologias => Set<TipologiaDp>();
     public DbSet<TipologiaEmpresa> TipologiasEmpresa => Set<TipologiaEmpresa>();
@@ -211,6 +212,11 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.Property(x => x.Origen).HasMaxLength(20);
             e.HasIndex(x => x.TextoNormalizado).IsUnique();
             e.HasOne<OrganismoTransito>().WithMany().HasForeignKey(x => x.OrganismoTransitoId);
+        });
+        m.Entity<OrganismoTransitoDp>(e =>
+        {
+            e.ToTable("organismo_transito_dp");
+            e.HasKey(x => x.OrganismoTransitoId);
         });
         m.Entity<PermisoOtEmpresa>(e =>
         {

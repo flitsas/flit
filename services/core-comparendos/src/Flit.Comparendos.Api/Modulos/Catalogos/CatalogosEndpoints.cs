@@ -17,9 +17,9 @@ namespace Flit.Comparendos.Api.Modulos.Catalogos;
 public static class CatalogosEndpoints
 {
     public sealed record OrganismoDto(Guid Id, string Codigo, string Nombre, string? Municipio, string? Departamento,
-        IReadOnlyList<string> CorreosRadicacion, bool PermiteCambioContraventor, bool ActivoPlataforma);
+        IReadOnlyList<string> CorreosRadicacion, bool PermiteCambioContraventor, bool ActivoPlataforma, bool AdmiteDpPorCorreo);
 
-    public sealed record CambioOrganismo(IReadOnlyList<string>? CorreosRadicacion, bool? PermiteCambioContraventor);
+    public sealed record CambioOrganismo(IReadOnlyList<string>? CorreosRadicacion, bool? PermiteCambioContraventor, bool? AdmiteDpPorCorreo = null);
 
     public sealed record AliasDto(Guid Id, string Texto, Guid OrganismoTransitoId, string Organismo, string Origen);
 
@@ -51,8 +51,8 @@ public static class CatalogosEndpoints
         admin.MapPut("/infracciones", CargarInfracciones);
     }
 
-    private static OrganismoDto Dto(OrganismoTransito o) =>
-        new(o.Id, o.Codigo, o.Nombre, o.Municipio, o.Departamento, o.CorreosRadicacion, o.PermiteCambioContraventor, o.ActivoPlataforma);
+    private static OrganismoDto Dto(OrganismoTransito o, bool admiteDp) =>
+        new(o.Id, o.Codigo, o.Nombre, o.Municipio, o.Departamento, o.CorreosRadicacion, o.PermiteCambioContraventor, o.ActivoPlataforma, admiteDp);
 
     private static async Task<IResult> ListarOrganismos(string? buscar, bool? sinCorreo, int? pagina, int? tamano, ComparendosDb db, CancellationToken ct)
     {
@@ -69,7 +69,10 @@ public static class CatalogosEndpoints
 
         var total = await q.CountAsync(ct).ConfigureAwait(false);
         var items = await q.OrderBy(o => o.Nombre).Skip((p - 1) * t).Take(t).ToListAsync(ct).ConfigureAwait(false);
-        return Results.Ok(new Pagina<OrganismoDto>(items.Select(Dto).ToList(), total, p, t));
+        var ids = items.Select(o => o.Id).ToList();
+        var admiten = await db.OrganismosTransitoDp.AsNoTracking().Where(x => ids.Contains(x.OrganismoTransitoId) && x.AdmiteDpPorCorreo)
+            .Select(x => x.OrganismoTransitoId).ToListAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new Pagina<OrganismoDto>(items.Select(o => Dto(o, admiten.Contains(o.Id))).ToList(), total, p, t));
     }
 
     private static async Task<IResult> CambiarOrganismo(Guid id, CambioOrganismo pedido, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, Reloj reloj, CancellationToken ct)
@@ -77,11 +80,21 @@ public static class CatalogosEndpoints
         var ot = await db.OrganismosTransito.FirstOrDefaultAsync(o => o.Id == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("El organismo de tránsito");
         var correos = pedido.CorreosRadicacion is null ? ot.CorreosRadicacion : NormalizarCorreos(pedido.CorreosRadicacion);
         var permite = pedido.PermiteCambioContraventor ?? ot.PermiteCambioContraventor;
+        var dp = await db.OrganismosTransitoDp.FirstOrDefaultAsync(x => x.OrganismoTransitoId == id, ct).ConfigureAwait(false);
+        var admite = pedido.AdmiteDpPorCorreo ?? dp?.AdmiteDpPorCorreo ?? false;
         var cambios = Auditoria.Diferencias(
             ("correos_radicacion", string.Join(", ", ot.CorreosRadicacion), string.Join(", ", correos)),
-            ("permite_cambio_contraventor", ot.PermiteCambioContraventor, permite));
+            ("permite_cambio_contraventor", ot.PermiteCambioContraventor, permite),
+            ("admite_dp_por_correo", dp?.AdmiteDpPorCorreo ?? false, admite));
         if (cambios.Length > 0)
         {
+            if (dp is null)
+            {
+                dp = new OrganismoTransitoDp { OrganismoTransitoId = id, CreadoEn = reloj.Ahora, CreadoPor = usuario.Id };
+                db.OrganismosTransitoDp.Add(dp);
+            }
+
+            (dp.AdmiteDpPorCorreo, dp.ActualizadoEn, dp.ActualizadoPor) = (admite, reloj.Ahora, usuario.Id);
             ot.CorreosRadicacion = [.. correos];
             ot.PermiteCambioContraventor = permite;
             ot.ActualizadoEn = reloj.Ahora;
@@ -90,7 +103,7 @@ public static class CatalogosEndpoints
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
 
-        return Results.Ok(Dto(ot));
+        return Results.Ok(Dto(ot, admite));
     }
 
     /// <summary>Correos válidos, en minúsculas, sin repetidos; uno inválido rechaza todo el cambio.</summary>
