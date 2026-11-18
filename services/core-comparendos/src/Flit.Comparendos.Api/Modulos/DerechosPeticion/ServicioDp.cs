@@ -249,6 +249,7 @@ public sealed class ServicioDp(
             DocumentoArchivoId = documentoId,
             LoteId = loteId,
             EnviadoPor = actor.UsuarioId ?? Guid.Empty,
+            EnvioAutomatico = actor.Tipo == ActorTipo.Scheduler,
             CreadoEn = reloj.Ahora,
             CreadoPor = actor.UsuarioId,
         };
