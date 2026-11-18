@@ -310,6 +310,7 @@ export function DiagnosticoPunto({
                   onVolver={() => setPaso("requisitos")}
                   onIrActores={() => setPaso("actores")}
                   onPagado={() => setPaso("envio")}
+                  generarAutomatico={!avisoPago}
                 />
               </>
             ) : paso === "envio" && solicitudIdPunto ? (

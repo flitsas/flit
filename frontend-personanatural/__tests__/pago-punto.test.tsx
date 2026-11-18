@@ -61,7 +61,7 @@ describe("Paso Pago del punto · #14451", () => {
   afterEach(() => vi.useRealTimers());
 
   it("muestra cargando y luego el desglose del organismo y de FLIT con el total, sin envío ni domicilio", async () => {
-    montar();
+    montar({ [GET_PAGO]: () => json(estado({ cobro: VIGENTE })) });
     expect(screen.getByText("Cargando el pago…")).toBeInTheDocument();
 
     expect(await screen.findByText("Tarifa del organismo")).toBeInTheDocument();
@@ -72,20 +72,20 @@ describe("Paso Pago del punto · #14451", () => {
     expect(screen.getByText("Total a pagar").parentElement).toHaveTextContent("75.000");
     expect(screen.getByText("Total a pagar").parentElement).toHaveClass("border-t", "text-lg");
     expect(screen.queryByText(/envío|domicilio/i)).toBeNull();
-    expect(screen.getByRole("button", { name: "Generar pago en caja" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: /Generar pago/ })).toBeNull();
     expect(screen.queryByText(/pasarela|tarjeta|PSE/i)).toBeNull();
   });
 
-  it("«Generar pago en caja» muestra la carga, luego el ID con copiar, el total, la vigencia y el estado pendiente", async () => {
+  it("al entrar genera el pago solo (una llamada): muestra la carga, luego el ID con copiar, la vigencia y el estado pendiente", async () => {
     let habilitado = false;
     let liberar: (r: Response) => void = () => undefined;
     const { llamadas } = montar({
       [GET_PAGO]: () => json(estado(habilitado ? { cobro: VIGENTE } : {})),
       [CAJA]: () => new Promise<Response>((r) => (liberar = r)),
     });
-    fireEvent.click(await screen.findByRole("button", { name: "Generar pago en caja" }));
 
     expect(await screen.findByText("Generando el pago en caja…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Generar pago/ })).toBeNull();
     habilitado = true;
     await act(async () => liberar(json({ codigoCobro: "PN-2026-0042", habilitadoEn: VIGENTE.habilitadoEn, venceEn: VIGENTE.venceEn, desglose: DESGLOSE, totalCop: 75000 })));
 
@@ -99,6 +99,13 @@ describe("Paso Pago del punto · #14451", () => {
     fireEvent.click(screen.getByRole("button", { name: /Copiar código/ }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith("PN-2026-0042"));
     expect(await screen.findByRole("button", { name: /Copiado/ })).toBeInTheDocument();
+  });
+
+  it("con un cobro vigente (retomar o recargar) lo muestra sin regenerarlo", async () => {
+    const { llamadas } = montar({ [GET_PAGO]: () => json(estado({ cobro: VIGENTE })) });
+    expect(await screen.findByTestId("codigo-cobro")).toHaveTextContent("PN-2026-0042");
+    expect(llamadas).not.toContain(CAJA);
+    expect(screen.queryByRole("button", { name: /Generar pago|Reintentar/ })).toBeNull();
   });
 
   it("con el cobro vigente sondea y, cuando aparece el pago, refresca la solicitud y pasa al cierre", async () => {
@@ -126,6 +133,7 @@ describe("Paso Pago del punto · #14451", () => {
 
     expect(await screen.findByText(/El pago en caja venció/)).toBeInTheDocument();
     expect(screen.queryByTestId("codigo-cobro")).toBeNull();
+    expect(llamadas).not.toContain(CAJA);
     fireEvent.click(screen.getByRole("button", { name: "Generar pago en caja de nuevo" }));
     await waitFor(() => expect(llamadas.filter((l) => l === CAJA)).toHaveLength(1));
   });
@@ -158,12 +166,23 @@ describe("Paso Pago del punto · #14451", () => {
     expect(screen.getByRole("button", { name: "Atrás" })).toBeEnabled();
   });
 
-  it("si habilitar la caja falla muestra el motivo del servidor y permite reintentar", async () => {
-    montar({ [CAJA]: () => problema(409, "sin_tarifa", { message: "El trámite no tiene tarifa vigente en este organismo." }) });
-    fireEvent.click(await screen.findByRole("button", { name: "Generar pago en caja" }));
+  it("si la generación automática falla muestra el motivo del servidor y «Reintentar» vuelve a llamar", async () => {
+    let falla = true;
+    const { llamadas } = montar({
+      [CAJA]: () => (falla ? problema(409, "sin_tarifa", { message: "El trámite no tiene tarifa vigente en este organismo." }) : json({ codigoCobro: "PN-2026-0042", habilitadoEn: VIGENTE.habilitadoEn, venceEn: VIGENTE.venceEn, desglose: DESGLOSE, totalCop: 75000 })),
+    });
 
     expect(await screen.findByRole("alert")).toHaveTextContent("El trámite no tiene tarifa vigente en este organismo.");
-    expect(screen.getByRole("button", { name: "Generar pago en caja" })).toBeEnabled();
+    expect(llamadas.filter((l) => l === CAJA)).toHaveLength(1);
+    falla = false;
+    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
+    await waitFor(() => expect(llamadas.filter((l) => l === CAJA)).toHaveLength(2));
+  });
+
+  it("con total $0 no genera pago en caja", async () => {
+    const { llamadas } = montar({ [GET_PAGO]: () => json(estado({ totalCop: 0, desglose: [] })) });
+    await screen.findByRole("button", { name: "Confirmar" });
+    expect(llamadas).not.toContain(CAJA);
   });
 
   it("si la consulta falla muestra el error con «Reintentar» y «Atrás»", async () => {
@@ -221,6 +240,7 @@ describe("Paso Pago del punto · esperar identidades #14452", () => {
     const { llamadas } = montar({
       [GET_PAGO]: () => json(validada ? estado() : enBorrador()),
       [INICIAR]: () => json(estado()),
+      [CAJA]: () => json({ codigoCobro: "PN-2026-0042", habilitadoEn: VIGENTE.habilitadoEn, venceEn: VIGENTE.venceEn, desglose: DESGLOSE, totalCop: 75000 }),
     });
     await screen.findByRole("list", { name: "Personas pendientes de validar" });
 
@@ -229,9 +249,9 @@ describe("Paso Pago del punto · esperar identidades #14452", () => {
       await vi.advanceTimersByTimeAsync(4500);
     });
 
-    expect(await screen.findByRole("button", { name: "Generar pago en caja" })).toBeEnabled();
+    await waitFor(() => expect(llamadas.filter((l) => l === CAJA)).toHaveLength(1));
     expect(screen.queryByRole("list", { name: "Personas pendientes de validar" })).toBeNull();
-    expect(llamadas.length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: /Generar pago/ })).toBeNull();
   });
 
   it("si el servidor rechaza iniciar por identidad pendiente, muestra a quien falta", async () => {
@@ -285,8 +305,8 @@ describe("Asistente del punto: pago retomado, cobro anulado y barra lateral", ()
   }
 
   it("con una solicitud reanudada arranca en Pago sin diagnóstico ni actores", async () => {
-    const llamadas = montarAsistente({ [GET_PAGO]: () => json(estado()), [INICIAR]: () => json(estado()) });
-    expect(await screen.findByRole("button", { name: "Generar pago en caja" })).toBeEnabled();
+    const llamadas = montarAsistente({ [GET_PAGO]: () => json(estado({ cobro: VIGENTE })), [INICIAR]: () => json(estado()) });
+    expect(await screen.findByTestId("codigo-cobro")).toHaveTextContent("PN-2026-0042");
     expect(screen.getByText("Paso 4 · Pago", { selector: "h2" })).toBeInTheDocument();
     expect(llamadas.some((l) => l.includes("diagnostico") || l.includes("actores"))).toBe(false);
   });
@@ -300,7 +320,7 @@ describe("Asistente del punto: pago retomado, cobro anulado y barra lateral", ()
   it("cobro anulado en el cierre: vuelve a Pago con el aviso amarillo y sin el bloque viejo", async () => {
     let anulado = false;
     let n = 0;
-    montarAsistente({
+    const llamadas = montarAsistente({
       [GET_PAGO]: () => json(anulado ? estado() : estado({ pago: PAGO })),
       [INICIAR]: () => json(estado()),
       [CIERRE]: () => {
@@ -312,7 +332,8 @@ describe("Asistente del punto: pago retomado, cobro anulado y barra lateral", ()
     expect(await screen.findByText(/Tu trámite está en proceso de registro/, {}, { timeout: 8000 })).toBeInTheDocument();
     const aviso = await screen.findByText("La caja anuló el cobro. Genera el pago de nuevo.", {}, { timeout: 10000 });
     expect(aviso).toHaveClass("border-warning");
-    expect(await screen.findByRole("button", { name: "Generar pago en caja" })).toBeEnabled();
+    expect(await screen.findByRole("button", { name: "Generar pago en caja de nuevo" })).toBeEnabled();
+    expect(llamadas).not.toContain(CAJA);
     expect(screen.queryByText(/Valor pagado/)).toBeNull();
     expect(screen.queryByText(/aún no tiene un pago confirmado/)).toBeNull();
   }, 25000);

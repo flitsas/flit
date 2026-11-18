@@ -42,9 +42,11 @@ type Props = {
   onIrActores: () => void;
   /** El pago quedó confirmado (caja o total $0): sigue el cierre. */
   onPagado: () => void;
+  /** Genera el pago en caja al entrar si no hay cobro. En falso (la caja anuló el cobro) la generación es con el botón. */
+  generarAutomatico?: boolean;
 };
 
-export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, placa, tipoNombre, onIrActores, onPagado }: Props) {
+export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, placa, tipoNombre, onIrActores, onPagado, generarAutomatico = true }: Props) {
   const queryClient = useQueryClient();
   const [medio] = useState<MedioId>(MEDIOS_DE_PAGO[0].id);
   const [falloAccion, setFalloAccion] = useState<string | null>(null);
@@ -119,6 +121,27 @@ export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, placa, t
       if (error instanceof ApiError && error.code === "total_mayor_cero") void refrescar();
     },
   });
+
+  // El pago en caja se genera solo al entrar al paso (una vez): con todo validado, total mayor que $0, sin bloqueo y sin cobro previo.
+  // Si el cobro venció o la caja lo anuló (`generarAutomatico` en falso) el total puede cambiar: ahí la acción es explícita.
+  const hayQueGenerar =
+    generarAutomatico &&
+    !!estado &&
+    !estado.pago &&
+    !lectura.data?.faltaInfo &&
+    estado.identidadesPendientes.length === 0 &&
+    !estado.bloqueo &&
+    (estado.totalCop ?? 0) > 0 &&
+    !estado.cobro;
+  const [autoLanzado, setAutoLanzado] = useState(false);
+  const autoIntentado = useRef(false);
+  const { mutate: generarCaja } = generar;
+  useEffect(() => {
+    if (!hayQueGenerar || autoIntentado.current) return;
+    autoIntentado.current = true;
+    setAutoLanzado(true);
+    generarCaja();
+  }, [hayQueGenerar, generarCaja]);
 
   const volver = (
     <Btn tone="secondary" onClick={onVolver}>
@@ -201,7 +224,8 @@ export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, placa, t
   }
 
   const total = estado.totalCop ?? null;
-  const ocupado = generar.isPending || confirmar.isPending;
+  const generandoAuto = hayQueGenerar && !autoLanzado;
+  const ocupado = generar.isPending || confirmar.isPending || generandoAuto;
   const lineas = estado.desglose ?? [];
 
   return (
@@ -244,7 +268,8 @@ export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, placa, t
               medio={medio}
               estado={estado}
               ocupado={ocupado}
-              generando={generar.isPending}
+              generando={generar.isPending || generandoAuto}
+              etiquetaGenerar={estado.cobro?.estado === "vencido" || !generarAutomatico ? "Generar pago en caja de nuevo" : "Reintentar"}
               confirmando={confirmar.isPending}
               onGenerar={() => generar.mutate()}
               onConfirmar={() => confirmar.mutate()}
@@ -278,6 +303,7 @@ function ZonaDeCobro({
   estado,
   ocupado,
   generando,
+  etiquetaGenerar,
   confirmando,
   onGenerar,
   onConfirmar,
@@ -286,6 +312,7 @@ function ZonaDeCobro({
   estado: EstadoPagoPunto;
   ocupado: boolean;
   generando: boolean;
+  etiquetaGenerar: string;
   confirmando: boolean;
   onGenerar: () => void;
   onConfirmar: () => void;
@@ -323,7 +350,7 @@ function ZonaDeCobro({
         </p>
       )}
       <Btn onClick={onGenerar} disabled={ocupado}>
-        {cobro?.estado === "vencido" ? "Generar pago en caja de nuevo" : "Generar pago en caja"}
+        {etiquetaGenerar}
       </Btn>
     </div>
   );
