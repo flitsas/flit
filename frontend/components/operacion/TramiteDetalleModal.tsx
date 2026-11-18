@@ -59,6 +59,7 @@ import type {
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { mimetypeDe } from '@/lib/documents/mimetype';
 
 const ICONO_PAGO = iconoComo("pago");
 
@@ -728,7 +729,7 @@ export function TramiteDetalleModal({
                   }
                 >
                   El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes
-                  consultarla y descargarla, pero ya no se regenera.
+                  consultarla y descargarla. Solo cambia si un administrador actualiza un documento.
                 </InlineAlert>
               )
             ) : null}
@@ -826,6 +827,10 @@ export function TramiteDetalleModal({
                                 ),
                               ),
                             )
+                      }
+                      // Bug #14604 — abre el archivo nuevo o el anterior de un documento actualizado.
+                      onVerDocumento={(a) =>
+                        void preview.open({ id: a.id, tipo: a.tipo, filename: a.filename, mimetype: mimetypeDe(a.filename) })
                       }
                       emptyMessage="Sin eventos registrados todavía."
                     />

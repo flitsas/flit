@@ -275,7 +275,7 @@ internal sealed partial class ProcedureInstanceRepository(
             .Where(i => i.DeletedAt == null
                 && (i.Status == TramiteEstado.Entregado || i.Status == TramiteEstado.Aprobado)
                 && i.Attachments.Any(a =>
-                    a.Tipo == "impronta"
+                    !a.IsHistorico && a.Tipo == "impronta"
                     && (a.Provider == null || a.Provider.ToLower() != Flit.Tramites.Domain.Documents.AttachmentProviders.Kyverum)
                     && !signedAttachmentIds.Contains(a.Id)))
             .OrderBy(i => i.CreatedAt)
@@ -2471,7 +2471,8 @@ internal sealed partial class ProcedureInstanceRepository(
                     p.ChangedAt,
                     p.CreatedBy,
                     StatusHistoryModificacionLectura.NombreActor(p.Campo, p.CreatedBy, nombre),
-                    StatusHistoryModificacionLectura.CompaniaActor(p.Campo, p.CreatedBy, compania));
+                    StatusHistoryModificacionLectura.CompaniaActor(p.Campo, p.CreatedBy, compania),
+                    p.Documento);
             })
             .ToList();
 

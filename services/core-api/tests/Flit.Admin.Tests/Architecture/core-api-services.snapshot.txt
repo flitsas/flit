@@ -767,6 +767,8 @@ Flit.Tramites.Application.UseCases.ProcedureInstances.ActorContactLookupHandler 
 Flit.Tramites.Application.UseCases.ProcedureInstances.AdjuntarLicenciaTransitoHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdjuntarLicenciaTransitoHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.AdminAnularHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdminAnularHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.AdminCambiarEstadoHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdminCambiarEstadoHandler (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.AdminCargarDocumentoHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdminCargarDocumentoHandler (Scoped)
+Flit.Tramites.Application.UseCases.ProcedureInstances.AdminDocumentoTiposHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdminDocumentoTiposHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReasignarGestorHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReasignarGestorHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReenviarValidacionIdentidadHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReenviarValidacionIdentidadHandler (Scoped)
 Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReenviarValidacionesLoteHandler => Flit.Tramites.Application.UseCases.ProcedureInstances.AdminReenviarValidacionesLoteHandler (Scoped)

@@ -268,6 +268,18 @@ public sealed class OtClientProcedureModificacion
     public string? ActorNombre { get; init; }
     /// <summary>Razón social de la compañía del actor; null si no resoluble.</summary>
     public string? ActorCompania { get; init; }
+    /// <summary>Bug #14604 — solo en «documento actualizado por el administrador»: adjuntos nuevo y anterior.</summary>
+    public OtDocumentoActualizado? Documento { get; init; }
+}
+
+/// <summary>Bug #14604 — documento que el administrador actualizó, para abrir el nuevo y el anterior desde la línea de tiempo.</summary>
+public sealed class OtDocumentoActualizado
+{
+    public string Tipo { get; init; } = string.Empty;
+    public Guid AttachmentId { get; init; }
+    public string Filename { get; init; } = string.Empty;
+    public Guid? AnteriorAttachmentId { get; init; }
+    public string? AnteriorFilename { get; init; }
 }
 
 /// <summary>Actor visible para el OT en el detalle del trámite de cliente.</summary>
