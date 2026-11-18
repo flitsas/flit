@@ -211,6 +211,9 @@ public sealed class PlantillaVersion : Auditada
     /// </summary>
     public DateTimeOffset? RevisadaJuridicamenteEn { get; set; }
     public Guid? RevisadaJuridicamentePor { get; set; }
+
+    /// <summary>HU #14616: quién aprobó, legible (el correo de quien aprobó al momento de hacerlo); las aprobaciones anteriores a este campo quedan sin nombre.</summary>
+    public string? RevisadaJuridicamentePorNombre { get; set; }
     public string? NotaRevisionJuridica { get; set; }
 }
 

@@ -263,6 +263,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.HasKey(x => x.Id);
             e.Property(x => x.Asunto).HasMaxLength(300);
             e.Property(x => x.NotaRevisionJuridica).HasMaxLength(1000);
+            e.Property(x => x.RevisadaJuridicamentePorNombre).HasMaxLength(200);
             e.HasIndex(x => new { x.PlantillaId, x.NumeroVersion }).IsUnique();
             e.HasOne<Plantilla>().WithMany().HasForeignKey(x => x.PlantillaId);
         });

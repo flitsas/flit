@@ -3441,6 +3441,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("revisada_juridicamente_por");
 
+                    b.Property<string>("RevisadaJuridicamentePorNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("revisada_juridicamente_por_nombre");
+
                     b.PrimitiveCollection<List<string>>("VariablesUsadas")
                         .IsRequired()
                         .HasColumnType("text[]")
