@@ -10,6 +10,7 @@ import { Card } from "@/components/tramite/piezas";
 import type { CierrePuntoRespuesta } from "@/lib/api/cliente";
 import { formatearHora12, formatearPesos } from "@/lib/formato";
 import { pasosDeCierre } from "@/lib/punto/seguimiento";
+import { ETIQUETA_ACCION_PRENDA } from "@/lib/tramite/prenda";
 
 const MEDIOS: Record<string, string> = { caja: "Caja", sin_cobro: "Sin cobro" };
 const MEDIOS_CAJA: Record<string, string> = { efectivo: "Efectivo", datafono: "Datáfono", transferencia: "Transferencia", otro: "Otro" };
@@ -33,6 +34,12 @@ const INSIGNIA_OK = "rounded-full bg-success/10 px-3 py-1 text-xs font-semibold 
 const PARRAFO_CONSULTA = "Para consultar el estado de tu trámite o la respuesta del Organismo de Tránsito, utiliza tu ID de trámite o el número de radicado.";
 const PARRAFO_CORREO = "También hemos enviado una copia de esta confirmación a tu correo electrónico registrado.";
 
+/** «Prenda: No» sin decisión, o «Prenda: Sí · Levantar la prenda inscrita»; nunca el código interno de la decisión. */
+export function textoPrenda(tiene: boolean, decision?: string | null): string {
+  const etiqueta = decision === "registrar" || decision === "levantar" ? ETIQUETA_ACCION_PRENDA[decision] : decision === "sin_prenda" && tiene ? "No hacer nada con la prenda" : null;
+  return `Prenda: ${tiene ? "Sí" : "No"}${tiene && etiqueta ? ` · ${etiqueta}` : ""}`;
+}
+
 /** Texto plano de la confirmación (lo que ve el ciudadano), para el comprobante en PDF. */
 export function lineasComprobante(cierre: CierrePuntoRespuesta, placa?: string, tipoNombre?: string): string[] {
   const r = cierre.resumen;
@@ -48,7 +55,7 @@ export function lineasComprobante(cierre: CierrePuntoRespuesta, placa?: string, 
   if (p) lineas.push(`Placa: ${p}`);
   if (r?.actores.length) lineas.push("", "Actores:", ...r.actores.map((a) => `  ${a.parte}: ${a.nombre}`));
   if (r?.valorVenta != null) lineas.push("", `Valor de venta: ${formatearPesos(r.valorVenta)}`);
-  if (r?.tienePrenda != null) lineas.push(`Prenda: ${r.tienePrenda ? "Sí" : "No"}`);
+  if (r?.tienePrenda != null) lineas.push(textoPrenda(r.tienePrenda, r.decisionPrenda));
   if (r?.documentos.length) lineas.push("", "Documentos cargados:", ...r.documentos.map((d) => `  ${d.nombre}`));
   lineas.push("", `Valor total del trámite: ${formatearPesos(cierre.valorCop)}`);
   if (r?.desglose.length) lineas.push(...r.desglose.map((l) => `  ${l.nombre}: ${formatearPesos(l.valorCop)}`));
@@ -158,12 +165,7 @@ export function ResumenCierre({
         {r != null && (r.valorVenta != null || r.tienePrenda != null || r.documentos.length > 0) && (
           <Card title="Condiciones Comerciales" id="cierre-condiciones">
             {r.valorVenta != null && <p>Venta: {formatearPesos(r.valorVenta)}</p>}
-            {r.tienePrenda != null && (
-              <p>
-                Prenda: {r.tienePrenda ? "Sí" : "No"}
-                {r.decisionPrenda ? ` · ${r.decisionPrenda}` : ""}
-              </p>
-            )}
+            {r.tienePrenda != null && <p>{textoPrenda(r.tienePrenda, r.decisionPrenda)}</p>}
             {r.documentos.length > 0 && <p className="text-xs font-light text-muted-foreground">{r.documentos.map((d) => d.nombre).join(", ")}</p>}
           </Card>
         )}

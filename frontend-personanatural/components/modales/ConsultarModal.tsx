@@ -2,7 +2,7 @@
 
 import { useMutation } from "@tanstack/react-query";
 import { Search } from "lucide-react";
-import { useId, useState } from "react";
+import { useId, useState, type ReactNode } from "react";
 import { boton } from "@/components/landing/estilos";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import { portal, type CierrePuntoRespuesta, type ClientePortal, type EstadoRadicado, type TipoTramite } from "@/lib/api/cliente";
@@ -48,8 +48,13 @@ export interface RetomarPagoDatos {
   documento: string;
 }
 
-/** Estado del trámite que aún no llegó al OT (se creó en este punto y falta el pago). */
-const ESTADO_SIN_ENVIAR = "pendiente_validacion";
+/**
+ * El trámite ya salió hacia el OT (pagado, en cola o radicado) cuando el paso «Enviado al OT» dejó de estar pendiente. El macro-estado
+ * no sirve para esto: sin espejo de FLIT 2 un trámite pagado y radicado también figura como «pendiente_validacion».
+ */
+const yaEnviado = (r: EstadoRadicado): boolean => (r.pasos.find((p) => p.clave === "enviado_ot")?.estado ?? "pending") !== "pending";
+/** Solo un trámite que aún no se pagó ni se envió puede retomar el pago. */
+const puedeRetomarPago = (r: EstadoRadicado): boolean => r.macroEstado.codigo === "pendiente_validacion" && !yaEnviado(r);
 
 const MENSAJE_FALTA_PLACA = "Para consultar este trámite necesitas ingresar la placa.";
 
@@ -189,15 +194,34 @@ function ContenidoConsulta({
           ("estadoCierre" in consulta.data ? (
             <ResultadoCierreConsulta cierre={consulta.data} onCerrar={onCerrar} />
           ) : (
-            <>
-              <ResultadoConsulta resultado={consulta.data} tipos={tipos} onCerrar={onCerrar} />
-              {consultaPunto && onRetomarPago && consulta.data.macroEstado.codigo === ESTADO_SIN_ENVIAR && (
-                <RetomarPago cliente={cliente} resultado={consulta.data} placaEscrita={placa} onRetomarPago={onRetomarPago} />
-              )}
-            </>
+            <ResultadoConsulta
+              resultado={consulta.data}
+              tipos={tipos}
+              onCerrar={onCerrar}
+              retomar={
+                consultaPunto && onRetomarPago && puedeRetomarPago(consulta.data) ? (
+                  <RetomarPago cliente={cliente} resultado={consulta.data} placaEscrita={placa} onRetomarPago={onRetomarPago} onCerrar={onCerrar} />
+                ) : null
+              }
+            />
           ))}
       </div>
     </>
+  );
+}
+
+/**
+ * Fila de acciones al final del resultado: a la derecha en una sola línea (apiladas a ancho completo en móvil, con la principal arriba).
+ * «Entendido» es la principal cuando está sola; si hay otra acción, «Entendido» pasa a secundaria (variant back) a su izquierda.
+ */
+function FilaAcciones({ onCerrar, principal }: { onCerrar: () => void; principal?: ReactNode }) {
+  return (
+    <div data-testid="acciones-consulta" className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+      <button type="button" onClick={onCerrar} className={boton(principal ? "back" : "flit", "h-11 w-full px-10 sm:w-auto", "none")}>
+        Entendido
+      </button>
+      {principal}
+    </div>
   );
 }
 
@@ -228,14 +252,26 @@ function ResultadoCierreConsulta({ cierre, onCerrar }: { cierre: CierrePuntoResp
       ) : (
         <p className={`mt-4 rounded-lg p-4 text-sm ${CLASE_MENSAJE[titular.tono]}`}>{MENSAJE_EN_PROCESO}</p>
       )}
-      <button type="button" onClick={onCerrar} className={boton("flit", "mx-auto mt-4 flex h-11 px-10", "none")}>
-        Entendido
-      </button>
+      <FilaAcciones onCerrar={onCerrar} />
     </section>
   );
 }
 
-function ResultadoConsulta({ resultado, tipos, onCerrar }: { resultado: EstadoRadicado; tipos: readonly TipoTramite[]; onCerrar: () => void }) {
+/** Ya enviado al OT y sin respuesta: el texto de «en proceso» del diseño; «Estamos validando…» queda para borrador, identidad y pago pendiente. */
+const mensajeDeCaja = (r: EstadoRadicado): string => (r.macroEstado.codigo === "pendiente_validacion" && yaEnviado(r) ? MENSAJE_EN_PROCESO : r.mensaje);
+
+function ResultadoConsulta({
+  resultado,
+  tipos,
+  onCerrar,
+  retomar,
+}: {
+  resultado: EstadoRadicado;
+  tipos: readonly TipoTramite[];
+  onCerrar: () => void;
+  /** Reemplaza la fila de acciones cuando se puede retomar el pago (trae su propia fila con «Entendido»). */
+  retomar: ReactNode;
+}) {
   const titular = titularDe(resultado);
   const nombreTipo = tipos.find((t) => t.code === resultado.tipoTramite)?.name ?? resultado.tipoTramite;
   const pasos = resultado.pasos.map((p) => ({ titulo: p.titulo, estado: p.estado, fecha: formatearFechaHora(p.fecha) }));
@@ -257,8 +293,7 @@ function ResultadoConsulta({ resultado, tipos, onCerrar }: { resultado: EstadoRa
           </div>
         ))}
       </dl>
-      <p className={`mt-4 rounded-lg p-4 text-sm ${CLASE_MENSAJE[titular.tono]}`}>{resultado.mensaje}</p>
-      {resultado.soloLectura && <p className="mt-2 text-xs text-foreground/70">Consultas este trámite como parte: solo puedes verlo, no modificarlo.</p>}
+      <p className={`mt-4 rounded-lg p-4 text-sm ${CLASE_MENSAJE[titular.tono]}`}>{mensajeDeCaja(resultado)}</p>
 
       {motivoRechazo && (
         <p role="note" className="mt-4 rounded-[9px] border border-alert bg-alert/10 p-4 text-sm text-alert">
@@ -266,11 +301,12 @@ function ResultadoConsulta({ resultado, tipos, onCerrar }: { resultado: EstadoRa
         </p>
       )}
 
-      {esAprobado(resultado) && (
-        <div className="mt-4 flex justify-center">
-          <button
+      {resultado.soloLectura && <p className="mt-4 text-xs text-foreground/70">Consultas este trámite como parte: solo puedes verlo, no modificarlo.</p>}
+
+      {retomar ?? <FilaAcciones onCerrar={onCerrar} principal={esAprobado(resultado) ? (
+        <button
             type="button"
-            className={boton("positive", "h-11 px-6", "none")}
+            className={boton("positive", "h-11 w-full px-10 sm:w-auto", "none")}
             onClick={() =>
               descargarPdf(`comprobante-${resultado.radicado}.pdf`, [
                 "FLIT - Comprobante del trámite",
@@ -286,12 +322,7 @@ function ResultadoConsulta({ resultado, tipos, onCerrar }: { resultado: EstadoRa
           >
             Descargar comprobante
           </button>
-        </div>
-      )}
-
-      <button type="button" onClick={onCerrar} className={boton("flit", "mx-auto mt-4 flex h-11 px-10", "none")}>
-        Entendido
-      </button>
+      ) : undefined} />}
     </section>
   );
 }
@@ -302,17 +333,20 @@ function RetomarPago({
   resultado,
   placaEscrita,
   onRetomarPago,
+  onCerrar,
 }: {
   cliente: ClientePortal;
   resultado: EstadoRadicado;
   placaEscrita: string;
   onRetomarPago: (datos: RetomarPagoDatos) => void;
+  onCerrar: () => void;
 }) {
   const [abierto, setAbierto] = useState(false);
   const [cedula, setCedula] = useState("");
   const [sigueSuCurso, setSigueSuCurso] = useState(false);
   const bloqueo = useBloqueo();
   const idCedula = useId();
+  const idForm = useId();
 
   const reanudar = useMutation({
     mutationFn: () => cliente.sesiones.reanudar({ radicado: resultado.radicado, cedula }),
@@ -339,22 +373,32 @@ function RetomarPago({
 
   if (sigueSuCurso) {
     return (
-      <p role="status" className="mt-4 rounded-[9px] bg-primary/10 p-3 text-center text-sm text-primary">
-        Tu trámite sigue su curso. Ya no necesitas retomar el pago.
-      </p>
+      <>
+        <p role="status" className="mt-4 rounded-[9px] bg-primary/10 p-3 text-center text-sm text-primary">
+          Tu trámite sigue su curso. Ya no necesitas retomar el pago.
+        </p>
+        <FilaAcciones onCerrar={onCerrar} />
+      </>
     );
   }
 
   if (!abierto) {
     return (
-      <button type="button" onClick={() => setAbierto(true)} className={boton("flit", "mx-auto mt-4 flex h-11 px-10", "none")}>
-        Retomar el pago
-      </button>
+      <FilaAcciones
+        onCerrar={onCerrar}
+        principal={
+          <button type="button" onClick={() => setAbierto(true)} className={boton("flit", "h-11 w-full px-10 sm:w-auto", "none")}>
+            Retomar el pago
+          </button>
+        }
+      />
     );
   }
 
   return (
+    <>
     <form
+      id={idForm}
       aria-label="Retomar el pago"
       className="mt-4 grid gap-3 rounded-[9px] border border-border p-4"
       onSubmit={(e) => {
@@ -391,9 +435,15 @@ function RetomarPago({
           </p>
         )}
       </div>
-      <button type="submit" className={boton("flit", "mx-auto flex h-11 px-10", "none")} disabled={!puedeEnviar}>
-        Continuar
-      </button>
     </form>
+    <FilaAcciones
+      onCerrar={onCerrar}
+      principal={
+        <button type="submit" form={idForm} className={boton("flit", "h-11 w-full px-10 sm:w-auto", "none")} disabled={!puedeEnviar}>
+          Continuar
+        </button>
+      }
+    />
+    </>
   );
 }

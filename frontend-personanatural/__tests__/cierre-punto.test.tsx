@@ -74,7 +74,7 @@ describe("Cierre del punto", () => {
     expect(screen.getByRole("region", { name: "Actores" })).toHaveTextContent("Comprador: María Rodríguez");
     const condiciones = screen.getByRole("region", { name: "Condiciones Comerciales" });
     expect(condiciones).toHaveTextContent(/Venta: .*45\.000\.000/);
-    expect(condiciones).toHaveTextContent("Prenda: Sí · levantar");
+    expect(condiciones).toHaveTextContent("Prenda: Sí · Levantar la prenda inscrita");
     expect(condiciones).toHaveTextContent("paz-y-salvo.pdf, impronta.png");
     const total = screen.getByRole("region", { name: "Valor Total del Trámite" });
     expect(total).toHaveTextContent(/366\.000/);
@@ -89,6 +89,24 @@ describe("Cierre del punto", () => {
     expect(screen.getByRole("button", { name: "Descargar comprobante" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Volver al inicio" }));
     expect(onTerminar).toHaveBeenCalledTimes(1);
+  });
+
+  it("prenda: texto legible, sin el código interno de la decisión", async () => {
+    const base = { actores: [], documentos: [], desglose: [], correoEnviado: false };
+    montar({ [CIERRE]: () => json(registrado({ resumen: { ...base, tienePrenda: false, decisionPrenda: "sin_prenda" } })) });
+    const condiciones = await screen.findByRole("region", { name: "Condiciones Comerciales" });
+    expect(condiciones).toHaveTextContent("Prenda: No");
+    expect(condiciones).not.toHaveTextContent("sin_prenda");
+  });
+
+  it.each([
+    ["registrar", "Prenda: Sí · Registrar una prenda nueva"],
+    ["levantar", "Prenda: Sí · Levantar la prenda inscrita"],
+    ["sin_prenda", "Prenda: Sí · No hacer nada con la prenda"],
+  ])("prenda con decisión %s se muestra como etiqueta", async (decision, texto) => {
+    const base = { actores: [], documentos: [], desglose: [], correoEnviado: false };
+    montar({ [CIERRE]: () => json(registrado({ resumen: { ...base, tienePrenda: true, decisionPrenda: decision } })) });
+    expect(await screen.findByRole("region", { name: "Condiciones Comerciales" })).toHaveTextContent(texto);
   });
 
   it("sin correo enviado omite la frase de la copia al correo; sin resumen no pinta tarjetas vacías", async () => {

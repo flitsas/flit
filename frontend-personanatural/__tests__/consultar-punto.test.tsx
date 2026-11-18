@@ -22,6 +22,8 @@ const ESTADO: EstadoRadicado = {
   subsanacion: null,
   soloLectura: false,
 };
+// Sin pago ni envío: «Enviado al OT» sigue pendiente.
+const PASOS_SIN_ENVIAR = ESTADO.pasos.map((p, i) => ({ ...p, estado: i === 0 ? ("done" as const) : i === 1 ? ("current" as const) : ("pending" as const), fecha: i < 2 ? p.fecha : null }));
 const problema = (status: number, code: string) => json({ type: "about:blank", title: "x", status, code }, status);
 
 function montar(manejador: (url: string) => Response, consultaPunto: boolean) {
@@ -68,7 +70,7 @@ describe("modal Consultar web (sin consultaPunto): regresión", () => {
 });
 
 describe("modal Consultar en el punto: retomar el pago", () => {
-  const SIN_ENVIAR: EstadoRadicado = { ...ESTADO, macroEstado: { codigo: "pendiente_validacion", etiqueta: "Pendiente", indice: 0 } };
+  const SIN_ENVIAR: EstadoRadicado = { ...ESTADO, macroEstado: { codigo: "pendiente_validacion", etiqueta: "Pendiente", indice: 0 }, pasos: PASOS_SIN_ENVIAR };
   const REANUDAR = "/api/v1/persona-natural/sesiones/reanudar";
   const SESION = { solicitudId: "s-9", codigoPublico: "PN-2026-0001", estado: "pendiente_pago", tipoTramiteCodigo: "TIPO_A", expiraEn: "2026-11-13T20:00:00Z" };
 
@@ -234,7 +236,7 @@ describe("modal Consultar en el punto: resultado por estado (diseño de referenc
   });
 
   it("«Retomar el pago» usa el estilo del botón principal (flit) en un trámite pendiente de pago", async () => {
-    const SIN_ENVIAR: EstadoRadicado = { ...ESTADO, macroEstado: { codigo: "pendiente_validacion", etiqueta: "Pendiente", indice: 0 } };
+    const SIN_ENVIAR: EstadoRadicado = { ...ESTADO, macroEstado: { codigo: "pendiente_validacion", etiqueta: "Pendiente", indice: 0 }, pasos: PASOS_SIN_ENVIAR };
     const fetchImpl = vi.fn(async (url: string) => (String(url).includes("/punto/pago/cierre/") ? problema(404, "solicitud_no_encontrada") : json(SIN_ENVIAR))) as unknown as typeof fetch;
     renderConQuery(<ConsultarModal abierto onCerrar={vi.fn()} cliente={crearCliente({ fetchImpl })} tipos={TIPOS} consultaPunto onRetomarPago={vi.fn()} />);
     escribir("abc123", "PN-2026-0001");
@@ -242,5 +244,74 @@ describe("modal Consultar en el punto: resultado por estado (diseño de referenc
 
     expect(await screen.findByRole("heading", { name: "Tu trámite está en proceso" })).toHaveClass("text-warning");
     expect(await screen.findByRole("button", { name: "Retomar el pago" })).toHaveClass("bg-primary");
+  });
+});
+
+describe("modal Consultar en el punto: mensaje, retomar y disposición de las acciones", () => {
+  const VALIDANDO = "Estamos validando la información y la identidad de las partes antes de enviar el trámite al Organismo de Tránsito.";
+  const EN_CURSO = "Tu trámite está en curso y aún no presenta respuesta por parte del Organismo de Tránsito. Te notificaremos a tu correo tan pronto sea procesado.";
+  const MACRO_PENDIENTE = { codigo: "pendiente_validacion", etiqueta: "Pendiente de Validación", indice: 0 };
+  // Pagado y radicado, pero sin espejo de FLIT 2: el macro-estado sigue «pendiente_validacion» y «Enviado al OT» está en curso.
+  const PAGADO_RADICADO: EstadoRadicado = {
+    ...ESTADO,
+    macroEstado: MACRO_PENDIENTE,
+    mensaje: VALIDANDO,
+    pasos: [
+      { clave: "borrador", titulo: "Borrador del trámite", estado: "done", fecha: "2026-10-20T14:15:00Z" },
+      { clave: "validacion_identidad", titulo: "Validación de identidad", estado: "done", fecha: "2026-10-20T16:42:00Z" },
+      { clave: "enviado_ot", titulo: "Enviado al OT", estado: "current", fecha: "2026-10-21T13:03:00Z" },
+      { clave: "en_revision", titulo: "En revisión", estado: "pending", fecha: null },
+      { clave: "resolucion", titulo: "Aprobado / Rechazado", estado: "pending", fecha: null },
+    ],
+  };
+  const SIN_PAGAR: EstadoRadicado = {
+    ...PAGADO_RADICADO,
+    pasos: PAGADO_RADICADO.pasos.map((p, i) => ({ ...p, estado: i < 1 ? ("done" as const) : i === 1 ? ("current" as const) : ("pending" as const), fecha: i < 2 ? p.fecha : null })),
+  };
+
+  function montarEstado(estado: EstadoRadicado, onRetomarPago: (() => void) | undefined = vi.fn()) {
+    const fetchImpl = vi.fn(async (url: string) => (String(url).includes("/punto/pago/cierre/") ? problema(404, "solicitud_no_encontrada") : json(estado))) as unknown as typeof fetch;
+    renderConQuery(<ConsultarModal abierto onCerrar={vi.fn()} cliente={crearCliente({ fetchImpl })} tipos={TIPOS} consultaPunto onRetomarPago={onRetomarPago} />);
+    escribir("abc123", "PN-2026-0001");
+    consultar();
+  }
+
+  it("pagado y radicado: no ofrece «Retomar el pago» y usa el texto de «en curso», no «Estamos validando…»", async () => {
+    montarEstado(PAGADO_RADICADO);
+
+    await screen.findByRole("heading", { name: "Tu trámite está en proceso" });
+    expect(screen.getByText(EN_CURSO)).toBeInTheDocument();
+    expect(screen.queryByText(VALIDANDO)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Retomar el pago" })).toBeNull();
+    // Solo «Entendido»: sola, a la derecha y como principal.
+    const fila = screen.getByTestId("acciones-consulta");
+    expect(within(fila).getAllByRole("button").map((b) => b.textContent)).toEqual(["Entendido"]);
+    expect(fila).toHaveClass("sm:justify-end");
+    expect(within(fila).getByRole("button", { name: "Entendido" })).toHaveClass("bg-primary");
+  });
+
+  it("sin pagar (identidad en curso): conserva «Estamos validando…» y ofrece retomar; fila con Entendido (back) y Retomar (flit) a la derecha", async () => {
+    montarEstado(SIN_PAGAR);
+
+    await screen.findByRole("heading", { name: "Tu trámite está en proceso" });
+    expect(screen.getByText(VALIDANDO)).toBeInTheDocument();
+    expect(screen.queryByText(EN_CURSO)).toBeNull();
+    const fila = screen.getByTestId("acciones-consulta");
+    const botones = within(fila).getAllByRole("button");
+    expect(botones.map((b) => b.textContent)).toEqual(["Entendido", "Retomar el pago"]);
+    expect(botones[0]).toHaveClass("bg-secondary");
+    expect(botones[1]).toHaveClass("bg-primary");
+    expect(botones[0]).toHaveClass("h-11");
+    expect(botones[1]).toHaveClass("h-11");
+    expect(fila).toHaveClass("sm:justify-end", "sm:flex-row", "flex-col-reverse");
+  });
+
+  it("la nota de «solo lectura» va encima de la fila de acciones", async () => {
+    montarEstado({ ...SIN_PAGAR, soloLectura: true });
+
+    const nota = await screen.findByText("Consultas este trámite como parte: solo puedes verlo, no modificarlo.");
+    const fila = screen.getByTestId("acciones-consulta");
+    expect(nota).toHaveClass("text-xs");
+    expect(nota.compareDocumentPosition(fila) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });
