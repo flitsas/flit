@@ -220,12 +220,14 @@ public static class InfrastructureExtensions
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        services.AddScoped<IGestorDashboardReadRepository, GestorDashboardReadRepository>(); // Inicio del Gestor (rediseño de los 3 dashboards)
         // HU #13076 (Épica #12737) — lectura entre compañías del feed de sincronización externa (ámbito exclusivo).
         services.AddScoped<Flit.Tramites.Domain.ExternalSync.IProcedureSyncReadRepository, ProcedureSyncReadRepository>();
         // HU #13263 (Épica #12741) — escritura del envío de adjuntos del cliente externo (fila del trámite bloqueada).
         services.AddScoped<Flit.Tramites.Domain.ExternalSync.IExternalAttachmentRepository, ExternalAttachmentRepository>();
         services.AddScoped<INetworkAnalyticsReadRepository, AnalyticsNetworkReadRepository>(); // HU #12359 - estadisticas de red
         services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
+        services.AddScoped<Flit.Analytics.Application.Queries.SuperAdminDashboard.ISuperAdminDashboardReadRepository, SuperAdminDashboardReadRepository>(); // Inicio del SuperAdmin (entre tenants)
         services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813
         services.AddScoped<Flit.Analytics.Application.Queries.IDetailedReportExcelExporter, Documents.DetailedReportExcelExporter>(); // Feature #10813 HU #10816
         services.AddScoped<Flit.Analytics.Application.Abstractions.INetworkDetailedReportReadRepository, DetailedReportNetworkReadRepository>(); // HU #12360 - reporte de red
