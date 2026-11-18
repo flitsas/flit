@@ -59,6 +59,31 @@ public sealed class VistaPreviaDpTests(ApiConFuente api) : IClassFixture<ApiConF
     }
 
     [Fact]
+    public async Task HU14616_Una_gestora_no_ve_quien_aprobo_ni_la_nota_y_un_nombre_largo_no_rompe_la_aprobacion()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var version = await PublicadaDpAsync("DA");
+        var largo = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true, Email: new string('a', 236) + "@ejemplo.test"));
+
+        var aprobada = await largo.PostAsJsonAsync($"{Base}/admin/plantillas/versiones/{version}/revision-juridica", new { nota = "Nota interna del abogado." }, ct);
+
+        aprobada.EnsureSuccessStatusCode();
+        var guardado = await api.EnDbAsync(db => db.PlantillaVersiones.AsNoTracking().Where(v => v.Id == version).Select(v => v.RevisadaJuridicamentePorNombre).SingleAsync(ct));
+        guardado!.Length.Should().Be(200, "se recorta al largo de la columna");
+
+        var super = await Super.GetFromJsonAsync<JsonElement>($"{Base}/plantillas/versiones/{version}", ct);
+        super.GetProperty("revisadaPor").GetString().Should().NotBeNullOrEmpty();
+        super.GetProperty("notaRevisionJuridica").GetString().Should().Be("Nota interna del abogado.");
+
+        var gestora = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [Permisos.PlantillasVer]));
+        var vista = await gestora.GetFromJsonAsync<JsonElement>($"{Base}/plantillas/versiones/{version}", ct);
+        vista.GetProperty("revisadaPor").ValueKind.Should().Be(JsonValueKind.Null);
+        vista.GetProperty("notaRevisionJuridica").ValueKind.Should().Be(JsonValueKind.Null);
+        vista.GetProperty("revisadaJuridicamenteEn").ValueKind.Should().NotBe(JsonValueKind.Null, "que está aprobada sí se ve");
+    }
+
+    [Fact]
     public async Task HU14616_La_vista_previa_de_plantilla_sin_comparendo_usa_datos_de_ejemplo_y_no_crea_nada()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
