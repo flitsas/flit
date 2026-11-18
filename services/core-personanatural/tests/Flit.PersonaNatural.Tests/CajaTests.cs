@@ -984,6 +984,57 @@ public sealed class CajaTests : IAsyncLifetime
         await _host.EnScopeAsync(sp => sp.GetRequiredService<CajaAnulacionService>().AnularAsync(OrganismoA, cobro, "Cobro duplicado por el cajero", Guid.NewGuid(), "Admin OT", version, TestContext.Current.CancellationToken));
     }
 
+    // ── Ventana de anulación por organismo (revisión 2026-11-17 de ADR-0082) ────────────────────────────────────────
+
+    [Fact]
+    public async Task VentanaPorOrganismo_Grpc_ConfirmarGuardaElLimite_YListarCobrosLoExpone()
+    {
+        await IniciarAsync();
+        var codigo = await CrearAsync();
+
+        var r = await Confirmar(codigo, Ana, "efectivo", ventanaMinutos: 10);
+
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        var pagadoEn = _host.Reloj.GetUtcNow();
+        var cuerpo = JsonDocument.Parse(await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement;
+        cuerpo.GetProperty("anulableHasta").GetDateTimeOffset().Should().Be(pagadoEn.AddMinutes(10));
+        var item = (await Lista()).Items.Single();
+        item.Anulable.Should().BeTrue();
+        DateTimeOffset.Parse(item.AnulableHasta, System.Globalization.CultureInfo.InvariantCulture).Should().Be(pagadoEn.AddMinutes(10));
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(11)); // vencida la del organismo (10), aunque la global sea 15
+        var vencida = (await Lista(fecha: "2026-10-27")).Items.Single();
+        vencida.Anulable.Should().BeFalse();
+        vencida.AnulableHasta.Should().BeEmpty("ya no aplica");
+    }
+
+    [Fact]
+    public async Task VentanaPorOrganismo_Grpc_ConVentanaCero_ElCobroNoEsAnulableYNoTrae_AnulableHasta()
+    {
+        await IniciarAsync();
+        var codigo = await CrearAsync();
+
+        var r = await Confirmar(codigo, Ana, "efectivo", ventanaMinutos: 0);
+
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        JsonDocument.Parse(await r.Content.ReadAsStringAsync(TestContext.Current.CancellationToken)).RootElement.GetProperty("anulableHasta").ValueKind.Should().Be(JsonValueKind.Null);
+        var item = (await Lista()).Items.Single();
+        item.Anulable.Should().BeFalse();
+        item.AnulableHasta.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task VentanaPorOrganismo_Grpc_SinElCampo_UsaLaVentanaGlobalDe15()
+    {
+        await IniciarAsync();
+        var codigo = await CrearAsync();
+
+        (await Confirmar(codigo, Ana, "efectivo")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var item = (await Lista()).Items.Single();
+        DateTimeOffset.Parse(item.AnulableHasta, System.Globalization.CultureInfo.InvariantCulture).Should().Be(_host.Reloj.GetUtcNow().AddMinutes(15));
+    }
+
     // ── Soporte ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private static Metadata CabecerasServicio(string? sub = "svc-tramites", string? aud = "personanatural", string? scope = "platform.personanatural.caja")
@@ -1019,7 +1070,7 @@ public sealed class CajaTests : IAsyncLifetime
 
     private Task<HttpResponseMessage> Confirmar(
         string codigo, Cajero usuario, string? medio, string? detalle = null, long? totalVisto = 366_000, string? llave = null, (string Nombre, byte[] Bytes)? prefactura = null,
-        string ip = "203.0.113.9")
+        string ip = "203.0.113.9", int? ventanaMinutos = null)
     {
         var pedido = new ConfirmarCobroRequest
         {
@@ -1032,6 +1083,8 @@ public sealed class CajaTests : IAsyncLifetime
             IdempotencyKey = llave ?? $"k-{Guid.NewGuid():N}",
             IpHash = HashDeIp(ip),
         };
+        if (ventanaMinutos is { } ventana)
+            pedido.VentanaAnulacionMinutos = ventana;
         if (totalVisto is { } t)
             pedido.TotalVisto = t;
         if (prefactura is { } p)
@@ -1048,6 +1101,7 @@ public sealed class CajaTests : IAsyncLifetime
             {
                 ["codigo"] = r.Codigo, ["valorCop"] = r.ValorCop, ["medio"] = r.Medio, ["medioDetalle"] = r.MedioDetalle.Length == 0 ? null : r.MedioDetalle,
                 ["pagadoEn"] = DateTimeOffset.Parse(r.PagadoEn, System.Globalization.CultureInfo.InvariantCulture),
+                ["anulableHasta"] = r.AnulableHasta.Length == 0 ? null : DateTimeOffset.Parse(r.AnulableHasta, System.Globalization.CultureInfo.InvariantCulture),
             };
         });
     }

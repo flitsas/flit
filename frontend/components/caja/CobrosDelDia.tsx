@@ -8,6 +8,7 @@ import { Ban } from "lucide-react";
 import { Button } from "@flit/ui/Button";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
+import { EtiquetaAnulable, useAhora, ventanaCerrada } from "./AnulableHasta";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { InlineAlert } from "@/components/atom/InlineAlert";
@@ -111,6 +112,8 @@ export function CobrosDelDia({ api, puedeAnular, version = 0 }: CobrosDelDiaProp
     }
   }
 
+  const ahora = useAhora(lista?.items);
+
   const columns: DataTableColumn<CajaCobro>[] = [
     { key: "codigo", header: "Trámite", render: (c) => <Tachable c={c}>{c.codigo}</Tachable> },
     { key: "valor", header: "Valor", align: "right", render: (c) => <Tachable c={c}>{formatPesos(c.valorCop)}</Tachable> },
@@ -138,7 +141,10 @@ export function CobrosDelDia({ api, puedeAnular, version = 0 }: CobrosDelDiaProp
             </span>
           </div>
         ) : (
-          <StatusBadge tone="success" label="Pagado" />
+          <div className="flex flex-col gap-1">
+            <StatusBadge tone="success" label="Pagado" />
+            {puedeAnular && <EtiquetaAnulable cobro={c} ahora={ahora} />}
+          </div>
         ),
     },
   ];
@@ -147,24 +153,26 @@ export function CobrosDelDia({ api, puedeAnular, version = 0 }: CobrosDelDiaProp
       key: "acciones",
       header: "Acciones",
       align: "right",
-      render: (c) => (
-        <ActionsMenu
-          ariaLabel={`Acciones del cobro ${c.codigo}`}
-          items={[
-            {
-              key: "anular",
-              label: "Anular",
-              icon: Ban,
-              tone: "danger",
-              ariaLabel: `Anular el cobro ${c.codigo}`,
-              disabled: c.estado === "anulado" || !c.anulable,
-              disabledReason:
-                c.estado === "anulado" ? "El cobro ya está anulado." : c.motivoNoAnulable?.trim() || CAJA_COBRO_NO_ANULABLE,
-              onSelect: () => abrirAnulacion(c),
-            },
-          ]}
-        />
-      ),
+      // Vencida la ventana de anulación, la acción desaparece aunque la lista no se haya recargado.
+      render: (c) =>
+        ventanaCerrada(c, ahora) ? null : (
+          <ActionsMenu
+            ariaLabel={`Acciones del cobro ${c.codigo}`}
+            items={[
+              {
+                key: "anular",
+                label: "Anular",
+                icon: Ban,
+                tone: "danger",
+                ariaLabel: `Anular el cobro ${c.codigo}`,
+                disabled: c.estado === "anulado" || !c.anulable,
+                disabledReason:
+                  c.estado === "anulado" ? "El cobro ya está anulado." : c.motivoNoAnulable?.trim() || CAJA_COBRO_NO_ANULABLE,
+                onSelect: () => abrirAnulacion(c),
+              },
+            ]}
+          />
+        ),
     });
   }
 

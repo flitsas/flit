@@ -179,3 +179,14 @@ El PO decidió que la caja no sea un portal aparte sino un módulo «Caja» dent
 - **Sesión:** desaparece el tope absoluto de 12 h; rige la expiración de FLIT 2.0. Escalar al Líder Técnico si `ot_caja` requiere vida de refresh menor. Desactivar al usuario sigue cortando el acceso en el siguiente request.
 - **Aislamiento entre organismos:** organismo y actor salen del token, nunca del cliente; Admin OT ajeno 403; SuperAdmin envía `transitOfficeId`.
 - **Enumeración y prefactura:** se conservan el tope de fallidas, la respuesta de búsqueda sin PII y el almacén y retención de la prefactura; validar tipo y tamaño en core-api y en el BFF.
+
+## Nota de revisión 2026-11-17: la ventana de anulación es configurable por organismo
+
+Decisión del PO (mejora sin HU, Feature #14453). **Estado: sigue Propuesto.** Reemplaza la ventana global fija de 15 minutos; el resto del ADR no cambia.
+
+1. **Rango y default.** Cada organismo tiene su ventana de anulación del cobro en caja, de 0 hasta `PortalCaja:VentanaAnulacionMaxMinutos` (60). `0` = el trámite se radica al cobrar y el cobro no se puede anular. Sin configurar, rige 15 (`PortalCaja:VentanaAnulacionPorDefectoMinutos`, el valor anterior): sin tocar nada el comportamiento es idéntico al de antes.
+2. **Quién la cambia.** El `ot_admin` de su organismo y el SuperAdmin (cualquier organismo), en la configuración de Cobro del portal (`PUT /api/v1/admin/ot/portal-cobro/caja-anulacion`). El cajero (`ot_caja`) no (403). Cada cambio queda en un historial (quién, antes, después, cuándo) y en la auditoría de configuración, como las tarifas.
+3. **Solo cobros nuevos.** core-api resuelve la ventana del organismo al confirmar y la manda en `ConfirmarCobroRequest.ventana_anulacion_minutos` (campo 13, `optional`). El BFF guarda en el cobro `annulable_until = paid_at + ventana` y desde ahí la anulación, la radicación diferida y `radicaEn` usan ese valor del cobro; un cambio posterior de la ventana no lo altera. La gracia de radicación (`Caja:RadicacionGraciaSegundos`) se sigue sumando solo para radicar: en el borde gana la anulación.
+4. **Compatibilidad.** Un cobro anterior sin `annulable_until` (o confirmado por un core-api sin el campo nuevo) cae a la ventana global del BFF (`Caja:VentanaAnulacionMinutos`, 15).
+5. **Datos.** core-api: DDL 200, tablas `admin.persona_natural_caja_settings` y `admin.persona_natural_caja_window_history` (migración `20261117160000_VentanaAnulacionCajaPorOrganismo`). BFF: columna nullable `personanatural.payment_charge.annulable_until` (migración `20261117160000_VentanaAnulacionPorCobro`). Aditivo y reversible.
+6. **Contratos.** `CobroPortalView.cajaAnulacion { minutos, porDefecto, maxMinutos }`; los cobros de `GET /api/v1/ot/caja/cobros` y de `/api/v1/admin/ot/portal-caja/cobros` traen `anulableHasta` (null si ya no aplica); `CobroResumen.anulable_hasta` (15) y `ConfirmarCobroResponse.anulable_hasta` (6) en el proto. Todos son campos nuevos: nada existente se rompe.

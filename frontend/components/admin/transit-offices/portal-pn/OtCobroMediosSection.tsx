@@ -19,6 +19,7 @@ import {
   PnLinkButton,
   PnSeccionHeader,
 } from "@/components/admin/plataforma/persona-natural/pn-componentes";
+import { CajaAnulacionCampo } from "./CajaAnulacionCampo";
 import { pnErrorMessage } from "@/components/admin/plataforma/persona-natural/pnErrors";
 import type {
   CobroApi,
@@ -412,6 +413,13 @@ export function OtCobroMediosSection({
             onChange={(next) => moverMedio(m.method, next)}
           />
         </div>
+        {m.method === "PIN" && cobro?.cajaAnulacion && api.guardarCajaAnulacion && (
+          <CajaAnulacionCampo
+            api={api}
+            valor={cobro.cajaAnulacion}
+            onGuardado={(nuevo) => setCobro((c) => (c ? { ...c, cajaAnulacion: nuevo } : c))}
+          />
+        )}
       </div>
     );
   }

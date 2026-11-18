@@ -145,6 +145,9 @@ message CobroResumen {
   string pagado_en = 6; string pagado_por_nombre = 7; string estado = 8; // pagado | anulado
   bool anulable = 9; string motivo_no_anulable = 10; string anulado_en = 11; string anulado_por_nombre = 12; string anulacion_motivo = 13;
   int64 row_version = 14;
+  // Ventana de anulacion por organismo: instante limite (ISO 8601) hasta el que el cobro se puede anular; vacio si ya no aplica
+  // (anulado, radicado o ventana en cero). Es el valor guardado en el cobro al confirmar; un cobro previo cae a la ventana global.
+  string anulable_hasta = 15;
 }
 message ListarCobrosResponse { repeated CobroResumen items = 1; int32 total = 2; int64 total_dia_cop = 3; }
 message AnularCobroRequest { string organismo_id = 1; string cobro_id = 2; string motivo = 3; /* 10..300 */ string actor_user_id = 4; string actor_nombre = 5; int64 row_version = 6; }
@@ -166,5 +169,11 @@ message ConfirmarCobroRequest {
   string prefactura_content_type = 10; // informativo
   string prefactura_nombre = 11;
   string ip_hash = 12;
+  // Minutos de la ventana de anulacion del organismo (0..max) que core-api resuelve de su configuracion; el BFF guarda en el cobro
+  // pagado_en + esta ventana (annulable_until). Ausente (core-api anterior) = ventana global del BFF (Caja:VentanaAnulacionMinutos).
+  optional int32 ventana_anulacion_minutos = 13;
 }
-message ConfirmarCobroResponse { string codigo = 1; int64 valor_cop = 2; string medio = 3; string medio_detalle = 4; string pagado_en = 5; }
+message ConfirmarCobroResponse {
+  string codigo = 1; int64 valor_cop = 2; string medio = 3; string medio_detalle = 4; string pagado_en = 5;
+  string anulable_hasta = 6; // ISO 8601; vacio si la ventana es 0 (se radica al cobrar)
+}

@@ -188,7 +188,7 @@ public sealed class PagoPuntoService(
     private PagoConfirmado PagoDe(CobroSolicitud c, string estadoSolicitud) => new(
         c.ValorCop ?? 0, c.Medio ?? string.Empty, c.MedioCaja, c.PagadoEn ?? c.UpdatedAt,
         EnRegistro: estadoSolicitud == EstadoSolicitud.Pagada,
-        RadicaEn: RadicacionDePagadasService.RadicaEn(c.Medio, c.PagadoEn, radicacionDiferida.Ventana));
+        RadicaEn: RadicacionDePagadasService.RadicaEn(c.Medio, c.PagadoEn, c.AnulableHasta, radicacionDiferida.Ventana));
 
     // ── Habilitar el cobro en caja ───────────────────────────────────────────────────────────────────────────────────
 

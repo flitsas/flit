@@ -9,7 +9,7 @@ namespace Flit.PersonaNatural.Api.Caja;
 
 /// <summary>
 /// Anular un cobro en caja desde el hub del OT (HU #14461, lado BFF). Solo si el cobro es del organismo indicado, sigue
-/// <c>pagado</c>, la solicitud sigue <c>pagada</c> (aún no se radicó) y la ventana de anulación no venció. Entonces el cobro pasa a
+/// <c>pagado</c>, la solicitud sigue <c>pagada</c> (aún no se radicó) y la ventana de anulación del cobro (<c>annulable_until</c>, o la global en cobros previos) no venció. Entonces el cobro pasa a
 /// <c>anulado</c> con motivo y quién lo anuló, y la solicitud vuelve a <c>pendiente_pago</c>. Si no: <c>cobro_no_anulable</c>
 /// (<c>ya_en_flit2</c>) y no se cambia nada.
 /// </summary>
@@ -53,7 +53,7 @@ public sealed class CajaAnulacionService(PersonaNaturalDb db, IOptions<CajaOptio
                     ?? throw Regla(404, CodigoNoEncontrado, "No encontramos ese cobro.");
 
                 var ahora = reloj.GetUtcNow();
-                var (anulable, razon) = CajaListaService.Evaluar(cobro.Estado, s.Estado, cobro.PagadoEn, ahora, opciones.Value.Ventana);
+                var (anulable, razon) = CajaListaService.Evaluar(cobro.Estado, s.Estado, cobro.PagadoEn, cobro.AnulableHasta, ahora, opciones.Value.Ventana);
                 if (!anulable || cobro.Medio != MedioDePago.Caja)
                     throw NoAnulable(razon ?? CajaListaService.MotivoYaEnFlit2);
                 if (rowVersion != cobro.RowVersion)

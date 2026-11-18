@@ -24,7 +24,8 @@ public sealed record PedidoDePago(
     Guid? PagadoPorId = null,
     string? PagadoPorNombre = null,
     string? LlaveConfirmacion = null,
-    long? TotalVistoCop = null);
+    long? TotalVistoCop = null,
+    int? VentanaAnulacionMinutos = null);
 
 /// <summary>Resultado de un pago confirmado. <see cref="EstadoSolicitud"/> es <c>en_cola</c> si la radicación ya se disparó.</summary>
 public sealed record PagoRegistrado(
@@ -86,7 +87,7 @@ public sealed class RegistroDePagos(
 
         // El pago ya está firme. Un cobro en caja espera la ventana de anulación (Feature #14453) y lo radica el trabajo de fondo; un
         // total $0 (o la ventana en cero) se radica ya. Si no se logra ahora, la solicitud queda «pagada» y se reintenta.
-        var ventana = caja.Value.Ventana;
+        var ventana = VentanaDe(pedido);
         if (pedido.Medio == MedioDePago.Caja && ventana > TimeSpan.Zero)
         {
             // El correo de cierre sale al quedar pagada, no al radicar.
@@ -171,6 +172,8 @@ public sealed class RegistroDePagos(
                 cobro.LlaveConfirmacion = pedido.LlaveConfirmacion;
                 cobro.PagadoEn = ahora;
                 cobro.PagadoEnDia = VigenciaDelCobro.DiaColombia(ahora);
+                // El límite de anulación se fija AQUÍ y no cambia aunque el organismo mueva su ventana después (solo aplica a cobros nuevos).
+                cobro.AnulableHasta = pedido.Medio == MedioDePago.Caja ? ahora + VentanaDe(pedido) : null;
                 cobro.Lineas = CotizadorDelPunto.SerializarLineas(cotizacion.Lineas);
                 cobro.VersionTarifa = cotizacion.VersionTarifa;
                 cobro.UpdatedAt = ahora;
@@ -198,6 +201,17 @@ public sealed class RegistroDePagos(
             throw YaPagado();
         }
     }
+
+    /// <summary>
+    /// Ventana de anulación de ESTE cobro: la del organismo que mandó core-api (acotada a 0..24 h por seguridad) o, si no la mandó (core-api
+    /// anterior), la global. Con la caja apagada es 0 (ver <see cref="CajaOptions.Ventana"/>).
+    /// </summary>
+    private TimeSpan VentanaDe(PedidoDePago pedido) =>
+        pedido.VentanaAnulacionMinutos is { } minutos && caja.Value.Habilitado
+            ? TimeSpan.FromMinutes(Math.Clamp(minutos, 0, MaxVentanaMinutos))
+            : caja.Value.Ventana;
+
+    private const int MaxVentanaMinutos = 24 * 60;
 
     internal static CobroSolicitud NuevoCobro(SolicitudTramite s, DateTimeOffset ahora) => new()
     {

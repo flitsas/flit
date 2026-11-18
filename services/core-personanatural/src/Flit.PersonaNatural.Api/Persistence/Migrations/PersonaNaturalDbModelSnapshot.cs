@@ -206,6 +206,10 @@ namespace Flit.PersonaNatural.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset?>("AnulableHasta")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("annulable_until");
+
                     b.Property<string>("AnulacionMotivo")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")

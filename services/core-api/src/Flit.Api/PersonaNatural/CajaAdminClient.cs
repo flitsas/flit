@@ -10,7 +10,7 @@ namespace Flit.Api.PersonaNatural;
 /// <summary>Un cobro en caja tal como lo informa el portal (campos de <c>CobroResumen</c>, sin traducir).</summary>
 internal sealed record CajaCobroResumen(
     string CobroId, string Codigo, long ValorCop, string Medio, string MedioDetalle, string PagadoEn, string PagadoPorNombre, string Estado,
-    bool Anulable, string MotivoNoAnulable, string AnuladoEn, string AnuladoPorNombre, string AnulacionMotivo, long RowVersion);
+    bool Anulable, string MotivoNoAnulable, string AnuladoEn, string AnuladoPorNombre, string AnulacionMotivo, long RowVersion, string AnulableHasta = "");
 
 internal sealed record CajaCobrosLista(IReadOnlyList<CajaCobroResumen> Items, int Total, long TotalDiaCop);
 
@@ -23,9 +23,9 @@ internal sealed record CajaLinea(string Concepto, long ValorCop);
 /// <summary>Lo que core-api manda a confirmar: el usuario y el organismo salen del JWT, nunca del cliente.</summary>
 internal sealed record CajaConfirmacion(
     Guid OrganismoId, string Codigo, Guid UsuarioId, string UsuarioNombre, string Medio, string Detalle, long? TotalVisto, string Llave,
-    byte[]? Prefactura, string? PrefacturaTipo, string? PrefacturaNombre, string IpHash);
+    byte[]? Prefactura, string? PrefacturaTipo, string? PrefacturaNombre, string IpHash, int? VentanaAnulacionMinutos = null);
 
-internal sealed record CajaCobroConfirmado(string Codigo, long ValorCop, string Medio, string? MedioDetalle, DateTimeOffset PagadoEn);
+internal sealed record CajaCobroConfirmado(string Codigo, long ValorCop, string Medio, string? MedioDetalle, DateTimeOffset PagadoEn, DateTimeOffset? AnulableHasta = null);
 
 /// <summary>
 /// El portal rechazó la operación con un código estable (<c>no_encontrado</c>, <c>ya_pagado</c>, <c>total_cambio</c>, <c>demasiados_intentos</c>...).
@@ -153,6 +153,8 @@ internal sealed class GrpcCajaAdminClient(CajaAdminService.CajaAdminServiceClien
             IdempotencyKey = pedido.Llave,
             IpHash = pedido.IpHash,
         };
+        if (pedido.VentanaAnulacionMinutos is { } ventana)
+            request.VentanaAnulacionMinutos = ventana;
         if (pedido.TotalVisto is { } visto)
             request.TotalVisto = visto;
         if (pedido.Prefactura is { Length: > 0 } archivo)
@@ -166,7 +168,8 @@ internal sealed class GrpcCajaAdminClient(CajaAdminService.CajaAdminServiceClien
         {
             var r = await client.ConfirmarCobroAsync(request, Empresa(), cancellationToken: ct).ConfigureAwait(false);
             return new CajaCobroConfirmado(
-                r.Codigo, r.ValorCop, r.Medio, r.MedioDetalle.Length == 0 ? null : r.MedioDetalle, DateTimeOffset.Parse(r.PagadoEn, CultureInfo.InvariantCulture));
+                r.Codigo, r.ValorCop, r.Medio, r.MedioDetalle.Length == 0 ? null : r.MedioDetalle, DateTimeOffset.Parse(r.PagadoEn, CultureInfo.InvariantCulture),
+                r.AnulableHasta.Length == 0 ? null : DateTimeOffset.Parse(r.AnulableHasta, CultureInfo.InvariantCulture));
         }
         catch (RpcException ex)
         {
@@ -200,7 +203,7 @@ internal sealed class GrpcCajaAdminClient(CajaAdminService.CajaAdminServiceClien
 
     private static CajaCobroResumen Mapear(CobroResumen c) => new(
         c.CobroId, c.Codigo, c.ValorCop, c.Medio, c.MedioDetalle, c.PagadoEn, c.PagadoPorNombre, c.Estado,
-        c.Anulable, c.MotivoNoAnulable, c.AnuladoEn, c.AnuladoPorNombre, c.AnulacionMotivo, c.RowVersion);
+        c.Anulable, c.MotivoNoAnulable, c.AnuladoEn, c.AnuladoPorNombre, c.AnulacionMotivo, c.RowVersion, c.AnulableHasta);
 }
 
 /// <summary>
@@ -215,6 +218,23 @@ internal static class CajaAdminExtensions
     public const string ScopeCaja = "platform.personanatural.caja";
 
     public static bool Habilitado(IConfiguration configuration) => configuration.GetValue(ClaveHabilitado, false);
+
+    public const string ClaveVentanaMax = "PortalCaja:VentanaAnulacionMaxMinutos";
+    public const string ClaveVentanaPorDefecto = "PortalCaja:VentanaAnulacionPorDefectoMinutos";
+
+    /// <summary>
+    /// Rango de la ventana de anulación por organismo (0..max, default 15). Se registra SIEMPRE: la configuración de Cobro del portal no
+    /// depende de que la caja esté encendida. El tope nunca supera el de la base (1440).
+    /// </summary>
+    public static IServiceCollection AddCajaAnulacionOpciones(this IServiceCollection services, IConfiguration configuration)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+        ArgumentNullException.ThrowIfNull(configuration);
+        var max = Math.Clamp(configuration.GetValue(ClaveVentanaMax, Flit.Admin.Domain.Plataforma.PersonaNatural.CajaAnulacionOpciones.Maximo), 0, Flit.Admin.Domain.Plataforma.PersonaNatural.CajaAnulacionOpciones.TopeDeLaBase);
+        var porDefecto = Math.Clamp(configuration.GetValue(ClaveVentanaPorDefecto, Flit.Admin.Domain.Plataforma.PersonaNatural.CajaAnulacionOpciones.PorDefecto), 0, max);
+        services.AddSingleton(new Flit.Admin.Domain.Plataforma.PersonaNatural.CajaAnulacionOpciones(porDefecto, max));
+        return services;
+    }
 
     public static IServiceCollection AddPortalCaja(this IServiceCollection services, IConfiguration configuration)
     {

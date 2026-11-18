@@ -249,6 +249,7 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.Property(c => c.PagadoPorId).HasColumnName("paid_by_id");
             e.Property(c => c.PagadoPorNombre).HasColumnName("paid_by_name").HasMaxLength(160);
             e.Property(c => c.PagadoEnDia).HasColumnName("paid_on_date");
+            e.Property(c => c.AnulableHasta).HasColumnName("annulable_until");
             e.Property(c => c.LlaveConfirmacion).HasColumnName("confirm_idempotency_key").HasMaxLength(100);
             e.Property(c => c.CorreoCierreEnviadoEn).HasColumnName("closure_email_sent_at")
                 .HasComment("Momento en que se reclamó el envío único del correo de cierre; nulo = pendiente (el reclamo se libera si el transporte falla).");

@@ -15706,6 +15706,95 @@ paths:
         "400": { description: "PORTAL_COBRO_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId en la ruta del OT)." }
         "401": { description: Sin sesión. }
         "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-cobro/caja-anulacion:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Cobro"]
+      summary: Cambia la ventana de anulación del cobro en caja del organismo
+      description: >-
+        Rol ot_admin (su organismo) o SuperAdmin (transitOfficeId obligatorio). 0 = el trámite se radica al cobrar y el cobro no se puede anular;
+        el máximo sale de PortalCaja:VentanaAnulacionMaxMinutos (60). Solo aplica a cobros nuevos: cada cobro guarda su límite al confirmarse.
+        El cajero (ot_caja) recibe 403.
+      operationId: AdminOtPortalCobroPutCajaAnulacion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarVentanaAnulacionCajaRequest" }
+      responses:
+        "200":
+          description: Ventana guardada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VentanaAnulacionCaja" }
+        "400": { description: "ventana_anulacion_invalida (nula o fuera de 0..max) o PORTAL_COBRO_ORGANISMO_REQUERIDO." }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo, o rol ot_caja. }
+        "404": { description: PORTAL_COBRO_ORGANISMO_NO_EXISTE. }
+  /api/v1/admin/ot/portal-cobro/caja-anulacion/historial:
+    get:
+      tags: ["Admin · OT · Portal Persona Natural · Cobro"]
+      summary: Historial de cambios de la ventana de anulación (más reciente primero, máximo 50)
+      operationId: AdminOtPortalCobroGetCajaAnulacionHistorial
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Cambios (quién, antes, después, cuándo).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistorialVentanaAnulacionCaja" }
+        "400": { description: PORTAL_COBRO_ORGANISMO_REQUERIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: Sin alcance sobre el organismo, o rol ot_caja. }
+  /api/v1/admin/plataforma/persona-natural/cobro/caja-anulacion:
+    put:
+      tags: ["Admin · Plataforma · Persona Natural · Cobro"]
+      summary: Cambia la ventana de anulación del cobro en caja de un organismo (SuperAdmin)
+      description: Igual que la ruta del OT; transitOfficeId es obligatorio (la web de persona no tiene caja).
+      operationId: AdminPlataformaPortalCobroPutCajaAnulacion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarVentanaAnulacionCajaRequest" }
+      responses:
+        "200":
+          description: Ventana guardada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VentanaAnulacionCaja" }
+        "400": { description: "ventana_anulacion_invalida o PORTAL_COBRO_ORGANISMO_REQUERIDO." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es SuperAdmin. }
+        "404": { description: PORTAL_COBRO_ORGANISMO_NO_EXISTE. }
+  /api/v1/admin/plataforma/persona-natural/cobro/caja-anulacion/historial:
+    get:
+      tags: ["Admin · Plataforma · Persona Natural · Cobro"]
+      summary: Historial de cambios de la ventana de anulación de un organismo (SuperAdmin)
+      operationId: AdminPlataformaPortalCobroGetCajaAnulacionHistorial
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Cambios.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistorialVentanaAnulacionCaja" }
+        "400": { description: PORTAL_COBRO_ORGANISMO_REQUERIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es SuperAdmin. }
   /api/v1/admin/plataforma/persona-natural/cobro/medios:
     put:
       tags: ["Admin · Plataforma · Persona Natural · Cobro"]
@@ -16390,10 +16479,13 @@ components:
               anuladoPorNombre: { type: string, nullable: true }
               anulacionMotivo: { type: string, nullable: true }
               rowVersion: { type: integer, format: int64 }
+              anulableHasta: { type: string, format: date-time, nullable: true, description: "Límite de anulación guardado en el cobro al confirmarlo (pagado_en + ventana del organismo); null si ya no aplica (anulado, radicado o ventana 0)." }
     CobroPortal:
       type: object
       required: [medios, tipos]
       properties:
+        cajaAnulacion:
+          $ref: "#/components/schemas/VentanaAnulacionCaja"
         medios:
           type: array
           items:
@@ -16428,6 +16520,32 @@ components:
                           enabled: { type: boolean, description: "Sin fila guardada vale encendido si montoCop > 0." }
                           montoCop: { type: integer, format: int64, description: Monto del renglón base (derechos de tránsito; servicio FLIT). }
                           editable: { type: boolean }
+    VentanaAnulacionCaja:
+      type: object
+      required: [minutos, porDefecto, maxMinutos]
+      properties:
+        minutos: { type: integer, minimum: 0, description: "Ventana efectiva en minutos (el valor por defecto, 15, si el organismo no la configuró)." }
+        porDefecto: { type: boolean, description: "true si el organismo no configuró la ventana." }
+        maxMinutos: { type: integer, description: "Tope vigente (PortalCaja:VentanaAnulacionMaxMinutos, 60)." }
+    GuardarVentanaAnulacionCajaRequest:
+      type: object
+      required: [minutos]
+      properties:
+        minutos: { type: integer, minimum: 0, description: "0 hasta maxMinutos; 0 = se radica al cobrar y no se puede anular." }
+    HistorialVentanaAnulacionCaja:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [minutosAntes, minutosDespues, cambiadoEn]
+            properties:
+              minutosAntes: { type: integer }
+              minutosDespues: { type: integer }
+              actorNombre: { type: string, nullable: true }
+              cambiadoEn: { type: string, format: date-time }
     GuardarMedioCobroRequest:
       type: object
       required: [method, enabled]

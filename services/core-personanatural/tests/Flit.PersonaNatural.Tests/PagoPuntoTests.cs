@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Flit.PersonaNatural.Api.Adjuntos;
+using Flit.PersonaNatural.Api.Caja;
 using Flit.PersonaNatural.Api.Pagos;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Punto;
@@ -676,6 +677,120 @@ public sealed partial class PagoPuntoTests : IAsyncLifetime
 
         _host.Reloj.Avanzar(TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(6));
         (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, string.Empty, token))).RootElement.GetProperty("estado").GetString().Should().Be("en_cola");
+    }
+
+    // ── Ventana de anulación por organismo (revisión 2026-11-17 de ADR-0082) ─────────────────────────────────────────
+
+    private Task<PagoRegistrado> PagarCajaConVentanaAsync(Guid id, int? minutos) =>
+        _host.EnScopeAsync(sp => sp.GetRequiredService<IRegistroDePagos>().RegistrarPagoAsync(
+            new PedidoDePago(id, "caja", "efectivo", null, null, "caja-1", Guid.Parse(PortalHost.Organismo), VentanaAnulacionMinutos: minutos), TestContext.Current.CancellationToken));
+
+    private async Task<CobroSolicitud> CobroDeAsync(Guid solicitudId)
+    {
+        await using var db = _host.NuevaDb();
+        return await db.Set<CobroSolicitud>().AsNoTracking().SingleAsync(c => c.SolicitudId == solicitudId && c.Estado == "pagado", TestContext.Current.CancellationToken);
+    }
+
+    [Fact]
+    public async Task VentanaPorOrganismo_ElCobroGuardaSuLimite_YLaRadicacionYLaAnulacionLoUsan_NoLaGlobal()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+
+        var pagado = await PagarCajaConVentanaAsync(id, 5);
+
+        pagado.RadicaEn.Should().Be(pagado.PagadoEn.AddMinutes(5));
+        (await CobroDeAsync(id)).AnulableHasta.Should().Be(pagado.PagadoEn.AddMinutes(5));
+        (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, string.Empty, token))).RootElement.GetProperty("pago").GetProperty("radicaEn").GetDateTimeOffset()
+            .Should().Be(pagado.PagadoEn.AddMinutes(5), "GET /punto/pago sale del valor guardado en el cobro");
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(5) + TimeSpan.FromSeconds(2)); // vencido su límite, dentro de la gracia
+        (await RadicarVencidasAsync()).Should().Be(0);
+        _host.Reloj.Avanzar(TimeSpan.FromSeconds(5));
+        (await RadicarVencidasAsync()).Should().Be(1, "la ventana propia (5 min) manda, no los 15 globales");
+        (await EstadoDeAsync(id)).Should().Be("en_cola");
+    }
+
+    [Fact]
+    public async Task VentanaPorOrganismo_UnaVentanaMayorQueLaGlobal_MantieneAnulableYSinRadicar()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        await PagarCajaConVentanaAsync(id, 30);
+        var cobroId = await CobroPagadoAsync(id);
+
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(16)); // pasada la global de 15
+        (await RadicarVencidasAsync()).Should().Be(0);
+        (await EstadoDeAsync(id)).Should().Be("pagada");
+        (await AnularAsync(cobroId)).Estado.Should().Be("anulado");
+    }
+
+    [Fact]
+    public async Task VentanaPorOrganismo_Cero_RadicaAlCobrar_YNoSePuedeAnular()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+
+        var pagado = await PagarCajaConVentanaAsync(id, 0);
+
+        pagado.RadicaEn.Should().BeNull();
+        pagado.EstadoSolicitud.Should().Be("en_cola");
+        var cobro = await CobroDeAsync(id);
+        cobro.AnulableHasta.Should().Be(pagado.PagadoEn);
+        await FluentActions.Awaiting(() => AnularAsync(cobro.Id)).Should().ThrowAsync<ReglaDeNegocioException>().Where(e => e.Codigo == "cobro_no_anulable");
+    }
+
+    [Fact]
+    public async Task VentanaPorOrganismo_UnCobroPrevioSinElDato_CaeALaVentanaGlobal()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+        var pagado = await PagarCajaConVentanaAsync(id, 30);
+        await using (var db = _host.NuevaDb())
+        {
+            await db.Set<CobroSolicitud>().Where(c => c.SolicitudId == id).ExecuteUpdateAsync(s => s.SetProperty(c => c.AnulableHasta, (DateTimeOffset?)null), TestContext.Current.CancellationToken);
+        }
+
+        (await PortalHost.JsonAsync(await Pago(HttpMethod.Get, string.Empty, token))).RootElement.GetProperty("pago").GetProperty("radicaEn").GetDateTimeOffset()
+            .Should().Be(pagado.PagadoEn.AddMinutes(15), "sin annulable_until rige Caja:VentanaAnulacionMinutos");
+        _host.Reloj.Avanzar(TimeSpan.FromMinutes(15) + TimeSpan.FromSeconds(6));
+        (await RadicarVencidasAsync()).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task VentanaPorOrganismo_SinLaVentanaEnElPedido_ElCobroUsaLaGlobal()
+    {
+        await IniciarAsync();
+        var (id, token) = await EnPagoAsync();
+        await Pago(HttpMethod.Post, "/caja", token);
+
+        var pagado = await PagarCajaConVentanaAsync(id, null);
+
+        (await CobroDeAsync(id)).AnulableHasta.Should().Be(pagado.PagadoEn.AddMinutes(15));
+    }
+
+    [Fact]
+    public void VentanaPorOrganismo_LimiteDeAnulacion_ReglasDeBorde()
+    {
+        var pagado = new DateTimeOffset(2026, 11, 17, 10, 0, 0, TimeSpan.Zero);
+        var g = TimeSpan.FromMinutes(15);
+        var gracia = TimeSpan.FromSeconds(5);
+        var caja = "caja";
+
+        RadicacionDePagadasService.LimiteDeAnulacion(caja, pagado, pagado.AddMinutes(3), g).Should().Be(pagado.AddMinutes(3));
+        RadicacionDePagadasService.LimiteDeAnulacion(caja, pagado, pagado, g).Should().BeNull("ventana 0");
+        RadicacionDePagadasService.LimiteDeAnulacion(caja, pagado, null, g).Should().Be(pagado.AddMinutes(15));
+        RadicacionDePagadasService.LimiteDeAnulacion(caja, pagado, null, TimeSpan.Zero).Should().BeNull("global apagada");
+        RadicacionDePagadasService.LimiteDeAnulacion("sin_cobro", pagado, pagado.AddMinutes(3), g).Should().BeNull();
+        RadicacionDePagadasService.EnVentana(caja, pagado, pagado.AddMinutes(3), pagado.AddMinutes(3), g).Should().BeFalse("en el borde exacto ya no es anulable");
+        RadicacionDePagadasService.EnVentana(caja, pagado, pagado.AddMinutes(3), pagado.AddMinutes(3), g, gracia).Should().BeTrue("la radicación espera la gracia");
+        CajaListaService.Evaluar("pagado", "pagada", pagado, pagado.AddMinutes(30), pagado.AddMinutes(20), g).Anulable.Should().BeTrue();
+        CajaListaService.Evaluar("pagado", "pagada", pagado, pagado.AddMinutes(30), pagado.AddMinutes(31), g).Anulable.Should().BeFalse();
+        CajaListaService.Evaluar("pagado", "pagada", pagado, null, pagado.AddMinutes(16), g).Anulable.Should().BeFalse("cobro previo: ventana global");
     }
 
     [Fact]

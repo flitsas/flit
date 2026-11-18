@@ -57,6 +57,7 @@ internal sealed class CajaAdminGrpcService(
                 AnuladoPorNombre = c.AnuladoPorNombre ?? string.Empty,
                 AnulacionMotivo = c.AnulacionMotivo ?? string.Empty,
                 RowVersion = c.RowVersion,
+                AnulableHasta = c.AnulableHasta?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty,
             });
         }
 
@@ -133,7 +134,8 @@ internal sealed class CajaAdminGrpcService(
         var prefactura = request.Prefactura.Length == 0 ? null : request.Prefactura.ToByteArray();
         var pedido = new PedidoDeConfirmacion(
             request.Codigo, request.MedioCaja, request.Detalle, request.HasTotalVisto ? request.TotalVisto : null, request.IdempotencyKey,
-            string.IsNullOrWhiteSpace(request.PrefacturaNombre) ? null : request.PrefacturaNombre, prefactura);
+            string.IsNullOrWhiteSpace(request.PrefacturaNombre) ? null : request.PrefacturaNombre, prefactura,
+            request.HasVentanaAnulacionMinutos ? request.VentanaAnulacionMinutos : null);
         try
         {
             var r = await confirmacion.ConfirmarAsync(cajero, pedido, IpHash(request.IpHash), context.CancellationToken).ConfigureAwait(false);
@@ -144,6 +146,7 @@ internal sealed class CajaAdminGrpcService(
                 Medio = r.Medio,
                 MedioDetalle = r.MedioDetalle ?? string.Empty,
                 PagadoEn = r.PagadoEn.ToString("O", CultureInfo.InvariantCulture),
+                AnulableHasta = r.AnulableHasta?.ToString("O", CultureInfo.InvariantCulture) ?? string.Empty,
             };
         }
         catch (ReglaDeNegocioException ex)
