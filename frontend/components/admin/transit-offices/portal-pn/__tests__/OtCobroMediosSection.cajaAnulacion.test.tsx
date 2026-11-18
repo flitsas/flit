@@ -1,4 +1,4 @@
-// Tiempo para anular un cobro de caja (0..max, 15 por defecto) en la fila «PIN en caja» de Cobro → Medios de pago.
+// Tiempo para anular un cobro de caja (0..max, 15 por defecto) en una franja propia bajo las tarjetas de Cobro → Medios de pago.
 import { describe, expect, it, vi } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -48,9 +48,46 @@ function montar(a: CobroApi) {
   );
 }
 
-const campo = () => screen.findByLabelText(/Tiempo para anular un cobro/);
+const campo = () => screen.findByLabelText(/^Tiempo para anular/);
 
 describe("Tiempo para anular un cobro de caja", () => {
+  it("vive en una franja propia, fuera de las tarjetas de medios, con ayuda corta", async () => {
+    montar(api(datos(POR_DEFECTO)));
+    const input = await campo();
+    const franja = screen.getByTestId("caja-anulacion");
+    expect(franja).toContainElement(input);
+    expect(within(franja).getByText("Anulación de cobros en caja")).toBeInTheDocument();
+    const switchPin = screen.getByRole("switch", { name: /^PIN en caja$/ });
+    expect(franja).not.toContainElement(switchPin);
+    expect(within(franja).getByText(CAJA_ANULACION_AYUDA)).toBeInTheDocument();
+  });
+
+  it("Guardar está deshabilitado sin cambios y se habilita al cambiar el valor", async () => {
+    montar(api(datos(POR_DEFECTO)));
+    const input = await campo();
+    const guardar = screen.getByRole("button", { name: "Guardar tiempo para anular" });
+    expect(guardar).toBeDisabled();
+    await userEvent.clear(input);
+    await userEvent.type(input, "20");
+    expect(guardar).toBeEnabled();
+    await userEvent.clear(input);
+    await userEvent.type(input, "15");
+    expect(guardar).toBeDisabled();
+  });
+
+  it("con «PIN en caja» apagado la franja se ve deshabilitada y explica por qué", async () => {
+    const d = datos(POR_DEFECTO);
+    d.medios = [
+      { method: "PASARELA", enabled: true },
+      { method: "PIN", enabled: false },
+    ];
+    montar(api(d));
+    const input = await campo();
+    expect(input).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Guardar tiempo para anular" })).toBeDisabled();
+    expect(screen.getByText(/Activa PIN en caja para usarlo./)).toBeInTheDocument();
+  });
+
   it("muestra el valor actual, la ayuda y «Valor por defecto»", async () => {
     montar(api(datos(POR_DEFECTO)));
     expect(await campo()).toHaveValue(15);
@@ -103,7 +140,9 @@ describe("Tiempo para anular un cobro de caja", () => {
       ),
     });
     montar(a);
-    await campo();
+    const input = await campo();
+    await userEvent.clear(input);
+    await userEvent.type(input, "50");
     await userEvent.click(screen.getByRole("button", { name: "Guardar tiempo para anular" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("El máximo permitido es 45 minutos.");
   });
@@ -135,12 +174,12 @@ describe("Tiempo para anular un cobro de caja", () => {
     const a = api(datos(POR_DEFECTO), { guardarCajaAnulacion: undefined, historialCajaAnulacion: undefined });
     montar(a);
     await screen.findByRole("switch", { name: /^PIN en caja$/ });
-    expect(screen.queryByLabelText(/Tiempo para anular un cobro/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Tiempo para anular/)).not.toBeInTheDocument();
   });
 
   it("si el servidor no manda cajaAnulacion tampoco se ofrece", async () => {
     montar(api(datos(undefined)));
     await screen.findByRole("switch", { name: /^PIN en caja$/ });
-    expect(screen.queryByLabelText(/Tiempo para anular un cobro/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/^Tiempo para anular/)).not.toBeInTheDocument();
   });
 });

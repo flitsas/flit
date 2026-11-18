@@ -413,13 +413,6 @@ export function OtCobroMediosSection({
             onChange={(next) => moverMedio(m.method, next)}
           />
         </div>
-        {m.method === "PIN" && cobro?.cajaAnulacion && api.guardarCajaAnulacion && (
-          <CajaAnulacionCampo
-            api={api}
-            valor={cobro.cajaAnulacion}
-            onGuardado={(nuevo) => setCobro((c) => (c ? { ...c, cajaAnulacion: nuevo } : c))}
-          />
-        )}
       </div>
     );
   }
@@ -450,6 +443,15 @@ export function OtCobroMediosSection({
           <div className={medios.length > 1 ? "grid gap-4 lg:grid-cols-2" : "grid gap-4"}>
             {medios.map(tarjetaMedio)}
           </div>
+
+          {cobro?.cajaAnulacion && api.guardarCajaAnulacion && (
+            <CajaAnulacionCampo
+              api={api}
+              valor={cobro.cajaAnulacion}
+              deshabilitado={!medios.some((x) => x.method === "PIN" && x.enabled)}
+              onGuardado={(nuevo) => setCobro((c) => (c ? { ...c, cajaAnulacion: nuevo } : c))}
+            />
+          )}
 
           {aviso && !aviso.conAccesoAPrecios && (
             <InlineAlert tone="warning" title="Medio sin cobro">
