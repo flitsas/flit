@@ -17,12 +17,12 @@ public sealed record Armado(Guid VersionId, string? Asunto, string Html);
 /// S-23) y la arma con los valores del comparendo. Los correos van dentro del marco HTML: el de FLIT, o uno neutro sin
 /// rastro de FLIT para el conjunto Renting (D9), aunque el texto venga de la plantilla de FLIT por respaldo.
 /// </summary>
-public sealed class ServicioPlantillas(ComparendosDb db, IConfiguration configuration)
+public class ServicioPlantillas(ComparendosDb db, IConfiguration configuration)
 {
     /// <summary>Imágenes de los correos (HU #13883): las publica el frontend de Comparendos en /assets/correo.</summary>
     public string Recursos => $"{(configuration["Comparendos:AppUrl"] ?? "http://127.0.0.1:4023").TrimEnd('/')}/assets/correo";
 
-    public async Task<PlantillaVersion?> PublicadaAsync(ConjuntoPlantillas conjunto, TipoPlantilla tipo, Guid? tipologiaId, CancellationToken ct)
+    public virtual async Task<PlantillaVersion?> PublicadaAsync(ConjuntoPlantillas conjunto, TipoPlantilla tipo, Guid? tipologiaId, CancellationToken ct)
     {
         foreach (var c in conjunto == ConjuntoPlantillas.Flit ? new[] { ConjuntoPlantillas.Flit } : [conjunto, ConjuntoPlantillas.Flit])
         {
@@ -37,7 +37,7 @@ public sealed class ServicioPlantillas(ComparendosDb db, IConfiguration configur
         return null;
     }
 
-    public async Task<Armado> ArmarAsync(ConjuntoPlantillas conjunto, TipoPlantilla tipo, Guid? tipologiaId, IReadOnlyDictionary<string, string?> valores, CancellationToken ct)
+    public virtual async Task<Armado> ArmarAsync(ConjuntoPlantillas conjunto, TipoPlantilla tipo, Guid? tipologiaId, IReadOnlyDictionary<string, string?> valores, CancellationToken ct)
     {
         var version = await PublicadaAsync(conjunto, tipo, tipologiaId, ct).ConfigureAwait(false)
             ?? throw new ReglaException("SIN_PLANTILLA", $"No hay una plantilla publicada de «{tipo}» para el conjunto de la empresa.");
