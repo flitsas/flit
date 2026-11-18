@@ -23,7 +23,13 @@ public static class ProductCodes
     /// <summary>Diagnóstico (<c>diagnostico.flitsas.online</c>).</summary>
     public const string Diagnostico = "diagnostico";
 
-    /// <summary>Todos los códigos de v1, en el orden del contrato §1.</summary>
+    /// <summary>
+    /// Caja del organismo (Épica #14210, ADR-0082): portal de cobro del punto de atención. Vive en el portal de Persona
+    /// Natural, no en core-api, así que su token solo llega a las rutas comunes de plataforma.
+    /// </summary>
+    public const string Caja = "caja";
+
+    /// <summary>Todos los códigos: los de v1 en el orden del contrato §1 y, al final, los agregados después.</summary>
     public static IReadOnlyList<string> All { get; } =
-        [Plataforma, Tramites, Comparendos, Diagnostico];
+        [Plataforma, Tramites, Comparendos, Diagnostico, Caja];
 }

@@ -802,15 +802,19 @@ export const OT_ARTICLES: ManualArticle[] = [
       "comprobar dominio",
       "registros dns",
       "enlace y qr",
+      "caja",
+      "usuarios de caja",
+      "cobros de caja",
+      "anular cobro",
     ],
     summary:
-      "Cómo el organismo administra su portal de Persona Natural: ve los trámites que llegan por él, define qué se cobra, le pone su marca y lo publica en sus propios dominios.",
+      "Cómo el organismo administra su portal de Persona Natural: ve los trámites que llegan por él, define qué se cobra, maneja su caja, le pone su marca y lo publica en sus propios dominios.",
     blocks: [
       {
         id: "entrada",
         title: "1. Dónde está",
         paragraphs: [
-          "En el hub del organismo, la pestaña «Portal Persona Natural» tiene tres secciones: «Reportes», «Cobro» y «Diseño». La ve el administrador del organismo, que solo trabaja con su propio organismo. El Super Admin entra al hub del organismo que necesite y ve lo mismo.",
+          "En el hub del organismo, la pestaña «Portal Persona Natural» tiene cuatro secciones: «Reportes», «Cobro», «Caja» y «Diseño». La ve el administrador del organismo, que solo trabaja con su propio organismo. El Super Admin entra al hub del organismo que necesite y ve lo mismo.",
           "Los cambios de cobro, de diseño publicado y de dominios llegan al portal sin pasos adicionales: quien lo abra después del cambio ya lo ve. Un trámite ya radicado conserva el valor con el que se radicó.",
         ],
       },
@@ -833,6 +837,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         bullets: [
           "Ofrecer o quitar un medio: usa el interruptor de su tarjeta, que cambia entre «Activado» y «Desactivado». Apagado, la persona no lo ve, y puedes dejar listos sus valores para cuando lo enciendas.",
           "Dejar de cobrar un valor en un medio: apaga su interruptor en la columna de ese medio; pasa a «No se cobra» solo ahí. Si apagas los dos, el aviso dice que ese medio no se ofrecerá para ese trámite.",
+          "Cambiar el tiempo para anular un cobro de caja: debajo de las dos tarjetas de medios está la franja «Anulación de cobros en caja», con el campo «Tiempo para anular» (en minutos; se habilita si «PIN en caja» está activado). Escribe un número entero entre 0 y el máximo que indica el mensaje (hasta 60) y pulsa «Guardar» (se habilita cuando cambias el valor). Mientras corre ese tiempo, el administrador del organismo puede anular el cobro; después, el trámite se envía al organismo. Si no lo has cambiado, verás «Valor por defecto» (15 minutos). Con 0, el trámite se envía en el momento de cobrar y el cobro ya no se puede anular. El cambio aplica solo a los cobros nuevos, no a los que ya se hicieron. Con «Ver historial» ves quién cambió el tiempo, cuándo y de cuántos minutos a cuántos. Lo cambian el administrador del organismo y el Super Admin; la persona de caja no ve este campo.",
           "Encender un valor sin monto: no se guarda. Junto a ese valor aparece «Definir precio», que abre el formulario del trámite en Precios; al guardar o cerrar, vuelves a Medios de pago con el monto ya cargado.",
         ],
         callouts: [
@@ -843,8 +848,28 @@ export const OT_ARTICLES: ManualArticle[] = [
         ],
       },
       {
+        id: "caja",
+        title: "4. Caja: usuarios y cobros",
+        paragraphs: [
+          "En el punto, la persona paga en la caja de tu organismo con el ID de su trámite. La pestaña «Caja» tiene dos partes: «Usuarios de caja», para decidir quién cobra, y «Cobros de caja», para revisar lo cobrado y corregir errores.",
+          "Un usuario de caja entra a FLIT 2 con su correo y su contraseña y solo ve el módulo «Caja» del menú: no ve los demás módulos ni los trámites de otros organismos. Tú, como administrador, también ves «Caja» en el menú y puedes cobrar desde ahí. Crea un usuario por cada persona que cobra, así queda registrado quién hizo cada cobro.",
+        ],
+        bullets: [
+          "Crear un usuario de caja: pulsa «Crear usuario», escribe el nombre y el correo y guarda. Le llega una invitación para definir su contraseña; mientras no la use, aparece como «Invitación pendiente» y puedes reenviarla desde «Acciones».",
+          "Desactivar o reactivar: en «Acciones» de la fila. Un usuario desactivado ya no puede cobrar desde su siguiente intento.",
+          "Ver los cobros: «Cobros de caja» muestra los del día elegido con el ID, el valor, el medio, la hora y quién cobró, y el total del día sin contar los anulados.",
+          "Anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Solo se puede durante los 15 minutos siguientes al cobro, antes de que el trámite pase a FLIT 2; después, la opción aparece deshabilitada con el motivo. El trámite anulado vuelve a quedar pendiente de pago. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si la caja no está habilitada para tu organismo, la pestaña lo indica. Pide al administrador de FLIT que la habilite.",
+          },
+        ],
+      },
+      {
         id: "diseno",
-        title: "4. Diseño: tu marca en el portal",
+        title: "5. Diseño: tu marca en el portal",
         paragraphs: [
           "Aquí le pones al portal el nombre, el logo, los banners y los colores de tu organismo. La vista previa muestra cómo quedará. Lo que cambias se guarda como borrador y la persona no lo ve hasta que lo publiques.",
         ],
@@ -868,7 +893,7 @@ export const OT_ARTICLES: ManualArticle[] = [
       },
       {
         id: "dominios",
-        title: "5. Dominios del organismo",
+        title: "6. Dominios del organismo",
         paragraphs: [
           "En «Diseño» también están los dominios: las direcciones web propias por las que se abre tu portal. Un organismo puede tener varios, hasta 10, y todos llevan al mismo portal. Por estas direcciones solo se abre el portal: no hay inicio de sesión de FLIT.",
           "Cada dominio tiene su propio estado. Si uno falla, los demás siguen funcionando. Uno de los activos es el principal: el enlace y el QR del punto usan ese.",
@@ -884,6 +909,88 @@ export const OT_ARTICLES: ManualArticle[] = [
             variant: "tip",
             text: "Si no tienes ningún dominio activo, el portal sigue disponible en el enlace del punto de atención.",
           },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "2-ot/15-portal-de-caja",
+    title: "Caja: cobrar un trámite del punto desde FLIT 2.0",
+    audience: "Organismo de Tránsito",
+    sectionId: "ot",
+    keywords: [
+      "caja",
+      "modulo caja",
+      "portal de caja",
+      "caja del organismo",
+      "usuario de caja",
+      "cobrar tramite",
+      "id del tramite",
+      "confirmar cobro",
+      "pago registrado",
+      "prefactura",
+      "cobros del dia",
+      "anular cobro",
+      "este tramite ya fue pagado",
+      "no encontramos ese tramite",
+      "la caja no esta habilitada",
+    ],
+    summary:
+      "Cómo el organismo cobra desde FLIT 2.0 un trámite que la persona inició en el punto: quién entra, qué ve, cómo cobra, cómo revisa los cobros del día y cómo anula el administrador del organismo.",
+    blocks: [
+      {
+        id: "entrar",
+        title: "1. Quién entra y qué ve",
+        paragraphs: [
+          "En el menú de abajo, «Administración» tiene «Portal Persona Natural», que se despliega en cuatro opciones: Reportes, Cobro, Caja y Diseño. La caja está en Administración → Portal Persona Natural → Caja, con tres pestañas: «Cobrar», «Cobros del día» y «Usuarios de caja». No es un ítem aparte del menú ni un portal distinto: la persona de caja entra a FLIT 2.0 por el inicio de sesión de siempre, con el correo y la contraseña de su usuario. El administrador del organismo la crea en la subpestaña «Usuarios de caja» y le llega una invitación para definir su contraseña.",
+          "Si tu único rol es el de caja, el menú muestra solo Administración → Portal Persona Natural → Caja y al entrar a FLIT 2.0 llegas directo a ella, con las pestañas «Cobrar» y «Cobros del día»: no ves Reportes, Cobro ni Diseño, ni «Usuarios de caja». El administrador del organismo ve las tres subpestañas y, en «Cobros del día», puede elegir el día y anular. El Super Admin entra al organismo que elija y administra «Usuarios de caja» y «Cobros de caja» (con anulación); no cobra.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si ves «La caja no está habilitada para tu organismo», pide al administrador de FLIT que la habilite.",
+          },
+        ],
+      },
+      {
+        id: "cobrar",
+        title: "2. Cobrar un trámite",
+        paragraphs: ["En la subpestaña «Cobrar», cada cobro se hace con el ID del trámite que la persona generó en el punto. Sigue estos pasos:"],
+        bullets: [
+          "Escribe el ID que te muestra la persona (por ejemplo PN-2026-000123) y pulsa «Buscar».",
+          "Revisa el tipo de trámite, lo que se paga y el total. El total no se puede cambiar: es el que calcula la plataforma en ese momento.",
+          "Elige el medio con que pagó: efectivo, datáfono, transferencia u otro (en «Otro», escribe cuál).",
+          "Si tienes la prefactura, adjúntala (PDF, JPG o PNG de hasta 5 MB). Es opcional.",
+          "Pulsa «Confirmar cobro». Verás «Pago registrado.» y la pantalla de la persona pasa sola al cierre. Para seguir, pulsa «Cobrar otro trámite».",
+        ],
+        callouts: [
+          {
+            variant: "warning",
+            title: "Si el total cambió",
+            text: "Si el precio cambió desde que buscaste el trámite, la pantalla muestra el total nuevo y te pide confirmar otra vez. Cobra siempre el total que muestra la pantalla.",
+          },
+        ],
+      },
+      {
+        id: "mensajes",
+        title: "3. Mensajes frecuentes",
+        paragraphs: ["Si la búsqueda no deja cobrar, la pantalla dice por qué:"],
+        bullets: [
+          "«No encontramos ese trámite.»: revisa el ID con la persona.",
+          "«Este trámite ya fue pagado.» (en amarillo): no lo cobres otra vez.",
+          "«Este trámite no es de este organismo.»: la persona debe pagar en el organismo donde lo inició.",
+          "«El pago en caja de este trámite venció.»: el ID vale solo el día en que se generó; la persona debe generarlo de nuevo en el punto.",
+          "«Este trámite no tiene el pago en caja habilitado.»: el trámite no se paga en caja.",
+          "«Demasiadas búsquedas sin resultado. Espere N minutos.»: si buscas varios ID que no existen seguidos, la caja se bloquea unos minutos por seguridad y te dice cuánto esperar.",
+        ],
+      },
+      {
+        id: "cobros-dia",
+        title: "4. Cobros del día y anulaciones",
+        paragraphs: [
+          "La subpestaña «Cobros del día» lista lo que se cobró en tu organismo, con el ID, el valor, el medio, la fecha y hora, quién cobró y el estado, y el total del día. Los cobros anulados aparecen marcados y tachados, y no suman al total. La tabla se pagina de 10, 20, 30 o 50 filas.",
+          "El administrador del organismo puede elegir otro día y anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Un cobro se puede anular solo durante un tiempo después de cobrarlo: mientras corre, el cobro dice «Anulable hasta» con la hora (por ejemplo, «Anulable hasta 9:41 p. m.»); cuando esa hora pasa, la opción «Anular» desaparece y el trámite se envía al organismo. Ese tiempo lo define el administrador del organismo en Cobro → Medios de pago (15 minutos si no lo cambia). Si el cobro ya no se puede anular porque el trámite ya llegó a FLIT 2.0, la opción aparece deshabilitada con su motivo. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
+          "Si eres de caja y te equivocaste en un cobro, avisa al administrador de tu organismo: solo él puede anularlo.",
         ],
       },
     ],

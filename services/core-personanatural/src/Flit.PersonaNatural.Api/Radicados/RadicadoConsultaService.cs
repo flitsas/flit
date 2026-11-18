@@ -190,14 +190,14 @@ public sealed class RadicadoConsultaService(
         }
         else if (tramite is not null && EstadosEnRevision.Contains(tramite))
             actual = 3;
-        else if (tramite is "borrador" or "preparado" || estado is EstadoSolicitud.Creada or EstadoSolicitud.EnCola)
+        else if (tramite is "borrador" or "preparado" || estado is EstadoSolicitud.Creada or EstadoSolicitud.EnCola or EstadoSolicitud.Pagada)
             actual = 2;
         else if (estado == EstadoSolicitud.RechazadaCreacion)
         {
             actual = 2;
             rechazadoEn = 2;
         }
-        else if (estado == EstadoSolicitud.PendienteValidacion)
+        else if (estado is EstadoSolicitud.PendienteValidacion or EstadoSolicitud.PendientePago)
             actual = 1;
 
         DateTimeOffset? Primera(params string[] estados) => historial.Where(x => estados.Contains(x.Hasta)).Select(x => (DateTimeOffset?)x.OcurrioEn).FirstOrDefault();

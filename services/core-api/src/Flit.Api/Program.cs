@@ -200,6 +200,8 @@ builder.Services.AddNotificacionesRemoto(builder.Configuration); // Epic #13316 
 Flit.Api.Derivacion.DerivacionExtensions.AddDerivacionDiagnostico(builder.Services, builder.Configuration); // ADR-0084 · Punto 4: borradores desde Diagnóstico (rpc apagado por defecto)
 Flit.Api.Usuarios.UsuariosProductoExtensions.AddUsuariosProducto(builder.Services); // ADR-0089 · HU #14587: usuarios de Diagnóstico gestionados desde el producto (gRPC)
 builder.Services.AddPersonaNaturalConsumidor(builder.Configuration); // Épica #14021 · HU #14050/#14051: crea los trámites del portal y devuelve su estado (apagado por defecto)
+builder.Services.AddCajaAnulacionOpciones(builder.Configuration); // ventana de anulación de la caja por organismo (rango y default)
+builder.Services.AddPortalCaja(builder.Configuration); // Épica #14210 · HU #14461: administración de la caja del organismo desde el hub (apagado por defecto)
 
 var app = builder.Build();
 
@@ -264,6 +266,9 @@ app.UseMiddleware<Flit.Api.Middleware.DomainContextMiddleware>();
 app.UseMiddleware<Flit.Api.Middleware.PortalDomainGuardMiddleware>();
 
 app.UseAuthentication();
+
+// HU #14454 (Épica #14210, ADR-0082) — el token «solo-caja» no usa la API de FLIT 2.0 (segunda capa; la primera es Identidad).
+app.UseMiddleware<Flit.Api.Authorization.SoloCajaGuardMiddleware>();
 
 // HU #12422 (Feature #12369, ADR-0060 D3) — liga la sesión al dominio de emisión (claim "dom").
 // Va DESPUÉS de auth (necesita HttpContext.User) y ANTES de authorization: una petición anónima

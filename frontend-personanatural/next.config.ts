@@ -9,6 +9,8 @@ const monorepoRoot = path.resolve(__dirname, "..");
 // atender cada petición (lib/config.server.ts) y el navegador habla con el BFF por el proxy /api/v1/persona-natural/*
 // de este mismo host (app/api/v1/persona-natural/[...path]), que custodia la sesión del trámite en una cookie HttpOnly.
 const nextConfig: NextConfig = {
+  // @flit/auth se publica como TypeScript del workspace (sesión OIDC de la caja del organismo).
+  transpilePackages: ["@flit/auth"],
   outputFileTracingRoot: monorepoRoot,
   async headers() {
     return [{ source: "/:path*", headers: cabecerasDeSeguridad(process.env.NODE_ENV === "development") }];

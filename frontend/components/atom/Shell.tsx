@@ -2,6 +2,7 @@
 
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { FLIT_PRIVACY_POLICY_URL } from "@/lib/brand/types";
+import * as nextNavigation from "next/navigation";
 import { usePathname } from "next/navigation";
 import { SuiteShell, type SuiteApp } from "@flit/shell/SuiteShell";
 import { useSuiteTheme } from "@flit/shell/theme";
@@ -12,12 +13,13 @@ import {
   isGroupParent,
   isOtAdmin,
   isOtUser,
+  isSoloCaja,
   isSuperAdmin,
   TOKEN_STORAGE_KEY,
 } from "@/lib/auth/jwt";
 import { apiFetch } from "@/lib/api/client";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
-import { extractTransitOfficeIdFromPath, resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
+import { SEGMENTO_ORGANISMO_PROPIO, extractTransitOfficeIdFromPath, resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import { DrFlitAssistant } from "@/components/dr-flit";
 import { LoteDescargaTracker, LoteDescargaTrackerProvider } from "@/components/shared/LoteDescargaTracker";
 import { tramitesNav } from "./dock/tramitesNav";
@@ -75,6 +77,8 @@ function useCurrentUser() {
       isOtAdmin: isOtAdmin(payload),
       // Cualquier rol de un tenant OT (no solo ot_admin) opera la superficie del organismo.
       isOtUser: isOtUser(payload),
+      // Su único rol es `ot_caja`: solo ve Portal Persona Natural → Caja y la API le niega el perfil del organismo.
+      isSoloCaja: isSoloCaja(payload),
       tenantId: (payload.tenant_id as string) ?? null,
       // HU #13382 — el seguimiento del lote de descarga masiva solo se monta con el permiso (sin polling inútil).
       puedeDescargaMasiva: canDescargarConsolidadosMasivo(payload),
@@ -83,12 +87,25 @@ function useCurrentUser() {
   return user;
 }
 
+/**
+ * `useSearchParams` tolerante: algunas pruebas sustituyen `next/navigation` por un doble sin esa función (el acceso al export
+ * lanza), y entonces la consulta se toma como vacía.
+ */
+const useQueryActual: () => { toString(): string } | null = (() => {
+  try {
+    return nextNavigation.useSearchParams;
+  } catch {
+    return () => null;
+  }
+})();
+
 /** Organismo del usuario OT: el de la ruta, el recordado en la sesión o el de su perfil. */
-function useOtTransitOfficeId(enabled: boolean, pathname: string): string | null {
+function useOtTransitOfficeId(enabled: boolean, pathname: string, soloCajaTenantId: string | null): string | null {
   const fromPath = enabled ? extractTransitOfficeIdFromPath(pathname) : null;
   const [resolved, setResolved] = useState<string | null>(null);
   useEffect(() => {
-    if (!enabled || fromPath) return;
+    // La persona de caja no puede pedir el perfil del organismo (403 `caja_sin_acceso`): su organismo es el de su token.
+    if (!enabled || fromPath || soloCajaTenantId) return;
     let alive = true;
     resolveOtTransitOfficeId(async () => (await fetchOtProfile()).transitOfficeId)
       .then((id) => alive && setResolved(id))
@@ -96,8 +113,8 @@ function useOtTransitOfficeId(enabled: boolean, pathname: string): string | null
     return () => {
       alive = false;
     };
-  }, [enabled, fromPath]);
-  return fromPath ?? resolved;
+  }, [enabled, fromPath, soloCajaTenantId]);
+  return soloCajaTenantId ?? fromPath ?? resolved;
 }
 
 /**
@@ -122,7 +139,15 @@ export function Shell({
   const { dark } = useSuiteTheme();
   const currentUser = useCurrentUser();
   const pathname = usePathname() ?? "";
-  const otTransitOfficeId = useOtTransitOfficeId(Boolean(currentUser?.isOtUser), pathname);
+  // Las entradas del dock con consulta (`…?tab=caja`) se marcan activas y abren su submenú comparando con la URL actual.
+  const consultaUrl = useQueryActual()?.toString() ?? "";
+  const searchActual = search || consultaUrl;
+  const soloCaja = Boolean(currentUser?.isSoloCaja);
+  const otTransitOfficeId = useOtTransitOfficeId(
+    Boolean(currentUser?.isOtUser),
+    pathname,
+    soloCaja ? (currentUser?.tenantId ?? SEGMENTO_ORGANISMO_PROPIO) : null,
+  );
 
   const nav = useMemo(
     () =>
@@ -133,8 +158,9 @@ export function Shell({
         isGroupParent: Boolean(currentUser?.isGroupParent),
         tenantId: currentUser?.tenantId ?? null,
         otTransitOfficeId,
+        isSoloCaja: soloCaja,
       }),
-    [currentUser, otTransitOfficeId],
+    [currentUser, otTransitOfficeId, soloCaja],
   );
 
   const user = useMemo(
@@ -166,7 +192,7 @@ export function Shell({
         user={user}
         loadApps={loadApps}
         homeHref="/"
-        search={search}
+        search={searchActual}
         onLogout={onLogout}
         // HU #14480 — buscador Ctrl K: atajos del listado y placa, solo si el rol ve Trámites en el dock.
         searchActions={ACCIONES_BUSCADOR}

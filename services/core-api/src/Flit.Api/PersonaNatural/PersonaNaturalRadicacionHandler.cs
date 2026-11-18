@@ -93,6 +93,7 @@ internal sealed class PersonaNaturalCreador(
     RegisterIntegrationAttachmentHandler adjuntos,
     TransitionProcedureInstanceHandler transicion,
     IConsultationProviderChainResolver consultas,
+    Flit.Tramites.Domain.Repositories.IProcedureInstanceRepository tramites,
     IConfiguration configuracion,
     ILogger<PersonaNaturalCreador> logger)
 {
@@ -145,6 +146,13 @@ internal sealed class PersonaNaturalCreador(
             // Ya no está en cola o no existe: no hay a quién avisar. No es un error técnico (reintentar no lo arregla).
             RadicacionLog.SolicitudNoLeible(logger, evento.SolicitudId, lectura.Razon ?? "desconocida");
             return ResultadoRadicacionPortal.SinEfecto;
+        }
+
+        // HU #14469 — un pago que el portal mandó pero no se pudo leer no deja crear el trámite: se rechaza sin crear nada.
+        if (solicitud.PagoIlegible)
+        {
+            RadicacionLog.PagoIlegible(logger, evento.SolicitudId);
+            return Rechazo(MotivosDeRechazo.PagoInvalido);
         }
 
         // Partes: roles que FLIT 2 sabe guardar. La identidad aprobada solo se exige con
@@ -295,12 +303,34 @@ internal sealed class PersonaNaturalCreador(
                 return Rechazo("adjunto_invalido");
         }
 
+        // 6. HU #14469 — pago confirmado en caja del punto: se guarda ligado al trámite (idempotente por trámite y por cobro).
+        await RegistrarPagoDelPuntoAsync(id, empresa, s, ct).ConfigureAwait(false);
+
         // Decisión del PO: aquí el trámite SIEMPRE se queda en borrador. Ni preflight ni radicación ni transiciones: el pago y el
         // resto del ciclo son de otra épica y los continúa FLIT 2 desde el borrador.
         db.ChangeTracker.Clear();
         var fila = await db.Set<ProcedureInstance>().AsNoTracking().Where(x => x.Id == id)
             .Select(x => new { x.ReferenceNumber, x.Status }).FirstAsync(ct).ConfigureAwait(false);
         return ResultadoRadicacionPortal.Nueva(id, fila.ReferenceNumber, fila.Status);
+    }
+
+    /// <summary>
+    /// HU #14469 — guarda el pago del portal solo cuando la solicitud es del punto de atención (<c>pn_punto</c>) y el portal lo
+    /// mandó. Otro canal no guarda nada aunque traiga pago. No cambia el estado del trámite ni rechaza la solicitud.
+    /// </summary>
+    private async Task RegistrarPagoDelPuntoAsync(Guid id, Guid empresa, SolicitudPortal s, CancellationToken ct)
+    {
+        if (TramiteCanal.DesdeSolicitudPortal(s.Datos.Canal) != TramiteCanal.PersonaNaturalOt)
+            return;
+        if (s.Pago is not { } pago)
+        {
+            return;
+        }
+
+        db.ChangeTracker.Clear();
+        var nuevo = await tramites.RegistrarPagoPortalAsync(id, empresa, pago, ct).ConfigureAwait(false);
+        if (nuevo)
+            RadicacionLog.PagoRegistrado(logger, id);
     }
 
     /// <summary>
@@ -527,6 +557,7 @@ internal static class MotivosDeRechazo
     public const string ParteNoSoportada = "parte_no_soportada";
     public const string IdentidadNoValidada = "identidad_no_validada";
     public const string OrganismoDestinoInvalido = "organismo_destino_invalido";
+    public const string PagoInvalido = "pago_invalido";
     public const string Generico = "no_fue_posible_crear";
 
     private static readonly Dictionary<string, string> Motivos = new(StringComparer.Ordinal)
@@ -542,6 +573,7 @@ internal static class MotivosDeRechazo
         [OrganismoDestinoInvalido] = "El organismo de destino elegido ya no está disponible. Elija otro organismo.",
         [SubmitGate.IdentidadNoAprobada] = "Falta validar la identidad de alguna de las partes del trámite.",
         [SubmitGate.DocumentosIncompletos] = "Faltan documentos obligatorios del trámite.",
+        [PagoInvalido] = "El pago registrado en caja no se pudo leer. Confírmelo de nuevo.",
         [SubmitGate.TipoServicioRequerido] = "Falta indicar el tipo de servicio del vehículo.",
         ["adjunto_invalido"] = "Alguno de los documentos adjuntos no se pudo registrar. Cárguelo de nuevo.",
         [InitialProcedureValidationGate.DuplicateActiveProcedure] = "Esta placa ya tiene un trámite en proceso. No puedes iniciar otro hasta que ese trámite termine o se anule. Puedes ver su estado en «Consultar mi trámite».",
@@ -576,6 +608,12 @@ internal static partial class RadicacionLog
 
     [LoggerMessage(EventId = 14054, Level = LogLevel.Warning, Message = "Portal Persona Natural: no se pudo anular el borrador {ProcedureInstanceId} de una solicitud rechazada ({Error}).")]
     public static partial void NoSePudoAnular(ILogger logger, Guid procedureInstanceId, string error);
+
+    [LoggerMessage(EventId = 14469, Level = LogLevel.Information, Message = "Portal Persona Natural: pago del punto registrado en el trámite {ProcedureInstanceId}.")]
+    public static partial void PagoRegistrado(ILogger logger, Guid procedureInstanceId);
+
+    [LoggerMessage(EventId = 14470, Level = LogLevel.Warning, Message = "Portal Persona Natural: la solicitud {SolicitudId} trajo un pago ilegible; se rechaza sin crear el trámite.")]
+    public static partial void PagoIlegible(ILogger logger, Guid solicitudId);
 
     [LoggerMessage(EventId = 14056, Level = LogLevel.Warning, Message = "Portal Persona Natural: no se sembró la ficha del vehículo del trámite {ProcedureInstanceId} ({Motivo}).")]
     public static partial void VehiculoNoSembrado(ILogger logger, Guid procedureInstanceId, string motivo);

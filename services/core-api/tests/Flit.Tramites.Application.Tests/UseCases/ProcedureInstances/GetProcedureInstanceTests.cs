@@ -81,6 +81,38 @@ public sealed class GetProcedureInstanceTests
         result.StatusHistory.Should().ContainSingle(h => h.ToStatus == TramiteEstado.Borrador);
     }
 
+    // HU #14469 — el detalle de un trámite del punto (pn_punto) trae el pago del portal con valor, medio y fecha.
+    [Fact]
+    public async Task HandleAsync_TramiteDelPuntoConPago_DevuelvePagoPortal()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var tenantId = Guid.NewGuid();
+        var pagadoEn = new DateTimeOffset(2026, 11, 9, 15, 30, 0, TimeSpan.Zero);
+        var instance = new ProcedureInstance
+        {
+            ProcedureType = ProcedureTypeFixture.Matricula,
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureTypeId = Guid.NewGuid(),
+            ReferenceNumber = "TRM-2026-000002",
+            Status = TramiteEstado.Borrador,
+            Channel = Flit.Tramites.Domain.Tramites.Enums.TramiteCanal.PersonaNaturalOt,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        _repo.GetByIdWithDetailsAsync(instance.Id, tenantId, ct).Returns(instance);
+        _repo.GetPagoPortalAsync(instance.Id, tenantId, ct).Returns(
+            new Flit.Tramites.Domain.Tramites.PersonaNatural.PagoPortalTramite(125_500, "caja", "efectivo", null, pagadoEn, "cobro-1"));
+
+        var (result, error) = await _sut.HandleAsync(instance.Id, tenantId, ct);
+
+        error.Should().BeNull();
+        result!.PagoPortal.Should().NotBeNull();
+        result.PagoPortal!.ValorCop.Should().Be(125_500);
+        result.PagoPortal.Medio.Should().Be("caja");
+        result.PagoPortal.MedioCaja.Should().Be("efectivo");
+        result.PagoPortal.PagadoEn.Should().Be(pagadoEn);
+    }
+
     // Bug #12526 — la Línea de tiempo del trámite mostraba gestor/correo/empresa fijos en vacío aunque
     // el backend tuviera el dato de quién ejecutó cada transición (changed_by).
     [Fact]

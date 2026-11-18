@@ -26,7 +26,8 @@ public sealed class ListEnabledProductsHandler
         var chain = await _store.GetTenantChainAsync(tenantId, ct).ConfigureAwait(false);
         if (chain.Count > 0)
         {
-            foreach (var product in ProductCodes.All.Where(p => p != ProductCodes.Plataforma))
+            // La caja del organismo es un módulo de FLIT 2.0 (ADR-0082), ya no una app aparte de la barra de la suite.
+            foreach (var product in ProductCodes.All.Where(p => p != ProductCodes.Plataforma && p != ProductCodes.Caja))
             {
                 var tenants = await _store.GetTenantsWithProductEnabledAsync(chain, product, ct).ConfigureAwait(false);
                 if (chain.All(tenants.Contains))

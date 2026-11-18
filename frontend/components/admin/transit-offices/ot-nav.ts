@@ -172,3 +172,15 @@ export function matchesOtOfficeSearch(
     foldOtSearch(office.name).includes(folded) || foldOtSearch(office.code).includes(folded)
   );
 }
+
+/**
+ * Segmento `[id]` de la ruta del organismo cuando el token de la persona de caja no trae `tenant_id`. La caja nunca manda
+ * ese id a la API (el organismo sale de su token), solo sirve para armar la URL de Portal Persona Natural.
+ */
+export const SEGMENTO_ORGANISMO_PROPIO = "mi-organismo";
+
+/** Ruta de Portal Persona Natural → Caja de la persona de caja: su organismo es el de su token (`tenant_id`). */
+export function cajaPortalPath(tenantId: string | null | undefined, sub?: "cobrar" | "cobros" | "usuarios"): string {
+  const base = otHubModulePath(tenantId || SEGMENTO_ORGANISMO_PROPIO, "portal-persona-natural");
+  return `${base}?tab=caja${sub ? `&sub=${sub}` : ""}`;
+}

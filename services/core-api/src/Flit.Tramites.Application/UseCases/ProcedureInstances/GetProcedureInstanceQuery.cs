@@ -214,7 +214,11 @@ public sealed record ProcedureInstanceDetailDto(
     // Organismo del punto de atención (solo canal pn_punto) y su nombre, para mostrarlo sin otra consulta.
     // Distinto del organismo del trámite, que puede cambiar al enviarlo al OT.
     Guid? ChannelTransitOfficeId = null,
-    string? ChannelTransitOfficeName = null);
+    string? ChannelTransitOfficeName = null,
+    // HU #14469 — pago del portal (canal pn_punto) ligado al trámite. Solo existe cuando el punto radicó ya pagado; en los
+    // demás trámites la propiedad no se escribe en el JSON. Aditivo.
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    ProcedureInstancePagoPortalDto? PagoPortal = null);
 
 public sealed class GetProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
@@ -383,8 +387,16 @@ public sealed class GetProcedureInstanceHandler(
             channelOfficeName = officeNames?.GetValueOrDefault(channelOfficeId);
         }
 
+        // HU #14469 — pago del portal: solo los trámites del punto de atención pueden tenerlo; el resto no consulta.
+        ProcedureInstancePagoPortalDto? pagoPortal = null;
+        if (string.Equals(instance.Channel, TramiteCanal.PersonaNaturalOt, StringComparison.Ordinal)
+            && await repo.GetPagoPortalAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false) is { } pago)
+        {
+            pagoPortal = ProcedureInstancePagoPortalDto.Desde(pago);
+        }
+
         return ToDetail(instance, events, actorInfo, revocationEligibility, activeRevocationRequest, lastRevocationDecision)
-            with { ConsolidadoWizard = wizard, ConsolidadoMaestro = maestro, ChannelTransitOfficeName = channelOfficeName };
+            with { ConsolidadoWizard = wizard, ConsolidadoMaestro = maestro, ChannelTransitOfficeName = channelOfficeName, PagoPortal = pagoPortal };
     }
 
     /// <summary>

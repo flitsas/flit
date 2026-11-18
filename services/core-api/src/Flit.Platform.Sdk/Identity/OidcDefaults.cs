@@ -38,6 +38,8 @@ public static class OidcDefaults
         ["platform.usuarios.diagnostico.conteos"] = ServiceAudiences.Tramites,
         // HU #14050 (Épica #14021): lectura por pull de las solicitudes radicadas en core-personanatural (la usa core-api, svc-tramites).
         ["platform.personanatural.leer"] = ServiceAudiences.PersonaNatural,
+        // HU #14461 (Épica #14210, ADR-0082): administración del cobro en caja desde el hub del OT (la usa core-api, svc-tramites).
+        ["platform.personanatural.caja"] = ServiceAudiences.PersonaNatural,
     };
 
     /// <summary>Prefijo de los clientes de servicio (contrato §3, <c>svc-&lt;código&gt;</c>): su <c>sub</c> en el token.</summary>

@@ -130,6 +130,75 @@ public sealed class AdjuntosService(
         await solicitudes.GuardarAsync(s, ct).ConfigureAwait(false);
     }
 
+    /// <summary>Soporte de caja (Feature #14453): la prefactura que el cajero adjunta al confirmar. No viaja a FLIT 2.0 ni a la persona.</summary>
+    public const string TipoPrefacturaCaja = "prefactura_caja";
+
+    public const string CodigoPrefacturaInvalida = "prefactura_invalida";
+
+    /// <summary>
+    /// Guarda la prefactura de un cobro en caja: PDF, JPG o PNG (por la FIRMA del archivo, no por la extensión) de hasta
+    /// <paramref name="maxBytes"/>. A diferencia de <see cref="CargarAsync"/> no exige que la solicitud sea editable (está en pago)
+    /// ni cuenta contra el tope de archivos del ciudadano. Devuelve el id del adjunto; la lectura es solo del administrador del OT.
+    /// </summary>
+    public async Task<Guid> GuardarPrefacturaAsync(Guid solicitudId, string? nombreOriginal, byte[] contenido, long maxBytes, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(contenido);
+        if (contenido.Length == 0)
+            throw Prefactura("La prefactura está vacía.");
+        if (contenido.LongLength > maxBytes)
+            throw Prefactura($"La prefactura supera los {maxBytes / (1024 * 1024)} MB permitidos.");
+
+        var mime = FirmaDeArchivo.Detectar(contenido);
+        if (mime is null or FirmaDeArchivo.Webp)
+            throw Prefactura("La prefactura debe ser un PDF, JPG o PNG.");
+        if (await analizador.AnalizarAsync(contenido, mime, ct).ConfigureAwait(false) is { } rechazo)
+            throw Prefactura(rechazo);
+
+        var nombre = FirmaDeArchivo.NombreSeguro(nombreOriginal, mime);
+        ArchivoGuardado guardado;
+        try
+        {
+            guardado = await almacen.GuardarAsync(solicitudId, TipoPrefacturaCaja, nombre, contenido, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or InvalidOperationException or TaskCanceledException && !ct.IsCancellationRequested)
+        {
+            throw new ReglaDeNegocioException(StatusCodes.Status502BadGateway, "almacenamiento_no_disponible", "Almacenamiento no disponible", "No pudimos guardar la prefactura. Intente de nuevo.");
+        }
+
+        var fila = new Adjunto
+        {
+            Id = Guid.CreateVersion7(), SolicitudId = solicitudId, Tipo = TipoPrefacturaCaja, NombreArchivo = nombre, MimeType = mime,
+            TamanoBytes = guardado.TamanoBytes, Sha256 = guardado.Sha256, StoragePath = guardado.Referencia, CreatedAt = reloj.GetUtcNow(),
+        };
+        db.Add(fila);
+        try
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            await almacen.EliminarAsync(guardado.Referencia, CancellationToken.None).ConfigureAwait(false);
+            throw;
+        }
+
+        return fila.Id;
+    }
+
+    /// <summary>Retira una prefactura que no llegó a quedar ligada a un pago (el cobro perdió la carrera o cambió el total).</summary>
+    public async Task DescartarPrefacturaAsync(Guid adjuntoId, CancellationToken ct)
+    {
+        db.ChangeTracker.Clear();
+        var fila = await db.Set<Adjunto>().FirstOrDefaultAsync(a => a.Id == adjuntoId && a.Tipo == TipoPrefacturaCaja, ct).ConfigureAwait(false);
+        if (fila is null)
+            return;
+        await almacen.EliminarAsync(fila.StoragePath, ct).ConfigureAwait(false);
+        db.Remove(fila);
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+    }
+
+    private static ReglaDeNegocioException Prefactura(string motivo) =>
+        new(StatusCodes.Status400BadRequest, CodigoPrefacturaInvalida, "Prefactura no válida", motivo);
+
     private static ReglaDeNegocioException Invalido(string campo, string mensaje)
     {
         var errores = new ErroresDeCampo();

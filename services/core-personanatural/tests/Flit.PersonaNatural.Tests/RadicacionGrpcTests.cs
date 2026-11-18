@@ -38,6 +38,8 @@ internal sealed class EsquemaDeAutenticacionDePrueba(IOptionsMonitor<Authenticat
         claims.AddRange(Request.Headers["x-test-aud"].Select(a => new Claim("aud", a!)));
         if (Request.Headers.TryGetValue("x-test-scope", out var scope))
             claims.Add(new Claim("scope", scope.ToString()));
+        // Feature #14453: claims arbitrarios (tipo=valor) para ejercitar la autorización del portal de caja (product, role, tenant_id, iat).
+        claims.AddRange(Request.Headers["x-test-claim"].Select(c => c!.Split('=', 2)).Where(p => p.Length == 2).Select(p => new Claim(p[0], p[1])));
         var ticket = new AuthenticationTicket(new ClaimsPrincipal(new ClaimsIdentity(claims, Nombre)), Nombre);
         return Task.FromResult(AuthenticateResult.Success(ticket));
     }
@@ -197,6 +199,38 @@ public sealed class RadicacionGrpcTests : IAsyncLifetime
         await SinLecturasAuditadasAsync();
     }
 
+    // ── HU #14468: el pago viaja por el RPC ──────────────────────────────────────────────────────────────────────────
+
+    private static readonly Guid CobroDelPunto = Guid.Parse("0199b7e0-0000-7000-8000-0000000000c1");
+
+    [Fact]
+    public async Task HU14468_UnaSolicitudDelPuntoPagada_LlevaElPagoPortal_SinDatosPersonales()
+    {
+        await IniciarAsync();
+        var id = await CrearSolicitudAsync(EstadoSolicitud.EnCola, punto: true);
+
+        var r = await Llamar(id, Cabeceras());
+
+        r.Pago.Should().NotBeNull();
+        r.Pago.ValorCop.Should().Be(366_000);
+        r.Pago.Medio.Should().Be("caja");
+        r.Pago.MedioCaja.Should().Be("otro");
+        r.Pago.MedioDetalle.Should().Be("Nequi");
+        r.Pago.PagadoEn.Should().Be("2026-10-27T21:30:00.000Z", "ISO-8601 en UTC");
+        r.Pago.CobroId.Should().Be(CobroDelPunto.ToString());
+    }
+
+    [Fact]
+    public async Task HU14468_UnaSolicitudDeLaWeb_NoLlevaPago()
+    {
+        await IniciarAsync();
+        var id = await CrearSolicitudAsync(EstadoSolicitud.EnCola);
+
+        var r = await Llamar(id, Cabeceras());
+
+        r.Pago.Should().BeNull();
+    }
+
     // ── Contenido, auditoría y logs ──────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -324,7 +358,7 @@ public sealed class RadicacionGrpcTests : IAsyncLifetime
     }
 
     /// <summary>Una solicitud completa en el estado dado, con las partes cifradas por <see cref="PersonaService"/> y dos adjuntos.</summary>
-    private async Task<Guid> CrearSolicitudAsync(string estado)
+    private async Task<Guid> CrearSolicitudAsync(string estado, bool punto = false)
     {
         var id = Guid.CreateVersion7();
         var ahora = _host.Reloj.GetUtcNow();
@@ -346,7 +380,7 @@ public sealed class RadicacionGrpcTests : IAsyncLifetime
                 Estado = estado,
                 CedulaSolicitanteHash = new byte[32],
                 FieldValues = "{\"km\":\"85000\"}",
-                Datos = "{\"comercial\":{\"valor\":45000000}}",
+                Datos = punto ? "{\"canal\":\"pn_punto\",\"comercial\":{\"valor\":45000000}}" : "{\"comercial\":{\"valor\":45000000}}",
                 IdempotencyKey = $"k-{_secuencia}",
                 CorrelationId = Guid.CreateVersion7(),
                 CreatedAt = ahora,
@@ -367,6 +401,15 @@ public sealed class RadicacionGrpcTests : IAsyncLifetime
         {
             await db.Set<PersonaSolicitante>().Where(p => p.SolicitudId == id)
                 .ExecuteUpdateAsync(set => set.SetProperty(p => p.ValidacionEstado, "aprobada").SetProperty(p => p.ValidacionId, Guid.NewGuid()), TestContext.Current.CancellationToken);
+            if (punto)
+            {
+                db.Add(new CobroSolicitud
+                {
+                    Id = CobroDelPunto, SolicitudId = id, OrganismoId = Guid.Parse(PortalHost.Organismo), Codigo = codigo, Estado = "pagado", ValorCop = 366_000, Medio = "caja", MedioCaja = "otro",
+                    MedioDetalle = "Nequi", PagadoPor = "caja-1", PagadoEn = new DateTimeOffset(2026, 10, 27, 21, 30, 0, TimeSpan.Zero), Lineas = "[]", VersionTarifa = "v1", CreatedAt = ahora, UpdatedAt = ahora,
+                });
+            }
+
             db.Add(new Adjunto { Id = Guid.CreateVersion7(), SolicitudId = id, Tipo = "compraventa", NombreArchivo = Archivo, MimeType = "application/pdf", TamanoBytes = 99, Sha256 = new string('b', 64), StoragePath = "ref-compraventa", CreatedAt = ahora });
             db.Add(new Adjunto { Id = Guid.CreateVersion7(), SolicitudId = id, Tipo = "comprobante_pago", NombreArchivo = "pago.png", MimeType = "image/png", TamanoBytes = 1234, Sha256 = new string('a', 64), StoragePath = "ref-pago", CreatedAt = ahora.AddSeconds(1) });
             await db.SaveChangesAsync(TestContext.Current.CancellationToken);

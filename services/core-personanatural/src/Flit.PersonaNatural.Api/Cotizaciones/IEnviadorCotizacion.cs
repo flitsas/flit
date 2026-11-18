@@ -13,6 +13,10 @@ public interface IEnviadorCotizacion
 {
     /// <returns><c>true</c> si el transporte aceptó el correo.</returns>
     Task<bool> EnviarAsync(string correo, string asunto, string html, CancellationToken ct);
+
+    /// <summary>Igual, con la plantilla del correo (otros correos del portal, p. ej. el de cierre). Por defecto ignora la plantilla.</summary>
+    Task<bool> EnviarAsync(string correo, string asunto, string html, string plantilla, CancellationToken ct) =>
+        EnviarAsync(correo, asunto, html, ct);
 }
 
 internal sealed class EnviadorCotizacionNoConfigurado : IEnviadorCotizacion
@@ -31,11 +35,14 @@ internal sealed partial class EnviadorCotizacionGrpc(NotificacionesService.Notif
     public const string Scope = "platform.notificaciones.send";
     public const string Plantilla = "persona-natural.cotizacion";
 
-    public async Task<bool> EnviarAsync(string correo, string asunto, string html, CancellationToken ct)
+    public Task<bool> EnviarAsync(string correo, string asunto, string html, CancellationToken ct) =>
+        EnviarAsync(correo, asunto, html, Plantilla, ct);
+
+    public async Task<bool> EnviarAsync(string correo, string asunto, string html, string plantilla, CancellationToken ct)
     {
         var request = new EnviarCorreoRequest
         {
-            Correo = new Correo { Plantilla = Plantilla, Canal = Canal.FlitSmtp, DestinatarioEmail = correo, Asunto = asunto, Html = html },
+            Correo = new Correo { Plantilla = plantilla, Canal = Canal.FlitSmtp, DestinatarioEmail = correo, Asunto = asunto, Html = html },
         };
         var metadata = new Metadata { { PlatformServiceCallInterceptor.TenantMetadata, PlatformTenants.PersonaNatural.ToString() } };
         try

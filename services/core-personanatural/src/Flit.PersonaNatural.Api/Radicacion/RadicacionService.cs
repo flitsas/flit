@@ -32,8 +32,12 @@ public sealed class RadicacionService(
     TimeProvider reloj,
     VerificadorDeOrganismo verificadorDeOrganismo,
     IGravamenDelBorrador? gravamen = null,
-    IFachadaMediosPago? medios = null)
+    IFachadaMediosPago? medios = null,
+    ILogger<RadicacionService>? log = null)
 {
+    /// <summary>Feature #14447 (HU #14468): una solicitud del punto sin pago confirmado no se radica.</summary>
+    public const string CodigoPagoPendiente = "pago_pendiente";
+
     public const string TipoEvento = "tramites.persona_natural.radicacion_solicitada";
     public const int VersionEvento = 1;
     public const string CodigoIdempotenciaRequerida = "idempotency_key_requerida";
@@ -74,12 +78,23 @@ public sealed class RadicacionService(
 
     private async Task<RadicacionAceptada> RadicarEnTransaccionAsync(Guid id, string llave, CobroAlRadicar? cobro, CancellationToken ct)
     {
-        var s = await db.Set<SolicitudTramite>().FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false) ?? throw SolicitudesService.NoEncontrada();
+        // FOR UPDATE: dos radicaciones de la misma solicitud (dos réplicas, o el trabajo de fondo y una consulta) se serializan; la segunda encuentra la llave ya usada.
+        var s = await Pagos.Transaccion.BloquearSolicitudAsync(db, id, ct).ConfigureAwait(false) ?? throw SolicitudesService.NoEncontrada();
 
         // Misma llave sobre la misma solicitud ya aceptada: el mismo resultado y ningún evento nuevo.
         if (s.IdempotencyKey == llave && !SolicitudesService.EsEditable(s.Estado))
             return new RadicacionAceptada(s.Id, s.CodigoPublico, s.Estado);
-        if (!SolicitudesService.EsEditable(s.Estado))
+
+        // HU #14468: en el punto la radicación se dispara con el pago confirmado. Antes del pago no se radica; la web no cambia.
+        var delPunto = SolicitudesService.EsCanalPunto(s.Datos);
+        var pagadaDelPunto = delPunto && s.Estado == EstadoSolicitud.Pagada;
+        if (delPunto && s.Estado is EstadoSolicitud.Borrador or EstadoSolicitud.PendienteValidacion or EstadoSolicitud.PendientePago)
+        {
+            throw new ReglaDeNegocioException(
+                StatusCodes.Status409Conflict, CodigoPagoPendiente, "Falta el pago", "El trámite se envía a FLIT 2.0 cuando el pago está confirmado.");
+        }
+
+        if (!pagadaDelPunto && !SolicitudesService.EsEditable(s.Estado))
             throw SolicitudesService.NoPermiteCambio(s.Estado);
         if (s.OrganismoId == Guid.Empty)
             throw new ReglaDeNegocioException(StatusCodes.Status422UnprocessableEntity, SolicitudesService.CodigoOrganismoRequerido, "Falta el organismo", "Elige el organismo de tránsito antes de enviar el trámite.");
@@ -149,7 +164,9 @@ public sealed class RadicacionService(
             }
         }
 
-        if (cobro?.Medio is not null)
+        if (pagadaDelPunto)
+            db.Add(await CongelarCotizacionDelPagoAsync(s, ct).ConfigureAwait(false));
+        else if (cobro?.Medio is not null)
             db.Add(await CongelarCotizacionAsync(s, cobro, ct).ConfigureAwait(false));
 
         var evento = await ArmarEventoAsync(s, borrador, llave, ct).ConfigureAwait(false);
@@ -169,7 +186,7 @@ public sealed class RadicacionService(
     /// </summary>
     private async Task<RadicacionSolicitada> ArmarEventoAsync(SolicitudTramite s, SolicitudDto borrador, string llave, CancellationToken ct)
     {
-        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id).OrderBy(a => a.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
+        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id && a.Tipo != Flit.PersonaNatural.Api.Adjuntos.AdjuntosService.TipoPrefacturaCaja).OrderBy(a => a.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
         var comprobante = adjuntos.LastOrDefault(a => a.Tipo == SolicitudesService.TipoComprobantePago);
         return new RadicacionSolicitada(
             s.Id, s.CodigoPublico, s.TipoTramiteCodigo, s.DefinicionVersion, borrador.DefinicionHuella, s.OrganismoId,
@@ -223,6 +240,53 @@ public sealed class RadicacionService(
         };
     }
 
+    /// <summary>
+    /// HU #14468 — la cotización que se congela es la del PAGO (líneas, total y versión de tarifa de cuando se confirmó), no una
+    /// nueva: lo que se cobró en caja es lo que queda en el trámite aunque la tarifa haya cambiado después.
+    /// </summary>
+    private async Task<CotizacionCongelada> CongelarCotizacionDelPagoAsync(SolicitudTramite s, CancellationToken ct)
+    {
+        var pago = await db.Set<CobroSolicitud>().AsNoTracking().SingleOrDefaultAsync(c => c.SolicitudId == s.Id && c.Estado == EstadoCobro.Pagado, ct).ConfigureAwait(false)
+            ?? throw new ReglaDeNegocioException(StatusCodes.Status409Conflict, CodigoPagoPendiente, "Falta el pago", "El trámite se envía a FLIT 2.0 cuando el pago está confirmado.");
+        return new CotizacionCongelada
+        {
+            SolicitudId = s.Id,
+            Medio = Pagos.CotizadorDelPunto.MedioPin,
+            AmbitoOrganismoId = s.OrganismoId,
+            Lineas = pago.Lineas ?? "[]",
+            TotalCop = pago.ValorCop ?? 0,
+            VersionTarifa = pago.VersionTarifa ?? string.Empty,
+            CongeladaEn = reloj.GetUtcNow(),
+        };
+    }
+
+    /// <summary>Llave de idempotencia de la radicación que dispara el pago: una por solicitud, estable entre reintentos.</summary>
+    public static string LlaveDelPago(Guid solicitudId) => $"pago-{solicitudId:N}";
+
+    /// <summary>
+    /// HU #14468 — radica una solicitud del punto que ya quedó <c>pagada</c>. Devuelve <c>true</c> si quedó (o ya estaba) en cola.
+    /// Si no se pudo (FLIT 2 caído, requisito que cambió) NO lanza: el pago es firme y la solicitud sigue <c>pagada</c> para que
+    /// el siguiente intento (otra consulta del estado de pago) la radique. Nada de datos personales en el registro.
+    /// </summary>
+    public async Task<bool> IntentarRadicarPagadaAsync(Guid solicitudId, CancellationToken ct)
+    {
+        var estado = await db.Set<SolicitudTramite>().AsNoTracking().Where(x => x.Id == solicitudId).Select(x => x.Estado).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (estado != EstadoSolicitud.Pagada)
+            return estado == EstadoSolicitud.EnCola;
+
+        try
+        {
+            await RadicarAsync(solicitudId, LlaveDelPago(solicitudId), null, ct).ConfigureAwait(false);
+            return true;
+        }
+        catch (Exception ex) when (ex is ReglaDeNegocioException or FachadaException or DbUpdateException)
+        {
+            if (log is not null)
+                LogsDeRadicacion.PagadaSinRadicar(log, solicitudId, (ex as ReglaDeNegocioException)?.Codigo ?? ex.GetType().Name);
+            return false;
+        }
+    }
+
     private static ReglaDeNegocioException LlaveEnUso() =>
         new(StatusCodes.Status409Conflict, CodigoIdempotenciaConflicto, "Clave ya usada", "Esa Idempotency-Key ya se usó con otro trámite.");
 
@@ -240,3 +304,9 @@ public sealed class RadicacionService(
 
 /// <summary>Cobro elegido al radicar: el medio, los adicionales que se cotizaron y, si se quiere, el total que la persona vio.</summary>
 public sealed record CobroAlRadicar(string? Medio, IReadOnlyCollection<string> Adicionales, long? TotalCopVisto);
+
+internal static partial class LogsDeRadicacion
+{
+    [LoggerMessage(Level = LogLevel.Warning, Message = "La solicitud {SolicitudId} está pagada pero aún no se pudo radicar: {Motivo}")]
+    public static partial void PagadaSinRadicar(ILogger logger, Guid solicitudId, string motivo);
+}
