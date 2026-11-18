@@ -40,7 +40,7 @@ public sealed class ReportesAutomaticos(ComparendosDb db, ServicioReportes repor
                 || !await productos.ComparendosHabilitadoAsync(empresa.TenantId, ct).ConfigureAwait(false))
                 continue;
             var a = new Alcance(empresa.TenantId, null, desde, hoy);
-            var html = await ArmarAsync(a, empresa.EmpresaNombre ?? "la empresa", semanal, ct).ConfigureAwait(false);
+            var html = await ArmarAsync(a, empresa.EmpresaNombre ?? "la empresa", semanal, ct, empresa.ConjuntoPlantillas).ConfigureAwait(false);
             await correo.RegistrarAsync(new CorreoNuevo
             {
                 TenantId = empresa.TenantId,
@@ -56,7 +56,7 @@ public sealed class ReportesAutomaticos(ComparendosDb db, ServicioReportes repor
         }
     }
 
-    public async Task<string> ArmarAsync(Alcance a, string empresa, bool semanal, CancellationToken ct)
+    public async Task<string> ArmarAsync(Alcance a, string empresa, bool semanal, CancellationToken ct, ConjuntoPlantillas conjunto = ConjuntoPlantillas.Flit)
     {
         ArgumentNullException.ThrowIfNull(a);
         var k = await reportes.KpisAsync(a, ct).ConfigureAwait(false);
@@ -88,6 +88,7 @@ public sealed class ReportesAutomaticos(ComparendosDb db, ServicioReportes repor
             {lista}
             <p><a href="{correo.AppUrl}/reportes">Ver el dashboard</a></p>
             """;
-        return HtmlCorreo.Envolver(semanal ? "Cierre semanal de comparendos" : "Cierre mensual de comparendos", cuerpo);
+        // Va a los destinatarios de la empresa: lleva el marco de su conjunto (FLIT o Renting, sin rastro de FLIT).
+        return HtmlCorreo.DeEmpresa(conjunto, semanal ? "Cierre semanal de comparendos" : "Cierre mensual de comparendos", cuerpo, empresa, $"{correo.AppUrl}/assets/correo");
     }
 }

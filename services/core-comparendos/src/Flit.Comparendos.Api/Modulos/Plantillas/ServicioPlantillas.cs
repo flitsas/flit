@@ -51,6 +51,13 @@ public class ServicioPlantillas(ComparendosDb db, IConfiguration configuration)
     public static bool ConMarca(TipoPlantilla tipo) => tipo is TipoPlantilla.CorreoAviso1 or TipoPlantilla.CorreoAviso2 or TipoPlantilla.CorreoAviso3
         or TipoPlantilla.CorreoAviso4 or TipoPlantilla.CorreoCambioContraventorOt;
 
+    /// <summary>
+    /// HU #14621: correos a organismos y a la empresa que en FLIT llevan la cabecera con imagen de FLIT. En Renting NO se usa todavía su
+    /// cabecera (dice «¡Aviso! Fotomulta pendiente de pago» y su pie es de dudas para conductores): hasta que haya una variante
+    /// apropiada siguen con el marco neutro sin rastro de FLIT.
+    /// </summary>
+    public static bool ConCabeceraFlit(TipoPlantilla tipo) => tipo is TipoPlantilla.CorreoDpOt or TipoPlantilla.CorreoAlertaSinRl;
+
     public static Armado Armar(PlantillaVersion version, TipoPlantilla tipo, IReadOnlyDictionary<string, string?> valores, ConjuntoPlantillas conjunto = ConjuntoPlantillas.Flit,
         string recursos = "http://127.0.0.1:4023/assets/correo")
     {
@@ -63,6 +70,9 @@ public class ServicioPlantillas(ComparendosDb db, IConfiguration configuration)
         var flit = conjunto == ConjuntoPlantillas.Flit;
         if (ConMarca(tipo))
             return new Armado(version.Id, asunto, flit ? HtmlCorreo.Flit(cuerpo, empresa, recursos, cierre: tipo != TipoPlantilla.CorreoCambioContraventorOt) : HtmlCorreo.Renting(cuerpo, recursos));
+        // El DP lo firma el representante y el aviso es del sistema: el marco no agrega «Cordialmente».
+        if (flit && ConCabeceraFlit(tipo))
+            return new Armado(version.Id, asunto, HtmlCorreo.Flit(cuerpo, empresa, recursos, cierre: false));
         var pie = empresa is null ? null : flit ? $"{empresa} · Comunicación enviada con FLIT." : $"{empresa} · Correo automático, no lo respondas.";
         return new Armado(version.Id, asunto, HtmlCorreo.Envolver(asunto ?? (flit ? "Comparendos" : empresa ?? "Comparendos"), cuerpo, pie, flit));
     }

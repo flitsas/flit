@@ -520,6 +520,35 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
     }
 
     [Fact]
+    public async Task HU14621_El_resumen_del_DP_automatico_sale_con_el_marco_y_la_cabecera_de_la_empresa()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        // Resumen (sin firma → omisión → resumen) con marco FLIT y, después, con el conjunto Renting de la empresa.
+        var empresa = await EmpresaListaAsync(conFirma: false);
+        await AlertasAsync(empresa);
+        await ComparendosAsync(empresa, "AUTO-MARCO", 1);
+        async Task<string> ResumenAsync()
+        {
+            var c = (await api.EnDbAsync(db => db.Comunicaciones.AsNoTracking().Where(x => x.TenantId == empresa && x.Tipo == TipoComunicacion.ResumenEnvioAutomaticoDp).OrderByDescending(x => x.CreadoEn).ToListAsync(ct)))[0];
+            await using var scope = api.App.Services.CreateAsyncScope();
+            return System.Text.Encoding.UTF8.GetString((await scope.ServiceProvider.GetRequiredService<Flit.Comparendos.Api.Modulos.Comun.RegistroArchivos>().LeerAsync(c.CuerpoHtmlArchivoId, ct))!.Value.Contenido);
+        }
+
+        await CorrerAsync(empresa);
+        (await ResumenAsync()).Should().Contain("flit-cabecera.png");
+
+        // El conjunto sigue al canal que Trámites tiene para la empresa (HU #13882): «API Renting cliente» ⇒ conjunto Renting.
+        api.Empresas.Agregar(empresa, "Renting Colombia S.A.S", NitGestora, CanalCorreo.EmpresaApi);
+        api.App.Services.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>().Remove(CanalDeTramites.ClaveCache);
+        api.Reloj.Hoy(Hoy.AddDays(1));
+        await CorrerAsync(empresa);
+        var renting = await ResumenAsync();
+        renting.Should().NotContain("flit-cabecera.png").And.Contain("Derechos de petici");
+        renting.ToLowerInvariant().Should().NotContain("flit");
+    }
+
+    [Fact]
     public async Task Una_empresa_que_falla_no_frena_a_las_demas()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
