@@ -849,6 +849,8 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "rechazar identidad",
       "esperando captura",
       "pendiente de revision",
+      "quien aprobo",
+      "aprobada por",
     ],
     summary:
       "Cuándo usar la validación manual, cómo activarla, cómo copiar o regenerar el enlace para el cliente y cómo aprobar o rechazar cada caso.",
@@ -903,6 +905,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         bullets: [
           "Aprobar: la identidad queda aprobada por 30 días y el estado cambia a «Aprobada manual».",
           "Rechazar: eliges uno de los motivos de la lista. La persona recibe el motivo por correo junto con un enlace nuevo para repetir la captura.",
+          "Queda registrado quién decidió y cuándo: el detalle del caso muestra, por ejemplo, «Aprobada por Ana Pérez el 18/11/2026 10:30» o «Rechazada por …».",
         ],
       },
       {
