@@ -43,6 +43,7 @@ public sealed class IctOrchestrationService(
     IOtOperabilityGate otOperabilityGate,
     IPlateRangeRepository plateRangeRepository,
     IVehicleBodyworkCatalog bodyworkCatalog,
+    IVehicleColorCatalog colorCatalog,
     FlitDbContext db,
     IConfiguration configuration,
     ILogger<IctOrchestrationService> logger) : IctOrchestration.IctOrchestrationBase
@@ -373,6 +374,9 @@ public sealed class IctOrchestrationService(
         // Carrocería de la transformación 17: DESPUÉS del preflight, que deja la clase RUNT (vehicle_class).
         await ValidarCarroceriaIctAsync(reply, summary.Id, tenantId, request, context.CancellationToken);
 
+        // Color de la transformación 5: también DESPUÉS del preflight (deja vehicle_color_runt hidratado).
+        await ValidarColorIctAsync(reply, summary.Id, tenantId, request, context.CancellationToken);
+
         // Bug #13445 (D1/D3) — prenda: DESPUÉS del preflight, que es quien deja la señal runt_* en los
         // field_values. Automática solo en los casos de la matriz conservadora; el resto, aviso al gestor.
         await ResolverPrendaIctAsync(reply, summary.Id, tenantId, createdBy, context.CancellationToken);
@@ -440,6 +444,7 @@ public sealed class IctOrchestrationService(
                 // Solo si ESTA pasada hizo el preflight: con snapshot previo la carrocería ya se validó (o el
                 // gestor la editó) y no se vuelve a tocar.
                 await ValidarCarroceriaIctAsync(reply, instanceId, tenantId, request, ct);
+                await ValidarColorIctAsync(reply, instanceId, tenantId, request, ct);
             }
         }
 
@@ -879,6 +884,70 @@ public sealed class IctOrchestrationService(
             IctOrchestrationLog.StepFailed(
                 logger, "carroceria", CodigoDeFallo(ex), ex.GetType().Name, SqlStateDe(ex), instanceId);
             AppendWarning(reply, "seed_warning:carroceria_" + CodigoDeFallo(ex));
+        }
+    }
+
+    /// <summary>
+    /// Transformación 5 (cambio de color): core-ict manda la <c>description</c> como <c>vehicle_color</c> junto a
+    /// <c>cambio_color=true</c>. Coincidencia exacta (salvo mayúsculas y espacios) con <c>catalogs.vehicle_colors</c>
+    /// → se guarda el nombre canónico del catálogo. Si no coincide → el color vuelve al del RUNT
+    /// (<c>vehicle_color_runt</c>, o vacío), <c>cambio_color</c> sigue en <c>true</c> para que el gestor elija y se
+    /// avisa con <see cref="IctPlacaCarroceria.WarningColorFueraDeCatalogo"/>. Sin color enviado no hace nada.
+    /// Best-effort: nada tumba la materialización.
+    /// </summary>
+    private async Task ValidarColorIctAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)
+    {
+        var enviado = FieldValueOf(request, VehicleFieldKeys.Color);
+        var cambio = FieldValueOf(request, "cambio_color");
+        if (!string.Equals(cambio?.Trim(), "true", StringComparison.OrdinalIgnoreCase)
+            || string.IsNullOrWhiteSpace(enviado))
+        {
+            return;
+        }
+
+        try
+        {
+            RefrescarRastreo();
+            var runt = await db.Set<ProcedureInstanceFieldValue>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(f => f.ProcedureInstanceId == instanceId && f.TenantId == tenantId
+                            && f.FieldKey == VehicleFieldKeys.ColorRunt)
+                .Select(f => f.ValueText)
+                .FirstOrDefaultAsync(ct);
+
+            // Candidatos con las mismas palabras (sin límite) y comparación EXACTA salvo mayúsculas/espacios.
+            // No se usa SearchAsync: con «contiene» + máximo 100 por nombre, un color común como «GRIS» (3 091
+            // nombres lo contienen) quedaría fuera del top y daría una advertencia falsa.
+            var candidatos = await colorCatalog.FindByWordsAsync(enviado, ct);
+            var coincide = IctPlacaCarroceria.CoincidenciaColor(enviado, candidatos);
+
+            var valor = coincide?.Name ?? (string.IsNullOrWhiteSpace(runt) ? null : runt.Trim());
+
+            RefrescarRastreo();
+            var (_, error) = await patchHandler.HandleAsync(
+                instanceId,
+                tenantId,
+                new Flit.Tramites.Application.UseCases.ProcedureInstances.PatchFieldValuesRequest(
+                    [new FieldValueInput(null, VehicleFieldKeys.Color, valor, null)]),
+                ct);
+            if (error is not null)
+            {
+                AppendWarning(reply, "seed_warning:" + error);
+            }
+
+            if (coincide is null)
+            {
+                AppendWarning(reply, IctPlacaCarroceria.WarningColorFueraDeCatalogo);
+            }
+        }
+        catch (Exception ex) when (EsFalloRecuperable(ex, ct))
+        {
+            RefrescarRastreo();
+            IctOrchestrationLog.StepFailed(
+                logger, "color", CodigoDeFallo(ex), ex.GetType().Name, SqlStateDe(ex), instanceId);
+            AppendWarning(reply, "seed_warning:color_" + CodigoDeFallo(ex));
         }
     }
 
