@@ -2,6 +2,7 @@
 
 import { ReactNode, useEffect, useMemo, useState } from "react";
 import { FLIT_PRIVACY_POLICY_URL } from "@/lib/brand/types";
+import * as nextNavigation from "next/navigation";
 import { usePathname } from "next/navigation";
 import { SuiteShell, type SuiteApp } from "@flit/shell/SuiteShell";
 import { useSuiteTheme } from "@flit/shell/theme";
@@ -86,6 +87,18 @@ function useCurrentUser() {
   return user;
 }
 
+/**
+ * `useSearchParams` tolerante: algunas pruebas sustituyen `next/navigation` por un doble sin esa función (el acceso al export
+ * lanza), y entonces la consulta se toma como vacía.
+ */
+const useQueryActual: () => { toString(): string } | null = (() => {
+  try {
+    return nextNavigation.useSearchParams;
+  } catch {
+    return () => null;
+  }
+})();
+
 /** Organismo del usuario OT: el de la ruta, el recordado en la sesión o el de su perfil. */
 function useOtTransitOfficeId(enabled: boolean, pathname: string, soloCajaTenantId: string | null): string | null {
   const fromPath = enabled ? extractTransitOfficeIdFromPath(pathname) : null;
@@ -126,6 +139,9 @@ export function Shell({
   const { dark } = useSuiteTheme();
   const currentUser = useCurrentUser();
   const pathname = usePathname() ?? "";
+  // Las entradas del dock con consulta (`…?tab=caja`) se marcan activas y abren su submenú comparando con la URL actual.
+  const consultaUrl = useQueryActual()?.toString() ?? "";
+  const searchActual = search || consultaUrl;
   const soloCaja = Boolean(currentUser?.isSoloCaja);
   const otTransitOfficeId = useOtTransitOfficeId(
     Boolean(currentUser?.isOtUser),
@@ -176,7 +192,7 @@ export function Shell({
         user={user}
         loadApps={loadApps}
         homeHref="/"
-        search={search}
+        search={searchActual}
         onLogout={onLogout}
         // HU #14480 — buscador Ctrl K: atajos del listado y placa, solo si el rol ve Trámites en el dock.
         searchActions={ACCIONES_BUSCADOR}
