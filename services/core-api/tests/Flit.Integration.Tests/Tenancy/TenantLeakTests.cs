@@ -310,6 +310,174 @@ public sealed class TenantLeakTests(PostgresDatabaseFixture fixture) : PostgresT
         }
     }
 
+    // ── Q55 / Q56: Inicio del SuperAdmin (lectura entre tenants; el 403 de los demás roles está en SuperAdminDashboardEndpointTests)
+
+    /// <summary>
+    /// Q55 — el resumen de compañías trae una fila por gestora con SUS conteos (2 trámites, los dos en proceso) y nunca al
+    /// organismo O, que también es fila de <c>identity.tenants</c>. La base puede traer otras compañías de las semillas de
+    /// migración: se afirma sobre las del escenario.
+    /// </summary>
+    [PostgresFact]
+    public async Task Q55_resumen_de_companias_trae_cada_gestora_con_lo_suyo_y_ningun_organismo()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        await using var ctx = NewContext();
+
+        var rows = await new SuperAdminDashboardReadRepository(ctx).GetCompaniesAsync(null, null, 7);
+
+        rows.Select(r => r.TenantId).Should().OnlyHaveUniqueItems();
+        rows.Should().NotContain(r => r.TenantId == HierarchyScenario.O, "un organismo de tránsito no es compañía cliente");
+        foreach (var tenant in HierarchyScenario.Clients)
+        {
+            var row = rows.Should().ContainSingle(r => r.TenantId == tenant).Subject;
+            row.Total.Should().Be(2, $"{HierarchyScenario.CodeOf(tenant)} solo tiene sus 2 trámites");
+            row.Activos.Should().Be(2, "entregado y borrador están en proceso");
+            row.Aprobados.Should().Be(0);
+            row.TasaAprobacionPct.Should().BeNull("sin decididos no hay tasa");
+            row.Represados.Should().Be(0, "los dos se movieron hace menos de 7 días");
+        }
+    }
+
+    /// <summary>
+    /// Q56 — con <c>tenantId</c> el organismo solo cuenta volumen y decisiones de esa compañía: la aprobación de C1 no
+    /// aparece en X. Sin compañía, Ot1 suma los trámites entregados de todas.
+    /// </summary>
+    [PostgresFact]
+    public async Task Q56_organismos_con_compania_solo_cuentan_lo_suyo_y_sin_ella_suman_todas()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        await using (var seed = NewContext())
+        {
+            // C1: el OT aprueba su trámite un día después de la radicación (entregado en now − 1 día).
+            seed.ProcedureInstanceStatusHistories.Add(new Flit.Tramites.Domain.Entities.ProcedureInstanceStatusHistory
+            {
+                Id = Guid.NewGuid(),
+                TenantId = HierarchyScenario.C1,
+                ProcedureInstanceId = HierarchyScenario.DeliveredProcedureOf(HierarchyScenario.C1),
+                FromStatus = TramiteEstado.Entregado,
+                ToStatus = TramiteEstado.Aprobado,
+                ChangedAt = DateTimeOffset.UtcNow,
+                ChangedBy = HierarchyScenario.UserOf(HierarchyScenario.C1),
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var repo = new SuperAdminDashboardReadRepository(ctx);
+
+        var c1 = await repo.GetOfficesAsync(HierarchyScenario.C1, null, null);
+        var ot1 = c1.Items.Should().ContainSingle("C1 solo radicó ante Ot1; el borrador no tiene organismo").Subject;
+        ot1.TransitOfficeId.Should().Be(HierarchyScenario.Ot1);
+        ot1.Volumen.Should().Be(1);
+        ot1.Decididos.Should().Be(1);
+        ot1.TiempoPromedioDias.Should().BeApproximately(1.0, 0.1);
+        c1.Decididos.Should().Be(1);
+        c1.TiempoPromedioDias.Should().BeApproximately(1.0, 0.1);
+
+        var x = await repo.GetOfficesAsync(HierarchyScenario.X, null, null);
+        x.Items.Should().ContainSingle().Which.Decididos.Should().Be(0, "la decisión de C1 no se filtra a X");
+        x.Decididos.Should().Be(0);
+        x.TiempoPromedioDias.Should().BeNull();
+
+        var todas = await repo.GetOfficesAsync(null, null, null);
+        todas.Items.Should().ContainSingle(o => o.TransitOfficeId == HierarchyScenario.Ot1)
+            .Which.Volumen.Should().BeGreaterThanOrEqualTo(HierarchyScenario.Clients.Count, "Ot1 recibió un trámite de cada cliente");
+    }
+
+    /// <summary>
+    /// Q55 / Q56 — Ver por familia (HU #13664) en las lecturas entre tenants: sin la familia del tipo sembrado no se cuenta
+    /// ningún trámite; con ella, los mismos conteos que sin restricción.
+    /// </summary>
+    [PostgresFact]
+    public async Task Q55_Q56_excluyen_la_familia_sin_Ver()
+    {
+        var tipo = await HierarchyScenario.SeedAsync(Fixture);
+        var propia = tipo.Family.ToUpperInvariant();
+        var ajena = propia == "TRASPASO" ? "MATRICULAS" : "TRASPASO";
+        await using var ctx = NewContext();
+        var repo = new SuperAdminDashboardReadRepository(ctx);
+
+        var conVer = await repo.GetCompaniesAsync(null, null, 7, [propia]);
+        var sinVer = await repo.GetCompaniesAsync(null, null, 7, [ajena]);
+        conVer.Single(r => r.TenantId == HierarchyScenario.C1).Total.Should().Be(2);
+        var fila = sinVer.Single(r => r.TenantId == HierarchyScenario.C1);
+        fila.Total.Should().Be(0, $"sin Ver de {propia} no se cuenta ningún trámite");
+        fila.Activos.Should().Be(0);
+
+        var officesConVer = await repo.GetOfficesAsync(HierarchyScenario.C1, null, null, [propia]);
+        officesConVer.Items.Should().ContainSingle().Which.Volumen.Should().Be(1);
+        officesConVer.Items[0].Distribucion.Should().OnlyContain(d => d.EnProceso + d.Completados + d.Rechazados > 0);
+        (await repo.GetOfficesAsync(HierarchyScenario.C1, null, null, [ajena])).Items.Should().BeEmpty();
+        (await repo.GetOfficesAsync(HierarchyScenario.C1, null, null, [])).Items.Should().BeEmpty("vacío = ninguna familia visible");
+    }
+
+    /// <summary>
+    /// Q55 — represado en positivo: el borrador de C1 sin historial y creado hace 10 días cuenta con <c>stuckDays</c> 7 y
+    /// no con 30 (prueba el <c>coalesce</c> con <c>created_at</c> y el <c>make_interval</c>).
+    /// </summary>
+    [PostgresFact]
+    public async Task Q55_represados_cuenta_lo_detenido_mas_de_stuckDays()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        await using (var seed = NewContext())
+        {
+            var borrador = await seed.ProcedureInstances.SingleAsync(p => p.Id == HierarchyScenario.DraftProcedureOf(HierarchyScenario.C1));
+            borrador.CreatedAt = DateTimeOffset.UtcNow.AddDays(-10);
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var repo = new SuperAdminDashboardReadRepository(ctx);
+
+        (await repo.GetCompaniesAsync(null, null, 7)).Single(r => r.TenantId == HierarchyScenario.C1)
+            .Represados.Should().Be(1, "el borrador lleva 10 días sin moverse");
+        (await repo.GetCompaniesAsync(null, null, 30)).Single(r => r.TenantId == HierarchyScenario.C1)
+            .Represados.Should().Be(0, "10 días no pasan de 30");
+        (await repo.GetCompaniesAsync(null, null, 7)).Single(r => r.TenantId == HierarchyScenario.C2)
+            .Represados.Should().Be(0, "el borrador de C1 no se cuenta en C2");
+    }
+
+    /// <summary>
+    /// Q56 — coherencia con «Trámites totales»: sin <c>tenantId</c>, los organismos solo cuentan compañías del universo
+    /// (activas y sin perfil OT), igual que el resumen de compañías. X inactiva y C2 con perfil OT salen del volumen de Ot1
+    /// y de la tabla; con <c>tenantId</c> explícito manda la compañía pedida.
+    /// </summary>
+    [PostgresFact]
+    public async Task Q56_sin_compania_excluye_inactivas_y_con_perfil_OT_como_el_resumen()
+    {
+        await HierarchyScenario.SeedAsync(Fixture);
+        int antes;
+        await using (var ctx0 = NewContext())
+            antes = (await new SuperAdminDashboardReadRepository(ctx0).GetOfficesAsync(null, null, null))
+                .Items.Single(o => o.TransitOfficeId == HierarchyScenario.Ot1).Volumen;
+
+        await using (var seed = NewContext())
+        {
+            (await seed.Tenants.SingleAsync(t => t.Id == HierarchyScenario.X)).IsActive = false;
+            seed.TransitOfficeProfiles.Add(new Flit.Infrastructure.Persistence.Entities.Admin.TransitOfficeProfile
+            {
+                Id = Guid.NewGuid(),
+                TenantId = HierarchyScenario.C2,
+                TransitOfficeId = HierarchyScenario.Ot2,
+                OperationMode = "dashboard",
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+            await seed.SaveChangesAsync();
+        }
+
+        await using var ctx = NewContext();
+        var repo = new SuperAdminDashboardReadRepository(ctx);
+
+        var despues = (await repo.GetOfficesAsync(null, null, null)).Items.Single(o => o.TransitOfficeId == HierarchyScenario.Ot1).Volumen;
+        despues.Should().Be(antes - 2, "los trámites de X (inactiva) y de C2 (perfil OT) salen del universo");
+
+        var companias = await repo.GetCompaniesAsync(null, null, 7);
+        companias.Should().NotContain(r => r.TenantId == HierarchyScenario.X || r.TenantId == HierarchyScenario.C2);
+
+        (await repo.GetOfficesAsync(HierarchyScenario.X, null, null)).Items.Should().ContainSingle()
+            .Which.Volumen.Should().Be(1, "con tenantId explícito manda la compañía pedida");
+    }
+
     private static DbTenantScopeResolver NewResolver(Infrastructure.Persistence.FlitDbContext ctx) =>
         new(ctx, new DbHierarchySwitches(ctx, NullLogger<DbHierarchySwitches>.Instance), NullLogger<DbTenantScopeResolver>.Instance);
 }
