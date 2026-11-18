@@ -1,3 +1,4 @@
+import { TRABAJO } from "@/lib/etiquetas";
 import { describe, expect, it } from "vitest";
 import {
   canalDeIngesta,
@@ -80,5 +81,12 @@ describe("ejecutar a mano (HU #13815)", () => {
   it("AC3: la ingesta va al diálogo de ingesta con su canal", () => {
     expect(canalDeIngesta("IngestaMunicipalPlaca")).toBe("MunicipalPlaca");
     expect(canalDeIngesta("ReporteSemanal")).toBeNull();
+  });
+});
+
+describe("trabajo EnvioAutomaticoDp (HU #14614)", () => {
+  it("tiene etiqueta y «Ejecutar ahora» advierte de correos reales", () => {
+    expect(TRABAJO.EnvioAutomaticoDp).toBe("Envío automático de derechos de petición");
+    expect(ejecucionManual("EnvioAutomaticoDp")).toMatchObject({ correos: true, porEmpresa: true });
   });
 });

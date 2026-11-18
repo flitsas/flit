@@ -33,6 +33,9 @@ public sealed class RelojDePrueba : TimeProvider
     public override DateTimeOffset GetUtcNow() => Ahora;
 
     public void Hoy(DateOnly dia) => Ahora = new DateTimeOffset(dia.ToDateTime(new TimeOnly(9, 0)), TimeSpan.FromHours(-5)).ToUniversalTime();
+
+    /// <summary>Fija un instante exacto (p. ej. cerca de la medianoche de Colombia, UTC-5).</summary>
+    public void En(DateTimeOffset momento) => Ahora = momento.ToUniversalTime();
 }
 
 /// <summary>

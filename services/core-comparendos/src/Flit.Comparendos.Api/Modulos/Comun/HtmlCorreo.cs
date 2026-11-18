@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using Flit.Comparendos.Domain.Modelo;
 
 namespace Flit.Comparendos.Api.Modulos.Comun;
 
@@ -69,6 +70,36 @@ public static class HtmlCorreo
         sb.Append("Si necesitas ayuda escribe a <strong>soporte@flitsas.com</strong>.</p>");
         sb.Append("<p style=\"margin:0;text-align:center\"><a href=\"https://flitsas.com.co/privacy-policy/\" style=\"color:#2F6FED;font-size:12px;text-decoration:underline\">POLÍTICA DE PRIVACIDAD</a></p>");
         sb.Append("</td></tr></table></body></html>");
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// HU #14621: el marco de un correo del sistema a la gente de la empresa según el conjunto de plantillas de la empresa (el canal
+    /// FlitSmtp/Renting solo es el transporte): con la cabecera de FLIT, o el marco neutro sin rastro de FLIT en Renting (su cabecera
+    /// es la de los avisos al conductor y no sirve para esto).
+    /// </summary>
+    public static string DeEmpresa(ConjuntoPlantillas conjunto, string titulo, string cuerpoHtml, string? empresa, string recursos)
+    {
+        var conTitulo = $"<h2 style=\"margin:0 0 12px;font-size:17px\">{WebUtility.HtmlEncode(titulo)}</h2>{cuerpoHtml}";
+        return conjunto == ConjuntoPlantillas.Renting ? RentingSistema(conTitulo, empresa, recursos) : Flit(conTitulo, empresa, recursos, cierre: false);
+    }
+
+    /// <summary>
+    /// HU #14621: marco de Renting para los correos de DP y del sistema a organismos y a la empresa: la cabecera de Renting SIN el texto
+    /// «¡Aviso! Fotomulta pendiente de pago» (<c>renting-cabecera-dp.jpg</c>, provisional hasta que Diseño entregue la suya) y, en vez del
+    /// pie de dudas de los avisos al conductor, un pie corto y neutro. Nada de FLIT. Los avisos al conductor siguen con <see cref="Renting"/>.
+    /// </summary>
+    public static string RentingSistema(string cuerpoHtml, string? empresa, string recursos)
+    {
+        var sb = new StringBuilder();
+        sb.Append("<!doctype html><html lang=\"es\"><head><meta charset=\"utf-8\"/><meta name=\"color-scheme\" content=\"light\"/><meta name=\"supported-color-schemes\" content=\"light\"/></head>");
+        sb.Append("<body style=\"margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:#333333;font-size:14px;line-height:1.5\">");
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:640px;margin:0 auto;background:#ffffff\">");
+        Imagen(sb, $"{recursos}/renting-cabecera-dp.jpg", "Renting Colombia · Localiza");
+        sb.Append("<tr><td style=\"padding:32px 36px 16px;background:#ffffff\">").Append(cuerpoHtml).Append("</td></tr>");
+        sb.Append("<tr><td style=\"padding:8px 36px 28px\"><hr style=\"border:none;border-top:1px solid #E5EAF2;margin:0 0 12px\"/><p style=\"margin:0;font-size:12px;color:#6B778C;text-align:center\">")
+            .Append(empresa is { Length: > 0 } ? $"{WebUtility.HtmlEncode(empresa)} · " : string.Empty).Append("Correo automático, no lo respondas.</p></td></tr>");
+        sb.Append("</table></body></html>");
         return sb.ToString();
     }
 

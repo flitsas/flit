@@ -66,6 +66,7 @@ const ILUSTRACION: Record<string, Ilustracion> = {
   flit: "configuracion",
   "adm-empresas": "empresas",
   "adm-tipologias": "causales",
+  "adm-envio-dp": "causales",
   "adm-plantillas": "generacion-documental",
   "adm-ingesta": "integraciones",
   "adm-log": "auditoria",
@@ -116,6 +117,7 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
       children: [
         { key: "adm-empresas", label: "Parametrizador por empresa", href: "/admin/empresas", section: "administracion", icon: iconoComo("rol"), superAdminOnly: true },
         { key: "adm-tipologias", label: "Tipologías de DP", href: "/admin/tipologias", section: "administracion", icon: iconoComo("ayuda"), superAdminOnly: true },
+        { key: "adm-envio-dp", label: "Envío automático de DP", href: "/admin/envio-automatico-dp", section: "administracion", icon: iconoComo("radicacion"), superAdminOnly: true },
         { key: "adm-plantillas", label: "Editor de plantillas", href: "/admin/plantillas", section: "administracion", icon: iconoComo("archivo"), superAdminOnly: true },
         { key: "adm-ingesta", label: "Trabajos e ingesta", href: "/admin/ingesta", section: "administracion", icon: iconoComo("integraciones"), superAdminOnly: true },
         { key: "adm-log", label: "Log de migración", href: "/admin/log-migracion", section: "administracion", icon: iconoComo("lista"), superAdminOnly: true },

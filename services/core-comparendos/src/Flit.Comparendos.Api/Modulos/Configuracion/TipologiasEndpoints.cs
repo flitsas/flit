@@ -1,7 +1,10 @@
 using Flit.Comparendos.Api.Modulos.Comun;
+using Flit.Comparendos.Api.Modulos.Plantillas;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Api.Plataforma;
+using Flit.Comparendos.Domain.Dp;
+using Flit.Comparendos.Domain.Modelo;
 using Flit.Comparendos.Domain.Plazos;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,12 +21,15 @@ public static class TipologiasEndpoints
     private static readonly string[] AdjuntosValidos = ["Cedula", "CertificadoRepresentacion", "EscrituraPoder"];
 
     public sealed record TipologiaDto(Guid Id, string Codigo, string Nombre, string DescripcionJuridica, string PrefijoRadicado, IReadOnlyList<string> EstadosLegalesPermitidos,
-        bool PermiteMasivo, int PlazoRespuestaOtDiasHabiles, IReadOnlyList<string> AdjuntosRequeridos, IReadOnlyList<string> AliasV2, bool Activo, bool? Habilitada, int? EmpresasHabilitadas);
+        bool PermiteMasivo, int PlazoRespuestaOtDiasHabiles, IReadOnlyList<string> AdjuntosRequeridos, IReadOnlyList<string> AliasV2, bool Activo, bool? Habilitada, int? EmpresasHabilitadas, bool? Automatizable = null);
 
     public sealed record DatosTipologia(string Codigo, string Nombre, string DescripcionJuridica, string PrefijoRadicado, IReadOnlyList<string> EstadosLegalesPermitidos,
         bool PermiteMasivo, int PlazoRespuestaOtDiasHabiles, IReadOnlyList<string>? AdjuntosRequeridos, bool? Activo);
 
     public sealed record Habilitacion(bool Habilitada);
+
+    /// <summary>HU #14614: marca si el envío automático puede usar la tipología en la empresa.</summary>
+    public sealed record MarcaAutomatizable(bool Automatizable);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -33,11 +39,12 @@ public static class TipologiasEndpoints
         admin.MapPost("/tipologias", Crear);
         admin.MapPut("/tipologias/{id:guid}", Editar);
         admin.MapPut("/empresas/{empresa:guid}/tipologias/{id:guid}", Habilitar);
+        admin.MapPut("/empresas/{empresa:guid}/tipologias/{id:guid}/automatizable", Automatizar);
     }
 
-    private static TipologiaDto Dto(TipologiaDp t, bool? habilitada = null, int? empresas = null) => new(
+    private static TipologiaDto Dto(TipologiaDp t, bool? habilitada = null, int? empresas = null, bool? automatizable = null) => new(
         t.Id, t.Codigo, t.Nombre, t.DescripcionJuridica, t.PrefijoRadicado, t.EstadosLegalesPermitidos, t.PermiteMasivo, t.PlazoRespuestaOtDiasHabiles,
-        t.AdjuntosRequeridos, t.AliasV2, t.Activo, habilitada, empresas);
+        t.AdjuntosRequeridos, t.AliasV2, t.Activo, habilitada, empresas, automatizable);
 
     /// <summary>El catálogo con la marca de cuáles tiene habilitadas la empresa (la del usuario, o la que elija el SuperAdmin).</summary>
     private static async Task<IResult> DeLaEmpresa(Guid? empresa, bool? soloHabilitadas, UsuarioActual usuario, ComparendosDb db, CancellationToken ct)
@@ -46,7 +53,8 @@ public static class TipologiasEndpoints
         var habilitadas = await db.TipologiasEmpresa.AsNoTracking().Where(h => h.TenantId == tenant && h.Habilitada).Select(h => h.TipologiaId).ToListAsync(ct).ConfigureAwait(false);
         // Una tesis desactivada en el catálogo sigue apareciendo para la empresa que ya la tenía (Epic #12977).
         var catalogo = await db.Tipologias.AsNoTracking().Where(t => t.Activo || habilitadas.Contains(t.Id)).OrderBy(t => t.Codigo).ToListAsync(ct).ConfigureAwait(false);
-        var lista = catalogo.Select(t => Dto(t, habilitadas.Contains(t.Id))).Where(t => soloHabilitadas != true || t.Habilitada == true);
+        var automatizables = await db.TipologiasEmpresa.AsNoTracking().Where(h => h.TenantId == tenant && h.Habilitada && h.Automatizable).Select(h => h.TipologiaId).ToListAsync(ct).ConfigureAwait(false);
+        var lista = catalogo.Select(t => Dto(t, habilitadas.Contains(t.Id), automatizable: automatizables.Contains(t.Id))).Where(t => soloHabilitadas != true || t.Habilitada == true);
         return Results.Ok(lista);
     }
 
@@ -57,8 +65,11 @@ public static class TipologiasEndpoints
         var habilitadas = empresa is { } e
             ? await db.TipologiasEmpresa.AsNoTracking().Where(h => h.TenantId == e && h.Habilitada).Select(h => h.TipologiaId).ToListAsync(ct).ConfigureAwait(false)
             : null;
+        var automatizables = empresa is { } a
+            ? await db.TipologiasEmpresa.AsNoTracking().Where(h => h.TenantId == a && h.Habilitada && h.Automatizable).Select(h => h.TipologiaId).ToListAsync(ct).ConfigureAwait(false)
+            : null;
         var lista = await db.Tipologias.AsNoTracking().OrderBy(t => t.Codigo).ToListAsync(ct).ConfigureAwait(false);
-        return Results.Ok(lista.Select(t => Dto(t, habilitadas?.Contains(t.Id), conteo.GetValueOrDefault(t.Id))));
+        return Results.Ok(lista.Select(t => Dto(t, habilitadas?.Contains(t.Id), conteo.GetValueOrDefault(t.Id), automatizables?.Contains(t.Id))));
     }
 
     private static (string Codigo, string Prefijo, List<string> Estados, List<string> Adjuntos) Validar(DatosTipologia d)
@@ -156,5 +167,36 @@ public static class TipologiasEndpoints
         auditoria.Registrar(empresa, "tipologia_empresa", $"{t.Codigo}", pedido.Habilitada ? "ACTIVAR" : "DESACTIVAR", new CambioCampo("habilitada", antes, pedido.Habilitada));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Results.Ok(new { habilitada = pedido.Habilitada });
+    }
+
+    /// <summary>
+    /// HU #14614: deja que el envío automático use la tipología en la empresa. Solo si la tipología está habilitada, el envío
+    /// automático sabe decidirla y la versión publicada de su plantilla tiene revisión jurídica de un abogado: sin esa
+    /// aprobación no se envían documentos legales solos.
+    /// </summary>
+    private static async Task<IResult> Automatizar(Guid empresa, Guid id, MarcaAutomatizable pedido, ComparendosDb db, ServicioPlantillas plantillas, Auditoria auditoria, Reloj reloj, UsuarioActual usuario, CancellationToken ct)
+    {
+        var t = await db.Tipologias.AsNoTracking().FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La tipología");
+        var h = await db.TipologiasEmpresa.FirstOrDefaultAsync(x => x.TenantId == empresa && x.TipologiaId == id, ct).ConfigureAwait(false);
+        if (h is not { Habilitada: true })
+            throw ReglaException.Conflicto("TIPOLOGIA_NO_HABILITADA", "La tipología no está habilitada para la empresa: habilítala antes de automatizarla.");
+        if (h.Automatizable == pedido.Automatizable)
+            return Results.Ok(new { automatizable = h.Automatizable });
+
+        if (pedido.Automatizable)
+        {
+            if (!CodigosTipologiaDp.Decidibles.Contains(t.Codigo))
+                throw ReglaException.Conflicto("TIPOLOGIA_SIN_REGLA_AUTOMATICA", $"«{t.Nombre}» no tiene una regla para decidir cuándo aplica: solo la puede enviar una persona.");
+            var conjunto = await db.ConfiguracionesEmpresa.AsNoTracking().Where(c => c.TenantId == empresa).Select(c => (ConjuntoPlantillas?)c.ConjuntoPlantillas).FirstOrDefaultAsync(ct).ConfigureAwait(false) ?? ConjuntoPlantillas.Flit;
+            var version = await plantillas.PublicadaAsync(conjunto, TipoPlantilla.DpDocumento, id, ct).ConfigureAwait(false);
+            if (version?.RevisadaJuridicamenteEn is null)
+                throw ReglaException.Conflicto("TIPOLOGIA_SIN_REVISION_JURIDICA", $"La versión publicada de la plantilla de «{t.Nombre}» no tiene revisión jurídica: un abogado debe aprobarla antes de automatizar la tipología.");
+        }
+
+        var antes = h.Automatizable;
+        (h.Automatizable, h.ActualizadoEn, h.ActualizadoPor) = (pedido.Automatizable, reloj.Ahora, usuario.Id);
+        auditoria.Registrar(empresa, "tipologia_empresa", t.Codigo, pedido.Automatizable ? "AUTOMATIZAR" : "DESAUTOMATIZAR", new CambioCampo("automatizable", antes, pedido.Automatizable));
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Results.Ok(new { automatizable = pedido.Automatizable });
     }
 }
