@@ -30,9 +30,13 @@ internal static class AdminDocumentoEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, ct);
-            return error is null
-                ? Results.Ok(result)
-                : Results.Problem(statusCode: 404, title: "Not Found", detail: "No se encontró el trámite.");
+            // Solo «no existe» es 404; cualquier otro error del checklist conserva su código estable.
+            return error switch
+            {
+                null => Results.Ok(result),
+                "not_found" => Problem(404, "Not Found", error, "No se encontró el trámite."),
+                _ => Problem(409, "Conflict", error, "No se pudieron consultar los tipos de documento del trámite."),
+            };
         })
         .RequirePermission(AdminTramiteAuthorization.CargarDocumentoSlug)
         .WithName("AdminTramiteDocumentoTipos")
@@ -41,7 +45,8 @@ internal static class AdminDocumentoEndpoints
         .Produces(StatusCodes.Status400BadRequest)
         .Produces(StatusCodes.Status401Unauthorized)
         .Produces(StatusCodes.Status403Forbidden)
-        .Produces(StatusCodes.Status404NotFound);
+        .Produces(StatusCodes.Status404NotFound)
+        .Produces(StatusCodes.Status409Conflict);
 
         // POST /api/v1/admin/tramites/{id}/documentos — multipart: file + tipo + observacion → 201.
         group.MapPost("/{id:guid}/documentos", async (
