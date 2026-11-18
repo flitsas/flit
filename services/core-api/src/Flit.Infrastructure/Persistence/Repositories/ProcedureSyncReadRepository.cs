@@ -155,7 +155,7 @@ internal sealed class ProcedureSyncReadRepository(FlitDbContext context) : IProc
                 SELECT x.id, x.filename, x.uploaded_at
                   FROM tramites.procedure_instance_attachments x
                  WHERE x.procedure_instance_id = pi.id AND x.tipo = 'factura'
-                 ORDER BY x.uploaded_at DESC, x.id DESC
+                 ORDER BY x.is_historico ASC, x.uploaded_at DESC, x.id DESC
                  LIMIT 1) f ON true
           LEFT JOIN LATERAL (
                 SELECT max(fv.value_text) FILTER (WHERE fv.field_key = 'vehicle_class')               AS clase,

@@ -658,7 +658,7 @@ export function TramiteDetalleModal({
                   }
                 >
                   El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes
-                  consultarla y descargarla, pero ya no se regenera.
+                  consultarla y descargarla. Solo cambia si un administrador actualiza un documento.
                 </InlineAlert>
               )
             ) : null}
@@ -736,7 +736,9 @@ export function TramiteDetalleModal({
                               e.tipo === 'reasignar_gestor_admin' ||
                               e.tipo === 'revocatoria_solicitada' ||
                               e.tipo === 'revocatoria_aprobada' ||
-                              e.tipo === 'revocatoria_rechazada',
+                              e.tipo === 'revocatoria_rechazada' ||
+                              // Bug #14604 — actualización de un documento por el admin FLIT.
+                              e.tipo === 'documento_cargado_admin',
                           ),
                         ),
                       )}

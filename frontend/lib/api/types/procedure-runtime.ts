@@ -648,7 +648,8 @@ export interface ProcedureInstanceEvent {
     | 'reenvio_validacion_admin'
     | 'revocatoria_solicitada'
     | 'revocatoria_aprobada'
-    | 'revocatoria_rechazada';
+    | 'revocatoria_rechazada'
+    | 'documento_cargado_admin';
   createdAt: string;
   createdByName: string | null;
   // reasignar_gestor_admin
@@ -678,6 +679,16 @@ export interface ProcedureInstanceEvent {
   // distinto de `revocationReason` (motivo original del gestor al pedirla). Reutilizan
   // `revocationAttemptNumber` de arriba.
   revocationDecisionReason?: string | null;
+  // documento_cargado_admin (Bug #14604) — el payload del evento es { tipo, filename, attachmentId,
+  // previousAttachmentIds, estado, observacion }; como `tipo` ya es el discriminador del evento, el
+  // DTO lo expone con prefijo para no colisionar.
+  /** Tipo de documento cargado (código; se muestra con `documentLabel`). */
+  documentoTipo?: string | null;
+  documentoFilename?: string | null;
+  /** Estado del trámite en el momento de la carga. */
+  estadoAlMomento?: string | null;
+  /** Observación obligatoria escrita por el administrador. */
+  observacion?: string | null;
 }
 
 /** Item del body de PATCH /instances/{id}/field-values. */
@@ -1139,6 +1150,12 @@ export interface ProcedureAttachment {
   ocrStatus?: AttachmentOcrStatus | null;
   /** Código cerrado del motivo (solo rejected/skipped). Nunca texto libre del documento (Ley 1581). */
   ocrReason?: string | null;
+  /**
+   * Bug #14604 — true si el documento quedó como «versión anterior» porque un administrador cargó
+   * otro del mismo tipo. Opcional para tolerar backends que aún no lo envían (ausente = vigente).
+   * Un histórico NUNCA cuenta como el documento vigente de la casilla, pero sí se puede abrir.
+   */
+  isHistorico?: boolean;
 }
 
 /** Bug #14559 — valores persistidos del veredicto OCR del adjunto. */

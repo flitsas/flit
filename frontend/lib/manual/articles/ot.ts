@@ -170,6 +170,8 @@ export const OT_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Abre un trámite para ver el expediente, organizado en acordeones independientes que puedes tener abiertos a la vez: vehículo, propietario y actores; transformaciones declaradas (si el vehículo cambió color, combustible o carrocería frente a lo que dice RUNT, aquí ves el antes y el después); documentos del gestor («Ver documentos»), consolidado («Ver consolidado») y el historial. El panel «Pendientes antes de decidir» lista lo que falta (por ejemplo SOAT vigente cuando la regla aplica).",
           "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio.",
+          "Si el equipo FLIT actualizó un documento, en los documentos del trámite el reemplazado aparece como «Versión anterior» y el nuevo es el que cuenta.",
+          "Los documentos y el consolidado se abren en una pestaña nueva del navegador, a pantalla completa; el documento que abres queda marcado como revisado igual que antes. Si no se puede abrir o ver, el aviso sale en la pantalla con «Descargar».",
         ],
         bullets: [
           "Aprobar: opcionalmente adjunta la Licencia de Tránsito (PDF). El sistema la analiza con OCR y te dice si parece una LT y si la placa/VIN leídos coinciden con el trámite; el análisis nunca bloquea. Si hay varios mandatarios válidos, eliges uno de los que te muestra el sistema. La LT también se puede adjuntar después desde la fila aprobada («Adjuntar LT»).",

@@ -571,10 +571,10 @@ describe('TramiteWizard — aviso acorde al estado real (HU #11053)', () => {
     expect(screen.getByText(/aún puedes generar o descargar el expediente consolidado/i)).toBeInTheDocument();
   });
 
-  it('aprobado: anuncia la aprobación y que la documentación ya no se regenera', async () => {
+  it('aprobado: anuncia la aprobación y que la documentación solo cambia si un administrador actualiza un documento', async () => {
     renderEnEstado('aprobado');
     expect(await screen.findByText(/Trámite aprobado — solo visualización/i)).toBeInTheDocument();
-    expect(screen.getByText(/ya no se regenera/i)).toBeInTheDocument();
+    expect(screen.getByText(/Solo cambia si un administrador actualiza un documento/i)).toBeInTheDocument();
     // Lo que el estado NO permite no debe anunciarse.
     expect(screen.queryByText(/Enviado a tránsito/i)).not.toBeInTheDocument();
   });

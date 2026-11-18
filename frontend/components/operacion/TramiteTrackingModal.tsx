@@ -7,6 +7,7 @@ import { Modal } from '@/components/atom/Modal';
 import { SeccionCargando, SeccionError } from '@/components/operacion/detalle/primitivos';
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { estadoChipStyle, estadoLabel, estadoLabelConOrigen } from '@/lib/tramites/estados';
+import { textoDocumentoCargadoAdmin } from '@/components/operacion/detalle/timeline-mappers';
 import { tramiteLabel, vehiculo } from '@/lib/tramites/tramites-row-labels';
 import type {
   InstanceSummary,
@@ -349,6 +350,17 @@ function eventoALinea(e: ProcedureInstanceEvent, index: number): ItemLinea {
       titulo: `Revocatoria ${aprobada ? 'aprobada' : 'rechazada'}${e.revocationAttemptNumber ? ` · Intento ${e.revocationAttemptNumber}` : ''}`,
       quien: decididoPor,
       motivo: e.revocationDecisionReason?.trim() || 'Sin motivo adicional registrado',
+    };
+  }
+
+  if (e.tipo === 'documento_cargado_admin') {
+    return {
+      key,
+      kind: 'evento',
+      fecha: e.createdAt,
+      titulo: 'Documento actualizado por el administrador',
+      quien: e.createdByName ? `Cargado por ${e.createdByName}` : 'Cargado por administrador',
+      motivo: textoDocumentoCargadoAdmin(e),
     };
   }
 

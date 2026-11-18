@@ -24,6 +24,7 @@ import { AvisoFalloRegeneracion } from '@/components/shared/AvisoFalloRegeneraci
 import { detectarFalloRegeneracion } from '@/lib/tramites/fallo-regeneracion-consolidado';
 import { mensajeErrorConsolidadoAmigable } from '@/lib/tramites/errores-consolidado';
 import { findConsolidadoAttachment } from './ExpedienteVisor';
+import { soloHistoricos, soloVigentes } from '@/lib/documents/vigencia';
 
 /**
  * HU #11054 / HU #11055 — consulta de los documentos de un trámite DESDE EL LISTADO, sin entrar al
@@ -466,7 +467,11 @@ export function TramiteDocumentosModal({
         {!loading && !error && docs.length > 0 && (
           <>
             <ul className="space-y-2" aria-label="Documentos del trámite">
-              {docs.map((d) => (
+              {/* Bug #14604 — los vigentes primero; las versiones anteriores al final, rotuladas. */}
+              {[
+                ...soloVigentes(docs).map((d) => ({ d, anterior: false })),
+                ...soloHistoricos(docs).map((d) => ({ d, anterior: true })),
+              ].map(({ d, anterior }) => (
                 <li
                   key={d.id}
                   className="flex items-center gap-3 rounded-xl border p-3"
@@ -476,6 +481,11 @@ export function TramiteDocumentosModal({
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-semibold text-flit-primary dark:text-white">
                       {documentLabel(d.tipo)}
+                      {anterior ? (
+                        <span className="ml-2 rounded-full border border-border px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                          Versión anterior
+                        </span>
+                      ) : null}
                     </p>
                     <p className="truncate text-xs opacity-60">
                       {d.filename} · {formatFechaHora(d.uploadedAt)}

@@ -6,9 +6,11 @@
  * 4 estados: idle (sin URL), cargando, cargado, error.
  */
 
-import type { ReactNode } from "react";
-import { Download, FileText } from "lucide-react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
+import { Download, FileText, X } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
+import { openLoadingDocumentTab, openObjectUrlInWindow } from "@/lib/documents/open-document-tab";
 
 export type PreviewState = "idle" | "loading" | "loaded" | "error";
 
@@ -50,7 +52,151 @@ function isImage(mime: string | null): boolean {
   );
 }
 
-export function DocumentPreviewModal({
+/** Cuánto vive la copia local del archivo que se le pasa a la pestaña (el visor del navegador ya la cargó). */
+const VIDA_COPIA_PESTANA_MS = 120_000;
+
+/**
+ * Mejora (Bug #14604) — el documento se abre en una PESTAÑA NUEVA a pantalla completa, como el consolidado
+ * del resumen del asistente, en vez de verse pequeño dentro del modal. Las props no cambian: quien lo usa
+ * sigue pasando `open`/`loading`/`url`/`error` y la decisión se toma aquí.
+ *
+ * <ul>
+ *   <li>La pestaña se abre en el mismo render que sigue al clic (sigue habiendo gesto del usuario, así el
+ *   navegador no la bloquea) y muestra el carrito de «Cargando» mientras llega el archivo.</li>
+ *   <li>El archivo se le pasa como copia local (blob): la URL firmada del almacenamiento nunca queda en la
+ *   barra de direcciones ni en el historial, y no depende de que quien abrió el visor libere la suya.</li>
+ *   <li>Error, archivo no previsualizable o sin archivo: la pestaña se cierra y el aviso (con «Descargar»)
+ *   sale en la pantalla actual, en el modal de siempre.</li>
+ *   <li>Si el navegador bloquea la pestaña, se usa el visor en modal como antes.</li>
+ * </ul>
+ */
+export function DocumentPreviewModal(props: DocumentPreviewModalProps) {
+  const { open, onClose, mimetype, url, loading, error, notice } = props;
+  const pestana = useRef<Window | null>(null);
+  /** La pestaña ya recibió el documento: al cerrar el visor NO se cierra. */
+  const entregadoRef = useRef(false);
+  /**
+   * El aviso del documento («Documento final», «Maestro radicado»…) iba encima del PDF en el modal. Con la
+   * pestaña se muestra en la pantalla actual; se guarda al entregar porque quien abrió el visor lo borra al
+   * cerrarlo.
+   */
+  const noticeRef = useRef<ReactNode>(notice);
+  useEffect(() => {
+    noticeRef.current = notice;
+  }, [notice]);
+  const [avisoEnPantalla, setAvisoEnPantalla] = useState<ReactNode>(null);
+  /** «pestana»: el documento va a otra pestaña; «modal»: el navegador la bloqueó y se usa el visor de siempre. */
+  const [modo, setModo] = useState<"pestana" | "modal" | null>(null);
+  const [entregado, setEntregado] = useState(false);
+  const [falloEntrega, setFalloEntrega] = useState<string | null>(null);
+
+  // Abre la pestaña apenas el visor se abre, todavía dentro del gesto del clic.
+  useLayoutEffect(() => {
+    if (!open) {
+      if (pestana.current && !pestana.current.closed && !entregadoRef.current) pestana.current.close();
+      pestana.current = null;
+      entregadoRef.current = false;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- al cerrar el visor se reinicia el vínculo con la pestaña (ventana externa).
+      setModo(null);
+      setEntregado(false);
+      setFalloEntrega(null);
+      return;
+    }
+    if (modo !== null) return;
+    const win = typeof window.open === "function" ? openLoadingDocumentTab() : null;
+    pestana.current = win;
+    setModo(win ? "pestana" : "modal");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  const resultadoEnPantalla =
+    !loading && (Boolean(error) || !url || !isPreviewable(mimetype) || falloEntrega !== null);
+
+  useEffect(() => {
+    if (!open || modo !== "pestana" || loading || entregado) return;
+    const win = pestana.current;
+    if (resultadoEnPantalla) {
+      if (win && !win.closed) win.close();
+      return;
+    }
+    if (!url) return;
+    let cancelado = false;
+    void (async () => {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(String(res.status));
+        const blob = await res.blob();
+        if (cancelado) return;
+        const copia = URL.createObjectURL(new Blob([blob], { type: mimetype ?? blob.type }));
+        openObjectUrlInWindow(copia, win);
+        window.setTimeout(() => URL.revokeObjectURL(copia), VIDA_COPIA_PESTANA_MS);
+        entregadoRef.current = true;
+        setEntregado(true);
+        if (noticeRef.current) setAvisoEnPantalla(noticeRef.current);
+        onClose();
+      } catch {
+        if (cancelado) return;
+        if (win && !win.closed) win.close();
+        setFalloEntrega("No se pudo abrir el documento en una pestaña nueva.");
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, modo, loading, url, error, mimetype, entregado, resultadoEnPantalla]);
+
+  // El aviso en pantalla se va solo; también se cierra con su botón.
+  useEffect(() => {
+    if (!avisoEnPantalla) return;
+    const t = window.setTimeout(() => setAvisoEnPantalla(null), DURACION_AVISO_MS);
+    return () => window.clearTimeout(t);
+  }, [avisoEnPantalla]);
+
+  const visible = open && (modo === "modal" || (modo === "pestana" && resultadoEnPantalla));
+  return (
+    <>
+      <VisorEnModal {...props} open={visible} error={error ?? falloEntrega} />
+      {avisoEnPantalla && typeof document !== "undefined"
+        ? createPortal(
+            <AvisoDelDocumento onCerrar={() => setAvisoEnPantalla(null)}>{avisoEnPantalla}</AvisoDelDocumento>,
+            document.body,
+          )
+        : null}
+    </>
+  );
+}
+
+/** Cuánto se queda en pantalla el aviso del documento abierto en otra pestaña. */
+const DURACION_AVISO_MS = 12_000;
+
+/**
+ * El aviso del documento (p. ej. «Documento final») en la pantalla actual, abajo a la derecha, cuando el
+ * documento se abrió en otra pestaña. Por encima de los modales de detalle (z-1100/1150) y del visor (z-1200).
+ */
+function AvisoDelDocumento({ children, onCerrar }: { children: ReactNode; onCerrar: () => void }) {
+  return (
+    <div
+      className="fixed bottom-4 right-4 z-[1300] w-[min(26rem,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-3 shadow-lg"
+      data-testid="aviso-documento-en-pantalla"
+    >
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">{children}</div>
+        <button
+          type="button"
+          onClick={onCerrar}
+          className="shrink-0 rounded-lg p-1 opacity-70 hover:opacity-100"
+          aria-label="Cerrar aviso"
+        >
+          <X className="h-4 w-4" aria-hidden="true" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** El visor dentro del modal: respaldo cuando no hay pestaña y lugar de los avisos de error o sin vista previa. */
+function VisorEnModal({
   open,
   onClose,
   title,

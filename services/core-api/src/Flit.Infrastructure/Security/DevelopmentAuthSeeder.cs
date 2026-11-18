@@ -2340,6 +2340,7 @@ public static class DevelopmentAuthSeeder
             ("AdminTramiteCargarConsolidado",   "Cargar el consolidado de un trámite",       "/api/v1/admin/tramites/{id}/consolidado/cargar",     "POST"),
             ("AdminTramiteReenviarValidacion",  "Reenviar validación de identidad",          "/api/v1/admin/tramites/{id}/reenviar-validacion",    "POST"),
             ("AdminTramiteReasignarGestor",     "Reasignar gestor de un trámite",            "/api/v1/admin/tramites/{id}/gestor",                 "PUT"),
+            ("AdminTramiteCargarDocumento",     "Cargar un documento a un trámite",          "/api/v1/admin/tramites/{id}/documentos",             "POST"),
         };
 
         var existingSlugs = await db.RbacActions

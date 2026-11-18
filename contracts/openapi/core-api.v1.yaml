@@ -11732,6 +11732,88 @@ paths:
         "404": { description: "Trámite no encontrado." }
         "409": { description: "Trámite migrado (solo lectura)." }
 
+  # ── Admin · Trámites · Cargar documentos en cualquier estado (Bug #14604) ─────────────────────
+
+  /api/v1/admin/tramites/{id}/documentos/tipos:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Tipos de documento que el admin puede cargar a un trámite
+      operationId: adminTramiteDocumentoTipos
+      security:
+        - bearerAuth: []
+      description: >
+        Bug #14604. Tipos de documento habilitados para el tipo de trámite de la instancia: la misma matriz documental
+        viva que alimenta el checklist del wizard (con reglas condicionales aplicadas y sin los documentos que genera
+        el sistema). No depende del estado del trámite. Requiere el permiso `AdminTramiteCargarDocumento`
+        (SuperAdmin bypassa).
+      responses:
+        "200":
+          description: Lista de tipos habilitados (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminDocumentoTipoDto" }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteCargarDocumento." }
+        "404": { description: "Trámite no encontrado." }
+
+  /api/v1/admin/tramites/{id}/documentos:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Cargar un documento a un trámite en cualquier estado (admin FLIT)
+      operationId: adminTramiteCargarDocumento
+      security:
+        - bearerAuth: []
+      description: >
+        Bug #14604. Acción administrativa con permiso propio `AdminTramiteCargarDocumento` (SuperAdmin bypassa), válida en
+        TODOS los estados (aprobado, anulado y revocado incluidos). El gate de estado del gestor no cambia. Solo tipos
+        habilitados para el tipo de trámite (ver `/documentos/tipos`) y observación obligatoria. Si había un adjunto
+        vigente del mismo tipo (tipos que reemplazan al subir), NO se borra: queda con `isHistorico=true`, visible y
+        descargable como versión anterior; en los tipos «bolsa» (`otro`, `anexos_generales`) se añade sin retirar nada.
+        «Gana quien carga primero»: si FLITO ya cargó ese tipo, responde 409 `adjunto_bloqueado_flito`. El consolidado se
+        regenera solo (las marcas de vigencia bajan al guardar). La bitácora registra el evento `documento_cargado_admin`
+        con `{ tipo, filename, attachmentId, previousAttachmentIds, estado, observacion }` y el usuario.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary, description: "Archivo (PDF, JPEG, PNG o WebP; máx. 20 MB o el límite del tipo)." }
+                tipo: { type: string, example: soat, description: "Código del tipo de documento." }
+                observacion: { type: string, maxLength: 1000, description: "Obligatoria; se recorta." }
+              required: [file, tipo, observacion]
+      responses:
+        "201":
+          description: Documento cargado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminCargarDocumentoResult" }
+        "400":
+          description: >
+            Falta el header X-Tenant-Id o ProblemDetails con `error` en `missing_file`, `invalid_tipo`, `invalid_mime`,
+            `file_too_large`, `observacion_requerida` u `observacion_demasiado_larga`.
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteCargarDocumento (o escritura sobre un trámite de la red)." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Un adjunto del tipo cargado por FLITO está vigente (`adjunto_bloqueado_flito`)." }
+        "422": { description: "`tipo_no_habilitado`: el tipo no está habilitado para el tipo de este trámite." }
+
   # ── Admin · Trámites · Cambiar estado sin restricción de flujo (Feature #12155, HU #12159) ─────
 
   /api/v1/admin/tramites/{id}/mandato/regenerar:
@@ -15528,6 +15610,11 @@ components:
         sha256: { type: string }
         source: { type: string, example: user }
         uploadedAt: { type: string, format: date-time }
+        isHistorico:
+          type: boolean
+          description: >
+            Bug #14604. true = versión anterior que dejó una carga administrativa (o la revocatoria): se muestra y se
+            descarga, pero ya no es el documento vigente del tipo.
         ocrStatus:
           type: string
           nullable: true
@@ -15538,6 +15625,23 @@ components:
           nullable: true
           enum: [vin_mismatch, tipo_invalido, no_confirmado, ilegible, excede_tamano, analisis_fallido]
           description: Código cerrado del motivo, solo con ocrStatus rejected/skipped. Informativo; no es compuerta (ADR-0085).
+    AdminDocumentoTipoDto:
+      type: object
+      required: [tipo, nombre]
+      properties:
+        tipo: { type: string, example: soat }
+        nombre: { type: string, example: SOAT }
+    AdminCargarDocumentoResult:
+      type: object
+      required: [attachmentId, tipo, filename, previousAttachmentIds]
+      properties:
+        attachmentId: { type: string, format: uuid }
+        tipo: { type: string, example: soat }
+        filename: { type: string }
+        previousAttachmentIds:
+          type: array
+          description: Adjuntos que quedaron como versión anterior (isHistorico=true); vacío si no había o el tipo no reemplaza.
+          items: { type: string, format: uuid }
     PresignAttachmentRequest:
       type: object
       required: [tipo, filename, mimetype, sizeBytes]

@@ -391,6 +391,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "3. El detalle del trámite",
         paragraphs: [
           "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
+          "Si el equipo FLIT actualizó un documento del trámite, la línea de tiempo muestra «Documento actualizado por el administrador» con el documento, el archivo, el estado en que estaba el trámite y la observación. El archivo reemplazado no se pierde: aparece como «Versión anterior» en «Ver documentos».",
+          "Los documentos se abren en una pestaña nueva del navegador, a pantalla completa. Si el documento trae un aviso (por ejemplo «Documento final» del consolidado), aparece unos segundos en la pantalla donde estabas. Si no se puede abrir o ver, el aviso sale en la pantalla con «Descargar». Si tu navegador bloquea las ventanas emergentes, el documento se muestra en la misma pantalla.",
           "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora.",
           "El panel del vehículo muestra también el Canal por el que entró el trámite y, si llegó del punto de atención de un organismo, el «OT del punto». En un trámite en borrador los verás en la barra superior del asistente. Son datos de solo lectura: los pone el sistema al crear el trámite.",
         ],

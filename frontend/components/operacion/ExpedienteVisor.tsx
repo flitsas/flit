@@ -14,6 +14,7 @@ import { StatusBadge } from '@/components/atom/StatusBadge';
 import { AvisoFalloRegeneracion } from '@/components/shared/AvisoFalloRegeneracion';
 import { AvisoDocumentoFinal } from '@/components/shared/AvisoDocumentoFinal';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
+import { soloVigentes } from '@/lib/documents/vigencia';
 import {
   avisosSinFalloConsolidado,
   detectarFalloRegeneracion,
@@ -90,7 +91,7 @@ const INK_BLUE = 'var(--badge-info-fg)';
 export function findConsolidadoAttachment(
   attachments: ProcedureAttachment[],
 ): ProcedureAttachment | undefined {
-  return attachments.find((a) => (a.tipo ?? '').toLowerCase() === 'consolidado');
+  return soloVigentes(attachments).find((a) => (a.tipo ?? '').toLowerCase() === 'consolidado');
 }
 
 /**

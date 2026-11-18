@@ -115,6 +115,8 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
         ("POST", "/api/v1/admin/tramites/{id}/validaciones-identidad/{any}/reenviar"),
         ("POST", "/api/v1/admin/tramites/{id}/consolidado/limpiar"),
         ("POST", "/api/v1/admin/tramites/{id}/consolidado/cargar"),
+        // Bug #14604 — carga administrativa de documentos en cualquier estado.
+        ("POST", "/api/v1/admin/tramites/{id}/documentos"),
     ];
 
     /// <summary>
@@ -305,6 +307,7 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
         // se ejercita con el tipo correcto (y un archivo vacío que jamás llega al handler).
         if (route.EndsWith("/attachments", StringComparison.Ordinal)
             || route.EndsWith("/consolidado/cargar", StringComparison.Ordinal)
+            || route.EndsWith("/documentos", StringComparison.Ordinal)
             || route.EndsWith("/revocation-requests", StringComparison.Ordinal))
         {
             var form = new MultipartFormDataContent();

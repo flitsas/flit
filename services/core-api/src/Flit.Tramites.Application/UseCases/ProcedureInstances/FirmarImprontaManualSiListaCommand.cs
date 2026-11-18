@@ -1,3 +1,4 @@
+using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Application.Documents;
 using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Domain.Documents;
@@ -95,7 +96,7 @@ public sealed class FirmarImprontaManualSiListaHandler(
                 return await FalloAsync(tenantId, procedureInstanceId, origen, "tramite_no_encontrado", null, ct)
                     .ConfigureAwait(false);
 
-            var attachment = instance.Attachments.FirstOrDefault(a =>
+            var attachment = instance.AdjuntosEfectivos().FirstOrDefault(a =>
                 string.Equals(a.Tipo, "impronta", StringComparison.OrdinalIgnoreCase)
                 && !AttachmentProviders.IsKyverum(a.Provider));
             if (attachment is null)

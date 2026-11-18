@@ -283,3 +283,36 @@ describe('timeline-mappers', () => {
     expect(merged.map((n) => n.isActive)).toEqual([false, false, true]);
   });
 });
+
+// Bug #14604 — «Documento actualizado por el administrador» en el timeline.
+describe('timeline-mappers — documento_cargado_admin', () => {
+  const evento: ProcedureInstanceEvent = {
+    tipo: 'documento_cargado_admin',
+    createdAt: '2026-06-01T10:00:00Z',
+    createdByName: 'Willyn Londoño',
+    createdByEmail: 'w@flit.co',
+    createdByCompania: 'FLIT',
+    documentoTipo: 'soat',
+    documentoFilename: 'soat_2026.pdf',
+    estadoAlMomento: 'entregado',
+    observacion: 'Soporte faltante en el expediente',
+  };
+
+  it('pinta título, archivo, estado del trámite y observación', () => {
+    const [nodo] = mapEventsToTimelineNodes([evento]);
+    expect(nodo!.label).toBe('Documento actualizado por el administrador');
+    expect(nodo!.info.rol).toBe('Cargado por Willyn Londoño');
+    expect(nodo!.info.extra).toContain('soat_2026.pdf');
+    expect(nodo!.info.extra).toContain('Estado del trámite: Entregado');
+    expect(nodo!.info.extra).toContain('Observación: Soporte faltante en el expediente');
+  });
+
+  it('tolera un evento sin datos opcionales', () => {
+    const [nodo] = mapEventsToTimelineNodes([
+      { tipo: 'documento_cargado_admin', createdAt: '2026-06-01T10:00:00Z', createdByName: null },
+    ]);
+    expect(nodo!.label).toBe('Documento actualizado por el administrador');
+    expect(nodo!.info.rol).toBe('Cargado por administrador');
+    expect(nodo!.info.extra).toContain('Sin observación registrada');
+  });
+});
