@@ -90,6 +90,73 @@ public sealed class KyverumWebhookHandlerTests
 
     private static string Sign(byte[] body) => KyverumWebhookVerifier.ComputeHmac(body, Secret);
 
+    private static byte[] BodyReabierta(string requestId = "kyv_123") =>
+        Encoding.UTF8.GetBytes("{\"evento\":\"validation.reopened\",\"requestId\":\"" + requestId
+            + "\",\"data\":{\"subjectId\":\"66824abc\",\"autoReintento\":1},\"deliveryId\":\"d1\",\"ts\":\"2026-11-18T17:00:00.000Z\"}");
+
+    [Fact]
+    public async Task Webhook_Reabierta_RechazoPorIntentosAgotados_VuelveAEnProcesoConConteoEnCero()
+    {
+        // Pedido del PO 18/11/2026: la persona pulsa «Reintentar registro» y Verify le da intentos nuevos en el
+        // mismo enlace; FLIT reabre la validación para que el resultado de esos intentos se aplique.
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(BiometricEstados.Rechazado);
+        v.MaxAttempts = 3;
+        v.Attempts = 3;
+        v.ExpiresAt = DateTimeOffset.UtcNow.AddHours(-1);
+        var body = BodyReabierta();
+
+        var (result, error) = await _handler.HandleAsync(new KyverumWebhookInput(v.Id, body, "sha256=" + Sign(body)), ct);
+
+        error.Should().BeNull();
+        result.Should().Be("ok");
+        v.Status.Should().Be(BiometricEstados.EnProceso);
+        v.Attempts.Should().Be(0);
+        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddHours(BiometricRules.KyverumTokenTtlHoras), TimeSpan.FromMinutes(2));
+        await _repo.Received(1).SaveChangesAsync(ct);
+
+        // Un intento posterior aprobado se aplica como cualquier aprobación.
+        var aprobado = Body(aprobado: true);
+        await _handler.HandleAsync(new KyverumWebhookInput(v.Id, aprobado, "sha256=" + Sign(aprobado)), ct);
+        v.Status.Should().Be(BiometricEstados.Aprobado);
+    }
+
+    [Fact]
+    public async Task Webhook_Reabierta_DeOtraVerificacion_OAprobada_NoCambiaNada()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var otra = Seed(BiometricEstados.Rechazado);
+        otra.MaxAttempts = 3;
+        otra.Attempts = 3;
+        var body = BodyReabierta("kyv_vieja");
+        await _handler.HandleAsync(new KyverumWebhookInput(otra.Id, body, "sha256=" + Sign(body)), ct);
+        otra.Status.Should().Be(BiometricEstados.Rechazado);
+        otra.Attempts.Should().Be(3);
+
+        var aprobada = Seed(BiometricEstados.Aprobado);
+        var body2 = BodyReabierta();
+        var (result, _) = await _handler.HandleAsync(new KyverumWebhookInput(aprobada.Id, body2, "sha256=" + Sign(body2)), ct);
+        result.Should().Be("ok");
+        aprobada.Status.Should().Be(BiometricEstados.Aprobado);
+        await _repo.DidNotReceive().SaveChangesAsync(ct);
+    }
+
+    [Fact]
+    public async Task Aviso_Reabierta_PorConsultas_TambienReabre()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(BiometricEstados.Rechazado);
+        v.MaxAttempts = 3;
+        v.Attempts = 3;
+
+        var (result, error) = await _handler.HandleVerifiedAsync(v.Id, BodyReabierta(), ct);
+
+        error.Should().BeNull();
+        result.Should().Be("ok");
+        v.Status.Should().Be(BiometricEstados.EnProceso);
+        v.Attempts.Should().Be(0);
+    }
+
     [Fact]
     public async Task Webhook_ValidSignatureApproved_UpdatesStateAndEmitsCompleted()
     {
