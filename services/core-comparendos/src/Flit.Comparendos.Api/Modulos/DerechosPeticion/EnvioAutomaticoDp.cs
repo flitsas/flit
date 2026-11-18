@@ -1,4 +1,6 @@
+using System.Net;
 using Flit.Comparendos.Api.Modulos.Comparendos;
+using Flit.Comparendos.Api.Modulos.Comun;
 using Flit.Comparendos.Api.Modulos.Correo;
 using Flit.Comparendos.Api.Modulos.Trabajos;
 using Flit.Comparendos.Api.Persistence;
@@ -29,6 +31,9 @@ namespace Flit.Comparendos.Api.Modulos.DerechosPeticion;
 public sealed partial class EnvioAutomaticoDp(
     ComparendosDb db,
     ServicioDp servicio,
+    Capacidades capacidades,
+    ServicioCorreo correo,
+    IUsuariosEmpresa usuarios,
     IProductosHabilitados productos,
     Timeline timeline,
     DespachadorCorreos despachador,
@@ -101,6 +106,7 @@ public sealed partial class EnvioAutomaticoDp(
             }
         }
 
+        await AvisarOmisionesAsync(tenant, omitidos, rescatados, ct).ConfigureAwait(false);
         return new ResultadoEmpresa(enviados, omitidos, rescatados, topeAlcanzado);
     }
 
@@ -144,7 +150,9 @@ public sealed partial class EnvioAutomaticoDp(
             var tipologia = await db.Tipologias.AsNoTracking().FirstAsync(t => t.Codigo == codigo, ct).ConfigureAwait(false);
 
             var preparado = await servicio.PrepararAsync(c, tipologia.Id, masivo: false, reintento: false, ct).ConfigureAwait(false);
-            if (ValidarOmision(c, preparado) is { } bloqueo)
+            var admiteDp = c.OrganismoTransitoId is { } otId
+                && await db.OrganismosTransitoDp.AnyAsync(x => x.OrganismoTransitoId == otId && x.AdmiteDpPorCorreo, ct).ConfigureAwait(false);
+            if (ValidarOmision(preparado, admiteDp) is { } bloqueo)
             {
                 omision = new Omision(c.Id, c.Numero, bloqueo.Codigo, bloqueo.Mensaje);
                 return new Proceso(EstadoProceso.Omitido, [], omision);
@@ -174,9 +182,15 @@ public sealed partial class EnvioAutomaticoDp(
     /// Por qué un comparendo decidido NO se puede enviar solo, o <c>null</c> si va. Con cualquier bloqueo de la preparación
     /// (sin correo de radicación, propietario ajeno, sin plantilla...) se omite en vez de dejar que el envío falle.
     /// </summary>
-    private static Bloqueo? ValidarOmision(Comparendo c, PreparacionDp p)
+    private static Bloqueo? ValidarOmision(PreparacionDp p, bool organismoAdmiteDp)
     {
-        ArgumentNullException.ThrowIfNull(c);
+        // HU #14610: el automático solo habla con organismos que aceptan DP por correo y solo con un representante que firma.
+        if (!organismoAdmiteDp)
+            return new Bloqueo("ORGANISMO_NO_ADMITE_DP_CORREO", "el organismo de tránsito no está marcado como que recibe derechos de petición por correo.");
+        if (p.Representante is null)
+            return new Bloqueo("SIN_REPRESENTANTE_LEGAL", "no hay un representante legal activo con permiso para firmar derechos de petición.");
+        if (p.Representante.FirmaArchivoId is null)
+            return new Bloqueo("SIN_FIRMA_REPRESENTANTE", "el representante legal no tiene su firma cargada.");
         return p.Bloqueos.Count > 0 ? p.Bloqueos[0] : null;
     }
 
@@ -215,6 +229,47 @@ public sealed partial class EnvioAutomaticoDp(
         }
 
         return colgados.Count;
+    }
+
+    /// <summary>
+    /// Resumen de lo omitido (y de los DP sin reacción) para los encargados de la empresa: a sus correos de alerta operativa
+    /// o, si no tiene, a quienes gestionan representantes. Máximo uno por empresa y día, aunque el trabajo corra varias veces.
+    /// </summary>
+    private async Task AvisarOmisionesAsync(Guid tenant, List<Omision> omitidos, int rescatados, CancellationToken ct)
+    {
+        if (omitidos.Count == 0 && rescatados == 0)
+            return;
+        var inicioHoy = new DateTimeOffset(reloj.Hoy.ToDateTime(TimeOnly.MinValue), Domain.Tiempo.ColombiaTime.Offset).ToUniversalTime();
+        if (await db.Comunicaciones.AnyAsync(x => x.TenantId == tenant && x.Tipo == TipoComunicacion.ResumenEnvioAutomaticoDp && x.CreadoEn >= inicioHoy, ct).ConfigureAwait(false))
+            return;
+
+        var config = await capacidades.DeAsync(tenant, ct).ConfigureAwait(false);
+        var para = config.CorreosAlertaOperativa.Count > 0
+            ? config.CorreosAlertaOperativa.Select(x => new Destinatario(x)).ToList()
+            : (await usuarios.ConPermisoAsync(tenant, Permisos.RepresentantesGestionar, ct).ConfigureAwait(false)).Select(u => new Destinatario(u.Correo, u.Nombre)).ToList();
+        if (para.Count == 0)
+            return;
+
+        var porMotivo = omitidos.GroupBy(o => o.Motivo).OrderByDescending(g => g.Count()).ToList();
+        var filas = string.Concat(porMotivo.Select(g =>
+            $"<li><b>{g.Count()}</b> comparendo(s): {WebUtility.HtmlEncode(g.Key)} <span style=\"color:#5B6B82\">({WebUtility.HtmlEncode(string.Join(", ", g.Take(5).Select(o => o.Numero)))}{(g.Count() > 5 ? ", …" : string.Empty)})</span></li>"));
+        var rescate = rescatados > 0 ? $"<p>Además, {rescatados} derecho(s) de petición llevan horas sin confirmación de envío; revísalos en el Centro de Mensajes antes de reintentar.</p>" : string.Empty;
+        var cuerpo = $"<p>El envío automático de derechos de petición de hoy no pudo enviar {omitidos.Count} comparendo(s):</p><ul>{filas}</ul>{rescate}"
+            + $"<p>Cada uno quedó anotado en la línea de tiempo del comparendo. Cuando se corrija el motivo, saldrá en la siguiente corrida.</p><p><a href=\"{correo.AppUrl}/comparendos\">Ver los comparendos</a></p>";
+        var marcaFlit = config.ConjuntoPlantillas == ConjuntoPlantillas.Flit;
+        var enviados = await correo.RegistrarAsync(new CorreoNuevo
+        {
+            TenantId = tenant,
+            Tipo = TipoComunicacion.ResumenEnvioAutomaticoDp,
+            Plantilla = "comparendos.resumen_envio_automatico_dp",
+            Para = para,
+            Asunto = "Derechos de petición automáticos: hay comparendos sin enviar",
+            Html = HtmlCorreo.Envolver("Derechos de petición automáticos", cuerpo, marcaFlit: marcaFlit),
+            Canal = CanalCorreo.FlitSmtp,
+            RemitenteNombre = marcaFlit ? "FLIT Comparendos" : config.RemitenteNombre ?? config.EmpresaNombre,
+        }, ct).ConfigureAwait(false);
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        await DespacharAsync([.. enviados.Select(e => e.Id)], ct).ConfigureAwait(false);
     }
 
     private async Task DespacharAsync(IReadOnlyList<Guid> comunicaciones, CancellationToken ct)
