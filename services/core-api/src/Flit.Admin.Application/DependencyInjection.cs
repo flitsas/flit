@@ -503,6 +503,9 @@ public static class DependencyInjection
         services.AddScoped<Plataforma.PersonaNatural.LeerCobroPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.GuardarMedioCobroPnHandler>();
         services.AddScoped<Plataforma.PersonaNatural.GuardarSwitchCobroPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.LeerVentanaAnulacionCajaHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.GuardarVentanaAnulacionCajaHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.HistorialVentanaAnulacionCajaHandler>();
         // HU #14397 / #14398 (Feature #14396, Épica #14297) — reporte de los trámites del portal y su Excel.
         services.AddScoped<Plataforma.PersonaNatural.ListarReportePortalHandler>();
         services.AddScoped<Plataforma.PersonaNatural.ExportarReportePortalHandler>();

@@ -247,6 +247,7 @@ public sealed class PersonaNaturalDb(DbContextOptions<PersonaNaturalDb> options)
             e.Property(c => c.PagadoPorId).HasColumnName("paid_by_id");
             e.Property(c => c.PagadoPorNombre).HasColumnName("paid_by_name").HasMaxLength(160);
             e.Property(c => c.PagadoEnDia).HasColumnName("paid_on_date");
+            e.Property(c => c.AnulableHasta).HasColumnName("annulable_until");
             e.Property(c => c.LlaveConfirmacion).HasColumnName("confirm_idempotency_key").HasMaxLength(100);
             e.Property(c => c.AnuladoPor).HasColumnName("cancelled_by").HasMaxLength(120);
             e.Property(c => c.AnuladoPorId).HasColumnName("cancelled_by_id");

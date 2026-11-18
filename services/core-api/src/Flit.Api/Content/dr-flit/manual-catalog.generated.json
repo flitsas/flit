@@ -2309,6 +2309,7 @@
           "bullets": [
             "Ofrecer o quitar un medio: usa el interruptor de su tarjeta, que cambia entre «Activado» y «Desactivado». Apagado, la persona no lo ve, y puedes dejar listos sus valores para cuando lo enciendas.",
             "Dejar de cobrar un valor en un medio: apaga su interruptor en la columna de ese medio; pasa a «No se cobra» solo ahí. Si apagas los dos, el aviso dice que ese medio no se ofrecerá para ese trámite.",
+            "Cambiar el tiempo para anular un cobro de caja: en la tarjeta «PIN en caja» está el campo «Tiempo para anular un cobro (minutos)». Escribe un número entero entre 0 y el máximo que indica el mensaje (hasta 60) y pulsa «Guardar». Mientras corre ese tiempo, el administrador del organismo puede anular el cobro; después, el trámite se envía al organismo. Si no lo has cambiado, verás «Valor por defecto» (15 minutos). Con 0, el trámite se envía en el momento de cobrar y el cobro ya no se puede anular. El cambio aplica solo a los cobros nuevos, no a los que ya se hicieron. Con «Ver historial» ves quién cambió el tiempo, cuándo y de cuántos minutos a cuántos. Lo cambian el administrador del organismo y el Super Admin; la persona de caja no ve este campo.",
             "Encender un valor sin monto: no se guarda. Junto a ese valor aparece «Definir precio», que abre el formulario del trámite en Precios; al guardar o cerrar, vuelves a Medios de pago con el monto ya cargado."
           ],
           "callouts": [
@@ -2434,7 +2435,7 @@
           "title": "4. Cobros del día y anulaciones",
           "paragraphs": [
             "La subpestaña «Cobros del día» lista lo que se cobró en tu organismo, con el ID, el valor, el medio, la fecha y hora, quién cobró y el estado, y el total del día. Los cobros anulados aparecen marcados y tachados, y no suman al total. La tabla se pagina de 10, 20, 30 o 50 filas.",
-            "El administrador del organismo puede elegir otro día y anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Si el cobro ya no se puede anular porque el trámite ya llegó a FLIT 2.0, la opción aparece deshabilitada con su motivo. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
+            "El administrador del organismo puede elegir otro día y anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Un cobro se puede anular solo durante un tiempo después de cobrarlo: mientras corre, el cobro dice «Anulable hasta» con la hora (por ejemplo, «Anulable hasta 9:41 p. m.»); cuando esa hora pasa, la opción «Anular» desaparece y el trámite se envía al organismo. Ese tiempo lo define el administrador del organismo en Cobro → Medios de pago (15 minutos si no lo cambia). Si el cobro ya no se puede anular porque el trámite ya llegó a FLIT 2.0, la opción aparece deshabilitada con su motivo. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
             "Si eres de caja y te equivocaste en un cobro, avisa al administrador de tu organismo: solo él puede anularlo."
           ],
           "bullets": [],

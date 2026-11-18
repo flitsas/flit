@@ -412,3 +412,7 @@ Errores: los de §3.1 (la falta de sesión es el 401 estándar). SuperAdmin env�
 
 ### 11.6 Notas
 Infra: ya no se requiere `Suite:Oidc` ni host para `caja`; el scope `platform.personanatural.caja` sigue en `svc-tramites`. QA: `ot_caja` recibe 403 fuera de la lista blanca y el Admin OT no anula fuera de ventana. Security: revisar separación de funciones y la lista blanca. Frontend: tablas estándar (`table-styles`, `usePaginacion`, `ActionsMenu`) y guardián de diseño.
+
+### 11.x Ventana de anulación por organismo (2026-11-17)
+
+La ventana de 15 minutos de §10 ya no es global: es configurable por organismo (0 a `PortalCaja:VentanaAnulacionMaxMinutos`, 60; default 15; 0 = se radica al cobrar y no se anula). La cambian el `ot_admin` de su organismo y el SuperAdmin, con historial. Al confirmar, core-api manda la ventana del organismo (`ConfirmarCobroRequest.ventana_anulacion_minutos`) y el BFF guarda `annulable_until` en el cobro; anulación, radicación diferida y `radicaEn` usan ese valor, de modo que un cambio solo afecta a cobros nuevos. Un cobro previo sin el dato usa `Caja:VentanaAnulacionMinutos`. Detalle y datos en la nota de revisión 2026-11-17 de ADR-0082. Las menciones a «15 min» de este documento son ahora el valor por defecto.

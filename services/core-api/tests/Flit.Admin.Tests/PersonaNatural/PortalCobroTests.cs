@@ -320,6 +320,157 @@ public sealed class PortalCobroTests(PortalCobroTests.Anfitrion anfitrion) : ICl
         (await e.ClienteSuperAdmin().GetAsync(BaseOt, Ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest, "el SuperAdmin debe indicar el organismo en la ruta del OT");
     }
 
+    // ── Ventana de anulación de la caja por organismo (revisión 2026-11-17 de ADR-0082) ────────────────────────────────
+
+    [Fact]
+    public async Task CajaAnulacion_SinConfigurar_Es15PorDefecto_ConElMaximoVigente()
+    {
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
+
+        var json = await LeerAsync(e.ClienteOt());
+
+        var v = json.GetProperty("cajaAnulacion");
+        (v.GetProperty("minutos").GetInt32(), v.GetProperty("porDefecto").GetBoolean(), v.GetProperty("maxMinutos").GetInt32()).Should().Be((15, true, 60));
+    }
+
+    [Fact]
+    public async Task CajaAnulacion_ElOtAdminCambiaLaDeSuOrganismo_YQuedaEnElHistorial()
+    {
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
+        var ot = e.ClienteOt();
+
+        var r = await ot.PutAsJsonAsync($"{BaseOt}/caja-anulacion", new { minutos = 10 }, Ct);
+
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cuerpo = await r.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        (cuerpo.GetProperty("minutos").GetInt32(), cuerpo.GetProperty("porDefecto").GetBoolean()).Should().Be((10, false));
+        (await LeerAsync(ot)).GetProperty("cajaAnulacion").GetProperty("minutos").GetInt32().Should().Be(10);
+        (await LeerAsync(e.ClienteOtroOt())).GetProperty("cajaAnulacion").GetProperty("minutos").GetInt32().Should().Be(15, "no toca otros organismos");
+        await ot.PutAsJsonAsync($"{BaseOt}/caja-anulacion", new { minutos = 0 }, Ct);
+        var historial = (await ot.GetFromJsonAsync<JsonElement>($"{BaseOt}/caja-anulacion/historial", Ct)).GetProperty("items").EnumerateArray().ToList();
+        historial.Select(h => (h.GetProperty("minutosAntes").GetInt32(), h.GetProperty("minutosDespues").GetInt32())).Should().Equal((10, 0), (15, 10));
+        historial[0].GetProperty("actorNombre").GetString().Should().Be("Actor de cobro");
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(61)]
+    public async Task CajaAnulacion_FueraDeRango_Responde400_YNoGuarda(int minutos)
+    {
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
+        var ot = e.ClienteOt();
+
+        var r = await ot.PutAsJsonAsync($"{BaseOt}/caja-anulacion", new { minutos }, Ct);
+
+        r.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await r.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().Should().Be("ventana_anulacion_invalida");
+        (await LeerAsync(ot)).GetProperty("cajaAnulacion").GetProperty("porDefecto").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CajaAnulacion_SinMinutos_Responde400()
+    {
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
+
+        var r = await e.ClienteOt().PutAsJsonAsync($"{BaseOt}/caja-anulacion", new { }, Ct);
+
+        r.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await r.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().Should().Be("ventana_anulacion_invalida");
+    }
+
+    [Fact]
+    public async Task CajaAnulacion_ElSuperAdminCambiaCualquierOrganismo_PeroUnOtAdminAjenoRecibe403_YElCajeroTambien()
+    {
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
+
+        (await e.ClienteSuperAdmin().PutAsJsonAsync($"{BasePlataforma}/caja-anulacion?transitOfficeId={e.OtroOrganismo}", new { minutos = 30 }, Ct))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await e.ClienteSuperAdmin().PutAsJsonAsync($"{BaseOt}/caja-anulacion?transitOfficeId={e.Organismo}", new { minutos = 20 }, Ct))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await e.ClienteSuperAdmin().PutAsJsonAsync($"{BasePlataforma}/caja-anulacion", new { minutos = 20 }, Ct))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest, "la web de persona no tiene caja");
+        (await LeerAsync(e.ClienteOtroOt())).GetProperty("cajaAnulacion").GetProperty("minutos").GetInt32().Should().Be(30);
+        (await e.ClienteOt().PutAsJsonAsync($"{BaseOt}/caja-anulacion?transitOfficeId={e.OtroOrganismo}", new { minutos = 1 }, Ct))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var cajero = ClientWith(anfitrion, Token("ot_caja", e.TenantOt, e.Actor));
+        (await cajero.PutAsJsonAsync($"{BaseOt}/caja-anulacion", new { minutos = 1 }, Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await cajero.GetAsync($"{BaseOt}/caja-anulacion/historial", Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // ── Ventana de anulación (reglas, sin base) ─────────────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(60, true)]
+    [InlineData(61, false)]
+    [InlineData(-1, false)]
+    public void CajaAnulacion_Rango_0AlMaximoConfigurado(int minutos, bool valido) =>
+        new CajaAnulacionOpciones().Valida(minutos).Should().Be(valido);
+
+    [Fact]
+    public void CajaAnulacion_ElMaximoSaleDeLaConfiguracion()
+    {
+        var o = new CajaAnulacionOpciones(15, 120);
+
+        o.Valida(120).Should().BeTrue();
+        o.Valida(121).Should().BeFalse();
+        o.Valida(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CajaAnulacion_Handlers_DefaultSinConfigurar_GuardaEHistorialSoloSiCambia()
+    {
+        var repo = new CajaAnulacionEnMemoria();
+        var org = Guid.NewGuid();
+        var actor = Guid.NewGuid();
+        var opciones = new CajaAnulacionOpciones();
+        var leer = new LeerVentanaAnulacionCajaHandler(repo, opciones);
+        var guardar = new GuardarVentanaAnulacionCajaHandler(repo, new TarifasFalsas(), new AuditoriaFalsa(), opciones);
+
+        (await leer.HandleAsync(org, Ct)).Should().Be(new VentanaAnulacionCajaView(15, true, 60));
+        (await guardar.HandleAsync(org, 61, actor, Ct)).Falla.Should().Be(CajaAnulacionErrores.VentanaInvalida);
+        (await guardar.HandleAsync(org, null, actor, Ct)).Falla.Should().Be(CajaAnulacionErrores.VentanaInvalida);
+        repo.Valores.Should().BeEmpty();
+        (await guardar.HandleAsync(org, 10, actor, Ct)).Vista.Should().Be(new VentanaAnulacionCajaView(10, false, 60));
+        (await guardar.HandleAsync(org, 10, actor, Ct)).Falla.Should().BeNull();
+        (await guardar.HandleAsync(org, 0, actor, Ct)).Vista!.Minutos.Should().Be(0);
+
+        (await leer.HandleAsync(org, Ct)).Should().Be(new VentanaAnulacionCajaView(0, false, 60));
+        var historial = await new HistorialVentanaAnulacionCajaHandler(repo).HandleAsync(org, Ct);
+        historial.Select(h => (h.MinutosAntes, h.MinutosDespues)).Should().Equal((10, 0), (15, 10));
+    }
+
+    [Fact]
+    public async Task CajaAnulacion_Handler_OrganismoInexistente_NoGuarda()
+    {
+        var repo = new CajaAnulacionEnMemoria();
+        var guardar = new GuardarVentanaAnulacionCajaHandler(repo, new TarifasFalsas { OrganismoExiste = false }, new AuditoriaFalsa(), new CajaAnulacionOpciones());
+
+        (await guardar.HandleAsync(Guid.NewGuid(), 5, Guid.NewGuid(), Ct)).Falla.Should().Be(CobroPnErrores.OrganismoNoExiste);
+        repo.Valores.Should().BeEmpty();
+    }
+
+    private sealed class CajaAnulacionEnMemoria : IPersonaNaturalCajaAnulacionRepository
+    {
+        public Dictionary<Guid, int> Valores { get; } = [];
+        private readonly List<(Guid Org, CambioVentanaAnulacionView Cambio)> _historial = [];
+
+        public Task<int?> LeerAsync(Guid organismoId, CancellationToken ct = default) =>
+            Task.FromResult(Valores.TryGetValue(organismoId, out var v) ? (int?)v : null);
+
+        public Task<int> GuardarAsync(Guid organismoId, int minutos, int minutosPorDefecto, Guid actor, CancellationToken ct = default)
+        {
+            var antes = Valores.TryGetValue(organismoId, out var v) ? v : minutosPorDefecto;
+            Valores[organismoId] = minutos;
+            if (antes != minutos)
+                _historial.Add((organismoId, new CambioVentanaAnulacionView(antes, minutos, "Actor", DateTimeOffset.UtcNow)));
+            return Task.FromResult(antes);
+        }
+
+        public Task<IReadOnlyList<CambioVentanaAnulacionView>> HistorialAsync(Guid organismoId, int max, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CambioVentanaAnulacionView>>([.. _historial.Where(h => h.Org == organismoId).Select(h => h.Cambio).Reverse().Take(max)]);
+    }
+
     // ── Soporte ───────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private static async Task<JsonElement> LeerAsync(HttpClient client, string ruta = BaseOt)
@@ -530,6 +681,8 @@ public sealed class PortalCobroTests(PortalCobroTests.Anfitrion anfitrion) : ICl
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_payment_methods WHERE transit_office_id = ANY({orgs}) OR created_by = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_tariffs WHERE procedure_type_id = {Tipo} OR transit_office_id = ANY({orgs}) OR created_by = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_enabled_types WHERE procedure_type_id = {Tipo}");
+                await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_caja_window_history WHERE transit_office_id = ANY({orgs})");
+                await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_caja_settings WHERE transit_office_id = ANY({orgs})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.tenant_config_audit_logs WHERE changed_by = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.users WHERE id = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_types WHERE id = {Tipo}");

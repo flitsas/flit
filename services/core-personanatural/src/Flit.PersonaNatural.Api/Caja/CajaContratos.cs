@@ -14,12 +14,13 @@ public sealed record LineaCaja(string Concepto, long ValorCop);
 public sealed record TramiteParaCobrar(
     string Codigo, CodigoNombre TipoTramite, CodigoNombre Organismo, IReadOnlyList<LineaCaja> Lineas, long TotalCop, string VersionTarifa, DateTimeOffset VenceEn);
 
-public sealed record CobroConfirmado(string Codigo, long ValorCop, string Medio, string? MedioDetalle, DateTimeOffset PagadoEn);
+public sealed record CobroConfirmado(string Codigo, long ValorCop, string Medio, string? MedioDetalle, DateTimeOffset PagadoEn, DateTimeOffset? AnulableHasta = null);
 
 /// <summary>Una fila de la lista del organismo (la usa la caja y el hub del OT por gRPC).</summary>
 public sealed record CobroDelOrganismo(
     Guid CobroId, string Codigo, long ValorCop, string? MedioCaja, string? MedioDetalle, DateTimeOffset PagadoEn, string? PagadoPorNombre, string Estado,
-    bool Anulable, string? MotivoNoAnulable, DateTimeOffset? AnuladoEn, string? AnuladoPorNombre, string? AnulacionMotivo, long RowVersion);
+    bool Anulable, string? MotivoNoAnulable, DateTimeOffset? AnuladoEn, string? AnuladoPorNombre, string? AnulacionMotivo, long RowVersion,
+    DateTimeOffset? AnulableHasta = null);
 
 public sealed record PaginaDeCobros(IReadOnlyList<CobroDelOrganismo> Items, int Total, long TotalDiaCop);
 

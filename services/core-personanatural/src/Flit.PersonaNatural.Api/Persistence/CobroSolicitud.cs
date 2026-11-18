@@ -75,6 +75,13 @@ public sealed class CobroSolicitud
     /// <summary>Día de Colombia de <see cref="PagadoEn"/>: sirve a la lista de cobros del día de la caja y del hub del organismo.</summary>
     public DateOnly? PagadoEnDia { get; set; }
 
+    /// <summary>
+    /// Instante límite de anulación (y de la radicación diferida) fijado al confirmar el cobro en caja: <c>PagadoEn</c> + la ventana del
+    /// organismo vigente en ese momento. Un cambio posterior de la ventana no lo altera. <c>null</c> = cobro anterior a la ventana por
+    /// organismo (cae a <c>Caja:VentanaAnulacionMinutos</c>) o sin ventana (sin_cobro).
+    /// </summary>
+    public DateTimeOffset? AnulableHasta { get; set; }
+
     /// <summary><c>Idempotency-Key</c> de la confirmación en caja: repetir la misma confirmación devuelve el mismo resultado.</summary>
     public string? LlaveConfirmacion { get; set; }
 

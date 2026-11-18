@@ -7,6 +7,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Ban } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
+import { EtiquetaAnulable, useAhora, ventanaCerrada } from "@/components/caja/AnulableHasta";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { InlineAlert } from "@/components/atom/InlineAlert";
@@ -117,6 +118,8 @@ export function OtCajaCobrosSection({ transitOfficeId, api: apiProp }: OtCajaCob
     setRecarga((n) => n + 1);
   }
 
+  const ahora = useAhora(lista?.items);
+
   const columns: DataTableColumn<CajaCobro>[] = [
     { key: "codigo", header: "Trámite", render: (c) => c.codigo },
     { key: "valor", header: "Valor", align: "right", render: (c) => formatPesos(c.valorCop) },
@@ -142,31 +145,35 @@ export function OtCajaCobrosSection({ transitOfficeId, api: apiProp }: OtCajaCob
             {c.anulacionMotivo ? `. Motivo: ${c.anulacionMotivo}` : ""}
           </span>
         ) : (
-          "Pagado"
+          <span className="flex flex-col gap-1">
+            Pagado
+            <EtiquetaAnulable cobro={c} ahora={ahora} />
+          </span>
         ),
     },
     {
       key: "acciones",
       header: "Acciones",
       align: "right",
-      render: (c) => (
-        <ActionsMenu
-          ariaLabel={`Acciones del cobro ${c.codigo}`}
-          items={[
-            {
-              key: "anular",
-              label: "Anular",
-              icon: Ban,
-              tone: "danger",
-              ariaLabel: `Anular el cobro ${c.codigo}`,
-              disabled: c.estado === "anulado" || !c.anulable,
-              disabledReason:
-                c.estado === "anulado" ? "El cobro ya está anulado." : c.motivoNoAnulable?.trim() || CAJA_COBRO_NO_ANULABLE,
-              onSelect: () => abrirAnulacion(c),
-            },
-          ]}
-        />
-      ),
+      render: (c) =>
+        ventanaCerrada(c, ahora) ? null : (
+          <ActionsMenu
+            ariaLabel={`Acciones del cobro ${c.codigo}`}
+            items={[
+              {
+                key: "anular",
+                label: "Anular",
+                icon: Ban,
+                tone: "danger",
+                ariaLabel: `Anular el cobro ${c.codigo}`,
+                disabled: c.estado === "anulado" || !c.anulable,
+                disabledReason:
+                  c.estado === "anulado" ? "El cobro ya está anulado." : c.motivoNoAnulable?.trim() || CAJA_COBRO_NO_ANULABLE,
+                onSelect: () => abrirAnulacion(c),
+              },
+            ]}
+          />
+        ),
     },
   ];
 

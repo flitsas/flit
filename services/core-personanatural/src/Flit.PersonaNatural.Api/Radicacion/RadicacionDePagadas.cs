@@ -8,8 +8,9 @@ namespace Flit.PersonaNatural.Api.Radicacion;
 
 /// <summary>
 /// Radicación diferida de lo cobrado en caja (Feature #14453, decisión del PO 2026-11-10). Un cobro con medio <c>caja</c> NO se
-/// radica al pagar: la solicitud queda <c>pagada</c> y se radica cuando vence <see cref="CajaOptions.VentanaAnulacionMinutos"/>
-/// contados desde <c>paid_at</c>. En esa ventana el administrador del organismo puede anular el cobro. Un total $0
+/// radica al pagar: la solicitud queda <c>pagada</c> y se radica cuando vence la ventana de anulación del cobro (<c>annulable_until</c>,
+/// fijada al cobrar con la ventana del organismo; un cobro previo cae a <see cref="CajaOptions.VentanaAnulacionMinutos"/> desde <c>paid_at</c>).
+/// En esa ventana el administrador del organismo puede anular el cobro. Un total $0
 /// (<c>sin_cobro</c>) se radica de inmediato. Es idempotente y seguro con varias réplicas: <see cref="RadicacionService"/> bloquea
 /// la fila de la solicitud y una segunda radicación con la misma llave devuelve el resultado de la primera.
 /// </summary>
@@ -22,13 +23,30 @@ public sealed class RadicacionDePagadasService(
 
     private TimeSpan ConGracia(TimeSpan ventana) => ventana > TimeSpan.Zero ? ventana + _o.Gracia : ventana;
 
-    /// <summary>La ventana de un cobro en caja sigue abierta: aún se puede anular y todavía no se radica.</summary>
-    public static bool EnVentana(string? medio, DateTimeOffset? pagadoEn, DateTimeOffset ahora, TimeSpan ventana) =>
-        medio == MedioDePago.Caja && pagadoEn is { } pagado && ventana > TimeSpan.Zero && ahora < pagado + ventana;
+    /// <summary>
+    /// Instante límite de anulación de un cobro en caja: el guardado en el cobro al confirmar (<paramref name="anulableHasta"/>) o, en un
+    /// cobro previo sin ese dato, <c>pagado_en</c> + la ventana global. <c>null</c> si no hay ventana (no es caja, ventana en cero).
+    /// </summary>
+    public static DateTimeOffset? LimiteDeAnulacion(string? medio, DateTimeOffset? pagadoEn, DateTimeOffset? anulableHasta, TimeSpan ventanaGlobal)
+    {
+        if (medio != MedioDePago.Caja || pagadoEn is not { } pagado)
+            return null;
+        if (anulableHasta is { } guardado)
+            return guardado > pagado ? guardado : null;
+        return ventanaGlobal > TimeSpan.Zero ? pagado + ventanaGlobal : null;
+    }
+
+    /// <summary>
+    /// La ventana de un cobro en caja sigue abierta: aún se puede anular y todavía no se radica. <paramref name="gracia"/> se suma al
+    /// límite solo para decidir la radicación (en el borde exacto gana la anulación).
+    /// </summary>
+    public static bool EnVentana(
+        string? medio, DateTimeOffset? pagadoEn, DateTimeOffset? anulableHasta, DateTimeOffset ahora, TimeSpan ventanaGlobal, TimeSpan gracia = default) =>
+        LimiteDeAnulacion(medio, pagadoEn, anulableHasta, ventanaGlobal) is { } limite && ahora < limite + gracia;
 
     /// <summary>Instante en que se radica un cobro en caja; <c>null</c> si no hay ventana (sin_cobro o ventana en cero).</summary>
-    public static DateTimeOffset? RadicaEn(string? medio, DateTimeOffset? pagadoEn, TimeSpan ventana) =>
-        medio == MedioDePago.Caja && pagadoEn is { } pagado && ventana > TimeSpan.Zero ? pagado + ventana : null;
+    public static DateTimeOffset? RadicaEn(string? medio, DateTimeOffset? pagadoEn, DateTimeOffset? anulableHasta, TimeSpan ventanaGlobal) =>
+        LimiteDeAnulacion(medio, pagadoEn, anulableHasta, ventanaGlobal);
 
     /// <summary>
     /// Radica la solicitud <c>pagada</c> si su ventana ya venció (o no tiene). Devuelve <c>true</c> si quedó en cola. Lo usan la
@@ -38,8 +56,8 @@ public sealed class RadicacionDePagadasService(
     {
         var cobro = await db.Set<CobroSolicitud>().AsNoTracking()
             .Where(c => c.SolicitudId == solicitudId && c.Estado == EstadoCobro.Pagado)
-            .Select(c => new { c.Medio, c.PagadoEn }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        if (cobro is not null && EnVentana(cobro.Medio, cobro.PagadoEn, reloj.GetUtcNow(), ConGracia(_o.Ventana)))
+            .Select(c => new { c.Medio, c.PagadoEn, c.AnulableHasta }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (cobro is not null && EnVentana(cobro.Medio, cobro.PagadoEn, cobro.AnulableHasta, reloj.GetUtcNow(), _o.Ventana, _o.Gracia))
             return false;
         return await radicacion.IntentarRadicarPagadaAsync(solicitudId, ct).ConfigureAwait(false);
     }
@@ -48,11 +66,19 @@ public sealed class RadicacionDePagadasService(
     public async Task<int> RadicarVencidasAsync(CancellationToken ct)
     {
         // La anulación usa el límite exacto de la ventana; la radicación espera además la gracia, así en el borde gana la anulación.
-        var limite = reloj.GetUtcNow() - ConGracia(_o.Ventana);
+        // El límite propio del cobro (annulable_until, fijado al cobrar) manda; sin él (cobro previo) rige la ventana global. Con ventana
+        // en cero (annulable_until = paid_at) se radica de inmediato, sin gracia.
+        var ahora = reloj.GetUtcNow();
+        var limite = ahora - _o.Gracia;
+        var limiteGlobal = ahora - ConGracia(_o.Ventana);
         var ids = await (
             from c in db.Set<CobroSolicitud>().AsNoTracking()
             join s in db.Set<SolicitudTramite>().AsNoTracking() on c.SolicitudId equals s.Id
-            where c.Estado == EstadoCobro.Pagado && s.Estado == EstadoSolicitud.Pagada && (c.Medio != MedioDePago.Caja || c.PagadoEn <= limite)
+            where c.Estado == EstadoCobro.Pagado && s.Estado == EstadoSolicitud.Pagada
+                  && (c.Medio != MedioDePago.Caja
+                      || (c.AnulableHasta != null
+                          ? (c.AnulableHasta <= c.PagadoEn || c.AnulableHasta <= limite)
+                          : c.PagadoEn <= limiteGlobal))
             orderby c.PagadoEn
             select s.Id).Take(Math.Max(1, _o.RadicacionLote)).ToListAsync(ct).ConfigureAwait(false);
 

@@ -33,6 +33,8 @@ export interface CajaCobro {
   estado: "pagado" | "anulado";
   anulable: boolean;
   motivoNoAnulable?: string | null;
+  /** Instante (ISO) hasta el que el cobro se puede anular; `null`, ya no. Ausente: el servidor no lo manda y rige `anulable`. */
+  anulableHasta?: string | null;
   anuladoEn?: string | null;
   anuladoPorNombre?: string | null;
   anulacionMotivo?: string | null;

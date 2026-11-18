@@ -1,6 +1,7 @@
 using Flit.PersonaNatural.Api.Adjuntos;
 using Flit.PersonaNatural.Api.Pagos;
 using Flit.PersonaNatural.Api.Persistence;
+using Flit.PersonaNatural.Api.Radicacion;
 using Flit.PersonaNatural.Api.Solicitudes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -8,7 +9,9 @@ using Microsoft.Extensions.Options;
 namespace Flit.PersonaNatural.Api.Caja;
 
 /// <summary>Lo que la caja envía al confirmar. <see cref="TotalVistoCop"/> solo se COMPARA: el servidor cobra siempre su propio total.</summary>
-public sealed record PedidoDeConfirmacion(string? Codigo, string? Medio, string? MedioDetalle, long? TotalVistoCop, string? Llave, string? PrefacturaNombre, byte[]? Prefactura);
+public sealed record PedidoDeConfirmacion(
+    string? Codigo, string? Medio, string? MedioDetalle, long? TotalVistoCop, string? Llave, string? PrefacturaNombre, byte[]? Prefactura,
+    int? VentanaAnulacionMinutos = null);
 
 /// <summary>
 /// Confirmar el cobro en caja (HU #14457) con el medio obligatorio y la prefactura opcional. Usa <see cref="IRegistroDePagos"/>:
@@ -108,7 +111,7 @@ public sealed class CajaConfirmacionService(
             pagado = await registro.RegistrarPagoAsync(
                 new PedidoDePago(
                     previa.Id, MedioDePago.Caja, medio, detalle, prefacturaId, cajero.UsuarioId.ToString(), cajero.OrganismoId,
-                    cajero.UsuarioId, cajero.Nombre, llave, pedido.TotalVistoCop), ct).ConfigureAwait(false);
+                    cajero.UsuarioId, cajero.Nombre, llave, pedido.TotalVistoCop, pedido.VentanaAnulacionMinutos), ct).ConfigureAwait(false);
         }
         catch (ReglaDeNegocioException ex)
         {
@@ -122,7 +125,7 @@ public sealed class CajaConfirmacionService(
         }
 
         await auditoria.RegistrarAsync(cajero, EventoCaja.AccionConfirmar, codigo, "ok", ip, ct).ConfigureAwait(false);
-        return new CobroConfirmado(codigo!, pagado.ValorCop, medio, detalle, pagado.PagadoEn);
+        return new CobroConfirmado(codigo!, pagado.ValorCop, medio, detalle, pagado.PagadoEn, pagado.RadicaEn);
     }
 
     /// <summary>Lectura previa (sin bloqueo; la transacción del pago la repite con la fila bloqueada): no pagado, pendiente de pago, habilitado y vigente.</summary>
@@ -158,7 +161,9 @@ public sealed class CajaConfirmacionService(
             throw Regla(409, CodigoLlaveReutilizada, "Esa clave de operación ya se usó con otro medio u otro total.");
         }
 
-        return new CobroConfirmado(c.Codigo, c.ValorCop ?? 0, c.MedioCaja ?? string.Empty, c.MedioDetalle, c.PagadoEn ?? c.UpdatedAt);
+        return new CobroConfirmado(
+            c.Codigo, c.ValorCop ?? 0, c.MedioCaja ?? string.Empty, c.MedioDetalle, c.PagadoEn ?? c.UpdatedAt,
+            RadicacionDePagadasService.LimiteDeAnulacion(c.Medio, c.PagadoEn, c.AnulableHasta, opciones.Value.Ventana));
     }
 
     private static ReglaDeNegocioException Regla(int http, string codigo, string mensaje) => new(http, codigo, "No se puede confirmar", mensaje);

@@ -10,7 +10,7 @@ namespace Flit.PersonaNatural.Api.Caja;
 /// <summary>
 /// Lista de cobros en caja de un organismo y un día de Colombia (HU #14459 para la caja; el hub del OT la usa por gRPC, HU #14461).
 /// Solo cobros del organismo pedido. Los anulados salen marcados y NO suman al total del día. Un cobro es anulable mientras la
-/// solicitud siga <c>pagada</c> y la ventana de <see cref="CajaOptions.VentanaAnulacionMinutos"/> no haya vencido.
+/// solicitud siga <c>pagada</c> y no haya vencido el límite del cobro (<c>annulable_until</c>, fijado al cobrar con la ventana del organismo; los cobros previos usan <see cref="CajaOptions.VentanaAnulacionMinutos"/>).
 /// </summary>
 public sealed class CajaListaService(PersonaNaturalDb db, IOptions<CajaOptions> opciones, TimeProvider reloj)
 {
@@ -41,22 +41,24 @@ public sealed class CajaListaService(PersonaNaturalDb db, IOptions<CajaOptions> 
         var items = filas.Select(x =>
         {
             var c = x.Cobro;
-            var (anulable, motivo) = Evaluar(c.Estado, x.EstadoSolicitud, c.PagadoEn, ahora, ventana);
+            var (anulable, motivo) = Evaluar(c.Estado, x.EstadoSolicitud, c.PagadoEn, c.AnulableHasta, ahora, ventana);
             return new CobroDelOrganismo(
                 c.Id, c.Codigo, c.ValorCop ?? 0, c.MedioCaja, c.MedioDetalle, c.PagadoEn ?? c.UpdatedAt, c.PagadoPorNombre, c.Estado,
-                anulable, motivo, c.AnuladoEn, c.AnuladoPorNombre, c.AnulacionMotivo, c.RowVersion);
+                anulable, motivo, c.AnuladoEn, c.AnuladoPorNombre, c.AnulacionMotivo, c.RowVersion,
+                AnulableHasta: anulable ? RadicacionDePagadasService.LimiteDeAnulacion(MedioDePago.Caja, c.PagadoEn, c.AnulableHasta, ventana) : null);
         }).ToList();
         return new PaginaDeCobros(items, total, totalDia);
     }
 
-    /// <summary>¿Se puede anular este cobro ahora? Devuelve el motivo en español cuando no.</summary>
-    public static (bool Anulable, string? Motivo) Evaluar(string estadoCobro, string estadoSolicitud, DateTimeOffset? pagadoEn, DateTimeOffset ahora, TimeSpan ventana)
+    /// <summary>¿Se puede anular este cobro ahora? Usa el límite guardado en el cobro y, sin él (cobro previo), la ventana global. Devuelve el motivo en español cuando no.</summary>
+    public static (bool Anulable, string? Motivo) Evaluar(
+        string estadoCobro, string estadoSolicitud, DateTimeOffset? pagadoEn, DateTimeOffset? anulableHasta, DateTimeOffset ahora, TimeSpan ventanaGlobal)
     {
         if (estadoCobro == EstadoCobro.Anulado)
             return (false, MotivoYaAnulado);
         if (estadoCobro != EstadoCobro.Pagado)
             return (false, MotivoYaEnFlit2);
-        var abierta = estadoSolicitud == EstadoSolicitud.Pagada && RadicacionDePagadasService.EnVentana(MedioDePago.Caja, pagadoEn, ahora, ventana);
+        var abierta = estadoSolicitud == EstadoSolicitud.Pagada && RadicacionDePagadasService.EnVentana(MedioDePago.Caja, pagadoEn, anulableHasta, ahora, ventanaGlobal);
         return abierta ? (true, null) : (false, MotivoYaEnFlit2);
     }
 }

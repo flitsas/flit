@@ -200,15 +200,18 @@ public static class OtCajaEndpoints
         }
 
         var portal = http.RequestServices.GetRequiredService<ICajaAdminClient>();
+        // La ventana de anulación es la del organismo AL COBRAR: el portal la guarda en el cobro y un cambio posterior no lo altera.
+        var ventana = await http.RequestServices.GetRequiredService<Flit.Admin.Application.Plataforma.PersonaNatural.LeerVentanaAnulacionCajaHandler>()
+            .HandleAsync(actor.OrganismoId, ct).ConfigureAwait(false);
         try
         {
             var r = await portal.ConfirmarAsync(
                 new CajaConfirmacion(
                     actor.OrganismoId, codigo ?? string.Empty, actor.UsuarioId, actor.Nombre, medio, detalle, visto,
-                    http.Request.Headers[CabeceraIdempotencia].ToString(), bytes, tipo, nombre, HuellaDeIp(http)),
+                    http.Request.Headers[CabeceraIdempotencia].ToString(), bytes, tipo, nombre, HuellaDeIp(http), ventana.Minutos),
                 ct).ConfigureAwait(false);
             return Results.Json(
-                new { codigo = r.Codigo, valorCop = r.ValorCop, medio = r.Medio, medioDetalle = r.MedioDetalle, pagadoEn = r.PagadoEn, mensaje = "Pago registrado." }, JsonOptions);
+                new { codigo = r.Codigo, valorCop = r.ValorCop, medio = r.Medio, medioDetalle = r.MedioDetalle, pagadoEn = r.PagadoEn, anulableHasta = r.AnulableHasta, mensaje = "Pago registrado." }, JsonOptions);
         }
         catch (CajaPortalRechazoException ex)
         {
@@ -263,6 +266,7 @@ public static class OtCajaEndpoints
                         anuladoPorNombre = c.AnuladoPorNombre.Length == 0 ? null : c.AnuladoPorNombre,
                         anulacionMotivo = c.AnulacionMotivo.Length == 0 ? null : c.AnulacionMotivo,
                         rowVersion = c.RowVersion,
+                        anulableHasta = c.Anulable && c.AnulableHasta.Length > 0 ? c.AnulableHasta : null,
                     };
                 }),
                 total = r.Total,

@@ -86,6 +86,7 @@ public static class AdminPortalCajaCobrosEndpoints
                     anuladoPorNombre = c.AnuladoPorNombre,
                     anulacionMotivo = c.AnulacionMotivo,
                     rowVersion = c.RowVersion,
+                    anulableHasta = c.Anulable && c.AnulableHasta.Length > 0 ? c.AnulableHasta : null,
                 }),
                 total = r.Total,
                 totalDiaCop = r.TotalDiaCop,
