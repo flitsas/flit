@@ -246,7 +246,7 @@ public sealed class IdentityValidationCompletedConsumer(
                 && s.Estado == SignatureEstados.Firmada));
         }
 
-        var fur = instance.Attachments
+        var fur = instance.AdjuntosEfectivos()
             .Where(a => string.Equals(a.Tipo, FurVigenciaExpediente.TipoFur, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(a => a.UploadedAt)
             .FirstOrDefault();

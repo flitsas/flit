@@ -991,7 +991,21 @@ public sealed record ProcedureInstanceModificacionEntry(
     DateTimeOffset ChangedAt,
     Guid? ChangedByUserId,
     string? ChangedByName,
-    string? ChangedByCompania);
+    string? ChangedByCompania,
+    // Bug #14604 — solo en «documento actualizado por el administrador»: qué documento cambió y los
+    // adjuntos nuevo y anterior, para abrirlos desde la línea de tiempo.
+    DocumentoActualizadoLectura? Documento = null);
+
+/// <summary>
+/// Bug #14604 — documento que el administrador actualizó: tipo, adjunto nuevo y el que estaba antes (si
+/// había uno). Los ids son de <c>procedure_instance_attachments</c> del mismo trámite.
+/// </summary>
+public sealed record DocumentoActualizadoLectura(
+    string Tipo,
+    Guid AttachmentId,
+    string Filename,
+    Guid? AnteriorAttachmentId,
+    string? AnteriorFilename);
 
 /// <summary>
 /// Proyección de lectura de una fila de <c>procedure_instance_status_history</c> con el nombre

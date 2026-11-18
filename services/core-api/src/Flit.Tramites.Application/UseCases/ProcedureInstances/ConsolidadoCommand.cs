@@ -526,11 +526,11 @@ public sealed class GenerarConsolidadoHandler(
 
         if (configurado.Count == 0)
             return SanitizeConsolidadoParts(
-                ConsolidadoOrderingResolver.Select(instance.Attachments, instance.FamilyCode));
+                ConsolidadoOrderingResolver.Select(instance.AdjuntosEfectivos().ToList(), instance.FamilyCode));
 
         return SanitizeConsolidadoParts(
             GenericConsolidadoOrdering.SelectByPrecedence(
-                instance.Attachments,
+                instance.AdjuntosEfectivos().ToList(),
                 ConsolidadoDocumentCodeMap.ToPrecedence(configurado)));
     }
 
