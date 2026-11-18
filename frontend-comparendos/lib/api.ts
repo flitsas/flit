@@ -91,6 +91,13 @@ export async function apiPostBlob(path: string, body: unknown, signal?: AbortSig
   return response.blob();
 }
 
+/** GET que devuelve un archivo (p. ej. la vista previa en PDF de un DP) como Blob, para mostrarlo dentro de la página. */
+export async function apiGetBlob(path: string, query?: Query, signal?: AbortSignal): Promise<Blob> {
+  const response = await fetch(buildUrl(path, query), { signal });
+  if (!response.ok) await readResponse<never>(response);
+  return response.blob();
+}
+
 /** Abre en otra pestaña un PDF que entrega la API por GET (vistas previas). La pestaña se pide antes del fetch para que
  * el navegador no la bloquee como ventana emergente. */
 export async function apiAbrirPdf(path: string, query?: Query): Promise<void> {

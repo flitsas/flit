@@ -5,11 +5,12 @@ import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { PanelAlegar } from "@/components/detalle/PanelAlegar";
+import { VistaPreviaDpModal } from "@/components/detalle/VistaPreviaDpModal";
 import { useToast } from "@/components/Toast";
 import { Datos } from "@/components/ui/Acordeon";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { SelectorArchivo } from "@/components/ui/SelectorArchivo";
-import { apiAbrirPdf, apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { armarRespuestaDp, erroresRespuestaDp, ordenarTipologias, type FormRespuestaDp, type TipologiaComparendo, type VistaPreviaDp } from "@/lib/dp";
 import { estadoLegal } from "@/lib/etiquetas";
 import { diaColombia } from "@/lib/format/date";
@@ -30,15 +31,11 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
     apiFetch<VistaPreviaDp>(`/comparendos/${d.id}/dp/vista-previa`, { method: "POST", body: { tipologiaId: elegida }, signal }),
   );
   const [confirmar, setConfirmar] = useState(false);
+  const [verComoLlegaria, setVerComoLlegaria] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const lista = ordenarTipologias(tipologias.datos ?? []);
   const tipologia = lista.find((t) => t.id === elegida);
   const v = previa.datos;
-
-  const verPdf = () =>
-    apiAbrirPdf(`/comparendos/${d.id}/dp/vista-previa.pdf`, { tipologiaId: elegida }).catch((e: unknown) =>
-      toast.show(e instanceof Error ? e.message : "No se pudo abrir la vista previa.", "error"),
-    );
 
   const enviar = async () => {
     setEnviando(true);
@@ -111,13 +108,12 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
               ["Anexos", v.anexos.join(", ")],
             ]}
           />
+          <p className="text-xs opacity-70">Antes de enviar, mira cómo llegaría el derecho de petición y su correo. Es solo una vista previa: no se envía nada.</p>
           <div className="flex flex-wrap gap-2">
-            {!v.bloqueos.some((b) => b.codigo === "SIN_PLANTILLA") && (
-              <button type="button" className={controlCls(false)} onClick={verPdf}>
-                <Icono nombre="documento" className="h-3.5 w-3.5" />
-                Ver documento
-              </button>
-            )}
+            <button type="button" className={controlCls(true)} onClick={() => setVerComoLlegaria(true)}>
+              <Icono nombre="documento" className="h-3.5 w-3.5" />
+              Ver cómo llegaría
+            </button>
             {puedeEnviar && (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!v.puedeEnviar} onClick={() => setConfirmar(true)}>
                 <Icono nombre="radicacion" className="h-3.5 w-3.5" />
@@ -126,6 +122,17 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
             )}
           </div>
         </div>
+      )}
+
+      {verComoLlegaria && v && (
+        <VistaPreviaDpModal
+          comparendoId={d.id}
+          tipologiaId={elegida}
+          vista={v}
+          sinPdf={v.bloqueos.some((b) => b.codigo === "SIN_PLANTILLA")}
+          onCerrar={() => setVerComoLlegaria(false)}
+          zClassName={Z}
+        />
       )}
 
       <Modal icono="radicacion"
