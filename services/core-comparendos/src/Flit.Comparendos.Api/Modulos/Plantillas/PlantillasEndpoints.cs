@@ -21,7 +21,8 @@ public static class PlantillasEndpoints
 
     public sealed record PlantillaDto(Guid Id, string Conjunto, string Tipo, Guid? TipologiaId, string? Tipologia, string Nombre, bool Activo, VersionResumen? Publicada);
 
-    public sealed record VersionDto(Guid Id, Guid PlantillaId, int NumeroVersion, string Estado, string? Asunto, string CuerpoHtml, IReadOnlyList<string> VariablesUsadas, string? NotaCambio, DateTimeOffset? PublicadaEn, DateTimeOffset? RevisadaJuridicamenteEn = null);
+    public sealed record VersionDto(Guid Id, Guid PlantillaId, int NumeroVersion, string Estado, string? Asunto, string CuerpoHtml, IReadOnlyList<string> VariablesUsadas, string? NotaCambio, DateTimeOffset? PublicadaEn, DateTimeOffset? RevisadaJuridicamenteEn = null,
+        string? RevisadaPor = null, string? NotaRevisionJuridica = null);
 
     public sealed record VistaPrevia(string Tipo, string? Asunto, string CuerpoHtml, Guid? ComparendoId, string? Formato, string? Conjunto = null);
 
@@ -51,7 +52,7 @@ public static class PlantillasEndpoints
     }
 
     private static VersionDto Dto(PlantillaVersion v) =>
-        new(v.Id, v.PlantillaId, v.NumeroVersion, v.Estado.ToString(), v.Asunto, v.CuerpoHtml, v.VariablesUsadas, v.NotaCambio, v.PublicadaEn, v.RevisadaJuridicamenteEn);
+        new(v.Id, v.PlantillaId, v.NumeroVersion, v.Estado.ToString(), v.Asunto, v.CuerpoHtml, v.VariablesUsadas, v.NotaCambio, v.PublicadaEn, v.RevisadaJuridicamenteEn, v.RevisadaJuridicamentePorNombre, v.NotaRevisionJuridica);
 
     /// <summary>§7.16: la gestora ve FLIT y su propio conjunto; el SuperAdmin, todos.</summary>
     private static async Task<List<ConjuntoPlantillas>> PermitidosAsync(UsuarioActual usuario, Capacidades capacidades, CancellationToken ct)
@@ -116,9 +117,19 @@ public static class PlantillasEndpoints
             : ContextoPlantilla.Ejemplo();
         var conjunto = Enum.TryParse<ConjuntoPlantillas>(pedido.Conjunto, true, out var c) ? c : ConjuntoPlantillas.Flit;
         var armado = ServicioPlantillas.Armar(new PlantillaVersion { Asunto = pedido.Asunto, CuerpoHtml = pedido.CuerpoHtml ?? string.Empty }, tipo, valores, conjunto, plantillas.Recursos);
+        // HU #14616: sin comparendo el documento sale con datos de EJEMPLO y así se dice (marca de agua en el PDF, banda en el correo).
+        var ejemplo = pedido.ComparendoId is null;
         if (string.Equals(pedido.Formato, "pdf", StringComparison.OrdinalIgnoreCase) && !ServicioPlantillas.EsCorreo(tipo))
-            return Results.File(ServicioPlantillas.Pdf(armado, "VISTA PREVIA"), "application/pdf");
-        return Results.Ok(new { armado.Asunto, armado.Html, desconocidas = validacion.Desconocidas });
+            return Results.File(ServicioPlantillas.Pdf(armado, ejemplo ? "VISTA PREVIA · DATOS DE EJEMPLO" : "VISTA PREVIA"), "application/pdf");
+        var html = ejemplo ? ConBandaDeEjemplo(armado.Html) : armado.Html;
+        return Results.Ok(new { armado.Asunto, Html = html, desconocidas = validacion.Desconocidas, ejemplo });
+    }
+
+    private static string ConBandaDeEjemplo(string html)
+    {
+        const string banda = "<div style=\"background:#FFF4CE;color:#7A5A00;padding:8px 12px;font:bold 12px Arial,sans-serif;text-align:center\">VISTA PREVIA CON DATOS DE EJEMPLO</div>";
+        var cuerpo = System.Text.RegularExpressions.Regex.Match(html, "<body[^>]*>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        return cuerpo.Success ? html.Insert(cuerpo.Index + cuerpo.Length, banda) : banda + html;
     }
 
     private static async Task<IResult> Crear(NuevaPlantilla pedido, ComparendosDb db, Auditoria auditoria, Reloj reloj, UsuarioActual usuario, ServicioPlantillas servicio, CancellationToken ct)
@@ -226,7 +237,7 @@ public static class PlantillasEndpoints
         // Aprobar de nuevo una versión ya aprobada conserva la primera aprobación (fecha, quién y nota): no se reescribe la historia.
         if (v.RevisadaJuridicamenteEn is not null)
             return Results.Ok(Dto(v));
-        (v.RevisadaJuridicamenteEn, v.RevisadaJuridicamentePor, v.NotaRevisionJuridica, v.ActualizadoEn, v.ActualizadoPor) = (reloj.Ahora, usuario.Id, pedido.Nota.Trim(), reloj.Ahora, usuario.Id);
+        (v.RevisadaJuridicamenteEn, v.RevisadaJuridicamentePor, v.RevisadaJuridicamentePorNombre, v.NotaRevisionJuridica, v.ActualizadoEn, v.ActualizadoPor) = (reloj.Ahora, usuario.Id, usuario.Nombre, pedido.Nota.Trim(), reloj.Ahora, usuario.Id);
         auditoria.Registrar(null, "plantilla", v.PlantillaId, "REVISION_JURIDICA", new CambioCampo("revisada_juridicamente_en", null, reloj.Ahora), new CambioCampo("version_revisada", null, v.NumeroVersion));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Results.Ok(Dto(v));
