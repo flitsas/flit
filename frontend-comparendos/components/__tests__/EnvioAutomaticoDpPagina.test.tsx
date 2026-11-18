@@ -7,8 +7,12 @@ import { ApiError } from "@/lib/api";
 // Pantalla del SuperAdmin que enciende el envío automático de documentos legales (Epic #14606, HU #14614). La API se
 // simula por ruta; lo que se comprueba es lo que la pantalla manda y lo que muestra.
 const apiFetch = vi.fn();
-
-vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), apiFetch: (...a: unknown[]) => apiFetch(...a) }));
+const apiPostBlob = vi.fn();
+vi.mock("@/lib/api", async (original) => ({
+  ...(await original<typeof import("@/lib/api")>()),
+  apiFetch: (...a: unknown[]) => apiFetch(...a),
+  apiPostBlob: (...a: unknown[]) => apiPostBlob(...a),
+}));
 vi.mock("@/components/ComparendosShell", () => ({
   useSesion: () => ({ sesion: { usuario: { esSuperAdmin: true } }, cargando: false, error: null }),
 }));
@@ -17,22 +21,27 @@ interface Opciones {
   modulo?: boolean;
   aprobada?: boolean;
   automatizable?: boolean;
+  habilitada?: boolean;
   alPut?: (ruta: string, cuerpo: unknown) => unknown;
 }
 
-function simular({ modulo = true, aprobada = false, automatizable = false, alPut }: Opciones = {}) {
-  apiFetch.mockImplementation(async (ruta: string, op?: { method?: string; body?: unknown }) => {
+function simular({ modulo = true, aprobada = false, automatizable = false, habilitada = true, alPut }: Opciones = {}) {
+  apiPostBlob.mockResolvedValue(new Blob(["%PDF"], { type: "application/pdf" }));
+  apiFetch.mockImplementation(async (ruta: string, op?: { method?: string; body?: unknown; query?: { tipo?: string } }) => {
+    if (ruta === "/plantillas/vista-previa") return { asunto: "Derecho de petición CAD-1", html: "<p>Cuerpo del correo de ejemplo</p>", desconocidas: [] };
     if (op?.method === "PUT" || op?.method === "POST") return alPut ? alPut(ruta, op.body) : {};
     if (ruta === "/admin/empresas") return [{ id: "e1", nombre: "Empresa Uno" }];
     if (ruta === "/admin/empresas/e1/configuracion")
       return { empresaId: "e1", hasRightPetitionModule: modulo, conjuntoPlantillas: "Flit", dpAutomaticoActivo: false, dpAutomaticoTopeDiario: 50 };
     if (ruta === "/admin/tipologias")
       return [
-        { id: "t1", codigo: "DPR", nombre: "Prescripción", habilitada: true, automatizable },
+        { id: "t1", codigo: "DPR", nombre: "Prescripción", habilitada, automatizable },
         { id: "t9", codigo: "OTRA", nombre: "No automática", habilitada: true, automatizable: false },
       ];
+    if (ruta === "/plantillas" && op?.query?.tipo === "CorreoDpOt") return [{ id: "pc", tipologiaId: null, publicada: { id: "vc", numeroVersion: 1, publicadaEn: "2026-11-01T10:00:00Z" } }];
+    if (ruta === "/plantillas/versiones/vc") return { id: "vc", numeroVersion: 1, asunto: "Derecho de petición {{dp.radicado}}", cuerpoHtml: "<p>Hola</p>", publicadaEn: "2026-11-01T10:00:00Z" };
     if (ruta === "/plantillas") return [{ id: "p1", tipologiaId: "t1", publicada: { id: "v1", numeroVersion: 2, publicadaEn: "2026-11-01T10:00:00Z" } }];
-    if (ruta === "/plantillas/versiones/v1") return { id: "v1", numeroVersion: 2, publicadaEn: "2026-11-01T10:00:00Z", revisadaJuridicamenteEn: aprobada ? "2026-11-02T10:00:00Z" : null };
+    if (ruta === "/plantillas/versiones/v1") return { id: "v1", numeroVersion: 2, publicadaEn: "2026-11-01T10:00:00Z", cuerpoHtml: "<p>Texto del DP</p>", revisadaJuridicamenteEn: aprobada ? "2026-11-02T10:00:00Z" : null, revisadaPor: aprobada ? "Ana Abogada" : null, notaRevisionJuridica: aprobada ? "Texto conforme" : null };
     throw new Error(`ruta sin simular: ${String(ruta)}`);
   });
 }
@@ -47,7 +56,10 @@ async function abrir() {
   await screen.findByText("Envío automático de la empresa");
 }
 
-const puts = () => apiFetch.mock.calls.filter(([, op]) => op?.method === "PUT" || op?.method === "POST");
+const puts = () => apiFetch.mock.calls.filter(([ruta, op]) => ruta !== "/plantillas/vista-previa" && (op?.method === "PUT" || op?.method === "POST"));
+
+URL.createObjectURL = () => "blob:vista-previa";
+URL.revokeObjectURL = () => {};
 
 describe("pantalla del envío automático de DP (HU #14614)", () => {
   // Con llaves: un beforeEach que devuelve el mock lo vuelve «hook de limpieza» y vitest lo llama sin argumentos.
@@ -112,7 +124,7 @@ describe("pantalla del envío automático de DP (HU #14614)", () => {
     });
     await abrir();
     await screen.findByText("A mano");
-    fireEvent.click(screen.getByRole("button", { name: "Enviar sola" }));
+    fireEvent.click(screen.getByRole("button", { name: "Activar envío automático" }));
     await screen.findByText(/todavía no está aprobado por el abogado/);
     expect(document.body.textContent).not.toContain("TIPOLOGIA_SIN_REVISION_JURIDICA");
     expect(document.body.textContent).not.toContain("texto crudo de la API");
@@ -134,10 +146,129 @@ describe("pantalla del envío automático de DP (HU #14614)", () => {
     expect(confirmar.disabled).toBe(true);
     expect(puts()).toHaveLength(0);
     fireEvent.change(nota, { target: { value: "Revisado por el abogado." } });
-    expect(confirmar.disabled).toBe(false);
+    await waitFor(() => expect(confirmar.disabled).toBe(false));
     fireEvent.click(confirmar);
     await waitFor(() => expect(puts()).toHaveLength(1));
     expect(puts()[0][0]).toBe("/admin/plantillas/versiones/v1/revision-juridica");
     expect(puts()[0][1]).toMatchObject({ method: "POST", body: { nota: "Revisado por el abogado." } });
+  });
+});
+
+describe("«Activar envío automático» explica su bloqueo y deja destrabarlo (HU #14617)", () => {
+  beforeEach(() => {
+    apiFetch.mockReset();
+  });
+  afterEach(cleanup);
+
+  it("AC1: tipología no habilitada → botón bloqueado con la razón visible", async () => {
+    simular({ habilitada: false, aprobada: true });
+    await abrir();
+    await screen.findByText("Primero habilítala para esta empresa");
+    expect((screen.getByRole("button", { name: "Activar envío automático" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("AC2: «Habilitar para esta empresa» llama al PUT existente con {habilitada:true} y refresca la fila", async () => {
+    let habilitada = false;
+    simular({ habilitada: false, aprobada: true, alPut: () => ((habilitada = true), {}) });
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (ruta: string, op?: { method?: string }) => {
+      const r = await base(ruta, op);
+      return ruta === "/admin/tipologias" ? r.map((t: { id: string }) => (t.id === "t1" ? { ...t, habilitada } : t)) : r;
+    });
+    await abrir();
+    fireEvent.click(await screen.findByRole("button", { name: "Habilitar para esta empresa" }));
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()[0][0]).toBe("/admin/empresas/e1/tipologias/t1");
+    expect(puts()[0][1]).toMatchObject({ method: "PUT", body: { habilitada: true } });
+    await waitFor(() => expect((screen.getByRole("button", { name: "Activar envío automático" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByText("Primero habilítala para esta empresa")).toBeNull();
+  });
+
+  it("AC3: habilitada pero sin texto aprobado → «Primero aprueba el texto» y el botón sigue bloqueado", async () => {
+    simular({ habilitada: true, aprobada: false });
+    await abrir();
+    await screen.findByText("Primero aprueba el texto");
+    expect((screen.getByRole("button", { name: "Activar envío automático" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Habilitar para esta empresa" })).toBeNull();
+  });
+
+  it("AC4: nombres sin ambigüedad y errores del contrato en español", async () => {
+    simular({
+      habilitada: false,
+      aprobada: true,
+      alPut: () => {
+        throw new ApiError(409, "crudo", "TIPOLOGIA_INACTIVA");
+      },
+    });
+    await abrir();
+    fireEvent.click(await screen.findByRole("button", { name: "Habilitar para esta empresa" }));
+    await screen.findByText(/desactivada en el catálogo/);
+    expect(document.body.textContent).not.toContain("TIPOLOGIA_INACTIVA");
+    cleanup();
+    apiFetch.mockReset();
+    simular({ automatizable: true, aprobada: true });
+    await abrir();
+    await screen.findByRole("button", { name: "Volver a enviar a mano" });
+    expect(screen.queryByRole("button", { name: "Enviar sola" })).toBeNull();
+  });
+});
+
+describe("«Aprobar texto» deja ver el documento y el correo, y registra quién aprobó (HU #14616)", () => {
+  beforeEach(() => {
+    apiFetch.mockReset();
+    apiPostBlob.mockReset();
+  });
+  afterEach(cleanup);
+
+  async function abrirAprobar() {
+    await abrir();
+    await screen.findByText("Texto sin aprobar");
+    fireEvent.click(screen.getByRole("button", { name: "Aprobar texto" }));
+    return screen.findByRole("dialog");
+  }
+
+  it("AC1: muestra el documento en PDF y el correo (asunto y cuerpo) y dice que no se envía nada", async () => {
+    simular();
+    const dialogo = await abrirAprobar();
+    await waitFor(() => expect(within(dialogo).getByTitle("Vista previa del documento")).toBeTruthy());
+    const correo = within(dialogo).getByTitle("Vista previa del correo") as HTMLIFrameElement;
+    expect(within(dialogo).getByText(/Derecho de petición CAD-1/)).toBeTruthy();
+    expect(correo.getAttribute("srcdoc")).toContain("Cuerpo del correo de ejemplo");
+    expect(within(dialogo).getByText(/no se envía nada a nadie/)).toBeTruthy();
+    const llamadas = apiFetch.mock.calls.filter(([r]) => r === "/plantillas/vista-previa").map(([, op]) => op.body);
+    expect(llamadas[0]).toMatchObject({ tipo: "CorreoDpOt", comparendoId: null, formato: "html" });
+    expect(apiPostBlob.mock.calls[0][1]).toMatchObject({ tipo: "DpDocumento", comparendoId: null, formato: "pdf" });
+  });
+
+  it("AC2: el correo va aislado en un iframe con sandbox sin permisos (nunca HTML crudo en la página)", async () => {
+    simular();
+    const dialogo = await abrirAprobar();
+    const correo = (await within(dialogo).findByTitle("Vista previa del correo")) as HTMLIFrameElement;
+    expect(correo.getAttribute("sandbox")).toBe("");
+    expect(within(dialogo).queryByText("Cuerpo del correo de ejemplo")).toBeNull();
+  });
+
+  it("AC3: «Aprobar texto» sigue bloqueado con la razón visible mientras carga o si la vista previa falla", async () => {
+    simular();
+    apiPostBlob.mockImplementation(() => new Promise(() => {}));
+    let dialogo = await abrirAprobar();
+    fireEvent.change(within(dialogo).getByLabelText(/Nota de la revisión/), { target: { value: "Revisado." } });
+    expect(within(dialogo).getByText(/Espera a que se arme la vista previa/)).toBeTruthy();
+    expect((within(dialogo).getByRole("button", { name: "Aprobar texto" }) as HTMLButtonElement).disabled).toBe(true);
+    cleanup();
+    simular();
+    apiPostBlob.mockRejectedValue(new Error("No se pudo armar el documento."));
+    dialogo = await abrirAprobar();
+    fireEvent.change(within(dialogo).getByLabelText(/Nota de la revisión/), { target: { value: "Revisado." } });
+    await within(dialogo).findByText(/No se pudo armar la vista previa/);
+    expect((within(dialogo).getByRole("button", { name: "Aprobar texto" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(puts()).toHaveLength(0);
+  });
+
+  it("AC4: la fila muestra quién aprobó, cuándo y la nota", async () => {
+    simular({ aprobada: true });
+    await abrir();
+    await screen.findByText("Texto aprobado");
+    expect(screen.getByText(/Aprobado por Ana Abogada el 02 de nov de 2026 · «Texto conforme»/)).toBeTruthy();
   });
 });
