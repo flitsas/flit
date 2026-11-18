@@ -23,7 +23,6 @@ import { ilustracionDe, rutaIlustracion, type Ilustracion } from "@flit/ui/ilust
  */
 export const DOCK_GROUP_ORDER = [
   "tramites",
-  "caja",
   "identidad",
   "reportes",
   "usuarios",
@@ -39,7 +38,6 @@ export type DockGroupSide = "left" | "right";
 /** Reparto izquierda/derecha del FAB — declarado, no por mitades (HU #12723). */
 export const DOCK_GROUP_SIDE: Record<DockGroupId, DockGroupSide> = {
   tramites: "left",
-  caja: "left",
   identidad: "left",
   reportes: "left",
   usuarios: "right",
@@ -50,7 +48,6 @@ export const DOCK_GROUP_SIDE: Record<DockGroupId, DockGroupSide> = {
 
 export const DOCK_GROUP_LABEL: Record<DockGroupId, string> = {
   tramites: COPY.B21Tramites,
-  caja: "Caja",
   identidad: COPY.A17,
   reportes: COPY.B21Reportes,
   usuarios: COPY.B21Usuarios,
@@ -82,7 +79,6 @@ export type DockIconComponent = ComponentType<{
 
 export const DOCK_GROUP_ICON: Record<DockGroupId, DockIconComponent> = {
   tramites: iconoComo("archivo"),
-  caja: iconoComo("pago"),
   identidad: iconoComo("escudo"),
   reportes: iconoComo("reportes"),
   usuarios: iconoComo("usuarios"),
@@ -96,8 +92,6 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
   tramites: "tramites",
   // Módulo id sigue siendo `validaciones` en la SPA; el label visible es "Identidad".
   validaciones: "identidad",
-  // Feature #14453 — Caja del organismo: persona de caja (`ot_caja`) y Admin OT. Ítem único → píldora directa.
-  caja: "caja",
   // HU #12194 — el historial por placa es una lectura del universo de trámites: cuelga de Trámites.
   "historial-placa": "tramites",
   reportes: "reportes",
@@ -147,7 +141,6 @@ export const DOCK_ITEM_GROUP: Record<string, DockGroupId> = {
  */
 export const DOCK_ITEM_DESCRIPCION: Record<string, string> = {
   tramites: "Traspasos y matrículas",
-  caja: "Cobrar y ver los cobros del día",
   "historial-placa": "Todo lo de un vehículo",
   validaciones: "Validación antes de firmar",
   reportes: "La operación en cifras",

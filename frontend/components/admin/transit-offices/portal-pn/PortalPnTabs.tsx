@@ -12,19 +12,24 @@ export interface PortalPnTabsProps {
   reportes?: ReactNode;
   /** Contenido de la subpestaña Cobro (precios del portal). Lo conecta la HU de precios; sin él, un aviso. */
   cobro?: ReactNode;
-  /** Contenido de la subpestaña Caja (usuarios y cobros de caja). Sin él, la pestaña no aparece. */
+  /** Contenido de la subpestaña Caja (usuarios y cobros de caja). Sin él, la pestaña no aparece. Admin OT: Cobrar, Cobros del día y Usuarios de caja; SuperAdmin: Usuarios y Cobros de caja. */
   caja?: ReactNode;
   /** Sección de dominio de Diseño (llega con otra HU). */
   domain?: ReactNode;
   /** Subpestaña inicial. Por defecto Reportes, la primera. */
   initialTab?: PortalPnTabId;
+  /**
+   * Muestra SOLO esa sección, sin la fila de pestañas: la sección la elige el submenú «Portal Persona Natural» del menú de
+   * abajo (Reportes, Cobro, Caja, Diseño) y viaja en la URL (`?tab=`). Sin ella, el componente pinta las pestañas de siempre.
+   */
+  seccion?: PortalPnTabId;
 }
 
 /**
- * Subpestañas del Portal Persona Natural del organismo (Épica #14297): `Reportes` (la primera), `Cobro` y `Diseño`.
+ * Subpestañas del Portal Persona Natural del organismo (Épica #14297): `Reportes` (la primera), `Cobro`, `Caja` y `Diseño`.
  * Es el mismo componente para el administrador del organismo y para el SuperAdmin: todo se ancla a `transitOfficeId`.
  */
-export function PortalPnTabs({ transitOfficeId, reportes, cobro, caja, domain, initialTab }: PortalPnTabsProps) {
+export function PortalPnTabs({ transitOfficeId, reportes, cobro, caja, domain, initialTab, seccion }: PortalPnTabsProps) {
   const [active, setActive] = useState<PortalPnTabId>(initialTab ?? "reportes");
 
   const tabs: SectionTab<PortalPnTabId>[] = [
@@ -54,5 +59,9 @@ export function PortalPnTabs({ transitOfficeId, reportes, cobro, caja, domain, i
     },
   ];
 
+  if (seccion) {
+    const elegida = tabs.find((t) => t.id === seccion) ?? tabs[0];
+    return <section aria-label={elegida.label}>{elegida.content}</section>;
+  }
   return <SectionTabs tabs={tabs} active={active} onChange={setActive} ariaLabel="Secciones del portal Persona Natural" />;
 }
