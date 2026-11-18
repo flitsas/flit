@@ -96,8 +96,20 @@ public static class DpEndpoints
     private static async Task<IResult> Enviar(Guid id, PedidoDp pedido, AccesoComparendo acceso, ServicioDp servicio, UsuarioActual usuario, ComparendosDb db, DespachadorCorreos despachador, CancellationToken ct)
     {
         var c = await acceso.ParaOperarAsync(id, ct).ConfigureAwait(false);
-        var dp = await servicio.EnviarAsync(c, pedido.TipologiaId, Actor.De(usuario), loteId: null, ct).ConfigureAwait(false);
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        DerechoPeticion dp;
+        try
+        {
+            // EnviarAsync ya guarda (al registrar el correo): el DP se inserta ahí, así que la carrera con el envío automático
+            // (índice único, o el aborto de Postgres al cruzarse los candados) puede saltar en cualquiera de las dos llamadas.
+            dp = await servicio.EnviarAsync(c, pedido.TipologiaId, Actor.De(usuario), loteId: null, ct).ConfigureAwait(false);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation or Npgsql.PostgresErrorCodes.DeadlockDetected or Npgsql.PostgresErrorCodes.SerializationFailure })
+        {
+            // El envío automático (u otra persona) lo envió a la vez: un DP por comparendo, no es un error del servidor.
+            throw ReglaException.Conflicto("YA_TIENE_DP", "El comparendo ya tiene un derecho de petición: solo admite uno.");
+        }
+
         foreach (var comunicacion in dp.ComunicacionIds)
             await despachador.DespacharAsync(comunicacion, ct).ConfigureAwait(false);
         var estado = await db.DerechosPeticion.AsNoTracking().Where(d => d.Id == dp.Id).Select(d => d.Estado).FirstAsync(ct).ConfigureAwait(false);
