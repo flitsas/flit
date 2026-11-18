@@ -50,8 +50,8 @@ function montar(rutas: Record<string, Manejador> = {}) {
     return (todas[clave] ?? (() => json({ code: "no_simulado", message: clave }, 404)))(init);
   }) as unknown as typeof fetch;
   const props = { onVolver: vi.fn(), onIrActores: vi.fn(), onPagado: vi.fn() };
-  renderConQuery(<PagoPunto cliente={crearCliente({ fetchImpl })} solicitudId="s-1" tipoCodigo="TIPO_A" placa="ABC123" tipoNombre="Traspaso" {...props} />);
-  return { llamadas, ...props };
+  const { client } = renderConQuery(<PagoPunto cliente={crearCliente({ fetchImpl })} solicitudId="s-1" tipoCodigo="TIPO_A" placa="ABC123" tipoNombre="Traspaso" {...props} />);
+  return { llamadas, client, ...props };
 }
 
 describe("Paso Pago del punto · #14451", () => {
@@ -179,6 +179,43 @@ describe("Paso Pago del punto · #14451", () => {
     await waitFor(() => expect(llamadas.filter((l) => l === CAJA)).toHaveLength(2));
   });
 
+  it("generado solo → la caja cobra → la caja anula en la misma visita: aviso amarillo y «Generar pago en caja de nuevo», sin «Reintentar»", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    let fase: "sin" | "vigente" | "pagado" | "anulado" = "sin";
+    const { llamadas, client } = montar({
+      [GET_PAGO]: () =>
+        json(
+          fase === "pagado"
+            ? estado({ estado: "en_cola", puedePagar: false, pago: PAGO })
+            : fase === "vigente"
+              ? estado({ cobro: VIGENTE })
+              : estado(),
+        ),
+      [CAJA]: () => {
+        fase = "vigente";
+        return json({ codigoCobro: "PN-2026-0042", habilitadoEn: VIGENTE.habilitadoEn, venceEn: VIGENTE.venceEn, desglose: DESGLOSE, totalCop: 75000 });
+      },
+    });
+    expect(await screen.findByTestId("codigo-cobro")).toBeInTheDocument();
+
+    fase = "pagado";
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(4500);
+    });
+    expect(await screen.findByText(/Pago recibido/)).toBeInTheDocument();
+
+    // La caja anula y la pantalla vuelve a leer el estado (sin objeto de cobro).
+    fase = "anulado";
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ["pn", "punto", "pago", "s-1"] });
+    });
+
+    expect(await screen.findByText("La caja anuló el cobro. Genera el pago de nuevo.")).toHaveClass("border-warning");
+    expect(screen.getByRole("button", { name: "Generar pago en caja de nuevo" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Reintentar" })).toBeNull();
+    expect(llamadas.filter((l) => l === CAJA)).toHaveLength(1);
+  });
+
   it("con total $0 no genera pago en caja", async () => {
     const { llamadas } = montar({ [GET_PAGO]: () => json(estado({ totalCop: 0, desglose: [] })) });
     await screen.findByRole("button", { name: "Confirmar" });
@@ -237,10 +274,11 @@ describe("Paso Pago del punto · esperar identidades #14452", () => {
   it("al validar la última identidad inicia el pago y habilita el botón sin recargar", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     let validada = false;
+    let generado = false;
     const { llamadas } = montar({
-      [GET_PAGO]: () => json(validada ? estado() : enBorrador()),
+      [GET_PAGO]: () => json(validada ? estado(generado ? { cobro: VIGENTE } : {}) : enBorrador()),
       [INICIAR]: () => json(estado()),
-      [CAJA]: () => json({ codigoCobro: "PN-2026-0042", habilitadoEn: VIGENTE.habilitadoEn, venceEn: VIGENTE.venceEn, desglose: DESGLOSE, totalCop: 75000 }),
+      [CAJA]: () => ((generado = true), json({ codigoCobro: "PN-2026-0042", habilitadoEn: VIGENTE.habilitadoEn, venceEn: VIGENTE.venceEn, desglose: DESGLOSE, totalCop: 75000 })),
     });
     await screen.findByRole("list", { name: "Personas pendientes de validar" });
 

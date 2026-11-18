@@ -98,6 +98,8 @@ export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, placa, t
 
   // Cuando la caja confirma (o se confirma el $0) se refresca la solicitud —ya no es editable— y se pasa al cierre.
   useEffect(() => {
+    // Si el pago desaparece (la caja lo anuló estando aquí), se rearma el aviso para volver a avanzar cuando se pague de nuevo.
+    if (!estado?.pago) avisado.current = false;
     if (!estado?.pago || avisado.current) return;
     avisado.current = true;
     void queryClient.refetchQueries({ queryKey: claveSolicitud(solicitudId) }).finally(onPagado);
@@ -225,6 +227,9 @@ export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, placa, t
 
   const total = estado.totalCop ?? null;
   const generandoAuto = hayQueGenerar && !autoLanzado;
+  // «Reintentar» solo con un motivo visible (falló la generación). Sin cobro, tras haber generado ya en esta visita, la caja lo anuló.
+  const reintentar = falloAccion !== null && generarAutomatico && estado.cobro?.estado !== "vencido";
+  const anuladoAqui = generarAutomatico && autoLanzado && !estado.cobro && !falloAccion && !generandoAuto && (total ?? 0) > 0 && !estado.bloqueo;
   const ocupado = generar.isPending || confirmar.isPending || generandoAuto;
   const lineas = estado.desglose ?? [];
 
@@ -261,6 +266,11 @@ export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, placa, t
 
       <Card title={total === 0 ? "Confirmar sin cobro" : "Pago en caja"} id="punto-pago-medio">
         <div className="space-y-4">
+          {anuladoAqui && (
+            <p role="status" className="rounded-[9px] border border-warning bg-warning/10 p-3 text-sm font-medium text-foreground">
+              La caja anuló el cobro. Genera el pago de nuevo.
+            </p>
+          )}
           {estado.bloqueo ? (
             <Alerta id="punto-pago-bloqueo">{estado.bloqueo.message}</Alerta>
           ) : (
@@ -269,7 +279,7 @@ export function PagoPunto({ cliente, solicitudId, tipoCodigo, onVolver, placa, t
               estado={estado}
               ocupado={ocupado}
               generando={generar.isPending || generandoAuto}
-              etiquetaGenerar={estado.cobro?.estado === "vencido" || !generarAutomatico ? "Generar pago en caja de nuevo" : "Reintentar"}
+              etiquetaGenerar={reintentar ? "Reintentar" : "Generar pago en caja de nuevo"}
               confirmando={confirmar.isPending}
               onGenerar={() => generar.mutate()}
               onConfirmar={() => confirmar.mutate()}
