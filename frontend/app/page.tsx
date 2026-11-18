@@ -41,6 +41,7 @@ import {
   isSoloCaja,
   isSuperAdmin,
 } from "@/lib/auth/jwt";
+import { cajaPortalPath } from "@/components/admin/transit-offices/ot-nav";
 
 function HomeContent() {
   const router = useRouter();
@@ -55,11 +56,11 @@ function HomeContent() {
   // Claims JWT: lectura perezosa (no reactiva) — el token no cambia en la sesión SPA.
   const [claims] = useState<JwtPayload | null>(() => decodeJwtPayload(getToken()));
   const isSuperAdminUser = isSuperAdmin(claims);
-  // Feature #14453 — la persona de caja (único rol `ot_caja`) solo ve el módulo Caja: el inicio la lleva allí.
+  // Feature #14453 — la persona de caja (único rol `ot_caja`) solo ve Portal Persona Natural → Caja: el inicio la lleva allí.
   const soloCaja = isSoloCaja(claims);
   useEffect(() => {
-    if (hydrated && authed && soloCaja) router.replace("/caja");
-  }, [hydrated, authed, soloCaja, router]);
+    if (hydrated && authed && soloCaja) router.replace(cajaPortalPath(typeof claims?.tenant_id === "string" ? claims.tenant_id : null));
+  }, [hydrated, authed, soloCaja, claims, router]);
   const isOtAdminUser = isOtUser(claims);
   const canLogQx = canReadLogQx(claims);
   // ICT (Bug #13445): Log solo SuperAdmin; Trazabilidad y Reportes por su permiso propio.

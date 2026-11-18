@@ -45,8 +45,8 @@ describe("catálogo de Trámites", () => {
       { isOtUser: true, isOtAdmin: true, otTransitOfficeId: "ot-1" },
       { roles: ["ot_admin"], modules: ["tramites", "reportes", "usuarios"] },
     );
-    // Feature #14453 — el Admin OT ve además Caja (píldora directa).
-    expect(groups.map((g) => g.label)).toEqual(["Trámites", "Caja", "Reportes", "Usuarios", "Administración"]);
+    // La Caja ya no es un grupo suelto del menú: vive en Portal Persona Natural → Caja.
+    expect(groups.map((g) => g.label)).toEqual(["Trámites", "Reportes", "Usuarios", "Administración"]);
     expect(groups.find((g) => g.id === "administracion")?.items.map((i) => i.label)).toEqual([
       "Documentos",
       "Mandatos",
@@ -62,36 +62,53 @@ describe("catálogo de Trámites", () => {
   it("HU14377 — Portal Persona Natural solo lo ve el ot_admin, no otro rol del organismo, y apunta a su organismo", () => {
     const admin = dock({ isOtUser: true, isOtAdmin: true, otTransitOfficeId: "ot-1" }, { roles: ["ot_admin"], modules: ["tramites", "reportes", "usuarios"] });
     const entrada = admin.flatMap((g) => g.items).find((i) => i.key === OT_ADM_DOCK.portalPersonaNatural);
-    expect(entrada?.href).toBe("/admin/transit-offices/ot-1/portal-persona-natural");
+    expect(entrada?.children?.map((c) => c.label)).toEqual(["Reportes", "Cobro", "Caja", "Diseño"]);
     expect(DOCK_ITEM_GROUP[OT_ADM_DOCK.portalPersonaNatural]).toBe("administracion");
 
     const gestor = dock({ isOtUser: true, isOtAdmin: false, otTransitOfficeId: "ot-1" }, { roles: ["gestor_ot"], modules: ["tramites"] });
     expect(gestor.flatMap((g) => g.items).map((i) => i.key)).not.toContain(OT_ADM_DOCK.portalPersonaNatural);
   });
 
-  // Feature #14453 — módulo Caja en el dock: solo `ot_caja` y Admin OT, ítem único con ruta /caja.
-  describe("Caja del organismo", () => {
+  // Feature #14453 — la Caja no es ítem del menú: la persona de caja entra por Portal Persona Natural (pestaña Caja).
+  describe("Caja dentro de Portal Persona Natural", () => {
     const ot = { isOtUser: true, otTransitOfficeId: "ot-1" };
-    const entradaCaja = (groups: ReturnType<typeof dock>) => groups.flatMap((g) => g.items).find((i) => i.key === "caja");
+    const llaves = (groups: ReturnType<typeof dock>) => groups.flatMap((g) => g.items.map((i) => i.key));
 
-    it("la persona de caja (ot_caja) ve SOLO Caja, con su ruta y su grupo", () => {
-      const groups = dock(ot, { roles: ["ot_caja"], modules: [] });
-      expect(groups.map((g) => g.label)).toEqual(["Caja"]);
-      expect(groups[0].items.map((i) => i.label)).toEqual(["Caja"]);
-      expect(entradaCaja(groups)?.href).toBe("/caja");
-      expect(DOCK_ITEM_GROUP.caja).toBe("caja");
+    it("no existe el grupo ni el ítem «Caja» en el dock", () => {
+      expect(DOCK_GROUP_ORDER).not.toContain("caja");
+      expect(DOCK_ITEM_GROUP).not.toHaveProperty("caja");
+      expect(DOCK_GROUP_SIDE).not.toHaveProperty("caja");
+      expect(DOCK_GROUP_LABEL).not.toHaveProperty("caja");
+      expect(DOCK_GROUP_ICON).not.toHaveProperty("caja");
+      const admin = dock({ ...ot, isOtAdmin: true }, { roles: ["ot_admin"], modules: ["tramites"] });
+      expect(llaves(admin)).not.toContain("caja");
     });
 
-    it("el Admin OT la ve además de lo suyo", () => {
-      const groups = dock({ ...ot, isOtAdmin: true }, { roles: ["ot_admin"], modules: ["tramites"] });
-      expect(entradaCaja(groups)?.href).toBe("/caja");
-      expect(groups.length).toBeGreaterThan(1);
+    const portal = (groups: ReturnType<typeof dock>) =>
+      groups.flatMap((g) => g.items).find((i) => i.key === OT_ADM_DOCK.portalPersonaNatural);
+
+    it("la persona de caja (solo ot_caja) ve SOLO Administración → Portal Persona Natural ▸ Caja, con acceso directo a su pestaña", () => {
+      const groups = dock({ ...ot, isSoloCaja: true }, { roles: ["ot_caja"], modules: [] });
+      expect(groups.map((g) => g.label)).toEqual(["Administración"]);
+      expect(groups.flatMap((g) => g.items.map((i) => i.label))).toEqual(["Portal Persona Natural"]);
+      expect(portal(groups)?.desplegable).toBe(true);
+      expect(portal(groups)?.children?.map((c) => c.label)).toEqual(["Caja"]);
+      expect(portal(groups)?.children?.[0].href).toBe("/admin/transit-offices/ot-1/portal-persona-natural?tab=caja");
     });
 
-    it("otro rol del organismo, un gestor de empresa y el SuperAdmin no la ven", () => {
-      expect(entradaCaja(dock(ot, { roles: ["gestor_ot"], modules: ["tramites"] }))).toBeUndefined();
-      expect(entradaCaja(dock({ isAdminCompany: true }, { roles: ["AdminCompany"], modules: ["tramites"] }))).toBeUndefined();
-      expect(entradaCaja(dock({}, { isSuperAdmin: true }))).toBeUndefined();
+    it("el Admin OT ve el submenú con Reportes, Cobro, Caja y Diseño, cada uno con su sección en la ruta", () => {
+      const admin = dock({ ...ot, isOtAdmin: true }, { roles: ["ot_admin"], modules: ["tramites"] });
+      expect(portal(admin)?.desplegable).toBe(true);
+      expect(portal(admin)?.children?.map((c) => [c.label, c.href])).toEqual([
+        ["Reportes", "/admin/transit-offices/ot-1/portal-persona-natural?tab=reportes"],
+        ["Cobro", "/admin/transit-offices/ot-1/portal-persona-natural?tab=cobro"],
+        ["Caja", "/admin/transit-offices/ot-1/portal-persona-natural?tab=caja"],
+        ["Diseño", "/admin/transit-offices/ot-1/portal-persona-natural?tab=diseno"],
+      ]);
+    });
+
+    it("otro rol del organismo no ve el submenú", () => {
+      expect(llaves(dock(ot, { roles: ["gestor_ot"], modules: ["tramites"] }))).not.toContain(OT_ADM_DOCK.portalPersonaNatural);
     });
   });
 
@@ -195,7 +212,6 @@ describe("catálogo de Trámites", () => {
   it("HU #12723 — cada agrupador declara lado izquierdo o derecho del inicio", () => {
     expect(DOCK_GROUP_SIDE).toEqual({
       tramites: "left",
-      caja: "left",
       identidad: "left",
       reportes: "left",
       usuarios: "right",

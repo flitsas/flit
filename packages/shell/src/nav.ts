@@ -36,6 +36,11 @@ export interface NavItem {
   superAdminOnly?: boolean;
   /** Un nivel de submenú (p. ej. Administradores → Plataforma → Mandatos). Un contenedor lleva `href: ""`. */
   children?: NavItem[];
+  /**
+   * Con `children`: el contenedor es un submenú que se despliega DENTRO del mismo panel (botón con ▸/▾ y `aria-expanded`), en
+   * lugar de una sección con título siempre abierta. Sin esto, el comportamiento es el de siempre.
+   */
+  desplegable?: boolean;
   /** Pendientes de la entrada (p. ej. solicitudes sin tomar). 0 o ausente: no se pinta (`formatoInsignia`). */
   badge?: number;
   /** Qué cuenta la insignia, para el nombre accesible: «solicitudes sin tomar». Por defecto «pendientes». */
@@ -67,6 +72,8 @@ export interface DockEntry {
   descripcion?: string;
   active: boolean;
   children?: DockEntry[];
+  /** Submenú desplegable dentro del panel (ver `NavItem.desplegable`). */
+  desplegable?: boolean;
   /** Insignia de la entrada (solo si el catálogo la trae). */
   badge?: number;
   badgeTexto?: string;
@@ -151,6 +158,7 @@ export function buildDock(catalog: NavCatalog, viewer: NavViewer, pathname: stri
     descripcion: it.descripcion,
     active: it.key === activeKey,
     children: it.children?.length ? it.children.map(toEntry) : undefined,
+    ...(it.desplegable ? { desplegable: true } : {}),
     // Solo con insignia: sin ella la entrada es la de siempre (consumidores sin `badge`).
     ...(it.badge === undefined ? {} : { badge: it.badge }),
     ...(it.badgeTexto === undefined ? {} : { badgeTexto: it.badgeTexto }),

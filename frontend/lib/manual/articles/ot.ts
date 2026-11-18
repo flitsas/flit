@@ -917,8 +917,8 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "entrar",
         title: "1. Quién entra y qué ve",
         paragraphs: [
-          "La caja es un módulo de FLIT 2.0 llamado «Caja», en el menú de abajo. No hay un portal aparte: la persona de caja entra por el inicio de sesión de siempre, con el correo y la contraseña de su usuario. Su administrador del organismo la crea en la pestaña «Caja» del hub del organismo y le llega una invitación para definir su contraseña.",
-          "Si tu único rol es el de caja, el menú muestra solo «Caja» y al entrar llegas directo a ella. El administrador del organismo ve «Caja» además de sus módulos de siempre, y puede cobrar, ver los cobros del día y anular. El Super Admin no usa este módulo: anula desde la administración del organismo.",
+          "En el menú de abajo, «Administración» tiene «Portal Persona Natural», que se despliega en cuatro opciones: Reportes, Cobro, Caja y Diseño. La caja está en Administración → Portal Persona Natural → Caja, con tres pestañas: «Cobrar», «Cobros del día» y «Usuarios de caja». No es un ítem aparte del menú ni un portal distinto: la persona de caja entra a FLIT 2.0 por el inicio de sesión de siempre, con el correo y la contraseña de su usuario. El administrador del organismo la crea en la subpestaña «Usuarios de caja» y le llega una invitación para definir su contraseña.",
+          "Si tu único rol es el de caja, el menú muestra solo Administración → Portal Persona Natural → Caja y al entrar a FLIT 2.0 llegas directo a ella, con las pestañas «Cobrar» y «Cobros del día»: no ves Reportes, Cobro ni Diseño, ni «Usuarios de caja». El administrador del organismo ve las tres subpestañas y, en «Cobros del día», puede elegir el día y anular. El Super Admin entra al organismo que elija y administra «Usuarios de caja» y «Cobros de caja» (con anulación); no cobra.",
         ],
         callouts: [
           {
@@ -930,7 +930,7 @@ export const OT_ARTICLES: ManualArticle[] = [
       {
         id: "cobrar",
         title: "2. Cobrar un trámite",
-        paragraphs: ["En la pestaña «Cobrar», cada cobro se hace con el ID del trámite que la persona generó en el punto. Sigue estos pasos:"],
+        paragraphs: ["En la subpestaña «Cobrar», cada cobro se hace con el ID del trámite que la persona generó en el punto. Sigue estos pasos:"],
         bullets: [
           "Escribe el ID que te muestra la persona (por ejemplo PN-2026-000123) y pulsa «Buscar».",
           "Revisa el tipo de trámite, lo que se paga y el total. El total no se puede cambiar: es el que calcula la plataforma en ese momento.",
@@ -963,7 +963,7 @@ export const OT_ARTICLES: ManualArticle[] = [
         id: "cobros-dia",
         title: "4. Cobros del día y anulaciones",
         paragraphs: [
-          "La pestaña «Cobros del día» lista lo que se cobró en tu organismo, con el ID, el valor, el medio, la fecha y hora, quién cobró y el estado, y el total del día. Los cobros anulados aparecen marcados y tachados, y no suman al total. La tabla se pagina de 10, 20, 30 o 50 filas.",
+          "La subpestaña «Cobros del día» lista lo que se cobró en tu organismo, con el ID, el valor, el medio, la fecha y hora, quién cobró y el estado, y el total del día. Los cobros anulados aparecen marcados y tachados, y no suman al total. La tabla se pagina de 10, 20, 30 o 50 filas.",
           "El administrador del organismo puede elegir otro día y anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Si el cobro ya no se puede anular porque el trámite ya llegó a FLIT 2.0, la opción aparece deshabilitada con su motivo. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
           "Si eres de caja y te equivocaste en un cobro, avisa al administrador de tu organismo: solo él puede anularlo.",
         ],

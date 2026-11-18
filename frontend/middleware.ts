@@ -50,7 +50,7 @@ export async function middleware(request: NextRequest) {
 
 /** Páginas que exigen sesión (las que montan `useAuthGate`). Las públicas (portal, biometría, invitación, manual, 403,
  *  /auth/*) quedan fuera. */
-const PROTECTED_PREFIXES = ["/tramites", "/caja", "/admin", "/empresa", "/profile", "/log-qx"];
+const PROTECTED_PREFIXES = ["/tramites", "/admin", "/empresa", "/profile", "/log-qx"];
 
 function isProtectedPage(pathname: string): boolean {
   return pathname === "/" || PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
@@ -79,5 +79,5 @@ export const config = {
   runtime: "nodejs",
   // `/`, /tramites, /profile y /log-qx solo hacen algo con la sesión de la suite (exigen sesión real); con la sesión
   // antigua pasan de largo.
-  matcher: ["/", "/tramites/:path*", "/caja/:path*", "/profile/:path*", "/log-qx/:path*", "/admin/:path*", "/empresa/:path*", "/login", "/api/v1/:path*"],
+  matcher: ["/", "/tramites/:path*", "/profile/:path*", "/log-qx/:path*", "/admin/:path*", "/empresa/:path*", "/login", "/api/v1/:path*"],
 };

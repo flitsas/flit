@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type ReactNode } from "react";
 import { getToken } from "@/lib/api/client";
-import { decodeJwtPayload, isOtAdmin, isSuperAdmin } from "@/lib/auth/jwt";
+import { decodeJwtPayload, isOtAdmin, isSoloCaja, isSuperAdmin } from "@/lib/auth/jwt";
 import { IconoAviso } from "@flit/ui/IconoAviso";
 
 export const PORTAL_PN_NO_ACCESS_MESSAGE =
@@ -19,8 +19,9 @@ export function PortalPnAccess({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const payload = decodeJwtPayload(getToken());
+    // La persona de caja (solo `ot_caja`) entra, pero la página solo le muestra la pestaña Caja.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- el token solo se lee en el navegador
-    setAccess(isSuperAdmin(payload) || isOtAdmin(payload) ? "allowed" : "denied");
+    setAccess(isSuperAdmin(payload) || isOtAdmin(payload) || isSoloCaja(payload) ? "allowed" : "denied");
   }, []);
 
   if (access === "checking") return null;
