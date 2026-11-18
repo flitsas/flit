@@ -183,6 +183,9 @@ public enum TipoComunicacion
     ReporteSemanal,
     ReporteMensual,
     ExportacionLista,
+
+    /// <summary>Epic #14606, HU #14610: resumen diario de lo que el envío automático de DP omitió (una vez al día por empresa).</summary>
+    ResumenEnvioAutomaticoDp,
 }
 
 /// <summary>Solo correo en la primera entrega; WhatsApp y SMS quedan en el backlog [Excel C11].</summary>

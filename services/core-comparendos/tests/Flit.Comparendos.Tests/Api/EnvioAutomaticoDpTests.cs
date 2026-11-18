@@ -42,11 +42,11 @@ public sealed class EnvioAutomaticoDpTests(ApiConFuente api) : IClassFixture<Api
     /// Empresa con DP, DCI habilitada, versión publicada aprobada por el abogado y marcada automatizable, el organismo con su
     /// correo de radicación, un representante con firma y el envío automático encendido con el tope dado.
     /// </summary>
-    private async Task<Guid> EmpresaListaAsync(int tope = 50, bool encendido = true, bool conRepresentante = true, bool aprobada = true)
+    private async Task<Guid> EmpresaListaAsync(int tope = 50, bool encendido = true, bool conRepresentante = true, bool aprobada = true, bool admiteOrganismo = true, bool conFirma = true)
     {
         var ct = TestContext.Current.CancellationToken;
         api.Reloj.Hoy(Hoy);
-        (await Super.PatchAsJsonAsync($"{Base}/admin/organismos/aaaaaaaa-0001-4000-8000-000000000001", new { correosRadicacion = new[] { "radicacion@movilidad.test" } }, ct)).EnsureSuccessStatusCode();
+        (await Super.PatchAsJsonAsync($"{Base}/admin/organismos/aaaaaaaa-0001-4000-8000-000000000001", new { correosRadicacion = new[] { "radicacion@movilidad.test" }, admiteDpPorCorreo = admiteOrganismo }, ct)).EnsureSuccessStatusCode();
         var empresa = await EmpresaAsync(api, dp: true);
         var dci = await TipologiaAsync("DCI");
         (await Super.PutAsJsonAsync($"{Base}/admin/empresas/{empresa}/tipologias/{dci}", new { habilitada = true }, ct)).EnsureSuccessStatusCode();
@@ -59,13 +59,13 @@ public sealed class EnvioAutomaticoDpTests(ApiConFuente api) : IClassFixture<Api
         }
 
         if (conRepresentante)
-            await RepresentanteConFirmaAsync(empresa);
+            await RepresentanteConFirmaAsync(empresa, conFirma);
         if (encendido)
             (await Super.PutAsJsonAsync($"{Base}/admin/empresas/{empresa}/envio-automatico-dp", new { activo = true, topeDiario = tope }, ct)).EnsureSuccessStatusCode();
         return empresa;
     }
 
-    private async Task RepresentanteConFirmaAsync(Guid empresa)
+    private async Task RepresentanteConFirmaAsync(Guid empresa, bool conFirma = true)
     {
         var ct = TestContext.Current.CancellationToken;
         var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
@@ -74,6 +74,8 @@ public sealed class EnvioAutomaticoDpTests(ApiConFuente api) : IClassFixture<Api
             alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", correo = "rl@gestora.test", cargo = "Representante legal",
             direccionNotificacion = "Calle 100 # 9A-45", permisoEnvioDp = true, permisoCambioContraventor = true,
         }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        if (!conFirma)
+            return;
         const string png = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
         using var firma = new MultipartFormDataContent { { new ByteArrayContent(Convert.FromBase64String(png)) { Headers = { ContentType = new MediaTypeHeaderValue("image/png") } }, "archivo", "firma.png" } };
         (await cliente.PostAsync($"{Base}/representantes/{rl.GetProperty("id").GetGuid()}/documentos/firma", firma, ct)).EnsureSuccessStatusCode();
@@ -247,7 +249,56 @@ public sealed class EnvioAutomaticoDpTests(ApiConFuente api) : IClassFixture<Api
 
         (await DpsAsync(empresa)).Should().BeEmpty();
         var eventos = await api.EnDbAsync(db => db.Timeline.AsNoTracking().Where(t => t.ComparendoId == ids[0] && t.Tipo == TipoEventoTimeline.DpAutomaticoOmitido).ToListAsync());
-        eventos.Should().ContainSingle("el mismo motivo no se repite cada día").Which.Descripcion.Should().Contain("representante");
+        eventos.Should().ContainSingle("el mismo motivo no se repite cada día").Which.Descripcion.Should().Contain("representante legal");
+    }
+
+    [Fact]
+    public async Task Un_organismo_que_no_admite_dp_por_correo_se_omite_y_se_avisa_una_sola_vez_al_dia()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = await EmpresaListaAsync(admiteOrganismo: false);
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+        (await cliente.PutAsJsonAsync($"{Base}/configuracion/correo", new { canalCorreo = "FlitSmtp", correosAlertaOperativa = new[] { "alertas@gestora.test" } }, ct)).EnsureSuccessStatusCode();
+        var ids = await ComparendosAsync(empresa, "AUTO-NOADMITE", 2);
+
+        await CorrerAsync(empresa);
+        await CorrerAsync(empresa);
+
+        (await DpsAsync(empresa)).Should().BeEmpty();
+        foreach (var id in ids)
+        {
+            var e = await api.EnDbAsync(db => db.Timeline.AsNoTracking().Where(t => t.ComparendoId == id && t.Tipo == TipoEventoTimeline.DpAutomaticoOmitido).ToListAsync(ct));
+            e.Should().ContainSingle().Which.Descripcion.Should().Contain("por correo");
+        }
+
+        var resumenes = await api.EnDbAsync(db => db.Comunicaciones.AsNoTracking().Where(c => c.TenantId == empresa && c.Tipo == TipoComunicacion.ResumenEnvioAutomaticoDp).ToListAsync(ct));
+        resumenes.Should().ContainSingle("una sola alerta por empresa y día aunque el trabajo corra dos veces");
+        resumenes[0].Destinatarios.Should().Contain("alertas@gestora.test");
+
+        // Al día siguiente, si sigue igual, vuelve a avisar (un aviso por día).
+        api.Reloj.Hoy(Hoy.AddDays(1));
+        await CorrerAsync(empresa);
+        (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == empresa && c.Tipo == TipoComunicacion.ResumenEnvioAutomaticoDp, ct))).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Sin_representante_o_sin_su_firma_se_omite_con_el_motivo_claro()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var sinFirma = await EmpresaListaAsync(conFirma: false);
+        var idFirma = (await ComparendosAsync(sinFirma, "AUTO-SINFIRMA", 1))[0];
+        var sinRl = await EmpresaListaAsync(conRepresentante: false);
+        var idRl = (await ComparendosAsync(sinRl, "AUTO-SINRL", 1))[0];
+
+        await CorrerAsync(sinFirma);
+        await CorrerAsync(sinRl);
+
+        (await DpsAsync(sinFirma)).Should().BeEmpty();
+        (await DpsAsync(sinRl)).Should().BeEmpty();
+        (await api.EnDbAsync(db => db.Timeline.Where(t => t.ComparendoId == idFirma && t.Tipo == TipoEventoTimeline.DpAutomaticoOmitido).Select(t => t.Descripcion).SingleAsync(ct))).Should().Contain("firma");
+        (await api.EnDbAsync(db => db.Timeline.Where(t => t.ComparendoId == idRl && t.Tipo == TipoEventoTimeline.DpAutomaticoOmitido).Select(t => t.Descripcion).SingleAsync(ct))).Should().Contain("representante legal");
     }
 
     [Fact]
