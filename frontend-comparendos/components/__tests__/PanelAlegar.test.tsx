@@ -21,7 +21,10 @@ function responde(d: Partial<DecisionDp>) {
 }
 
 describe("PanelAlegar (HU #14613)", () => {
-  beforeEach(() => apiFetch.mockReset());
+  // Con llaves: un beforeEach que devuelve el mock lo vuelve «hook de limpieza» y vitest lo llama sin argumentos.
+  beforeEach(() => {
+    apiFetch.mockReset();
+  });
   afterEach(cleanup);
 
   it("lista lo aplicable con su razón, marca la elegida y muestra la infracción con descripción", async () => {
@@ -54,5 +57,11 @@ describe("PanelAlegar (HU #14613)", () => {
     render(<PanelAlegar ctx={ctx} />);
     await screen.findByText("Esperar: se puede trasladar al conductor con descuento");
     expect(document.body.textContent).not.toContain("VentanaDescuento");
+  });
+
+  it("muestra el error de la API", async () => {
+    apiFetch.mockRejectedValue(new Error("No tienes permiso."));
+    render(<PanelAlegar ctx={ctx} />);
+    await screen.findByText("No tienes permiso.");
   });
 });
