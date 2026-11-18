@@ -204,6 +204,77 @@ describe("SuperAdminDashboard — franja 1", () => {
 });
 
 describe("SuperAdminDashboard — franja 2: organismos", () => {
+  const sieteOrganismos = Array.from({ length: 7 }, (_, i) => ({
+    ...ORGANISMOS.items[0],
+    transitOfficeId: `dddddddd-0000-4000-8000-${String(i).padStart(12, "0")}`,
+    nombre: `Organismo ${i + 1}`,
+    volumen: i + 1,
+  }));
+
+  it("muestra los 5 de más volumen y «Ver los N organismos» abre el modal con todos", async () => {
+    mocks.fetchSuperAdminOrganismos.mockResolvedValue({ ...ORGANISMOS, items: sieteOrganismos });
+    const user = userEvent.setup();
+    renderVista();
+    const grid = await screen.findByTestId("organismos-grid");
+    await within(grid).findByText("Organismo 7");
+    expect(within(grid).getByText("Organismo 3")).toBeInTheDocument();
+    expect(within(grid).queryByText("Organismo 2")).not.toBeInTheDocument();
+
+    const boton = screen.getByTestId("organismos-ver-todos");
+    expect(boton).toHaveTextContent("Ver los 7 organismos");
+    await user.click(boton);
+    const panel = screen.getByRole("dialog", { name: "Organismos de tránsito" });
+    expect(within(panel).getByRole("button", { name: "Filtrar la distribución por Organismo 1" })).toBeInTheDocument();
+    // La rejilla del Inicio no crece: el resto vive en el modal.
+    expect(within(grid).queryByText("Organismo 1")).not.toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: "Organismos de tránsito" })).not.toBeInTheDocument();
+  });
+
+  it("el modal busca sin tildes y ordena por tiempo de respuesta", async () => {
+    const conTiempos = sieteOrganismos.map((o, i) => ({ ...o, tiempoPromedioDias: i === 0 ? null : 10 - i }));
+    conTiempos[2] = { ...conTiempos[2], nombre: "Tránsito Bogotá" };
+    mocks.fetchSuperAdminOrganismos.mockResolvedValue({ ...ORGANISMOS, items: conTiempos });
+    const user = userEvent.setup();
+    renderVista();
+    await user.click(await screen.findByTestId("organismos-ver-todos"));
+    const panel = screen.getByRole("dialog", { name: "Organismos de tránsito" });
+
+    await user.type(within(panel).getByLabelText("Buscar organismo"), "bogota");
+    expect(within(panel).getByRole("button", { name: /Tránsito Bogotá/ })).toBeInTheDocument();
+    expect(within(panel).queryByRole("button", { name: /Organismo 2$/ })).not.toBeInTheDocument();
+
+    await user.clear(within(panel).getByLabelText("Buscar organismo"));
+    await user.selectOptions(within(panel).getByLabelText("Ordenar por"), "rapido");
+    const nombres = within(panel)
+      .getAllByRole("button", { name: /^Filtrar la distribución por/ })
+      .map((b) => b.textContent);
+    // Más rápido primero (Organismo 7: 4 días) y el que no tiene decisiones (Organismo 1) al final.
+    expect(nombres[0]).toBe("Organismo 7");
+    expect(nombres[nombres.length - 1]).toBe("Organismo 1");
+  });
+
+  it("elegir en el modal filtra, cierra y deja al elegido en el lugar del quinto", async () => {
+    mocks.fetchSuperAdminOrganismos.mockResolvedValue({ ...ORGANISMOS, items: sieteOrganismos });
+    const user = userEvent.setup();
+    renderVista();
+    await user.click(await screen.findByTestId("organismos-ver-todos"));
+    await user.click(screen.getByRole("button", { name: "Filtrar la distribución por Organismo 1" }));
+    expect(screen.queryByRole("dialog", { name: "Organismos de tránsito" })).not.toBeInTheDocument();
+    const grid = screen.getByTestId("organismos-grid");
+    expect(within(grid).getByText("Organismo 1")).toBeInTheDocument();
+    expect(within(grid).queryByText("Organismo 3")).not.toBeInTheDocument();
+    expect(within(grid).getAllByRole("button")).toHaveLength(5);
+    expect(screen.getByTestId("panel-operaciones")).toHaveTextContent("Organismo 1");
+  });
+
+  it("con 5 organismos o menos no ofrece «Ver los N organismos»", async () => {
+    renderVista();
+    await screen.findByTestId(`organismo-${OT_BOG}`);
+    expect(screen.queryByTestId("organismos-ver-todos")).not.toBeInTheDocument();
+  });
+
   it("una tarjeta por organismo con volumen y tiempo en días; sin decisiones se dice en palabras", async () => {
     renderVista();
     const bog = await screen.findByTestId(`organismo-${OT_BOG}`);
@@ -318,5 +389,10 @@ describe("SuperAdminDashboard — utilidades", () => {
   it("formatoDias usa singular, coma decimal y un decimal", () => {
     expect(formatoDias(1)).toBe("1 día");
     expect(formatoDias(2.46)).toBe("2,5 días");
+  });
+
+  it("formatoDias dice «Menos de 1 día» por debajo de un día (antes salía «0 días»)", () => {
+    expect(formatoDias(0)).toBe("Menos de 1 día");
+    expect(formatoDias(0.2)).toBe("Menos de 1 día");
   });
 });
