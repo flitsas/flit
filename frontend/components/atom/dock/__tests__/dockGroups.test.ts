@@ -107,6 +107,15 @@ describe("catálogo de Trámites", () => {
       ]);
     });
 
+    it("estando en una sección (?tab=), esa opción queda activa y su grupo también; sub= no estorba", () => {
+      const ruta = "/admin/transit-offices/ot-1/portal-persona-natural";
+      const admin = dock({ ...ot, isOtAdmin: true }, { roles: ["ot_admin"], modules: ["tramites"] }, ruta, "tab=cobro");
+      expect(portal(admin)?.children?.filter((c) => c.active).map((c) => c.label)).toEqual(["Cobro"]);
+      const cajero = dock({ ...ot, isSoloCaja: true }, { roles: ["ot_caja"], modules: [] }, ruta, "tab=caja&sub=cobrar");
+      expect(portal(cajero)?.children?.filter((c) => c.active).map((c) => c.label)).toEqual(["Caja"]);
+      expect(cajero[0].active).toBe(true);
+    });
+
     it("otro rol del organismo no ve el submenú", () => {
       expect(llaves(dock(ot, { roles: ["gestor_ot"], modules: ["tramites"] }))).not.toContain(OT_ADM_DOCK.portalPersonaNatural);
     });

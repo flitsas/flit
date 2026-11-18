@@ -6,8 +6,12 @@ import { Box } from "lucide-react";
 import { buildDock, type NavCatalog } from "../nav";
 import { Dock } from "../dock/Dock";
 
-vi.mock("next/navigation", () => ({ usePathname: () => "/" }));
-afterEach(cleanup);
+let ruta = "/";
+vi.mock("next/navigation", () => ({ usePathname: () => ruta }));
+afterEach(() => {
+  cleanup();
+  ruta = "/";
+});
 
 const catalogo: NavCatalog = {
   sections: [{ id: "adm", label: "Administración", icon: Box, side: "right" }],
@@ -30,8 +34,8 @@ const catalogo: NavCatalog = {
   ],
 };
 
-function pintar(roles: string[]) {
-  const groups = buildDock(catalogo, { permissions: [], isSuperAdmin: false, roles }, "/");
+function pintar(roles: string[], search = "") {
+  const groups = buildDock(catalogo, { permissions: [], isSuperAdmin: false, roles }, ruta, search);
   render(<Dock groups={groups} homeHref="/" homeLabel="Inicio" homeIconSrc="/favicon.svg" homeActive={false} />);
 }
 
@@ -77,5 +81,24 @@ describe("DockSubmenu", () => {
     expect(screen.queryByRole("link", { name: "Documentos" })).not.toBeInTheDocument();
     const lista = document.getElementById(submenu.getAttribute("aria-controls") as string) as HTMLElement;
     expect(within(lista).getAllByRole("link").map((a) => a.textContent)).toEqual(["Caja"]);
+  });
+
+  it("estando en una de sus opciones (con ?tab=) se abre solo y marca esa opción como activa", () => {
+    ruta = "/p";
+    pintar(["ot_admin"], "tab=cobro");
+    fireEvent.click(screen.getByRole("button", { name: /Administración/ }));
+    const submenu = screen.getByRole("button", { name: /Portal Persona Natural/ });
+    expect(submenu).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Cobro" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "Reportes" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("el cajero en ?tab=caja ve el submenú abierto con Caja activa", () => {
+    ruta = "/p";
+    pintar(["ot_caja"], "tab=caja&sub=cobrar");
+    fireEvent.click(screen.getByRole("button", { name: /Administración|Portal Persona Natural/ }));
+    const submenu = screen.getAllByRole("button", { name: /Portal Persona Natural/ }).at(-1) as HTMLElement;
+    expect(submenu).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("link", { name: "Caja" })).toHaveAttribute("aria-current", "page");
   });
 });
