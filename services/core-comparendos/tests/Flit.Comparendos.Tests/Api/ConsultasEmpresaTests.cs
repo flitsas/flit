@@ -20,7 +20,11 @@ public sealed class ProductosDePrueba : IProductosHabilitados
     /// <summary>Empresas para las que Identidad "falla" (lanza), para probar que una empresa rota no frena a las demás.</summary>
     public ConcurrentDictionary<Guid, bool> Fallan { get; } = new();
 
+    /// <summary>Empresas para las que la llamada a Identidad "expira" (TaskCanceledException sin que el token esté cancelado).</summary>
+    public ConcurrentDictionary<Guid, bool> Expiran { get; } = new();
+
     public Task<bool> ComparendosHabilitadoAsync(Guid tenant, CancellationToken ct) =>
+        Expiran.ContainsKey(tenant) ? throw new TaskCanceledException("Tiempo de espera agotado (prueba).") :
         Fallan.ContainsKey(tenant) ? throw new InvalidOperationException("Identidad no responde (prueba).") : Task.FromResult(!Apagadas.ContainsKey(tenant));
 }
 

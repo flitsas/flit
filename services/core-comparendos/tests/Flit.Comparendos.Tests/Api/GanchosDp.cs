@@ -21,11 +21,6 @@ public sealed class GanchosPlantillas
 
 public sealed class PlantillasConGancho(ComparendosDb db, IConfiguration configuration, GanchosPlantillas ganchos) : ServicioPlantillas(db, configuration)
 {
-    public override async Task<PlantillaVersion?> PublicadaAsync(ConjuntoPlantillas conjunto, TipoPlantilla tipo, Guid? tipologiaId, CancellationToken ct)
-    {
-        return await base.PublicadaAsync(conjunto, tipo, tipologiaId, ct).ConfigureAwait(false);
-    }
-
     public override async Task<Armado> ArmarAsync(ConjuntoPlantillas conjunto, TipoPlantilla tipo, Guid? tipologiaId, IReadOnlyDictionary<string, string?> valores, CancellationToken ct)
     {
         if (tipo == TipoPlantilla.DpDocumento)
