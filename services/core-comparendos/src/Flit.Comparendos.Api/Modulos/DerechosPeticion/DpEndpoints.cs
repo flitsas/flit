@@ -104,7 +104,7 @@ public static class DpEndpoints
             dp = await servicio.EnviarAsync(c, pedido.TipologiaId, Actor.De(usuario), loteId: null, ct).ConfigureAwait(false);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
-        catch (DbUpdateException ex) when (ex.InnerException is Npgsql.PostgresException { SqlState: Npgsql.PostgresErrorCodes.UniqueViolation or Npgsql.PostgresErrorCodes.DeadlockDetected or Npgsql.PostgresErrorCodes.SerializationFailure })
+        catch (Exception ex) when (EnvioAutomaticoDp.EsCarreraDeComparendo(ex))
         {
             // El envío automático (u otra persona) lo envió a la vez: un DP por comparendo, no es un error del servidor.
             throw ReglaException.Conflicto("YA_TIENE_DP", "El comparendo ya tiene un derecho de petición: solo admite uno.");
