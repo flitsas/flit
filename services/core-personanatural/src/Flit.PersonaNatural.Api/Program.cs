@@ -58,7 +58,7 @@ public static class Program
         var connectionString = builder.Configuration.GetConnectionString("Servicio")!;
         builder.Services.AddDbContext<PersonaNaturalDb>(o => PersonaNaturalDb.Configure(o, connectionString));
         builder.Services.AddFlitPlatformAuthentication(builder.Configuration);
-        builder.Services.AddAuthorization(CajaEndpoints.AgregarPoliticas); // Feature #14453: CajaPolicy (producto caja + rol ot_caja)
+        builder.Services.AddAuthorization();
         builder.Services.AddFlitGrpcServer().AddRadicacionGrpc().AddCajaAdminGrpc(); // HU #14049: lectura por pull para radicar (token de svc-tramites)
         builder.Services.AddFlitOutbox<PersonaNaturalDb>(builder.Configuration);
 
@@ -161,7 +161,6 @@ public static class Program
         app.MapCatalogosVehiculoEndpoints();
         app.MapAdjuntosEndpoints();
         app.MapRadicacionEndpoints();
-        app.MapCajaEndpoints();
         app.MapGet("/health", () => Results.Ok(new { status = "alive" })).AllowAnonymous();
         app.MapGet("/health/ready", async (PersonaNaturalDb db, CancellationToken ct) =>
             await db.Database.CanConnectAsync(ct).ConfigureAwait(false)

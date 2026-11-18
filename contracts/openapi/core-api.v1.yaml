@@ -15992,6 +15992,116 @@ paths:
         "404": { description: "COBRO_NO_ENCONTRADO en este organismo." }
         "409": { description: "COBRO_NO_ANULABLE: el trámite ya llegó a FLIT 2.0 o pasó la ventana." }
         "503": { description: "PORTAL_NO_DISPONIBLE." }
+  /api/v1/ot/caja/tramites/{codigo}:
+    get:
+      tags: ["OT · Caja"]
+      summary: "Busca el trámite por su ID y devuelve el desglose a cobrar"
+      description: "La caja del organismo como módulo de FLIT 2.0 (Feature #14453, ADR-0082). Roles ot_caja u ot_admin del organismo (no SuperAdmin). El organismo y el usuario salen del token, nunca del cliente; el usuario ot_caja se revalida en cada petición. Fachada: core-api consulta al portal por gRPC (CajaAdminService.BuscarTramite). Solo existe con PortalCaja:Habilitado=true (404 si está apagado). Errores { code, message }. Las búsquedas sin resultado cuentan contra un tope por usuario e IP (429 demasiados_intentos con Retry-After)."
+      operationId: OtCajaBuscarTramite
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: codigo, in: path, required: true, description: "ID público PN-AAAA-NNNNNN (no distingue mayúsculas).", schema: { type: string } }
+      responses:
+        "200":
+          description: "El trámite por cobrar (sin nombre, documento ni placa de las partes)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtCajaTramite" }
+        "401": { description: "Sin sesión." }
+        "403": { description: "sin_permiso (rol, usuario desactivado u organismo sin caja) u otro_organismo (el trámite es de otro organismo)." }
+        "404": { description: "no_encontrado, o la caja apagada." }
+        "409": { description: "ya_pagado, cobro_vencido o no_habilitado." }
+        "429": { description: "demasiados_intentos; Retry-After en segundos." }
+        "503": { description: "portal_no_disponible." }
+  /api/v1/ot/caja/tramites/{codigo}/confirmar:
+    post:
+      tags: ["OT · Caja"]
+      summary: "Confirma el cobro en caja"
+      description: "Medio de cobro obligatorio (efectivo, datafono, transferencia u otro con detalle de hasta 120 caracteres), prefactura opcional (PDF, JPG o PNG de hasta 5 MB, validada por la firma del archivo) e Idempotency-Key obligatoria (reintentar con la misma clave no cobra dos veces). Se cobra siempre el total del servidor; totalVisto solo se compara (409 total_cambio con el nuevo totalActualCop). El primero que confirma gana (409 ya_pagado). El trámite se radica en FLIT 2.0 pasada la ventana de anulación. Mismos roles y reglas que la búsqueda."
+      operationId: OtCajaConfirmarCobro
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: codigo, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 100 } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [medioCaja]
+              properties:
+                medioCaja: { type: string, enum: [efectivo, datafono, transferencia, otro], description: "También se acepta el nombre anterior medio." }
+                detalle: { type: string, maxLength: 120, description: "Obligatorio con medio otro. También se acepta medioDetalle." }
+                totalVisto: { type: integer, format: int64, description: "El total que la caja tenía a la vista (COP). También se acepta totalVistoCop." }
+                prefactura: { type: string, format: binary }
+      responses:
+        "200":
+          description: "Pago registrado (idempotente: la misma clave devuelve el mismo resultado)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtCajaCobroConfirmado" }
+        "400": { description: "medio_invalido, detalle_requerido, idempotency_key_requerida o prefactura_invalida." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "sin_permiso u otro_organismo." }
+        "404": { description: "no_encontrado, o la caja apagada." }
+        "409": { description: "total_cambio (con totalActualCop), ya_pagado, cobro_vencido, no_habilitado o idempotency_key_reutilizada." }
+        "413": { description: "prefactura_invalida: el cuerpo supera el tope." }
+        "429": { description: "demasiados_intentos; Retry-After en segundos." }
+        "503": { description: "portal_no_disponible." }
+  /api/v1/ot/caja/cobros:
+    get:
+      tags: ["OT · Caja"]
+      summary: "Cobros en caja del organismo en un día de Colombia (por defecto hoy)"
+      description: "Roles ot_caja u ot_admin del organismo. El total del día no suma los cobros anulados. Cada fila trae cobroId, anulable y rowVersion para que el administrador del OT anule."
+      operationId: OtCajaCobros
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: date, in: query, required: false, description: "Día de Colombia AAAA-MM-DD; vacío es hoy.", schema: { type: string, format: date } }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+      responses:
+        "200":
+          description: "Cobros del día."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtCajaCobrosDelDia" }
+        "400": { description: "fecha_invalida." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "sin_permiso." }
+        "404": { description: "Caja apagada." }
+        "503": { description: "portal_no_disponible." }
+  /api/v1/ot/caja/cobros/{cobroId}/anular:
+    post:
+      tags: ["OT · Caja"]
+      summary: "Anula un cobro en caja con motivo obligatorio"
+      description: "SOLO el administrador del OT del organismo; el usuario ot_caja recibe 403 sin_permiso y el SuperAdmin anula desde la administración del organismo. Posible mientras el trámite no haya llegado a FLIT 2.0 (ventana de anulación)."
+      operationId: OtCajaAnularCobro
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: cobroId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo, rowVersion]
+              properties:
+                motivo: { type: string, minLength: 10, maxLength: 300, description: "También se acepta reason." }
+                rowVersion: { type: integer, format: int64, minimum: 1, description: "El rowVersion del cobro que se vio en la lista." }
+      responses:
+        "200": { description: "Anulado.", content: { application/json: { schema: { $ref: "#/components/schemas/CajaAnulacion" } } } }
+        "400": { description: "motivo_requerido, motivo_longitud (fuera de 10 a 300) o version_requerida." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "sin_permiso (incluye al usuario ot_caja)." }
+        "404": { description: "cobro_no_encontrado en este organismo, o la caja apagada." }
+        "409": { description: "cobro_no_anulable: el trámite ya llegó a FLIT 2.0 o pasó la ventana." }
+        "503": { description: "portal_no_disponible." }
 
 components:
   securitySchemes:
@@ -16228,6 +16338,58 @@ components:
       properties:
         cobroId: { type: string, format: uuid }
         estado: { type: string }
+    OtCajaTramite:
+      type: object
+      required: [codigo, tipoTramite, organismo, lineas, totalCop, versionTarifa, venceEn]
+      properties:
+        codigo: { type: string }
+        tipoTramite: { type: object, properties: { codigo: { type: string }, nombre: { type: string } } }
+        organismo: { type: object, properties: { codigo: { type: string }, nombre: { type: string } } }
+        lineas:
+          type: array
+          items: { type: object, properties: { concepto: { type: string }, valorCop: { type: integer, format: int64 } } }
+        totalCop: { type: integer, format: int64 }
+        versionTarifa: { type: string }
+        venceEn: { type: string, format: date-time }
+    OtCajaCobroConfirmado:
+      type: object
+      required: [codigo, valorCop, medio, pagadoEn, mensaje]
+      properties:
+        codigo: { type: string }
+        valorCop: { type: integer, format: int64 }
+        medio: { type: string }
+        medioDetalle: { type: string, nullable: true }
+        pagadoEn: { type: string, format: date-time }
+        mensaje: { type: string }
+    OtCajaCobrosDelDia:
+      type: object
+      required: [fecha, totalDiaCop, items, total, pagina, tamano]
+      properties:
+        fecha: { type: string, format: date }
+        totalDiaCop: { type: integer, format: int64 }
+        total: { type: integer }
+        pagina: { type: integer }
+        tamano: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              codigo: { type: string }
+              valorCop: { type: integer, format: int64 }
+              medio: { type: string }
+              medioDetalle: { type: string, nullable: true }
+              hora: { type: string, description: "HH:mm, hora de Colombia." }
+              pagadoEn: { type: string, format: date-time }
+              usuario: { type: string }
+              estado: { type: string, enum: [pagado, anulado] }
+              cobroId: { type: string, format: uuid }
+              anulable: { type: boolean }
+              motivoNoAnulable: { type: string, nullable: true }
+              anuladoEn: { type: string, nullable: true }
+              anuladoPorNombre: { type: string, nullable: true }
+              anulacionMotivo: { type: string, nullable: true }
+              rowVersion: { type: integer, format: int64 }
     CobroPortal:
       type: object
       required: [medios, tipos]

@@ -9,12 +9,6 @@ public sealed class CajaOptions
     public const string SectionName = "Caja";
     public const string ClaveHabilitadoAlterna = "PersonaNatural:Caja:Habilitado";
 
-    /// <summary>Audiencia (client_id OIDC) del producto caja.</summary>
-    public const string Audiencia = "caja";
-
-    /// <summary>Rol del usuario de caja, limitado a un organismo.</summary>
-    public const string Rol = "ot_caja";
-
     public bool Habilitado { get; set; }
 
     /// <summary>Minutos que un cobro en caja espera, ya pagado, antes de radicarse: es la ventana en que el administrador del OT puede anularlo. 0 radica de inmediato.</summary>
@@ -39,9 +33,6 @@ public sealed class CajaOptions
 
     /// <summary>Tope de la prefactura (PDF, JPG o PNG).</summary>
     public long PrefacturaMaxBytes { get; set; } = 5L * 1024 * 1024;
-
-    /// <summary>Tope absoluto de la sesión de caja: un token con más antigüedad se rechaza aunque no haya vencido.</summary>
-    public int SesionTopeHoras { get; set; } = 12;
 
     /// <summary>Cada cuánto el trabajo de fondo radica los cobros cuya ventana venció.</summary>
     public int RadicacionIntervaloSegundos { get; set; } = 30;

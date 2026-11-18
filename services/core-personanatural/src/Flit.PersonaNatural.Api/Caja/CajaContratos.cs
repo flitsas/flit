@@ -1,10 +1,8 @@
-using Flit.PersonaNatural.Api.Cotizaciones;
-
 namespace Flit.PersonaNatural.Api.Caja;
 
 /// <summary>
-/// Quién cobra y en qué organismo, tal como lo resolvió core-api en ESTA petición (<c>ResolverUsuarioCaja</c>, sin caché). Es la
-/// única fuente del organismo: el cliente no lo envía nunca.
+/// Quién cobra y en qué organismo, tal como lo resolvió core-api en ESTA petición desde el JWT del usuario (el cliente final no lo
+/// envía nunca). El código y el nombre del organismo los completa core-api; el portal solo usa el id.
 /// </summary>
 public sealed record Cajero(Guid UsuarioId, string Nombre, Guid OrganismoId, string OrganismoCodigo, string OrganismoNombre);
 
@@ -18,10 +16,6 @@ public sealed record TramiteParaCobrar(
 
 public sealed record CobroConfirmado(string Codigo, long ValorCop, string Medio, string? MedioDetalle, DateTimeOffset PagadoEn);
 
-public sealed record ItemCobroDelDia(string Codigo, long ValorCop, string Medio, string? MedioDetalle, string Hora, DateTimeOffset PagadoEn, string Usuario, string Estado);
-
-public sealed record CobrosDelDia(string Fecha, long TotalDiaCop, IReadOnlyList<ItemCobroDelDia> Items, int Total, int Pagina, int Tamano);
-
 /// <summary>Una fila de la lista del organismo (la usa la caja y el hub del OT por gRPC).</summary>
 public sealed record CobroDelOrganismo(
     Guid CobroId, string Codigo, long ValorCop, string? MedioCaja, string? MedioDetalle, DateTimeOffset PagadoEn, string? PagadoPorNombre, string Estado,
@@ -29,9 +23,3 @@ public sealed record CobroDelOrganismo(
 
 public sealed record PaginaDeCobros(IReadOnlyList<CobroDelOrganismo> Items, int Total, long TotalDiaCop);
 
-/// <summary>Usuario de caja que cobra: qué dice core-api de él.</summary>
-public interface IResolverCajero
-{
-    /// <summary>El cajero activo y su organismo, o <c>null</c> si no es un usuario <c>ot_caja</c> activo con producto encendido.</summary>
-    Task<Cajero?> ResolverAsync(Guid tenantId, Guid usuarioId, CancellationToken ct);
-}

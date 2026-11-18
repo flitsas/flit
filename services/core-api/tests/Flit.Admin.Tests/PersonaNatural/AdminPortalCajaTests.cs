@@ -568,5 +568,11 @@ public sealed class AdminPortalCajaTests : IClassFixture<WebApplicationFactory<P
             Anulaciones.Add(new AnulacionLlamada(organismoId, cobroId, motivo, actorUserId, actorNombre, rowVersion));
             return Task.FromResult(Resultado);
         }
+
+        public Task<CajaTramite> BuscarAsync(Guid organismoId, string codigo, Guid usuarioId, string ipHash, CancellationToken ct) =>
+            throw new NotSupportedException("Lo cubre OtCajaTests.");
+
+        public Task<CajaCobroConfirmado> ConfirmarAsync(CajaConfirmacion pedido, CancellationToken ct) =>
+            throw new NotSupportedException("Lo cubre OtCajaTests.");
     }
 }

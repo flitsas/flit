@@ -1,4 +1,3 @@
-using System.Globalization;
 using Flit.PersonaNatural.Api.Pagos;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Radicacion;
@@ -59,19 +58,5 @@ public sealed class CajaListaService(PersonaNaturalDb db, IOptions<CajaOptions> 
             return (false, MotivoYaEnFlit2);
         var abierta = estadoSolicitud == EstadoSolicitud.Pagada && RadicacionDePagadasService.EnVentana(MedioDePago.Caja, pagadoEn, ahora, ventana);
         return abierta ? (true, null) : (false, MotivoYaEnFlit2);
-    }
-
-    /// <summary>La lista del día de hoy en Colombia para la caja (HU #14459).</summary>
-    public async Task<CobrosDelDia> HoyAsync(Cajero cajero, int? pagina, int? tamano, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(cajero);
-        var (p, t) = Paginar(pagina, tamano);
-        var fecha = VigenciaDelCobro.DiaColombia(reloj.GetUtcNow());
-        var lista = await ListarAsync(cajero.OrganismoId, fecha, p, t, ct).ConfigureAwait(false);
-        var colombia = TimeSpan.FromHours(-5);
-        var items = lista.Items.Select(i => new ItemCobroDelDia(
-            i.Codigo, i.ValorCop, i.MedioCaja ?? string.Empty, i.MedioDetalle, i.PagadoEn.ToOffset(colombia).ToString("HH:mm", CultureInfo.InvariantCulture), i.PagadoEn,
-            i.PagadoPorNombre ?? string.Empty, i.Estado)).ToList();
-        return new CobrosDelDia(fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture), lista.TotalDiaCop, items, lista.Total, p, t);
     }
 }
