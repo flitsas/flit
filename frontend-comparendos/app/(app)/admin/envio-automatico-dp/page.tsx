@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, StatusBadge } from "@flit/ui";
+import { ActionsMenu, DataTable, InlineAlert, Modal, StatusBadge, type ActionsMenuItem } from "@flit/ui";
 import { VistaPrevia } from "@/components/plantillas/VistaPrevia";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -84,36 +83,40 @@ function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresa
           Esta empresa no tiene el módulo de derechos de petición, así que el envío automático no puede encenderse.
         </InlineAlert>
       )}
-      <Interruptor
-        activo={activo && !sinModulo}
-        onCambio={setActivo}
-        deshabilitado={sinModulo}
-        etiqueta={activo && !sinModulo ? "Encendido" : "Apagado"}
-        ayuda="Cuando está encendido, cada día hábil se envían solos los derechos de petición que aplican, hasta el tope diario. Al principio siempre está apagado."
-      />
-      <label className={`${ETIQUETA_CLS} max-w-xs`}>
-        Tope diario de envíos
-        <input
-          className={INPUT_CLS}
-          type="number"
-          inputMode="numeric"
-          min={TOPE_MINIMO}
-          max={TOPE_MAXIMO}
-          step={1}
-          value={tope}
-          disabled={sinModulo}
-          aria-invalid={invalido !== null}
-          onChange={(e) => setTope(e.target.value)}
-        />
-        <span className="text-[11px] font-normal opacity-70">De {TOPE_MINIMO} a {TOPE_MAXIMO} por día. Lo que pase del tope sigue el siguiente día hábil.</span>
-      </label>
+      <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end md:gap-x-8 md:gap-y-3">
+        <div className="min-w-0 md:max-w-md md:flex-1">
+          <Interruptor
+            activo={activo && !sinModulo}
+            onCambio={setActivo}
+            deshabilitado={sinModulo}
+            etiqueta={activo && !sinModulo ? "Encendido" : "Apagado"}
+            ayuda="Cuando está encendido, cada día hábil se envían solos los derechos de petición que aplican, hasta el tope diario. Al principio siempre está apagado."
+          />
+        </div>
+        <label className={`${ETIQUETA_CLS} w-full md:w-72`}>
+          Tope diario de envíos
+          <input
+            className={INPUT_CLS}
+            type="number"
+            inputMode="numeric"
+            min={TOPE_MINIMO}
+            max={TOPE_MAXIMO}
+            step={1}
+            value={tope}
+            disabled={sinModulo}
+            aria-invalid={invalido !== null}
+            onChange={(e) => setTope(e.target.value)}
+          />
+          <span className="text-[11px] font-normal opacity-70">De {TOPE_MINIMO} a {TOPE_MAXIMO} por día. Lo que pase del tope sigue el siguiente día hábil.</span>
+        </label>
+        <div>
+          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || sinModulo || invalido !== null || sinCambios} onClick={guardar}>
+            {ocupado ? "Guardando…" : "Guardar"}
+          </button>
+        </div>
+      </div>
       {invalido && !sinModulo && <InlineAlert tone="warning" compact>{invalido}</InlineAlert>}
       {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
-      <div>
-        <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || sinModulo || invalido !== null || sinCambios} onClick={guardar}>
-          {ocupado ? "Guardando…" : "Guardar"}
-        </button>
-      </div>
     </div>
   );
 }
@@ -226,6 +229,23 @@ function Tipologias({ datos, empresaId, onCambio }: { datos: Datos; empresaId: s
     }
   };
 
+  /** Acciones de la fila según su estado. Una no disponible sale deshabilitada con su razón escrita en el propio ítem. */
+  const accionesDe = (f: FilaTipologia): ActionsMenuItem[] => {
+    const t = f.tipologia;
+    const trabajando = ocupada === t.id;
+    const texto = estadoTexto(f.version !== null, f.version?.revisadaJuridicamenteEn);
+    const bloqueo = t.automatizable ? null : bloqueoActivar(t.habilitada, f.version !== null, f.version?.revisadaJuridicamenteEn);
+    const conRazon = (label: string, razon: string | null, onSelect: () => void): ActionsMenuItem =>
+      razon ? { key: label, label: `${label} · ${razon}`, ariaLabel: `${label}. ${razon}`, onSelect, disabled: true, disabledReason: razon } : { key: label, label, onSelect };
+    const items: ActionsMenuItem[] = [];
+    if (texto.aprobable) items.push(conRazon("Aprobar texto", trabajando ? "Espera un momento" : null, () => setAprobar(f)));
+    else if (f.version === null) items.push(conRazon("Aprobar texto", "Primero publica el texto en el editor de plantillas", () => {}));
+    if (!t.habilitada) items.push(conRazon("Habilitar para esta empresa", trabajando ? "Espera un momento" : null, () => habilitar(f)));
+    if (t.automatizable) items.push(conRazon("Volver a enviar a mano", trabajando ? "Espera un momento" : null, () => marcar(f, false)));
+    else items.push(conRazon("Activar envío automático", trabajando ? "Espera un momento" : (bloqueo?.texto ?? null), () => marcar(f, true)));
+    return items;
+  };
+
   const marcar = async (fila: FilaTipologia, automatizable: boolean) => {
     setOcupada(fila.tipologia.id);
     setError(null);
@@ -288,38 +308,9 @@ function Tipologias({ datos, empresaId, onCambio }: { datos: Datos; empresaId: s
           },
           {
             key: "acciones",
-            header: "Acciones",
-            render: (f) => {
-              const e = estadoTexto(f.version !== null, f.version?.revisadaJuridicamenteEn);
-              const bloqueo = f.tipologia.automatizable ? null : bloqueoActivar(f.tipologia.habilitada, f.version !== null, f.version?.revisadaJuridicamenteEn);
-              const ocupadaAhora = ocupada === f.tipologia.id;
-              return (
-                <div className="flex min-w-0 flex-col gap-2">
-                  <div className="flex flex-wrap gap-2">
-                    {e.aprobable && (
-                      <button type="button" className={controlCls(false)} onClick={() => setAprobar(f)}>
-                        <Icono nombre="escudo" className="h-3.5 w-3.5" />
-                        Aprobar texto
-                      </button>
-                    )}
-                    {bloqueo?.accion === "habilitar" && (
-                      <button type="button" className={controlCls(false)} disabled={ocupadaAhora} onClick={() => habilitar(f)}>
-                        {ocupadaAhora ? "Habilitando…" : "Habilitar para esta empresa"}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      className={controlCls(false)}
-                      disabled={ocupadaAhora || bloqueo !== null}
-                      onClick={() => marcar(f, !f.tipologia.automatizable)}
-                    >
-                      {f.tipologia.automatizable ? "Volver a enviar a mano" : "Activar envío automático"}
-                    </button>
-                  </div>
-                  {bloqueo && <p className="break-words text-[11px] text-muted-foreground">{bloqueo.texto}</p>}
-                </div>
-              );
-            },
+            header: <span className="sr-only">Acciones</span>,
+            align: "right",
+            render: (f) => <ActionsMenu ariaLabel={`Acciones de ${f.tipologia.codigo}`} items={accionesDe(f)} />,
           },
         ]}
       />
