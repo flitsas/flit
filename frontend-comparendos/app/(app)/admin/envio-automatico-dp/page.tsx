@@ -51,7 +51,7 @@ async function cargarDatos(empresaId: string, signal: AbortSignal): Promise<Dato
 /** Panel de la pantalla: misma receta que la bandeja (`rounded-2xl border border-border bg-card`), con título, descripción y estado. */
 function Panel({ titulo, descripcion, estado, children }: { titulo: string; descripcion: string; estado?: ReactNode; children: ReactNode }) {
   return (
-    <section aria-label={titulo} className="min-w-0 rounded-2xl border border-border bg-card">
+    <section aria-label={titulo} className="min-w-0 max-w-6xl rounded-2xl border border-border bg-card">
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-border px-4 py-3 sm:px-5">
         <div className="min-w-0">
           <h3 className="text-sm font-semibold text-flit-primary">{titulo}</h3>
@@ -64,31 +64,43 @@ function Panel({ titulo, descripcion, estado, children }: { titulo: string; desc
   );
 }
 
-/** Enciende o apaga el envío automático de la empresa y fija el tope diario (1 a 500). Apagado es el estado por defecto. */
+/**
+ * Enciende o apaga el envío automático de la empresa y fija el tope diario (1 a 500). Apagado es el estado por defecto.
+ * El interruptor se guarda solo (PUT inmediato con aviso): nada queda encendido o apagado «sin guardar». Guardar es del tope.
+ */
 function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresaId: string; onGuardado: () => void }) {
   const toast = useToast();
   const { config } = datos;
-  const [activo, setActivo] = useState(config.dpAutomaticoActivo ?? false);
-  const [tope, setTope] = useState(String(config.dpAutomaticoTopeDiario ?? TOPE_POR_DEFECTO));
+  const activoGuardado = config.dpAutomaticoActivo ?? false;
+  const topeGuardado = config.dpAutomaticoTopeDiario ?? TOPE_POR_DEFECTO;
+  const [activo, setActivo] = useState(activoGuardado);
+  const [tope, setTope] = useState(String(topeGuardado));
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const sinModulo = !config.hasRightPetitionModule;
   const numero = Number(tope);
   const invalido = tope.trim() === "" ? errorTope(Number.NaN) : errorTope(numero);
-  const sinCambios = activo === (config.dpAutomaticoActivo ?? false) && numero === (config.dpAutomaticoTopeDiario ?? TOPE_POR_DEFECTO);
+  const sinCambios = numero === topeGuardado;
 
-  const guardar = async () => {
+  /** Un solo PUT para los dos campos del contrato: cada acción manda el valor nuevo y el otro tal como está guardado. */
+  const guardar = async (nuevoActivo: boolean, nuevoTope: number, aviso: string) => {
     setOcupado(true);
     setError(null);
     try {
-      await apiFetch(`/admin/empresas/${empresaId}/envio-automatico-dp`, { method: "PUT", body: { activo, topeDiario: numero } });
-      toast.show(activo ? "Envío automático encendido." : "Envío automático apagado.", "success");
+      await apiFetch(`/admin/empresas/${empresaId}/envio-automatico-dp`, { method: "PUT", body: { activo: nuevoActivo, topeDiario: nuevoTope } });
+      toast.show(aviso, "success");
       onGuardado();
     } catch (e) {
+      setActivo(activoGuardado);
       setError(mensajeError(e, "No se pudo guardar el envío automático."));
     } finally {
       setOcupado(false);
     }
+  };
+
+  const alternar = (v: boolean) => {
+    setActivo(v);
+    void guardar(v, topeGuardado, v ? "Envío automático encendido." : "Envío automático apagado.");
   };
 
   const encendido = activo && !sinModulo;
@@ -103,21 +115,24 @@ function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresa
           Esta empresa no tiene el módulo de derechos de petición, así que el envío automático no puede encenderse.
         </InlineAlert>
       )}
-      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-x-8">
-        <div className="min-w-0 md:max-w-xl md:flex-1">
+      <div className="flex max-w-3xl flex-col gap-5 md:flex-row md:items-start md:gap-8">
+        <div className="min-w-0 md:w-80 md:shrink-0">
           <Interruptor
             activo={encendido}
-            onCambio={setActivo}
-            deshabilitado={sinModulo}
-            etiqueta={encendido ? "Encendido" : "Apagado"}
-            ayuda="Al principio siempre está apagado: enciéndelo solo cuando los textos estén aprobados."
+            onCambio={alternar}
+            deshabilitado={sinModulo || ocupado}
+            etiqueta="Enviar solos los derechos de petición"
+            ayuda="Se guarda al cambiarlo. Empieza apagado."
           />
         </div>
-        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
-          <label className={`${ETIQUETA_CLS} w-full sm:w-72`}>
+        <div className="flex min-w-0 flex-col gap-1">
+          <label htmlFor="tope-diario" className="text-[11px] font-semibold text-muted-foreground">
             Tope diario de envíos
+          </label>
+          <div className="flex items-stretch gap-2">
             <input
-              className={INPUT_CLS}
+              id="tope-diario"
+              className={`${INPUT_CLS} !w-40 shrink-0`}
               type="number"
               inputMode="numeric"
               min={TOPE_MINIMO}
@@ -128,13 +143,16 @@ function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresa
               aria-invalid={invalido !== null}
               onChange={(e) => setTope(e.target.value)}
             />
-            <span className="text-[11px] font-normal opacity-70">De {TOPE_MINIMO} a {TOPE_MAXIMO} por día. Lo que pase sigue el siguiente día hábil.</span>
-          </label>
-          <div>
-            <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || sinModulo || invalido !== null || sinCambios} onClick={guardar}>
+            <button
+              type="button"
+              className={`${BOTON_PRIMARIO_CLS} h-10`}
+              disabled={ocupado || sinModulo || invalido !== null || sinCambios}
+              onClick={() => guardar(activoGuardado, numero, "Tope diario guardado.")}
+            >
               {ocupado ? "Guardando…" : "Guardar"}
             </button>
           </div>
+          <span className="whitespace-nowrap text-[11px] text-muted-foreground">De {TOPE_MINIMO} a {TOPE_MAXIMO} por día</span>
         </div>
       </div>
       {invalido && !sinModulo && <InlineAlert tone="warning" compact>{invalido}</InlineAlert>}
