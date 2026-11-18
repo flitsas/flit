@@ -303,6 +303,9 @@ public static class AdminInfrastructureExtensions
             // HU #14393 (Feature #14392) — banderas de medios y switches de cobro del portal (DDL 182).
             services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalCobroRepository,
                 Flit.Infrastructure.PersonaNatural.PersonaNaturalCobroRepository>();
+            // Ventana de anulación de la caja por organismo y su historial (DDL 200).
+            services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalCajaAnulacionRepository,
+                Flit.Infrastructure.PersonaNatural.PersonaNaturalCajaAnulacionRepository>();
         // HU #14072 — configuración del portal (lista blanca de tipos, parámetros y organismos).
         services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalConfigRepository,
             Flit.Infrastructure.PersonaNatural.PersonaNaturalConfigRepository>();

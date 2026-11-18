@@ -9,6 +9,10 @@ namespace Flit.PersonaNatural.Api.Abuso;
 public static class AbusoEndpoints
 {
     public const string PoliticaPorIp = "por-ip";
+
+    /// <summary>Tope por minuto, por cookie del punto + IP, de la consulta del cierre por código (frena la enumeración de códigos).</summary>
+    public const string PoliticaCierrePorCodigo = "punto-cierre-codigo";
+    public const int LimiteCierrePorCodigoPorMinuto = 10;
     public const string CabeceraCaptcha = "X-Captcha-Token";
     public const string CodigoCaptcha = "captcha_required";
     public const string CodigoLimitada = "rate_limited";
@@ -42,6 +46,9 @@ public static class AbusoEndpoints
             o.AddPolicy(PoliticaPorIp, http => RateLimitPartition.GetFixedWindowLimiter(
                 http.Connection.RemoteIpAddress?.ToString() ?? "desconocida",
                 _ => new FixedWindowRateLimiterOptions { PermitLimit = abuso.LimiteIpPorMinuto, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
+            o.AddPolicy(PoliticaCierrePorCodigo, http => RateLimitPartition.GetFixedWindowLimiter(
+                $"{http.RequestServices.GetService<Punto.CookiePunto>()?.Leer(http)?.OrganismoId.ToString("N") ?? "sin-cookie"}|{http.Connection.RemoteIpAddress}",
+                _ => new FixedWindowRateLimiterOptions { PermitLimit = LimiteCierrePorCodigoPorMinuto, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
             o.OnRejected = async (contexto, ct) =>
             {
                 var espera = contexto.Lease.TryGetMetadata(MetadataName.RetryAfter, out var retry) ? Math.Ceiling(retry.TotalSeconds) : 60;

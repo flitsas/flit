@@ -639,6 +639,17 @@ export interface ProcedureInstanceDetail {
   consolidadoWizard?: ConsolidadoVigencia | null;
   /** HU #12791 (Épica #12760) — vigencia del consolidado maestro. Ver {@link ConsolidadoVigencia}. */
   consolidadoMaestro?: ConsolidadoVigencia | null;
+  /** HU #14470 — pago en caja del punto. Ausente si el trámite no tiene pago del portal. */
+  pagoPortal?: PagoPortal | null;
+}
+
+/** HU #14470 — pago registrado en caja (o «sin cobro») de un trámite del punto. */
+export interface PagoPortal {
+  valorCop: number;
+  medio: 'caja' | 'sin_cobro';
+  medioCaja?: 'efectivo' | 'datafono' | 'transferencia' | 'otro' | null;
+  medioDetalle?: string | null;
+  pagadoEn: string;
 }
 
 /** Ver `ProcedureInstanceDetail.events`. */

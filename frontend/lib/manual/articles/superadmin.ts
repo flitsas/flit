@@ -718,6 +718,14 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "editar resumen",
       "confirmacion del tramite",
       "tramite llega como borrador",
+      "pago en caja",
+      "generar pago en caja",
+      "id del tramite",
+      "vale hasta hoy",
+      "esperando identidades",
+      "tu tramite quedo",
+      "recoge en este organismo",
+      "en proceso de registro",
       "borrador en flit 2",
       "consolidado",
       "licencia de conduccion",
@@ -775,14 +783,42 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         title: "5. Resumen y confirmación",
         paragraphs: [
           "El Resumen reúne, en este orden: Trámite, Vehículo, Titular y actores, Validación de identidad, Información del trámite, Documentos cargados y Valores. Cada sección trae el botón «Editar» para volver a corregirla.",
-          "La pantalla de confirmación al enviar no muestra datos personales y sí el estado real de la identidad: aprobada o pendiente.",
+          "En el portal web, la pantalla de confirmación al enviar no muestra datos personales y sí el estado real de la identidad: aprobada o pendiente.",
+          "En el punto del organismo no hay paso de Resumen: los pasos son Diagnóstico, Actores, Requisitos, Pago y Envío, y «Continuar» en Requisitos lleva directo a Pago. Allí no se envía el trámite desde el Resumen: el valor se ve en Pago.",
+        ],
+      },
+      {
+        id: "pago-punto",
+        title: "6. Pago en el punto del organismo",
+        paragraphs: [
+          "En el punto, el trámite se paga en la caja del organismo. Antes de pagar, todas las personas del trámite deben haber validado su identidad: si falta alguna, la pantalla muestra quién falta y no deja pagar; cuando la última valida, el pago se habilita solo.",
+          "La pantalla abre con la tarjeta «Resumen del cobro»: placa, tipo de trámite, la tarifa del organismo, el valor de FLIT y el total a pagar. Debajo está la tarjeta «Pago en caja». No hay envío a domicilio: el documento se recoge en el organismo. El botón «Atrás» regresa a Requisitos.",
+        ],
+        bullets: [
+          "Al llegar a Pago, el pago en caja se genera solo: no hay que pulsar nada. Aparece el ID del trámite (por ejemplo PN-2026-000123), con un botón para copiarlo, el total y «Vale hasta hoy a las 11:59 p. m.».",
+          "La persona va a la caja con ese ID. Cuando la caja confirma el cobro, la pantalla del punto pasa sola al cierre.",
+          "Si el día terminó sin pagar, el ID vence: pulsa «Generar pago en caja de nuevo» y el total se calcula de nuevo con los precios vigentes.",
+          "Si recargaste la página o la caja anuló el cobro, entra a «Consultar mi trámite» con la placa y el código, pulsa «Retomar el pago» y escribe la cédula de quien radicó. Si la caja anula el cobro mientras ves el cierre, la pantalla vuelve sola a Pago con el aviso «La caja anuló el cobro. Genera el pago de nuevo.».",
+          "Si no se alcanza a generar el pago, la pantalla dice el motivo y ofrece «Reintentar».",
+          "Si el total es $0, la pantalla muestra «Confirmar» y sigue al cierre sin ir a la caja.",
+          "Si el trámite no tiene precio en el organismo, o el organismo no tiene habilitado el pago en caja, la pantalla lo dice y no deja continuar.",
+        ],
+      },
+      {
+        id: "cierre-punto",
+        title: "7. Envío (cierre) en el punto",
+        paragraphs: [
+          "Con el pago confirmado, la persona ve un círculo verde con el mensaje «¡Tu trámite quedó! Recoge en este organismo.» y una tabla con el ID del trámite, el tipo, el número de radicado (o «En registro» si aún no llega) y el organismo, con el botón «Copiar ID». Más abajo están las tarjetas «Valor pagado» (con el medio) y «Vehículo». Si ya llegó a FLIT 2, la tabla muestra su radicado de FLIT 2.",
+          "Durante los primeros 15 minutos después del cobro en caja, el organismo todavía puede anular un cobro hecho por error; en ese tiempo el cierre dice «Tu trámite está en proceso de registro» (con un reloj en vez del visto bueno) y se consulta después con el ID del trámite. Luego el trámite pasa a FLIT 2.",
+          "Si la persona dio un correo propio, le llega un aviso con su ID y el lugar donde recoge. «Consultar trámite» abre la consulta con el ID ya escrito.",
         ],
       },
       {
         id: "flit2",
-        title: "6. Qué pasa en FLIT 2",
+        title: "8. Qué pasa en FLIT 2",
         paragraphs: [
           "Los trámites que llegan del portal quedan en FLIT 2 como borrador, con todos sus documentos cargados, incluido el consolidado. El equipo del organismo los revisa y los radica como cualquier otro trámite.",
+          "Los del punto del organismo llegan solo después de pagar, y su detalle muestra «Pagado en caja» (o «Sin cobro») con el valor, el medio y la fecha. No se vuelve a cobrar en FLIT 2.",
         ],
         callouts: [
           {

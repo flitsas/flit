@@ -6,6 +6,7 @@ using Flit.PersonaNatural.Api.Consultas;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Definiciones;
 using Flit.PersonaNatural.Api.Identidad;
+using Flit.PersonaNatural.Api.Pagos;
 using Flit.PersonaNatural.Api.Sesiones;
 using Flit.PersonaNatural.Api.Solicitudes;
 using Flit.Tramites.Grpc.V1;
@@ -30,7 +31,7 @@ public static class PuntoEndpoints
 
     private const string ItemSesion = "flit.pn.punto";
 
-    private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
+    internal static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
@@ -49,6 +50,7 @@ public static class PuntoEndpoints
         services.TryAddScoped<RequisitosPuntoService>();
         services.TryAddScoped<IBorradorPunto, BorradorPuntoDb>();
         services.TryAddScoped<CompletitudRequisitosPuntoService>();
+        services.AddPagosDelPunto();
         services.TryAddScoped<ICanalPunto>(sp =>
         {
             var cliente = sp.GetService<PersonaNaturalService.PersonaNaturalServiceClient>();
@@ -392,10 +394,13 @@ public static class PuntoEndpoints
             }
         }).AddEndpointFilter(ConSesionDePunto);
 
+        // Feature #14447 — paso Pago del punto (pasar a pago, estado, habilitar caja, confirmar $0).
+        grupo.MapPagoPunto();
+
         return app;
     }
 
-    private static async ValueTask<object?> ConSesionDePunto(EndpointFilterInvocationContext contexto, EndpointFilterDelegate siguiente)
+    internal static async ValueTask<object?> ConSesionDePunto(EndpointFilterInvocationContext contexto, EndpointFilterDelegate siguiente)
     {
         var http = contexto.HttpContext;
         var organismo = http.RequestServices.GetRequiredService<CookiePunto>().Leer(http);
@@ -405,10 +410,10 @@ public static class PuntoEndpoints
         return await siguiente(contexto).ConfigureAwait(false);
     }
 
-    private static OrganismoPunto Sesion(HttpContext http) =>
+    internal static OrganismoPunto Sesion(HttpContext http) =>
         http.Items[ItemSesion] as OrganismoPunto ?? throw new InvalidOperationException("La sesión del punto no está en la petición.");
 
-    private static string? TokenSolicitud(HttpContext http)
+    internal static string? TokenSolicitud(HttpContext http)
     {
         var cabecera = http.Request.Headers.Authorization.ToString();
         return cabecera.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? cabecera["Bearer ".Length..] : null;

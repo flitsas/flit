@@ -707,6 +707,98 @@ export interface ResultadoMultasPunto {
   multas?: MultaPunto[] | null;
 }
 
+// ── Paso Pago del punto (HU #14451/#14452): POST /punto/pago/{iniciar,caja,confirmar} y GET /punto/pago ─────────────
+export interface LineaCobroPunto {
+  codigo: string;
+  nombre: string;
+  subtitulo: string;
+  valorCop: number;
+}
+
+export interface ParteFaltantePunto {
+  parte: string;
+  ordinal: number;
+  estado: string;
+}
+
+export interface BloqueoPagoPunto {
+  code: string;
+  message: string;
+}
+
+export interface CobroCajaPunto {
+  codigo: string;
+  /** `vigente` o `vencido` según la hora de la consulta. */
+  estado: "vigente" | "vencido";
+  habilitadoEn: string;
+  venceEn: string;
+}
+
+export interface PagoConfirmadoPunto {
+  valorCop: number;
+  medio: string;
+  medioCaja?: string | null;
+  pagadoEn: string;
+  /** Pagado en caja y todavía no enviado al organismo (la ventana para anular sigue abierta). */
+  enRegistro?: boolean;
+  /** Cuándo se envía al organismo (ISO). Con ventana 0 coincide con el cobro. */
+  radicaEn?: string | null;
+}
+
+export interface EstadoPagoPunto {
+  solicitudId: string;
+  codigoPublico: string;
+  estado: string;
+  puedePagar: boolean;
+  motivoIdentidad?: string | null;
+  identidadesPendientes: ParteFaltantePunto[];
+  desglose?: LineaCobroPunto[] | null;
+  totalCop?: number | null;
+  bloqueo?: BloqueoPagoPunto | null;
+  cobro?: CobroCajaPunto | null;
+  pago?: PagoConfirmadoPunto | null;
+}
+
+export type EstadoCierrePunto = "en_registro" | "registrado" | "rechazado";
+
+/** Cierre del canal OT: ID del trámite y dónde recogerlo (los campos nulos no viajan). */
+export interface CierrePuntoRespuesta {
+  estadoCierre: EstadoCierrePunto;
+  codigoPublico: string;
+  radicadoFlit2?: string | null;
+  motivo?: string | null;
+  valorCop: number;
+  medio: string;
+  medioCaja?: string | null;
+  pagadoEn: string;
+  recogeEn: { organismo: string };
+  /** Nombre del tipo de trámite (de la definición congelada) y placa del vehículo. */
+  tipoTramite?: string | null;
+  placa?: string | null;
+  /** Solo en el cierre de la sesión del trámite (no en la consulta por código). */
+  resumen?: ResumenCierrePunto | null;
+}
+
+/** Resumen de la confirmación final: partes por nombre (sin documentos), condiciones, adjuntos por nombre y desglose cobrado. */
+export interface ResumenCierrePunto {
+  actores: { parte: string; nombre: string }[];
+  valorVenta?: number | null;
+  tienePrenda?: boolean | null;
+  decisionPrenda?: string | null;
+  documentos: { nombre: string }[];
+  desglose: { nombre: string; valorCop: number }[];
+  /** Verdadero si el correo de confirmación ya salió hacia quien radicó. */
+  correoEnviado: boolean;
+}
+
+export interface CajaHabilitadaPunto {
+  codigoCobro: string;
+  habilitadoEn: string;
+  venceEn: string;
+  desglose: LineaCobroPunto[];
+  totalCop: number;
+}
+
 export interface OpcionesCliente {
   base?: string;
   fetchImpl?: typeof fetch;
@@ -940,6 +1032,18 @@ export function crearCliente({ base = BASE_BFF, fetchImpl }: OpcionesCliente = {
       /** Gate a Pago: el servidor calcula desde el borrador (sesión pn_sesion + cookie del punto); solo se manda el tipo. */
       requisitosCompletitud: (datos: { tipoCodigo: string }, o?: OpcionesLlamada) =>
         solicitar<CompletitudRequisitosPunto>("POST", "/punto/requisitos/completitud", { tipoCodigo: datos.tipoCodigo }, o),
+      /** Paso Pago (solo caja): iniciar es idempotente; estado se sondea; caja habilita el cobro; confirmar solo acepta total $0. */
+      pago: {
+        iniciar: (o?: OpcionesLlamada) => solicitar<EstadoPagoPunto>("POST", "/punto/pago/iniciar", undefined, o),
+        estado: (o?: OpcionesLlamada) => solicitar<EstadoPagoPunto>("GET", "/punto/pago", undefined, o),
+        caja: (o?: OpcionesLlamada) => solicitar<CajaHabilitadaPunto>("POST", "/punto/pago/caja", undefined, o),
+        confirmar: (o?: OpcionesLlamada) => solicitar<EstadoPagoPunto>("POST", "/punto/pago/confirmar", undefined, o),
+        /** Cierre del trámite pagado (sesión del trámite). */
+        cierre: (o?: OpcionesLlamada) => solicitar<CierrePuntoRespuesta>("GET", "/punto/pago/cierre", undefined, o),
+        /** Consultar del punto: por código público o radicado de FLIT 2.0, dentro del mismo organismo. */
+        cierrePorCodigo: (codigo: string, o?: OpcionesLlamada) =>
+          solicitar<CierrePuntoRespuesta>("GET", `/punto/pago/cierre/${encodeURIComponent(codigo)}`, undefined, o),
+      },
       consultas: {
         vehiculo: (datos: { placa: string; documento: string; tipoDocumento?: string; consentimiento: boolean }, o?: OpcionesLlamada) =>
           solicitar<ResultadoVehiculoPunto>(

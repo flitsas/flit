@@ -18,6 +18,13 @@ public sealed class PlatformAuthOptions
     /// <summary>Emisores aceptados: el hub del ambiente (p. ej. <c>https://&lt;ambiente&gt;.flitsas.online/</c>).</summary>
     public IList<string> Issuers { get; } = [];
 
+    /// <summary>
+    /// Audiencias adicionales aceptadas además de <see cref="Audience"/> (aditivo, vacío por defecto). Las usa un servicio que atiende
+    /// a otro producto de la suite por REST, p. ej. el BFF del portal con los tokens del producto <c>caja</c> (ADR-0082). Quien las
+    /// configure sigue obligado a autorizar por política cada endpoint que las abra.
+    /// </summary>
+    public IList<string> ExtraAudiences { get; } = [];
+
     /// <summary>JWKS de Identidad por la red interna (p. ej. <c>http://core-identity:4025/.well-known/jwks.json</c>).</summary>
     public string JwksUri { get; set; } = string.Empty;
 }
@@ -69,6 +76,7 @@ public static class PlatformAuthenticationExtensions
                     ValidIssuers = [.. options.Issuers],
                     ValidateAudience = true,
                     ValidAudience = options.Audience,
+                    ValidAudiences = options.ExtraAudiences.Count == 0 ? null : [options.Audience, .. options.ExtraAudiences],
                     ValidateLifetime = true,
                     RequireExpirationTime = true,
                     ValidateIssuerSigningKey = true,

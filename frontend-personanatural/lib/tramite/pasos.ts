@@ -6,7 +6,7 @@
 // al tipo «no disponible» entero; nunca se pinta una parte. Aquí no hay ningún tipo de trámite nombrado.
 import type { DefinicionTipo, PasoDefinicion, Pendiente, Solicitud } from "@/lib/api/cliente";
 
-export type GrupoPaso = "diagnostico" | "actores" | "requisitos" | "resumen" | "envio";
+export type GrupoPaso = "diagnostico" | "actores" | "requisitos" | "resumen" | "pago" | "envio";
 
 export interface PasoBase {
   id: string;

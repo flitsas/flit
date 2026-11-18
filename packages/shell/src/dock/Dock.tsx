@@ -1,6 +1,6 @@
 "use client";
 
-import { useId, type RefObject } from "react";
+import { useId, useState, type RefObject } from "react";
 import Link from "next/link";
 import { Icono } from "@flit/ui/Icono";
 import type { DockEntry, DockGroup } from "../nav";
@@ -94,7 +94,7 @@ type Block = { key: string; title?: string; icon?: DockEntry["icon"]; ilustracio
 function blocks(entries: DockEntry[]): Block[] {
   const out: Block[] = [];
   for (const it of entries) {
-    if (it.children?.length) {
+    if (it.children?.length && !it.desplegable) {
       out.push({ key: it.key, title: it.label, icon: it.icon, ilustracion: it.ilustracion, items: it.children });
       continue;
     }
@@ -210,7 +210,11 @@ function DockBlock({ block, panelId, onNavigate }: { block: Block; panelId: stri
     <ul className="dock-menu__entradas">
       {block.items.map((it) => (
         <li key={it.key}>
-          <DockEntryLink item={it} onNavigate={onNavigate} />
+          {it.desplegable && it.children?.length ? (
+            <DockSubmenu item={it} onNavigate={onNavigate} />
+          ) : (
+            <DockEntryLink item={it} onNavigate={onNavigate} />
+          )}
         </li>
       ))}
     </ul>
@@ -226,6 +230,46 @@ function DockBlock({ block, panelId, onNavigate }: { block: Block; panelId: stri
         {block.title}
       </p>
       {list}
+    </div>
+  );
+}
+
+/**
+ * Submenú desplegable dentro del panel (p. ej. Administración → Portal Persona Natural ▸ Reportes, Cobro, Caja, Diseño):
+ * un botón con el ícono y el nombre, el indicador ▸/▾ y `aria-expanded`; Enter/Espacio lo abren y cierran, y sus hijos son
+ * enlaces normales en el orden de tabulación. Se abre solo si una de sus opciones es la página actual.
+ */
+export function DockSubmenu({ item, onNavigate }: { item: DockEntry; onNavigate: () => void }) {
+  const uid = useId();
+  const listId = `${uid}-submenu`;
+  const [abierto, setAbierto] = useState(() => Boolean(item.children?.some((c) => c.active)));
+  return (
+    <div className="dock-submenu">
+      <button
+        type="button"
+        className="dock-entrada dock-submenu__boton"
+        aria-expanded={abierto}
+        aria-controls={listId}
+        onClick={() => setAbierto((v) => !v)}
+      >
+        <DockGlyph icon={item.icon} ilustracion={item.ilustracion} className="dock-entrada__glifo" />
+        <span className="dock-entrada__texto">
+          <strong>{item.label}</strong>
+          {item.descripcion && <small>{item.descripcion}</small>}
+        </span>
+        <span aria-hidden="true" className="dock-submenu__indicador">
+          {abierto ? "▾" : "▸"}
+        </span>
+      </button>
+      {abierto && (
+        <ul id={listId} className="dock-menu__entradas dock-submenu__lista">
+          {item.children?.map((c) => (
+            <li key={c.key}>
+              <DockEntryLink item={c} onNavigate={onNavigate} />
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

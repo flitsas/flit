@@ -14,6 +14,7 @@ import { GENERACION_DOCUMENTAL_BASE_PATH } from "@/components/admin/generacion-d
 import { OT_ADMIN_SPA_OMIT } from "@/lib/nav/modules";
 import { navGatingFor, otHubNavGating, type OtHubDelegableTab } from "@/lib/nav/module-access";
 import { COPY } from "@/lib/copy/copy-catalog";
+import { OT_ADMIN_ROLE, OT_CAJA_ROLE } from "@/lib/auth/jwt";
 import {
   DOCK_GROUP_ICON,
   DOCK_GROUP_LABEL,
@@ -36,6 +37,8 @@ export interface TramitesNavContext {
   tenantId: string | null;
   /** Organismo del usuario OT. Sin él, las entradas del organismo no se declaran (aún no hay a dónde llevarlas). */
   otTransitOfficeId: string | null;
+  /** Su único rol es `ot_caja`: el dock le muestra solo «Portal Persona Natural» (pestaña Caja). */
+  isSoloCaja?: boolean;
 }
 
 type Entry = Omit<NavItem, "section" | "children"> & { children?: Entry[] };
@@ -192,13 +195,30 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
       ot(OT_ADM_DOCK.imprintValidation, "Validar impronta", "imprint-validation", iconoComo("identidad")),
       ot(OT_ADM_DOCK.webhooks, "Webhooks", "webhooks", iconoComo("integraciones")),
     );
-    // Épica #14297 / HU #14377 — Portal Persona Natural del organismo: solo el ot_admin (por rol, sin permiso delegable).
-    if (ctx.isOtAdmin) {
+    // Épica #14297 / HU #14377 — Portal Persona Natural: submenú desplegable dentro de Administración con sus cuatro secciones.
+    // El ot_admin las ve todas; la persona de caja (solo `ot_caja`) solo ve Caja. La caja ya no es un ítem suelto del menú.
+    if (ctx.isOtAdmin || ctx.isSoloCaja) {
+      const portal = otHubModulePath(officeId, "portal-persona-natural");
+      const seccion = (tab: string, label: string, icon: NavIcon, roles: string[]): Entry => ({
+        key: `${OT_ADM_DOCK.portalPersonaNatural}-${tab}`,
+        label,
+        href: `${portal}?tab=${tab}`,
+        icon,
+        roles,
+      });
       entries.push({
         key: OT_ADM_DOCK.portalPersonaNatural,
         label: "Portal Persona Natural",
-        href: otHubModulePath(officeId, "portal-persona-natural"),
+        href: "",
         icon: iconoComo("persona"),
+        roles: [OT_ADMIN_ROLE, OT_CAJA_ROLE],
+        desplegable: true,
+        children: [
+          seccion("reportes", "Reportes", iconoComo("reportes"), [OT_ADMIN_ROLE]),
+          seccion("cobro", "Cobro", iconoComo("pago"), [OT_ADMIN_ROLE]),
+          seccion("caja", "Caja", iconoComo("pago"), [OT_ADMIN_ROLE, OT_CAJA_ROLE]),
+          seccion("diseno", "Diseño", iconoComo("lapiz"), [OT_ADMIN_ROLE]),
+        ],
       });
     }
   }

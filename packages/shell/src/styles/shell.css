@@ -771,6 +771,32 @@
     font-weight: 650;
   }
 
+  /* Submenú desplegable dentro del panel (Portal Persona Natural ▸ …): mismo aspecto de entrada, con ▸/▾ a la derecha. */
+  .dock-submenu__boton {
+    border: 0;
+    background: transparent;
+    cursor: pointer;
+    font-family: inherit;
+    align-items: center;
+  }
+
+  .dock-submenu__boton:focus-visible {
+    outline: 2px solid var(--di-action);
+    outline-offset: 2px;
+  }
+
+  .dock-submenu__indicador {
+    margin-left: auto;
+    color: var(--di-text-secondary, var(--di-text-primary));
+    font-size: 0.75rem;
+  }
+
+  .dock-submenu__lista {
+    margin: 2px 0 4px 18px;
+    padding-left: 10px;
+    border-left: 2px solid var(--di-accent-soft);
+  }
+
   .dock-menu__seccion-glifo {
     width: 22px;
     height: 22px;

@@ -36,14 +36,16 @@ public sealed record MedioDelTipoPnView(string Method, bool Ofrecido, IReadOnlyL
 
 public sealed record TipoCobroPnView(Guid TipoTramiteId, string Nombre, IReadOnlyList<MedioDelTipoPnView> Medios);
 
-public sealed record CobroPortalView(IReadOnlyList<MedioCobroPnView> Medios, IReadOnlyList<TipoCobroPnView> Tipos);
+public sealed record CobroPortalView(
+    IReadOnlyList<MedioCobroPnView> Medios, IReadOnlyList<TipoCobroPnView> Tipos, VentanaAnulacionCajaView? CajaAnulacion = null);
 
 /// <summary>
 /// HU #14393 — lo que el administrador ve en Cobro: las banderas de los medios del portal y, por cada tipo y medio, los dos
 /// switches con su monto. <c>MontoCop</c> es el del renglón base del concepto (derechos de tránsito; servicio FLIT): las
 /// transformaciones y el envío siguen el switch de su grupo. Sin caché: lo guardado se ve en la siguiente consulta.
 /// </summary>
-public sealed class LeerCobroPnHandler(IPersonaNaturalCobroRepository cobro, IPersonaNaturalTarifaRepository tarifas)
+public sealed class LeerCobroPnHandler(
+    IPersonaNaturalCobroRepository cobro, IPersonaNaturalTarifaRepository tarifas, LeerVentanaAnulacionCajaHandler? ventanaCaja = null)
 {
     public async Task<CobroPortalView> HandleAsync(AlcanceCobroPn alcance, CancellationToken ct = default)
     {
@@ -52,6 +54,10 @@ public sealed class LeerCobroPnHandler(IPersonaNaturalCobroRepository cobro, IPe
         var tipos = await tarifas.ListarTiposDelPortalAsync(ct).ConfigureAwait(false);
         var montos = await cobro.MontosAsync(alcance.OrganismoId, [.. tipos.Select(t => t.Id)], ct).ConfigureAwait(false);
         var medios = MediosPagoPn.DelPortal(alcance.Web);
+        // Ventana de anulación de la caja: solo existe por organismo (la web de persona no tiene caja).
+        var ventana = alcance.OrganismoId is { } organismo && ventanaCaja is not null
+            ? await ventanaCaja.HandleAsync(organismo, ct).ConfigureAwait(false)
+            : null;
 
         return new CobroPortalView(
             [.. medios.Select(m => new MedioCobroPnView(m, config.MedioHabilitado(m)))],
@@ -65,7 +71,8 @@ public sealed class LeerCobroPnHandler(IPersonaNaturalCobroRepository cobro, IPe
                         return new ConceptoCobroPnView(c, config.SwitchEncendido(t.Id, m, c, monto), monto, CobrosPn.Mueve(alcance.EsSuperAdmin, c));
                     }).ToList();
                     return new MedioDelTipoPnView(m, config.MedioHabilitado(m) && conceptos.Any(c => c.Enabled), conceptos);
-                })]))]);
+                })]))],
+            ventana);
     }
 }
 

@@ -169,7 +169,11 @@ describe("modal Consultar: envío y estados", () => {
     expect(screen.getByText("Tipo de trámite").nextSibling).toHaveTextContent("TIPO_RARO");
   });
 
-  it("aprobado: titular verde, todos los pasos completos y el comprobante marcado como no disponible aún", async () => {
+  it("aprobado: titular verde, todos los pasos completos y el comprobante descargable", async () => {
+    const crear = vi.fn(() => "blob:comprobante");
+    Object.defineProperty(URL, "createObjectURL", { value: crear, configurable: true });
+    Object.defineProperty(URL, "revokeObjectURL", { value: vi.fn(), configurable: true });
+    const clic = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => undefined);
     montar(() => json(APROBADO));
     llenar();
 
@@ -180,8 +184,11 @@ describe("modal Consultar: envío y estados", () => {
     const pasos = within(screen.getByRole("list", { name: "Tracking del radicado" })).getAllByRole("listitem");
     expect(pasos.every((p) => p.getAttribute("data-status") === "done")).toBe(true);
     const descargar = screen.getByRole("button", { name: "Descargar comprobante" });
-    expect(descargar).toBeDisabled();
-    expect(descargar).toHaveAccessibleDescription("El comprobante estará disponible próximamente.");
+    expect(descargar).toBeEnabled();
+    fireEvent.click(descargar);
+    expect(crear).toHaveBeenCalledTimes(1);
+    expect(clic).toHaveBeenCalled();
+    clic.mockRestore();
   });
 
   it("rechazo: muestra la causal y cierra con Entendido, sin ofrecer corregir el trámite", async () => {
