@@ -156,6 +156,9 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.Property(x => x.CorreoRespuesta).HasMaxLength(254);
             e.Property(x => x.Cc).HasColumnType("jsonb");
             e.Property(x => x.Bcc).HasColumnType("jsonb");
+            // HU #14614: las empresas que ya existen quedan con el envío automático apagado y el tope en 50.
+            e.Property(x => x.DpAutomaticoActivo).HasDefaultValue(false);
+            e.Property(x => x.DpAutomaticoTopeDiario).HasDefaultValue((short)50);
         });
         m.Entity<IdentificacionMonitoreada>(e =>
         {
@@ -239,6 +242,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.ToTable("tipologia_empresa");
             e.HasKey(x => new { x.TenantId, x.TipologiaId });
             e.HasOne<TipologiaDp>().WithMany().HasForeignKey(x => x.TipologiaId);
+            e.Property(x => x.Automatizable).HasDefaultValue(false);
         });
         m.Entity<Plantilla>(e =>
         {
@@ -252,6 +256,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.ToTable("plantilla_version");
             e.HasKey(x => x.Id);
             e.Property(x => x.Asunto).HasMaxLength(300);
+            e.Property(x => x.NotaRevisionJuridica).HasMaxLength(1000);
             e.HasIndex(x => new { x.PlantillaId, x.NumeroVersion }).IsUnique();
             e.HasOne<Plantilla>().WithMany().HasForeignKey(x => x.PlantillaId);
         });
