@@ -9,7 +9,7 @@ import { useToast } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
 import { Interruptor } from "@/components/ui/Interruptor";
 import { apiFetch } from "@/lib/api";
-import { errorTope, esAutomatizable, estadoTexto, mensajeError, TOPE_MAXIMO, TOPE_MINIMO, TOPE_POR_DEFECTO } from "@/lib/envioAutomaticoDp";
+import { bloqueoActivar, errorTope, esAutomatizable, estadoTexto, mensajeError, TOPE_MAXIMO, TOPE_MINIMO, TOPE_POR_DEFECTO } from "@/lib/envioAutomaticoDp";
 import { formatoFecha } from "@/lib/format/date";
 import type { ConfiguracionEmpresa, PlantillaResumen, Tipologia, VersionPlantilla } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
@@ -172,6 +172,20 @@ function Tipologias({ datos, empresaId, onCambio }: { datos: Datos; empresaId: s
   const [ocupada, setOcupada] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const habilitar = async (fila: FilaTipologia) => {
+    setOcupada(fila.tipologia.id);
+    setError(null);
+    try {
+      await apiFetch(`/admin/empresas/${empresaId}/tipologias/${fila.tipologia.id}`, { method: "PUT", body: { habilitada: true } });
+      toast.show(`${fila.tipologia.codigo} habilitada para esta empresa.`, "success");
+      onCambio();
+    } catch (e) {
+      setError(mensajeError(e, "No se pudo habilitar la tipología."));
+    } finally {
+      setOcupada(null);
+    }
+  };
+
   const marcar = async (fila: FilaTipologia, automatizable: boolean) => {
     setOcupada(fila.tipologia.id);
     setError(null);
@@ -224,22 +238,32 @@ function Tipologias({ datos, empresaId, onCambio }: { datos: Datos; empresaId: s
             header: "Acciones",
             render: (f) => {
               const e = estadoTexto(f.version !== null, f.version?.revisadaJuridicamenteEn);
+              const bloqueo = f.tipologia.automatizable ? null : bloqueoActivar(f.tipologia.habilitada, f.version !== null, f.version?.revisadaJuridicamenteEn);
+              const ocupadaAhora = ocupada === f.tipologia.id;
               return (
-                <div className="flex flex-wrap gap-2">
-                  {e.aprobable && (
-                    <button type="button" className={controlCls(false)} onClick={() => setAprobar(f)}>
-                      <Icono nombre="escudo" className="h-3.5 w-3.5" />
-                      Aprobar texto
+                <div className="flex min-w-0 flex-col gap-2">
+                  <div className="flex flex-wrap gap-2">
+                    {e.aprobable && (
+                      <button type="button" className={controlCls(false)} onClick={() => setAprobar(f)}>
+                        <Icono nombre="escudo" className="h-3.5 w-3.5" />
+                        Aprobar texto
+                      </button>
+                    )}
+                    {bloqueo?.accion === "habilitar" && (
+                      <button type="button" className={controlCls(false)} disabled={ocupadaAhora} onClick={() => habilitar(f)}>
+                        {ocupadaAhora ? "Habilitando…" : "Habilitar para esta empresa"}
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className={controlCls(false)}
+                      disabled={ocupadaAhora || bloqueo !== null}
+                      onClick={() => marcar(f, !f.tipologia.automatizable)}
+                    >
+                      {f.tipologia.automatizable ? "Volver a enviar a mano" : "Activar envío automático"}
                     </button>
-                  )}
-                  <button
-                    type="button"
-                    className={controlCls(false)}
-                    disabled={ocupada === f.tipologia.id || (!f.tipologia.automatizable && !f.tipologia.habilitada)}
-                    onClick={() => marcar(f, !f.tipologia.automatizable)}
-                  >
-                    {f.tipologia.automatizable ? "Enviar a mano" : "Enviar sola"}
-                  </button>
+                  </div>
+                  {bloqueo && <p className="break-words text-[11px] text-muted-foreground">{bloqueo.texto}</p>}
                 </div>
               );
             },
