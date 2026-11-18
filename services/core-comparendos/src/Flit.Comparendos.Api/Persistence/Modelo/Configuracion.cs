@@ -108,6 +108,16 @@ public sealed class OrganismoTransito : Auditada
     public DateTimeOffset SincronizadoEn { get; set; }
 }
 
+/// <summary>
+/// Epic #14606, HU #14611: si el organismo admite derechos de petición por correo. Vive en una tabla propia de Comparendos
+/// (no en <see cref="OrganismoTransito"/>) para que la réplica diaria del catálogo no lo pise. Sin fila = no admite.
+/// </summary>
+public sealed class OrganismoTransitoDp : Auditada
+{
+    public Guid OrganismoTransitoId { get; set; }
+    public bool AdmiteDpPorCorreo { get; set; }
+}
+
 /// <summary>Texto de secretaría que trae una fuente, traducido al OT del catálogo (§3.7).</summary>
 public sealed class OrganismoTransitoAlias : Auditada
 {
