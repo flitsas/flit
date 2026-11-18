@@ -276,6 +276,27 @@ public sealed class ServicioDp(
         dp.ComunicacionId = dp.ComunicacionIds[0];
     }
 
+    /// <summary>
+    /// HU #14619: el correo CorreoDpOt tal como saldría para este comparendo (misma plantilla y marco), con el radicado enmascarado.
+    /// No registra nada ni reserva radicado. <c>null</c> si no hay plantilla publicada del correo.
+    /// </summary>
+    public async Task<(string Asunto, string Html)?> CorreoVistaPreviaAsync(Comparendo c, PreparacionDp p, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        ArgumentNullException.ThrowIfNull(p);
+        var radicado = RadicadoEnmascarado(p.Tipologia, reloj.Hoy);
+        var valores = await contexto.DeAsync(c, new ExtrasContexto(Representante: p.Representante, Radicado: radicado, Tipologia: p.Tipologia), ct).ConfigureAwait(false);
+        try
+        {
+            var cuerpo = await plantillas.ArmarAsync(p.Config.ConjuntoPlantillas, TipoPlantilla.CorreoDpOt, null, valores, ct).ConfigureAwait(false);
+            return (cuerpo.Asunto ?? $"Derecho de petición {radicado}", cuerpo.Html);
+        }
+        catch (ReglaException ex) when (ex.Codigo == "SIN_PLANTILLA")
+        {
+            return null;
+        }
+    }
+
     private async Task<List<Guid>> CorreoAlOtAsync(Comparendo c, DerechoPeticion dp, PreparacionDp p, byte[] pdf, Actor actor, CancellationToken ct)
     {
         var valores = await contexto.DeAsync(c, new ExtrasContexto(Representante: p.Representante, Radicado: dp.Radicado, Tipologia: p.Tipologia), ct).ConfigureAwait(false);
