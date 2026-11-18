@@ -25,6 +25,7 @@ const ERRORES: Record<string, string> = {
   TIPOLOGIA_NO_HABILITADA: "Esta tipología no está habilitada para la empresa. Habilítala primero en el parametrizador de la empresa.",
   TIPOLOGIA_SIN_REGLA_AUTOMATICA: "Esta tipología no tiene una regla para decidir cuándo aplica: solo la puede enviar una persona.",
   TIPOLOGIA_SIN_REVISION_JURIDICA: "El texto publicado de esta tipología todavía no está aprobado por el abogado. Apruébalo antes de automatizarla.",
+  TIPOLOGIA_INACTIVA: "Esta tipología está desactivada en el catálogo y ya no se puede habilitar a más empresas.",
   VERSION_NO_PUBLICADA: "Solo se puede aprobar un texto que ya esté publicado. Publícalo primero en el editor de plantillas.",
 };
 
@@ -46,4 +47,19 @@ export function estadoTexto(publicada: boolean, revisadaEn: string | null | unde
   if (!publicada) return { texto: "Sin texto publicado", tono: "neutral", aprobable: false };
   if (!revisadaEn) return { texto: "Texto sin aprobar", tono: "warning", aprobable: true };
   return { texto: "Texto aprobado", tono: "success", aprobable: false };
+}
+
+export interface BloqueoActivar {
+  /** Frase corta junto al botón bloqueado. */
+  texto: string;
+  /** Qué se puede hacer desde la misma fila para destrabarlo; null si hay que ir a otra pantalla. */
+  accion: "habilitar" | "aprobar" | null;
+}
+
+/** Por qué no se puede activar el envío automático de una tipología (null si se puede). Mismo orden que la API. */
+export function bloqueoActivar(habilitada: boolean | null | undefined, publicada: boolean, revisadaEn: string | null | undefined): BloqueoActivar | null {
+  if (!habilitada) return { texto: "Primero habilítala para esta empresa", accion: "habilitar" };
+  if (!publicada) return { texto: "Primero publica el texto en el editor de plantillas", accion: null };
+  if (!revisadaEn) return { texto: "Primero aprueba el texto", accion: "aprobar" };
+  return null;
 }

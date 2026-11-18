@@ -17,10 +17,11 @@ interface Opciones {
   modulo?: boolean;
   aprobada?: boolean;
   automatizable?: boolean;
+  habilitada?: boolean;
   alPut?: (ruta: string, cuerpo: unknown) => unknown;
 }
 
-function simular({ modulo = true, aprobada = false, automatizable = false, alPut }: Opciones = {}) {
+function simular({ modulo = true, aprobada = false, automatizable = false, habilitada = true, alPut }: Opciones = {}) {
   apiFetch.mockImplementation(async (ruta: string, op?: { method?: string; body?: unknown }) => {
     if (op?.method === "PUT" || op?.method === "POST") return alPut ? alPut(ruta, op.body) : {};
     if (ruta === "/admin/empresas") return [{ id: "e1", nombre: "Empresa Uno" }];
@@ -28,7 +29,7 @@ function simular({ modulo = true, aprobada = false, automatizable = false, alPut
       return { empresaId: "e1", hasRightPetitionModule: modulo, conjuntoPlantillas: "Flit", dpAutomaticoActivo: false, dpAutomaticoTopeDiario: 50 };
     if (ruta === "/admin/tipologias")
       return [
-        { id: "t1", codigo: "DPR", nombre: "Prescripción", habilitada: true, automatizable },
+        { id: "t1", codigo: "DPR", nombre: "Prescripción", habilitada, automatizable },
         { id: "t9", codigo: "OTRA", nombre: "No automática", habilitada: true, automatizable: false },
       ];
     if (ruta === "/plantillas") return [{ id: "p1", tipologiaId: "t1", publicada: { id: "v1", numeroVersion: 2, publicadaEn: "2026-11-01T10:00:00Z" } }];
@@ -112,7 +113,7 @@ describe("pantalla del envío automático de DP (HU #14614)", () => {
     });
     await abrir();
     await screen.findByText("A mano");
-    fireEvent.click(screen.getByRole("button", { name: "Enviar sola" }));
+    fireEvent.click(screen.getByRole("button", { name: "Activar envío automático" }));
     await screen.findByText(/todavía no está aprobado por el abogado/);
     expect(document.body.textContent).not.toContain("TIPOLOGIA_SIN_REVISION_JURIDICA");
     expect(document.body.textContent).not.toContain("texto crudo de la API");
@@ -139,5 +140,64 @@ describe("pantalla del envío automático de DP (HU #14614)", () => {
     await waitFor(() => expect(puts()).toHaveLength(1));
     expect(puts()[0][0]).toBe("/admin/plantillas/versiones/v1/revision-juridica");
     expect(puts()[0][1]).toMatchObject({ method: "POST", body: { nota: "Revisado por el abogado." } });
+  });
+});
+
+describe("«Activar envío automático» explica su bloqueo y deja destrabarlo (HU #14617)", () => {
+  beforeEach(() => {
+    apiFetch.mockReset();
+  });
+  afterEach(cleanup);
+
+  it("AC1: tipología no habilitada → botón bloqueado con la razón visible", async () => {
+    simular({ habilitada: false, aprobada: true });
+    await abrir();
+    await screen.findByText("Primero habilítala para esta empresa");
+    expect((screen.getByRole("button", { name: "Activar envío automático" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("AC2: «Habilitar para esta empresa» llama al PUT existente con {habilitada:true} y refresca la fila", async () => {
+    let habilitada = false;
+    simular({ habilitada: false, aprobada: true, alPut: () => ((habilitada = true), {}) });
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (ruta: string, op?: { method?: string }) => {
+      const r = await base(ruta, op);
+      return ruta === "/admin/tipologias" ? r.map((t: { id: string }) => (t.id === "t1" ? { ...t, habilitada } : t)) : r;
+    });
+    await abrir();
+    fireEvent.click(await screen.findByRole("button", { name: "Habilitar para esta empresa" }));
+    await waitFor(() => expect(puts()).toHaveLength(1));
+    expect(puts()[0][0]).toBe("/admin/empresas/e1/tipologias/t1");
+    expect(puts()[0][1]).toMatchObject({ method: "PUT", body: { habilitada: true } });
+    await waitFor(() => expect((screen.getByRole("button", { name: "Activar envío automático" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByText("Primero habilítala para esta empresa")).toBeNull();
+  });
+
+  it("AC3: habilitada pero sin texto aprobado → «Primero aprueba el texto» y el botón sigue bloqueado", async () => {
+    simular({ habilitada: true, aprobada: false });
+    await abrir();
+    await screen.findByText("Primero aprueba el texto");
+    expect((screen.getByRole("button", { name: "Activar envío automático" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByRole("button", { name: "Habilitar para esta empresa" })).toBeNull();
+  });
+
+  it("AC4: nombres sin ambigüedad y errores del contrato en español", async () => {
+    simular({
+      habilitada: false,
+      aprobada: true,
+      alPut: () => {
+        throw new ApiError(409, "crudo", "TIPOLOGIA_INACTIVA");
+      },
+    });
+    await abrir();
+    fireEvent.click(await screen.findByRole("button", { name: "Habilitar para esta empresa" }));
+    await screen.findByText(/desactivada en el catálogo/);
+    expect(document.body.textContent).not.toContain("TIPOLOGIA_INACTIVA");
+    cleanup();
+    apiFetch.mockReset();
+    simular({ automatizable: true, aprobada: true });
+    await abrir();
+    await screen.findByRole("button", { name: "Volver a enviar a mano" });
+    expect(screen.queryByRole("button", { name: "Enviar sola" })).toBeNull();
   });
 });
