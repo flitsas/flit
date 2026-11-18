@@ -1892,6 +1892,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("enviado_por");
 
+                    b.Property<bool>("EnvioAutomatico")
+                        .HasColumnType("boolean")
+                        .HasColumnName("envio_automatico");
+
                     b.Property<string>("Estado")
                         .IsRequired()
                         .HasMaxLength(40)
