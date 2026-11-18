@@ -334,4 +334,14 @@ describe("acciones en un solo menú y bloque de envío en una fila (HU #14620)",
     expect(fila.contains(screen.getByLabelText(/Tope diario/))).toBe(true);
     expect(fila.contains(screen.getByRole("button", { name: "Guardar" }))).toBe(true);
   });
+
+  it("los dos bloques van en un panel con fondo (receta de la bandeja) y el estado se ve en el encabezado", async () => {
+    simular();
+    await abrir();
+    const panel = screen.getByRole("region", { name: "Envío automático de la empresa" });
+    expect(panel.className).toContain("bg-card");
+    expect(panel.className).toContain("border-border");
+    expect(within(panel).getAllByText("Apagado").length).toBeGreaterThan(1); // distintivo del encabezado + etiqueta del interruptor
+    expect(screen.getByRole("region", { name: "Tipologías que se envían solas" }).className).toContain("bg-card");
+  });
 });

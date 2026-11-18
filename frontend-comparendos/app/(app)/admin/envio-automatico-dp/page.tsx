@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ActionsMenu, DataTable, InlineAlert, Modal, StatusBadge, type ActionsMenuItem } from "@flit/ui";
 import { VistaPrevia } from "@/components/plantillas/VistaPrevia";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -48,6 +48,22 @@ async function cargarDatos(empresaId: string, signal: AbortSignal): Promise<Dato
   return { config, filas, correo };
 }
 
+/** Panel de la pantalla: misma receta que la bandeja (`rounded-2xl border border-border bg-card`), con título, descripción y estado. */
+function Panel({ titulo, descripcion, estado, children }: { titulo: string; descripcion: string; estado?: ReactNode; children: ReactNode }) {
+  return (
+    <section aria-label={titulo} className="min-w-0 rounded-2xl border border-border bg-card">
+      <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 border-b border-border px-4 py-3 sm:px-5">
+        <div className="min-w-0">
+          <h3 className="text-sm font-semibold text-flit-primary">{titulo}</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">{descripcion}</p>
+        </div>
+        {estado}
+      </header>
+      <div className="flex min-w-0 flex-col gap-4 px-4 py-4 sm:px-5">{children}</div>
+    </section>
+  );
+}
+
 /** Enciende o apaga el envío automático de la empresa y fija el tope diario (1 a 500). Apagado es el estado por defecto. */
 function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresaId: string; onGuardado: () => void }) {
   const toast = useToast();
@@ -75,49 +91,55 @@ function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresa
     }
   };
 
+  const encendido = activo && !sinModulo;
   return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-sm font-semibold">Envío automático de la empresa</h3>
+    <Panel
+      titulo="Envío automático de la empresa"
+      descripcion="Cada día hábil se envían solos los derechos de petición que aplican, hasta el tope diario."
+      estado={<StatusBadge label={encendido ? "Encendido" : "Apagado"} tone={encendido ? "success" : "neutral"} />}
+    >
       {sinModulo && (
         <InlineAlert tone="warning" compact>
           Esta empresa no tiene el módulo de derechos de petición, así que el envío automático no puede encenderse.
         </InlineAlert>
       )}
-      <div className="flex flex-col gap-4 md:flex-row md:flex-wrap md:items-end md:gap-x-8 md:gap-y-3">
-        <div className="min-w-0 md:max-w-md md:flex-1">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between md:gap-x-8">
+        <div className="min-w-0 md:max-w-xl md:flex-1">
           <Interruptor
-            activo={activo && !sinModulo}
+            activo={encendido}
             onCambio={setActivo}
             deshabilitado={sinModulo}
-            etiqueta={activo && !sinModulo ? "Encendido" : "Apagado"}
-            ayuda="Cuando está encendido, cada día hábil se envían solos los derechos de petición que aplican, hasta el tope diario. Al principio siempre está apagado."
+            etiqueta={encendido ? "Encendido" : "Apagado"}
+            ayuda="Al principio siempre está apagado: enciéndelo solo cuando los textos estén aprobados."
           />
         </div>
-        <label className={`${ETIQUETA_CLS} w-full md:w-72`}>
-          Tope diario de envíos
-          <input
-            className={INPUT_CLS}
-            type="number"
-            inputMode="numeric"
-            min={TOPE_MINIMO}
-            max={TOPE_MAXIMO}
-            step={1}
-            value={tope}
-            disabled={sinModulo}
-            aria-invalid={invalido !== null}
-            onChange={(e) => setTope(e.target.value)}
-          />
-          <span className="text-[11px] font-normal opacity-70">De {TOPE_MINIMO} a {TOPE_MAXIMO} por día. Lo que pase del tope sigue el siguiente día hábil.</span>
-        </label>
-        <div>
-          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || sinModulo || invalido !== null || sinCambios} onClick={guardar}>
-            {ocupado ? "Guardando…" : "Guardar"}
-          </button>
+        <div className="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-end">
+          <label className={`${ETIQUETA_CLS} w-full sm:w-72`}>
+            Tope diario de envíos
+            <input
+              className={INPUT_CLS}
+              type="number"
+              inputMode="numeric"
+              min={TOPE_MINIMO}
+              max={TOPE_MAXIMO}
+              step={1}
+              value={tope}
+              disabled={sinModulo}
+              aria-invalid={invalido !== null}
+              onChange={(e) => setTope(e.target.value)}
+            />
+            <span className="text-[11px] font-normal opacity-70">De {TOPE_MINIMO} a {TOPE_MAXIMO} por día. Lo que pase sigue el siguiente día hábil.</span>
+          </label>
+          <div>
+            <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || sinModulo || invalido !== null || sinCambios} onClick={guardar}>
+              {ocupado ? "Guardando…" : "Guardar"}
+            </button>
+          </div>
         </div>
       </div>
       {invalido && !sinModulo && <InlineAlert tone="warning" compact>{invalido}</InlineAlert>}
       {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
-    </div>
+    </Panel>
   );
 }
 
@@ -261,8 +283,7 @@ function Tipologias({ datos, empresaId, onCambio }: { datos: Datos; empresaId: s
   };
 
   return (
-    <div className="flex flex-col gap-3">
-      <h3 className="text-sm font-semibold">Tipologías que se envían solas</h3>
+    <Panel titulo="Tipologías que se envían solas" descripcion="Cuáles de las tipologías con regla automática se envían sin que una persona las dispare.">
       <InlineAlert tone="info" compact>
         Una tipología solo se envía sola si su texto publicado está aprobado. Publicar un texto nuevo apaga la marca de esa tipología en todas las empresas: hay que aprobar el texto nuevo y volver a marcarla.
       </InlineAlert>
@@ -326,7 +347,7 @@ function Tipologias({ datos, empresaId, onCambio }: { datos: Datos; empresaId: s
           }}
         />
       )}
-    </div>
+    </Panel>
   );
 }
 
