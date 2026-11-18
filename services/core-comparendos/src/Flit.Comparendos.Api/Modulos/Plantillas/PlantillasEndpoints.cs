@@ -103,7 +103,9 @@ public static class PlantillasEndpoints
                        join p in db.Plantillas.AsNoTracking() on x.PlantillaId equals p.Id
                        where x.Id == id && permitidos.Contains(p.Conjunto)
                        select x).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        return Results.Ok(Dto(v ?? throw ReglaException.NoEncontrado("La versión")));
+        var dto = Dto(v ?? throw ReglaException.NoEncontrado("La versión"));
+        // Quién aprobó (su correo) y la nota interna de la revisión jurídica son del SuperAdmin: una gestora que mira una plantilla de FLIT no los ve.
+        return Results.Ok(usuario.EsSuperAdmin ? dto : dto with { RevisadaPor = null, NotaRevisionJuridica = null });
     }
 
     /// <summary>Vista previa con datos de ejemplo o de un comparendo real de la empresa del usuario; HTML o PDF.</summary>
@@ -237,7 +239,7 @@ public static class PlantillasEndpoints
         // Aprobar de nuevo una versión ya aprobada conserva la primera aprobación (fecha, quién y nota): no se reescribe la historia.
         if (v.RevisadaJuridicamenteEn is not null)
             return Results.Ok(Dto(v));
-        (v.RevisadaJuridicamenteEn, v.RevisadaJuridicamentePor, v.RevisadaJuridicamentePorNombre, v.NotaRevisionJuridica, v.ActualizadoEn, v.ActualizadoPor) = (reloj.Ahora, usuario.Id, usuario.Nombre, pedido.Nota.Trim(), reloj.Ahora, usuario.Id);
+        (v.RevisadaJuridicamenteEn, v.RevisadaJuridicamentePor, v.RevisadaJuridicamentePorNombre, v.NotaRevisionJuridica, v.ActualizadoEn, v.ActualizadoPor) = (reloj.Ahora, usuario.Id, usuario.Nombre.Length > 200 ? usuario.Nombre[..200] : usuario.Nombre, pedido.Nota.Trim(), reloj.Ahora, usuario.Id);
         auditoria.Registrar(null, "plantilla", v.PlantillaId, "REVISION_JURIDICA", new CambioCampo("revisada_juridicamente_en", null, reloj.Ahora), new CambioCampo("version_revisada", null, v.NumeroVersion));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Results.Ok(Dto(v));
