@@ -67,21 +67,42 @@ public sealed partial class EnvioAutomaticoDp(
         var empresas = await db.ConfiguracionesEmpresa.AsNoTracking()
             .Where(e => e.DpAutomaticoActivo && e.HasRightPetitionModule && (solicitud.TenantId == null || e.TenantId == solicitud.TenantId))
             .Select(e => e.TenantId).ToListAsync(ct).ConfigureAwait(false);
+        int bien = 0, mal = 0;
         foreach (var tenant in empresas)
         {
             try
             {
                 if (!await productos.ComparendosHabilitadoAsync(tenant, ct).ConfigureAwait(false))
+                {
+                    // Puede ser que la empresa de verdad no tenga el producto o que Identidad no responda (ambas dan «no»). Antes esto
+                    // pasaba en silencio y el trabajo parecía no hacer nada.
+                    mal++;
+                    LogProductoNoHabilitado(logger, tenant);
                     continue;
+                }
+
                 var r = await EmpresaAsync(tenant, ct).ConfigureAwait(false);
                 LogResumen(logger, tenant, r.Enviados, r.Omitidos.Count, r.Rescatados, r.TopeAlcanzado);
+                if (r.Detenido)
+                    mal++;
+                else
+                    bien++;
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 // Una empresa que falla no frena a las demás.
+                mal++;
                 db.ChangeTracker.Clear();
                 LogFallo(logger, tenant, ex);
             }
+        }
+
+        // Observabilidad: la pantalla de Trabajos muestra el último resultado (antes quedaba vacío para este trabajo).
+        if (bien + mal > 0)
+        {
+            var resultado = mal == 0 ? ResultadoCiclo.Exitoso : bien == 0 ? ResultadoCiclo.Fallido : ResultadoCiclo.Parcial;
+            await db.TrabajosProgramados.Where(t => t.Tipo == TipoTrabajo.EnvioAutomaticoDp)
+                .ExecuteUpdateAsync(u => u.SetProperty(t => t.UltimoResultado, resultado), CancellationToken.None).ConfigureAwait(false);
         }
     }
 
@@ -447,6 +468,9 @@ public sealed partial class EnvioAutomaticoDp(
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Envío automático de DP, empresa {Empresa}: {Enviados} enviados, {Omitidos} omitidos, {Rescatados} sin reacción; tope alcanzado: {Tope}.")]
     private static partial void LogResumen(ILogger logger, Guid empresa, int enviados, int omitidos, int rescatados, bool tope);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Envío automático de DP: la empresa {Empresa} se saltó porque su producto Comparendos no está habilitado o Identidad no respondió.")]
+    private static partial void LogProductoNoHabilitado(ILogger logger, Guid empresa);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Falló el envío automático de DP de la empresa {Empresa}.")]
     private static partial void LogFallo(ILogger logger, Guid empresa, Exception ex);
