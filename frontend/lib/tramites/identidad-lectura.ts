@@ -58,6 +58,14 @@ const ETAPAS_VISIBLES = new Set([
   'expired',
   'webhook_received',
   'webhook_applied',
+  // Flujo manual (Épica #13202). Se omiten consentimiento, enlace copiado e imágenes consultadas:
+  // son actos internos de soporte que no le dicen nada al gestor.
+  'manual_activado',
+  'manual_enlace_regenerado',
+  'manual_correo_fallido',
+  'manual_captura_recibida',
+  'manual_aprobado',
+  'manual_rechazado',
 ]);
 
 const OUTCOMES_CORRECTOS = new Set(['ok', 'received', 'aprobado']);
@@ -102,6 +110,25 @@ export function estadoDeIdentidad(v: BiometricValidation, ahora: Date = new Date
       tono: 'alerta',
       explicacion: 'El enlace caducó antes de que la persona lo usara.',
       accion: 'Se puede enviar un enlace nuevo.',
+    };
+  }
+
+  // Flujo manual: la persona no usa un enlace de terceros, sube sus fotos y su firma.
+  if (v.status === 'manual_activo') {
+    return {
+      label: 'A la espera de la persona',
+      tono: 'pendiente',
+      explicacion: 'Se le envió un enlace para que suba sus fotos y su firma, y todavía no lo ha hecho.',
+      accion: 'Se puede enviar un enlace nuevo si no le llegó.',
+    };
+  }
+
+  if (v.status === 'pendiente_revision_manual') {
+    return {
+      label: 'Pendiente de revisión',
+      tono: 'pendiente',
+      explicacion: 'La persona ya envió sus fotos y su firma. Falta la decisión de FLIT.',
+      accion: null,
     };
   }
 
@@ -159,7 +186,8 @@ export function hitosDeIdentidad(
   const visibles = colapsarRepetidos(eventos.filter((e) => ETAPAS_VISIBLES.has(e.stage)));
   const envio = [...visibles]
     .reverse()
-    .find((e) => e.stage === 'send' || e.stage === 'resend')?.occurredAt;
+    .find((e) => ['send', 'resend', 'manual_activado', 'manual_enlace_regenerado'].includes(e.stage))
+    ?.occurredAt;
 
   const nombre = primerNombre(v.name);
 
@@ -169,9 +197,11 @@ export function hitosDeIdentidad(
     switch (e.stage) {
       case 'send':
       case 'resend':
+      case 'manual_activado':
+      case 'manual_enlace_regenerado':
         return {
           ...base,
-          titulo: e.stage === 'resend' ? 'Se reenvió el enlace' : 'Se envió el enlace',
+          titulo: e.stage === 'resend' || e.stage === 'manual_enlace_regenerado' ? 'Se reenvió el enlace' : 'Se envió el enlace',
           // El correo es de la persona, no del sistema: decirlo permite detectar el típico
           // «no le llega» que en realidad es una dirección mal escrita.
           detalle: v.email?.trim() ? `A ${v.email.trim()}` : null,
@@ -179,6 +209,7 @@ export function hitosDeIdentidad(
         };
 
       case 'send_error':
+      case 'manual_correo_fallido':
         return {
           ...base,
           titulo: 'No se pudo enviar el enlace',
@@ -210,9 +241,21 @@ export function hitosDeIdentidad(
           tono: 'neutro',
         };
 
+      case 'manual_captura_recibida':
+        return {
+          ...base,
+          titulo: `${nombre} envió sus fotos y su firma`,
+          detalle: envio ? `${capitalizar(transcurridoEntre(envio, e.occurredAt))} de recibir el enlace` : null,
+          tono: 'neutro',
+        };
+
+      case 'manual_aprobado':
+      case 'manual_rechazado':
       case 'webhook_applied':
       default: {
-        const aprobado = OUTCOMES_CORRECTOS.has(e.outcome) || e.outcome === 'aprobado';
+        const aprobado =
+          e.stage === 'manual_aprobado' ||
+          (e.stage !== 'manual_rechazado' && OUTCOMES_CORRECTOS.has(e.outcome));
         return {
           ...base,
           titulo: aprobado ? 'Identidad aprobada' : 'Identidad rechazada',
