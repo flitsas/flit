@@ -347,14 +347,18 @@ describe("acciones en un solo menú y bloque de envío en una fila (HU #14620)",
     expect(document.activeElement).toBe(boton);
   });
 
-  it("AC4: interruptor, tope y Guardar comparten una fila que se apila en pantallas chicas", async () => {
+  it("AC4: estado, tope (con Guardar al lado) y «Cómo funciona» van en celdas de una cuadrícula que se apila en pantallas chicas", async () => {
     simular();
     await abrir();
     const interruptor = screen.getByRole("switch", { name: "Enviar solos los derechos de petición" });
-    const fila = interruptor.closest("div.flex-col")!;
-    expect(fila.className).toContain("md:flex-row");
-    expect(fila.contains(screen.getByLabelText(/Tope diario/))).toBe(true);
-    expect(fila.contains(screen.getByRole("button", { name: "Guardar" }))).toBe(true);
+    const cuadricula = interruptor.closest("div.grid")!;
+    expect(cuadricula.className).toContain("grid-cols-1");
+    expect(cuadricula.className).toContain("md:grid-cols-2");
+    expect(cuadricula.className).toContain("xl:grid-cols-3");
+    const celdaTope = screen.getByLabelText(/Tope diario/).closest("div.rounded-xl")!;
+    expect(celdaTope.contains(screen.getByRole("button", { name: "Guardar" }))).toBe(true);
+    expect(celdaTope.contains(interruptor)).toBe(false);
+    expect(within(cuadricula as HTMLElement).getByText("Cómo funciona")).toBeTruthy();
   });
 
   it("los dos bloques van en un panel con fondo (receta de la bandeja) y el estado se ve en el encabezado", async () => {
@@ -364,7 +368,7 @@ describe("acciones en un solo menú y bloque de envío en una fila (HU #14620)",
     expect(panel.className).toContain("bg-card");
     expect(panel.className).toContain("border-border");
     expect(within(panel).getAllByText("Apagado")).toHaveLength(1); // el estado se dice una sola vez (distintivo del encabezado)
-    expect(panel.className).toContain("max-w-6xl");
+    expect(panel.className).not.toMatch(/max-w-/); // ocupa todo el ancho, igual que la tarjeta del título y el selector
     expect(screen.getByRole("region", { name: "Tipologías que se envían solas" }).className).toContain("bg-card");
   });
 });
