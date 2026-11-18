@@ -61,7 +61,7 @@ public sealed class ResolutorRepresentante(ComparendosDb db)
         }
         else
         {
-            if (c.TipoDocumentoInfractor is { } tipo && tipo != TipoDocumento.NIT)
+            if (c.TipoDocumentoInfractor is not null && !Flit.Comparendos.Domain.Dp.PropietarioJuridico.Es(c.TipoDocumentoInfractor, c.NumeroDocumentoInfractor, c.NitConsultado))
                 return (false, null);
             var documento = new string(c.NumeroDocumentoInfractor.Where(char.IsAsciiDigit).ToArray()).TrimStart('0');
             esLaEmpresa = Coincide(empresaNit, documento);
