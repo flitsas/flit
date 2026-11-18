@@ -17,6 +17,16 @@ public static class CodigosTipologiaDp
 
     /// <summary>Revocatoria por la sentencia C-321 de 2022 (C35 y D02 no se detectan por cámara).</summary>
     public const string RevocatoriaC321 = "DRP";
+
+    /// <summary>Las únicas tipologías que el envío automático sabe decidir: cualquier otra solo la dispara una persona.</summary>
+    public static IReadOnlySet<string> Decidibles { get; } = new HashSet<string>(StringComparer.Ordinal)
+    {
+        Caducidad,
+        MalaNotificacion,
+        Prescripcion,
+        PersonaJuridica,
+        RevocatoriaC321,
+    };
 }
 
 /// <summary>De qué fecha del comparendo corre un plazo.</summary>

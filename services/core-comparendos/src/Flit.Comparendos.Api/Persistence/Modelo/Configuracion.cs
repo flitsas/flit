@@ -26,6 +26,15 @@ public sealed class ConfiguracionEmpresa : Auditada
     public TipoIntegracionConductor TipoIntegracionConductor { get; set; } = TipoIntegracionConductor.Manual;
     public ConjuntoPlantillas ConjuntoPlantillas { get; set; } = ConjuntoPlantillas.Flit;
     public bool RequiereRepresentanteLegal { get; set; } = true;
+
+    /// <summary>
+    /// HU #14614 (Epic #14606): el sistema envía solo los derechos de petición elegibles, una vez por día hábil. Nace apagado y
+    /// solo lo enciende el SuperAdmin; además cada tipología debe estar marcada <see cref="TipologiaEmpresa.Automatizable"/>.
+    /// </summary>
+    public bool DpAutomaticoActivo { get; set; }
+
+    /// <summary>HU #14614: cuántos derechos de petición como máximo envía el trabajo por día y empresa; el resto queda para el siguiente día hábil.</summary>
+    public short DpAutomaticoTopeDiario { get; set; } = 50;
     public List<string> DestinatariosReportes { get; set; } = [];
     public List<string> CorreosAlertaOperativa { get; set; } = [];
 }
@@ -152,6 +161,12 @@ public sealed class TipologiaEmpresa : Auditada
     public Guid TenantId { get; set; }
     public Guid TipologiaId { get; set; }
     public bool Habilitada { get; set; }
+
+    /// <summary>
+    /// HU #14614: el envío automático puede usar esta tipología en esta empresa. Nace apagado y solo se enciende si la versión
+    /// publicada de su plantilla tiene revisión jurídica (<see cref="PlantillaVersion.RevisadaJuridicamenteEn"/>).
+    /// </summary>
+    public bool Automatizable { get; set; }
 }
 
 /// <summary>Plantilla de documento o de correo de un conjunto (§3.25).</summary>
@@ -179,6 +194,14 @@ public sealed class PlantillaVersion : Auditada
     public string? NotaCambio { get; set; }
     public DateTimeOffset? PublicadaEn { get; set; }
     public Guid? PublicadaPor { get; set; }
+
+    /// <summary>
+    /// HU #14614 / #14612: cuándo un abogado aprobó este texto. Se registra sobre una versión ya publicada (el cuerpo sigue
+    /// inmutable). Sin aprobación, la tipología no puede enviarse en automático.
+    /// </summary>
+    public DateTimeOffset? RevisadaJuridicamenteEn { get; set; }
+    public Guid? RevisadaJuridicamentePor { get; set; }
+    public string? NotaRevisionJuridica { get; set; }
 }
 
 /// <summary>Trabajo programado (§3.10): expresión cron en hora de Colombia.</summary>
