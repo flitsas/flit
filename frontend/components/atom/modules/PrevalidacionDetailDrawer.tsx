@@ -64,6 +64,8 @@ export interface PrevalidacionDetailDrawerProps {
   onStatusChanged?: () => void;
   /** Título del panel (prevalidación vs validación del módulo transversal). */
   title?: string;
+  /** Compañía del registro: el enlace al trámite lleva `?t=` para el Super Admin. Ausente = sin `?t=`. */
+  tenantId?: string;
 }
 
 export function PrevalidacionDetailDrawer({
@@ -71,6 +73,7 @@ export function PrevalidacionDetailDrawer({
   onClose,
   onStatusChanged,
   title = 'Proceso de validación',
+  tenantId,
 }: PrevalidacionDetailDrawerProps) {
   const [detail, setDetail] = useState<BiometricValidation | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -238,7 +241,7 @@ export function PrevalidacionDetailDrawer({
                   linkedProcedures: detail.linkedProcedures,
                 });
                 return associated.length > 0 ? (
-                  <AssociatedProceduresList procedures={associated} collapsible />
+                  <AssociatedProceduresList procedures={associated} collapsible tenantId={tenantId} />
                 ) : null;
               })()}
 

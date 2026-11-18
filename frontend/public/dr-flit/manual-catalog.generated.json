@@ -3417,7 +3417,8 @@
           ],
           "bullets": [
             "Aprobar: la identidad queda aprobada por 30 días y el estado cambia a «Aprobada manual».",
-            "Rechazar: eliges uno de los motivos de la lista. La persona recibe el motivo por correo junto con un enlace nuevo para repetir la captura."
+            "Rechazar: eliges uno de los motivos de la lista. La persona recibe el motivo por correo junto con un enlace nuevo para repetir la captura.",
+            "Queda registrado quién decidió y cuándo: el detalle del caso muestra, por ejemplo, «Aprobada por Ana Pérez el 18/11/2026 10:30» o «Rechazada por …»."
           ],
           "callouts": []
         },
