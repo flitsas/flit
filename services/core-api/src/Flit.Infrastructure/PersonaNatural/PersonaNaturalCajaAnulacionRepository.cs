@@ -6,7 +6,7 @@ namespace Flit.Infrastructure.PersonaNatural;
 
 /// <summary>
 /// Ventana de anulación de la caja por organismo sobre <c>admin.persona_natural_caja_settings</c> y su historial
-/// (<c>admin.persona_natural_caja_window_history</c>, DDL 200). SQL parametrizado: las tablas no son entidades EF. Sin caché.
+/// (<c>admin.persona_natural_caja_window_history</c>, DDL 201). SQL parametrizado: las tablas no son entidades EF. Sin caché.
 /// </summary>
 internal sealed class PersonaNaturalCajaAnulacionRepository(FlitDbContext db) : IPersonaNaturalCajaAnulacionRepository
 {
@@ -53,7 +53,7 @@ internal sealed class PersonaNaturalCajaAnulacionRepository(FlitDbContext db) : 
     public async Task<IReadOnlyList<CambioVentanaAnulacionView>> HistorialAsync(Guid organismoId, int max, CancellationToken ct = default)
     {
         var filas = await db.Database.SqlQuery<CambioFila>($"""
-            SELECT h.minutes_before AS "MinutosAntes", h.minutes_after AS "MinutosDespues", u.display_name AS "ActorNombre", h.changed_at AS "CambiadoEn"
+            SELECT h.minutes_before AS minutos_antes, h.minutes_after AS minutos_despues, u.display_name AS actor_nombre, h.changed_at AS cambiado_en
               FROM admin.persona_natural_caja_window_history h
               LEFT JOIN identity.users u ON u.id = h.changed_by
              WHERE h.transit_office_id = {organismoId}
