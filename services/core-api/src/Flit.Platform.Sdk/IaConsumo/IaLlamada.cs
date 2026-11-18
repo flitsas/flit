@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Flit.Platform.Sdk.IaConsumo;
 
@@ -44,7 +45,7 @@ public sealed record IaLlamada
 }
 
 /// <summary>Utilidades del contrato: placa, recortes, hash.</summary>
-public static class IaConsumoTexto
+public static partial class IaConsumoTexto
 {
     /// <summary>Tope de <c>error_mensaje</c> (contrato regla 4).</summary>
     public const int MaxErrorMensaje = 500;
@@ -66,6 +67,19 @@ public static class IaConsumoTexto
         }
         return sb.Length == 0 ? null : sb.ToString();
     }
+
+    /// <summary>
+    /// Quita del mensaje de error lo que puede ser un dato personal (contrato regla 4, criterio común con FLITO): correos →
+    /// <c>[correo]</c> y secuencias de 6 o más dígitos (cédulas, NIT, teléfonos) → <c>[numero]</c>.
+    /// </summary>
+    public static string? SanearError(string? mensaje) =>
+        mensaje is null ? null : Digitos().Replace(Correo().Replace(mensaje, "[correo]"), "[numero]");
+
+    [GeneratedRegex(@"[\w.+-]+@[\w-]+(\.[\w-]+)+")]
+    private static partial Regex Correo();
+
+    [GeneratedRegex(@"\d[\d.\s-]{4,}\d")]
+    private static partial Regex Digitos();
 
     /// <summary>Recorta a <paramref name="max"/> caracteres sin partir un par sustituto.</summary>
     public static string? Recortar(string? texto, int max)

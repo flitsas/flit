@@ -110,7 +110,7 @@ public sealed class IaConsumoTests
         fila.Modulo.Should().Be("desconocido");
         fila.Proceso.Should().Be("desconocido");
         fila.TipoTarea.Should().Be(IaTiposTarea.Ocr);
-        fila.Origen.Should().Be(IaOrigenes.Sistema, "sin usuario autenticado");
+        fila.Origen.Should().Be(IaOrigenes.Job, "sin usuario en la petición (criterio común con FLITO)");
         fila.Aplicativo.Should().Be("flit");
         fila.Servicio.Should().Be("core-api");
         fila.Ambiente.Should().Be("local");
@@ -239,7 +239,9 @@ public sealed class IaConsumoTests
     [InlineData(401, IaResultados.ErrorProveedor)]
     [InlineData(400, IaResultados.Rechazado)]
     [InlineData(413, IaResultados.Rechazado)]
-    [InlineData(408, IaResultados.Timeout)]
+    [InlineData(408, IaResultados.ErrorProveedor)]
+    [InlineData(404, IaResultados.ErrorProveedor)]
+    [InlineData(415, IaResultados.Rechazado)]
     [InlineData(200, IaResultados.Exito)]
     public void ClasificaElStatusHttpSegunElCatalogo(int status, string esperado) =>
         IaResultados.DesdeHttp(status).Should().Be(esperado);
@@ -364,6 +366,14 @@ public sealed class IaConsumoTests
         await escritor.StopAsync(TestContext.Current.CancellationToken);
 
         almacen.Guardados.Should().HaveCount(3);
+    }
+
+    [Fact]
+    public void ElMensajeDeErrorSeSaneaSinCedulasNiCorreos()
+    {
+        IaConsumoTexto.SanearError("documento 1.020.304.050 de ana.p@flit.test rechazado; http 429")
+            .Should().Be("documento [numero] de [correo] rechazado; http 429");
+        IaConsumoTexto.SanearError(null).Should().BeNull();
     }
 
     [Fact]

@@ -162,6 +162,7 @@ internal sealed class AnthropicMessagesClient(
                 // El tope de salida cortó la respuesta: el JSON viene a media llave y no hay objeto
                 // que rescatar. Se avisa aparte porque la salida es subir max_tokens, no reintentar.
                 var cortada = string.Equals(stopReason, "max_tokens", StringComparison.Ordinal);
+                var invalida = cortada || string.Equals(stopReason, "refusal", StringComparison.Ordinal);
                 if (cortada)
                     AnthropicLog.Truncated(logger);
 
@@ -171,8 +172,8 @@ internal sealed class AnthropicMessagesClient(
                     return new AnthropicVisionResult(false, null, 503, MsgManual);
                 }
 
-                medicion.Registrar(inicio, intento, cortada ? IaResultados.RespuestaInvalida : IaResultados.Exito, status, meta,
-                    cortada ? "max_tokens" : null, null, text);
+                medicion.Registrar(inicio, intento, invalida ? IaResultados.RespuestaInvalida : IaResultados.Exito, status, meta,
+                    invalida ? stopReason : null, null, text);
                 return new AnthropicVisionResult(true, text, 200, null);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
@@ -293,6 +294,7 @@ internal sealed class AnthropicMessagesClient(
                 var cortada = string.Equals(body?.StopReason, "max_tokens", StringComparison.Ordinal);
                 if (cortada)
                     AnthropicLog.Truncated(logger);
+                var invalida = cortada || string.Equals(body?.StopReason, "refusal", StringComparison.Ordinal);
 
                 var meta = new StreamMeta
                 {
@@ -311,8 +313,8 @@ internal sealed class AnthropicMessagesClient(
                     return AnthropicChatResult.Failed;
                 }
 
-                medicion.Registrar(inicio, intento, cortada ? IaResultados.RespuestaInvalida : IaResultados.Exito, status, meta,
-                    cortada ? "max_tokens" : null, null, text);
+                medicion.Registrar(inicio, intento, invalida ? IaResultados.RespuestaInvalida : IaResultados.Exito, status, meta,
+                    invalida ? body?.StopReason : null, null, text);
                 var usage = body!.Usage is { } u
                     ? new AnthropicUsage(u.InputTokens, u.OutputTokens, u.CacheReadInputTokens, u.CacheCreationInputTokens)
                     : null;

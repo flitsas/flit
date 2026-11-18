@@ -30,12 +30,15 @@ public static class IaResultados
     public const string Cancelado = "cancelado";
     public const string NoConfigurado = "no_configurado";
 
-    /// <summary>Clasifica una respuesta HTTP completa que NO fue 2xx.</summary>
+    /// <summary>
+    /// Clasifica una respuesta HTTP completa. Criterio común con FLITO: 429 → rate_limit; 400/413/415/422 → rechazado;
+    /// cualquier otro no-2xx (401, 404, 408, 529…) → error_proveedor. Un 200 con <c>stop_reason</c> max_tokens o refusal lo
+    /// clasifica el cliente como <see cref="RespuestaInvalida"/>.
+    /// </summary>
     public static string DesdeHttp(int status) => status switch
     {
         >= 200 and < 300 => Exito,
         429 => RateLimit,
-        408 => Timeout,
         400 or 413 or 415 or 422 => Rechazado,
         _ => ErrorProveedor,
     };

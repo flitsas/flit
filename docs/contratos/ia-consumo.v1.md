@@ -21,6 +21,15 @@ consolidarlas después sin traducir. Cambiar este contrato = nueva versión (v2)
    ámbito ambiental (AsyncLocal en .NET / AsyncLocalStorage en Node); el cliente HTTP lo lee. Usuario y
    tenant se toman de la petición. Sin contexto ⇒ `modulo='desconocido'`, `proceso='desconocido'` (nunca falla).
 8. `placa` en MAYÚSCULAS, sin espacios ni guiones. Fechas en UTC.
+
+### Criterios comunes acordados al implementar (FLIT y FLITO)
+
+- `resultado`: HTTP 429 → `rate_limit`; 400/413/415/422 → `rechazado`; cualquier otro no-2xx (401, 404, 408, 529…) →
+  `error_proveedor`; 200 con `stop_reason` `max_tokens` o `refusal` → `respuesta_invalida`; sin llave o proveedor sin
+  configurar → fila con `no_configurado` (`http_status` 0).
+- `origen` por defecto: `usuario` si la petición trae usuario; si no, `job`.
+- Sin contexto, `tipo_tarea` lo pone el cliente según el uso (visión → `ocr`, chat → `chat`); no existe «desconocido» en ese catálogo.
+- `error_mensaje` se sanea (sin cédulas, NIT ni correos) antes de recortarlo a 500.
 9. Costo: `costo_usd_estimado = (tokens_entrada*precio_entrada + tokens_salida*precio_salida +
    tokens_cache_lectura*precio_cache_lectura + tokens_cache_escritura*precio_cache_escritura) / 1e6`
    con la tarifa vigente (`vigente_desde <= fecha_inicio`, la más reciente) de (proveedor, modelo_respondido
@@ -150,6 +159,7 @@ Retención del detalle: tarea diaria `DELETE FROM ia_consumo_detalle WHERE fecha
 | vehiculos | ocr_vehiculo | ocr |
 | vehiculos | ocr_declaracion_impuesto | ocr |
 | drive | ocr_pagina_drive | ocr |
+| bolsas_documentos | ocr_fecha_expedicion | ocr |
 | runt | ocr_cedula | ocr |
 | runt | captcha | captcha |
 | sistema | salud_modelos | salud (origen sistema) |

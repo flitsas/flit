@@ -176,7 +176,8 @@ internal sealed class IaConsumoRegistrador(
             TenantId = ambito.TenantId ?? tenant,
             UsuarioId = ambito.UsuarioId ?? usuarioId,
             UsuarioLogin = ambito.UsuarioLogin ?? login,
-            Origen = ambito.Origen ?? (autenticado ? IaOrigenes.Usuario : IaOrigenes.Sistema),
+            // Criterio común con FLITO: usuario si la petición trae uno; si no, job (procesadores y colas).
+            Origen = ambito.Origen ?? (autenticado ? IaOrigenes.Usuario : IaOrigenes.Job),
             Modulo = ambito.Modulo ?? IaValores.Desconocido,
             Proceso = ambito.Proceso ?? IaValores.Desconocido,
             TipoTarea = ambito.TipoTarea ?? llamada.TipoTareaPorDefecto,
@@ -199,7 +200,7 @@ internal sealed class IaConsumoRegistrador(
             Resultado = llamada.Resultado,
             StopReason = llamada.StopReason,
             ErrorCodigo = llamada.ErrorCodigo,
-            ErrorMensaje = IaConsumoTexto.Recortar(llamada.ErrorMensaje, IaConsumoTexto.MaxErrorMensaje),
+            ErrorMensaje = IaConsumoTexto.Recortar(IaConsumoTexto.SanearError(llamada.ErrorMensaje), IaConsumoTexto.MaxErrorMensaje),
             TokensEntrada = Math.Max(0, llamada.TokensEntrada),
             TokensSalida = Math.Max(0, llamada.TokensSalida),
             TokensCacheLectura = Math.Max(0, llamada.TokensCacheLectura),
