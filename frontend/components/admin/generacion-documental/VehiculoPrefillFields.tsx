@@ -51,8 +51,8 @@ export interface PropietarioConsultaInput {
   numeroDoc: string;
 }
 
-/** Los mismos que ofrece el paso «consulta» del wizard de tramites. */
-export const DOC_TYPES_PROPIETARIO = ["CC", "CE", "NIT", "PAS"] as const;
+/** Los mismos que ofrece el paso «consulta» del wizard de tramites. HU #14642 — TI y PPT añadidos. */
+export const DOC_TYPES_PROPIETARIO = ["CC", "CE", "TI", "NIT", "PAS", "PPT"] as const;
 
 export interface VehiculoPrefillFieldsProps {
   valores: TransferVehiculoInput;

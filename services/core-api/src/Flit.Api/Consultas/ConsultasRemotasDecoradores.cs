@@ -31,6 +31,9 @@ internal sealed class ConsultasRemotasCliente(
         "verifik_simit" or "flit_fines" or "kyverum_fines" => Categoria.Multas,
         "verifik_rnmc" => Categoria.Rnmc,
         "verifik_rues" => Categoria.Rues,
+        // HU #14642: tenant_manual_conductor es un proveedor LOCAL (interceptado en core-api por el
+        // decorador TenantRuntPersonOverrideChainResolverDecorator). No se envía a core-consultas.
+        "tenant_manual_conductor" => Categoria.Desconocida,
         _ => Categoria.Desconocida,
     };
 
