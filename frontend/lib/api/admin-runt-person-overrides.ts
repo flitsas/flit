@@ -1,15 +1,11 @@
 // Cliente tipado — SuperAdmin → Overrides de persona RUNT por tenant (HU #14642).
 // Contrato: GET/POST/PATCH /api/v1/superadmin/companies/{tenantId}/runt-person-overrides
 // Requiere SuperAdminPolicy (token con rol superadmin).
-import { superadminClient as _client } from "./superadmin-client";
-
-// Re-usar el helper `request` interno del módulo no es público; modelamos los endpoints usando
-// fetch directo tal como los demás métodos de superadmin-client que se añaden fuera del objeto.
 import { apiBaseForPageRoot, sessionAwareBase } from "@/lib/api/base-url";
 import { getToken } from "./client";
 
-/** Tipos de documento que acepta el override (backend: DocumentType enum). */
-export type OverrideDocumentType = "CC" | "CE" | "TI" | "PAS" | "PPT" | "NIT";
+/** Tipos de documento que acepta el override (DDL HU #14642). */
+export type OverrideDocumentType = "CC" | "CE" | "TI" | "PAS" | "PPT";
 
 export interface RuntPersonOverride {
   id: string;
