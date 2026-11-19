@@ -462,6 +462,8 @@ services:
       Consultas__Remoto__Address: ${CONSULTAS_REMOTO_ADDRESS:-http://core-consultas:8084}
       Cotizaciones__CoreApiAddress: ${PERSONANATURAL_CORE_API_ADDRESS:-http://core-api:${CORE_API_GRPC_PORT:-8082}}
       Cotizaciones__NotificacionesAddress: ${NOTIFICACIONES_REMOTO_ADDRESS:-http://core-notificaciones:8085}
+      # Banner y logo de los correos FLIT (Correos 2.0): misma base pública que core-api. Sin ella apuntan a localhost.
+      Notifications__EmailAssets__BaseUrl: ${CORS_ORIGIN:-}/email-assets
       # Detrás del gateway: la IP real del ciudadano llega en X-Forwarded-For (límite por IP).
       Abuso__ConfiarEnXForwardedFor: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
