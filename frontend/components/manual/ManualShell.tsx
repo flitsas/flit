@@ -112,7 +112,7 @@ export function ManualShell({
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
-    <div className="manual-root min-h-screen" style={{ background: "var(--manual-bg)" }}>
+    <div className="manual-root min-h-dvh" style={{ background: "var(--manual-bg)" }}>
       {/* Mobile overlay: velo del Modal */}
       {mobileOpen && (
         <button
@@ -123,7 +123,7 @@ export function ManualShell({
         />
       )}
 
-      <div className="mx-auto flex min-h-screen max-w-[1440px] items-start gap-6 lg:px-8 lg:py-6">
+      <div className="mx-auto flex min-h-dvh max-w-[1440px] items-start gap-6 lg:px-8 lg:py-6">
         {/* Lista de guías: tarjeta fija al viewport en escritorio; cajón con radio y sombra del Modal en celular. */}
         <aside
           className={`fixed inset-y-0 left-0 z-50 flex h-dvh max-h-dvh w-[300px] max-w-[calc(100vw-2rem)] shrink-0 flex-col overflow-clip rounded-r-[var(--di-radius-modal)] border-r shadow-[var(--shadow-modal)] transition-transform lg:sticky lg:top-6 lg:z-auto lg:h-[calc(100dvh-3rem)] lg:max-h-[calc(100dvh-3rem)] lg:translate-x-0 lg:rounded-[var(--manual-radius-card)] lg:border lg:shadow-[var(--manual-shadow)] ${

@@ -108,7 +108,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
     // stepper cuando excede el alto disponible; ambos contenedores quedan a la par abajo.
     <div className="grid lg:grid-cols-[280px_1fr] gap-6 lg:items-stretch">
       {/* Stepper Sidebar */}
-      <div className="glass rounded-2xl p-4 flex flex-col min-h-0 lg:max-h-[calc(100vh-120px)]">
+      <div className="glass rounded-2xl p-4 flex flex-col min-h-0 lg:max-h-[calc(100dvh-120px)]">
         <div className="flex items-center justify-between mb-4 shrink-0">
           <h3 className="font-bold text-foreground text-sm">Asistente Transaccional</h3>
           <button onClick={onExit} className="p-1 rounded-lg hover:bg-secondary"><Icono nombre="cerrar" className="h-4 w-4 text-muted-foreground" /></button>

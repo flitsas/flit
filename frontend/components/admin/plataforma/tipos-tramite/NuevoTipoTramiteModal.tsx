@@ -4,6 +4,7 @@ import { buttonClass } from '@flit/ui/Button';
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from '@/components/admin/dialogo-propio';
 import { useState } from 'react';
 import { Icono } from "@flit/ui/Icono";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { FAMILIA_OPCIONES } from '@/lib/api/types/familia-labels';
 import type {
@@ -33,6 +34,7 @@ export function NuevoTipoTramiteModal({
   onCerrar: () => void;
 }) {
   const [code, setCode] = useState('');
+  useBloqueoScroll(true);
   const [name, setName] = useState('');
   const [family, setFamily] = useState<ProcedureFamily>('OTROS');
   const [description, setDescription] = useState('');

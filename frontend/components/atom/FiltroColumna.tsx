@@ -326,8 +326,9 @@ function BotonFiltro({
   const nombre = activo
     ? `Filtrar por ${columna.label} (${columna.label}: filtro activo)`
     : `Filtrar por ${columna.label}`;
-  const ancho =
-    typeof window === "undefined" ? PANEL_ANCHO : Math.min(PANEL_ANCHO, window.innerWidth - 16);
+  // El mismo tope que usa el posicionado (`innerWidth - 16`), pero en CSS: leer `window` durante el
+  // render da un ancho distinto en el servidor y en el cliente (riesgo de hidratación).
+  const ancho = `min(${PANEL_ANCHO}px, calc(100vw - 16px))`;
 
   return (
     <>
@@ -365,7 +366,7 @@ function BotonFiltro({
                 width: ancho,
                 visibility: pos ? "visible" : "hidden",
               }}
-              className={`z-[60] max-h-[calc(100vh-1rem)] overflow-y-auto p-3 ${PANEL_TEXTO} ${POPOVER_SURFACE_CLS}`}
+              className={`z-[60] max-h-[calc(100dvh-1rem)] overflow-y-auto overscroll-contain p-3 ${PANEL_TEXTO} ${POPOVER_SURFACE_CLS}`}
             >
               <EditorColumna
                 columna={columna}

@@ -4,6 +4,7 @@ import { buttonClass } from "@flit/ui/Button";
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
@@ -720,6 +721,7 @@ function OtInviteUserDialog({
   /** Gestor OT restringido: el invitado hereda su alcance de clientes (solo nota informativa). */
   inheritsRestrictedScope?: boolean;
 }) {
+  useBloqueoScroll(true);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -804,7 +806,7 @@ function OtInviteUserDialog({
         <form
           id="ot-invite-form"
           onSubmit={handleSubmit}
-          className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-1"
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pb-1"
         >
           <OtField label="Nombre completo" htmlFor="ot-invite-name">
             <input

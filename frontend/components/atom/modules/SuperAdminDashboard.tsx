@@ -424,7 +424,7 @@ export function SuperAdminDashboard({ onNewTramite: _onNewTramite }: { onNewTram
   const tiempoEcosistema = organismos.data?.tiempoPromedioDias ?? null;
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 max-sm:px-4 flex flex-col gap-4 text-foreground" data-testid="superadmin-dashboard">
+    <div className="app-bg px-6 pt-6 pb-10 max-sm:px-4 flex flex-col gap-4 text-foreground" data-testid="superadmin-dashboard">
       {/* Franja 1 — carrusel y, a la derecha, filtros + 3 KPIs. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-stretch">
         <CarruselInicio bienvenida={bienvenida} banners={banners} aria-label="Novedades de la plataforma" />

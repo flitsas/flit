@@ -15,6 +15,13 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
   TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
@@ -301,7 +308,7 @@ export function IctTrazabilidad() {
         : "ready";
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
+    <div className="app-bg px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Trazabilidad ICT"
         subtitle="Qué pasó con cada trámite que entró por la integración con terceros. Busca por número, placa o VIN y abre su recorrido completo."
@@ -497,8 +504,8 @@ export function IctTrazabilidad() {
             {/* Tabla en el patrón del resto de la consola (companies / trámites): cabecera en
                 pastilla #DFE5ED y cada fila como tarjeta blanca separada. */}
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] text-xs" style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
-                <thead>
+              <table className={`w-full min-w-[1040px] text-xs ${TABLA_MOVIL_TABLE_CLS}`} style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
+                <thead className={TABLA_MOVIL_THEAD_CLS}>
                   <tr>
                     <th
                       scope="col"
@@ -526,7 +533,7 @@ export function IctTrazabilidad() {
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={TABLA_MOVIL_TBODY_CLS}>
                   {items.map((t) => (
                     <FilaTramite
                       key={t.id}
@@ -602,7 +609,7 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer bg-card text-flit-primary ${TABLA_ROW_HOVER_CLS} ${
+        className={`cursor-pointer bg-card text-flit-primary ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS} ${
           abierta ? "border-flit-brand/40" : "border-border"
         }`}
         onClick={onToggle}
@@ -617,31 +624,36 @@ function FilaTramite({
           }
         }}
       >
-        <td className={`${tdCls} rounded-l-xl border-l px-3`}>
+        <td className={`${tdCls} rounded-l-xl border-l px-3 max-lg:hidden`}>
           <Icono nombre="derecha" className={`h-3.5 w-3.5 text-flit-brand transition-transform ${abierta ? "rotate-90" : ""}`} />
         </td>
-        <td className={tdCls}>
+        <td data-label="N.º" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>
           <span className="font-mono font-semibold text-flit-brand">{tramite.numero}</span>
         </td>
-        <td className={tdCls}>
-          <span className="font-mono font-semibold tracking-wide">{tramite.placa}</span>
-          {tramite.vin && (
-            <span className="block font-mono text-[10px] opacity-55">{tramite.vin}</span>
-          )}
+        <td data-label="Placa" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>
+          {/* Un solo hijo: en la tarjeta la celda es flex y la placa y el VIN van juntos a la derecha. */}
+          <span>
+            <span className="font-mono font-semibold tracking-wide">{tramite.placa}</span>
+            {tramite.vin && (
+              <span className="block font-mono text-[10px] opacity-55">{tramite.vin}</span>
+            )}
+          </span>
         </td>
-        <td className={tdCls}>
-          {tramite.tipoTramite ?? "—"}
-          <span className="block text-[10px] opacity-55">{tramite.operacion ?? "—"}</span>
+        <td data-label="Trámite" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>
+          <span>
+            {tramite.tipoTramite ?? "—"}
+            <span className="block text-[10px] opacity-55">{tramite.operacion ?? "—"}</span>
+          </span>
         </td>
-        <td className={tdCls}>{tramite.compania ?? "—"}</td>
-        <td className={tdCls}>{tramite.radicador || "—"}</td>
-        <td className={tdCls}>
+        <td data-label="Compañía" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>{tramite.compania ?? "—"}</td>
+        <td data-label="Radicador" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>{tramite.radicador || "—"}</td>
+        <td data-label="Estado" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>
           <span {...etiquetaKit(estilo ? { c: estilo.border, ct: estilo.color } : "neutral")}>
             <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             {estadoIctLabel(tramite.estado)}
           </span>
         </td>
-        <td className={tdCls}>
+        <td data-label="Señales" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>
           {señales.length === 0 ? (
             <span className="opacity-45">—</span>
           ) : (
@@ -654,7 +666,7 @@ function FilaTramite({
             </span>
           )}
         </td>
-        <td className={`${tdCls} rounded-r-xl border-r`}>
+        <td data-label="Esperando" className={`${tdCls} rounded-r-xl border-r ${TABLA_MOVIL_CELL_CLS}`}>
           <span
             className={`font-mono tabular-nums ${alta ? "font-semibold text-[var(--badge-pending-fg)]" : "opacity-70"}`}
           >
@@ -663,8 +675,8 @@ function FilaTramite({
         </td>
       </tr>
       {abierta && (
-        <tr>
-          <td colSpan={COLUMNAS.length + 2} className="px-0 pb-2 pt-0">
+        <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
+          <td colSpan={COLUMNAS.length + 2} className={`px-0 pb-2 pt-0 ${TABLA_MOVIL_FILA_ANCHA_CLS}`}>
             <DetalleTramiteIct tramite={tramite} esAdmin={esAdmin} />
           </td>
         </tr>

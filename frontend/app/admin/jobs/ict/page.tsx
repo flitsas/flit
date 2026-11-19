@@ -13,7 +13,7 @@ export default function AdminIctJobSettingsPage() {
 
   return (
     <ToastProvider>
-      <div className="flex min-h-screen flex-col gap-4 px-4 pt-6 pb-24 md:px-6">
+      <div className="flex flex-col gap-4 px-4 pt-6 pb-24 md:px-6">
         <button
           type="button"
           onClick={() => router.push("/admin/jobs")}

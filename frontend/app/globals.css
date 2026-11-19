@@ -76,3 +76,17 @@
   --rdp-accent-background-color: var(--kit-hover);
   color: #fff;
 }
+
+/*
+ * Responsive iOS (S2) — red de seguridad contra el zoom de WebKit al enfocar un campo: por debajo de 640px ningún
+ * input, select ni textarea de texto queda bajo 16px, aunque su clase diga `text-xs`/`text-sm`. Va FUERA de `@layer`
+ * a propósito, para ganarle a las utilidades de Tailwind (que viven en capa). Desde 640 manda la clase de cada campo.
+ */
+@media (max-width: 639.98px) {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="file"]):not([type="color"]):not([type="hidden"]),
+  select,
+  textarea,
+  [contenteditable="true"] {
+    font-size: 16px;
+  }
+}

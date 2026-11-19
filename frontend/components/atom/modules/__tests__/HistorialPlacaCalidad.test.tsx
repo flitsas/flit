@@ -110,7 +110,7 @@ describe("HU #12197 — AC1: color por token, no por literal", () => {
     expect(CODIGO).toMatch(/<ModuleTitle/);
     expect(CODIGO).not.toMatch(/<h1/);
     // Cáscara canónica de módulo (idéntica a Auditoría / LOG QX / Reportes).
-    expect(CODIGO).toMatch(/app-bg[^"]*min-h-screen[^"]*px-6 pt-6 pb-10/);
+    expect(CODIGO).toMatch(/app-bg[^"]*px-6 pt-6 pb-10/);
   });
 });
 
