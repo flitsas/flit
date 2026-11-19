@@ -61,24 +61,23 @@ internal sealed partial class RedactorEnCola(
 
     /// <summary>
     /// true si una toma con <paramref name="intentos"/> (contando esa toma) ya pasó del tope: <c>intentos &gt; maxReintentos</c>.
-    /// Es el único borde de reintentos; lo usan <see cref="Decidir"/> y <see cref="EnCola"/>. Con MaxReintentos=2 hay tres tomas
-    /// (1, 2 y 3) y el fallo de la tercera ya no agenda.
+    /// Es el único borde de reintentos y lo usa <see cref="Decidir"/>: con MaxReintentos=2 hay tres tomas (1, 2 y 3) y el fallo
+    /// de la tercera deja la fecha de toma en null, así que la fila sale de <see cref="EnCola"/>.
     /// </summary>
     public static bool AgotoReintentos(int intentos, int maxReintentos) => intentos > maxReintentos;
 
     /// <summary>
-    /// HU-2 (<c>redaccion_en_cola</c>): la fila espera una redacción del modelo. Función pura de la fila ya leída: redacción
-    /// encendida (<see cref="OpcionesRedaccion.Habilitado"/>; si no, ningún trabajador toma la cola), <c>PENDIENTE</c>, con fecha
-    /// de toma y sin agotar reintentos según <see cref="AgotoReintentos"/>, es decir <c>intentos &lt;= MaxReintentos</c>.
-    /// No mira el lease: una fila tomada sigue en cola.
+    /// HU-2 (<c>redaccion_en_cola</c>): la fila espera una redacción del modelo. Función pura de la fila ya leída, con el
+    /// predicado de la toma (<see cref="ColaRedaccion"/>: <c>PENDIENTE</c> y <c>redaccion_disponible_desde</c> no nula) más la
+    /// redacción encendida (<see cref="OpcionesRedaccion.Habilitado"/>; si no, ningún trabajador toma la cola). Los reintentos
+    /// agotados ya quedan fuera porque <see cref="Decidir"/> deja la fecha en null. No mira el lease: una fila tomada sigue en cola.
     /// </summary>
-    public static bool EnCola(string estadoRedaccion, DateTimeOffset? disponibleDesde, int intentos, OpcionesRedaccion opciones)
+    public static bool EnCola(string estadoRedaccion, DateTimeOffset? disponibleDesde, OpcionesRedaccion opciones)
     {
         ArgumentNullException.ThrowIfNull(opciones);
         return opciones.Habilitado
             && estadoRedaccion == ColaRedaccion.Pendiente
-            && disponibleDesde is not null
-            && !AgotoReintentos(intentos, opciones.MaxReintentos);
+            && disponibleDesde is not null;
     }
 
     /// <summary>

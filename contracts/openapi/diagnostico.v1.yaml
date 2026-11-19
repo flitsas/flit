@@ -70,8 +70,9 @@ info:
     DEMASIADAS_SOLICITUDES, PLATAFORMA_NO_DISPONIBLE y PLATAFORMA_NO_CONFIGURADA.
 
     Versión 1.6.1 (redactor IA, registro diferido HU-2): cambio aditivo. DictamenVehiculo y DictamenVehiculoBackoffice traen
-    redaccion_en_cola (boolean, requerido): true solo si la redacción del modelo está encendida en el servicio, el dictamen
-    sigue PENDIENTE, tiene fecha de toma y no agotó los reintentos (intentos <= MaxReintentos, el mismo borde de la cola).
+    redaccion_en_cola (boolean, requerido): true solo si la redacción del modelo está encendida en el servicio
+    (Diagnostico:Redaccion:Habilitado), estado_redaccion es PENDIENTE y redaccion_disponible_desde no es nula, el mismo
+    predicado de la toma de la cola. Al agotar los reintentos la cola deja la fecha nula y el campo pasa a false.
     No se exponen intentos, lease ni fecha de toma.
   license:
     name: Propietario FLIT
@@ -6498,8 +6499,9 @@ components:
         redaccion_en_cola:
           type: boolean
           description: >
-            Versión 1.6.1. true si la redacción del modelo de este dictamen sigue en cola (redacción encendida, PENDIENTE, con fecha
-            de toma y sin agotar reintentos). false con COMPLETADA, con la redacción apagada o suspendida, o con los reintentos agotados.
+            Versión 1.6.1. true si la redacción está encendida, estado_redaccion es PENDIENTE y redaccion_disponible_desde no es
+            nula (el predicado de la toma). false con COMPLETADA, con la redacción apagada o suspendida, o con los reintentos
+            agotados (la cola deja la fecha nula).
 
     DictamenVehiculoBackoffice:
       type: object
@@ -6526,8 +6528,9 @@ components:
         redaccion_en_cola:
           type: boolean
           description: >
-            Versión 1.6.1. true si la redacción del modelo de este dictamen sigue en cola (redacción encendida, PENDIENTE, con fecha
-            de toma y sin agotar reintentos). false con COMPLETADA, con la redacción apagada o suspendida, o con los reintentos agotados.
+            Versión 1.6.1. true si la redacción está encendida, estado_redaccion es PENDIENTE y redaccion_disponible_desde no es
+            nula (el predicado de la toma). false con COMPLETADA, con la redacción apagada o suspendida, o con los reintentos
+            agotados (la cola deja la fecha nula).
 
     CuerpoOverrideDictamen:
       type: object

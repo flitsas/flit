@@ -124,7 +124,6 @@ internal sealed class LectorContenidoReporte(
                 Ajustado = d.AjusteMotivo != null,
                 d.OverrideEn,
                 d.RedaccionDisponibleDesde,
-                d.RedaccionIntentos,
             })
             .SingleOrDefaultAsync(ct)
             .ConfigureAwait(false);
@@ -133,7 +132,7 @@ internal sealed class LectorContenidoReporte(
             : new DictamenEnHuella(
                 fila.Veredicto, fila.EstadoRedaccion, ContenidoReporteVehiculo.TextoDeAlertamientos(fila.Alertamientos), fila.Version,
                 fila.Ajustado ? fila.OverrideEn : null,
-                Trabajos.RedactorEnCola.EnCola(fila.EstadoRedaccion, fila.RedaccionDisponibleDesde, fila.RedaccionIntentos, redaccion.Value));
+                Trabajos.RedactorEnCola.EnCola(fila.EstadoRedaccion, fila.RedaccionDisponibleDesde, redaccion.Value));
     }
 
     /// <summary>El contenido del lote para la compañía del token, con su visibilidad y la empresa del claim.</summary>

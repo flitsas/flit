@@ -277,7 +277,7 @@ public sealed class ContenidoReporteTests
     // sin tipo de error, causa ni fecha del intento.
     /// <summary>
     /// HU-3: el lector lleva al contenido el estado de cola del dictamen vigente con la misma regla de <c>redaccion_en_cola</c>
-    /// (<see cref="RedactorEnCola.EnCola"/>): encendida, PENDIENTE, con fecha y sin agotar reintentos. Apagada o agotada, false.
+    /// (<see cref="RedactorEnCola.EnCola"/>): encendida, PENDIENTE y con fecha. Apagada, o agotada (la cola deja la fecha en null), false.
     /// </summary>
     [Fact]
     public async Task HU3_el_contenido_lleva_el_estado_de_cola_del_dictamen()
@@ -307,13 +307,15 @@ public sealed class ContenidoReporteTests
         await using (var escritura = empresa.Db())
         {
             var guardada = await escritura.Set<DictamenVehiculo>().SingleAsync(d => d.Id == fila.Id, ct);
+            // Lo que deja Decidir al agotar reintentos (intentos 3 > MaxReintentos 2): la fecha de toma en null.
             guardada.RedaccionIntentos = 3;
+            guardada.RedaccionDisponibleDesde = null;
             await escritura.SaveChangesAsync(ct);
         }
 
         db.ChangeTracker.Clear();
         (await Lector(api, db, new UsuariosIdentidadDePrueba(), encendida).VehiculoAsync(Usuario(empresa.Id), lote.Id, vehiculo, ct))
-            .Dictamen!.EnCola.Should().BeFalse("intentos 3 > MaxReintentos 2: la cola ya no la toma");
+            .Dictamen!.EnCola.Should().BeFalse("reintentos agotados: sin fecha de toma la cola ya no la toma");
     }
 
     /// <summary>

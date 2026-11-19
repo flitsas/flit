@@ -46,6 +46,8 @@ public sealed class ConsultaDictamenTests
 
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
+    private static readonly OpcionesRedaccion Encendida = new() { Habilitado = true, MaxReintentos = 2 };
+
     [Fact]
     public void El_DTO_de_la_compania_no_tiene_override_y_el_de_backoffice_solo_suma_esos_tres()
     {
@@ -60,8 +62,8 @@ public sealed class ConsultaDictamenTests
         fila.AnalisisOverride = true;
         fila.UsuarioOverrideId = Guid.CreateVersion7();
         fila.OverrideEn = Ahora;
-        var compania = JsonSerializer.SerializeToNode(ConsultaDictamen.Compania(fila), Web)!.AsObject();
-        var backoffice = JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(fila), Web)!.AsObject();
+        var compania = JsonSerializer.SerializeToNode(ConsultaDictamen.Compania(fila, null, Encendida), Web)!.AsObject();
+        var backoffice = JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(fila, null, Encendida), Web)!.AsObject();
 
         compania.Select(p => p.Key).Should().BeEquivalentTo(
             ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en", "cambio_propietario", "redaccion_en_cola"]);
@@ -78,14 +80,14 @@ public sealed class ConsultaDictamenTests
     }
 
     /// <summary>
-    /// HU-2 (redactor IA, registro diferido): <c>redaccion_en_cola</c> es true solo con la redacción encendida, la fila PENDIENTE,
-    /// fecha de toma y <c>intentos &lt;= MaxReintentos</c> (el mismo borde de <see cref="RedactorEnCola.Decidir"/>, que deja de
-    /// agendar cuando <c>intentos &gt; maxReintentos</c>). Función pura de la fila ya leída: ni intentos, ni lease, ni la fecha salen.
+    /// HU-2 (redactor IA, registro diferido; CR-1): <c>redaccion_en_cola</c> es true solo con la redacción encendida, la fila
+    /// PENDIENTE y fecha de toma: el predicado de la toma de <see cref="ColaRedaccion"/>. Los intentos no cuentan (al agotarlos,
+    /// <see cref="RedactorEnCola.Decidir"/> deja la fecha en null). Función pura de la fila ya leída: ni intentos, ni lease, ni la fecha salen.
     /// </summary>
     [Theory]
     [InlineData(true, "PENDIENTE", true, 0, true)]
     [InlineData(true, "PENDIENTE", true, 2, true)]
-    [InlineData(true, "PENDIENTE", true, 3, false)]
+    [InlineData(true, "PENDIENTE", true, 3, true)]
     [InlineData(true, "PENDIENTE", false, 0, false)]
     [InlineData(true, "COMPLETADA", false, 1, false)]
     [InlineData(true, "COMPLETADA", true, 1, false)]
@@ -114,21 +116,21 @@ public sealed class ConsultaDictamenTests
         }
     }
 
-    /// <summary>HU-2: sin opciones de redacción (lectores que no la conocen) la fila nunca se declara en cola.</summary>
+    /// <summary>HU-2 (CR-2): el lector que no publica la cola (panel de deuda) usa la sobrecarga explícita y nunca declara cola.</summary>
     [Fact]
     public void HU2_sin_opciones_de_redaccion_no_esta_en_cola()
     {
         var fila = Fila();
         fila.RedaccionDisponibleDesde = Ahora;
-        ConsultaDictamen.Compania(fila).RedaccionEnCola.Should().BeFalse();
-        ConsultaDictamen.Backoffice(fila).RedaccionEnCola.Should().BeFalse();
+        ConsultaDictamen.CompaniaSinCola(fila).RedaccionEnCola.Should().BeFalse();
+        ConsultaDictamen.Compania(fila, null, Encendida).RedaccionEnCola.Should().BeTrue();
     }
 
     /// <summary>Punto 5 (2026-11-11): cada alerta lleva su rótulo y el nombre de su fuente; un código sin rótulo nunca sale crudo.</summary>
     [Fact]
     public void Cada_alerta_lleva_etiqueta_y_fuente_etiqueta_y_el_codigo_sin_rotulo_sale_generico()
     {
-        var compania = JsonSerializer.SerializeToNode(ConsultaDictamen.Compania(Fila()), Web)!.AsObject();
+        var compania = JsonSerializer.SerializeToNode(ConsultaDictamen.Compania(Fila(), null, Encendida), Web)!.AsObject();
         var alertas = compania["alertamientos"]!.AsArray();
 
         alertas[0]!["codigo"]!.GetValue<string>().Should().Be("SOAT_NO_VIGENTE");
@@ -138,7 +140,7 @@ public sealed class ConsultaDictamenTests
         alertas[1]!["etiqueta"]!.GetValue<string>().Should().Be("Novedad sin clasificar");
         alertas[1]!["fuente_etiqueta"]!.GetValue<string>().Should().Be("Novedad sin clasificar");
 
-        var backoffice = JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(Fila()), Web)!.AsObject();
+        var backoffice = JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(Fila(), null, Encendida), Web)!.AsObject();
         backoffice["alertamientos"]![0]!["etiqueta"]!.GetValue<string>().Should().Be("SOAT no vigente");
     }
 

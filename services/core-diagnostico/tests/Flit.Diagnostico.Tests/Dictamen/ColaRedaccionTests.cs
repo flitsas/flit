@@ -115,9 +115,9 @@ public sealed class ColaRedaccionTests
     }
 
     /// <summary>
-    /// HU-2 (SP-4): <see cref="RedactorEnCola.EnCola"/> y <see cref="RedactorEnCola.Decidir"/> comparten el borde. Con un fallo
-    /// técnico, Decidir agenda mientras <c>intentos &lt;= maxReintentos</c> y deja de agendar con <c>intentos &gt; maxReintentos</c>;
-    /// la fila que deja es «en cola» exactamente cuando quedó con fecha.
+    /// HU-2 (SP-4, CR-1): <see cref="RedactorEnCola.EnCola"/> es el predicado de la toma (PENDIENTE con fecha). Con un fallo
+    /// técnico, Decidir agenda mientras <c>intentos &lt;= maxReintentos</c> y con <c>intentos &gt; maxReintentos</c> deja la fecha
+    /// en null; la fila que deja es «en cola» exactamente cuando quedó con fecha.
     /// </summary>
     [Theory]
     [InlineData(0)]
@@ -130,7 +130,7 @@ public sealed class ColaRedaccionTests
         for (var intentos = 0; intentos <= maxReintentos + 2; intentos++)
         {
             var cierre = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos, fallo, maxReintentos, Ahora);
-            var enCola = RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, intentos, opciones);
+            var enCola = RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, opciones);
             enCola.Should().Be(cierre.DisponibleDesde is not null, $"intentos {intentos}, max {maxReintentos}");
             enCola.Should().Be(intentos <= maxReintentos, $"intentos {intentos}, max {maxReintentos}");
         }
@@ -146,7 +146,7 @@ public sealed class ColaRedaccionTests
         for (var toma = 1; toma <= 3; toma++)
         {
             var cierre = RedactorEnCola.Decidir("VIABLE", Alertas, toma, fallo, opciones.MaxReintentos, Ahora);
-            estados.Add(RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, toma, opciones));
+            estados.Add(RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, opciones));
             if (toma == 3)
             {
                 cierre.DisponibleDesde.Should().BeNull("el tercer fallo no se reencola");
@@ -171,7 +171,7 @@ public sealed class ColaRedaccionTests
         cierre.RedactadoPor.Should().Be("PLANTILLA");
         cierre.Alertamientos.Should().Be(Alertas);
         cierre.DisponibleDesde.Should().BeNull();
-        RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, 1, opciones).Should().BeFalse();
+        RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, opciones).Should().BeFalse();
     }
 
     /// <summary>

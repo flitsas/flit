@@ -22,5 +22,5 @@ internal static class DictamenEndpoints
 
     private static async Task<IResult> Obtener(
         Guid id, Guid vid, DiagnosticoDb db, UsuarioActual usuario, IOptions<Trabajos.OpcionesRedaccion> redaccion, CancellationToken ct) =>
-        Results.Ok(await ConsultaDictamen.LeerDeLaCompaniaAsync(db, usuario, id, vid, ct, redaccion.Value).ConfigureAwait(false));
+        Results.Ok(await ConsultaDictamen.LeerDeLaCompaniaAsync(db, usuario, id, vid, redaccion.Value, ct).ConfigureAwait(false));
 }
