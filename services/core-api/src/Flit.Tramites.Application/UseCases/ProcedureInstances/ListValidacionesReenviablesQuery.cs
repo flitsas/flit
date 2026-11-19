@@ -11,9 +11,13 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// que actúa el reenvío administrativo. <see cref="Ordinal"/> distingue copropietarios del mismo rol
 /// (ADR-0053). <see cref="EsFlujoManual"/>: la validación está en captura manual (HU #13286) y no se
 /// reenvía al proveedor automático — se lista para que la UI explique por qué no se puede marcar.
+/// <see cref="ValidationId"/> es <c>null</c> cuando la persona NUNCA tuvo una validación de identidad en
+/// este trámite (HU #14627): no hay fila sobre la cual reenviar, pero SÍ se puede enviar por primera vez
+/// (<see cref="AdminReenviarValidacionIdentidadHandler"/>), con <see cref="Status"/> en
+/// <see cref="ValidacionReenviableEstados.SinIniciar"/>.
 /// </summary>
 public sealed record ValidacionReenviableDto(
-    Guid ValidationId,
+    Guid? ValidationId,
     string PartyRole,
     int Ordinal,
     string? Name,
@@ -22,6 +26,17 @@ public sealed record ValidacionReenviableDto(
     string? CaptureUrl,
     DateTimeOffset? CaptureExpiresAt,
     bool EsFlujoManual);
+
+/// <summary>
+/// Etiquetas de <see cref="ValidacionReenviableDto.Status"/> que NO existen en
+/// <see cref="BiometricEstados"/> (el enum de la fila real): son estados DERIVADOS de este DTO,
+/// calculados por <see cref="ListValidacionesReenviablesHandler"/>.
+/// </summary>
+public static class ValidacionReenviableEstados
+{
+    /// <summary>HU #14627 — el actor nunca tuvo una fila de validación de identidad propia en este trámite.</summary>
+    public const string SinIniciar = "no_iniciada";
+}
 
 public sealed record ValidacionesReenviablesResult(IReadOnlyList<ValidacionReenviableDto> Personas);
 
@@ -42,10 +57,15 @@ public sealed record ValidacionesReenviablesResult(IReadOnlyList<ValidacionReenv
 /// <item><description>tiene una validación PROPIA aprobada y vigente;</description></item>
 /// <item><description>tiene una identidad aprobada y vigente en OTRO trámite (referenciada, HU #10350):
 /// para el trámite ya firmó;</description></item>
-/// <item><description>no tiene ninguna fila propia sin aprobar: no hay registro sobre el cual reenviar y el
-/// cuadro no inventa una persona (caso borde de la épica).</description></item>
+/// <item><description>SÍ tiene filas propias pero TODAS están aprobadas (vencidas, sin otra pendiente): ya
+/// hubo una validación, solo que venció — revalidar exige iniciar una nueva, fuera del alcance de "reenviar"
+/// (sin cambios de esta HU).</description></item>
 /// </list>
-/// Si tiene varios intentos, se toma el más reciente sin aprobar (una fila por persona).</para>
+/// Si tiene varios intentos, se toma el más reciente sin aprobar (una fila por persona). Si NUNCA tuvo
+/// NINGUNA fila propia (no solo "sin pendiente"), se lista igual con
+/// <see cref="ValidacionReenviableDto.ValidationId"/> <c>null</c> y
+/// <see cref="ValidacionReenviableEstados.SinIniciar"/> (HU #14627): ya no es un caso borde que se descarta,
+/// es la persona a la que hay que enviarle la validación por primera vez.</para>
 /// </summary>
 public sealed class ListValidacionesReenviablesHandler(
     IProcedureInstanceRepository repo,
@@ -102,13 +122,32 @@ public sealed class ListValidacionesReenviablesHandler(
                     continue;
 
                 // Una aprobada que ya venció no es reenviable (el reenvío no pisa aprobaciones): se necesita
-                // una validación nueva, que no es el alcance de esta acción.
+                // una validación nueva, que no es el alcance de esta acción (eso sigue excluyendo al actor,
+                // sin cambios — HU #14627 no toca este caso: SÍ hubo una validación, solo que ya venció).
                 var pendiente = propias
                     .Where(v => v.Status != BiometricEstados.Aprobado)
                     .OrderByDescending(v => v.CreatedAt)
                     .FirstOrDefault();
                 if (pendiente is null)
+                {
+                    if (propias.Count > 0)
+                        continue;
+
+                    // HU #14627 — el actor NUNCA tuvo una fila propia (no solo "sin pendiente"): se lista
+                    // igual (sin inventar un id) para que el admin pueda enviarle la validación por primera
+                    // vez desde el mismo cuadro.
+                    personas.Add(new ValidacionReenviableDto(
+                        null,
+                        parte,
+                        actor.Ordinal,
+                        subject.Nombre,
+                        subject.Email,
+                        ValidacionReenviableEstados.SinIniciar,
+                        null,
+                        null,
+                        false));
                     continue;
+                }
 
                 personas.Add(new ValidacionReenviableDto(
                     pendiente.Id,
