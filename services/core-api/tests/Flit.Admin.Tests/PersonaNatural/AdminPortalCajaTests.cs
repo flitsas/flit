@@ -31,14 +31,14 @@ namespace Flit.Admin.Tests.PersonaNatural;
 /// <c>ot_caja</c>, alcance por organismo), el guardián de asignación genérica, la resolución del usuario de caja que usa el portal y
 /// «Cobros de caja» (fachada hacia el portal, con el cliente gRPC reemplazado por un doble). Requiere la base con el DDL 199.
 /// </summary>
-public sealed class AdminPortalCajaTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
+public sealed class AdminPortalCajaTests : IClassFixture<AdminPortalCajaTests.Anfitrion>, IDisposable
 {
     private static readonly SymmetricSecurityKey DummyKey = new(Encoding.UTF8.GetBytes(new string('k', 64)));
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private readonly WebApplicationFactory<Program> _off;
     private readonly WebApplicationFactory<Program> _on;
-    private readonly FakeCajaAdminClient _portal = new();
+    private readonly FakeCajaAdminClient _portal;
 
     private readonly Guid _officeA = Guid.NewGuid();
     private readonly Guid _officeB = Guid.NewGuid();
@@ -52,20 +52,35 @@ public sealed class AdminPortalCajaTests : IClassFixture<WebApplicationFactory<P
     private Guid _roleCaja;
     private Guid _roleAdmin;
 
-    public AdminPortalCajaTests(WebApplicationFactory<Program> factory)
+    public AdminPortalCajaTests(Anfitrion anfitrion)
     {
-        _off = factory;
-        _on = factory.WithWebHostBuilder(b =>
-        {
-            b.UseSetting("PortalCaja:Habilitado", "true");
-            b.UseSetting("PersonaNatural:Portal:Address", "http://localhost:9");
-            b.ConfigureTestServices(s =>
-            {
-                s.RemoveAll<ICajaAdminClient>();
-                s.AddSingleton<ICajaAdminClient>(_portal);
-            });
-        });
+        _off = anfitrion.Base;
+        _on = anfitrion.Factory;
+        // El doble del portal vive en el host compartido: cada prueba lo recibe limpio (las de una clase corren en serie).
+        _portal = anfitrion.Portal;
+        _portal.Reiniciar();
         SeedAsync().GetAwaiter().GetResult();
+    }
+
+    /// <summary>Un host para toda la clase (<see cref="HostPorClase"/>): antes cada prueba arrancaba el suyo con
+    /// <c>WithWebHostBuilder</c> (26 pruebas, ~7 min en CI, la clase más lenta de Flit.Admin.Tests). Cada prueba siembra sus
+    /// organismos, empresas y usuarios con identificadores propios y los borra en <see cref="Dispose"/>, así que comparten host
+    /// sin cruzarse. <see cref="HostPorClase.Base"/> es el host con la función apagada.</summary>
+    public sealed class Anfitrion : HostPorClase
+    {
+        internal FakeCajaAdminClient Portal { get; } = new();
+
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            factory.WithWebHostBuilder(b =>
+            {
+                b.UseSetting("PortalCaja:Habilitado", "true");
+                b.UseSetting("PersonaNatural:Portal:Address", "http://localhost:9");
+                b.ConfigureTestServices(s =>
+                {
+                    s.RemoveAll<ICajaAdminClient>();
+                    s.AddSingleton<ICajaAdminClient>(Portal);
+                });
+            });
     }
 
     // ── Función apagada ─────────────────────────────────────────────────────────────────────────────────────────
@@ -533,10 +548,22 @@ public sealed class AdminPortalCajaTests : IClassFixture<WebApplicationFactory<P
         db.SaveChanges();
     }
 
-    private sealed record AnulacionLlamada(Guid Organismo, Guid Cobro, string Motivo, Guid Actor, string ActorNombre, long RowVersion);
+    internal sealed record AnulacionLlamada(Guid Organismo, Guid Cobro, string Motivo, Guid Actor, string ActorNombre, long RowVersion);
 
-    private sealed class FakeCajaAdminClient : ICajaAdminClient
+    internal sealed class FakeCajaAdminClient : ICajaAdminClient
     {
+        /// <summary>Vuelve al estado inicial: el doble se comparte entre las pruebas de la clase.</summary>
+        public void Reiniciar()
+        {
+            Lista = new([], 0, 0);
+            Resultado = new(null, "anulado");
+            Caido = false;
+            UltimoOrganismo = null;
+            UltimaFecha = null;
+            UltimaPagina = default;
+            Anulaciones.Clear();
+        }
+
         public CajaCobrosLista Lista { get; set; } = new([], 0, 0);
 
         public CajaAnulacionResultado Resultado { get; set; } = new(null, "anulado");
