@@ -156,6 +156,11 @@ export const MODULE_ACCESS = {
     permissionsAny: ["runt_confirmation.settings.manage", "runt_confirmation.history.read"],
     api: { kind: "permission", slug: "runt_confirmation.settings.manage", source: "services/core-api/src/Flit.Api/Endpoints/AdminRuntConfirmationEndpoints.cs" },
   },
+  // Épica #14644 (HU #14649) — contingencia de proveedor RUNT; permiso sembrado solo para el Super Admin FLIT.
+  "admin-contingencia-runt": {
+    permissionsAny: ["runt_contingency.manage"],
+    api: { kind: "permission", slug: "runt_contingency.manage", source: "services/core-api/src/Flit.Api/Endpoints/AdminRuntContingencyEndpoints.cs" },
+  },
   // Gestor: «Administración» de su compañía (`/admin/companies`); API con la política AdminCompany.
   "mi-empresa": { rolesAny: [ADMIN_COMPANY_ROLE], api: { kind: "policy", policy: "AdminCompany", source: SECURITY_MODULES_SOURCE } },
   "admin-network": { rolesAny: [ADMIN_COMPANY_ROLE], api: { kind: "policy", policy: "AdminCompany", source: SECURITY_MODULES_SOURCE } },
@@ -314,6 +319,15 @@ export const ROUTE_ACCESS: readonly RouteAccessRule[] = [
     requirement: {
       permissionsAny: MODULE_ACCESS["admin-confirmacion-runt"].permissionsAny,
       api: MODULE_ACCESS["admin-confirmacion-runt"].api,
+    },
+  },
+  // Épica #14644 — Contingencia de proveedor RUNT: por permiso, no por rol.
+  {
+    id: "admin-contingencia-runt",
+    pattern: /^\/admin\/plataforma\/contingencia-runt/,
+    requirement: {
+      permissionsAny: MODULE_ACCESS["admin-contingencia-runt"].permissionsAny,
+      api: MODULE_ACCESS["admin-contingencia-runt"].api,
     },
   },
   // Todo lo demás de /admin (incluye Banners, HU #13439): solo SuperAdmin.
