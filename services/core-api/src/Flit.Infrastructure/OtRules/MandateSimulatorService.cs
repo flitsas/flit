@@ -10,7 +10,9 @@ using Flit.Tramites.Domain.Documents;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
+using Flit.Infrastructure.Notifications;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure.OtRules;
 
@@ -49,6 +51,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
     private readonly IAttachmentStorage _storage;
     private readonly IEmailSender _emailSender;
     private readonly IMandateFormatTemplateProvider? _formatTemplates;
+    private readonly string? _emailAssetsBaseUrl;
 
     public MandateSimulatorService(
         FlitDbContext db,
@@ -60,7 +63,8 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         ISignatureVaultPolicy vaultPolicy,
         IAttachmentStorage storage,
         IEmailSender emailSender,
-        IMandateFormatTemplateProvider? formatTemplates = null)
+        IMandateFormatTemplateProvider? formatTemplates = null,
+        IOptions<NotificationEmailAssetsOptions>? emailAssets = null)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -72,6 +76,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         _storage = storage ?? throw new ArgumentNullException(nameof(storage));
         _emailSender = emailSender ?? throw new ArgumentNullException(nameof(emailSender));
         _formatTemplates = formatTemplates;
+        _emailAssetsBaseUrl = emailAssets?.Value.BaseUrl;
     }
 
     /// <summary>
@@ -155,7 +160,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         var office = _catalog.GetById(request.OfficeId);
         var asunto = $"Simulación de Contrato de Mandato · {office?.Name ?? "Organismo de tránsito"}";
 
-        var html = BuildEmailHtml(office?.Name);
+        var html = BuildEmailHtml(office?.Name, _emailAssetsBaseUrl);
 
         var message = new EmailMessage(
             TenantId: null,
@@ -192,12 +197,23 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
     /// PDF adjunto lleva marcadores donde van los datos del mandante, y sin ese aviso podría
     /// confundirse con un contrato emitido.
     /// </summary>
+    /// <remarks>Correos 2.0 — mismo texto, envuelto en <see cref="FlitEmailLayout"/> (banner y pie con
+    /// logo). Sin título ni texto de soporte: el correo nunca los tuvo y el copy está congelado.</remarks>
     internal static string BuildEmailHtml(string? officeName, string? assetsBaseUrl = null) =>
-        "<p>Adjunto encontrarás una <b>simulación</b> del Contrato Privado de Mandato "
-        + $"para <b>{System.Net.WebUtility.HtmlEncode(officeName ?? "el organismo de tránsito")}</b>.</p>"
-        + "<p>Es un documento de prueba generado desde Plataforma → Mandatos: "
-        + "los datos del mandante, la placa y el trámite aparecen como marcadores y "
-        + "<b>no corresponde a ningún trámite real</b>.</p>";
+        FlitEmailLayout.Documento(
+            assetsBaseUrl,
+            tituloHtml: null,
+            "<div style=\"padding-top:24px;\">"
+            + FlitEmailLayout.Parrafo(
+                "Adjunto encontrarás una <b>simulación</b> del Contrato Privado de Mandato "
+                + $"para <b>{System.Net.WebUtility.HtmlEncode(officeName ?? "el organismo de tránsito")}</b>.")
+            + FlitEmailLayout.Parrafo(
+                "Es un documento de prueba generado desde Plataforma → Mandatos: "
+                + "los datos del mandante, la placa y el trámite aparecen como marcadores y "
+                + "<b>no corresponde a ningún trámite real</b>.",
+                margen: "0")
+            + "</div>",
+            FlitEmailLayout.PieFlit(assetsBaseUrl, soporteHtml: null, politicaPrivacidad: false));
 
     private async Task<MandateSimulationResult> BuildAsync(
         Guid officeId,

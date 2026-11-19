@@ -34,9 +34,9 @@ public class TramiteCambioEstadoEmailComposerTests
             TraspasoRechazado, "https://cdn.example/email-assets");
 
         subject.Should().Contain("GSR101").And.Contain("Rechazado");
-        html.Should().Contain("https://cdn.example/email-assets/tramite-cambio-estado-header.png");
-        html.Should().Contain("https://cdn.example/email-assets/flit-logo.png");
-        html.Should().Contain("¡NOTIFICACIÓN RADICACIÓN DEL TRÁMITE!");
+        html.Should().Contain("https://cdn.example/email-assets/flit-banner-correo.png");
+        html.Should().Contain("https://cdn.example/email-assets/flit-logo-firma.png");
+        System.Net.WebUtility.HtmlDecode(html).Should().Contain("¡NOTIFICACIÓN RADICACIÓN DEL TRÁMITE!");
         html.Should().Contain("❌");
         html.Should().Contain("Rechazado");
         html.Should().NotContain("RECHAZADO");
@@ -109,7 +109,7 @@ public class TramiteCambioEstadoEmailComposerTests
 
         aprobadoFlit.Html.Should().Contain("Aprobado");
         aprobadoFlit.Html.Should().NotContain("APROBADO");
-        aprobadoFlit.Html.Should().Contain("tramite-cambio-estado-header.png");
+        aprobadoFlit.Html.Should().Contain("flit-banner-correo.png");
         rechazadoRenting.Html.Should().Contain("Rechazado");
         rechazadoRenting.Html.Should().NotContain("RECHAZADO");
         rechazadoRenting.Html.Should().Contain("tramite-cambio-estado-renting-header.png");
@@ -176,7 +176,7 @@ public class TramiteCambioEstadoEmailComposerTests
     public void PreviewSample_BuildFlitAprobado_UsaAssetsBaseUrl()
     {
         var (_, html) = TramiteEmailPreviewSample.BuildFlitAprobado("http://localhost:3000/email-assets");
-        html.Should().Contain("http://localhost:3000/email-assets/tramite-cambio-estado-header.png");
+        html.Should().Contain("http://localhost:3000/email-assets/flit-banner-correo.png");
         html.Should().Contain("Aprobado");
         html.Should().NotContain("APROBADO");
     }

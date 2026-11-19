@@ -1,6 +1,5 @@
 using System.Net;
 using System.Text;
-using Flit.Infrastructure.Notifications.Tramites;
 using Flit.Modules.Security.Domain.Auth;
 
 namespace Flit.Infrastructure.Notifications.Identity;
@@ -58,6 +57,9 @@ public static class IdentityVerificationEmailLayout
         ArgumentNullException.ThrowIfNull(theme);
         ArgumentException.ThrowIfNullOrWhiteSpace(link);
         ArgumentNullException.ThrowIfNull(content);
+
+        if (!theme.IsBrand)
+            return RenderFlit(assetsBaseUrl, recipientName, link, content);
 
         var product = Enc(ProductName(theme));
         var accent = theme.IsBrand ? BrandedEmailChrome.LinkColor(theme) : FlitBlue;
@@ -145,6 +147,76 @@ public static class IdentityVerificationEmailLayout
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Correos 2.0 — tema FLIT sobre <see cref="FlitEmailLayout"/>: mismo texto y mismo orden que la
+    /// tarjeta anterior (antetítulo, aviso, título, saludo, intro, «Solicitado por», pasos, botón,
+    /// enlace de respaldo, nota y ayuda), con banner, botón degradado y pie con logo. La marca
+    /// blanca sigue en la estructura de tarjeta de arriba, sin cambios.
+    /// </summary>
+    private static string RenderFlit(
+        string assetsBaseUrl, string? recipientName, string link, IdentityVerificationEmailContent content)
+    {
+        var accent = FlitEmailLayout.Accent;
+        var product = Enc(ProductName(EmailTheme.Flit));
+        var href = Enc(link);
+        var greeting = string.IsNullOrWhiteSpace(recipientName)
+            ? "Hola."
+            : $"Hola {FlitEmailLayout.Destacado(Enc(recipientName.Trim()))}.";
+
+        string? aviso = null;
+        if (!string.IsNullOrWhiteSpace(content.BannerText))
+        {
+            var (bannerBg, bannerInk) = content.BannerTone == IdentityEmailBannerTone.Warning
+                ? ("#FFF4E0", "#7A4B00")
+                : ("#E3F2EC", "#164A3A");
+            aviso = "<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:10px 0 14px;\"><tr>"
+                + $"<td style=\"background:{bannerBg};color:{bannerInk};border-radius:10px;padding:12px 14px;font-size:13px;line-height:1.45;text-align:center;\">"
+                + Enc(content.BannerText) + "</td></tr></table>";
+        }
+
+        var sb = new StringBuilder(4096);
+
+        sb.Append(FlitEmailLayout.Parrafo(greeting, margen: "0 0 12px"));
+        sb.Append(FlitEmailLayout.Parrafo(content.IntroHtml, margen: "0 0 12px"));
+        sb.Append("<p style=\"margin:0 0 20px;text-align:center;font-size:13px;line-height:1.4;color:").Append(FlitEmailLayout.Muted)
+            .Append(";\">").Append(Enc(content.RequestedByLabel)).Append("<br/><strong style=\"font-size:14px;color:")
+            .Append(FlitEmailLayout.Ink).Append(";\">").Append(product).Append("</strong></p>");
+
+        // Pasos: tarjeta con burbujas numeradas (el número y el texto del paso no cambian).
+        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 20px;border:1px solid ")
+            .Append(FlitEmailLayout.CardBorder).Append(";border-radius:12px;border-collapse:separate;box-shadow:0 4px 14px rgba(22,39,68,0.10);\"><tr><td style=\"padding:16px 20px 8px;\">");
+        sb.Append("<p style=\"margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:0.06em;color:").Append(FlitEmailLayout.Muted)
+            .Append(";\">").Append(Enc(content.StepsHeading)).Append("</p>");
+        sb.Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
+        for (var i = 0; i < content.Steps.Count; i++)
+        {
+            sb.Append("<tr><td style=\"padding:0 12px 10px 0;vertical-align:middle;\">")
+                .Append("<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr>")
+                .Append("<td width=\"26\" height=\"26\" align=\"center\" style=\"width:26px;height:26px;background:").Append(StepBubble)
+                .Append(";border-radius:13px;font-size:12px;font-weight:700;color:").Append(accent).Append(";\">")
+                .Append(i + 1).Append("</td></tr></table></td>")
+                .Append("<td style=\"padding:0 0 10px;vertical-align:middle;font-size:14px;color:").Append(FlitEmailLayout.Ink).Append(";\">")
+                .Append(Enc(content.Steps[i])).Append("</td></tr>");
+        }
+        sb.Append("</table></td></tr></table>");
+
+        sb.Append(FlitEmailLayout.Boton(content.ButtonLabel, link));
+        sb.Append("<p style=\"margin:0 0 6px;text-align:center;font-size:12px;line-height:1.5;color:").Append(FlitEmailLayout.Muted).Append(";\">")
+            .Append(Enc(content.FallbackLinkIntro)).Append("<br/><a href=\"").Append(href).Append("\" style=\"color:").Append(accent)
+            .Append(";word-break:break-all;\">").Append(href).Append("</a></p>");
+        sb.Append("<p style=\"margin:10px 0 0;text-align:center;font-size:12px;line-height:1.5;color:").Append(FlitEmailLayout.Muted).Append(";\">")
+            .Append(Enc(content.FooterNote)).Append("</p>");
+
+        var ayuda = $"¿Necesitas ayuda? Escríbenos a <a href=\"mailto:{SupportEmail}\" style=\"color:{accent};font-weight:600;\">{SupportEmail}</a>.";
+
+        return FlitEmailLayout.Documento(
+            assetsBaseUrl,
+            FlitEmailLayout.Titulo(content.Title, Enc(content.Eyebrow), aviso),
+            sb.ToString(),
+            FlitEmailLayout.PieFlit(assetsBaseUrl, ayuda, politicaPrivacidad: false),
+            documentTitle: content.Title);
+    }
+
     /// <summary>Nombre del producto para asunto y cuerpo: el de la marca de la red, o FLIT 2.0.</summary>
     public static string ProductName(EmailTheme theme) =>
         new(Clean(string.IsNullOrWhiteSpace(theme.PlatformName) ? EmailTheme.Flit.PlatformName : theme.PlatformName).ToArray());
@@ -162,7 +234,7 @@ public static class IdentityVerificationEmailLayout
                 : null;
         }
 
-        return TramiteCambioEstadoEmailComposer.ResolveLogoUrl(assetsBaseUrl);
+        return FlitEmailLayout.LogoUrl(assetsBaseUrl);
     }
 
     private static string LogoHtml(string? logoUrl, string productEncoded, int heightPx, string accent) =>

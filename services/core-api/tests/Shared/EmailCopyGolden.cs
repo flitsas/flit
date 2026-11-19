@@ -44,6 +44,9 @@ internal static class EmailCopyGolden
         return sb.ToString();
     }
 
+    /// <summary>Texto visible del cuerpo en una sola línea (para aserciones de contenido sin acoplarse al marcado).</summary>
+    internal static string VisibleText(string html) => Collapse(Extract(string.Empty, html)["Asunto:".Length..]);
+
     internal static void Assert(string subject, string html, string plantilla)
     {
         var nombre = $"{plantilla}.text.golden.txt";
