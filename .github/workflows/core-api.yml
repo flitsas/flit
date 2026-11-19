@@ -137,13 +137,25 @@ jobs:
         with:
           global-json-file: services/core-api/global.json
 
+      # Cada carril compila SOLO lo que prueba: admin e integration su proyecto de pruebas (con Flit.Api y lo que
+      # referencie), resto la solución entera. Antes los 9 carriles compilaban todo Flit.slnx (~3 min cada uno), y
+      # integration compilaba Admin.Tests (465 archivos) sin usarlo, y viceversa.
+      - name: Qué compila el carril
+        id: objetivo
+        run: |
+          case "${{ matrix.carril }}" in
+            admin) echo "proyecto=tests/Flit.Admin.Tests/Flit.Admin.Tests.csproj" >> "$GITHUB_OUTPUT" ;;
+            integration) echo "proyecto=tests/Flit.Integration.Tests/Flit.Integration.Tests.csproj" >> "$GITHUB_OUTPUT" ;;
+            *) echo "proyecto=" >> "$GITHUB_OUTPUT" ;;
+          esac
+
       - name: Restore
-        run: dotnet restore
+        run: dotnet restore ${{ steps.objetivo.outputs.proyecto }}
 
       # Sin analizadores (CA, estilo, AOT/trim): los carriles solo necesitan los binarios para probar. Los analizadores,
       # con TreatWarningsAsErrors, corren UNA vez en el job «analizadores» (en paralelo, fuera del camino crítico).
       - name: Build (sin analizadores)
-        run: dotnet build --no-restore --configuration Release /p:RunAnalyzers=false
+        run: dotnet build ${{ steps.objetivo.outputs.proyecto }} --no-restore --configuration Release /p:RunAnalyzers=false
 
       # El contenedor de Postgres trae max_connections=100. Las pruebas crean muchas bases propias y cada una
       # deja su pool de Npgsql abierto: en «admin» se agotaban («too many clients already») desde el minuto ~30
