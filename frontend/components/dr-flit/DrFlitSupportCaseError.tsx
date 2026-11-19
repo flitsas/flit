@@ -4,20 +4,19 @@ import { DrFlitSupportPanel } from "./DrFlitSupportPanel";
 import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
- * HU #12930 AC3 — el caso no se pudo radicar. Se ofrecen los canales de soporte como salida de
- * emergencia y se conserva el formulario: «Reintentar» vuelve a radicar lo mismo y «Editar el caso»
- * vuelve al formulario, sin reescribir nada.
+ * HU #12930 AC3 — el caso no se pudo radicar. Se ofrecen los canales de soporte (correo/teléfono)
+ * como salida de emergencia: «Reintentar» vuelve a radicar lo mismo y «Editar el caso» vuelve al
+ * formulario, sin reescribir nada. Bug #14629 — ya no se ofrece aquí un botón de "generar caso"
+ * alterno: el único formulario de radicación vive en el flujo del chat (ver DrFlitChatPanel).
  */
 export function DrFlitSupportCaseError({
   message,
   onRetry,
   onEdit,
-  onOpen,
 }: {
   message: string;
   onRetry: () => void;
   onEdit: () => void;
-  onOpen: (href: string) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -47,7 +46,7 @@ export function DrFlitSupportCaseError({
           Editar el caso
         </button>
       </div>
-      <DrFlitSupportPanel onOpenCase={onOpen} />
+      <DrFlitSupportPanel />
     </div>
   );
 }
