@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, Modal, usePaginacion } from "@flit/ui";
 import { METRICAS_GRID_CLS, TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
-import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
+import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { Encabezado } from "@/components/Pantalla";
 import { FiltrosPeriodo, periodoInicial, type Periodo } from "@/components/reportes/FiltrosPeriodo";
 import { RequiereReportes } from "@/components/reportes/RequiereReportes";
@@ -62,7 +62,7 @@ function Contenido() {
   const toast = useToast();
   const [periodo, setPeriodo] = useState<Periodo>(periodoInicial);
   const [sel, setSel] = useState<Seleccion | null>(null);
-  const [ver, setVer] = useState<string | null>(null);
+  const setVer = useAbrirDetalle();
   const pg = usePaginacion(25);
   const datos = useCarga(JSON.stringify(periodo), (signal) =>
     apiFetch<{ filas: FilaProductividad[] }>("/reportes/productividad", { signal, query: { empresa: periodo.empresa, desde: periodo.desde, hasta: periodo.hasta } }),
@@ -128,7 +128,6 @@ function Contenido() {
         pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: filas.length, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
       />
       {sel && <DetalleCifra sel={sel} periodo={periodo} onCerrar={() => setSel(null)} onVer={(id) => { setSel(null); setVer(id); }} />}
-      <DetalleComparendo id={ver} onCerrar={() => setVer(null)} />
     </section>
   );
 }

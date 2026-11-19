@@ -5,7 +5,7 @@ import { useSearchParams } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
-import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
+import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
@@ -137,7 +137,7 @@ function Centro() {
   const [comparendo, setComparendo] = useState("");
   const [placa, setPlaca] = useState("");
   const [abierto, setAbierto] = useState<string | null>(() => params.get("mensaje"));
-  const [verComparendo, setVerComparendo] = useState<string | null>(null);
+  const setVerComparendo = useAbrirDetalle();
 
   const filtros = { empresa: internas ? undefined : (empresa ?? undefined), internas: superAdmin && internas ? true : undefined, tipo, estado, canal, desde, hasta, comparendo: comparendo.trim(), placa: placa.trim() };
   const lista = useCarga(`mensajes:${JSON.stringify(filtros)}:${pg.page}:${pg.pageSize}`, (signal) =>
@@ -265,7 +265,6 @@ function Centro() {
       />
       <p className="text-[11px] opacity-60">La apertura es un dato informativo: no constituye prueba de notificación.</p>
       {abierto && <DetalleMensaje key={abierto} id={abierto} onCerrar={() => setAbierto(null)} onCambio={lista.recargar} onComparendo={setVerComparendo} />}
-      <DetalleComparendo id={verComparendo} onCerrar={() => setVerComparendo(null)} onCambio={lista.recargar} />
     </section>
   );
 }
