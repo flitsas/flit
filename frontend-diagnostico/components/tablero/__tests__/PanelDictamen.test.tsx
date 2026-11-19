@@ -17,6 +17,7 @@ const LLENO = {
   version: 1,
   veredicto: "BLOQUEADO",
   estado_redaccion: "PENDIENTE",
+  redaccion_en_cola: true,
   alertamientos: [
     { codigo: "SOAT_NO_VIGENTE", texto: "El SOAT no está vigente.", efecto: "BLOQUEA", fuente: "RUNT" },
     { codigo: "IMPUESTO", texto: "Hay impuesto pendiente.", efecto: "ADVIERTE", fuente: "IMPUESTO_DEPARTAMENTAL" },
@@ -586,5 +587,34 @@ describe("PanelDictamen — HU #14585: cambio de propietario del dictamen", () =
     pintar();
     await screen.findByText("Bloqueado");
     expect(screen.queryByRole("button", { name: "Cambio de propietario" })).toBeNull();
+  });
+});
+
+// Redactor IA HU-4 (registro diferido; D6=c; contrato diagnostico 1.6.1 `redaccion_en_cola`): el rótulo distingue la
+// redacción en cola del texto estándar que nunca se redactará. Uso de ejemplo: GET …/dictamen →
+// { …, estado_redaccion: "PENDIENTE", redaccion_en_cola: false } pinta «Sin análisis».
+describe("PanelDictamen — Redactor IA HU-4: rótulo de la redacción", () => {
+  it("PENDIENTE y redaccion_en_cola true: dice «redacción IA pendiente» y no el texto estándar", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ ...LLENO, estado_redaccion: "PENDIENTE", redaccion_en_cola: true }) });
+    pintar();
+    await screen.findByText("Bloqueado");
+    expect(screen.getByText("redacción IA pendiente")).toBeInTheDocument();
+    expect(screen.queryByText("Sin análisis")).toBeNull();
+  });
+
+  it("PENDIENTE y redaccion_en_cola false: dice «Sin análisis» y no la redacción pendiente", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ ...LLENO, estado_redaccion: "PENDIENTE", redaccion_en_cola: false }) });
+    pintar();
+    await screen.findByText("Bloqueado");
+    expect(screen.getByText("Sin análisis")).toBeInTheDocument();
+    expect(screen.queryByText("redacción IA pendiente")).toBeNull();
+  });
+
+  it("COMPLETADA: no pinta ningún rótulo de redacción", async () => {
+    simularApi({ [`GET ${RUTA}`]: () => Response.json({ ...LLENO, estado_redaccion: "COMPLETADA", redaccion_en_cola: false }) });
+    pintar();
+    await screen.findByText("Bloqueado");
+    expect(screen.queryByText("redacción IA pendiente")).toBeNull();
+    expect(screen.queryByText("Sin análisis")).toBeNull();
   });
 });

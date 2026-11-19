@@ -108,4 +108,78 @@ public sealed class AiToolSettingsHandlerTests
             Arg.Any<string?>(),
             Arg.Any<CancellationToken>());
     }
+
+    /// <summary>
+    /// Review HU-6 · CR-5 — el rechazo <c>proveedor_no_aplica</c> al guardar es solo de <c>diagnostico_dictamen</c>: en ocr se puede
+    /// deshabilitar deepseek y volver a habilitarlo como antes de ADR-0091.
+    /// </summary>
+    [Fact]
+    public async Task Save_ocr_rehabilitar_deepseek_tras_deshabilitarlo_es_OK()
+    {
+        var ocrSinDeepSeek = OcrSettings with
+        {
+            Providers =
+            [
+                new AiProviderSlot(AiProviderCodes.Anthropic, true, 1),
+                new AiProviderSlot(AiProviderCodes.OpenAi, true, 2),
+                new AiProviderSlot(AiProviderCodes.DeepSeek, false, 3),
+            ],
+        };
+        var repo = Substitute.For<IAiToolProviderSettingsRepository>();
+        repo.GetByToolCodeAsync(AiToolCodes.Ocr, Arg.Any<CancellationToken>()).Returns(ocrSinDeepSeek);
+        repo.SaveSettingsAsync(AiToolCodes.Ocr, Arg.Any<bool>(), Arg.Any<IReadOnlyList<AiProviderSlot>>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(OcrSettings);
+        var audit = Substitute.For<IAdminAuditWriter>();
+        var handler = new SaveAiToolSettingsHandler(repo, Substitute.For<IAiApiKeyEnvironmentProbe>(), audit);
+
+        var result = await handler.HandleAsync(
+            AiToolCodes.Ocr,
+            new SaveAiToolSettingsCommand(
+                true,
+                [
+                    new AiProviderSlotCommand(AiProviderCodes.Anthropic, true, 1),
+                    new AiProviderSlotCommand(AiProviderCodes.OpenAi, true, 2),
+                    new AiProviderSlotCommand(AiProviderCodes.DeepSeek, true, 3),
+                ],
+                Guid.CreateVersion7()),
+            TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeTrue();
+        result.ErrorCode.Should().BeNull();
+        await repo.Received(1).SaveSettingsAsync(AiToolCodes.Ocr, true, Arg.Any<IReadOnlyList<AiProviderSlot>>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
+    }
+
+    /// <summary>Review HU-6 · CR-5 — en <c>diagnostico_dictamen</c> sigue el rechazo: habilitar openai ⇒ <c>proveedor_no_aplica</c>.</summary>
+    [Fact]
+    public async Task Save_diagnostico_dictamen_habilitar_openai_es_proveedor_no_aplica()
+    {
+        var dictamen = OcrSettings with
+        {
+            ToolCode = AiToolCodes.DiagnosticoDictamen,
+            Providers =
+            [
+                new AiProviderSlot(AiProviderCodes.Anthropic, true, 1),
+                new AiProviderSlot(AiProviderCodes.OpenAi, false, 2),
+            ],
+        };
+        var repo = Substitute.For<IAiToolProviderSettingsRepository>();
+        repo.GetByToolCodeAsync(AiToolCodes.DiagnosticoDictamen, Arg.Any<CancellationToken>()).Returns(dictamen);
+        var audit = Substitute.For<IAdminAuditWriter>();
+        var handler = new SaveAiToolSettingsHandler(repo, Substitute.For<IAiApiKeyEnvironmentProbe>(), audit);
+
+        var result = await handler.HandleAsync(
+            AiToolCodes.DiagnosticoDictamen,
+            new SaveAiToolSettingsCommand(
+                true,
+                [
+                    new AiProviderSlotCommand(AiProviderCodes.Anthropic, true, 1),
+                    new AiProviderSlotCommand(AiProviderCodes.OpenAi, true, 2),
+                ],
+                Guid.CreateVersion7()),
+            TestContext.Current.CancellationToken);
+
+        result.IsValid.Should().BeFalse();
+        result.ErrorCode.Should().Be("proveedor_no_aplica");
+        await repo.DidNotReceiveWithAnyArgs().SaveSettingsAsync(default!, default, default!, default, TestContext.Current.CancellationToken);
+    }
 }

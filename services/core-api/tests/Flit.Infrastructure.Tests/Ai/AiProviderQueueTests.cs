@@ -138,4 +138,28 @@ public sealed class AiProviderQueueTests
 
         queue.Should().Equal(AiProviderCodes.Anthropic);
     }
+
+    [Fact]
+    public void Build_diagnostico_dictamen_solo_admite_anthropic()
+    {
+        var queue = AiProviderQueue.Build(
+            AiToolCodes.DiagnosticoDictamen,
+            AiProviderCodes.OpenAi,
+            FullSlots,
+            hasApiKey: _ => true);
+
+        queue.Should().Equal(AiProviderCodes.Anthropic);
+    }
+
+    [Fact]
+    public void Build_diagnostico_dictamen_sin_llave_de_anthropic_queda_vacia()
+    {
+        var queue = AiProviderQueue.Build(
+            AiToolCodes.DiagnosticoDictamen,
+            AiProviderCodes.Anthropic,
+            FullSlots,
+            hasApiKey: code => code != AiProviderCodes.Anthropic);
+
+        queue.Should().BeEmpty();
+    }
 }

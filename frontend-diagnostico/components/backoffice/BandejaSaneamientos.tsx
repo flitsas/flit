@@ -92,7 +92,7 @@ export function textoResultadoTomar(r: ResultadoTomar): Aviso {
   return { tono: r.omitidos.length > 0 || r.tomados === 0 ? "warning" : "success", texto: partes.join(" ") };
 }
 
-const textoModo = (modo: FilaBandeja["modo"]) => (modo === "CON_ANALISIS" ? "Con análisis IA" : "Simple");
+const textoModo = (modo: FilaBandeja["modo"]) => (modo === "CON_ANALISIS" ? "Con análisis" : "Simple");
 const fecha = (iso: string | null) => (iso ? fechaDelDato(iso) : "—");
 const irA = (f: FilaBandeja) => `/backoffice/saneamientos/${encodeURIComponent(f.id)}?empresa=${encodeURIComponent(f.empresa)}`;
 

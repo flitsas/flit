@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.1.4"
+  version: "1.1.5"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -1573,7 +1573,7 @@ paths:
       operationId: adminPlataformaAiListTools
       summary: Lista tools IA y estado de proveedores (HU #13509)
       description: >
-        Settings por tool (ocr, dr_flit) con activeProvider, prioridades y presencia de API key
+        Settings por tool (ocr, dr_flit, diagnostico_dictamen) con activeProvider, prioridades y presencia de API key
         enmascarada. Nunca incluye el secreto. Requiere JWT SuperAdmin.
       security:
         - bearerAuth: []
@@ -16403,7 +16403,7 @@ components:
       required: true
       schema:
         $ref: "#/components/schemas/AiToolCode"
-      description: Código de herramienta IA (ocr | dr_flit).
+      description: Código de herramienta IA (ocr | dr_flit | diagnostico_dictamen).
     NetworkStatsFrom:
       name: from
       in: query
@@ -19203,7 +19203,7 @@ components:
 
     AiToolCode:
       type: string
-      enum: [ocr, dr_flit]
+      enum: [ocr, dr_flit, diagnostico_dictamen]
       description: Código de herramienta IA de plataforma.
 
     AiProviderCode:

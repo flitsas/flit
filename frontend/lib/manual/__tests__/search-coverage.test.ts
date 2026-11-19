@@ -96,7 +96,7 @@ const CASOS: { pregunta: string; perfil: ManualProfile; slug: string }[] = [
   { pregunta: "pestaña vehículos todas las placas", perfil: "gestor", slug: "6-diagnostico/2-inicio-y-vehiculos" },
   { pregunta: "diagnóstico express placa o vin", perfil: "gestor", slug: "6-diagnostico/3-nuevo-diagnostico" },
   { pregunta: "diagnóstico masivo con archivo de vehículos", perfil: "gestor", slug: "6-diagnostico/3-nuevo-diagnostico" },
-  { pregunta: "modo simple o con análisis ia", perfil: "gestor", slug: "6-diagnostico/3-nuevo-diagnostico" },
+  { pregunta: "modo simple o con análisis", perfil: "gestor", slug: "6-diagnostico/3-nuevo-diagnostico" },
   { pregunta: "semáforo de consultas del tablero", perfil: "gestor", slug: "6-diagnostico/4-tablero-y-dictamen" },
   { pregunta: "dictamen viable o bloqueado", perfil: "gestor", slug: "6-diagnostico/4-tablero-y-dictamen" },
   { pregunta: "impuesto departamental vigencias pagada", perfil: "gestor", slug: "6-diagnostico/5-impuesto-departamental" },

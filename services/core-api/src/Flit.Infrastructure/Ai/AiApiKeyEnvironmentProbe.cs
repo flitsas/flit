@@ -1,10 +1,11 @@
 using Flit.Admin.Application.Plataforma.Ai;
 using Flit.Admin.Domain.Plataforma.Ai;
+using Flit.Infrastructure.Ai.Entrega;
 using Microsoft.Extensions.Configuration;
 
 namespace Flit.Infrastructure.Ai;
 
-internal sealed class AiApiKeyEnvironmentProbe(IConfiguration configuration) : IAiApiKeyEnvironmentProbe
+internal sealed class AiApiKeyEnvironmentProbe(IConfiguration configuration) : IAiApiKeyEnvironmentProbe, ILectorLlaveProveedorIa
 {
     private static readonly Dictionary<string, string> EnvVarByProvider =
         new(StringComparer.Ordinal)
@@ -20,6 +21,9 @@ internal sealed class AiApiKeyEnvironmentProbe(IConfiguration configuration) : I
         var key = ReadKeyForMasking(providerCode);
         return !string.IsNullOrWhiteSpace(key);
     }
+
+    /// <summary>ADR-0091: la misma variable por proveedor (DELTA P2=b); solo para sellarla, nunca fuera de Infrastructure.</summary>
+    public string? LeerLlave(string providerCode) => ReadKeyForMasking(providerCode);
 
     public string? ReadKeyForMasking(string providerCode)
     {

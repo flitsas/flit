@@ -148,14 +148,14 @@ describe("Pantalla única — cambio de modo (AC5)", () => {
     montarNuevo(navegacion);
     fireEvent.change(await screen.findByRole("textbox", { name: "Placa o VIN" }), { target: { value: "tst123" } });
     fireEvent.click(await screen.findByRole("checkbox", { name: "SIMIT vehículo" }));
-    fireEvent.click(screen.getByRole("radio", { name: "Con Análisis IA" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Con análisis" }));
     fireEvent.change(await screen.findByRole("combobox", { name: /tipo de trámite/i }), { target: { value: "TRASPASO_STANDARD" } });
 
     fireEvent.click(radioModo("Masivo"));
     expect(radioModo("Masivo")).toHaveAttribute("aria-checked", "true");
     expect(await screen.findByLabelText(/archivo de vehículos/i)).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "SIMIT vehículo" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "Con Análisis IA" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Con análisis" })).toBeChecked();
     expect(screen.getByRole("combobox", { name: /tipo de trámite/i })).toHaveValue("TRASPASO_STANDARD");
     expect(window.location.search).toContain("modo=masivo");
 

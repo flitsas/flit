@@ -6,6 +6,8 @@ export function etiquetaHerramienta(code: AiToolCode): string {
       return "OCR";
     case "dr_flit":
       return "DR. FLIT";
+    case "diagnostico_dictamen":
+      return "Redacción del dictamen (Diagnóstico)";
     default:
       return String(code);
   }
@@ -17,6 +19,8 @@ export function descripcionHerramienta(code: AiToolCode): string {
       return "Análisis visual de documentos (licencias, improntas y similares).";
     case "dr_flit":
       return "Asistente conversacional Dr. FLIT (chat de soporte y guía).";
+    case "diagnostico_dictamen":
+      return "Redacción del texto del dictamen del Diagnóstico Vehicular.";
     default:
       return "Herramienta de inteligencia artificial de plataforma.";
   }
