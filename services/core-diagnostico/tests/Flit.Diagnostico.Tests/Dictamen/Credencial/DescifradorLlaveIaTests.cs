@@ -55,6 +55,21 @@ public sealed class DescifradorLlaveIaTests
         llave.Should().Be(V.Texto("llave_en_claro"));
     }
 
+    /// <summary>HU-7b: la privada en línea (variable de entorno, base64 DER PKCS#8) pasa por la misma importación que el archivo y abre el vector.</summary>
+    [Fact]
+    public void SP16_PrivadaEnVariableBase64Pkcs8_CargaYAbreElSobreDelVector()
+    {
+        var opciones = new OpcionesIa { Origen = OpcionesIa.OrigenPlataforma, Kid = V.Kid, ClavePrivada = V.PrivadaBase64 };
+
+        using var claves = ClavesPrivadasIa.Cargar(opciones, out var motivo, out var aviso);
+
+        motivo.Should().Be("OK");
+        aviso.Should().BeNull();
+        claves.Should().NotBeNull();
+        var llave = DescifradorLlaveIa.Descifrar(V.Sobre(), V.Kid, claves!.Para(V.Kid)!, AadDelVector());
+        llave.Should().Be(V.Texto("llave_en_claro"));
+    }
+
     [Fact]
     public void SP9_ConCekEIvFijos_AesGcmDaElMismoTextoCifradoYTagDelVector()
     {

@@ -23,17 +23,20 @@ public static class ConfiguracionIaPlataforma
 }
 
 /// <summary>
-/// Una línea al arrancar con el redactor elegido (SP-5, SP-16): origen, proveedor, kid y si la privada está presente; nunca la llave,
-/// la privada ni su ruta. Con <c>plataforma</c> incompleta avisa «redactor sin configuración de plataforma» con un código fijo.
+/// Una línea al arrancar con el redactor elegido (SP-5, SP-16): origen, proveedor, kid y si la privada está presente y de dónde
+/// (<c>presente(variable)</c>, <c>presente(archivo)</c> o <c>ausente</c>); nunca la llave, la privada ni su ruta. Con <c>plataforma</c> incompleta avisa «redactor sin configuración de plataforma» con un código fijo.
 /// </summary>
 public sealed partial class AvisoArranqueRedactor(AvisoArranqueRedactor.Estado estado, ILogger<AvisoArranqueRedactor> log) : IHostedService
 {
-    /// <summary>Lo que se decidió en el registro. <see cref="Motivo"/> es un código fijo (<c>OK</c>, <c>SIN_DIRECCION</c>, …).</summary>
-    public sealed record Estado(string Origen, string Proveedor, string Kid, bool PrivadaPresente, string Motivo, string? AvisoAnterior);
+    /// <summary>
+    /// Lo que se decidió en el registro. <see cref="Privada"/> sale de <see cref="OpcionesIa.DescribirPrivada"/>; <see cref="Motivo"/>
+    /// es un código fijo (<c>OK</c>, <c>SIN_DIRECCION</c>, …).
+    /// </summary>
+    public sealed record Estado(string Origen, string Proveedor, string Kid, string Privada, string Motivo, string? AvisoAnterior);
 
     public Task StartAsync(CancellationToken cancellationToken)
     {
-        var privada = estado.PrivadaPresente ? "presente" : "ausente";
+        var privada = string.IsNullOrEmpty(estado.Privada) ? "ausente" : estado.Privada;
         if (string.Equals(estado.Motivo, "OK", StringComparison.Ordinal))
             Elegido(log, estado.Origen, estado.Proveedor, string.IsNullOrEmpty(estado.Kid) ? "-" : estado.Kid, privada);
         else

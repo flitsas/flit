@@ -51,7 +51,7 @@ public static class RegistroRedactor
             return AddPlataforma(services, configuration);
 
         services.AddSingleton<IProveedorRedactor, ProveedorRedactorNoConfigurado>();
-        services.AddSingleton(new AvisoArranqueRedactor.Estado("desconocido", "no-configurado", string.Empty, false, "ORIGEN_DESCONOCIDO", null));
+        services.AddSingleton(new AvisoArranqueRedactor.Estado("desconocido", "no-configurado", string.Empty, "ausente", "ORIGEN_DESCONOCIDO", null));
         return services;
     }
 
@@ -77,14 +77,14 @@ public static class RegistroRedactor
             proveedor = "no-configurado";
         }
 
-        services.AddSingleton(new AvisoArranqueRedactor.Estado(OpcionesIa.OrigenLocal, proveedor, string.Empty, false, "OK", null));
+        services.AddSingleton(new AvisoArranqueRedactor.Estado(OpcionesIa.OrigenLocal, proveedor, string.Empty, "ausente", "OK", null));
         return services;
     }
 
     private static IServiceCollection AddPlataforma(IServiceCollection services, IConfiguration configuration)
     {
         var opciones = configuration.GetSection(OpcionesIa.Seccion).Get<OpcionesIa>() ?? new OpcionesIa();
-        var privadaPresente = !string.IsNullOrWhiteSpace(opciones.ClavePrivadaArchivo);
+        var privada = opciones.DescribirPrivada();
         var kid = SobreLlaveIa.KidValido(opciones.Kid?.Trim()) ? opciones.Kid!.Trim() : string.Empty;
         var direccion = configuration[TiposTramiteEndpoints.ClaveDireccion];
         string motivo;
@@ -103,7 +103,7 @@ public static class RegistroRedactor
         if (claves is null || uri is null)
         {
             services.AddSingleton<IProveedorRedactor, ProveedorRedactorNoConfigurado>();
-            services.AddSingleton(new AvisoArranqueRedactor.Estado(OpcionesIa.OrigenPlataforma, "no-configurado", kid, privadaPresente, motivo, avisoAnterior));
+            services.AddSingleton(new AvisoArranqueRedactor.Estado(OpcionesIa.OrigenPlataforma, "no-configurado", kid, privada, motivo, avisoAnterior));
             return services;
         }
 
@@ -118,7 +118,7 @@ public static class RegistroRedactor
             sp.GetRequiredService<ILogger<FuenteCredencialPlataforma>>()));
         services.AddSingleton(sp => new TopeLlamadasRedactor(opciones.MaxLlamadasPorMinuto, sp.GetRequiredService<TimeProvider>()));
         services.AddHttpClient<IProveedorRedactor, ProveedorRedactorAnthropic>();
-        services.AddSingleton(new AvisoArranqueRedactor.Estado(OpcionesIa.OrigenPlataforma, FuenteCredencialPlataforma.ProveedorPermitido, claves.Kid, privadaPresente, "OK", avisoAnterior));
+        services.AddSingleton(new AvisoArranqueRedactor.Estado(OpcionesIa.OrigenPlataforma, FuenteCredencialPlataforma.ProveedorPermitido, claves.Kid, privada, "OK", avisoAnterior));
         return services;
     }
 }
