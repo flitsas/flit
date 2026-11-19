@@ -2,15 +2,15 @@
 
 import { useSyncExternalStore } from "react";
 import type { ComponentType } from "react";
-import { Icono } from "@flit/ui/Icono";
+import { ChipFiltro, CHIPS_FILTRO_FILA_CLS, TarjetaPlegable } from "@flit/ui";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { Contadores } from "@/lib/tipos";
 import { TEXTO_JURIDICO, TEXTO_RAPIDO, type FiltroJuridico, type FiltroRapido } from "@/lib/filtros";
 
-const RAPIDOS: { id: FiltroRapido; color: string; icono: ComponentType<{ className?: string; "aria-hidden"?: boolean }>; contador: "proximosAVencer" | "sinContraventor" | "rechazadosOt" }[] = [
-  { id: "ProximosAVencer", color: "var(--badge-danger-fg)", icono: iconoComo("reloj"), contador: "proximosAVencer" },
-  { id: "SinContraventor", color: "var(--badge-purple-fg)", icono: iconoComo("persona"), contador: "sinContraventor" },
-  { id: "RechazadosOt", color: "var(--badge-warning-fg)", icono: iconoComo("alerta"), contador: "rechazadosOt" },
+const RAPIDOS: { id: FiltroRapido; tono: string; icono: ComponentType<{ className?: string; "aria-hidden"?: boolean }>; contador: "proximosAVencer" | "sinContraventor" | "rechazadosOt" }[] = [
+  { id: "ProximosAVencer", tono: "text-[color:var(--badge-danger-fg)]", icono: iconoComo("reloj"), contador: "proximosAVencer" },
+  { id: "SinContraventor", tono: "text-[color:var(--badge-purple-fg)]", icono: iconoComo("persona"), contador: "sinContraventor" },
+  { id: "RechazadosOt", tono: "text-[color:var(--badge-warning-fg)]", icono: iconoComo("alerta"), contador: "rechazadosOt" },
 ];
 
 // C-321 y Pico y placa eléctricos no están: siguen sin definición (S-57) y la HU #13870 los oculta hasta que existan.
@@ -48,14 +48,6 @@ function suscribir(avisar: () => void) {
   };
 }
 
-const ATAJO_CLS = "inline-flex h-8 items-center gap-1.5 rounded-lg border px-3 text-xs font-semibold transition focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
-const atajoNeutro = (activo: boolean) =>
-  `${ATAJO_CLS} ${
-    activo
-      ? "border-flit-brand bg-flit-brand/10 text-flit-brand-ink"
-      : "border-border text-flit-primary hover:border-flit-brand"
-  }`;
-
 /**
  * HU #13870: «Búsqueda rápida» reúne los atajos de la bandeja (§6.11): los de color con su conteo, «Sin gestión» y los
  * filtros jurídicos (RN-182). Cada atajo se aplica al pulsarlo y se quita con un segundo clic.
@@ -81,53 +73,34 @@ export function BusquedaRapida({
   const abierto = useSyncExternalStore(suscribir, leerAbierto, () => true);
 
   return (
-    <section className="rounded-2xl border border-border bg-card">
-      <h2 className="m-0">
-        <button
-          type="button"
-          aria-expanded={abierto}
-          aria-controls="bandeja-busqueda-rapida"
-          onClick={() => guardarAbierto(!abierto)}
-          className="flex w-full items-center justify-between rounded-2xl px-4 py-2.5 text-left text-xs font-semibold text-flit-primary transition hover:bg-flit-brand/[0.04] focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand"
-        >
-          Búsqueda rápida
-          <Icono nombre="abajo" className={`h-4 w-4 opacity-60 transition-transform motion-reduce:transition-none ${abierto ? "rotate-180" : ""}`} />
-        </button>
-      </h2>
-      <div id="bandeja-busqueda-rapida" hidden={!abierto} className="px-4 pb-3">
-        <div role="group" aria-label="Atajos de búsqueda rápida" className="flex flex-wrap items-center gap-2">
-          {RAPIDOS.map((r) => {
-            const activo = rapido === r.id;
-            const Icono = r.icono;
-            return (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => onRapido(activo ? null : r.id)}
-                aria-pressed={activo}
-                className={ATAJO_CLS}
-                style={{ borderColor: r.color, color: activo ? "var(--card)" : r.color, background: activo ? r.color : "transparent" }}
-              >
-                <Icono className="h-3.5 w-3.5" aria-hidden />
-                {TEXTO_RAPIDO[r.id]}
-                <span className="rounded-full bg-current/10 px-2 py-0.5 text-[11px] tabular-nums">{contadores ? contadores[r.contador] : "…"}</span>
-              </button>
-            );
-          })}
-          <button type="button" aria-pressed={sinGestion} onClick={() => onSinGestion(!sinGestion)} className={atajoNeutro(sinGestion)}>
-            Sin gestión
-          </button>
-          <span className="mx-1 h-5 w-px bg-border" aria-hidden />
-          {JURIDICOS.map((j) => {
-            const activo = juridico === j;
-            return (
-              <button key={j} type="button" aria-pressed={activo} onClick={() => onJuridico(activo ? null : j)} className={atajoNeutro(activo)}>
-                {TEXTO_JURIDICO[j]}
-              </button>
-            );
-          })}
-        </div>
+    <TarjetaPlegable titulo="Búsqueda rápida" abierta={abierto} onAlternar={guardarAbierto} nivelTitulo={2}>
+      <div role="group" aria-label="Atajos de búsqueda rápida" className={`${CHIPS_FILTRO_FILA_CLS} items-center`}>
+        {RAPIDOS.map((r) => {
+          const activo = rapido === r.id;
+          const IconoAtajo = r.icono;
+          return (
+            <ChipFiltro
+              key={r.id}
+              activo={activo}
+              onClick={() => onRapido(activo ? null : r.id)}
+              etiqueta={
+                <span className="inline-flex items-center gap-1.5">
+                  {/* El color de cada atajo queda en su ícono; el chip es el del kit. */}
+                  <IconoAtajo className={`h-4 w-4 shrink-0 ${r.tono}`} aria-hidden />
+                  {TEXTO_RAPIDO[r.id]}
+                  <span className="rounded-full bg-[var(--kit-hover)] px-2 py-0.5 text-xs tabular-nums">{contadores ? contadores[r.contador] : "…"}</span>
+                </span>
+              }
+            />
+          );
+        })}
+        <ChipFiltro activo={sinGestion} onClick={() => onSinGestion(!sinGestion)} etiqueta="Sin gestión" />
+        <span className="mx-1 h-6 w-px bg-[color:var(--di-divider)]" aria-hidden />
+        {JURIDICOS.map((j) => {
+          const activo = juridico === j;
+          return <ChipFiltro key={j} activo={activo} onClick={() => onJuridico(activo ? null : j)} etiqueta={TEXTO_JURIDICO[j]} />;
+        })}
       </div>
-    </section>
+    </TarjetaPlegable>
   );
 }
