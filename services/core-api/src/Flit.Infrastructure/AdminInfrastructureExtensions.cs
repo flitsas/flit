@@ -34,7 +34,6 @@ using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Admin.Application.Companies.RuntPersonOverrides;
 using Flit.Infrastructure.Tramites;
 using Flit.Admin.Domain.ProcedureSnapshots;
-using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;

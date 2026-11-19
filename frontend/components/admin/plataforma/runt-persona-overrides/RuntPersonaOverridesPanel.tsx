@@ -40,7 +40,6 @@ const DOC_OPTIONS: { value: OverrideDocumentType; label: string }[] = [
   { value: "TI", label: "Tarjeta de identidad (TI)" },
   { value: "PAS", label: "Pasaporte (PAS)" },
   { value: "PPT", label: "Permiso por Protección Temporal (PPT)" },
-  { value: "NIT", label: "NIT" },
 ];
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
@@ -554,6 +553,7 @@ export function RuntPersonaOverridesPanel() {
 
   useEffect(() => {
     const ctrl = new AbortController();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- carga al cambiar tenant: skeleton intencional
     void load(tenantId, ctrl.signal);
     return () => ctrl.abort();
   }, [tenantId, load]);
@@ -634,9 +634,10 @@ export function RuntPersonaOverridesPanel() {
         </EncabezadoFiltrable>
       ),
       render: (o) => (
-        <StatusBadge tone={o.isActive ? "success" : "neutral"}>
-          {o.isActive ? "Activo" : "Inactivo"}
-        </StatusBadge>
+        <StatusBadge
+          label={o.isActive ? "Activo" : "Inactivo"}
+          tone={o.isActive ? "success" : "neutral"}
+        />
       ),
     },
     {
@@ -726,21 +727,24 @@ export function RuntPersonaOverridesPanel() {
       ) : (
         <UiStateBoundary
           status={status}
-          loadingLabel="Cargando overrides…"
-          emptyLabel="Esta compañía no tiene overrides de persona RUNT."
-          emptyDescription="Usa «Nuevo override» para crear el primero."
+          emptyMessage="Esta compañía no tiene overrides de persona RUNT. Usa «Nuevo override» para crear el primero."
+          errorMessage="No se pudieron cargar los overrides de persona RUNT."
           onRetry={() => void load(tenantId)}
         >
-          {visibles.length === 0 && filtros.hayFiltros ? (
-            <TablaFiltrosVacio onLimpiar={filtros.limpiar} />
-          ) : (
-            <DataTable
-              columns={columns}
-              rows={visibles}
-              rowKey={(o) => o.id}
-              paginacion={pg}
-            />
-          )}
+          <DataTable<RuntPersonOverride>
+            ariaLabel="Overrides de persona RUNT"
+            columns={columns}
+            rows={pg.paginar(visibles)}
+            getRowKey={(o) => o.id}
+            emptyContent={<TablaFiltrosVacio onLimpiar={filtros.limpiar} />}
+            pagination={{
+              page: pg.page,
+              pageSize: pg.pageSize,
+              totalCount: visibles.length,
+              onPageChange: pg.setPage,
+              onPageSizeChange: pg.setPageSize,
+            }}
+          />
         </UiStateBoundary>
       )}
 
