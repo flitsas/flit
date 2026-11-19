@@ -114,6 +114,88 @@ public sealed class ColaRedaccionTests
         agotado.InvalidarPdf.Should().BeFalse();
     }
 
+    /// <summary>
+    /// HU-2 (SP-4): <see cref="RedactorEnCola.EnCola"/> y <see cref="RedactorEnCola.Decidir"/> comparten el borde. Con un fallo
+    /// técnico, Decidir agenda mientras <c>intentos &lt;= maxReintentos</c> y deja de agendar con <c>intentos &gt; maxReintentos</c>;
+    /// la fila que deja es «en cola» exactamente cuando quedó con fecha.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(5)]
+    public void HU2_en_cola_usa_el_mismo_borde_que_Decidir(int maxReintentos)
+    {
+        var fallo = new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", ColaRedaccion.Pendiente, 1, "claude", TipoFalloRedactor.Red);
+        var opciones = new OpcionesRedaccion { Habilitado = true, MaxReintentos = maxReintentos };
+        for (var intentos = 0; intentos <= maxReintentos + 2; intentos++)
+        {
+            var cierre = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos, fallo, maxReintentos, Ahora);
+            var enCola = RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, intentos, opciones);
+            enCola.Should().Be(cierre.DisponibleDesde is not null, $"intentos {intentos}, max {maxReintentos}");
+            enCola.Should().Be(intentos <= maxReintentos, $"intentos {intentos}, max {maxReintentos}");
+        }
+    }
+
+    /// <summary>HU-2: con MaxReintentos=2, el tercer fallo técnico saca la fila de la cola y ya no se reencola.</summary>
+    [Fact]
+    public void HU2_tres_fallos_tecnicos_dejan_la_fila_fuera_de_cola()
+    {
+        var opciones = new OpcionesRedaccion { Habilitado = true, MaxReintentos = 2 };
+        var fallo = new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", ColaRedaccion.Pendiente, 1, "claude", TipoFalloRedactor.Http5xx);
+        var estados = new List<bool>();
+        for (var toma = 1; toma <= 3; toma++)
+        {
+            var cierre = RedactorEnCola.Decidir("VIABLE", Alertas, toma, fallo, opciones.MaxReintentos, Ahora);
+            estados.Add(RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, toma, opciones));
+            if (toma == 3)
+            {
+                cierre.DisponibleDesde.Should().BeNull("el tercer fallo no se reencola");
+                cierre.RedactadoPor.Should().Be("PLANTILLA");
+                ColaRedaccion.EsTomable(cierre.EstadoRedaccion, true, cierre.DisponibleDesde, cierre.LeaseHasta, Ahora.AddDays(1)).Should().BeFalse();
+            }
+        }
+
+        estados.Should().Equal(true, true, false);
+    }
+
+    /// <summary>
+    /// HU-2: empresa suspendida (o proveedor apagado) mientras la fila estaba en cola: no hay resultado del modelo, queda la
+    /// plantilla y sale de la cola. La ausencia de llamada la prueban <c>Suspension_o_proveedor_apagado_al_tomar_dejan_la_fecha_en_null</c>
+    /// y <c>RedactorLlmTests.RedaccionSuspendida_NoLlamaAlProveedor</c>.
+    /// </summary>
+    [Fact]
+    public void HU2_suspendida_en_cola_queda_plantilla_y_fuera_de_cola()
+    {
+        var opciones = new OpcionesRedaccion { Habilitado = true, MaxReintentos = 2 };
+        var cierre = RedactorEnCola.Decidir("VIABLE", Alertas, 1, resultado: null, opciones.MaxReintentos, Ahora);
+        cierre.RedactadoPor.Should().Be("PLANTILLA");
+        cierre.Alertamientos.Should().Be(Alertas);
+        cierre.DisponibleDesde.Should().BeNull();
+        RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, 1, opciones).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// HU-2: con <c>Diagnostico:Redaccion:Habilitado=false</c> el emisor no deja fecha de toma aunque haya proveedor (el
+    /// simulado de LOCAL); encendida, sí. El host de pruebas trae la bandera en false.
+    /// </summary>
+    [Fact]
+    public async Task HU2_con_la_redaccion_apagada_el_emisor_no_deja_fecha_aunque_haya_proveedor()
+    {
+        await using (var apagado = await ApiDePrueba.SinBaseAsync(configurar: Simulado))
+        {
+            await using var scope = apagado.App.Services.CreateAsyncScope();
+            scope.ServiceProvider.GetRequiredService<IProveedorRedactor>().Configurado.Should().BeTrue();
+            var emisor = scope.ServiceProvider.GetRequiredService<EmisorDictamen>();
+            emisor.RedaccionActiva.Should().BeFalse();
+            EmisorDictamen.FilaAlCerrar(Guid.CreateVersion7(), Guid.CreateVersion7(), 1, "TRASPASO_STANDARD", new DictamenEvaluado("VIABLE", []), false, emisor.RedaccionActiva, Ahora)
+                .RedaccionDisponibleDesde.Should().BeNull();
+        }
+
+        EmisorDictamen.RedaccionActivaCon(proveedorConfigurado: true, new OpcionesRedaccion { Habilitado = false }).Should().BeFalse();
+        EmisorDictamen.RedaccionActivaCon(proveedorConfigurado: false, new OpcionesRedaccion { Habilitado = true }).Should().BeFalse();
+        EmisorDictamen.RedaccionActivaCon(proveedorConfigurado: true, new OpcionesRedaccion { Habilitado = true }).Should().BeTrue();
+    }
+
     [Fact]
     public void Suspension_al_tomar_contradiccion_o_proveedor_apagado_no_reintentan()
     {

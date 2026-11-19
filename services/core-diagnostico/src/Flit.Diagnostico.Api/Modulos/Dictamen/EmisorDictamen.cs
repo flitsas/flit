@@ -16,6 +16,7 @@ using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Dictamen;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Diagnostico.Api.Modulos.Dictamen;
 
@@ -46,9 +47,23 @@ internal readonly record struct TransicionVersion(VersionEmitida? Anterior, Vers
 /// <c>diagnostico.dictamen.emitido</c> (corte 7).
 /// </summary>
 internal sealed partial class EmisorDictamen(
-    DiagnosticoDb db, IProtectorRespuestaFuente protector, IProveedorRedactor proveedor, IPlatformOutbox outbox, ILogger<EmisorDictamen> log)
+    DiagnosticoDb db, IProtectorRespuestaFuente protector, IProveedorRedactor proveedor, IPlatformOutbox outbox,
+    IOptions<Trabajos.OpcionesRedaccion> redaccion, ILogger<EmisorDictamen> log)
 {
     private static readonly JsonSerializerOptions Json = new();
+
+    /// <summary>
+    /// HU-2: la cola de redacción puede tomar lo que deje este emisor. Con <c>Diagnostico:Redaccion:Habilitado=false</c> no hay
+    /// trabajador, así que el cierre no deja fecha de toma aunque haya proveedor.
+    /// </summary>
+    public bool RedaccionActiva => RedaccionActivaCon(proveedor.Configurado, redaccion.Value);
+
+    /// <summary>HU-2: proveedor configurado y redacción encendida. Lo usan el cierre y el reemplazo del backoffice.</summary>
+    public static bool RedaccionActivaCon(bool proveedorConfigurado, Trabajos.OpcionesRedaccion opciones)
+    {
+        ArgumentNullException.ThrowIfNull(opciones);
+        return proveedorConfigurado && opciones.Habilitado;
+    }
 
     /// <summary>
     /// true si el vehículo no estaba terminado con el estado anterior de esta celda y el actual de las hermanas, y sí lo está
@@ -418,7 +433,7 @@ internal sealed partial class EmisorDictamen(
             vigente.Vigente = false;
 
         var fila = FilaAlCerrar(
-            celda.TenantId, celda.VehiculoId, transicion.Nueva.Version, pedido.TipoTramiteCodigo, evaluado, suspendida, proveedor.Configurado, ahora);
+            celda.TenantId, celda.VehiculoId, transicion.Nueva.Version, pedido.TipoTramiteCodigo, evaluado, suspendida, RedaccionActiva, ahora);
         // HU #14563 (ADR-0086 D-1, AC7): la fila toma la versión de la celda que cierra; la cabecera no sube otra vez.
         await EscritorCeldas.MarcarFilaAsync(
             db, celda.VehiculoId, celda.VersionTablero, ct, db.ParaEditarDeLaEmpresa<VehiculoDiagnostico>(celda.TenantId)).ConfigureAwait(false);

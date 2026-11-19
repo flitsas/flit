@@ -55,8 +55,30 @@ internal sealed partial class RedactorEnCola(
             return new CierreDeRedaccion(ConTexto(alertamientos, resultado.Texto), "LLM", ColaRedaccion.Completada, null, null, true);
         }
 
-        var desde = intentos > maxReintentos || resultado is null ? null : EmisorDictamen.DisponibleDesde(resultado, ahora);
+        var desde = AgotoReintentos(intentos, maxReintentos) || resultado is null ? null : EmisorDictamen.DisponibleDesde(resultado, ahora);
         return new CierreDeRedaccion(alertamientos, "PLANTILLA", ColaRedaccion.Pendiente, desde, null, false);
+    }
+
+    /// <summary>
+    /// true si una toma con <paramref name="intentos"/> (contando esa toma) ya pasó del tope: <c>intentos &gt; maxReintentos</c>.
+    /// Es el único borde de reintentos; lo usan <see cref="Decidir"/> y <see cref="EnCola"/>. Con MaxReintentos=2 hay tres tomas
+    /// (1, 2 y 3) y el fallo de la tercera ya no agenda.
+    /// </summary>
+    public static bool AgotoReintentos(int intentos, int maxReintentos) => intentos > maxReintentos;
+
+    /// <summary>
+    /// HU-2 (<c>redaccion_en_cola</c>): la fila espera una redacción del modelo. Función pura de la fila ya leída: redacción
+    /// encendida (<see cref="OpcionesRedaccion.Habilitado"/>; si no, ningún trabajador toma la cola), <c>PENDIENTE</c>, con fecha
+    /// de toma y sin agotar reintentos según <see cref="AgotoReintentos"/>, es decir <c>intentos &lt;= MaxReintentos</c>.
+    /// No mira el lease: una fila tomada sigue en cola.
+    /// </summary>
+    public static bool EnCola(string estadoRedaccion, DateTimeOffset? disponibleDesde, int intentos, OpcionesRedaccion opciones)
+    {
+        ArgumentNullException.ThrowIfNull(opciones);
+        return opciones.Habilitado
+            && estadoRedaccion == ColaRedaccion.Pendiente
+            && disponibleDesde is not null
+            && !AgotoReintentos(intentos, opciones.MaxReintentos);
     }
 
     /// <summary>

@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.6.0"
+  version: "1.6.1"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -68,6 +68,11 @@ info:
     ROL_NO_ASIGNABLE, OBJETIVO_PROTEGIDO, ACCION_SOBRE_SI_MISMO, USUARIO_NO_ENCONTRADO, USUARIO_SUSPENDIDO, INVITACION_PENDIENTE,
     ULTIMO_ADMINISTRADOR, ROL_YA_VIGENTE, CORREO_INVALIDO, NOMBRE_REQUERIDO, FILTRO_INVALIDO, PAGINACION_INVALIDA,
     DEMASIADAS_SOLICITUDES, PLATAFORMA_NO_DISPONIBLE y PLATAFORMA_NO_CONFIGURADA.
+
+    Versión 1.6.1 (redactor IA, registro diferido HU-2): cambio aditivo. DictamenVehiculo y DictamenVehiculoBackoffice traen
+    redaccion_en_cola (boolean, requerido): true solo si la redacción del modelo está encendida en el servicio, el dictamen
+    sigue PENDIENTE, tiene fecha de toma y no agotó los reintentos (intentos <= MaxReintentos, el mismo borde de la cola).
+    No se exponen intentos, lease ni fecha de toma.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -6464,8 +6469,8 @@ components:
       description: >
         Dictamen vigente que ve la compañía. Sin override, lease, intentos ni empresa. HU #14563 (D6, P1 = a): la marca
         ajustado_por_flit y ajustado_en; nunca el autor, el motivo, la versión anterior ni la marca ajuste por alertamiento.
-        HU #14582: cambio_propietario del vehículo.
-      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, cambio_propietario]
+        HU #14582: cambio_propietario del vehículo. 1.6.1: redaccion_en_cola.
+      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, cambio_propietario, redaccion_en_cola]
       properties:
         version: { type: integer, minimum: 1 }
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
@@ -6490,12 +6495,17 @@ components:
           type: boolean
           nullable: true
           description: HU #14582. El del vehículo (FilaVehiculo.cambio_propietario); sin documentos.
+        redaccion_en_cola:
+          type: boolean
+          description: >
+            Versión 1.6.1. true si la redacción del modelo de este dictamen sigue en cola (redacción encendida, PENDIENTE, con fecha
+            de toma y sin agotar reintentos). false con COMPLETADA, con la redacción apagada o suspendida, o con los reintentos agotados.
 
     DictamenVehiculoBackoffice:
       type: object
       additionalProperties: false
       description: El de la compañía más los tres campos de override. Sin lease, intentos ni texto de cola.
-      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, analisis_override, usuario_override_id, override_en, cambio_propietario]
+      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, analisis_override, usuario_override_id, override_en, cambio_propietario, redaccion_en_cola]
       properties:
         version: { type: integer, minimum: 1 }
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
@@ -6513,6 +6523,11 @@ components:
           type: boolean
           nullable: true
           description: HU #14582. El del vehículo (FilaVehiculo.cambio_propietario); sin documentos.
+        redaccion_en_cola:
+          type: boolean
+          description: >
+            Versión 1.6.1. true si la redacción del modelo de este dictamen sigue en cola (redacción encendida, PENDIENTE, con fecha
+            de toma y sin agotar reintentos). false con COMPLETADA, con la redacción apagada o suspendida, o con los reintentos agotados.
 
     CuerpoOverrideDictamen:
       type: object
