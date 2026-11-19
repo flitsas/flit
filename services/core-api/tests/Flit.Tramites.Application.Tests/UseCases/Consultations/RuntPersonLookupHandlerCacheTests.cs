@@ -47,6 +47,8 @@ public sealed class RuntPersonLookupHandlerCacheTests
 
     public RuntPersonLookupHandlerCacheTests()
     {
+        // HU #14642: anular tenant_manual_conductor para que NSubstitute no auto-mockee un provider fantasma.
+        _registry.Resolve("tenant_manual_conductor").Returns((IConsultationProvider?)null);
         _registry.Resolve("kyverum_runt_conductor").Returns((IConsultationProvider?)null);
         var resolver = new ConsultationProviderChainResolver(_registry, new ConsultationChainOptions());
         var cacheService = new ExternalQueryCacheService(_cacheRepo, _consentRepo, _catalogRepo);
