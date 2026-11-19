@@ -95,7 +95,7 @@ export function IngresoLayout({
   children: ReactNode;
 }) {
   return (
-    <div className="grid min-h-screen w-full grid-cols-1 min-[961px]:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
+    <div className="grid min-h-dvh w-full grid-cols-1 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
       <div
         className="relative flex flex-col gap-6 overflow-hidden p-[clamp(28px,4.5vw,64px)] text-[color:var(--di-ingreso-texto)]"
         style={{ background: "var(--di-ingreso-fondo)" }}
