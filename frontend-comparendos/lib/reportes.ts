@@ -181,3 +181,94 @@ export function totalesProductividad(filas: FilaProductividad[]): Record<Metrica
   for (const f of filas) for (const m of METRICAS) t[m.clave] += f[m.clave];
   return t;
 }
+
+// ── Lente de dinero (rediseño de Comparendos, S2: GET /reportes/dinero) ──────────────────────────────────────────────
+
+export interface Monto {
+  cantidad: number;
+  valor: number;
+}
+
+export interface DineroEstado extends Monto {
+  estado: "SinNotificar" | "EnTiempo" | "Vencido" | "Caducado" | "Prescrito";
+}
+
+export interface DineroOrganismo extends Monto {
+  organismoId: string | null;
+  nombre: string;
+  /** La parte que todavía se puede cobrar (sin notificar, en tiempo o vencido). */
+  exigible: number;
+}
+
+export interface Frentes {
+  proximosAVencer: Monto;
+  sinContraventor: Monto;
+  rechazadosOt: Monto;
+  sinGestion: Monto;
+  vencidos: Monto;
+  caducidadInmediata: Monto;
+}
+
+export interface Dinero {
+  hoy: string;
+  /** Deuda (activo, sin pagar y sin DP favorable) repartida por estado legal. */
+  estados: DineroEstado[];
+  exigible: Monto;
+  noExigible: Monto;
+  cobroCoactivo: Monto;
+  descuento: { d50: Monto & { ahorroEstimado: number }; d25: Monto & { ahorroEstimado: number } };
+  organismos: DineroOrganismo[];
+  pagado: { cantidad: number; total: number; cc: number; pc: number; bc: number };
+  frentes: Frentes;
+  ahorroLogrado: number;
+  mensual: { periodo: string; valorIngresado: number; pagado: number }[];
+}
+
+export interface RespuestaDinero {
+  alcance: { empresa: string | null; nit: string | null; desde: string; hasta: string };
+  dinero: Dinero;
+}
+
+/** Pesos abreviados para las cifras grandes: 3.900.000.000 → «$ 3,9 mil M»; 126.200.000 → «$ 126,2 M». */
+export function pesosCorto(valor: number | null | undefined): string {
+  if (valor === null || valor === undefined) return "—";
+  if (Math.abs(valor) < 1e6) return `$ ${Math.round(valor).toLocaleString("es-CO")}`;
+  return `$ ${numeroCorto(valor)}`;
+}
+
+/** Un frente de «Para hoy»: lo que se cuenta, a dónde lleva en la bandeja y si es plata que urge o que se recupera. */
+export interface DefFrente {
+  clave: keyof Frentes;
+  titulo: string;
+  /** Qué hacer, en una línea. */
+  accion: string;
+  /** Filtro de la bandeja con las mismas claves de `aQuery`. */
+  query: Record<string, string>;
+  pendiente?: boolean;
+}
+
+export const FRENTES: DefFrente[] = [
+  { clave: "proximosAVencer", titulo: "Próximos a vencer", accion: "Vencen en 2 días hábiles o menos", query: { rapido: "ProximosAVencer" }, pendiente: true },
+  { clave: "caducidadInmediata", titulo: "Caducidad inmediata", accion: "Caducados o por caducar en 30 días, sin DP", query: { juridico: "CaducidadInmediata" } },
+  { clave: "sinContraventor", titulo: "Sin contraventor", accion: "Falta el conductor responsable", query: { rapido: "SinContraventor" } },
+  { clave: "rechazadosOt", titulo: "Rechazados por el organismo", accion: "El cambio de contraventor no fue aceptado", query: { rapido: "RechazadosOt" }, pendiente: true },
+  { clave: "sinGestion", titulo: "Sin gestión", accion: "Nadie ha hecho nada todavía", query: { sinGestion: "true" } },
+  { clave: "vencidos", titulo: "Vencidos", accion: "Se pasó el plazo de gestión", query: { estadoLegal: "Vencido" } },
+];
+
+/** Enlace a la bandeja con el filtro del frente (y la empresa del SuperAdmin o el NIT, si los hay). */
+export function hrefBandeja(query: Record<string, string>, extra: { empresa?: string | null; nit?: string | null } = {}): string {
+  const q = new URLSearchParams(query);
+  if (extra.empresa) q.set("empresa", extra.empresa);
+  if (extra.nit) q.set("nit", extra.nit);
+  return `/bandeja?${q.toString()}`;
+}
+
+/** «noviembre de 2026» o «1 al 19 de noviembre de 2026» según el rango; es el periodo visible de «Pagado» y «Ahorro». */
+export function textoPeriodo(desde: string, hasta: string): string {
+  const mes = (p: string) => new Intl.DateTimeFormat("es-CO", { month: "long", timeZone: "UTC" }).format(new Date(`${p}T00:00:00Z`));
+  const [ad, md, dd] = desde.split("-");
+  const [ah, mh, dh] = hasta.split("-");
+  if (ad === ah && md === mh) return `${Number(dd)} al ${Number(dh)} de ${mes(hasta)} de ${ah}`;
+  return `${Number(dd)} de ${mes(desde)} de ${ad} al ${Number(dh)} de ${mes(hasta)} de ${ah}`;
+}
