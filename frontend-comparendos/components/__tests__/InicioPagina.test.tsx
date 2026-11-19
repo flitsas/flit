@@ -155,6 +155,10 @@ describe("Inicio de Comparendos", () => {
     expect(screen.getByTestId("frente-vencidos").getAttribute("aria-label")).toMatch(/^Vencidos: 10 comparendos por un valor de \$\s3\.800\.000\. Se pasó el plazo de gestión$/);
     // R2: el dinero es una franja de 4 tarjetas; la tendencia, la dona, los organismos y el coactivo están en Reportes.
     expect(kpis.childElementCount).toBe(4);
+    // R4: el dinero va segundo, entre «Para hoy» y la gestión.
+    const orden = (a: Element, b: Element) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(orden(screen.getByTestId("para-hoy"), kpis)).toBeTruthy();
+    expect(orden(kpis, await screen.findByTestId("gestion"))).toBeTruthy();
     expect(screen.queryByRole("link", { name: /^En cobro coactivo/ })).toBeNull();
     expect(screen.queryByText(/Tendencia de los últimos 12 meses/)).toBeNull();
     // La operación con el módulo trae pesos, y la frase de arriba los dice.
