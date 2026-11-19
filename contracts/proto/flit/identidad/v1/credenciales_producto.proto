@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package flit.identidad.v1;
+
+option csharp_namespace = "Flit.Identidad.Grpc.V1";
+
+// Credenciales de un producto por empresa para el servicio que llama a un tercero en su nombre (ADR-0092).
+// Lo atiende core-identity, dueño de platform.tenant_product_credentials (cifrada con Data Protection).
+//
+// Autenticación (ADR-0070, contrato §3):
+//   - authorization: token de servicio con aud=plataforma y scope platform.identidad.credenciales.impuesto.
+//   - x-flit-tenant-id: OBLIGATORIA; la empresa del sobre del trabajo. Sin ella INVALID_ARGUMENT.
+//   - Solo el cliente svc-consultas. Otro sub -> PERMISSION_DENIED reason CLIENTE_NO_PERMITIDO.
+// Canal h2c interno: la llave viaja en claro dentro de la red de contenedores (riesgo aceptado en ADR-0092, pendiente
+// aval de Seguridad). El campo 6 queda libre para un sobre flit.platform.v1.LlaveCifrada si Seguridad lo exige.
+// core-identity NUNCA escribe la llave en logs. Errores con google.rpc.ErrorInfo (domain flitsas.com).
+service CredencialesProductoService {
+  // Idempotente y sin efectos. Fail-closed: con Diagnóstico apagado para la empresa o algún ancestro, disponible=false.
+  rpc ObtenerCredencialImpuesto(ObtenerCredencialImpuestoRequest) returns (ObtenerCredencialImpuestoResponse);
+}
+
+message ObtenerCredencialImpuestoRequest {}
+
+message ObtenerCredencialImpuestoResponse {
+  bool disponible = 1;                    // false => el consumidor NO llama a la fuente
+  MotivoCredencialNoDisponible motivo = 2;  // UNSPECIFIED con disponible = true
+  string api_key = 3;                     // solo con disponible = true
+  int64 version = 4;                      // row_version de la fila; 0 sin fila. Versión de la caché del consumidor
+  int32 ttl_segundos = 5;                 // caché sugerida: 300 con llave, 60 sin llave
+}
+
+enum MotivoCredencialNoDisponible {
+  MOTIVO_CREDENCIAL_NO_DISPONIBLE_UNSPECIFIED = 0;
+  MOTIVO_CREDENCIAL_NO_DISPONIBLE_SIN_CONFIGURAR = 1;     // no hay fila diagnostico/impuesto_api_key para la empresa
+  MOTIVO_CREDENCIAL_NO_DISPONIBLE_PRODUCTO_APAGADO = 2;   // diagnostico apagado para la empresa o un ancestro (ADR-0057)
+}
