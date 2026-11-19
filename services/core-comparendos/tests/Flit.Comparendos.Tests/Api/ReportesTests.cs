@@ -188,6 +188,33 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
     }
 
     [Fact]
+    public async Task S2_Dinero_Bordes_ValorYOrganismoNulos_EmpresaAjena_YRangoInvalido()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, usuario, ids) = await EscenarioAsync(ct);
+        // R-4 sin valor y sin organismo: cuenta como deuda, suma 0 y sale como «Sin organismo identificado», sin 500.
+        await api.EnDbAsync(db => db.Comparendos.Where(c => c.Id == ids["R4"])
+            .ExecuteUpdateAsync(u => u.SetProperty(c => c.ValorTotal, (decimal?)null).SetProperty(c => c.OrganismoTransitoId, (Guid?)null), ct));
+        var cliente = api.Cliente(usuario);
+
+        var d = (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero", ct)).GetProperty("dinero");
+        (d.GetProperty("exigible").GetProperty("cantidad").GetInt32(), d.GetProperty("exigible").GetProperty("valor").GetDecimal()).Should().Be((2, 604100m));
+        var sinOrganismo = d.GetProperty("organismos").EnumerateArray().Single(o => o.GetProperty("organismoId").ValueKind == JsonValueKind.Null);
+        (sinOrganismo.GetProperty("nombre").GetString(), sinOrganismo.GetProperty("cantidad").GetInt32(), sinOrganismo.GetProperty("valor").GetDecimal())
+            .Should().Be(("Sin organismo identificado", 1, 0m));
+        d.GetProperty("descuento").GetProperty("d50").GetProperty("ahorroEstimado").GetDecimal().Should().Be(302050m, "un comparendo sin valor no ahorra nada");
+
+        var otra = await EmpresaAsync(api, reportes: true);
+        (await cliente.GetAsync($"/api/v1/comparendos/reportes/dinero?empresa={otra}", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden, "una gestora no lee otra empresa");
+        (await cliente.GetAsync("/api/v1/comparendos/reportes/dinero?desde=2026-10-09&hasta=2026-10-01", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await cliente.GetAsync("/api/v1/comparendos/reportes/dinero?desde=2020-01-01&hasta=2026-10-09", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, "más de tres años");
+        // El SuperAdmin sin empresa ve todas: al menos la deuda de esta.
+        (await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero", ct)).GetProperty("dinero").GetProperty("exigible").GetProperty("cantidad").GetInt32()
+            .Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
     public async Task AC2_ReporteSemanal_ADestinatarios_ConCopiaOcultaInterna_UnaVezPorDia()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

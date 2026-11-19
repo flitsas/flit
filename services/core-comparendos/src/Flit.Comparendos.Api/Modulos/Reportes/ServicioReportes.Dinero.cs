@@ -1,5 +1,6 @@
 using System.Globalization;
 using Flit.Comparendos.Api.Modulos.Bandeja;
+using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Domain.Modelo;
 using Flit.Comparendos.Domain.Tiempo;
 using Microsoft.EntityFrameworkCore;
@@ -50,10 +51,14 @@ public sealed partial class ServicioReportes
         ArgumentNullException.ThrowIfNull(bandeja);
         var h = await bandeja.HoyAsync(ct).ConfigureAwait(false);
         var hoy = h.Dia;
-        var conFavorable = ConDpFavorable(a);
 
         // Una sola pasada agrupada por organismo: los totales por estado salen de sumar los grupos.
-        var grupos = await Comparendos(a).Where(c => c.Activo && !c.Pagado && !conFavorable.Contains(c.Id))
+        // La misma deuda que KpisAsync (sin DP favorable), escrita como NOT EXISTS: anti join por el índice único de
+        // derecho_peticion.comparendo_id en vez de un NOT IN que vuelve a recorrer los comparendos de la empresa (DRE:
+        // 11 ms contra 21 ms con 61.620 comparendos).
+        var grupos = await Comparendos(a)
+            .Where(c => c.Activo && !c.Pagado
+                && !db.DerechosPeticion.Any(d => d.ComparendoId == c.Id && d.Estado == EstadoDp.Respondido && d.RespuestaSentido == SentidoRespuestaOt.Favorable))
             .GroupBy(c => c.OrganismoTransitoId)
             .Select(g => new
             {
@@ -98,7 +103,7 @@ public sealed partial class ServicioReportes
             g.Organismo is { } id && nombres.TryGetValue(id, out var nombre) ? nombre : "Sin organismo identificado",
             g.N, g.V, g.VSin + g.VTiempo + g.VVencido)).ToList();
 
-        var pagosPeriodo = await (from p in db.Pagos.AsNoTracking()
+        var pagosPeriodo = await (from p in Pagos(a)
                                   join c in Comparendos(a) on p.ComparendoId equals c.Id
                                   where p.FechaPago >= a.Desde && p.FechaPago <= a.Hasta
                                   group p by p.TipoPago into g
@@ -122,6 +127,13 @@ public sealed partial class ServicioReportes
             await MensualDineroAsync(a, hoy, ct).ConfigureAwait(false));
     }
 
+    /// <summary>
+    /// Pagos de la empresa del alcance. El filtro por tenant repite el del join a propósito: deja usar el índice
+    /// (tenant_id, fecha_pago) en vez de recorrer los pagos de todas las empresas (DRE: 0,6 ms contra 6 ms).
+    /// </summary>
+    private IQueryable<Pago> Pagos(Alcance a) =>
+        db.Pagos.AsNoTracking().Where(p => a.Tenant == null || p.TenantId == a.Tenant);
+
     /// <summary>Cantidad y valor de un frente con el mismo filtro de la bandeja (y el NIT del reporte, si lo hay).</summary>
     private static async Task<Monto> FrenteAsync(ConsultaBandeja bandeja, Alcance a, FiltrosBandeja f, ConsultaBandeja.Hoy h, CancellationToken ct)
     {
@@ -142,7 +154,7 @@ public sealed partial class ServicioReportes
             .Select(c => new { Local = c.CreadoEn + desfase, c.ValorTotal })
             .GroupBy(x => new { x.Local.Year, x.Local.Month })
             .Select(g => new { g.Key.Year, g.Key.Month, V = g.Sum(x => x.ValorTotal ?? 0) }).ToListAsync(ct).ConfigureAwait(false);
-        var pagos = await (from p in db.Pagos.AsNoTracking()
+        var pagos = await (from p in Pagos(a)
                            join c in Comparendos(a) on p.ComparendoId equals c.Id
                            where p.FechaPago >= primerMes
                            group p by new { p.FechaPago.Year, p.FechaPago.Month } into g
