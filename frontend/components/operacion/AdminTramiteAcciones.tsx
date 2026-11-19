@@ -44,17 +44,17 @@ import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
  * el backend igual lo rechaza (422) si algo se cuela, pero la UX debe prevenirlo.
  */
 
-const FIELD_LABEL_CLS = 'block text-xs font-semibold text-flit-primary dark:text-white';
+const FIELD_LABEL_CLS = 'block text-xs font-semibold text-foreground';
 // `ring-inset`: el modal recorta el contenido con `overflow-y-auto` (el navegador fuerza también
 // `overflow-x: auto` — no hay forma de pedir solo un eje), y un campo `w-full` toca el borde de ese
 // contenedor sin margen horizontal. Un ring normal (fuera de la caja) queda cortado a los lados al
 // enfocar; `ring-inset` lo dibuja hacia adentro y nunca se recorta, sin importar el ancestro.
 const FIELD_CLS =
-  'w-full rounded-xl border px-3 py-2 text-sm text-flit-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand dark:border-white/15 dark:bg-transparent dark:text-white';
+  'w-full rounded-xl border px-3 py-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand dark:bg-transparent';
 // El asa de resize nativa del <textarea> es cuadrada: sobre `rounded-xl` recorta la esquina
 // inferior derecha y se ve como una muesca. `resize-none` la quita (el campo ya crece con `rows`).
 const TEXTAREA_CLS = `${FIELD_CLS} resize-none`;
-const FIELD_BORDER = { borderColor: '#DFE5ED' };
+const FIELD_BORDER = { borderColor: 'var(--border)' };
 
 function PrimaryButton({
   children,
@@ -109,7 +109,7 @@ function SecondaryButton({
 }
 
 /** Rojo del token `anulado` (`lib/tramites/estados.ts` → `ESTADO_CHIP_STYLES.anulado.accent`): no un HEX suelto. */
-const DANGER_COLOR = '#C1272D';
+const DANGER_COLOR = 'var(--destructive)';
 
 function DangerButton({
   children,
@@ -127,7 +127,7 @@ function DangerButton({
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-xl py-2.5 text-sm font-semibold text-white transition disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
+      className={`rounded-xl py-2.5 text-sm font-semibold text-destructive-foreground transition disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       style={{ background: DANGER_COLOR }}
     >
       {children}
@@ -436,8 +436,8 @@ function ConsolidadoModal({
       <div className="space-y-4" onClick={(e) => e.stopPropagation()}>
         {canLimpiar ? (
           <div className="space-y-2 rounded-xl border p-3" style={FIELD_BORDER}>
-            <p className="text-xs font-semibold text-flit-primary dark:text-white">Limpiar consolidado</p>
-            <p className="text-xs text-flit-primary/70 dark:text-white/70">
+            <p className="text-xs font-semibold text-foreground">Limpiar consolidado</p>
+            <p className="text-xs text-muted-foreground">
               Descarta el consolidado vigente (incluso si lo cargó un admin) y lo regenera desde
               cero.
             </p>
@@ -449,8 +449,8 @@ function ConsolidadoModal({
 
         {canCargar ? (
           <div className="space-y-2 rounded-xl border p-3" style={FIELD_BORDER}>
-            <p className="text-xs font-semibold text-flit-primary dark:text-white">Cargar consolidado</p>
-            <p className="text-xs text-flit-primary/70 dark:text-white/70">
+            <p className="text-xs font-semibold text-foreground">Cargar consolidado</p>
+            <p className="text-xs text-muted-foreground">
               Registra un PDF externo como el expediente consolidado. Reemplaza cualquier
               consolidado vigente.
             </p>
@@ -482,16 +482,16 @@ function ConsolidadoModal({
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-flit-brand/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
               style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
             >
-              <Icono nombre="archivo" className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="archivo" className="h-3.5 w-3.5" />
               {file ? 'Cambiar archivo' : 'Elegir archivo PDF'}
             </button>
             {file ? (
-              <p className="truncate text-xs text-flit-primary/70 dark:text-white/70">
+              <p className="truncate text-xs text-muted-foreground">
                 Archivo seleccionado:{' '}
-                <span className="font-medium text-flit-primary dark:text-white">{file.name}</span>
+                <span className="font-medium text-foreground">{file.name}</span>
               </p>
             ) : (
-              <p className="text-xs text-flit-primary/50 dark:text-white/50">Ningún archivo elegido todavía.</p>
+              <p className="text-xs text-muted-foreground">Ningún archivo elegido todavía.</p>
             )}
             <SecondaryButton onClick={() => void cargar()} disabled={busy || !file}>
               {busyCargar ? 'Cargando…' : 'Cargar PDF'}
@@ -549,7 +549,7 @@ function ConsolidadoModal({
                     color: INLINE_ALERT_TONES.warning.color,
                   }}
                 >
-                  <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
                   <div className="min-w-0 flex-1 text-xs leading-relaxed">
                     <p className="font-semibold">Avisos de la regeneración</p>
                     <ul
@@ -783,11 +783,11 @@ function ConsultarRuntModal({ open, onClose, item, onSuccess, onError }: Omit<Mo
     >
       <div className="contents" onClick={(e) => e.stopPropagation()}>
         <div className="space-y-3">
-          <p className="text-sm text-flit-primary dark:text-white">
+          <p className="text-sm text-foreground">
             Se consulta el RUNT de inmediato con el proveedor configurado y el resultado queda en el
             historial de Confirmación RUNT. Cuenta como un intento.
           </p>
-          <p className="text-xs text-[#59677D] dark:text-white/60">
+          <p className="text-xs text-muted-foreground">
             La columna «Confirmado en RUNT» de este trámite se actualiza al terminar.
           </p>
 

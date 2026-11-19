@@ -2153,7 +2153,8 @@ export interface TenantBiometricPersonFilters {
   documentNumber?: string;
   /** Ajuste 2026-11-10 (D1=a) — radicado (FT…), coincidencia parcial en servidor. */
   referenceNumber?: string;
-  status?: BiometricEstado;
+  /** Uno o varios estados separados por coma: la franja de Identidad pide «enviado,en_proceso» para «En proceso». */
+  status?: BiometricEstado | 'enviado,en_proceso';
   createdFrom?: string;
   createdTo?: string;
   vigenciaEstado?: BiometricVigenciaEstado;
