@@ -27,8 +27,17 @@ namespace Flit.Integration.Tests.Tramites;
 /// el bloqueo de fila bajo concurrencia, la matriz documental real y la bitácora real. Usa el PDF sintético de ~3 MB de
 /// <c>Tramites/Fixtures</c> (sin datos reales).
 /// </summary>
-public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
+public sealed class ExternalAttachmentEndToEndTests(
+    PostgresDatabaseFixture fixture, HostsPorClase hosts, ExternalAttachmentEndToEndTests.AlmacenEnMemoria almacenCompartido)
+    : PostgresTestBase(fixture), IClassFixture<HostsPorClase>, IClassFixture<ExternalAttachmentEndToEndTests.AlmacenEnMemoria>
 {
+    /// <summary>El almacén es de la clase (como el host): se vacía antes de cada prueba.</summary>
+    public override async ValueTask InitializeAsync()
+    {
+        almacenCompartido.Reiniciar();
+        await base.InitializeAsync();
+    }
+
     private static readonly string[] Textos = ["uno", "uno", "uno", "dos", "tres", "cuatro"];
     private const string Tipo = "liquidacion_impuesto";
     private static readonly Guid Compania = new("5a5a5a5a-0001-4000-8000-000000013263");
@@ -44,7 +53,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         pdf.Length.Should().BeGreaterThan(2_000_000, "el PDF sintético pesa ~3 MB");
         Convert.ToHexStringLower(SHA256.HashData(pdf)).Should().Be(FixtureSha);
 
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
         var response = await Post(almacen, tramite, pdf);
 
         response.StatusCode.Should().Be(HttpStatusCode.Created, await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken));
@@ -74,7 +83,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         await SembrarAsync();
         var tramite = await RadicadoAsync("asignado");
         var pdf = await LeerFixtureAsync();
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var primero = await Json(await Post(almacen, tramite, pdf));
         var repetido = await Post(almacen, tramite, pdf);
@@ -105,7 +114,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         var tramite = await RadicadoAsync("entregado");
         var pdf = await LeerFixtureAsync();
         var delGestor = await InsertarAdjuntoAsync(tramite, provider: null, sha: FixtureSha, path: "fm-gestor");
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var response = await Post(almacen, tramite, pdf);
 
@@ -132,7 +141,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
     {
         await SembrarAsync();
         var tramite = await RadicadoAsync(estado, subsanacion);
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var response = await Post(almacen, tramite, "%PDF-1.4 estado"u8.ToArray());
 
@@ -159,7 +168,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         var nuncaRadicado = await RadicadoAsync("asignado", radicado: false);
         var migrado = await RadicadoAsync("asignado", migrado: true);
         var eliminado = await RadicadoAsync("asignado", eliminado: true);
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         foreach (var id in new[] { nuncaRadicado, migrado, eliminado, Guid.CreateVersion7() })
         {
@@ -180,7 +189,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
     {
         await SembrarAsync();
         var tramite = await RadicadoAsync("asignado");
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var response = await Post(almacen, tramite, "%PDF-1.4 permiso"u8.ToArray(), [ExternalScopes.TramitesRead, ExternalScopes.TramitesPiiRead]);
 
@@ -194,7 +203,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
     {
         await SembrarAsync();
         var tramite = await RadicadoAsync("asignado");
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
         var anterior = await Json(await Post(almacen, tramite, "%PDF-1.4 uno"u8.ToArray()));
         almacen.Almacen.Falla = new HttpRequestException("file-manager caído");
 
@@ -211,7 +220,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
     {
         await SembrarAsync();
         var tramite = await RadicadoAsync("asignado");
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var cliente = Cliente(almacen, [ExternalScopes.AttachmentsWrite]);
         cliente.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.263");
@@ -243,7 +252,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         await EjecutarAsync(
             "DELETE FROM tramites.procedure_document_requirements WHERE procedure_type_id = (SELECT procedure_type_id FROM tramites.procedure_instances WHERE id = @id)",
             ("id", tramite));
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var sinMatriz = await Json(await Post(almacen, tramite, "%PDF-1.4 sin matriz"u8.ToArray()));
         await EjecutarAsync(
@@ -272,7 +281,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         await EjecutarAsync(
             "UPDATE tramites.procedure_instances SET consolidado_wizard_vigente = true, consolidado_maestro_vigente = true WHERE id = @id",
             ("id", tramite));
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var response = await Post(almacen, tramite, "%PDF-1.4 bug14660"u8.ToArray());
 
@@ -294,7 +303,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         await EjecutarAsync(
             "UPDATE tramites.procedure_instances SET consolidado_wizard_vigente = true, consolidado_maestro_vigente = true WHERE id = @id",
             ("id", tramite));
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var response = await Post(almacen, tramite, "%PDF-1.4 bug14660-sin-matriz"u8.ToArray());
 
@@ -320,7 +329,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
     {
         await SembrarAsync();
         var tramite = await RadicadoAsync(estado, subsanacion);
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var primero = await Post(almacen, tramite, "%PDF-1.4 uno"u8.ToArray());
 
@@ -347,7 +356,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         var tramite = await RadicadoAsync("borrador");
         await SembrarMarcaAsync(tramite, fuente, valor);
         await EjecutarAsync("UPDATE tramites.procedure_instances SET status = 'asignado' WHERE id = @id", ("id", tramite));
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var response = await Post(almacen, tramite, "%PDF-1.4 pisa"u8.ToArray());
 
@@ -363,7 +372,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         await SembrarAsync();
         var delGestor = await RadicadoAsync("asignado");
         await InsertarAdjuntoAsync(delGestor, provider: null, sha: "gestor", path: "fm-gestor");
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var response = await Post(almacen, delGestor, "%PDF-1.4 rechazado"u8.ToArray());
 
@@ -382,7 +391,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
         var tramite = await RadicadoAsync("borrador");
         await SembrarMarcaAsync(tramite, fuente, "false");
         await EjecutarAsync("UPDATE tramites.procedure_instances SET status = @estado WHERE id = @id", ("id", tramite), ("estado", estado));
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         var response = await Post(almacen, tramite, "%PDF-1.4 previa"u8.ToArray());
 
@@ -397,7 +406,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
     {
         await SembrarAsync();
         var tramite = await RadicadoAsync("asignado");
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
         var pdf = "%PDF-1.4 hueco"u8.ToArray();
         var primero = await Json(await Post(almacen, tramite, pdf));
         // Un adjunto cargado antes del Bug #14625 en un estado que no marcaba: el adjunto existe y la marca no.
@@ -442,7 +451,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
     {
         await SembrarAsync();
         var tramite = await RadicadoAsync("asignado");
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
         var pdf = "%PDF-1.4 vigente"u8.ToArray();
         (await Post(almacen, tramite, pdf)).StatusCode.Should().Be(HttpStatusCode.Created);
         var antes = await EscalarAsync(
@@ -464,7 +473,7 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
     {
         await SembrarAsync();
         var tramite = await RadicadoAsync("asignado");
-        await using var almacen = new AlmacenFactory(Fixture);
+        await using var almacen = NuevoAlmacen();
 
         // Seis envíos al mismo tiempo: tres con el mismo contenido y tres distintos.
         var contenidos = Textos.Select(t => System.Text.Encoding.UTF8.GetBytes($"%PDF-1.4 {t}")).ToArray();
@@ -514,28 +523,42 @@ public sealed class ExternalAttachmentEndToEndTests(PostgresDatabaseFixture fixt
             Path.Combine(AppContext.BaseDirectory, "Tramites", "Fixtures", "comprobante-impuesto-sintetico.pdf"),
             TestContext.Current.CancellationToken);
 
-    /// <summary>Host real con el file-manager reemplazado por un almacén en memoria.</summary>
-    private sealed class AlmacenFactory : IAsyncDisposable
-    {
-        public AlmacenFactory(PostgresDatabaseFixture fixture)
+    /// <summary>
+    /// Host real con el file-manager reemplazado por el almacén en memoria de la clase. El host es uno por clase
+    /// (<see cref="HostsPorClase"/>): antes cada prueba arrancaba el suyo y no liberaba la fábrica base.
+    /// </summary>
+    private AlmacenFactory NuevoAlmacen() => new(
+        hosts.Obtener(Fixture, servicios: s =>
         {
-            Factory = new MarcaBlancaApiFactory(fixture).WithWebHostBuilder(b => b.ConfigureTestServices(s =>
-            {
-                s.RemoveAll<IAttachmentStorage>();
-                s.AddSingleton<IAttachmentStorage>(Almacen);
-            }));
-        }
+            s.RemoveAll<IAttachmentStorage>();
+            s.AddSingleton<IAttachmentStorage>(almacenCompartido);
+        }, clave: "almacen-en-memoria"),
+        almacenCompartido);
 
-        public WebApplicationFactory<Program> Factory { get; }
+    private sealed class AlmacenFactory(WebApplicationFactory<Program> factory, AlmacenEnMemoria almacen) : IAsyncDisposable
+    {
+        public WebApplicationFactory<Program> Factory { get; } = factory;
 
-        public AlmacenEnMemoria Almacen { get; } = new();
+        public AlmacenEnMemoria Almacen { get; } = almacen;
 
-        public ValueTask DisposeAsync() => Factory.DisposeAsync();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask; // el host lo libera HostsPorClase al terminar la clase
     }
 
-    private sealed class AlmacenEnMemoria : IAttachmentStorage
+    /// <summary>Doble del file-manager; fixture de clase (ver <see cref="InitializeAsync"/>).</summary>
+    public sealed class AlmacenEnMemoria : IAttachmentStorage
     {
         private int _n;
+
+        public void Reiniciar()
+        {
+            lock (Guardados)
+            {
+                _n = 0;
+                Guardados.Clear();
+                Borrados.Clear();
+                Falla = null;
+            }
+        }
 
         public List<string> Guardados { get; } = [];
 
