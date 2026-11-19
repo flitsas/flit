@@ -184,12 +184,14 @@ public sealed class DescifradorLlaveIaTests
     [InlineData("kid", "Diag-Mayus")]
     [InlineData("kid", "diag\nx")]
     [InlineData("kid", "")]
+    [InlineData("kid", "diag-x\n")]
     [InlineData("tool", "diagnostico_dictamen\n")]
     [InlineData("tool", "otra_herramienta")]
     [InlineData("proveedor", "anthropic\nopenai")]
     [InlineData("proveedor", "mistral")]
     [InlineData("modelo", "claude\nhaiku")]
     [InlineData("modelo", "")]
+    [InlineData("modelo", "claude-haiku-4-5\n")]
     public void SP11_CamposConSaltoDeLineaOFueraDeCatalogo_NoComponenAad(string campo, string valor)
     {
         var acto = campo switch

@@ -44,13 +44,17 @@ public sealed class CredencialRedactor
     public override string ToString() => $"CredencialRedactor(proveedor={Proveedor}, modelo={Modelo}, row_version={RowVersion}, llave=[REDACTADA])";
 }
 
-/// <summary>Resultado de pedir la credencial: una credencial o el motivo de la falla.</summary>
+/// <summary>
+/// Resultado de pedir la credencial: una credencial o el motivo de la falla. <see cref="DeCache"/> dice si la credencial salió de la
+/// caché (no se pidió en esta llamada): solo esa merece pedir otra y reintentar tras un 401/403 del proveedor (contrato §2.6, CR-7).
+/// </summary>
 public sealed class ResultadoCredencial
 {
-    private ResultadoCredencial(CredencialRedactor? credencial, FallaCredencial falla)
+    private ResultadoCredencial(CredencialRedactor? credencial, FallaCredencial falla, bool deCache = false)
     {
         Credencial = credencial;
         Falla = falla;
+        DeCache = deCache;
     }
 
     public static ResultadoCredencial NoConfigurado { get; } = new(null, FallaCredencial.NoConfigurado);
@@ -61,11 +65,17 @@ public sealed class ResultadoCredencial
 
     public FallaCredencial Falla { get; }
 
+    /// <summary>True si la credencial salió de la caché y no se pidió en esta llamada.</summary>
+    public bool DeCache { get; }
+
     public static ResultadoCredencial Con(CredencialRedactor credencial)
     {
         ArgumentNullException.ThrowIfNull(credencial);
         return new(credencial, FallaCredencial.Ninguna);
     }
+
+    /// <summary>La misma credencial marcada como salida de la caché (las fallas no cambian).</summary>
+    public ResultadoCredencial DesdeCache() => Credencial is null || DeCache ? this : new(Credencial, Falla, deCache: true);
 
     public override string ToString() => Credencial is { } c ? c.ToString() : $"ResultadoCredencial({Falla})";
 }

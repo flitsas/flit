@@ -19,6 +19,12 @@ namespace Flit.Diagnostico.Api.Modulos.Dictamen.Credencial;
 /// fuera de la allowlist local (<see cref="ProveedorPermitido"/>) o modelo fuera de <c>ModelosPermitidos</c> (SP-14 = a) →
 /// <see cref="FallaCredencial.NoConfigurado"/>. Nunca registra la llave, el sobre, la respuesta ni el mensaje de una excepción.
 /// </para>
+/// <para>
+/// Review HU-7: UNAUTHENTICATED es técnica con log Error (CR-6); <c>emitida_en</c> fuera de rango es técnica de reloj (CR-3); un modelo
+/// fuera de formato se registra como <c>FORMATO_INVALIDO</c> (CR-2); un <c>row_version</c> menor se rechaza con log Error y al tercer
+/// rechazo seguido se acepta y pasa a ser la última aceptada (CR-5); una llave con caracteres fuera de 0x21–0x7E es <c>SOBRE_INVALIDO</c>
+/// (CR-8). La credencial servida desde la caché sale marcada (<see cref="ResultadoCredencial.DeCache"/>, CR-7).
+/// </para>
 /// </summary>
 public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedactor, IDisposable
 {
@@ -36,6 +42,16 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
 
     public static readonly TimeSpan DesfaseMaximo = TimeSpan.FromSeconds(120);
 
+    /// <summary>Rechazos seguidos por <c>row_version</c> menor tras los cuales se acepta la respuesta (CR-5).</summary>
+    public const int RechazosRowVersionAntesDeAceptar = 3;
+
+    /// <summary>Lo que se registra en lugar de un modelo con formato inválido (CR-2).</summary>
+    public const string ModeloFormatoInvalido = "FORMATO_INVALIDO";
+
+    private const long SegundosMinimos = -62135596800L;
+
+    private const long SegundosMaximos = 253402300799L;
+
     private readonly Func<ConfiguracionIaService.ConfiguracionIaServiceClient> _cliente;
     private readonly ClavesPrivadasIa _claves;
     private readonly OpcionesIa _opciones;
@@ -44,6 +60,7 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
     private readonly SemaphoreSlim _vuelo = new(1, 1);
     private Instantanea? _instantanea;
     private long? _ultimaRowVersion;
+    private int _rechazosRowVersion;
 
     public FuenteCredencialPlataforma(
         Func<ConfiguracionIaService.ConfiguracionIaServiceClient> cliente,
@@ -78,7 +95,7 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
             var paso = await IntentoAsync(_claves.Kid, ct).ConfigureAwait(false);
             if (paso.KidDesconocido && _claves.KidAnterior is { } anterior)
                 paso = await IntentoAsync(anterior, ct).ConfigureAwait(false);
-            Volatile.Write(ref _instantanea, paso.Vigencia is { } vigencia ? new Instantanea(paso.Resultado, _reloj.GetUtcNow() + vigencia) : null);
+            Volatile.Write(ref _instantanea, paso.Vigencia is { } vigencia ? new Instantanea(paso.Resultado.DesdeCache(), _reloj.GetUtcNow() + vigencia) : null);
             return paso.Resultado;
         }
         finally
@@ -131,6 +148,10 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
             case StatusCode.FailedPrecondition:
                 Rechazada(_log, ex.StatusCode, reason);
                 return string.Equals(reason, ReasonKidDesconocido, StringComparison.Ordinal) ? Paso.NoConfigurado with { KidDesconocido = true } : Paso.NoConfigurado;
+            case StatusCode.Unauthenticated:
+                // Token de servicio ausente o inválido: técnica (reintentable, sin caché) pero con log Error (contrato §1.2, CR-6).
+                NoAutenticada(_log, ex.StatusCode);
+                return Paso.Tecnica;
             default:
                 TecnicaRpc(_log, ex.StatusCode, reason);
                 return Paso.Tecnica;
@@ -147,17 +168,28 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
             return Paso.Tecnica;
         }
 
-        if (r.EmitidaEn is null || (_reloj.GetUtcNow() - DateTimeOffset.FromUnixTimeSeconds(r.EmitidaEn.Seconds)).Duration() > DesfaseMaximo)
+        if (r.EmitidaEn is null || r.EmitidaEn.Seconds is < SegundosMinimos or > SegundosMaximos
+            || (_reloj.GetUtcNow() - DateTimeOffset.FromUnixTimeSeconds(r.EmitidaEn.Seconds)).Duration() > DesfaseMaximo)
         {
             Tecnica(_log, "RELOJ", "-");
             return Paso.Tecnica;
         }
 
+        // Dentro del single-flight (_vuelo): los campos de row_version solo cambian aquí.
         if (_ultimaRowVersion is { } ultima && r.RowVersion < ultima)
         {
-            Tecnica(_log, "ROW_VERSION_ANTERIOR", "-");
-            return Paso.Tecnica;
+            if (++_rechazosRowVersion < RechazosRowVersionAntesDeAceptar)
+            {
+                RowVersionAnterior(_log, r.RowVersion, ultima, _rechazosRowVersion);
+                return Paso.Tecnica;
+            }
+
+            // CR-5: tras 3 rechazos seguidos se asume que core-api reinició su contador (p. ej. BD restaurada) y se acepta.
+            RowVersionReiniciada(_log, r.RowVersion, ultima, _rechazosRowVersion);
+            _ultimaRowVersion = r.RowVersion;
         }
+
+        _rechazosRowVersion = 0;
 
         if (!r.Disponible)
         {
@@ -174,7 +206,7 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
 
         if (!_opciones.ModelosEfectivos.Contains(proveedor.Modelo, StringComparer.Ordinal))
         {
-            ModeloNoPermitido(_log, proveedor.Modelo, r.RowVersion);
+            ModeloNoPermitido(_log, ModeloParaLog(proveedor.Modelo), r.RowVersion);
             return Paso.NoConfigurado;
         }
 
@@ -198,8 +230,9 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
             return Paso.Tecnica;
         }
 
-        if (string.IsNullOrWhiteSpace(llave))
+        if (!LlaveImprimible(llave))
         {
+            // CR-8: solo ASCII 0x21–0x7E (un salto de línea o un espacio rompería el encabezado). Nunca se registra el valor.
             Tecnica(_log, "SOBRE_INVALIDO", "-");
             return Paso.Tecnica;
         }
@@ -209,6 +242,35 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
         Entregada(_log, proveedor.Proveedor, proveedor.Modelo, r.RowVersion, (int)vigencia.TotalSeconds);
         return new Paso(ResultadoCredencial.Con(new CredencialRedactor(proveedor.Proveedor, proveedor.Modelo, llave, r.RowVersion)), vigencia, false);
     }
+
+    /// <summary>El modelo tal cual solo si cumple el formato del AAD (≤ 128); si no, un código fijo (CR-2).</summary>
+    private static string ModeloParaLog(string? modelo) =>
+        SobreLlaveIa.ModeloValido(modelo) ? modelo![..Math.Min(modelo!.Length, 128)] : ModeloFormatoInvalido;
+
+    private static bool LlaveImprimible(string llave)
+    {
+        if (llave.Length == 0)
+            return false;
+        foreach (var c in llave)
+        {
+            if (c is < '\x21' or > '\x7E')
+                return false;
+        }
+
+        return true;
+    }
+
+    [LoggerMessage(EventId = 126911, Level = LogLevel.Error,
+        Message = "core-api no aceptó el token de servicio de Diagnóstico ({Estado}); la redacción se reintenta")]
+    private static partial void NoAutenticada(ILogger logger, StatusCode estado);
+
+    [LoggerMessage(EventId = 126912, Level = LogLevel.Error,
+        Message = "core-api entregó row_version={RowVersion} menor que la aceptada ({Ultima}), rechazo {Rechazos} de 3; la redacción se reintenta")]
+    private static partial void RowVersionAnterior(ILogger logger, long rowVersion, long ultima, int rechazos);
+
+    [LoggerMessage(EventId = 126913, Level = LogLevel.Error,
+        Message = "core-api entregó row_version={RowVersion} menor que la aceptada ({Ultima}) {Rechazos} veces seguidas; se acepta y pasa a ser la última aceptada")]
+    private static partial void RowVersionReiniciada(ILogger logger, long rowVersion, long ultima, int rechazos);
 
     [LoggerMessage(EventId = 126900, Level = LogLevel.Information,
         Message = "Configuración de IA de plataforma vigente: proveedor={Proveedor}, modelo={Modelo}, row_version={RowVersion}, vigencia={VigenciaSegundos}s")]

@@ -428,4 +428,135 @@ public sealed class FuenteCredencialPlataformaTests : IAsyncLifetime
         _logs.Todo.Should().Contain("anthropic").And.Contain("claude-haiku-4-5");
         c.ToString().Should().NotContain(Centinela);
     }
+
+    /// <summary>CR-2: un modelo fuera de formato no llega al log (inyección de líneas); se registra un código fijo.</summary>
+    [Fact]
+    public async Task CR2_ModeloNoPermitidoConFormatoInvalido_NoSeRegistraTalCual()
+    {
+        _core.Responder = p =>
+        {
+            var r = CoreApiIaFalso.Valida(p, _publica, _reloj.GetUtcNow());
+            r.Cola[0].Modelo = "x\nINYECTADO";
+            return Task.FromResult(r);
+        };
+        using var fuente = Fuente();
+
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.NoConfigurado);
+
+        _logs.Todo.Should().NotContain("INYECTADO").And.Contain("FORMATO_INVALIDO");
+    }
+
+    /// <summary>CR-2: un modelo con formato válido pero fuera de la allowlist sí se registra.</summary>
+    [Fact]
+    public async Task CR2_ModeloNoPermitidoConFormatoValido_SeRegistra()
+    {
+        _core.Responder = p => Task.FromResult(CoreApiIaFalso.Valida(p, _publica, _reloj.GetUtcNow(), modelo: "claude-opus-4-1"));
+        using var fuente = Fuente();
+
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.NoConfigurado);
+
+        _logs.Todo.Should().Contain("modelo=claude-opus-4-1");
+    }
+
+    /// <summary>CR-3: emitida_en fuera del rango representable es fallo técnico de reloj, sin excepción.</summary>
+    [Theory]
+    [InlineData(long.MaxValue)]
+    [InlineData(long.MinValue)]
+    [InlineData(253402300800L)]
+    [InlineData(-62135596801L)]
+    public async Task CR3_EmitidaEnFueraDeRango_EsTecnicaReloj_SinExcepcion(long segundos)
+    {
+        _core.Responder = p =>
+        {
+            var r = CoreApiIaFalso.Valida(p, _publica, _reloj.GetUtcNow());
+            r.EmitidaEn = new Timestamp { Seconds = segundos };
+            return Task.FromResult(r);
+        };
+        using var fuente = Fuente();
+
+        var r = await fuente.ObtenerAsync(Ct);
+
+        r.Falla.Should().Be(FallaCredencial.Tecnica);
+        _logs.Todo.Should().Contain("RELOJ");
+    }
+
+    /// <summary>CR-5: row_version menor → Error; tras 3 rechazos seguidos se acepta y se reinicia la última aceptada.</summary>
+    [Fact]
+    public async Task CR5_RowVersionMenor_TresRechazosSeguidos_AlTerceroSeAceptaYSeReinicia()
+    {
+        var version = 9L;
+        _core.Responder = p => Task.FromResult(CoreApiIaFalso.Valida(p, _publica, _reloj.GetUtcNow(), rowVersion: version));
+        using var fuente = Fuente();
+        (await fuente.ObtenerAsync(Ct)).Credencial!.RowVersion.Should().Be(9);
+        fuente.Invalidar();
+        version = 5;
+
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        var tercera = await fuente.ObtenerAsync(Ct);
+
+        tercera.Falla.Should().Be(FallaCredencial.Ninguna);
+        tercera.Credencial!.RowVersion.Should().Be(5);
+        tercera.Credencial.ApiKey.Should().Be(Centinela);
+        _logs.Eventos.Count(e => e.Nivel == Microsoft.Extensions.Logging.LogLevel.Error && e.Texto.Contains("row_version", StringComparison.Ordinal))
+            .Should().BeGreaterThanOrEqualTo(2);
+
+        fuente.Invalidar();
+        (await fuente.ObtenerAsync(Ct)).Credencial!.RowVersion.Should().Be(5, "la última aceptada quedó reiniciada a 5");
+        _core.Pedidos.Should().HaveCount(5);
+    }
+
+    /// <summary>CR-5: una respuesta con row_version aceptable corta la racha de rechazos.</summary>
+    [Fact]
+    public async Task CR5_LaRachaDeRechazosSeCortaConUnaRespuestaAceptable()
+    {
+        var version = 9L;
+        _core.Responder = p => Task.FromResult(CoreApiIaFalso.Valida(p, _publica, _reloj.GetUtcNow(), rowVersion: version));
+        using var fuente = Fuente();
+        await fuente.ObtenerAsync(Ct);
+        fuente.Invalidar();
+
+        version = 5;
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        version = 9;
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Ninguna);
+        fuente.Invalidar();
+        version = 5;
+
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica, "la racha volvió a empezar");
+    }
+
+    /// <summary>CR-6: UNAUTHENTICATED de core-api es fallo técnico sin caché, con log de nivel Error.</summary>
+    [Fact]
+    public async Task CR6_Unauthenticated_EsTecnica_ConLogError()
+    {
+        _core.Responder = _ => throw new RpcException(new Status(StatusCode.Unauthenticated, "token " + Centinela));
+        using var fuente = Fuente();
+
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+
+        _core.Pedidos.Should().HaveCount(2);
+        _logs.Eventos.Should().Contain(e => e.Nivel == Microsoft.Extensions.Logging.LogLevel.Error && e.Texto.Contains("Unauthenticated", StringComparison.Ordinal));
+        _logs.Todo.Should().NotContain(Centinela);
+    }
+
+    /// <summary>CR-8: una llave descifrada con caracteres fuera de 0x21–0x7E es SOBRE_INVALIDO y su valor no llega al log.</summary>
+    [Theory]
+    [InlineData(Centinela + "\n")]
+    [InlineData(" " + Centinela)]
+    [InlineData("sk-ant-test-CENTINELAé")]
+    [InlineData("sk-ant-test-CENTINELA\u007f")]
+    public async Task CR8_LlaveConCaracteresNoImprimibles_EsSobreInvalido_SinLoguearla(string llave)
+    {
+        _core.Responder = p => Task.FromResult(CoreApiIaFalso.Valida(p, _publica, _reloj.GetUtcNow(), llave: llave));
+        using var fuente = Fuente();
+
+        var r = await fuente.ObtenerAsync(Ct);
+
+        r.Falla.Should().Be(FallaCredencial.Tecnica, "camino actual de SOBRE_INVALIDO");
+        r.Credencial.Should().BeNull();
+        _logs.Todo.Should().Contain("SOBRE_INVALIDO").And.NotContain("CENTINELA");
+    }
 }

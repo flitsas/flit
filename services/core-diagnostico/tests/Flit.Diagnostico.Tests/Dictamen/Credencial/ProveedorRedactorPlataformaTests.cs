@@ -1,4 +1,5 @@
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Flit.Diagnostico.Api.Modulos.Dictamen;
@@ -152,6 +153,72 @@ public sealed class ProveedorRedactorPlataformaTests
         (await sinLlave.ObtenerAsync(TestContext.Current.CancellationToken)).Falla.Should().Be(FallaCredencial.NoConfigurado);
     }
 
+    /// <summary>
+    /// CR-7 (contrato §2.6): un 401/403 con la credencial salida de la caché invalida, pide otra vez y reintenta UNA sola vez
+    /// (consume tope); si vuelve 401/403 o la credencial ya era fresca, queda ilegible como antes.
+    /// </summary>
+    [Theory]
+    [InlineData(HttpStatusCode.Unauthorized)]
+    [InlineData(HttpStatusCode.Forbidden)]
+    public async Task CR7_CacheY401_PideOtraCredencialYReintentaUnaVez_Redacta(HttpStatusCode codigo)
+    {
+        await using var escena = await Escena.CrearAsync();
+        (await escena.Fuente.ObtenerAsync(TestContext.Current.CancellationToken)).Falla.Should().Be(FallaCredencial.Ninguna);
+        var http = new Anthropic(codigo, HttpStatusCode.OK);
+        var tope = new TopeLlamadasRedactor(10, escena.Reloj);
+
+        var salida = await Proveedor(http, escena.Fuente, tope).RedactarAsync("prompt", TestContext.Current.CancellationToken);
+
+        salida.TipoFallo.Should().BeNull();
+        salida.Texto.Should().Be("El dictamen del bien es VIABLE.");
+        escena.Core.Pedidos.Should().HaveCount(2);
+        http.Llamadas.Should().Be(2);
+        http.Llaves.Should().Equal("sk-ant-test-vieja", Centinela);
+        Enumerable.Range(0, 8).Select(i => tope.IntentarTomar(out _)).Should().OnlyContain(x => x, "el reintento consumió 1 del tope (2 de 10)");
+        tope.IntentarTomar(out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CR7_CacheY401Y401_QuedaIlegible_SinTercerIntento()
+    {
+        await using var escena = await Escena.CrearAsync();
+        await escena.Fuente.ObtenerAsync(TestContext.Current.CancellationToken);
+        var http = new Anthropic(HttpStatusCode.Unauthorized, HttpStatusCode.Unauthorized, HttpStatusCode.OK);
+
+        var salida = await Proveedor(http, escena.Fuente).RedactarAsync("prompt", TestContext.Current.CancellationToken);
+
+        salida.TipoFallo.Should().Be(TipoFalloRedactor.Ilegible);
+        salida.Mensaje.Should().NotContain(Centinela);
+        http.Llamadas.Should().Be(2);
+        escena.Core.Pedidos.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task CR7_FrescaY401_QuedaIlegible_UnSoloPedido()
+    {
+        await using var escena = await Escena.CrearAsync();
+        var http = new Anthropic(HttpStatusCode.Unauthorized, HttpStatusCode.OK);
+
+        var salida = await Proveedor(http, escena.Fuente).RedactarAsync("prompt", TestContext.Current.CancellationToken);
+
+        salida.TipoFallo.Should().Be(TipoFalloRedactor.Ilegible);
+        http.Llamadas.Should().Be(1);
+        escena.Core.Pedidos.Should().HaveCount(1);
+    }
+
+    [Fact]
+    public async Task CR7_CacheY401_SinTopeParaElReintento_EsRateLimit()
+    {
+        await using var escena = await Escena.CrearAsync();
+        await escena.Fuente.ObtenerAsync(TestContext.Current.CancellationToken);
+        var http = new Anthropic(HttpStatusCode.Unauthorized, HttpStatusCode.OK);
+
+        var salida = await Proveedor(http, escena.Fuente, new TopeLlamadasRedactor(1, escena.Reloj)).RedactarAsync("prompt", TestContext.Current.CancellationToken);
+
+        salida.TipoFallo.Should().Be(TipoFalloRedactor.RateLimit);
+        http.Llamadas.Should().Be(1);
+    }
+
     private static ServicioRedactor Servicio(IProveedorRedactor proveedor) =>
         new(proveedor, Options.Create(new OpcionesAnthropic { ReintentosContradiccion = 1 }));
 
@@ -170,21 +237,65 @@ public sealed class ProveedorRedactorPlataformaTests
         public void Invalidar() => Invalidaciones++;
     }
 
-    private sealed class Anthropic(HttpStatusCode codigo = HttpStatusCode.OK) : HttpMessageHandler
+    /// <summary>core-api falso que entrega primero la llave vieja y luego la nueva, y la fuente real de la plataforma.</summary>
+    private sealed class Escena : IAsyncDisposable
     {
+        private readonly RSA _privada;
+        private readonly RSA _publica;
+
+        private Escena(VectorIa v, CoreApiIaFalso core)
+        {
+            _privada = v.Privada();
+            _publica = v.Publica();
+            Core = core;
+            Reloj = new RelojMovil(v.Emitida);
+            var entregas = 0;
+            core.Responder = p => Task.FromResult(CoreApiIaFalso.Valida(p, _publica, Reloj.GetUtcNow(),
+                llave: Interlocked.Increment(ref entregas) == 1 ? "sk-ant-test-vieja" : Centinela));
+            Fuente = new FuenteCredencialPlataforma(core.Cliente, new ClavesPrivadasIa(v.Kid, _privada),
+                Options.Create(new OpcionesIa { Origen = OpcionesIa.OrigenPlataforma, Kid = v.Kid }), Reloj, new LogsIa().Logger<FuenteCredencialPlataforma>());
+        }
+
+        public CoreApiIaFalso Core { get; }
+
+        public RelojMovil Reloj { get; }
+
+        public FuenteCredencialPlataforma Fuente { get; }
+
+        public static async Task<Escena> CrearAsync() => new(VectorIa.Cargar(), await CoreApiIaFalso.IniciarAsync());
+
+        public async ValueTask DisposeAsync()
+        {
+            Fuente.Dispose();
+            await Core.DisposeAsync();
+            _privada.Dispose();
+            _publica.Dispose();
+        }
+    }
+
+    private sealed class Anthropic : HttpMessageHandler
+    {
+        private readonly HttpStatusCode[] _codigos;
+
+        public Anthropic(params HttpStatusCode[] codigos) => _codigos = codigos.Length == 0 ? [HttpStatusCode.OK] : codigos;
+
         public int Llamadas { get; private set; }
 
         public Uri? Uri { get; private set; }
 
         public string? Llave { get; private set; }
 
+        public List<string?> Llaves { get; } = [];
+
         public string? Cuerpo { get; private set; }
 
         protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
         {
+            var codigo = _codigos[Math.Min(Llamadas, _codigos.Length - 1)];
             Llamadas++;
             Uri = request.RequestUri;
             Llave = request.Headers.TryGetValues("x-api-key", out var v) ? v.Single() : null;
+            Llaves.Add(Llave);
             Cuerpo = await request.Content!.ReadAsStringAsync(cancellationToken);
             var json = JsonSerializer.Serialize(new { stop_reason = "end_turn", content = new object[] { new { type = "text", text = "El dictamen del bien es VIABLE." } } });
             return new HttpResponseMessage(codigo) { Content = new StringContent(json, Encoding.UTF8, "application/json") };

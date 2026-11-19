@@ -248,7 +248,9 @@ public sealed class ProveedorRedactorSimulado : IProveedorRedactor
 /// ADR-0091 §3.2: la llave y el modelo salen de <see cref="Credencial.IFuenteCredencialRedactor"/> en cada llamada (la local de
 /// <c>Diagnostico:Anthropic</c> o la de la plataforma); <c>BaseUrl</c>, plazo, tokens y reintentos siguen en <see cref="OpcionesAnthropic"/>
 /// (la URL nunca viene de core-api). «No configurado» sale de la cola; un fallo técnico de core-api queda como <see cref="TipoFalloRedactor.Red"/>;
-/// pasado el tope local por minuto (SP-17), <see cref="TipoFalloRedactor.RateLimit"/> sin llamar. Un 401/403 invalida la credencial.
+/// pasado el tope local por minuto (SP-17), <see cref="TipoFalloRedactor.RateLimit"/> sin llamar. Un 401/403 invalida la credencial;
+/// si esa credencial salió de la caché, se pide otra y se reintenta UNA sola vez consumiendo tope (contrato §2.6, CR-7). Un 401/403
+/// con la credencial recién pedida, o en el reintento, queda ilegible.
 /// </summary>
 public sealed class ProveedorRedactorAnthropic : IProveedorRedactor
 {
@@ -286,18 +288,35 @@ public sealed class ProveedorRedactorAnthropic : IProveedorRedactor
     {
         var o = opciones.Value;
         var resuelta = await fuente.ObtenerAsync(ct).ConfigureAwait(false);
-        switch (resuelta.Falla)
-        {
-            case Credencial.FallaCredencial.NoConfigurado:
-                return Fallo(o.Modelo, TipoFalloRedactor.NoConfigurado, "El redactor no tiene proveedor configurado en la plataforma.");
-            case Credencial.FallaCredencial.Tecnica:
-                return Fallo(o.Modelo, TipoFalloRedactor.Red, "La configuración de IA de la plataforma no respondió.");
-        }
+        if (SinCredencial(resuelta, o) is { } sinCredencial)
+            return sinCredencial;
 
-        var credencial = resuelta.Credencial!;
+        var (salida, rechazada) = await LlamarAsync(resuelta.Credencial!, prompt, o, ct).ConfigureAwait(false);
+        if (!rechazada || !resuelta.DeCache)
+            return salida;
+
+        // §2.6: la credencial guardada ya no sirve (p. ej. la llave rotó en core-api). Ya se invalidó: se pide otra y se reintenta
+        // UNA sola vez; si el reintento también da 401/403, queda ilegible sin tercer intento.
+        var otra = await fuente.ObtenerAsync(ct).ConfigureAwait(false);
+        if (SinCredencial(otra, o) is { } sinOtra)
+            return sinOtra;
+
+        return (await LlamarAsync(otra.Credencial!, prompt, o, ct).ConfigureAwait(false)).Salida;
+    }
+
+    private static SalidaModelo? SinCredencial(Credencial.ResultadoCredencial resuelta, OpcionesAnthropic o) => resuelta.Falla switch
+    {
+        Credencial.FallaCredencial.NoConfigurado => Fallo(o.Modelo, TipoFalloRedactor.NoConfigurado, "El redactor no tiene proveedor configurado en la plataforma."),
+        Credencial.FallaCredencial.Tecnica => Fallo(o.Modelo, TipoFalloRedactor.Red, "La configuración de IA de la plataforma no respondió."),
+        _ => null,
+    };
+
+    /// <summary>Una llamada al proveedor (consume tope). <c>Rechazada</c> = 401/403: la credencial ya quedó invalidada.</summary>
+    private async Task<(SalidaModelo Salida, bool Rechazada)> LlamarAsync(Credencial.CredencialRedactor credencial, string prompt, OpcionesAnthropic o, CancellationToken ct)
+    {
         var modelo = credencial.Modelo;
         if (!tope.IntentarTomar(out var espera))
-            return Fallo(modelo, TipoFalloRedactor.RateLimit, "Se alcanzó el tope local de llamadas por minuto al proveedor.", espera);
+            return (Fallo(modelo, TipoFalloRedactor.RateLimit, "Se alcanzó el tope local de llamadas por minuto al proveedor.", espera), false);
 
         var cuerpo = new
         {
@@ -326,42 +345,46 @@ public sealed class ProveedorRedactorAnthropic : IProveedorRedactor
             pedido.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
             using var respuesta = await http.SendAsync(pedido, limite.Token).ConfigureAwait(false);
             if (respuesta.StatusCode == HttpStatusCode.TooManyRequests)
-                return Fallo(modelo, TipoFalloRedactor.RateLimit, "El proveedor limitó las peticiones (429).", RetryAfter(respuesta.Headers.RetryAfter));
+                return (Fallo(modelo, TipoFalloRedactor.RateLimit, "El proveedor limitó las peticiones (429).", RetryAfter(respuesta.Headers.RetryAfter)), false);
             if ((int)respuesta.StatusCode >= 500)
-                return Fallo(modelo, TipoFalloRedactor.Http5xx, $"El proveedor respondió {(int)respuesta.StatusCode}.");
+                return (Fallo(modelo, TipoFalloRedactor.Http5xx, $"El proveedor respondió {(int)respuesta.StatusCode}."), false);
             if (respuesta.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
                 fuente.Invalidar();
+                return (Fallo(modelo, TipoFalloRedactor.Ilegible, $"El proveedor rechazó la solicitud ({(int)respuesta.StatusCode})."), true);
+            }
+
             if (!respuesta.IsSuccessStatusCode)
-                return Fallo(modelo, TipoFalloRedactor.Ilegible, $"El proveedor rechazó la solicitud ({(int)respuesta.StatusCode}).");
+                return (Fallo(modelo, TipoFalloRedactor.Ilegible, $"El proveedor rechazó la solicitud ({(int)respuesta.StatusCode})."), false);
 
             var texto = await respuesta.Content.ReadAsStringAsync(limite.Token).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(texto);
             switch (doc.RootElement.TryGetProperty("stop_reason", out var parada) ? parada.GetString() : null)
             {
                 case "max_tokens":
-                    return Fallo(modelo, TipoFalloRedactor.Ilegible, "La respuesta del modelo quedó cortada (se acabó el límite de tokens).");
+                    return (Fallo(modelo, TipoFalloRedactor.Ilegible, "La respuesta del modelo quedó cortada (se acabó el límite de tokens)."), false);
                 case "refusal":
-                    return Fallo(modelo, TipoFalloRedactor.Ilegible, "El modelo rechazó la redacción.");
+                    return (Fallo(modelo, TipoFalloRedactor.Ilegible, "El modelo rechazó la redacción."), false);
             }
 
             // SP-6 (HU-2): sin content, content que no es arreglo o un bloque de texto sin text queda ilegible (no se reintenta).
             // Antes lanzaba: la vuelta fallaba con la fila tomada y, al vencer el lease, se volvía a llamar al proveedor sin tope.
             var salida = TextoDe(doc.RootElement);
-            return string.IsNullOrWhiteSpace(salida)
+            return (string.IsNullOrWhiteSpace(salida)
                 ? Fallo(modelo, TipoFalloRedactor.Ilegible, "La respuesta del modelo no trae texto.")
-                : new SalidaModelo(salida, modelo);
+                : new SalidaModelo(salida, modelo), false);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
-            return Fallo(modelo, TipoFalloRedactor.Timeout, $"El proveedor no respondió en {o.TimeoutSegundos} s.");
+            return (Fallo(modelo, TipoFalloRedactor.Timeout, $"El proveedor no respondió en {o.TimeoutSegundos} s."), false);
         }
         catch (HttpRequestException ex)
         {
-            return Fallo(modelo, TipoFalloRedactor.Red, $"Error de red: {ex.Message}");
+            return (Fallo(modelo, TipoFalloRedactor.Red, $"Error de red: {ex.Message}"), false);
         }
         catch (JsonException)
         {
-            return Fallo(modelo, TipoFalloRedactor.Http5xx, "Respuesta del proveedor no interpretable.");
+            return (Fallo(modelo, TipoFalloRedactor.Http5xx, "Respuesta del proveedor no interpretable."), false);
         }
     }
 

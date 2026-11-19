@@ -104,7 +104,7 @@ public sealed class RegistroRedactorOrigenTests : IDisposable
     }
 
     public static TheoryData<string> FaltasDePlataforma =>
-        ["sin_direccion", "sin_kid", "kid_invalido", "sin_privada", "privada_inexistente", "privada_ilegible", "privada_2048"];
+        ["sin_direccion", "sin_kid", "kid_invalido", "sin_privada", "privada_inexistente", "privada_ilegible", "privada_2048", "pem_public_key", "pem_rsa_public_key"];
 
     [Theory]
     [MemberData(nameof(FaltasDePlataforma))]
@@ -121,6 +121,8 @@ public sealed class RegistroRedactorOrigenTests : IDisposable
                 case "sin_privada": c["Diagnostico:Ia:ClavePrivadaArchivo"] = string.Empty; break;
                 case "privada_inexistente": c["Diagnostico:Ia:ClavePrivadaArchivo"] = Path.Combine(_dir, "no-existe.p8"); break;
                 case "privada_ilegible": c["Diagnostico:Ia:ClavePrivadaArchivo"] = Archivo("mala.p8", "esto no es una clave"); break;
+                case "pem_public_key": c["Diagnostico:Ia:ClavePrivadaArchivo"] = Archivo("publica.pem", PublicaPem(spki: true)); break;
+                case "pem_rsa_public_key": c["Diagnostico:Ia:ClavePrivadaArchivo"] = Archivo("publica-rsa.pem", PublicaPem(spki: false)); break;
                 default: c["Diagnostico:Ia:ClavePrivadaArchivo"] = Archivo("corta.p8", Convert.ToBase64String(rsa2048.ExportPkcs8PrivateKey())); break;
             }
         });
@@ -128,6 +130,35 @@ public sealed class RegistroRedactorOrigenTests : IDisposable
         using var sp = Construir(valores);
 
         sp.GetRequiredService<IProveedorRedactor>().Should().BeOfType<ProveedorRedactorNoConfigurado>(falta);
+    }
+
+    private static string PublicaPem(bool spki)
+    {
+        using var publica = V.Publica();
+        publica.KeySize.Should().BeGreaterThanOrEqualTo(ClavesPrivadasIa.BitsMinimos);
+        return spki ? publica.ExportSubjectPublicKeyInfoPem() : publica.ExportRSAPublicKeyPem();
+    }
+
+    /// <summary>CR-4: una PEM pública (PUBLIC KEY o RSA PUBLIC KEY) de 3072 bits no pasa por privada: motivo PRIVADA_NO_ES_PRIVADA.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task CR4_PemPublicaComoPrivada_EsPrivadaNoEsPrivada_YQuedaSinConfigurar(bool spki)
+    {
+        var archivo = Archivo(spki ? "publica.pem" : "publica-rsa.pem", PublicaPem(spki));
+        var opciones = new OpcionesIa { Origen = OpcionesIa.OrigenPlataforma, Kid = V.Kid, ClavePrivadaArchivo = archivo };
+
+        var claves = ClavesPrivadasIa.Cargar(opciones, out var motivo, out _);
+
+        claves.Should().BeNull();
+        motivo.Should().Be("PRIVADA_NO_ES_PRIVADA");
+
+        var logs = new LogsIa();
+        using var sp = Construir(Plataforma(c => c["Diagnostico:Ia:ClavePrivadaArchivo"] = archivo), logs);
+        sp.GetRequiredService<IProveedorRedactor>().Should().BeOfType<ProveedorRedactorNoConfigurado>();
+        foreach (var h in sp.GetServices<IHostedService>())
+            await h.StartAsync(TestContext.Current.CancellationToken);
+        logs.Todo.Should().Contain("PRIVADA_NO_ES_PRIVADA").And.NotContain(_dir);
     }
 
     [Fact]

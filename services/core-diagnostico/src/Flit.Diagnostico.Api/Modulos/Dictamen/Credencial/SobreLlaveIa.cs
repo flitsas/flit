@@ -36,7 +36,11 @@ public static partial class SobreLlaveIa
 
     private static readonly HashSet<string> Proveedores = new(StringComparer.Ordinal) { "anthropic", "openai", "kimi", "deepseek" };
 
+    /// <summary>Solo <c>[a-z0-9-]{1,64}</c>; <c>\z</c> y no <c>$</c>, que aceptaría un salto de línea final (CR-1).</summary>
     public static bool KidValido(string? kid) => kid is not null && PatronKid().IsMatch(kid);
+
+    /// <summary>Formato de modelo que entra al AAD y al log; <c>\z</c> y no <c>$</c> (CR-1).</summary>
+    public static bool ModeloValido(string? modelo) => modelo is not null && PatronModelo().IsMatch(modelo);
 
     /// <summary>
     /// <c>flit.ia.llave.v1\ndiagnostico\n&lt;tool&gt;\n&lt;proveedor&gt;\n&lt;modelo&gt;\n&lt;row_version&gt;\n&lt;kid&gt;\n&lt;base64url(nonce)&gt;\n&lt;emitida_en s&gt;</c>
@@ -48,7 +52,7 @@ public static partial class SobreLlaveIa
             throw new ArgumentException("Herramienta fuera del catálogo.", nameof(toolCode));
         if (proveedor is null || !Proveedores.Contains(proveedor))
             throw new ArgumentException("Proveedor fuera del catálogo.", nameof(proveedor));
-        if (modelo is null || !PatronModelo().IsMatch(modelo))
+        if (!ModeloValido(modelo))
             throw new ArgumentException("Modelo con formato inválido.", nameof(modelo));
         if (!KidValido(kid))
             throw new ArgumentException("kid con formato inválido.", nameof(kid));
@@ -71,10 +75,10 @@ public static partial class SobreLlaveIa
     private static string Base64Url(ReadOnlySpan<byte> datos) =>
         Convert.ToBase64String(datos).TrimEnd('=').Replace('+', '-').Replace('/', '_');
 
-    [GeneratedRegex("^[a-z0-9-]{1,64}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^[a-z0-9-]{1,64}\z", RegexOptions.CultureInvariant)]
     private static partial Regex PatronKid();
 
-    [GeneratedRegex("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\z", RegexOptions.CultureInvariant)]
     private static partial Regex PatronModelo();
 }
 
@@ -160,11 +164,15 @@ public static class DescifradorLlaveIa
 
 /// <summary>
 /// Privadas de Diagnóstico por <c>kid</c> (actual y, durante una rotación, la anterior). Se importan una vez al arrancar desde el
-/// archivo (SP-16) y los bytes leídos se ponen a cero. Una clave de menos de 3072 bits no se acepta (SP-9).
+/// archivo (SP-16) y los bytes leídos se ponen a cero. Una clave de menos de 3072 bits no se acepta (SP-9). Del PEM solo se acepta la
+/// etiqueta <c>PRIVATE KEY</c> (PKCS#8) y toda clave cargada pasa una ida y vuelta OAEP-SHA256: una pública (<c>PUBLIC KEY</c>,
+/// <c>RSA PUBLIC KEY</c>) da <c>PRIVADA_NO_ES_PRIVADA</c> y el redactor queda sin configurar (CR-4).
 /// </summary>
 public sealed class ClavesPrivadasIa : IDisposable
 {
     public const int BitsMinimos = 3072;
+
+    public const string EtiquetaPem = "PRIVATE KEY";
 
     private readonly RSA _actual;
     private readonly RSA? _anterior;
@@ -269,24 +277,40 @@ public sealed class ClavesPrivadasIa : IDisposable
         {
             var n = Encoding.ASCII.GetChars(bytes, texto);
             var contenido = texto.AsSpan(0, n).Trim();
+            ReadOnlySpan<char> base64 = contenido;
             if (contenido.StartsWith("-----BEGIN", StringComparison.Ordinal))
             {
-                rsa.ImportFromPem(contenido);
+                if (!PemEncoding.TryFind(contenido, out var campos))
+                    throw new FormatException("PEM ilegible.");
+                if (!contenido[campos.Label].SequenceEqual(EtiquetaPem.AsSpan()))
+                {
+                    rsa.Dispose();
+                    motivo = "PRIVADA_NO_ES_PRIVADA";
+                    return null;
+                }
+
+                base64 = contenido[campos.Base64Data];
             }
-            else
-            {
-                der = new byte[contenido.Length];
-                if (!Convert.TryFromBase64Chars(contenido, der, out var largo))
-                    throw new FormatException("La privada no es base64.");
-                rsa.ImportPkcs8PrivateKey(der.AsSpan(0, largo), out var leidos);
-                if (leidos != largo)
-                    throw new FormatException("La privada trae bytes de más.");
-            }
+
+            der = new byte[base64.Length];
+            if (!Convert.TryFromBase64Chars(base64, der, out var largo))
+                throw new FormatException("La privada no es base64.");
+
+            rsa.ImportPkcs8PrivateKey(der.AsSpan(0, largo), out var leidos);
+            if (leidos != largo)
+                throw new FormatException("La privada trae bytes de más.");
 
             if (rsa.KeySize < BitsMinimos)
             {
                 rsa.Dispose();
                 motivo = "PRIVADA_MENOR_3072";
+                return null;
+            }
+
+            if (!IdaYVueltaOaep(rsa))
+            {
+                rsa.Dispose();
+                motivo = "PRIVADA_NO_ES_PRIVADA";
                 return null;
             }
 
@@ -305,6 +329,29 @@ public sealed class ClavesPrivadasIa : IDisposable
             Array.Clear(texto);
             if (der is not null)
                 CryptographicOperations.ZeroMemory(der);
+        }
+    }
+
+    /// <summary>Cifra 32 bytes aleatorios con OAEP-SHA256 y los descifra: solo una privada completa los devuelve iguales.</summary>
+    private static bool IdaYVueltaOaep(RSA rsa)
+    {
+        var prueba = RandomNumberGenerator.GetBytes(SobreLlaveIa.BytesCek);
+        byte[]? vuelta = null;
+        try
+        {
+            var ida = rsa.Encrypt(prueba, RSAEncryptionPadding.OaepSHA256);
+            vuelta = rsa.Decrypt(ida, RSAEncryptionPadding.OaepSHA256);
+            return CryptographicOperations.FixedTimeEquals(prueba, vuelta);
+        }
+        catch (CryptographicException)
+        {
+            return false;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(prueba);
+            if (vuelta is not null)
+                CryptographicOperations.ZeroMemory(vuelta);
         }
     }
 }
