@@ -1169,7 +1169,6 @@ Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.Con
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.ConsolidadoLoteProcessor (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Messaging.ConsolidadoLotePurgaProcessor (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Platform.Sdk.IaConsumo.IaConsumoEscritor (Singleton)
-Microsoft.Extensions.Hosting.IHostedService => Flit.Platform.Sdk.IaConsumo.IaConsumoRetencion (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Quipux.QuipuxRegisterProcessor (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Quipux.QuipuxStatusPollProcessor (Singleton)
 Microsoft.Extensions.Hosting.IHostedService => Flit.Infrastructure.Domains.DomainVerificationSchedulerProcessor (Singleton)
