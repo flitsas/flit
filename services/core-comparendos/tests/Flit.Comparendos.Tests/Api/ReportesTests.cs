@@ -270,7 +270,14 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
         var top = despues.GetProperty("topEmpresas").EnumerateArray().ToList();
         top.Count.Should().BeLessThanOrEqualTo(5);
         top.Select(e => e.GetProperty("ahorro").GetDecimal()).Should().BeInDescendingOrder();
-        top.Single(e => e.GetProperty("empresaId").GetGuid() == empresa).GetProperty("dpFavorables").GetInt32().Should().Be(1);
+        // La base de pruebas es compartida: si ya hay cinco empresas con más ahorro, la del escenario no entra al top.
+        var mia = top.SingleOrDefault(e => e.GetProperty("empresaId").GetGuid() == empresa);
+        if (mia.ValueKind == JsonValueKind.Object)
+            mia.GetProperty("dpFavorables").GetInt32().Should().Be(1);
+        else
+            top.Should().HaveCount(5).And.OnlyContain(e => e.GetProperty("ahorro").GetDecimal() >= 604100m);
+        // La tasa es por DP sobre lo respondido en el año: nunca pasa del 100 %.
+        despues.GetProperty("dp").GetProperty("tasa").GetDecimal().Should().BeInRange(0m, 1m);
 
         (await api.Cliente(usuario).GetAsync("/api/v1/comparendos/admin/resumen?partes=impacto", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden, "solo el SuperAdmin");
         (await Super.GetAsync("/api/v1/comparendos/admin/resumen?partes=otra", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);

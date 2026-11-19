@@ -213,7 +213,8 @@ function Contenido() {
       )}
       {/* R4 (Samuel): el dinero va segundo, debajo de «Para hoy». Mientras carga ocupa su sitio (MAIA): si apareciera
           después, empujaría toda la operación hacia abajo. */}
-      {conDinero && <DineroInicio datos={dinero.estado === "ready" ? dinero.datos : null} />}
+      {/* Con error no se queda cargando para siempre: el aviso de arriba ya dice qué pasó y ofrece «Reintentar» (GIA). */}
+      {conDinero && dinero.estado !== "error" && <DineroInicio datos={dinero.estado === "ready" ? dinero.datos : null} />}
       {listo && !veBandeja && !conDinero && (
         <EstadoVacio
           titulo="Tu Inicio está vacío por ahora"

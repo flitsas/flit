@@ -47,9 +47,15 @@ public sealed partial class ServicioReportes
             .ToListAsync(ct).ConfigureAwait(false);
         // Tasa como la del dashboard: favorables sobre lo que tuvo respuesta en el año (no sobre lo enviado, que puede
         // haberse respondido el año siguiente y daría más de 100 %).
-        var desfavorables = await db.DerechosPeticion.AsNoTracking()
-            .CountAsync(d => d.Estado == EstadoDp.Respondido && d.RespuestaSentido == SentidoRespuestaOt.Desfavorable && d.RespuestaFecha >= desde && d.RespuestaFecha <= hoy, ct)
-            .ConfigureAwait(false);
+        // Por DP, como KpisAsync (GIA: los favorables por comparendo daban una tasa distinta a la del dashboard).
+        var respondidos = await db.DerechosPeticion.AsNoTracking()
+            .Where(d => d.Estado == EstadoDp.Respondido && d.RespuestaFecha >= desde && d.RespuestaFecha <= hoy)
+            .GroupBy(_ => 1).Select(g => new
+            {
+                Favorables = g.Count(d => d.RespuestaSentido == SentidoRespuestaOt.Favorable),
+                Desfavorables = g.Count(d => d.RespuestaSentido == SentidoRespuestaOt.Desfavorable),
+            }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        var (fav, desf) = (respondidos?.Favorables ?? 0, respondidos?.Desfavorables ?? 0);
         var porEmpresa = favorables.GroupBy(x => x.TenantId).Select(g => new { Tenant = g.Key, Ahorro = g.Sum(x => x.Valor ?? 0), Favorables = g.Count() }).ToList();
 
         // Comparendos gestionados: la regla de productividad (acciones de usuarios: pago, contraventor, aviso y DP enviado),
@@ -75,13 +81,12 @@ public sealed partial class ServicioReportes
             .ToDictionaryAsync(c => c.TenantId, c => c.EmpresaNombre, ct).ConfigureAwait(false);
 
         var totalEnviados = enviados.Sum(x => x.N);
-        var totalFavorables = porEmpresa.Sum(x => x.Favorables);
         return new ImpactoPlataforma(
             hoy.Year,
             desde,
             hoy,
             porEmpresa.Sum(x => x.Ahorro),
-            new ImpactoDp(totalEnviados, totalFavorables, totalFavorables + desfavorables == 0 ? null : Math.Round((decimal)totalFavorables / (totalFavorables + desfavorables), 4)),
+            new ImpactoDp(totalEnviados, fav, fav + desf == 0 ? null : Math.Round((decimal)fav / (fav + desf), 4)),
             gestionados,
             avisos,
             new ImpactoCambios(cambios?.Solicitados ?? 0, cambios?.Aceptados ?? 0),

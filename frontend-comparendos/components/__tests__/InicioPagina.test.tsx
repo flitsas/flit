@@ -224,6 +224,34 @@ describe("Inicio de Comparendos", () => {
     expect(apiFetch.mock.calls.some(([ruta, op]) => ruta === "/reportes/dinero" && op?.query?.partes === "inicio")).toBe(true);
   });
 
+  it("si el impacto falla, su panel ofrece reintentar y el resto del Inicio del SuperAdmin sigue", async () => {
+    sesion = { usuario: { id: "s", email: "s@flit.test", esSuperAdmin: true }, permisos: [], empresa: null };
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (ruta: string, op?: { query?: Record<string, unknown> }) => {
+      if (ruta === "/admin/resumen" && op?.query?.partes === "impacto") throw new Error("Sin conexión");
+      return base(ruta, op);
+    });
+    render(<Inicio />);
+    const panel = await screen.findByTestId("impacto");
+    expect(await within(panel).findByText(/Sin conexión/)).toBeTruthy();
+    expect(within(panel).getByRole("button", { name: "Reintentar" })).toBeTruthy();
+    expect(screen.getByTestId("necesitan-algo")).toBeTruthy();
+    expect(screen.getByTestId("salud")).toBeTruthy();
+  });
+
+  it("si el dinero falla, la franja no se queda cargando: el aviso general ofrece reintentar", async () => {
+    sesion = gestora(true);
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (ruta: string, op?: { query?: Record<string, unknown> }) => {
+      if (ruta === "/reportes/dinero") throw new Error("Sin conexión");
+      return base(ruta, op);
+    });
+    render(<Inicio />);
+    expect(await screen.findByText("No se pudo cargar el tablero")).toBeTruthy();
+    expect(screen.queryByText("Dinero")).toBeNull();
+    expect(await screen.findByTestId("gestion")).toBeTruthy();
+  });
+
   it("el SuperAdmin con «Todas» ve la salud de la plataforma y las empresas que necesitan algo", async () => {
     sesion = { usuario: { id: "s", email: "s@flit.test", esSuperAdmin: true }, permisos: [], empresa: null };
     render(<Inicio />);
