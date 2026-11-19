@@ -515,7 +515,7 @@ function Cabecera({ d, acciones }: { d: Detalle; acciones: ReactNode }) {
 function TarjetaContexto({ titulo, children, accion, onIr }: { titulo: string; children: ReactNode; accion: string; onIr: () => void }) {
   return (
     <div className={`${TARJETA_CLS} flex min-w-0 flex-col gap-2 p-4`}>
-      <h2 className={`m-0 ${SUBTITULO_CLS}`}>{titulo}</h2>
+      <h3 className={`m-0 ${SUBTITULO_CLS}`}>{titulo}</h3>
       <div className="flex min-w-0 flex-1 flex-col gap-1 text-sm">{children}</div>
       <button type="button" onClick={onIr} className="self-start text-sm font-semibold text-flit-brand-ink hover:underline focus-visible:outline-2 focus-visible:outline-[var(--di-action)]">
         {accion}
@@ -673,8 +673,10 @@ export function ContenidoDetalle({
     pendientes.current.forEach((t) => window.clearTimeout(t));
     pendientes.current = [];
   };
-  const ubicar = (idSeccion: string, suave: boolean) => {
+  const ubicar = (idSeccion: string, pedidoSuave: boolean) => {
     cancelar();
+    // Con «reducir movimiento» del sistema, el salto es directo.
+    const suave = pedidoSuave && !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
     const corrida = () => {
       const el = document.getElementById(idSeccion);
       if (!el) return null;

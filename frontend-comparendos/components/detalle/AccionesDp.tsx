@@ -56,7 +56,7 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
 
   return (
     <div className="flex flex-col gap-3 border-t border-border pt-3">
-      <h4 className="text-xs font-semibold">Generar derecho de petición</h4>
+      <h3 className="text-xs font-semibold">Generar derecho de petición</h3>
       {tipologias.estado === "loading" && <p className="text-xs opacity-60">Cargando tipologías…</p>}
       {tipologias.estado === "error" && <InlineAlert tone="error">{tipologias.error}</InlineAlert>}
       {tipologias.estado === "ready" && lista.length === 0 && (
