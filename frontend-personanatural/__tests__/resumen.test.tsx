@@ -1,0 +1,87 @@
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { abrirResumen, DOC_COMPRADOR, DOC_VENDEDOR, resumenVisible } from "./fixtures-envio";
+import { nodo } from "./montar-wizard";
+
+const seccion = (nombre: string) => within(resumenVisible()).getByRole("region", { name: nombre });
+
+describe("Paso 4 · Resumen", () => {
+  it("reabre el borrador completo en Resumen, con la miga del diseño", async () => {
+    await abrirResumen();
+
+    expect(nodo(4)).toHaveAttribute("aria-current", "step");
+    expect(screen.getByRole("navigation", { name: "Ruta de navegación" })).toHaveTextContent("Dashboard > Trámites > Trámite A > Resumen");
+    expect(screen.getByRole("list", { name: "Pasos del trámite" })).toHaveTextContent(/Diagnóstico.*Actores.*Requisitos.*Resumen.*Envío/);
+  });
+
+  it("muestra placa, tipo y valor, y el botón que radica", async () => {
+    await abrirResumen();
+
+    const datos = seccion("Datos del trámite");
+    expect(datos).toHaveTextContent("PlacaABC123");
+    expect(datos).toHaveTextContent("Tipo de trámiteTrámite A");
+    expect(datos).toHaveTextContent("Valor del trámite");
+    expect(screen.queryByRole("region", { name: "Elección de facturación" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Datos bancarios FLIT" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Comprobante de pago" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Enviar trámite" })).toBeEnabled();
+    expect(screen.queryByRole("button", { name: "Continuar" })).toBeNull();
+  });
+
+  it("muestra las secciones con los datos del borrador, la identidad real y los documentos, con enlace «Editar»", async () => {
+    await abrirResumen();
+
+    const actores = seccion("Titular y actores");
+    expect(actores).toHaveTextContent("LUIS PEREZ");
+    expect(actores).toHaveTextContent("luis.perez@mail.co");
+    expect(seccion("Validación de identidad")).toHaveTextContent("Validada");
+    expect(seccion("Documentos cargados")).toHaveTextContent("Paz y salvo de impuestospaz-y-salvo.pdf");
+    expect(seccion("Documentos cargados")).not.toHaveTextContent("soporte.pdf");
+    expect(screen.queryByRole("region", { name: "Vehículo" })).toBeNull();
+
+    fireEvent.click(within(seccion("Titular y actores")).getByRole("button", { name: "Editar Titular y actores" }));
+
+    expect(nodo(2)).toHaveAttribute("aria-current", "step");
+  });
+
+  it("«Atrás» vuelve a Requisitos", async () => {
+    await abrirResumen();
+
+    fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
+
+    expect(nodo(3)).toHaveAttribute("aria-current", "step");
+  });
+
+  it("la identidad se lee solo con el Resumen a la vista y de nuevo al volver a él", async () => {
+    const { llamadas } = await abrirResumen();
+    const lecturas = () => llamadas.filter((l) => l.clave === "GET /solicitudes/s-1/identidad").length;
+    await waitFor(() => expect(lecturas()).toBe(1));
+
+    fireEvent.click(screen.getByRole("button", { name: "Atrás" }));
+    expect(nodo(3)).toHaveAttribute("aria-current", "step");
+    await new Promise((r) => setTimeout(r, 50));
+    expect(lecturas()).toBe(1);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Siguiente" }));
+    await waitFor(() => expect(nodo(4)).toHaveAttribute("aria-current", "step"));
+    await waitFor(() => expect(lecturas()).toBe(2));
+  });
+
+  it("los pasos ocultos no consultan personas al abrir el borrador en Resumen", async () => {
+    const { llamadas } = await abrirResumen();
+    await new Promise((r) => setTimeout(r, 700));
+
+    expect(llamadas.filter((l) => l.clave.includes("persona-detalle"))).toHaveLength(0);
+  });
+
+  it("Habeas Data: nada del ciudadano en el almacenamiento, en la URL ni en la consola", async () => {
+    const espias = (["log", "info", "warn", "error", "debug"] as const).map((n) => vi.spyOn(console, n).mockImplementation(() => undefined));
+    await abrirResumen();
+
+    expect(localStorage.length).toBe(0);
+    expect(sessionStorage.length).toBe(0);
+    expect(window.location.href).not.toMatch(new RegExp(`${DOC_VENDEDOR}|${DOC_COMPRADOR}|ABC123`));
+    for (const e of espias) expect(e).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  });
+});

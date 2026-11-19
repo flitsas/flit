@@ -42,8 +42,7 @@ internal sealed class NotificacionesGrpcService(
             CorreoMapeo.AMensaje(correo, caller.TenantId),
             CorreoMapeo.ACanal(correo.Canal),
             Origen(caller.ClientId),
-            // El buzón de pruebas es el único que llama directo y su destinatario es un buzón controlado (HU #11372).
-            BuzonControlado: true);
+            BuzonControlado: EsBuzonDePruebas(request, caller.ClientId));
         var (resultado, entregaId) = await envio.EnviarAsync(pedido, context.CancellationToken).ConfigureAwait(false);
         return new EnviarCorreoResponse
         {
@@ -107,6 +106,17 @@ internal sealed class NotificacionesGrpcService(
             info.RemitenteNombre = nombre;
         return info;
     }
+
+    /// <summary>
+    /// HU #13881: la exención del desvío (HU #11372) es solo del banco de pruebas de core-api, que lo pide de forma explícita.
+    /// Antes valía para todo el que llamara directo, y así los avisos de Comparendos por la API de Renting se saltaban el
+    /// desvío al buzón de pruebas en DEV y QA.
+    /// </summary>
+    internal static bool EsBuzonDePruebas(EnviarCorreoRequest request, string clientId) =>
+        request.BuzonDePruebas && Origen(clientId) == OrigenBancoDePruebas;
+
+    /// <summary>El servicio de core-api (cliente <c>svc-tramites</c>), dueño del banco de pruebas de notificaciones.</summary>
+    internal const string OrigenBancoDePruebas = "tramites";
 
     private static string Origen(string clientId) => clientId.StartsWith("svc-", StringComparison.Ordinal) ? clientId["svc-".Length..] : clientId;
 

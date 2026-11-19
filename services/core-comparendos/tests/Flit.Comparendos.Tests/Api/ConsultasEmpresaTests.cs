@@ -17,7 +17,15 @@ public sealed class ProductosDePrueba : IProductosHabilitados
 {
     public ConcurrentDictionary<Guid, bool> Apagadas { get; } = new();
 
-    public Task<bool> ComparendosHabilitadoAsync(Guid tenant, CancellationToken ct) => Task.FromResult(!Apagadas.ContainsKey(tenant));
+    /// <summary>Empresas para las que Identidad "falla" (lanza), para probar que una empresa rota no frena a las demás.</summary>
+    public ConcurrentDictionary<Guid, bool> Fallan { get; } = new();
+
+    /// <summary>Empresas para las que la llamada a Identidad "expira" (TaskCanceledException sin que el token esté cancelado).</summary>
+    public ConcurrentDictionary<Guid, bool> Expiran { get; } = new();
+
+    public Task<bool> ComparendosHabilitadoAsync(Guid tenant, CancellationToken ct) =>
+        Expiran.ContainsKey(tenant) ? throw new TaskCanceledException("Tiempo de espera agotado (prueba).") :
+        Fallan.ContainsKey(tenant) ? throw new InvalidOperationException("Identidad no responde (prueba).") : Task.FromResult(!Apagadas.ContainsKey(tenant));
 }
 
 /// <summary>Identidad falsa para los usuarios: devuelve los que se le pongan, por empresa.</summary>
@@ -29,7 +37,7 @@ public sealed class UsuariosDePrueba : IUsuariosEmpresa
         Task.FromResult<IReadOnlyList<UsuarioConPermiso>>(PorEmpresa.GetValueOrDefault(tenant) ?? []);
 }
 
-public sealed class ApiConProductos : ApiConFuente
+public class ApiConProductos : ApiConFuente
 {
     public ProductosDePrueba Productos { get; } = new();
 
@@ -139,7 +147,7 @@ public sealed class ConsultasEmpresaTests(ApiConProductos api) : IClassFixture<A
 
         var texto = await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.ConfiguracionVer])).GetStringAsync("/api/v1/comparendos/configuracion/consultas", Ct);
         texto.Should().NotContainAny("proveedor", "prueba", "Fuente de prueba");
-        var vista = JsonDocument.Parse(texto).RootElement;
+        var vista = JsonElement.Parse(texto);
         vista.GetProperty("estado").GetString().Should().Be("Activa");
         var simit = vista.GetProperty("canales").EnumerateArray().Single(c => c.GetProperty("canal").GetString() == "SimitNit");
         simit.GetProperty("descripcion").GetString().Should().Be("Días hábiles a las 07:00, 13:00");

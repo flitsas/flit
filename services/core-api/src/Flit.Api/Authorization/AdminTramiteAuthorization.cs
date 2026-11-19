@@ -44,7 +44,10 @@ public static class AdminTramiteAuthorization
     /// <summary>Reasignar el gestor de un trámite (HU #12162).</summary>
     public const string ReasignarGestorSlug = "AdminTramiteReasignarGestor";
 
-    /// <summary>Los 6 slugs del catálogo, útil para pruebas parametrizadas y validaciones cruzadas.</summary>
+    /// <summary>Cargar un documento a un trámite en cualquier estado (Bug #14604).</summary>
+    public const string CargarDocumentoSlug = "AdminTramiteCargarDocumento";
+
+    /// <summary>Los 7 slugs del catálogo, útil para pruebas parametrizadas y validaciones cruzadas.</summary>
     public static readonly IReadOnlyList<string> AllSlugs =
     [
         CambiarEstadoSlug,
@@ -53,5 +56,6 @@ public static class AdminTramiteAuthorization
         CargarConsolidadoSlug,
         ReenviarValidacionSlug,
         ReasignarGestorSlug,
+        CargarDocumentoSlug,
     ];
 }

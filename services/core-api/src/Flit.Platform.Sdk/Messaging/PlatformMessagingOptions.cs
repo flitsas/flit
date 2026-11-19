@@ -24,6 +24,13 @@ public sealed partial class PlatformMessagingOptions
     /// </summary>
     public TimeSpan MaxRetryDelay { get; set; } = TimeSpan.FromMinutes(1);
 
+    /// <summary>
+    /// Retención de las filas YA publicadas de la outbox (HU #13727, ADR-0072 R-2): con valor, una purga en segundo plano
+    /// borra por lotes las publicadas antes de ahora − retención; las pendientes nunca se borran. Sin valor (por defecto)
+    /// no hay purga y la outbox se conserva entera. La encienden los servicios cuyo payload lleva datos personales.
+    /// </summary>
+    public TimeSpan? RetencionPublicados { get; set; }
+
     internal void Validate()
     {
         if (!ProducerPattern().IsMatch(Producer))
@@ -34,6 +41,8 @@ public sealed partial class PlatformMessagingOptions
             throw new InvalidOperationException($"{SectionName}: BatchSize y PollInterval deben ser positivos.");
         if (MaxRetryDelay < PollInterval)
             throw new InvalidOperationException($"{SectionName}:MaxRetryDelay no puede ser menor que PollInterval.");
+        if (RetencionPublicados <= TimeSpan.Zero)
+            throw new InvalidOperationException($"{SectionName}:RetencionPublicados debe ser positiva (o no declararse para no purgar).");
     }
 
     [GeneratedRegex("^[a-z][a-z0-9-]{1,40}$")]

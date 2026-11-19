@@ -67,6 +67,7 @@ public static partial class OtPermissionMap
         ["GET /api/v1/admin/ot/metrics/reviewers"] = Reportes,
         ["GET /api/v1/admin/ot/metrics/reviewer-options"] = Reportes,
         ["GET /api/v1/admin/ot/metrics/client-companies"] = Reportes,
+        ["GET /api/v1/admin/ot/metrics/clientes-por-familia"] = Reportes,
         ["GET /api/v1/admin/ot/queries/fields"] = Reportes,
         ["POST /api/v1/admin/ot/queries/run"] = Reportes,
         ["GET /api/v1/admin/ot/queries/saved"] = Reportes,

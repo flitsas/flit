@@ -137,7 +137,8 @@ describe("Shell — usuario de organismo de tránsito", () => {
     }
 
     await userEvent.click(screen.getByRole("button", { name: "Menú de usuario" }));
-    expect(screen.getByText("Admin OT")).toBeInTheDocument();
+    // HU #14479: el rol sale en la barra y en la franja del menú abierto.
+    expect(within(screen.getByRole("region", { name: "Cuenta" })).getByText("Admin OT")).toBeInTheDocument();
   });
 
   it("los módulos homónimos de la SPA no se duplican: Trámites es el del organismo", async () => {
@@ -241,35 +242,36 @@ describe("Shell — AdminCompany", () => {
 });
 
 describe("Shell — dock SuperAdmin (HU #10469)", () => {
-  it("muestra Compañías, Tránsito, Improntas, RBAC y Auditoría dentro de Administradores", async () => {
+  it("muestra Compañías, Improntas, RBAC y Auditoría dentro de las secciones de Administradores (HU #14479)", async () => {
     setDevSuperAdminToken();
     renderShell();
     expect(within(dock()).queryByRole("link", { name: "Compañías" })).not.toBeInTheDocument();
     await userEvent.click(within(dock()).getByRole("button", { name: "Administradores" }));
-    expect(within(dock()).getByRole("link", { name: "Compañías" })).toHaveAttribute("href", "/admin/companies");
-    expect(within(dock()).getByRole("button", { name: "Tránsito" })).toBeInTheDocument();
-    expect(within(dock()).getByRole("link", { name: "Improntas" })).toBeInTheDocument();
-    expect(within(dock()).getByRole("link", { name: "RBAC Admin" })).toHaveAttribute("href", "/?m=rbac");
-    expect(within(dock()).getByRole("link", { name: "Auditoría" })).toHaveAttribute("href", "/?m=auditoria");
+    // HU #14479: las secciones de Administradores ya no se despliegan; son grupos con nombre en dos columnas.
+    const seccion = (name: string) => within(within(dock()).getByRole("group", { name }));
+    expect(seccion("Compañías y tránsito").getByRole("link", { name: "Compañías" })).toHaveAttribute("href", "/admin/companies");
+    expect(seccion("Documentos").getByRole("link", { name: "Improntas" })).toBeInTheDocument();
+    expect(seccion("Seguridad y operación").getByRole("link", { name: "RBAC Admin" })).toHaveAttribute("href", "/?m=rbac");
+    expect(seccion("Seguridad y operación").getByRole("link", { name: "Auditoría" })).toHaveAttribute("href", "/?m=auditoria");
   });
 
-  it("anida Organismos y Causales de rechazo bajo Administradores → Tránsito", async () => {
+  it("anida Organismos y Causales de rechazo bajo Administradores → Compañías y tránsito (HU #14479)", async () => {
     setDevSuperAdminToken();
     renderShell();
     await userEvent.click(within(dock()).getByRole("button", { name: "Administradores" }));
-    await userEvent.click(within(dock()).getByRole("button", { name: "Tránsito" }));
-    expect(within(dock()).getByRole("link", { name: "Organismos" })).toHaveAttribute("href", "/admin/transit-offices");
-    expect(within(dock()).getByRole("link", { name: "Causales de rechazo" })).toBeInTheDocument();
+    const transito = within(within(dock()).getByRole("group", { name: "Compañías y tránsito" }));
+    expect(transito.getByRole("link", { name: "Organismos" })).toHaveAttribute("href", "/admin/transit-offices");
+    expect(transito.getByRole("link", { name: "Causales de rechazo" })).toBeInTheDocument();
   });
 
   it("muestra Mandatos y Notificaciones dentro de Administradores → Plataforma, en ese orden (HU #11369 AC1)", async () => {
     setDevSuperAdminToken();
     renderShell();
     await userEvent.click(within(dock()).getByRole("button", { name: "Administradores" }));
-    await userEvent.click(within(dock()).getByRole("button", { name: "Plataforma" }));
+    const plataforma = within(within(dock()).getByRole("group", { name: "Plataforma" }));
 
-    const mandatos = within(dock()).getByRole("link", { name: "Mandatos" });
-    const notificaciones = within(dock()).getByRole("link", { name: "Notificaciones" });
+    const mandatos = plataforma.getByRole("link", { name: "Mandatos" });
+    const notificaciones = plataforma.getByRole("link", { name: "Notificaciones" });
     expect(mandatos.compareDocumentPosition(notificaciones) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
@@ -277,6 +279,7 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     renderShell();
     for (const name of ["Administradores", "Plataforma"]) {
       expect(within(dock()).queryByRole("button", { name })).not.toBeInTheDocument();
+      expect(within(dock()).queryByRole("group", { name })).not.toBeInTheDocument();
     }
     expect(within(dock()).queryByRole("link", { name: "Improntas" })).not.toBeInTheDocument();
   });
@@ -286,10 +289,11 @@ describe("Shell — dock SuperAdmin (HU #10469)", () => {
     renderShell();
     await userEvent.click(within(dock()).getByRole("button", { name: "Integraciones" }));
     expect(within(dock()).getByRole("link", { name: "Log QX" })).toHaveAttribute("href", "/?m=log-qx");
-    expect(within(dock()).queryByRole("link", { name: "Log ICT" })).not.toBeInTheDocument();
-    await userEvent.click(within(dock()).getByRole("button", { name: "ICT" }));
-    expect(within(dock()).getByRole("link", { name: "Log ICT" })).toBeInTheDocument();
-    expect(within(dock()).getByRole("link", { name: "Reportes ICT" })).toBeInTheDocument();
+    // HU #14479: ICT es una sección con nombre dentro del submenú; Log QX va suelto, fuera de ella.
+    const ict = within(within(dock()).getByRole("group", { name: "ICT" }));
+    expect(ict.queryByRole("link", { name: "Log QX" })).not.toBeInTheDocument();
+    expect(ict.getByRole("link", { name: "Log ICT" })).toHaveAttribute("href", "/?m=ict-logs");
+    expect(ict.getByRole("link", { name: "Reportes ICT" })).toHaveAttribute("href", "/?m=ict-reportes");
   });
 });
 
@@ -322,7 +326,8 @@ describe("Shell — barra y menú de cuenta", () => {
 
   it("el contenido hace scroll en [data-shell-scroll], con colchón para el dock", () => {
     renderShell();
-    const box = screen.getByText("contenido").parentElement!;
+    // El contenido va dentro del ancho de 1240 px de la propuesta (HU #14476); el scroll es del contenedor de afuera.
+    const box = screen.getByText("contenido").closest("[data-shell-scroll]")!;
     expect(box).toHaveAttribute("data-shell-scroll");
     expect(box.className).toContain("overflow-y-auto");
     expect(box.className).toMatch(/pb-\d/);

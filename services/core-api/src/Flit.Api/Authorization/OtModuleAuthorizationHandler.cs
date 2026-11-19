@@ -21,6 +21,14 @@ public sealed class OtModuleAuthorizationHandler
             .Where(c => c.Type == AdminAuthorization.RoleClaimType)
             .Select(c => c.Value);
 
+        // HU #14454 (ADR-0082) — hueco del tenant OT: quien solo tiene ot_caja no entra a ningún módulo del organismo, aunque su
+        // tenant sea un TRANSIT_OFFICE. Fail explícito: ningún otro handler de la política puede concederlo.
+        if (SoloCajaGuard.EsSoloCaja(context.User))
+        {
+            context.Fail(new AuthorizationFailureReason(this, "El rol ot_caja no accede a los módulos del organismo."));
+            return Task.CompletedTask;
+        }
+
         var isTransitOfficeTenant = context.User.Claims.Any(c =>
             c.Type == AdminAuthorization.EntityTypeClaimType
             && string.Equals(c.Value, AdminAuthorization.TransitOfficeEntityType, StringComparison.OrdinalIgnoreCase));

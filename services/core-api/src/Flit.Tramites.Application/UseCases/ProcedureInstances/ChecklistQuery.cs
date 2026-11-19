@@ -34,9 +34,8 @@ public sealed record ChecklistResponse(
 /// (<c>checklist_estado</c>) con los tipos de documentos ya subidos (auto-marca) y delega el
 /// cómputo en el dominio (<see cref="ChecklistEngine"/>). Sobre la lista base aplica además las
 /// reglas condicionales por atributo del trámite (RF30/33/35/37/38/39, derivadas de los datos
-/// persistidos por <see cref="TramiteDocumentContextMapper"/>) y los parámetros de la compañía
-/// gestora (RF31). Sin datos que disparen condiciones ni parámetros configurados, el resultado
-/// es idéntico al checklist plano ⇒ sin cambios de comportamiento.
+/// persistidos por <see cref="TramiteDocumentContextMapper"/>). Sin datos que disparen condiciones,
+/// el resultado es idéntico al checklist plano ⇒ sin cambios de comportamiento.
 /// <para>
 /// HU #10522 (RF17/RF22 — decisión LT: <b>matriz viva</b>): cuando el gestor tiene una matriz
 /// documental configurada para el trámite (<see cref="IResolvedChecklistMatrixProvider"/> devuelve
@@ -49,7 +48,6 @@ public sealed record ChecklistResponse(
 /// </summary>
 public sealed class GetChecklistHandler(
     IProcedureInstanceRepository repo,
-    IChecklistCompanyParamsProvider companyParams,
     IResolvedChecklistMatrixProvider? matrixProvider = null,
     IDocumentTypeCatalog? documentTypes = null,
     IMandateRequirementPolicy? mandatePolicy = null)
@@ -72,7 +70,7 @@ public sealed class GetChecklistHandler(
         var codigo = instance.TypeCode;
 
         // RF30 — atributos del trámite derivados de los datos persistidos (actores, campos RUNT,
-        // participantes) y sus reglas condicionales por tipología; RF31 — parámetros por gestora.
+        // participantes) y sus reglas condicionales por tipología.
         // La supresión de cédula para persona natural (HU #10542) queda cubierta por la regla
         // condicional `pn_sin_cedula` (EsPersonaNatural ⇒ Hide cedulas), sin override aparte.
         // ADR-0036 (HU #10913) — configuración de mandato del OT por su código (field_values); null si
@@ -86,7 +84,6 @@ public sealed class GetChecklistHandler(
 
         var context = TramiteDocumentContextMapper.From(instance, mandateConfig);
         var rules = ConditionalDocumentRules.For(codigo);
-        var parametros = await companyParams.GetForTenantAsync(tenantId, ct);
 
         ChecklistResultado? computed = null;
 
@@ -104,7 +101,7 @@ public sealed class GetChecklistHandler(
                 var carga = matriz.Where(d => !d.EsGeneradoSistema).ToList();
                 var baseItems = MatrixChecklistItems.Build(codigo, carga);
                 computed = ChecklistEngine.ComputeFromMatrix(
-                    codigo, baseItems, manual, docTipos, context, rules, parametros);
+                    codigo, baseItems, manual, docTipos, context, rules);
             }
             else
             {
@@ -112,7 +109,7 @@ public sealed class GetChecklistHandler(
             }
         }
 
-        computed ??= ChecklistEngine.ComputeConditional(codigo, manual, docTipos, context, rules, parametros);
+        computed ??= ChecklistEngine.ComputeConditional(codigo, manual, docTipos, context, rules);
 
         computed ??= ChecklistResultado.Vacio(codigo);
 

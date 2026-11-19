@@ -19,6 +19,7 @@ using Flit.Queries.Domain;
 using Flit.Queries.Domain.Documentos;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
@@ -274,7 +275,7 @@ internal sealed partial class ProcedureInstanceRepository(
             .Where(i => i.DeletedAt == null
                 && (i.Status == TramiteEstado.Entregado || i.Status == TramiteEstado.Aprobado)
                 && i.Attachments.Any(a =>
-                    a.Tipo == "impronta"
+                    !a.IsHistorico && a.Tipo == "impronta"
                     && (a.Provider == null || a.Provider.ToLower() != Flit.Tramites.Domain.Documents.AttachmentProviders.Kyverum)
                     && !signedAttachmentIds.Contains(a.Id)))
             .OrderBy(i => i.CreatedAt)
@@ -571,6 +572,33 @@ internal sealed partial class ProcedureInstanceRepository(
         return result;
     }
 
+    public async Task<IReadOnlyList<ProcedureInstanceFirmaBaulCopia>> ListFirmaBaulCopiasAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct) =>
+        await db.ProcedureInstanceFirmaBaulCopias
+            .Where(c => c.ProcedureInstanceId == procedureInstanceId && c.TenantId == tenantId && c.DeletedAt == null)
+            .ToListAsync(ct);
+
+    public async Task<IReadOnlyDictionary<Guid, IReadOnlyList<ProcedureInstanceFirmaBaulCopia>>> ListFirmaBaulCopiasPorInstanciasAsync(
+        IReadOnlyCollection<Guid> procedureInstanceIds, CancellationToken ct)
+    {
+        if (procedureInstanceIds.Count == 0)
+            return new Dictionary<Guid, IReadOnlyList<ProcedureInstanceFirmaBaulCopia>>();
+
+        var ids = procedureInstanceIds.Distinct().ToList();
+        var rows = await db.ProcedureInstanceFirmaBaulCopias
+            .AsNoTracking()
+            .Where(c => ids.Contains(c.ProcedureInstanceId) && c.DeletedAt == null)
+            .ToListAsync(ct);
+
+        return rows
+            .GroupBy(c => c.ProcedureInstanceId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<ProcedureInstanceFirmaBaulCopia>)g.ToList());
+    }
+
+    public async Task AddFirmaBaulCopiasAsync(
+        IReadOnlyCollection<ProcedureInstanceFirmaBaulCopia> copias, CancellationToken ct) =>
+        await db.ProcedureInstanceFirmaBaulCopias.AddRangeAsync(copias, ct);
+
     /// <summary>Estado "activa" del baúl (ADR-0025): las revocadas no cuentan como vigentes.</summary>
     private const string SignatureVaultEstadoActiva = "activa";
 
@@ -643,12 +671,15 @@ internal sealed partial class ProcedureInstanceRepository(
         // upper(btrim(tipo)), upper(btrim(número)), en vuelo, sin mandatario): todas las filas que impedirían guardar una
         // validación nueva de este documento, sin filtrar por trámite ni quedarse con la más reciente. Rastreadas y con el
         // trámite cargado para que el caso de uso decida cuáles cerrar.
-        var tipo = (tipoDoc ?? string.Empty).Trim().ToUpperInvariant();
+        // HU #14044 — el índice excluye además las filas del portal (portal_solicitud_ref IS NOT NULL, que tienen su
+        // propio índice por solicitud/parte): este método también las ignora para no cerrar validaciones del portal.
+        var tipo =(tipoDoc ?? string.Empty).Trim().ToUpperInvariant();
         var numero = (documento ?? string.Empty).Trim().ToUpperInvariant();
         return await db.ProcedureInstanceBiometricValidations
             .Include(v => v.ProcedureInstance)
             .Where(v => v.TenantId == tenantId
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && (v.Status == BiometricEstados.PendienteEnvio
                     || v.Status == BiometricEstados.Enviado
                     || v.Status == BiometricEstados.EnProceso)
@@ -673,6 +704,7 @@ internal sealed partial class ProcedureInstanceRepository(
             .AsNoTracking()
             .Where(v => tenantIds.Contains(v.TenantId)
                 && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
                 && v.Status == BiometricEstados.Aprobado
                 && v.DocumentType != null
                 && v.DocumentNumber != null
@@ -691,6 +723,121 @@ internal sealed partial class ProcedureInstanceRepository(
                 keys.Add(BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber));
 
         return keys;
+    }
+
+    public async Task<ProcedureInstanceBiometricValidation?> FindProtegidaPorVencimientoManualAsync(
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now,
+        DateTimeOffset? salidaDeBorradorAt, CancellationToken ct)
+    {
+        // HU #13824 — identidad vencida a mano que los trámites fuera de borrador siguen honrando hasta su fin previo,
+        // siempre que el trámite haya salido de borrador antes del vencimiento (ConservaFirmaTrasVencimientoManual).
+        var candidates = await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => v.TenantId == tenantId
+                && v.Status == BiometricEstados.Aprobado
+                && v.ExpiredManuallyAt != null
+                && (v.ValidUntilPrevious == null || v.ValidUntilPrevious > now))
+            .WhereDocumentoVigenteCandidato(tipoDoc, documento)
+            .WhereInstanciaVigente()
+            .OrderByDescending(v => v.ValidatedAt)
+            .Take(10)
+            .ToListAsync(ct);
+
+        // Estado "no borrador" cualquiera: la protección solo depende de que el trámite ya no sea borrador.
+        return candidates.FirstOrDefault(v =>
+            BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now, salidaDeBorradorAt));
+    }
+
+    public async Task<DateTimeOffset?> GetSalidaDeBorradorAtAsync(Guid instanceId, Guid tenantId, CancellationToken ct)
+    {
+        var salida = await db.ProcedureInstanceStatusHistories
+            .AsNoTracking()
+            .Where(h => h.ProcedureInstanceId == instanceId
+                && h.TenantId == tenantId
+                && h.FromStatus == TramiteEstado.Borrador)
+            .OrderBy(h => h.ChangedAt)
+            .Select(h => (DateTimeOffset?)h.ChangedAt)
+            .FirstOrDefaultAsync(ct);
+        return salida;
+    }
+
+    public async Task<IReadOnlyDictionary<Guid, DateTimeOffset>> ListSalidasDeBorradorAsync(
+        IReadOnlyCollection<Guid> tenantIds, IReadOnlyCollection<Guid> instanceIds, CancellationToken ct)
+    {
+        if (instanceIds.Count == 0 || tenantIds.Count == 0)
+            return new Dictionary<Guid, DateTimeOffset>();
+
+        var filas = await db.ProcedureInstanceStatusHistories
+            .AsNoTracking()
+            .Where(h => tenantIds.Contains(h.TenantId)
+                && instanceIds.Contains(h.ProcedureInstanceId)
+                && h.FromStatus == TramiteEstado.Borrador)
+            .GroupBy(h => h.ProcedureInstanceId)
+            .Select(g => new { Id = g.Key, Salida = g.Min(h => h.ChangedAt) })
+            .ToListAsync(ct);
+        return filas.ToDictionary(f => f.Id, f => f.Salida);
+    }
+
+    public async Task<IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>>> ListProtegidasPorVencimientoManualKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct)
+    {
+        var keys = new Dictionary<string, IReadOnlyList<IdentidadVencidaManual>>(StringComparer.Ordinal);
+        if (tenantIds.Count == 0)
+            return keys;
+
+        // Usa el índice parcial ix_biometric_validations_expired_manually (solo filas vencidas a mano).
+        var candidates = await db.ProcedureInstanceBiometricValidations
+            .AsNoTracking()
+            .Where(v => tenantIds.Contains(v.TenantId)
+                && v.MandateSignerId == null
+                && v.PortalSolicitudRef == null
+                && v.Status == BiometricEstados.Aprobado
+                && v.ExpiredManuallyAt != null
+                && (v.ValidUntilPrevious == null || v.ValidUntilPrevious > now)
+                && v.DocumentType != null
+                && v.DocumentNumber != null
+                && (v.ProcedureInstanceId == null
+                    || (v.ProcedureInstance != null && v.ProcedureInstance.DeletedAt == null)))
+            .ToListAsync(ct);
+
+        // Por llave se devuelven TODAS las identidades vencidas a mano (aprobación + vencimiento): el listado compara contra
+        // la salida de borrador de cada trámite y basta con que CUALQUIERA cumpla (misma regla que el gate).
+        foreach (var v in candidates)
+        {
+            if (!BiometricRules.EsAprobadaVigenteParaTramite(v, TramiteEstado.Entregado, now) || v.ExpiredManuallyAt is not { } vencidaA)
+                continue;
+            var key = BiometricRules.IdentidadKey(v.TenantId, v.DocumentType, v.DocumentNumber);
+            if (!keys.TryGetValue(key, out var lista))
+                keys[key] = lista = new List<IdentidadVencidaManual>();
+            ((List<IdentidadVencidaManual>)lista).Add(new IdentidadVencidaManual(v.ValidatedAt, vencidaA));
+        }
+
+        return keys;
+    }
+
+    public async Task<IReadOnlyList<ProcedureInstance>> ListBorradoresConActorDocumentoAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct)
+    {
+        var (_, numero) = DocumentCanonicalNormalization.Normalize(tipoDoc, documento);
+
+        // Prefiltro grueso en SQL: el actor tiene ese número de documento, o es una persona jurídica (su sujeto de
+        // identidad —el representante legal— vive en actor.metadata, jsonb). El emparejamiento exacto con el
+        // sujeto lo hace la capa de aplicación (IdentitySubjectResolver).
+        return await db.ProcedureInstances
+            .AsNoTracking()
+            .AsSplitQuery()
+            .Include(x => x.Actors)
+            .Include(x => x.ProcedureType)
+            .Include(x => x.BiometricValidations)
+            .Where(x => x.TenantId == tenantId
+                && x.DeletedAt == null
+                && x.Status == TramiteEstado.Borrador
+                && x.Actors.Any(a => a.DocumentNumber.Trim().ToUpper() == numero
+                    || (a.PersonType != null && a.PersonType.ToLower() == ActorPersonTypes.Juridical)
+                    || a.DocumentType.Trim().ToUpper() == "NIT"))
+            .OrderByDescending(x => x.UpdatedAt ?? x.CreatedAt)
+            .Take(200)
+            .ToListAsync(ct);
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<LinkedProcedureSummary>>> ListLinkedProceduresByIdentityDocumentsAsync(
@@ -884,6 +1031,20 @@ internal sealed partial class ProcedureInstanceRepository(
     /// el modelo ni el estado persistido.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Estados pedidos en el filtro: uno o varios separados por coma («enviado,en_proceso»), en minúscula y sin
+    /// repetir. <c>null</c> si no se pidió ninguno. La franja de Identidad filtra «En proceso» con dos estados.
+    /// </summary>
+    internal static string[]? EstadosDelFiltro(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return null;
+        var estados = status.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(e => e.ToLowerInvariant())
+            .Distinct()
+            .ToArray();
+        return estados.Length == 0 ? null : estados;
+    }
+
     private static string EstadoEfectivo(string status, DateTimeOffset expiresAt, DateTimeOffset now) =>
         status != BiometricEstados.Aprobado && expiresAt < now
             ? BiometricEstados.Expirado
@@ -1161,11 +1322,12 @@ internal sealed partial class ProcedureInstanceRepository(
                 -- Filtra por el estado EFECTIVO (el mismo que se pinta y se cuenta): una validación no
                 -- aprobada con el enlace vencido es "expirada" aunque en base siga enviada o en proceso.
                 -- Con el estado crudo, "Expirado" no encontraba filas que en pantalla decían Expirado.
-                WHERE ({5}::text IS NULL
+                -- {5} es una lista: «En proceso» de la franja de Identidad pide enviado + en_proceso.
+                WHERE ({5}::text[] IS NULL
                        OR (CASE
                              WHEN status <> 'aprobado' AND expires_at < {14} THEN 'expirado'
                              ELSE status
-                           END) = {5})
+                           END) = ANY({5}::text[]))
                   AND ({6}::timestamptz IS NULL OR created_at >= {6})
                   AND ({7}::timestamptz IS NULL OR created_at <= {7})
                   AND (
@@ -1256,7 +1418,7 @@ internal sealed partial class ProcedureInstanceRepository(
         var docNumber = string.IsNullOrWhiteSpace(filter?.DocumentNumber)
             ? null
             : EscapeLike(DocumentCanonicalNormalization.NormalizePart(filter!.DocumentNumber));
-        var status = string.IsNullOrWhiteSpace(filter?.Status) ? null : filter!.Status!.Trim().ToLowerInvariant();
+        var status = EstadosDelFiltro(filter?.Status);
         var vigencia = string.IsNullOrWhiteSpace(filter?.VigenciaEstado)
             ? null
             : filter!.VigenciaEstado!.Trim().ToLowerInvariant();
@@ -1448,12 +1610,11 @@ internal sealed partial class ProcedureInstanceRepository(
 
         if (filter is not null)
         {
-            if (!string.IsNullOrWhiteSpace(filter.Status))
+            if (EstadosDelFiltro(filter.Status) is { } estados)
             {
-                // Estado EFECTIVO, igual que el CASE de la consulta Npgsql.
-                var st = filter.Status.Trim();
+                // Estado EFECTIVO, igual que el CASE de la consulta Npgsql; acepta varios separados por coma.
                 groups = groups
-                    .Where(g => string.Equals(EstadoEfectivo(g.Status, g.ExpiresAt, now), st, StringComparison.OrdinalIgnoreCase))
+                    .Where(g => estados.Contains(EstadoEfectivo(g.Status, g.ExpiresAt, now).ToLowerInvariant()))
                     .ToList();
             }
 
@@ -1670,21 +1831,23 @@ internal sealed partial class ProcedureInstanceRepository(
             query = query.Where(v => EF.Functions.ILike(v.DocumentNumber, $"%{term}%", LikeEscapeChar));
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Status))
+        if (EstadosDelFiltro(filter.Status) is { } estados)
         {
-            var estado = filter.Status.Trim().ToLower();
-            if (estado == BiometricEstados.Expirado)
+            // Varios estados separados por coma (p. ej. «enviado,en_proceso»); expirado conserva su regla.
+            var otros = estados.Where(e => e != BiometricEstados.Expirado).ToArray();
+            if (estados.Contains(BiometricEstados.Expirado))
             {
                 // AC3: expirado incluye estado persistido + flag expired calculado (no aprobada y vencida).
                 // HU #13286: una fila manual no aprobada con el enlace de 24 h vencido también cuenta como expirada
                 // (aceptado: es solo presentación; ningún worker la toca y no genera alertas).
                 query = query.Where(v =>
                     v.Status == BiometricEstados.Expirado
-                    || (v.Status != BiometricEstados.Aprobado && v.ExpiresAt < now));
+                    || (v.Status != BiometricEstados.Aprobado && v.ExpiresAt < now)
+                    || otros.Contains(v.Status.ToLower()));
             }
             else
             {
-                query = query.Where(v => v.Status.ToLower() == estado);
+                query = query.Where(v => otros.Contains(v.Status.ToLower()));
             }
         }
 
@@ -1781,6 +1944,26 @@ internal sealed partial class ProcedureInstanceRepository(
         db.ProcedureInstanceBiometricValidations
             .Include(x => x.Person)
             .FirstOrDefaultAsync(x => x.Id == id && x.TenantId == tenantId, ct);
+
+    // HU #14044 — solo filas con ancla de portal: la búsqueda por (solicitud, rol, documento) nunca alcanza a una validación
+    // de otra solicitud ni a las de FLIT 2 (decisión del PO: no se reutilizan).
+    public Task<ProcedureInstanceBiometricValidation?> FindPortalValidationAsync(
+        Guid tenantId, string solicitudRef, string parte, string documentNumber, CancellationToken ct = default)
+    {
+        var documento = documentNumber.Trim().ToUpperInvariant();
+        return db.ProcedureInstanceBiometricValidations
+            .Where(v => v.TenantId == tenantId
+                && v.PortalSolicitudRef == solicitudRef
+                && v.PortalParte == parte
+                && v.DocumentNumber.Trim().ToUpper() == documento)
+            .OrderByDescending(v => v.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    public Task<ProcedureInstanceBiometricValidation?> GetPortalValidationByIdAsync(
+        Guid tenantId, Guid validationId, CancellationToken ct = default) =>
+        db.ProcedureInstanceBiometricValidations
+            .FirstOrDefaultAsync(v => v.Id == validationId && v.TenantId == tenantId && v.PortalSolicitudRef != null, ct);
 
     // UPDATE atómico e idempotente del conteo de intentos Kyverum. La guarda `last_attempt_at <> @key`
     // (más el row-lock del UPDATE) garantiza que dos entregas paralelas del MISMO intento cuenten una sola vez.
@@ -2045,11 +2228,15 @@ internal sealed partial class ProcedureInstanceRepository(
     /// <summary>HU #13246 — a lo sumo una validación en vuelo por mandatario (DDL 129).</summary>
     private const string BiometricInFlightMandatarioIndex = "uq_biometric_validations_inflight_mandate_signer";
 
+    /// <summary>HU #14044 — a lo sumo una validación en vuelo por (solicitud, rol, documento) del portal (DDL 160).</summary>
+    private const string BiometricInFlightPortalIndex = "uq_biometric_validations_inflight_portal";
+
     private static bool IsBiometricInFlightUniqueViolation(DbUpdateException ex) =>
         ex.InnerException is PostgresException pg
         && pg.SqlState == PostgresErrorCodes.UniqueViolation
         && (string.Equals(pg.ConstraintName, BiometricInFlightUniqueIndex, StringComparison.Ordinal)
-            || string.Equals(pg.ConstraintName, BiometricInFlightMandatarioIndex, StringComparison.Ordinal));
+            || string.Equals(pg.ConstraintName, BiometricInFlightMandatarioIndex, StringComparison.Ordinal)
+            || string.Equals(pg.ConstraintName, BiometricInFlightPortalIndex, StringComparison.Ordinal));
 
     /// <summary>HU #11029 — ver <see cref="IProcedureInstanceRepository.ResetTracking"/>.</summary>
     public void ResetTracking() => db.ChangeTracker.Clear();
@@ -2224,6 +2411,88 @@ internal sealed partial class ProcedureInstanceRepository(
         }
 
         return resultado;
+    }
+
+    /// <summary>
+    /// HU #14173 — eventos dato_modificado de la instancia, más reciente primero, con nombre y
+    /// compañía del actor resueltos igual que GetStatusHistoryPageAsync. Incluye filas de borrador.
+    /// HU #14180 — proyecta además, una sola vez, los actos ya guardados (reasignación, reenvío,
+    /// revocatoria). No escribe otro evento. Devuelve null si la instancia no existe en el tenant
+    /// (mismo criterio que GetStatusHistoryPageAsync). Si el payload de un dato_modificado está roto,
+    /// omite esa fila sin lanzar ni loguear el payload (puede traer nombre, documento, placa).
+    /// El tiempo se conserva en UTC; no se convierte a hora Colombia.
+    /// </summary>
+    public async Task<(IReadOnlyList<ProcedureInstanceModificacionEntry> Items, int Total)?> GetModificacionesPageAsync(
+        Guid id, Guid tenantId, int skip, int take, CancellationToken ct)
+    {
+        // Mismo predicado de existencia que GetStatusHistoryPageAsync.
+        var exists = await db.ProcedureInstances.AsNoTracking()
+            .AnyAsync(x => x.Id == id && x.TenantId == tenantId && x.DeletedAt == null, ct);
+        if (!exists)
+            return null;
+
+        // Se leen todos los tipos de la línea y se deduplica antes de paginar: un acto y su
+        // dato_modificado espejo no pueden caer en páginas distintas y contarse dos veces.
+        var tipos = StatusHistoryModificacionLectura.Tipos();
+        var raw = await db.ProcedureInstanceEvents.AsNoTracking()
+            .Where(e => e.ProcedureInstanceId == id && e.TenantId == tenantId && tipos.Contains(e.Tipo))
+            .OrderByDescending(e => e.CreatedAt)
+            .ThenByDescending(e => e.Id)
+            .Select(e => new { e.Id, e.Tipo, e.CreatedAt, e.CreatedBy, e.Payload })
+            .ToListAsync(ct);
+
+        var projected = new List<StatusHistoryModificacionLectura.Fila>(raw.Count);
+        foreach (var row in raw)
+        {
+            if (StatusHistoryModificacionLectura.TryProject(
+                    row.Tipo, row.Id, row.CreatedAt, row.CreatedBy, row.Payload, out var fila))
+                projected.Add(fila);
+        }
+
+        var deduped = StatusHistoryModificacionLectura.Dedup(projected);
+        var total = deduped.Count;
+        var page = deduped.Skip(skip).Take(take).ToList();
+        if (page.Count == 0)
+            return ([], total);
+
+        // Resolver nombre y compañía en batch — mismo criterio que GetStatusHistoryPageAsync.
+        var userIds = page
+            .Where(p => p.CreatedBy is not null)
+            .Select(p => p.CreatedBy!.Value)
+            .Distinct()
+            .ToList();
+
+        var names = userIds.Count == 0
+            ? new Dictionary<Guid, string>()
+            : (await db.Users.AsNoTracking()
+                .Where(u => userIds.Contains(u.Id))
+                .Select(u => new { u.Id, u.DisplayName })
+                .ToListAsync(ct))
+                .Where(r => !string.IsNullOrWhiteSpace(r.DisplayName))
+                .ToDictionary(r => r.Id, r => r.DisplayName);
+
+        var companias = await ResolveCompaniasDeUsuariosAsync(userIds, ct);
+
+        var items = page
+            .Select(p =>
+            {
+                var nombre = p.CreatedBy is { } uid1 && names.TryGetValue(uid1, out var n) ? n : null;
+                var compania = p.CreatedBy is { } uid2 && companias.TryGetValue(uid2, out var co) ? co : null;
+                return new ProcedureInstanceModificacionEntry(
+                    p.Id,
+                    p.Etiqueta,
+                    p.Campo,
+                    p.Anterior,
+                    p.Nuevo,
+                    p.ChangedAt,
+                    p.CreatedBy,
+                    StatusHistoryModificacionLectura.NombreActor(p.Campo, p.CreatedBy, nombre),
+                    StatusHistoryModificacionLectura.CompaniaActor(p.Campo, p.CreatedBy, compania),
+                    p.Documento);
+            })
+            .ToList();
+
+        return (items, total);
     }
 
     public async Task<IReadOnlyList<ProcedureStateChangeEmailDispatch>?> ListEmailDispatchesAsync(

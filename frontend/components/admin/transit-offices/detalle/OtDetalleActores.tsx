@@ -2,7 +2,7 @@
 
 import type { OtClientProcedure, OtClientProcedureActor } from "@/lib/api/types-ot";
 import { formatDocumentWithType } from "@/lib/display/document-number";
-import { OtRejilla, OtVacio } from "./OtDetallePrimitivos";
+import { OtRejillaPaginada, OtVacio } from "./OtDetallePrimitivos";
 
 const ACTOR_TYPE_LABELS: Record<string, string> = {
   comprador: "Comprador",
@@ -105,14 +105,15 @@ export function OtDetalleActores({ procedure }: { procedure: OtClientProcedure }
 
   return (
     <div className="flex flex-col gap-3">
-      <OtRejilla
+      <OtRejillaPaginada
+        clave="transit-offices.OtDetalleActores"
         etiqueta="Actores del trámite"
         columnas={["Documento", "Nombre completo", "Tipo de actor"]}
         plantilla="minmax(0,1fr) minmax(0,1.6fr) minmax(0,1fr)"
         filas={filas}
       />
       {faltantes.length > 0 ? (
-        <p className="text-xs font-medium" style={{ color: "#B45309" }} role="alert">
+        <p className="text-xs font-medium" style={{ color: "var(--badge-warning-fg)" }} role="alert">
           Faltan actores esperados para este tipo de trámite:{" "}
           {faltantes.map(actorTypeLabel).join(", ")}.
         </p>

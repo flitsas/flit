@@ -240,7 +240,7 @@ describe("HU #11818 — bandeja de Trazabilidad ICT", () => {
     render(<IctTrazabilidad />);
 
     await waitFor(() => expect(screen.getByText("4 h 12 min")).toBeInTheDocument());
-    expect(screen.getByText("4 h 12 min").className).toMatch(/text-\[#C2410C\]/);
+    expect(screen.getByText("4 h 12 min").className).toMatch(/text-\[var\(--badge-pending-fg\)\]/);
     // El terminal no muestra cero: cero se leería como «acaba de moverse».
     expect(screen.getAllByText("—").length).toBeGreaterThan(0);
   });

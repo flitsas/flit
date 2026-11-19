@@ -114,6 +114,16 @@ public sealed class FirmaExentaPorPreasignacionTests
             }
         }
 
+        // Matrícula inicial: el tipo de servicio es obligatorio al radicar (SubmitGate.TipoServicioRequerido).
+        i.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            FieldKey = "vehicle_service",
+            ValueText = "PARTICULAR",
+            Source = "user",
+        });
         i.Actors.Add(Natural(i, "comprador", "9000000301"));
         i.FieldValues.Add(Campo(i, "transit_office_code", "11001000"));
         if (conPlaca)

@@ -130,6 +130,12 @@ public static class DependencyInjection
         services.AddScoped<Integrations.Clients.RegenerateExternalClientSecretHandler>();
         services.AddScoped<Integrations.Clients.UnlockExternalClientHandler>();
 
+        // HU #14067 (Épica #14021) — integraciones externas ligadas a una compañía.
+        services.AddScoped<Integrations.Clients.ListExternalIntegrationsHandler>();
+        services.AddScoped<Integrations.Clients.CreateExternalIntegrationHandler>();
+        services.AddScoped<Integrations.Clients.RotateExternalIntegrationSecretHandler>();
+        services.AddScoped<Integrations.Clients.ChangeExternalIntegrationStateHandler>();
+
         // Alta de compañías (botón "Crear compañía" en la consola, #10118).
         services.AddScoped<CreateCompanyHandler>();
 
@@ -332,6 +338,11 @@ public static class DependencyInjection
         services.AddScoped<UpdateRejectionReasonHandler>();
         services.AddScoped<SetRejectionReasonActiveHandler>();
 
+        // Feature #14374 (Épica #14297): marca del portal Persona Natural de cada organismo.
+        services.AddScoped<Companies.TransitOffices.PortalMarca.PortalMarcaAdminHandler>();
+        services.AddScoped<Companies.TransitOffices.PortalMarca.PortalMarcaImagenHandler>();
+        services.AddScoped<Companies.TransitOffices.PortalMarca.PortalMarcaPuntoHandler>();
+
         // Reportes del organismo de tránsito: hasta ahora el módulo de reportes solo existía para
         // la empresa gestora, y el organismo operaba sin ningún instrumento propio.
         services.AddScoped<OtMetrics.GetOtOperationalPanelHandler>();
@@ -340,6 +351,7 @@ public static class DependencyInjection
         services.AddScoped<OtMetrics.GetOtDrilldownHandler>();
         services.AddScoped<OtMetrics.GetOtReportHandler>();
         services.AddScoped<OtMetrics.ListOtClientCompaniesHandler>();
+        services.AddScoped<OtMetrics.GetOtClientsByFamilyHandler>();
         services.AddScoped<OtMetrics.GetOtReviewersReportHandler>();
         services.AddScoped<OtMetrics.ListOtReviewerOptionsHandler>();
 
@@ -369,10 +381,6 @@ public static class DependencyInjection
 
         // Preview informativo de documentos (paso 1 wizard, sin instancia).
         services.AddScoped<PreviewDocumentosInformativosHandler>();
-
-        // HU #10521 (RF31) — parámetros documentales por compañía gestora.
-        services.AddScoped<CompanyDocumentParams.ListCompanyDocumentParamsHandler>();
-        services.AddScoped<CompanyDocumentParams.UpsertCompanyDocumentParamHandler>();
 
         // HU #10197 — alta de trámite con snapshot documental inmutable + lectura del snapshot.
         services.AddScoped<CreateProcedureInstanceHandler>();
@@ -406,6 +414,10 @@ public static class DependencyInjection
         // HU #10540 (R09) — diagnóstico de bandeja OT (entregados con/sin grant).
         services.AddScoped<GetOtBandejaHealthHandler>();
         services.AddScoped<GetOtBandejaCountersHandler>();
+        services.AddScoped<Flit.Admin.Application.OtClientScopes.SetOtUserClientScopeHandler>();
+        services.AddScoped<Flit.Admin.Application.OtClientScopes.ValidateOtInvitationClientScopeHandler>();
+        services.AddScoped<Flit.Admin.Application.OtClientScopes.GetOtUserClientScopeHandler>();
+        services.AddScoped<Flit.Admin.Application.OtClientScopes.ListOtClientCompaniesHandler>();
 
         // HU #10221 — motor de reglas AND/OR.
         services.AddScoped<CreateOtRuleHandler>();
@@ -477,6 +489,34 @@ public static class DependencyInjection
         // HU #12513 — catálogo de jobs ICT + último run (sin PII).
         services.AddScoped<GetIctJobCatalogHandler>();
         services.AddScoped<GetIctJobRunsHandler>();
+
+        // HU #14071 (Feature J, Épica #14021) — tarifas del portal de Persona Natural (SuperAdmin Plataforma).
+        services.AddScoped<Plataforma.PersonaNatural.ListarTarifasPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.HistorialTarifaPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.TarifaVigentePnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.VersionarTarifasPnHandler>();
+        // HU #14388 (Feature #14387, Épica #14297) — los mismos precios vistos desde el dashboard del organismo.
+        services.AddScoped<Plataforma.PersonaNatural.ListarTarifasOtHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.HistorialTarifaOtHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.TiposTarifaOtHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.VersionarTarifasOtHandler>();
+        // HU #14393 (Feature #14392, Épica #14297) — medios de pago y switches de cobro del portal.
+        services.AddScoped<Plataforma.PersonaNatural.LeerCobroPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.GuardarMedioCobroPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.GuardarSwitchCobroPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.LeerVentanaAnulacionCajaHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.GuardarVentanaAnulacionCajaHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.HistorialVentanaAnulacionCajaHandler>();
+        // HU #14397 / #14398 (Feature #14396, Épica #14297) — reporte de los trámites del portal y su Excel.
+        services.AddScoped<Plataforma.PersonaNatural.ListarReportePortalHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.ExportarReportePortalHandler>();
+        // HU #14072 — configuración del portal: parámetros, organismos y lista blanca de tipos.
+        services.AddScoped<Plataforma.PersonaNatural.ParametrosPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.OrganismosPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.CanalPuntoPnHandler>();
+        services.AddScoped<Plataforma.PersonaNatural.TiposPnHandler>();
+        // HU #14073 — contenido del portal: preguntas, banners, enlaces y publicación.
+        services.AddScoped<Plataforma.PersonaNatural.ContenidoPnHandler>();
 
         // Feature #13508 (HU #13509 / #13512) — configuración multi-proveedor IA (SuperAdmin Plataforma).
         services.AddScoped<Plataforma.Ai.ListAiToolsHandler>();

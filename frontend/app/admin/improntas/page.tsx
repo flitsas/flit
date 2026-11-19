@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { ImprontaFormPanel } from "@/components/admin/improntas/ImprontaFormPanel";
@@ -16,7 +16,7 @@ export default function AdminImprontasPage() {
   return (
     <div className="flex min-h-screen flex-col gap-4 px-4 md:px-6 pt-6 pb-10">
       <button type="button" onClick={() => router.push("/")} className={ADMIN_BACK_LINK_CLS}>
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" />
         Volver al inicio
       </button>
 

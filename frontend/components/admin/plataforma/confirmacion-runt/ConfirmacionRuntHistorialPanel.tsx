@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { Download, RefreshCw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -25,24 +25,13 @@ import { formatFechaHora } from "@/lib/format/date";
 import { HISTORIAL_EXPORT_COLUMNS, HISTORIAL_EXPORT_IDS, proveedorLabel, VERDICT_TONE, vehiculoDe } from "./historial-columns";
 import { IntentoDetalle } from "./IntentoDetalle";
 import { UltimaCorridaResumen } from "./UltimaCorridaResumen";
+import { useTamanoDePagina } from "@/components/atom/usePaginacion";
+import { buttonClass } from "@flit/ui/Button";
+import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
 
-/** Mismos tamaños que /tramites; el elegido se recuerda durante la sesión (sessionStorage, con guarda). */
-const TAMANOS_DE_PAGINA = [10, 25, 50, 100] as const;
-const PAGE_SIZE_POR_DEFECTO = 10;
-const CLAVE_PAGE_SIZE = "confirmacion-runt.historial.pageSize";
+/** Tabla para recordar «Filas por página» en la sesión (estándar de toda tabla, HU #13917). */
+const CLAVE_TABLA = "plataforma.confirmacionRunt.historial";
 
-function suscripcionInerte(): () => void {
-  return () => {};
-}
-
-function leerPageSizeGuardado(): number {
-  try {
-    const guardado = Number(sessionStorage.getItem(CLAVE_PAGE_SIZE));
-    return TAMANOS_DE_PAGINA.includes(guardado as (typeof TAMANOS_DE_PAGINA)[number]) ? guardado : PAGE_SIZE_POR_DEFECTO;
-  } catch {
-    return PAGE_SIZE_POR_DEFECTO;
-  }
-}
 const VERDICTS: RuntConfirmationVerdict[] = ["confirmed", "pending", "discrepancy", "unverifiable", "error"];
 
 type Estado = "loading" | "error" | "ready";
@@ -80,8 +69,8 @@ function aQuery(f: FiltrosUrl): string {
   return s ? `?${s}` : "";
 }
 
-const selectCls =
-  "rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-xs text-flit-primary outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+// HU #14483 — el `.control` del prototipo, el mismo de la barra de Trámites.
+const selectCls = TRAMITES_INPUT_CLS;
 
 /**
  * Plataforma → Confirmación RUNT → Historial (HU #12311). Una fila por intento; filtros en la URL
@@ -111,11 +100,8 @@ export function ConfirmacionRuntHistorialPanel() {
   const [exportando, setExportando] = useState(false);
   const [exportAviso, setExportAviso] = useState<string | null>(null);
 
-  // Tamaño de página como en /tramites: se lee con useSyncExternalStore porque sessionStorage no
-  // existe en el render del servidor.
-  const pageSizeGuardado = useSyncExternalStore(suscripcionInerte, leerPageSizeGuardado, () => PAGE_SIZE_POR_DEFECTO);
-  const [pageSizeElegido, setPageSizeElegido] = useState<number | null>(null);
-  const pageSize = pageSizeElegido ?? pageSizeGuardado;
+  // Tamaño de página recordado en la sesión, como toda tabla (HU #13917).
+  const [pageSize, recordarPageSize] = useTamanoDePagina(CLAVE_TABLA);
 
   const aplicar = useCallback(
     (cambios: Partial<FiltrosUrl>) => {
@@ -128,15 +114,10 @@ export function ConfirmacionRuntHistorialPanel() {
 
   const cambiarPageSize = useCallback(
     (n: number) => {
-      setPageSizeElegido(n);
-      try {
-        sessionStorage.setItem(CLAVE_PAGE_SIZE, String(n));
-      } catch {
-        // ventana privada: se queda en memoria y ya
-      }
+      recordarPageSize(n);
       if (filtros.page !== 1) aplicar({ page: 1 });
     },
-    [aplicar, filtros.page],
+    [aplicar, filtros.page, recordarPageSize],
   );
 
   const filtroApi = useMemo<RuntConfirmationAttemptsFilter>(
@@ -238,7 +219,7 @@ export function ConfirmacionRuntHistorialPanel() {
         header: "Trámite",
         render: (r) => (
           <span className="flex flex-col">
-            <span className="font-mono text-xs font-semibold text-flit-primary dark:text-white">{r.referenceNumber}</span>
+            <span className="font-mono text-xs font-semibold text-flit-primary">{r.referenceNumber}</span>
             <span className="text-[10px] opacity-60">{r.tenantName ?? "—"}</span>
           </span>
         ),
@@ -269,7 +250,7 @@ export function ConfirmacionRuntHistorialPanel() {
             }}
             aria-expanded={expandido === r.id}
             aria-controls={`intento-detalle-${r.id}`}
-            className="rounded-full border border-[#DFE5ED] px-3 py-1 text-[11px] font-semibold text-flit-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10"
+            className="rounded-full border border-border px-3 py-1 text-[11px] font-semibold text-flit-brand focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           >
             {expandido === r.id ? "Cerrar" : "Ver"}
           </button>
@@ -290,7 +271,7 @@ export function ConfirmacionRuntHistorialPanel() {
         }}
         aria-label="Filtros del historial"
       >
-        <label className="flex flex-col gap-1 text-[11px] font-semibold text-flit-primary dark:text-white">
+        <label className="flex flex-col gap-1 text-[11px] font-semibold text-flit-primary">
           Corrida
           <select className={selectCls} value={filtros.runId} onChange={(e) => aplicar({ runId: e.target.value })}>
             <option value="">Todas</option>
@@ -302,7 +283,7 @@ export function ConfirmacionRuntHistorialPanel() {
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-[11px] font-semibold text-flit-primary dark:text-white">
+        <label className="flex flex-col gap-1 text-[11px] font-semibold text-flit-primary">
           Resultado
           <select className={selectCls} value={filtros.verdict} onChange={(e) => aplicar({ verdict: e.target.value })}>
             <option value="">Todos</option>
@@ -313,7 +294,7 @@ export function ConfirmacionRuntHistorialPanel() {
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-[11px] font-semibold text-flit-primary dark:text-white">
+        <label className="flex flex-col gap-1 text-[11px] font-semibold text-flit-primary">
           Tipo de trámite
           <select className={selectCls} value={filtros.procedureTypeCode} onChange={(e) => aplicar({ procedureTypeCode: e.target.value })}>
             <option value="">Todos</option>
@@ -324,7 +305,7 @@ export function ConfirmacionRuntHistorialPanel() {
             ))}
           </select>
         </label>
-        <label className="flex flex-col gap-1 text-[11px] font-semibold text-flit-primary dark:text-white">
+        <label className="flex flex-col gap-1 text-[11px] font-semibold text-flit-primary">
           Trámite o placa
           <input
             type="search"
@@ -336,7 +317,7 @@ export function ConfirmacionRuntHistorialPanel() {
         </label>
         <button
           type="submit"
-          className="rounded-full bg-gradient-to-r from-[#22D3C5] to-flit-brand px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          className={buttonClass({ variant: "primary", size: "sm" })}
         >
           Buscar
         </button>
@@ -347,7 +328,7 @@ export function ConfirmacionRuntHistorialPanel() {
               setBusqueda("");
               router.replace(pathname);
             }}
-            className="text-xs font-semibold text-flit-brand underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+            className={buttonClass({ variant: "secondary", size: "sm" })}
           >
             Limpiar filtros
           </button>
@@ -356,9 +337,9 @@ export function ConfirmacionRuntHistorialPanel() {
           <button
             type="button"
             onClick={() => setRecarga((n) => n + 1)}
-            className="flex items-center gap-1 rounded-full border border-[#DFE5ED] px-3 py-2 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand dark:border-white/10 dark:text-white"
+            className={buttonClass({ variant: "secondary", size: "sm" })}
           >
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="reintento" className="h-3.5 w-3.5" />
             Actualizar
           </button>
           <button
@@ -366,16 +347,16 @@ export function ConfirmacionRuntHistorialPanel() {
             onClick={() => void exportar()}
             disabled={exportando || estado === "loading"}
             data-testid="confirmacion-runt-export"
-            className="flex items-center gap-1 rounded-full border border-[#DFE5ED] px-3 py-2 text-xs font-semibold text-flit-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/10 dark:text-white"
+            className={buttonClass({ variant: "secondary", size: "sm" })}
           >
-            <Download className={`h-3.5 w-3.5 ${exportando ? "animate-pulse" : ""}`} aria-hidden="true" />
+            <Icono nombre="nube-bajar" className={`h-3.5 w-3.5 ${exportando ? "animate-pulse" : ""}`} />
             {exportando ? "Exportando…" : "Exportar"}
           </button>
         </span>
       </form>
 
       {exportAviso ? (
-        <p role="status" className="text-xs text-[#59677D] dark:text-white/60">
+        <p role="status" className="text-xs text-muted-foreground">
           {exportAviso}
         </p>
       ) : null}
@@ -411,7 +392,6 @@ export function ConfirmacionRuntHistorialPanel() {
           pageSize,
           totalCount: total,
           onPageChange: (page) => aplicar({ page }),
-          pageSizeOptions: TAMANOS_DE_PAGINA,
           onPageSizeChange: cambiarPageSize,
         }}
         renderExpanded={(r) =>

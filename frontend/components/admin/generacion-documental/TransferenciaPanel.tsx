@@ -1,6 +1,6 @@
 "use client";
 
-import { FileSignature } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 
 export interface TransferenciaPanelProps {
@@ -22,7 +22,7 @@ export function TransferenciaPanel({ status = "empty", onRetry, children }: Tran
   return (
     <section aria-labelledby="gd-transferencia-title" className="flex flex-1 flex-col gap-3">
       <header className="flex items-start gap-2">
-        <FileSignature className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden="true" />
+        <Icono nombre="firma" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
         <div>
           <h2 id="gd-transferencia-title" className="text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
             Transferencia de dominio

@@ -36,6 +36,18 @@ public sealed class ProcedureInstanceBiometricValidation
     /// </summary>
     public Guid? MandateSignerId { get; set; }
 
+    /// <summary>
+    /// HU #14044 (Feature #14023, Épica #14021) — solicitud del portal de Persona Natural (<c>external_ref</c> del trámite
+    /// que nacerá de ella) a la que pertenece esta validación. Decisión del PO (2026-10-27): en el portal una validación
+    /// vale SOLO para esa solicitud (no se reutiliza entre trámites ni tiene vigencia), por eso el ancla es la solicitud y no
+    /// la persona. Va siempre junto con <see cref="PortalParte"/> (CHECK en BD) y sin trámite ni persona del módulo Identidad.
+    /// Null en todo lo demás: FLIT 2 no la usa.
+    /// </summary>
+    public string? PortalSolicitudRef { get; set; }
+
+    /// <summary>HU #14044 — rol del actor en la solicitud del portal (vendedor, comprador, titular…); solo con <see cref="PortalSolicitudRef"/>.</summary>
+    public string? PortalParte { get; set; }
+
     public string Name { get; set; } = string.Empty;
     public string DocumentType { get; set; } = string.Empty;
     public string DocumentNumber { get; set; } = string.Empty;
@@ -149,6 +161,33 @@ public sealed class ProcedureInstanceBiometricValidation
     /// <see cref="BiometricRules.DiasRestantesVigencia"/> (siempre frescos, sin job).
     /// </summary>
     public DateTimeOffset? ValidUntil { get; set; }
+
+    /// <summary>
+    /// HU #13824 — instante en que un Super Admin VENCIÓ manualmente esta identidad aprobada (ver
+    /// <see cref="VencerManualmente"/>). Null si nunca se venció a mano. La fila, el certificado y el estado
+    /// <c>aprobado</c> se conservan: lo que termina es la vigencia (<see cref="ValidUntil"/> = este instante).
+    /// </summary>
+    public DateTimeOffset? ExpiredManuallyAt { get; set; }
+
+    /// <summary>
+    /// HU #13824 — fin de vigencia que tenía la identidad ANTES de vencerla a mano. Solo lo usan los trámites que ya no
+    /// están en borrador (<see cref="BiometricRules.EsAprobadaVigenteParaTramite"/>) para conservar su firma hasta ese
+    /// fin natural. Null si no se venció a mano (o si la aprobación no tenía fecha, caso solo de fixtures).
+    /// </summary>
+    public DateTimeOffset? ValidUntilPrevious { get; set; }
+
+    /// <summary>
+    /// HU #13824 — vence a mano una identidad aprobada y vigente: la vigencia termina en <paramref name="now"/>
+    /// (<see cref="ValidUntil"/> es la fuente de verdad de <see cref="BiometricRules.EsAprobadaVigente"/>). No borra la
+    /// fila ni el certificado. Guarda el fin de vigencia previo para proteger a los trámites ya fuera de borrador.
+    /// </summary>
+    public void VencerManualmente(DateTimeOffset now)
+    {
+        ValidUntilPrevious = ValidUntil ?? BiometricRules.FechaFinVigencia(this);
+        ExpiredManuallyAt = now;
+        ValidUntil = now;
+        UpdatedAt = now;
+    }
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? UpdatedAt { get; set; }
@@ -767,6 +806,60 @@ public static class BiometricRules
     public const int VigenciaPorVencerDias = 7;
 
     /// <summary>
+    /// HU #13824 — <see cref="EsAprobadaVigente"/> desde el punto de vista de UN trámite: igual, salvo que una identidad
+    /// vencida a mano por un Super Admin (<see cref="ProcedureInstanceBiometricValidation.VencerManualmente"/>) sigue
+    /// valiendo para los trámites que ya NO están en borrador (hasta su fin de vigencia previo). Los consumidores que
+    /// evalúan la firma de un trámite concreto (gate, listado, FUR) usan este método; la reutilización de una identidad
+    /// para un trámite nuevo o en borrador sigue usando <see cref="EsAprobadaVigente"/>.
+    /// </summary>
+    public static bool EsAprobadaVigenteParaTramite(
+        ProcedureInstanceBiometricValidation validation, string? tramiteStatus, DateTimeOffset now,
+        DateTimeOffset? salidaDeBorradorAt = null)
+    {
+        ArgumentNullException.ThrowIfNull(validation);
+        if (EsAprobadaVigente(validation, now))
+            return true;
+        if (validation.Status != BiometricEstados.Aprobado || validation.ExpiredManuallyAt is null)
+            return false;
+        if (!ConservaFirmaTrasVencimientoManual(
+                tramiteStatus, salidaDeBorradorAt, validation.ValidatedAt, validation.ExpiredManuallyAt))
+            return false;
+        return validation.ValidUntilPrevious is not { } previa || now < previa;
+    }
+
+    /// <summary>
+    /// ÚNICA regla de «salió con esa firma» (HU #13824): una identidad vencida a mano solo se sigue honrando si el
+    /// trámite salió de borrador cuando ESA identidad ya estaba aprobada y todavía no la habían vencido
+    /// (<c>validadaAt &lt;= salidaDeBorradorAt &lt;= expiredManuallyAt</c>). Un trámite en borrador nunca la conserva. Si
+    /// salió ANTES de que se aprobara (p. ej. una matrícula sin placa exenta de firma que el comprador valida después) o
+    /// DESPUÉS de vencerla, nunca salió con esa firma. Sin fila de salida en el historial
+    /// (<paramref name="salidaDeBorradorAt"/> nulo: legado o migrados) se conserva el comportamiento previo (protegida) y
+    /// sin fecha de aprobación (<paramref name="validadaAt"/> nula, solo fixtures) solo se compara contra el vencimiento.
+    /// Un trámite no vuelve a borrador (la máquina de estados no lo permite), así que la salida es única.
+    /// </summary>
+    public static bool ConservaFirmaTrasVencimientoManual(
+        string? tramiteStatus, DateTimeOffset? salidaDeBorradorAt, DateTimeOffset? validadaAt, DateTimeOffset? expiredManuallyAt)
+    {
+        if (string.Equals(tramiteStatus, Flit.Tramites.Domain.Tramites.Estados.TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (salidaDeBorradorAt is not { } salida)
+            return true;
+        if (validadaAt is { } aprobada && salida < aprobada)
+            return false;
+        return expiredManuallyAt is not { } vencidaA || salida <= vencidaA;
+    }
+
+    /// <summary>
+    /// ¿Alguna de las identidades vencidas a mano de la persona (<paramref name="identidades"/>) es la firma con la que el
+    /// trámite salió de borrador? Es la misma regla que <see cref="EsAprobadaVigenteParaTramite"/>, sobre los datos
+    /// agregados que usa el listado (basta que CUALQUIERA cumpla).
+    /// </summary>
+    public static bool ConservaFirmaTrasVencimientoManual(
+        string? tramiteStatus, DateTimeOffset? salidaDeBorradorAt, IReadOnlyList<IdentidadVencidaManual>? identidades) =>
+        identidades is not null
+        && identidades.Any(i => ConservaFirmaTrasVencimientoManual(tramiteStatus, salidaDeBorradorAt, i.ValidadaAt, i.VencidaAt));
+
+    /// <summary>
     /// ¿La validación está APROBADA y VIGENTE en la fecha <paramref name="now"/>? Vigente ⟺ el DÍA
     /// calendario de hoy (en hora de Colombia) es anterior a <c>ValidadoAt + VigenciaDias</c>: el día de
     /// aprobación es el día 1 y vence en el día 31. El corte es por DÍA, no por hora.
@@ -941,3 +1034,11 @@ public static class IdentityVigenciaClassifier
         };
     }
 }
+
+/// <summary>
+/// Identidad vencida a mano de una persona, reducida a lo que el listado necesita para decidir si un trámite «salió con esa
+/// firma» (<see cref="BiometricRules.ConservaFirmaTrasVencimientoManual(string?, DateTimeOffset?, IReadOnlyList{IdentidadVencidaManual}?)"/>).
+/// </summary>
+/// <param name="ValidadaAt">Cuándo se aprobó (<c>validated_at</c>); nula solo en fixtures.</param>
+/// <param name="VencidaAt">Cuándo la venció a mano un Super Admin (<c>expired_manually_at</c>).</param>
+public readonly record struct IdentidadVencidaManual(DateTimeOffset? ValidadaAt, DateTimeOffset VencidaAt);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { ChevronDown, Search } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 
 export type VehicleBodyworkOption = {
@@ -26,6 +26,7 @@ export function VehicleBodyworkSearchSelect({
   placeholder = 'Selecciona…',
   invalid = false,
   onChange,
+  onCatalogoVerificado,
 }: {
   id: string;
   label: string;
@@ -38,6 +39,8 @@ export function VehicleBodyworkSearchSelect({
   placeholder?: string;
   invalid?: boolean;
   onChange: (name: string) => void;
+  /** Avisa si el valor guardado pertenece al catálogo de la clase (true también si no hay valor). */
+  onCatalogoVerificado?: (valor: string, enCatalogo: boolean) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
@@ -48,7 +51,46 @@ export function VehicleBodyworkSearchSelect({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const display = value || '';
+  // Resultado de verificar el valor guardado contra el catálogo de la clase. Se ata al valor y la
+  // clase verificados: si cambian, el resultado viejo no aplica (mientras tanto se muestra el valor).
+  const [verificado, setVerificado] = useState<{
+    valor: string;
+    clase: string;
+    ok: boolean;
+  } | null>(null);
+  const valorGuardado = value.trim();
+  const fueraDeCatalogo =
+    valorGuardado !== '' &&
+    verificado !== null &&
+    verificado.valor === valorGuardado &&
+    verificado.clase === vehicleClass &&
+    !verificado.ok;
+  // Un valor que no pertenece al catálogo de la clase se muestra sin selección: el gestor elige.
+  const display = fueraDeCatalogo ? '' : value || '';
+
+  // Mantiene el callback fresco sin re-disparar la consulta.
+  const onCatalogoRef = useRef(onCatalogoVerificado);
+  useEffect(() => {
+    onCatalogoRef.current = onCatalogoVerificado;
+  });
+
+  useEffect(() => {
+    if (!valorGuardado) return;
+    const ac = new AbortController();
+    tramitesClient
+      .searchVehicleBodyworks(vehicleClass || undefined, valorGuardado, 200, ac.signal)
+      .then((items) => {
+        if (ac.signal.aborted) return;
+        const buscado = valorGuardado.toUpperCase();
+        const ok = items.some((i) => i.name.trim().toUpperCase() === buscado);
+        setVerificado({ valor: valorGuardado, clase: vehicleClass, ok });
+        onCatalogoRef.current?.(valorGuardado, ok);
+      })
+      .catch(() => {
+        // Sin red no se bloquea: se queda el valor guardado.
+      });
+    return () => ac.abort();
+  }, [valorGuardado, vehicleClass]);
 
   const load = (term: string) => {
     abortRef.current?.abort();
@@ -64,12 +106,9 @@ export function VehicleBodyworkSearchSelect({
         const filtered = runt
           ? items.filter((i) => i.name.trim().toUpperCase() !== runt)
           : items;
-        const cur = value.trim();
-        const merged =
-          cur && !filtered.some((i) => i.name.toUpperCase() === cur.toUpperCase())
-            ? [{ id: 'current', code: '—', name: cur.toUpperCase(), classVehicle: null }, ...filtered]
-            : filtered;
-        setOptions(merged);
+        // Solo se ofrece lo que está en el catálogo de la clase: un valor libre (p. ej. el que
+        // manda una integración) no se inyecta como opción válida.
+        setOptions(filtered);
       })
       .catch((err: unknown) => {
         if (ac.signal.aborted) return;
@@ -126,27 +165,24 @@ export function VehicleBodyworkSearchSelect({
         aria-expanded={open}
         aria-label={label}
         onClick={toggleOpen}
-        aria-invalid={invalid || undefined}
-        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-white px-3 py-2 text-left text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-60 dark:bg-[#162744]"
-        style={invalid ? { borderColor: '#FF4E00', borderWidth: 2 } : undefined}
+        aria-invalid={invalid || fueraDeCatalogo || undefined}
+        className="flex w-full items-center justify-between gap-2 rounded-xl border bg-card px-3 py-2 text-left text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-60"
+        style={invalid || fueraDeCatalogo ?{ borderColor: 'var(--destructive)', borderWidth: 2 } : undefined}
       >
         <span className={display ? 'font-medium' : 'opacity-50'}>
           {display || 'Selecciona…'}
         </span>
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" aria-hidden />
+        <Icono nombre="abajo" className="h-3.5 w-3.5 shrink-0 opacity-50" />
       </button>
 
       {open && !disabled && (
         <div
-          className="absolute z-30 mt-1 w-full rounded-xl border bg-white p-2 shadow-lg dark:bg-[#162744]"
+          className="absolute z-30 mt-1 w-full rounded-xl border bg-card p-2 shadow-[var(--kit-sombra)]"
           role="listbox"
           aria-label={label}
         >
           <div className="relative mb-2">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40"
-              aria-hidden
-            />
+            <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 opacity-40" />
             <input
               ref={inputRef}
               type="search"
@@ -162,7 +198,7 @@ export function VehicleBodyworkSearchSelect({
             {loading && options.length === 0 ? (
               <li className="px-2 py-2 text-xs opacity-55">Buscando…</li>
             ) : error ? (
-              <li className="px-2 py-2 text-xs" style={{ color: '#FF4E00' }} role="alert">
+              <li className="px-2 py-2 text-xs" style={{ color: 'var(--destructive)' }} role="alert">
                 {error}
               </li>
             ) : options.length === 0 ? (

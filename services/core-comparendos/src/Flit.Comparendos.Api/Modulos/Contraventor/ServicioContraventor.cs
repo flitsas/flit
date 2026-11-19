@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Comparendos.Api.Modulos.Contraventor;
 
 /// <summary>Datos del conductor que se asignan.</summary>
-public sealed record DatosConductor(string TipoDocumento, string NumeroDocumento, string Nombres, string? Correo, string? Telefono, string? Direccion,
+public sealed record DatosConductor(string? TipoDocumento, string? NumeroDocumento, string Nombres, string? Correo, string? Telefono, string? Direccion,
     string? Ciudad, string? Sucursal, string? TipoContrato);
 
 /// <summary>
@@ -27,10 +27,11 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
         ArgumentNullException.ThrowIfNull(c);
         ArgumentNullException.ThrowIfNull(d);
         ArgumentNullException.ThrowIfNull(actor);
-        if (!Enum.TryParse<TipoDocumento>(d.TipoDocumento, true, out var tipo) || !Enum.IsDefined(tipo))
-            throw new ReglaException("TIPO_DOCUMENTO_INVALIDO", "Tipo de documento del conductor inválido.");
-        var numero = (d.NumeroDocumento ?? string.Empty).Trim();
-        if (numero.Length is 0 or > 20 || string.IsNullOrWhiteSpace(d.Nombres))
+        // La API de contratos de Renting no devuelve el documento (HU #13712): solo con origen API puede faltar, y entonces
+        // faltan los dos. A mano siempre es obligatorio.
+        var sinDocumento = origen == OrigenContraventor.Api && string.IsNullOrWhiteSpace(d.TipoDocumento) && string.IsNullOrWhiteSpace(d.NumeroDocumento);
+        var (tipo, numero) = sinDocumento ? ((TipoDocumento?)null, (string?)null) : Documento(d.TipoDocumento, d.NumeroDocumento);
+        if (string.IsNullOrWhiteSpace(d.Nombres))
             throw new ReglaException("CONDUCTOR_INCOMPLETO", "El documento (hasta 20 caracteres) y el nombre del conductor son obligatorios.");
         var correo = string.IsNullOrWhiteSpace(d.Correo) ? null : Catalogos.CatalogosEndpoints.NormalizarCorreos([d.Correo]).Single();
         if (origen == OrigenContraventor.Manual && !declaracion)
@@ -78,7 +79,7 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
             db.Contraventores.Add(nuevo);
             c.Contraventor = nuevo;
             timeline.Agregar(c, TipoEventoTimeline.ContraventorAsignado,
-                $"Conductor asignado ({(origen == OrigenContraventor.Api ? "API" : "manual")}): {nuevo.Nombres}, {tipo} {Comun.HtmlCorreo.Enmascarar(numero)}.", actor);
+                $"Conductor asignado ({(origen == OrigenContraventor.Api ? "automático" : "manual")}): {nuevo.Nombres}, {(numero is null ? "documento pendiente" : $"{tipo} {Comun.HtmlCorreo.Enmascarar(numero)}")}.", actor);
         }
         else
         {
@@ -101,29 +102,89 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
         c.Gestionado = true;
     }
 
+    private static (TipoDocumento? Tipo, string? Numero) Documento(string? tipoTexto, string? numeroTexto)
+    {
+        if (!Enum.TryParse<TipoDocumento>(tipoTexto, true, out var tipo) || !Enum.IsDefined(tipo))
+            throw new ReglaException("TIPO_DOCUMENTO_INVALIDO", "Tipo de documento del conductor inválido.");
+        var numero = (numeroTexto ?? string.Empty).Trim();
+        if (numero.Length is 0 or > 20)
+            throw new ReglaException("CONDUCTOR_INCOMPLETO", "El documento (hasta 20 caracteres) y el nombre del conductor son obligatorios.");
+        return (tipo, numero);
+    }
+
+    /// <summary>
+    /// Completa el documento del conductor que trajo la API de contratos sin él (HU #13712). No es un reemplazo: el
+    /// conductor, sus enlaces del portal y sus avisos siguen igual; queda en el historial y en la línea de tiempo.
+    /// </summary>
+    public void CompletarDocumento(Comparendo c, string? tipoDocumento, string? numeroDocumento, Actor actor)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        ArgumentNullException.ThrowIfNull(actor);
+        var k = c.Contraventor ?? throw new ReglaException("SIN_CONDUCTOR", "El comparendo no tiene conductor asignado.");
+        if (k.NumeroDocumento is not null)
+            throw new ReglaException("DOCUMENTO_YA_REGISTRADO", "El conductor ya tiene documento: para cambiarlo, reemplaza el conductor con un motivo.");
+        var anterior = JsonSerializer.Serialize(Foto(k), Json);
+        (k.TipoDocumento, k.NumeroDocumento) = Documento(tipoDocumento, numeroDocumento);
+        (k.ActualizadoEn, k.ActualizadoPor) = (reloj.Ahora, actor.UsuarioId);
+        db.ContraventorHistorial.Add(new ContraventorHistorial
+        {
+            Id = Guid.CreateVersion7(),
+            TenantId = c.TenantId,
+            ComparendoId = c.Id,
+            DatosAnteriores = anterior,
+            DatosNuevos = JsonSerializer.Serialize(Foto(k), Json),
+            Origen = k.Origen,
+            Motivo = "Documento completado: la consulta automática no lo trae.",
+            UsuarioId = actor.UsuarioId,
+            ActorNombre = actor.Nombre,
+            RegistradoEn = reloj.Ahora,
+        });
+        timeline.Agregar(c, TipoEventoTimeline.ContraventorReemplazado,
+            $"Se completó el documento del conductor {k.Nombres}: {k.TipoDocumento} {Comun.HtmlCorreo.Enmascarar(k.NumeroDocumento!)}.", actor);
+    }
+
+    /// <summary>GDC punto 20: intentos fallidos de la consulta automática, entre manuales y automáticos, antes de «agotada».</summary>
+    public const int MaxIntentos = 3;
+
     /// <summary>
     /// Consulta la API de contratos (§4.7). Si encuentra conductor lo asigna con origen API; si ya había uno, solo lo
-    /// reemplaza con <paramref name="confirmarReemplazo"/>. Cuenta los intentos fallidos (máximo 3 automáticos, S-35).
+    /// reemplaza con <paramref name="confirmarReemplazo"/>. Cuenta los intentos fallidos: al tercero la consulta queda
+    /// «agotada» (GDC punto 20) y desde ahí solo se asigna a mano.
+    /// <para>
+    /// La hora (GDC punto 19) solo acompaña a <c>FechaImposicion</c>; si la fecha sale de <c>FechaNotificacion</c>, es
+    /// «sin hora». Sin hora se consulta a las 00:00 y a las 23:59: si las dos dan el mismo conductor se asigna; si no,
+    /// queda «sin hora» para que la gestora lo revise. Las dos consultas cuentan como un solo intento.
+    /// </para>
     /// </summary>
     public async Task<RespuestaContrato> ConsultarAsync(Comparendo c, Actor actor, bool confirmarReemplazo, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(c);
         var config = await capacidades.ExigirAsync(c.TenantId, Capacidad.ConsultaContraventor, ct).ConfigureAwait(false);
         if (config.TipoIntegracionConductor != TipoIntegracionConductor.ApiRenting)
-            throw new ReglaException("SIN_INTEGRACION", "Tu empresa asigna el conductor a mano: no tiene una API de contratos configurada.");
+            throw new ReglaException("SIN_INTEGRACION", "Tu empresa asigna el conductor a mano: no tiene la consulta automática del conductor.");
+        if (!ConsultaPorApi.DeNitMarcado(c, await ConsultaPorApi.MarcadosAsync(db, c.TenantId, ct).ConfigureAwait(false)))
+            throw new ReglaException("NIT_SIN_API", "La consulta automática del conductor no aplica para el propietario de este comparendo: asígnalo a mano.");
         if (c.OrganismoTransitoId is { } ot && !(await permisos.DeAsync(c.TenantId, ot, null, ct).ConfigureAwait(false)).Consulta)
             throw new ReglaException("OT_BLOQUEADO", "La consulta de contraventor está bloqueada para este organismo de tránsito.");
-        if (c.Placa is null || (c.FechaImposicion ?? c.FechaNotificacion) is not { } fecha)
+        var (fecha, hora) = c.FechaImposicion is { } fi ? (fi, c.HoraImposicion is { } h ? new TimeOnly(h.Hour, h.Minute) : (TimeOnly?)null)
+            : c.FechaNotificacion is { } fn ? (fn, (TimeOnly?)null)
+            : (default(DateOnly?), (TimeOnly?)null);
+        if (c.Placa is null || fecha is not { } dia)
             throw new ReglaException("SIN_DATOS_CONSULTA", "El comparendo no tiene placa o fecha para consultar el contrato.");
+        if (c.EstadoConsultaContraventor == EstadoConsultaContraventor.Agotada || c.IntentosConsultaContraventor >= MaxIntentos)
+            throw new ReglaException("CONSULTA_AGOTADA", $"La consulta automática del conductor ya se intentó {MaxIntentos} veces sin respuesta: asígnalo a mano.");
 
-        var r = await api.ConsultarAsync(c.TenantId, c.Placa, fecha, ct).ConfigureAwait(false);
+        var r = hora is not null
+            ? await api.ConsultarAsync(c.TenantId, c.Placa, dia, hora, ct).ConfigureAwait(false)
+            : await SinHoraAsync(c.TenantId, c.Placa, dia, ct).ConfigureAwait(false);
+        c.UltimoIntentoConsultaContraventor = reloj.Hoy;
         switch (r.Resultado)
         {
             case ResultadoContrato.Encontrado when r.Conductor is { } k:
                 if (c.Contraventor is not null && !confirmarReemplazo)
                     return r;
-                Asignar(c, new DatosConductor(k.TipoDocumento.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato),
-                    OrigenContraventor.Api, actor, c.Contraventor is null ? null : "Reemplazo confirmado con la consulta a la API de contratos.", declaracion: false);
+                Asignar(c, new DatosConductor(k.TipoDocumento?.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato),
+                    OrigenContraventor.Api, actor, c.Contraventor is null ? null : "Reemplazo confirmado con la consulta automática del conductor.", declaracion: false);
                 c.EstadoConsultaContraventor = EstadoConsultaContraventor.Encontrado;
                 c.ErrorConsultaContraventor = null;
                 break;
@@ -131,9 +192,13 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
                 c.EstadoConsultaContraventor = EstadoConsultaContraventor.NoEncontrado;
                 c.ErrorConsultaContraventor = null;
                 break;
+            case ResultadoContrato.SinHora:
+                c.EstadoConsultaContraventor = EstadoConsultaContraventor.SinHora;
+                c.ErrorConsultaContraventor = null;
+                break;
             default:
-                c.EstadoConsultaContraventor = EstadoConsultaContraventor.Error;
                 c.IntentosConsultaContraventor++;
+                c.EstadoConsultaContraventor = c.IntentosConsultaContraventor >= MaxIntentos ? EstadoConsultaContraventor.Agotada : EstadoConsultaContraventor.Error;
                 var error = string.Join("\n", new[] { r.Mensaje, r.CuerpoCrudo }.Where(x => !string.IsNullOrWhiteSpace(x)));
                 c.ErrorConsultaContraventor = error.Length > 4000 ? error[..4000] : error;
                 break;
@@ -141,15 +206,53 @@ public sealed class ServicioContraventor(ComparendosDb db, Timeline timeline, IA
 
         timeline.Agregar(c, TipoEventoTimeline.ContraventorConsultado, r.Resultado switch
         {
-            ResultadoContrato.Encontrado => "La API de contratos encontró el conductor.",
-            ResultadoContrato.NoEncontrado => "La API de contratos no encontró conductor para la placa y la fecha: hay que asignarlo a mano.",
-            _ => $"La consulta a la API de contratos falló: {r.Mensaje}",
+            // El detalle técnico del fallo queda en ErrorConsultaContraventor (solo lo ve el SuperAdmin).
+            ResultadoContrato.Encontrado => "La consulta automática encontró el conductor.",
+            ResultadoContrato.NoEncontrado => "La consulta automática no encontró conductor para la placa y la fecha: hay que asignarlo a mano.",
+            ResultadoContrato.SinHora => "El comparendo no trae hora y ese día el vehículo cambió de conductor: revisa quién conducía y asígnalo a mano.",
+            _ when c.EstadoConsultaContraventor == EstadoConsultaContraventor.Agotada =>
+                $"No se pudo consultar el conductor después de {MaxIntentos} intentos: asígnalo a mano.",
+            _ => "No se pudo consultar el conductor: se reintenta más tarde o se asigna a mano.",
         }, actor);
         return r;
     }
 
+    /// <summary>
+    /// GDC «sin hora»: consulta el contrato a las 00:00 y a las 23:59 del día. El mismo conductor en las dos → se
+    /// asigna; las dos vacías → no encontrado; distinto, o una vacía y la otra no → «sin hora»; si alguna falla, es un
+    /// solo fallo (un intento).
+    /// </summary>
+    private async Task<RespuestaContrato> SinHoraAsync(Guid tenantId, string placa, DateOnly dia, CancellationToken ct)
+    {
+        var inicio = await api.ConsultarAsync(tenantId, placa, dia, new TimeOnly(0, 0), ct).ConfigureAwait(false);
+        if (inicio.Resultado == ResultadoContrato.Error)
+            return inicio;
+        var fin = await api.ConsultarAsync(tenantId, placa, dia, new TimeOnly(23, 59), ct).ConfigureAwait(false);
+        if (fin.Resultado == ResultadoContrato.Error)
+            return fin;
+        return (inicio, fin) switch
+        {
+            ({ Resultado: ResultadoContrato.NoEncontrado }, { Resultado: ResultadoContrato.NoEncontrado }) => inicio,
+            ({ Resultado: ResultadoContrato.Encontrado, Conductor: { } a }, { Resultado: ResultadoContrato.Encontrado, Conductor: { } b }) when MismoConductor(a, b) => inicio,
+            _ => new RespuestaContrato(ResultadoContrato.SinHora, null,
+                $"El comparendo no trae hora y el {dia:yyyy-MM-dd} el vehículo {placa} no tuvo el mismo conductor todo el día: revisa quién conducía y asígnalo a mano.", null),
+        };
+    }
+
+    /// <summary>Mismo conductor: mismo documento (si las dos lo traen), mismos nombres y mismo correo, sin distinguir mayúsculas.</summary>
+    internal static bool MismoConductor(ConductorEncontrado a, ConductorEncontrado b)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(b);
+        static string N(string? x) => (x ?? string.Empty).Trim();
+        if (a.NumeroDocumento is not null && b.NumeroDocumento is not null && (a.TipoDocumento != b.TipoDocumento || N(a.NumeroDocumento) != N(b.NumeroDocumento)))
+            return false;
+        return string.Equals(N(a.Nombres), N(b.Nombres), StringComparison.OrdinalIgnoreCase)
+            && string.Equals(N(a.Correo), N(b.Correo), StringComparison.OrdinalIgnoreCase);
+    }
+
     private static object Foto(Persistence.Modelo.Contraventor k) => new
     {
-        tipoDocumento = k.TipoDocumento.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato, origen = k.Origen.ToString(),
+        tipoDocumento = k.TipoDocumento?.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato, origen = k.Origen.ToString(),
     };
 }

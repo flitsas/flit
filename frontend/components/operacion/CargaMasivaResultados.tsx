@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Loader2, RefreshCw } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from '@/components/atom/InlineAlert';
+import { CarLoaderModal } from '@/components/atom/CarLoader';
+import { Pagination } from '@/components/atom/Pagination';
+import { usePaginacion } from '@/components/atom/usePaginacion';
 import { formatFechaHora } from '@/lib/format/date';
 import {
   BULK_TRAMITES_TEMPLATES,
@@ -28,6 +31,9 @@ interface Props {
   onNavegar?: () => void;
 }
 
+/** Borde de las celdas de fila: el token de la tabla, no un hex suelto (HU #13919). */
+const BORDE_FILA = { borderColor: 'var(--table-row-border)' } as const;
+
 const TITULO_TIPO = new Map(BULK_TRAMITES_TEMPLATES.map((t) => [t.tipo, t.titulo]));
 
 /**
@@ -43,6 +49,9 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
   const [detalle, setDetalle] = useState<BulkTramitesBatchDetail | null>(null);
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // HU #13919 — los resultados del lote se paginan dentro del modal (10 por página, con «Filas por
+  // página»): un lote de cientos de filas obligaba a un scroll interno largo y sin referencia.
+  const pg = usePaginacion('operacion.CargaMasivaResultados');
 
   /**
    * Recarga la lista y el detalle. Conserva el lote que el usuario tenía elegido: «Actualizar» se
@@ -73,6 +82,8 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
     setError(null);
     try {
       setDetalle(await bulkTramitesClient.detalleLote(batchId));
+      // Otro lote es otra lista: se vuelve a su primera página.
+      pg.setPage(1);
     } catch {
       setError('No se pudo cargar el detalle del lote.');
     }
@@ -84,12 +95,8 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
   };
 
   if (cargando) {
-    return (
-      <p className="flex items-center gap-2 text-xs text-flit-primary/70 dark:text-white/60">
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
-        Cargando lotes…
-      </p>
-    );
+    // HU #13919 — la espera usa el loader estándar de las tablas, no un texto suelto.
+    return <CarLoaderModal label="Cargando lotes…" />;
   }
 
   if (error) {
@@ -98,7 +105,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
 
   if (lotes.length === 0) {
     return (
-      <p className="text-xs text-flit-primary/70 dark:text-white/60" data-testid="carga-masiva-sin-lotes">
+      <p className="text-xs text-muted-foreground" data-testid="carga-masiva-sin-lotes">
         Todavía no has cargado ningún archivo. Cuando lo hagas, aquí verás en qué quedó cada fila.
       </p>
     );
@@ -109,14 +116,14 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
   return (
     <div className="flex flex-col gap-4" data-testid="carga-masiva-resultados">
       <div className="flex items-center justify-between gap-2">
-        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-flit-primary dark:text-white">
+        <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-foreground">
           <span className="shrink-0 font-semibold">Lote</span>
           <select
             value={detalle?.batch.id ?? ''}
             onChange={(e) => void verDetalle(e.target.value)}
             aria-label="Lote de carga masiva"
             data-testid="carga-masiva-selector-lote"
-            className="h-9 min-w-0 flex-1 rounded-xl border border-[#DFE5ED] bg-white px-2 text-xs dark:border-white/15 dark:bg-[#0B0F14] dark:text-white"
+            className="h-9 min-w-0 flex-1 rounded-xl border border-border bg-card px-2 text-xs"
           >
             {/* Con hora: dos cargas del mismo archivo el mismo día eran indistinguibles. */}
             {lotes.map((lote) => (
@@ -133,7 +140,7 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
           className={controlCls(false)}
           data-testid="carga-masiva-actualizar"
         >
-          <RefreshCw className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           Actualizar
         </button>
       </div>
@@ -149,18 +156,15 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
               </span>
             </InlineAlert>
           ) : (
-            <p className="text-xs text-flit-primary dark:text-white" data-testid="carga-masiva-contadores">
+            <p className="text-xs text-foreground" data-testid="carga-masiva-contadores">
               {`${detalle.batch.counts.created} creados · ${detalle.batch.counts.createdPending} por retomar · ${detalle.batch.counts.notCreated} no creados`}
             </p>
           )}
 
-          <div className="max-h-64 overflow-y-auto">
-            {/* Bug #13055 — tabla homologada con el modelo de trámites (resultados del lote dentro del
-                modal: tabla de resultados, sin paginación). */}
-            <table
-              className="text-left text-xs"
-              style={{ width: '100%', borderCollapse: 'separate', borderSpacing: '0 8px' }}
-            >
+          {/* HU #13919 — estilo estándar de listado, sin scroll vertical propio (la paginación acota
+              la altura) y con la paginación común con «Filas por página». */}
+          <div className="overflow-x-auto">
+            <table className="w-full border-separate border-spacing-y-2 text-left text-xs">
               <thead>
                 <tr>
                   {['Fila', 'Vehículo', 'Resultado', 'Motivo'].map((col, i, arr) => (
@@ -176,40 +180,40 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {detalle.rows.map((fila) => (
+                {pg.paginar(detalle.rows).map((fila) => (
                   <tr
                     key={fila.rowNumber}
-                    className={`bg-white align-top dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+                    className={`bg-card align-top ${TABLA_ROW_HOVER_CLS}`}
                     data-testid={`carga-masiva-fila-${fila.rowNumber}`}
                   >
                     <td
-                      className="rounded-l-xl border-y border-l px-4 py-3 text-flit-primary dark:text-white"
-                      style={{ borderColor: '#DFE5ED' }}
+                      className="rounded-l-xl border-y border-l px-4 py-3 text-foreground"
+                      style={BORDE_FILA}
                     >
                       {fila.rowNumber}
                     </td>
-                    <td className="border-y px-4 py-3 text-flit-primary dark:text-white" style={{ borderColor: '#DFE5ED' }}>
+                    <td className="border-y px-4 py-3 text-foreground" style={BORDE_FILA}>
                       {fila.identificador ?? '—'}
                     </td>
-                    <td className="border-y px-4 py-3" style={{ borderColor: '#DFE5ED' }}>
+                    <td className="border-y px-4 py-3" style={BORDE_FILA}>
                       {fila.procedureInstanceId ? (
                         <button
                           type="button"
                           onClick={() => abrirTramite(fila.procedureInstanceId!)}
-                          className="text-left font-semibold text-[#3B4FD6] underline-offset-2 hover:underline dark:text-[#8FA8FF]"
+                          className="text-left font-semibold text-flit-brand-ink underline-offset-2 hover:underline"
                           data-testid={`carga-masiva-abrir-${fila.rowNumber}`}
                         >
                           {etiquetaOutcome(fila.outcome)}
                         </button>
                       ) : (
-                        <span className="text-flit-primary dark:text-white">
+                        <span className="text-foreground">
                           {etiquetaOutcome(fila.outcome)}
                         </span>
                       )}
                     </td>
                     <td
-                      className="rounded-r-xl border-y border-r px-4 py-3 text-flit-primary/70 dark:text-white/60"
-                      style={{ borderColor: '#DFE5ED' }}
+                      className="rounded-r-xl border-y border-r px-4 py-3 text-muted-foreground"
+                      style={BORDE_FILA}
                     >
                       {fila.motivo ? mensajeMotivo(fila.motivo) : '—'}
                     </td>
@@ -218,6 +222,14 @@ export function CargaMasivaResultados({ refreshKey = 0, onNavegar }: Props) {
               </tbody>
             </table>
           </div>
+          <Pagination
+            page={pg.page}
+            pageSize={pg.pageSize}
+            totalCount={detalle.rows.length}
+            onPageChange={pg.setPage}
+            onPageSizeChange={pg.setPageSize}
+            ariaLabel="Paginación de resultados del lote"
+          />
         </>
       ) : null}
     </div>

@@ -27,6 +27,7 @@ public sealed class CreateMandateSignerHandler
     private readonly ISignatureVaultReader? _vaultReader;
     private readonly IMandateSignerIdentityLauncher? _identityLauncher;
     private readonly IMandatarioAssociableCompanies? _associable;
+    private readonly IOtUserClientScopeResolver? _clientScope;
 
     /// <summary>Medio de firma resuelto en el alta desde el OT (solo el nombre, sin datos del baúl).</summary>
     public const string MeansVault = "baul";
@@ -50,8 +51,10 @@ public sealed class CreateMandateSignerHandler
         IMandateSignerRepository repository,
         ISignatureVaultReader? vaultReader = null,
         IMandateSignerIdentityLauncher? identityLauncher = null,
-        IMandatarioAssociableCompanies? associable = null)
+        IMandatarioAssociableCompanies? associable = null,
+        IOtUserClientScopeResolver? clientScope = null)
     {
+        _clientScope = clientScope;
         _associable = associable;
         _vaultReader = vaultReader;
         _identityLauncher = identityLauncher;
@@ -67,6 +70,14 @@ public sealed class CreateMandateSignerHandler
         ArgumentNullException.ThrowIfNull(command);
 
         var companyIds = command.CompanyTenantIds ?? [];
+
+        // Alcance de compañías del usuario: con 'especificos' solo puede vincular compañías de su alcance (403, nada se guarda),
+        // tanto las propietarias como las asociadas.
+        var allowedClients = await MandateSignerClientScopeGuard
+            .AllowedAsync(_clientScope, command.TransitOfficeId, cancellationToken).ConfigureAwait(false);
+        MandateSignerClientScopeGuard.EnsureWithin(allowedClients, companyIds);
+        MandateSignerClientScopeGuard.EnsureWithin(
+            allowedClients, (command.OfficeCompanies ?? []).SelectMany(o => o.AssociatedCompanyTenantIds ?? []));
 
         // HU #13179 — compañías asociadas: 403 si el Admin de Compañía envía una que no es su hija (nada se
         // guarda); 422 por elemento para propia, inactiva o inexistente; RF33 para el OT.

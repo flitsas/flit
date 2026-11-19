@@ -1,0 +1,3 @@
+# Migraciones generadas por EF (`dotnet ef migrations add`): los índices compuestos usan arreglos literales.
+[*.cs]
+dotnet_diagnostic.CA1861.severity = none

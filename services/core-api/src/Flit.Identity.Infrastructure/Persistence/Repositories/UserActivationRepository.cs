@@ -6,7 +6,7 @@ using Npgsql;
 
 namespace Flit.Infrastructure.Persistence.Repositories;
 
-public sealed class UserActivationRepository(IIdentityDb db) : IUserActivationRepository
+public sealed class UserActivationRepository(IIdentityDb db, IEnumerable<IUserActivationHook>? hooks = null) : IUserActivationRepository
 {
     public async Task ActivateAsync(ActivationData data, CancellationToken cancellationToken)
     {
@@ -46,6 +46,13 @@ public sealed class UserActivationRepository(IIdentityDb db) : IUserActivationRe
                 AssignedBy = data.InvitedBy,
                 CreatedAt = data.ActivatedAt,
             });
+        }
+
+        // Datos ligados a la invitación (p. ej. el alcance de compañías de un usuario de OT): se registran en el mismo
+        // contexto antes del SaveChanges para que el alta del usuario y esos datos sean atómicos.
+        foreach (var hook in hooks ?? [])
+        {
+            await hook.OnUserCreatedAsync(data, user.Id, cancellationToken);
         }
 
         // Track invitation update through Change Tracker → single atomic SaveChanges

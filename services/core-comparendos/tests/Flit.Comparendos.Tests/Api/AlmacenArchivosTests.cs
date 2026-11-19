@@ -68,7 +68,7 @@ public sealed class AlmacenArchivosTests
         var r = await almacen.GuardarAsync(Guid.Parse("11111111-1111-1111-1111-111111111111"), "ocr", "a.pdf", "application/pdf", [1, 2, 3], CancellationToken.None);
 
         r.Referencia.Should().Be("f-1");
-        var creacion = JsonDocument.Parse(falso.Pedidos[0].Cuerpo!).RootElement;
+        var creacion = JsonElement.Parse(falso.Pedidos[0].Cuerpo!);
         creacion.GetProperty("category").GetString().Should().Be("comparendos");
         creacion.GetProperty("metadata").GetProperty("empresaId").GetString().Should().Be("11111111-1111-1111-1111-111111111111");
         (falso.Pedidos[1].Metodo, falso.Pedidos[1].Url).Should().Be((HttpMethod.Put, "http://s3.test/sube"));

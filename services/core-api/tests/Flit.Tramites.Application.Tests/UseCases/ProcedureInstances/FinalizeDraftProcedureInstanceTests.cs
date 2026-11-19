@@ -18,8 +18,13 @@ public sealed class FinalizeDraftProcedureInstanceTests
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
     private readonly FinalizeDraftProcedureInstanceHandler _sut;
 
-    public FinalizeDraftProcedureInstanceTests() =>
+    public FinalizeDraftProcedureInstanceTests()
+    {
+        _repo.AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repo.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         _sut = new FinalizeDraftProcedureInstanceHandler(_repo);
+    }
 
     /// <summary>Submit N 03: orquestador del lifecycle service (puertos no-op, sin gates OT).</summary>
     private SubmitProcedureInstanceHandler SubmitHandler(IProcedureTypeRepository typeRepo)
@@ -73,6 +78,16 @@ public sealed class FinalizeDraftProcedureInstanceTests
     private static ProcedureInstance FinalizeReady(Guid id, Guid tenant)
     {
         var i = Instance(id, tenant);
+        // Matrícula inicial: el tipo de servicio es obligatorio al radicar (SubmitGate.TipoServicioRequerido).
+        i.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            FieldKey = "vehicle_service",
+            ValueText = "PARTICULAR",
+            Source = "user",
+        });
         i.Actors.Add(Actor(tenant, id, "comprador"));
         foreach (var t in new[] { "factura", "aduana", "impronta" })
         {

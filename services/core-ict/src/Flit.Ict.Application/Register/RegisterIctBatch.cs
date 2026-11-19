@@ -30,8 +30,8 @@ public sealed record RegisterPrincipalMandanteInput(
 /// <summary>
 /// Transformación declarada por el gestor (contrato v1: <c>more_transaction_transaction_type</c>).
 /// OJO: dentro de este arreglo el contrato usa camelCase (<c>transactionType</c>), a diferencia del
-/// resto del payload que es snake_case. <c>transactionType</c> usa el catálogo ICT Tipo Trámite
-/// (5 blindaje, 6 carrocería, 7 color, 9 combustible — Bug #13445), no códigos RUNT.
+/// resto del payload que es snake_case. <c>transactionType</c> usa el catálogo B «Tipo de transformación ICT»
+/// (5 color, 9 combustible, 17 carrocería), no códigos RUNT.
 /// </summary>
 public sealed record RegisterTransformationInput(
     [property: JsonPropertyName("transactionType")] int TransactionType,
@@ -88,6 +88,8 @@ public sealed record RegisterRowInput(
     // Otros trámites: blindaje y nuevo combustible.
     [property: JsonPropertyName("armor_level_number_id")] short? ArmorLevelNumberId = null,
     [property: JsonPropertyName("new_vehicle_fuel_type")] short? NewVehicleFuelType = null,
+    // Tipo de servicio (opcional, solo matrícula): 1 Particular, 2 Público, 3 Diplomático, 4 Oficial, 5 Especial, 6 Otros. Sin valor => Particular.
+    [property: JsonPropertyName("vehicle_service_type")] short? VehicleServiceType = null,
     [property: JsonPropertyName("more_transaction_transaction_type")] IReadOnlyList<RegisterTransformationInput>? MoreTransactionTransactionType = null,
     [property: JsonPropertyName("seller")] IReadOnlyList<RegisterActorInput>? Seller = null,
     [property: JsonPropertyName("buyer")] IReadOnlyList<RegisterActorInput>? Buyer = null,

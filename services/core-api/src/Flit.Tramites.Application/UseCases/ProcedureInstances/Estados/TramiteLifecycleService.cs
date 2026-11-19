@@ -63,7 +63,10 @@ public sealed class TramiteLifecycleService(
     UltimoBloqueoFirma? ultimoBloqueo = null,
     // Excepción de firma de la matrícula sin placa: se excluye el canal Quipux (OT efectivo). AL FINAL por la misma
     // razón. Null ⇒ con OT elegido no hay exención (fail-safe).
-    ITransitOfficeQuipuxCanalReader? quipuxCanalReader = null) : ITramiteLifecycleService
+    ITransitOfficeQuipuxCanalReader? quipuxCanalReader = null,
+    // Copia de la firma de baúl al radicar. AL FINAL por la misma razón. Null en tests que no la ejercitan:
+    // sin capturador el trámite sigue leyendo el baúl en vivo (comportamiento previo).
+    FirmaBaulCopiaCapturer? firmaBaulCopia = null) : ITramiteLifecycleService
 {
     private readonly ILogger<TramiteLifecycleService> _logger =
         logger ?? NullLogger<TramiteLifecycleService>.Instance;
@@ -281,6 +284,21 @@ public sealed class TramiteLifecycleService(
                 await ResolverMandatarioAlAprobarAsync(instance, command, ct).ConfigureAwait(false);
             if (mandatoError is not null)
                 return TramiteTransitionOutcome.Fail(mandatoError, DetalleMandatario(mandatoError, sinCandidatos));
+        }
+
+        // Firma de baúl: al RADICAR (salir de borrador, con todos los gates ya superados) se copia al trámite la
+        // firma de cada parte; desde entonces FUR, regeneraciones, gate y listado usan la copia y no el baúl en
+        // vivo. Va en la MISMA unidad de trabajo que la transición. Volver a borrador la descarta (el borrador
+        // vuelve a leer el baúl en vivo y se recapturará al radicar de nuevo).
+        if (from == TramiteEstado.Borrador
+            && command.ToStatus is not (TramiteEstado.Borrador or TramiteEstado.Anulado)
+            && firmaBaulCopia is not null)
+        {
+            await firmaBaulCopia.CapturarAsync(instance, ct).ConfigureAwait(false);
+        }
+        else if (command.ToStatus == TramiteEstado.Borrador)
+        {
+            instance.FirmaBaulCopiadaAt = null;
         }
 
         var now = DateTimeOffset.UtcNow;
@@ -546,6 +564,7 @@ public sealed class TramiteLifecycleService(
         SubmitGate.FurRequerido => "generar el FUR",
         SubmitGate.OrganismoRequerido => "seleccionar el organismo de tránsito",
         SubmitGate.ImprontaRequerida => "generar la impronta de motor y chasis",
+        SubmitGate.TipoServicioRequerido => "seleccionar el tipo de servicio del vehículo",
         _ => $"resolver un requisito pendiente ({code})",
     };
 

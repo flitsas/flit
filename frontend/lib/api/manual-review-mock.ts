@@ -83,7 +83,7 @@ function buildRows(count: number, now: Date): ManualDetail[] {
       consentTextVersion: captured ? 'consentimiento-manual-v1' : null,
       images: MANUAL_IMAGE_KINDS.map((kind) => ({ kind, available: captured })),
       reviewedAt: status === 'aprobado' || status === 'rechazado' ? now.toISOString() : null,
-      reviewedBy: null,
+      reviewedBy: status === 'aprobado' || status === 'rechazado' ? 'Revisor demo' : null,
       rejectionReasonCode: status === 'rechazado' ? MOTIVOS_RECHAZO_MANUAL[i % 6].code : null,
       // Como el backend: el enlace vigente solo existe esperando captura o tras un rechazo (enlace nuevo de 24 h).
       linkExpiresAt:
@@ -159,6 +159,7 @@ export function createMockManualReviewClient(options: MockOptions = {}): ManualR
       row.status = 'aprobado';
       row.waitingMinutes = null;
       row.reviewedAt = new Date().toISOString();
+      row.reviewedBy = 'Revisor demo';
       return {
         validationId: row.id,
         tenantId: 'mock-tenant',
@@ -181,6 +182,7 @@ export function createMockManualReviewClient(options: MockOptions = {}): ManualR
       row.waitingMinutes = null;
       row.rejectionReasonCode = reasonCode;
       row.reviewedAt = new Date().toISOString();
+      row.reviewedBy = 'Revisor demo';
       row.linkExpiresAt = new Date(Date.now() + 24 * 3_600_000).toISOString();
       return {
         validationId: row.id,

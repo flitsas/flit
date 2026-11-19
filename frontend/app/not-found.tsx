@@ -1,35 +1,30 @@
 import Link from "next/link";
-import { FileQuestion } from "lucide-react";
+import { buttonClass } from "@flit/ui/Button";
+import { IconoModulo } from "@flit/ui/Icono";
 
 /**
  * 404 global FLIT — patrón AlertCard / Acceso restringido (`/403`).
- * Fondo app azul claro, tipografía Poppins vía shell, CTA pastilla degradada.
- * Semántica: alerta/error (naranja marca) + código gris (inactivo/borrador).
+ * Fondo app, tarjeta con ilustración (estado vacío `.vacio` de la propuesta, HU #14511) y botón del kit.
  */
 export default function NotFoundPage() {
   return (
     <main className="app-bg flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
       <div
-        className="flex flex-col items-center gap-3 rounded-2xl border border-[#DFE5ED] bg-white px-8 py-12 shadow-sm dark:border-white/10 dark:bg-[#0B0F14]"
+        className="flex w-full max-w-lg flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-10 shadow-[var(--shadow-card)] sm:px-10"
         role="status"
         aria-live="polite"
       >
-        <FileQuestion
-          className="h-14 w-14"
-          style={{ color: "#FF4E00" }}
-          strokeWidth={1.8}
-          aria-hidden="true"
-        />
+        <IconoModulo clave="consulta-placa" disco size={96} />
         <p
-          className="text-3xl font-bold tracking-tight text-[#59677D] dark:text-white/55"
+          className="text-3xl font-bold tracking-tight text-muted-foreground"
           aria-hidden="true"
         >
           404
         </p>
-        <h1 className="text-2xl font-bold" style={{ color: "var(--color-flit-primary)" }}>
+        <h1 className="text-2xl font-bold text-[color:var(--di-heading)]">
           Página no encontrada
         </h1>
-        <p className="max-w-md text-sm text-[#59677D] dark:text-white/65">
+        <p className="max-w-md text-sm text-muted-foreground">
           La sección que buscas aún no está disponible o la ruta no existe. Vuelve al inicio para
           continuar.
         </p>
@@ -37,11 +32,7 @@ export default function NotFoundPage() {
           404. Página no encontrada. La sección que buscas aún no está disponible o la ruta no
           existe.
         </span>
-        <Link
-          href="/"
-          className="mt-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
-        >
+        <Link href="/" className={buttonClass({ className: "mt-2" })}>
           Volver al inicio
         </Link>
       </div>

@@ -1,6 +1,18 @@
 "use client";
 
 import type { ReactNode } from "react";
+import { Pagination } from "@/components/atom/Pagination";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import {
+  TABLA_HEADER_BG,
+  TABLA_HEADER_FG,
+  TABLA_ROW_HOVER_CLS,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@/components/atom/table-styles";
 import { OT_BANDA, OT_BLUE, OT_CARD, OT_MARCO, OT_NAVY } from "./ot-detalle-visual";
 
 /**
@@ -25,7 +37,7 @@ export function OtTarjeta({
   return (
     <section className={`${OT_CARD} h-full p-4 ${className}`} aria-label={titulo}>
       <h4 className="mb-3 text-sm font-semibold" style={{ color: OT_NAVY }}>
-        <span className="dark:text-white">{titulo}</span>
+        <span className="dark:text-foreground">{titulo}</span>
       </h4>
       {children}
     </section>
@@ -43,8 +55,8 @@ export function OtListaCampos({ children }: { children: ReactNode }) {
 export function OtCampo({ campo, valor }: { campo: string; valor: ReactNode }) {
   return (
     <>
-      <dt className="text-xs text-flit-primary/70 dark:text-white/70">{campo}</dt>
-      <dd className="break-words text-xs font-medium text-flit-primary dark:text-white">
+      <dt className="text-xs text-flit-primary/70 dark:text-muted-foreground">{campo}</dt>
+      <dd className="break-words text-xs font-medium text-flit-primary">
         {valor === null || valor === undefined || valor === "" ? "—" : valor}
       </dd>
     </>
@@ -56,7 +68,7 @@ export function OtSello({ texto, color, soft }: { texto: string; color: string; 
   return (
     <span
       className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-      style={soft ? { background: `${color}22`, color } : { background: color, color: "#fff" }}
+      style={soft ? { background: `color-mix(in srgb, ${color} 13%, transparent)`, color } : { background: color, color: "var(--di-on-action)" }}
     >
       {texto}
     </span>
@@ -70,8 +82,8 @@ export function OtCargando({ etiqueta, filas = 3 }: { etiqueta: string; filas?: 
       {Array.from({ length: filas }).map((_, i) => (
         <div
           key={i}
-          className="h-10 animate-pulse rounded-xl dark:bg-white/5"
-          style={{ background: "rgba(223,229,237,0.5)" }}
+          className="h-10 animate-pulse rounded-xl dark:bg-secondary"
+          style={{ background: "var(--secondary)" }}
         />
       ))}
     </div>
@@ -80,7 +92,7 @@ export function OtCargando({ etiqueta, filas = 3 }: { etiqueta: string; filas?: 
 
 /** Estado «vacío»: se dice qué falta, nunca se deja el hueco mudo. */
 export function OtVacio({ mensaje }: { mensaje: string }) {
-  return <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>;
+  return <p className="text-xs text-flit-primary/70 dark:text-muted-foreground">{mensaje}</p>;
 }
 
 /** Estado «error» con reintento. `contexto` da nombre accesible propio a cada botón del panel. */
@@ -95,7 +107,7 @@ export function OtError({
 }) {
   return (
     <div className="flex flex-col items-start gap-2" role="alert">
-      <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>
+      <p className="text-xs text-flit-primary/70 dark:text-muted-foreground">{mensaje}</p>
       <button
         type="button"
         onClick={onReintentar}
@@ -117,6 +129,10 @@ export function OtError({
  * con `<table>` el reparto lo decide el navegador según el contenido: la misma columna cambiaba de
  * ancho entre un trámite y el siguiente. Los roles dejan la semántica intacta para quien navega con
  * lector de pantalla.
+ *
+ * HU #13919 — por defecto se dibuja con el estilo estándar de las tablas (cabecera gris en píldora y
+ * una tarjeta por fila, sin marco que las envuelva), el mismo de `DataTable`. `ficha` conserva la
+ * banda azul enmarcada, que es la de las fichas de pares campo/valor (`OtFichaCampos`) y no un listado.
  */
 export function OtRejilla({
   etiqueta,
@@ -124,6 +140,7 @@ export function OtRejilla({
   filas,
   plantilla,
   conMarco = true,
+  ficha = false,
 }: {
   /** Nombre accesible de la tabla; nunca se omite. */
   etiqueta: string;
@@ -131,12 +148,56 @@ export function OtRejilla({
   filas: ReactNode[][];
   /** `grid-template-columns` a medida; por defecto todas las columnas iguales. */
   plantilla?: string;
-  /** A false, la rejilla no dibuja su propio borde: la envuelve otra. */
+  /** Solo en modo `ficha`: a false, la rejilla no dibuja su propio borde porque la envuelve otra. */
   conMarco?: boolean;
+  /** Fila única de pares campo/valor con banda azul (ficha), no una tabla de listado. */
+  ficha?: boolean;
 }) {
   const estilo = {
     gridTemplateColumns: plantilla ?? `repeat(${columnas.length}, minmax(0, 1fr))`,
   };
+
+  if (!ficha) {
+    return (
+      <div role="table" aria-label={etiqueta} className={`flex flex-col gap-2 ${TABLA_MOVIL_TBODY_CLS}`}>
+        <div
+          role="row"
+          className={`grid rounded-xl ${TABLA_MOVIL_THEAD_CLS}`}
+          style={{ ...estilo, background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+        >
+          {columnas.map((c) => (
+            <div
+              key={c}
+              role="columnheader"
+              className="px-4 py-2.5 text-[10px] font-semibold uppercase tracking-wider"
+            >
+              {c}
+            </div>
+          ))}
+        </div>
+        {filas.map((fila, i) => (
+          <div
+            key={i}
+            role="row"
+            className={`grid rounded-xl border bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}
+            style={{ ...estilo, borderColor: "var(--table-row-border)" }}
+          >
+            {fila.map((celda, j) => (
+              <div
+                key={j}
+                role="cell"
+                className={`self-center break-words px-4 py-3 text-xs font-semibold ${TABLA_MOVIL_CELL_CLS} ${j === 0 ? TABLA_MOVIL_CELL_TITULO_CLS : ""}`}
+                data-label={columnas[j]}
+                style={{ color: OT_NAVY }}
+              >
+                <span className="dark:text-foreground">{celda}</span>
+              </div>
+            ))}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div role="table" aria-label={etiqueta} className={conMarco ? OT_MARCO : undefined}>
@@ -155,7 +216,7 @@ export function OtRejilla({
         <div
           key={i}
           role="row"
-          className="grid border-t border-[#DFE5ED] dark:border-white/5"
+          className="grid border-t border-border"
           style={estilo}
         >
           {fila.map((celda, j) => (
@@ -165,11 +226,36 @@ export function OtRejilla({
               className="self-center break-words px-3 py-2 text-xs font-semibold"
               style={{ color: OT_NAVY }}
             >
-              <span className="dark:text-white">{celda}</span>
+              <span className="dark:text-foreground">{celda}</span>
             </div>
           ))}
         </div>
       ))}
+    </div>
+  );
+}
+
+/**
+ * `OtRejilla` de una COLECCIÓN (actores, documentos…) con la paginación estándar y «Filas por
+ * página» (HU #13919). `clave` identifica la tabla para recordar su tamaño: `"<carpeta>.<Componente>"`.
+ * Las rejillas de una sola fila (fichas) no se paginan y siguen usando `OtRejilla`.
+ */
+export function OtRejillaPaginada({
+  clave,
+  ...props
+}: Omit<Parameters<typeof OtRejilla>[0], "ficha"> & { clave: string }) {
+  const pg = usePaginacion(clave);
+  return (
+    <div className="flex flex-col">
+      <OtRejilla {...props} filas={pg.paginar(props.filas)} />
+      <Pagination
+        page={pg.page}
+        pageSize={pg.pageSize}
+        totalCount={props.filas.length}
+        onPageChange={pg.setPage}
+        onPageSizeChange={pg.setPageSize}
+        ariaLabel={`Paginación de ${props.etiqueta.toLowerCase()}`}
+      />
     </div>
   );
 }
@@ -200,7 +286,7 @@ export function OtFichaCampos({
   return (
     <div className={OT_MARCO}>
       {tandas.map((tanda, i) => (
-        <div key={i} className={i > 0 ? "border-t border-[#DFE5ED] dark:border-white/5" : undefined}>
+        <div key={i} className={i > 0 ? "border-t border-border" : undefined}>
           <OtRejilla
             etiqueta={tandas.length > 1 ? `${etiqueta} (${i + 1} de ${tandas.length})` : etiqueta}
             columnas={tanda.map((c) => c.campo)}
@@ -209,6 +295,7 @@ export function OtFichaCampos({
             // para que los valores no se estiren y desalineen la ficha entera.
             plantilla={`repeat(${porFila}, minmax(0, 1fr))`}
             conMarco={false}
+            ficha
           />
         </div>
       ))}

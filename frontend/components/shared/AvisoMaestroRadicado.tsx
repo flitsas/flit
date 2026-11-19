@@ -1,6 +1,6 @@
 'use client';
 
-import { Landmark } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   COPY_MAESTRO_RADICADO_TITULO,
   textoMaestroRadicado,
@@ -29,7 +29,7 @@ export function AvisoMaestroRadicado({
       role="status"
       data-testid="aviso-maestro-radicado"
     >
-      <Landmark className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden="true" />
+      <Icono nombre="banco" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
       <p className="text-xs text-flit-primary dark:text-white/80">
         <span className="font-bold">{COPY_MAESTRO_RADICADO_TITULO}.</span>{' '}
         <span>{textoMaestroRadicado(radicadoEn)}</span>

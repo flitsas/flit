@@ -1,87 +1,82 @@
 "use client";
 
-// Vista inicial de una sesión de organismo de tránsito (Feature #11939 / HU #11940, #11941).
+// Inicio de una sesión de organismo de tránsito (Feature #11939; rediseño en 3 dashboards, 2026-11-17).
 //
-// Existe porque `Dashboard` —el inicio del gestor— le pregunta a `/analytics/*` y a
-// `/tramites/biometric-validations`, y las tres llamadas filtran por el tenant de quien llama. Un
-// trámite vive en el tenant de la EMPRESA CLIENTE; el usuario del OT vive en el tenant del
-// ORGANISMO. Las respuestas volvían 200 y vacías, así que el organismo veía cuatro ceros: no era un
-// conteo mal hecho, era la fuente de datos equivocada. Ese aislamiento es el mismo que ya obligó a
-// darle al OT su propia puerta en el detalle del trámite (Feature #11928), y es deseable.
+// Existe porque `Dashboard` —el inicio del gestor— le pregunta a `/analytics/*`, que filtra por el tenant de quien
+// llama. Un trámite vive en el tenant de la EMPRESA CLIENTE; el usuario del OT vive en el tenant del ORGANISMO. Las
+// respuestas volvían 200 y vacías: no era un conteo mal hecho, era la fuente de datos equivocada. Todo lo de aquí sale
+// de `/admin/ot/metrics/*`.
 //
-// El encuadre también cambia, y es la mitad del arreglo: «Matrículas / Traspasos / Completados»
-// miden la producción de una empresa, y «Validaciones Biométricas» es un paso que ejecuta el gestor
-// al radicar. Aquí se responde otra pregunta, la de la primera mirada del día: qué hay en mi cola y
-// qué se está envejeciendo. La consola de Reportes sigue respondiendo «¿cómo vamos?»; esta pantalla
-// responde «¿qué tengo que hacer ahora?».
-//
-// De ahí sale la ausencia de filtro de fechas: la cola describe el AHORA, y un rango no movería un
-// solo número. Es la misma conclusión —y por el mismo motivo— que ya documenta `OtNowTab`.
+// Tres franjas, en el orden del prototipo (`OtView`), con el diseño del UI Kit 2026:
+//  1. Carrusel + cifras de la cola. Las cifras describen el AHORA y no las mueve el rango de fechas.
+//  2. Tiempos de gestión (en DÍAS, sin meta: no hay SLA en el dominio) + cola crítica (lo que lleva más esperando).
+//  3. Aprobados, rechazados y causales de rechazo + trámites por cliente corporativo.
+// El rango de fechas gobierna solo las franjas 2 (tiempos) y 3.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Pie,
-  PieChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
-import {
-  AlertTriangle,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  ExternalLink,
-  Inbox,
-  Timer,
-} from "lucide-react";
+import Link from "next/link";
+import { Icono } from "@flit/ui/Icono";
+import { buttonClass } from "@flit/ui/Button";
+import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
+import { DataTable, type DataTableColumn } from "@flit/ui/DataTable";
+import { Pestanas } from "@flit/ui/Pestanas";
+import { BarraProgreso } from "@flit/ui/BarraProgreso";
+import { StatusBadge, type StatusBadgeTone } from "@flit/ui/StatusBadge";
 import { fetchOtProfile } from "@/lib/api/admin-ot";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { getToken } from "@/lib/api/client";
 import { ApiError } from "@/lib/api/types";
 import { decodeJwtPayload, hasPermission, isOtAdmin, isOtUser, isSuperAdmin } from "@/lib/auth/jwt";
 import {
+  fetchOtClientsByFamily,
   fetchOtDrilldown,
   fetchOtOperationalPanel,
+  fetchOtRejectionReasons,
   fetchOtReport,
   OT_DRILLDOWN_BUCKETS,
+  type OtClientFamilyRow,
+  type OtClientsByFamily,
+  type OtDrilldown,
   type OtDrilldownBucket,
+  type OtDrilldownItem,
   type OtMetricsParams,
   type OtOperationalPanel,
-  type OtReportSeriesPoint,
+  type OtRejectionReasons,
   type OtReportSummary,
 } from "@/lib/api/ot-metrics";
-import { bannerImageUrl, type ActiveBanner } from "@/lib/api/public-banners";
 import { useActiveBanners } from "@/hooks/useActiveBanners";
-import { bannerAmbientGradient, useDominantColor } from "@/hooks/useDominantColor";
 import { resolveOtTransitOfficeId } from "@/components/admin/transit-offices/ot-nav";
 import {
   DrilldownPanel,
   type DrilldownState,
 } from "@/components/admin/transit-offices/_reportes/DrilldownPanel";
-import { defaultRange, lastDaysRange } from "@/components/admin/transit-offices/_reportes/filters";
-import { formatHours } from "@/components/admin/transit-offices/_reportes/report-columns";
+import { defaultRange } from "@/components/admin/transit-offices/_reportes/filters";
+import { RangoFechas, resolverPreset } from "@/components/atom/RangoFechas";
+import { isValidRange, type DateRange } from "@/components/atom/modules/_reportes/range";
+import { CarruselInicio, type SlideBienvenida } from "@/components/inicio/CarruselInicio";
+import { PanelInicio } from "@/components/inicio/PanelInicio";
+import { GraficoArea } from "@/components/inicio/GraficoArea";
+import { GraficoDona } from "@/components/inicio/GraficoDona";
+import { FILTROS_REJILLA_CLS } from "@/components/inicio/filtros-inicio";
 
-/** Hero del dashboard OT (A18 es N/A: no se unifica con «Hola, {nombre}»). */
+/** Título del slide fijo cuando aún no se conoce el nombre del organismo (A18 es N/A: no es «Hola, {nombre}»). */
 export const OT_DASHBOARD_HERO_TITLE = "Tu cola de trabajo";
-/** KPIs de métrica OT (A19 es N/A: no se clonan ni se unifican con COPY.E03). */
-export const OT_KPI_ESPERAN_MI_DECISION = "Esperan mi decisión";
-export const OT_KPI_ENTREGADOS_HOY = "Entregados hoy";
+/** Antetítulo del slide fijo, del prototipo. */
+export const OT_DASHBOARD_HERO_ANTETITULO = "Control de la operación";
+/** KPIs de la cola (A19 es N/A: no se clonan ni se unifican con COPY.E03). */
+export const OT_KPI_PENDIENTES_HOY = "Pendientes de hoy";
+export const OT_KPI_PRIORITARIOS = "Trámites prioritarios";
+export const OT_KPI_MAS_DE_7_DIAS = "Sin gestión más de 7 días";
+export const OT_KPI_POR_ASIGNAR_PLACA = "Por asignar / preasignar placa";
 
-/**
- * Ventana de la mediana de decisión. Fija y declarada en la propia tarjeta: el usuario no la eligió,
- * así que no puede deducirla. Coincide con el rango que se manda al endpoint (`defaultRange`).
- */
+/** Ventana de la mediana de decisión del mensaje de bienvenida. Coincide con el rango que se manda al panel. */
 const VENTANA_MEDIANA_DIAS = 30;
 
-/** Ventana de la franja de actividad. Corta a propósito: aquí se mira el ritmo, no la historia. */
-const ACTIVIDAD_DIAS = 14;
+/** Filas de la cola crítica. El resto está en la bandeja («Ver todos»). */
+const COLA_CRITICA_FILAS = 5;
+
+/** Causales que se muestran: las que más pesan. El catálogo completo vive en Reportes. */
+const CAUSALES_TOP = 3;
 
 type Estado = "cargando" | "listo" | "error" | "sin-permiso";
 
@@ -93,8 +88,26 @@ function sinPermisoDeCola(): boolean {
   return !hasPermission(claims, "ot.reportes.manage");
 }
 
-/** Abre el detalle de un bloque del panel. `null` en los indicadores que no son navegables. */
+/** Abre el detalle de un bloque de la cola. */
 type AbrirBloque = (bucket: OtDrilldownBucket, label: string) => void;
+
+/** Clientes del adelanto «Trámites por Cliente Corporativo». */
+export const TOP_CLIENTES = 5;
+
+/** Familias del filtro de aprobados y rechazados. `""` es «Todos». */
+type Familia = "" | "MATRICULAS" | "TRASPASO" | "OTROS";
+
+const FAMILIAS: { id: Familia | "todos"; label: string }[] = [
+  { id: "todos", label: "Todos" },
+  { id: "MATRICULAS", label: "Matrícula inicial" },
+  { id: "TRASPASO", label: "Traspasos" },
+  { id: "OTROS", label: "Otros trámites" },
+];
+
+/** Rango de arranque de las franjas 2 y 3: los últimos 30 días, resueltos en día LOCAL como el selector. */
+function rangoInicial(): DateRange {
+  return resolverPreset("ultimos_30", new Date()) ?? defaultRange();
+}
 
 export function OtDashboard() {
   const [panel, setPanel] = useState<OtOperationalPanel | null>(null);
@@ -104,6 +117,7 @@ export function OtDashboard() {
   const [intento, setIntento] = useState(0);
   const [drilldown, setDrilldown] = useState<DrilldownState | null>(null);
   const [organismo, setOrganismo] = useState<string | null>(null);
+  const [rango, setRango] = useState<DateRange>(rangoInicial);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -122,11 +136,13 @@ export function OtDashboard() {
           const perfil = await fetchOtProfile(controller.signal);
           return perfil.transitOfficeId;
         });
-        // El rango solo gobierna la mediana; la cola y la antigüedad describen este momento.
+        if (controller.signal.aborted) return;
+        // La cola describe este momento: su rango es fijo (solo gobierna la mediana del mensaje) y el selector de
+        // fechas no lo mueve. Se fija antes de pedir el panel para que las franjas 2 y 3 no dependan de él.
         const consulta: OtMetricsParams = { ...defaultRange(), transitOfficeId };
+        setParams(consulta);
         const datos = await fetchOtOperationalPanel(consulta);
         if (controller.signal.aborted) return;
-        setParams(consulta);
         setPanel(datos);
         setEstado("listo");
       } catch (err) {
@@ -136,9 +152,7 @@ export function OtDashboard() {
           return;
         }
         setMensajeError(
-          err instanceof Error && err.message
-            ? err.message
-            : "No se pudo cargar el estado de la cola.",
+          err instanceof Error && err.message ? err.message : "No se pudo cargar el estado de la cola.",
         );
         setEstado("error");
       }
@@ -148,9 +162,7 @@ export function OtDashboard() {
     return () => controller.abort();
   }, [intento]);
 
-  // Nombre del organismo para la bienvenida. Va por su cuenta y falla en silencio: si el catálogo no
-  // responde, la cabecera se queda sin nombre pero la cola —que es a lo que se viene— se sigue
-  // viendo. Mismo origen que usa la cabecera del hub OT.
+  // Nombre del organismo para el carrusel. Falla en silencio: sin catálogo el slide se queda con el título genérico.
   useEffect(() => {
     const transitOfficeId = params?.transitOfficeId;
     if (!transitOfficeId) return;
@@ -169,9 +181,13 @@ export function OtDashboard() {
 
   // Banners Activos globales (HU #12242, AC2): mismo set y mismo hook que ve el gestor.
   const activeBanners = useActiveBanners();
+  const bienvenida = useMemo(
+    () => mensajesDelOrganismo(organismo, estado === "listo" ? panel : null),
+    [organismo, estado, panel],
+  );
 
-  // El detalle se pide con los MISMOS parámetros del panel, para que la lista nunca contradiga a la
-  // tarjeta que la abrió: es el backend quien recalcula el bloque con idénticos predicados.
+  // El detalle se pide con los MISMOS parámetros del panel, para que la lista nunca contradiga a la tarjeta que la
+  // abrió: es el backend quien recalcula el bloque con idénticos predicados.
   const abrirBloque = useCallback<AbrirBloque>(
     (bucket, label) => {
       if (!params) return;
@@ -191,90 +207,84 @@ export function OtDashboard() {
     [params],
   );
 
+  const transitOfficeId = params?.transitOfficeId;
+  const conPermiso = estado !== "sin-permiso";
+  const rangoValido = isValidRange(rango);
+  const periodo = useMemo<OtMetricsParams | null>(
+    () => (transitOfficeId && rangoValido ? { from: rango.from, to: rango.to, transitOfficeId } : null),
+    [transitOfficeId, rangoValido, rango.from, rango.to],
+  );
+
   return (
-    <div
-      className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-flit-primary dark:text-white"
-      data-testid="ot-inicio"
-    >
-      {/* Banner + KPIs: misma grilla que el dashboard del gestor (`Dashboard.tsx`) — banner en
-          2/3, KPIs en 2×2 en el 1/3 restante — para que ambos contenedores de banner midan lo
-          mismo. Durante error no hay KPIs que mostrar (AC del panel operativo); el banner ocupa
-          entonces el ancho completo en vez de dejar la columna vacía. */}
-      <div className="grid grid-cols-1 gap-3 shrink-0 md:grid-cols-3">
-        <Bienvenida
-          organismo={organismo}
-          panel={estado === "listo" ? panel : null}
+    <div className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-foreground max-sm:px-4" data-testid="ot-inicio">
+      {/* Franja 1: carrusel a la izquierda; filtros y cifras de la cola a la derecha. */}
+      <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
+        <CarruselInicio
+          bienvenida={bienvenida}
           banners={activeBanners}
-          className={estado === "error" || estado === "sin-permiso" ? "md:col-span-3" : "md:col-span-2"}
+          aria-label="Novedades del organismo"
+          data-testid="ot-inicio-carrusel"
         />
-        {estado !== "error" && estado !== "sin-permiso" && (
-          <PanelOperativoKpis panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
-        )}
+        <div className="flex min-w-0 flex-col gap-3">
+          {conPermiso && (
+            <div className={FILTROS_REJILLA_CLS}>
+              <RangoFechas value={rango} onChange={setRango} idPrefix="ot-inicio-rango" />
+            </div>
+          )}
+          {estado === "sin-permiso" ? (
+            <p role="status" className="rounded-[9px] border border-[color:var(--di-border)] bg-card px-5 py-4 text-sm text-muted-foreground">
+              {MENSAJE_SIN_PERMISO_COLA}
+            </p>
+          ) : estado === "error" ? (
+            <ErrorPanel message={mensajeError} onRetry={reintentar} />
+          ) : (
+            <KpisCola panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
+          )}
+        </div>
       </div>
 
-      {estado === "sin-permiso" ? (
-        <p role="status" className="rounded-2xl border border-[#DFE5ED] bg-white px-5 py-4 text-sm text-[#6B7280] dark:border-white/15 dark:bg-white/5 dark:text-white/70">
-          {MENSAJE_SIN_PERMISO_COLA}
-        </p>
-      ) : estado === "error" ? (
-        <ErrorPanel message={mensajeError} onRetry={reintentar} />
-      ) : (
-        <PanelOperativoResto panel={estado === "listo" ? panel : null} onAbrir={abrirBloque} />
-      )}
+      {conPermiso && transitOfficeId && (
+        <>
+          {!rangoValido && (
+            <p role="status" className="text-sm text-muted-foreground">
+              Elige un rango de fechas completo para ver los tiempos, los aprobados y rechazados, y los clientes.
+            </p>
+          )}
 
-      {estado !== "sin-permiso" && <PeriodoReciente transitOfficeId={params?.transitOfficeId} />}
+          {/* Franja 2: tiempos de gestión del periodo + lo que lleva más esperando ahora. */}
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <TiemposGestion periodo={periodo} />
+            <ColaCritica params={params} transitOfficeId={transitOfficeId} />
+          </div>
+
+          {/* Franja 3: en qué terminó lo recibido + quién lo radicó. */}
+          <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+            <Resoluciones periodo={periodo} />
+            <ClientesCorporativos periodo={periodo} />
+          </div>
+        </>
+      )}
 
       <DrilldownPanel
         state={drilldown}
-        transitOfficeId={params?.transitOfficeId ?? ""}
+        transitOfficeId={transitOfficeId ?? ""}
         onClose={() => setDrilldown(null)}
       />
     </div>
   );
 }
 
-/** Cada cuánto rota el banner. Mismo ritmo que el del gestor, para que la plataforma se sienta una. */
-const ROTACION_MS = 6000;
-
-/** Fondo del carrusel, IGUAL en todos los slides (mensaje fijo y banner) — ver `Bienvenida`. */
-const BRAND_GRADIENT = "linear-gradient(120deg,var(--color-flit-tech) 0%,var(--color-flit-brand) 100%)";
-
-type MensajeSlide = {
-  kind: "mensaje";
-  id: string;
-  title: string;
-  body: string;
-};
-
-type BannerSlide = {
-  kind: "banner";
-  id: string;
-  name: string;
-  imageUrl: string;
-  linkUrl: string | null;
-};
-
-type OrganismoSlide = MensajeSlide | BannerSlide;
+// ── Carrusel ──────────────────────────────────────────────────────────────────
 
 /**
- * Slides del banner del organismo.
- *
- * El carrusel del gestor no servía tal cual: anunciaba «validación de identidad con IA ya integrada
- * en TUS trámites» a quien no radica trámites ni valida biometrías. Lo que se conserva es el
- * mecanismo —el sitio donde se pasan mensajes—; lo que cambia es que aquí el único mensaje propio
- * habla de la cola. Detrás van los banners Activos del Administrador (HU #12242, AC2): el mismo
- * set global que ve el gestor. Sin banners activos, el slide fijo queda solo (AC3).
+ * Slide fijo del carrusel del organismo. El del gestor anunciaba «validación de identidad con IA en TUS trámites» a
+ * quien no radica ni valida biometrías; aquí el único mensaje propio habla de la cola. Los banners Activos van detrás
+ * (los pone `CarruselInicio`).
  */
-function mensajesDelOrganismo(
-  organismo: string | null,
-  panel: OtOperationalPanel | null,
-  banners: ActiveBanner[],
-): OrganismoSlide[] {
+function mensajesDelOrganismo(organismo: string | null, panel: OtOperationalPanel | null): SlideBienvenida[] {
   const porRevisar = panel?.cola.porRevisar ?? null;
-  // Opción A (dato ya cargado en el mismo panel operativo, sin llamada nueva): la cola no solo
-  // dice cuántos esperan, sino cuántos ya llevan estancados y cuál es la mediana de decisión hoy.
   const estancados = panel?.antiguedad.masDe7Dias ?? 0;
-  const mediana = panel?.movimiento.tiempoMedianoDecisionHoras ?? null;
+  const medianaHoras = panel?.movimiento.tiempoMedianoDecisionHoras ?? null;
 
   const cola =
     porRevisar === null
@@ -287,706 +297,65 @@ function mensajesDelOrganismo(
             : "") +
           ".";
 
-  const medianaTexto =
-    porRevisar !== null && mediana !== null
-      ? ` Tu mediana de decisión hoy es de ${formatHours(mediana)}.`
+  const mediana =
+    porRevisar !== null && medianaHoras !== null
+      ? ` Tu mediana de decisión de los últimos ${VENTANA_MEDIANA_DIAS} días es de ${formatDias(medianaHoras / 24)}.`
       : "";
 
-  const fijo: MensajeSlide = {
-    kind: "mensaje",
-    id: "bienvenida",
-    title: OT_DASHBOARD_HERO_TITLE,
-    body: `${cola}${medianaTexto} Los datos son del día calendario de Bogotá.`,
-  };
-
-  const bannerSlides: BannerSlide[] = banners.map((banner) => ({
-    kind: "banner",
-    id: banner.id,
-    name: banner.name,
-    imageUrl: bannerImageUrl(banner.id),
-    linkUrl: banner.linkUrl,
-  }));
-
-  return [fijo, ...bannerSlides];
-}
-
-/**
- * Banner del organismo: el nombre siempre visible y los slides rotando encima.
- *
- * El nombre NO entra en la rotación a propósito: identifica el organismo y desaparecería dos de cada
- * tres veces.
- */
-function Bienvenida({
-  organismo,
-  panel,
-  banners,
-  className = "",
-}: {
-  organismo: string | null;
-  panel: OtOperationalPanel | null;
-  banners: ActiveBanner[];
-  className?: string;
-}) {
-  // Si una imagen de banner falla al cargar (`onError`), ese slide puntual se retira sin romper
-  // el resto del carrusel (AC3).
-  const [failedBannerIds, setFailedBannerIds] = useState<Set<string>>(new Set());
-  const bannersVisibles = useMemo(
-    () => banners.filter((banner) => !failedBannerIds.has(banner.id)),
-    [banners, failedBannerIds],
-  );
-  const mensajes = useMemo(
-    () => mensajesDelOrganismo(organismo, panel, bannersVisibles),
-    [organismo, panel, bannersVisibles],
-  );
-  const [actual, setActual] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setActual((i) => (i + 1) % mensajes.length), ROTACION_MS);
-    return () => clearInterval(id);
-  }, [mensajes.length]);
-
-  // Defensivo: si el slide actual desaparece (banner con imagen rota), el índice se reacomoda
-  // en el siguiente render; mientras tanto no debe intentar leer un slide inexistente.
-  const mensaje = mensajes[actual] ?? mensajes[0];
-  const bannerColor = useDominantColor(mensaje.kind === "banner" ? mensaje.imageUrl : undefined);
-
-  return (
-    <header
-      className={`relative flex flex-col justify-between overflow-hidden rounded-2xl text-white ${className}`}
-      style={{ minHeight: "220px" }}
-    >
-      {/* Capa de fondo: gradiente de marca fijo en el slide de la cola; en un banner, el color
-          PROMEDIO de esa misma imagen (así combina con cualquier banner, no solo con el
-          azul/turquesa de marca) — es el respaldo que se ve cuando `object-contain` deja margen
-          (abajo de `md`, ver siguiente bloque); en `md+` es invisible, cubierto por el banner a
-          pantalla completa. */}
-      <div
-        className="absolute inset-0"
-        style={{ background: mensaje.kind === "mensaje" ? BRAND_GRADIENT : bannerAmbientGradient(bannerColor) }}
-      />
-      {mensaje.kind === "banner" && (
-        // Ajuste adaptable, mismo criterio que Spotify/YouTube/Amazon: con espacio de sobra
-        // (`md:` en adelante, header a 2/3 de ancho junto a los KPIs) se ajusta completo al
-        // contenedor (object-cover, sesgado a la derecha para no cortar el texto); en pantallas
-        // angostas (abajo de `md`, el header pasa a ancho completo y el recorte horizontal sería
-        // mucho más agresivo) se ve la imagen COMPLETA sin recortar (object-contain).
-        <img
-          src={mensaje.imageUrl}
-          alt={mensaje.name}
-          onError={() => setFailedBannerIds((prev) => (prev.has(mensaje.id) ? prev : new Set(prev).add(mensaje.id)))}
-          className="absolute inset-0 h-full w-full object-contain object-center md:object-cover md:object-[80%_center]"
-        />
-      )}
-      {/* Velo para que el nombre del organismo y los controles mantengan contraste sobre
-          cualquier imagen de banner; sobre el gradiente es imperceptible. */}
-      <div
-        className="absolute inset-0"
-        style={{ background: "linear-gradient(180deg, rgba(0,0,0,0.25) 0%, rgba(0,0,0,0) 45%, rgba(0,0,0,0.35) 100%)" }}
-      />
-      {mensaje.kind === "mensaje" && (
-        <div className="absolute -right-10 -top-10 h-36 w-36 rounded-full bg-white opacity-15" />
-      )}
-
-      {/* Sin título visible del banner (solo el banner): el enlace cubre toda la imagen — al
-          acercarse, se opaca un poco y aparece el ícono de enlace; clic en cualquier punto abre
-          el enlace. El nombre del organismo (fuera de la rotación) sigue viéndose igual. */}
-      {mensaje.kind === "banner" && mensaje.linkUrl && (
-        <a
-          href={mensaje.linkUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label={mensaje.name}
-          className="group absolute inset-0"
-        >
-          <span className="absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/25" />
-          <span className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-            <span className="flex h-10 w-10 items-center justify-center rounded-full bg-white/90 text-flit-primary shadow-lg">
-              <ExternalLink className="h-5 w-5" aria-hidden="true" />
-            </span>
-          </span>
-        </a>
-      )}
-
-      {/* pointer-events-none: esta caja ocupa TODO el alto del header (flex-1) aunque su contenido
-          solo ocupe una franja arriba y otra abajo — sin esto, el hueco vacío del medio tapaba el
-          enlace del banner de abajo y ni el hover ni el clic le llegaban nunca. Se restaura
-          pointer-events-auto solo en la franja de controles (puntos/flechas), que sí son clicables. */}
-      <div className="relative flex flex-1 flex-col justify-between px-6 py-5 pointer-events-none">
-        <div className="max-w-[85%]">
-          <p className="text-[11px] font-semibold uppercase tracking-wide opacity-80">
-            {organismo ?? "Organismo de tránsito"}
-          </p>
-          {mensaje.kind === "mensaje" ? (
-            <>
-              <h1 className="mt-1 text-2xl font-bold leading-tight md:text-3xl">{mensaje.title}</h1>
-              <p className="mt-1.5 text-sm leading-snug opacity-90">{mensaje.body}</p>
-            </>
-          ) : (
-            <span className="sr-only">{mensaje.name}</span>
-          )}
-        </div>
-
-        <div className="mt-4 flex items-center justify-between pointer-events-auto">
-          <div className="flex gap-1">
-            {mensajes.map((m, i) => (
-              <button
-                key={m.id}
-                type="button"
-                onClick={() => setActual(i)}
-                aria-label={`Mensaje ${i + 1} de ${mensajes.length}`}
-                aria-current={i === actual}
-                className="h-1.5 rounded-full transition-all"
-                style={{
-                  width: i === actual ? 16 : 5,
-                  background: i === actual ? "#ffffff" : "rgba(255,255,255,0.5)",
-                }}
-              />
-            ))}
-          </div>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              onClick={() => setActual((i) => (i - 1 + mensajes.length) % mensajes.length)}
-              disabled={mensajes.length <= 1}
-              aria-label="Mensaje anterior"
-              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
-            >
-              <ChevronLeft className="h-3 w-3" aria-hidden="true" />
-            </button>
-            <button
-              type="button"
-              onClick={() => setActual((i) => (i + 1) % mensajes.length)}
-              disabled={mensajes.length <= 1}
-              aria-label="Mensaje siguiente"
-              className="grid h-6 w-6 place-items-center rounded-full bg-white/15 hover:bg-white/25 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-white/15"
-            >
-              <ChevronRight className="h-3 w-3" aria-hidden="true" />
-            </button>
-          </div>
-        </div>
-      </div>
-    </header>
-  );
-}
-
-/**
- * Carga de un recurso del organismo, con los tres estados que esta pantalla distingue.
- *
- * `cargar` tiene que ser una función estable (de módulo): así entra en las dependencias del efecto
- * sin necesidad de refs, y cada tarjeta conserva su propio ciclo de vida.
- */
-function useRecursoOt<T>(
-  transitOfficeId: string | undefined,
-  cargar: (transitOfficeId: string, signal: AbortSignal) => Promise<T>,
-) {
-  const [dato, setDato] = useState<T | null>(null);
-  const [estado, setEstado] = useState<Estado>("cargando");
-
-  useEffect(() => {
-    if (!transitOfficeId) return;
-    const controller = new AbortController();
-    // No se marca «cargando» aquí: el estado ya nace así, y hacerlo dentro del efecto es
-    // exactamente lo que prohíbe `react-hooks/set-state-in-effect`. El id del organismo se resuelve
-    // una vez por sesión, así que no hay una segunda carga que anunciar.
-    cargar(transitOfficeId, controller.signal)
-      .then((resultado) => {
-        if (controller.signal.aborted) return;
-        setDato(resultado);
-        setEstado("listo");
-      })
-      .catch((err: unknown) => {
-        if (controller.signal.aborted || (err as Error)?.name === "AbortError") return;
-        setEstado("error");
-      });
-    return () => controller.abort();
-  }, [transitOfficeId, cargar]);
-
-  return { dato, estado };
-}
-
-/** El informe pagina filas que aquí no se usan: solo interesa `resumen`, así que se pide la mínima. */
-function cargarResumenDelPeriodo(transitOfficeId: string, signal: AbortSignal) {
-  return fetchOtReport(
-    { ...lastDaysRange(ACTIVIDAD_DIAS), transitOfficeId, page: 1, pageSize: 1 },
-    signal,
-  ).then((informe) => informe.resumen);
-}
-
-/**
- * Lo reciente: el ritmo del periodo y en qué quedó lo que entró.
- *
- * Las dos tarjetas salen de UNA sola llamada —el informe devuelve la serie y el desglose juntos—,
- * y van aparte de la cola: si el informe se cae, la cola, que es a lo que se entra a esta pantalla,
- * se sigue viendo.
- */
-function PeriodoReciente({ transitOfficeId }: { transitOfficeId: string | undefined }) {
-  const { dato: resumen, estado } = useRecursoOt<OtReportSummary>(
-    transitOfficeId,
-    cargarResumenDelPeriodo,
-  );
-
-  return (
-    <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-      <Actividad estado={estado} serie={resumen?.serie ?? null} />
-      <Composicion estado={estado} resumen={resumen} />
-    </div>
-  );
-}
-
-/** Ritmo del periodo: qué entró y qué se decidió cada día. */
-function Actividad({ estado, serie }: { estado: Estado; serie: OtReportSeriesPoint[] | null }) {
-  const hayMovimiento = (serie ?? []).some(
-    (p) => p.radicados > 0 || p.aprobados > 0 || p.rechazados > 0,
-  );
-
-  return (
-    <Tarjeta titulo={`Actividad de los últimos ${ACTIVIDAD_DIAS} días`}>
-      {estado === "cargando" && <Esqueleto filas={1} />}
-      {estado === "error" && (
-        <p role="alert" className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
-          No se pudo cargar la actividad reciente.
-        </p>
-      )}
-      {estado === "listo" && !hayMovimiento && (
-        // Un gráfico en blanco no distingue «no pasó nada» de «no cargó». Se dice con palabras.
-        <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
-          No hubo movimiento en los últimos {ACTIVIDAD_DIAS} días.
-        </p>
-      )}
-      {estado === "listo" && hayMovimiento && (
-        <div className="h-56 w-full" data-testid="ot-inicio-actividad">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={serie ?? []} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#EEF1F5" vertical={false} />
-              <XAxis dataKey="label" tick={{ fontSize: 10 }} tickLine={false} axisLine={false} />
-              <YAxis tick={{ fontSize: 10 }} tickLine={false} axisLine={false} allowDecimals={false} />
-              <Tooltip cursor={{ fill: "color-mix(in srgb, var(--color-flit-brand) 6%, transparent)" }} />
-              <Bar dataKey="radicados" name="Radicados" fill="var(--color-flit-brand)" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="aprobados" name="Aprobados" fill="#8CC63F" radius={[3, 3, 0, 0]} />
-              <Bar dataKey="rechazados" name="Rechazados" fill="#FF4E00" radius={[3, 3, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-    </Tarjeta>
-  );
-}
-
-/**
- * Agrupación de lo recibido en el periodo, en las tres palabras con las que el organismo habla de un
- * trámite: lo aprobó, lo rechazó, o todavía no lo decidió.
- *
- * El backend expone nueve estados propios del OT y aquí se doblan a cinco grupos. El detalle de qué
- * entra en cada uno va en el tooltip de la fila, porque la agrupación tiene juicio dentro y quien la
- * lea tiene derecho a verlo:
- *
- * - «Esperando placa» (ADR-0059) es un trámite radicado sin placa que el organismo aún no revisó: la
- *   placa se asigna ANTES de la revisión, así que cuenta como sin decisión.
- * - «En subsanación» es un rechazo con la subsanación abierta: el verdicto fue en contra aunque el
- *   trámite vaya a volver.
- * - «Esperando al cliente» es el grupo con menos filo: cae ahí tanto un trámite pausado a la espera
- *   de la empresa como uno ya con placa asignada. Se cuenta como sin decisión y el tooltip lo dice.
- * - «Revocados» va aparte: se aprobó y el organismo lo deshizo. Sumarlo a aprobados mentiría y
- *   sumarlo a rechazados escondería que hubo una aprobación de por medio.
- *
- * El desglose fino de los nueve estados vive en la consola de Reportes; aquí se busca la lectura de
- * un vistazo.
- */
-function composicionDelPeriodo(resumen: OtReportSummary) {
   return [
     {
-      id: "aprobados",
-      name: "Aprobados",
-      color: "#8CC63F",
-      value: resumen.aprobados,
-      hint: "Aprobados por el organismo.",
+      antetitulo: OT_DASHBOARD_HERO_ANTETITULO,
+      titulo: organismo ?? OT_DASHBOARD_HERO_TITLE,
+      cuerpo: `${cola}${mediana} Los datos son del día calendario de Bogotá.`,
     },
-    {
-      id: "rechazados",
-      name: "Rechazados",
-      color: "#FF4E00",
-      value: resumen.rechazados + resumen.enSubsanacion,
-      hint: "Rechazados, con o sin subsanación abierta.",
-    },
-    {
-      id: "sin-decision",
-      name: "Sin decisión",
-      color: "var(--color-flit-brand)",
-      value:
-        resumen.enRevision + resumen.esperandoPlaca + resumen.esperandoCliente + resumen.otros,
-      hint: "En revisión, esperando placa y los que esperan algo de la empresa (SOAT, impuestos o trámite pausado).",
-    },
-    {
-      id: "revocados",
-      name: "Revocados",
-      color: "#8B5CF6",
-      value: resumen.revocados,
-      hint: "Aprobados que el organismo revocó después.",
-    },
-    {
-      id: "anulados",
-      name: "Anulados",
-      color: "#94A3B8",
-      value: resumen.anulados,
-      hint: "La empresa los dio de baja después de radicarlos.",
-    },
-  ].filter((grupo) => grupo.value > 0);
+  ];
 }
+
+// ── Franja 1: cifras de la cola ──────────────────────────────────────────────
 
 /**
- * En qué quedó lo que entró en el periodo.
- *
- * El universo son los trámites RECIBIDOS en la ventana, no los decididos: es lo que hace que los
- * cuatro grupos cierren contra el total y que el porcentaje del centro signifique algo.
+ * Las 4 cifras de la cola, en 2×2. Cada una abre su lista (`DrilldownPanel`); una en cero no se ofrece como enlace.
+ * No las mueve el rango: describen la cola de este momento.
  */
-function Composicion({ estado, resumen }: { estado: Estado; resumen: OtReportSummary | null }) {
-  const grupos = resumen ? composicionDelPeriodo(resumen) : [];
-  const total = grupos.reduce((suma, g) => suma + g.value, 0);
-  const aprobados = grupos.find((g) => g.id === "aprobados")?.value ?? 0;
-  const pctAprobados = total === 0 ? 0 : (aprobados / total) * 100;
-
-  return (
-    <Tarjeta titulo={`En qué quedó lo recibido en ${ACTIVIDAD_DIAS} días`}>
-      {estado === "cargando" && <Esqueleto filas={1} />}
-      {estado === "error" && (
-        <p role="alert" className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
-          No se pudo cargar la composición del periodo.
-        </p>
-      )}
-      {estado === "listo" && total === 0 && (
-        <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
-          No se recibió ningún trámite en los últimos {ACTIVIDAD_DIAS} días.
-        </p>
-      )}
-      {estado === "listo" && total > 0 && (
-        <div
-          className="flex flex-col items-center gap-4 sm:flex-row"
-          data-testid="ot-inicio-composicion"
-        >
-          <div className="relative h-40 w-40 shrink-0">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie
-                  data={grupos}
-                  dataKey="value"
-                  nameKey="name"
-                  innerRadius="62%"
-                  outerRadius="92%"
-                  paddingAngle={1}
-                  stroke="none"
-                  isAnimationActive={false}
-                >
-                  {grupos.map((g) => (
-                    <Cell key={g.id} fill={g.color} />
-                  ))}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-            {/* La cifra del centro es la que resume la tarjeta; va fuera del SVG para poder
-                componerla con dos tamaños sin pelear con el posicionamiento de recharts. */}
-            <div className="pointer-events-none absolute inset-0 grid place-items-center text-center">
-              <div>
-                <p className="text-xl font-bold tabular-nums">{formatPct(pctAprobados)}</p>
-                <p className="text-[9px] font-semibold uppercase tracking-wide text-[#9AA5B4]">
-                  Aprobados
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <ul className="flex w-full min-w-0 flex-1 flex-col gap-1.5">
-            {grupos.map((g) => (
-              <li
-                key={g.id}
-                title={g.hint}
-                className="flex items-center justify-between gap-3 text-xs"
-              >
-                <span className="flex min-w-0 items-center gap-2">
-                  <span
-                    className="h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ background: g.color }}
-                    aria-hidden="true"
-                  />
-                  <span className="truncate">{g.name}</span>
-                </span>
-                <span className="shrink-0 tabular-nums">
-                  <b className="font-semibold">{g.value}</b>{" "}
-                  <span className="text-[#9AA5B4] dark:text-white/40">
-                    ({formatPct((g.value / total) * 100)})
-                  </span>
-                </span>
-              </li>
-            ))}
-            <li className="mt-1 border-t border-[#EEF1F5] pt-1.5 text-[11px] text-[#9AA5B4] dark:border-white/10 dark:text-white/40">
-              {total} recibidos en total
-            </li>
-          </ul>
-        </div>
-      )}
-    </Tarjeta>
-  );
-}
-
-/** Un decimal, como en el resto de porcentajes del producto. */
-function formatPct(valor: number): string {
-  return `${valor.toFixed(1)} %`;
-}
-
-/**
- * Un fallo NO se pinta como ceros. Ese es exactamente el defecto que tenía la pantalla anterior:
- * una cola con problemas se leía como una cola sana.
- */
-function ErrorPanel({ message, onRetry }: { message: string | null; onRetry: () => void }) {
-  return (
-    <div
-      role="alert"
-      className="flex flex-col items-start gap-3 rounded-2xl border border-[#FF4E00]/40 bg-[#FF4E00]/[0.07] px-5 py-4"
-    >
-      <p className="flex items-center gap-2 text-sm font-semibold text-flit-primary dark:text-white">
-        <AlertTriangle className="h-4 w-4 shrink-0 text-[#FF4E00]" aria-hidden="true" />
-        No se pudo cargar el estado de la cola
-      </p>
-      <p className="text-xs text-[#6B7280] dark:text-white/60">
-        {message ?? "Intenta de nuevo en un momento."}
-      </p>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="rounded-lg border border-[#DFE5ED] px-3 py-1.5 text-xs font-semibold transition hover:border-flit-brand dark:border-white/15"
-      >
-        Reintentar
-      </button>
-    </div>
-  );
-}
-
-/**
- * Cifras derivadas del panel operativo, compartidas por {@link PanelOperativoKpis} (al lado del
- * banner) y {@link PanelOperativoResto} (desglose debajo) — un solo lugar que decide qué significa
- * "cargando" o "sin pendientes" para que las dos mitades del panel jamás se contradigan.
- */
-function useDerivadosPanelOperativo(panel: OtOperationalPanel | null) {
+function KpisCola({ panel, onAbrir }: { panel: OtOperationalPanel | null; onAbrir: AbrirBloque }) {
   const cargando = panel === null;
-  const movimiento = panel?.movimiento;
-  const cola = panel?.cola;
-  const antiguedad = panel?.antiguedad;
-  const pendientes = movimiento?.pendientesTotal ?? 0;
-  const sinPendientes = !cargando && pendientes === 0;
-  const sinMediana = !cargando && (movimiento?.tiempoMedianoDecisionHoras ?? null) === null;
-  return { cargando, movimiento, cola, antiguedad, pendientes, sinPendientes, sinMediana };
-}
-
-/**
- * Los 4 indicadores del panel operativo, en 2×2 — mismo patrón que las 4 tarjetas KPI del
- * dashboard del gestor al lado de su banner (`Dashboard.tsx`), para que ambos contenedores de
- * banner midan exactamente lo mismo (misma grilla `md:grid-cols-3`, mismo `col-span-1` de al lado).
- */
-function PanelOperativoKpis({
-  panel,
-  onAbrir,
-}: {
-  panel: OtOperationalPanel | null;
-  onAbrir: AbrirBloque;
-}) {
-  const { cargando, movimiento, cola, sinMediana } = useDerivadosPanelOperativo(panel);
-  const pendientes = movimiento?.pendientesTotal ?? 0;
-
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid flex-1 grid-cols-2 gap-3" data-testid="ot-inicio-kpis">
       <Kpi
-        label={OT_KPI_ESPERAN_MI_DECISION}
-        value={cola?.porRevisar}
+        label={OT_KPI_PENDIENTES_HOY}
+        value={panel?.movimiento.entregadosHoy}
         cargando={cargando}
-        color="var(--color-flit-brand)"
-        icon={Inbox}
-        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, OT_KPI_ESPERAN_MI_DECISION)}
+        ilustracion="tramites"
+        hint="Radicados ingresados hoy"
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, OT_KPI_PENDIENTES_HOY)}
       />
       <Kpi
-        label="Pendientes en total"
-        value={pendientes}
+        label={OT_KPI_PRIORITARIOS}
+        value={panel?.cola.prioritarios}
         cargando={cargando}
-        color="#F9AC00"
-        icon={Clock}
-        hint="Incluye lo que espera a un tercero"
-        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.pendientes, "Pendientes en total")}
+        ilustracion="pendientes"
+        hint="Atención preferencial"
+        pendiente
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.prioritarios, OT_KPI_PRIORITARIOS)}
       />
       <Kpi
-        label={OT_KPI_ENTREGADOS_HOY}
-        value={movimiento?.entregadosHoy}
+        label={OT_KPI_MAS_DE_7_DIAS}
+        value={panel?.antiguedad.masDe7Dias}
         cargando={cargando}
-        color="#8CC63F"
-        icon={CheckCircle2}
-        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entregadosHoy, OT_KPI_ENTREGADOS_HOY)}
+        ilustracion="vencidos"
+        hint="Llevan más de 7 días en el organismo"
+        pendiente
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.masDe7Dias, OT_KPI_MAS_DE_7_DIAS)}
       />
       <Kpi
-        label="Tiempo mediano de decisión"
-        // Sin decisiones en la ventana no hay mediana que calcular. Antes esto pintaba un «—» del
-        // tamaño de un titular y en color de acento: se leía como una barra de algún color, no
-        // como una cifra ausente. Ahora se dice con palabras por qué está vacío.
-        value={
-          cargando
-            ? undefined
-            : sinMediana
-              ? "Sin decisiones aún"
-              : // Se formatea en vez de interpolar el número crudo: una mediana de dos minutos
-                // salía como «0.03 h», con punto decimal inglés y en una unidad donde el dato no
-                // significa nada.
-                formatHours(movimiento?.tiempoMedianoDecisionHoras)
-        }
+        label={OT_KPI_POR_ASIGNAR_PLACA}
+        value={panel?.cola.esperandoAsignarPlaca}
         cargando={cargando}
-        color="var(--color-flit-tech)"
-        sinDato={sinMediana}
-        icon={Timer}
-        hint={
-          sinMediana
-            ? `Ninguna decisión en los últimos ${VENTANA_MEDIANA_DIAS} días`
-            : `Últimos ${VENTANA_MEDIANA_DIAS} días`
-        }
-        // Una mediana no es un conjunto de trámites: no hay lista que abrir detrás.
+        ilustracion="preasignacion"
+        hint="Matrículas iniciales"
+        onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.esperandoPlaca, OT_KPI_POR_ASIGNAR_PLACA)}
       />
     </div>
-  );
-}
-
-/** Desglose de la cola y antigüedad de lo pendiente — el resto del panel operativo, debajo del banner. */
-function PanelOperativoResto({
-  panel,
-  onAbrir,
-}: {
-  panel: OtOperationalPanel | null;
-  onAbrir: AbrirBloque;
-}) {
-  const { cargando, cola, antiguedad, pendientes, sinPendientes } = useDerivadosPanelOperativo(panel);
-
-  return (
-    <div className="flex flex-col gap-4">
-      {sinPendientes ? (
-        <Tarjeta>
-          <p className="py-6 text-center text-sm text-[#6B7280] dark:text-white/50">
-            No hay trámites pendientes en este momento.
-          </p>
-        </Tarjeta>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-          <Tarjeta titulo="En qué está esperando cada trámite">
-            {cargando ? (
-              <Esqueleto filas={3} />
-            ) : (
-              <div className="flex flex-col gap-3">
-                <Espera
-                  label="Por revisar"
-                  value={cola?.porRevisar ?? 0}
-                  total={pendientes}
-                  miTurno
-                  onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.porRevisar, "Por revisar")}
-                />
-                <Espera
-                  label="Esperando asignar placa"
-                  value={cola?.esperandoAsignarPlaca ?? 0}
-                  total={pendientes}
-                  onAbrir={() =>
-                    onAbrir(OT_DRILLDOWN_BUCKETS.esperandoPlaca, "Esperando asignar placa")
-                  }
-                />
-                <Espera
-                  label="En espera del cliente"
-                  value={cola?.enEsperaDelCliente ?? 0}
-                  total={pendientes}
-                  onAbrir={() =>
-                    onAbrir(OT_DRILLDOWN_BUCKETS.enEsperaDelCliente, "En espera del cliente")
-                  }
-                />
-                <p className="text-[11px] text-[#9AA5B4] dark:text-white/40">
-                  Solo «Por revisar» espera una acción del organismo.
-                </p>
-              </div>
-            )}
-          </Tarjeta>
-
-          <Tarjeta titulo="Antigüedad de lo pendiente">
-            {cargando ? (
-              <Esqueleto filas={1} />
-            ) : (
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <Tramo
-                  label="0–1 día"
-                  value={antiguedad?.hasta1Dia ?? 0}
-                  onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.hasta1Dia, "Pendientes de 0–1 día")}
-                />
-                <Tramo
-                  label="2–3 días"
-                  value={antiguedad?.entre2y3Dias ?? 0}
-                  onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entre2y3Dias, "Pendientes de 2–3 días")}
-                />
-                <Tramo
-                  label="4–7 días"
-                  value={antiguedad?.entre4y7Dias ?? 0}
-                  onAbrir={() => onAbrir(OT_DRILLDOWN_BUCKETS.entre4y7Dias, "Pendientes de 4–7 días")}
-                />
-                <Tramo
-                  label="Más de 7 días"
-                  value={antiguedad?.masDe7Dias ?? 0}
-                  alarma
-                  onAbrir={() =>
-                    onAbrir(OT_DRILLDOWN_BUCKETS.masDe7Dias, "Pendientes de más de 7 días")
-                  }
-                />
-              </div>
-            )}
-          </Tarjeta>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── Piezas ────────────────────────────────────────────────────────────────────
-
-function Tarjeta({ titulo, children }: { titulo?: string; children: React.ReactNode }) {
-  return (
-    <section className="rounded-2xl border border-[#DFE5ED] bg-white p-5 dark:border-white/10 dark:bg-[#0B0F14]">
-      {titulo && (
-        <h2 className="mb-4 text-[11px] font-semibold uppercase tracking-wide text-[#6B7280] dark:text-white/50">
-          {titulo}
-        </h2>
-      )}
-      {children}
-    </section>
-  );
-}
-
-/**
- * Envoltorio de un indicador navegable. Un bloque en cero NO se ofrece como enlace: llevaría a una
- * lista vacía, que es una promesa incumplida, y enseña a desconfiar del resto de los números.
- */
-function Navegable({
-  navegable,
-  etiqueta,
-  className,
-  onAbrir,
-  children,
-}: {
-  navegable: boolean;
-  etiqueta: string;
-  className: string;
-  onAbrir?: () => void;
-  children: React.ReactNode;
-}) {
-  if (!navegable || !onAbrir) {
-    return <div className={className}>{children}</div>;
-  }
-  return (
-    <button
-      type="button"
-      onClick={onAbrir}
-      // El nombre accesible dice a dónde lleva: el texto visible es una etiqueta y un número, que
-      // por sí solos no anuncian que haya una lista detrás.
-      aria-label={etiqueta}
-      className={`${className} text-left transition hover:border-flit-brand hover:shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-flit-brand`}
-    >
-      {children}
-    </button>
   );
 }
 
@@ -994,138 +363,482 @@ function Kpi({
   label,
   value,
   cargando,
-  color,
-  icon: Icon,
+  ilustracion,
+  pendiente,
   hint,
-  sinDato,
   onAbrir,
 }: {
   label: string;
-  value: number | string | undefined;
+  value: number | undefined;
   cargando: boolean;
-  color: string;
-  icon: typeof Inbox;
+  /** Ilustración del prototipo a la derecha de la cifra (HU #14481). */
+  ilustracion: string;
+  /** Lo que espera al organismo: con trámites, la tarjeta lleva el borde de pendiente (`.metrica--pendiente`). */
+  pendiente?: boolean;
   hint?: string;
-  /** No hay cifra que mostrar. Se apaga el color de acento: una cifra ausente no es un resultado. */
-  sinDato?: boolean;
   onAbrir?: () => void;
 }) {
-  const numero = typeof value === "number" ? value : null;
-  // Una cifra corta manda con el tamaño de titular; una frase a 30 px se sale de la tarjeta.
-  const tamano = numero === null && typeof value === "string" && value.length > 6
-    ? "text-lg"
-    : "text-3xl";
+  const numero = cargando ? null : (value ?? 0);
+  // Un bloque en cero NO se ofrece como enlace: llevaría a una lista vacía, una promesa incumplida.
+  const navegable = numero !== null && numero > 0 && Boolean(onAbrir);
   return (
-    <Navegable
-      navegable={!cargando && numero !== null && numero > 0}
-      etiqueta={`Ver los ${numero} trámites: ${label.toLowerCase()}`}
-      onAbrir={onAbrir}
-      className="flex w-full items-center justify-between rounded-2xl border border-[#DFE5ED] bg-white p-4 dark:border-white/10 dark:bg-[#0B0F14]"
+    // Receta del Inicio del gestor (HU #14481): `TarjetaMetrica` con la ilustración fijada abajo a la derecha (con
+    // `max-w-none`, o la rejilla la aplasta). `content-start`: si la fila la estira, la cifra sigue bajo el rótulo.
+    <TarjetaMetrica
+      className="relative w-full grid-cols-1 content-start p-4 [&>:nth-child(3)]:absolute [&>:nth-child(3)]:bottom-3.5 [&>:nth-child(3)]:right-3.5 [&>:nth-child(3)]:h-9 [&>:nth-child(3)]:w-9 [&>:nth-child(3)]:max-w-none [&>:nth-child(3)]:shrink-0 [&>span:nth-child(2)]:pr-11 [&>span:nth-child(4)]:pr-11 [&>span:nth-child(4)]:font-normal [&>span:nth-child(4)]:text-[color:var(--di-text-tertiary)]"
+      etiqueta={label}
+      cifra={
+        numero === null ? (
+          <span className="text-3xl" aria-label="Cargando">…</span>
+        ) : numero === 0 ? (
+          // Un KPI vacío se dice en palabras, igual que en el Inicio del gestor.
+          <span className="text-base font-medium">Ninguno</span>
+        ) : (
+          <span className="text-3xl">{numero}</span>
+        )
+      }
+      icono={ilustracion}
+      pie={hint}
+      pendiente={Boolean(pendiente) && navegable}
+      onClick={navegable ? onAbrir : undefined}
+      aria-label={navegable ? `Ver los ${numero} trámites: ${label.toLowerCase()}` : undefined}
+    />
+  );
+}
+
+// ── Carga por recurso ─────────────────────────────────────────────────────────
+
+/**
+ * Carga un recurso por clave. El estado «cargando» se DERIVA de que la clave del último resultado no sea la pedida, en
+ * vez de marcarse dentro del efecto (`react-hooks/set-state-in-effect`). Cada panel tiene su propio ciclo: si uno se
+ * cae, los demás se siguen viendo.
+ */
+function useRecurso<T>(clave: string | null, cargar: ((signal: AbortSignal) => Promise<T>) | null) {
+  const [resultado, setResultado] = useState<{ clave: string; dato: T | null; error: string | null } | null>(null);
+
+  useEffect(() => {
+    if (!clave || !cargar) return;
+    const controller = new AbortController();
+    cargar(controller.signal)
+      .then((dato) => {
+        if (!controller.signal.aborted) setResultado({ clave, dato, error: null });
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted || (err as Error)?.name === "AbortError") return;
+        setResultado({
+          clave,
+          dato: null,
+          error: err instanceof ApiError && err.status === 400 && err.message ? err.message : "error",
+        });
+      });
+    return () => controller.abort();
+  }, [clave, cargar]);
+
+  const vigente = clave !== null && resultado?.clave === clave ? resultado : null;
+  const estado: Estado = !vigente ? "cargando" : vigente.error ? "error" : "listo";
+  // Un 400 del rango (p. ej. más de un año) trae un motivo que se puede mostrar; el resto se dice genérico.
+  const motivo = vigente?.error && vigente.error !== "error" ? vigente.error : null;
+  return { dato: vigente?.dato ?? null, estado, motivo };
+}
+
+function claveDe(periodo: OtMetricsParams | null, extra = ""): string | null {
+  return periodo ? `${periodo.transitOfficeId}|${periodo.from}|${periodo.to}|${extra}` : null;
+}
+
+/** Del informe solo interesa el resumen: se pide la página mínima. */
+function cargarResumen(periodo: OtMetricsParams, family: Familia) {
+  return (signal: AbortSignal): Promise<OtReportSummary> =>
+    fetchOtReport({ ...periodo, family: family || undefined, page: 1, pageSize: 1 }, signal).then((r) => r.resumen);
+}
+
+// ── Franja 2 ──────────────────────────────────────────────────────────────────
+
+const GRANULARIDAD: Record<string, string> = { dia: "día", semana: "semana", mes: "mes" };
+
+/**
+ * Tiempo promedio de decisión por periodo, en días. Sin línea de meta: no hay SLA en el dominio. Los periodos sin
+ * decisiones no se dibujan en cero —se leería «se decidió al instante»—, se omiten.
+ */
+function TiemposGestion({ periodo }: { periodo: OtMetricsParams | null }) {
+  const cargar = useMemo(() => (periodo ? cargarResumen(periodo, "") : null), [periodo]);
+  const { dato: resumen, estado, motivo } = useRecurso(claveDe(periodo, "resumen"), cargar);
+  const puntos = (resumen?.serie ?? [])
+    .filter((p) => p.tiempoPromedioDecisionDias != null)
+    .map((p) => ({ etiqueta: p.label, valor: p.tiempoPromedioDecisionDias ?? 0 }));
+  const granularidad = GRANULARIDAD[resumen?.granularidad ?? ""] ?? "periodo";
+
+  return (
+    <PanelInicio
+      titulo="Tiempos de gestión"
+      subtitulo={`Tiempo promedio de decisión, en días, por ${granularidad}`}
+      icono="cronometro"
+      data-testid="ot-inicio-tiempos"
     >
-      <div className="min-w-0">
-        <p className="text-[11px] font-medium opacity-70">{label}</p>
-        <p
-          className={`mt-1 font-bold tabular-nums ${tamano} ${sinDato ? "text-[#9AA5B4] dark:text-white/40" : ""}`}
-          style={sinDato ? undefined : { color }}
+      {!periodo || estado === "cargando" ? (
+        <Esqueleto filas={3} />
+      ) : estado === "error" ? (
+        <FalloPanel texto={motivo ?? "No se pudieron cargar los tiempos de gestión."} />
+      ) : puntos.length === 0 ? (
+        <Vacio>No hubo decisiones en el periodo elegido.</Vacio>
+      ) : (
+        <GraficoArea puntos={puntos} nombreSerie="Tiempo promedio de decisión" formato={formatDiasCorto} />
+      )}
+    </PanelInicio>
+  );
+}
+
+/** Ruta de la bandeja del organismo filtrada por la placa o el VIN del trámite: «ir a decidirlo». */
+function enlaceTramite(transitOfficeId: string, item: OtDrilldownItem): string {
+  const query = new URLSearchParams();
+  if (item.placa) query.set("placa", item.placa);
+  else if (item.vin) query.set("vin", item.vin);
+  query.set("status", item.status);
+  return `/admin/transit-offices/${transitOfficeId}/client-procedures?${query.toString()}`;
+}
+
+function tonoEspera(dias: number): StatusBadgeTone {
+  if (dias > 7) return "danger";
+  if (dias > 3) return "warning";
+  return "info";
+}
+
+/**
+ * Lo que lleva más esperando la decisión del organismo, AHORA (no lo mueve el rango). Sale del mismo detalle que abre
+ * «Esperan mi decisión», que el backend ya ordena por días de espera de mayor a menor.
+ */
+function ColaCritica({ params, transitOfficeId }: { params: OtMetricsParams | null; transitOfficeId: string }) {
+  const cargar = useMemo(
+    () =>
+      params
+        ? (signal: AbortSignal): Promise<OtDrilldown> => fetchOtDrilldown(params, OT_DRILLDOWN_BUCKETS.porRevisar, signal)
+        : null,
+    [params],
+  );
+  const { dato, estado } = useRecurso(params ? `${transitOfficeId}|cola-critica` : null, cargar);
+  const filas = useMemo(
+    () =>
+      [...(dato?.items ?? [])]
+        .sort((a, b) => (b.diasEsperando ?? 0) - (a.diasEsperando ?? 0))
+        .slice(0, COLA_CRITICA_FILAS),
+    [dato],
+  );
+
+  const columnas: DataTableColumn<OtDrilldownItem>[] = [
+    {
+      key: "radicado",
+      header: "Radicado",
+      render: (r) => <span className="font-medium tabular-nums">{r.referenceNumber}</span>,
+    },
+    {
+      key: "tramite",
+      header: "Trámite",
+      render: (r) => (
+        <span className="flex flex-col">
+          <span>{r.tipoTramite || r.familia || "Trámite"}</span>
+          <span className="text-xs text-[color:var(--di-text-tertiary)]">{r.clientTenantName}</span>
+        </span>
+      ),
+    },
+    {
+      key: "espera",
+      header: "Tiempo en espera",
+      render: (r) => {
+        const dias = r.diasEsperando ?? 0;
+        return <StatusBadge label={formatDiasEnteros(dias)} tone={tonoEspera(dias)} />;
+      },
+    },
+    {
+      key: "accion",
+      header: <span className="sr-only">Acción</span>,
+      align: "right",
+      render: (r) => (
+        <Link
+          href={enlaceTramite(transitOfficeId, r)}
+          className={buttonClass({ variant: "secondary", size: "sm" })}
+          aria-label={`Revisar el trámite ${r.referenceNumber}`}
         >
-          {cargando ? "—" : (value ?? 0)}
+          Revisar
+        </Link>
+      ),
+    },
+  ];
+
+  return (
+    <PanelInicio
+      titulo="Cola crítica"
+      subtitulo="Lo que lleva más tiempo esperando tu decisión"
+      icono="vencido"
+      data-testid="ot-inicio-cola-critica"
+      accion={
+        <Link
+          href={`/admin/transit-offices/${transitOfficeId}/client-procedures?status=entregado`}
+          className="text-sm font-semibold text-[color:var(--di-action)] hover:underline"
+        >
+          Ver todos
+        </Link>
+      }
+    >
+      <DataTable
+        columns={columnas}
+        rows={filas}
+        getRowKey={(r) => r.procedureInstanceId}
+        status={estado === "cargando" ? "loading" : estado === "error" ? "error" : filas.length === 0 ? "empty" : "ready"}
+        emptyMessage="No hay trámites esperando tu decisión."
+        errorMessage="No se pudo cargar la cola crítica."
+        ariaLabel="Cola crítica"
+        tarjeta={false}
+        minWidth={520}
+      />
+    </PanelInicio>
+  );
+}
+
+// ── Franja 3 ──────────────────────────────────────────────────────────────────
+
+/**
+ * En qué terminó lo RECIBIDO en el periodo (aprobado contra rechazado) y por qué se rechaza, filtrado por familia.
+ * Solo se monta el contenido de la pestaña activa: las demás no piden nada hasta que se eligen.
+ */
+function Resoluciones({ periodo }: { periodo: OtMetricsParams | null }) {
+  const [familia, setFamilia] = useState<Familia | "todos">("todos");
+  return (
+    <PanelInicio titulo="Aprobados, rechazados y causales" icono="causal" data-testid="ot-inicio-resoluciones">
+      <Pestanas
+        ariaLabel="Tipo de trámite"
+        active={familia}
+        onChange={setFamilia}
+        tabs={FAMILIAS.map((f) => ({
+          id: f.id,
+          label: f.label,
+          content:
+            f.id === familia ? <ResolucionesDeFamilia periodo={periodo} familia={f.id === "todos" ? "" : f.id} /> : null,
+        }))}
+      />
+    </PanelInicio>
+  );
+}
+
+function ResolucionesDeFamilia({ periodo, familia }: { periodo: OtMetricsParams | null; familia: Familia }) {
+  // «Todos» reutiliza la clave del panel de tiempos: es la misma consulta del informe.
+  const cargarRes = useMemo(() => (periodo ? cargarResumen(periodo, familia) : null), [periodo, familia]);
+  const resumen = useRecurso(claveDe(periodo, familia ? `resumen-${familia}` : "resumen"), cargarRes);
+
+  const cargarCausales = useMemo(
+    () =>
+      periodo
+        ? (signal: AbortSignal): Promise<OtRejectionReasons> =>
+            fetchOtRejectionReasons({ ...periodo, family: familia || undefined }, signal)
+        : null,
+    [periodo, familia],
+  );
+  const causales = useRecurso(claveDe(periodo, `causales-${familia}`), cargarCausales);
+
+  if (!periodo || resumen.estado === "cargando") return <Esqueleto filas={3} />;
+  if (resumen.estado === "error") {
+    return <FalloPanel texto={resumen.motivo ?? "No se pudieron cargar los aprobados y rechazados."} />;
+  }
+
+  const r = resumen.dato;
+  const aprobados = r?.aprobados ?? 0;
+  // Un rechazo con la subsanación abierta sigue siendo un veredicto en contra, aunque el trámite vaya a volver.
+  const rechazados = (r?.rechazados ?? 0) + (r?.enSubsanacion ?? 0);
+  const decididos = aprobados + rechazados;
+  const pctAprobados = decididos === 0 ? 0 : (aprobados / decididos) * 100;
+
+  const top = (causales.dato?.causales ?? []).filter((c) => c.rechazos > 0).slice(0, CAUSALES_TOP);
+
+  return (
+    <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+      {decididos === 0 ? (
+        <Vacio>Ningún trámite recibido en el periodo se ha aprobado ni rechazado todavía.</Vacio>
+      ) : (
+        <div className="flex flex-col gap-2">
+          <GraficoDona
+            total={decididos}
+            centro={formatPct(pctAprobados)}
+            rotuloCentro="Aprobados"
+            porciones={[
+              {
+                clave: "aprobados",
+                etiqueta: "Aprobados",
+                valor: aprobados,
+                color: "var(--flit-success-ink)",
+                detalle: formatPct(pctAprobados),
+              },
+              {
+                clave: "rechazados",
+                etiqueta: "Rechazados",
+                valor: rechazados,
+                color: "var(--color-flit-alert)",
+                detalle: formatPct(100 - pctAprobados),
+              },
+            ]}
+          />
+          <p className="text-xs text-[color:var(--di-text-tertiary)]" data-testid="ot-inicio-pct-aprobados">
+            {formatPct(pctAprobados)} de lo decidido se aprobó. Universo: trámites recibidos en el periodo.
+          </p>
+        </div>
+      )}
+
+      <div className="flex min-w-0 flex-col gap-3" data-testid="ot-inicio-causales">
+        <div>
+          <h3 className="text-sm font-semibold text-[color:var(--di-text-primary)]">Principales causales de rechazo</h3>
+          {/* El % es de RECHAZOS que incluyen la causal: un rechazo puede llevar varias, así que no suman 100. */}
+          <p className="text-xs text-[color:var(--di-text-tertiary)]">
+            % de los rechazos del periodo que incluyen la causal. Un rechazo puede tener varias.
+          </p>
+        </div>
+        {causales.estado === "cargando" ? (
+          <Esqueleto filas={2} />
+        ) : causales.estado === "error" ? (
+          <FalloPanel texto="No se pudieron cargar las causales." />
+        ) : top.length === 0 ? (
+          <Vacio>No hubo rechazos con causal en el periodo.</Vacio>
+        ) : (
+          <ul className="m-0 flex list-none flex-col gap-3 p-0">
+            {top.map((c) => {
+              // Cada causal es «% de rechazos que la incluyen»: por sí sola no puede pasar de 100. Si un dato malo lo
+              // hiciera, la barra se acota en vez de desbordarse (la suma ENTRE causales sí puede pasar de 100).
+              const pct = Math.min(100, Math.max(0, c.pct));
+              return (
+                <li key={c.reasonId} className="flex flex-col gap-1">
+                  <span className="flex items-baseline justify-between gap-3 text-[0.8125rem]">
+                    <span className="min-w-0 text-[color:var(--di-text-primary)]">{c.description}</span>
+                    <strong className="shrink-0 tabular-nums">{formatPct(pct)}</strong>
+                  </span>
+                  <BarraProgreso
+                    etiqueta={c.description}
+                    valor={pct}
+                    maximo={100}
+                    textoValor={`${formatPct(pct)} de los rechazos (${c.rechazos})`}
+                  />
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Quién le radicó al organismo en el periodo, por familia. Mismo universo que el informe. */
+function ClientesCorporativos({ periodo }: { periodo: OtMetricsParams | null }) {
+  const cargar = useMemo(
+    () => (periodo ? (signal: AbortSignal): Promise<OtClientsByFamily> => fetchOtClientsByFamily(periodo, signal) : null),
+    [periodo],
+  );
+  const { dato, estado, motivo } = useRecurso(claveDe(periodo, "clientes"), cargar);
+  // Decisión de Samuel (2026-11-17): el Inicio muestra un ADELANTO, los 5 clientes con más trámites radicados en el
+  // periodo; el resto se cuenta en una línea (el detalle por cliente vive en Reportes).
+  const todos = useMemo(() => [...(dato?.clientes ?? [])].sort((a, b) => b.total - a.total), [dato]);
+  const filas = todos.slice(0, TOP_CLIENTES);
+  const otros = todos.length - filas.length;
+
+  const numero = (v: number) => <span className="tabular-nums">{v}</span>;
+  const columnas: DataTableColumn<OtClientFamilyRow>[] = [
+    { key: "cliente", header: "Cliente", render: (r) => <span className="font-medium">{r.nombre}</span> },
+    { key: "matriculas", header: "Matrícula inicial", align: "right", render: (r) => numero(r.matriculas) },
+    { key: "traspasos", header: "Traspasos", align: "right", render: (r) => numero(r.traspasos) },
+    { key: "otros", header: "Otros trámites", align: "right", render: (r) => numero(r.otros) },
+    { key: "total", header: "Total", align: "right", render: (r) => <strong className="tabular-nums">{r.total}</strong> },
+  ];
+
+  return (
+    <PanelInicio
+      titulo="Trámites por Cliente Corporativo"
+      subtitulo="Los 5 clientes que más radicaron en el periodo, por tipo de trámite"
+      icono="empresas"
+      data-testid="ot-inicio-clientes"
+    >
+      <DataTable
+        columns={columnas}
+        rows={filas}
+        getRowKey={(r) => r.clientTenantId}
+        status={!periodo || estado === "cargando" ? "loading" : estado === "error" ? "error" : filas.length === 0 ? "empty" : "ready"}
+        emptyMessage="Ningún cliente radicó trámites en el periodo."
+        errorMessage={motivo ?? "No se pudo cargar el volumen por cliente."}
+        ariaLabel="Trámites por cliente corporativo"
+        tarjeta={false}
+        minWidth={520}
+      />
+      {estado !== "cargando" && otros > 0 && (
+        <p className="mt-3 text-xs text-[color:var(--di-text-tertiary)]" data-testid="ot-inicio-clientes-otros">
+          {otros} {otros === 1 ? "cliente más radicó" : "clientes más radicaron"} trámites en el periodo; el detalle está en
+          Reportes.
         </p>
-        {hint && <p className="mt-0.5 text-[10px] text-[#9AA5B4] dark:text-white/35">{hint}</p>}
-      </div>
-      <div
-        className="grid h-11 w-11 shrink-0 place-items-center rounded-xl"
-        style={{ background: `${color}1A` }}
-      >
-        <Icon className="h-5 w-5" style={{ color }} aria-hidden="true" />
-      </div>
-    </Navegable>
+      )}
+    </PanelInicio>
   );
 }
 
-/**
- * Una fila del desglose de la cola. `miTurno` distingue lo que espera al organismo de lo que espera
- * a un tercero: sin esa separación el OT lee como deuda propia un atraso que no lo es.
- */
-function Espera({
-  label,
-  value,
-  total,
-  miTurno,
-  onAbrir,
-}: {
-  label: string;
-  value: number;
-  total: number;
-  miTurno?: boolean;
-  onAbrir?: () => void;
-}) {
-  const pct = total === 0 ? 0 : Math.min(100, Math.round((value / total) * 100));
-  return (
-    <Navegable
-      navegable={value > 0}
-      etiqueta={`Ver los ${value} trámites: ${label.toLowerCase()}`}
-      onAbrir={onAbrir}
-      className="grid grid-cols-[minmax(7rem,11rem)_1fr_auto] items-center gap-3 rounded-lg text-xs"
-    >
-      <span className="truncate" title={label}>
-        {label}
-        {miTurno && <span className="sr-only"> (espera una acción del organismo)</span>}
-      </span>
-      <span className="h-2 overflow-hidden rounded bg-[#EEF1F5] dark:bg-white/10">
-        <span
-          className="block h-full rounded"
-          style={{
-            width: `${pct}%`,
-            background: miTurno ? "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" : "#C9D2E0",
-          }}
-        />
-      </span>
-      <span className="font-semibold tabular-nums">{value}</span>
-    </Navegable>
-  );
-}
+// ── Piezas ────────────────────────────────────────────────────────────────────
 
 /**
- * Tramo de antigüedad. La alarma se enciende solo con contenido: un bloque resaltado siempre en cero
- * enseña a ignorar el resaltado justo cuando sí importa.
+ * Un fallo NO se pinta como ceros: ese era el defecto de la pantalla anterior, una cola con problemas se leía como una
+ * cola sana.
  */
-function Tramo({
-  label,
-  value,
-  alarma,
-  onAbrir,
-}: {
-  label: string;
-  value: number;
-  alarma?: boolean;
-  onAbrir?: () => void;
-}) {
-  const encendida = Boolean(alarma) && value > 0;
+function ErrorPanel({ message, onRetry }: { message: string | null; onRetry: () => void }) {
   return (
-    <Navegable
-      navegable={value > 0}
-      etiqueta={`Ver los ${value} trámites pendientes de ${label.toLowerCase()}`}
-      onAbrir={onAbrir}
-      className={`w-full rounded-xl border px-3 py-3 text-center ${
-        encendida
-          ? "border-[#FF4E00]/45 bg-[#FF4E00]/[0.06]"
-          : "border-[#DFE5ED] dark:border-white/10"
-      }`}
+    <div
+      role="alert"
+      className="flex flex-1 flex-col items-start gap-3 rounded-[9px] border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] px-5 py-4"
     >
-      <p className={`text-2xl font-bold tabular-nums ${encendida ? "text-[#FF4E00]" : ""}`}>
-        {value}
+      <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+        <Icono nombre="alerta" className="h-4 w-4 shrink-0 text-[var(--badge-warning-fg)]" />
+        No se pudo cargar el estado de la cola
       </p>
-      <p className="mt-0.5 text-[10px] text-[#6B7280] dark:text-white/50">{label}</p>
-    </Navegable>
+      <p className="text-xs text-muted-foreground">{message ?? "Intenta de nuevo en un momento."}</p>
+      <button type="button" onClick={onRetry} className={buttonClass({ variant: "secondary", size: "sm" })}>
+        Reintentar
+      </button>
+    </div>
   );
+}
+
+function FalloPanel({ texto }: { texto: string }) {
+  return (
+    <p role="alert" className="py-6 text-center text-sm text-muted-foreground">
+      {texto}
+    </p>
+  );
+}
+
+function Vacio({ children }: { children: React.ReactNode }) {
+  return <p className="py-6 text-center text-sm text-muted-foreground">{children}</p>;
 }
 
 function Esqueleto({ filas }: { filas: number }) {
   return (
     <div className="flex flex-col gap-3" aria-hidden="true">
       {Array.from({ length: filas }, (_, i) => (
-        <div key={i} className="h-8 animate-pulse rounded-lg bg-[#EEF1F5] dark:bg-white/5" />
+        <div key={i} className="h-8 animate-pulse rounded-lg bg-secondary" />
       ))}
     </div>
   );
+}
+
+const NUM_1 = new Intl.NumberFormat("es-CO", { maximumFractionDigits: 1 });
+
+/** «1,5 días», «1 día», «menos de 1 día». */
+function formatDias(dias: number): string {
+  if (dias < 0.05) return "menos de 1 día";
+  const n = NUM_1.format(dias);
+  return `${n} ${n === "1" ? "día" : "días"}`;
+}
+
+/** Eje y tooltip de la gráfica de tiempos: «1,5 d». */
+function formatDiasCorto(dias: number): string {
+  return `${NUM_1.format(dias)} d`;
+}
+
+/** Días enteros de espera en la cola: «0 días», «1 día», «12 días». */
+function formatDiasEnteros(dias: number): string {
+  const n = Math.floor(dias);
+  return `${n} ${n === 1 ? "día" : "días"}`;
+}
+
+/** Un decimal, como en el resto de porcentajes del producto. */
+function formatPct(valor: number): string {
+  return `${NUM_1.format(valor)} %`;
 }

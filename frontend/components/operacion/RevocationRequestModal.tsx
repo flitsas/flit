@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef, useState } from 'react';
-import { AlertTriangle, Paperclip } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient, TramitesApiError } from '@/lib/api/tramites-client';
 import type { RequestRevocationResult } from '@/lib/api/types/procedure-runtime';
 import { WizardModal } from './WizardModal';
@@ -138,14 +138,10 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
         <>
           <div
             className="flex items-start gap-2 rounded-xl border p-3"
-            style={{ borderColor: '#F9AC00', background: 'rgba(249,172,0,0.08)' }}
+            style={{ borderColor: 'var(--badge-warning-border)', background: 'var(--badge-warning-bg)' }}
             role="alert"
           >
-            <AlertTriangle
-              className="mt-0.5 h-4 w-4 shrink-0"
-              style={{ color: 'var(--badge-warning-fg)' }}
-              aria-hidden="true"
-            />
+            <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--badge-warning-fg)' }} />
             <p className="text-xs leading-relaxed" style={{ color: 'var(--color-flit-primary)' }}>
               <strong>Esta acción no tiene reversa.</strong> Al continuar iniciarás la solicitud de
               revocatoria de este trámite Aprobado. En el siguiente paso deberás indicar el motivo,
@@ -190,10 +186,10 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
                 aria-invalid={!!fieldErrors.reason}
                 aria-describedby={fieldErrors.reason ? 'revocation-reason-err' : undefined}
                 placeholder="Explica por qué solicitas la revocatoria de este trámite"
-                className="mt-1.5 w-full rounded-xl border border-[#DFE5ED] px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 dark:border-white/15 dark:bg-white/5"
+                className="mt-1.5 w-full rounded-xl border border-border px-3 py-2 text-xs outline-none transition focus:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50 bg-card"
               />
               {fieldErrors.reason ? (
-                <p id="revocation-reason-err" role="alert" className="mt-1 text-[11px] font-medium" style={{ color: '#C2410C' }}>
+                <p id="revocation-reason-err" role="alert" className="mt-1 text-[11px] font-medium" style={{ color: 'var(--destructive)' }}>
                   {fieldErrors.reason}
                 </p>
               ) : null}
@@ -229,18 +225,18 @@ export function RevocationRequestModal({ instanceId, tenantId, onClose, onSucces
                 className="mt-1.5 inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-flit-brand/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
               >
-                <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="archivo" className="h-3.5 w-3.5" />
                 {file ? 'Cambiar archivo' : 'Elegir archivo PDF'}
               </button>
               {file ? (
-                <p className="mt-1 truncate text-xs" style={{ color: '#59677D' }}>
+                <p className="mt-1 truncate text-xs" style={{ color: 'var(--muted-foreground)' }}>
                   Archivo seleccionado: <span className="font-medium" style={{ color: 'var(--color-flit-primary)' }}>{file.name}</span>
                 </p>
               ) : (
-                <p className="mt-1 text-xs" style={{ color: '#94A3B8' }}>Ningún archivo elegido todavía.</p>
+                <p className="mt-1 text-xs" style={{ color: 'var(--muted-foreground)' }}>Ningún archivo elegido todavía.</p>
               )}
               {fieldErrors.file ? (
-                <p id="revocation-file-err" role="alert" className="mt-1 text-[11px] font-medium" style={{ color: '#C2410C' }}>
+                <p id="revocation-file-err" role="alert" className="mt-1 text-[11px] font-medium" style={{ color: 'var(--destructive)' }}>
                   {fieldErrors.file}
                 </p>
               ) : null}
@@ -336,7 +332,7 @@ function RevocationCheckbox({
         </label>
       </div>
       {error ? (
-        <p id={`${id}-err`} role="alert" className="mt-1 text-[11px] font-medium" style={{ color: '#C2410C' }}>
+        <p id={`${id}-err`} role="alert" className="mt-1 text-[11px] font-medium" style={{ color: 'var(--destructive)' }}>
           {error}
         </p>
       ) : null}

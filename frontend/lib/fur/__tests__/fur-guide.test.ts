@@ -61,3 +61,31 @@ describe("buildFurGuide", () => {
     expect(g.observaciones[0]).toContain("Matrícula con locatario por Leasing");
   });
 });
+
+describe("buildFurGuide · conversión de combustible (casillas 9 + 18)", () => {
+  it("el trámite de conversión de combustible marca 9 y 18", () => {
+    const g = buildFurGuide({
+      code: "CONVERSION_COMBUSTIBLE",
+      family: "TRANSFORMACIONES",
+      prenda: "ninguna",
+      color: false,
+      carroceria: false,
+      combustible: false,
+      blindaje: false,
+    });
+    expect(g.casillas.map((c) => c.n)).toEqual([9, 18]);
+  });
+
+  it("el cambio de combustible como adicional de un traspaso suma 9 y 18", () => {
+    const g = buildFurGuide({
+      code: "TRASPASO_STANDARD",
+      family: "TRASPASO",
+      prenda: "ninguna",
+      color: false,
+      carroceria: false,
+      combustible: true,
+      blindaje: false,
+    });
+    expect(g.casillas.map((c) => c.n)).toEqual([2, 9, 18]);
+  });
+});

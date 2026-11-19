@@ -1,0 +1,213 @@
+using System.Collections.Concurrent;
+using System.Net;
+using Flit.Diagnostico.Api.Modulos.Catalogos;
+using Flit.Diagnostico.Api.Modulos.Configuracion;
+using Flit.Diagnostico.Api.Modulos.Consultas;
+using Flit.Diagnostico.Domain.Consultas;
+using Flit.Diagnostico.Domain.Diagnosticos;
+using Flit.Diagnostico.Tests.Aislamiento;
+using Flit.Diagnostico.Tests.Api;
+using Flit.Diagnostico.Tests.Consultas;
+using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Xunit;
+using static Flit.Diagnostico.Tests.Configuracion.ConfiguracionOperativaTests;
+using static Flit.Diagnostico.Tests.Configuracion.ContratoBackofficeTests;
+
+namespace Flit.Diagnostico.Tests.Configuracion;
+
+/// <summary>
+/// HU #13733 (F03-H5), AC5 y AC6 (F03-C8, F03-C9, F03-C15) — guardia de fuentes sin adaptador: el catálogo
+/// <see cref="FuentesDisponibles"/> (fuentes con un ejecutor registrado; en D2 solo RUNT) lo consultan el contrato del
+/// backoffice y <c>POST /diagnosticos</c>. Habilitar o pedir una fuente sin adaptador responde 422 y no guarda nada.
+/// <c>IMPUESTO_DEPARTAMENTAL</c> además exige <c>Diagnostico:Fuentes:ImpuestoDisponible=true</c> (ausente = false). Estas
+/// pruebas quitan el doble de <see cref="ApiDePrueba"/> que da a toda fuente por adaptada y usan el registro real.
+/// </summary>
+/// <example>
+/// <code>
+/// dotnet test services/core-diagnostico/tests/Flit.Diagnostico.Tests --no-build --filter FullyQualifiedName~FuentesSinAdaptadorTests
+/// </code>
+/// </example>
+public sealed class FuentesSinAdaptadorTests
+{
+    // AC5 (F03-C8) — el backoffice habilita SIMIT_VEHICULO sin un ejecutor que cierre sus celdas: 422 y el contrato no cambia.
+    // Desde ADR-0075 todas las fuentes de F05 tienen ejecutor y la conexión con el proveedor es de core-consultas, así que la
+    // fuente sin adaptador la da un registro de prueba con solo RUNT.
+    [Fact]
+    public async Task Contrato_con_fuente_sin_adaptador_responde_422()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ArrancarAsync(SoloRunt);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        await SembrarAsync(empresas.B, new ConfiguracionEmpresa(), ct);
+
+        var respuesta = await api.Cliente(TokenBackoffice(api, Guid.NewGuid()))
+            .PutAsync(Url(empresas.B.Id), Cuerpo("""{ "fuentes_habilitadas": ["RUNT", "SIMIT_VEHICULO"], "limite_vehiculos_lote": 100 }"""), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, await respuesta.Content.ReadAsStringAsync(ct));
+        (await Codigo(respuesta, ct)).Should().Be(ServicioConfiguracion.CodigoFuenteNoDisponible);
+        var deB = await LeerAsync(api, empresas.B.Id, ct);
+        deB.FuentesHabilitadas.Should().Equal(Fuente.Runt);
+        deB.LimiteVehiculosLote.Should().Be(500, "un 422 no guarda ningún campo");
+        (await Motor.EscalarAsync(api, "SELECT count(*) FROM diagnostico.cambios_contrato", ct)).Should().Be(0);
+    }
+
+    // AC5 — con un adaptador registrado para la fuente, el mismo contrato se guarda (la guardia mira el registro, no una lista fija).
+    // Desde ADR-0075 la conexión con el proveedor es de core-consultas: basta el ejecutor de la fuente.
+    [Fact]
+    public async Task Contrato_con_fuente_con_adaptador_se_guarda()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ArrancarAsync(b =>
+            new EjecutorFuenteDePrueba(Fuente.SimitVehiculo, new ConcurrentQueue<string>()).Registrar(b.Services));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        await SembrarAsync(empresas.B, new ConfiguracionEmpresa(), ct);
+
+        var respuesta = await api.Cliente(TokenBackoffice(api, Guid.NewGuid()))
+            .PutAsync(Url(empresas.B.Id), Cuerpo("""{ "fuentes_habilitadas": ["RUNT", "SIMIT_VEHICULO"] }"""), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.OK, await respuesta.Content.ReadAsStringAsync(ct));
+        (await LeerAsync(api, empresas.B.Id, ct)).FuentesHabilitadas.Should().Equal(Fuente.Runt, Fuente.SimitVehiculo);
+    }
+
+    // AC5 — la compañía tiene SIMIT_VEHICULO habilitada de antes, pero sin adaptador (registro de prueba con solo RUNT): pedirla al
+    // crear es 422.
+    [Fact]
+    public async Task Crear_diagnostico_con_fuente_sin_adaptador_responde_422()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ArrancarAsync(SoloRunt);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        await SembrarAsync(empresas.A, new ConfiguracionEmpresa { FuentesHabilitadas = [Fuente.Runt, Fuente.SimitVehiculo] }, ct);
+        using var cliente = api.Cliente(Cabeceras.TokenUsuario(api, empresas.A.Id));
+
+        var respuesta = await cliente.PostAsync(Cabeceras.Ruta, Cuerpo(Cabeceras.Json("Lote", "SIMPLE", null, ["RUNT", "SIMIT_VEHICULO"])), ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, await respuesta.Content.ReadAsStringAsync(ct));
+        (await Codigo(respuesta, ct)).Should().Be(ValidadorCabecera.CodigoFuenteNoDisponible);
+        (await Cabeceras.ContarAsync(api, empresas.A.Id, ct)).Should().Be(0);
+        (await cliente.PostAsync(Cabeceras.Ruta, Cuerpo(Cabeceras.Json("Lote", "SIMPLE", null, ["RUNT"])), ct))
+            .StatusCode.Should().Be(HttpStatusCode.Created, "RUNT sí tiene adaptador");
+    }
+
+    // AC6 (F03-C9, F03-C15) — con la bandera en false, IMPUESTO_DEPARTAMENTAL es 422 en el contrato y en la creación,
+    // aunque haya un adaptador registrado para el impuesto.
+    [Fact]
+    public async Task Impuesto_con_bandera_false_responde_422_en_contrato_y_en_creacion()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ArrancarAsync(b =>
+        {
+            b.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { [DisponibilidadFuentes.ClaveImpuestoDisponible] = "false" });
+            new EjecutorFuenteDePrueba(Fuente.ImpuestoDepartamental, new ConcurrentQueue<string>()).Registrar(b.Services);
+        });
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresas = DosEmpresas.En(api);
+        await SembrarAsync(empresas.B, new ConfiguracionEmpresa(), ct);
+        await SembrarAsync(empresas.A, new ConfiguracionEmpresa { FuentesHabilitadas = [Fuente.Runt, Fuente.ImpuestoDepartamental] }, ct);
+
+        var contrato = await api.Cliente(TokenBackoffice(api, Guid.NewGuid()))
+            .PutAsync(Url(empresas.B.Id), Cuerpo("""{ "fuentes_habilitadas": ["RUNT", "IMPUESTO_DEPARTAMENTAL"] }"""), ct);
+        var creacion = await api.Cliente(Cabeceras.TokenUsuario(api, empresas.A.Id))
+            .PostAsync(Cabeceras.Ruta, Cuerpo(Cabeceras.Json("Lote", "SIMPLE", null, ["RUNT", "IMPUESTO_DEPARTAMENTAL"])), ct);
+
+        contrato.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await Codigo(contrato, ct)).Should().Be(ServicioConfiguracion.CodigoFuenteNoDisponible);
+        (await LeerAsync(api, empresas.B.Id, ct)).FuentesHabilitadas.Should().Equal(Fuente.Runt);
+        creacion.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await Codigo(creacion, ct)).Should().Be(ValidadorCabecera.CodigoFuenteNoDisponible);
+        (await Cabeceras.ContarAsync(api, empresas.A.Id, ct)).Should().Be(0);
+    }
+
+    // AC6 — sin la clave en la configuración el impuesto no está disponible; con true y adaptador, sí; sin adaptador, nunca.
+    [Fact]
+    public void Bandera_ausente_equivale_a_false()
+    {
+        // Desde HU #13863 la disponibilidad también mira la réplica: aquí con un departamento soportado, para aislar la bandera.
+        var soportados = ConSoportados(true);
+        var conImpuesto = new RegistroFijo(Fuente.Runt, Fuente.ImpuestoDepartamental);
+        new FuentesDisponibles(conImpuesto, new DisponibilidadFuentes(new ConfigurationBuilder().Build()), soportados)
+            .Disponible(Fuente.ImpuestoDepartamental).Should().BeFalse("sin la bandera, el impuesto no está disponible");
+        var conBandera = Bandera(true);
+        new FuentesDisponibles(conImpuesto, conBandera, soportados).Disponible(Fuente.ImpuestoDepartamental).Should().BeTrue();
+        new FuentesDisponibles(new RegistroFijo(Fuente.Runt), conBandera, soportados).Disponible(Fuente.ImpuestoDepartamental).Should().BeFalse("sin adaptador no basta la bandera");
+        new FuentesDisponibles(conImpuesto, conBandera, soportados).Disponible(Fuente.SimitVehiculo).Should().BeFalse();
+    }
+
+    // HU #13863 (F09-H4), AC1, AC2 y AC3 (F09-C7; Q5=a) — matriz de las cuatro condiciones del impuesto: ejecutor registrado,
+    // adaptador conectado (no el no conectado), bandera Diagnostico:Fuentes:ImpuestoDisponible=true y al menos un departamento
+    // soportado en la réplica (EstadoCapacidadImpuesto.HaySoportados). Solo con las cuatro está disponible; RUNT no cambia
+    // con ninguna, y Todas() devuelve las disponibles en el orden del enum con la misma regla.
+    [Theory]
+    [InlineData(true, true, true, true, true)]
+    [InlineData(false, true, true, true, false)]
+    [InlineData(true, false, true, true, false)]
+    [InlineData(true, true, false, true, false)]
+    [InlineData(true, true, true, false, false)]
+    [InlineData(true, false, false, false, false)]
+    public void Impuesto_disponible_solo_con_bandera_adaptador_conectado_y_departamento_soportado(
+        bool ejecutor, bool conectado, bool bandera, bool haySoportados, bool disponible)
+    {
+        var registro = new RegistroFijo(ejecutor ? [Fuente.Runt, Fuente.Avaluo, Fuente.ImpuestoDepartamental] : [Fuente.Runt, Fuente.Avaluo])
+        {
+            NoConectadas = conectado ? [] : [Fuente.ImpuestoDepartamental],
+        };
+        var fuentes = new FuentesDisponibles(registro, Bandera(bandera), ConSoportados(haySoportados));
+
+        fuentes.Disponible(Fuente.ImpuestoDepartamental).Should().Be(disponible, $"ejecutor={ejecutor} conectado={conectado} bandera={bandera} soportados={haySoportados}");
+        fuentes.Disponible(Fuente.Runt).Should().BeTrue("las demás fuentes no dependen de la réplica ni de la bandera");
+        fuentes.Disponible(Fuente.Avaluo).Should().BeTrue();
+        fuentes.Todas().Should().Equal(disponible ? [Fuente.Runt, Fuente.Avaluo, Fuente.ImpuestoDepartamental] : [Fuente.Runt, Fuente.Avaluo]);
+    }
+
+    // El registro real del servicio: tienen adaptador RUNT (HU #13730), desde HU #13792 RUNT_PROPIETARIO y RUNT_LOCATARIO,
+    // desde HU #13793 SIMIT_VEHICULO, desde HU #13795 AVALUO y, desde HU #13794, SIMIT_PROPIETARIO y SIMIT_LOCATARIO (cambio
+    // por diseño: cada HU de F05 suma el ejecutor de su fuente) y, desde HU #13862, IMPUESTO_DEPARTAMENTAL (su disponibilidad
+    // sigue exigiendo la bandera y un adaptador conectado).
+    [Fact]
+    public async Task Tienen_adaptador_todas_las_fuentes_incluido_el_impuesto()
+    {
+        await using var api = await ArrancarAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var registro = api.App.Services.GetRequiredService<IRegistroAdaptadores>();
+        Enum.GetValues<Fuente>().Where(registro.TieneAdaptador).Should().Equal(
+            Fuente.Runt, Fuente.RuntPropietario, Fuente.RuntLocatario, Fuente.SimitVehiculo, Fuente.SimitPropietario, Fuente.SimitLocatario, Fuente.Avaluo,
+            Fuente.ImpuestoDepartamental);
+    }
+
+    /// <summary>API con el registro de adaptadores real (sin el doble de <see cref="ApiDePrueba"/>).</summary>
+    private static Task<ApiDePrueba> ArrancarAsync(Action<WebApplicationBuilder>? configurar = null) =>
+        ApiDePrueba.ConBaseAsync(configurar: b =>
+        {
+            b.Services.RemoveAll<IRegistroAdaptadores>();
+            configurar?.Invoke(b);
+        });
+
+    private static void SoloRunt(WebApplicationBuilder b) => b.Services.AddSingleton<IRegistroAdaptadores>(new RegistroFijo(Fuente.Runt));
+
+    private static DisponibilidadFuentes Bandera(bool encendida) => new(new ConfigurationBuilder()
+        .AddInMemoryCollection(new Dictionary<string, string?> { [DisponibilidadFuentes.ClaveImpuestoDisponible] = encendida ? "true" : "false" }).Build());
+
+    private static EstadoCapacidadImpuesto ConSoportados(bool haySoportados)
+    {
+        var estado = new EstadoCapacidadImpuesto();
+        estado.Fijar(haySoportados);
+        return estado;
+    }
+
+    private sealed class RegistroFijo(params Fuente[] fuentes) : IRegistroAdaptadores
+    {
+        public Fuente[] NoConectadas { get; init; } = [];
+
+        public bool TieneAdaptador(Fuente fuente) => fuentes.Contains(fuente);
+
+        public bool EsNoConectada(Fuente fuente) => NoConectadas.Contains(fuente);
+    }
+}

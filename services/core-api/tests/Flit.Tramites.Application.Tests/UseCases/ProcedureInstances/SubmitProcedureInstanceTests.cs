@@ -49,6 +49,9 @@ public sealed class SubmitProcedureInstanceTests
             .IsOperableAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(true);
         _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
+        _repo.AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        _repo.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         // Por defecto: OT sin integración Quipux (como Funza/Manizales en QA sin DIVIPO/flags).
         _quipuxCanal
             .GetAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
@@ -95,6 +98,16 @@ public sealed class SubmitProcedureInstanceTests
                 UploadedAt = DateTimeOffset.UtcNow,
             });
         }
+        // Matrícula inicial: el tipo de servicio es obligatorio al radicar (SubmitGate.TipoServicioRequerido).
+        i.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            FieldKey = "vehicle_service",
+            ValueText = "PARTICULAR",
+            Source = "user",
+        });
         // Biométrica del comprador aprobada.
         i.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
         {
@@ -545,6 +558,15 @@ public sealed class SubmitProcedureInstanceTests
         var tenantId = Guid.NewGuid();
         var instance = FullyGated(id, tenantId);
         instance.FieldValues.Clear();
+        instance.FieldValues.Add(new ProcedureInstanceFieldValue
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = id,
+            FieldKey = "vehicle_service",
+            ValueText = "PARTICULAR",
+            Source = "user",
+        });
         Wire(instance, ct);
 
         var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);

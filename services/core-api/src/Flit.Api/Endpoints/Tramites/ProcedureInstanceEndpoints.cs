@@ -489,15 +489,55 @@ internal static class ProcedureInstanceEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             PatchFieldValuesRequest request,
             PatchFieldValuesHandler handler,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, ct);
+            // HU #14172 — el usuario autenticado queda como CreatedBy del evento de bitácora.
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, ResolveUserId(http.User), ct);
+
+            // Matrícula ICT con placa de rango (tipo 4): la secretaría queda fija. 409 con código estable.
+            if (PatchFieldValuesHandler.TryParseOtFijado(error, out var placaFija))
+            {
+                return Results.Problem(
+                    statusCode: 409,
+                    title: PatchFieldValuesHandler.OtFijadoPorPlacaError,
+                    detail: $"La placa {placaFija} pertenece al rango de este organismo de tránsito; no se puede cambiar la secretaría.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["code"] = PatchFieldValuesHandler.OtFijadoPorPlacaError,
+                        ["plate"] = placaFija,
+                    });
+            }
+
+            // Y la propia placa del rango (o su tipo de asignación) tampoco se modifica.
+            if (PatchFieldValuesHandler.TryParsePlacaFijada(error, out var placaReservada))
+            {
+                return Results.Problem(
+                    statusCode: 409,
+                    title: PatchFieldValuesHandler.PlacaFijadaPorRangoError,
+                    detail: $"La placa {placaReservada} está reservada en el rango de este organismo de tránsito; no se puede modificar.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["code"] = PatchFieldValuesHandler.PlacaFijadaPorRangoError,
+                        ["plate"] = placaReservada,
+                    });
+            }
+
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
+                // Cambio de carrocería simultáneo sobre un vehículo sin carrocería (modo block).
+                VehicleBodyTypePolicy.ErrorCode => Results.Problem(
+                    statusCode: 422,
+                    title: VehicleBodyTypePolicy.ErrorCode,
+                    detail: "El vehículo no tiene carrocería registrada en el RUNT: el cambio de carrocería no aplica.",
+                    extensions: new Dictionary<string, object?>
+                    {
+                        ["procedureType"] = VehicleBodyTypePolicy.ProcedureTypeCambioCarroceria,
+                    }),
                 "not_draft" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Solo se pueden modificar field_values en borrador o con subsanación activa."),
                 // B11 (HU #10659) — en traspaso el OT proviene del RUNT y no puede modificarse.
                 "ot_traspaso_no_modificable" => Results.Problem(statusCode: 409, title: "Conflict", detail: "En un traspaso el organismo de tránsito proviene del RUNT y no puede modificarse."),
@@ -688,6 +728,7 @@ internal static class ProcedureInstanceEndpoints
                 "fur_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe generar el FUR antes de radicar."),
                 "organismo_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Debe seleccionar el organismo de tránsito antes de radicar."),
                 SubmitGate.ImprontaRequerida => Results.Problem(statusCode: 409, title: SubmitGate.ImprontaRequerida, detail: "Debe generar o cargar la impronta antes de radicar."),
+                SubmitGate.TipoServicioRequerido => Results.Problem(statusCode: 409, title: SubmitGate.TipoServicioRequerido, detail: "Debe seleccionar el tipo de servicio del vehículo (Particular, Público, Diplomático, Oficial, Especial u Otros) antes de radicar."),
                 "organismo_no_habilitado" => Results.Problem(statusCode: 422, title: "Unprocessable Entity", detail: "El organismo de tránsito seleccionado no está habilitado para la compañía."),
                 // HU #10806 — compañía con preasignación activa pero OT mal configurado (grant/allow): se
                 // bloquea la radicación para que se corrija la configuración, en vez de degradar a estándar.

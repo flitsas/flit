@@ -1,8 +1,16 @@
 'use client';
 
 import type { ReactNode } from 'react';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from '@flit/ui/StatusBadge';
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
-import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY } from './detalle-visual';
+import {
+  DETALLE_BLUE,
+  DETALLE_CARD,
+  DETALLE_GOLD,
+  DETALLE_GREEN,
+  DETALLE_NAVY,
+  DETALLE_RED,
+} from './detalle-visual';
 
 export { DETALLE_CARD } from './detalle-visual';
 
@@ -35,13 +43,32 @@ export interface SeccionDetalleProps {
 const NAVY = DETALLE_NAVY;
 const AZUL = DETALLE_BLUE;
 
-/** Badge soft del mockup detalle (`{color}22` fondo). */
-export function DetalleBadgeSoft({ text, color }: { text: string; color: string }) {
+/**
+ * Pastilla del detalle (HU #14482) con la etiqueta del UI Kit 2026: los tres tonos semánticos del detalle (hecho,
+ * pendiente, rechazado) toman su tono del kit; cualquier otro color se usa como color de la etiqueta.
+ */
+const TONO_KIT_DETALLE: Record<string, 'success' | 'warning' | 'danger'> = {
+  [DETALLE_GREEN]: 'success',
+  [DETALLE_GOLD]: 'warning',
+  [DETALLE_RED]: 'danger',
+};
+
+export function DetalleBadgeSoft({
+  text,
+  color,
+  sinMarca = false,
+}: {
+  text: string;
+  color: string;
+  /** El texto ya trae su propia marca (p. ej. «✓ Adjunto»): se pinta el tono sin sumar el check. */
+  sinMarca?: boolean;
+}) {
+  // UI Kit 2026: la etiqueta con punta del kit. Los tres tonos semánticos del detalle van a su tono del kit
+  // (hecho verde, pendiente naranja, rechazado rojo); cualquier otro color se usa tal cual como color de la etiqueta.
+  const tono = TONO_KIT_DETALLE[color];
   return (
-    <span
-      className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-      style={{ background: `${color}22`, color }}
-    >
+    <span {...etiquetaKit(tono ?? { c: color })}>
+      {sinMarca ? null : <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />}
       {text}
     </span>
   );
@@ -69,7 +96,7 @@ export function TarjetaDetalle({
           className="text-sm font-semibold"
           style={{ color: tituloAzul ? AZUL : NAVY }}
         >
-          <span className="dark:text-white">{titulo}</span>
+          <span>{titulo}</span>
         </h4>
         {accion ?? null}
       </div>
@@ -85,8 +112,8 @@ export function TarjetaDetalle({
 export function CampoValor({ campo, valor }: { campo: string; valor: ReactNode }) {
   return (
     <>
-      <dt className="text-xs text-flit-primary/70 dark:text-white/70">{campo}</dt>
-      <dd className="text-xs font-medium break-words text-flit-primary dark:text-white">
+      <dt className="text-xs text-muted-foreground">{campo}</dt>
+      <dd className="text-xs font-medium break-words text-foreground">
         {valor === null || valor === undefined || valor === '' ? '—' : valor}
       </dd>
     </>
@@ -125,8 +152,8 @@ export function SeccionCargando({ etiqueta, filas = 3 }: { etiqueta: string; fil
       {Array.from({ length: filas }).map((_, i) => (
         <div
           key={i}
-          className="h-10 animate-pulse rounded-xl dark:bg-white/5"
-          style={{ background: 'rgba(223,229,237,0.5)' }}
+          className="h-10 animate-pulse rounded-xl"
+          style={{ background: 'var(--surface-sunken)' }}
         />
       ))}
     </div>
@@ -158,14 +185,14 @@ export function SeccionError({
 }) {
   if (sinReintento) {
     return (
-      <p className="text-xs text-flit-primary/70 dark:text-white/70" role="status">
+      <p className="text-xs text-muted-foreground" role="status">
         {mensaje}
       </p>
     );
   }
   return (
     <div className="flex flex-col items-start gap-2" role="alert">
-      <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>
+      <p className="text-xs text-muted-foreground">{mensaje}</p>
       <button
         type="button"
         onClick={onReintentar}
@@ -181,5 +208,5 @@ export function SeccionError({
 
 /** Estado "vacío" de una sección: se dice qué falta, nunca se deja el hueco mudo. */
 export function SeccionVacia({ mensaje }: { mensaje: string }) {
-  return <p className="text-xs text-flit-primary/70 dark:text-white/70">{mensaje}</p>;
+  return <p className="text-xs text-muted-foreground">{mensaje}</p>;
 }

@@ -159,7 +159,7 @@ public static class PromptsOcrEndpoints
             versionNumero = numeros.GetValueOrDefault(e.PromptVersionId),
             vigenteNumero = e.PromptVigenteId is { } v ? numeros.GetValueOrDefault(v) : (int?)null,
             e.Aprobada, e.Mensaje, e.CreadoEn, e.TerminadaEn,
-            detalle = e.Detalle is null ? (System.Text.Json.JsonElement?)null : System.Text.Json.JsonDocument.Parse(e.Detalle).RootElement,
+            detalle = e.Detalle is null ? (System.Text.Json.JsonElement?)null : System.Text.Json.JsonElement.Parse(e.Detalle),
         });
     }
 

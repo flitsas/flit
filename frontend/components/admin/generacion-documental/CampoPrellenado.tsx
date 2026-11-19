@@ -14,7 +14,7 @@
  *       es una diferencia entre lo que él capturó y lo que dice la fuente.</li>
  * </ul>
  */
-import { Lock, LockOpen, TriangleAlert } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { TransferValidationIssue } from "@/lib/api/types-generacion-documental";
 import type { CampoHidratado, DiscrepanciaPrellenado } from "./prefill-hidratacion";
 import { etiquetaFuente } from "./useEncadenamientoPrefill";
@@ -85,12 +85,12 @@ export function CampoPrellenado({
           id={`${id}-hidratacion`}
           data-testid={`${id}-hidratacion`}
           className="mt-1 flex items-center gap-1 text-[10px]"
-          style={{ color: "#5E6A7B" }}
+          style={{ color: "var(--muted-foreground)" }}
         >
           {bloqueado ? (
-            <Lock className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <Icono nombre="candado" className="h-3 w-3 shrink-0" />
           ) : (
-            <LockOpen className="h-3 w-3 shrink-0" aria-hidden="true" />
+            <Icono nombre="candado-abierto" className="h-3 w-3 shrink-0" />
           )}
           <span>
             Dato de {etiquetaFuente(hidratado.fuente)} · {bloqueado ? "bloqueado" : "editable"}
@@ -113,9 +113,9 @@ export function CampoPrellenado({
           id={`${id}-discrepancia`}
           data-testid={`${id}-discrepancia`}
           role="status"
-          className="mt-1 flex flex-wrap items-center gap-1 rounded-lg border border-amber-300 bg-amber-50 px-2 py-1 text-[10px] text-amber-900"
+          className="mt-1 flex flex-wrap items-center gap-1 rounded-lg border border-[var(--badge-warning-border)] bg-[var(--badge-warning-bg)] px-2 py-1 text-[10px] text-[var(--badge-warning-fg)]"
         >
-          <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden="true" />
+          <Icono nombre="alerta" className="h-3 w-3 shrink-0" />
           <span>
             {etiquetaFuente(discrepancia.fuente)} reporta «{discrepancia.valorFuente}». Se conservó
             el valor que escribiste.
@@ -146,7 +146,7 @@ export function CampoPrellenado({
           key={`${issue.code}-${issue.field}`}
           id={`${id}-error`}
           role="alert"
-          className="mt-1 text-[11px] text-red-700"
+          className="mt-1 text-[11px] text-destructive"
         >
           <span className="font-semibold">{issue.code}</span> — {issue.message}
         </p>

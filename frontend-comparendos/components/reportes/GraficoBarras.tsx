@@ -46,9 +46,9 @@ export function GraficoBarras({
   return (
     <figure className="flex flex-col gap-2">
       <figcaption className="flex flex-wrap items-center justify-between gap-2">
-        <span className="text-sm font-semibold text-flit-primary dark:text-white">{titulo}</span>
+        <span className="text-sm font-semibold text-flit-primary">{titulo}</span>
         {series.length > 1 && (
-          <span className="flex flex-wrap items-center gap-3 text-[11px] text-[#5B6B82] dark:text-slate-300">
+          <span className="flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
             {series.map((s) => (
               <span key={s.nombre} className="inline-flex items-center gap-1">
                 <span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: s.color }} aria-hidden />
@@ -61,8 +61,8 @@ export function GraficoBarras({
       <svg viewBox={`0 0 ${ancho} ${alto}`} className="h-auto w-full" role="img" aria-label={titulo}>
         {marcas.map((m) => (
           <g key={m}>
-            <line x1={margen.izquierda} x2={ancho - margen.derecha} y1={y(m)} y2={y(m)} className="stroke-[#EEF1F6] dark:stroke-white/10" strokeWidth={1} />
-            <text x={margen.izquierda - 6} y={y(m) + 3} textAnchor="end" className="fill-[#5B6B82] text-[10px] dark:fill-slate-400">
+            <line x1={margen.izquierda} x2={ancho - margen.derecha} y1={y(m)} y2={y(m)} className="stroke-border" strokeWidth={1} />
+            <text x={margen.izquierda - 6} y={y(m) + 3} textAnchor="end" className="fill-muted-foreground text-[10px]">
               {numeroCorto(m)}
             </text>
           </g>
@@ -84,14 +84,14 @@ export function GraficoBarras({
                   </rect>
                 );
               })}
-              <text x={margen.izquierda + i * banda + banda / 2} y={alto - 8} textAnchor="middle" className="fill-[#5B6B82] text-[10px] dark:fill-slate-400">
+              <text x={margen.izquierda + i * banda + banda / 2} y={alto - 8} textAnchor="middle" className="fill-muted-foreground text-[10px]">
                 {c}
               </text>
             </g>
           );
         })}
         {vacio && (
-          <text x={margen.izquierda + areaAncho / 2} y={margen.arriba + areaAlto / 2} textAnchor="middle" className="fill-[#5B6B82] text-[12px] dark:fill-slate-400">
+          <text x={margen.izquierda + areaAncho / 2} y={margen.arriba + areaAlto / 2} textAnchor="middle" className="fill-muted-foreground text-[12px]">
             Sin datos en el periodo
           </text>
         )}

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
-import { Eye, Info } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   ocrResultForTipo,
   resumirVins,
@@ -23,11 +23,22 @@ import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
 import { esAdjuntoDeFlito } from '@/lib/tramites/flito';
+import { esTipoDocumentoMultiple } from '@/lib/tramites/documentos-multiples';
+import { formatFechaHora } from '@/lib/format/date';
+import {
+  DIALOGO_FRANJA,
+  DIALOGO_FRANJA_CIRCULO,
+  DIALOGO_FRANJA_TITULO,
+  DIALOGO_PANEL,
+} from './dialogo-propio';
+import { MODAL_VELO_CLS } from '@flit/ui/Modal';
 import type {
   ChecklistItemView,
   ProcedureAttachment,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 export type DocumentUploadMode = 'individual' | 'batch';
 
@@ -111,8 +122,8 @@ export function DocumentUploadModeToggle({
   ];
   return (
     <div
-      className="inline-flex rounded-xl border bg-white p-1 dark:bg-[#162744]"
-      style={{ borderColor: '#E2E8F0' }}
+      className="inline-flex rounded-xl border bg-card p-1"
+      style={{ borderColor: 'var(--border)' }}
       role="group"
       aria-label="Modo de cargue de documentos"
     >
@@ -129,11 +140,11 @@ export function DocumentUploadModeToggle({
             style={
               on
                 ? {
-                    background: '#EFF6FF',
+                    background: 'var(--badge-info-bg)',
                     color: 'var(--color-flit-brand)',
-                    boxShadow: '0 4px 20px -2px rgba(15,23,42,0.05)',
+                    boxShadow: 'var(--shadow-card)',
                   }
-                : { color: '#64748B' }
+                : { color: 'var(--muted-foreground)' }
             }
           >
             {opt.label}
@@ -586,7 +597,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
       <button
         type="button"
         className="inline-flex h-7 w-7 items-center justify-center rounded-full"
-        style={{ background: palette.color, color: '#FFFFFF', boxShadow: '0 1px 2px rgba(0,0,0,0.18)' }}
+        style={{ background: palette.color, color: 'var(--di-on-accent)' }}
         aria-label={`OCR ${nombre}: ${palette.label}. Ver detalle`}
         aria-describedby={tipOpen ? tipId : undefined}
         aria-expanded={detailOpen}
@@ -596,14 +607,14 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
         onBlur={() => setTipOpen(false)}
         onClick={() => setDetailOpen(true)}
       >
-        <Info className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+        <IconoAviso tipo="info" className="h-4 w-4" />
       </button>
 
       {tipOpen && !detailOpen && (
         <div
           id={tipId}
           role="tooltip"
-          className="absolute right-0 z-40 mt-1.5 w-56 rounded-xl border bg-white p-2.5 text-left shadow-lg dark:bg-[#162744]"
+          className="absolute right-0 z-40 mt-1.5 w-56 rounded-xl border bg-card p-2.5 text-left shadow-[var(--kit-sombra)]"
           style={{ borderColor: palette.border }}
         >
           <p className="text-xs font-bold" style={{ color: palette.color }}>
@@ -630,7 +641,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
           // B6 (guardián de diseño) — overlay único del sistema: `rgba(22,39,68,0.45)` +
           // `backdrop-blur-[6px]` (antes `bg-black/40 backdrop-blur-sm`, uno de los cuatro
           // overlays distintos del asistente).
-          className="fixed inset-0 z-50 grid place-items-center bg-[rgba(22,39,68,0.45)] px-4 backdrop-blur-[6px]"
+          className={`fixed inset-0 z-50 grid place-items-center px-4 ${MODAL_VELO_CLS}`}
           role="dialog"
           aria-modal="true"
           aria-labelledby={`ocr-detail-title-${tipo}`}
@@ -639,26 +650,24 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
           <div
             ref={ocrDialogRef}
             tabIndex={-1}
-            className="max-h-[80vh] w-full max-w-lg overflow-y-auto rounded-2xl border bg-white p-4 shadow-xl outline-none focus:ring-0 dark:bg-[#162744]"
-            style={{ borderColor: palette.border }}
+            className={`${DIALOGO_PANEL} flex max-h-[80vh] w-full max-w-lg flex-col outline-none focus:ring-0`}
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="mb-3 flex items-start justify-between gap-2">
-              <div className="flex items-center gap-2">
+            <div className={DIALOGO_FRANJA}>
+              <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
+              <div className="flex min-w-0 flex-col items-center gap-2">
                 <span
-                  className="inline-flex h-7 w-7 items-center justify-center rounded-full"
-                  style={{ background: palette.color, color: '#FFFFFF' }}
+                  className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--kit-hover)] text-[color:var(--kit-azul-relleno)]"
                   aria-hidden
                 >
-                  <Info className="h-4 w-4" strokeWidth={2.5} />
+                  <IconoAviso tipo="info" className="h-4 w-4" />
                 </span>
                 <h3
                   id={`ocr-detail-title-${tipo}`}
-                  className="text-sm font-semibold"
-                  style={{ color: 'var(--color-flit-primary)' }}
+                  className={DIALOGO_FRANJA_TITULO}
                 >
                   OCR — {nombre}
-                  <span className="mt-0.5 block text-xs font-bold" style={{ color: palette.color }}>
+                  <span className="mt-0.5 block text-xs font-bold opacity-85">
                     {palette.label}
                   </span>
                 </h3>
@@ -666,11 +675,12 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
               <button
                 type="button"
                 onClick={() => setDetailOpen(false)}
-                className="rounded-lg px-2 py-1 text-xs font-medium opacity-70 hover:opacity-100"
+                className="absolute right-3 top-3 shrink-0 rounded-[9px] border border-[color:var(--di-border)] bg-transparent px-3 py-1.5 text-xs font-semibold text-[color:var(--di-action)] transition hover:bg-[var(--kit-hover)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
               >
                 Cerrar
               </button>
             </div>
+            <div className="min-h-0 flex-1 overflow-y-auto p-4">
             {ocr.motivo && (
               <p className="mb-2 text-xs font-medium" style={{ color: palette.color }}>
                 {ocr.motivo}
@@ -682,7 +692,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
               </p>
             )}
             {avisoLegibilidad && (
-              <p className="mb-2 text-xs font-medium" style={{ color: '#B77900' }}>
+              <p className="mb-2 text-xs font-medium" style={{ color: 'var(--badge-warning-fg)' }}>
                 {avisoLegibilidad}
               </p>
             )}
@@ -701,7 +711,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
                       <dd
                         className={`min-w-0 wrap-break-word ${field.strong ? 'font-bold' : ''}`}
                         style={
-                          field.vin && rechazoPorVin ? { color: '#FF4E00', fontWeight: 700 } : undefined
+                          field.vin && rechazoPorVin ? { color: 'var(--destructive)', fontWeight: 700 } : undefined
                         }
                       >
                         {value}
@@ -711,6 +721,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
                 ))}
               </dl>
             )}
+            </div>
           </div>
         </div>
       )}
@@ -726,6 +737,8 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
 export function DocumentSlot({
   item,
   attachment,
+  bolsa,
+  deletingId,
   uploading,
   analyzing,
   deleting,
@@ -739,6 +752,14 @@ export function DocumentSlot({
 }: {
   item: ChecklistItemView;
   attachment: ProcedureAttachment | undefined;
+  /**
+   * Casillas «bolsa» (tipos múltiples, p. ej. `otro`): TODOS los adjuntos del tipo por orden de carga.
+   * Con valor, la casilla los lista con ver/eliminar individuales y ofrece «Agregar otro documento»
+   * en vez de «Reemplazar archivo» (subir aquí no reemplaza, acumula).
+   */
+  bolsa?: ProcedureAttachment[];
+  /** Id del adjunto que se está borrando (para marcar la fila correcta de la bolsa). */
+  deletingId?: string | null;
   uploading: boolean;
   analyzing: boolean;
   deleting: boolean;
@@ -764,7 +785,8 @@ export function DocumentSlot({
   // HU #13266 (AC1) — gana quien carga primero (HU #13265): el adjunto de FLITO no se reemplaza ni se
   // borra desde aquí (el backend respondería 409); la casilla solo deja previsualizarlo.
   const deFlito = esAdjuntoDeFlito(attachment);
-  const done = item.satisfied || !!attachment;
+  const esBolsa = bolsa !== undefined;
+  const done = item.satisfied || !!attachment || (bolsa?.length ?? 0) > 0;
   const busy = uploading || analyzing || deleting || generating;
   const isAuto = AUTO_DOC_TIPOS.has(tipo);
   const isImpronta = tipo.toLowerCase() === 'impronta';
@@ -828,20 +850,18 @@ export function DocumentSlot({
         // «Certificado de Aduana» (sin nombre de archivo ni barra de progreso) quedaba más baja que
         // sus vecinas. Quitar la altura explícita deja actuar el `align-items: stretch` por defecto
         // del flex container, que sí iguala cada tarjeta a la más alta de su misma fila.
-        'relative flex grow shrink-0 basis-full flex-col rounded-xl bg-white p-4 shadow-sm transition hover:shadow-md dark:bg-[#162744] md:basis-[calc(50%-0.5rem)] xl:basis-[calc(25%-0.75rem)] 2xl:basis-[calc(16.6667%-0.8333rem)] ' +
+        'relative flex grow shrink-0 basis-full flex-col rounded-xl bg-card p-4 border border-[color:var(--di-border)] transition hover:border-[color:var(--di-action)] md:basis-[calc(50%-0.5rem)] xl:basis-[calc(25%-0.75rem)] 2xl:basis-[calc(16.6667%-0.8333rem)] ' +
         (isAuto || (done && !ocrRejected)
           ? 'border'
-          : 'border-2 border-dashed hover:border-flit-brand hover:bg-[#F0F5FF]')
+          : 'border-2 border-dashed hover:border-flit-brand hover:bg-secondary')
       }
-      style={{ borderColor: '#E2E8F0' }}
+      style={{ borderColor: 'var(--border)' }}
     >
       {/* Badges + OCR en cabecera (HU #12728 D.2): Opcional en brand-ink; chip obligatorio por token danger. */}
       <div className="absolute right-3 top-3 flex items-center gap-1.5">
         {showValidado ? (
-          <span
-            className="whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold text-white"
-            style={{ background: '#8CC63F' }}
-          >
+          <span {...etiquetaKit('success')}>
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
             Cargado
           </span>
         ) : ocrRejected ? (
@@ -873,13 +893,13 @@ export function DocumentSlot({
               de «Ver» y del foco), no en el degradado de marca, y a plena opacidad: el `opacity-70`
               vive en el texto para que el color no salga lavado. `shrink-0` + `mt-px` evitan que se
               deforme o se despegue de la primera línea cuando el texto envuelve. */}
-          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+          <IconoAviso tipo="info" className="mt-px h-3 w-3 shrink-0" />
           <span className="opacity-70">{instruccion}</span>
         </p>
       )}
       {improntaSoloManual && !readOnly && !attachment && !isAuto && (
         <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
-          <Info className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+          <IconoAviso tipo="info" className="mt-px h-3 w-3 shrink-0" />
           <span className="opacity-70">
             {IMPRONTA_MANUAL_TEXTO}
             {item.obligatorio ? ' Debe cargarla para radicar.' : ''}
@@ -887,7 +907,53 @@ export function DocumentSlot({
         </p>
       )}
       <p className="mt-1 text-[11px] opacity-70">{limitsCaption}</p>
-      {attachment && !isAuto && (
+      {bolsa && !isAuto && bolsa.length > 0 && (
+        <ul className="mt-2 flex flex-col gap-1.5" aria-label={`Archivos de ${caption}`}>
+          {bolsa.map((att) => {
+            const borrando = deletingId === att.id;
+            return (
+              <li
+                key={att.id}
+                className="flex items-center gap-2 rounded-lg border px-2 py-1.5"
+                style={{ borderColor: 'var(--border)' }}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[11px] font-medium" title={att.filename}>
+                    {att.filename}
+                  </p>
+                  <p className="text-[10px] opacity-60">
+                    {formatFechaHora(att.uploadedAt)} · {formatSize(att.sizeBytes)}
+                  </p>
+                </div>
+                {onPreview && (
+                  <button
+                    type="button"
+                    onClick={() => onPreview(att)}
+                    className="rounded-lg border p-1"
+                    style={{ color: 'var(--color-flit-brand)' }}
+                    aria-label={`Previsualizar ${att.filename}`}
+                  >
+                    <Icono nombre="ojo" className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {!readOnly && !esAdjuntoDeFlito(att) && (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(att.id)}
+                    disabled={busy}
+                    className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{ color: 'var(--destructive)' }}
+                    aria-label={`Eliminar ${att.filename}`}
+                  >
+                    {borrando ? 'Borrando…' : 'Eliminar'}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {attachment && !isAuto && !esBolsa && (
         <p className="mt-1 truncate text-[11px] opacity-60">
           {attachment.filename} · {formatSize(attachment.sizeBytes)}
         </p>
@@ -904,14 +970,14 @@ export function DocumentSlot({
             {(done || analyzing || generating) && (
         <div
           className="mt-3 h-1.5 w-full overflow-hidden rounded-full"
-          style={{ background: '#F1F5F9' }}
+          style={{ background: 'var(--surface-sunken)' }}
           aria-hidden="true"
         >
           <div
               className={`h-full rounded-full ${analyzing || generating ? 'animate-pulse' : ''}`}
               style={{
                 width: analyzing || generating ? '60%' : '100%',
-                background: analyzing || generating ? 'var(--color-flit-brand)' : ocrRejected ? 'var(--badge-danger-fg)' : '#8CC63F',
+                background: analyzing || generating ? 'var(--color-flit-brand)' : ocrRejected ? 'var(--badge-danger-fg)' : 'var(--flit-success-ink)',
               }}
           />
         </div>
@@ -923,7 +989,7 @@ export function DocumentSlot({
             Autogenerado por el sistema al radicar.
           </p>
         ) : readOnly ? (
-          attachment && onPreview ? (
+          attachment && onPreview && !esBolsa ? (
             <button
               type="button"
               onClick={() => onPreview(attachment)}
@@ -936,7 +1002,7 @@ export function DocumentSlot({
           ) : null
         ) : (
           <>
-            {attachment && onPreview && (
+            {attachment && onPreview && !esBolsa && (
               <button
                 type="button"
                 onClick={() => onPreview(attachment)}
@@ -944,7 +1010,7 @@ export function DocumentSlot({
                 style={{ color: 'var(--color-flit-brand)' }}
                 aria-label={`Previsualizar ${caption}`}
                 >
-                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="ojo" className="h-3.5 w-3.5" />
               </button>
             )}
             {!deFlito && (
@@ -961,16 +1027,18 @@ export function DocumentSlot({
                   type="button"
                   onClick={() => inputRef.current?.click()}
                   disabled={busy}
-                  className="h-9 rounded-lg border bg-white px-4 text-[12px] font-semibold transition hover:bg-[#EFF6FF] disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
+                  className="h-9 rounded-lg border bg-card px-4 text-[12px] font-semibold transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50 dark:bg-transparent"
                   style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
                 >
                   {analyzing
                     ? 'Analizando documento...'
                     : uploading
                       ? 'Subiendo…'
-                      : attachment
-                        ? 'Reemplazar archivo'
-                        : 'Adjuntar archivo'}
+                      : esBolsa && bolsa.length > 0
+                        ? 'Agregar otro documento'
+                        : attachment
+                          ? 'Reemplazar archivo'
+                          : 'Adjuntar archivo'}
                 </button>
                 {canGenerate && (
                   <button
@@ -983,13 +1051,13 @@ export function DocumentSlot({
                     {generating ? 'Generando impronta…' : 'Generar impronta'}
                   </button>
                 )}
-                {attachment && (
+                {attachment && !esBolsa && (
                   <button
                     type="button"
                     onClick={() => onRemove(attachment.id)}
                     disabled={busy}
                     className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
-                    style={{ color: '#FF4E00' }}
+                    style={{ color: 'var(--destructive)' }}
                     aria-label={`Borrar ${caption}`}
                   >
                     {deleting ? 'Borrando…' : 'Borrar'}
@@ -1004,7 +1072,7 @@ export function DocumentSlot({
       {localError && (
         <p
           className="mt-1.5 text-xs"
-          style={{ color: '#FF4E00' }}
+          style={{ color: 'var(--destructive)' }}
           role="alert"
           aria-live="polite"
         >
@@ -1167,7 +1235,7 @@ export function DocumentChecklist({
       className={
         hideHeader
           ? ''
-          : 'rounded-2xl border bg-white p-4 dark:bg-[#162744]'
+          : 'rounded-2xl border bg-card p-4'
       }
       aria-label="Documentos del trámite"
     >
@@ -1214,9 +1282,9 @@ export function DocumentChecklist({
         <div
           className="mb-3 flex items-center justify-between gap-3 rounded-xl border p-3 text-xs"
           style={{
-            borderColor: '#FF4E00',
-            background: 'rgba(255,78,0,0.06)',
-            color: '#FF4E00',
+            borderColor: 'var(--badge-danger-border)',
+            background: 'var(--badge-danger-bg)',
+            color: 'var(--badge-danger-fg)',
           }}
           role="alert"
           aria-live="polite"
@@ -1279,9 +1347,9 @@ export function DocumentChecklist({
             <div
               className="mt-2 flex items-center justify-between gap-3 rounded-xl border p-3 text-xs"
               style={{
-                borderColor: '#FF4E00',
-                background: 'rgba(255,78,0,0.06)',
-                color: '#FF4E00',
+                borderColor: 'var(--badge-danger-border)',
+                background: 'var(--badge-danger-bg)',
+                color: 'var(--badge-danger-fg)',
               }}
               role="alert"
               aria-live="polite"
@@ -1319,14 +1387,25 @@ export function DocumentChecklist({
             .map((item) => {
             const tipo = item.docTipo ?? item.key;
             const attachment = attachmentByTipo.get(tipo.toLowerCase());
+            const bolsa = esTipoDocumentoMultiple(tipo)
+              ? attachments
+                  .filter((a) => a.tipo.toLowerCase() === tipo.toLowerCase())
+                  .sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt))
+              : undefined;
             return (
               <DocumentSlot
                 key={item.key}
                 item={item}
                 attachment={attachment}
+                bolsa={bolsa}
+                deletingId={deletingId}
                 uploading={uploadingTipos.has(tipo)}
                 analyzing={analyzingTipos.has(tipo)}
-                deleting={!!attachment && deletingId === attachment.id}
+                deleting={
+                  bolsa
+                    ? bolsa.some((a) => a.id === deletingId)
+                    : !!attachment && deletingId === attachment.id
+                }
                 ocr={ocrResultForTipo(ocrResults, tipo)}
                 onUpload={(file) =>
                   void upload(tipo, file).then((ok) => {

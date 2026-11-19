@@ -61,7 +61,7 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         c.EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.Aviso1);
         (await api.EnDbAsync(db => db.PortalEnlaces.CountAsync(p => p.ComparendoId == id))).Should().Be(1);
         var correo = await api.EnDbAsync(db => db.Comunicaciones.SingleAsync(x => x.ComparendoId == id));
-        correo.Asunto.Should().Be("Comparendo AV-1 del vehículo ABC124");
+        correo.Asunto.Should().Be("Comparendo AV-1 del vehículo ABC124: tienes descuento");
         correo.Tipo.Should().Be(TipoComunicacion.Aviso1);
 
         api.Reloj.Hoy(new DateOnly(2026, 10, 20));
@@ -92,10 +92,75 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var (empresa, ids) = await PrepararAsync("AV-3");
-        var r = await api.Cliente(new UsuarioDePrueba(empresa, Operador)).PostAsJsonAsync($"/api/v1/comparendos/comparendos/{ids["AV3"]}/avisos", new { tipo = "Aviso2" }, TestContext.Current.CancellationToken);
+        var r = await api.Cliente(new UsuarioDePrueba(empresa, Operador)).PostAsJsonAsync($"/api/v1/comparendos/comparendos/{ids["AV3"]}/avisos", new { tipo = "Aviso1" }, TestContext.Current.CancellationToken);
 
         (await r.Content.ReadFromJsonAsync<JsonElement>(TestContext.Current.CancellationToken)).GetProperty("estado").GetString().Should().Be("Enviado");
-        (await api.EnDbAsync(db => db.Comparendos.SingleAsync(x => x.Id == ids["AV3"]))).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.Aviso2);
+        (await api.EnDbAsync(db => db.Comparendos.SingleAsync(x => x.Id == ids["AV3"]))).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.Aviso1);
+    }
+
+    /// <summary>Bug #14270 (AV-03/AV-04): la secuencia es estricta en el servidor, también si el pedido llega por fuera de la pantalla.</summary>
+    [Fact]
+    public async Task Secuencia_RechazaCadaSaltoYAceptaElOrdenValido()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, ids) = await PrepararAsync("AV-S");
+        var id = ids["AVS"];
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+        async Task<(HttpStatusCode, string?)> EnviarAsync(string tipo)
+        {
+            var r = await cliente.PostAsJsonAsync($"/api/v1/comparendos/comparendos/{id}/avisos", new { tipo }, ct);
+            return (r.StatusCode, r.IsSuccessStatusCode ? null : (await r.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("error").GetString());
+        }
+
+        async Task<string[]> PermitidosAsync() =>
+            (await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/{id}/avisos/permitidos", ct)).GetProperty("permitidos").EnumerateArray().Select(x => x.GetString()!).ToArray();
+
+        // Sin avisos (el caso POU273): ni el 2 ni el 3, y el estado no cambia.
+        (await PermitidosAsync()).Should().Equal("Aviso1");
+        (await EnviarAsync("Aviso3")).Should().Be((HttpStatusCode.UnprocessableEntity, "Primero debe salir el aviso 1."));
+        (await EnviarAsync("Aviso2")).Should().Be((HttpStatusCode.UnprocessableEntity, "Primero debe salir el aviso 1."));
+        (await api.EnDbAsync(db => db.Comparendos.SingleAsync(x => x.Id == id, ct))).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.SinNotificar);
+
+        // Aviso 1 en el 50 %: el 2 espera a que venza el 50 % y el 3 a la tarifa plena; solo se puede reenviar el 1.
+        (await EnviarAsync("Aviso1")).Item1.Should().Be(HttpStatusCode.OK);
+        (await PermitidosAsync()).Should().Equal("Aviso1");
+        (await EnviarAsync("Aviso2")).Should().Be((HttpStatusCode.UnprocessableEntity, "El aviso 2 sale cuando vence el descuento del 50 %."));
+        (await EnviarAsync("Aviso3")).Should().Be((HttpStatusCode.UnprocessableEntity, "El aviso 3 sale cuando el comparendo ya no tiene descuento."));
+
+        // En el 25 %: procede el 2; después ya no se vuelve al 1.
+        api.Reloj.Hoy(new DateOnly(2026, 10, 21));
+        (await PermitidosAsync()).Should().Equal("Aviso1", "Aviso2");
+        (await EnviarAsync("Aviso2")).Item1.Should().Be(HttpStatusCode.OK);
+        (await EnviarAsync("Aviso1")).Should().Be((HttpStatusCode.UnprocessableEntity, "El conductor ya recibió el aviso 2: no se le envía uno anterior."));
+
+        // Sin descuento: procede el 3.
+        api.Reloj.Hoy(new DateOnly(2026, 11, 13));
+        (await PermitidosAsync()).Should().Equal("Aviso3");
+        (await EnviarAsync("Aviso3")).Item1.Should().Be(HttpStatusCode.OK);
+        (await api.EnDbAsync(db => db.AvisosConductor.Where(a => a.ComparendoId == id).OrderBy(a => a.RegistradoEn).Select(a => a.TipoAviso).ToListAsync(ct)))
+            .Should().Equal(TipoAviso.Aviso1, TipoAviso.Aviso2, TipoAviso.Aviso3);
+    }
+
+    [Fact]
+    public async Task Secuencia_EnvioMasivo_OmiteConMotivoLosQueNoProceden()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, ids) = await PrepararAsync("AV-M1", "AV-M2");
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+        (await cliente.PostAsJsonAsync($"/api/v1/comparendos/comparendos/{ids["AVM1"]}/avisos", new { tipo = "Aviso1" }, ct)).EnsureSuccessStatusCode();
+        api.Reloj.Hoy(new DateOnly(2026, 10, 21));
+        var seleccion = new { comparendoIds = ids.Values };
+
+        var cuenta = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/avisos/masivo/permitidos", seleccion, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        cuenta.EnumerateArray().ToDictionary(x => x.GetProperty("tipo").GetString()!, x => x.GetProperty("aplica").GetInt32())
+            .Should().BeEquivalentTo(new Dictionary<string, int> { ["Aviso1"] = 2, ["Aviso2"] = 1, ["Aviso3"] = 0 });
+
+        var r = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/avisos/masivo", new { comparendoIds = ids.Values, tipo = "Aviso2" }, ct)).Content.ReadFromJsonAsync<JsonElement>(ct);
+        var porNumero = r.EnumerateArray().ToDictionary(x => x.GetProperty("comparendoId").GetGuid(), x => (x.GetProperty("enviado").GetBoolean(), x.GetProperty("motivo").GetString()));
+        porNumero[ids["AVM1"]].Should().Be((true, null));
+        porNumero[ids["AVM2"]].Should().Be((false, "Primero debe salir el aviso 1."));
     }
 
     [Theory]
@@ -185,4 +250,131 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
     [InlineData("200.21.70.10", true)]
     public void D7_SoloSeDescargaDeDireccionesPublicas(string ip, bool publica) =>
         DescargaFotoHttp.EsPublica(System.Net.IPAddress.Parse(ip)).Should().Be(publica);
+
+    /// <summary>El HTML que quedó guardado de un correo del comparendo, por tipo.</summary>
+    private async Task<(string Asunto, string Html, CanalCorreo? Canal)> CorreoAsync(Guid comparendo, TipoComunicacion tipo)
+    {
+        await using var scope = api.App.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<Flit.Comparendos.Api.Persistence.ComparendosDb>();
+        var c = await db.Comunicaciones.AsNoTracking().SingleAsync(x => x.ComparendoId == comparendo && x.Tipo == tipo);
+        var archivo = await db.Archivos.AsNoTracking().SingleAsync(a => a.Id == c.CuerpoHtmlArchivoId);
+        var bytes = await scope.ServiceProvider.GetRequiredService<Flit.Comparendos.Api.Infraestructura.Archivos.IAlmacenArchivos>().LeerAsync(archivo.Referencia, CancellationToken.None);
+        return (c.Asunto, System.Text.Encoding.UTF8.GetString(bytes!), c.CanalCorreo);
+    }
+
+    [Fact]
+    public async Task HU13883_FLIT_DisenoDeTramites_YElDescuentoSegunLaVentana()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, ids) = await PrepararAsync("AVT-1");
+        var id = ids["AVT1"];
+
+        await SchedulerAsync(empresa);
+        var (_, html1, canal) = await CorreoAsync(id, TipoComunicacion.Aviso1);
+        canal.Should().Be(CanalCorreo.FlitSmtp);
+        html1.Should().Contain("/assets/correo/flit-cabecera.png").And.Contain("AVISO DE COMPARENDO").And.Contain("50% de descuento")
+            .And.Contain("Juan P&#233;rez").And.NotContain("Los plazos de descuento ya terminaron");
+
+        api.Reloj.Hoy(new DateOnly(2026, 10, 20));
+        await SchedulerAsync(empresa);
+        var (asunto2, html2, _) = await CorreoAsync(id, TipoComunicacion.Aviso2);
+        asunto2.Should().Be("Aún tienes 25% de descuento: comparendo AVT-1");
+        html2.Should().Contain("El plazo del 50%").And.Contain("25% de descuento");
+    }
+
+    [Fact]
+    public async Task HU13883_Renting_TextosDeV1_SuMarca_YNadaDeFlit()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, ids) = await PrepararAsync("AVR-1");
+        var id = ids["AVR1"];
+        // La empresa tiene «API Renting cliente» en Trámites (HU #13882).
+        api.Empresas.Agregar(empresa, "Renting Colombia S.A.S", NitGestora, CanalCorreo.EmpresaApi);
+        api.App.Services.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>().Remove(CanalDeTramites.ClaveCache);
+
+        await SchedulerAsync(empresa);
+        var (asunto, html, canal) = await CorreoAsync(id, TipoComunicacion.Aviso1);
+        canal.Should().Be(CanalCorreo.EmpresaApi);
+        asunto.Should().Be("Información sobre la fotomulta N° AVR-1 asociada al vehículo con placa ABC124");
+        html.Should().Contain("/assets/correo/renting-cabecera.jpg").And.Contain("/assets/correo/renting-pie.jpg")
+            .And.Contain("Hemos identificado una fotomulta asociada a un vehículo rentado con <strong>Renting Colombia</strong>.")
+            .And.Contain("Hoy puedes pagarla con el 50% de descuento")
+            .And.Contain("El organismo de tránsito notificó la fotomulta el 1 de octubre de 2026", "ya hay notificación: no se dice que no la hay");
+        html.Should().NotContain("FLIT").And.NotContain("flit", "el conductor de Renting no ve a FLIT");
+    }
+
+    [Theory]
+    [InlineData("LAURA MARCELA GÓMEZ DE LA ROSA", "Laura Marcela Gómez de la Rosa")]
+    [InlineData("RENTING COLOMBIA S.A.S.", "Renting Colombia S.A.S.")]
+    [InlineData("Juan Pérez", "Juan Pérez")]
+    [InlineData("CONDUCTOR DE PRUEBA QNQ836", "Conductor de Prueba QNQ836")]
+    [InlineData("  ", "")]
+    public void HU13883_NombresEnMayusculas_ANombrePropio(string entrada, string esperado) =>
+        Flit.Comparendos.Api.Modulos.Plantillas.Formato.NombrePropio(entrada).Should().Be(esperado);
+
+    /// <summary>Representante legal de la empresa que firma el cambio de contraventor, con firma y, si se pide, poder.</summary>
+    private async Task RepresentanteAsync(Guid empresa, bool firma, bool poder)
+    {
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, [Permisos.RepresentantesVer, Permisos.RepresentantesGestionar]));
+        var rl = await (await cliente.PostAsJsonAsync("/api/v1/comparendos/representantes", new
+        {
+            alcance = "Empresa", tipoDocumento = "CC", numeroDocumento = "52123456", nombres = "María Gómez", correo = "rl@gestora.test", cargo = "Representante legal",
+            permisoEnvioDp = true, permisoCambioContraventor = true,
+        })).Content.ReadFromJsonAsync<JsonElement>();
+        var id = rl.GetProperty("id").GetGuid();
+        async Task SubirAsync(string tipo, byte[] contenido, string contentType, string nombre)
+        {
+            using var form = new MultipartFormDataContent { { new ByteArrayContent(contenido) { Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType) } }, "archivo", nombre } };
+            (await cliente.PostAsync($"/api/v1/comparendos/representantes/{id}/documentos/{tipo}", form)).EnsureSuccessStatusCode();
+        }
+
+        if (firma)
+            await SubirAsync("firma", Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="), "image/png", "firma.png");
+        if (poder)
+            await SubirAsync("escritura", System.Text.Encoding.ASCII.GetBytes("%PDF-1.4\n%poder de prueba\n%%EOF"), "application/pdf", "poder.pdf");
+    }
+
+    private Task<List<string>> AdjuntosAsync(Guid comparendo, TipoComunicacion tipo) =>
+        api.EnDbAsync(db => (from c in db.Comunicaciones
+                             join a in db.ComunicacionAdjuntos on c.Id equals a.ComunicacionId
+                             where c.ComparendoId == comparendo && c.Tipo == tipo
+                             orderby a.Nombre
+                             select a.Nombre).ToListAsync());
+
+    [Fact]
+    public async Task HU13884_ConRepresentante_AdjuntaLaAutorizacionFirmadaYElPoder()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, ids) = await PrepararAsync("AVA-1");
+        await RepresentanteAsync(empresa, firma: true, poder: true);
+
+        await SchedulerAsync(empresa);
+        (await AdjuntosAsync(ids["AVA1"], TipoComunicacion.Aviso1)).Should().Equal("autorizacion-cambio-infractor-ABC124.pdf", "poder-gestora-de-prueba.pdf");
+        var (_, html, _) = await CorreoAsync(ids["AVA1"], TipoComunicacion.Aviso1);
+        html.Should().Contain("Adjuntamos la autorizaci").And.Contain("y el poder de la empresa");
+
+        // El PDF de la autorización lleva el representante y el conductor.
+        var pdf = await api.EnDbAsync(async db =>
+        {
+            var archivoId = await (from c in db.Comunicaciones join a in db.ComunicacionAdjuntos on c.Id equals a.ComunicacionId
+                                   where c.ComparendoId == ids["AVA1"] && a.Nombre.StartsWith("autorizacion") select a.ArchivoId).SingleAsync();
+            return await db.Archivos.SingleAsync(a => a.Id == archivoId);
+        });
+        pdf.ContentType.Should().Be("application/pdf");
+    }
+
+    [Fact]
+    public async Task HU13884_SinFirmaNiPoder_SaleSinEsosAdjuntos_YLaLineaDeTiempoLoDice()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, ids) = await PrepararAsync("AVS-1");
+        await RepresentanteAsync(empresa, firma: false, poder: false);
+
+        await SchedulerAsync(empresa);
+        (await AdjuntosAsync(ids["AVS1"], TipoComunicacion.Aviso1)).Should().BeEmpty("nunca sale un adjunto vacío");
+        var (_, html, _) = await CorreoAsync(ids["AVS1"], TipoComunicacion.Aviso1);
+        html.Should().NotContain("Adjuntamos la autorizaci", "el texto no promete lo que no va");
+        var evento = await api.EnDbAsync(db => db.Timeline.Where(e => e.ComparendoId == ids["AVS1"] && e.Tipo == TipoEventoTimeline.AvisoEnviado).Select(e => e.Descripcion).SingleAsync());
+        evento.Should().Contain("Salió sin la autorización (el representante legal no tiene la firma cargada) ni el poder");
+    }
 }

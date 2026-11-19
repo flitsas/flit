@@ -364,4 +364,101 @@ export const INTRO_ARTICLES: ManualArticle[] = [
       },
     ],
   },
+  {
+    slug: "0-introduccion/7-tablas-y-paginacion",
+    title: "Tablas: cómo leerlas y moverte entre páginas",
+    audience: "Todos",
+    sectionId: "introduccion",
+    keywords: [
+      "tabla",
+      "tablas",
+      "paginación",
+      "filas por página",
+      "registros por página",
+      "primera página",
+      "última página",
+      "página siguiente",
+      "página anterior",
+      "cuántos registros",
+      "filtrar",
+      "filtro",
+      "filtros",
+      "filtrar una tabla",
+      "filtro por columna",
+      "embudo",
+      "filtro de columna",
+      "quitar filtro",
+      "buscar en una tabla",
+      "más filtro",
+      "limpiar filtros",
+      "empezar de cero",
+      "periodo",
+    ],
+    summary:
+      "Todas las tablas de FLIT se ven y se usan igual: cómo filtrar por columna, cambiar de página, ir al principio o al final y elegir cuántas filas ver.",
+    blocks: [
+      {
+        id: "mismo-diseno",
+        title: "1. Todas las tablas funcionan igual",
+        paragraphs: [
+          "Trámites, usuarios, compañías, reportes, auditoría o cualquier otra lista: todas las tablas de FLIT tienen el mismo aspecto y los mismos controles. La cabecera gris se queda fija al bajar, cada fila es una tarjeta que se ilumina al pasar el puntero y las acciones de la fila son iconos con su nombre al acercar el puntero.",
+        ],
+      },
+      {
+        id: "navegar",
+        title: "2. Moverte entre páginas",
+        paragraphs: ["Al pie de cada tabla, a la derecha, está la barra de páginas:"],
+        bullets: [
+          "«Primera» lleva a la primera página.",
+          "‹ y › van a la página anterior y a la siguiente.",
+          "Los números saltan directo a esa página; la página en la que estás se ve resaltada en azul.",
+          "«Última» lleva a la última página.",
+          "Si ya estás en la primera página, «Primera» y ‹ se ven apagados; en la última, › y «Última» también.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "El texto «Mostrando 21–30 de 95» te dice qué registros estás viendo y cuántos hay en total. Si todo cabe en una sola página, no aparecen los botones de navegación.",
+          },
+        ],
+      },
+      {
+        id: "filas-por-pagina",
+        title: "3. Elegir cuántas filas ver",
+        paragraphs: [
+          "A la izquierda del pie, «Filas por página» deja elegir 10, 20, 30 o 50 registros. Toda tabla abre con 10. Al cambiar la cantidad, la tabla vuelve a la primera página para que no te pierdas.",
+          "Tu elección se recuerda mientras tengas abierta la sesión del navegador: si eliges 50 en Usuarios, sales a otro módulo y vuelves, sigues viendo 50. Cada tabla recuerda lo suyo, así que cambiar Usuarios no cambia Auditoría. Al cerrar la pestaña y entrar de nuevo, todas vuelven a 10.",
+        ],
+      },
+      {
+        id: "filtrar-tabla",
+        title: "4. Cómo filtrar una tabla",
+        paragraphs: [
+          "Hay dos lugares para filtrar, y se usan igual en Compañías, Usuarios, Auditoría y las demás listas: aprendes una vez y la usas en todas.",
+        ],
+        bullets: [
+          "En cada columna: todas las columnas con datos tienen un pequeño embudo en su encabezado (la columna Acciones no lo tiene). Al pulsarlo se despliega el filtro de esa columna.",
+          "Si la columna es de texto (nombre, documento, código…), escribe lo que buscas en la caja «X contiene»: el cursor ya queda ahí. Pulsa Enter o «Aplicar».",
+          "Si la columna tiene opciones (estado, tipo, catálogos), marca una o varias casillas y pulsa «Aplicar».",
+          "Si la columna es una fecha, elige un periodo: Sin periodo, Hoy, Últimos 7 días, Últimos 30 días, Últimos 90 días, Mes actual, Mes anterior o Rango propio con fecha inicial y final. Si la fecha inicial es posterior a la final, te avisa y no aplica el filtro.",
+          "Para quitar un filtro, abre el embudo de esa columna y pulsa «Quitar filtro». Cuando una columna tiene filtro, su embudo se pinta en azul para que lo reconozcas de un vistazo.",
+          "Arriba de la tabla: cada pantalla conserva los filtros que ya tenía (por ejemplo, el panel de NIT, Razón social, Estado y fechas con «Buscar» y «Limpiar» en el listado de Compañías, o un buscador por nombre, documento o código en otras listas). No hay un botón «+ Filtro» ni un «Periodo» arriba: lo de las columnas se hace desde el embudo.",
+          "Los filtros de arriba y los de las columnas se combinan: la tabla muestra solo lo que cumple todos a la vez."
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si ningún registro cumple los filtros, la tabla sigue mostrando sus encabezados y filtros, y avisa «Ningún registro coincide con los filtros» con el botón «Limpiar filtros» para volver a ver todo. También puedes quitar un solo filtro desde su embudo.",
+          },
+        ],
+      },
+      {
+        id: "filtros",
+        title: "5. Filtros y exportaciones",
+        paragraphs: [
+          "Las páginas se calculan sobre el resultado filtrado: si aplicas un filtro que deja pocos registros, la tabla te lleva a la página que existe en vez de mostrarte una vacía. Exportar a Excel o CSV siempre incluye todo el resultado del filtro, no solo la página que estás viendo.",
+        ],
+      },
+    ],
+  },
 ];

@@ -12,16 +12,17 @@ describe('SectionTabs: color en tema oscuro', () => {
     render(<SectionTabs tabs={tabs} active="a" onChange={() => {}} ariaLabel="Secciones" />);
     const inactiva = screen.getByRole('tab', { name: 'Segunda' });
     expect(inactiva.getAttribute('style') ?? '').not.toMatch(/color|opacity/i);
-    expect(inactiva.className).toContain('dark:text-white/[0.78]');
-    expect(inactiva.className).toContain('dark:opacity-100');
-    expect(inactiva.className).toContain('text-flit-primary');
+    // UI Kit 2026 (propuesta-2): el color sale de `.kit-pestana` (--kit-gris, que ya cambia en oscuro), no de clases sueltas.
+    expect(inactiva.className).toContain('kit-pestana');
+    expect(inactiva.className).not.toContain('kit-pestana--activa');
   });
 
   it('la activa conserva su azul y sin estilo inline', () => {
     render(<SectionTabs tabs={tabs} active="a" onChange={() => {}} ariaLabel="Secciones" />);
     const activa = screen.getByRole('tab', { name: 'Primera' });
     expect(activa.getAttribute('style') ?? '').toBe('');
-    expect(activa.className).toContain('text-flit-brand');
+    // UI Kit 2026: la activa va en --kit-azul-texto (#1D53FF; #8FB0FF en oscuro) por `.kit-pestana--activa`.
+    expect(activa.className).toContain('kit-pestana--activa');
     expect(activa.className).not.toContain('dark:text-white');
   });
 });

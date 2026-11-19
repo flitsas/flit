@@ -18,14 +18,8 @@ import { formatDurationMs, formatInt, formatPct } from "../format";
 import { KpiCard } from "../KpiCard";
 import { PeakHoursHeatmap } from "../PeakHoursHeatmap";
 import { useAnalyticsQuery } from "../useAnalyticsQuery";
-import {
-  CARDLIST_CELL,
-  CARDLIST_HEAD_ROW,
-  CARDLIST_ROW,
-  CARDLIST_SCROLL,
-  CARDLIST_TABLE,
-  CARDLIST_TH,
-} from "@/components/atom/table-cardlist";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 
 export interface UsoTabProps {
   filters: ReportFilters;
@@ -45,7 +39,39 @@ function isUsageEmpty(data: UsageData): boolean {
   );
 }
 
+type WizardStep = UsageData["wizardSteps"][number];
+
+// HU #13923 — columnas del embudo de pasos del wizard con el DataTable estándar.
+const WIZARD_STEP_COLUMNS: DataTableColumn<WizardStep>[] = [
+  { key: "paso", header: "Paso", cellClassName: "font-medium", render: (step) => step.stepKey },
+  { key: "vistas", header: "Vistas", render: (step) => formatInt(step.views) },
+  { key: "completados", header: "Completados", render: (step) => formatInt(step.completions) },
+  {
+    key: "abandono",
+    header: "Abandono",
+    render: (step) => (
+      <span className="inline-flex items-center gap-2">
+        <span
+          className="font-semibold"
+          style={{ color: step.abandonmentPct >= 30 ? "var(--destructive)" : step.abandonmentPct >= 10 ? "var(--badge-warning-fg)" : "var(--flit-success-ink)" }}
+        >
+          {formatPct(step.abandonmentPct)}
+        </span>
+        <span className="h-1.5 w-16 rounded-full bg-flit-gray overflow-hidden">
+          <span
+            className="block h-full rounded-full"
+            style={{ width: `${Math.min(100, step.abandonmentPct)}%`, background: "var(--destructive)" }}
+          />
+        </span>
+      </span>
+    ),
+  },
+  { key: "promedio", header: "Tiempo promedio", cellClassName: "opacity-80", render: (step) => formatDurationMs(step.avgDurationMs) },
+  { key: "mediano", header: "Tiempo mediano", cellClassName: "opacity-80", render: (step) => formatDurationMs(step.medianDurationMs) },
+];
+
 export function UsoTab({ filters, needsCompany }: UsoTabProps) {
+  const pg = usePaginacion("tabs.UsoTab");
   const params = toMetricsParams(filters);
   const usage = useAnalyticsQuery(
     (signal) => fetchUsageMetrics(params, signal),
@@ -67,15 +93,17 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
     >
       {usage.data && (
         <div className="flex flex-col gap-4">
-          <div className="grid grid-cols-2 gap-3 max-w-xl">
+          <div className="grid grid-cols-[repeat(auto-fit,minmax(min(200px,100%),1fr))] gap-4 max-w-xl">
             <KpiCard
               label="Duración media del wizard"
+              icono="tiempo"
               value={formatDurationMs(usage.data.current.avgWizardDurationMs)}
               tooltip="Promedio del tiempo total desde que se abre el wizard hasta radicar el trámite."
               color="var(--color-flit-brand)"
             />
             <KpiCard
               label="Duración mediana del wizard"
+              icono="tiempo"
               value={formatDurationMs(usage.data.current.medianWizardDurationMs)}
               tooltip="Mediana del tiempo total del wizard: la mitad de los trámites se radica en este tiempo o menos."
               color="var(--color-flit-tech)"
@@ -83,7 +111,7 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
           </div>
 
           <section aria-labelledby="wizard-steps-title">
-            {/* Bug #13055 — tabla homologada con el modelo de trámites (sin tarjeta envolvente). */}
+            {/* Bug #13055 — tabla homologada con el modelo de trámites; desde la HU #14477 la tarjeta la pone DataTable. */}
             <h2
               id="wizard-steps-title"
               className="text-sm font-bold mb-3"
@@ -91,55 +119,27 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
             >
               Embudo de pasos del wizard
             </h2>
-            {usage.data.current.wizardSteps.length === 0 ? (
-              <p className="text-xs opacity-60">Aún no hay telemetría del wizard.</p>
-            ) : (
-              <div className={CARDLIST_SCROLL}>
-                <table className={CARDLIST_TABLE} data-testid="wizard-steps-table" aria-labelledby="wizard-steps-title">
-                  <thead>
-                    <tr className={CARDLIST_HEAD_ROW}>
-                      <th scope="col" className={CARDLIST_TH}>Paso</th>
-                      <th scope="col" className={CARDLIST_TH}>Vistas</th>
-                      <th scope="col" className={CARDLIST_TH}>Completados</th>
-                      <th scope="col" className={CARDLIST_TH}>Abandono</th>
-                      <th scope="col" className={CARDLIST_TH}>Tiempo promedio</th>
-                      <th scope="col" className={CARDLIST_TH}>Tiempo mediano</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {usage.data.current.wizardSteps.map((step) => (
-                      <tr key={step.stepKey} className={CARDLIST_ROW}>
-                        <td className={`${CARDLIST_CELL} font-medium`}>{step.stepKey}</td>
-                        <td className={CARDLIST_CELL}>{formatInt(step.views)}</td>
-                        <td className={CARDLIST_CELL}>{formatInt(step.completions)}</td>
-                        <td className={CARDLIST_CELL}>
-                          <span className="inline-flex items-center gap-2">
-                            <span
-                              className="font-semibold"
-                              style={{ color: step.abandonmentPct >= 30 ? "#FF4E00" : step.abandonmentPct >= 10 ? "#F9AC00" : "#8CC63F" }}
-                            >
-                              {formatPct(step.abandonmentPct)}
-                            </span>
-                            <span className="h-1.5 w-16 rounded-full bg-[#DFE5ED] dark:bg-[#1E2A3C] overflow-hidden">
-                              <span
-                                className="block h-full rounded-full"
-                                style={{ width: `${Math.min(100, step.abandonmentPct)}%`, background: "#FF4E00" }}
-                              />
-                            </span>
-                          </span>
-                        </td>
-                        <td className={`${CARDLIST_CELL} opacity-80`}>{formatDurationMs(step.avgDurationMs)}</td>
-                        <td className={`${CARDLIST_CELL} opacity-80`}>{formatDurationMs(step.medianDurationMs)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+            {/* HU #13923 — paginación estándar con «Filas por página»; el texto vacío se conserva. */}
+            <div data-testid="wizard-steps-table">
+              <DataTable
+                columns={WIZARD_STEP_COLUMNS}
+                rows={pg.paginar(usage.data.current.wizardSteps)}
+                getRowKey={(step) => step.stepKey}
+                ariaLabel="Embudo de pasos del wizard"
+                emptyMessage="Aún no hay telemetría del wizard."
+                pagination={{
+                  page: pg.page,
+                  pageSize: pg.pageSize,
+                  totalCount: usage.data.current.wizardSteps.length,
+                  onPageChange: pg.setPage,
+                  onPageSizeChange: pg.setPageSize,
+                }}
+              />
+            </div>
           </section>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="modulos-title">
+            <section className="rounded-2xl p-5 bg-card border" aria-labelledby="modulos-title">
               <h2 id="modulos-title" className="text-sm font-bold mb-3" title="Eventos de apertura de módulo y accesos a la API, agrupados por módulo.">
                 Módulos más usados
               </h2>
@@ -156,7 +156,7 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
               />
             </section>
 
-            <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="documentos-title">
+            <section className="rounded-2xl p-5 bg-card border" aria-labelledby="documentos-title">
               <h2
                 id="documentos-title"
                 className="text-sm font-bold mb-3"
@@ -171,14 +171,14 @@ export function UsoTab({ filters, needsCompany }: UsoTabProps) {
                   value: d.replacements,
                   hint: `${formatInt(d.uploads)} cargas totales`,
                 }))}
-                color="#F9AC00"
+                color="var(--badge-warning-fg)"
                 emptyMessage="Sin reemplazos de documentos en el periodo."
                 testId="documentos-reemplazados"
               />
             </section>
           </div>
 
-          <section className="rounded-2xl p-5 bg-white dark:bg-[#0B0F14] border" aria-labelledby="heatmap-title">
+          <section className="rounded-2xl p-5 bg-card border" aria-labelledby="heatmap-title">
             <h2 id="heatmap-title" className="text-sm font-bold mb-3" title="Eventos registrados por día de la semana y hora, en hora de Bogotá.">
               Horas pico de uso
             </h2>

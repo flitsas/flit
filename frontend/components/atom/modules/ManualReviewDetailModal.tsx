@@ -1,7 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, CheckCircle2, Clock, Eye, ScanFace, ShieldCheck, XCircle } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 import { Modal } from '@flit/ui/Modal';
 import { UiStateBoundary } from '@flit/ui/UiStateBoundary';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
@@ -28,8 +29,8 @@ type Carga = 'loading' | 'error' | 'ready';
 export function Dato({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-xs font-medium text-[#59677D] dark:text-white/70">{label}</dt>
-      <dd className="mt-0.5 text-sm font-semibold text-flit-primary dark:text-white">{children}</dd>
+      <dt className="text-xs font-medium text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 text-sm font-semibold text-foreground">{children}</dd>
     </div>
   );
 }
@@ -100,7 +101,7 @@ export function ManualReviewDetailModal({
 
   return (
     // Con el visor o un diálogo de confirmación abiertos, Escape cierra solo ese: el detalle queda `busy`.
-    <Modal open onClose={onClose} busy={visorAbierto || accionAbierta} title="Detalle de validación manual" icon={ScanFace} size="xl">
+    <Modal open onClose={onClose} busy={visorAbierto || accionAbierta} title="Detalle de validación manual" icono="biometria" size="xl">
       <DetalleCuerpo
         id={id}
         client={client}
@@ -133,14 +134,26 @@ function contarNoVerificadas(detail: ManualDetail): number {
   return [fotos.rostro, fotos.anverso, fotos.reverso].filter((f) => f?.estado === 'no_verificada').length;
 }
 
+/** «Aprobada por X el DD/MM/YYYY HH:mm»; solo con datos, nunca «null». */
+function textoRevision(verbo: 'Aprobada' | 'Rechazada', detail: ManualDetail): string | null {
+  const quien = detail.reviewedBy?.trim();
+  const cuando = detail.reviewedAt ? formatFechaHora(detail.reviewedAt) : '';
+  if (!quien && !cuando) return null;
+  return `${verbo}${quien ? ` por ${quien}` : ''}${cuando ? ` el ${cuando}` : ''}`;
+}
+
 /** Lo primero que lee quien abre el detalle: en qué va el caso y qué sigue. */
 function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCapturas: boolean }) {
   if (detail.status === 'aprobado') {
+    const revision = textoRevision('Aprobada', detail);
     return (
       <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-2.5 text-sm ${MANUAL_AVISO.success}`}>
-        <p className="flex items-center gap-2 font-semibold">
-          <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden /> Identidad aprobada
-        </p>
+        <div className="min-w-0">
+          <p className="flex items-center gap-2 font-semibold">
+            <IconoAviso tipo="ok" className="h-4 w-4 shrink-0" /> Identidad aprobada
+          </p>
+          {revision && <p className="mt-0.5 pl-6 text-xs">{revision}</p>}
+        </div>
         <CertificadoIdentidadAccion
           validation={{ id: detail.id, status: 'aprobado', provider: 'manual', cartaDisponible: detail.cartaDisponible }}
         />
@@ -148,10 +161,12 @@ function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCaptu
     );
   }
   if (detail.status === 'rechazado') {
+    const revision = textoRevision('Rechazada', detail);
     return (
       <div className={`${MANUAL_AVISO_BASE} ${MANUAL_AVISO.danger}`}>
-        <XCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <Icono nombre="cerrar" className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0">
+          {revision && <p className="text-xs">{revision}</p>}
           {detail.rejectionReasonCode && (
             <>
               <p className="text-xs">Motivo del rechazo</p>
@@ -170,7 +185,7 @@ function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCaptu
   if (sinCapturas) {
     return (
       <div role="status" className={`${MANUAL_AVISO_BASE} ${MANUAL_AVISO.info}`}>
-        <Clock className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+        <Icono nombre="reloj" className="mt-0.5 h-4 w-4 shrink-0" />
         <div className="min-w-0">
           <p className="font-semibold">El cliente aún no ha capturado.</p>
           {detail.linkExpiresAt && (
@@ -188,9 +203,9 @@ function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCaptu
     return (
       <div className={`${MANUAL_AVISO_BASE} ${noVerificadas > 0 ? MANUAL_AVISO.warning : MANUAL_AVISO.info}`}>
         {noVerificadas > 0 ? (
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
         ) : (
-          <Eye className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <Icono nombre="ojo" className="mt-0.5 h-4 w-4 shrink-0" />
         )}
         <div className="min-w-0">
           <p className="font-semibold">Revisa las fotos y decide</p>
@@ -249,16 +264,16 @@ function DetalleCuerpo({
           <>
             <section
               aria-label="Datos del caso"
-              className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10"
+              className="rounded-2xl border border-border p-4"
             >
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-lg font-bold text-flit-primary dark:text-white">{detail.fullName}</p>
-                  <p className="font-mono text-sm text-[#59677D] dark:text-white/70">{detail.documentNumber}</p>
+                  <p className="text-lg font-bold text-foreground">{detail.fullName}</p>
+                  <p className="font-mono text-sm text-muted-foreground">{detail.documentNumber}</p>
                 </div>
                 <ManualStatusBadge status={detail.status} />
               </div>
-              <dl className="mt-3 grid gap-3 border-t border-[#DFE5ED] pt-3 sm:grid-cols-2 lg:grid-cols-4 dark:border-white/10">
+              <dl className="mt-3 grid gap-3 border-t border-border pt-3 sm:grid-cols-2 lg:grid-cols-4">
                 <Dato label="Compañía">{detail.tenantName}</Dato>
                 <Dato label="Origen">{manualOriginLabel(detail.origin)}</Dato>
                 <Dato label="Fecha de activación">{formatFechaHora(detail.activatedAt)}</Dato>
@@ -267,10 +282,10 @@ function DetalleCuerpo({
                 )}
               </dl>
               <div className="mt-3 flex items-start gap-2 text-sm">
-                <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-flit-brand" aria-hidden />
+                <Icono nombre="escudo" className="mt-0.5 h-4 w-4 shrink-0 text-flit-brand" />
                 <div className="min-w-0">
-                  <p className="text-xs font-medium text-[#59677D] dark:text-white/70">Consentimiento de tratamiento de datos</p>
-                  <p className="mt-0.5 font-semibold text-flit-primary dark:text-white">
+                  <p className="text-xs font-medium text-muted-foreground">Consentimiento de tratamiento de datos</p>
+                  <p className="mt-0.5 font-semibold text-foreground">
                     {detail.consentAt
                       ? `Aceptado el ${formatFechaHora(detail.consentAt)}${detail.consentTextVersion ? ` · texto ${detail.consentTextVersion}` : ''}`
                       : 'Sin constancia: el cliente aún no ha aceptado.'}
@@ -284,10 +299,11 @@ function DetalleCuerpo({
                 role="status"
                 className={`${MANUAL_AVISO_BASE} items-center font-semibold ${avisoConProblema ? MANUAL_AVISO.warning : MANUAL_AVISO.success}`}
               >
+                {/* Discos de aviso del juego de íconos FLIT (PDF): el estado del aviso no es un glifo suelto. */}
                 {avisoConProblema ? (
-                  <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+                  <IconoAviso tipo="alerta" className="h-4 w-4 shrink-0" />
                 ) : (
-                  <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
+                  <IconoAviso tipo="ok" className="h-4 w-4 shrink-0" />
                 )}{' '}
                 {mensaje}
               </p>
@@ -298,10 +314,10 @@ function DetalleCuerpo({
             {!sinCapturas && (
               <section aria-labelledby={`${id}-capturas`}>
                 <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
-                  <h3 id={`${id}-capturas`} className="text-sm font-bold text-flit-primary dark:text-white">
+                  <h3 id={`${id}-capturas`} className="text-sm font-bold text-flit-primary">
                     Capturas del cliente
                   </h3>
-                  <p className="text-xs text-[#59677D] dark:text-white/70">Toca una foto para verla en grande.</p>
+                  <p className="text-xs text-muted-foreground">Toca una foto para verla en grande.</p>
                 </div>
                 <ManualImageGallery client={client} id={detail.id} images={detail.images} onViewerChange={onViewerChange} validacionFotos={detail.validacionFotos} />
               </section>
@@ -309,7 +325,7 @@ function DetalleCuerpo({
           </>
         )}
       </UiStateBoundary>
-      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-[#DFE5ED] bg-white px-1 pb-1 pt-3 dark:border-white/10 dark:bg-[#162744]">
+      <div className="sticky bottom-0 flex flex-wrap items-center justify-between gap-3 border-t border-border bg-card px-1 pb-1 pt-3">
         <button type="button" onClick={onClose} className={MANUAL_BTN_SECUNDARIO}>
           Cerrar
         </button>

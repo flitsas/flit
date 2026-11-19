@@ -71,7 +71,7 @@ public static class PortalEndpoints
         {
             empresa = config?.EmpresaNombre,
             conjunto = (config?.ConjuntoPlantillas ?? ConjuntoPlantillas.Flit).ToString(),
-            conductor = c.Contraventor is { } k ? new { k.Nombres, documento = $"{k.TipoDocumento} {HtmlCorreo.Enmascarar(k.NumeroDocumento)}" } : null,
+            conductor = c.Contraventor is { } k ? new { k.Nombres, documento = k.NumeroDocumento is null ? null : $"{k.TipoDocumento} {HtmlCorreo.Enmascarar(k.NumeroDocumento)}" } : null,
             comparendo = new
             {
                 c.Numero,

@@ -266,7 +266,7 @@ beforeEach(() => {
   mocks.setCurrentStep.mockResolvedValue({ id: 'inst-1', currentStep: null });
   mocks.runPreflight.mockResolvedValue(GREEN_PREFLIGHT);
   mocks.getPreflight.mockResolvedValue(null);
-  // HU #10478 — por defecto Kyverum-first (el wizard oculta el tipo de documento en traspaso).
+  // HU #10478 — por defecto Kyverum-first (selector visible; consult legacy manda CC).
   mocks.getConsultationConfig.mockResolvedValue({
     vehicleVin: 'kyverum_runt',
     vehiclePlate: 'kyverum_runt',
@@ -571,10 +571,10 @@ describe('TramiteWizard — aviso acorde al estado real (HU #11053)', () => {
     expect(screen.getByText(/aún puedes generar o descargar el expediente consolidado/i)).toBeInTheDocument();
   });
 
-  it('aprobado: anuncia la aprobación y que la documentación ya no se regenera', async () => {
+  it('aprobado: anuncia la aprobación y que la documentación solo cambia si un administrador actualiza un documento', async () => {
     renderEnEstado('aprobado');
     expect(await screen.findByText(/Trámite aprobado — solo visualización/i)).toBeInTheDocument();
-    expect(screen.getByText(/ya no se regenera/i)).toBeInTheDocument();
+    expect(screen.getByText(/Solo cambia si un administrador actualiza un documento/i)).toBeInTheDocument();
     // Lo que el estado NO permite no debe anunciarse.
     expect(screen.queryByText(/Enviado a tránsito/i)).not.toBeInTheDocument();
   });
@@ -735,55 +735,110 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await waitFor(() => expect(onExit).toHaveBeenCalled());
   });
 
-  it('N 03 — fallo de generación de docs tras preparado bloquea la entrega', async () => {
-    const BORRADOR_COMPLETO: WizardState = {
+  // Bug #14631 — radicar desde `preparado` (misma ruta que "N 03 dos pasos"): el consolidado ya no
+  // reintenta ni usa force, y una falla TÉCNICA no bloquea el /submit.
+  async function radicarDesdePreparado() {
+    const PREPARADO: WizardState = {
       ...TRASPASO_WIZARD,
       canSubmit: true,
       blockers: [],
+      status: 'preparado',
+      allowedTransitions: ['entregado'],
       steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
     };
-    mocks.getWizardState.mockResolvedValue(BORRADOR_COMPLETO);
-    mocks.getInstance.mockResolvedValue({
-      id: 'inst-1',
-      status: 'borrador',
-      fieldValues: [
-        {
-          formFieldId: null,
-          fieldKey: 'transit_office_code',
-          valueText: '11001',
-          valueJson: null,
-          source: 'runt',
-        },
-      ],
-      actors: [],
-      statusHistory: [],
-    });
-    // Pre-gen falla; al radicar: preparado sí, pero sin consolidado no se entrega.
-    mocks.generarFur.mockRejectedValue(new Error('fur_unavailable'));
-    mocks.generarConsolidado.mockRejectedValue(new Error('fur_unavailable'));
-
-    const onExit = vi.fn();
+    mocks.getWizardState.mockResolvedValue(PREPARADO);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'preparado', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'entregado' });
     const user = userEvent.setup();
-    render(
-      <TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={onExit} />,
-    );
-    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
-    await user.click(screen.getByRole('button', { name: /^Paso 6: Resumen/ }));
-
-    const radicar = await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ });
-    expect(radicar).toBeEnabled();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={vi.fn()} />);
+    const radicar = await screen.findByRole('button', { name: /Finalizar y enviar trámite/ });
+    await waitFor(() => expect(radicar).toBeEnabled());
     await user.click(radicar);
     await screen.findByText('Confirmar radicación');
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
+  }
 
-    await waitFor(() =>
-      expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
+  const AVISO_CONSOLIDADO = /Trámite enviado al OT\. El expediente consolidado se está generando/;
+
+  it('Bug #14631 — fallo TÉCNICO del consolidado NO bloquea: 1 solo intento, se llama /submit y avisa', async () => {
+    mocks.generarConsolidado.mockRejectedValue(new FakeTramitesApiError(502, 'Bad Gateway', null));
+    await radicarDesdePreparado();
+
+    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(toastShow).toHaveBeenCalledWith(expect.stringMatching(AVISO_CONSOLIDADO), 'success');
+    expect(screen.queryByText(/No se puede radicar/i)).not.toBeInTheDocument();
+    await screen.findByText('¡Trámite completado!');
+  });
+
+  it('Bug #14631 — consolidado OK: se radica sin force y sin aviso de generación pendiente', async () => {
+    await radicarDesdePreparado();
+
+    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.generarConsolidado).toHaveBeenCalledWith(
+      'inst-1',
+      undefined,
+      false,
+      expect.any(AbortSignal),
     );
+    expect(toastShow).not.toHaveBeenCalledWith(expect.stringMatching(AVISO_CONSOLIDADO), 'success');
+    await screen.findByText('¡Trámite completado!');
+  });
+
+  it('Bug #14631 — consolidado incompleto (regla de negocio) SÍ bloquea y no llama /submit', async () => {
+    mocks.generarConsolidado.mockResolvedValue({
+      incompleto: true,
+      documentosFaltantes: ['Cédula'],
+    });
+    await radicarDesdePreparado();
+
+    expect(await screen.findByText(/No se puede radicar: Expediente incompleto: faltan Cédula/)).toBeInTheDocument();
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
     expect(mocks.submitInstance).not.toHaveBeenCalled();
+  });
+
+  it('Bug #14631 — un 4xx de negocio del consolidado (adjunto no disponible) SÍ bloquea con el detalle', async () => {
+    mocks.generarConsolidado.mockRejectedValue(
+      new FakeTramitesApiError(409, 'Un adjunto del expediente no está disponible.', {
+        code: 'adjunto_no_disponible',
+      }),
+    );
+    await radicarDesdePreparado();
+
     expect(
-      await screen.findByText(/No se puede radicar/i),
+      await screen.findByText(/No se puede radicar: Un adjunto del expediente no está disponible\./),
     ).toBeInTheDocument();
-    expect(onExit).not.toHaveBeenCalled();
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.submitInstance).not.toHaveBeenCalled();
+    expect(toastShow).not.toHaveBeenCalledWith(expect.stringMatching(AVISO_CONSOLIDADO), 'success');
+  });
+
+  it('Bug #14631 — timeout del cliente en el consolidado aborta la espera y se radica igual', async () => {
+    // El consolidado nunca responde (simula el corte de nginx): solo el tope del cliente lo libera.
+    let senal: AbortSignal | undefined;
+    mocks.generarConsolidado.mockImplementation(
+      (_id: string, _t?: string, _f?: boolean, signal?: AbortSignal) => {
+        senal = signal;
+        return new Promise(() => {});
+      },
+    );
+    // El tope de 30 s se dispara de inmediato; el resto de timers corre normal.
+    const realSetTimeout = globalThis.setTimeout;
+    const spy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(((fn: TimerHandler, ms?: number, ...args: unknown[]) =>
+        realSetTimeout(fn as () => void, ms === 30_000 ? 0 : ms, ...args)) as typeof setTimeout);
+    try {
+      await radicarDesdePreparado();
+      await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(senal?.aborted).toBe(true);
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(toastShow).toHaveBeenCalledWith(expect.stringMatching(AVISO_CONSOLIDADO), 'success');
+    await screen.findByText('¡Trámite completado!');
   });
 
   it('N 03 dos pasos — en `preparado` el botón "Finalizar y enviar trámite" radica por /submit, avisa y sale', async () => {
@@ -811,7 +866,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
     await waitFor(() => {
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, false, expect.any(AbortSignal));
     });
     await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
     expect(mocks.transitionInstance).not.toHaveBeenCalledWith('inst-1', 'entregado');
@@ -928,7 +983,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       await radicar();
       await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
       expect(mocks.generarFur).toHaveBeenCalled();
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, false, expect.any(AbortSignal));
       expect(mocks.generarImpronta).not.toHaveBeenCalled();
     });
 
@@ -1846,9 +1901,19 @@ describe('TramiteWizard — datos comerciales dentro de Requisitos', () => {
   });
 });
 
-// HU #10478 — el paso de consulta de traspaso adapta el formulario al proveedor del tenant: con
-// Kyverum RUNT no pide el tipo de documento del propietario (el RUNT lo resuelve); con Verifik sí.
-describe('TramiteWizard — tipo de documento del propietario según proveedor (HU #10478)', () => {
+/**
+ * Hotfix tipo-documento-visible (gap sin HU ADO — QA no certificado):
+ *
+ * AC1 — Given proveedor placa Kyverum, When abro consulta traspaso,
+ *       Then veo selector Tipo documento (default CC) junto a placa y número.
+ * AC2 — Given Kyverum y tipo UI = NIT, When consulto,
+ *       Then el patch/preflight de consulta manda owner_document_type=CC (payload legacy)
+ *       And después persiste owner_document_type=NIT para Actores/RUES.
+ * AC3 — Given Verifik, When consulto con NIT, Then el patch manda NIT (sin legacy CC).
+ * AC4 — Given Kyverum default CC, When consulto, Then el payload incluye owner_document_type=CC
+ *       (fallback Verifik; regresión HU #10478).
+ */
+describe('TramiteWizard — tipo de documento del propietario según proveedor (HU #10478 + hotfix visible)', () => {
   beforeEach(() => {
     mocks.getWizardState.mockResolvedValue(TRASPASO_WIZARD);
     mocks.getInstance.mockResolvedValue({ id: 'inst-tr', status: 'borrador', fieldValues: [] });
@@ -1861,16 +1926,18 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     await user.click(consultaTab);
     // Espera a que el form de placa (traspaso) se pinte.
     await screen.findByLabelText('Placa del vehículo');
+    return user;
   }
 
-  it('con Kyverum RUNT (default) NO pide el tipo, pero sí placa y número', async () => {
+  it('con Kyverum RUNT (default) SÍ muestra el tipo, placa y número', async () => {
     await abrirPasoConsulta();
 
     expect(screen.getByLabelText('Placa del vehículo')).toBeInTheDocument();
     expect(screen.getByLabelText('Número documento del propietario')).toBeInTheDocument();
-    await waitFor(() =>
-      expect(screen.queryByLabelText('Tipo documento propietario')).not.toBeInTheDocument(),
-    );
+    expect(
+      await screen.findByLabelText('Tipo documento propietario'),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText('Tipo documento propietario')).toHaveValue('CC');
   });
 
   it('con Verifik SÍ pide el tipo de documento del propietario', async () => {
@@ -1887,9 +1954,8 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
     ).toBeInTheDocument();
   });
 
-  // Regresión: aunque el tipo esté OCULTO (Kyverum), el payload SIGUE enviando owner_document_type
-  // (default 'CC') — el fallback a Verifik lo exige; omitirlo devolvía "requiere documento" (unknown)
-  // y enmascaraba el fallo como pre-vuelo verde.
+  // Regresión HU #10478: el payload de consulta SIEMPRE envía owner_document_type (default CC)
+  // — el fallback a Verifik lo exige; omitirlo devolvía "requiere documento" (unknown).
   it('con Kyverum el payload igual incluye owner_document_type (para el fallback a Verifik)', async () => {
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-tr" onExit={() => {}} />);
@@ -1913,6 +1979,78 @@ describe('TramiteWizard — tipo de documento del propietario según proveedor (
         },
       ]),
     );
+  });
+
+  it('con Kyverum y tipo UI NIT: consulta manda CC y luego persiste NIT', async () => {
+    const user = await abrirPasoConsulta();
+    await screen.findByLabelText('Tipo documento propietario');
+
+    await user.selectOptions(screen.getByLabelText('Tipo documento propietario'), 'NIT');
+    await user.type(screen.getByLabelText(/Placa del vehículo/), 'PWL160');
+    await user.type(screen.getByLabelText(/Número documento del propietario/), '890903938');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    // Payload de consulta legacy (CC), aunque la UI tenga NIT.
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-tr', [
+        { formFieldId: null, fieldKey: 'plate', valueText: 'PWL160', valueJson: null },
+        { formFieldId: null, fieldKey: 'owner_document_type', valueText: 'CC', valueJson: null },
+        {
+          formFieldId: null,
+          fieldKey: 'owner_document_number',
+          valueText: '890903938',
+          valueJson: null,
+        },
+      ]),
+    );
+    // Tras el preflight, persiste el tipo de UI para Actores/RUES.
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-tr', [
+        {
+          formFieldId: null,
+          fieldKey: 'owner_document_type',
+          valueText: 'NIT',
+          valueJson: null,
+        },
+      ]),
+    );
+  });
+
+  it('con Verifik y tipo UI NIT: la consulta manda NIT (sin legacy CC)', async () => {
+    mocks.getConsultationConfig.mockResolvedValue({
+      vehicleVin: 'kyverum_runt',
+      vehiclePlate: 'verifik',
+      conductor: 'kyverum_runt_conductor',
+    });
+    const user = await abrirPasoConsulta();
+    await screen.findByLabelText('Tipo documento propietario');
+
+    await user.selectOptions(screen.getByLabelText('Tipo documento propietario'), 'NIT');
+    await user.type(screen.getByLabelText(/Placa del vehículo/), 'PWL160');
+    await user.type(screen.getByLabelText(/Número documento del propietario/), '890903938');
+    await user.click(screen.getByRole('button', { name: /Consultar RUNT/ }));
+
+    await waitFor(() =>
+      expect(mocks.patchFieldValues).toHaveBeenCalledWith('inst-tr', [
+        { formFieldId: null, fieldKey: 'plate', valueText: 'PWL160', valueJson: null },
+        { formFieldId: null, fieldKey: 'owner_document_type', valueText: 'NIT', valueJson: null },
+        {
+          formFieldId: null,
+          fieldKey: 'owner_document_number',
+          valueText: '890903938',
+          valueJson: null,
+        },
+      ]),
+    );
+    // Sin patch post-consulta de solo tipo: tipoUi === tipoConsulta.
+    expect(
+      mocks.patchFieldValues.mock.calls.some(
+        ([, items]) =>
+          Array.isArray(items) &&
+          items.length === 1 &&
+          items[0]?.fieldKey === 'owner_document_type',
+      ),
+    ).toBe(false);
   });
 });
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Image as ImageIcon, ShieldAlert } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
@@ -15,6 +15,10 @@ import { BannerDeleteDialog } from "@/components/admin/banners/BannerDeleteDialo
 import { createBanner, fetchBanners, updateBanner, type Banner, type BannerPagedResult } from "@/lib/api/admin-banners";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { ADMIN_BACK_LINK_CLS } from "@/components/admin/admin-ui-styles";
+import { iconoComo } from "@flit/ui/iconoComo";
+import { IconoAviso } from "@flit/ui/IconoAviso";
+
+const ICONO_MEGAFONO = iconoComo("megafono");
 
 /**
  * Consola admin de banners promocionales (HU #12241, Feature #12236): listado administrable
@@ -38,7 +42,7 @@ export default function AdminBannersPage() {
 function NoAccess() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-4 text-center">
-      <ShieldAlert className="h-8 w-8" style={{ color: "#FF4E00" }} aria-hidden="true" />
+      <IconoAviso tipo="error" className="h-8 w-8" />
       <p className="text-sm font-medium" style={{ color: "var(--color-flit-primary)" }}>
         No tienes permiso para administrar banners promocionales.
       </p>
@@ -50,7 +54,7 @@ function BannersList() {
   const router = useRouter();
   const { show } = useToast();
   // Bug #13055 — tabla homologada con el modelo de trámites: filas por página elegibles.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("admin.banners");
   const [status, setStatus] = useState<UiStatus>("loading");
   const [result, setResult] = useState<BannerPagedResult | null>(null);
   const [formTarget, setFormTarget] = useState<Banner | null | "new">(null);
@@ -111,13 +115,13 @@ function BannersList() {
   return (
     <div className="flex min-h-screen flex-col gap-4 px-4 md:px-6 pt-6 pb-10">
       <button type="button" onClick={() => router.push("/")} className={ADMIN_BACK_LINK_CLS}>
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" /> Volver al inicio
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" /> Volver al inicio
       </button>
 
       <ModuleTitle
         title="Banners promocionales"
         subtitle="Configura y programa el contenido informativo del carrusel de banners, sin intervención técnica."
-        action={<CreateButton label="Nuevo banner" icon={ImageIcon} onClick={() => setFormTarget("new")} />}
+        action={<CreateButton label="Nuevo banner" icon={ICONO_MEGAFONO} onClick={() => setFormTarget("new")} />}
       />
 
       {/* Sin tarjeta blanca envolvente: mismo lenguaje visual que TramitesTable — la tabla es una

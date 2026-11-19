@@ -9,6 +9,7 @@ export const FUR_CASILLA_LABEL: Record<number, string> = {
   5: "Cambio de color",
   7: "Regrabar motor",
   8: "Regrabar chasis",
+  9: "Transformación",
   10: "Duplicado licencia tránsito",
   11: "Inscrip. prenda",
   12: "Levanta prenda",
@@ -54,7 +55,9 @@ function baseBoxes(code: string, family: string): number[] {
   if (code === "LEVANTAR_INSCRIBIR_PRENDA") return [11, 12];
   if (code === "DUPLICADO_PLACA") return [15];
   if (code === "CAMBIO_CARROCERIA") return [17];
-  if (code === "CONVERSION_COMBUSTIBLE" || code === "CAMBIO_LOCATARIO" || code === "CAMBIO_ACREEDOR") return [18];
+  // Conversión de combustible = 9 «Transformación» + 18 «Otros» (ejemplar Fur_OtroTramite_CambioCombus.pdf).
+  if (code === "CONVERSION_COMBUSTIBLE") return [9, 18];
+  if (code === "CAMBIO_LOCATARIO" || code === "CAMBIO_ACREEDOR") return [18];
   if (code === "BLINDAJE") return [];
   if (family.includes("TRASPASO") || family === "TRASPASO") return [2];
   if (code.includes("MATRICULA") || family.includes("MATRICULA") || family === "MATRICULAS") return [1];
@@ -84,7 +87,10 @@ export function buildFurGuide(input: FurGuideInput): FurGuideResult {
   }
   if (code !== "CAMBIO_COLOR" && input.color) marks.add(5);
   if (code !== "CAMBIO_CARROCERIA" && input.carroceria) marks.add(17);
-  if (code !== "CONVERSION_COMBUSTIBLE" && input.combustible) marks.add(18);
+  if (code !== "CONVERSION_COMBUSTIBLE" && input.combustible) {
+    marks.add(9);
+    marks.add(18);
+  }
 
   const casillas = [...marks]
     .sort((a, b) => a - b)

@@ -8,12 +8,9 @@ namespace Flit.Tramites.Application.Documents;
 /// </summary>
 public static class MandatoFirmaModoResolver
 {
-    public static MandatarioFirmaModo Resolve(
-        string? assignmentMode,
-        bool tieneConvenio,
-        bool tieneEstampa)
+    public static MandatarioFirmaModo Resolve(string? assignmentMode, bool tieneEstampa)
     {
-        if (MandatoAssignmentModeCodes.IsInstitutional(assignmentMode) || tieneConvenio)
+        if (MandatoAssignmentModeCodes.IsInstitutional(assignmentMode))
             return MandatarioFirmaModo.SinBloque;
 
         if (MandatoAssignmentModeCodes.IsOpen(assignmentMode) || !tieneEstampa)

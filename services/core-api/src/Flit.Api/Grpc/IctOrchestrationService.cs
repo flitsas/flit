@@ -1,10 +1,12 @@
 using System.Globalization;
 using Flit.Ict.Grpc.Contracts;
+using Flit.Admin.Domain.PlatePreassign;
 using Flit.Infrastructure.Persistence;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
+using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Application.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
@@ -38,10 +40,45 @@ public sealed class IctOrchestrationService(
     EnsureIdentityAndNotifyHandler identityNotifier,
     RepresentanteLegalDesdeDirectorio representanteDirectorio,
     ITransitOfficeResolver transitOfficeResolver,
+    IOtOperabilityGate otOperabilityGate,
+    IPlateRangeRepository plateRangeRepository,
+    IVehicleBodyworkCatalog bodyworkCatalog,
     FlitDbContext db,
     IConfiguration configuration,
     ILogger<IctOrchestrationService> logger) : IctOrchestration.IctOrchestrationBase
 {
+    /// <summary>
+    /// ErrorCode de <see cref="DraftReply"/> cuando el nombre de organismo del RUNT corresponde a un OT del
+    /// catálogo que no está activo, no tiene grant habilitado para el tenant o no está operativo.
+    /// </summary>
+    internal const string ErrorOtRuntNoHabilitado = "ot_runt_no_habilitado";
+
+    /// <summary>
+    /// Resuelve el OT por el nombre RUNT. Devuelve <c>(office, false)</c> si hay un OT habilitado Y operativo;
+    /// <c>(null, true)</c> si el nombre SÍ es un OT del catálogo pero no está habilitado/operativo (error);
+    /// <c>(null, false)</c> si el nombre no casa con ningún OT (el gestor lo asigna, comportamiento previo).
+    /// </summary>
+    internal static async Task<(ResolvedTransitOffice? Office, bool NoHabilitado)> ResolverOtPorNombreRuntAsync(
+        ITransitOfficeResolver resolver,
+        IOtOperabilityGate operabilityGate,
+        Guid tenantId,
+        string runtName,
+        CancellationToken cancellationToken)
+    {
+        var name = runtName.Trim();
+        var enabled = await resolver.ResolveEnabledByNameAsync(tenantId, name, cancellationToken);
+        if (enabled is not null)
+        {
+            return await operabilityGate.IsOperableAsync(enabled.Id, cancellationToken)
+                ? (enabled, false)
+                : (null, true);
+        }
+
+        return await resolver.ExistsInCatalogByNameAsync(name, cancellationToken)
+            ? (null, true)
+            : (null, false);
+    }
+
     /// <summary>Bug #13304 — vigencia por defecto de la consulta RUNT de la validación ICT.</summary>
     internal const int DefaultVehicleConsultationMaxAgeHours = 24;
 
@@ -68,7 +105,7 @@ public sealed class IctOrchestrationService(
             var existing = await db.Set<ProcedureInstance>()
                 .AsNoTracking()
                 .Where(p => p.TenantId == tenantId && p.ExternalRef == externalRef && p.DeletedAt == null)
-                .Select(p => new { p.Id, p.ReferenceNumber, p.Status, p.SubsanacionActiva })
+                .Select(p => new { p.Id, p.ReferenceNumber, p.Status, p.SubsanacionActiva, p.TransitOfficeId })
                 .FirstOrDefaultAsync(context.CancellationToken);
             if (existing is not null)
             {
@@ -86,6 +123,22 @@ public sealed class IctOrchestrationService(
                 if (string.Equals(existing.Status, TramiteEstado.Borrador, StringComparison.Ordinal))
                 {
                     await CompletarFaltantesAsync(existingReply, existing.Id, tenantId, request, context.CancellationToken);
+
+                    // Tipo 4 — si el intento previo se cayó entre crear el borrador y reservar la placa, el
+                    // reintento la reserva (idempotente para el mismo trámite). Si ya no se puede, aviso: el
+                    // borrador existe y no se descarta uno ya entregado.
+                    if (IctPlacaCarroceria.TipoPlaca(request) == IctPlacaCarroceria.TipoPlacaDeRango
+                        && IctPlacaCarroceria.PlacaEntregada(request) is { } placaReintento
+                        && existing.TransitOfficeId is { } oficinaReintento)
+                    {
+                        var reservada = await plateRangeRepository.TryReservePlateAsync(
+                            tenantId, oficinaReintento, placaReintento, existing.Id, context.CancellationToken);
+                        RefrescarRastreo();
+                        if (!reservada)
+                        {
+                            AppendWarning(existingReply, "plate_warning:" + IctPlacaCarroceria.ErrorPlacaFueraDeRango);
+                        }
+                    }
                 }
 
                 // Bug #13109 — si el intento previo creó el borrador pero perdió los adjuntos (se cayó en
@@ -115,8 +168,10 @@ public sealed class IctOrchestrationService(
         // Organismo de tránsito del borrador. Preferencia: un transit_office_id explícito; si no vino
         // (caso ICT: el cliente NO lo manda) pero sí el NOMBRE del organismo del RUNT (traspaso), se
         // resuelve al OT HABILITADO del tenant por nombre — el mismo resolver (grants + catálogo) que usa
-        // el preflight de traspaso. Si el nombre RUNT no casa con un OT habilitado, queda null y el gestor
-        // asigna el OT: no se inventa uno. Paridad con v1, donde el traspaso derivaba la secretaría del RUNT.
+        // el preflight de traspaso. Si el nombre RUNT no casa con NINGÚN OT del catálogo, queda null y el
+        // gestor asigna el OT: no se inventa uno. Si SÍ es un OT del catálogo pero no está activo, no tiene
+        // grant habilitado para el tenant o no está operativo (OtOperabilityGate) → ot_runt_no_habilitado
+        // y no se crea el borrador. Paridad con v1, donde el traspaso derivaba la secretaría del RUNT.
         Guid? officeFromIct = Guid.TryParse(request.TransitOfficeId, out var office) && office != Guid.Empty
             ? office
             : null;
@@ -124,9 +179,44 @@ public sealed class IctOrchestrationService(
         ResolvedTransitOffice? officeByRuntName = null;
         if (transitOfficeId is null && !string.IsNullOrWhiteSpace(request.TransitOfficeName))
         {
-            officeByRuntName = await transitOfficeResolver.ResolveEnabledByNameAsync(
-                tenantId, request.TransitOfficeName.Trim(), context.CancellationToken);
+            var (resolved, noHabilitado) = await ResolverOtPorNombreRuntAsync(
+                transitOfficeResolver, otOperabilityGate, tenantId,
+                request.TransitOfficeName, context.CancellationToken);
+            if (noHabilitado)
+            {
+                // El nombre RUNT SÍ es un OT del catálogo pero no está activo / habilitado para el tenant /
+                // operativo: no se crea el borrador (core-ict lo mapea a novedad).
+                IctOrchestrationLog.OtRuntNoHabilitado(logger, tenantId);
+                return new DraftReply { ErrorCode = ErrorOtRuntNoHabilitado };
+            }
+
+            officeByRuntName = resolved;
             transitOfficeId = officeByRuntName?.Id;
+        }
+
+        // Matrícula con placa de un RANGO asignado por el OT (plate_assignment_type = 4): la placa debe existir
+        // y estar disponible en el inventario de (esta compañía, el OT del borrador). Se valida ANTES de crear
+        // para no dejar un borrador; la reserva va DESPUÉS (necesita el id del trámite). Sin OT conocido (ni el
+        // id de ICT ni el derivado del RUNT) no hay rango contra el cual validar → novedad fatal.
+        var tipoPlaca = IctPlacaCarroceria.TipoPlaca(request);
+        var placaRango = tipoPlaca == IctPlacaCarroceria.TipoPlacaDeRango
+            ? IctPlacaCarroceria.PlacaEntregada(request)
+            : null;
+        if (tipoPlaca == IctPlacaCarroceria.TipoPlacaDeRango)
+        {
+            if (transitOfficeId is not { } oficinaRango)
+            {
+                IctOrchestrationLog.PlacaRangoRechazada(logger, IctPlacaCarroceria.ErrorPlacaRangoSinOt, tenantId);
+                return new DraftReply { ErrorCode = IctPlacaCarroceria.ErrorPlacaRangoSinOt };
+            }
+
+            if (placaRango is null
+                || !await plateRangeRepository.IsPlateAvailableAsync(
+                    tenantId, oficinaRango, placaRango, context.CancellationToken))
+            {
+                IctOrchestrationLog.PlacaRangoRechazada(logger, IctPlacaCarroceria.ErrorPlacaFueraDeRango, tenantId);
+                return new DraftReply { ErrorCode = IctPlacaCarroceria.ErrorPlacaFueraDeRango };
+            }
         }
 
         var createRequest = new CreateProcedureInstanceRequest(
@@ -154,6 +244,19 @@ public sealed class IctOrchestrationService(
             Status = summary.Status,
         };
 
+        // Reserva de la placa del rango (tipo 4) para este trámite: misma operación y mismo ciclo de vida que el
+        // inventario del OT (disponible → preasignada; al aprobar → utilizada; al rechazar → disponible). Si otro
+        // trámite la tomó entre la validación y aquí (carrera), el borrador recién creado se descarta (borrado
+        // lógico: el índice único de external_ref lo ignora) y el reintento de ICT vuelve a validar el rango.
+        if (placaRango is not null && transitOfficeId is { } oficinaReserva)
+        {
+            if (!await ReservarPlacaDeRangoAsync(
+                    summary.Id, tenantId, oficinaReserva, placaRango, context.CancellationToken))
+            {
+                return new DraftReply { ErrorCode = IctPlacaCarroceria.ErrorPlacaFueraDeRango };
+            }
+        }
+
         // field_values del pre-trámite: vin/plate (los envía core-ict) + los datos del LOCATARIO
         // cuando el trámite NO es traspaso (matrícula leasing tipo 2 / cambio de locatario tipo 8). El
         // locatario no es una parte comprador/vendedor en esos trámites, así que se preserva como
@@ -162,6 +265,9 @@ public sealed class IctOrchestrationService(
         var fieldItems = request.FieldValues
             .Select(f => new FieldValueInput(null, f.FieldKey, f.ValueText, null))
             .ToList();
+        // Placa de la matrícula según plate_assignment_type: 3/4 → plate con origen «ict» (placa entregada);
+        // 2 → nunca plate, solo el dígito de preferencia.
+        IctPlacaCarroceria.AjustarPlaca(fieldItems, tipoPlaca);
         fieldItems.AddRange(MapLesseeFieldValues(request.Actors, request.ProcedureTypeCode));
 
         // Fecha de venta del traspaso (contrato v1): v2 NO la modela en el comercial
@@ -264,6 +370,9 @@ public sealed class IctOrchestrationService(
             await CorrerPreflightIctAsync(reply, summary.Id, tenantId, request, context.CancellationToken);
         }
 
+        // Carrocería de la transformación 17: DESPUÉS del preflight, que deja la clase RUNT (vehicle_class).
+        await ValidarCarroceriaIctAsync(reply, summary.Id, tenantId, request, context.CancellationToken);
+
         // Bug #13445 (D1/D3) — prenda: DESPUÉS del preflight, que es quien deja la señal runt_* en los
         // field_values. Automática solo en los casos de la matriz conservadora; el resto, aviso al gestor.
         await ResolverPrendaIctAsync(reply, summary.Id, tenantId, createdBy, context.CancellationToken);
@@ -328,6 +437,9 @@ public sealed class IctOrchestrationService(
             if (!tieneSnapshot)
             {
                 await CorrerPreflightIctAsync(reply, instanceId, tenantId, request, ct);
+                // Solo si ESTA pasada hizo el preflight: con snapshot previo la carrocería ya se validó (o el
+                // gestor la editó) y no se vuelve a tocar.
+                await ValidarCarroceriaIctAsync(reply, instanceId, tenantId, request, ct);
             }
         }
 
@@ -492,7 +604,7 @@ public sealed class IctOrchestrationService(
     }
 
     private static bool TieneVehiculo(CreateDraftFromIctRequest request) =>
-        FieldValueOf(request, "plate") is not null || FieldValueOf(request, "vin") is not null;
+        IctPlacaCarroceria.PlacaDelVehiculo(request) is not null || FieldValueOf(request, "vin") is not null;
 
     private static string? FieldValueOf(CreateDraftFromIctRequest request, string key) =>
         request.FieldValues
@@ -511,7 +623,7 @@ public sealed class IctOrchestrationService(
         var maxAgeHours = configuration.GetValue("Ict:VehicleConsultationMaxAgeHours", DefaultVehicleConsultationMaxAgeHours);
         var (precomputed, motivo) = ResolverPrecomputed(
             request.PrecomputedVehicle,
-            FieldValueOf(request, "plate"),
+            IctPlacaCarroceria.PlacaDelVehiculo(request),
             FieldValueOf(request, "vin"),
             maxAgeHours,
             DateTimeOffset.UtcNow);
@@ -536,6 +648,251 @@ public sealed class IctOrchestrationService(
             RefrescarRastreo();
             AppendWarning(reply, "preflight_warning:exception");
         }
+
+        // El preflight hidrata vehicle_service desde el RUNT y pisa lo que mandó ICT. En matrícula el tipo
+        // de servicio que declara el cliente (o el PARTICULAR explícito de core-ict) es el que vale: se
+        // re-aplica DESPUÉS del preflight, incluso si éste falló (el borrador ya existe). Mismo criterio
+        // que CreateFromConsultaCommand (escribe el servicio tras el preflight).
+        var servicio = ServicioMatriculaIct(request);
+        if (servicio is not null)
+        {
+            RefrescarRastreo();
+            try
+            {
+                var (_, servicioError) = await patchHandler.HandleAsync(
+                    instanceId,
+                    tenantId,
+                    new Flit.Tramites.Application.UseCases.ProcedureInstances.PatchFieldValuesRequest(
+                        [new FieldValueInput(null, "vehicle_service", servicio, null)]),
+                    ct);
+                if (servicioError is not null)
+                {
+                    AppendWarning(reply, "seed_warning:" + servicioError);
+                }
+            }
+            catch (Exception) when (!ct.IsCancellationRequested)
+            {
+                RefrescarRastreo();
+                AppendWarning(reply, "seed_warning:vehicle_service_exception");
+            }
+        }
+
+        await ReaplicarPlacaIctAsync(reply, instanceId, tenantId, request, ct);
+    }
+
+    /// <summary>
+    /// La hidratación RUNT del preflight escribe <c>plate</c> con origen «consultation» si el proveedor la trae.
+    /// La placa entregada por ICT (tipos 3 y 4) es la que vale: se re-aplica con origen «ict» DESPUÉS del
+    /// preflight, incluso si éste falló, solo si el valor o el origen cambiaron. Mismo patrón que
+    /// <c>vehicle_service</c> en matrícula.
+    /// </summary>
+    private async Task ReaplicarPlacaIctAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)
+    {
+        var placa = IctPlacaCarroceria.PlacaEntregada(request);
+        if (placa is null)
+        {
+            return;
+        }
+
+        RefrescarRastreo();
+        try
+        {
+            var actual = await db.Set<ProcedureInstanceFieldValue>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(f => f.ProcedureInstanceId == instanceId && f.TenantId == tenantId && f.FieldKey == "plate")
+                .Select(f => new { f.ValueText, f.Source })
+                .FirstOrDefaultAsync(ct);
+            if (actual is not null
+                && string.Equals(actual.ValueText, placa, StringComparison.Ordinal)
+                && string.Equals(actual.Source, IctPlacaCarroceria.SourceIct, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var (_, error) = await patchHandler.HandleAsync(
+                instanceId,
+                tenantId,
+                new Flit.Tramites.Application.UseCases.ProcedureInstances.PatchFieldValuesRequest(
+                    [new FieldValueInput(null, "plate", placa, null, IctPlacaCarroceria.SourceIct)]),
+                ct);
+            if (error is not null)
+            {
+                AppendWarning(reply, "seed_warning:" + error);
+            }
+        }
+        catch (Exception ex) when (EsFalloRecuperable(ex, ct))
+        {
+            RefrescarRastreo();
+            IctOrchestrationLog.StepFailed(
+                logger, "placa", CodigoDeFallo(ex), ex.GetType().Name, SqlStateDe(ex), instanceId);
+            AppendWarning(reply, "seed_warning:plate_" + CodigoDeFallo(ex));
+        }
+
+    }
+
+    /// <summary>
+    /// Reserva la placa del rango (tipo 4) para el trámite recién creado. <c>false</c> (la placa ya no está
+    /// disponible) o excepción → el borrador se descarta para no dejarlo huérfano (en la excepción se
+    /// relanza para que ICT reintente sobre una base limpia).
+    /// </summary>
+    private async Task<bool> ReservarPlacaDeRangoAsync(
+        Guid instanceId, Guid tenantId, Guid transitOfficeId, string placa, CancellationToken ct)
+    {
+        bool reservada;
+        try
+        {
+            reservada = await plateRangeRepository.TryReservePlateAsync(tenantId, transitOfficeId, placa, instanceId, ct);
+        }
+        catch (Exception) when (!ct.IsCancellationRequested)
+        {
+            await DescartarBorradorAsync(instanceId, tenantId);
+            throw;
+        }
+
+        RefrescarRastreo();
+        if (!reservada)
+        {
+            IctOrchestrationLog.PlacaRangoRechazada(logger, IctPlacaCarroceria.ErrorPlacaFueraDeRango, tenantId);
+            await DescartarBorradorAsync(instanceId, tenantId);
+        }
+
+        return reservada;
+    }
+
+    /// <summary>
+    /// Compensación: borrado LÓGICO del borrador (<c>deleted_at</c>) creado por esta llamada. El índice único
+    /// parcial (tenant, external_ref) excluye los borrados, así que el reintento de ICT crea uno nuevo.
+    /// Intencionalmente sin <see cref="CancellationToken"/> del llamante: debe completarse aunque se cancele.
+    /// </summary>
+    private async Task DescartarBorradorAsync(Guid instanceId, Guid tenantId)
+    {
+        try
+        {
+            RefrescarRastreo();
+            var ahora = DateTimeOffset.UtcNow;
+            await db.Set<ProcedureInstance>()
+                .IgnoreQueryFilters()
+                .Where(p => p.Id == instanceId && p.TenantId == tenantId)
+                .ExecuteUpdateAsync(s => s.SetProperty(p => p.DeletedAt, ahora), CancellationToken.None);
+            IctOrchestrationLog.BorradorDescartado(logger, instanceId);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            IctOrchestrationLog.StepFailed(
+                logger, "descartar_borrador", CodigoDeFallo(ex), ex.GetType().Name, SqlStateDe(ex), instanceId);
+        }
+    }
+
+    /// <summary>
+    /// Transformación 17 (cambio de carrocería): core-ict manda la <c>description</c> como
+    /// <c>vehicle_body_type</c> junto a <c>cambio_carroceria=true</c>. Se compara con el catálogo de carrocerías
+    /// de la clase RUNT del vehículo (sin clase: filas de respaldo, como <c>GET /tramites/vehicle-bodyworks</c>).
+    /// Coincidencia exacta (salvo mayúsculas y espacios) → se guarda el nombre del catálogo. Si no coincide →
+    /// el borrador SÍ existe, la carrocería vuelve al valor del RUNT (o queda vacía) para que el gestor la elija,
+    /// <c>cambio_carroceria</c> sigue en <c>true</c> y se avisa con
+    /// <see cref="IctPlacaCarroceria.WarningCarroceriaFueraDeCatalogo"/>. Best-effort: nada tumba la materialización.
+    /// </summary>
+    private async Task ValidarCarroceriaIctAsync(
+        DraftReply reply, Guid instanceId, Guid tenantId, CreateDraftFromIctRequest request, CancellationToken ct)
+    {
+        var enviada = FieldValueOf(request, VehicleFieldKeys.BodyType);
+        var cambio = FieldValueOf(request, "cambio_carroceria");
+        if (!string.Equals(cambio?.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        try
+        {
+            RefrescarRastreo();
+            var campos = await db.Set<ProcedureInstanceFieldValue>()
+                .IgnoreQueryFilters()
+                .AsNoTracking()
+                .Where(f => f.ProcedureInstanceId == instanceId && f.TenantId == tenantId
+                            && (f.FieldKey == VehicleFieldKeys.Class || f.FieldKey == VehicleFieldKeys.BodyTypeRunt))
+                .Select(f => new { f.FieldKey, f.ValueText })
+                .ToListAsync(ct);
+            var clase = campos.FirstOrDefault(c => c.FieldKey == VehicleFieldKeys.Class)?.ValueText;
+            var runt = campos.FirstOrDefault(c => c.FieldKey == VehicleFieldKeys.BodyTypeRunt)?.ValueText;
+
+            // Vehículo SIN carrocería en el RUNT (misma regla que VehicleBodyTypePolicy): no hay carrocería que
+            // cambiar, así que no se activa el cambio y no se compara nada con el catálogo. Solo cuenta si la
+            // consulta SÍ respondió (clase o carrocería hidratadas): sin respuesta no se sabe y se sigue como antes.
+            var consultaRespondio = !string.IsNullOrWhiteSpace(clase) || !string.IsNullOrWhiteSpace(runt);
+            if (consultaRespondio && VehicleBodyTypePolicy.SinCarroceria(runt))
+            {
+                RefrescarRastreo();
+                var (_, errorSin) = await patchHandler.HandleAsync(
+                    instanceId,
+                    tenantId,
+                    new Flit.Tramites.Application.UseCases.ProcedureInstances.PatchFieldValuesRequest(
+                    [
+                        new FieldValueInput(null, "cambio_carroceria", "false", null),
+                        new FieldValueInput(null, VehicleFieldKeys.BodyType,
+                            string.IsNullOrWhiteSpace(runt) ? null : runt.Trim(), null),
+                    ]),
+                    ct);
+                if (errorSin is not null)
+                {
+                    AppendWarning(reply, "seed_warning:" + errorSin);
+                }
+
+                AppendWarning(reply, IctPlacaCarroceria.WarningVehiculoSinCarroceria);
+                return;
+            }
+
+            if (enviada is null)
+            {
+                return;
+            }
+
+            var catalogo = await bodyworkCatalog.SearchAsync(
+                string.IsNullOrWhiteSpace(clase) ? null : clase.Trim(), term: null, limit: 300, ct);
+            var coincide = IctPlacaCarroceria.CoincidenciaCarroceria(enviada, catalogo);
+
+            // Coincide: el nombre canónico del catálogo. No coincide: el valor del RUNT («sin cambio» del
+            // preflight) o vacío si el RUNT no trae carrocería.
+            var valor = coincide?.Name ?? (string.IsNullOrWhiteSpace(runt) ? null : runt.Trim());
+
+            RefrescarRastreo();
+            var (_, error) = await patchHandler.HandleAsync(
+                instanceId,
+                tenantId,
+                new Flit.Tramites.Application.UseCases.ProcedureInstances.PatchFieldValuesRequest(
+                    [new FieldValueInput(null, VehicleFieldKeys.BodyType, valor, null)]),
+                ct);
+            if (error is not null)
+            {
+                AppendWarning(reply, "seed_warning:" + error);
+            }
+
+            if (coincide is null)
+            {
+                AppendWarning(reply, IctPlacaCarroceria.WarningCarroceriaFueraDeCatalogo);
+            }
+        }
+        catch (Exception ex) when (EsFalloRecuperable(ex, ct))
+        {
+            RefrescarRastreo();
+            IctOrchestrationLog.StepFailed(
+                logger, "carroceria", CodigoDeFallo(ex), ex.GetType().Name, SqlStateDe(ex), instanceId);
+            AppendWarning(reply, "seed_warning:carroceria_" + CodigoDeFallo(ex));
+        }
+    }
+
+    /// <summary>
+    /// <c>vehicle_service</c> que ICT declara para una MATRÍCULA (código del catálogo: PUBLICO, PARTICULAR…),
+    /// o <c>null</c> si el trámite no es de matrícula (traspaso y demás: lo hidrata el RUNT) o ICT no lo mandó.
+    /// </summary>
+    internal static string? ServicioMatriculaIct(CreateDraftFromIctRequest request)
+    {
+        var tipo = request.ProcedureTypeCode ?? string.Empty;
+        var esMatricula = tipo.Contains("MATRICULA", StringComparison.OrdinalIgnoreCase)
+                          && !tipo.Contains("TRASPASO", StringComparison.OrdinalIgnoreCase)
+                          && !tipo.Contains("CANCELACION", StringComparison.OrdinalIgnoreCase);
+        return esMatricula ? FieldValueOf(request, "vehicle_service")?.Trim() : null;
     }
 
     /// <summary>
@@ -1366,6 +1723,15 @@ internal static partial class IctOrchestrationLog
 {
     [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: identidad sin asegurar ({Code}). Instancia {InstanceId}, parte {Parte}.")]
     public static partial void IdentityWarning(ILogger logger, string code, Guid instanceId, string parte);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: borrador rechazado, el organismo del RUNT no está habilitado (tenant {TenantId}).")]
+    public static partial void OtRuntNoHabilitado(ILogger logger, Guid tenantId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: borrador rechazado por la placa del rango del OT ({Code}, tenant {TenantId}).")]
+    public static partial void PlacaRangoRechazada(ILogger logger, string code, Guid tenantId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: borrador {InstanceId} descartado (borrado lógico) porque no se pudo reservar la placa del rango.")]
+    public static partial void BorradorDescartado(ILogger logger, Guid instanceId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: no se pudo consultar el directorio de representantes legales ({ExceptionType}).")]
     public static partial void DirectoryWarning(ILogger logger, string exceptionType);
