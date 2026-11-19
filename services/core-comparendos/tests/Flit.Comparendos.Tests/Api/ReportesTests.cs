@@ -126,6 +126,164 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
     }
 
     [Fact]
+    public async Task S2_Dinero_EstadosDescuentosOrganismosPagosYFrentes()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, usuario, _) = await EscenarioAsync(ct);
+        var nitOriginal = await api.EnDbAsync(db => db.IdentificacionesMonitoreadas.Where(n => n.TenantId == empresa).Select(n => n.Id).SingleAsync(ct));
+        // Notificado hace casi dos años: ya caducó (1 año) y no ha prescrito (3 años); fuera de toda ventana de descuento.
+        await IngresarAsync(api, empresa, Item("R-5", placa: "XYZ987", notificacion: new DateOnly(2025, 1, 15), valor: 500000m));
+        var cliente = api.Cliente(usuario);
+
+        var r = await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero?desde=2026-10-01&hasta=2026-10-09", ct);
+        var d = r.GetProperty("dinero");
+        var estados = d.GetProperty("estados").EnumerateArray().ToDictionary(e => e.GetProperty("estado").GetString()!, e => (e.GetProperty("cantidad").GetInt32(), e.GetProperty("valor").GetDecimal()));
+        estados.Keys.Should().Equal("SinNotificar", "EnTiempo", "Vencido", "Caducado", "Prescrito");
+        estados["EnTiempo"].Should().Be((2, 1604100m), "R-1 está pagado y R-2 tiene DP favorable: no son deuda");
+        estados["Caducado"].Should().Be((1, 500000m));
+        (d.GetProperty("exigible").GetProperty("valor").GetDecimal(), d.GetProperty("noExigible").GetProperty("valor").GetDecimal()).Should().Be((1604100m, 500000m));
+        var d50 = d.GetProperty("descuento").GetProperty("d50");
+        (d50.GetProperty("cantidad").GetInt32(), d50.GetProperty("valor").GetDecimal(), d50.GetProperty("ahorroEstimado").GetDecimal()).Should().Be((2, 1604100m, 802050m));
+        d.GetProperty("descuento").GetProperty("d25").GetProperty("cantidad").GetInt32().Should().Be(0);
+        d.GetProperty("cobroCoactivo").GetProperty("cantidad").GetInt32().Should().Be(0);
+        var organismos = d.GetProperty("organismos").EnumerateArray().ToList();
+        organismos.Sum(o => o.GetProperty("valor").GetDecimal()).Should().Be(2104100m, "el top suma la misma deuda cuando hay menos de 10 organismos");
+        organismos.Sum(o => o.GetProperty("exigible").GetDecimal()).Should().Be(1604100m);
+        var pagado = d.GetProperty("pagado");
+        (pagado.GetProperty("cantidad").GetInt32(), pagado.GetProperty("total").GetDecimal(), pagado.GetProperty("bc").GetDecimal(), pagado.GetProperty("cc").GetDecimal())
+            .Should().Be((1, 604100m, 604100m, 0m));
+        d.GetProperty("ahorroLogrado").GetDecimal().Should().Be(604100m, "el mismo ahorro que el indicador del dashboard");
+        var mensual = d.GetProperty("mensual").EnumerateArray().ToList();
+        mensual.Should().HaveCount(12);
+        mensual[^1].GetProperty("periodo").GetString().Should().Be("2026-10");
+        mensual[^1].GetProperty("pagado").GetDecimal().Should().Be(604100m);
+
+        // Cada frente da la cifra que muestra la bandeja con el mismo filtro.
+        var frentes = d.GetProperty("frentes");
+        var contadores = await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/comparendos/contadores", ct);
+        frentes.GetProperty("proximosAVencer").GetProperty("cantidad").GetInt32().Should().Be(contadores.GetProperty("proximosAVencer").GetInt32());
+        frentes.GetProperty("sinContraventor").GetProperty("cantidad").GetInt32().Should().Be(contadores.GetProperty("sinContraventor").GetInt32());
+        frentes.GetProperty("rechazadosOt").GetProperty("cantidad").GetInt32().Should().Be(contadores.GetProperty("rechazadosOt").GetInt32());
+        foreach (var (frente, query) in new[] { ("sinGestion", "sinGestion=true"), ("vencidos", "estadoLegal=Vencido"), ("caducidadInmediata", "juridico=CaducidadInmediata") })
+        {
+            var bandeja = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos?{query}", ct);
+            frentes.GetProperty(frente).GetProperty("cantidad").GetInt32().Should().Be(bandeja.GetProperty("total").GetInt32(), frente);
+        }
+
+        frentes.GetProperty("caducidadInmediata").GetProperty("valor").GetDecimal().Should().Be(500000m, "R-5 caducó y no tiene DP");
+
+        // El NIT acota todo; otra empresa no ve nada; sin el módulo de reportes, 403.
+        var porNit = (await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/reportes/dinero?nit={nitOriginal}", ct)).GetProperty("dinero");
+        porNit.GetProperty("noExigible").GetProperty("valor").GetDecimal().Should().Be(0m);
+        porNit.GetProperty("frentes").GetProperty("caducidadInmediata").GetProperty("cantidad").GetInt32().Should().Be(0);
+        var otra = await EmpresaAsync(api, reportes: true);
+        var ajena = (await api.Cliente(new UsuarioDePrueba(otra, Operador)).GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero", ct)).GetProperty("dinero");
+        (ajena.GetProperty("exigible").GetProperty("cantidad").GetInt32(), ajena.GetProperty("organismos").GetArrayLength()).Should().Be((0, 0));
+        var sinModulo = await EmpresaAsync(api);
+        (await api.Cliente(new UsuarioDePrueba(sinModulo, Operador)).GetAsync("/api/v1/comparendos/reportes/dinero", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.BandejaVer])).GetAsync("/api/v1/comparendos/reportes/dinero", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await Super.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/reportes/dinero?empresa={empresa}", ct)).GetProperty("dinero").GetProperty("exigible").GetProperty("valor").GetDecimal()
+            .Should().Be(1604100m);
+    }
+
+    [Fact]
+    public async Task S2_Dinero_Bordes_ValorYOrganismoNulos_EmpresaAjena_YRangoInvalido()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, usuario, ids) = await EscenarioAsync(ct);
+        // R-4 sin valor y sin organismo: cuenta como deuda, suma 0 y sale como «Sin organismo identificado», sin 500.
+        await api.EnDbAsync(db => db.Comparendos.Where(c => c.Id == ids["R4"])
+            .ExecuteUpdateAsync(u => u.SetProperty(c => c.ValorTotal, (decimal?)null).SetProperty(c => c.OrganismoTransitoId, (Guid?)null), ct));
+        var cliente = api.Cliente(usuario);
+
+        var d = (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero", ct)).GetProperty("dinero");
+        (d.GetProperty("exigible").GetProperty("cantidad").GetInt32(), d.GetProperty("exigible").GetProperty("valor").GetDecimal()).Should().Be((2, 604100m));
+        var sinOrganismo = d.GetProperty("organismos").EnumerateArray().Single(o => o.GetProperty("organismoId").ValueKind == JsonValueKind.Null);
+        (sinOrganismo.GetProperty("nombre").GetString(), sinOrganismo.GetProperty("cantidad").GetInt32(), sinOrganismo.GetProperty("valor").GetDecimal())
+            .Should().Be(("Sin organismo identificado", 1, 0m));
+        d.GetProperty("descuento").GetProperty("d50").GetProperty("ahorroEstimado").GetDecimal().Should().Be(302050m, "un comparendo sin valor no ahorra nada");
+
+        var otra = await EmpresaAsync(api, reportes: true);
+        (await cliente.GetAsync($"/api/v1/comparendos/reportes/dinero?empresa={otra}", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden, "una gestora no lee otra empresa");
+        (await cliente.GetAsync("/api/v1/comparendos/reportes/dinero?desde=2026-10-09&hasta=2026-10-01", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await cliente.GetAsync("/api/v1/comparendos/reportes/dinero?desde=2020-01-01&hasta=2026-10-09", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, "más de tres años");
+        // El SuperAdmin sin empresa ve todas: al menos la deuda de esta.
+        (await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero", ct)).GetProperty("dinero").GetProperty("exigible").GetProperty("cantidad").GetInt32()
+            .Should().BeGreaterThanOrEqualTo(2);
+    }
+
+    [Fact]
+    public async Task S2_Dinero_PartesEstados_YCobroCoactivoComoLaBandeja()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, usuario, ids) = await EscenarioAsync(ct);
+        // R-1 está pagado y R-4 es deuda: los dos en cobro coactivo. La bandeja cuenta los dos; la tarjeta también.
+        await api.EnDbAsync(db => db.Comparendos.Where(c => c.Id == ids["R1"] || c.Id == ids["R4"])
+            .ExecuteUpdateAsync(u => u.SetProperty(c => c.EnCobroCoactivo, true), ct));
+        var cliente = api.Cliente(usuario);
+
+        var todo = (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero", ct)).GetProperty("dinero");
+        var bandeja = await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/comparendos?cobroCoactivo=true", ct);
+        (todo.GetProperty("cobroCoactivo").GetProperty("cantidad").GetInt32(), todo.GetProperty("cobroCoactivo").GetProperty("valor").GetDecimal())
+            .Should().Be((bandeja.GetProperty("total").GetInt32(), 1604100m), "la cifra es la de la bandeja al hacer clic, pagados incluidos");
+        bandeja.GetProperty("total").GetInt32().Should().Be(2);
+
+        // ?partes=estados: solo el reparto, igual al de la respuesta completa.
+        var solo = (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero?partes=estados", ct)).GetProperty("dinero");
+        solo.EnumerateObject().Select(x => x.Name).Should().BeEquivalentTo(["hoy", "estados", "exigible", "noExigible"]);
+        solo.GetProperty("exigible").GetRawText().Should().Be(todo.GetProperty("exigible").GetRawText());
+        solo.GetProperty("noExigible").GetRawText().Should().Be(todo.GetProperty("noExigible").GetRawText());
+        solo.GetProperty("estados").GetRawText().Should().Be(todo.GetProperty("estados").GetRawText());
+        (await cliente.GetAsync("/api/v1/comparendos/reportes/dinero?partes=todo", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+
+        // ?partes=inicio: solo lo que pinta el Inicio, con los mismos valores que la respuesta completa.
+        var inicio = (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero?partes=inicio", ct)).GetProperty("dinero");
+        inicio.EnumerateObject().Select(x => x.Name).Should().BeEquivalentTo(["hoy", "exigible", "noExigible", "descuento", "pagado", "frentes", "ahorroLogrado"]);
+        foreach (var campo in new[] { "exigible", "noExigible", "descuento", "pagado", "frentes", "ahorroLogrado" })
+            inicio.GetProperty(campo).GetRawText().Should().Be(todo.GetProperty(campo).GetRawText(), campo);
+    }
+
+    [Fact]
+    public async Task R4_Impacto_DelAnio_EntreTodasLasEmpresas_ConTop5()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        // El impacto suma TODAS las empresas de la base de pruebas: se compara antes y después del escenario.
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var antes = await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/resumen?partes=impacto", ct);
+        var (empresa, usuario, _) = await EscenarioAsync(ct);
+        var despues = await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/resumen?partes=impacto", ct);
+
+        (despues.GetProperty("anio").GetInt32(), despues.GetProperty("desde").GetString()).Should().Be((2026, "2026-01-01"));
+        decimal D(JsonElement e, params string[] ruta) => ruta.Aggregate(e, (x, k) => x.GetProperty(k)).GetDecimal();
+        int I(JsonElement e, params string[] ruta) => ruta.Aggregate(e, (x, k) => x.GetProperty(k)).GetInt32();
+        (D(despues, "ahorroLogrado") - D(antes, "ahorroLogrado")).Should().Be(604100m, "R-2 salió favorable");
+        (I(despues, "dp", "enviados") - I(antes, "dp", "enviados")).Should().Be(2);
+        (I(despues, "dp", "favorables") - I(antes, "dp", "favorables")).Should().Be(1);
+        (I(despues, "comparendosGestionados") - I(antes, "comparendosGestionados")).Should().Be(4, "pago, dos DP y un contraventor, cada comparendo una vez");
+        (I(despues, "avisosEnviados") - I(antes, "avisosEnviados")).Should().Be(0);
+        (I(despues, "cambiosContraventor", "solicitados") - I(antes, "cambiosContraventor", "solicitados")).Should().Be(0);
+        despues.GetProperty("dp").GetProperty("tasa").ValueKind.Should().Be(JsonValueKind.Number);
+        var top = despues.GetProperty("topEmpresas").EnumerateArray().ToList();
+        top.Count.Should().BeLessThanOrEqualTo(5);
+        top.Select(e => e.GetProperty("ahorro").GetDecimal()).Should().BeInDescendingOrder();
+        // La base de pruebas es compartida: si ya hay cinco empresas con más ahorro, la del escenario no entra al top.
+        var mia = top.SingleOrDefault(e => e.GetProperty("empresaId").GetGuid() == empresa);
+        if (mia.ValueKind == JsonValueKind.Object)
+            mia.GetProperty("dpFavorables").GetInt32().Should().Be(1);
+        else
+            top.Should().HaveCount(5).And.OnlyContain(e => e.GetProperty("ahorro").GetDecimal() >= 604100m);
+        // La tasa es por DP sobre lo respondido en el año: nunca pasa del 100 %.
+        despues.GetProperty("dp").GetProperty("tasa").GetDecimal().Should().BeInRange(0m, 1m);
+
+        (await api.Cliente(usuario).GetAsync("/api/v1/comparendos/admin/resumen?partes=impacto", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden, "solo el SuperAdmin");
+        (await Super.GetAsync("/api/v1/comparendos/admin/resumen?partes=otra", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
     public async Task AC2_ReporteSemanal_ADestinatarios_ConCopiaOcultaInterna_UnaVezPorDia()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, StatusBadge } from "@flit/ui";
+import { DataTable, InlineAlert, Modal, StatusBadge, VehicleLoader } from "@flit/ui";
 import { ConsultasAdmin } from "@/components/consultas/ConsultasAdmin";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SearchInput } from "@/components/SearchInput";
@@ -83,7 +83,7 @@ function NuevaEmpresa({
       }
     >
       <div className="flex flex-col gap-3">
-        {empresas.estado === "loading" && <p className="text-sm opacity-60">Cargando empresas…</p>}
+        {empresas.estado === "loading" && <VehicleLoader label="Cargando empresas…" />}
         {empresas.estado === "error" && <InlineAlert tone="error">{empresas.error}</InlineAlert>}
         {empresas.estado !== "loading" && empresas.estado !== "error" && disponibles.length === 0 && (
           <InlineAlert tone="info">
@@ -120,12 +120,12 @@ function DatosEmpresa({ nombre, nit }: { nombre: string | null; nit: string | nu
   return (
     <div className="flex flex-col gap-1">
       <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-        <dt className="opacity-70">Nombre</dt>
+        <dt className="text-muted-foreground">Nombre</dt>
         <dd className="font-semibold">{nombre ?? "—"}</dd>
-        <dt className="opacity-70">NIT</dt>
+        <dt className="text-muted-foreground">NIT</dt>
         <dd className="font-semibold tabular-nums">{nit ?? "Sin NIT en la plataforma"}</dd>
       </dl>
-      <p className="text-[11px] opacity-70">
+      <p className="text-xs text-muted-foreground">
         Se toman de la plataforma; si algo está mal, se corrige en Administración de compañías. El dígito de verificación
         lo calcula el sistema.
       </p>
@@ -139,16 +139,16 @@ function Historial({ empresaId, onCerrar }: { empresaId: string; onCerrar: () =>
   );
   return (
     <Modal icono="reloj" open onClose={onCerrar} title="Historial de cambios" size="lg">
-      {lista.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
+      {lista.estado === "loading" && <VehicleLoader label="Cargando el historial…" />}
       {lista.estado === "error" && <InlineAlert tone="error">{lista.error}</InlineAlert>}
-      {lista.datos?.length === 0 && <p className="text-sm opacity-70">Sin cambios registrados.</p>}
+      {lista.datos?.length === 0 && <p className="text-sm text-muted-foreground">Sin cambios registrados.</p>}
       <ol className="flex flex-col gap-3">
         {(lista.datos ?? []).map((a) => (
           <li key={a.id} className="border-l-2 border-flit-brand pl-3 text-xs">
             <p className="font-semibold">
               {a.accion} · {a.entidad}
             </p>
-            <p className="opacity-70">
+            <p className="text-muted-foreground">
               {formatoFechaHora(a.registradoEn)} · {a.usuarioNombre}
             </p>
             <ul className="mt-1">
@@ -229,7 +229,7 @@ function NitsConsultaContrato({ empresaId, integracionApi }: { empresaId: string
   return (
     <section className="flex flex-col gap-2">
       <h2 className="text-sm font-semibold">NIT que consultan el conductor en la API de contratos</h2>
-      <p className="text-xs opacity-70">
+      <p className="text-xs text-muted-foreground">
         La API de Renting solo sabe quién tenía un vehículo de su propia flota. Marca únicamente esos NIT: los demás se
         asignan a mano.
       </p>
@@ -271,6 +271,7 @@ function NitsConsultaContrato({ empresaId, integracionApi }: { empresaId: string
             align: "right",
             render: (n) => (
               <Interruptor
+                soloControl
                 activo={n.consultaContratoApi}
                 onCambio={(v) => cambiar(n, v)}
                 etiqueta="Consultar por API"
@@ -298,7 +299,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
   const [errorGuardar, setErrorGuardar] = useState<string | null>(null);
 
   if (config.estado === "loading")
-    return <p className="text-sm opacity-60">Cargando configuración…</p>;
+    return <VehicleLoader label="Cargando la configuración…" />;
   if (config.estado === "error" || !config.datos)
     return <InlineAlert tone="error">{config.error ?? "No se pudo cargar."}</InlineAlert>;
 
@@ -420,7 +421,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
         <div className={ETIQUETA_CLS}>
           Conjunto de plantillas
           <p className={`${INPUT_CLS} flex items-center bg-secondary`}>{valores.conjuntoPlantillas === "Renting" ? "Renting" : "FLIT"}</p>
-          <span className="font-normal opacity-70">
+          <span className="font-normal text-muted-foreground">
             Sigue el «Enrutamiento de notificaciones» de la empresa en Trámites: Renting con «API Renting cliente», FLIT con «Colas FLIT».
           </span>
         </div>
@@ -479,6 +480,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
               align: "right",
               render: (t) => (
                 <Interruptor
+                  soloControl
                   activo={!!t.habilitada}
                   onCambio={(v) => habilitar(t, v)}
                   etiqueta={`Habilitar ${t.codigo}`}
@@ -649,7 +651,7 @@ export default function Empresas() {
                     label={e.estadoConfiguracion === "Activa" ? "Activa" : e.estadoConfiguracion === "Inactiva" ? "Inactiva" : "Pendiente de configuración"}
                     tone={e.estadoConfiguracion === "Activa" ? "info" : e.estadoConfiguracion === "Inactiva" ? "neutral" : "warning"}
                   />
-                  {e.estadoConfiguracion === "Pendiente" && <span className="text-[11px] opacity-70">{e.faltantes.join(" · ")}</span>}
+                  {e.estadoConfiguracion === "Pendiente" && <span className="text-xs text-muted-foreground">{e.faltantes.join(" · ")}</span>}
                 </span>
               ),
             },

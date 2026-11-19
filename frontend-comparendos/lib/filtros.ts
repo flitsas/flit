@@ -275,3 +275,103 @@ export function resumenPagina(pagina: number, tamano: number, mostradas: number,
   const desde = (pagina - 1) * tamano + 1;
   return `Mostrando ${desde}–${desde + mostradas - 1} de ${total}`;
 }
+
+/** Lo que la bandeja guarda en su URL además de los filtros: al volver del detalle queda igual (rediseño S1). */
+export interface VistaBandeja {
+  orden: string;
+  descendente: boolean;
+  pagina: number;
+  tamano: number;
+  /** Empresa elegida por el SuperAdmin. */
+  empresa: string | null;
+}
+
+export const VISTA_POR_DEFECTO: VistaBandeja = { orden: "", descendente: false, pagina: 1, tamano: 50, empresa: null };
+
+const ORDENES_VALIDOS = ["valor", "imposicion", "notificacion", "actividad", "numero"];
+const TAMANOS_VALIDOS = [10, 20, 30, 50];
+const RAPIDOS: FiltroRapido[] = ["ProximosAVencer", "SinContraventor", "RechazadosOt", "Radar"];
+const JURIDICOS: FiltroJuridico[] = ["CaducidadInmediata", "NoImpugnables", "C038"];
+const RESULTADOS_DP = ["Favorable", "Desfavorable", "SinRespuesta"] as const;
+const FECHA = /^\d{4}-\d{2}-\d{2}$/;
+
+/**
+ * Filtros y vista de la bandeja como parámetros de la URL: solo lo que difiere de fábrica, con las mismas claves que la
+ * query de la API. Una bandeja recién abierta deja la URL limpia.
+ */
+export function filtrosAParams(f: FiltrosBandeja, vista: VistaBandeja = VISTA_POR_DEFECTO): URLSearchParams {
+  const p = new URLSearchParams();
+  for (const [clave, valor] of Object.entries(aQuery(f))) {
+    if (valor !== undefined && valor !== null && valor !== "") p.set(clave, String(valor));
+  }
+  if (vista.empresa) p.set("empresa", vista.empresa);
+  if (vista.orden) p.set("orden", vista.orden);
+  if (vista.orden && vista.descendente) p.set("descendente", "true");
+  if (vista.pagina > 1) p.set("pagina", String(vista.pagina));
+  if (vista.tamano !== VISTA_POR_DEFECTO.tamano) p.set("tamano", String(vista.tamano));
+  return p;
+}
+
+/** Lector mínimo de la URL (sirve igual con `URLSearchParams` y con `useSearchParams` de Next). */
+export interface LectorParams {
+  get(clave: string): string | null;
+}
+
+/**
+ * La inversa de {@link filtrosAParams}. Lo que no se reconoce se ignora (un enlace viejo o editado a mano no rompe la
+ * bandeja). Acepta también lo que mandan el dashboard y Reportes: `?nit=` (uno solo) y `?rapido=Radar`.
+ */
+export function filtrosDeParams(p: LectorParams): { filtros: FiltrosBandeja; vista: VistaBandeja } {
+  const lista = (clave: string) => (p.get(clave) ?? "").split(",").map((v) => v.trim()).filter(Boolean);
+  const deCatalogo = (clave: string, catalogo: Record<string, unknown>) => lista(clave).filter((v) => v in catalogo);
+  const uno = <T extends string>(clave: string, validos: readonly T[]): T | null => {
+    const v = p.get(clave);
+    return v && (validos as readonly string[]).includes(v) ? (v as T) : null;
+  };
+  const tri = (clave: string): TriEstado => uno(clave, ["true", "false"] as const) ?? "";
+  const fecha = (clave: string) => {
+    const v = p.get(clave) ?? "";
+    return FECHA.test(v) ? v : "";
+  };
+  const nitSuelto = p.get("nit");
+  const activos = uno("activos", ["inactivos", "todos"] as const) ?? "activos";
+  const filtros: FiltrosBandeja = {
+    buscar: (p.get("buscar") ?? "").trim(),
+    nits: [...new Set([...lista("nits"), ...(nitSuelto ? [nitSuelto] : [])])],
+    placas: lista("placas"),
+    numeros: lista("numeros"),
+    organismos: lista("organismos"),
+    imposicionDesde: fecha("imposicionDesde"),
+    imposicionHasta: fecha("imposicionHasta"),
+    notificacionDesde: fecha("notificacionDesde"),
+    notificacionHasta: fecha("notificacionHasta"),
+    registroDesde: fecha("registroDesde"),
+    registroHasta: fecha("registroHasta"),
+    estadoLegal: deCatalogo("estadoLegal", ESTADO_LEGAL),
+    estadoProceso: deCatalogo("estadoProceso", ESTADO_PROCESO),
+    ultimoAviso: deCatalogo("ultimoAviso", ULTIMO_AVISO),
+    cambioContraventor: deCatalogo("cambioContraventor", CAMBIO_CONTRAVENTOR),
+    fuente: deCatalogo("fuente", FUENTE),
+    conContraventor: tri("conContraventor"),
+    pagado: tri("pagado"),
+    conDp: tri("conDp"),
+    resultadoDp: uno("resultadoDp", RESULTADOS_DP) ?? "",
+    activos,
+    cobroCoactivo: tri("cobroCoactivo"),
+    sinGestion: p.get("sinGestion") === "true",
+    rapido: uno("rapido", RAPIDOS),
+    juridico: uno("juridico", JURIDICOS),
+    negar: lista("negar").filter((c): c is CampoNegable => (NEGABLES as string[]).includes(c)),
+  };
+  const pagina = Number(p.get("pagina"));
+  const tamano = Number(p.get("tamano"));
+  const orden = uno("orden", ORDENES_VALIDOS) ?? "";
+  const vista: VistaBandeja = {
+    orden,
+    descendente: !!orden && p.get("descendente") === "true",
+    pagina: Number.isInteger(pagina) && pagina > 1 ? pagina : 1,
+    tamano: TAMANOS_VALIDOS.includes(tamano) ? tamano : VISTA_POR_DEFECTO.tamano,
+    empresa: p.get("empresa") || null,
+  };
+  return { filtros, vista };
+}
