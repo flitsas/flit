@@ -14,7 +14,7 @@ import { AiToolCard } from "./AiToolCard";
 
 type Estado = "loading" | "error" | "empty" | "ready";
 
-const ORDEN_HERRAMIENTAS = ["ocr", "dr_flit"] as const;
+const ORDEN_HERRAMIENTAS = ["ocr", "dr_flit", "diagnostico_dictamen"] as const;
 
 function ordenarTools(tools: AiToolSettingsView[]): AiToolSettingsView[] {
   const rank = (code: string) => {
