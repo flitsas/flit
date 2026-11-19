@@ -34,8 +34,8 @@ namespace Flit.Integration.Tests.Tramites;
 /// con <c>ActivatorUtilities</c>, igual que lo activaría el host gRPC, y se invoca con un
 /// <see cref="ServerCallContext"/> mínimo.</para>
 /// </summary>
-public sealed class IctOrchestrationAdjuntosIntegrationTests(PostgresDatabaseFixture fixture)
-    : PostgresTestBase(fixture)
+public sealed class IctOrchestrationAdjuntosIntegrationTests(PostgresDatabaseFixture fixture, HostsPorClase hosts)
+    : PostgresTestBase(fixture), IClassFixture<HostsPorClase>
 {
     private static readonly Guid UserId = new("b13109a8-0000-4000-8000-0000000000aa");
     private static readonly Guid SeededInstanceId = new("b13109a8-0000-4000-8000-000000000001");
@@ -269,7 +269,7 @@ public sealed class IctOrchestrationAdjuntosIntegrationTests(PostgresDatabaseFix
         CreateDraftFromIctRequest request,
         RegisterIntegrationAttachmentHandler? attachmentsOverride = null)
     {
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
+        var factory = hosts.Obtener(Fixture); // un host por clase (HostsPorClase)
         await using var scope = factory.Services.CreateAsyncScope();
         var service = attachmentsOverride is null
             ? ActivatorUtilities.CreateInstance<IctOrchestrationService>(scope.ServiceProvider)
