@@ -144,7 +144,8 @@ function Configuracion({ empresa }: { empresa: string | null }) {
   const soloLectura = !esSuper && !puedeEditar;
   const sucio = JSON.stringify(f) !== clave;
   const cuentaPropia = c.canalCorreo === "EmpresaApi";
-  const verRepresentantes = esSuper || tienePermiso(sesion, P.representantesVer);
+  // El SuperAdmin no ve el enlace: representantes no recibe la empresa elegida y caería en el selector vacío.
+  const verRepresentantes = !esSuper && tienePermiso(sesion, P.representantesVer);
 
   return (
     <div className="flex flex-col gap-8">
