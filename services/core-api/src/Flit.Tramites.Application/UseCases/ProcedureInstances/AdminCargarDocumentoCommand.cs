@@ -62,9 +62,12 @@ public sealed class AdminDocumentoTiposHandler(GetChecklistHandler checklist)
 /// (1) solo tipos habilitados para el tipo de trámite (<see cref="AdminDocumentoTiposHandler"/>);
 /// (2) observación obligatoria;
 /// (3) el adjunto vigente anterior del mismo tipo NO se borra: queda <see cref="ProcedureInstanceAttachment.IsHistorico"/>
-/// y sigue visible y descargable como «versión anterior». Los tipos «bolsa» (<see cref="AttachmentRules.TiposMultiples"/>)
-/// añaden sin retirar nada. Lo que generó el sistema o personalizó la compañía no se retira (mismo criterio que la subida
-/// del gestor);
+/// y sigue visible y descargable como «versión anterior». A diferencia de la subida del gestor, aquí aplica a TODOS los
+/// tipos, incluidos los «bolsa» (<see cref="AttachmentRules.TiposMultiples"/>, p. ej. «Otros documentos»): la acción se
+/// llama «Actualizar documento» y el modal le promete al admin «El documento actual quedará como versión anterior» sin
+/// distinguir tipo (Bug #14604, novedad QA 2026-11-19). El histórico queda fuera del consolidado (<c>Efectivos()</c>);
+/// no choca con el Bug #14570 («Otro» bolsa visible), que solo gobierna la subida del gestor (añade sin retirar nada).
+/// Lo que generó el sistema o personalizó la compañía no se retira;
 /// (4) «gana quien carga primero» (HU #13265): si FLITO ya cargó ese tipo, se responde 409 igual que al gestor;
 /// (5) trazabilidad: evento propio <c>documento_cargado_admin</c> en la bitácora, con el estado del trámite al cargar.</para>
 ///
@@ -127,16 +130,15 @@ public sealed class AdminCargarDocumentoHandler(
         if (AttachmentRules.BloqueadoPorFlito(instance.Attachments, tipo))
             return (null, ExternalAttachmentRules.BlockedCode);
 
-        // Los vigentes del mismo tipo pasan a histórico (no se borran). Solo los tipos que reemplazan al subir; lo
+        // Los vigentes del mismo tipo pasan a histórico (no se borran). A diferencia de la subida del gestor, aquí
+        // aplica también a los tipos «bolsa» (Bug #14604, novedad QA): «Actualizar documento» siempre reemplaza. Lo
         // generado por el sistema o personalizado por la compañía tiene su propio ciclo de vida y no se toca.
-        var previos = AttachmentRules.ReemplazaAlSubir(tipo)
-            ? instance.Attachments
-                .Where(a => !a.IsHistorico
-                            && string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
-                            && !string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase))
-                .ToList()
-            : [];
+        var previos = instance.Attachments
+            .Where(a => !a.IsHistorico
+                        && string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
+                        && !string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase))
+            .ToList();
 
         // Trazabilidad: lo que estaba en la casilla antes de la carga (el documento efectivo de ese tipo; en un
         // trámite revocado puede ser uno ya histórico), para que el historial diga qué archivo se reemplazó.
