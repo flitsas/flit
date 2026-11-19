@@ -5,7 +5,7 @@ import { Icono } from "@flit/ui/Icono";
 import { Cargador, DataTable, EstadoVacio, InlineAlert, ListaDefinicion, Modal, Pestanas, Placa, type ItemDefinicion } from "@flit/ui";
 import { BarraSecciones, type SeccionBarra } from "@/components/detalle/BarraSecciones";
 import { Estado } from "@/components/detalle/EstadoTexto";
-import { useCercania } from "@/components/detalle/useCercania";
+import { contenedorScroll, useCercania } from "@/components/detalle/useCercania";
 import { useSesion } from "@/components/ComparendosShell";
 import { Timeline, type SeccionDetalle } from "@/components/detalle/Timeline";
 import { EXTENSIONES_DETALLE, type ContextoDetalle, type ExtensionesDetalle } from "@/components/detalle/extensiones";
@@ -255,7 +255,7 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
 
       {d.documentos.length > 0 && (
         <div className="flex flex-col gap-1">
-          <h4 className={SUBTITULO_CLS}>Documentos</h4>
+          <h3 className={SUBTITULO_CLS}>Documentos</h3>
           <ConMas items={d.documentos} texto={(n) => `Ver los ${n} documentos`}>
             {(doc) => (
             <div key={doc.id} className="flex flex-wrap items-center gap-x-2 text-sm">
@@ -272,7 +272,7 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
 
       {d.historialContraventor.length > 0 && (
         <div className="flex flex-col gap-2">
-          <h4 className={SUBTITULO_CLS}>Historial de conductores</h4>
+          <h3 className={SUBTITULO_CLS}>Historial de conductores</h3>
           <ConMas items={d.historialContraventor} visibles={2} texto={(n) => `Ver los ${n} cambios de conductor`}>
             {(h) => {
             const anterior = conductorDeFoto(h.datosAnteriores);
@@ -345,7 +345,7 @@ function ResolucionDp({ d, extra }: { d: Detalle; extra?: ReactNode }) {
       />
       {dp.respuesta && (
         <div className={`${TARJETA_CLS} p-3`}>
-          <h4 className="mb-2 text-sm font-semibold">Respuesta del organismo</h4>
+          <h3 className="mb-2 text-sm font-semibold">Respuesta del organismo</h3>
           <Datos
             filas={[
               ["Sentido", <Estado key="s" e={resultadoDp(dp.respuesta.sentido)} />],
@@ -583,6 +583,16 @@ function TarjetasContexto({ d, soloLectura, onIr, onPestana }: { d: Detalle; sol
   );
 }
 
+/** Las secciones de la barra, en el orden de la página (constante: la barra no rehace su observador en cada render). */
+const SECCIONES_BARRA: SeccionBarra[] = [
+  { id: "detalle-resumen", texto: "Resumen" },
+  { id: "detalle-timeline", texto: "Línea de tiempo", corto: "Tiempo" },
+  { id: "detalle-contraventor", texto: "Contraventor" },
+  { id: "detalle-dp", texto: "Derecho de petición", corto: "DP" },
+  { id: "detalle-pago", texto: "Pago" },
+  { id: "detalle-pestanas", texto: "Datos" },
+];
+
 /** Altura de la barra de secciones: cada sección se ubica debajo de ella. */
 const BAJO_LA_BARRA = "scroll-mt-16";
 
@@ -656,23 +666,48 @@ export function ContenidoDetalle({
     if (d) onCargado?.(d);
   }, [d, onCargado]);
   // Lleva a una sección y deja el foco en su título. Las acciones y el timeline cargan después y empujan el destino: se
-  // vuelve a ubicar mientras el contenido se acomoda (~1 s, B11-2), sin animación para que no «persiga» el destino.
+  // re-ubica mientras el contenido se acomoda (~1 s, B11-2), solo si de verdad se corrió y sin animación. Un salto nuevo o
+  // cualquier gesto de la gestora (rueda, toque, tecla, clic) cancela los re-ubicados pendientes: nunca la devuelven.
+  const pendientes = useRef<number[]>([]);
+  const cancelar = () => {
+    pendientes.current.forEach((t) => window.clearTimeout(t));
+    pendientes.current = [];
+  };
   const ubicar = (idSeccion: string, suave: boolean) => {
-    const ir = (comportamiento: ScrollBehavior) => {
+    cancelar();
+    const corrida = () => {
       const el = document.getElementById(idSeccion);
-      el?.scrollIntoView({ behavior: comportamiento, block: "start" });
-      return el;
+      if (!el) return null;
+      const margen = parseFloat(getComputedStyle(el).scrollMarginTop) || 0;
+      const raiz = contenedorScroll(el)?.getBoundingClientRect().top ?? 0;
+      return { el, desvio: el.getBoundingClientRect().top - raiz - margen };
     };
-    window.setTimeout(() => {
-      ir(suave ? "smooth" : "auto");
-      document.getElementById(`${idSeccion}-titulo`)?.focus({ preventScroll: true });
-    }, 0);
-    return [150, 400, 800, 1200].map((ms) => window.setTimeout(() => ir("auto"), ms));
+    const reubicar = () => {
+      const c = corrida();
+      if (c && Math.abs(c.desvio) > 8) c.el.scrollIntoView({ behavior: "auto", block: "start" });
+    };
+    pendientes.current = [
+      window.setTimeout(() => {
+        document.getElementById(idSeccion)?.scrollIntoView({ behavior: suave ? "smooth" : "auto", block: "start" });
+        document.getElementById(`${idSeccion}-titulo`)?.focus({ preventScroll: true });
+      }, 0),
+      // Con scroll suave se espera a que termine antes de corregir.
+      ...(suave ? [700, 1200] : [150, 400, 800, 1200]).map((ms) => window.setTimeout(reubicar, ms)),
+    ];
   };
   useEffect(() => {
+    const gesto = () => cancelar();
+    const eventos = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+    eventos.forEach((e) => window.addEventListener(e, gesto, { capture: true, passive: true }));
+    return () => {
+      eventos.forEach((e) => window.removeEventListener(e, gesto, { capture: true }));
+      cancelar();
+    };
+  }, []);
+  useEffect(() => {
     if (!cargado || !seccionInicial) return;
-    const tiempos = ubicar(`detalle-${seccionInicial}`, false);
-    return () => tiempos.forEach((t) => window.clearTimeout(t));
+    ubicar(`detalle-${seccionInicial}`, false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo al llegar con ?seccion=
   }, [cargado, id, seccionInicial]);
   const ir = (s: SeccionDetalle) => {
     setForzadas((actual) => (actual.includes(s) ? actual : [...actual, s]));
@@ -706,23 +741,17 @@ export function ContenidoDetalle({
     </>
   ) : null;
 
-  const barra: SeccionBarra[] = [
-    { id: "detalle-resumen", texto: "Resumen" },
-    { id: "detalle-timeline", texto: "Línea de tiempo", corto: "Tiempo" },
-    { id: "detalle-contraventor", texto: "Contraventor" },
-    { id: "detalle-dp", texto: "Derecho de petición", corto: "DP" },
-    { id: "detalle-pago", texto: "Pago" },
-    { id: "detalle-pestanas", texto: "Datos" },
-  ];
-
   // R2: una sola columna de secciones siempre abiertas, con una barra fija que lleva a cada una (nada de dos columnas de
   // alto libre: abrir una dejaba un hueco al lado).
   return (
     <div className="flex flex-col gap-4">
       <Cabecera d={d} acciones={acciones} />
-      <BarraSecciones secciones={barra} onIr={irA} />
+      <BarraSecciones secciones={SECCIONES_BARRA} onIr={irA} />
 
-      <section id="detalle-resumen" aria-label="Resumen del comparendo" className={BAJO_LA_BARRA}>
+      <section id="detalle-resumen" aria-labelledby="detalle-resumen-titulo" className={BAJO_LA_BARRA}>
+        <h2 id="detalle-resumen-titulo" tabIndex={-1} className="sr-only">
+          Resumen
+        </h2>
         <TarjetasContexto d={d} soloLectura={soloLectura} onIr={ir} onPestana={irAPestana} />
       </section>
 
@@ -761,7 +790,10 @@ export function ContenidoDetalle({
         <Pago d={d} extra={!soloLectura ? <AccionesDiferidas forzada={forzadas.includes("pago")}>{() => extensiones.pago?.(ctx)}</AccionesDiferidas> : null} />
       </Seccion>
 
-      <section id="detalle-pestanas" aria-label="Datos, fuentes e historial" className={`${TARJETA_CLS} ${BAJO_LA_BARRA} p-4`} data-testid="detalle-pestanas">
+      <section id="detalle-pestanas" aria-labelledby="detalle-pestanas-titulo" className={`${TARJETA_CLS} ${BAJO_LA_BARRA} p-4`} data-testid="detalle-pestanas">
+        <h2 id="detalle-pestanas-titulo" tabIndex={-1} className="sr-only">
+          Datos, fuentes e historial
+        </h2>
         <PestanasDetalle d={d} activa={pestana} onCambiar={setPestana} />
       </section>
     </div>

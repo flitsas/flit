@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { ContenidoDetalle } from "@/components/detalle/ContenidoDetalle";
 import { ToastProvider } from "@/components/Toast";
+import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import type { DetalleComparendo } from "@/lib/tipos";
 
 // Rediseño S1: el detalle como página. Nada sale a la red: la API está simulada.
@@ -52,11 +53,18 @@ const detalle = {
 
 // Las extensiones cuentan cuántas veces se montan: así se ve que se montan al acercarse y no al cargar.
 const montajes = { dp: 0, pago: 0 };
-function ExtDp() {
+function ExtDp({ ctx }: { ctx: ContextoDetalle }) {
   useEffect(() => {
     montajes.dp++;
   }, []);
-  return <p>extension DP</p>;
+  return (
+    <p>
+      extension DP
+      <button type="button" onClick={ctx.recargar}>
+        recargar desde DP
+      </button>
+    </p>
+  );
 }
 function ExtPago() {
   useEffect(() => {
@@ -64,7 +72,7 @@ function ExtPago() {
   }, []);
   return <p>extension Pago</p>;
 }
-const extensiones = { acciones: () => <button type="button">Enviar aviso</button>, dp: () => <ExtDp />, pago: () => <ExtPago /> };
+const extensiones = { acciones: () => <button type="button">Enviar aviso</button>, dp: (ctx: ContextoDetalle) => <ExtDp ctx={ctx} />, pago: () => <ExtPago /> };
 
 // IntersectionObserver simulado: la prueba decide qué secciones «se acercan».
 const observadores: { cb: IntersectionObserverCallback; els: Element[] }[] = [];
@@ -178,13 +186,70 @@ describe("detalle del comparendo como página (rediseño S1)", () => {
     expect(screen.getByText("evento 10")).toBeInTheDocument();
   });
 
+  it("dos saltos seguidos terminan en el último: el primero no la devuelve", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    montar();
+    await screen.findByTestId("detalle-cabecera");
+    const barra = screen.getByTestId("detalle-barra");
+    const scroll = Element.prototype.scrollIntoView as unknown as ReturnType<typeof vi.fn>;
+    scroll.mockClear();
+    fireEvent.click(within(barra).getByRole("button", { name: /DP/ }));
+    fireEvent.click(within(barra).getByRole("button", { name: /Pago/ }));
+    await act(async () => vi.advanceTimersByTime(2000));
+    const destinos = scroll.mock.contexts.map((el) => (el as Element).id);
+    expect(destinos).toContain("detalle-pago");
+    expect(destinos).not.toContain("detalle-dp");
+    vi.useRealTimers();
+  });
+
+  it("si la gestora mueve la rueda, no se re-ubica después", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    montar();
+    await screen.findByTestId("detalle-cabecera");
+    // La sección quedó corrida 500 px: sin gesto, se re-ubicaría a los 700 ms.
+    const dp = screen.getByTestId("detalle-dp");
+    dp.getBoundingClientRect = () => ({ top: 500 }) as DOMRect;
+    const scroll = Element.prototype.scrollIntoView as unknown as ReturnType<typeof vi.fn>;
+    fireEvent.click(within(screen.getByTestId("detalle-barra")).getByRole("button", { name: /DP/ }));
+    await act(async () => vi.advanceTimersByTime(10));
+    scroll.mockClear();
+    fireEvent.wheel(window);
+    await act(async () => vi.advanceTimersByTime(2000));
+    expect(scroll).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("recargar el detalle no vuelve a montar las acciones (no repite llamadas)", async () => {
+    montar({ seccionInicial: "dp" });
+    await screen.findByText("extension DP");
+    fireEvent.click(screen.getByRole("button", { name: "recargar desde DP" }));
+    await waitFor(() => expect(apiFetch.mock.calls.filter(([r]) => r === "/comparendos/c1").length).toBe(2));
+    expect(montajes.dp).toBe(1);
+  });
+
+  it("los historiales largos muestran los primeros y «Ver los N»", async () => {
+    detalle.historialContraventor = Array.from({ length: 4 }, (_, i) => ({ id: `h${i}`, origen: "Manual", motivo: null, datosAnteriores: null, datosNuevos: JSON.stringify({ nombres: `Conductor ${i}` }), actorNombre: null, registradoEn: "2026-11-01T10:00:00Z" }));
+    try {
+      montar();
+      await screen.findByText(/Conductor 1/);
+      expect(screen.queryByText(/Conductor 2/)).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Ver los 4 cambios de conductor" }));
+      expect(screen.getByText(/Conductor 3/)).toBeInTheDocument();
+    } finally {
+      detalle.historialContraventor = [];
+    }
+  });
+
   it("los estados largos van como texto que parte línea, no como pill", async () => {
     detalle.contraventor = { nombres: "Ana", tipoDocumento: "CC", numeroDocumento: "", documentoPendiente: true, correo: null, telefono: null, direccion: null, ciudad: null, sucursal: null, tipoContrato: null, origen: "Api" } as unknown as DetalleComparendo["contraventor"];
+    try {
     montar();
     const texto = await screen.findByText("Pendiente: la consulta automática no lo trae");
     expect(texto.closest("[data-estado-texto]")).not.toBeNull();
     expect(texto.closest(".kit-etiqueta")).toBeNull();
-    detalle.contraventor = null;
+    } finally {
+      detalle.contraventor = null;
+    }
   });
 
   it("el SuperAdmin solo lee: sin acciones ni extensiones, pero ve lo técnico", async () => {
