@@ -85,10 +85,15 @@ public sealed class SubmitExternalAttachmentHandlerTests
     }
 
     [Theory]
+    [InlineData("borrador", false)]
+    [InlineData("preparado", false)]
     [InlineData("preasignacion", false)]
     [InlineData("asignado", false)]
+    [InlineData("entregado", false)]
+    [InlineData("aprobado", false)]
     [InlineData("rechazado", true)]
-    public async Task AC1_EnLosEstadosEditablesElComprobanteMarcaElImpuestoComoPagado(string estado, bool subsanacion)
+    [InlineData("rechazado", false)]
+    public async Task BUG14625_EnTodoEstadoAdmitidoElComprobanteMarcaElImpuestoComoPagado(string estado, bool subsanacion)
     {
         _repo.Target = Target(estado, subsanacion);
 
@@ -114,34 +119,15 @@ public sealed class SubmitExternalAttachmentHandlerTests
         _repo.Marcas.Should().Be(1);
     }
 
-    [Fact]
-    public async Task AC2_EnEntregadoSeArchivaSinMarcarYLaRespuestaDiceFalseSiNoHabiaMarcaPrevia()
-    {
-        _repo.Target = Target("entregado");
-
-        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
-
-        result.Status.Should().Be(SubmitExternalAttachmentStatus.Created);
-        result.Receipt!.PagadoMarcado.Should().BeFalse();
-        _repo.Escritos.Should().ContainSingle("el adjunto se archiva");
-        _repo.Marcas.Should().Be(0);
-    }
-
-    [Fact]
-    public async Task AC2_EnEntregadoConMarcaPreviaDeFlitoLaRespuestaDiceTrueSinEscribir()
-    {
-        _repo.Target = Target("entregado") with { PagadoMarcado = true };
-
-        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
-
-        result.Receipt!.PagadoMarcado.Should().BeTrue("la marca ya existía y se lee, no se escribe");
-        _repo.Marcas.Should().Be(0);
-    }
-
     [Theory]
+    [InlineData("borrador", false)]
+    [InlineData("preparado", false)]
     [InlineData("preasignacion", false)]
     [InlineData("asignado", false)]
+    [InlineData("entregado", false)]
+    [InlineData("aprobado", false)]
     [InlineData("rechazado", true)]
+    [InlineData("rechazado", false)]
     public async Task ElIdempotente200PoneLaMarcaFaltanteSinTocarElAdjunto(string estado, bool subsanacion)
     {
         var vigente = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Sha(Pdf), "fm-1");
@@ -157,19 +143,6 @@ public sealed class SubmitExternalAttachmentHandlerTests
         _repo.Escritos.Should().BeEmpty("el adjunto no se toca");
         _repo.Retirados.Should().BeEmpty();
         _storage.Guardados.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task ElIdempotente200EnEntregadoNoEscribeNada()
-    {
-        var vigente = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Sha(Pdf), "fm-1");
-        _repo.Target = Target("entregado") with { Vigentes = [vigente], PagadoMarcado = false };
-
-        var result = await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
-
-        result.Status.Should().Be(SubmitExternalAttachmentStatus.Unchanged);
-        result.Receipt!.PagadoMarcado.Should().BeFalse();
-        _repo.Marcas.Should().Be(0);
     }
 
     [Fact]
@@ -208,21 +181,29 @@ public sealed class SubmitExternalAttachmentHandlerTests
         ExternalAttachmentRules.IsProtectedFlitoMark(clave, fuente).Should().Be(protegida);
 
     [Theory]
+    [InlineData("borrador", false, true)]
+    [InlineData("preparado", false, true)]
     [InlineData("preasignacion", false, true)]
     [InlineData("asignado", false, true)]
+    [InlineData("entregado", false, true)]
+    [InlineData("aprobado", false, true)]
     [InlineData("rechazado", true, true)]
-    [InlineData("rechazado", false, false)]
-    [InlineData("entregado", false, false)]
-    [InlineData("borrador", false, false)]
-    public void MarksPaidSoloEnLosEstadosEditables(string estado, bool subsanacion, bool marca) =>
+    [InlineData("rechazado", false, true)]
+    [InlineData("anulado", false, false)]
+    [InlineData("revocado", false, false)]
+    public void BUG14625_MarksPaidEnTodoEstadoAdmitido(string estado, bool subsanacion, bool marca) =>
         ExternalAttachmentRules.MarksPaid(estado, subsanacion).Should().Be(marca);
 
     [Theory]
+    [InlineData("borrador", false)]
+    [InlineData("preparado", false)]
     [InlineData("preasignacion", false)]
     [InlineData("asignado", false)]
     [InlineData("entregado", false)]
+    [InlineData("aprobado", false)]
     [InlineData("rechazado", true)]
-    public async Task AC3_LosEstadosQueAceptanElEnvioArchivan(string estado, bool subsanacion)
+    [InlineData("rechazado", false)]
+    public async Task BUG14625_TodoEstadoSalvoAnuladoYRevocadoArchiva(string estado, bool subsanacion)
     {
         _repo.Target = Target(estado, subsanacion);
 
@@ -232,12 +213,9 @@ public sealed class SubmitExternalAttachmentHandlerTests
     }
 
     [Theory]
-    [InlineData("aprobado", false, true)]
     [InlineData("anulado", false, true)]
     [InlineData("revocado", false, true)]
-    [InlineData("borrador", false, false)]
-    [InlineData("preparado", false, false)]
-    [InlineData("rechazado", false, false)]
+    [InlineData("ANULADO", true, true)]
     public async Task AC3_EstadoNoPermitido409ConEstadoYTerminalSinArchivar(string estado, bool subsanacion, bool terminal)
     {
         _repo.Target = Target(estado, subsanacion);
@@ -423,15 +401,18 @@ public sealed class SubmitExternalAttachmentHandlerTests
     }
 
     [Theory]
-    [InlineData("aprobado", false, true)]
-    [InlineData("borrador", false, false)]
-    [InlineData("rechazado", true, false)]
-    public void LaReglaDeEstadoDistingueSiElTramiteVolveraAAceptar(string estado, bool subsanacion, bool terminal)
+    [InlineData("anulado", false, false, true)]
+    [InlineData("revocado", false, false, true)]
+    [InlineData("aprobado", false, true, false)]
+    [InlineData("borrador", false, true, false)]
+    [InlineData("rechazado", false, true, false)]
+    [InlineData("rechazado", true, true, false)]
+    public void BUG14625_LaReglaDeEstadoSoloRechazaAnuladoYRevocado(string estado, bool subsanacion, bool permitido, bool terminal)
     {
-        var (permitido, esTerminal) = ExternalAttachmentRules.EvaluateState(estado, subsanacion);
+        var (admitido, esTerminal) = ExternalAttachmentRules.EvaluateState(estado, subsanacion);
 
+        admitido.Should().Be(permitido);
         esTerminal.Should().Be(terminal);
-        permitido.Should().Be(estado == "rechazado");
     }
 
     private static ExternalAttachmentTarget Target(string estado, bool subsanacion = false) =>
