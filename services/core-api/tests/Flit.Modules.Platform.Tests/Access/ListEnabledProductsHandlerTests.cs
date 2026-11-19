@@ -41,6 +41,15 @@ public sealed class ListEnabledProductsHandlerTests
     }
 
     [Fact]
+    public async Task LaCajaDelOrganismo_NoEsUnaAppDeLaBarra_AunqueElProductoEsteEncendido()
+    {
+        Enabled("tramites", ChildId, HeadId);
+        Enabled("caja", ChildId, HeadId);
+
+        (await Handle(ChildId)).Should().Equal("plataforma", "tramites");
+    }
+
+    [Fact]
     public async Task CabezaApagada_LaHijaNoLoTiene()
     {
         Enabled("tramites", ChildId);

@@ -90,6 +90,14 @@ public static class InfrastructureExtensions
         services.AddScoped<IProcedureTypeSourceRepository, ProcedureTypeSourceRepository>();
         // FEATURE-08 / HU-BE-04 (CFD-06) — requisitos documentales por tipo (configurador dinámico).
         services.AddScoped<IProcedureTypeDocumentRepository, ProcedureTypeDocumentRepository>();
+        // HU #14043/#14079 (Épica #14021) — catálogo, elegibilidad y tarifas del portal de Persona Natural (solo lectura).
+        services.AddScoped<PersonaNatural.PersonaNaturalTiposReader>();
+        services.AddScoped(sp => new PersonaNatural.PersonaNaturalPortalReader(
+            sp.GetRequiredService<Persistence.FlitDbContext>(), sp.GetService<TimeProvider>(),
+            sp.GetService<Flit.Admin.Domain.Companies.TransitOffices.IEffectiveTransitOfficeListResolver>()));
+        // HU #14073 — contenido publicado y parámetros públicos del portal (solo lectura).
+        services.AddScoped(sp => new PersonaNatural.PersonaNaturalConfiguracionPublicaReader(
+            sp.GetRequiredService<Persistence.FlitDbContext>(), sp.GetService<TimeProvider>()));
         // FEATURE-08 / HU-BE-06 (CFD-09) — feature flag F08_DynamicProcedures (por tenant, ot_feature_flags).
         services.AddScoped<Flit.Tramites.Application.UseCases.ProcedureInstances.IDynamicProceduresPolicy,
             OtRules.DynamicProceduresPolicy>();
@@ -187,8 +195,6 @@ public static class InfrastructureExtensions
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleBodyworkCatalog, DbVehicleBodyworkCatalog>();
         // Catálogo global de tipos de servicio del vehículo (sección 18 del FUR, ADR-0019) — cerrado, 6 valores.
         services.AddScoped<Flit.Tramites.Domain.Tramites.Catalog.IVehicleServiceTypeCatalog, DbVehicleServiceTypeCatalog>();
-        // HU #10521 (RF31) — puente de parámetros documentales por gestora hacia el checklist condicional.
-        services.AddScoped<Flit.Tramites.Domain.Repositories.IChecklistCompanyParamsProvider, ChecklistCompanyParamsProvider>();
         // HU #10522 (RF17/RF22) — puente de la matriz documental resuelta del gestor hacia el checklist (matriz viva).
         services.AddScoped<Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider, Services.ResolvedChecklistMatrixProvider>();
         // HU #11184 — orden del expediente configurado por el OT (admin.ot_document_precedence).
@@ -214,12 +220,14 @@ public static class InfrastructureExtensions
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        services.AddScoped<IGestorDashboardReadRepository, GestorDashboardReadRepository>(); // Inicio del Gestor (rediseño de los 3 dashboards)
         // HU #13076 (Épica #12737) — lectura entre compañías del feed de sincronización externa (ámbito exclusivo).
         services.AddScoped<Flit.Tramites.Domain.ExternalSync.IProcedureSyncReadRepository, ProcedureSyncReadRepository>();
         // HU #13263 (Épica #12741) — escritura del envío de adjuntos del cliente externo (fila del trámite bloqueada).
         services.AddScoped<Flit.Tramites.Domain.ExternalSync.IExternalAttachmentRepository, ExternalAttachmentRepository>();
         services.AddScoped<INetworkAnalyticsReadRepository, AnalyticsNetworkReadRepository>(); // HU #12359 - estadisticas de red
         services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
+        services.AddScoped<Flit.Analytics.Application.Queries.SuperAdminDashboard.ISuperAdminDashboardReadRepository, SuperAdminDashboardReadRepository>(); // Inicio del SuperAdmin (entre tenants)
         services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813
         services.AddScoped<Flit.Analytics.Application.Queries.IDetailedReportExcelExporter, Documents.DetailedReportExcelExporter>(); // Feature #10813 HU #10816
         services.AddScoped<Flit.Analytics.Application.Abstractions.INetworkDetailedReportReadRepository, DetailedReportNetworkReadRepository>(); // HU #12360 - reporte de red

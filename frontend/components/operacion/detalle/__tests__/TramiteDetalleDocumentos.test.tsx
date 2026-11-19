@@ -215,3 +215,33 @@ describe('TramiteDetalleDocumentos', () => {
     expect(screen.queryByRole('region', { name: 'Otros adjuntos' })).not.toBeInTheDocument();
   });
 });
+
+// Bug #14604 — la versión anterior se ve y se descarga, pero no cuenta como documento vigente.
+describe('TramiteDetalleDocumentos — versiones anteriores', () => {
+  it('lista el histórico aparte y el requisito se empareja con el vigente', async () => {
+    const user = userEvent.setup();
+    mocks.getChecklist.mockResolvedValue(
+      checklist([
+        { key: 'soat', label: 'SOAT vigente', obligatorio: true, docTipo: 'soat', satisfied: true },
+      ]),
+    );
+    mocks.getAttachments.mockResolvedValue([
+      { ...ATTACHMENT_SOAT, id: 'att-viejo', filename: 'soat_viejo.pdf', isHistorico: true },
+      ATTACHMENT_SOAT,
+    ]);
+
+    render(<TramiteDetalleDocumentos instanceId="inst-1" item={ITEM} />);
+
+    // El botón de descarga del requisito apunta al vigente, no al histórico.
+    expect(await screen.findByRole('button', { name: 'Descargar soat_vigente.pdf' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Descargar soat_viejo.pdf' })).toBeInTheDocument();
+
+    const resumen = screen.getByText('Versiones anteriores (1)');
+    await user.click(resumen);
+    const lista = screen.getByRole('list', { name: 'Versiones anteriores de documentos' });
+    expect(within(lista).getByText(/soat_viejo.pdf/)).toBeInTheDocument();
+    expect(within(lista).getByText(/Versión anterior · Cargado el/)).toBeInTheDocument();
+    // El histórico no aparece como «Otros adjuntos».
+    expect(screen.queryByRole('region', { name: 'Otros adjuntos' })).not.toBeInTheDocument();
+  });
+});

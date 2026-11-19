@@ -1,26 +1,30 @@
 import type { ManualCallout } from "@/lib/manual/types";
-import { Info, Lightbulb, AlertTriangle } from "lucide-react";
+import type { ComponentType } from "react";
+import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
+import { avisoComo } from "@flit/ui/IconoAviso";
+
+const ICONO_DESTELLO = iconoComo("destello");
 
 const styles: Record<
   ManualCallout["variant"],
-  { border: string; bg: string; icon: typeof Info; label: string }
+  { border: string; bg: string; icon: ComponentType<IconoComoProps>; label: string }
 > = {
   info: {
-    border: "color-mix(in srgb, var(--color-flit-brand) 35%, transparent)",
-    bg: "color-mix(in srgb, var(--color-flit-brand) 8%, transparent)",
-    icon: Info,
+    border: "var(--di-sky-line)",
+    bg: "var(--di-accent-soft)",
+    icon: avisoComo("info"),
     label: "Información",
   },
   tip: {
-    border: "color-mix(in srgb, var(--color-flit-tech) 45%, transparent)",
-    bg: "color-mix(in srgb, var(--color-flit-tech) 10%, transparent)",
-    icon: Lightbulb,
+    border: "color-mix(in srgb, var(--di-highlight-decor) 45%, transparent)",
+    bg: "color-mix(in srgb, var(--di-highlight-decor) 10%, transparent)",
+    icon: ICONO_DESTELLO,
     label: "Consejo",
   },
   warning: {
-    border: "rgba(255, 78, 0, 0.35)",
-    bg: "rgba(255, 78, 0, 0.08)",
-    icon: AlertTriangle,
+    border: "var(--badge-warning-border)",
+    bg: "var(--badge-warning-bg)",
+    icon: avisoComo("alerta"),
     label: "Importante",
   },
 };

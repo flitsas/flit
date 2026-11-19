@@ -107,6 +107,7 @@ public static class AdminPlateRangesEndpoints
         IPlateAssignmentEmailEnqueuer plateAssignmentEmailEnqueuer,
         FirmarImprontaManualSiListaHandler firmaImpronta,
         IConsolidadoRegeneracionQueue regeneracionQueue,
+        BitacoraPlacaOtHandler bitacoraHandler,
         ILoggerFactory loggerFactory, CancellationToken ct)
     {
         if (!RequestTenantResolver.TryResolveTenantId(http.User, out var otTenantId))
@@ -192,6 +193,9 @@ public static class AdminPlateRangesEndpoints
         }
 
         var result = outcome.Procedure!;
+
+        // HU #14177 — normalizar la placa igual que AssignPlateAsync para el evento de bitácora.
+        var normalizedPlate = request.Plate.Trim().ToUpperInvariant();
 
         // HU #10995 — al asignar la placa (Flujo B), regenerar el FUR y los demás documentos en caliente
         // para que reflejen la placa recién escrita en field_values; la regeneración del FUR además invalida
@@ -280,6 +284,31 @@ public static class AdminPlateRangesEndpoints
                 AdminPlateRegenLog.CorreoAsignacionPlacaOmitido(
                     loggerFactory.CreateLogger("AdminPlate.AssignPlateEmail"), ex, instanceId);
             }
+
+            // HU #14177 — bitácora de placa asignada por el OT: anterior vacío (primera asignación),
+            // nuevo la placa. Best-effort: la asignación ya está persistida aunque el evento falle.
+            try
+            {
+                await otRepo.ExecuteInClientTenantScopeAsync(
+                    procedure.ClientTenantId,
+                    async () =>
+                    {
+                        await bitacoraHandler.HandleAsync(
+                            procedure.ClientTenantId,
+                            instanceId,
+                            previousPlate: null, // Primera asignación desde preasignacion: sin placa previa.
+                            newPlate: normalizedPlate,
+                            changedBy: ResolveUserId(http.User),
+                            ct);
+                        return 0;
+                    },
+                    ct).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                AdminPlateRegenLog.BitacoraPlacaOmitida(
+                    loggerFactory.CreateLogger("AdminPlate.AssignPlateBitacora"), ex, instanceId);
+            }
         }
 
         return Results.Ok(result);
@@ -296,6 +325,7 @@ public static class AdminPlateRangesEndpoints
     private static async Task<IResult> UpdateProcedurePlateAsync(
         Guid instanceId, UpdatePlateRequest request, HttpContext http,
         IOtClientProcedureRepository otRepo, IConsolidadoRegeneracionQueue regeneracionQueue,
+        BitacoraPlacaOtHandler bitacoraHandler,
         ILoggerFactory loggerFactory, CancellationToken ct)
     {
         if (!RequestTenantResolver.TryResolveTenantId(http.User, out var otTenantId))
@@ -313,6 +343,10 @@ public static class AdminPlateRangesEndpoints
             return Results.Problem(statusCode: 422, title: "Unprocessable",
                 detail: PlateRangeRules.InvalidPlateFormatMessage);
         }
+
+        // HU #14177 — capturar la placa anterior ANTES de la corrección para el evento de bitácora.
+        var procedureBeforeUpdate = await otRepo.GetByIdAsync(otTenantId, instanceId, ct).ConfigureAwait(false);
+        var previousPlate = procedureBeforeUpdate?.Placa ?? string.Empty;
 
         PlateAssignmentOutcome outcome;
         try
@@ -368,6 +402,32 @@ public static class AdminPlateRangesEndpoints
         }
 
         EncolarConsolidados(regeneracionQueue, outcome.Procedure!.ClientTenantId, instanceId);
+
+        // HU #14177 — bitácora de placa corregida por el OT.
+        var correctedPlate = request.Plate.Trim().ToUpperInvariant();
+        try
+        {
+            await otRepo.ExecuteInClientTenantScopeAsync(
+                outcome.Procedure.ClientTenantId,
+                async () =>
+                {
+                    await bitacoraHandler.HandleAsync(
+                        outcome.Procedure.ClientTenantId,
+                        instanceId,
+                        previousPlate,
+                        correctedPlate,
+                        changedBy: ResolveUserId(http.User),
+                        ct);
+                    return 0;
+                },
+                ct).ConfigureAwait(false);
+        }
+        catch (Exception ex)
+        {
+            AdminPlateRegenLog.BitacoraPlacaOmitida(
+                loggerFactory.CreateLogger("AdminPlate.UpdatePlateBitacora"), ex, instanceId);
+        }
+
         return Results.Ok(outcome.Procedure);
     }
 
@@ -417,6 +477,11 @@ internal static partial class AdminPlateRegenLog
     [LoggerMessage(Level = LogLevel.Warning,
         Message = "No se pudo encolar el aviso de correo tras asignar la placa al trámite {InstanceId}; la asignación se conserva.")]
     public static partial void CorreoAsignacionPlacaOmitido(ILogger logger, Exception ex, Guid instanceId);
+
+    // HU #14177 — el evento de bitácora de placa es best-effort: la placa ya está asignada/corregida.
+    [LoggerMessage(Level = LogLevel.Warning,
+        Message = "No se pudo registrar el evento de bitácora de placa para el trámite {InstanceId}; la asignación/corrección se conserva.")]
+    public static partial void BitacoraPlacaOmitida(ILogger logger, Exception ex, Guid instanceId);
 
     [LoggerMessage(Level = LogLevel.Information,
         Message = "Firma automática de impronta tras asignar placa al trámite {InstanceId} (tenant {TenantId}): {Resultado}.")]

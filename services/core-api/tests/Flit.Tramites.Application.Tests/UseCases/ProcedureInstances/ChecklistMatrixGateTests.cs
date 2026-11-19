@@ -18,14 +18,7 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// </summary>
 public sealed class ChecklistMatrixGateTests
 {
-    private readonly IChecklistCompanyParamsProvider _companyParams = Substitute.For<IChecklistCompanyParamsProvider>();
     private readonly IResolvedChecklistMatrixProvider _matrix = Substitute.For<IResolvedChecklistMatrixProvider>();
-
-    public ChecklistMatrixGateTests()
-    {
-        _companyParams.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<CompanyDocumentParam>>(new List<CompanyDocumentParam>()));
-    }
 
     private static ProcedureInstance Matricula() => new()
     {
@@ -49,7 +42,7 @@ public sealed class ChecklistMatrixGateTests
     public async Task Servicio_SinProveedorMatriz_DevuelveNull()
     {
         // Sin proveedor inyectado ⇒ no aplica ⇒ el llamador usa su gate del catálogo.
-        var svc = new ChecklistMatrixCompleteness(_companyParams);
+        var svc = new ChecklistMatrixCompleteness();
 
         var result = await svc.TryComputeCompletoAsync(Matricula(), Guid.NewGuid(), TestContext.Current.CancellationToken);
 
@@ -60,7 +53,7 @@ public sealed class ChecklistMatrixGateTests
     public async Task Servicio_SinMatriz_CompletoPorqueNoHayDocumentosAsociados()
     {
         SetMatrix();
-        var svc = new ChecklistMatrixCompleteness(_companyParams, _matrix);
+        var svc = new ChecklistMatrixCompleteness(_matrix);
 
         var result = await svc.TryComputeCompletoAsync(Matricula(), Guid.NewGuid(), TestContext.Current.CancellationToken);
 
@@ -72,7 +65,7 @@ public sealed class ChecklistMatrixGateTests
     {
         // factura obligatorio y sin subir ⇒ incompleto.
         SetMatrix(new ResolvedChecklistDoc("factura", "Factura", true, 10));
-        var svc = new ChecklistMatrixCompleteness(_companyParams, _matrix);
+        var svc = new ChecklistMatrixCompleteness(_matrix);
 
         var result = await svc.TryComputeCompletoAsync(Matricula(), Guid.NewGuid(), TestContext.Current.CancellationToken);
 
@@ -83,7 +76,7 @@ public sealed class ChecklistMatrixGateTests
     public async Task Servicio_DocumentoGeneradoObligatorio_NoIncompleta()
     {
         SetMatrix(new ResolvedChecklistDoc("soat", "SOAT", true, 10, EsGeneradoSistema: true));
-        var svc = new ChecklistMatrixCompleteness(_companyParams, _matrix);
+        var svc = new ChecklistMatrixCompleteness(_matrix);
 
         var result = await svc.TryComputeCompletoAsync(Matricula(), Guid.NewGuid(), TestContext.Current.CancellationToken);
 

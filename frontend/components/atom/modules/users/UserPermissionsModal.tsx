@@ -1,6 +1,5 @@
 "use client";
 
-import { ShieldCheck } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { ModulePermissionsSection } from "@/components/shared/permissions/ModulePermissionsSection";
 import { ADMIN_READ_ONLY_MESSAGE, adminReadOnlyFor } from "@/lib/permissions/modulePermissions";
@@ -44,7 +43,7 @@ export function UserPermissionsModal({
       open
       onClose={onClose}
       size="xl"
-      icon={ShieldCheck}
+      icono="escudo"
       title={`Permisos por módulo — ${user.fullName}`}
       description={user.email}
     >

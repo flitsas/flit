@@ -41,5 +41,13 @@ jobs:
       - name: Type check
         run: pnpm -r --if-present typecheck
 
+      # Google Fonts en el build hizo fallar este job por lo que respondía el servicio externo.
+      - name: Fuentes locales
+        run: |
+          if grep -rl --include='*.ts' --include='*.tsx' 'next/font/google' frontend*/app frontend*/components; then
+            echo "::error::Usa next/font/local con los archivos de app/fonts, no next/font/google."
+            exit 1
+          fi
+
       - name: Build
         run: pnpm -r --if-present build

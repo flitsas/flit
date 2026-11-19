@@ -242,31 +242,6 @@ export function removeTransitBlock(tenantId: string, transitOfficeId: string): P
 }
 
 /**
- * GET /{tenantId}/transit-agreements — ids de OT con los que la compañía tiene CONVENIO comercial.
- *
- * No confundir con los transit-grants: aquellos habilitan la radicación (y la radicación los exige);
- * el convenio solo decide si el contrato de mandato lleva bloque de firma del mandatario.
- */
-export function fetchTransitAgreements(
-  tenantId: string,
-  signal?: AbortSignal,
-): Promise<TransitGrantsResponse> {
-  return apiFetch<TransitGrantsResponse>(`${base}/${tenantId}/transit-agreements`, { signal });
-}
-
-/** PUT /{tenantId}/transit-agreements/{transitOfficeId} — marca o desmarca el convenio (idempotente). */
-export function setTransitAgreement(
-  tenantId: string,
-  transitOfficeId: string,
-  active: boolean,
-): Promise<void> {
-  return apiFetch<void>(`${base}/${tenantId}/transit-agreements/${transitOfficeId}`, {
-    method: "PUT",
-    body: { active },
-  });
-}
-
-/**
  * GET /{tenantId}/ot-consultation-restrictions — restricciones de consulta por OT
  * (HU #10759 AC1/AC5). Tabla dispersa: solo vuelven los pares configurados
  * explícitamente; la ausencia de fila equivale a consulta permitida.
@@ -350,16 +325,30 @@ export function setOtPrendaDocumentPolicy(
   });
 }
 
-/** GET /{tenantId}/audit-log — historial paginado DESC (AC5). */
+/** Filtros por columna del historial (HU #14004/#14005). Fechas `yyyy-MM-dd` (día local Bogotá, inclusivo). */
+export interface AuditLogFilters {
+  fechaDesde?: string;
+  fechaHasta?: string;
+  campo?: string;
+  valorAnterior?: string;
+  operador?: string;
+  /** Claves técnicas (coma) cuya etiqueta visible coincide con `campo`; OR con `campo`. */
+  campoClaves?: string;
+  /** Valores técnicos (coma, p. ej. `true,false`) de la etiqueta visible; OR con `valorAnterior`. */
+  valorAnteriorAlternativas?: string;
+}
+
+/** GET /{tenantId}/audit-log — historial paginado DESC (AC5), filtrable en servidor (HU #14005). */
 export function fetchAuditLog(
   tenantId: string,
   page = 1,
   pageSize = 20,
   signal?: AbortSignal,
   networkHeadId?: string | null,
+  filters: AuditLogFilters = {},
 ): Promise<AuditLogPageResponse> {
   return apiFetch<AuditLogPageResponse>(companyResourcePath(tenantId, "/audit-log", networkHeadId), {
-    query: { page, pageSize },
+    query: { page, pageSize, ...filters },
     signal,
   });
 }

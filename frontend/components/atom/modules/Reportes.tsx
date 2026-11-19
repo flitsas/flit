@@ -5,7 +5,7 @@
 // compartido al detalle de trámites. El dashboard original (HU #10247/#10248)
 // se recoloca en la pestaña "Resumen general" sin duplicarse.
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CalendarClock, Network, ShieldQuestion } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { usePermissions } from "@/hooks/usePermissions";
 import { useNetworkScope } from "@/hooks/useNetworkScope";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
@@ -34,6 +34,9 @@ import { UsoTab } from "./_reportes/tabs/UsoTab";
 import { ConsultasTab } from "./_reportes/tabs/ConsultasTab";
 import { DetailedReportPanel } from "./_reportesDetallados/DetailedReportPanel";
 import { ADMIN_BRAND_OUTLINE_BTN_CLS } from "@/components/admin/admin-ui-styles";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_CANDADO = iconoComo("candado");
 
 type TabId = "resumen" | "operacion" | "detallados" | "ot" | "uso" | "productividad" | "consultas";
 
@@ -202,13 +205,13 @@ export function Reportes() {
   // Sin ninguna pestaña visible → estado vacío amable (§3).
   if (visibleTabs.length === 0) {
     return (
-      <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+      <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
         <ModuleTitle title="Reportes y Analíticas" subtitle="Monitorea el desempeño operativo por pestañas temáticas." />
         <div
-          className="flex flex-col items-center justify-center gap-3 rounded-2xl border p-10 text-center bg-white dark:bg-[#0B0F14]"
+          className="flex flex-col items-center justify-center gap-3 rounded-2xl border p-10 text-center bg-card"
           data-testid="reportes-sin-permisos"
         >
-          <ShieldQuestion className="h-10 w-10 opacity-50" aria-hidden="true" />
+          <ICONO_CANDADO className="h-10 w-10 opacity-50" aria-hidden="true" />
           <p className="text-sm font-medium">No tienes permisos para ver reportes.</p>
           <p className="text-xs opacity-70 max-w-md">
             Pide a tu administrador que te asigne acceso a alguna pestaña de reportes
@@ -220,7 +223,7 @@ export function Reportes() {
   }
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Reportes y Analíticas"
         subtitle="Monitorea el desempeño operativo por pestañas temáticas."
@@ -262,7 +265,7 @@ export function Reportes() {
             className={ADMIN_BRAND_OUTLINE_BTN_CLS}
             data-testid="reportes-abrir-programacion"
           >
-            <CalendarClock className="h-4 w-4" aria-hidden="true" />
+            <Icono nombre="calendario" className="h-4 w-4" />
             Programación y alertas
           </button>
         )}
@@ -301,7 +304,7 @@ export function Reportes() {
       {!rangeValid && activeTab !== "consultas" && !ownFilters ? (
         <div
           role="alert"
-          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-card"
         >
           <p className="text-sm font-medium">La fecha inicial no puede ser posterior a la fecha final.</p>
           <p className="text-xs opacity-70">Corrige el rango de fechas para volver a consultar las métricas.</p>
@@ -309,16 +312,16 @@ export function Reportes() {
       ) : !net.ready ? (
         // La cabeza espera a conocer su alcance guardado: así ninguna pestaña pide primero «lo
         // propio» para luego pedir «la red». Para quien no es cabeza `ready` es inmediato.
-        <div role="status" aria-busy="true" aria-live="polite" className="rounded-2xl border p-8 bg-white dark:bg-[#0B0F14]">
+        <div role="status" aria-busy="true" aria-live="polite" className="rounded-2xl border p-8 bg-card">
           <span className="sr-only">Cargando alcance…</span>
         </div>
       ) : networkActive && activeTab && !NETWORK_TABS.includes(activeTab) ? (
         <div
           role="status"
-          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-white dark:bg-[#0B0F14]"
+          className="flex flex-col items-center justify-center gap-2 rounded-2xl border p-8 text-center bg-card"
           data-testid="reportes-tab-no-disponible-red"
         >
-          <Network className="h-8 w-8 text-[color:var(--color-flit-brand)]" aria-hidden="true" />
+          <Icono nombre="integraciones" className="h-8 w-8 text-[color:var(--color-flit-brand)]" />
           <p className="text-sm font-medium">{COPY_SOLO_COMPANIA_PROPIA}</p>
           <p className="text-xs opacity-70">{COPY_CAMBIA_A_COMPANIA_PROPIA}</p>
         </div>

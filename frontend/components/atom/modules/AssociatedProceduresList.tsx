@@ -1,10 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import { ExternalLink } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Icono } from "@flit/ui/Icono";
 import type { LinkedProcedureRef } from '@/lib/api/types/procedure-runtime';
-import { FLIT } from '@/lib/flit-design-tokens';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
+import { decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import { getToken } from '@/lib/api/client';
+import { hrefTramite } from '@/lib/tramites/href-tramite';
 
 export type AssociatedProcedureItem = {
   instanceId: string;
@@ -31,6 +33,11 @@ export function AssociatedProceduresList({
    * vista propia de la cabeza, así que se muestra sin enlace.
    */
   linkable = true,
+  /**
+   * Compañía dueña de los trámites. El Super Admin ve validaciones de todas las compañías: con ella el enlace
+   * lleva `?t=` y el trámite se abre en el tenant correcto. Ausente = enlace sin `?t=`.
+   */
+  tenantId,
 }: {
   procedures: AssociatedProcedureItem[];
   ariaLabel?: string;
@@ -39,8 +46,15 @@ export function AssociatedProceduresList({
   collapsible?: boolean;
   defaultOpen?: boolean;
   linkable?: boolean;
+  tenantId?: string | null;
 }) {
   const [open, setOpen] = useState(defaultOpen);
+  // ¿SuperAdmin? Se resuelve del JWT tras montar, igual que LOG QX y el listado de trámites.
+  const [esAdmin, setEsAdmin] = useState(false);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setEsAdmin(isSuperAdmin(decodeJwtPayload(getToken())));
+  }, []);
 
   if (procedures.length === 0) return null;
 
@@ -54,13 +68,13 @@ export function AssociatedProceduresList({
         return (
           <li key={p.instanceId}>
             <ProcedureLinkTag
-              href={linkable ? `/tramites/${p.instanceId}` : undefined}
+              href={linkable ? hrefTramite(p.instanceId, tenantId, esAdmin) : undefined}
               className={
                 compact
                   ? 'block truncate underline'
-                  : 'flex flex-col gap-0.5 rounded-lg border px-3 py-2 hover:bg-[rgba(79,116,201,0.05)]'
+                  : 'flex flex-col gap-0.5 rounded-lg border px-3 py-2 hover:bg-[var(--badge-info-bg)]'
               }
-              style={compact ? { color: FLIT.brand.blue } : { borderColor: FLIT.border.soft }}
+              style={compact ? { color: 'var(--di-action)' } : { borderColor: 'var(--border)' }}
               title={`${p.referenceNumber}${tipo ? ` · ${tipo}` : ''}${p.status ? ` (${p.status})` : ''}`}
             >
               {compact ? (
@@ -70,8 +84,8 @@ export function AssociatedProceduresList({
                 </>
               ) : (
                 <>
-                  <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: FLIT.brand.blue }}>
-                    {linkable ? <ExternalLink className="h-3 w-3 shrink-0" aria-hidden /> : null}
+                  <span className="flex items-center gap-1.5 text-xs font-semibold" style={{ color: 'var(--di-action)' }}>
+                    {linkable ? <Icono nombre="externo" className="h-3 w-3 shrink-0" /> : null}
                     {p.referenceNumber}
                     {p.primary ? (
                       <span className="rounded-full px-1.5 py-0.5 text-[9px] font-bold opacity-70">
@@ -105,7 +119,7 @@ export function AssociatedProceduresList({
   if (!collapsible) {
     return (
       <div className="space-y-2" aria-label={ariaLabel}>
-        <p className="text-[11px] font-semibold text-flit-primary dark:text-white">Trámites asociados</p>
+        <p className="text-[11px] font-semibold text-foreground">Trámites asociados</p>
         {list}
       </div>
     );
@@ -113,7 +127,7 @@ export function AssociatedProceduresList({
 
   // Barra del mockup de detalle: texto a la izquierda, CTA outlined a la derecha.
   return (
-    <div className="rounded-xl border px-3 py-2.5" style={{ borderColor: FLIT.border.soft }}>
+    <div className="rounded-xl border px-3 py-2.5" style={{ borderColor: 'var(--border)' }}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-[11px] opacity-70">
           {procedures.length} trámite{procedures.length === 1 ? '' : 's'} asociado
@@ -124,9 +138,9 @@ export function AssociatedProceduresList({
           onClick={() => setOpen((prev) => !prev)}
           className="inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
           style={{
-            borderColor: FLIT.brand.blue,
-            color: FLIT.brand.blue,
-            outlineColor: FLIT.brand.blue,
+            borderColor: 'var(--di-action)',
+            color: 'var(--di-action)',
+            outlineColor: 'var(--di-action)',
           }}
           aria-expanded={open}
           aria-label={`Ver trámites asociados (${procedures.length})`}

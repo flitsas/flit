@@ -12,9 +12,9 @@ export const ESTADO_LABELS: Record<SignatureVaultEstado, string> = {
 
 /** Colores del badge de estado (tokens FLIT): activa teal, revocada naranja, vencida ámbar. */
 export const ESTADO_BADGE: Record<SignatureVaultEstado, { color: string; border: string; bg: string }> = {
-  activa: { color: "#0a8f8b", border: "#8fdedb", bg: "color-mix(in srgb, var(--color-flit-tech) 12%, transparent)" },
-  revocada: { color: "#FF4E00", border: "#f0b49a", bg: "rgba(255,78,0,0.08)" },
-  vencida: { color: "#8a6000", border: "#f0d38e", bg: "rgba(249,172,0,0.10)" },
+  activa: { color: "var(--flit-success-ink)", border: "var(--badge-success-border)", bg: "var(--badge-success-bg)" },
+  revocada: { color: "var(--destructive)", border: "var(--badge-danger-border)", bg: "var(--badge-danger-bg)" },
+  vencida: { color: "var(--badge-warning-fg)", border: "var(--badge-warning-border)", bg: "var(--badge-warning-bg)" },
 };
 
 /** Formatea una fecha ISO / YYYY-MM-DD a dd/mm/aaaa en es-CO, robusto ante valores vacíos. */

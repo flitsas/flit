@@ -23,7 +23,6 @@ public sealed class BusquedaRapidaTests
     private const string DocFactura = "factura";
 
     private readonly IProcedureInstanceRepository _repo = Substitute.For<IProcedureInstanceRepository>();
-    private readonly IChecklistCompanyParamsProvider _params = Substitute.For<IChecklistCompanyParamsProvider>();
     private readonly IResolvedChecklistMatrixProvider _matriz = Substitute.For<IResolvedChecklistMatrixProvider>();
 
     public BusquedaRapidaTests()
@@ -38,8 +37,6 @@ public sealed class BusquedaRapidaTests
         _repo.ListVigenteApprovedIdentityKeysAsync(
                 Arg.Any<IReadOnlyCollection<Guid>>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>())
             .Returns(_aprobadas);
-        _params.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Array.Empty<CompanyDocumentParam>());
         _matriz.GetForAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns([new ResolvedChecklistDoc(DocFactura, "Factura", Obligatorio: true, Orden: 1)]);
     }
@@ -207,7 +204,6 @@ public sealed class BusquedaRapidaTests
             Cargar(Borrador(), Borrador(), Borrador()), ct: TestContext.Current.CancellationToken);
 
         await _matriz.Received(1).GetForAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>());
-        await _params.Received(1).GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     // ── AC4 — pausados ────────────────────────────────────────────────────────────────────
@@ -287,9 +283,18 @@ public sealed class BusquedaRapidaTests
             Arg.Any<CancellationToken>());
     }
 
+    [Fact] // HU #14411 AC8 — el respaldo sin proveedor de matriz no lee nada y no marca ningún borrador.
+    public async Task SinDocumento_SinProveedorDeMatriz_NoMarcaNingunBorrador()
+    {
+        var filtro = await new BusquedaRapidaResolver(_repo).AplicarAsync(
+            new ProcedureInstanceListFilter(), BusquedaRapida.SinDocumento, Cargar(Borrador()), ct: TestContext.Current.CancellationToken);
+
+        filtro.IdsIncluidos.Should().BeEmpty();
+    }
+
     // ── Helpers ───────────────────────────────────────────────────────────────────────────
 
-    private BusquedaRapidaResolver Resolver() => new(_repo, _params, _matriz);
+    private BusquedaRapidaResolver Resolver() => new(_repo, _matriz);
 
     private static BusquedaRapidaResolver.CargarCandidatos Cargar(params ProcedureInstance[] candidatos) =>
         (_, _, _) => Task.FromResult<(IReadOnlyList<ProcedureInstance>, int)>((candidatos, candidatos.Length));

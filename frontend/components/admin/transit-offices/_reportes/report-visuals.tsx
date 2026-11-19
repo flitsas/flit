@@ -23,14 +23,9 @@ import {
 import type { OtReportSeriesPoint, OtReportSummary, OtReportTimeBucket } from "@/lib/api/ot-metrics";
 import { ESTADO_ORDER, estadoMeta, formatInt } from "./report-columns";
 import { Empty } from "./shared";
-import {
-  CARDLIST_CELL,
-  CARDLIST_HEAD_ROW,
-  CARDLIST_ROW,
-  CARDLIST_SCROLL,
-  CARDLIST_TABLE,
-  CARDLIST_TH,
-} from "@/components/atom/table-cardlist";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 // ── Composición por estado ─────────────────────────────────────────────────────
 
@@ -104,7 +99,7 @@ export function EstadoComposition({ resumen }: { resumen: OtReportSummary }) {
                 style={{ background: meta.color }}
               />
               <span className="font-semibold">{meta.label}</span>
-              <span className="tabular-nums text-[#6B7280] dark:text-white/50">
+              <span className="tabular-nums text-muted-foreground">
                 {formatInt(slice.value)} · {pct.toFixed(1)} %
               </span>
             </li>
@@ -157,11 +152,11 @@ export function buildTrendData(serie: OtReportSeriesPoint[]): TrendPoint[] {
 
 const SERIES = [
   { key: "radicados", label: "Radicados", color: "var(--color-flit-brand)" },
-  { key: "aprobados", label: "Aprobados", color: "#8CC63F" },
-  { key: "rechazados", label: "Rechazados", color: "#FF4E00" },
+  { key: "aprobados", label: "Aprobados", color: "var(--serie-verde)" },
+  { key: "rechazados", label: "Rechazados", color: "var(--serie-naranja)" },
 ] as const;
 
-const ACUMULADO_COLOR = "#F9AC00";
+const ACUMULADO_COLOR = "var(--serie-ambar)";
 
 /**
  * Radicados contra decisiones a lo largo del periodo, con el pendiente acumulado encima.
@@ -173,6 +168,35 @@ const ACUMULADO_COLOR = "#F9AC00";
  * La serie llega COMPLETA del backend, con los periodos vacíos en cero: por eso aquí no hay que
  * rellenar huecos ni la gráfica puede dibujar una continuidad que no existió.
  */
+/** Columnas de la tabla «Ver los valores periodo a periodo» (HU #13923: DataTable estándar). */
+function columnasTendencia(
+  onZoom?: (desde: string, hasta: string, label: string) => void,
+): DataTableColumn<TrendPoint>[] {
+  return [
+    {
+      key: "periodo",
+      header: "Periodo",
+      render: (point) =>
+        onZoom ? (
+          <button
+            type="button"
+            onClick={() => onZoom(point.desde, point.hasta, point.label)}
+            className="font-semibold underline underline-offset-2 transition hover:text-flit-brand"
+            aria-label={`Acotar el informe a ${point.label}`}
+          >
+            {point.label}
+          </button>
+        ) : (
+          point.label
+        ),
+    },
+    { key: "radicados", header: "Radicados", cellClassName: "tabular-nums", render: (p) => formatInt(p.radicados) },
+    { key: "aprobados", header: "Aprobados", cellClassName: "tabular-nums", render: (p) => formatInt(p.aprobados) },
+    { key: "rechazados", header: "Rechazados", cellClassName: "tabular-nums", render: (p) => formatInt(p.rechazados) },
+    { key: "acumulado", header: "Acumulado", cellClassName: "tabular-nums", render: (p) => formatInt(p.acumulado) },
+  ];
+}
+
 export function TrendChart({
   serie,
   granularidad,
@@ -184,6 +208,8 @@ export function TrendChart({
   onZoom?: (desde: string, hasta: string, label: string) => void;
 }) {
   const [verValores, setVerValores] = useState(false);
+  // HU #13923 — la tabla de valores por periodo (hasta un año en días) lleva la paginación estándar.
+  const pg = usePaginacion("_reportes.report-visuals.TrendChart");
 
   if (serie.length === 0) {
     return <Empty>No hay periodos que graficar en el rango seleccionado.</Empty>;
@@ -209,14 +235,8 @@ export function TrendChart({
           Recibí <strong className="tabular-nums">{formatInt(totalRadicados)}</strong> y decidí{" "}
           <strong className="tabular-nums">{formatInt(totalDecididos)}</strong>
         </span>
-        <span
-          className="rounded-full px-2.5 py-0.5 text-[11px] font-semibold"
-          style={{
-            background: saldoFinal > 0 ? "#F9AC001A" : "#8CC63F1A",
-            color: saldoFinal > 0 ? "#B47800" : "#5B8A22",
-          }}
-          data-testid="ot-report-tendencia-saldo"
-        >
+        <span {...etiquetaKit(saldoFinal > 0 ? "warning" : "success")} data-testid="ot-report-tendencia-saldo">
+          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
           {saldoFinal > 0
             ? `Se acumularon ${formatInt(saldoFinal)} sin decidir`
             : saldoFinal < 0
@@ -242,7 +262,7 @@ export function TrendChart({
                   if (point && onZoom) onZoom(point.desde, point.hasta, point.label);
                 }}
               >
-                <CartesianGrid strokeDasharray="3 3" stroke="#DFE5ED" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" tick={{ fontSize: 10 }} interval={tickInterval} />
                 <YAxis yAxisId="left" tick={{ fontSize: 11 }} allowDecimals={false} width={36} />
                 <YAxis
@@ -279,7 +299,7 @@ export function TrendChart({
             </ResponsiveContainer>
           </div>
 
-          <p className="text-[11px] text-[#6B7280] dark:text-white/50">
+          <p className="text-[11px] text-muted-foreground">
             Agrupado {granularidadLabel(granularidad)}. La línea es el pendiente acumulado dentro del
             rango: si sube, entra más de lo que sale.
             {onZoom ? " Haz clic en un periodo para acotar el informe a esos días." : ""}
@@ -298,42 +318,22 @@ export function TrendChart({
         <summary className="cursor-pointer text-[11px] font-semibold text-flit-brand">
           Ver los valores periodo a periodo
         </summary>
-        <div className={`mt-2 ${CARDLIST_SCROLL}`}>
-          <table className={`min-w-[28rem] ${CARDLIST_TABLE}`}>
-            <thead>
-              <tr className={CARDLIST_HEAD_ROW}>
-                <th scope="col" className={CARDLIST_TH}>Periodo</th>
-                <th scope="col" className={CARDLIST_TH}>Radicados</th>
-                <th scope="col" className={CARDLIST_TH}>Aprobados</th>
-                <th scope="col" className={CARDLIST_TH}>Rechazados</th>
-                <th scope="col" className={CARDLIST_TH}>Acumulado</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.map((point) => (
-                <tr key={point.bucket} className={CARDLIST_ROW}>
-                  <td className={CARDLIST_CELL}>
-                    {onZoom ? (
-                      <button
-                        type="button"
-                        onClick={() => onZoom(point.desde, point.hasta, point.label)}
-                        className="font-semibold underline underline-offset-2 transition hover:text-flit-brand"
-                        aria-label={`Acotar el informe a ${point.label}`}
-                      >
-                        {point.label}
-                      </button>
-                    ) : (
-                      point.label
-                    )}
-                  </td>
-                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.radicados)}</td>
-                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.aprobados)}</td>
-                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.rechazados)}</td>
-                  <td className={`${CARDLIST_CELL} tabular-nums`}>{formatInt(point.acumulado)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-2">
+          <DataTable
+            columns={columnasTendencia(onZoom)}
+            rows={pg.paginar(data)}
+            getRowKey={(point) => point.bucket}
+            ariaLabel="Valores periodo a periodo"
+            minWidth={448}
+            tarjeta={false}
+            pagination={{
+              page: pg.page,
+              pageSize: pg.pageSize,
+              totalCount: data.length,
+              onPageChange: pg.setPage,
+              onPageSizeChange: pg.setPageSize,
+            }}
+          />
         </div>
       </details>
     </div>
@@ -357,7 +357,7 @@ function TrendTooltip({
   const point = payload[0]!.payload;
 
   return (
-    <div className="rounded-xl bg-[#162744]/95 px-3 py-2 text-[11px] text-white shadow-lg">
+    <div className="rounded-xl bg-[var(--di-accent)]/95 px-3 py-2 text-[11px] text-[color:var(--di-on-accent)] shadow-[var(--kit-sombra)]">
       <p className="mb-1 font-semibold">{point.label}</p>
       {SERIES.map((s) => (
         <p key={s.key} className="flex items-center gap-1.5">
@@ -400,7 +400,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
   }
 
   // Del verde al rojo según el tramo: el color hace el trabajo de decir qué tramo es bueno.
-  const colors = ["#8CC63F", "var(--color-flit-tech)", "var(--color-flit-brand)", "#F9AC00", "#FF4E00"];
+  const colors = ["var(--serie-verde)", "var(--color-flit-tech)", "var(--color-flit-brand)", "var(--serie-ambar)", "var(--serie-naranja)"];
 
   return (
     <div className="flex flex-col gap-2" data-testid="ot-report-histograma">
@@ -412,7 +412,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
             className="grid grid-cols-[minmax(7rem,9rem)_1fr_auto] items-center gap-3 text-xs"
           >
             <span>{bucket.label}</span>
-            <span className="h-2 overflow-hidden rounded bg-[#EEF1F5] dark:bg-white/10">
+            <span className="h-2 overflow-hidden rounded bg-secondary">
               <span
                 className="block h-full rounded"
                 style={{
@@ -423,7 +423,7 @@ export function TimeHistogram({ buckets }: { buckets: OtReportTimeBucket[] }) {
             </span>
             <span className="tabular-nums font-semibold">
               {formatInt(bucket.tramites)}{" "}
-              <span className="font-normal text-[#6B7280] dark:text-white/50">
+              <span className="font-normal text-muted-foreground">
                 ({pct.toFixed(0)} %)
               </span>
             </span>

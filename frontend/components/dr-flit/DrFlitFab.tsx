@@ -33,7 +33,7 @@ export function DrFlitFab({
       }}
     >
       <span
-        className="absolute -top-0.5 -right-0.5 z-10 h-3 w-3 rounded-full ring-2 ring-white"
+        className="absolute -top-0.5 -right-0.5 z-10 h-3 w-3 rounded-full ring-2 ring-card"
         style={{ background: "var(--dr-flit-accent)" }}
         aria-hidden="true"
       />

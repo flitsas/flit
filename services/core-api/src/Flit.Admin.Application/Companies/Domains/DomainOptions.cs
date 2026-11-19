@@ -22,4 +22,10 @@ public sealed class DomainOptions
 
     /// <summary>Destino CNAME que el SuperAdmin debe apuntar (borde #12421), informativo en el contrato de instrucciones DNS.</summary>
     public string EdgeTarget { get; set; } = string.Empty;
+
+    /// <summary>IP pública del borde: el valor del registro A que se le pide al organismo para el dominio de su portal (Épica #14297). Vacía = no se muestra el registro A.</summary>
+    public string EdgeIp { get; set; } = string.Empty;
+
+    /// <summary>Tope de dominios vigentes del portal de un mismo organismo (<c>Domains:PortalMaxPorOrganismo</c>).</summary>
+    public int PortalMaxPorOrganismo { get; set; } = 10;
 }

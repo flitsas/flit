@@ -1,12 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Info, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DocumentTypeSelect } from "@/components/admin/documents/DocumentTypeSelect";
 import { ScopeBadge } from "@/components/admin/documents/panels/ScopeBadge";
 import { ApiError, ApiValidationError } from "@/lib/api/types";
 import type { DocumentType, OverrideScope } from "@/lib/api/types-documents";
 import { digitsOnly } from "@/lib/format/currency";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 // Formulario de alta de override de orden por OT o Cliente (HU #10198, AC3/AC4).
 // Muestra el badge del scope (OT/CLIENTE) y, para CLIENTE, la nota de precedencia
@@ -65,10 +66,10 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
       {scope === "CLIENTE" && (
         <p
           className="mb-3 flex items-start gap-1.5 rounded-xl border px-3 py-2 text-xs font-medium"
-          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           role="note"
         >
-          <Info className="mt-px h-3.5 w-3.5 shrink-0" />
+          <IconoAviso tipo="alerta" className="mt-px h-3.5 w-3.5 shrink-0" />
           Precedencia: CLIENTE &gt; OT &gt; Default. Este orden prevalece sobre el de OT y el default.
         </p>
       )}
@@ -98,7 +99,7 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
             onChange={(e) => setOrden(digitsOnly(e.target.value))}
             disabled={disabled}
             className="w-full rounded-xl border px-3 py-2 text-xs outline-none focus:border-flit-brand focus:ring-2 focus:ring-flit-brand/20"
-            style={{ borderColor: error ? "#FF4E00" : "#DFE5ED" }}
+            style={{ borderColor: error ? "var(--destructive)" : "var(--border)" }}
           />
         </div>
         <button
@@ -106,15 +107,15 @@ export function OrderOverrideForm({ scope, documents, excludeIds, onSubmit, disa
           onClick={submit}
           disabled={disabled || submitting}
           className="inline-flex items-center justify-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          style={{ background: "var(--gradient-action)" }}
         >
-          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" />}
+          {submitting && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
           Agregar
         </button>
       </div>
 
       {error && (
-        <p className="mt-2 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="mt-2 text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}

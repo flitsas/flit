@@ -149,7 +149,8 @@ public sealed class FirmaHandlerTests
             CreatedAt = DateTimeOffset.UtcNow,
         };
         instance.Signatures.Add(sig);
-        _repo.GetByIdWithSignaturesAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(instance);
+        // HU #14175: SimularFirmaHandler usa GetByIdWithFurGraphAsync para cargar actores + firmas.
+        _repo.GetByIdWithFurGraphAsync(id, tenant, Arg.Any<CancellationToken>()).Returns(instance);
         return (instance, sig);
     }
 

@@ -10,7 +10,8 @@
     "./client": "./src/client.tsx",
     "./types": "./src/types.ts",
     "./request": "./src/request.ts",
-    "./network": "./src/network.ts"
+    "./network": "./src/network.ts",
+    "./return-to": "./src/return-to.ts"
   },
   "scripts": {
     "test": "vitest run",

@@ -63,7 +63,7 @@ describe('timeline-mappers', () => {
     expect(nodes).toHaveLength(2);
     const vendedor = nodes.find((n) => n.label.includes('Vendedor'));
     expect(vendedor?.info.extra).toBe('Acreditado por firma del baúl');
-    expect(vendedor?.color).toBe('#8CC63F');
+    expect(vendedor?.color).toBe('var(--flit-success-ink)');
   });
 
   it('mapIdentidadToTimelineNodes usa estado biométrico cuando hay validación', () => {
@@ -191,6 +191,37 @@ describe('timeline-mappers', () => {
     expect(nodes[0]!.info.extra).toBe('Reenviado a un correo distinto del registrado');
   });
 
+  it('HU #13822 AC3: reenvio_validacion_admin con cambio de correo dice «Correo actualizado: anterior → nuevo»', () => {
+    const nodes = mapEventsToTimelineNodes([
+      {
+        tipo: 'reenvio_validacion_admin',
+        createdAt: '2026-06-02T10:00:00Z',
+        createdByName: 'Willyn Londoño',
+        partyRole: 'locatario',
+        emailActualizado: true,
+        correoAnterior: 'viejo@dominio.com',
+        correoDestino: 'nueva@dominio.com',
+      },
+    ]);
+    expect(nodes[0]!.label).toBe('Reenvío de validación · Locatario');
+    expect(nodes[0]!.info.extra).toBe('Correo actualizado: viejo@dominio.com → nueva@dominio.com');
+  });
+
+  it('HU #13822 AC3: sin correo anterior mantiene el texto de reenvío al correo actual', () => {
+    const nodes = mapEventsToTimelineNodes([
+      {
+        tipo: 'reenvio_validacion_admin',
+        createdAt: '2026-06-02T10:00:00Z',
+        createdByName: null,
+        partyRole: 'vendedor',
+        emailActualizado: false,
+        correoAnterior: null,
+        correoDestino: 'ana@dominio.com',
+      },
+    ]);
+    expect(nodes[0]!.info.extra).toBe('Reenviado al correo actual');
+  });
+
   // HU #12575 (Feature #12565, AC2) — la solicitud de revocatoria se pinta como nodo ADICIONAL, con
   // el número de intento en la etiqueta y el motivo/correo del SOLICITANTE (no de un tercero).
   it('mapEventsToTimelineNodes pinta revocatoria_solicitada con intento, motivo y solicitante', () => {
@@ -281,5 +312,38 @@ describe('timeline-mappers', () => {
     // El vigente pasa a ser el último cronológico de la unión (Revocado), no el último de la lista
     // de estados sola ni el de eventos sola.
     expect(merged.map((n) => n.isActive)).toEqual([false, false, true]);
+  });
+});
+
+// Bug #14604 — «Documento actualizado por el administrador» en el timeline.
+describe('timeline-mappers — documento_cargado_admin', () => {
+  const evento: ProcedureInstanceEvent = {
+    tipo: 'documento_cargado_admin',
+    createdAt: '2026-06-01T10:00:00Z',
+    createdByName: 'Willyn Londoño',
+    createdByEmail: 'w@flit.co',
+    createdByCompania: 'FLIT',
+    documentoTipo: 'soat',
+    documentoFilename: 'soat_2026.pdf',
+    estadoAlMomento: 'entregado',
+    observacion: 'Soporte faltante en el expediente',
+  };
+
+  it('pinta título, archivo, estado del trámite y observación', () => {
+    const [nodo] = mapEventsToTimelineNodes([evento]);
+    expect(nodo!.label).toBe('Documento actualizado por el administrador');
+    expect(nodo!.info.rol).toBe('Cargado por Willyn Londoño');
+    expect(nodo!.info.extra).toContain('soat_2026.pdf');
+    expect(nodo!.info.extra).toContain('Estado del trámite: Entregado');
+    expect(nodo!.info.extra).toContain('Observación: Soporte faltante en el expediente');
+  });
+
+  it('tolera un evento sin datos opcionales', () => {
+    const [nodo] = mapEventsToTimelineNodes([
+      { tipo: 'documento_cargado_admin', createdAt: '2026-06-01T10:00:00Z', createdByName: null },
+    ]);
+    expect(nodo!.label).toBe('Documento actualizado por el administrador');
+    expect(nodo!.info.rol).toBe('Cargado por administrador');
+    expect(nodo!.info.extra).toContain('Sin observación registrada');
   });
 });

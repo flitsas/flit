@@ -30,6 +30,8 @@ export interface VistaPreviaDp {
   representante: { nombres: string; cargo: string | null; numeroDocumento: string } | null;
   anexos: string[];
   estadoLegal: string;
+  /** El correo CorreoDpOt armado con este comparendo; null si no hay plantilla de correo publicada. No se envía. */
+  correo?: { asunto: string | null; html: string } | null;
 }
 
 /** Las que proceden primero (por el estado legal de hoy), luego por código. */

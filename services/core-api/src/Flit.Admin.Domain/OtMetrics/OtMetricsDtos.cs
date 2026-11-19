@@ -48,10 +48,15 @@ public sealed record OtDayMovementDto(
 /// pausados). Se devuelve como un único número para que el panel pueda explicar honestamente por
 /// qué el desglose no suma el total, y para poder decidir más adelante si se excluyen del conteo.</para>
 /// </summary>
+/// <remarks><see cref="Prioritarios"/> (rediseño del Inicio, 2026-11-17) cuenta TODOS los pendientes
+/// marcados como prioritarios, sin importar cuánto llevan. Es la cifra «Trámites prioritarios» del
+/// Inicio del organismo; <see cref="OtAgingDto.PrioritariosEstancados"/> sigue siendo el subconjunto
+/// que ya pasó de 3 días.</remarks>
 public sealed record OtQueueBreakdownDto(
     int PorRevisar,
     int EsperandoAsignarPlaca,
-    int EnEsperaDelCliente);
+    int EnEsperaDelCliente,
+    int Prioritarios = 0);
 
 /// <summary>Antigüedad de lo pendiente, en días desde que entró a <c>entregado</c>.</summary>
 public sealed record OtAgingDto(
@@ -154,10 +159,13 @@ public static class OtDrilldownBuckets
     public const string MasDe7Dias = "antiguedad_mas_7";
     public const string PrioritariosEstancados = "prioritarios_estancados";
 
+    /// <summary>Todos los pendientes prioritarios: la lista detrás de <see cref="OtQueueBreakdownDto.Prioritarios"/>.</summary>
+    public const string Prioritarios = "prioritarios";
+
     public static bool IsKnown(string? bucket) => bucket is
         EntregadosHoy or DecididosHoy or Pendientes or PorRevisar or EsperandoPlaca
         or EnEsperaDelCliente or Hasta1Dia or Entre2y3Dias or Entre4y7Dias or MasDe7Dias
-        or PrioritariosEstancados;
+        or PrioritariosEstancados or Prioritarios;
 }
 
 /// <summary>Un trámite dentro de un bloque, con lo justo para reconocerlo y poder ir a decidirlo.</summary>
@@ -192,6 +200,26 @@ public sealed record OtDrilldownDto(
 
 /// <summary>Empresa cliente del organismo, para el filtro del reporte.</summary>
 public sealed record OtClientCompanyOptionDto(Guid TenantId, string Name);
+
+// ── Trámites por cliente corporativo (Inicio del organismo) ──────────────────────────────────
+
+/// <summary>
+/// Una empresa cliente y cuántos trámites le RADICÓ al organismo en el periodo, por familia.
+/// <para>El universo es el mismo del informe del periodo (trámites que llegaron al organismo dentro
+/// del rango), así que la suma de <see cref="Total"/> cuadra con el total del informe.</para>
+/// </summary>
+public sealed record OtClientFamilyRowDto(
+    Guid ClientTenantId,
+    string Nombre,
+    int Matriculas,
+    int Traspasos,
+    int Otros,
+    int Total);
+
+/// <summary>Trámites por cliente corporativo, de mayor a menor volumen.</summary>
+public sealed record OtClientsByFamilyDto(
+    IReadOnlyList<OtClientFamilyRowDto> Clientes,
+    int Total);
 
 // ── B. Informe del periodo ────────────────────────────────────────────────────────────────────
 
@@ -252,6 +280,10 @@ public sealed record OtReportTimeBucketDto(string Key, string Label, int Tramite
 /// en lunes y el recorte contra los extremos del rango, que es justo la clase de lógica que se
 /// desincroniza en silencio.</para>
 /// </summary>
+/// <remarks><see cref="TiempoPromedioDecisionDias"/> (rediseño del Inicio, 2026-11-17) es el promedio, en
+/// DÍAS, del turno del organismo (última radicación → decisión) de las decisiones que cayeron en ese
+/// periodo. Es <c>null</c> cuando no hubo decisiones: un cero se leería como «se decidió al
+/// instante». No hay meta ni SLA en el dominio, así que el punto viaja solo.</remarks>
 public sealed record OtReportSeriesPointDto(
     string Bucket,
     string Label,
@@ -259,7 +291,8 @@ public sealed record OtReportSeriesPointDto(
     string Hasta,
     int Radicados,
     int Aprobados,
-    int Rechazados);
+    int Rechazados,
+    double? TiempoPromedioDecisionDias = null);
 
 /// <summary>
 /// Cabecera del informe.

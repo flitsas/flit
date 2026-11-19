@@ -57,7 +57,7 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
 
     /// <summary>
     /// Inventario de rutas de escritura sobre un trámite identificado en la ruta (brief F13/F14/F15):
-    /// 39 runtime bajo <c>/api/v1/tramites/instances/{id}</c> + 6 de gestión avanzada bajo
+    /// 39 runtime bajo <c>/api/v1/tramites/instances/{id}</c> + 7 de gestión avanzada bajo
     /// <c>/api/v1/admin/tramites/{id}</c>. <c>{id}</c> se sustituye por el trámite del hijo.
     /// </summary>
     private static readonly (string Method, string Route)[] Routes =
@@ -113,8 +113,12 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
         ("POST", "/api/v1/admin/tramites/{id}/estado"),
         ("POST", "/api/v1/admin/tramites/{id}/reasignar-gestor"),
         ("POST", "/api/v1/admin/tramites/{id}/validaciones-identidad/{any}/reenviar"),
+        // HU #13821 — reenvío a una o varias personas.
+        ("POST", "/api/v1/admin/tramites/{id}/validaciones-identidad/reenviar"),
         ("POST", "/api/v1/admin/tramites/{id}/consolidado/limpiar"),
         ("POST", "/api/v1/admin/tramites/{id}/consolidado/cargar"),
+        // Bug #14604 — carga administrativa de documentos en cualquier estado.
+        ("POST", "/api/v1/admin/tramites/{id}/documentos"),
     ];
 
     /// <summary>
@@ -305,6 +309,7 @@ public sealed class NetworkWriteRejectionTests : IClassFixture<NetworkWriteRejec
         // se ejercita con el tipo correcto (y un archivo vacío que jamás llega al handler).
         if (route.EndsWith("/attachments", StringComparison.Ordinal)
             || route.EndsWith("/consolidado/cargar", StringComparison.Ordinal)
+            || route.EndsWith("/documentos", StringComparison.Ordinal)
             || route.EndsWith("/revocation-requests", StringComparison.Ordinal))
         {
             var form = new MultipartFormDataContent();

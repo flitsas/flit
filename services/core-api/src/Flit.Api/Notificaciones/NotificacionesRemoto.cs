@@ -83,7 +83,8 @@ internal sealed class CanalesPorNotificaciones(NotificacionesService.Notificacio
 
         try
         {
-            var r = await client.EnviarCorreoAsync(new EnviarCorreoRequest { Correo = correo }, NotificacionesRemoto.Empresa(mensaje.TenantId), cancellationToken: ct)
+            // El banco de pruebas escribe a un buzón controlado: lo dice explícitamente para quedar fuera del desvío (HU #13881).
+            var r = await client.EnviarCorreoAsync(new EnviarCorreoRequest { Correo = correo, BuzonDePruebas = true }, NotificacionesRemoto.Empresa(mensaje.TenantId), cancellationToken: ct)
                 .ConfigureAwait(false);
             var outcome = Desenlace(r.Resultado);
             var resultado = outcome == EmailSendOutcome.Sent

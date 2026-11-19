@@ -10,37 +10,37 @@
  * lo pida. Duplicar aquí es lo que hace verdadera la promesa de que el gestor no se toca.
  */
 
-export const OT_NAVY = "#162744";
+export const OT_NAVY = "var(--color-flit-primary)";
 export const OT_BLUE = "var(--color-flit-brand)";
-export const OT_GREEN = "#8CC63F";
-export const OT_WARN = "#F9AC00";
+export const OT_GREEN = "var(--flit-success-ink)";
+export const OT_WARN = "var(--badge-warning-fg)";
 /** Texto sobre la banda ámbar de avisos: el ámbar puro sobre blanco no contrasta. */
-export const OT_WARN_TEXT = "#8A6300";
+export const OT_WARN_TEXT = "var(--badge-warning-fg)";
 /** Naranja del rechazo. El prototipo usa `#FF6B00` en el botón y `#FF5722` en la modal de motivo. */
-export const OT_ORANGE = "#FF6B00";
-export const OT_BORDER = "#DFE5ED";
-export const OT_CANVAS = "#EEF5FF";
-export const OT_META = "#5E6A7B";
+export const OT_ORANGE = "var(--destructive)";
+export const OT_BORDER = "var(--border)";
+export const OT_CANVAS = "var(--secondary)";
+export const OT_META = "var(--muted-foreground)";
 
 /** Tarjeta del prototipo: sin relleno propio —cada bloque decide el suyo—. */
 export const OT_CARD =
-  "rounded-xl border border-[#DFE5ED] bg-white shadow-[0_4px_12px_rgba(0,0,0,0.05)] dark:border-white/5 dark:bg-[#0B0F14]";
+  "rounded-xl border border-border bg-card shadow-[var(--shadow-card)]";
 
 /** Marco de las rejillas de datos: recorta las bandas de encabezado a las esquinas redondeadas. */
 export const OT_MARCO =
-  "overflow-hidden rounded-xl border border-[#DFE5ED] dark:border-white/5";
+  "overflow-hidden rounded-xl border border-border";
 
 /** Banda de encabezado de una rejilla. */
-export const OT_BANDA = "bg-[#EEF5FF] dark:bg-white/5";
+export const OT_BANDA = "bg-secondary";
 
 /**
  * Degradado del CTA de aprobación. El detalle del gestor usa el degradado de marca (azul→cian); el
  * prototipo del OT usa cian→esmeralda y esa es la decisión de producto para esta pantalla.
  */
-export const OT_APROBAR_GRADIENTE = "bg-gradient-to-r from-cyan-500 to-emerald-500";
+export const OT_APROBAR_GRADIENTE = "bg-[image:var(--gradient-action)]";
 
 export const OT_OVERLAY_STYLE = {
-  background: "rgba(22, 39, 68, 0.45)",
+  background: "var(--overlay)",
   backdropFilter: "blur(6px)",
   WebkitBackdropFilter: "blur(6px)",
 } as const;
@@ -51,4 +51,4 @@ export const OT_OVERLAY_STYLE = {
  * desplazable. Con los acordeones abiertos, los botones de decidir siguen a la vista.
  */
 export const OT_SHEET_CLASS =
-  "flex w-[900px] max-w-full max-h-[85vh] flex-col overflow-hidden rounded-2xl bg-[#EEF5FF] p-4 shadow-[0_20px_48px_rgba(15,23,20,0.18)] dark:bg-[#05060A]";
+  "flex w-[900px] max-w-full max-h-[85vh] flex-col overflow-hidden rounded-[9px] border border-[color:var(--di-border)] bg-secondary p-4 shadow-none";

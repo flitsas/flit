@@ -28,7 +28,7 @@ public sealed class ServicioAvisos(
     CalendarioService calendario,
     Capacidades capacidades,
     Timeline timeline,
-    FotoFotomulta foto,
+    AdjuntosAviso adjuntos,
     Reloj reloj)
 {
     /// <summary>Elegibilidad común E(c) (§6.6) con el motivo cuando no aplica.</summary>
@@ -80,16 +80,19 @@ public sealed class ServicioAvisos(
         if (await NoElegibleAsync(c, ct).ConfigureAwait(false) is { } motivo)
             throw new ReglaException("AVISO_NO_PROCEDE", motivo);
 
+        var ventana = await VentanaAsync(c, ct).ConfigureAwait(false);
+        if (FueraDeSecuencia(tipo, c.EstadoNotificacionConductor, ventana) is { } salto)
+            throw new ReglaException("AVISO_FUERA_DE_SECUENCIA", salto);
+
         var config = await capacidades.DeAsync(c.TenantId, ct).ConfigureAwait(false);
-        var motor = await calendario.MotorAsync(ct).ConfigureAwait(false);
-        var s = motor.Evaluar(Plazos.Fechas(c), reloj.Hoy);
-        var ventana = Plazos.Ventana(s, c);
         var enlace = portal.Emitir(c);
         var valores = await contexto.DeAsync(c, new ExtrasContexto(PortalEnlace: enlace.Url, PortalVence: enlace.Vence), ct).ConfigureAwait(false);
+        var adjuntado = await adjuntos.ParaAvisoAsync(c, config, tipo, ct).ConfigureAwait(false);
+        valores["adjuntos.autorizacion"] = adjuntado.Autorizacion ? "sí" : null;
+        valores["adjuntos.poder"] = adjuntado.Poder ? "sí" : null;
         var plantilla = tipo switch { TipoAviso.Aviso1 => TipoPlantilla.CorreoAviso1, TipoAviso.Aviso2 => TipoPlantilla.CorreoAviso2, _ => TipoPlantilla.CorreoAviso3 };
         var comunicacion = tipo switch { TipoAviso.Aviso1 => TipoComunicacion.Aviso1, TipoAviso.Aviso2 => TipoComunicacion.Aviso2, _ => TipoComunicacion.Aviso3 };
         var armado = await plantillas.ArmarAsync(config.ConjuntoPlantillas, plantilla, null, valores, ct).ConfigureAwait(false);
-        var adjunto = await foto.ParaAvisoAsync(c, ct).ConfigureAwait(false);
         var enviados = await correo.RegistrarAsync(new CorreoNuevo
         {
             TenantId = c.TenantId,
@@ -102,7 +105,7 @@ public sealed class ServicioAvisos(
             Bcc = EmpresasEndpoints.CopiasPara(config.Bcc, comunicacion),
             Asunto = armado.Asunto ?? "Comparendo",
             Html = armado.Html,
-            Adjuntos = adjunto is null ? [] : [adjunto],
+            Adjuntos = adjuntado.Archivos,
             Canal = config.CanalCorreo,
             RemitenteNombre = config.RemitenteNombre ?? config.EmpresaNombre,
             CreadoPor = actor.UsuarioId,
@@ -133,10 +136,51 @@ public sealed class ServicioAvisos(
             c.EstadoNotificacionConductor = nuevo;
         c.Gestionado = true;
         timeline.Agregar(c, TipoEventoTimeline.AvisoEnviado,
-            $"{Nombre(tipo)} {(disparo == Disparo.Manual ? "enviado a mano" : "enviado por el scheduler")} a {c.Contraventor.Correo} ({(porcentaje > 0 ? $"descuento del {porcentaje}%" : "sin descuento")}){(adjunto is null ? string.Empty : ", con la foto de la fotomulta")}.",
-            actor, new { tipo = tipo.ToString(), ventana = ventana.ToString(), destinatario = c.Contraventor.Correo, foto = adjunto is not null }, "comunicacion_saliente", enviados[0].Id);
+            $"{Nombre(tipo)} {(disparo == Disparo.Manual ? "enviado a mano" : "enviado automáticamente")} a {c.Contraventor.Correo} ({(porcentaje > 0 ? $"descuento del {porcentaje}%" : "sin descuento")}).{Faltantes(adjuntado)}",
+            actor, new { tipo = tipo.ToString(), ventana = ventana.ToString(), destinatario = c.Contraventor.Correo, adjuntos = adjuntado.Archivos.Select(a => a.Nombre), faltantes = adjuntado.Faltantes },
+            "comunicacion_saliente", enviados[0].Id);
         return aviso;
     }
+
+    /// <summary>La ventana de descuento de hoy, la misma que usa el envío.</summary>
+    public async Task<VentanaDescuento> VentanaAsync(Comparendo c, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(c);
+        var motor = await calendario.MotorAsync(ct).ConfigureAwait(false);
+        return Plazos.Ventana(motor.Evaluar(Plazos.Fechas(c), reloj.Hoy), c);
+    }
+
+    /// <summary>
+    /// Secuencia estricta de los avisos 1 a 3 (bug #14270, AV-03/AV-04), para cualquier envío, manual o automático: el 1
+    /// primero (o su reenvío mientras no haya salido otro); el 2 con el 1 enviado y el descuento del 50 % vencido; el 3
+    /// con el 1 enviado y el comparendo ya en tarifa plena, como la regla automática. Nunca uno anterior al último que
+    /// salió. Devuelve por qué no procede, o null.
+    /// </summary>
+    public static string? FueraDeSecuencia(TipoAviso tipo, EstadoNotificacionConductor estado, VentanaDescuento ventana)
+    {
+        var ultimo = estado switch { EstadoNotificacionConductor.Aviso1 => 1, EstadoNotificacionConductor.Aviso2 => 2, EstadoNotificacionConductor.Aviso3 => 3, _ => 0 };
+        var numero = tipo switch { TipoAviso.Aviso1 => 1, TipoAviso.Aviso2 => 2, _ => 3 };
+        if (numero < ultimo)
+            return $"El conductor ya recibió el aviso {ultimo}: no se le envía uno anterior.";
+        if (numero > 1 && ultimo == 0)
+            return "Primero debe salir el aviso 1.";
+        return tipo switch
+        {
+            TipoAviso.Aviso2 when ventana == VentanaDescuento.Descuento50 => "El aviso 2 sale cuando vence el descuento del 50 %.",
+            TipoAviso.Aviso2 when ventana == VentanaDescuento.SinDescuento => "El descuento del 25 % ya venció: corresponde el aviso 3.",
+            TipoAviso.Aviso2 when ventana != VentanaDescuento.Descuento25 => "Sin fecha de notificación no se puede saber si aplica el descuento del 25 %.",
+            TipoAviso.Aviso3 when ventana is VentanaDescuento.Descuento50 or VentanaDescuento.Descuento25 => "El aviso 3 sale cuando el comparendo ya no tiene descuento.",
+            TipoAviso.Aviso3 when ventana != VentanaDescuento.SinDescuento => "Sin fecha de notificación no se puede saber si el comparendo perdió el descuento.",
+            _ => null,
+        };
+    }
+
+    /// <summary>Los avisos 1 a 3 que se pueden enviar hoy a este comparendo, en orden.</summary>
+    public static IReadOnlyList<TipoAviso> Permitidos(EstadoNotificacionConductor estado, VentanaDescuento ventana) =>
+        new[] { TipoAviso.Aviso1, TipoAviso.Aviso2, TipoAviso.Aviso3 }.Where(t => FueraDeSecuencia(t, estado, ventana) is null).ToList();
+
+    /// <summary>HU #13884: lo que no se pudo adjuntar, dicho en la línea de tiempo del comparendo.</summary>
+    public static string Faltantes(Adjuntos a) => a.Faltantes.Count == 0 ? string.Empty : $" Salió sin {string.Join(" ni ", a.Faltantes)}.";
 
     public static string Nombre(TipoAviso t) => t switch
     {

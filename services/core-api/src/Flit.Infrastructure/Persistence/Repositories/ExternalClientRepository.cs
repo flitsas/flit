@@ -13,6 +13,7 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 internal sealed class ExternalClientRepository(FlitDbContext context) : IExternalClientRepository
 {
     private const string ClientIdUniqueConstraint = "uq_external_clients_client_id";
+    private const string CompanyTipoActivoUniqueIndex = "uq_external_clients_company_tipo_activo";
 
     public async Task<ExternalClientView> CreateAsync(NewExternalClient client, CancellationToken cancellationToken = default)
     {
@@ -29,6 +30,8 @@ internal sealed class ExternalClientRepository(FlitDbContext context) : IExterna
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
             CreatedBy = client.CreatedBy,
+            Tipo = client.Tipo,
+            CompanyId = client.CompanyId,
         };
 
         context.ExternalClients.Add(entity);
@@ -44,6 +47,15 @@ internal sealed class ExternalClientRepository(FlitDbContext context) : IExterna
         {
             context.Entry(entity).State = EntityState.Detached;
             throw new ExternalClientAlreadyExistsException(client.ClientId);
+        }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException
+        {
+            SqlState: PostgresErrorCodes.UniqueViolation,
+            ConstraintName: CompanyTipoActivoUniqueIndex,
+        })
+        {
+            context.Entry(entity).State = EntityState.Detached;
+            throw new ExternalIntegrationAlreadyActiveException(client.CompanyId ?? Guid.Empty, client.Tipo);
         }
 
         return ToView(entity);
@@ -76,14 +88,15 @@ internal sealed class ExternalClientRepository(FlitDbContext context) : IExterna
                 entity.IsActive,
                 ReadScopes(entity.Scopes),
                 entity.FailedAttempts,
-                entity.LockedUntil);
+                entity.LockedUntil,
+                entity.Tipo);
     }
 
     public async Task<IReadOnlyList<ExternalClientView>> ListAsync(CancellationToken cancellationToken = default)
     {
         // Sin paginar: son unos pocos clientes de máquina (uno por sistema y ambiente).
         var entities = await context.ExternalClients.AsNoTracking()
-            .Where(c => c.DeletedAt == null)
+            .Where(c => c.DeletedAt == null && c.Tipo == ExternalIntegrationTypes.Externa)
             .OrderBy(c => c.ClientId)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
@@ -194,6 +207,41 @@ internal sealed class ExternalClientRepository(FlitDbContext context) : IExterna
         return rows == 0 ? null : await GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
     }
 
+    // HU #14067 — integraciones ligadas a una compañía.
+    public Task<bool> CompanyExistsAsync(Guid companyId, CancellationToken cancellationToken = default) =>
+        context.Tenants.AsNoTracking().AnyAsync(t => t.Id == companyId, cancellationToken);
+
+    public async Task<IReadOnlyList<ExternalClientView>> ListByCompanyAsync(
+        Guid companyId, CancellationToken cancellationToken = default)
+    {
+        var entities = await context.ExternalClients.AsNoTracking()
+            .Where(c => c.CompanyId == companyId && c.DeletedAt == null)
+            .OrderByDescending(c => c.CreatedAt)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+        return entities.Select(ToView).ToList();
+    }
+
+    public async Task<ExternalClientView?> GetByCompanyAsync(
+        Guid companyId, Guid id, CancellationToken cancellationToken = default)
+    {
+        var entity = await context.ExternalClients.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.Id == id && c.CompanyId == companyId && c.DeletedAt == null, cancellationToken)
+            .ConfigureAwait(false);
+        return entity is null ? null : ToView(entity);
+    }
+
+    public async Task<ExternalClientView?> BlockAsync(
+        Guid id, Guid? actor, DateTimeOffset now, CancellationToken cancellationToken = default)
+    {
+        var rows = await Vigentes(id).ExecuteUpdateAsync(s => s
+            .SetProperty(c => c.LockedUntil, ExternalIntegrationRules.IndefiniteBlock)
+            .SetProperty(c => c.UpdatedAt, now)
+            .SetProperty(c => c.UpdatedBy, actor), cancellationToken).ConfigureAwait(false);
+
+        return rows == 0 ? null : await GetByIdAsync(id, cancellationToken).ConfigureAwait(false);
+    }
+
     private IQueryable<ExternalClient> Vigentes(Guid id) =>
         context.ExternalClients.Where(c => c.Id == id && c.DeletedAt == null);
 
@@ -207,7 +255,9 @@ internal sealed class ExternalClientRepository(FlitDbContext context) : IExterna
         entity.MustRotate,
         entity.LockedUntil,
         entity.LastTokenAt,
-        entity.CreatedAt);
+        entity.CreatedAt,
+        entity.Tipo,
+        entity.CompanyId);
 
     private static List<string> ReadScopes(string json) =>
         JsonSerializer.Deserialize<List<string>>(json) ?? [];

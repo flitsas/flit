@@ -140,6 +140,20 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> transitOfficeIds, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #14469 — pago del portal (punto de atención) ligado al trámite; null si el trámite no tiene (web, histórico,
+    /// otro origen). Lectura lean por trámite, sin cargar el grafo.
+    /// </summary>
+    Task<Flit.Tramites.Domain.Tramites.PersonaNatural.PagoPortalTramite?> GetPagoPortalAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14469 — guarda el pago del portal ligado al trámite. Idempotente: el mismo trámite o el mismo cobro del portal
+    /// no se vuelve a guardar. Devuelve true si insertó una fila nueva.
+    /// </summary>
+    Task<bool> RegistrarPagoPortalAsync(
+        Guid procedureInstanceId, Guid tenantId, Flit.Tramites.Domain.Tramites.PersonaNatural.PagoPortalTramite pago, CancellationToken ct = default);
+
+    /// <summary>
     /// HU #11056 — resuelve el nombre visible de cada usuario indicado, para la columna "Gestor" del
     /// listado (la persona que radica, <c>created_by_user_id</c>). Devuelve un mapa id→nombre en UNA
     /// consulta (<c>WHERE id IN …</c>): la columna no debe costar una petición por fila. Los ids sin
@@ -448,6 +462,57 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #13824 — identidad aprobada que un Super Admin VENCIÓ a mano pero que los trámites ya fuera de borrador siguen
+    /// honrando (<see cref="Entities.BiometricRules.EsAprobadaVigenteParaTramite"/>): la más reciente de la persona
+    /// (<paramref name="tipoDoc"/> + <paramref name="documento"/>) cuyo fin de vigencia previo aún no llega. Para el
+    /// FUR, el certificado y el gate de un trámite que NO está en borrador. Solo lectura.
+    /// </summary>
+    /// <param name="salidaDeBorradorAt">
+    /// Salida de borrador del trámite (<see cref="GetSalidaDeBorradorAtAsync"/>); solo cuentan las identidades vencidas a
+    /// mano que estaban aprobadas al salir y aún no vencidas (<see cref="Entities.BiometricRules.ConservaFirmaTrasVencimientoManual(string?, DateTimeOffset?, DateTimeOffset?, DateTimeOffset?)"/>).
+    /// Nulo = sin historial (legado): comportamiento previo.
+    /// </param>
+    Task<ProcedureInstanceBiometricValidation?> FindProtegidaPorVencimientoManualAsync(
+        Guid tenantId, string tipoDoc, string documento, DateTimeOffset now,
+        DateTimeOffset? salidaDeBorradorAt, CancellationToken ct = default);
+
+    /// <summary>
+    /// Momento en que el trámite salió de borrador por primera vez (primera fila de
+    /// <c>procedure_instance_status_history</c> con <c>from_status = 'borrador'</c>), o <c>null</c> si no hay fila
+    /// (legado o migrados). Un trámite no vuelve a borrador, así que es único.
+    /// </summary>
+    Task<DateTimeOffset?> GetSalidaDeBorradorAtAsync(Guid instanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// <see cref="GetSalidaDeBorradorAtAsync"/> en lote (UNA consulta, sin N+1) para el listado. Filtra por
+    /// <paramref name="tenantIds"/> (la vista de red es multi-tenant) además de por id. Las instancias sin fila de salida no
+    /// aparecen en el diccionario.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, DateTimeOffset>> ListSalidasDeBorradorAsync(
+        IReadOnlyCollection<Guid> tenantIds, IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13824 — claves (<see cref="Entities.BiometricRules.IdentidadKey"/>) de las identidades vencidas a mano que los
+    /// trámites ya fuera de borrador siguen honrando, en UNA consulta (listado de trámites, sin N+1). Set vacío si no hay.
+    /// </summary>
+    /// <remarks>
+    /// El valor son TODAS las identidades vencidas a mano de esa llave (aprobación y vencimiento): un trámite conserva la
+    /// firma si CUALQUIERA estaba aprobada y sin vencer cuando salió de borrador
+    /// (<see cref="Entities.BiometricRules.ConservaFirmaTrasVencimientoManual(string?, DateTimeOffset?, IReadOnlyList{Entities.IdentidadVencidaManual}?)"/>).
+    /// </remarks>
+    Task<IReadOnlyDictionary<string, IReadOnlyList<Entities.IdentidadVencidaManual>>> ListProtegidasPorVencimientoManualKeysAsync(
+        IReadOnlyCollection<Guid> tenantIds, DateTimeOffset now, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #13824 — trámites EN BORRADOR del tenant (no eliminados) que tienen un actor con ese documento (el propio o el
+    /// de su representante legal), con actores y validaciones cargados. Ordenados del más reciente al más antiguo
+    /// (<c>updated_at</c> o, si no hay, <c>created_at</c>). La coincidencia exacta con el sujeto de identidad se resuelve
+    /// en la capa de aplicación. Solo lectura.
+    /// </summary>
+    Task<IReadOnlyList<ProcedureInstance>> ListBorradoresConActorDocumentoAsync(
+        Guid tenantId, string tipoDoc, string documento, CancellationToken ct = default);
+
+    /// <summary>
     /// Feature #11066 / HU #11069 — trámites del tenant asociados a la misma identidad
     /// (<paramref name="documents"/> = pares tipo+número): por validación biométrica de la instancia
     /// y/o por actores con ese documento. Mapa por <see cref="Entities.BiometricRules.IdentidadKey"/>.
@@ -481,6 +546,21 @@ public interface IProcedureInstanceRepository
     /// </summary>
     Task<ProcedureInstanceBiometricValidation?> GetBiometricByIdWithPersonAsync(
         Guid id, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14044 (Épica #14021) — la validación MÁS RECIENTE del portal de Persona Natural para (solicitud, rol, documento),
+    /// en cualquier estado, aislada por tenant y TRACKEADA. Solo mira lo de ESA solicitud: una validación de otra solicitud
+    /// de la misma cédula nunca se devuelve (decisión del PO: no se reutiliza entre trámites).
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> FindPortalValidationAsync(
+        Guid tenantId, string solicitudRef, string parte, string documentNumber, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14044 — una validación del portal por id (solo las que tienen <c>portal_solicitud_ref</c>), aislada por tenant y
+    /// TRACKEADA (para reenviar). Null si no existe, es de otro tenant o no es del portal.
+    /// </summary>
+    Task<ProcedureInstanceBiometricValidation?> GetPortalValidationByIdAsync(
+        Guid tenantId, Guid validationId, CancellationToken ct = default);
 
     /// <summary>
     /// Cuenta un intento rechazado de Kyverum de forma ATÓMICA e idempotente: en un ÚNICO <c>UPDATE</c>
@@ -649,6 +729,17 @@ public interface IProcedureInstanceRepository
     /// pertenece al tenant (→ 404); si existe pero no tiene historial, página vacía con Total 0.
     /// </summary>
     Task<(IReadOnlyList<ProcedureInstanceStatusHistoryEntry> Items, int Total)?> GetStatusHistoryPageAsync(
+        Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14173 — eventos <c>dato_modificado</c> de la instancia (campo a campo), ordenados por
+    /// <c>created_at</c> DESC (más reciente primero), con nombre y compañía del actor resueltos igual
+    /// que <see cref="GetStatusHistoryPageAsync"/>. Incluye filas escritas en borrador: no filtra por
+    /// estado. Devuelve <c>null</c> si la instancia no existe o no pertenece al tenant (mismo criterio
+    /// que <see cref="GetStatusHistoryPageAsync"/>: TenantId + DeletedAt == null). Si existe pero no
+    /// hay eventos, devuelve página vacía con Total 0. El tiempo se conserva en UTC.
+    /// </summary>
+    Task<(IReadOnlyList<ProcedureInstanceModificacionEntry> Items, int Total)?> GetModificacionesPageAsync(
         Guid id, Guid tenantId, int skip, int take, CancellationToken ct = default);
 
     /// <summary>
@@ -885,6 +976,36 @@ public sealed record TramitesFilterOptions(
 public sealed record TramitesFilterTipoOption(string Code, string Name, string Family);
 
 public sealed record TramitesFilterCompaniaOption(Guid Id, string Nombre);
+
+/// <summary>
+/// HU #14173 — proyección de un evento <c>dato_modificado</c> con nombre y compañía del actor
+/// resueltos en batch. El tiempo (<see cref="ChangedAt"/>) es el <c>created_at</c> UTC del evento;
+/// no se convierte a hora Colombia.
+/// </summary>
+public sealed record ProcedureInstanceModificacionEntry(
+    Guid Id,
+    string Etiqueta,
+    string Campo,
+    string Anterior,
+    string Nuevo,
+    DateTimeOffset ChangedAt,
+    Guid? ChangedByUserId,
+    string? ChangedByName,
+    string? ChangedByCompania,
+    // Bug #14604 — solo en «documento actualizado por el administrador»: qué documento cambió y los
+    // adjuntos nuevo y anterior, para abrirlos desde la línea de tiempo.
+    DocumentoActualizadoLectura? Documento = null);
+
+/// <summary>
+/// Bug #14604 — documento que el administrador actualizó: tipo, adjunto nuevo y el que estaba antes (si
+/// había uno). Los ids son de <c>procedure_instance_attachments</c> del mismo trámite.
+/// </summary>
+public sealed record DocumentoActualizadoLectura(
+    string Tipo,
+    Guid AttachmentId,
+    string Filename,
+    Guid? AnteriorAttachmentId,
+    string? AnteriorFilename);
 
 /// <summary>
 /// Proyección de lectura de una fila de <c>procedure_instance_status_history</c> con el nombre

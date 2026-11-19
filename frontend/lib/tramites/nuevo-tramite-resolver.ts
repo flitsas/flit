@@ -1,3 +1,4 @@
+import { rutaIlustracion } from '@flit/ui/ilustraciones';
 import type { ProcedureFamily, ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
 
 /** Familias que el mockup presenta como las tres tarjetas fijas. */
@@ -174,7 +175,7 @@ export const TIPOS_UI_MOCKUP: {
   /** Ya no se pinta en la tarjeta (el diseño la deja con icono + título + desplegable). Se conserva
    *  como texto accesible del icono y para los mensajes de familia bloqueada / sin tipos. */
   subtitle: string;
-  /** Ilustración de la tarjeta. Trae su círculo azul dentro, igual que los iconos de estado. */
+  /** Ilustración de la tarjeta: la de la propuesta (HU #14482), igual que `.tarjeta__ilus` del formulario «Nuevo trámite». */
   icon: string;
   /** Rótulo del desplegable de la tarjeta cuando aún no se ha elegido nada. */
   placeholder: string;
@@ -183,21 +184,21 @@ export const TIPOS_UI_MOCKUP: {
     id: 'MATRICULAS',
     title: 'Matrícula Inicial',
     subtitle: 'Vehículo nuevo sin placa asignada',
-    icon: '/assets/tipos-tramite/matriculas.svg',
+    icon: rutaIlustracion('matricula'),
     placeholder: 'Selecciona tipo',
   },
   {
     id: 'TRASPASO',
     title: 'Traspaso',
     subtitle: 'Cambio de propietario del vehículo',
-    icon: '/assets/tipos-tramite/traspaso.svg',
+    icon: rutaIlustracion('traspaso'),
     placeholder: 'Selecciona modalidad',
   },
   {
     id: 'OTROS',
     title: 'Otros Trámites',
     subtitle: 'Modificaciones y novedades',
-    icon: '/assets/tipos-tramite/otros.svg',
+    icon: rutaIlustracion('tramites'),
     placeholder: 'Selecciona trámite',
   },
 ];

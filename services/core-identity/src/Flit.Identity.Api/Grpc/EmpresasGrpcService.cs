@@ -1,5 +1,6 @@
 using Flit.Identidad.Grpc.V1;
 using Flit.Infrastructure.Persistence;
+using Flit.Infrastructure.Persistence.Entities.Admin;
 using Flit.Infrastructure.Persistence.Entities.Platform;
 using Flit.Modules.Security.Application.Products;
 using Grpc.Core;
@@ -15,6 +16,9 @@ namespace Flit.Identity.Api.Grpc;
 internal sealed class EmpresasGrpcService(IIdentityDb db) : EmpresasService.EmpresasServiceBase
 {
     public const string Scope = "platform.identidad.empresas";
+
+    /// <summary>Valor de <c>notification_channel</c> para «Colas FLIT», el de las empresas sin política.</summary>
+    internal const string CanalFlit = "flit_smtp";
 
     /// <summary>Mismo tope que <c>ProductAccessStore</c> al subir por <c>parent_tenant_id</c>.</summary>
     private const int MaxHierarchyDepth = 8;
@@ -51,12 +55,24 @@ internal sealed class EmpresasGrpcService(IIdentityDb db) : EmpresasService.Empr
             return true;
         }
 
+        var listadas = encendidas.Where(id => empresas.TryGetValue(id, out var e) && e.IsActive && Habilitada(id)).ToList();
+        // HU #13882: el canal de correo que la empresa eligió en Trámites; sin política, el de FLIT (como Trámites).
+        var canales = await db.Set<TenantOperationalPolicy>().AsNoTracking()
+            .Where(p => listadas.Contains(p.TenantId))
+            .Select(p => new { p.TenantId, p.NotificationChannel })
+            .ToDictionaryAsync(p => p.TenantId, p => p.NotificationChannel, ct).ConfigureAwait(false);
+
         var respuesta = new ListarEmpresasConProductoResponse();
-        respuesta.Empresas.AddRange(encendidas
-            .Where(id => empresas.TryGetValue(id, out var e) && e.IsActive && Habilitada(id))
+        respuesta.Empresas.AddRange(listadas
             .Select(id => empresas[id])
             .OrderBy(e => e.LegalName, StringComparer.CurrentCultureIgnoreCase)
-            .Select(e => new Empresa { Id = e.Id.ToString(), Nombre = e.LegalName, Nit = e.TaxId ?? string.Empty }));
+            .Select(e => new Empresa
+            {
+                Id = e.Id.ToString(),
+                Nombre = e.LegalName,
+                Nit = e.TaxId ?? string.Empty,
+                CanalCorreo = canales.GetValueOrDefault(e.Id) is { Length: > 0 } canal ? canal : CanalFlit,
+            }));
         return respuesta;
     }
 }

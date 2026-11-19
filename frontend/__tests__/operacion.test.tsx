@@ -270,7 +270,7 @@ describe('M0 — entrada al asistente (flujo del diseño)', () => {
     const user = userEvent.setup();
     render(<ToastProvider><OperacionView onNewTramite={onNew} /></ToastProvider>);
 
-    await user.click(await screen.findByRole('button', { name: /Nuevos*trámite/ }));
+    await user.click(await screen.findByRole('button', { name: /Nuevo\s*trámite/ }));
 
     expect(onNew).toHaveBeenCalledTimes(1);
     // No se pide modalidad aquí, ni se crea nada: eso vive en la ruta del asistente.
@@ -281,7 +281,7 @@ describe('M0 — entrada al asistente (flujo del diseño)', () => {
 
   it('ya no ofrece un selector de modalidad en el listado', async () => {
     render(<ToastProvider><OperacionView onNewTramite={vi.fn()} /></ToastProvider>);
-    await screen.findByRole('button', { name: /Nuevos*trámite/ });
+    await screen.findByRole('button', { name: /Nuevo\s*trámite/ });
 
     expect(screen.queryByRole('radio', { name: /Matrícula inicial/ })).toBeNull();
     expect(screen.queryByRole('radio', { name: /Traspaso estándar/ })).toBeNull();

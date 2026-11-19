@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Radar } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { usePermissions } from "@/hooks/usePermissions";
 import { LOG_QX_READ_PERMISSION } from "@/lib/auth/jwt";
 import { fetchLogQx } from "@/lib/api/admin-log-qx";
@@ -56,7 +56,7 @@ export function LogQxLink({ instanceId }: { instanceId: string }) {
       // flotando en modo oscuro, que es justo lo que esa HU vino a arreglar.
       className="inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[13px] font-semibold text-flit-brand hover:bg-flit-brand/[0.08] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
     >
-      <Radar className="h-4 w-4" aria-hidden="true" /> Ver LOG QX
+      <Icono nombre="consulta" className="h-4 w-4" /> Ver LOG QX
     </Link>
   );
 }

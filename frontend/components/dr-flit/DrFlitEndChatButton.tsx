@@ -1,6 +1,8 @@
 "use client";
 
-import { MessageCircleOff } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_ASISTENTE_APAGADO = iconoComo("asistente-apagado");
 
 export function DrFlitEndChatButton({
   onEnd,
@@ -21,7 +23,7 @@ export function DrFlitEndChatButton({
         boxShadow: "var(--dr-flit-shadow-card)",
       }}
     >
-      <MessageCircleOff className="h-4 w-4 shrink-0" aria-hidden="true" />
+      <ICONO_ASISTENTE_APAGADO className="h-4 w-4 shrink-0" aria-hidden="true" />
       Terminar chat
     </button>
   );

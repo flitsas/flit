@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 import type { InstanceSummary } from '@/lib/api/types/procedure-runtime';
+import { GLIFOS } from '@flit/ui/iconos-kit';
 
 /**
  * HU #12362 — Vista consolidada: modo consulta transversal en el módulo de trámites.
@@ -46,6 +47,7 @@ const mocks = vi.hoisted(() => ({
   downloadAttachment: vi.fn(),
   downloadBiometricCertificado: vi.fn(),
   getInstance: vi.fn(),
+  getStatusHistory: vi.fn(),
   listBiometricExpediente: vi.fn(),
   startSubsanacion: vi.fn(),
   pauseInstance: vi.fn(),
@@ -56,6 +58,8 @@ const mocks = vi.hoisted(() => ({
   adminCambiarEstado: vi.fn(),
   adminAnular: vi.fn(),
   adminReenviarValidacionIdentidad: vi.fn(),
+  adminReenviarValidacionesLote: vi.fn(),
+  adminListValidacionesReenviables: vi.fn(),
   adminReasignarGestor: vi.fn(),
   adminListGestoresDisponibles: vi.fn(),
 }));
@@ -72,6 +76,7 @@ const ESCRITURAS = [
   'adminCambiarEstado',
   'adminAnular',
   'adminReenviarValidacionIdentidad',
+  'adminReenviarValidacionesLote',
   'adminReasignarGestor',
 ] as const;
 
@@ -278,6 +283,14 @@ beforeEach(() => {
   mocks.getInstance.mockResolvedValue({ ...detalle, id: 'inst-propio', tenantId: CABEZA });
   mocks.getNetworkInstance.mockResolvedValue({ ...detalle, fromNetwork: true });
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getStatusHistory.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+    modificaciones: [],
+    modificacionesTotal: 0,
+  });
   mocks.getNetworkAttachments.mockResolvedValue([]);
   mocks.getChecklist.mockResolvedValue({ items: [] });
   mocks.listBiometricExpediente.mockResolvedValue({
@@ -422,8 +435,11 @@ describe('HU #12362 — AC1/AC2/AC8: listado, un caso por punto de escritura', (
         expect(screen.queryByRole('menuitem', { name: 'Radicar' })).not.toBeInTheDocument();
         expect(screen.queryByRole('menuitem', { name: 'Continuar' })).not.toBeInTheDocument();
         const ver = screen.getByRole('menuitem', { name: 'Ver' });
-        expect(ver.querySelector('svg.lucide-eye')).not.toBeNull();
-        expect(ver.querySelector('svg.lucide-file-check')).toBeNull();
+        // UI Kit 2026: los íconos son los del kit (`svg.kit-icono`); el glifo se reconoce por su dibujo.
+        const trazo = (inner: string) => /\sd="([^"]+)"/.exec(inner)?.[1] ?? '';
+        const glifo = ver.querySelector('svg.kit-icono')?.innerHTML ?? '';
+        expect(trazo(glifo)).toBe(trazo(GLIFOS.ojo.inner));
+        expect(trazo(glifo)).not.toBe(trazo(GLIFOS.documento.inner));
       },
       interactuar: async () => abrirAcciones('TR-RED'),
     },

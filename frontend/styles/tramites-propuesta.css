@@ -1,0 +1,123 @@
+/*
+ * Piezas de Trámites en el lenguaje de la propuesta «Diseño Inteligente» (HU #14482, Epic #14471).
+ * Portado de la rama `propuesta` (docs/design/propuesta-diseno-inteligente/propuesta.css) con prefijo
+ * `di-` en las clases, para no chocar con utilidades de Tailwind, y `var(--color-x)` → `var(--di-x)`.
+ * Los espaciados y tamaños del prototipo (--space-*, --text-*) van como valores literales: el repo no
+ * tiene esos tokens.
+ */
+
+/* ── Chip de estado del trámite (HU #14482): solo texto, con el color propio del estado (tokens --estado-*). ── */
+.di-estado { display: inline-flex; align-items: center; gap: 6px; }
+/* UI Kit 2026: el chip de estado es la etiqueta con punta del kit (StatusBadge) y conserva su punto o su ícono. */
+/* Marcas que siguen en pastillas que no son estado del trámite («✓ Adjunto», SOAT…). */
+.di-estado--check::before,
+.di-estado--punto::before,
+.di-estado--equis::before { content: ""; flex: none; }
+.di-estado--check::before {
+  width: 9px; height: 5px;
+  border-left: 2px solid var(--di-success-dot); border-bottom: 2px solid var(--di-success-dot);
+  transform: translateY(-2px) rotate(-45deg);
+}
+.di-estado--punto::before { width: 6px; height: 6px; border-radius: 50%; background: var(--di-alerta-punto); }
+.di-estado--equis::before {
+  width: 8px; height: 8px;
+  background:
+    linear-gradient(45deg, transparent 40%, var(--di-alerta-punto) 40% 60%, transparent 60%),
+    linear-gradient(-45deg, transparent 40%, var(--di-alerta-punto) 40% 60%, transparent 60%);
+}
+
+/* ── Antetítulo (texto pequeño en mayúsculas sobre un título) ── */
+.di-antetitulo { margin: 0 0 4px; text-transform: uppercase; letter-spacing: 0.06em; font-size: 0.75rem; font-weight: 700; color: var(--di-highlight); }
+
+/* ── Hueco de placa: el detalle de un trámite sin placa (la placa real es `Placa` de @flit/ui) ── */
+.di-placa-vacia {
+  display: inline-grid; place-items: center; width: 156px; aspect-ratio: 33 / 16; border-radius: 8px;
+  background: var(--di-surface-sunken); color: var(--di-text-tertiary); border: 1.5px dashed var(--di-border-control);
+  font-size: 0.8125rem; font-weight: 600;
+}
+
+/* ── Tarjeta de vehículo ── */
+.di-vehiculo { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; }
+.di-vehiculo__datos { display: grid; gap: 4px; flex: 1 1 220px; min-width: 0; }
+.di-vehiculo__nombre { margin: 0; font-size: 1.25rem; font-weight: 700; color: var(--di-heading); overflow-wrap: anywhere; }
+.di-vehiculo__meta { margin: 0; color: var(--di-text-secondary); font-size: 0.8125rem; overflow-wrap: anywhere; }
+
+/* ── Fichas de datos (dl en baldosas cielo) ── */
+.di-fichas { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin: 0; }
+.di-fichas > div, .di-fichas > p { margin: 0; padding: 12px 14px; border-radius: 12px; background: var(--di-sky); }
+.di-fichas__dt { display: block; margin-bottom: 4px; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--di-text-secondary); }
+.di-fichas__dd { color: var(--di-heading); font-weight: 600; font-size: 0.875rem; overflow-wrap: anywhere; }
+
+/* ── Pasos del asistente (marcador numerado del prototipo) ── */
+.di-paso__num {
+  display: grid; place-items: center; flex: none; border-radius: 50%; font-weight: 700; font-size: 0.8125rem;
+  background: var(--di-surface-sunken); color: var(--di-text-secondary); border: 1.5px solid var(--di-border-control);
+}
+.di-paso__num--hecho { background: var(--color-flit-tech); border-color: var(--color-flit-tech); color: var(--flit-tinta, #162744); }
+.di-paso__num--actual { background: var(--di-action); border-color: var(--di-action); color: var(--di-surface-elevated); box-shadow: 0 0 0 4px var(--di-accent-soft); }
+.dark .di-paso__num--actual { color: var(--di-on-accent); }
+.di-paso__num--bloqueado { background: var(--di-surface-elevated); border-style: dashed; color: var(--di-text-tertiary); }
+
+/* ── Actividad (carril con punto azul y hilo) ── */
+.di-actividad { list-style: none; margin: 0; padding: 0; }
+.di-actividad > li { position: relative; padding: 8px 0 8px 22px; }
+.di-actividad > li::before { content: ""; position: absolute; left: 3px; top: 21px; width: 9px; height: 9px; border-radius: 50%; background: var(--di-action); box-shadow: 0 0 0 3px var(--di-accent-soft); }
+.di-actividad > li:not(:last-child)::after { content: ""; position: absolute; left: 7px; top: 34px; bottom: -13px; width: 1px; background: var(--di-divider); }
+.di-actividad > li.di-actividad--vigente::before { background: var(--color-flit-tech); box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-flit-tech) 25%, transparent); }
+
+/* ── Filas de lista (documentos, firmas, partes) ── */
+.di-lista-fila { list-style: none; margin: 0; padding: 0; }
+.di-lista-fila > li { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-top: 1px solid var(--di-divider); flex-wrap: wrap; }
+.di-lista-fila > li:first-child { border-top: 0; padding-top: 0; }
+.di-firmantes { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.di-firmantes > li { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border: 1px solid var(--di-border); border-radius: 12px; flex-wrap: wrap; background: var(--di-surface-elevated); }
+
+/* ── Zona de cargue de archivo ── */
+.di-carga { border-radius: 12px; border: 2px dashed var(--di-sky-line); background: var(--di-surface-elevated); color: var(--di-action); }
+.di-carga:hover { background: var(--di-accent-soft); }
+.di-carga--lista { border-style: solid; border-color: var(--di-success-line); background: var(--di-success-soft); color: var(--di-success); }
+
+/* ── Listado como tarjetas en celular (excepción de UX aprobada). Cada <td> trae su `data-label`;
+   la cabecera se oculta a la vista pero sigue en el DOM. El orden de las celdas no cambia. ── */
+@media (max-width: 640px) {
+  .di-tabla-tarjetas { min-width: 0 !important; table-layout: auto !important; border-spacing: 0 12px !important; }
+  .di-tabla-tarjetas colgroup { display: none; }
+  .di-tabla-tarjetas thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .di-tabla-tarjetas, .di-tabla-tarjetas tbody { display: block; width: 100%; }
+  .di-tabla-tarjetas tbody > tr {
+    display: grid; grid-template-columns: 1fr auto; gap: 10px 12px; margin-bottom: 12px; padding: 14px 16px;
+    border: 1px solid var(--di-border); border-radius: 20px; box-shadow: var(--shadow-card);
+  }
+  .di-tabla-tarjetas tbody > tr > td { display: block; padding: 0 !important; border: 0 !important; border-radius: 0 !important; grid-column: 1 / -1; }
+  .di-tabla-tarjetas tbody > tr > td[data-label]::before {
+    content: attr(data-label); display: block; margin-bottom: 2px;
+    font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--di-text-tertiary);
+  }
+  /* Acciones arriba a la derecha de la tarjeta, junto a la primera celda. */
+  .di-tabla-tarjetas tbody > tr > td:last-of-type { grid-column: 2; grid-row: 1; align-self: start; }
+  .di-tabla-tarjetas tbody > tr > td:first-of-type { grid-column: 1; grid-row: 1; }
+}
+
+/* ===================== Manual UI Kit 2026 (propuesta-2) ===================== */
+.di-antetitulo { font-weight: 500; letter-spacing: 0.04em; color: var(--di-text-tertiary); }
+.di-placa-vacia { border-radius: 8px; border: 1px dashed var(--kit-linea); background: var(--kit-hover); }
+.di-vehiculo__nombre { color: var(--di-heading); }
+.di-fichas > div, .di-fichas > p { border-radius: 9px; background: var(--kit-hover); }
+.di-fichas__dt { color: var(--di-text-tertiary); letter-spacing: 0.04em; }
+.di-fichas__dd { color: var(--di-text-primary); }
+.di-paso__num { background: var(--di-surface-elevated); color: var(--kit-gris); border: 2px solid var(--kit-gris); }
+.di-paso__num--hecho { background: var(--kit-verde); border-color: var(--kit-verde); color: #fff; }
+.di-paso__num--actual { background: var(--di-surface-elevated); border-color: var(--kit-azul-texto); color: var(--kit-azul-texto); box-shadow: 0 0 0 4px var(--kit-hover); }
+.dark .di-paso__num--actual { color: var(--kit-azul-texto); }
+.di-paso__num--bloqueado { border-style: dashed; }
+.di-actividad > li::before { background: var(--kit-azul-texto); box-shadow: 0 0 0 3px var(--kit-hover); }
+.di-actividad > li.di-actividad--vigente::before { background: var(--kit-verde); box-shadow: 0 0 0 3px var(--kit-hover); }
+.di-actividad > li:not(:last-child)::after { background: var(--di-border); }
+.di-lista-fila > li { border-top-color: var(--di-border); }
+.di-firmantes > li { border-radius: 9px; }
+.di-carga { border-radius: 9px; border: 1.5px dashed var(--kit-azul-texto); }
+.di-carga:hover { background: var(--kit-hover); }
+.di-carga--lista { border: 1.5px solid var(--kit-verde); background: #8cc63f1a; color: var(--di-success); }
+@media (max-width: 640px) {
+  .di-tabla-tarjetas tbody > tr { border-radius: 9px; box-shadow: none; padding: 4px 14px 8px; }
+}

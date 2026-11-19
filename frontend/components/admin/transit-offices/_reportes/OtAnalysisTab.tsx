@@ -151,7 +151,7 @@ function RejectionReasonsPanel({ reasons }: { reasons: OtRejectionReasons }) {
           {/* La aclaración solo tiene sentido si hay barras que leer. Sin causales, repetirla
               debajo del estado vacío es ruido. */}
           {conDatos.length > 0 && (
-            <p className="text-[11px] text-[#6B7280] dark:text-white/50">
+            <p className="text-[11px] text-muted-foreground">
               Porcentaje de rechazos que incluyen cada causal. Como un rechazo puede tener varias, la
               suma puede pasar del 100 %.
             </p>
@@ -173,6 +173,7 @@ function PerformancePanel({ performance }: { performance: OtPerformance }) {
           <Empty>Ninguna empresa entregó trámites en el periodo seleccionado.</Empty>
         ) : (
           <Table
+            claveTabla="_reportes.OtAnalysisTab"
             headers={["Empresa", "Entregados", "Aprobados", "Pasan a la primera", "Devoluciones promedio"]}
             rows={performance.empresas.map((e, i) => ({
               key: e.tenantId || `${e.name}-${i}`,

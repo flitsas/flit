@@ -1,0 +1,66 @@
+{
+  "ok": true,
+  "identidad": {
+    "primerNombre": "PERSONA",
+    "segundoNombre": "SIMULADA",
+    "primerApellido": "FICTICIA",
+    "segundoApellido": "UNO",
+    "nombreCompleto": "PERSONA SIMULADA FICTICIA UNO"
+  },
+  "persona": {
+    "nombres": "P****A S****A",
+    "apellidos": "F****A U**",
+    "primerNombre": "PERSONA",
+    "segundoNombre": "SIMULADA",
+    "primerApellido": "FICTICIA",
+    "segundoApellido": "UNO",
+    "nombreCompleto": "PERSONA SIMULADA FICTICIA UNO",
+    "tipoDocumento": "C",
+    "documento": "{{documento}}",
+    "estadoPersona": "ACTIVA",
+    "estadoConductor": "ACTIVO",
+    "tieneLicencias": true,
+    "numeroInscripcion": "99999000000001",
+    "fechaInscripcion": "2015-04-10"
+  },
+  "licencias": [
+    {
+      "numeroLicencia": "99999000101",
+      "estadoLicencia": "ACTIVA",
+      "fechaExpedicion": "2024-01-15",
+      "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA",
+      "restricciones": "LENTES",
+      "detalleLicencia": [
+        { "categoria": "B1", "fechaExpedicion": "2024-01-15", "fechaVencimiento": "2034-01-15" },
+        { "categoria": "A2", "fechaExpedicion": "2024-01-15", "fechaVencimiento": "2034-01-15" }
+      ]
+    },
+    {
+      "numeroLicencia": "99999000102",
+      "estadoLicencia": "VENCIDA",
+      "fechaExpedicion": "2012-06-01",
+      "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA",
+      "restricciones": "",
+      "detalleLicencia": [
+        { "categoria": "C1", "fechaExpedicion": "2012-06-01", "fechaVencimiento": "2022-06-01" }
+      ]
+    },
+    {
+      "numeroLicencia": "99999000103",
+      "estadoLicencia": "SUSPENDIDA",
+      "fechaExpedicion": "2019-09-20",
+      "organismoTransito": "SECRETARIA DE TRANSITO DE PRUEBA",
+      "restricciones": "",
+      "motivoSuspension": "SUSPENSION SIMULADA",
+      "fechaFinSuspension": "2027-09-20",
+      "detalleLicencia": [
+        { "categoria": "C2", "fechaExpedicion": "2019-09-20", "fechaVencimiento": "2029-09-20" }
+      ]
+    }
+  ],
+  "multas": {
+    "tieneMultas": "NO",
+    "nroPazYSalvo": "PZ-SIMULADO"
+  },
+  "fromCache": false
+}

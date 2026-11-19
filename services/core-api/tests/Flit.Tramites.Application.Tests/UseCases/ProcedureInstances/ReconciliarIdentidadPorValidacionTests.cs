@@ -12,8 +12,8 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 
 /// <summary>
 /// L1 — reconciliar con Kyverum Verify por <c>validationId</c>, sin exigir trámite: sirve para la validación ligada a
-/// un trámite y para la prevalidación (<c>ProcedureInstanceId</c> nulo). En release el expirado aplicado por esta ruta
-/// solo deja la auditoría (sin frase en bitácora: depende de la HU #14179) y no publica <see cref="IdentityValidationCompleted"/>.
+/// un trámite y para la prevalidación (<c>ProcedureInstanceId</c> nulo). L4 — el expirado aplicado por esta ruta deja
+/// la frase en la bitácora del trámite y la auditoría, sin publicar <see cref="IdentityValidationCompleted"/>.
 /// <para>Uso de ejemplo:
 /// <c>var (r, err) = await handler.HandleByValidationAsync(tenantId, validationId, ct);</c> → <c>r.Status</c>,
 /// <c>r.Updated</c>; <c>err</c> ∈ { not_found, no_kyverum, proveedor_error, proveedor_no_disponible, persist_error }.</para>
@@ -111,7 +111,7 @@ public sealed class ReconciliarIdentidadPorValidacionTests
         v.Status.Should().Be(BiometricEstados.Aprobado);
         await _events.Received(1).PublishAsync(Arg.Is<IdentityValidationCompleted>(e =>
             e.ValidationId == _validation && e.ProcedureInstanceId == _instance), Ct);
-        _bitacora.Should().BeEmpty(); // release: sin frases de bitácora de identidad (HU #14179 no está en release)
+        _bitacora.Should().ContainSingle(e => e.ProcedureInstanceId == _instance);
     }
 
     [Fact]
@@ -188,10 +188,10 @@ public sealed class ReconciliarIdentidadPorValidacionTests
             && a.ValidationId == _validation), Ct);
     }
 
-    // ── Expirado por la reconciliación manual (release: sin frase en bitácora) ─────────────────────────────
+    // ── L4 por la reconciliación manual ────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Expirado_ConTramite_AuditaSinBitacoraNiEvento()
+    public async Task L4_ExpiradoConTramite_DejaFraseEnBitacora_Auditoria_YNoPublicaEvento()
     {
         var v = Seed(procedureInstanceId: _instance, status: BiometricEstados.EnProceso);
         KyverumResponde("expirado");
@@ -201,7 +201,11 @@ public sealed class ReconciliarIdentidadPorValidacionTests
         error.Should().BeNull();
         result.Should().Be(new ReconciliarIdentidadResult(BiometricEstados.Expirado, true));
         v.Status.Should().Be(BiometricEstados.Expirado);
-        _bitacora.Should().BeEmpty();
+        var evt = _bitacora.Should().ContainSingle().Subject;
+        evt.ProcedureInstanceId.Should().Be(_instance);
+        evt.TenantId.Should().Be(_tenant);
+        using (var doc = JsonDocument.Parse(evt.Payload))
+            doc.RootElement.GetProperty("nuevo").GetString().Should().Be("Identidad del comprador: expirada");
         await _audit.Received(1).LogAsync(Arg.Is<IdentityValidationAuditEntry>(a =>
             a.Stage == IdentityValidationAuditStages.Reconcile
             && a.Outcome == IdentityValidationAuditOutcomes.Expired
@@ -211,7 +215,7 @@ public sealed class ReconciliarIdentidadPorValidacionTests
     }
 
     [Fact]
-    public async Task Expirado_SinTramite_SoloAuditoria_SinBitacoraNiEvento()
+    public async Task L4_ExpiradoSinTramite_SoloAuditoria_SinBitacoraNiEvento()
     {
         var v = Seed(procedureInstanceId: null, partyRole: null);
         KyverumResponde("expirado", partyRole: null);

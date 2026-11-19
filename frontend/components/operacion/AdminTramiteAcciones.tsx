@@ -1,16 +1,8 @@
 'use client';
 
 import { type ReactNode, useEffect, useRef, useState } from 'react';
-import {
-  AlertTriangle,
-  ArrowRightLeft,
-  BadgeCheck,
-  Ban,
-  Paperclip,
-  RefreshCcw,
-  Send,
-  UserCog,
-} from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from '@/components/atom/Modal';
 import { INLINE_ALERT_TONES, InlineAlert } from '@/components/atom/InlineAlert';
 import type { ActionsMenuItem } from '@/components/atom/ActionsMenu';
@@ -20,7 +12,11 @@ import {
   SeccionVacia,
 } from '@/components/operacion/detalle/primitivos';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
-import { ReenviarValidacionIdentidadModal } from './ReenviarValidacionIdentidadModal';
+import { AdminCargarDocumentoModal } from './AdminCargarDocumentoModal';
+import {
+  ReenviarValidacionIdentidadModal,
+  mensajeTodosFirmaron,
+} from './ReenviarValidacionIdentidadModal';
 import { usePermissions } from '@/hooks/usePermissions';
 import { useToast } from '@/components/admin/Toast';
 import { tramitesClient, type GestorOption } from '@/lib/api/tramites-client';
@@ -104,7 +100,7 @@ function SecondaryButton({
       onClick={onClick}
       disabled={disabled}
       aria-describedby={describedBy}
-      className={`rounded-xl border py-2.5 text-sm font-medium text-flit-primary transition hover:bg-[#162744]/[0.04] disabled:cursor-not-allowed disabled:opacity-60 dark:border-white/20 dark:text-white ${className}`}
+      className={`rounded-xl border py-2.5 text-sm font-medium text-foreground transition hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-60 ${className}`}
       style={FIELD_BORDER}
     >
       {children}
@@ -194,7 +190,7 @@ function CambiarEstadoModal({ open, onClose, item, tenantId, onSuccess, onError 
       onClose={onClose}
       title="Cambiar estado"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={ArrowRightLeft}
+      icono="intercambio"
       description={`Trámite ${item.referenceNumber} · Estado actual: ${estadoLabel(item.estado)}`}
       size="sm"
       busy={busy}
@@ -288,7 +284,7 @@ function AnularModal({ open, onClose, item, tenantId, onSuccess, onError }: Moda
       onClose={onClose}
       title="Anular trámite"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={Ban}
+      icono="distinto"
       iconBg={DANGER_COLOR}
       description={`Trámite ${item.referenceNumber} · Estado actual: ${estadoLabel(item.estado)}`}
       size="sm"
@@ -431,7 +427,7 @@ function ConsolidadoModal({
       onClose={onClose}
       title="Gestionar consolidado"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={RefreshCcw}
+      icono="reintento"
       description={`Trámite ${item.referenceNumber}`}
       size="sm"
       // Con la confirmación abierta encima, Escape/backdrop solo deben cerrar la confirmación.
@@ -486,7 +482,7 @@ function ConsolidadoModal({
               className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-flit-brand/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
               style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
             >
-              <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="archivo" className="h-3.5 w-3.5" aria-hidden="true" />
               {file ? 'Cambiar archivo' : 'Elegir archivo PDF'}
             </button>
             {file ? (
@@ -553,7 +549,7 @@ function ConsolidadoModal({
                     color: INLINE_ALERT_TONES.warning.color,
                   }}
                 >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                  <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                   <div className="min-w-0 flex-1 text-xs leading-relaxed">
                     <p className="font-semibold">Avisos de la regeneración</p>
                     <ul
@@ -580,7 +576,7 @@ function ConsolidadoModal({
         onClose={() => setConfirmRegenerarOpen(false)}
         title="Confirmar regeneración del mandato"
         titleClassName="text-base font-bold text-flit-brand"
-        icon={AlertTriangle}
+        icono="alerta"
         iconBg="var(--color-flit-alert)"
         description={`Trámite ${item.referenceNumber}`}
         size="sm"
@@ -690,7 +686,7 @@ function ReasignarGestorModal({ open, onClose, item, tenantId, onSuccess, onErro
       onClose={onClose}
       title="Reasignar gestor"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={UserCog}
+      icono="rol"
       description={`Trámite ${item.referenceNumber}`}
       size="sm"
       busy={busy}
@@ -780,7 +776,7 @@ function ConsultarRuntModal({ open, onClose, item, onSuccess, onError }: Omit<Mo
       onClose={onClose}
       title="Consultar ahora en RUNT"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={BadgeCheck}
+      icono="check"
       description={`Trámite ${item.referenceNumber}${item.placa ? ` · ${item.placa}` : ''}`}
       size="sm"
       busy={busy}
@@ -867,10 +863,13 @@ export function useAdminTramiteAcciones({
   // falta reenviar nada.
   const identidadNoAccionable =
     esAprobado || esAnulado || item.identityValidationStatus === 'aprobado';
+  // Épica #13817 — la matrícula solo tiene comprador: no se habla de «comprador y vendedor».
+  const todosFirmaron = mensajeTodosFirmaron(item.modalidad, item.tipoCodigo);
 
   const [estadoOpen, setEstadoOpen] = useState(false);
   const [anularOpen, setAnularOpen] = useState(false);
   const [consolidadoOpen, setConsolidadoOpen] = useState(false);
+  const [cargarDocOpen, setCargarDocOpen] = useState(false);
   const [reenviarOpen, setReenviarOpen] = useState(false);
   const [reasignarOpen, setReasignarOpen] = useState(false);
   const [consultarRuntOpen, setConsultarRuntOpen] = useState(false);
@@ -889,7 +888,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-cambiar-estado',
       label: 'Cambiar estado',
-      icon: ArrowRightLeft,
+      icon: iconoComo("intercambio"),
       disabled: esAprobado,
       disabledReason: 'Un trámite Aprobado no admite cambio de estado administrativo.',
       onSelect: () => setEstadoOpen(true),
@@ -899,12 +898,22 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-anular',
       label: 'Anular',
-      icon: Ban,
+      icon: iconoComo("distinto"),
       disabled: esAprobado || esAnulado,
       disabledReason: esAnulado
         ? 'Este trámite ya está Anulado.'
         : 'Un trámite Aprobado no se puede anular.',
       onSelect: () => setAnularOpen(true),
+    });
+  }
+  // Bug #14604 — habilitada en TODOS los estados (entregado, aprobado, anulado, revocado...): la
+  // observación obligatoria deja la trazabilidad; no hace falta pasar el trámite a borrador.
+  if (puede(ADMIN_TRAMITE_PERMISSIONS.cargarDocumento)) {
+    items.push({
+      key: 'admin-cargar-documento',
+      label: 'Actualizar documento',
+      icon: iconoComo("archivo"),
+      onSelect: () => setCargarDocOpen(true),
     });
   }
   const canLimpiar = puede(ADMIN_TRAMITE_PERMISSIONS.limpiarConsolidado);
@@ -915,7 +924,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-consolidado',
       label: 'Gestionar consolidado',
-      icon: RefreshCcw,
+      icon: iconoComo("reintento"),
       onSelect: () => setConsolidadoOpen(true),
     });
   }
@@ -923,12 +932,12 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-reenviar-validacion',
       label: 'Reenviar validación',
-      icon: Send,
+      icon: iconoComo("radicacion"),
       disabled: identidadNoAccionable,
       disabledReason:
         esAprobado || esAnulado
           ? 'La identidad ya no es accionable en este estado del trámite.'
-          : 'La identidad de este trámite ya está aprobada: no hay nada que reenviar.',
+          : todosFirmaron,
       onSelect: () => setReenviarOpen(true),
     });
   }
@@ -936,7 +945,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-reasignar-gestor',
       label: 'Reasignar gestor',
-      icon: UserCog,
+      icon: iconoComo("rol"),
       onSelect: () => setReasignarOpen(true),
     });
   }
@@ -946,7 +955,7 @@ export function useAdminTramiteAcciones({
     items.push({
       key: 'admin-consultar-runt',
       label: 'Consultar ahora en RUNT',
-      icon: BadgeCheck,
+      icon: iconoComo("check"),
       disabled: !esAprobado || yaConfirmado,
       disabledReason: !esAprobado
         ? 'Solo se confirman en el RUNT los trámites aprobados.'
@@ -973,6 +982,14 @@ export function useAdminTramiteAcciones({
         onSuccess={onSuccess}
         onError={onError}
       />
+      <AdminCargarDocumentoModal
+        open={cargarDocOpen}
+        onClose={() => setCargarDocOpen(false)}
+        item={item}
+        tenantId={tenantId}
+        onSuccess={onSuccess}
+        onError={onError}
+      />
       <ConsolidadoModal
         open={consolidadoOpen}
         onClose={() => setConsolidadoOpen(false)}
@@ -990,6 +1007,7 @@ export function useAdminTramiteAcciones({
         instanceId={item.id}
         referenceNumber={item.referenceNumber}
         tenantId={tenantId}
+        mensajeVacio={todosFirmaron}
         onSuccess={onSuccess}
         onError={onError}
       />

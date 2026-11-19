@@ -235,7 +235,7 @@ public sealed class GenerarConsolidadoMaestroHandler(
         // descartan además la evidencia biométrica (tipos "biometric_*", que no forma parte del
         // expediente legal) y los MIME no fusionables (solo pdf/jpeg/png/webp llegan al merge); los
         // adjuntos subidos ya están acotados a esos MIME por AttachmentRules.
-        var fuentes = instance.Attachments
+        var fuentes = instance.AdjuntosEfectivos()
             .Where(a => !ConsolidadoTipos.Contains(a.Tipo))
             .ToList();
 
