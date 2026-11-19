@@ -1,9 +1,9 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, StatusBadge, usePaginacion, VehicleLoader } from "@flit/ui";
+import { DataTable, InlineAlert, Modal, StatusBadge, VehicleLoader } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -15,11 +15,16 @@ import { controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { CANAL_CORREO, ESTADO_COMUNICACION, estadoComunicacion, opciones, TIPO_COMUNICACION } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
+import { mensajesAParams, mensajesDeParams } from "@/lib/estadoMensajes";
 import { leerDestinatarios, resumenDestinatarios, sePuedeReintentar } from "@/lib/mensajes";
 import { P } from "@/lib/nav";
 import { tienePermiso } from "@/lib/sesion";
 import type { MensajeDetalle, MensajeFila, Pagina } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { crearUrlPropia } from "@/lib/urlPropia";
+
+// Rediseño S1: filtros, página y mensaje abierto viven en la URL; al volver del detalle del comparendo queda igual.
+const UrlMensajes = crearUrlPropia();
 
 function Lista({ titulo, valores }: { titulo: string; valores: string[] }) {
   if (valores.length === 0) return null;
@@ -121,25 +126,87 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
   );
 }
 
+function CentroConUrl() {
+  const version = UrlMensajes.useVersion(useSearchParams().toString());
+  return <Centro key={version} />;
+}
+
 function Centro() {
-  const { sesion } = useSesion();
-  // ?mensaje=<id> abre su detalle (enlace desde el timeline del comparendo, §7.2).
+  const { sesion, cargando: cargandoSesion } = useSesion();
+  // ?mensaje=<id> abre su detalle (enlace desde el timeline del comparendo, §7.2). El resto de la URL trae los filtros.
   const params = useSearchParams();
+  const router = useRouter();
+  const [inicial] = useState(() => mensajesDeParams(params));
   const superAdmin = !!sesion?.usuario.esSuperAdmin;
-  const pg = usePaginacion(25);
-  const [empresa, setEmpresa] = useState<string | null>(null);
-  const [internas, setInternas] = useState(false);
-  const [tipo, setTipo] = useState("");
-  const [estado, setEstado] = useState("");
-  const [canal, setCanal] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
-  const [comparendo, setComparendo] = useState("");
-  const [placa, setPlaca] = useState("");
-  const [abierto, setAbierto] = useState<string | null>(() => params.get("mensaje"));
+  const [page, setPage] = useState(inicial.pagina);
+  const [pageSize, setPageSizeEstado] = useState(inicial.tamano);
+  const pg = {
+    page,
+    pageSize,
+    setPage,
+    setPageSize: (n: number) => {
+      setPageSizeEstado(n);
+      setPage(1);
+    },
+  };
+  const [empresa, setEmpresa] = useState<string | null>(inicial.empresa);
+  const [internas, setInternas] = useState(inicial.internas);
+  const [tipo, setTipo] = useState(inicial.tipo);
+  const [estado, setEstado] = useState(inicial.estado);
+  const [canal, setCanal] = useState(inicial.canal);
+  const [desde, setDesde] = useState(inicial.desde);
+  const [hasta, setHasta] = useState(inicial.hasta);
+  const [comparendo, setComparendo] = useState(inicial.comparendo);
+  const [placa, setPlaca] = useState(inicial.placa);
+  // Lo que se ve en las cajas; el filtro (y la URL) se aplica cuando se deja de escribir, como la búsqueda de la bandeja.
+  const [textoComparendo, setTextoComparendo] = useState(inicial.comparendo);
+  const [textoPlaca, setTextoPlaca] = useState(inicial.placa);
+  // Una espera por caja: pasar de Placa a Comparendo antes de 400 ms no descarta lo escrito en la primera.
+  const espera = useRef<Record<"comparendo" | "placa", ReturnType<typeof setTimeout> | undefined>>({ comparendo: undefined, placa: undefined });
+  const escribir = (caja: "comparendo" | "placa", mostrar: (v: string) => void, aplicar: (v: string) => void) => (v: string) => {
+    mostrar(v);
+    clearTimeout(espera.current[caja]);
+    espera.current[caja] = setTimeout(() => {
+      aplicar(v);
+      setPage(1);
+    }, 400);
+  };
+  useEffect(() => {
+    const pendientes = espera.current;
+    return () => {
+      clearTimeout(pendientes.comparendo);
+      clearTimeout(pendientes.placa);
+    };
+  }, []);
+  const [abierto, setAbierto] = useState<string | null>(inicial.mensaje);
   const setVerComparendo = useAbrirDetalle();
 
-  const filtros = { empresa: internas ? undefined : (empresa ?? undefined), internas: superAdmin && internas ? true : undefined, tipo, estado, canal, desde, hasta, comparendo: comparendo.trim(), placa: placa.trim() };
+  // Cada cambio queda en la URL sin sumar pasos al historial. Mientras carga la sesión no se sabe si es SuperAdmin:
+  // no se escribe, para no borrar la empresa elegida.
+  // La empresa solo la elige el SuperAdmin: una ?empresa= puesta a mano no viaja para nadie más.
+  const empresaVista = superAdmin ? empresa : null;
+  const nuevaQuery = mensajesAParams({
+    empresa: empresaVista,
+    internas: superAdmin && internas,
+    tipo,
+    estado,
+    canal,
+    desde,
+    hasta,
+    comparendo,
+    placa,
+    pagina: page,
+    tamano: pageSize,
+    mensaje: abierto,
+  }).toString();
+  useEffect(() => {
+    if (cargandoSesion) return;
+    UrlMensajes.registrar(nuevaQuery);
+    if (nuevaQuery === new URLSearchParams(window.location.search).toString()) return;
+    router.replace(nuevaQuery ? `/mensajes?${nuevaQuery}` : "/mensajes", { scroll: false });
+  }, [cargandoSesion, nuevaQuery, router]);
+
+  const filtros = { empresa: internas ? undefined : (empresaVista ?? undefined), internas: superAdmin && internas ? true : undefined, tipo, estado, canal, desde, hasta, comparendo: comparendo.trim(), placa: placa.trim() };
   const lista = useCarga(`mensajes:${JSON.stringify(filtros)}:${pg.page}:${pg.pageSize}`, (signal) =>
     apiFetch<Pagina<MensajeFila>>("/mensajes", {
       signal,
@@ -216,11 +283,11 @@ function Centro() {
         </label>
         <label className={ETIQUETA_CLS}>
           Comparendo
-          <input className={INPUT_CLS} value={comparendo} onChange={(e) => filtrar(setComparendo)(e.target.value)} />
+          <input className={INPUT_CLS} value={textoComparendo} onChange={(e) => escribir("comparendo", setTextoComparendo, setComparendo)(e.target.value)} />
         </label>
         <label className={ETIQUETA_CLS}>
           Placa
-          <input className={INPUT_CLS} value={placa} onChange={(e) => filtrar(setPlaca)(e.target.value.toUpperCase())} />
+          <input className={INPUT_CLS} value={textoPlaca} onChange={(e) => escribir("placa", setTextoPlaca, setPlaca)(e.target.value.toUpperCase())} />
         </label>
       </div>
       <DataTable
@@ -264,7 +331,7 @@ function Centro() {
         pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: lista.datos?.total ?? 0, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
       />
       <p className="text-xs text-muted-foreground">La apertura es un dato informativo: no constituye prueba de notificación.</p>
-      {abierto && <DetalleMensaje key={abierto} id={abierto} onCerrar={() => setAbierto(null)} onCambio={lista.recargar} onComparendo={setVerComparendo} />}
+      {abierto && <DetalleMensaje key={abierto} id={abierto} onCerrar={() => setAbierto(null)} onCambio={lista.recargar} onComparendo={(id) => setVerComparendo(id, null, nuevaQuery ? `/mensajes?${nuevaQuery}` : "/mensajes")} />}
     </section>
   );
 }
@@ -274,7 +341,7 @@ export default function CentroMensajes() {
   return (
     <Requiere permiso={P.mensajesVer}>
       <Suspense fallback={<VehicleLoader label="Cargando…" />}>
-        <Centro />
+        <CentroConUrl />
       </Suspense>
     </Requiere>
   );
