@@ -3,11 +3,12 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, usePaginacion } from "@flit/ui";
+import { DataTable, usePaginacion, VehicleLoader } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { Chip } from "@/components/ui/Chip";
+import { Interruptor } from "@/components/ui/Interruptor";
 import { controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { CANAL, canal, opciones, RESULTADO_CICLO, resultadoCiclo } from "@/lib/etiquetas";
@@ -88,10 +89,7 @@ function Log() {
         </fieldset>
       </div>
       <div className="flex flex-wrap items-center gap-3">
-        <label className="flex items-center gap-2 text-xs font-semibold">
-          <input type="checkbox" checked={porEmpresa} onChange={(e) => cambiar(setPorEmpresa)(e.target.checked)} />
-          Filtrar por empresa
-        </label>
+        <Interruptor activo={porEmpresa} onCambio={(v) => cambiar(setPorEmpresa)(v)} etiqueta="Filtrar por empresa" />
         {porEmpresa && <SelectorEmpresa valor={empresa} onCambio={cambiar(setEmpresa)} />}
       </div>
       <DataTable
@@ -102,7 +100,7 @@ function Log() {
         errorMessage={lista.error ?? undefined}
         onRetry={lista.recargar}
         emptyMessage="No hay registros con estos filtros."
-        minWidth={1400}
+        minWidth={1100}
         columns={[
           { key: "fecha", header: "Fecha", render: (l) => <span className="whitespace-nowrap">{formatoFechaHora(l.inicioEn)}</span> },
           { key: "empresa", header: "Empresa", render: (l) => l.empresa ?? l.empresaId },
@@ -127,7 +125,7 @@ function Log() {
 export default function LogMigracionPage() {
   return (
     <Requiere superAdmin>
-      <Suspense fallback={<p className="text-sm opacity-60">Cargando…</p>}>
+      <Suspense fallback={<VehicleLoader label="Cargando el registro…" />}>
         <Log />
       </Suspense>
     </Requiere>

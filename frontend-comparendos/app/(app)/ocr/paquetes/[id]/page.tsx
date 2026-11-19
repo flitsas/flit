@@ -2,12 +2,12 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
+import { ChipsFiltro, DataTable, InlineAlert, Miga, Modal, TarjetaMetrica, usePaginacion, VehicleLoader } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
-import { Contador, EstadoDocumento, Progreso, useSondeo } from "@/components/ocr/comunes";
+import { COLOR_CIFRA_DOCUMENTO, CONTADORES_GRID_CLS, EstadoDocumento, Progreso, useSondeo } from "@/components/ocr/comunes";
 import { OfertaPlacas } from "@/components/ocr/OfertaPlacas";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
@@ -16,7 +16,7 @@ import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_
 import { apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { type DocumentoPaquete, ESTADO_DOCUMENTO, ESTADO_PAQUETE, ESTADOS_DOCUMENTO, hayEnCurso, hojaPaquete, motivoDocumento, registroEnLote, TIPO_FALLO } from "@/lib/ocr";
+import { type DocumentoPaquete, ESTADO_DOCUMENTO, ESTADO_PAQUETE, hayEnCurso, hojaPaquete, motivoDocumento, registroEnLote, TIPO_FALLO } from "@/lib/ocr";
 import { tienePermiso } from "@/lib/sesion";
 import { useCarga } from "@/lib/useCarga";
 import { buildXlsx, XLSX_MIME } from "@/lib/xlsx";
@@ -57,7 +57,10 @@ function Detalle({ id }: { id: string }) {
   const toast = useToast();
   const { sesion } = useSesion();
   const opera = !sesion?.usuario.esSuperAdmin && tienePermiso(sesion, P.ocrGestionar);
-  const [estado, setEstado] = useState("");
+  const params = useSearchParams();
+  // El filtro vive en la URL (?estado=) para que «atrás» desde un documento vuelva con el mismo filtro.
+  const estado = params.get("estado") ?? "";
+  const setEstado = (e: string) => router.replace(e ? `/ocr/paquetes/${id}?estado=${encodeURIComponent(e)}` : `/ocr/paquetes/${id}`, { scroll: false });
   const [ocupado, setOcupado] = useState(false);
   const [resultado, setResultado] = useState<ResultadoRegistro | null>(null);
   const [descartando, setDescartando] = useState(false);
@@ -129,19 +132,36 @@ function Detalle({ id }: { id: string }) {
     });
 
   if (carga.estado === "error" && !p) return <InlineAlert tone="error">{carga.error}</InlineAlert>;
-  if (!p) return <p className="text-sm opacity-60">Cargando paquete…</p>;
+  if (!p) return <VehicleLoader label="Cargando paquete…" />;
   const cerrado = p.estado === "Cerrado";
   // Con el filtro puesto la lista puede no traer los incompletos: el botón se guía por el contador del paquete.
   // GDC punto 14: los completos con el número por verificar no entran en el registro en lote.
   const lote = registroEnLote(p.cantidadCompletos, carga.datos?.completosPorConfirmar ?? 0);
+  const filtrar = (e: string) => {
+    setEstado(e);
+    pg.setPage(1);
+  };
+  const enCola = estado === "Pendiente" || estado === "EnProcesamiento";
+  const FILTROS: [string, string, number][] = [
+    ["Completo", "Completos", p.cantidadCompletos],
+    ["Incompleto", "Incompletos", p.cantidadIncompletos],
+    ["Fallido", "Fallidos", p.cantidadFallidos],
+    ["Duplicado", "Duplicados", p.cantidadDuplicados],
+    ["Registrado", "Registrados", p.cantidadRegistrados],
+    ["Descartado", "Descartados", p.cantidadDescartados],
+  ];
   const reprocesables = estado && estado !== "Incompleto" ? p.cantidadIncompletos : docs.filter((d) => d.estado === "Incompleto" && d.reprocesable).length;
 
   return (
     <section className="flex flex-col gap-6">
-      <Link href="/ocr" className="inline-flex items-center gap-1 text-xs font-semibold text-flit-brand-ink hover:underline">
-        <Icono nombre="izquierda" className="h-3.5 w-3.5" />
-        Paquetes OCR
-      </Link>
+      <Miga
+        items={[{ etiqueta: "Paquetes OCR", href: "/ocr" }, { etiqueta: p.nombre }]}
+        enlace={({ href, className, children }) => (
+          <Link href={href} className={className}>
+            {children}
+          </Link>
+        )}
+      />
       <Encabezado
         titulo={p.nombre}
         descripcion={
@@ -190,15 +210,44 @@ function Detalle({ id }: { id: string }) {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        <Contador etiqueta="Documentos" valor={p.cantidadDocumentos} />
-        <Contador etiqueta="En cola" valor={p.cantidadPendientes} clase="text-flit-brand-ink" />
-        <Contador etiqueta="Completos" valor={p.cantidadCompletos} clase="text-[var(--flit-success-ink)]" />
-        <Contador etiqueta="Incompletos" valor={p.cantidadIncompletos} clase="text-[var(--badge-warning-fg)]" />
-        <Contador etiqueta="Fallidos" valor={p.cantidadFallidos} clase="text-destructive" />
-        <Contador etiqueta="Duplicados" valor={p.cantidadDuplicados} clase="text-[var(--badge-purple-fg)]" />
-        <Contador etiqueta="Registrados" valor={p.cantidadRegistrados} />
-        <Contador etiqueta="Descartados" valor={p.cantidadDescartados} />
+      <div className="flex flex-col gap-2">
+        <p className="text-xs text-muted-foreground">Toca una cifra para ver solo esos documentos; tócala de nuevo para verlos todos.</p>
+        <div className={CONTADORES_GRID_CLS} role="group" aria-label="Filtrar documentos por estado">
+          <TarjetaMetrica etiqueta="Documentos" cifra={p.cantidadDocumentos} activa={estado === ""} onAlternar={() => filtrar("")} />
+          <TarjetaMetrica
+            etiqueta="En cola"
+            cifra={p.cantidadPendientes}
+            pendiente={p.cantidadPendientes > 0}
+            pie={p.cantidadPendientes > 0 ? "Se actualiza sola" : undefined}
+            activa={enCola}
+            onAlternar={(siguiente) => filtrar(siguiente ? "Pendiente" : "")}
+          />
+          {FILTROS.map(([valor, etiqueta, cifra]) => (
+            <TarjetaMetrica
+              key={valor}
+              etiqueta={etiqueta}
+              cifra={cifra}
+              colorCifra={COLOR_CIFRA_DOCUMENTO[valor]}
+              activa={estado === valor}
+              onAlternar={(siguiente) => filtrar(siguiente ? valor : "")}
+            />
+          ))}
+        </div>
+        {/* «En cola» suma dos estados y el filtro acepta uno: al activarla se elige cuál. */}
+        {enCola && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground">En cola:</span>
+            <ChipsFiltro
+              ariaLabel="Documentos en cola"
+              valor={estado}
+              onChange={filtrar}
+              opciones={[
+                { valor: "Pendiente", etiqueta: "Pendiente" },
+                { valor: "EnProcesamiento", etiqueta: "En procesamiento" },
+              ]}
+            />
+          </div>
+        )}
       </div>
 
       {opera && !cerrado && lote.aviso && (
@@ -225,31 +274,13 @@ function Detalle({ id }: { id: string }) {
       )}
 
       <div className="flex flex-col gap-2">
-        <label className={`${ETIQUETA_CLS} w-56`}>
-          Estado del documento
-          <select
-            className={INPUT_CLS}
-            value={estado}
-            onChange={(e) => {
-              setEstado(e.target.value);
-              pg.setPage(1);
-            }}
-          >
-            <option value="">Todos</option>
-            {ESTADOS_DOCUMENTO.map((e) => (
-              <option key={e} value={e}>
-                {ESTADO_DOCUMENTO[e].texto}
-              </option>
-            ))}
-          </select>
-        </label>
         <DataTable
-          ariaLabel="Documentos del paquete"
+          ariaLabel={estado ? `Documentos del paquete: ${ESTADO_DOCUMENTO[estado]?.texto ?? estado}` : "Documentos del paquete"}
           rows={pg.paginar(docs)}
           getRowKey={(d) => d.id}
           onRowClick={(d) => router.push(`/ocr/documentos/${d.id}`)}
           status={carga.estado === "loading" && !carga.datos ? "loading" : undefined}
-          emptyMessage={estado ? "No hay documentos en ese estado." : "El paquete no tiene documentos."}
+          emptyMessage={estado ? "No hay documentos en ese estado. Toca «Documentos» para verlos todos." : "El paquete no tiene documentos."}
           minWidth={1000}
           columns={[
             { key: "archivo", header: "Archivo", render: (d) => <span className="font-semibold">{d.nombreArchivo}</span> },
@@ -261,7 +292,7 @@ function Detalle({ id }: { id: string }) {
                 <span className="flex flex-col">
                   {d.numeroComparendoExtraido ?? "—"}
                   {d.avisoNumero && d.numeroPorConfirmar !== false && (
-                    <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--badge-warning-fg)]" title={d.avisoNumero}>
+                    <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--badge-warning-fg)]" title={d.avisoNumero}>
                       <Icono nombre="alerta" className="h-3 w-3" />
                       Verificar número
                     </span>
@@ -275,7 +306,7 @@ function Detalle({ id }: { id: string }) {
               render: (d) => {
                 const texto = motivoDocumento(d);
                 if (!texto) return "—";
-                const tono = d.estado === "Fallido" ? "text-destructive" : d.estado === "Duplicado" ? "text-[var(--badge-purple-fg)]" : d.estado === "Descartado" ? "opacity-60" : "text-[var(--badge-warning-fg)]";
+                const tono = d.estado === "Fallido" ? "text-destructive" : d.estado === "Duplicado" ? "text-[var(--badge-purple-fg)]" : d.estado === "Descartado" ? "text-muted-foreground" : "text-[var(--badge-warning-fg)]";
                 return (
                   <span className={tono} title={d.estado === "Fallido" && d.tipoFallo ? TIPO_FALLO[d.tipoFallo] : undefined}>
                     {texto}

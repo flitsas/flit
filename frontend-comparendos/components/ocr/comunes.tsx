@@ -1,12 +1,32 @@
 "use client";
 
 import { useEffect } from "react";
+import { StatusBadge, type StatusBadgeTone } from "@flit/ui";
 import { ESTADO_DOCUMENTO, progreso, type ContadoresPaquete } from "@/lib/ocr";
 
-/** Chip de estado de un documento OCR con los colores de §7.6 (incluido el morado de DUPLICADO). */
+/** Tono del kit por estado de documento (§7.6, incluido el morado de DUPLICADO). */
+export const TONO_DOCUMENTO: Record<string, StatusBadgeTone> = {
+  Pendiente: "neutral",
+  EnProcesamiento: "info",
+  Completo: "success",
+  Incompleto: "warning",
+  Fallido: "danger",
+  Duplicado: "purple",
+  Registrado: "success",
+  Descartado: "neutral",
+};
+
+/** Color de la cifra de una tarjeta de contador, con el mismo tono que el chip del estado. */
+export const COLOR_CIFRA_DOCUMENTO: Record<string, string> = {
+  Completo: "var(--flit-success-ink)",
+  Incompleto: "var(--badge-warning-fg)",
+  Fallido: "var(--badge-danger-fg)",
+  Duplicado: "var(--badge-purple-fg)",
+};
+
+/** Chip de estado de un documento OCR con el StatusBadge del kit. */
 export function EstadoDocumento({ estado }: { estado: string }) {
-  const e = ESTADO_DOCUMENTO[estado] ?? { texto: estado, clase: "bg-secondary text-muted-foreground" };
-  return <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${e.clase}`}>{e.texto}</span>;
+  return <StatusBadge label={ESTADO_DOCUMENTO[estado]?.texto ?? estado} tone={TONO_DOCUMENTO[estado] ?? "neutral"} />;
 }
 
 /** Barra de avance «45/50 procesados». */
@@ -17,20 +37,13 @@ export function Progreso({ p }: { p: ContadoresPaquete }) {
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
         <div className="h-full rounded-full bg-flit-brand" style={{ width: `${r.porcentaje}%` }} />
       </div>
-      <span className="whitespace-nowrap tabular-nums opacity-70">{r.texto}</span>
+      <span className="whitespace-nowrap tabular-nums text-muted-foreground">{r.texto}</span>
     </div>
   );
 }
 
-/** Cifra con su rótulo, para las filas de contadores. */
-export function Contador({ etiqueta, valor, clase }: { etiqueta: string; valor: number | undefined; clase?: string }) {
-  return (
-    <div className="flex min-w-24 flex-col gap-0.5 rounded-xl border border-border px-3 py-2">
-      <span className="text-[11px] font-semibold text-muted-foreground">{etiqueta}</span>
-      <span className={`text-lg font-semibold tabular-nums ${clase ?? "text-flit-primary"}`}>{valor ?? 0}</span>
-    </div>
-  );
-}
+/** Rejilla de tarjetas de contador: 2 columnas en celular, y desde sm las del kit (`.metricas`) algo más angostas. */
+export const CONTADORES_GRID_CLS = "grid grid-cols-2 gap-3 sm:grid-cols-[repeat(auto-fit,minmax(150px,1fr))]";
 
 /** Mientras haya algo en cola se vuelve a consultar cada pocos segundos. */
 export function useSondeo(activo: boolean, recargar: () => void, ms = 4000) {

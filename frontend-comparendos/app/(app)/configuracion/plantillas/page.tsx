@@ -22,21 +22,23 @@ function Visor({ plantilla, onCerrar }: { plantilla: PlantillaResumen; onCerrar:
 
   return (
     <Modal icono="documento" open onClose={onCerrar} size="2xl" title={TIPO_PLANTILLA[plantilla.tipo] ?? plantilla.tipo} description={`${plantilla.conjunto === "Renting" ? "Renting" : "FLIT"}${plantilla.tipologia ? ` · ${plantilla.tipologia}` : ""}`}>
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
-        <aside className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold">Versiones</h3>
-          {(detalle.datos?.versiones ?? []).map((v) => (
-            <button key={v.id} type="button" className={`${controlCls(v.id === versionId)} justify-between`} onClick={() => setVersionId(v.id)}>
-              <span>v{v.numeroVersion}</span>
-              <StatusBadge label={v.estado} tone={TONO_VERSION[v.estado] ?? "neutral"} />
-            </button>
-          ))}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold">Versiones</h3>
+          <div className="flex flex-wrap gap-2">
+            {(detalle.datos?.versiones ?? []).map((v) => (
+              <button key={v.id} type="button" className={`${controlCls(v.id === versionId)} justify-between`} onClick={() => setVersionId(v.id)}>
+                <span>v{v.numeroVersion}</span>
+                <StatusBadge label={v.estado} tone={TONO_VERSION[v.estado] ?? "neutral"} />
+              </button>
+            ))}
+          </div>
           {version.datos && (
-            <p className="text-[11px] opacity-70">
+            <p className="text-xs text-muted-foreground">
               {version.datos.notaCambio ?? "Sin nota"} {version.datos.publicadaEn ? `· ${formatoFecha(version.datos.publicadaEn)}` : ""}
             </p>
           )}
-        </aside>
+        </div>
         <VistaPrevia contenido={version.datos ? { tipo: plantilla.tipo, conjunto: plantilla.conjunto, asunto: version.datos.asunto, cuerpoHtml: version.datos.cuerpoHtml } : null} />
       </div>
     </Modal>
