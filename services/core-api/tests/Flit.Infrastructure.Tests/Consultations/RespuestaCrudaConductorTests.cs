@@ -111,6 +111,25 @@ public sealed class RespuestaCrudaConductorTests
         (await mock.ConsultAsync(Ctx(), ct)).RawPayload.Should().BeNull("el mock de Trámites sigue igual");
     }
 
+    /// <summary>
+    /// Regresión PDN: Verifik 200 con <c>infractions: []</c> (PPT) no debe mapearse a check error
+    /// ni perder el nombre (antes JsonException → ProviderUnavailable → failover a Kyverum vacío).
+    /// </summary>
+    [Fact]
+    public async Task Verifik_conductor_con_infractions_array_vacio_hidrata_nombre()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        const string Cuerpo = """
+            {"data":{"documentType":"PPT","documentNumber":"9999900141","firstName":"PERSONA","lastName":"FICTICIA PPT","fullName":"PERSONA FICTICIA PPT","citizenStatus":"ACTIVA","driverStatus":"ACTIVO","licenses":[{"category":"B1","status":"ACTIVA"}],"infractions":[],"identityValidationAttempts":{"estadoUsuario":"ACTIVO"}},"id":"FICTICIO-PPT"}
+            """;
+
+        var result = await Verifik(Responde(HttpStatusCode.OK, Cuerpo)).ConsultAsync(Ctx(), ct);
+
+        result.Checks.Should().NotContain(c => c.Status == "error");
+        result.HydratedFields.Should().Contain(f => f.FieldKey == "person_full_name" && f.ValueText == "PERSONA FICTICIA PPT");
+        result.Overall.Should().Be("green");
+    }
+
     private static KyverumRuntConductorConsultationProvider Kyverum(HttpMessageHandler handler) =>
         new(new KyverumRuntApiClient(
             new HttpClient(handler) { BaseAddress = new Uri("https://runt.kyverum.test") },
