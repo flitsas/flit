@@ -25,7 +25,7 @@ namespace Flit.Integration.Tests.Security;
 /// (<c>RequirePermission</c> sin policy de rol extra). No se usa <c>improntas.read</c> porque <c>/admin/improntas</c> exige además
 /// SuperAdminPolicy y SuperAdmin no admite overrides. AC3 lo cubre <c>PermisosEnforcedArchitectureTests</c> (sin duplicar).
 /// </summary>
-public sealed class Hu13648PermisosIndividualesEnforcementHttpTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
+public sealed class Hu13648PermisosIndividualesEnforcementHttpTests(PostgresDatabaseFixture fixture, HostsPorClase hosts) : PostgresTestBase(fixture), IClassFixture<HostsPorClase>
 {
     private const string Email = "it13648@empresa.test";
     private const string OverviewUrl = "/api/v1/analytics/overview?from=2026-06-01&to=2026-06-30";
@@ -94,9 +94,9 @@ public sealed class Hu13648PermisosIndividualesEnforcementHttpTests(PostgresData
     private async Task<HttpStatusCode> CallAsync(string url)
     {
         var token = await LoginAsync();
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
-        await using var configured = factory.WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) =>
-            c.AddInMemoryCollection(new Dictionary<string, string?> { ["Security:ModulePermissionEnforcement:Enabled"] = "true" })));
+        // Un host por clase (HostsPorClase).
+        var configured = hosts.Obtener(Fixture,
+            new Dictionary<string, string?> { ["Security:ModulePermissionEnforcement:Enabled"] = "true" });
         using var client = configured.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var response = await client.GetAsync(url, Ct);
