@@ -259,7 +259,7 @@ public sealed class ColaRedaccionTests
         pedido.Reglas[1].MontoPesos.Should().Be(150_000);
         pedido.RedaccionSuspendida.Should().BeFalse();
 
-        var encabezado = new EncabezadoReporte(Guid.Empty, "Lote", "Empresa", "Ana", Ahora, "Con análisis IA", "ABC123", "PLACA_CARRO", "ABC123", null);
+        var encabezado = new EncabezadoReporte(Guid.Empty, "Lote", "Empresa", "Ana", Ahora, "Diagnóstico Con análisis — TRASPASO", "ABC123", "PLACA_CARRO", "ABC123", null);
         var sin = new ContenidoReporteVehiculo(encabezado, []);
         sin.ParaHuella().Keys.Should().NotContain(k => k.StartsWith("dictamen/", StringComparison.Ordinal));
         var con = sin with { Dictamen = new DictamenEnHuella("BLOQUEADO", ColaRedaccion.Completada, ContenidoReporteVehiculo.TextoDeAlertamientos(Alertas)) };

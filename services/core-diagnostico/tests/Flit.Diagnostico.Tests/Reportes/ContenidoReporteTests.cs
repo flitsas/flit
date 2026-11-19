@@ -4,14 +4,17 @@ using System.Text;
 using System.Text.Json;
 using Flit.Diagnostico.Api.Modulos.Consultas;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
+using Flit.Diagnostico.Api.Modulos.Dictamen;
 using Flit.Diagnostico.Api.Modulos.Reportes;
 using Flit.Diagnostico.Api.Modulos.Tablero;
+using Flit.Diagnostico.Api.Modulos.Trabajos;
 using Flit.Diagnostico.Api.Modulos.Vehiculos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Catalogos;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
+using Flit.Diagnostico.Domain.Dictamen;
 using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
 using Flit.Diagnostico.Tests.Aislamiento;
@@ -23,6 +26,7 @@ using Grpc.Core;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using Xunit;
 using Intempo = Flit.Consultas.Grpc.V1;
 using TableroAyudas = Flit.Diagnostico.Tests.Tablero.Tablero;
@@ -271,6 +275,68 @@ public sealed class ContenidoReporteTests
 
     // AC1 (F07-C3) y Q7 — N/A con su motivo en código y en texto; una fuente del vehículo en ERROR sale «consulta no disponible»
     // sin tipo de error, causa ni fecha del intento.
+    /// <summary>
+    /// HU-3: el lector lleva al contenido el estado de cola del dictamen vigente con la misma regla de <c>redaccion_en_cola</c>
+    /// (<see cref="RedactorEnCola.EnCola"/>): encendida, PENDIENTE, con fecha y sin agotar reintentos. Apagada o agotada, false.
+    /// </summary>
+    [Fact]
+    public async Task HU3_el_contenido_lleva_el_estado_de_cola_del_dictamen()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.ConBaseAsync();
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await TableroAyudas.SembrarAsync(empresa, ct, vehiculos: [new("TST961", [new(Fuente.Runt, EstadoCelda.Completado, 1)])]);
+        var vehiculo = lote.Vehiculos.Single().Id;
+        await TableroAyudas.PayloadAsync(empresa, lote.Celda("TST961", Fuente.Runt), PayloadRunt, ct);
+        var fila = EmisorDictamen.FilaAlCerrar(
+            empresa.Id, vehiculo, 1, "TRASPASO_STANDARD", new DictamenEvaluado("VIABLE", []), redaccionSuspendida: false, proveedorConfigurado: true, Dato);
+        await using (var escritura = empresa.Db())
+        {
+            escritura.Add(fila);
+            await escritura.SaveChangesAsync(ct);
+        }
+
+        var encendida = new OpcionesRedaccion { Habilitado = true, MaxReintentos = 2 };
+        await using var db = empresa.Db();
+        (await Lector(api, db, new UsuariosIdentidadDePrueba(), encendida).VehiculoAsync(Usuario(empresa.Id), lote.Id, vehiculo, ct))
+            .Dictamen!.EnCola.Should().BeTrue();
+        (await Lector(api, db, new UsuariosIdentidadDePrueba()).VehiculoAsync(Usuario(empresa.Id), lote.Id, vehiculo, ct))
+            .Dictamen!.EnCola.Should().BeFalse("con la redacción apagada nadie toma la cola");
+
+        await using (var escritura = empresa.Db())
+        {
+            var guardada = await escritura.Set<DictamenVehiculo>().SingleAsync(d => d.Id == fila.Id, ct);
+            guardada.RedaccionIntentos = 3;
+            await escritura.SaveChangesAsync(ct);
+        }
+
+        db.ChangeTracker.Clear();
+        (await Lector(api, db, new UsuariosIdentidadDePrueba(), encendida).VehiculoAsync(Usuario(empresa.Id), lote.Id, vehiculo, ct))
+            .Dictamen!.EnCola.Should().BeFalse("intentos 3 > MaxReintentos 2: la cola ya no la toma");
+    }
+
+    /// <summary>
+    /// HU-3: el estado de cola entra en la huella del PDF solo con el dictamen PENDIENTE (clave <c>dictamen/en_cola</c>): al salir
+    /// de la cola cambia el rótulo y la huella invalida el PDF sin subir la versión de plantilla. Con COMPLETADA no hay clave, así
+    /// que los PDF de dictámenes ya redactados conservan su huella.
+    /// </summary>
+    [Fact]
+    public void HU3_el_estado_de_cola_entra_en_la_huella_solo_si_el_dictamen_esta_pendiente()
+    {
+        var encabezado = new EncabezadoReporte(Guid.Empty, "Lote", "Empresa", "Ana", Dato, "Diagnóstico Simple", "TST962", "PLACA_CARRO", "TST962", null);
+        var sin = new ContenidoReporteVehiculo(encabezado, []);
+        var enCola = sin with { Dictamen = new DictamenEnHuella("VIABLE", "PENDIENTE", "texto", EnCola: true) };
+        var fuera = sin with { Dictamen = new DictamenEnHuella("VIABLE", "PENDIENTE", "texto", EnCola: false) };
+        enCola.ParaHuella()["dictamen/en_cola"].Should().Be("true");
+        fuera.ParaHuella()["dictamen/en_cola"].Should().Be("false");
+        enCola.ParaHuella().Should().NotBeEquivalentTo(fuera.ParaHuella());
+
+        var completada = sin with { Dictamen = new DictamenEnHuella("VIABLE", "COMPLETADA", "texto", EnCola: true) };
+        completada.ParaHuella().Keys.Should().NotContain("dictamen/en_cola");
+        completada.ParaHuella().Should().BeEquivalentTo((sin with { Dictamen = new DictamenEnHuella("VIABLE", "COMPLETADA", "texto") }).ParaHuella());
+    }
+
     [Fact]
     public async Task Na_trae_su_motivo()
     {
@@ -342,7 +408,7 @@ public sealed class ContenidoReporteTests
         EtiquetaTipoAnalisis.Texto(ModoDiagnostico.Simple, null).Should().Be(EtiquetaTipoAnalisis.Simple);
     }
 
-    // AC4 (F07-C2) — Con Análisis IA: «Diagnóstico Con Análisis IA — » más el nombre del tipo publicado en mayúsculas; con un
+    // AC4 (F07-C2) — Con análisis: «Diagnóstico Con análisis — » más el nombre del tipo publicado en mayúsculas; con un
     // código que ya no está publicado o con el catálogo caído, el código.
     [Fact]
     public async Task Con_analisis_se_rotula_con_el_nombre_del_tipo_de_tramite()
@@ -359,10 +425,10 @@ public sealed class ContenidoReporteTests
         await using var db = empresa.Db();
         var lector = Lector(api, db, new UsuariosIdentidadDePrueba());
         (await lector.VehiculoAsync(Usuario(empresa.Id), conTipo.Id, conTipo.Vehiculos.Single().Id, ct)).Encabezado.TipoAnalisis
-            .Should().Be("Diagnóstico Con Análisis IA — TRASPASO UNILATERAL");
+            .Should().Be("Diagnóstico Con análisis — TRASPASO UNILATERAL");
         (await lector.VehiculoAsync(Usuario(empresa.Id), sinPublicar.Id, sinPublicar.Vehiculos.Single().Id, ct)).Encabezado.TipoAnalisis
-            .Should().Be("Diagnóstico Con Análisis IA — TIPO_RETIRADO", "sin publicar sale el código");
-        EtiquetaTipoAnalisis.Texto(ModoDiagnostico.ConAnalisis, "Traspaso").Should().Be("Diagnóstico Con Análisis IA — TRASPASO");
+            .Should().Be("Diagnóstico Con análisis — TIPO_RETIRADO", "sin publicar sale el código");
+        EtiquetaTipoAnalisis.Texto(ModoDiagnostico.ConAnalisis, "Traspaso").Should().Be("Diagnóstico Con análisis — TRASPASO");
 
         await using var api2 = await ApiDePrueba.ConBaseAsync();
         api2.Catalogos.FallaSiempre = StatusCode.Unavailable;
@@ -371,7 +437,7 @@ public sealed class ContenidoReporteTests
         await ModoAsync(otra, caido.Id, "TRASPASO_UNILATERAL", ct);
         await using var db2 = otra.Db();
         (await Lector(api2, db2, new UsuariosIdentidadDePrueba()).VehiculoAsync(Usuario(otra.Id), caido.Id, caido.Vehiculos.Single().Id, ct))
-            .Encabezado.TipoAnalisis.Should().Be("Diagnóstico Con Análisis IA — TRASPASO_UNILATERAL", "con el catálogo caído, el código");
+            .Encabezado.TipoAnalisis.Should().Be("Diagnóstico Con análisis — TRASPASO_UNILATERAL", "con el catálogo caído, el código");
     }
 
     // AC4 (F07-C1, Q3) — Identidad no responde: el creador sale «No disponible» y el contenido se arma igual.
@@ -648,12 +714,14 @@ public sealed class ContenidoReporteTests
                 : throw new CryptographicException("cifrado de prueba ilegible");
     }
 
-    internal static LectorContenidoReporte Lector(ApiDePrueba api, DiagnosticoDb db, UsuariosIdentidadDePrueba identidad)
+    internal static LectorContenidoReporte Lector(
+        ApiDePrueba api, DiagnosticoDb db, UsuariosIdentidadDePrueba identidad, OpcionesRedaccion? redaccion = null)
     {
         var scope = api.App.Services.CreateScope();
         return new LectorContenidoReporte(
             db, api.App.Services.GetRequiredService<IProtectorDocumentoPersona>(), api.App.Services.GetRequiredService<IProtectorRespuestaFuente>(),
-            identidad.Resolutor(), scope.ServiceProvider.GetRequiredService<ICatalogoTiposTramite>());
+            identidad.Resolutor(), scope.ServiceProvider.GetRequiredService<ICatalogoTiposTramite>(),
+            Options.Create(redaccion ?? new OpcionesRedaccion()));
     }
 
     /// <summary>Quien pide: usuario de la empresa con <c>diagnosticos.ver</c> y el claim <c>company_name</c> ficticio.</summary>

@@ -6,19 +6,19 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 
 /// <summary>
 /// Rótulo del tipo de análisis en el encabezado de los archivos (HU #13847, F07-C2, decisión Q4): Simple → «Diagnóstico Simple»;
-/// Con Análisis IA → «Diagnóstico Con Análisis IA — » más el nombre del tipo de trámite en mayúsculas, del catálogo publicado
+/// Con análisis → «Diagnóstico Con análisis — » más el nombre del tipo de trámite en mayúsculas, del catálogo publicado
 /// (<see cref="ICatalogoTiposTramite"/>); si el código ya no está publicado o el catálogo no responde, el código.
 /// </summary>
 /// <example>
 /// <code>
-/// EtiquetaTipoAnalisis.Texto(ModoDiagnostico.ConAnalisis, "Traspaso"); // "Diagnóstico Con Análisis IA — TRASPASO"
+/// EtiquetaTipoAnalisis.Texto(ModoDiagnostico.ConAnalisis, "Traspaso"); // "Diagnóstico Con análisis — TRASPASO"
 /// </code>
 /// </example>
 public static class EtiquetaTipoAnalisis
 {
     public const string Simple = "Diagnóstico Simple";
 
-    public const string PrefijoConAnalisis = "Diagnóstico Con Análisis IA — ";
+    public const string PrefijoConAnalisis = "Diagnóstico Con análisis — ";
 
     /// <summary>El rótulo del modo con el nombre (o código) del tipo de trámite ya resuelto.</summary>
     public static string Texto(ModoDiagnostico modo, string? tipoTramite) => modo switch

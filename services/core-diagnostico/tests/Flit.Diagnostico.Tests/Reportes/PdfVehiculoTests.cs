@@ -728,7 +728,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         const string segundo = "qy28 beta dictamen multa unica";
         var contenido = Contenido("ABC123") with
         {
-            Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", primero + "\n" + segundo),
+            Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", primero + "\n" + segundo, EnCola: true),
         };
         var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
 
@@ -775,8 +775,9 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         sin.ParaHuella().Keys.Should().NotContain(k => k.StartsWith("dictamen/", StringComparison.Ordinal));
 
         var con = sin with { Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", textoDictamen) };
+        // HU-3: con PENDIENTE la huella suma dictamen/en_cola (el rótulo depende de él); con COMPLETADA no (B7 abajo).
         con.ParaHuella().Keys.Where(k => k.StartsWith("dictamen/", StringComparison.Ordinal))
-            .Should().BeEquivalentTo(["dictamen/veredicto", "dictamen/estado", "dictamen/texto"]);
+            .Should().BeEquivalentTo(["dictamen/veredicto", "dictamen/estado", "dictamen/texto", "dictamen/en_cola"]);
         con.ParaHuella()["dictamen/veredicto"].Should().Be("BLOQUEADO");
         con.ParaHuella()["dictamen/estado"].Should().Be("PENDIENTE");
         con.ParaHuella()["dictamen/texto"].Should().Be(textoDictamen);

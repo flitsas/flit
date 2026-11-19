@@ -268,7 +268,7 @@ paths:
     get:
       tags: [Catalogos]
       operationId: listarTiposTramiteDiagnostico
-      summary: Tipos de trámite de la etapa (modo Con Análisis IA)
+      summary: Tipos de trámite de la etapa (modo Con análisis)
       description: >
         Permiso diagnostico.diagnosticos.crear (HU #13742). Proxy del rpc ListarTiposTramite de
         flit.tramites.v1.CatalogosService (core-api, token de servicio svc-diagnostico con scope
@@ -1316,7 +1316,7 @@ paths:
         INCOMPLETO con todas sus celdas cerradas: la fuente en ERROR sale «consulta no disponible», sin código de error ni causa
         (Q7). Encabezado con ID del diagnóstico, nombre del lote, empresa (claim company_name), creador («No disponible» si
         Identidad no responde), fecha y hora de creación (hora Colombia), tipo de análisis («Diagnóstico Simple» o «Diagnóstico
-        Con Análisis IA — TRÁMITE») e identificación; una sección por fuente del alcance en el orden de la grilla (SIMIT con hasta
+        Con análisis — TRÁMITE») e identificación; una sección por fuente del alcance en el orden de la grilla (SIMIT con hasta
         100 comparendos y «y N más»; avalúo con valor sugerido o «sin valor comercial»; personas con «****» + 4 últimos y el
         rótulo «Declarado por el cliente»; impuesto departamental con «Total adeudado» y la grilla Vigencia / Valor / Estado
         «Pagada» o «Pendiente», o «No registra vigencias», HU #13864; N/A con su motivo); pie con «Generado el …» y «Página X de Y». Sin origen, usuario
@@ -1396,7 +1396,7 @@ paths:
         El valor total en pesos es número; si el SIMIT trajo más comparendos de los que se listan (tope 100) sale el texto
         «al menos N». «Diagnóstico»: ID del diagnóstico, nombre del lote, empresa (claim company_name), usuario creador («No
         disponible» si Identidad no responde), fecha de creación (hora Colombia) y tipo de análisis («Diagnóstico Simple» o
-        «Diagnóstico Con Análisis IA — TRÁMITE»). «Consultas»: solo con estimado_consultas=AL_FINALIZAR en la copia de
+        «Diagnóstico Con análisis — TRÁMITE»). «Consultas»: solo con estimado_consultas=AL_FINALIZAR en la copia de
         configuración del lote y el lote COMPLETADO o INCOMPLETO; fuente, consultas estimadas, consultas consumidas y
         «al menos» si el estimado es mínimo (el mismo cálculo de la grilla). Sin origen, usuario manual, proveedor ni transacción
         (R-20): una celda llenada a mano produce la misma fila que una de API. Toda celda de texto que empiece por =, +, -, @,

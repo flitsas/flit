@@ -70,7 +70,7 @@ public sealed class ValidadorCabecera(ICatalogoTiposTramite catalogo, Func<Fuent
         var conAnalisis = solicitud.Modo == ModoDiagnostico.ConAnalisis;
         var tipo = solicitud.TipoTramiteCodigo?.Trim();
         if (conAnalisis && string.IsNullOrEmpty(tipo))
-            errores.Add(new(CodigoTipoTramiteRequerido, CampoTipoTramite, "Con Análisis IA exige el tipo de trámite."));
+            errores.Add(new(CodigoTipoTramiteRequerido, CampoTipoTramite, "Con análisis exige el tipo de trámite."));
 
         if (errores.Count > 0 || !conAnalisis)
             return errores;
