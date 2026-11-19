@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.6.0"
+  version: "1.6.1"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -68,6 +68,12 @@ info:
     ROL_NO_ASIGNABLE, OBJETIVO_PROTEGIDO, ACCION_SOBRE_SI_MISMO, USUARIO_NO_ENCONTRADO, USUARIO_SUSPENDIDO, INVITACION_PENDIENTE,
     ULTIMO_ADMINISTRADOR, ROL_YA_VIGENTE, CORREO_INVALIDO, NOMBRE_REQUERIDO, FILTRO_INVALIDO, PAGINACION_INVALIDA,
     DEMASIADAS_SOLICITUDES, PLATAFORMA_NO_DISPONIBLE y PLATAFORMA_NO_CONFIGURADA.
+
+    Versión 1.6.1 (redactor IA, registro diferido HU-2): cambio aditivo. DictamenVehiculo y DictamenVehiculoBackoffice traen
+    redaccion_en_cola (boolean, requerido): true solo si la redacción del modelo está encendida en el servicio
+    (Diagnostico:Redaccion:Habilitado), estado_redaccion es PENDIENTE y redaccion_disponible_desde no es nula, el mismo
+    predicado de la toma de la cola. Al agotar los reintentos la cola deja la fecha nula y el campo pasa a false.
+    No se exponen intentos, lease ni fecha de toma.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -263,7 +269,7 @@ paths:
     get:
       tags: [Catalogos]
       operationId: listarTiposTramiteDiagnostico
-      summary: Tipos de trámite de la etapa (modo Con Análisis IA)
+      summary: Tipos de trámite de la etapa (modo Con análisis)
       description: >
         Permiso diagnostico.diagnosticos.crear (HU #13742). Proxy del rpc ListarTiposTramite de
         flit.tramites.v1.CatalogosService (core-api, token de servicio svc-diagnostico con scope
@@ -1311,7 +1317,7 @@ paths:
         INCOMPLETO con todas sus celdas cerradas: la fuente en ERROR sale «consulta no disponible», sin código de error ni causa
         (Q7). Encabezado con ID del diagnóstico, nombre del lote, empresa (claim company_name), creador («No disponible» si
         Identidad no responde), fecha y hora de creación (hora Colombia), tipo de análisis («Diagnóstico Simple» o «Diagnóstico
-        Con Análisis IA — TRÁMITE») e identificación; una sección por fuente del alcance en el orden de la grilla (SIMIT con hasta
+        Con análisis — TRÁMITE») e identificación; una sección por fuente del alcance en el orden de la grilla (SIMIT con hasta
         100 comparendos y «y N más»; avalúo con valor sugerido o «sin valor comercial»; personas con «****» + 4 últimos y el
         rótulo «Declarado por el cliente»; impuesto departamental con «Total adeudado» y la grilla Vigencia / Valor / Estado
         «Pagada» o «Pendiente», o «No registra vigencias», HU #13864; N/A con su motivo); pie con «Generado el …» y «Página X de Y». Sin origen, usuario
@@ -1391,7 +1397,7 @@ paths:
         El valor total en pesos es número; si el SIMIT trajo más comparendos de los que se listan (tope 100) sale el texto
         «al menos N». «Diagnóstico»: ID del diagnóstico, nombre del lote, empresa (claim company_name), usuario creador («No
         disponible» si Identidad no responde), fecha de creación (hora Colombia) y tipo de análisis («Diagnóstico Simple» o
-        «Diagnóstico Con Análisis IA — TRÁMITE»). «Consultas»: solo con estimado_consultas=AL_FINALIZAR en la copia de
+        «Diagnóstico Con análisis — TRÁMITE»). «Consultas»: solo con estimado_consultas=AL_FINALIZAR en la copia de
         configuración del lote y el lote COMPLETADO o INCOMPLETO; fuente, consultas estimadas, consultas consumidas y
         «al menos» si el estimado es mínimo (el mismo cálculo de la grilla). Sin origen, usuario manual, proveedor ni transacción
         (R-20): una celda llenada a mano produce la misma fila que una de API. Toda celda de texto que empiece por =, +, -, @,
@@ -6464,8 +6470,8 @@ components:
       description: >
         Dictamen vigente que ve la compañía. Sin override, lease, intentos ni empresa. HU #14563 (D6, P1 = a): la marca
         ajustado_por_flit y ajustado_en; nunca el autor, el motivo, la versión anterior ni la marca ajuste por alertamiento.
-        HU #14582: cambio_propietario del vehículo.
-      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, cambio_propietario]
+        HU #14582: cambio_propietario del vehículo. 1.6.1: redaccion_en_cola.
+      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, cambio_propietario, redaccion_en_cola]
       properties:
         version: { type: integer, minimum: 1 }
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
@@ -6490,12 +6496,18 @@ components:
           type: boolean
           nullable: true
           description: HU #14582. El del vehículo (FilaVehiculo.cambio_propietario); sin documentos.
+        redaccion_en_cola:
+          type: boolean
+          description: >
+            Versión 1.6.1. true si la redacción está encendida, estado_redaccion es PENDIENTE y redaccion_disponible_desde no es
+            nula (el predicado de la toma). false con COMPLETADA, con la redacción apagada o suspendida, o con los reintentos
+            agotados (la cola deja la fecha nula).
 
     DictamenVehiculoBackoffice:
       type: object
       additionalProperties: false
       description: El de la compañía más los tres campos de override. Sin lease, intentos ni texto de cola.
-      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, analisis_override, usuario_override_id, override_en, cambio_propietario]
+      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, analisis_override, usuario_override_id, override_en, cambio_propietario, redaccion_en_cola]
       properties:
         version: { type: integer, minimum: 1 }
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
@@ -6513,6 +6525,12 @@ components:
           type: boolean
           nullable: true
           description: HU #14582. El del vehículo (FilaVehiculo.cambio_propietario); sin documentos.
+        redaccion_en_cola:
+          type: boolean
+          description: >
+            Versión 1.6.1. true si la redacción está encendida, estado_redaccion es PENDIENTE y redaccion_disponible_desde no es
+            nula (el predicado de la toma). false con COMPLETADA, con la redacción apagada o suspendida, o con los reintentos
+            agotados (la cola deja la fecha nula).
 
     CuerpoOverrideDictamen:
       type: object

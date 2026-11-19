@@ -62,7 +62,7 @@ export const NOMBRE_FILTRO_MAXIMO = 100;
 
 export const MODOS: ReadonlyArray<{ valor: ModoDiagnostico; nombre: string }> = [
   { valor: "SIMPLE", nombre: "Diagnóstico Simple" },
-  { valor: "CON_ANALISIS", nombre: "Con Análisis IA" },
+  { valor: "CON_ANALISIS", nombre: "Con análisis" },
 ];
 
 export const ESTADOS_FILTRABLES: readonly EstadoFiltrable[] = ["EN_PROCESO", "COMPLETADO", "INCOMPLETO"];

@@ -1,0 +1,32 @@
+{
+  "_aviso": "SOLO PRUEBA. Par RSA-3072 generado para los tests de ADR-0091; no es la clave de ningun ambiente (DEV, QA ni PDN) y no protege nada. Nunca usarlo fuera de tests.",
+  "_uso": "core-diagnostico (DescifradorLlaveIaTests) descifra 'sobre' con 'privada_pkcs8_b64'; core-api (SelladorLlaveIaTests) sella con 'publica_spki_b64', CEK e IV fijos y debe obtener el mismo texto_cifrado y tag. cek_cifrada es RSA-OAEP (aleatorio): solo se compara al descifrar.",
+  "version_aad": "flit.ia.llave.v1",
+  "alg": "RSA-OAEP-256+A256GCM",
+  "rsa_bits": 3072,
+  "privada_pkcs8_b64": "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",
+  "publica_spki_b64": "MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAtj+y14JjfONn2l2vLlyES31kXpSMt8ez+OGzTLgptu3n+sv9iDt6xE+k5oBNpaE/iut9MqkBTc1wt/g+yLUZLp5Hg0zKqojHJaja+lOVN0L/5Bia7dNv5quYoOkOQ2IaYkIUOP62fKIwMjFuOZYpJexgpcjWy51V2M4ECKKU9hRvrDkH4aqTVeJ88awxqH+Lkasuc1co6UJQ0UvE1jYrUcPE+tq188CoUwba3TQx4ErKk7hENJ2Xpbjy3ssUavlyD1DtlvJQb0eAnIViEPyNuuO5ld6MK3awUpjjrwXAk1O1e6tklgRk8Dx/bM8WqGTwPmos9n+pQUR9oQBAUNBgj+MaZkXBc4ayMeSUGGMDL29d8N8lBYeLSmAm31N8W3NWGwmNM9c+rAJNTsp8Ys6Z8WncQDX3Nm6Q1qwvQsCAyfFFASFFnl3Kx1soUv2k8sT1ezN6cTrU60DmmtU0NhK59nPaDtqkoANisa5isqMMWbhwcsuQMBs5maXxJjkhbw1tAgMBAAE=",
+  "kid": "diag-prueba-202611",
+  "audiencia": "diagnostico",
+  "tool_code": "diagnostico_dictamen",
+  "proveedor": "anthropic",
+  "modelo": "claude-haiku-4-5",
+  "row_version": 7,
+  "nonce_b64": "jx4tPEtaaXiHlqW0w9Lh8A==",
+  "nonce_b64url": "jx4tPEtaaXiHlqW0w9Lh8A",
+  "emitida_en_segundos": 1795000000,
+  "emitida_en_nanos": 250000000,
+  "aad_utf8": "flit.ia.llave.v1\ndiagnostico\ndiagnostico_dictamen\nanthropic\nclaude-haiku-4-5\n7\ndiag-prueba-202611\njx4tPEtaaXiHlqW0w9Lh8A\n1795000000",
+  "aad_b64": "ZmxpdC5pYS5sbGF2ZS52MQpkaWFnbm9zdGljbwpkaWFnbm9zdGljb19kaWN0YW1lbgphbnRocm9waWMKY2xhdWRlLWhhaWt1LTQtNQo3CmRpYWctcHJ1ZWJhLTIwMjYxMQpqeDR0UEV0YWFYaUhscVcwdzlMaDhBCjE3OTUwMDAwMDA=",
+  "cek_b64": "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+  "iv_b64": "oKGio6Slpqeoqaqr",
+  "llave_en_claro": "sk-ant-test-CENTINELA",
+  "sobre": {
+    "alg": "RSA-OAEP-256+A256GCM",
+    "kid": "diag-prueba-202611",
+    "cek_cifrada_b64": "OoM71OM7t/5NApkkUoq5PXZpr/nRe36hkaK4+QRhOuOV1383vRKcWD9X15pPv7G8THdVj/+MEARy1wFYpS2YPuzI+s7xuz+v2k7og+WGnnQOn3rq8sHGiCH3n4NCh3DvMCbWaLrHjrpaDyluZ/yHoTz3Z4cjHyoYDA1HkhtjyBEXmiJPt/uC+gSLpSktr3aZQ/0VgX7+K7KGzkVLs1GY0xbdNDi+EsISvg/sHQyHC0RtuZqzuY2HHlEIXQ7Y3qUb+76s4WTRPvx0wU7L9dzk0z1xrO3Z9mPfKC8HxGAKkCb0eDv8EVf4SH0TAa1PzQwobnXXFVx+J5A8LKVWBoslbdkmnOEvIjj50AV6ZqMNsl4nYRoCNiPIKKmoZpGsY5so98om2J4C3GJJpdu/znoVb2l7niRom0LtwjzTz7vfuTv0dvZqZsXcTNyUPfeXwW3XQV1PMi+agdVFIv3wtWHKZtnvpoHxnGNnuirVr1NWE4qqrnusRFA5DZZqhcwe7cHZ",
+    "iv_b64": "oKGio6Slpqeoqaqr",
+    "texto_cifrado_b64": "lXNRTCu/L8sHFvP+RD+OijniHFzT",
+    "tag_b64": "zL0M/wOWXBoy8vgPnXqW2A=="
+  }
+}

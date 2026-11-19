@@ -98,7 +98,7 @@ public static class Modulos
         services.AddSingleton<Trabajos.RedactorEnCola>();
         services.AddOptions<Trabajos.OpcionesRedaccion>()
             .Bind(configuration.GetSection(Trabajos.OpcionesRedaccion.Seccion))
-            .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesRedaccion.Seccion} tiene valores fuera de rango (Intervalo > 0, DuracionLease >= 30 s, MaxReintentos 0-5).")
+            .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesRedaccion.Seccion} tiene valores fuera de rango (Intervalo > 0, DuracionLease >= 30 s, MaxReintentos 0-5, EsperaReintento > 0).")
             .ValidateOnStart();
         if (configuration.GetValue($"{Trabajos.OpcionesRedaccion.Seccion}:{nameof(Trabajos.OpcionesRedaccion.Habilitado)}", false))
             services.AddHostedService<Trabajos.TrabajadorRedaccion>();

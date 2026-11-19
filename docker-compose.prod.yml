@@ -330,6 +330,14 @@ services:
       # >= 4,5 GB si M = 2048 MB. Al arrancar, core-api borra los temporales huérfanos de ahí.
       # Fuera del ancla a propósito: core-identity no empaqueta lotes.
       ConsolidadoLotes__DirectorioTemporal: /var/tmp/flit-lotes
+      # Entrega de la llave de IA a Diagnóstico (ADR-0091): pública RSA-3072 de Diagnóstico (base64 DER SPKI en una línea;
+      # NO es secreta) y su kid. La llave que se entrega cifrada es ANTHROPIC_API_KEY (bloque OCR / IA del ancla). Las
+      # «Siguiente» solo durante una rotación. Vacías ⇒ core-api no entrega llave y Diagnóstico sale con la plantilla.
+      # Fuera del ancla a propósito: core-identity no entrega llaves de IA.
+      Ai__Entrega__Diagnostico__Kid: ${AI_ENTREGA_DIAGNOSTICO_KID:-}
+      Ai__Entrega__Diagnostico__ClavePublica: ${AI_ENTREGA_DIAGNOSTICO_CLAVE_PUBLICA:-}
+      Ai__Entrega__Diagnostico__KidSiguiente: ${AI_ENTREGA_DIAGNOSTICO_KID_SIGUIENTE:-}
+      Ai__Entrega__Diagnostico__ClavePublicaSiguiente: ${AI_ENTREGA_DIAGNOSTICO_CLAVE_PUBLICA_SIGUIENTE:-}
     volumes:
       # HU #13378 — temporales del empaquetado de lotes (ver ConsolidadoLotes__DirectorioTemporal arriba).
       # El .pfx de Renting ya no se monta aquí: desde el corte (HU #13359) solo lo usa core-notificaciones.
@@ -346,6 +354,9 @@ services:
     # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
     # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
     mem_limit: ${CORE_API_MEM_LIMIT:-0}
+    # ADR-0091 (SP-18): sin volcados de memoria; uno tendría ANTHROPIC_API_KEY en claro.
+    ulimits:
+      core: 0
     cpus: ${CORE_API_CPUS:-0}
     oom_score_adj: ${CORE_API_OOM_SCORE_ADJ:-0}
     logging: *default-logging
@@ -576,6 +587,19 @@ services:
       # simulación no se declara aquí: QA y PDN nunca la encienden.
       Diagnostico__Consultas__Address: ${DIAGNOSTICO_CONSULTAS_ADDRESS:-}
       Diagnostico__Ambiente: ${DIAGNOSTICO_AMBIENTE:-}
+      # Redacción IA del dictamen (épica #12678): cola apagada por defecto. Encendida en DEV y QA; en PDN queda en false
+      # hasta que el PO decida por costo. Diagnóstico ya no tiene llave propia (ADR-0091): proveedor, modelo y llave salen
+      # de «Configuración de IA» de core-api por gRPC (el mismo Diagnostico__Tramites__Address), con la llave cifrada para
+      # la pública de Diagnóstico; aquí entra la privada que la descifra (base64 DER PKCS#8 en una línea), por variable
+      # como ANTHROPIC_API_KEY de core-api. Kid diag-<ambiente>-<aaaamm> (p. ej. diag-dev-202611). Kid/ClavePrivada actuales; Anterior solo durante una rotación. Sin privada
+      # arranca igual y el dictamen sale con la plantilla «sin análisis»: no rompe el deploy. ModelosPermitidos y
+      # MaxLlamadasPorMinuto no se declaran (defectos de la imagen).
+      Diagnostico__Redaccion__Habilitado: ${DIAGNOSTICO_REDACCION_HABILITADO:-false}
+      Diagnostico__Ia__Origen: ${DIAGNOSTICO_IA_ORIGEN:-plataforma}
+      Diagnostico__Ia__Kid: ${DIAGNOSTICO_IA_KID:-}
+      Diagnostico__Ia__ClavePrivada: ${DIAGNOSTICO_IA_CLAVE_PRIVADA:-}
+      Diagnostico__Ia__KidAnterior: ${DIAGNOSTICO_IA_KID_ANTERIOR:-}
+      Diagnostico__Ia__ClavePrivadaAnterior: ${DIAGNOSTICO_IA_CLAVE_PRIVADA_ANTERIOR:-}
       # Evidencias y PDF del informe (HU #13846) por el file-manager corporativo, las mismas variables que core-api y con el
       # mismo defecto (AWS pdn) para que ambos apunten siempre al mismo sitio, en su propia categoría. Sin URL no arranca.
       FILE_MANAGER_BASE_URL: ${FILE_MANAGER_BASE_URL:-https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/}
@@ -598,6 +622,9 @@ services:
       start_period: 40s
     restart: *restart
     mem_limit: ${CORE_DIAGNOSTICO_MEM_LIMIT:-0}
+    # ADR-0091 (SP-18): sin volcados de memoria; uno tendría la privada RSA y la llave de IA en claro.
+    ulimits:
+      core: 0
     cpus: ${CORE_DIAGNOSTICO_CPUS:-0}
     logging: *default-logging
 

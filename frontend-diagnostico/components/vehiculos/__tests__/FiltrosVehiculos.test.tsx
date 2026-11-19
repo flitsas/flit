@@ -50,7 +50,7 @@ describe("FiltrosVehiculos — AC21: controles con etiqueta visible", () => {
       "Saneado",
       "Saneamiento no procede",
     ]);
-    expect(opciones("Modo")).toEqual(["Todos", "Simple", "Con análisis IA"]);
+    expect(opciones("Modo")).toEqual(["Todos", "Simple", "Con análisis"]);
     expect(opciones("Trámite")).toEqual(["Todos", "Con trámite", "Sin trámite"]);
   });
 });

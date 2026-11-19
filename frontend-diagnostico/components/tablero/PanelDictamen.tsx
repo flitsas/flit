@@ -264,7 +264,11 @@ export function PanelDictamen({
             {dictamen.ajustado_en ? ` el ${fechaCorta(dictamen.ajustado_en)}` : null}
           </p>
         )}
-        {dictamen.estado_redaccion === "PENDIENTE" && <p className="text-sm text-flit-primary">redacción IA pendiente</p>}
+        {dictamen.estado_redaccion === "PENDIENTE" && (
+          <p className="text-sm text-flit-primary">
+            {dictamen.redaccion_en_cola ? "redacción IA pendiente" : "Sin análisis"}
+          </p>
+        )}
         <ol aria-label="Alertamientos del dictamen" className="flex flex-col gap-3">
           {dictamen.alertamientos.map((alerta, i) => (
             <li key={`${i}-${alerta.codigo}`} className="rounded-xl border border-border p-3">

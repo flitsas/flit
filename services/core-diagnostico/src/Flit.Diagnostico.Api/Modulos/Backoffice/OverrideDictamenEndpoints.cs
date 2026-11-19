@@ -10,6 +10,7 @@ using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Npgsql;
 
 namespace Flit.Diagnostico.Api.Modulos.Backoffice;
@@ -60,18 +61,19 @@ internal static partial class OverrideDictamenEndpoints
             .WithName("CorregirDictamenVehiculoBackoffice");
     }
 
-    private static async Task<IResult> Obtener(Guid id, Guid vid, HttpContext http, DiagnosticoDb db, CancellationToken ct)
+    private static async Task<IResult> Obtener(
+        Guid id, Guid vid, HttpContext http, DiagnosticoDb db, IOptions<Trabajos.OpcionesRedaccion> redaccion, CancellationToken ct)
     {
         var empresa = EmpresaExplicita.De(http);
         await ExigirLoteYVehiculoAsync(db, empresa, id, vid, ct).ConfigureAwait(false);
         var fila = await VigenteAsync(db, empresa, vid, seguir: false, ct).ConfigureAwait(false);
         var cambio = await ConsultaDictamen.CambioPropietarioAsync(db.DeLaEmpresa<VehiculoDiagnostico>(empresa), vid, ct).ConfigureAwait(false);
-        return Results.Ok(ConsultaDictamen.Backoffice(fila, cambio));
+        return Results.Ok(ConsultaDictamen.Backoffice(fila, cambio, redaccion.Value));
     }
 
     private static async Task<IResult> Reemplazar(
         Guid id, Guid vid, HttpContext http, JsonElement cuerpo, DiagnosticoDb db, UsuarioActual usuario, TimeProvider reloj,
-        IPlatformOutbox outbox, IProveedorRedactor proveedor, CancellationToken ct)
+        IPlatformOutbox outbox, IProveedorRedactor proveedor, IOptions<Trabajos.OpcionesRedaccion> redaccion, CancellationToken ct)
     {
         var pedido = LeerCuerpo(cuerpo);
         var empresa = EmpresaExplicita.De(http);
@@ -103,7 +105,7 @@ internal static partial class OverrideDictamenEndpoints
             // La configuración de redacción solo cuenta en el ajuste de solo veredicto (con alertamientos nace MANUAL/COMPLETADA).
             var suspendida = pedido.Alertamientos is null && (await db.DeLaEmpresa<ConfiguracionEmpresa>(empresa)
                 .Select(c => (bool?)c.RedaccionIaSuspendida).SingleOrDefaultAsync(ct).ConfigureAwait(false) ?? false);
-            var fila = NuevaFila(pedido, vigente, cabecera, autor, empresa, conTramite: tramite is not null, suspendida, proveedor.Configurado, ahora);
+            var fila = NuevaFila(pedido, vigente, cabecera, autor, empresa, conTramite: tramite is not null, suspendida, EmisorDictamen.RedaccionActivaCon(proveedor.Configurado, redaccion.Value), ahora);
             db.Add(fila);
             DictamenEmitido.Encolar(outbox, cabecera, fila, esOverride: true);
             try
@@ -117,7 +119,7 @@ internal static partial class OverrideDictamenEndpoints
 
             await transaccion.CommitAsync(ct).ConfigureAwait(false);
             var cambio = await ConsultaDictamen.CambioPropietarioAsync(db.DeLaEmpresa<VehiculoDiagnostico>(empresa), vid, ct).ConfigureAwait(false);
-            return ConsultaDictamen.Backoffice(fila, cambio);
+            return ConsultaDictamen.Backoffice(fila, cambio, redaccion.Value);
         }).ConfigureAwait(false);
         return Results.Ok(dto);
     }

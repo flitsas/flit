@@ -4,7 +4,7 @@ flowchart TD
     C -- "No" --> D["Error: las demás fuentes de ese vehículo\nesperan al RUNT y no se consultan"]
     C -- "Sí" --> E["En paralelo: SIMIT, RUNT y SIMIT de las personas,\navalúo e impuesto, según el alcance"]
     E --> F["Cada celda del semáforo termina en\nEjecutado, Con deuda, Novedad o Error"]
-    F --> G{"¿Modo Con Análisis IA?"}
+    F --> G{"¿Modo Con análisis?"}
     G -- "No (Simple)" --> H["Vehículo terminado: PDF\ny «Crear trámite» con el tipo que elijas"]
     G -- "Sí" --> I["El motor de reglas emite el dictamen:\nViable o Bloqueado"]
     I --> J["La IA redacta la explicación\n(si no responde, sale con plantilla)"]

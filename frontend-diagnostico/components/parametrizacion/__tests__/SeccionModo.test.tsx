@@ -21,10 +21,10 @@ function montar(props: Partial<SeccionModoProps> = {}) {
 }
 
 describe("SeccionModo — exclusión de opciones (AC 4)", () => {
-  it("Simple y Con Análisis IA son dos opciones excluyentes", () => {
+  it("Simple y Con análisis son dos opciones excluyentes", () => {
     const { onModo, rerender } = montar();
     const simple = screen.getByRole("radio", { name: "Simple" });
-    const ia = screen.getByRole("radio", { name: "Con Análisis IA" });
+    const ia = screen.getByRole("radio", { name: "Con análisis" });
     expect(simple).toBeChecked();
     expect(ia).not.toBeChecked();
     expect(simple).toHaveAttribute("name", ia.getAttribute("name"));
@@ -34,7 +34,7 @@ describe("SeccionModo — exclusión de opciones (AC 4)", () => {
 
     rerender({ modo: "CON_ANALISIS" });
     expect(screen.getByRole("radio", { name: "Simple" })).not.toBeChecked();
-    expect(screen.getByRole("radio", { name: "Con Análisis IA" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Con análisis" })).toBeChecked();
   });
 
   it("en Simple no se pide el tipo de trámite", () => {
@@ -42,7 +42,7 @@ describe("SeccionModo — exclusión de opciones (AC 4)", () => {
     expect(screen.queryByRole("combobox", { name: /tipo de trámite/i })).toBeNull();
   });
 
-  it("en Con Análisis IA el combobox es obligatorio y trae los tipos de GET /tipos-tramite", () => {
+  it("en Con análisis el combobox es obligatorio y trae los tipos de GET /tipos-tramite", () => {
     const { onTipo } = montar({ modo: "CON_ANALISIS" });
     const combo = screen.getByRole("combobox", { name: /tipo de trámite/i });
     expect(combo).toBeRequired();

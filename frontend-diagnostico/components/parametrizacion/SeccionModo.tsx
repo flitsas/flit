@@ -26,7 +26,7 @@ export interface SeccionModoProps {
 
 const MODOS: ReadonlyArray<{ valor: ModoDiagnostico; nombre: string }> = [
   { valor: "SIMPLE", nombre: "Simple" },
-  { valor: "CON_ANALISIS", nombre: "Con Análisis IA" },
+  { valor: "CON_ANALISIS", nombre: "Con análisis" },
 ];
 
 /**
@@ -59,7 +59,7 @@ export function SeccionModo({
           <Titulo className={compacta ? ETIQUETA_CLS : "text-lg font-semibold text-flit-primary"}>Modo</Titulo>
         </legend>
         {!compacta && (
-          <p className={AYUDA_CLS}>Simple consulta las fuentes y entrega el consolidado. Con Análisis IA suma el dictamen para un tipo de trámite.</p>
+          <p className={AYUDA_CLS}>Simple consulta las fuentes y entrega el consolidado. Con análisis suma el dictamen para un tipo de trámite.</p>
         )}
         <div className="grid gap-2 sm:grid-cols-2">
           {MODOS.map((m) => (

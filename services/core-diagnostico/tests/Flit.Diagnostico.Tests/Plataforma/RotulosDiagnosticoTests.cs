@@ -32,6 +32,14 @@ public sealed class RotulosDiagnosticoTests
 {
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
+    /// <summary>HU-3 (decisión del usuario 2026-11-18): literales exactos del rótulo del dictamen en el PDF.</summary>
+    [Fact]
+    public void HU3_rotulos_del_dictamen_pendiente_son_literales_exactos()
+    {
+        RotulosDiagnostico.SinAnalisis.Should().Be("Sin análisis");
+        RotulosDiagnostico.AnalisisEnPreparacion.Should().Be("Análisis en preparación");
+    }
+
     // ---- AC5: cobertura de todos los códigos ----
 
     [Fact]

@@ -2,7 +2,7 @@ flowchart TD
     A["Inicio de Diagnóstico"] --> B{"¿Cuántos vehículos?"}
     B -- "Uno" --> C["Express: escribe la placa o el VIN\ny pulsa «Diagnosticar en línea»"]
     B -- "Muchos" --> D["Masivo: «Nuevo diagnóstico masivo»"]
-    C --> E["Parámetros: nombre, alcance\ny modo Simple o Con Análisis IA"]
+    C --> E["Parámetros: nombre, alcance\ny modo Simple o Con análisis"]
     D --> F["Parámetros y archivo .xlsx o .csv;\npulsa «Validar archivo»"]
     F --> G{"¿Hay filas con error?"}
     G -- "Sí" --> H["Corrige las filas o continúa\nsolo con los válidos"]

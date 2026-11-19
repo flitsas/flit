@@ -50,7 +50,7 @@ describe("ListadoDiagnosticos — AC1: tabla con las columnas y la fila abre el 
     const fila = within(t).getByRole("row", { name: /Flota de prueba 001/ });
     expect(within(fila).getByText("0192F0A1")).toBeInTheDocument();
     expect(within(fila).getByText("22/10/2026 09:00")).toBeInTheDocument();
-    expect(within(fila).getByText("Con Análisis IA")).toBeInTheDocument();
+    expect(within(fila).getByText("Con análisis")).toBeInTheDocument();
     expect(within(fila).getByText("TRASPASO")).toBeInTheDocument();
     expect(within(fila).getByText("En proceso")).toBeInTheDocument();
     expect(within(fila).getByText("Ana Prueba")).toBeInTheDocument();
@@ -76,7 +76,7 @@ describe("ListadoDiagnosticos — AC1: tabla con las columnas y la fila abre el 
 
     const express = within(t).getByRole("row", { name: /Express TST001/ });
     expect(within(express).getAllByRole("cell")[iModalidad]).toHaveTextContent(/^Express$/);
-    expect(within(express).getAllByRole("cell")[iTipo]).toHaveTextContent("Con Análisis IA");
+    expect(within(express).getAllByRole("cell")[iTipo]).toHaveTextContent("Con análisis");
     const masivo = within(t).getByRole("row", { name: /Flota de prueba 002/ });
     expect(within(masivo).getAllByRole("cell")[iModalidad]).toHaveTextContent(/^Masivo$/);
     expect(within(masivo).getAllByRole("cell")[iTipo]).toHaveTextContent("Diagnóstico Simple");
@@ -220,7 +220,7 @@ describe("ListadoDiagnosticos — AC4: creador «No disponible»", () => {
     const celdas = within(fila).getAllByRole("cell");
     expect(celdas).toHaveLength(8);
     expect(celdas[7]).toHaveTextContent("No disponible");
-    for (const texto of ["0192F0A1", "Flota de prueba 001", "22/10/2026 09:00", "Masivo", "Con Análisis IA", "TRASPASO", "En proceso"])
+    for (const texto of ["0192F0A1", "Flota de prueba 001", "22/10/2026 09:00", "Masivo", "Con análisis", "TRASPASO", "En proceso"])
       expect(within(fila).getByText(texto)).toBeInTheDocument();
   });
 });
@@ -334,14 +334,14 @@ describe("ListadoDiagnosticos — AC14 (HU #14562): un estado de URL que el API 
 });
 
 describe("ListadoDiagnosticos — rediseño del kit 2026 (HU #14562 AC13)", () => {
-  it("el tipo es un SelectorSegmentado Todos/Simple/Con Análisis IA que reescribe la URL", async () => {
+  it("el tipo es un SelectorSegmentado Todos/Simple/Con análisis que reescribe la URL", async () => {
     simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
     render(<ListadoDiagnosticos />);
     await tabla();
     const tipo = screen.getByRole("radiogroup", { name: "Tipo" });
-    expect(within(tipo).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Todos", "Simple", "Con Análisis IA"]);
+    expect(within(tipo).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Todos", "Simple", "Con análisis"]);
     expect(within(tipo).getByRole("radio", { name: "Todos" })).toHaveAttribute("aria-checked", "true");
-    fireEvent.click(within(tipo).getByRole("radio", { name: "Con Análisis IA" }));
+    fireEvent.click(within(tipo).getByRole("radio", { name: "Con análisis" }));
     expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?modo=CON_ANALISIS", { scroll: false });
     fireEvent.click(within(tipo).getByRole("radio", { name: "Todos" }));
     expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos", { scroll: false });

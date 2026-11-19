@@ -39,6 +39,11 @@ export interface Dictamen {
   version: number;
   veredicto: "VIABLE" | "BLOQUEADO";
   estado_redaccion: "PENDIENTE" | "COMPLETADA";
+  /**
+   * Contrato 1.6.1: true solo si estado_redaccion es PENDIENTE y la redacción está de verdad en cola. Con PENDIENTE y
+   * false, el texto estándar es el definitivo (nunca se redactará).
+   */
+  redaccion_en_cola: boolean;
   alertamientos: AlertaDictamen[];
   catalogo_version: number;
   creado_en: string;

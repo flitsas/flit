@@ -52,6 +52,10 @@ public sealed record ContenidoReporteVehiculo(
             claves["dictamen/veredicto"] = dictamen.Veredicto;
             claves["dictamen/estado"] = dictamen.Estado;
             claves["dictamen/texto"] = dictamen.Texto;
+            // HU-3: el aviso del PDF pendiente depende de la cola; la clave solo existe con PENDIENTE, así que salir de la cola
+            // invalida el PDF y los PDF de dictámenes completados conservan su huella (sin subir VersionPlantilla).
+            if (dictamen.Estado == DictamenEnHuella.Pendiente)
+                claves["dictamen/en_cola"] = dictamen.EnCola ? "true" : "false";
             // HU #14563 AC32: la marca «ajustado por FLIT» y la versión del dictamen entran en la huella solo si hay ajuste, así
             // que los PDF de dictámenes no ajustados conservan su huella.
             if (dictamen.AjustadoEn is { } ajustado)
@@ -78,7 +82,15 @@ public sealed record ContenidoReporteVehiculo(
 /// Lo que la huella toma del dictamen vigente: veredicto, estado y los textos, en ese orden. <see cref="AjustadoEn"/> (HU #14563,
 /// D6) es la fecha del ajuste FLIT (null si no hay); con él la huella suma la marca y <see cref="Version"/>.
 /// </summary>
-public sealed record DictamenEnHuella(string Veredicto, string Estado, string Texto, int Version = 0, DateTimeOffset? AjustadoEn = null);
+/// <param name="EnCola">
+/// HU-3: el dictamen sigue en la cola de redacción (<c>redaccion_en_cola</c>). Solo cuenta con <c>PENDIENTE</c>: decide el aviso del
+/// PDF («Análisis en preparación» o «Sin análisis») y entra en la huella como <c>dictamen/en_cola</c>.
+/// </param>
+public sealed record DictamenEnHuella(string Veredicto, string Estado, string Texto, int Version = 0, DateTimeOffset? AjustadoEn = null, bool EnCola = false)
+{
+    /// <summary>Estado de redacción que lleva aviso en el PDF.</summary>
+    public const string Pendiente = "PENDIENTE";
+}
 
 /// <summary>
 /// Encabezado del reporte de un vehículo (F07-C1/C2): ID del diagnóstico, nombre del lote, empresa (claim <c>company_name</c>

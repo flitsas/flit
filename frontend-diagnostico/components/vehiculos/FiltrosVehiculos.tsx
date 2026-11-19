@@ -53,7 +53,7 @@ const DICTAMENES: readonly { valor: VeredictoFiltro; texto: string }[] = [
 ];
 const MODOS_FILTRO: readonly { valor: ModoDiagnostico; texto: string }[] = [
   { valor: "SIMPLE", texto: "Simple" },
-  { valor: "CON_ANALISIS", texto: "Con análisis IA" },
+  { valor: "CON_ANALISIS", texto: "Con análisis" },
 ];
 
 /** Un solo select para «con / sin» y los cuatro estados (D-10): un estado implica «con saneamiento». */

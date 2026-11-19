@@ -13,3 +13,7 @@ docs
 agent-templates
 scripts
 infra
+# ADR-0091: material del par RSA de la llave de IA de Diagnóstico.
+*.pem
+*.der
+*.p8
