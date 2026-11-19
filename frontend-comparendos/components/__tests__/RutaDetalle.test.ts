@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { escapeVuelve, nombreOrigen, rutaDetalle, volverSeguro } from "@/components/detalle/ruta";
+import { escapeVuelve, hayCapaAbierta, nombreOrigen, rutaDetalle, volverSeguro } from "@/components/detalle/ruta";
 
 describe("ruta del detalle y «volver» (rediseño S1)", () => {
   it("arma la ruta con sección y origen", () => {
@@ -23,15 +23,33 @@ describe("ruta del detalle y «volver» (rediseño S1)", () => {
     expect(nombreOrigen("/otra")).toBe("Volver");
   });
 
-  it("Escape vuelve, salvo con un diálogo abierto o escribiendo", () => {
-    const sinDialogo = { querySelector: () => null };
-    const conDialogo = { querySelector: () => ({}) as Element };
+  it("Escape vuelve solo sin capa abierta al pulsarlo y sin estar escribiendo", () => {
     const div = document.createElement("div");
-    const input = document.createElement("textarea");
-    expect(escapeVuelve({ key: "Escape", defaultPrevented: false, target: div }, sinDialogo)).toBe(true);
-    expect(escapeVuelve({ key: "Escape", defaultPrevented: false, target: div }, conDialogo)).toBe(false);
-    expect(escapeVuelve({ key: "Escape", defaultPrevented: false, target: input }, sinDialogo)).toBe(false);
-    expect(escapeVuelve({ key: "Escape", defaultPrevented: true, target: div }, sinDialogo)).toBe(false);
-    expect(escapeVuelve({ key: "Enter", defaultPrevented: false, target: div }, sinDialogo)).toBe(false);
+    const campo = document.createElement("textarea");
+    expect(escapeVuelve({ key: "Escape", defaultPrevented: false, target: div }, false)).toBe(true);
+    expect(escapeVuelve({ key: "Escape", defaultPrevented: false, target: div }, true)).toBe(false);
+    expect(escapeVuelve({ key: "Escape", defaultPrevented: false, target: campo }, false)).toBe(false);
+    expect(escapeVuelve({ key: "Escape", defaultPrevented: true, target: div }, false)).toBe(false);
+    expect(escapeVuelve({ key: "Enter", defaultPrevented: false, target: div }, false)).toBe(false);
+  });
+
+  it("reconoce como capa los diálogos, menús, la cuenta, los productos y el grupo abierto del dock", () => {
+    const capas = [
+      '<div role="dialog"></div>',
+      '<div role="alertdialog"></div>',
+      '<ul role="menu"></ul>',
+      '<ul role="listbox"></ul>',
+      '<div id="flit-suite-account" role="region"></div>',
+      '<div id="flit-suite-products" role="region"></div>',
+      '<nav aria-label="Navegación principal"><button aria-expanded="true"></button></nav>',
+    ];
+    for (const html of capas) {
+      document.body.innerHTML = html;
+      expect(hayCapaAbierta(document)).toBe(true);
+    }
+    // Una tarjeta plegable abierta del contenido o el dock cerrado no son capas.
+    document.body.innerHTML = '<main><button aria-expanded="true"></button></main><nav aria-label="Navegación principal"><button aria-expanded="false"></button></nav>';
+    expect(hayCapaAbierta(document)).toBe(false);
+    document.body.innerHTML = "";
   });
 });

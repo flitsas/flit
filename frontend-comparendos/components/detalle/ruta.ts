@@ -43,10 +43,25 @@ export function nombreOrigen(volver: string): string {
   return ORIGENES.find(([re]) => re.test(volver))?.[1] ?? "Volver";
 }
 
-/** Escape vuelve, salvo con un diálogo abierto (cierra él su capa) o escribiendo en un campo. */
-export function escapeVuelve(e: Pick<KeyboardEvent, "key" | "defaultPrevented" | "target">, doc: Pick<Document, "querySelector">): boolean {
-  if (e.key !== "Escape" || e.defaultPrevented) return false;
-  if (doc.querySelector('[role="dialog"], [role="alertdialog"], [role="menu"]')) return false;
+/**
+ * Capas que atienden Escape antes que la página: diálogos del kit (Modal, PanelLateral, la hoja del dock en celular),
+ * menús, los menús de cuenta y productos de la barra y el grupo abierto del dock.
+ */
+export const SELECTOR_CAPAS =
+  '[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], #flit-suite-account, #flit-suite-products, ' +
+  'nav[aria-label="Navegación principal"] [aria-expanded="true"]';
+
+/** ¿Hay una capa abierta? Se pregunta en la fase de CAPTURA, antes de que la capa se cierre con ese mismo Escape. */
+export function hayCapaAbierta(doc: Pick<Document, "querySelector">): boolean {
+  return doc.querySelector(SELECTOR_CAPAS) !== null;
+}
+
+/**
+ * Escape vuelve solo si al pulsarlo no había ninguna capa abierta (la capa se cierra sola y la página se queda) y no se
+ * está escribiendo en un campo. `habiaCapa` se mide en la captura: en el burbujeo la capa ya puede haberse desmontado.
+ */
+export function escapeVuelve(e: Pick<KeyboardEvent, "key" | "defaultPrevented" | "target">, habiaCapa: boolean): boolean {
+  if (e.key !== "Escape" || e.defaultPrevented || habiaCapa) return false;
   const t = e.target as HTMLElement | null;
   const etiqueta = t?.tagName;
   if (etiqueta === "INPUT" || etiqueta === "TEXTAREA" || etiqueta === "SELECT" || t?.isContentEditable) return false;

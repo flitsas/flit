@@ -498,7 +498,7 @@ function TarjetaContexto({ titulo, children, accion, onIr }: { titulo: string; c
   );
 }
 
-function TarjetasContexto({ d, onIr, onPestana }: { d: Detalle; onIr: (s: SeccionDetalle) => void; onPestana: (p: PestanaDetalle) => void }) {
+function TarjetasContexto({ d, soloLectura, onIr, onPestana }: { d: Detalle; soloLectura: boolean; onIr: (s: SeccionDetalle) => void; onPestana: (p: PestanaDetalle) => void }) {
   const k = d.contraventor;
   const tipoVehiculo = [d.vehiculo.tipoVehiculo, d.vehiculo.servicioVehiculo].filter(Boolean).join(" · ");
   return (
@@ -517,7 +517,7 @@ function TarjetasContexto({ d, onIr, onPestana }: { d: Detalle; onIr: (s: Seccio
           <span className="text-muted-foreground">{[d.organismo.municipio, d.organismo.departamento].filter(Boolean).join(", ")}</span>
         )}
       </TarjetaContexto>
-      <TarjetaContexto titulo="Contraventor" accion={k ? "Ver el contraventor" : "Asignar o consultar"} onIr={() => onIr("contraventor")}>
+      <TarjetaContexto titulo="Contraventor" accion={k || soloLectura ? "Ver el contraventor" : "Asignar o consultar"} onIr={() => onIr("contraventor")}>
         {k ? (
           <>
             <span className="break-words font-semibold">{k.nombres}</span>
@@ -646,7 +646,7 @@ export function ContenidoDetalle({
   return (
     <div className="flex flex-col gap-4">
       <Cabecera d={d} acciones={acciones} />
-      <TarjetasContexto d={d} onIr={ir} onPestana={irAPestana} />
+      <TarjetasContexto d={d} soloLectura={soloLectura} onIr={ir} onPestana={irAPestana} />
 
       <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
         <section aria-labelledby="detalle-titulo-timeline" className={`${TARJETA_CLS} flex min-w-0 flex-col gap-3 p-4`} data-testid="detalle-timeline">
