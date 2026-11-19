@@ -44,7 +44,7 @@ public static class AdminResetPasswordEmailTemplate
         var name = System.Net.WebUtility.HtmlEncode(nameRaw);
         var password = System.Net.WebUtility.HtmlEncode(temporaryPassword);
         var body =
-            FlitBrandedEmailLayout.ParagraphHtml($"Hola {name},")
+            FlitBrandedEmailLayout.Greeting(name, theme)
             + FlitBrandedEmailLayout.Paragraph(
                 $"Un administrador restableció tu contraseña en {FlitBrandedEmailLayout.PlatformName(theme)}. Tu contraseña temporal es:")
             + FlitBrandedEmailLayout.ParagraphHtml(

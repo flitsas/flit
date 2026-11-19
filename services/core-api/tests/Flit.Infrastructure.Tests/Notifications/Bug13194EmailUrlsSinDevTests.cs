@@ -16,7 +16,7 @@ namespace Flit.Infrastructure.Tests.Notifications;
 /// Uso de ejemplo:
 /// <code>
 /// var url = TramiteCambioEstadoEmailComposer.ResolveLogoUrl(options.BaseUrl);
-/// // https://qa.flitsas.online/email-assets/flit-logo.png
+/// // https://qa.flitsas.online/email-assets/flit-logo-firma.png
 /// </code>
 /// </para>
 /// </summary>
@@ -30,7 +30,7 @@ public sealed class Bug13194EmailUrlsSinDevTests
     public void TramiteCambioEstado_usa_la_base_de_las_options_y_sin_base_no_cae_a_dev()
     {
         TramiteCambioEstadoEmailComposer.ResolveLogoUrl(QaOptions.BaseUrl)
-            .Should().Be("https://qa.flitsas.online/email-assets/flit-logo.png");
+            .Should().Be("https://qa.flitsas.online/email-assets/flit-logo-firma.png");
         TramiteCambioEstadoEmailComposer.ResolveHeaderUrl(QaOptions.BaseUrl)
             .Should().StartWith("https://qa.flitsas.online/email-assets/");
 

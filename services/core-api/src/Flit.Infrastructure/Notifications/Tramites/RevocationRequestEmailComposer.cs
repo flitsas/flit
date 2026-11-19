@@ -43,18 +43,11 @@ public sealed record RevocationRequestEmailModel(
 /// </summary>
 public static class RevocationRequestEmailComposer
 {
-    private const string PrimaryBlue = "#2F6FED";
-    private const string Ink = "#162244";
-    private const string ApprovedGreen = "#2E7D32";
-    private const string RejectedRed = "#C62828";
-    private const string InfoAmber = "#8A6D00";
     private const string RentingInk = "#1A1A1A";
     private const string RentingMuted = "#4A4A4A";
     private const string RentingLink = "#2F5BEA";
     private const string PqrsUrl = "https://usadosrentingcolombia.com";
     private const string RentingSupportEmail = "servicio@rentingcolombia.com";
-    private const string PrivacyPolicyUrl = "https://flitsas.com.co/privacy-policy/";
-    private const string SupportEmail = "soporte@flitsas.com";
 
     /// <param name="theme">HU #12428 AC1/AC2/AC9 — igual convención que
     /// <c>AsignacionPlacaEmailComposer.ComposeFlit</c>: aditivo, <c>Flit</c>/<c>null</c> preserva
@@ -116,53 +109,34 @@ public static class RevocationRequestEmailComposer
     private static string BuildSubject(MilestoneCopy copy, string radicado) =>
         $"[FLIT] {copy.SubjectPrefix} — {radicado}";
 
+    /// <summary>
+    /// Correos 2.0 — variante FLIT sobre <see cref="FlitEmailLayout"/>: título en el azul único del
+    /// layout (el hito se lee en el propio título); radicado, placa y motivo en la tarjeta.
+    /// </summary>
     private static string BuildFlitHtml(
         MilestoneCopy copy, RevocationRequestEmailModel model, string assetsBaseUrl)
     {
-        var destinatario = Enc(model.DestinatarioNombre);
-        var placa = Enc(model.Placa);
-        var radicado = Enc(model.Radicado);
-        var headerUrl = EncAttr(TramiteCambioEstadoEmailComposer.ResolveHeaderUrl(assetsBaseUrl));
-        var logoUrl = EncAttr(TramiteCambioEstadoEmailComposer.ResolveLogoUrl(assetsBaseUrl));
-
-        var sb = new StringBuilder();
-        sb.Append("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"/></head>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<body style=\"margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:{Ink};\">");
-        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:640px;margin:0 auto;background:#ffffff;\">");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<tr><td style=\"padding:0;\"><img src=\"{headerUrl}\" alt=\"FLIT Version 2.0\" width=\"640\" style=\"display:block;width:100%;max-width:640px;height:auto;border:0;\"/></td></tr>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<tr><td style=\"padding:28px 28px 8px;text-align:center;\"><h1 style=\"margin:0;font-size:20px;letter-spacing:0.02em;color:{copy.AccentColor};\">{Enc(copy.Heading)}</h1></td></tr>");
-        sb.Append("<tr><td style=\"padding:16px 28px 8px;font-size:14px;line-height:1.55;\">");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 12px;\">Estimado/a Señor/a <strong style=\"color:{PrimaryBlue};\">{destinatario}</strong>.</p>");
-        sb.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0 0 16px;\">{copy.IntroHtml}</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Radicado:</strong> {radicado}</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 16px;\"><strong style=\"color:{PrimaryBlue};\">Placa del Vehículo:</strong> {placa}</p>");
-        if (!string.IsNullOrWhiteSpace(model.Motivo) && copy.ShowMotivo)
+        var filas = new List<(string, string)>
         {
-            sb.Append(CultureInfo.InvariantCulture,
-                $"<p style=\"margin:0 0 16px;\"><strong style=\"color:{PrimaryBlue};\">Motivo:</strong> {EncMultiline(model.Motivo)}</p>");
-        }
-        sb.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0 0 20px;\">{copy.CierreHtml}</p>");
-        sb.Append("<p style=\"margin:0 0 8px;\">Cordialmente,</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<img src=\"{logoUrl}\" alt=\"flit\" width=\"96\" style=\"display:block;border:0;margin:0 0 24px;\"/>");
-        sb.Append("</td></tr>");
-        sb.Append("<tr><td style=\"padding:0 28px 28px;\">");
-        sb.Append("<hr style=\"border:none;border-top:1px solid #E5EAF2;margin:0 0 16px;\"/>");
-        sb.Append("<p style=\"margin:0 0 12px;font-size:12px;line-height:1.5;color:#6B778C;text-align:center;\">");
-        sb.Append("Si tienes alguna pregunta o necesitas ayuda, no dudes en ponerte en contacto con nosotros. ");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"Puedes hacerlo a través de <strong>{Enc(SupportEmail)}</strong> o nuestro <strong>chat online</strong>.");
-        sb.Append("</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0;text-align:center;\"><a href=\"{EncAttr(PrivacyPolicyUrl)}\" style=\"color:{PrimaryBlue};font-size:12px;text-decoration:underline;\">POLÍTICA DE PRIVACIDAD</a></p>");
-        sb.Append("</td></tr></table></body></html>");
-        return sb.ToString();
+            ("Radicado:", Enc(model.Radicado)),
+            ("Placa del Vehículo:", Enc(model.Placa)),
+        };
+        if (!string.IsNullOrWhiteSpace(model.Motivo) && copy.ShowMotivo)
+            filas.Add(("Motivo:", EncMultiline(model.Motivo)));
+
+        var cuerpo = new StringBuilder();
+        cuerpo.Append(FlitEmailLayout.Parrafo(
+            $"Estimado/a Señor/a {FlitEmailLayout.Destacado(Enc(model.DestinatarioNombre))}."));
+        cuerpo.Append(FlitEmailLayout.Parrafo(copy.IntroHtml, margen: "0 0 20px"));
+        cuerpo.Append(FlitEmailLayout.TarjetaDetalle(null, filas));
+        cuerpo.Append(FlitEmailLayout.Parrafo(copy.CierreHtml, centrado: false));
+        cuerpo.Append(FlitEmailLayout.Parrafo("Cordialmente,", centrado: false, margen: "0"));
+
+        return FlitEmailLayout.Documento(
+            assetsBaseUrl,
+            FlitEmailLayout.Titulo(copy.Heading),
+            cuerpo.ToString(),
+            FlitEmailLayout.PieFlit(assetsBaseUrl, FlitEmailLayout.SoporteEstandarHtml, politicaPrivacidad: true));
     }
 
     private static string BuildRentingHtml(
@@ -219,7 +193,7 @@ public static class RevocationRequestEmailComposer
     /// <param name="CierreBrandHtml">Cierre para el chrome de marca (HU #12428): sin la mención
     /// literal a FLIT, porque el remitente visual es la marca de la red.</param>
     private sealed record MilestoneCopy(
-        string SubjectPrefix, string Heading, string AccentColor, string IntroHtml, string CierreHtml, bool ShowMotivo,
+        string SubjectPrefix, string Heading, string IntroHtml, string CierreHtml, bool ShowMotivo,
         string CierreBrandHtml);
 
     private const string CierreBrandGenerico =
@@ -230,7 +204,6 @@ public static class RevocationRequestEmailComposer
         RevocationRequestEmailMilestone.Solicitada => new MilestoneCopy(
             SubjectPrefix: "Hemos recibido tu solicitud de revocatoria",
             Heading: "¡SOLICITUD DE REVOCATORIA RECIBIDA!",
-            AccentColor: InfoAmber,
             IntroHtml: "Hemos recibido tu solicitud de revocatoria del trámite. El organismo de tránsito la revisará y te avisaremos por este medio en cuanto haya una decisión.",
             CierreHtml: "En FLIT, nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.",
             ShowMotivo: false,
@@ -238,7 +211,6 @@ public static class RevocationRequestEmailComposer
         RevocationRequestEmailMilestone.Aprobada => new MilestoneCopy(
             SubjectPrefix: "Tu solicitud de revocatoria fue aprobada",
             Heading: "¡SOLICITUD DE REVOCATORIA APROBADA!",
-            AccentColor: ApprovedGreen,
             IntroHtml: "El organismo de tránsito aprobó tu solicitud de revocatoria. El trámite quedó en estado <strong>Revocado</strong>.",
             CierreHtml: "En FLIT, nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.",
             ShowMotivo: false,
@@ -246,7 +218,6 @@ public static class RevocationRequestEmailComposer
         RevocationRequestEmailMilestone.Rechazada => new MilestoneCopy(
             SubjectPrefix: "Tu solicitud de revocatoria fue rechazada",
             Heading: "SOLICITUD DE REVOCATORIA RECHAZADA",
-            AccentColor: RejectedRed,
             IntroHtml: "El organismo de tránsito rechazó tu solicitud de revocatoria. El trámite permanece sin cambios en su estado actual.",
             CierreHtml: "Puedes radicar un nuevo intento de revocatoria cuando corrijas el motivo indicado abajo.",
             ShowMotivo: true,

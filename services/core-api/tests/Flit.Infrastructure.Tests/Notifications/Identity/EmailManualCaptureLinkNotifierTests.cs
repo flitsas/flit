@@ -70,18 +70,18 @@ public sealed class EmailManualCaptureLinkNotifierTests
         await Notifier().NotifyAsync(Link(), Ct);
 
         var html = WebUtility.HtmlDecode(enviado!.HtmlBody);
-        html.Should().Contain("Hola Ana Perez.")
-            .And.Contain("Verifica tu identidad")
+        Flit.Tests.Shared.EmailCopyGolden.VisibleText(enviado.HtmlBody).Should().Contain("Hola Ana Perez.");
+        html.Should().Contain("Verifica tu identidad")
             .And.Contain("Verificación de identidad")
             .And.Contain("FLIT 2.0</strong> necesita confirmar tu identidad para continuar y es quien guarda tus datos.")
             .And.Contain("Solicitado por")
             .And.Contain("PASOS DE LA VERIFICACIÓN")
             .And.Contain("Valida tus datos").And.Contain("Realiza la validación biométrica")
             .And.Contain("Captura los datos del documento").And.Contain("Firma")
-            .And.Contain("Verificar mi identidad").And.Contain("#557EFF")
+            .And.Contain("Verificar mi identidad").And.Contain("#1D53FF")
             .And.Contain("Si el botón no funciona, copia este enlace:")
             .And.Contain("El enlace es personal, de un solo uso y caduca en 24 horas. Ábrelo en tu celular.")
-            .And.Contain("https://app.flit.example/email-assets/flit-logo.png");
+            .And.Contain("https://app.flit.example/email-assets/flit-logo-firma.png");
         html.Should().NotContainEquivalentOf("kyverum");
         enviado.Subject.Should().NotContainEquivalentOf("kyverum");
     }

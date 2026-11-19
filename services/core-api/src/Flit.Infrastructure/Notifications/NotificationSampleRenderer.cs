@@ -42,8 +42,8 @@ public static class NotificationSampleRenderer
             "security.forgot-password" => ToTuple(SecurityEmailPreviewSample.BuildForgotPassword(assetsBaseUrl: baseUrl, theme: effectiveTheme)),
             "security.admin-reset-password" => ToTuple(SecurityEmailPreviewSample.BuildAdminResetPassword(baseUrl, effectiveTheme)),
             "security.welcome-registration" => ToTuple(SecurityEmailPreviewSample.BuildWelcomeRegistration(baseUrl, effectiveTheme)),
-            "analytics.scheduled-report" => AnalyticsEmailPreviewSample.BuildScheduledReport(effectiveTheme),
-            "analytics.alert" => AnalyticsEmailPreviewSample.BuildAlert(effectiveTheme),
+            "analytics.scheduled-report" => AnalyticsEmailPreviewSample.BuildScheduledReport(effectiveTheme, baseUrl),
+            "analytics.alert" => AnalyticsEmailPreviewSample.BuildAlert(effectiveTheme, baseUrl),
             TramiteCambioEstadoEmailComposer.TemplateIdAprobado => ComposeTramiteCambio(
                 TramiteEmailPreviewSample.SampleAprobado, channel, baseUrl, procedureType, effectiveTheme),
             TramiteCambioEstadoEmailComposer.TemplateIdRechazado => ComposeTramiteCambio(

@@ -54,7 +54,7 @@ public static class WelcomeRegistrationEmailTemplate
             FlitBrandedEmailLayout.Paragraph("Nos alegra que estés aquí.")
             + FlitBrandedEmailLayout.Paragraph(
                 "Para ingresar a tu cuenta haz clic en el siguiente enlace:")
-            + FlitBrandedEmailLayout.ActionLink(url, display, FlitBrandedEmailLayout.BrandLinkColor(theme));
+            + FlitBrandedEmailLayout.UrlLink(url, display, theme);
 
         var html = FlitBrandedEmailLayout.Wrap(
             headline: "¡GRACIAS POR REGISTRARTE!",

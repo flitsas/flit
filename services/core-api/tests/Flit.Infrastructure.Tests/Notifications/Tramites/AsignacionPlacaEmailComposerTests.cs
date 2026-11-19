@@ -23,8 +23,8 @@ public class AsignacionPlacaEmailComposerTests
             Sample, AsignacionPlacaEmailPreviewSample.DefaultAssetsBaseUrl);
 
         subject.Should().Contain("ABC123").And.Contain("Asignado").And.Contain("[FLIT]");
-        html.Should().Contain("tramite-cambio-estado-header.png");
-        html.Should().Contain("flit-logo.png");
+        html.Should().Contain("flit-banner-correo.png");
+        html.Should().Contain("flit-logo-firma.png");
         html.Should().Contain("Juan Carlos P&#233;rez G&#243;mez");
         html.Should().Contain("ABC123");
         html.Should().Contain("Estado Actual:");
@@ -51,8 +51,8 @@ public class AsignacionPlacaEmailComposerTests
         html.Should().Contain("3508285539");
         html.Should().Contain("servicio@rentingcolombia.com");
         html.Should().Contain("dejanos-tus-comentarios-te-asesoramos");
-        html.Should().NotContain("flit-logo.png");
-        html.Should().NotContain("tramite-cambio-estado-header.png");
+        html.Should().NotContain("flit-logo-firma.png");
+        html.Should().NotContain("flit-banner-correo.png");
         html.Should().NotContain("soporte@flitsas.com");
         html.Should().NotContain("alt=\"flit\"");
     }
@@ -76,8 +76,8 @@ public class AsignacionPlacaEmailComposerTests
         var renting = NotificationSampleRenderer.Render(
             AsignacionPlacaEmailComposer.TemplateId, NotificationChannel.TenantApi);
 
-        flit.Html.Should().Contain("flit-logo.png");
-        renting.Html.Should().NotContain("flit-logo.png");
+        flit.Html.Should().Contain("flit-logo-firma.png");
+        renting.Html.Should().NotContain("flit-logo-firma.png");
         renting.Html.Should().Contain("tramite-cambio-estado-renting-footer.png");
         flit.Html.Should().NotBe(renting.Html);
     }
@@ -122,9 +122,10 @@ public class AsignacionPlacaEmailComposerTests
             Sample, AsignacionPlacaEmailPreviewSample.DefaultAssetsBaseUrl);
 
         html.Should().Contain("<h1");
-        html.Should().Contain("ASIGNACIÓN DE PLACA");
-        html.Should().Contain("color:#2F6FED");
-        html.Should().Contain("Estado Actual:</strong> <span style=\"color:#2F6FED;font-weight:700;\">Asignado</span>");
+        System.Net.WebUtility.HtmlDecode(html).Should().Contain("ASIGNACIÓN DE PLACA");
+        // Correos 2.0 — el estado va en la tarjeta de detalle con el acento FLIT (#1D53FF).
+        html.Should().Contain("<span style=\"color:#1D53FF;font-weight:700;\">Asignado</span>");
+        Flit.Tests.Shared.EmailCopyGolden.VisibleText(html).Should().Contain("Estado Actual: Asignado");
     }
 
     [Fact]

@@ -1,0 +1,21 @@
+Asunto: [FLIT 2.0] Verifica tu identidad
+Verificación de identidad
+Verifica tu identidad
+Hola Ana María Pérez Gómez.
+FLIT 2.0 necesita confirmar tu identidad para continuar y es quien guarda tus datos.
+Solicitado por
+FLIT 2.0
+PASOS DE LA VERIFICACIÓN
+1
+Valida tus datos
+2
+Realiza la validación biométrica
+3
+Captura los datos del documento
+4
+Firma
+Verificar mi identidad
+Si el botón no funciona, copia este enlace:
+https://app.flit.example/verificacion/TOKEN-DE-EJEMPLO
+El enlace es personal, de un solo uso y caduca en 24 horas. Ábrelo en tu celular.
+¿Necesitas ayuda? Escríbenos a soporte@flitsas.com.

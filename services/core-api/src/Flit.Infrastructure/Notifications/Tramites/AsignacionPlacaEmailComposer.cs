@@ -29,14 +29,13 @@ public static class AsignacionPlacaEmailComposer
 
     private const string Ink = "#1A1A1A";
     private const string Muted = "#4A4A4A";
-    private const string PrimaryBlue = "#2F6FED";
     private const string FlitSupportEmail = "soporte@flitsas.com";
     private const string RentingSupportEmail = "servicio@rentingcolombia.com";
     private const string RentingWebFormsUrl =
         "https://www.rentingcolombia.com/dejanos-tus-comentarios-te-asesoramos";
 
-    public const string DefaultFlitHeaderFileName = "tramite-cambio-estado-header.png";
-    public const string DefaultFlitLogoFileName = "flit-logo.png";
+    public const string DefaultFlitHeaderFileName = FlitEmailLayout.BannerFileName;
+    public const string DefaultFlitLogoFileName = FlitEmailLayout.LogoFileName;
     public const string DefaultRentingHeaderFileName = "tramite-cambio-estado-renting-header.png";
     public const string DefaultRentingFooterFileName = "tramite-cambio-estado-renting-footer.png";
 
@@ -94,50 +93,53 @@ public static class AsignacionPlacaEmailComposer
     private static string NormalizeEstado(string estado) =>
         string.IsNullOrWhiteSpace(estado) ? "Asignado" : estado.Trim();
 
+    /// <summary>
+    /// Correos 2.0 — variante FLIT sobre <see cref="FlitEmailLayout"/>. «Detalles clave:» ya era
+    /// parte del copy y pasa a ser el encabezado de la tarjeta; los campos son los mismos. Brand y
+    /// Renting siguen sobre <see cref="BuildSharedBody"/> sin cambios.
+    /// </summary>
     private static string BuildFlitHtml(
         AsignacionPlacaEmailModel model, string estado, string assetsBaseUrl)
     {
-        var body = BuildSharedBody(model, estado, estadoColor: PrimaryBlue);
-        var headerUrl = EncAttr(ResolveFlitHeaderUrl(assetsBaseUrl));
-        var logoUrl = EncAttr(ResolveFlitLogoUrl(assetsBaseUrl));
-        var support = Enc(FlitSupportEmail);
-        var supportMailto = EncAttr($"mailto:{FlitSupportEmail}");
+        var cliente = Enc(model.ClienteNombre);
+        var placa = Enc(model.Placa);
 
-        var sb = new StringBuilder(2560);
-        sb.Append("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"/>");
-        sb.Append("<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"/>");
-        sb.Append("<meta name=\"color-scheme\" content=\"light dark\"/>");
-        sb.Append("<meta name=\"supported-color-schemes\" content=\"light dark\"/>");
-        sb.Append("<title>Asignación de placa</title>");
-        sb.Append("<style type=\"text/css\">");
-        sb.Append(".placa-bg{background-color:#ffffff !important;}");
-        sb.Append("@media (prefers-color-scheme:dark){.placa-bg{background-color:#ffffff !important;}}");
-        sb.Append("</style></head>");
-        sb.Append("<body style=\"margin:0;padding:0;background:#ffffff;\">");
-        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" class=\"placa-bg\" bgcolor=\"#ffffff\" style=\"max-width:640px;margin:0 auto;background-color:#ffffff !important;\">");
-        sb.Append("<tr><td style=\"padding:0;\"><img src=\"").Append(headerUrl)
-            .Append("\" alt=\"FLIT\" width=\"640\" style=\"display:block;width:100%;max-width:640px;height:auto;border:0;\"/></td></tr>");
-        sb.Append("<tr><td style=\"padding:28px 28px 8px;text-align:center;\"><h1 style=\"margin:0;font-size:20px;letter-spacing:0.02em;color:")
-            .Append(PrimaryBlue).Append(";\">¡NOTIFICACIÓN ASIGNACIÓN DE PLACA!</h1></td></tr>");
-        sb.Append("<tr><td style=\"padding:16px 28px 8px;font-family:Arial,Helvetica,sans-serif;color:")
-            .Append(Ink).Append(";font-size:14px;line-height:1.5;\">");
-        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\">");
-        sb.Append(body);
-        sb.Append("<tr><td style=\"padding:8px 0 20px;\">Atentamente,</td></tr>");
-        sb.Append("<tr><td style=\"padding:0 0 24px;\">");
-        sb.Append("<img src=\"").Append(logoUrl)
-            .Append("\" alt=\"flit\" width=\"96\" style=\"display:block;border:0;height:auto;\"/>");
-        sb.Append("</td></tr>");
-        sb.Append("<tr><td style=\"padding:0;font-size:12px;line-height:1.45;color:")
-            .Append(Muted).Append(";\">");
-        sb.Append("Por favor, <strong>NO respondas a este mensaje, esto es un mensaje o una notificación automática.</strong> ");
-        sb.Append("Si requieres ayuda o mas información sobre éste, puedes escribirnos a nuestro correo de soporte nacional ");
-        sb.Append("<a href=\"").Append(supportMailto).Append("\" style=\"color:")
-            .Append(PrimaryBlue).Append(";font-weight:bold;text-decoration:underline;\">")
-            .Append(support).Append("</a>");
-        sb.Append("</td></tr>");
-        sb.Append("</table></td></tr></table></body></html>");
-        return sb.ToString();
+        var filas = new List<(string, string)>
+        {
+            ("Cliente:", cliente),
+            ("Placa del Vehículo:", placa),
+        };
+        if (HasText(model.Ciudad))
+            filas.Add(("Ciudad:", Enc(model.Ciudad)));
+        if (HasText(model.SecretariaTransito))
+            filas.Add(("Secretaría de Tránsito:", Enc(model.SecretariaTransito)));
+        filas.Add(("Estado Actual:", $"<span style=\"color:{FlitEmailLayout.Accent};font-weight:700;\">{Enc(estado)}</span>"));
+
+        var cuerpo = new StringBuilder(2048);
+        cuerpo.Append(FlitEmailLayout.Parrafo($"Estimados Señor/a {FlitEmailLayout.Destacado(cliente)}."));
+        cuerpo.Append(FlitEmailLayout.Parrafo(
+            $"Queremos mantenerlos informados sobre el estado actualizado de su matrícula inicial de vehículo. Le confirmamos que la placa asignada es: <strong>{placa}</strong>.",
+            margen: "0 0 20px"));
+        cuerpo.Append(FlitEmailLayout.TarjetaDetalle("Detalles clave:", filas));
+        cuerpo.Append(FlitEmailLayout.Parrafo(
+            "Le informamos que, como comprador, debe adquirir el SOAT (Seguro Obligatorio de Accidentes de Tránsito) para continuar con el trámite.",
+            centrado: false));
+        cuerpo.Append(FlitEmailLayout.Parrafo(
+            "Nuestro compromiso es asegurar un proceso sin contratiempos. Les proporcionaremos cualquier novedad y estamos disponibles para responder sus preguntas a través de nuestros canales de contacto.",
+            centrado: false));
+        cuerpo.Append(FlitEmailLayout.Parrafo("Atentamente,", centrado: false, margen: "0"));
+
+        var soporte =
+            "Por favor, <strong>NO respondas a este mensaje, esto es un mensaje o una notificación automática.</strong> "
+            + "Si requieres ayuda o mas información sobre éste, puedes escribirnos a nuestro correo de soporte nacional "
+            + $"<a href=\"{EncAttr($"mailto:{FlitSupportEmail}")}\" style=\"color:{FlitEmailLayout.Accent};font-weight:700;text-decoration:underline;\">{Enc(FlitSupportEmail)}</a>";
+
+        return FlitEmailLayout.Documento(
+            assetsBaseUrl,
+            FlitEmailLayout.Titulo("¡NOTIFICACIÓN ASIGNACIÓN DE PLACA!"),
+            cuerpo.ToString(),
+            FlitEmailLayout.PieFlit(assetsBaseUrl, soporte, politicaPrivacidad: false),
+            documentTitle: "Asignación de placa");
     }
 
     private static string BuildRentingHtml(
@@ -253,13 +255,10 @@ public static class AsignacionPlacaEmailComposer
     private static bool HasText(string? value) =>
         !string.IsNullOrWhiteSpace(value);
 
-    private static string CombineAssetUrl(string assetsBaseUrl, string fileName)
-    {
-        var baseUrl = string.IsNullOrWhiteSpace(assetsBaseUrl)
-            ? NotificationEmailAssetsOptions.LocalFallbackBaseUrl
-            : assetsBaseUrl.Trim().TrimEnd('/');
-        return $"{baseUrl}/{fileName}";
-    }
+    private static string CombineAssetUrl(string assetsBaseUrl, string fileName) =>
+        FlitEmailLayout.AssetUrl(
+            string.IsNullOrWhiteSpace(assetsBaseUrl) ? NotificationEmailAssetsOptions.LocalFallbackBaseUrl : assetsBaseUrl,
+            fileName);
 
     private static string Enc(string? value) =>
         WebUtility.HtmlEncode(value ?? string.Empty);
