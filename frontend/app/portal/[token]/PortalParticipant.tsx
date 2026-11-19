@@ -55,12 +55,8 @@ export function PortalParticipant({ token }: Props) {
   if (finalized) {
     return (
       <div className={CARD} role="status">
-        <div
-          className="h-14 w-14 mx-auto rounded-full grid place-items-center mb-3"
-          style={{ background: 'color-mix(in srgb, var(--color-flit-tech) 15%, transparent)' }}
-        >
-          <Icono nombre="check" className="h-7 w-7" style={{ color: 'var(--color-flit-tech)' }} />
-        </div>
+        {/* Disco «aviso-ok» del juego de íconos FLIT (PDF): el estado de éxito no es un ✓ suelto. */}
+        <IconoAviso tipo="ok" className="mx-auto mb-3 h-14 w-14" />
         <h1 className="text-lg font-bold text-center">¡Listo!</h1>
         <p className="text-sm opacity-70 text-center mt-1">
           Completaste tu parte del trámite. Ya puedes cerrar esta página.
@@ -352,7 +348,7 @@ function BiometricaTask({
         </p>
       ) : !pendiente ? (
         <p className="text-[11px] flex items-center gap-1.5 font-semibold" style={{ color: "var(--flit-success-ink)" }}>
-          <Icono nombre="check" className="h-3.5 w-3.5" /> Identidad verificada
+          <IconoAviso tipo="ok" className="h-3.5 w-3.5 shrink-0" /> Identidad verificada
         </p>
       ) : (
         <p className="text-[11px] opacity-70">
@@ -409,7 +405,7 @@ function FirmaTask({ token, onRefresh }: { token: string; onRefresh: () => void 
       <h2 className="text-sm font-bold mb-1">Firma de la compraventa</h2>
       {firma?.firmada ? (
         <p className="text-[11px] flex items-center gap-1.5 font-semibold" style={{ color: "var(--flit-success-ink)" }}>
-          <Icono nombre="check" className="h-3.5 w-3.5" /> Firmaste la compraventa
+          <IconoAviso tipo="ok" className="h-3.5 w-3.5 shrink-0" /> Firmaste la compraventa
         </p>
       ) : firma && firma.signatureId === null ? (
         <p className="text-[11px] opacity-70">

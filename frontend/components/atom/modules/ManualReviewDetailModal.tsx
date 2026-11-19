@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { Icono } from "@flit/ui/Icono";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 import { Modal } from '@flit/ui/Modal';
 import { UiStateBoundary } from '@flit/ui/UiStateBoundary';
 import { useWizardFocusTrap } from '@/components/operacion/use-wizard-focus-trap';
@@ -149,7 +150,7 @@ function EstadoDelCaso({ detail, sinCapturas }: { detail: ManualDetail; sinCaptu
       <div className={`flex flex-wrap items-center justify-between gap-2 rounded-2xl border px-4 py-2.5 text-sm ${MANUAL_AVISO.success}`}>
         <div className="min-w-0">
           <p className="flex items-center gap-2 font-semibold">
-            <Icono nombre="check" className="h-4 w-4 shrink-0" /> Identidad aprobada
+            <IconoAviso tipo="ok" className="h-4 w-4 shrink-0" /> Identidad aprobada
           </p>
           {revision && <p className="mt-0.5 pl-6 text-xs">{revision}</p>}
         </div>
@@ -298,10 +299,11 @@ function DetalleCuerpo({
                 role="status"
                 className={`${MANUAL_AVISO_BASE} items-center font-semibold ${avisoConProblema ? MANUAL_AVISO.warning : MANUAL_AVISO.success}`}
               >
+                {/* Discos de aviso del juego de íconos FLIT (PDF): el estado del aviso no es un glifo suelto. */}
                 {avisoConProblema ? (
-                  <Icono nombre="alerta" className="h-4 w-4 shrink-0" />
+                  <IconoAviso tipo="alerta" className="h-4 w-4 shrink-0" />
                 ) : (
-                  <Icono nombre="check" className="h-4 w-4 shrink-0" />
+                  <IconoAviso tipo="ok" className="h-4 w-4 shrink-0" />
                 )}{' '}
                 {mensaje}
               </p>
