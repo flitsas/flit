@@ -3,13 +3,13 @@
 import { TarjetaPlegable } from "@flit/ui/TarjetaPlegable";
 import { METRICAS_GRID_CLS, TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { formatoPesos } from "@/lib/format/date";
-import { pesosCorto, textoPeriodo, type RespuestaDinero } from "@/lib/reportes";
+import { pesosCorto, textoPeriodo, type RespuestaDineroInicio } from "@/lib/reportes";
 
 /**
  * La franja de dinero del Inicio (rediseño R2): cuatro tarjetas en un bloque plegable, para que la plata no compita con
  * la operación. La tendencia, la dona, el dinero por organismo y el cobro coactivo están en Reportes.
  */
-export function DineroInicio({ datos }: { datos: RespuestaDinero }) {
+export function DineroInicio({ datos }: { datos: RespuestaDineroInicio }) {
   const d = datos.dinero;
   const periodo = textoPeriodo(datos.alcance.desde, datos.alcance.hasta);
   return (

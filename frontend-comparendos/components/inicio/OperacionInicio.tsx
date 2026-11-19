@@ -78,7 +78,8 @@ export function OperacionInicio({ o, empresa }: { o: Operacion; empresa: string 
               valor: x.cantidad,
               cifra: comparendos(x.cantidad),
               detalle: `${x.organismos === 0 ? "Organismo sin identificar" : `Ante ${n(x.organismos)} ${x.organismos === 1 ? "organismo" : "organismos"}`}${conPesos(x.valor)}`,
-              href: hrefBandeja({ placas: x.placa }, { empresa }),
+              // pagado=false: la cifra son sus pendientes, y la bandeja debe mostrar los mismos.
+              href: hrefBandeja({ placas: x.placa, pagado: "false" }, { empresa }),
               ariaLabel: `${x.placa}: ${comparendos(x.cantidad)}${x.organismos === 0 ? "" : ` ante ${n(x.organismos)} ${x.organismos === 1 ? "organismo" : "organismos"}`}${x.valor === null ? "" : `, por un valor de ${formatoPesos(x.valor)}`}. Ver en la bandeja`,
             }))}
           />
@@ -141,14 +142,18 @@ export function OperacionInicio({ o, empresa }: { o: Operacion; empresa: string 
         <PanelInicio titulo="Antigüedad de lo pendiente" subtitulo="Hace cuánto ocurrió la infracción. Cada tramo abre la bandeja." icono="reloj" data-testid="antiguedad">
           <BarrasSimples
             color="var(--kit-gris)"
-            filas={o.antiguedad.map((t) => ({
-              clave: t.tramo,
-              etiqueta: t.tramo,
-              valor: t.cantidad,
-              cifra: `${n(t.cantidad)}${conPesos(t.valor)}`,
-              href: t.cantidad > 0 ? hrefTramo(t, empresa) : undefined,
-              ariaLabel: `${t.tramo}: ${comparendos(t.cantidad)}${t.valor === null ? "" : `, por un valor de ${formatoPesos(t.valor)}`}. Ver en la bandeja`,
-            }))}
+            filas={o.antiguedad.map((t) => {
+              // «Sin fecha de imposición» no tiene filtro en la bandeja: ni enlace ni «Ver en la bandeja».
+              const href = t.cantidad > 0 ? (hrefTramo(t, empresa) ?? undefined) : undefined;
+              return {
+                clave: t.tramo,
+                etiqueta: t.tramo,
+                valor: t.cantidad,
+                cifra: `${n(t.cantidad)}${conPesos(t.valor)}`,
+                href,
+                ariaLabel: href ? `${t.tramo}: ${comparendos(t.cantidad)}${t.valor === null ? "" : `, por un valor de ${formatoPesos(t.valor)}`}. Ver en la bandeja` : undefined,
+              };
+            })}
           />
         </PanelInicio>
       </div>
@@ -172,7 +177,8 @@ export function OperacionInicio({ o, empresa }: { o: Operacion; empresa: string 
                 ? "Sin respuestas todavía"
                 : `${n(d.respondidos)} con respuesta${d.diasPromedio === null ? "" : ` · ${String(d.diasPromedio).replace(".", ",")} días en promedio`}`,
             href: d.organismoId ? hrefBandeja({ organismos: d.organismoId, conDp: "true" }, { empresa }) : undefined,
-            ariaLabel: `${d.nombre}: ${n(d.favorables)} de ${n(d.enviados)} derechos de petición favorables. Ver en la bandeja`,
+            // La bandeja muestra sus comparendos activos con DP, no los mismos enviados (que incluyen los ya cerrados).
+            ariaLabel: `${d.nombre}: ${n(d.favorables)} de ${n(d.enviados)} derechos de petición favorables. Ver sus comparendos con DP en la bandeja`,
           }))}
         />
       </PanelInicio>

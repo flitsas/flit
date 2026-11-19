@@ -277,6 +277,12 @@ export function textoPeriodo(desde: string, hasta: string): string {
   return `${Number(dd)} de ${mes(desde)} de ${ad} al ${Number(dh)} de ${mes(hasta)} de ${ah}`;
 }
 
+/** `GET /reportes/dinero?partes=inicio`: lo que pinta el Inicio (frentes, descuento y las 4 tarjetas de la franja). */
+export interface RespuestaDineroInicio {
+  alcance: RespuestaDinero["alcance"];
+  dinero: Pick<Dinero, "hoy" | "exigible" | "noExigible" | "descuento" | "pagado" | "frentes" | "ahorroLogrado">;
+}
+
 /** `GET /reportes/dinero?partes=estados`: solo el reparto por estado (el indicador «Deuda sin pagar» de Reportes). */
 export interface RespuestaEstados {
   alcance: RespuestaDinero["alcance"];
@@ -320,8 +326,12 @@ export const PASOS_GESTION: Record<string, string> = {
   RespuestaFavorable: "Respuesta favorable",
 };
 
-/** Enlace a la bandeja con los comparendos pendientes (activos y sin pagar) de un tramo de antigüedad. */
-export function hrefTramo(t: { desde: string | null; hasta: string | null }, empresa?: string | null): string {
+/**
+ * Enlace a la bandeja con los comparendos pendientes (activos y sin pagar) de un tramo de antigüedad. El tramo «Sin fecha
+ * de imposición» no tiene desde ni hasta y la bandeja no filtra eso: no lleva enlace (null).
+ */
+export function hrefTramo(t: { desde: string | null; hasta: string | null }, empresa?: string | null): string | null {
+  if (!t.desde && !t.hasta) return null;
   const q: Record<string, string> = { pagado: "false" };
   if (t.desde) q.imposicionDesde = t.desde;
   if (t.hasta) q.imposicionHasta = t.hasta;
@@ -335,6 +345,8 @@ export interface ResumenPlataforma {
   empresas: { total: number; activas: number; pendientes: number; inactivas: number };
   ingesta24h: { consultas: number; conError: number; empresasConError: number };
   correosFallidos7d: number;
+  /** Desde qué día (Colombia) cuenta los correos fallidos: el mismo `desde` del enlace a /mensajes. */
+  correosDesde: string;
   ocrPorRevisar: number;
   dpDelMes: { enviados: number; favorables: number };
   necesitanAlgo: { empresaId: string; nombre: string; motivos: string[] }[];

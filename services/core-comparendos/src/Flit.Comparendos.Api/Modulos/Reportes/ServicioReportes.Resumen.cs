@@ -17,6 +17,7 @@ public sealed record ResumenPlataforma(
     SaludEmpresas Empresas,
     SaludIngesta Ingesta24h,
     int CorreosFallidos7d,
+    DateOnly CorreosDesde,
     int OcrPorRevisar,
     SaludDp DpDelMes,
     IReadOnlyList<EmpresaQueNecesita> NecesitanAlgo);
@@ -68,7 +69,9 @@ public sealed partial class ServicioReportes
             Empresas = g.Where(l => l.Resultado == ResultadoCiclo.Fallido).Select(l => l.TenantId).Distinct().Count(),
         }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
 
-        var hace7d = ahora.AddDays(-7);
+        // Por día de Colombia, como filtra /mensajes?desde=: así la cifra es la que muestra la lista al hacer clic.
+        var correosDesde = hoy.AddDays(-7);
+        var hace7d = Alcance.Utc(correosDesde);
         var fallidos = await db.Comunicaciones.AsNoTracking()
             .CountAsync(c => c.CreadoEn >= hace7d && (c.Estado == EstadoComunicacion.Fallido || c.Estado == EstadoComunicacion.Rebotado), ct).ConfigureAwait(false);
         var ocr = await db.DocumentosOcr.AsNoTracking().CountAsync(d => OcrPorRevisar.Contains(d.Estado), ct).ConfigureAwait(false);
@@ -85,6 +88,7 @@ public sealed partial class ServicioReportes
             new SaludEmpresas(empresas.Count, estados.Count(s => s == "Activa"), estados.Count(s => s == "Pendiente"), estados.Count(s => s == "Inactiva")),
             new SaludIngesta(ingesta?.N ?? 0, ingesta?.Error ?? 0, ingesta?.Empresas ?? 0),
             fallidos,
+            correosDesde,
             ocr,
             new SaludDp(dp?.Enviados ?? 0, dp?.Favorables ?? 0),
             necesitan.OrderByDescending(n => n.Motivos.Count).ThenBy(n => n.Nombre, StringComparer.Ordinal).ToList());
