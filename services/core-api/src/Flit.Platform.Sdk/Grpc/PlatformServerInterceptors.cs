@@ -41,8 +41,11 @@ public sealed class PlatformServiceCallInterceptor(string requiredScope, string 
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(continuation);
+        // Métodos globales de plataforma: responden por todas las empresas y no exigen la metadata de empresa.
         var exigeEmpresa = requireTenant
-            && !context.Method.EndsWith("/ListarDepartamentosImpuesto", StringComparison.Ordinal);
+            && !context.Method.EndsWith("/ListarDepartamentosImpuesto", StringComparison.Ordinal)
+            && !context.Method.EndsWith("/ObtenerContingenciaRunt", StringComparison.Ordinal)
+            && !context.Method.EndsWith("/GuardarContingenciaRunt", StringComparison.Ordinal);
         Validate(context.GetHttpContext().User, context.RequestHeaders.GetValue(TenantMetadata), exigeEmpresa).Store(context);
         return await continuation(request, context).ConfigureAwait(false);
     }

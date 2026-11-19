@@ -14,9 +14,81 @@ namespace Flit.Consultas.Api.Grpc;
 /// esquema de Consultas. La escribe core-api con lo que guarda el SuperAdmin en la pantalla de siempre; aplica a la
 /// siguiente consulta. Se guarda con los mismos JSON que <c>admin.tenant_operational_policies</c>.
 /// </summary>
-internal sealed class ConsultasAdminGrpcService(ConsultasDb db, TimeProvider time, Impuesto.CatalogoDepartamentosImpuesto departamentosImpuesto) : ConsultasAdminService.ConsultasAdminServiceBase
+internal sealed class ConsultasAdminGrpcService(
+    ConsultasDb db, TimeProvider time, Impuesto.CatalogoDepartamentosImpuesto departamentosImpuesto, Configuracion.ContingenciaRuntVigente contingencia)
+    : ConsultasAdminService.ConsultasAdminServiceBase
 {
     public const string Scope = "platform.consultas.admin";
+
+    /// <summary>Largo máximo del motivo de un cambio de contingencia.</summary>
+    internal const int MotivoMaximo = 500;
+
+    /// <summary>
+    /// Épica #14644 (HU #14648): los tres tipos con su contingencia, siempre en el mismo orden. Global: no usa la empresa.
+    /// </summary>
+    public override async Task<ObtenerContingenciaRuntResponse> ObtenerContingenciaRunt(ObtenerContingenciaRuntRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var filas = await db.ContingenciasRunt.AsNoTracking().ToListAsync(context.CancellationToken).ConfigureAwait(false);
+        var respuesta = new ObtenerContingenciaRuntResponse();
+        foreach (var tipo in Configuracion.ContingenciaRuntReglas.Tipos)
+            respuesta.Tipos.Add(AProto(tipo, filas.FirstOrDefault(f => f.Kind == tipo)));
+        return respuesta;
+    }
+
+    /// <summary>
+    /// Activa, cambia o apaga (proveedor vacío) la contingencia de un tipo. El tipo, el proveedor de ese tipo y el motivo se
+    /// validan aquí (<c>InvalidArgument</c>) y, si algo falla, nada cambia. No toca la configuración de ninguna empresa.
+    /// </summary>
+    public override async Task<ContingenciaRunt> GuardarContingenciaRunt(GuardarContingenciaRuntRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+        var ct = context.CancellationToken;
+
+        var tipo = request.Tipo?.Trim() ?? string.Empty;
+        if (!Configuracion.ContingenciaRuntReglas.EsTipo(tipo))
+            throw new RpcException(new Status(StatusCode.InvalidArgument, $"Tipo de consulta desconocido: {tipo}."));
+
+        var proveedor = request.Proveedor?.Trim() ?? string.Empty;
+        if (proveedor.Length > 0 && !Configuracion.ContingenciaRuntReglas.ProveedoresDe(tipo).Contains(proveedor, StringComparer.Ordinal))
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "Ese proveedor no atiende este tipo de consulta."));
+
+        var motivo = request.Motivo?.Trim() ?? string.Empty;
+        if (motivo.Length is 0 or > MotivoMaximo)
+            throw new RpcException(new Status(StatusCode.InvalidArgument, motivo.Length == 0 ? "Escribe el motivo del cambio." : $"El motivo admite hasta {MotivoMaximo} caracteres."));
+
+        var nombre = request.ActualizadoPor?.Trim() ?? string.Empty;
+        if (nombre.Length > 200)
+            nombre = nombre[..200];
+
+        var ahora = time.GetUtcNow();
+        var fila = await db.ContingenciasRunt.FirstOrDefaultAsync(c => c.Kind == tipo, ct).ConfigureAwait(false);
+        if (fila is null)
+        {
+            fila = new Persistence.ContingenciaProveedorRunt { Id = Guid.CreateVersion7(), Kind = tipo, CreatedAt = ahora };
+            db.ContingenciasRunt.Add(fila);
+        }
+
+        fila.Provider = proveedor.Length == 0 ? null : proveedor;
+        fila.Reason = motivo;
+        fila.UpdatedByName = nombre;
+        fila.UpdatedById = Guid.TryParse(request.ActualizadoPorId, out var actor) ? actor : null;
+        fila.UpdatedAt = ahora;
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        contingencia.Invalidar();
+        return AProto(tipo, fila);
+    }
+
+    private static ContingenciaRunt AProto(string tipo, Persistence.ContingenciaProveedorRunt? fila) => new()
+    {
+        Tipo = tipo,
+        Proveedor = fila?.Provider ?? string.Empty,
+        Motivo = fila?.Reason ?? string.Empty,
+        ActualizadoPor = fila?.UpdatedByName ?? string.Empty,
+        ActualizadoEn = fila is null ? null : Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(fila.UpdatedAt),
+    };
 
     private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
 
