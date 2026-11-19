@@ -50,7 +50,7 @@ const ILUSTRACION: Record<string, Ilustracion> = {
   operacion: "comparendos",
   reportes: "reportes",
   configuracion: "configuracion",
-  administracion: "empresas",
+  administracion: "seguridad",
   bandeja: "comparendos",
   ocr: "documentos",
   "dp-lotes": "notificaciones",
@@ -63,7 +63,7 @@ const ILUSTRACION: Record<string, Ilustracion> = {
   ots: "organismos",
   correo: "empresas",
   plantillas: "generacion-documental",
-  flit: "configuracion",
+  flit: "seguridad",
   "adm-empresas": "empresas",
   "adm-tipologias": "causales",
   "adm-envio-dp": "causales",
@@ -89,7 +89,7 @@ function conIlustracion(item: NavItem): NavItem {
 
 export function comparendosNav(caps: Capacidades): NavCatalog {
   const items: NavItem[] = [
-    { key: "bandeja", label: "Bandeja", href: "/", section: "operacion", icon: iconoComo("radicacion"), permission: P.bandejaVer },
+    { key: "bandeja", label: "Bandeja", href: "/bandeja", section: "operacion", icon: iconoComo("radicacion"), permission: P.bandejaVer },
     ...(caps.ocr ? [{ key: "ocr", label: "Paquetes OCR", href: "/ocr", section: "operacion", icon: ICONO_DOCUMENTO, permission: P.ocrVer }] : []),
     ...(caps.derechosPeticion
       ? [{ key: "dp-lotes", label: "Envíos masivos de DP", href: "/dp/lotes", section: "operacion", icon: iconoComo("radicacion"), permission: P.dpEnviarMasivo }]
@@ -112,7 +112,7 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
       label: "Administración FLIT",
       href: "",
       section: "administracion",
-      icon: iconoComo("ajustes"),
+      icon: iconoComo("escudo"),
       superAdminOnly: true,
       children: [
         { key: "adm-empresas", label: "Parametrizador por empresa", href: "/admin/empresas", section: "administracion", icon: iconoComo("rol"), superAdminOnly: true },
@@ -137,7 +137,7 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
         { id: "operacion", label: "Operación", icon: iconoComo("radicacion"), side: "left" },
         { id: "reportes", label: "Reportes", icon: iconoComo("medidor"), side: "left" },
         { id: "configuracion", label: "Configuración", icon: iconoComo("ajustes"), side: "right" },
-        { id: "administracion", label: "Administración FLIT", icon: iconoComo("ajustes"), side: "right" },
+        { id: "administracion", label: "Administración FLIT", icon: iconoComo("escudo"), side: "right" },
       ] satisfies NavSection[]
     ).map((sec) => ({ ...sec, ilustracion: iconoDockDe(sec.id) })),
     items: items.map(conIlustracion),

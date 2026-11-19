@@ -14,10 +14,12 @@ public static class ReportesEndpoints
         var g = api.MapGroup("/reportes");
         g.MapGet("/dashboard", Dashboard).RequirePermiso(Permisos.ReportesVer);
         g.MapGet("/radar", Radar).RequirePermiso(Permisos.ReportesVer);
+        g.MapGet("/dinero", LenteDinero).RequirePermiso(Permisos.ReportesVer);
         g.MapGet("/nits", Nits).RequirePermiso(Permisos.ReportesVer);
         g.MapGet("/productividad", Productividad).RequirePermiso(Permisos.ProductividadVer);
         g.MapGet("/productividad/detalle", Detalle).RequirePermiso(Permisos.ProductividadVer);
         g.MapGet("/productividad/excel", Excel).RequirePermiso(Permisos.ProductividadVer);
+        OperacionEndpoints.Map(api);
     }
 
     private static async Task<Alcance> AlcanceAsync(UsuarioActual usuario, Capacidades capacidades, Guid? empresa, Guid? nit, DateOnly? desde, DateOnly? hasta, Reloj reloj, CancellationToken ct)
@@ -52,6 +54,25 @@ public static class ReportesEndpoints
             },
             porNit = await reportes.TotalesPorNitAsync(a, ct).ConfigureAwait(false),
         });
+    }
+
+    /// <summary>La lente de dinero del Inicio y de Reportes: deuda por estado legal, descuentos, organismos, pagos y frentes del día.</summary>
+    /// <remarks>
+    /// <c>?partes=estados</c> devuelve solo el reparto por estado (una consulta); <c>?partes=inicio</c>, lo que pinta el
+    /// Inicio (frentes, descuento y la franja de dinero); sin <c>partes</c>, todo.
+    /// </remarks>
+    private static async Task<IResult> LenteDinero(Guid? empresa, Guid? nit, DateOnly? desde, DateOnly? hasta, string? partes, UsuarioActual usuario, Capacidades capacidades,
+        ServicioReportes reportes, Bandeja.ConsultaBandeja bandeja, Reloj reloj, CancellationToken ct)
+    {
+        if (partes is not null && partes != "estados" && partes != "inicio")
+            throw new ReglaException("PARTES_INVALIDAS", "«partes» puede ser «estados» o «inicio».");
+        var a = await AlcanceAsync(usuario, capacidades, empresa, nit, desde, hasta, reloj, ct).ConfigureAwait(false);
+        var alcance = new { empresa = a.Tenant, a.Nit, a.Desde, a.Hasta };
+        if (partes == "estados")
+            return Results.Ok(new { alcance, dinero = await reportes.EstadosAsync(a, bandeja, ct).ConfigureAwait(false) });
+        if (partes == "inicio")
+            return Results.Ok(new { alcance, dinero = await reportes.InicioAsync(a, bandeja, ct).ConfigureAwait(false) });
+        return Results.Ok(new { alcance, dinero = await reportes.DineroAsync(a, bandeja, ct).ConfigureAwait(false) });
     }
 
     /// <summary>NITs monitoreados para el filtro del dashboard (sin exigir el permiso de monitoreo).</summary>

@@ -3,9 +3,9 @@
 import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
+import { DataTable, InlineAlert, Modal, TarjetaMetrica, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
-import { Contador, Progreso, useSondeo } from "@/components/ocr/comunes";
+import { COLOR_CIFRA_DOCUMENTO, CONTADORES_GRID_CLS, Progreso, useSondeo } from "@/components/ocr/comunes";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
@@ -159,7 +159,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
         >
           <Icono nombre="archivo-subir" className="h-5 w-5 text-flit-brand" />
           <span className="font-semibold">Arrastra los archivos aquí o haz clic para elegirlos</span>
-          <span className="opacity-60">JPG, PNG, TIFF o PDF · máximo 20 MB cada uno</span>
+          <span className="text-muted-foreground">JPG, PNG, TIFF o PDF · máximo 20 MB cada uno</span>
           <input
             ref={input}
             type="file"
@@ -189,7 +189,7 @@ function NuevoPaquete({ onCerrar, onCreado }: { onCerrar: () => void; onCreado: 
                 <li key={`${a.archivo.name}-${a.archivo.size}`} className="flex items-center justify-between gap-3 border-b border-border px-3 py-1.5 last:border-0">
                   <span className={`truncate ${a.error ? "text-destructive" : ""}`}>
                     {a.archivo.name}
-                    <span className="ml-2 opacity-60">{(a.archivo.size / 1024 / 1024).toFixed(1)} MB</span>
+                    <span className="ml-2 text-muted-foreground">{(a.archivo.size / 1024 / 1024).toFixed(1)} MB</span>
                     {a.error && <span className="ml-2 font-semibold">· {a.error}</span>}
                   </span>
                   <button type="button" aria-label={`Quitar ${a.archivo.name}`} onClick={() => setElegidos((l) => l.filter((_, j) => j !== i))}>
@@ -308,26 +308,27 @@ function Paquetes() {
       {esSuper && (
         <div className="flex flex-col gap-1">
           <SelectorEmpresa valor={empresa} onCambio={(id) => filtrar(() => setEmpresa(id))} />
-          <span className="text-[11px] opacity-60">Sin empresa elegida ves los paquetes de todas. Como administrador de FLIT solo lees.</span>
+          <span className="text-xs text-muted-foreground">Sin empresa elegida ves los paquetes de todas. Como administrador de FLIT solo lees.</span>
         </div>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <Contador etiqueta="Paquetes" valor={c?.paquetes} />
-        <Contador etiqueta="Documentos" valor={c?.documentos} />
-        <Contador etiqueta="En cola" valor={c?.pendientes} clase="text-flit-brand-ink" />
-        <Contador etiqueta="Completos" valor={c?.completos} clase="text-[var(--flit-success-ink)]" />
-        <Contador etiqueta="Incompletos" valor={c?.incompletos} clase="text-[var(--badge-warning-fg)]" />
-        <Contador etiqueta="Fallidos" valor={c?.fallidos} clase="text-destructive" />
-        <Contador etiqueta="Duplicados" valor={c?.duplicados} clase="text-[var(--badge-purple-fg)]" />
-        <Contador etiqueta="Registrados" valor={c?.registrados} />
+      {/* Cuentan documentos de todos los paquetes; el filtro de abajo es por estado del paquete, por eso no filtran. */}
+      <div className={CONTADORES_GRID_CLS}>
+        <TarjetaMetrica etiqueta="Paquetes" cifra={c?.paquetes ?? 0} />
+        <TarjetaMetrica etiqueta="Documentos" cifra={c?.documentos ?? 0} />
+        <TarjetaMetrica etiqueta="En cola" cifra={c?.pendientes ?? 0} pendiente={(c?.pendientes ?? 0) > 0} />
+        <TarjetaMetrica etiqueta="Completos" cifra={c?.completos ?? 0} colorCifra={COLOR_CIFRA_DOCUMENTO.Completo} />
+        <TarjetaMetrica etiqueta="Incompletos" cifra={c?.incompletos ?? 0} colorCifra={COLOR_CIFRA_DOCUMENTO.Incompleto} />
+        <TarjetaMetrica etiqueta="Fallidos" cifra={c?.fallidos ?? 0} colorCifra={COLOR_CIFRA_DOCUMENTO.Fallido} />
+        <TarjetaMetrica etiqueta="Duplicados" cifra={c?.duplicados ?? 0} colorCifra={COLOR_CIFRA_DOCUMENTO.Duplicado} />
+        <TarjetaMetrica etiqueta="Registrados" cifra={c?.registrados ?? 0} />
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="flex flex-wrap items-end gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-end">
           <label className={ETIQUETA_CLS}>
-            Estado
-            <select className={`${INPUT_CLS} w-48`} value={estado} onChange={(e) => filtrar(() => setEstado(e.target.value))}>
+            Estado del paquete
+            <select className={`${INPUT_CLS} sm:w-48`} value={estado} onChange={(e) => filtrar(() => setEstado(e.target.value))}>
               <option value="">Todos</option>
               {ESTADOS_PAQUETE.map((e) => (
                 <option key={e} value={e}>
@@ -358,7 +359,7 @@ function Paquetes() {
           columns={[
             { key: "nombre", header: "Paquete", render: (p) => <span className="font-semibold">{p.nombre}</span> },
             { key: "fecha", header: "Creado", render: (p) => formatoFechaHora(p.creadoEn) },
-            { key: "creador", header: "Creador", render: (p) => (p.creadoPorNombre ? <span title={p.creadoPor}>{p.creadoPorNombre}</span> : <span title={p.creadoPor} className="font-mono text-[11px] opacity-70">{corto(p.creadoPor)}</span>) },
+            { key: "creador", header: "Creador", render: (p) => (p.creadoPorNombre ? <span title={p.creadoPor}>{p.creadoPorNombre}</span> : <span title={p.creadoPor} className="font-mono text-xs text-muted-foreground">{corto(p.creadoPor)}</span>) },
             { key: "estado", header: "Estado", render: (p) => <Chip e={estadoPaquete(p.estado)} /> },
             { key: "progreso", header: "Progreso", render: (p) => <Progreso p={p} /> },
             { key: "completos", header: "Completos", align: "right", render: (p) => p.cantidadCompletos },

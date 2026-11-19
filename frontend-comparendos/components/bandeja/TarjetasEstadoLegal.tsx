@@ -1,15 +1,25 @@
 "use client";
 
-import { ChipFiltro, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
+import { ChipFiltro, EMBUDO_CLS } from "@flit/ui/ChipsFiltro";
+import { rutaKit } from "@flit/ui/iconos-mapas";
 import { ESTADO_LEGAL } from "@/lib/etiquetas";
 
 /** Orden de los estados legales en la fila. */
 const ESTADOS = ["SinNotificar", "EnTiempo", "Vencido", "Caducado", "Prescrito"] as const;
 
+/** Disco del kit para cada tono del estado legal (el mismo color que su etiqueta en la tabla). */
+const DISCO_POR_TONO: Record<string, string> = {
+  neutral: rutaKit("estado-borrador"),
+  success: rutaKit("estado-aprobado"),
+  danger: rutaKit("estado-rechazado"),
+  warning: rutaKit("estado-revocado"),
+  info: rutaKit("estado-preparado"),
+};
+
 /**
- * HU #13869: los 5 estados legales con su conteo, como la tira de estados de Trámites. Clic elige el estado; segundo
- * clic lo suelta. Sin conteo todavía se pinta un guion: un 0 diría que no hay comparendos. Con el aspecto de los chips
- * que filtran de la propuesta (HU #14486, `ChipFiltro` de @flit/ui): sin colores de estado, el activo en azul de acción.
+ * HU #13869: los 5 estados legales con su conteo. Rediseño de Comparendos: el embudo del kit (`EMBUDO_CLS`), igual que
+ * la franja de estados de Trámites: contenedor con borde, una casilla por estado con su disco, nombre y cifra. Clic elige
+ * el estado; segundo clic lo suelta. Sin conteo todavía se pinta un guion: un 0 diría que no hay comparendos.
  */
 export function TarjetasEstadoLegal({
   conteos,
@@ -21,10 +31,10 @@ export function TarjetasEstadoLegal({
   onElegir: (estado: string) => void;
 }) {
   return (
-    <div role="group" aria-label="Estados legales de los comparendos" className={CHIPS_FILTRO_FILA_CLS}>
+    <div role="group" aria-label="Estados legales de los comparendos" className={EMBUDO_CLS}>
       {ESTADOS.map((estado) => {
         const activo = elegido === estado;
-        const texto = ESTADO_LEGAL[estado].texto;
+        const { texto, tono } = ESTADO_LEGAL[estado];
         const conteo = conteos?.[estado];
         return (
           <ChipFiltro
@@ -34,6 +44,7 @@ export function TarjetasEstadoLegal({
             onClick={() => onElegir(activo ? "" : estado)}
             cifra={conteo === undefined ? "—" : conteo.toLocaleString("es-CO")}
             etiqueta={texto}
+            icono={DISCO_POR_TONO[tono]}
           />
         );
       })}

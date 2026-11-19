@@ -16,8 +16,8 @@ export function TipologiasEmpresa({ empresa }: { empresa?: string | null }) {
   );
   return (
     <section className="flex flex-col gap-2">
-      <h2 className="text-sm font-semibold">Tipologías de derecho de petición habilitadas</h2>
-      <p className="text-[11px] text-muted-foreground">Las habilita FLIT. Si necesitas otra, solicítala a operaciones.</p>
+      <h3 className="text-sm font-semibold">Tipologías de derecho de petición habilitadas</h3>
+      <p className="text-xs text-muted-foreground">Los motivos por los que tu empresa puede presentar un derecho de petición. Los habilita FLIT: si necesitas otro, solicítalo a operaciones.</p>
       <DataTable
         ariaLabel="Tipologías habilitadas"
         rows={lista.datos ?? []}

@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, usePaginacion } from "@flit/ui";
+import { DataTable, InlineAlert, usePaginacion, VehicleLoader } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
@@ -45,7 +45,7 @@ function Resultado({ id }: { id: string }) {
       toast.show(e instanceof Error ? e.message : "No se pudo descargar.", "error"),
     );
 
-  if (carga.estado === "loading") return <p className="text-sm opacity-60">Cargando resultado…</p>;
+  if (carga.estado === "loading") return <VehicleLoader label="Cargando resultado…" />;
   if (carga.estado === "error") return <InlineAlert tone="error">{carga.error}</InlineAlert>;
   if (!c) return null;
 
@@ -165,7 +165,7 @@ function CargaPagos() {
               <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
               {subiendo ? "Procesando…" : "Cargar Excel de pagos"}
             </button>
-            <span className="text-xs opacity-70">
+            <span className="text-xs text-muted-foreground">
               Columnas: tipo_pago (CC, PC o BC), placa, numero_comparendo, valor, fecha_pago. Un pago por comparendo; no hay anulación.
             </span>
           </div>

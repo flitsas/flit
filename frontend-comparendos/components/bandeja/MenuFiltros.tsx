@@ -136,7 +136,7 @@ export function MenuFiltros({
           id={id}
           role="dialog"
           aria-label="Filtros de la bandeja"
-          className="absolute left-0 top-full z-40 mt-2 flex max-h-[min(34rem,calc(100dvh-19rem))] w-[24rem] max-w-[calc(100vw-2rem)] flex-col overflow-clip rounded-[var(--di-radius-modal)] bg-card text-foreground shadow-[var(--shadow-modal)]"
+          className="absolute left-0 top-full z-40 mt-2 flex max-h-[min(34rem,calc(100dvh-19rem))] w-[min(24rem,calc(100vw-2rem))] flex-col overflow-clip rounded-[var(--di-radius-modal)] bg-card text-foreground shadow-[var(--shadow-modal)]"
         >
           <div className="min-h-0 flex-1 overflow-y-auto p-3">
             {editando ? (
@@ -226,7 +226,7 @@ function EsNoEs({ campo, borrador, onCambio }: { campo: CampoNegable; borrador: 
 }
 
 function Casillas({ opciones, valores, onCambio }: { opciones: { valor: string; texto: string }[]; valores: string[]; onCambio: (v: string[]) => void }) {
-  if (opciones.length === 0) return <p className="px-2 py-1 text-xs opacity-60">Sin opciones</p>;
+  if (opciones.length === 0) return <p className="px-2 py-1 text-xs text-muted-foreground">Sin opciones</p>;
   return (
     <div className="flex flex-col">
       {opciones.map((o) => (
@@ -370,7 +370,7 @@ function EditorLista({ campo, borrador, onCambio }: { campo: "placas" | "numeros
           onCambio({ ...borrador, [campo]: leerLista(e.target.value) });
         }}
       />
-      <p className="mt-1 text-[11px] opacity-70">
+      <p className="mt-1 text-xs text-muted-foreground">
         {valores.length === 0
           ? "Escribe o pega desde Excel, uno por línea. Busca el valor completo."
           : `${valores.length} ${campo === "placas" ? (valores.length === 1 ? "placa" : "placas") : valores.length === 1 ? "número" : "números"}`}
@@ -389,7 +389,7 @@ function EditorNits({ borrador, onCambio, empresa, onNombres }: { borrador: Filt
       <EsNoEs campo="nits" borrador={borrador} onCambio={onCambio} />
       <input value={buscar} onChange={(e) => setBuscar(e.target.value)} placeholder="Buscar NIT o titular…" aria-label="Buscar NIT" className={`${INPUT_CLS} mb-2`} />
       {nits.estado === "loading" ? (
-        <p className="px-2 py-1 text-xs opacity-60">Cargando…</p>
+        <p className="px-2 py-1 text-xs text-muted-foreground">Cargando…</p>
       ) : (
         <Casillas
           opciones={opciones.filter((o) => !t || o.texto.toLowerCase().includes(t))}
