@@ -35,6 +35,8 @@ describe("pie del layout app", () => {
     expect(envoltura.className).toContain("lg:fixed");
     expect(envoltura.className).toContain("max-lg:mt-auto");
     expect(scroll.className).toContain("max-lg:flex");
+    // Blindaje: en el flex de móvil ningún hijo se encoge (una raíz con overflow-hidden no queda recortada).
+    expect(scroll.className).toContain("max-lg:[&>*]:shrink-0");
     // El contenedor reserva el alto del pie desde lg, con 2rem (el pie de Trámites) mientras no se mide.
     expect(scroll.closest(".h-dvh")?.className).toContain("lg:pb-[var(--suite-pie-alto,2rem)]");
   });

@@ -185,7 +185,8 @@ export function SuiteShell({
           <div
             ref={scrollRef}
             className={`absolute inset-0 overflow-y-auto pb-28 scroll-pb-28 [&_.app-bg]:bg-transparent [&_.app-bg]:bg-none ${
-              footer ? "max-lg:flex max-lg:flex-col" : ""
+              // Ningún hijo se encoge en el flex (uno con overflow distinto de visible perdería min-height:auto y se recortaría).
+              footer ? "max-lg:flex max-lg:flex-col max-lg:[&>*]:shrink-0" : ""
             }`}
             data-shell-scroll
           >
