@@ -1515,8 +1515,22 @@ export function TramiteWizard(props: Props) {
             : 'Expediente incompleto: faltan documentos obligatorios.',
           fallaTecnica: false,
         };
-      } catch {
+      } catch (err) {
         setPaqueteDocsStatus('error');
+        // Un 4xx (salvo 408/429) es una regla de negocio del expediente —adjunto no disponible,
+        // formato no soportado, estado final…—: sigue bloqueando con el detalle del backend. Solo
+        // timeout/abort, red caída y 5xx cuentan como falla técnica. Duck typing por `status`
+        // (misma forma que TramitesApiError), como el resto del wizard.
+        const status = (err as { status?: unknown } | null)?.status;
+        if (typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+          return {
+            bloqueo:
+              err instanceof Error && err.message
+                ? err.message
+                : 'No se pudieron generar los documentos del expediente.',
+            fallaTecnica: false,
+          };
+        }
         return { bloqueo: null, fallaTecnica: true };
       } finally {
         clearTimeout(timer);
