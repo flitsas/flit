@@ -493,7 +493,7 @@ describe('HU #12163 — Reenviar validación de identidad', () => {
 
     expect(mocks.adminReenviarValidacionesLote).toHaveBeenCalledWith(
       'inst-0001',
-      [{ validationId: 'val-1', email: null }],
+      [{ validationId: 'val-1', partyRole: 'comprador', ordinal: 1, email: null }],
       undefined,
     );
     expect(await within(dialog).findByText('Validación de identidad reenviada.')).toBeInTheDocument();
