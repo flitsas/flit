@@ -11,6 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+using Flit.Infrastructure.Notifications;
 
 namespace Flit.Infrastructure.Analytics.Scheduling;
 
@@ -58,6 +60,14 @@ internal sealed class AnalyticsSchedulerProcessor(
     }
 
     /// <summary>Un ciclo completo (informes + alertas); cada mitad aislada en su try/catch.</summary>
+    /// <summary>
+    /// Correos 2.0 — base de los assets del correo (banner y logo): <c>Notifications:EmailAssets:BaseUrl</c>
+    /// del ambiente. Con <c>GetService</c>: si el host no registró las options, el composer cae al
+    /// respaldo local (Bug #13194) en vez de tumbar el envío.
+    /// </summary>
+    private static string? AssetsBase(IServiceProvider services) =>
+        services.GetService<IOptions<NotificationEmailAssetsOptions>>()?.Value.BaseUrl;
+
     internal async Task RunCycleAsync(CancellationToken ct)
     {
         var nowUtc = DateTimeOffset.UtcNow;
@@ -239,7 +249,8 @@ internal sealed class AnalyticsSchedulerProcessor(
                 schedule.TenantId, from, to, TopProducersLimit, ct: ct);
 
             var (subject, html) = SchedulerEmailComposer.BuildScheduledReport(
-                schedule.Name, schedule.ReportType, periodLabel, overview, topProducers, theme);
+                schedule.Name, schedule.ReportType, periodLabel, overview, topProducers, theme,
+                AssetsBase(scope.ServiceProvider));
             var attachment = await BuildAttachmentAsync(scope.ServiceProvider, schedule, from, to, ct);
             message = (subject, html, attachment);
         }
@@ -301,12 +312,12 @@ internal sealed class AnalyticsSchedulerProcessor(
                 var otResult = await otBuilder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
                 if (otResult is null)
                 {
-                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name, theme);
+                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name, theme, AssetsBase(services));
                     return (missingSubject, missingHtml, null);
                 }
 
                 (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
-                    schedule.Name, otResult.QueryName, otResult.Total, otResult.Truncated, OtQueryReportDocumentBuilder.RowCap, theme);
+                    schedule.Name, otResult.QueryName, otResult.Total, otResult.Truncated, OtQueryReportDocumentBuilder.RowCap, theme, AssetsBase(services));
                 bytes = otResult.Bytes;
             }
             else if (schedule.SavedQueryScope == "ict")
@@ -318,12 +329,12 @@ internal sealed class AnalyticsSchedulerProcessor(
                 var ictResult = await ictBuilder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
                 if (ictResult is null)
                 {
-                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name, theme);
+                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name, theme, AssetsBase(services));
                     return (missingSubject, missingHtml, null);
                 }
 
                 (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
-                    schedule.Name, ictResult.QueryName, ictResult.Total, ictResult.Truncated, IctQueryReportDocumentBuilder.RowCap, theme);
+                    schedule.Name, ictResult.QueryName, ictResult.Total, ictResult.Truncated, IctQueryReportDocumentBuilder.RowCap, theme, AssetsBase(services));
                 bytes = ictResult.Bytes;
             }
             else
@@ -334,12 +345,12 @@ internal sealed class AnalyticsSchedulerProcessor(
                     : await builder.BuildAsync(schedule.TenantId!.Value, schedule.SavedQueryId!.Value, ct);
                 if (result is null)
                 {
-                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name, theme);
+                    var (missingSubject, missingHtml) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name, theme, AssetsBase(services));
                     return (missingSubject, missingHtml, null);
                 }
 
                 (subject, html) = SchedulerEmailComposer.BuildConsultaReport(
-                    schedule.Name, result.QueryName, result.Total, result.Truncated, CompanyQueryReportDocumentBuilder.RowCap, theme);
+                    schedule.Name, result.QueryName, result.Total, result.Truncated, CompanyQueryReportDocumentBuilder.RowCap, theme, AssetsBase(services));
                 bytes = result.Bytes;
             }
 
@@ -351,7 +362,8 @@ internal sealed class AnalyticsSchedulerProcessor(
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             SchedulerLog.AttachmentBuildError(logger, schedule.Id, schedule.ReportType, ex);
-            var (subject, html) = SchedulerEmailComposer.BuildConsultaReportMissing(schedule.Name);
+            var (subject, html) = SchedulerEmailComposer.BuildConsultaReportMissing(
+                schedule.Name, assetsBaseUrl: AssetsBase(services));
             return (subject, html, null);
         }
     }
@@ -582,7 +594,7 @@ internal sealed class AnalyticsSchedulerProcessor(
         var theme = await themeResolver.ResolveAsync(rule.TenantId, ct).ConfigureAwait(false);
         var (subject, html) = SchedulerEmailComposer.BuildAlert(
             rule.Name, rule.Metric, rule.Operator, rule.Threshold, alertEvent.MetricValue,
-            rule.WindowMinutes, nowUtc, BogotaTimeZone, theme);
+            rule.WindowMinutes, nowUtc, BogotaTimeZone, theme, AssetsBase(services));
 
         var anySent = false;
         foreach (var recipient in alertEvent.Recipients)
