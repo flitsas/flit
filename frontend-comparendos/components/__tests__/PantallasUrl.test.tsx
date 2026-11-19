@@ -9,7 +9,14 @@ let qs = "";
 const replace = vi.fn();
 const push = vi.fn();
 // Como en Next, el router es el mismo objeto en cada render.
-const router = { replace: (...a: unknown[]) => replace(...a), push: (...a: unknown[]) => push(...a) };
+// Y como en el navegador, `replace` cambia la URL de la página (sin eso, la pantalla creería que ya está escrita).
+const router = {
+  replace: (...a: unknown[]) => {
+    replace(...a);
+    window.history.replaceState(null, "", String(a[0]));
+  },
+  push: (...a: unknown[]) => push(...a),
+};
 vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(qs),
   useRouter: () => router,
@@ -53,6 +60,7 @@ afterEach(() => {
   apiFetch.mockReset();
   replace.mockReset();
   push.mockReset();
+  window.history.replaceState(null, "", "/");
 });
 
 const volverDe = () => decodeURIComponent(new URL(String(push.mock.calls.at(-1)?.[0]), "http://x").searchParams.get("volver") ?? "");
@@ -100,6 +108,15 @@ describe("Centro de mensajes: volver y escritura", () => {
     expect(replace.mock.calls.filter(([u]) => String(u).includes("placa=")).length).toBe(1);
   });
 
+  it("pasar de Placa a Comparendo antes de que termine la espera no descarta la placa", async () => {
+    await act(async () => render(<ToastProvider><CentroMensajes /></ToastProvider>));
+    await act(async () => {
+      fireEvent.change(screen.getByLabelText("Placa"), { target: { value: "ABC123" } });
+      fireEvent.change(screen.getByLabelText("Comparendo"), { target: { value: "0508" } });
+    });
+    await waitFor(() => expect(replace).toHaveBeenLastCalledWith("/mensajes?comparendo=0508&placa=ABC123", { scroll: false }));
+  });
+
   it("una ?empresa= puesta a mano no viaja para quien no es SuperAdmin", async () => {
     qs = "empresa=otra";
     await act(async () => render(<ToastProvider><CentroMensajes /></ToastProvider>));
@@ -133,6 +150,22 @@ describe("Productividad", () => {
     await act(async () => render(<ToastProvider><Productividad /></ToastProvider>));
     await waitFor(() => expect(llamadas("/reportes/productividad").length).toBeGreaterThan(0));
     expect(llamadas("/reportes/productividad").every((q) => q.empresa == null)).toBe(true);
+  });
+
+  it("consultar otro periodo cierra la cifra abierta", async () => {
+    qs = "desde=2026-10-01&hasta=2026-10-31&usuario=u1&metrica=pagos";
+    await act(async () => render(<ToastProvider><Productividad /></ToastProvider>));
+    await screen.findByText("Pagos registrados · Ana Gestora");
+    // La cifra abre un modal encima: se cierra con su X para llegar a Consultar, como haría la gestora.
+    await act(async () => screen.getByRole("button", { name: "Consultar" }).click());
+    await waitFor(() => expect(String(replace.mock.calls.at(-1)?.[0])).not.toContain("metrica="));
+  });
+
+  it("una cifra cuyo usuario no está en el periodo no queda en la URL", async () => {
+    qs = "usuario=fantasma&metrica=pagos";
+    await act(async () => render(<ToastProvider><Productividad /></ToastProvider>));
+    await waitFor(() => expect(llamadas("/reportes/productividad").length).toBeGreaterThan(0));
+    await waitFor(() => expect(replace).toHaveBeenLastCalledWith("/reportes/productividad", { scroll: false }));
   });
 
   it("abrir una cifra la deja en la URL", async () => {

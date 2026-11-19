@@ -166,7 +166,7 @@ function Contenido() {
         pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: filas.length, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
       />
       {/* Al ver un comparendo la cifra sigue abierta en la URL: así «volver» la reabre. */}
-      {sel && <DetalleCifra sel={sel} periodo={periodo} onCerrar={() => setCifra(null)} onVer={(id) => setVer(id, null, `/reportes/productividad?${nuevaQuery}`)} />}
+      {sel && <DetalleCifra sel={sel} periodo={periodo} onCerrar={() => setCifra(null)} onVer={(id) => setVer(id, null, nuevaQuery ? `/reportes/productividad?${nuevaQuery}` : "/reportes/productividad")} />}
     </section>
   );
 }

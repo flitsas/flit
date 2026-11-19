@@ -161,15 +161,23 @@ function Centro() {
   // Lo que se ve en las cajas; el filtro (y la URL) se aplica cuando se deja de escribir, como la búsqueda de la bandeja.
   const [textoComparendo, setTextoComparendo] = useState(inicial.comparendo);
   const [textoPlaca, setTextoPlaca] = useState(inicial.placa);
-  const espera = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const escribir = (mostrar: (v: string) => void, aplicar: (v: string) => void) => (v: string) => {
+  // Una espera por caja: pasar de Placa a Comparendo antes de 400 ms no descarta lo escrito en la primera.
+  const espera = useRef<Record<"comparendo" | "placa", ReturnType<typeof setTimeout> | undefined>>({ comparendo: undefined, placa: undefined });
+  const escribir = (caja: "comparendo" | "placa", mostrar: (v: string) => void, aplicar: (v: string) => void) => (v: string) => {
     mostrar(v);
-    if (espera.current) clearTimeout(espera.current);
-    espera.current = setTimeout(() => {
+    clearTimeout(espera.current[caja]);
+    espera.current[caja] = setTimeout(() => {
       aplicar(v);
       setPage(1);
     }, 400);
   };
+  useEffect(() => {
+    const pendientes = espera.current;
+    return () => {
+      clearTimeout(pendientes.comparendo);
+      clearTimeout(pendientes.placa);
+    };
+  }, []);
   const [abierto, setAbierto] = useState<string | null>(inicial.mensaje);
   const setVerComparendo = useAbrirDetalle();
 
@@ -275,11 +283,11 @@ function Centro() {
         </label>
         <label className={ETIQUETA_CLS}>
           Comparendo
-          <input className={INPUT_CLS} value={textoComparendo} onChange={(e) => escribir(setTextoComparendo, setComparendo)(e.target.value)} />
+          <input className={INPUT_CLS} value={textoComparendo} onChange={(e) => escribir("comparendo", setTextoComparendo, setComparendo)(e.target.value)} />
         </label>
         <label className={ETIQUETA_CLS}>
           Placa
-          <input className={INPUT_CLS} value={textoPlaca} onChange={(e) => escribir(setTextoPlaca, setPlaca)(e.target.value.toUpperCase())} />
+          <input className={INPUT_CLS} value={textoPlaca} onChange={(e) => escribir("placa", setTextoPlaca, setPlaca)(e.target.value.toUpperCase())} />
         </label>
       </div>
       <DataTable
@@ -323,7 +331,7 @@ function Centro() {
         pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: lista.datos?.total ?? 0, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
       />
       <p className="text-xs text-muted-foreground">La apertura es un dato informativo: no constituye prueba de notificación.</p>
-      {abierto && <DetalleMensaje key={abierto} id={abierto} onCerrar={() => setAbierto(null)} onCambio={lista.recargar} onComparendo={(id) => setVerComparendo(id, null, `/mensajes?${nuevaQuery}`)} />}
+      {abierto && <DetalleMensaje key={abierto} id={abierto} onCerrar={() => setAbierto(null)} onCambio={lista.recargar} onComparendo={(id) => setVerComparendo(id, null, nuevaQuery ? `/mensajes?${nuevaQuery}` : "/mensajes")} />}
     </section>
   );
 }
