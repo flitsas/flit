@@ -151,23 +151,15 @@ function Configuracion({ empresa }: { empresa: string | null }) {
     <div className="flex flex-col gap-8">
       <div className="flex flex-col gap-8">
         <Bloque titulo="Cómo salen tus correos" proposito="Así ve el organismo de tránsito los correos que enviamos en nombre de tu empresa.">
-          {/* HU #13882: el canal sale del «Enrutamiento de notificaciones» de la empresa en la plataforma; aquí solo se ve. */}
-          <ListaDefinicion
-            items={[
-              {
-                termino: "Se envían desde",
-                valor: (
-                  <span className="flex flex-col gap-0.5">
-                    <span className="font-semibold">{cuentaPropia ? "Cuenta de correo propia de la empresa" : "Cuenta de FLIT"}</span>
-                    <span className="text-xs text-muted-foreground">
-                      {esSuper ? "Sigue el «Enrutamiento de notificaciones» de la empresa en Trámites (Administración → Compañías)." : "Lo define FLIT para tu empresa."}
-                    </span>
-                  </span>
-                ),
-              },
-            ]}
-          />
-          <div className="grid max-w-6xl grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* HU #13882: el canal sale del «Enrutamiento de notificaciones» de la empresa en la plataforma; aquí solo se ve. */}
+            <div className={ETIQUETA_CLS}>
+              Se envían desde
+              <span className="flex min-h-10 items-center text-sm font-semibold text-foreground">{cuentaPropia ? "Cuenta de correo propia de la empresa" : "Cuenta de FLIT"}</span>
+              <span className={AYUDA_CLS}>
+                {esSuper ? "Sigue el «Enrutamiento de notificaciones» de la empresa en Trámites (Administración → Compañías)." : "Lo define FLIT para tu empresa."}
+              </span>
+            </div>
             <label className={ETIQUETA_CLS}>
               Nombre del remitente
               <input className={INPUT_CLS} value={f.remitenteNombre} maxLength={120} disabled={soloLectura} onChange={(e) => cambiar({ remitenteNombre: e.target.value })} placeholder="Si se deja vacío, la razón social" />
@@ -186,7 +178,7 @@ function Configuracion({ empresa }: { empresa: string | null }) {
             </label>
           </div>
           {!f.correoRespuesta.trim() && (
-            <InlineAlert tone="warning" compact className="max-w-6xl">
+            <InlineAlert tone="warning" compact>
               Sin este correo usamos el del representante legal. Si tampoco hay, no se podrán radicar derechos de petición ni pedir cambios de contraventor para vehículos de la empresa.
               {verRepresentantes && (
                 <>
@@ -198,14 +190,14 @@ function Configuracion({ empresa }: { empresa: string | null }) {
               )}
             </InlineAlert>
           )}
-          <div className="grid max-w-6xl grid-cols-1 gap-5 xl:grid-cols-2">
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
             <Copias titulo="Copias visibles (CC)" ayuda="Reciben una copia visible de los envíos que elijas; si no eliges ninguno, de todos." valor={f.cc} onCambio={(cc) => cambiar({ cc })} soloLectura={soloLectura} />
             <Copias titulo="Copias ocultas (BCC)" ayuda="Igual que las copias visibles, pero el organismo no ve estos correos." valor={f.bcc} onCambio={(bcc) => cambiar({ bcc })} soloLectura={soloLectura} />
           </div>
         </Bloque>
 
         <Bloque titulo="Quién recibe reportes y alertas" proposito="Correos internos de tu empresa: aquí no se escribe al organismo.">
-          <div className="grid max-w-6xl grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <label className={ETIQUETA_CLS}>
               Reporte semanal y mensual
               <textarea className={TEXTAREA_CLS} rows={3} value={f.destinatariosReportes} disabled={soloLectura} onChange={(e) => cambiar({ destinatariosReportes: e.target.value })} placeholder="Un correo por línea" />
@@ -254,6 +246,7 @@ function Configuracion({ empresa }: { empresa: string | null }) {
         <div className="rounded-xl border border-border bg-card p-4 md:p-5">
           <ListaDefinicion
             columnas={2}
+            className="gap-y-4 lg:grid-cols-4"
             items={[
               { termino: "Derechos de petición", valor: <Incluido si={c.hasRightPetitionModule} /> },
               { termino: "Lectura automática de documentos", valor: <Incluido si={c.hasOcrAccess} /> },
