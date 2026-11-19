@@ -69,9 +69,9 @@ public sealed class PdfVehiculoRotulosTests
         PdfDePrueba.Tiene(texto, "parrafo hu3").Should().BeTrue(texto);
     }
 
-    /// <summary>HU-3: no se sube la versión de plantilla; el cambio de rótulo lo invalida la huella.</summary>
+    /// <summary>HU-3 no suma su propia subida: la versión queda en la 8 de los ajustes del PDF; el cambio de rótulo lo invalida la huella.</summary>
     [Fact]
-    public void HU3_no_sube_la_version_de_plantilla() => PdfVehiculo.VersionPlantilla.Should().Be(7);
+    public void HU3_no_sube_la_version_de_plantilla() => PdfVehiculo.VersionPlantilla.Should().Be(8);
 
     [Fact]
     public void Seccion_de_fuente_sin_titulo_usa_el_rotulo_generico_y_nunca_el_codigo()
