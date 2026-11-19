@@ -26,6 +26,8 @@ internal static class SuperAdminEndpointExtensions
         ConsultasConsumoEndpoints.Map(group);
         // Epic #13316 (HU #13357) — mensajes muertos de Notificaciones (correos y webhooks que no salieron).
         MensajesMuertosEndpoints.Map(group);
+        // HU #14642 — overrides manuales de persona RUNT por tenant (cortocircuito RUNT).
+        TenantRuntPersonOverrideEndpoints.Map(group);
 
         return app;
     }

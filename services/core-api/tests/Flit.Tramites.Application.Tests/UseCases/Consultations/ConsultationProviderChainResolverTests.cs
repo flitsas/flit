@@ -30,7 +30,9 @@ public sealed class ConsultationProviderChainResolverTests
         var resolver = Resolver(new ConsultationChainOptions()); // DefaultChains vacío
 
         resolver.ResolveChain(ConsultationKind.VehiclePlate).Should().Equal("kyverum_runt", "verifik");
-        resolver.ResolveChain(ConsultationKind.Conductor).Should().Equal("kyverum_runt_conductor", "verifik_conductor");
+        // HU #14642: tenant_manual_conductor encabeza la cadena de conductor (cortocircuito local).
+        resolver.ResolveChain(ConsultationKind.Conductor).Should().Equal(
+            "tenant_manual_conductor", "kyverum_runt_conductor", "verifik_conductor");
     }
 
     // ── Fallback ────────────────────────────────────────────────────────────────────────────
