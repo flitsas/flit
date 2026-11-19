@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, Modal, usePaginacion } from "@flit/ui";
+import { METRICAS_GRID_CLS, TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
 import { Encabezado } from "@/components/Pantalla";
 import { FiltrosPeriodo, periodoInicial, type Periodo } from "@/components/reportes/FiltrosPeriodo";
@@ -88,10 +89,12 @@ function Contenido() {
       />
       <FiltrosPeriodo valor={periodo} onAplicar={setPeriodo} />
       {filas.length > 0 && (
-        <p className="text-xs text-muted-foreground">
-          Total del periodo: <b>{totales.gestionados.toLocaleString("es-CO")}</b> comparendos gestionados, <b>{totales.dpEnviados.toLocaleString("es-CO")}</b> DPs enviados y{" "}
-          <b>{totales.pagos.toLocaleString("es-CO")}</b> pagos registrados.
-        </p>
+        <div className={METRICAS_GRID_CLS} aria-label="Totales del periodo" role="group">
+          <TarjetaMetrica etiqueta="Comparendos gestionados" cifra={totales.gestionados.toLocaleString("es-CO")} pie={`${filas.length.toLocaleString("es-CO")} usuarios en el periodo`} />
+          <TarjetaMetrica etiqueta="DPs enviados" cifra={totales.dpEnviados.toLocaleString("es-CO")} pie={`${totales.respuestasOt.toLocaleString("es-CO")} respuestas del organismo registradas`} />
+          <TarjetaMetrica etiqueta="Pagos registrados" cifra={totales.pagos.toLocaleString("es-CO")} pie={`${totales.contraventoresAsignados.toLocaleString("es-CO")} contraventores asignados`} />
+          <TarjetaMetrica etiqueta="Avisos y OCR" cifra={(totales.avisosManuales + totales.ocrRegistrados).toLocaleString("es-CO")} pie={`${totales.avisosManuales.toLocaleString("es-CO")} avisos manuales · ${totales.ocrRegistrados.toLocaleString("es-CO")} por OCR`} />
+        </div>
       )}
       <DataTable
         ariaLabel="Productividad por usuario"
@@ -118,7 +121,7 @@ function Contenido() {
                   {f[m.clave].toLocaleString("es-CO")}
                 </button>
               ) : (
-                <span className="opacity-50">0</span>
+                <span className="text-[color:var(--di-text-tertiary)]">0</span>
               ),
           })),
         ]}
