@@ -19,6 +19,7 @@ public static class ReportesEndpoints
         g.MapGet("/productividad", Productividad).RequirePermiso(Permisos.ProductividadVer);
         g.MapGet("/productividad/detalle", Detalle).RequirePermiso(Permisos.ProductividadVer);
         g.MapGet("/productividad/excel", Excel).RequirePermiso(Permisos.ProductividadVer);
+        OperacionEndpoints.Map(api);
     }
 
     private static async Task<Alcance> AlcanceAsync(UsuarioActual usuario, Capacidades capacidades, Guid? empresa, Guid? nit, DateOnly? desde, DateOnly? hasta, Reloj reloj, CancellationToken ct)
