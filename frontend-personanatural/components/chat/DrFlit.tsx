@@ -17,6 +17,8 @@ interface Mensaje {
 /** Demora que finge «está escribiendo» (la misma del diseño). */
 const DEMORA_MS = 650;
 const MAX_MENSAJE = 300;
+/** Por debajo de 1024 (contrato responsive §1) el panel del chat bloquea el scroll de la página. */
+const ANCHO_BLOQUEO = "(max-width: 1023.98px)";
 
 /**
  * Asistente Dr. FLIT SIMULADO: sin servicio externo, sin IA y sin datos personales. Lo que el ciudadano escribe vive solo en el
@@ -35,8 +37,19 @@ export function DrFlit({ contexto = {} }: { contexto?: ContextoChat }) {
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
   const siguiente = useRef(1);
   const aviso = useId();
-  // iOS: con el panel abierto, arrastrar dentro de él no desplaza la página de atrás.
-  useBloqueoScroll(abierto);
+  // El panel no es modal: en escritorio la página sigue con su scroll. Por debajo de 1024 (celular y iPad) se bloquea, porque
+  // en iOS arrastrar dentro del panel desplaza la página de atrás. El ancho se lee en un efecto (nunca en el render) y se
+  // recalcula si cruza 1024 con el chat abierto.
+  const [estrecho, setEstrecho] = useState(false);
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const consulta = window.matchMedia(ANCHO_BLOQUEO);
+    const actualizar = () => setEstrecho(consulta.matches);
+    actualizar();
+    consulta.addEventListener("change", actualizar);
+    return () => consulta.removeEventListener("change", actualizar);
+  }, []);
+  useBloqueoScroll(abierto && estrecho);
 
   useEffect(() => { if (abierto) cerrar.current?.focus(); }, [abierto]);
   useEffect(() => () => { if (temporizador.current) clearTimeout(temporizador.current); }, []);
