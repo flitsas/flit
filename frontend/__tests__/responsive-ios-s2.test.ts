@@ -51,7 +51,11 @@ describe("responsive iOS — S2 Trámites/admin", () => {
     const css = sinComentarios(readFileSync(path.join(FE_ROOT, "app/globals.css"), "utf8"));
     const bloque = css.match(/@media \(max-width: 639\.98px\) \{([\s\S]*?)\n\}/)?.[1] ?? "";
     expect(bloque).toMatch(/select,\s*textarea/);
-    expect(bloque).toMatch(/font-size: 16px/);
+    // Nunca achica: ni lo heredado (max con 1em) ni un campo que ya trae text-base o más grande.
+    expect(bloque).toMatch(/font-size: max\(16px, 1em\)/);
+    expect(bloque).toMatch(/:not\(\.text-base, \.text-lg, \.text-xl/);
+    // Solo campos: los botones con forma de input no entran.
+    for (const tipo of ["submit", "button", "reset", "image"]) expect(bloque).toContain(`[type="${tipo}"]`);
   });
 
   it("FiltroColumna no lee window durante el render (el ancho del panel va en CSS)", () => {
@@ -64,5 +68,12 @@ describe("responsive iOS — S2 Trámites/admin", () => {
     const src = readFileSync(path.join(FE_ROOT, "components/consultas/SavedQueryList.tsx"), "utf8");
     expect(src).not.toMatch(/gap-0\.5 opacity-0 /);
     expect(src).toMatch(/opacity-100 \[@media\(hover:hover\)\]:opacity-0/);
+  });
+  it("el listado de /tramites y ClientProceduresTable pasan a tarjetas por debajo de 1024, como el resto", () => {
+    const css = sinComentarios(readFileSync(path.join(FE_ROOT, "styles/tramites-propuesta.css"), "utf8"));
+    expect(css).toMatch(/@media \(max-width: 1023\.98px\) \{\s*\.di-tabla-tarjetas \{/);
+    expect(css).not.toMatch(/@media \(max-width: 639\.98px\) \{\s*\.di-tabla-tarjetas/);
+    const tabla = readFileSync(path.join(FE_ROOT, "components/operacion/TramitesTable.tsx"), "utf8");
+    expect(tabla).not.toMatch(/TABLA_TARJETA_640_CLS/);
   });
 });

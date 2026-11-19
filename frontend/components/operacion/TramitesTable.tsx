@@ -109,7 +109,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
-  TABLA_TARJETA_640_CLS,
+  TABLA_TARJETA_CLS,
 } from '@/components/atom/table-styles';
 import { PageNav } from '@/components/atom/PageNav';
 import { TAMANOS_DE_PAGINA, useTamanoDePagina } from '@/components/atom/usePaginacion';
@@ -2259,7 +2259,7 @@ function TableBody({
     // Scroll normal de página: la tabla crece con su contenido y solo scrollea en horizontal
     // cuando las columnas visibles no caben a lo ancho. La píldora de conteo que iba aquí se
     // fundió con "Mostrando X de Y" de `PageNav` — un solo lugar para el recuento.
-    <div className={`flex flex-col ${TABLA_TARJETA_640_CLS}`}>
+    <div className={`flex flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
         <table
           aria-label="Trámites en curso"
