@@ -14,9 +14,14 @@ export function DineroInicio({ datos }: { datos: RespuestaDineroInicio | null })
   if (!datos)
     return (
       <TarjetaPlegable titulo="Dinero" abiertaInicial nivelTitulo={2}>
-        {/* El alto de una fila de tarjetas: el bloque no crece cuando llegan las cifras (sin salto de la operación). */}
-        <div className="flex min-h-[112px] items-center justify-center" aria-busy="true">
-          <Cargador />
+        {/* Cuatro tarjetas fantasma en la misma grilla y con el alto real de una TarjetaMetrica (120 px, medido): la
+            reserva cuadra en todos los anchos (en celular se apilan como las reales) y la operación no salta. */}
+        <div className={METRICAS_GRID_CLS} aria-busy="true" aria-label="Cargando el dinero">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="flex h-[120px] items-center justify-center rounded-[9px] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)]">
+              {i === 0 && <Cargador />}
+            </div>
+          ))}
         </div>
       </TarjetaPlegable>
     );

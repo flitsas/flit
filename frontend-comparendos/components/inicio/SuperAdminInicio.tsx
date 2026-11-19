@@ -53,7 +53,7 @@ function ImpactoFlit() {
             <TarjetaMetrica
               etiqueta="Derechos de petición"
               cifra={n(i.dp.enviados)}
-              pie={`${n(i.dp.favorables)} favorables${i.dp.tasa === null ? "" : ` (${formatoTasa(i.dp.tasa)} de los respondidos)`}`}
+              pie={`${n(i.dp.favorables)} ${i.dp.favorables === 1 ? "favorable" : "favorables"}${i.dp.tasa === null ? "" : ` (${formatoTasa(i.dp.tasa)} de los respondidos)`}`}
             />
             <TarjetaMetrica etiqueta="Comparendos gestionados" cifra={n(i.comparendosGestionados)} pie="Con DP, pago, contraventor o aviso" />
             <TarjetaMetrica etiqueta="Avisos a conductores" cifra={n(i.avisosEnviados)} pie="Manuales y automáticos" />
