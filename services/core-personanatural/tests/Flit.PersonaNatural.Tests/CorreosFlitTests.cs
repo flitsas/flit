@@ -52,6 +52,15 @@ public sealed class CorreosFlitTests
             + "Guarda este código: con él puedes consultar el estado de tu trámite.");
 
     [Fact]
+    public void El_nombre_va_en_su_propia_linea_en_negrita_azul_y_sin_nombre_queda_igual()
+    {
+        CorreoDeCierre.ArmarHtml("Ana <b>", "PN-1", "Org")
+            .Should().Contain("Hola<br><strong style=\"color:#557EFF;\">Ana &lt;b&gt;,</strong>");
+        CorreoDeAnulacion.ArmarHtml(null, "PN-1", "Org")
+            .Should().Contain(">Hola,</p>").And.NotContain("Hola<br>");
+    }
+
+    [Fact]
     public void Las_imagenes_van_por_url_absoluta_desde_la_misma_clave_de_core_api()
     {
         var configuracion = new ConfigurationBuilder()

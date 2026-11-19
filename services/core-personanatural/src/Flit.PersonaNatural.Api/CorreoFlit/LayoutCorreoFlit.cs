@@ -60,6 +60,15 @@ internal static class LayoutCorreoFlit
     /// <summary>Párrafo del cuerpo con HTML interno ya codificado.</summary>
     public static string Parrafo(string html) => $"<p style=\"margin:0 0 12px;\">{html}</p>";
 
+    /// <summary>
+    /// Saludo del correo. Con nombre, «Hola» y debajo el nombre en negrita azul con la coma (como la maqueta); sin nombre,
+    /// «Hola,». Las palabras son las mismas en ambos casos: solo cambia el salto de línea.
+    /// </summary>
+    public static string Saludo(string? nombre) =>
+        string.IsNullOrWhiteSpace(nombre)
+            ? Parrafo("Hola,")
+            : Parrafo($"Hola<br><strong style=\"color:{Azul};\">{Enc(nombre.Trim())},</strong>");
+
     /// <summary>Nota secundaria (gris, más pequeña) con HTML interno ya codificado.</summary>
     public static string Nota(string html) => $"<p style=\"margin:12px 0 0;font-size:13px;line-height:1.5;color:{Gris};\">{html}</p>";
 

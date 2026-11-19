@@ -1,4 +1,3 @@
-using System.Net;
 using System.Text.Json;
 using Flit.PersonaNatural.Api.Adjuntos;
 using Flit.PersonaNatural.Api.CorreoFlit;
@@ -338,10 +337,9 @@ public sealed partial class CorreoDeCierre(
 
     internal static string ArmarHtml(string? nombre, string codigoPublico, string organismo, string? baseAssets = null)
     {
-        var saludo = string.IsNullOrWhiteSpace(nombre) ? "Hola" : "Hola " + WebUtility.HtmlEncode(nombre.Trim());
         return LayoutCorreoFlit.Envolver(
             "Tu trámite quedó pagado",
-            LayoutCorreoFlit.Parrafo(saludo + ",")
+            LayoutCorreoFlit.Saludo(nombre)
             + LayoutCorreoFlit.Parrafo($"Recibimos el pago de tu trámite. Tu código para consultarlo es {LayoutCorreoFlit.Destacado(codigoPublico)}.")
             + LayoutCorreoFlit.Parrafo($"Recógelo en {LayoutCorreoFlit.Destacado(organismo)}.")
             + LayoutCorreoFlit.Nota("Guarda este código: con él puedes consultar el estado de tu trámite."),

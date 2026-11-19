@@ -1,4 +1,3 @@
-using System.Net;
 using Flit.PersonaNatural.Api.CorreoFlit;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Persistence;
@@ -79,10 +78,9 @@ public sealed partial class CorreoDeAnulacion(
 
     internal static string ArmarHtml(string? nombre, string codigoPublico, string organismo, string? baseAssets = null)
     {
-        var saludo = string.IsNullOrWhiteSpace(nombre) ? "Hola" : "Hola " + WebUtility.HtmlEncode(nombre.Trim());
         return LayoutCorreoFlit.Envolver(
             "Tu pago fue anulado",
-            LayoutCorreoFlit.Parrafo(saludo + ",")
+            LayoutCorreoFlit.Saludo(nombre)
             + LayoutCorreoFlit.Parrafo($"El pago en caja de tu trámite {LayoutCorreoFlit.Destacado(codigoPublico)} fue anulado por el organismo.")
             + LayoutCorreoFlit.Parrafo($"Acércate a la caja de {LayoutCorreoFlit.Destacado(organismo)} para generar el pago de nuevo.")
             + LayoutCorreoFlit.Nota("Guarda este código: con él puedes consultar el estado de tu trámite."),
