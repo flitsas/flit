@@ -187,6 +187,13 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Una matrícula inicial puede tomar la ruta de placa: Preasignación → Asignado → Entregado. Consulta «Matrícula inicial: ruta de placa» para saber qué te corresponde en cada estado.",
           "Haz seguimiento desde el listado (búsqueda por radicado, placa o VIN) o pregúntale a DR. FLIT.",
         ],
+        callouts: [
+          {
+            variant: "info",
+            title: "Si el expediente tarda en generarse",
+            text: "Al enviar, la plataforma genera el expediente consolidado (FUR y documentos). Si tarda o falla por un problema momentáneo, el trámite se envía igual al organismo y verás «Trámite enviado al OT. El expediente consolidado se está generando y estará disponible en unos minutos.». No tienes que volver a enviarlo. Si en cambio falta un documento obligatorio, verás «No se puede radicar: Expediente incompleto» con lo que falta, y el trámite no se envía hasta que lo cargues.",
+          },
+        ],
       },
     ],
   },
