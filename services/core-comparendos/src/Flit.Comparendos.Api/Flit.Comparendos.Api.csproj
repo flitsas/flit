@@ -42,6 +42,8 @@
     <EmbeddedResource Include="Semillas\Plantillas\Renting\*.html" />
     <EmbeddedResource Include="Infraestructura\Pdf\Fuentes\*.ttf" />
     <EmbeddedResource Include="Infraestructura\Pdf\Membretes\*.jpg" />
+    <!-- Correos 2.0: bandas del membrete FLIT, copiadas de core-api (Documents/Branding/Assets), como en core-diagnostico. -->
+    <EmbeddedResource Include="Infraestructura\Pdf\Membretes\*.svg" />
   </ItemGroup>
 
   <ItemGroup>

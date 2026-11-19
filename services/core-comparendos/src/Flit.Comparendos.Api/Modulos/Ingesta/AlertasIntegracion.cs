@@ -80,7 +80,7 @@ public sealed class AlertasIntegracion(ComparendosDb db, ServicioCorreo correo, 
             <p>Falló la consulta a <b>{WebUtility.HtmlEncode(fuente)}</b> en el ciclo del {momento}.</p>
             {HtmlCorreo.Tabla(filas)}
             <p><b>Acción tomada:</b> datos existentes preservados — no se modificó ningún registro de las gestoras afectadas.</p>
-            <p><a href="{correo.AppUrl}/admin/log-migracion?ciclo={ciclo.Id}">Ver el log de migración</a></p>
+            {HtmlCorreo.Boton("Ver el log de migración", $"{correo.AppUrl}/admin/log-migracion?ciclo={ciclo.Id}")}
             """;
         await correo.RegistrarAsync(new CorreoNuevo
         {
@@ -88,7 +88,7 @@ public sealed class AlertasIntegracion(ComparendosDb db, ServicioCorreo correo, 
             Plantilla = "comparendos.alerta_fallo_integracion",
             Para = para,
             Asunto = asunto,
-            Html = HtmlCorreo.Envolver(critica ? "Fallo crítico de integración" : "Fallo de integración", cuerpo),
+            Html = HtmlCorreo.Envolver(critica ? "Fallo crítico de integración" : "Fallo de integración", cuerpo, recursos: $"{correo.AppUrl}/assets/correo"),
             RemitenteNombre = config.RemitenteNombre,
         }, ct).ConfigureAwait(false);
     }

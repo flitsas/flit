@@ -42,10 +42,10 @@ public sealed partial class CopyCongeladoTests
         Comparar($"{nombre}.html", Correos().Single(c => c.Nombre == nombre).Html());
 
     [Fact]
-    public void Linea_base_de_PDF_si_se_pide()
+    public void Linea_base_visual_si_se_pide()
     {
         var dir = Environment.GetEnvironmentVariable("COPY_PDF_DIR");
-        Assert.SkipWhen(string.IsNullOrEmpty(dir), "Solo con COPY_PDF_DIR (línea base visual de los PDF).");
+        Assert.SkipWhen(string.IsNullOrEmpty(dir), "Solo con COPY_PDF_DIR (línea base visual de los PDF y los correos).");
         Directory.CreateDirectory(dir!);
         var valores = Valores();
         foreach (var (tipo, archivo) in new[]
@@ -56,8 +56,12 @@ public sealed partial class CopyCongeladoTests
         {
             var armado = ServicioPlantillas.Armar(new PlantillaVersion { CuerpoHtml = Semilla(archivo).Cuerpo }, tipo, valores, ConjuntoPlantillas.Flit, Recursos);
             File.WriteAllBytes(Path.Combine(dir!, $"{Path.GetFileNameWithoutExtension(archivo)}.pdf"),
-                ServicioPlantillas.Pdf(armado, titulo: archivo));
+                ServicioPlantillas.Pdf(armado, titulo: archivo, membrete: ServicioPlantillas.MembreteDeDocumento(ConjuntoPlantillas.Flit)));
         }
+
+        // Y los correos FLIT en HTML, para mirarlos a 360 y 600 px.
+        foreach (var c in Correos().Where(c => !c.Renting && c.Nombre != "tabla" && c.Nombre != "boton"))
+            File.WriteAllText(Path.Combine(dir!, $"{c.Nombre}.html"), c.Html());
     }
 
     // ── Los correos ─────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -84,17 +88,22 @@ public sealed partial class CopyCongeladoTests
         }
 
         var cuerpoTabla = $"<p>Falló la lectura del documento.</p>{HtmlCorreo.Tabla(Filas)}";
+        // Los reportes de Renting arman su tabla sin la marca de FLIT (la de siempre).
+        var cuerpoTablaRenting = $"<p>Falló la lectura del documento.</p>{HtmlCorreo.Tabla(Filas, marcaFlit: false)}";
         yield return new("envolver-alerta-flit", false, () => HtmlCorreo.Envolver("Fallo del proveedor de OCR", cuerpoTabla));
         yield return new("envolver-pie-propio-flit", false, () => HtmlCorreo.Envolver("Fallo crítico de integración", cuerpoTabla, $"{Empresa} · Comunicación enviada con FLIT."));
-        yield return new("envolver-renting", true, () => HtmlCorreo.Envolver(Empresa, cuerpoTabla, $"{Empresa} · Correo automático, no lo respondas.", marcaFlit: false));
+        yield return new("envolver-renting", true, () => HtmlCorreo.Envolver(Empresa, cuerpoTablaRenting, $"{Empresa} · Correo automático, no lo respondas.", marcaFlit: false));
         yield return new("deempresa-flit", false, () => HtmlCorreo.DeEmpresa(ConjuntoPlantillas.Flit, "Cierre semanal de comparendos", cuerpoTabla, Empresa, Recursos));
         yield return new("deempresa-sin-empresa-flit", false, () => HtmlCorreo.DeEmpresa(ConjuntoPlantillas.Flit, "Derechos de petición automáticos", cuerpoTabla, null, Recursos));
-        yield return new("deempresa-renting", true, () => HtmlCorreo.DeEmpresa(ConjuntoPlantillas.Renting, "Cierre semanal de comparendos", cuerpoTabla, Empresa, Recursos));
+        yield return new("deempresa-renting", true, () => HtmlCorreo.DeEmpresa(ConjuntoPlantillas.Renting, "Cierre semanal de comparendos", cuerpoTablaRenting, Empresa, Recursos));
         yield return new("flit-con-cierre", false, () => HtmlCorreo.Flit("<p>Cuerpo del aviso.</p>", Empresa, Recursos));
         yield return new("flit-sin-empresa", false, () => HtmlCorreo.Flit("<p>Cuerpo del aviso.</p>", null, Recursos));
         yield return new("renting-aviso", true, () => HtmlCorreo.Renting("<p>Cuerpo del aviso.</p>", Recursos));
         yield return new("renting-sistema", true, () => HtmlCorreo.RentingSistema("<p>Cuerpo.</p>", Empresa, Recursos));
         yield return new("tabla", false, () => HtmlCorreo.Tabla(Filas));
+        yield return new("tabla-renting", true, () => HtmlCorreo.Tabla(Filas, marcaFlit: false));
+        yield return new("boton", false, () => HtmlCorreo.Boton("Ver el paquete", "https://comparendos.flit.test/ocr/paquetes/1"));
+        yield return new("envolver-con-recursos-flit", false, () => HtmlCorreo.Envolver("Fallo del proveedor de OCR", $"{cuerpoTabla}{HtmlCorreo.Boton("Ver el paquete", "https://x.test/p")}", recursos: Recursos));
     }
 
     private static Dictionary<string, string?> Valores()
@@ -111,7 +120,7 @@ public sealed partial class CopyCongeladoTests
     }
 
     private static string DeCuerpo(TipoPlantilla tipo, ConjuntoPlantillas conjunto) =>
-        ServicioPlantillas.Armar(new PlantillaVersion { Asunto = "Resumen {{empresa.razon_social}}", CuerpoHtml = $"<p>Hola {{{{empresa.razon_social}}}}.</p>{HtmlCorreo.Tabla(Filas)}" },
+        ServicioPlantillas.Armar(new PlantillaVersion { Asunto = "Resumen {{empresa.razon_social}}", CuerpoHtml = $"<p>Hola {{{{empresa.razon_social}}}}.</p>{HtmlCorreo.Tabla(Filas, conjunto == ConjuntoPlantillas.Flit)}" },
             tipo, Valores(), conjunto, Recursos).Html;
 
     // ── Semillas (embebidas en el ensamblado del API) ───────────────────────────────────────────────────────────────────
