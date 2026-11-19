@@ -20,7 +20,7 @@ namespace Flit.Ict.Infrastructure.Jobs;
 internal static class MaterializacionNovedades
 {
     private static readonly string[] PrefijosVisibles =
-        ["actors_warning:", "commercial_warning:", "preflight_warning:", "carroceria_warning:"];
+        ["actors_warning:", "commercial_warning:", "preflight_warning:", "carroceria_warning:", "color_warning:", "combustible_warning:"];
 
     /// <summary>
     /// Texto en español de las advertencias visibles que lo ameritan (el resto se publica como código). Se
@@ -30,6 +30,10 @@ internal static class MaterializacionNovedades
     {
         ["carroceria_warning:fuera_de_catalogo"] =
             "La carrocería enviada no corresponde al catálogo para la clase del vehículo consultado; el gestor debe elegirla",
+        ["color_warning:fuera_de_catalogo"] =
+            "El color enviado no corresponde al catálogo de colores; el gestor debe elegirlo",
+        ["combustible_warning:sin_equivalencia"] =
+            "El combustible enviado no tiene equivalencia en el catálogo; el gestor debe elegirlo",
         ["carroceria_warning:vehiculo_sin_carroceria"] =
             "El vehículo no tiene carrocería registrada en el RUNT; el cambio de carrocería no aplica y no se incluyó en el trámite",
     };
@@ -53,6 +57,22 @@ internal static class MaterializacionNovedades
             .Where(w => PrefijosVisibles.Any(p => w.StartsWith(p, StringComparison.Ordinal)))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+    }
+
+    /// <summary>Une el ErrorCode del reply con las advertencias locales, sin repetir códigos.</summary>
+    internal static string? Combinar(string? errorCode, IReadOnlyList<string> locales)
+    {
+        ArgumentNullException.ThrowIfNull(locales);
+        var presentes = (errorCode ?? string.Empty).Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        var extra = locales.Where(l => !string.IsNullOrWhiteSpace(l) && !presentes.Contains(l, StringComparer.Ordinal)).ToList();
+        if (extra.Count == 0)
+        {
+            return errorCode;
+        }
+
+        return string.IsNullOrWhiteSpace(errorCode)
+            ? string.Join(';', extra)
+            : errorCode.TrimEnd(';', ' ') + ";" + string.Join(';', extra);
     }
 
     /// <summary>Mensaje de novedad (null si no hay advertencias visibles).</summary>

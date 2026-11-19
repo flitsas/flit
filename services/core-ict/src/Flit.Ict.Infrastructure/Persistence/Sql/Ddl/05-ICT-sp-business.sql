@@ -8,7 +8,7 @@
 -- Portadas: documento/nombre/apellido/email/teléfono de seller/buyer/lessee, formato de
 -- representante legal y mandante principal, selling_date/selling_price, e integridad de adjuntos.
 -- TODO(ICT-SP-FIELDS): pendiente el requisito ESTRICTO de rep legal por tipo de actor (NIT ⇒
--- obligatorio), related_company_* y el bloque de limitations_* (gravámenes) de v1.
+-- obligatorio) y el bloque de limitations_* (gravámenes) de v1.
 -- =============================================================================
 
 -- Índice PARCIAL de apoyo al drenado batcheado: solo indexa las filas PENDIENTES de validación de
@@ -213,6 +213,23 @@ BEGIN
             SET business_comments_validation = business_comments_validation || ' selling_price no debe ir vacio o en cero;'
             WHERE id = rec.id_master AND selling_price <= 0;
         END IF;
+
+        -- Compañía relacionada (HU #14600, v1 #78/#79): solo se valida si viene el documento.
+        UPDATE ict.external_integration_master
+        SET business_comments_validation = business_comments_validation || ' related_company_company_document invalido;'
+        WHERE id = rec.id_master
+          AND length(TRIM(COALESCE(related_company_document, ''))) > 0
+          AND TRIM(related_company_document) !~ '^\d{6,11}$';
+
+        UPDATE ict.external_integration_master
+        SET business_comments_validation = business_comments_validation || ' related_company_company_name no debe estar vacio;'
+        WHERE id = rec.id_master
+          AND length(TRIM(COALESCE(related_company_document, ''))) > 0
+          AND length(TRIM(COALESCE(related_company_name, ''))) = 0;
+
+        -- Transformaciones (v1 #85): NO se validan aquí. El código fuera del catálogo se rechaza al registrar
+        -- (RegisterTransformationInputValidator, HU #14600): la FK fk_eimtt_type impide que llegue a la tabla
+        -- puente, así que una regla en este SP nunca se dispararía. No se porta v1 #86 (estaba invertida).
 
         -- ===== Sección Integración =====
         UPDATE ict.external_integration_master eim

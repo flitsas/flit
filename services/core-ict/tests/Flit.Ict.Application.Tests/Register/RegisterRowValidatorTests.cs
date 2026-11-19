@@ -88,7 +88,9 @@ public sealed class RegisterRowValidatorTests
     {
         var row = MatriculaInicial() with
         {
-            VehicleServiceType = 2, RelatedCompanyDocument = null, RelatedCompanyName = null,
+            VehicleServiceType = 2,
+            RelatedCompanyDocument = null,
+            RelatedCompanyName = null,
         };
         Validator.Validate(row).IsValid.Should().BeTrue();
     }
@@ -206,10 +208,166 @@ public sealed class RegisterRowValidatorTests
         ErrorOn(Bilateral() with { Seller = new[] { seller } }, "principal_mandante").Should().BeTrue();
     }
 
+    // ===== Feature #14601: paridad de reglas de negocio (P3, P4, P5) =====
+    private static RegisterPrincipalMandanteInput ValidMandante(string tipo = "CC") =>
+        new(tipo, "987654", "Man", "Dante", Email: "m@e.co");
+
+    private static RegisterRowInput ConRep(RegisterLegalRepresentativeInput rep) =>
+        Bilateral() with { Seller = new[] { NitActor(rep) } };
+
+    private static RegisterRowInput ConMandante(RegisterPrincipalMandanteInput m) =>
+        Bilateral() with { Seller = new[] { NaturalActor("111") with { PrincipalMandante = m } } };
+
+    [Fact]
+    public void Ac1_fila_valida_con_operacion_1_representante_y_mandante_pasa()
+    {
+        var seller = NitActor(ValidRep() with { Email = "rep@e.co", Phone = "300 123 4567" })
+            with
+        { PrincipalMandante = ValidMandante() };
+        Validator.Validate(Bilateral() with { Seller = new[] { seller } }).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(2)]
+    [InlineData(3)]
+    public void Ac4_operacion_actualizar_o_eliminar_se_rechaza_con_mensaje_exacto(int op)
+    {
+        var errores = Validator.Validate(Bilateral() with { TransactionOperation = op }).Errors
+            .Select(e => e.ErrorMessage).ToList();
+        errores.Should().ContainSingle().Which.Should().Be(
+            "transaction_operation no soportada en el registro: para actualizar use la edición del pre-trámite y para eliminar use abortProcess");
+    }
+
+    [Theory]
+    [InlineData(0, "transaction_operation es obligatorio")]
+    [InlineData(-1, "transaction_operation es obligatorio")]
+    [InlineData(4, "transaction_operation invalido")]
+    [InlineData(99, "transaction_operation invalido")]
+    public void Operacion_fuera_de_1_conserva_obligatorio_o_invalido(int op, string mensaje)
+    {
+        var errores = Validator.Validate(Bilateral() with { TransactionOperation = op }).Errors
+            .Select(e => e.ErrorMessage).ToList();
+        errores.Should().ContainSingle().Which.Should().Be(mensaje);
+    }
+
+    [Theory]
+    [InlineData("XX")]
+    [InlineData("ZZZ")]
+    public void Ac5_representante_con_tipo_documento_no_reconocido_falla(string tipo)
+    {
+        ErrorOn(ConRep(ValidRep() with { DocumentType = tipo }), "legal_representative_document_type no es valido")
+            .Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("no-es-correo")]
+    [InlineData("a@")]
+    public void Ac5_representante_con_email_invalido_falla(string email)
+    {
+        ErrorOn(ConRep(ValidRep() with { Email = email }), "legal_representative_email formato invalido")
+            .Should().BeTrue();
+    }
+
+    [Fact]
+    public void Representante_con_telefono_de_mas_de_50_digitos_falla()
+    {
+        var row = ConRep(ValidRep() with { Phone = new string('3', 51) });
+        ErrorOn(row, "legal_representative_phone").Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData(null)]
+    public void Ac8_representante_con_email_vacio_no_rechaza(string? email)
+    {
+        Validator.Validate(ConRep(ValidRep() with { Email = email })).IsValid.Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("XX")]
+    [InlineData("ZZZ")]
+    public void Ac6_mandante_con_tipo_documento_no_reconocido_falla(string tipo)
+    {
+        ErrorOn(ConMandante(ValidMandante(tipo)), "principal_mandante_document_type no es valido")
+            .Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData("C")]
+    [InlineData("N.I.T")]
+    [InlineData("nit")]
+    public void Alias_validos_de_tipo_documento_se_aceptan_en_representante_y_mandante(string alias)
+    {
+        Validator.Validate(ConRep(ValidRep() with { DocumentType = alias })).IsValid.Should().BeTrue();
+        Validator.Validate(ConMandante(ValidMandante(alias))).IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Normalizer_guarda_el_tipo_de_representante_y_mandante_normalizado()
+    {
+        var seller = NitActor(ValidRep() with { DocumentType = "N.I.T" })
+            with
+        { PrincipalMandante = ValidMandante("c") };
+        var master = IctPayloadNormalizer.ToMaster(Bilateral() with { Seller = new[] { seller } }, Guid.NewGuid());
+        var actor = master.Actors.Single(a => a.LegalRepresentativeDocumentType is not null);
+        actor.LegalRepresentativeDocumentType.Should().Be("NIT");
+        actor.PrincipalMandanteDocumentType.Should().Be("CC");
+    }
+
     [Fact]
     public void Actor_sin_documento_falla()
     {
         var badSeller = new RegisterActorInput("CC", "", "Juan", "Perez");
         ErrorOn(Bilateral() with { Seller = new[] { badSeller } }, "document_number").Should().BeTrue();
     }
+
+    // ===== HU #14600 — AC7: transformación fuera del catálogo =====
+    [Theory]
+    [InlineData(6)]
+    [InlineData(7)]
+    [InlineData(99)]
+    public void Ac7_transformacion_fuera_del_catalogo_rechaza_la_fila(int codigo)
+    {
+        var row = Bilateral() with
+        {
+            MoreTransactionTransactionType = new[] { new RegisterTransformationInput(codigo, "x") },
+        };
+
+        ErrorOn(row, "more_transaction_transaction_type/transactionType no tiene un valor valido").Should().BeTrue();
+    }
+
+    [Theory]
+    [InlineData(5)]
+    [InlineData(9)]
+    [InlineData(17)]
+    public void Ac7_transformacion_del_catalogo_pasa(int codigo)
+    {
+        var row = Bilateral() with
+        {
+            MoreTransactionTransactionType = new[] { new RegisterTransformationInput(codigo, "x") },
+        };
+
+        Validator.Validate(row).IsValid.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Normalizer_guarda_el_telefono_del_representante_solo_con_digitos_y_dentro_de_la_columna()
+    {
+        // 59 caracteres crudos (pasa la guarda de 64) con 50 dígitos: debe guardarse en ≤ 50 (varchar(50)).
+        var crudo = string.Join(" ", Enumerable.Repeat("12345", 10));
+        crudo.Length.Should().BeGreaterThan(50);
+        var rep = ValidRep() with { Phone = crudo };
+        var row = ConRep(rep);
+        Validator.Validate(row).IsValid.Should().BeTrue();
+
+        var master = IctPayloadNormalizer.ToMaster(row, Guid.NewGuid());
+        var guardado = master.Actors.First(a => a.LegalRepresentativeDocumentType is not null).LegalRepresentativePhone;
+        guardado.Should().NotBeNull();
+        guardado!.Length.Should().BeLessThanOrEqualTo(50);
+        guardado.Should().MatchRegex("^[0-9]+$");
+    }
+
+    [Fact]
+    public void Ac8_sin_transformaciones_no_rechaza() =>
+        Validator.Validate(Bilateral() with { MoreTransactionTransactionType = null }).IsValid.Should().BeTrue();
 }

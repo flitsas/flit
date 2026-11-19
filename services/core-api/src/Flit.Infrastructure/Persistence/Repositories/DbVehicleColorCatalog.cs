@@ -40,4 +40,32 @@ internal sealed class DbVehicleColorCatalog : IVehicleColorCatalog
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
     }
+
+    public async Task<IReadOnlyList<VehicleColorEntry>> FindByWordsAsync(
+        string name,
+        CancellationToken cancellationToken = default)
+    {
+        var palabras = (name ?? string.Empty).Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (palabras.Length == 0)
+        {
+            return [];
+        }
+
+        // «AZUL CLARO» → patrón «AZUL%CLARO» (sin comodines en los extremos): trae «AZUL  CLARO» (espacios
+        // dobles, 57 nombres del catálogo los tienen) y candidatos como «AZUL MUY CLARO», que el llamador
+        // descarta con la comparación exacta. Se escapan los comodines del texto recibido.
+        var patron = string.Join('%', palabras.Select(EscaparLike));
+        return await _context.Set<VehicleColor>()
+            .AsNoTracking()
+            .Where(c => c.IsActive && EF.Functions.ILike(c.Name, patron, "\\"))
+            .OrderBy(c => c.Name)
+            .Select(c => new VehicleColorEntry(c.Id, c.Code, c.Name))
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static string EscaparLike(string palabra) =>
+        palabra.Replace("\\", "\\\\", StringComparison.Ordinal)
+            .Replace("%", "\\%", StringComparison.Ordinal)
+            .Replace("_", "\\_", StringComparison.Ordinal);
 }
