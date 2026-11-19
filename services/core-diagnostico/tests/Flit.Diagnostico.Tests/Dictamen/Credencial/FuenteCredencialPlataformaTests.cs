@@ -163,7 +163,7 @@ public sealed class FuenteCredencialPlataformaTests : IAsyncLifetime
     [InlineData(StatusCode.Unauthenticated)]
     [InlineData(StatusCode.Unknown)]
     [InlineData(StatusCode.ResourceExhausted)]
-    public async Task SP12_CoreApiCaido_EsFalloTecnico_NuncaNoConfigurado_YNoSeCachea(StatusCode estado)
+    public async Task SP12_CoreApiCaido_EsFalloTecnico_NuncaNoConfigurado_ConVigenciaNegativaDe10s(StatusCode estado)
     {
         _core.Responder = _ => throw new RpcException(new Status(estado, "detalle interno " + Centinela));
         using var fuente = Fuente();
@@ -171,7 +171,10 @@ public sealed class FuenteCredencialPlataformaTests : IAsyncLifetime
         (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
         (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
 
-        _core.Pedidos.Should().HaveCount(2, "un fallo técnico no se cachea");
+        _core.Pedidos.Should().HaveCount(1, "CR-1 (review final): el fallo técnico se guarda 10 s");
+        _reloj.Avanzar(TimeSpan.FromSeconds(10));
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica, "nunca se convierte en no configurado");
+        _core.Pedidos.Should().HaveCount(2, "pasados 10 s se vuelve a pedir");
         _logs.Todo.Should().NotContain(Centinela).And.NotContain("detalle interno");
     }
 
@@ -521,8 +524,11 @@ public sealed class FuenteCredencialPlataformaTests : IAsyncLifetime
         fuente.Invalidar();
         version = 5;
 
+        // CR-1 (review final): cada rechazo queda 10 s en la vigencia negativa; se avanza el reloj para que haya otro pedido.
         (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        _reloj.Avanzar(TimeSpan.FromSeconds(10));
         (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        _reloj.Avanzar(TimeSpan.FromSeconds(10));
         var tercera = await fuente.ObtenerAsync(Ct);
 
         tercera.Falla.Should().Be(FallaCredencial.Ninguna);
@@ -548,7 +554,9 @@ public sealed class FuenteCredencialPlataformaTests : IAsyncLifetime
 
         version = 5;
         (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        _reloj.Avanzar(TimeSpan.FromSeconds(10));
         (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        _reloj.Avanzar(TimeSpan.FromSeconds(10));
         version = 9;
         (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Ninguna);
         fuente.Invalidar();
@@ -557,7 +565,10 @@ public sealed class FuenteCredencialPlataformaTests : IAsyncLifetime
         (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica, "la racha volvió a empezar");
     }
 
-    /// <summary>CR-6: UNAUTHENTICATED de core-api es fallo técnico sin caché, con log de nivel Error.</summary>
+    /// <summary>
+    /// CR-6: UNAUTHENTICATED de core-api es fallo técnico con log de nivel Error. Desde CR-1 (review final) queda 10 s en la
+    /// vigencia negativa como todo fallo técnico.
+    /// </summary>
     [Fact]
     public async Task CR6_Unauthenticated_EsTecnica_ConLogError()
     {
@@ -567,6 +578,9 @@ public sealed class FuenteCredencialPlataformaTests : IAsyncLifetime
         (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
         (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
 
+        _core.Pedidos.Should().HaveCount(1, "la segunda sale de la vigencia negativa de 10 s");
+        _reloj.Avanzar(TimeSpan.FromSeconds(10));
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
         _core.Pedidos.Should().HaveCount(2);
         _logs.Eventos.Should().Contain(e => e.Nivel == Microsoft.Extensions.Logging.LogLevel.Error && e.Texto.Contains("Unauthenticated", StringComparison.Ordinal));
         _logs.Todo.Should().NotContain(Centinela);
@@ -588,5 +602,101 @@ public sealed class FuenteCredencialPlataformaTests : IAsyncLifetime
         r.Falla.Should().Be(FallaCredencial.Tecnica, "camino actual de SOBRE_INVALIDO");
         r.Credencial.Should().BeNull();
         _logs.Todo.Should().Contain("SOBRE_INVALIDO").And.NotContain("CENTINELA");
+    }
+
+    /// <summary>
+    /// CR-1 (review final): un fallo técnico queda 10 s en la vigencia negativa; dentro de ella no hay RPC y el log Warning no se
+    /// repite. Pasados 10 s se vuelve a pedir.
+    /// </summary>
+    [Fact]
+    public async Task CR1_Tecnica_VigenciaNegativaDe10s_SinRpcNiLogRepetido()
+    {
+        _core.Responder = _ => throw new RpcException(new Status(StatusCode.Unavailable, "reiniciando"));
+        using var fuente = Fuente();
+
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        _core.Pedidos.Should().HaveCount(1);
+        _logs.Eventos.Count(e => e.Nivel == Microsoft.Extensions.Logging.LogLevel.Warning).Should().Be(1, "la llamada servida de la caché negativa no registra");
+
+        _reloj.Avanzar(TimeSpan.FromSeconds(9));
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        _core.Pedidos.Should().HaveCount(1, "a los 9 s sigue vigente");
+
+        _reloj.Avanzar(TimeSpan.FromSeconds(1));
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+        _core.Pedidos.Should().HaveCount(2, "a los 10 s vence");
+        _logs.Eventos.Count(e => e.Nivel == Microsoft.Extensions.Logging.LogLevel.Warning).Should().Be(2);
+    }
+
+    /// <summary>CR-1 (review final): <c>Invalidar()</c> borra también la vigencia negativa del fallo técnico.</summary>
+    [Fact]
+    public async Task CR1_Invalidar_BorraLaVigenciaNegativaDeTecnica()
+    {
+        _core.Responder = _ => throw new RpcException(new Status(StatusCode.Unavailable, "reiniciando"));
+        using var fuente = Fuente();
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(FallaCredencial.Tecnica);
+
+        fuente.Invalidar();
+        _core.Responder = p => Task.FromResult(CoreApiIaFalso.Valida(p, _publica, _reloj.GetUtcNow()));
+        var r = await fuente.ObtenerAsync(Ct);
+
+        r.Falla.Should().Be(FallaCredencial.Ninguna);
+        _core.Pedidos.Should().HaveCount(2, "tras Invalidar hay RPC inmediato");
+    }
+
+    /// <summary>CR-1 (review final): 8 llamadas a la vez con core-api caído comparten un solo RPC (single-flight + vigencia negativa).</summary>
+    [Fact]
+    public async Task CR1_OchoConcurrentesConCoreApiCaido_UnSoloRpc()
+    {
+        _core.Responder = async _ =>
+        {
+            await Task.Delay(200);
+            throw new RpcException(new Status(StatusCode.Unavailable, "reiniciando"));
+        };
+        using var fuente = Fuente();
+
+        var resultados = await Task.WhenAll(Enumerable.Range(0, 8).Select(_ => fuente.ObtenerAsync(Ct)));
+
+        resultados.Should().OnlyContain(r => r.Falla == FallaCredencial.Tecnica);
+        _core.Pedidos.Should().HaveCount(1);
+    }
+
+    /// <summary>
+    /// H-4 (security final): el <c>reason</c> del ErrorInfo de core-api solo llega al log si cumple <c>^[A-Za-z0-9_]{1,64}\z</c>;
+    /// si no, se registra <c>(invalido)</c>. La clasificación por reason no cambia.
+    /// </summary>
+    [Theory]
+    [InlineData(StatusCode.Unavailable, "x\nINYECTADO", FallaCredencial.Tecnica)]
+    [InlineData(StatusCode.PermissionDenied, "x\nINYECTADO", FallaCredencial.NoConfigurado)]
+    [InlineData(StatusCode.InvalidArgument, "x\nINYECTADO", FallaCredencial.NoConfigurado)]
+    [InlineData(StatusCode.FailedPrecondition, "x\nINYECTADO", FallaCredencial.NoConfigurado)]
+    [InlineData(StatusCode.Unavailable, "LARGO65", FallaCredencial.Tecnica)]
+    [InlineData(StatusCode.PermissionDenied, "LARGO65", FallaCredencial.NoConfigurado)]
+    public async Task H4_ReasonFueraDeFormato_SeRegistraComoInvalido(StatusCode estado, string reason, FallaCredencial esperada)
+    {
+        var enviado = reason == "LARGO65" ? "INYECTADO" + new string('A', 56) : reason;
+        enviado.Length.Should().BeOneOf(11, 65);
+        _core.Responder = _ => throw PlatformRpcErrors.ToRpcException(enviado, "rechazado", estado);
+        using var fuente = Fuente();
+
+        (await fuente.ObtenerAsync(Ct)).Falla.Should().Be(esperada);
+
+        _logs.Todo.Should().Contain("(invalido)").And.NotContain("INYECTADO");
+    }
+
+    /// <summary>H-4: un reason con formato válido (hasta 64 caracteres) se sigue registrando tal cual.</summary>
+    [Theory]
+    [InlineData(StatusCode.PermissionDenied, "CLIENTE_NO_PERMITIDO")]
+    [InlineData(StatusCode.Unavailable, "LARGO64")]
+    public async Task H4_ReasonConFormatoValido_SeRegistraTalCual(StatusCode estado, string reason)
+    {
+        var enviado = reason == "LARGO64" ? "VALIDO_" + new string('A', 57) : reason;
+        _core.Responder = _ => throw PlatformRpcErrors.ToRpcException(enviado, "rechazado", estado);
+        using var fuente = Fuente();
+
+        await fuente.ObtenerAsync(Ct);
+
+        _logs.Todo.Should().Contain(enviado).And.NotContain("(invalido)");
     }
 }

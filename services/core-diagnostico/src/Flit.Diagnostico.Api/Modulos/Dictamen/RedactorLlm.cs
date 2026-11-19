@@ -304,10 +304,18 @@ public sealed class ProveedorRedactorAnthropic : IProveedorRedactor
         return (await LlamarAsync(otra.Credencial!, prompt, o, ct).ConfigureAwait(false)).Salida;
     }
 
+    /// <summary>
+    /// Espera antes de reintentar la redacción cuando la configuración de IA de la plataforma no respondió
+    /// (<see cref="Credencial.FallaCredencial.Tecnica"/>: core-api reiniciando, UNAVAILABLE inmediato, token caído). Sin ella la cola
+    /// retomaba el dictamen al instante y gastaba sus tomas en milisegundos (CR-1, review final). Fija: el proveedor no conoce el
+    /// número de toma; con <c>MaxReintentos=2</c> cubre unos 4 minutos de corte.
+    /// </summary>
+    public static readonly TimeSpan EsperaPlataformaCaida = TimeSpan.FromSeconds(120);
+
     private static SalidaModelo? SinCredencial(Credencial.ResultadoCredencial resuelta, OpcionesAnthropic o) => resuelta.Falla switch
     {
         Credencial.FallaCredencial.NoConfigurado => Fallo(o.Modelo, TipoFalloRedactor.NoConfigurado, "El redactor no tiene proveedor configurado en la plataforma."),
-        Credencial.FallaCredencial.Tecnica => Fallo(o.Modelo, TipoFalloRedactor.Red, "La configuración de IA de la plataforma no respondió."),
+        Credencial.FallaCredencial.Tecnica => Fallo(o.Modelo, TipoFalloRedactor.Red, "La configuración de IA de la plataforma no respondió.", EsperaPlataformaCaida),
         _ => null,
     };
 

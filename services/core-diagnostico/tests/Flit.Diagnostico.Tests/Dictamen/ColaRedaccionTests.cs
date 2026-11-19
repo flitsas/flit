@@ -115,6 +115,53 @@ public sealed class ColaRedaccionTests
     }
 
     /// <summary>
+    /// CR-1 (review final): core-api caído (UNAVAILABLE) en una toma deja la fila con <c>redaccion_disponible_desde ≥ ahora + 120 s</c>
+    /// y no tomable en la misma vuelta, en vez de volver a tomarla al instante y gastar las tomas en milisegundos. Cadena real:
+    /// <see cref="Credencial.FuenteCredencialPlataforma"/> → <see cref="ProveedorRedactorAnthropic"/> → <see cref="ServicioRedactor"/> → Decidir.
+    /// </summary>
+    [Fact]
+    public async Task CR1_core_api_caido_agenda_la_toma_a_120_s_y_no_se_retoma_en_la_misma_vuelta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Credencial.VectorIa.Cargar();
+        using var privada = v.Privada();
+        await using var core = await Credencial.CoreApiIaFalso.IniciarAsync();
+        core.Responder = _ => throw new global::Grpc.Core.RpcException(new global::Grpc.Core.Status(global::Grpc.Core.StatusCode.Unavailable, "reiniciando"));
+        using var fuente = new Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.FuenteCredencialPlataforma(core.Cliente,
+            new Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.ClavesPrivadasIa(v.Kid, privada),
+            Microsoft.Extensions.Options.Options.Create(new Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.OpcionesIa
+            {
+                Origen = Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.OpcionesIa.OrigenPlataforma,
+                Kid = v.Kid,
+            }),
+            new Credencial.RelojMovil(v.Emitida), new Credencial.LogsIa().Logger<Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.FuenteCredencialPlataforma>());
+        using var http = new HttpClient(new SinLlamadas());
+        var anthropic = Microsoft.Extensions.Options.Options.Create(new OpcionesAnthropic { BaseUrl = "https://api.anthropic.com", ReintentosContradiccion = 1 });
+        var proveedor = new ProveedorRedactorAnthropic(http, anthropic, fuente, Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.TopeLlamadasRedactor.SinTope());
+        var pedido = new PedidoRedaccion("BLOQUEADO", [new ReglaDisparada("SOAT_NO_VIGENTE", "RUNT", "BLOQUEA", null)],
+            new DatosBien("ABC123", "AUTOMOVIL", "MARCA", "LINEA", "2020", "PARTICULAR"), false);
+        var opciones = new OpcionesRedaccion { Habilitado = true, MaxReintentos = 2 };
+
+        var resultado = await new ServicioRedactor(proveedor, anthropic).RedactarAsync(pedido, ct);
+        var cierre = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos: 1, resultado, opciones.MaxReintentos, Ahora);
+
+        resultado.TipoFallo.Should().Be(TipoFalloRedactor.Red);
+        cierre.EstadoRedaccion.Should().Be(ColaRedaccion.Pendiente);
+        cierre.DisponibleDesde.Should().NotBeNull().And.BeOnOrAfter(Ahora.AddSeconds(120));
+        ColaRedaccion.EsTomable(cierre.EstadoRedaccion, true, cierre.DisponibleDesde, cierre.LeaseHasta, Ahora).Should().BeFalse("no se retoma en la misma vuelta");
+        ColaRedaccion.EsTomable(cierre.EstadoRedaccion, true, cierre.DisponibleDesde, cierre.LeaseHasta, Ahora.AddSeconds(119)).Should().BeFalse();
+        ColaRedaccion.EsTomable(cierre.EstadoRedaccion, true, cierre.DisponibleDesde, cierre.LeaseHasta, Ahora.AddSeconds(120)).Should().BeTrue("a los 120 s vuelve a la cola");
+        RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, opciones).Should().BeTrue("sigue en cola con reintento agendado");
+    }
+
+    /// <summary>Anthropic falso que falla el test si se le llama: con core-api caído no debe haber llamada al proveedor.</summary>
+    private sealed class SinLlamadas : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("No debía llamarse al proveedor con core-api caído.");
+    }
+
+    /// <summary>
     /// HU-2 (SP-4, CR-1): <see cref="RedactorEnCola.EnCola"/> es el predicado de la toma (PENDIENTE con fecha). Con un fallo
     /// técnico, Decidir agenda mientras <c>intentos &lt;= maxReintentos</c> y con <c>intentos &gt; maxReintentos</c> deja la fecha
     /// en null; la fila que deja es «en cola» exactamente cuando quedó con fecha.

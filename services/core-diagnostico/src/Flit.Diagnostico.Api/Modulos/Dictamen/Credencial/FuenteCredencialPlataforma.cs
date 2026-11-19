@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Flit.Platform.Grpc.V1;
 using Flit.Platform.Sdk.Grpc;
 using Google.Protobuf;
@@ -12,9 +13,10 @@ namespace Flit.Diagnostico.Api.Modulos.Dictamen.Credencial;
 /// <c>Diagnostico:Ia:Origen=plataforma</c> (ADR-0091 §2.4, §2.7, §3.2): pide a core-api <c>ObtenerConfiguracionIa</c> para
 /// <see cref="ToolCode"/> con un nonce nuevo por llamada, valida el eco (nonce, kid, herramienta) en tiempo constante y el reloj
 /// (±120 s), recompone el AAD y abre el sobre con la privada. La credencial vive solo en memoria, vigente
-/// <c>min(ttl_segundos, 300 s)</c>; la negativa (<c>disponible=false</c> y rechazos permanentes) 60 s; una sola llamada en vuelo.
+/// <c>min(ttl_segundos, 300 s)</c>; la negativa (<c>disponible=false</c> y rechazos permanentes) 60 s; el fallo técnico 10 s
+/// (<see cref="VigenciaTecnica"/>); una sola llamada en vuelo.
 /// <para>
-/// Mapeo (SP-12): core-api caído, token, eco, reloj o tag → <see cref="FallaCredencial.Tecnica"/> (reintento de la cola, sin caché);
+/// Mapeo (SP-12): core-api caído, token, eco, reloj o tag → <see cref="FallaCredencial.Tecnica"/> (reintento de la cola; 10 s de vigencia negativa, CR-1);
 /// <c>disponible=false</c>, cliente o herramienta no permitidos, pedido inválido, kid desconocido, <c>alg</c> desconocido, proveedor
 /// fuera de la allowlist local (<see cref="ProveedorPermitido"/>) o modelo fuera de <c>ModelosPermitidos</c> (SP-14 = a) →
 /// <see cref="FallaCredencial.NoConfigurado"/>. Nunca registra la llave, el sobre, la respuesta ni el mensaje de una excepción.
@@ -40,7 +42,17 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
 
     public static readonly TimeSpan VigenciaNegativa = TimeSpan.FromSeconds(60);
 
+    /// <summary>
+    /// Vigencia negativa de un fallo técnico (CR-1, review final): dentro de ella <see cref="ObtenerAsync"/> devuelve
+    /// <see cref="FallaCredencial.Tecnica"/> sin RPC, y la comparten quienes esperan en el single-flight. Con core-api caído evita
+    /// que cada dictamen de la cola lance su propio RPC; <see cref="Invalidar"/> la borra.
+    /// </summary>
+    public static readonly TimeSpan VigenciaTecnica = TimeSpan.FromSeconds(10);
+
     public static readonly TimeSpan DesfaseMaximo = TimeSpan.FromSeconds(120);
+
+    /// <summary>Lo que se registra en lugar de un <c>reason</c> de core-api fuera de <c>^[A-Za-z0-9_]{1,64}\z</c> (H-4).</summary>
+    public const string ReasonInvalido = "(invalido)";
 
     /// <summary>Rechazos seguidos por <c>row_version</c> menor tras los cuales se acepta la respuesta (CR-5).</summary>
     public const int RechazosRowVersionAntesDeAceptar = 3;
@@ -139,21 +151,22 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
     private Paso Rechazo(RpcException ex)
     {
         var reason = PlatformRpcErrors.Reason(ex) ?? "-";
+        var reasonLog = ReasonParaLog(reason);
         switch (ex.StatusCode)
         {
             case StatusCode.PermissionDenied:
             case StatusCode.InvalidArgument:
-                Rechazada(_log, ex.StatusCode, reason);
+                Rechazada(_log, ex.StatusCode, reasonLog);
                 return Paso.NoConfigurado;
             case StatusCode.FailedPrecondition:
-                Rechazada(_log, ex.StatusCode, reason);
+                Rechazada(_log, ex.StatusCode, reasonLog);
                 return string.Equals(reason, ReasonKidDesconocido, StringComparison.Ordinal) ? Paso.NoConfigurado with { KidDesconocido = true } : Paso.NoConfigurado;
             case StatusCode.Unauthenticated:
-                // Token de servicio ausente o inválido: técnica (reintentable, sin caché) pero con log Error (contrato §1.2, CR-6).
+                // Token de servicio ausente o inválido: técnica (reintentable, 10 s de vigencia negativa) pero con log Error (contrato §1.2, CR-6).
                 NoAutenticada(_log, ex.StatusCode);
                 return Paso.Tecnica;
             default:
-                TecnicaRpc(_log, ex.StatusCode, reason);
+                TecnicaRpc(_log, ex.StatusCode, reasonLog);
                 return Paso.Tecnica;
         }
     }
@@ -243,6 +256,16 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
         return new Paso(ResultadoCredencial.Con(new CredencialRedactor(proveedor.Proveedor, proveedor.Modelo, llave, r.RowVersion)), vigencia, false);
     }
 
+    /// <summary>
+    /// H-4 (security final): el <c>reason</c> del ErrorInfo de core-api llega al log solo si cumple <c>^[A-Za-z0-9_]{1,64}\z</c>; si no,
+    /// <see cref="ReasonInvalido"/> (evita inyección de líneas). Sin ErrorInfo sigue el guion. La clasificación usa el reason original.
+    /// </summary>
+    private static string ReasonParaLog(string reason) =>
+        reason == "-" || ReasonValido().IsMatch(reason) ? reason : ReasonInvalido;
+
+    [GeneratedRegex(@"^[A-Za-z0-9_]{1,64}\z", RegexOptions.CultureInvariant)]
+    private static partial Regex ReasonValido();
+
     /// <summary>El modelo tal cual solo si cumple el formato del AAD (≤ 128); si no, un código fijo (CR-2).</summary>
     private static string ModeloParaLog(string? modelo) =>
         SobreLlaveIa.ModeloValido(modelo) ? modelo![..Math.Min(modelo!.Length, 128)] : ModeloFormatoInvalido;
@@ -313,7 +336,7 @@ public sealed partial class FuenteCredencialPlataforma : IFuenteCredencialRedact
 
     private readonly record struct Paso(ResultadoCredencial Resultado, TimeSpan? Vigencia, bool KidDesconocido)
     {
-        public static Paso Tecnica => new(ResultadoCredencial.Tecnica, null, false);
+        public static Paso Tecnica => new(ResultadoCredencial.Tecnica, VigenciaTecnica, false);
 
         public static Paso NoConfigurado => new(ResultadoCredencial.NoConfigurado, VigenciaNegativa, false);
     }
