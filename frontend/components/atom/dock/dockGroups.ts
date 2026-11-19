@@ -156,6 +156,7 @@ export const DOCK_ITEM_DESCRIPCION: Record<string, string> = {
   "admin-quipux": "Radicación por Quipux",
   "admin-tipos-tramite": "Qué trámites están activos",
   "admin-confirmacion-runt": "Radicados por confirmar",
+  "admin-contingencia-runt": "Proveedor ante una caída",
   "admin-mandatos": "Plantillas de mandato",
   "admin-fur": "Formulario único por trámite",
   "admin-notificaciones": "Correos y mensajes",
