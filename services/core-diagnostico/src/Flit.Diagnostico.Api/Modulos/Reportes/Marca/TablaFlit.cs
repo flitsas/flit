@@ -39,30 +39,64 @@ internal static class TablaFlit
     /// <summary>Radio de las esquinas del recuadro de la nota (pt).</summary>
     public const float RadioNota = 12;
 
+    /// <summary>Relleno horizontal de cada celda, a cada lado (pt).</summary>
+    public const float RellenoCelda = 5;
+
+    /// <summary>Tamaño mínimo al que <see cref="Distribuir"/> reduce el texto del encabezado de una grilla ancha (pt).</summary>
+    public const float TamanoMinimoEncabezado = 7.5f;
+
     /// <summary>Valores de estado que se pintan en verde (comparación sin mayúsculas).</summary>
     public static readonly IReadOnlySet<string> EstadosFavorables = new HashSet<string>(["Vigente", "Aprobada", "Pagada"], StringComparer.OrdinalIgnoreCase);
 
     /// <summary>
     /// Tabla etiqueta-valor en bloques de <see cref="ColumnasCampos"/> columnas: una fila de etiquetas (encabezado degradado) y debajo
     /// la de sus valores, repetido. Si sobran 1 o 2 campos al final, la última pareja de filas ocupa solo esas columnas (a la
-    /// izquierda). Cada pareja no se parte entre páginas.
+    /// izquierda). Cada pareja no se parte entre páginas. Con <paramref name="centrar"/>, una tabla de un solo bloque con menos de
+    /// <see cref="ColumnasCampos"/> campos queda centrada con el ancho de columna de siempre (<see cref="MargenCentrado"/>).
     /// </summary>
-    public static void Campos(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor)> campos)
+    public static void Campos(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor)> campos, bool centrar = false)
     {
         ArgumentNullException.ThrowIfNull(campos);
-        Campos(contenedor, [.. campos.Select(c => (c.Etiqueta, c.Valor, 1))]);
+        Campos(contenedor, [.. campos.Select(c => (c.Etiqueta, c.Valor, 1))], centrar);
     }
 
     /// <summary>
     /// Como <see cref="Campos(IContainer, IReadOnlyList{ValueTuple{string, string}})"/>, pero cada campo ocupa <c>Columnas</c>
     /// columnas del bloque (1 a <see cref="ColumnasCampos"/>; p. ej. «Organismo de tránsito» a dos columnas en el diseño v2). Un
-    /// campo que no cabe en lo que queda del bloque abre el siguiente.
+    /// campo que no cabe en lo que queda del bloque abre el siguiente. <paramref name="centrar"/>: ver
+    /// <see cref="Campos(IContainer, IReadOnlyList{ValueTuple{string, string}}, bool)"/>.
     /// </summary>
-    public static void Campos(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor, int Columnas)> campos)
+    public static void Campos(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor, int Columnas)> campos, bool centrar = false)
     {
         ArgumentNullException.ThrowIfNull(contenedor);
         ArgumentNullException.ThrowIfNull(campos);
         var bloques = Bloques(campos);
+        var ocupadas = bloques.Count == 1 ? bloques[0].Sum(x => x.Columnas) : ColumnasCampos;
+        var margen = centrar ? MargenCentrado(ocupadas, bloques.Count) : 0;
+        if (margen > 0)
+        {
+            // Rejilla de solo las columnas ocupadas, con el ancho de columna de la de 3 y el mismo margen a cada lado.
+            contenedor.Row(fila =>
+            {
+                fila.RelativeItem(margen);
+                fila.RelativeItem(ocupadas).Element(c => BloquesDeCampos(c, bloques, ocupadas));
+                fila.RelativeItem(margen);
+            });
+            return;
+        }
+
+        BloquesDeCampos(contenedor, bloques, ColumnasCampos);
+    }
+
+    /// <summary>
+    /// Margen (en columnas de la rejilla de <see cref="ColumnasCampos"/>) a cada lado de una tabla etiqueta-valor centrada: solo con
+    /// un bloque de menos de <see cref="ColumnasCampos"/> columnas ocupadas (2 campos ⇒ media columna; 1 ⇒ una). Con varios bloques
+    /// (p. ej. SIMIT y su «Cancelada» sola al final) o un bloque lleno, 0: la tabla ocupa todo el ancho como siempre.
+    /// </summary>
+    internal static float MargenCentrado(int columnasOcupadas, int bloques) =>
+        bloques == 1 && columnasOcupadas is > 0 and < ColumnasCampos ? (ColumnasCampos - columnasOcupadas) / 2f : 0;
+
+    private static void BloquesDeCampos(IContainer contenedor, List<List<(string Etiqueta, string Valor, int Columnas)>> bloques, int totalColumnas) =>
         contenedor.Column(col =>
         {
             col.Spacing(Separador);
@@ -74,20 +108,22 @@ internal static class TablaFlit
                 col.Item().ShowEntire().Column(par =>
                 {
                     par.Spacing(Separador);
-                    par.Item().Element(c => Fila(c, [.. bloque.Select(x => (x.Etiqueta, x.Columnas))], ColumnasCampos, encabezado: true, arriba: primero, abajo: false));
-                    par.Item().Element(c => Fila(c, [.. bloque.Select(x => (x.Valor, x.Columnas))], ColumnasCampos, encabezado: false, arriba: false, abajo: ultimo));
+                    par.Item().Element(c => Fila(c, [.. bloque.Select(x => (x.Etiqueta, x.Columnas))], totalColumnas, encabezado: true, arriba: primero, abajo: false));
+                    par.Item().Element(c => Fila(c, [.. bloque.Select(x => (x.Valor, x.Columnas))], totalColumnas, encabezado: false, arriba: false, abajo: ultimo));
                 });
             }
         });
-    }
 
     /// <summary>
     /// Grilla: encabezado degradado (se repite si la tabla se parte entre páginas) y una fila por elemento (nunca partida). Sin filas
     /// y con <paramref name="sinFilas"/>, una sola fila con ese texto que abarca todas las columnas. <paramref name="anchos"/>
-    /// (opcional, uno por columna, enteros ≥ 1): ancho relativo de cada columna; sin él, todas iguales.
+    /// (opcional, uno por columna, enteros ≥ 1): ancho relativo de cada columna; sin él, todas iguales (<see cref="Distribuir"/> los
+    /// calcula para que ninguna palabra se parta). <paramref name="tamanoEncabezado"/> (opcional): tamaño del texto del encabezado;
+    /// sin él, <see cref="TamanoTexto"/>.
     /// </summary>
     public static void Grilla(
-        IContainer contenedor, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas, string? sinFilas = null, IReadOnlyList<int>? anchos = null)
+        IContainer contenedor, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas, string? sinFilas = null, IReadOnlyList<int>? anchos = null,
+        float? tamanoEncabezado = null)
     {
         ArgumentNullException.ThrowIfNull(contenedor);
         ArgumentNullException.ThrowIfNull(columnas);
@@ -102,7 +138,8 @@ internal static class TablaFlit
         contenedor.Table(tabla =>
         {
             tabla.ColumnsDefinition(c => c.RelativeColumn());
-            tabla.Header(h => h.Cell().Element(c => Fila(c, [.. columnas.Select((t, i) => (t, pesos[i]))], total, encabezado: true, arriba: true, abajo: datos.Count == 0)));
+            tabla.Header(h => h.Cell().Element(c => Fila(c, [.. columnas.Select((t, i) => (t, pesos[i]))], total, encabezado: true, arriba: true, abajo: datos.Count == 0,
+                tamanoEncabezado ?? TamanoTexto)));
             for (var i = 0; i < datos.Count; i++)
             {
                 var fila = datos[i];
@@ -114,8 +151,9 @@ internal static class TablaFlit
 
     /// <summary>
     /// Tabla de dos columnas: la etiqueta a la izquierda (cabecera) y el valor a la derecha. Una fila por par, sin partirse.
+    /// <paramref name="pesoEtiqueta"/>/<paramref name="pesoValor"/> (opcionales): ancho relativo de cada columna; sin ellos, mitad y mitad.
     /// </summary>
-    public static void Pares(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor)> filas)
+    public static void Pares(IContainer contenedor, IReadOnlyList<(string Etiqueta, string Valor)> filas, float pesoEtiqueta = 1, float pesoValor = 1)
     {
         ArgumentNullException.ThrowIfNull(contenedor);
         ArgumentNullException.ThrowIfNull(filas);
@@ -130,8 +168,8 @@ internal static class TablaFlit
                 col.Item().ShowEntire().Row(fila =>
                 {
                     fila.Spacing(Separador);
-                    fila.RelativeItem().Element(c => Pintar(c, etiqueta, encabezado: true, new Esquinas(arriba, false, false, abajo), 0, 1));
-                    fila.RelativeItem().Element(c => Pintar(c, valor, encabezado: false, new Esquinas(false, arriba, abajo, false), 0, 1));
+                    fila.RelativeItem(pesoEtiqueta).Element(c => Pintar(c, etiqueta, encabezado: true, new Esquinas(arriba, false, false, abajo), 0, 1));
+                    fila.RelativeItem(pesoValor).Element(c => Pintar(c, valor, encabezado: false, new Esquinas(false, arriba, abajo, false), 0, 1));
                 });
             }
         });
@@ -193,9 +231,11 @@ internal static class TablaFlit
     /// <summary>
     /// Una fila de <paramref name="totalColumnas"/> columnas de igual ancho con las <paramref name="celdas"/> en las primeras, cada
     /// una ocupando sus <c>Columnas</c> (las sobrantes quedan vacías, sin fondo). <paramref name="arriba"/>/<paramref name="abajo"/>
-    /// redondean las esquinas de los extremos de lo ocupado.
+    /// redondean las esquinas de los extremos de lo ocupado. <paramref name="tamanoEncabezado"/>: tamaño del texto si es encabezado.
     /// </summary>
-    private static void Fila(IContainer contenedor, IReadOnlyList<(string Texto, int Columnas)> celdas, int totalColumnas, bool encabezado, bool arriba, bool abajo) =>
+    private static void Fila(
+        IContainer contenedor, IReadOnlyList<(string Texto, int Columnas)> celdas, int totalColumnas, bool encabezado, bool arriba, bool abajo,
+        float tamanoEncabezado = TamanoTexto) =>
         contenedor.Row(fila =>
         {
             fila.Spacing(Separador);
@@ -209,7 +249,7 @@ internal static class TablaFlit
                 var desde = (float)inicio / totalColumnas;
                 var hasta = (float)(inicio + columnas) / totalColumnas;
                 inicio += columnas;
-                fila.RelativeItem(columnas).Element(c => Pintar(c, texto, encabezado, esquinas, desde, hasta));
+                fila.RelativeItem(columnas).Element(c => Pintar(c, texto, encabezado, esquinas, desde, hasta, tamanoEncabezado));
             }
 
             for (var i = inicio; i < totalColumnas; i++)
@@ -217,12 +257,13 @@ internal static class TablaFlit
         });
 
     /// <summary>Una celda: fondo SVG del tamaño real y el texto centrado encima.</summary>
-    private static void Pintar(IContainer contenedor, string texto, bool encabezado, Esquinas esquinas, float desde, float hasta) =>
+    private static void Pintar(
+        IContainer contenedor, string texto, bool encabezado, Esquinas esquinas, float desde, float hasta, float tamanoEncabezado = TamanoTexto) =>
         contenedor.Layers(capas =>
         {
             capas.Layer().Svg(tamano => CeldaSvg(tamano.Width, tamano.Height, esquinas, encabezado, desde, hasta));
-            var celda = capas.PrimaryLayer().PaddingVertical(4).PaddingHorizontal(5).AlignCenter().AlignMiddle().Text(texto)
-                .FontSize(TamanoTexto);
+            var celda = capas.PrimaryLayer().PaddingVertical(4).PaddingHorizontal(RellenoCelda).AlignCenter().AlignMiddle().Text(texto)
+                .FontSize(encabezado ? tamanoEncabezado : TamanoTexto);
             if (encabezado)
                 celda.FontFamily(FlitDocumentTheme.FontMedium).FontColor(FlitDocumentTheme.Blanco);
             else
@@ -292,4 +333,132 @@ internal static class TablaFlit
 
     private static string Envolver(float ancho, float alto, string cuerpo) => string.Create(CultureInfo.InvariantCulture,
         $"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{ancho}\" height=\"{alto}\" viewBox=\"0 0 {ancho} {alto}\">{cuerpo}</svg>");
+    // Anchos de avance de Poppins (milésimas de em), leídos de Marca/Assets/Poppins-*.ttf, para los caracteres de Glifos. Las vocales
+    // tildadas, la ü y la ñ tienen el mismo avance que su letra base. Un carácter desconocido cuenta como AnchoDesconocido (holgado).
+    private const string Glifos = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.,:;/-()$%#&'\" º–*+_";
+
+    private static readonly short[] AvanceRegular =
+    [
+        676, 676, 607, 676, 620, 329, 676, 640, 246, 248, 515, 246, 1030, 640, 640, 676, 676, 373, 522, 364, 640, 561, 820, 479, 563, 455,
+        674, 613, 772, 707, 513, 504, 778, 692, 246, 530, 599, 432, 861, 703, 786, 579, 788, 608, 587, 541, 675, 676, 976, 621, 584, 541,
+        628, 320, 575, 589, 629, 628, 635, 546, 631, 630, 210, 198, 213, 264, 476, 551, 454, 454, 622, 759, 840, 739, 159, 292, 267, 436,
+        677, 486, 683, 733,
+    ];
+
+    private static readonly short[] AvanceMedium =
+    [
+        678, 678, 600, 678, 617, 332, 678, 649, 264, 264, 554, 264, 1039, 649, 638, 678, 678, 384, 534, 372, 649, 576, 825, 499, 582, 471,
+        697, 630, 773, 709, 524, 515, 773, 705, 264, 564, 633, 444, 882, 721, 784, 595, 787, 632, 604, 564, 690, 694, 999, 660, 605, 558,
+        641, 350, 577, 594, 647, 639, 642, 560, 638, 635, 241, 225, 245, 304, 514, 585, 492, 492, 650, 794, 872, 761, 172, 323, 260, 444,
+        708, 504, 714, 798,
+    ];
+
+    private const short AnchoDesconocido = 800;
+
+    /// <summary>Holgura multiplicativa sobre el ancho estimado de una palabra (redondeos del motor).</summary>
+    private const float Holgura = 1.04f;
+
+    /// <summary>Holgura fija sobre el ancho estimado de una palabra (pt).</summary>
+    private const float HolguraFija = 2;
+
+    /// <summary>
+    /// Ancho estimado (pt) de <paramref name="texto"/> en una línea, en Poppins Regular (o Medium, la de los encabezados) a
+    /// <paramref name="tamano"/> pt, sumando el avance de cada carácter. QuestPDF no expone la medición de texto.
+    /// </summary>
+    internal static float AnchoTexto(string texto, float tamano, bool medium = false)
+    {
+        ArgumentNullException.ThrowIfNull(texto);
+        var avances = medium ? AvanceMedium : AvanceRegular;
+        var milesimas = 0;
+        foreach (var caracter in texto)
+        {
+            var i = Glifos.IndexOf(Base(caracter), StringComparison.Ordinal);
+            milesimas += i >= 0 ? avances[i] : AnchoDesconocido;
+        }
+
+        return milesimas * tamano / 1000f;
+    }
+
+    /// <summary>Ancho estimado (pt) de la palabra más ancha de <paramref name="texto"/> (las líneas solo se parten en los espacios).</summary>
+    internal static float AnchoPalabraMayor(string texto, float tamano, bool medium = false)
+    {
+        ArgumentNullException.ThrowIfNull(texto);
+        return texto.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(p => AnchoTexto(p, tamano, medium)).DefaultIfEmpty(0).Max();
+    }
+
+    /// <summary>Ancho (pt) de una celda para que <paramref name="texto"/> quepa en una línea: texto con holgura más el relleno.</summary>
+    internal static float AnchoCelda(string texto, float tamano, bool medium = false) => Ajustar(AnchoTexto(texto, tamano, medium));
+
+    /// <summary>
+    /// Anchos relativos de las columnas de una grilla de <paramref name="anchoDisponible"/> pt para que ninguna palabra (del
+    /// encabezado en Medium ni de las celdas en Regular <see cref="TamanoTexto"/>) quede más ancha que su celda: cada columna recibe
+    /// al menos su palabra más ancha más el relleno; si así no caben todas, el encabezado baja de 0,5 en 0,5 pt hasta
+    /// <see cref="TamanoMinimoEncabezado"/>. Lo que sobra se reparte como en una tabla HTML automática: si todos los textos caben en
+    /// una línea, cada columna su texto más una parte igual; si no, en proporción a lo que a cada columna le falta para su texto
+    /// entero. Devuelve enteros (décimas de pt) para <see cref="Grilla"/>.
+    /// </summary>
+    internal static DistribucionGrilla Distribuir(IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas, float anchoDisponible)
+    {
+        ArgumentNullException.ThrowIfNull(columnas);
+        ArgumentNullException.ThrowIfNull(filas);
+        var n = columnas.Count;
+        var util = anchoDisponible - ((n - 1) * Separador);
+
+        var tamanoEncabezado = TamanoTexto;
+        var minimos = Minimos(columnas, filas, tamanoEncabezado);
+        while (minimos.Sum() > util && tamanoEncabezado > TamanoMinimoEncabezado)
+        {
+            tamanoEncabezado -= 0.5f;
+            minimos = Minimos(columnas, filas, tamanoEncabezado);
+        }
+
+        var naturales = new float[n];
+        for (var i = 0; i < n; i++)
+        {
+            var texto = Math.Max(AnchoTexto(columnas[i], tamanoEncabezado, medium: true), Celdas(filas, i).Select(c => AnchoTexto(c, TamanoTexto)).DefaultIfEmpty(0).Max());
+            naturales[i] = Math.Max(minimos[i], Ajustar(texto));
+        }
+
+        float[] anchos;
+        if (naturales.Sum() <= util)
+        {
+            var extra = (util - naturales.Sum()) / n;
+            anchos = [.. naturales.Select(x => x + extra)];
+        }
+        else if (minimos.Sum() < util)
+        {
+            var falta = naturales.Zip(minimos, (a, b) => a - b).ToArray();
+            var extra = util - minimos.Sum();
+            anchos = [.. minimos.Select((m, i) => m + (extra * falta[i] / falta.Sum()))];
+        }
+        else
+        {
+            anchos = minimos;
+        }
+
+        return new DistribucionGrilla([.. anchos.Select(a => Math.Max(1, (int)Math.Round(a * 10)))], tamanoEncabezado);
+    }
+
+    /// <summary>Por columna: su palabra más ancha (encabezado en Medium a <paramref name="tamanoEncabezado"/>, celdas en Regular) más el relleno.</summary>
+    private static float[] Minimos(IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas, float tamanoEncabezado) =>
+    [
+        .. columnas.Select((columna, i) => Ajustar(Math.Max(
+            AnchoPalabraMayor(columna, tamanoEncabezado, medium: true),
+            Celdas(filas, i).Select(c => AnchoPalabraMayor(c, TamanoTexto)).DefaultIfEmpty(0).Max()))),
+    ];
+
+    private static IEnumerable<string> Celdas(IReadOnlyList<string[]> filas, int columna) =>
+        filas.Where(f => columna < f.Length).Select(f => f[columna] ?? string.Empty);
+
+    private static float Ajustar(float anchoTexto) => (anchoTexto * Holgura) + HolguraFija + (2 * RellenoCelda);
+
+    /// <summary>Anchos relativos de las columnas (enteros ≥ 1) y tamaño del texto del encabezado de una grilla.</summary>
+    internal sealed record DistribucionGrilla(IReadOnlyList<int> Anchos, float TamanoEncabezado);
+
+    private static char Base(char caracter) => caracter switch
+    {
+        'á' => 'a', 'é' => 'e', 'í' => 'i', 'ó' => 'o', 'ú' or 'ü' => 'u', 'ñ' => 'n',
+        'Á' => 'A', 'É' => 'E', 'Í' => 'I', 'Ó' => 'O', 'Ú' or 'Ü' => 'U', 'Ñ' => 'N',
+        _ => caracter,
+    };
 }
