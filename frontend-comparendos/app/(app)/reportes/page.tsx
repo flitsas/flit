@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DataTable, InlineAlert, usePaginacion } from "@flit/ui";
@@ -25,12 +26,15 @@ import {
   SERIES,
   valorSerie,
   type Dashboard as DatosDashboard,
-  type RespuestaEstados,
+  type RespuestaDinero,
   type Serie,
 } from "@/lib/reportes";
 import { tienePermiso } from "@/lib/sesion";
 import type { Nit } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+
+/** Las gráficas de dinero (recharts) se cargan aparte: el resto de Reportes pinta sin esperarlas. */
+const DineroGraficas = dynamic(() => import("@/components/reportes/DineroGraficas").then((m) => m.DineroGraficas), { loading: () => <Cargador /> });
 import { METRICAS_GRID_CLS, TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 
 const AZUL = "var(--kit-azul)";
@@ -74,10 +78,10 @@ function Contenido() {
   const datos = useCarga(JSON.stringify({ ...periodo, nit }), (signal) =>
     apiFetch<DatosDashboard>("/reportes/dashboard", { signal, query: { empresa: periodo.empresa, nit, desde: periodo.desde, hasta: periodo.hasta } }),
   );
-  // Solo el reparto de la deuda (lo que se puede cobrar frente a lo caducado o prescrito) para rotular bien el indicador:
-  // ?partes=estados es una consulta, no las ~11 de la lente completa del Inicio.
+  // R2: la lente de dinero completa vive aquí (tendencia, dona, organismos y cobro coactivo salieron del Inicio). Su
+  // reparto por estado también rotula el indicador de deuda: una sola llamada para las dos cosas.
   const dinero = useCarga(`dinero:${JSON.stringify({ ...periodo, nit })}`, (signal) =>
-    apiFetch<RespuestaEstados>("/reportes/dinero", { signal, query: { empresa: periodo.empresa, nit, desde: periodo.desde, hasta: periodo.hasta, partes: "estados" } }),
+    apiFetch<RespuestaDinero>("/reportes/dinero", { signal, query: { empresa: periodo.empresa, nit, desde: periodo.desde, hasta: periodo.hasta } }),
   );
   const reparto = dinero.datos?.dinero;
   const d = datos.datos;
@@ -156,6 +160,8 @@ function Contenido() {
               }}
             />
           </div>
+
+          {reparto && <DineroGraficas d={reparto} empresa={sesion?.usuario.esSuperAdmin ? periodo.empresa : null} />}
 
           <div className={CHIPS_FILTRO_FILA_CLS} role="group" aria-label="Indicador de las gráficas">
             {SERIES.map((s) => (
