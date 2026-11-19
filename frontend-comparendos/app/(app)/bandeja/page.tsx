@@ -67,7 +67,10 @@ let ultimaEscrita = "";
 function BandejaConUrl() {
   const qs = useSearchParams().toString();
   const [base, setBase] = useState({ qs, version: 0 });
-  if (qs !== base.qs && qs !== ultimaEscrita) setBase({ qs, version: base.version + 1 });
+  if (qs !== base.qs) {
+    // Su propio eco solo actualiza la referencia; cualquier otra URL (dock, Inicio) rearma la bandeja con ella.
+    setBase({ qs, version: qs === ultimaEscrita ? base.version : base.version + 1 });
+  }
   return <ContenidoBandeja key={base.version} />;
 }
 
@@ -111,8 +114,11 @@ function ContenidoBandeja() {
   const nuevaQuery = filtrosAParams(filtros, { orden, descendente, pagina: page, tamano: pageSize, empresa: esSuperAdmin ? empresa : null }).toString();
   useEffect(() => {
     // Mientras carga la sesión no se sabe si es SuperAdmin: no se escribe para no borrar la empresa de la URL.
-    if (cargandoSesion || nuevaQuery === new URLSearchParams(window.location.search).toString()) return;
+    if (cargandoSesion) return;
+    // La URL que la bandeja tiene (llegó así o la escribe ahora) es la conocida: un enlace posterior con otra query la
+    // rearma, y uno con esta misma no se confunde con un eco viejo.
     ultimaEscrita = nuevaQuery;
+    if (nuevaQuery === new URLSearchParams(window.location.search).toString()) return;
     router.replace(nuevaQuery ? `/bandeja?${nuevaQuery}` : "/bandeja", { scroll: false });
   }, [cargandoSesion, nuevaQuery, router]);
   const puedeLote = !esSuperAdmin && tienePermiso(sesion, P.dpEnviarMasivo) && capacidades(sesion).derechosPeticion;

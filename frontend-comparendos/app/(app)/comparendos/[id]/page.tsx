@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Miga } from "@flit/ui";
 import { ContenidoDetalle } from "@/components/detalle/ContenidoDetalle";
-import { escapeVuelve, nombreOrigen, volverSeguro } from "@/components/detalle/ruta";
+import { escapeVuelve, hayCapaAbierta, nombreOrigen, volverSeguro } from "@/components/detalle/ruta";
 import type { SeccionDetalle } from "@/components/detalle/Timeline";
 import type { DetalleComparendo } from "@/lib/tipos";
 
@@ -30,11 +30,22 @@ function Contenido() {
   const alCargar = useCallback((d: DetalleComparendo) => setNumero(d.numero), []);
 
   useEffect(() => {
-    const alPulsar = (e: KeyboardEvent) => {
-      if (escapeVuelve(e, document)) router.push(volver);
+    // Escape cierra solo la capa de arriba. Si había una (modal, menú, dock), la página se queda: se mide en la CAPTURA,
+    // porque al burbujear la capa ya pudo desmontarse (React 19 aplica el cierre entre un listener y otro).
+    let habiaCapa = false;
+    const alCapturar = (e: KeyboardEvent) => {
+      if (e.key === "Escape") habiaCapa = hayCapaAbierta(document);
     };
+    const alPulsar = (e: KeyboardEvent) => {
+      if (escapeVuelve(e, habiaCapa)) router.push(volver);
+      habiaCapa = false;
+    };
+    window.addEventListener("keydown", alCapturar, true);
     window.addEventListener("keydown", alPulsar);
-    return () => window.removeEventListener("keydown", alPulsar);
+    return () => {
+      window.removeEventListener("keydown", alCapturar, true);
+      window.removeEventListener("keydown", alPulsar);
+    };
   }, [router, volver]);
 
   return (
