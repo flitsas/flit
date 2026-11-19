@@ -96,14 +96,7 @@ internal static class PdfDeuda
             {
                 FlitLetterhead.ApplyTo(page);
                 page.Header().Element(FlitLetterhead.Header);
-                page.Footer().AlignCenter().Text(t =>
-                {
-                    t.DefaultTextStyle(s => s.FontSize(8).FontColor(FlitDocumentTheme.Gris));
-                    t.Span(Titulo + " · Página ");
-                    t.CurrentPageNumber();
-                    t.Span(" de ");
-                    t.TotalPages();
-                });
+                page.Footer().Element(Pie);
                 page.Content().PaddingHorizontal(FlitDocumentTheme.MarginCm, Unit.Centimetre).PaddingVertical(0.4f, Unit.Centimetre).Column(col =>
                 {
                     col.Spacing(14);
@@ -127,6 +120,23 @@ internal static class PdfDeuda
             })
             .GeneratePdf();
     }
+
+    /// <summary>Alto (pt) desde el borde inferior de la hoja hasta el número de página, sobre la banda del membrete (como <see cref="PdfVehiculo"/>).</summary>
+    private const float PieDesdeAbajo = 30;
+
+    /// <summary>Banda inferior del membrete con el número de página encima, en la misma posición que el pie de <see cref="PdfVehiculo"/>.</summary>
+    private static void Pie(IContainer contenedor) => contenedor.Layers(capas =>
+    {
+        capas.PrimaryLayer().Element(FlitLetterhead.Footer);
+        capas.Layer().AlignBottom().PaddingBottom(PieDesdeAbajo).PaddingRight(FlitDocumentTheme.MarginCm, Unit.Centimetre).AlignRight().Text(t =>
+        {
+            t.DefaultTextStyle(s => s.FontSize(8).FontColor(FlitDocumentTheme.Gris));
+            t.Span(Titulo + " · Página ");
+            t.CurrentPageNumber();
+            t.Span(" de ");
+            t.TotalPages();
+        });
+    });
 
     private static List<(string, string)> Encabezado(PanelDeudaDto panel, DateTimeOffset generado)
     {

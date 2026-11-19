@@ -19,16 +19,21 @@ public static partial class HtmlAPdf
 {
     private static int _fuentes;
 
+    /// <summary>Márgenes de la hoja con membrete FLIT: los de <c>FlitDocumentTheme</c> de core-api (2,54 cm), el alto de cada banda.</summary>
+    internal const float MargenMembreteCm = 2.54f;
+
     /// <param name="titulo">Título del PDF: el navegador lo muestra en la pestaña en vez de un identificador (hallazgo B9-4).</param>
-    /// <param name="fondo">HU #13884: membrete de página completa (el de Renting); deja más margen arriba y abajo para su
-    /// logo y su pie, y sin numeración, que caería encima del pie.</param>
-    public static byte[] Generar(string html, string? marcaDeAgua = null, string? titulo = null, byte[]? fondo = null)
+    /// <param name="membrete">HU #13884: membrete de página completa (el de Renting): deja más margen arriba y abajo para su
+    /// logo y su pie, y sin numeración, que caería encima del pie. Correos 2.0: o las bandas del membrete FLIT, arriba y abajo
+    /// en todas las páginas, con el cuerpo entre ellas y la numeración encima de la banda inferior.</param>
+    public static byte[] Generar(string html, string? marcaDeAgua = null, string? titulo = null, MembretePdf? membrete = null)
     {
         Inicializar();
         var bloques = Parsear(html ?? string.Empty);
         return Document.Create(doc => doc.Page(page =>
         {
-            if (fondo is { Length: > 0 })
+            var conBandas = membrete is { BandaSuperiorSvg: not null, BandaInferiorSvg: not null };
+            if (membrete?.Fondo is { Length: > 0 } fondo)
             {
                 // El membrete de V1 es A4: en carta se vería estirado.
                 page.Size(PageSizes.A4);
@@ -36,6 +41,13 @@ public static partial class HtmlAPdf
                 page.MarginTop(4f, Unit.Centimetre);
                 page.MarginBottom(4.2f, Unit.Centimetre);
                 page.Background().Image(fondo).FitUnproportionally();
+            }
+            else if (conBandas)
+            {
+                // Las bandas van de borde a borde: la hoja no tiene margen y el cuerpo se separa con su propio relleno.
+                page.Size(PageSizes.Letter);
+                page.Margin(0);
+                page.Header().Height(MargenMembreteCm, Unit.Centimetre).AlignTop().Svg(membrete!.BandaSuperiorSvg!);
             }
             else
             {
@@ -50,23 +62,36 @@ public static partial class HtmlAPdf
                     .Text(marcaDeAgua).FontSize(64).Bold().FontColor("#E6EAF0");
             }
 
-            page.Content().Column(col =>
+            var contenido = conBandas ? page.Content().PaddingHorizontal(MargenMembreteCm, Unit.Centimetre).PaddingVertical(0.5f, Unit.Centimetre) : page.Content();
+            contenido.Column(col =>
             {
                 col.Spacing(6);
                 foreach (var b in bloques)
                     Dibujar(col.Item(), b);
             });
-            if (fondo is { Length: > 0 })
+            if (membrete?.Fondo is { Length: > 0 })
                 return;
-            page.Footer().AlignRight().Text(t =>
+            if (conBandas)
             {
-                t.DefaultTextStyle(s => s.FontSize(8).FontColor("#8792A6"));
-                t.CurrentPageNumber();
-                t.Span(" / ");
-                t.TotalPages();
-            });
+                page.Footer().Column(pie =>
+                {
+                    Numeracion(pie.Item().PaddingHorizontal(MargenMembreteCm, Unit.Centimetre).PaddingBottom(4));
+                    pie.Item().Height(MargenMembreteCm, Unit.Centimetre).AlignBottom().Svg(membrete!.BandaInferiorSvg!);
+                });
+                return;
+            }
+
+            Numeracion(page.Footer());
         })).WithMetadata(new DocumentMetadata { Title = titulo ?? string.Empty, Author = "FLIT · Gestión de Comparendos" }).GeneratePdf();
     }
+
+    private static void Numeracion(IContainer c) => c.AlignRight().Text(t =>
+    {
+        t.DefaultTextStyle(s => s.FontSize(8).FontColor("#8792A6"));
+        t.CurrentPageNumber();
+        t.Span(" / ");
+        t.TotalPages();
+    });
 
     private static void Inicializar()
     {

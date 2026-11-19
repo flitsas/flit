@@ -36,7 +36,7 @@ public sealed class AdjuntosAviso(ResolutorRepresentante resolutor, RegistroArch
         {
             var valores = await contexto.DeAsync(c, new ExtrasContexto(Representante: rl, FirmaPng: firma), ct).ConfigureAwait(false);
             var armado = await plantillas.ArmarAsync(config.ConjuntoPlantillas, TipoPlantilla.AutorizacionCambioInfractor, null, valores, ct).ConfigureAwait(false);
-            var pdf = ServicioPlantillas.Pdf(armado, titulo: $"Autorización de cambio de infractor — {c.Numero}", fondo: ServicioPlantillas.Membrete(config.ConjuntoPlantillas));
+            var pdf = ServicioPlantillas.Pdf(armado, titulo: $"Autorización de cambio de infractor — {c.Numero}", membrete: ServicioPlantillas.Membrete(config.ConjuntoPlantillas));
             lista.Add(new AdjuntoCorreo($"autorizacion-cambio-infractor-{c.Placa ?? c.Numero}.pdf", "application/pdf", pdf));
             autorizacion = true;
         }

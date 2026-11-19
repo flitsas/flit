@@ -57,7 +57,7 @@ public static class AnalyticsEmailPreviewSample
     /// Muestra del informe programado (plantilla <c>analytics.scheduled-report</c>) con tablas de
     /// KPIs por categoría y top de radicadores POBLADAS con DTOs sintéticos (AC1).
     /// </summary>
-    public static (string Subject, string Html) BuildScheduledReport(EmailTheme? theme = null)
+    public static (string Subject, string Html) BuildScheduledReport(EmailTheme? theme = null, string? assetsBaseUrl = null)
     {
         var overview = new List<CategoryMetricsDto>
         {
@@ -71,7 +71,7 @@ public static class AnalyticsEmailPreviewSample
         };
 
         return SchedulerEmailComposer.BuildScheduledReport(
-            PhScheduleName, SyntheticReportType, PhPeriodLabel, overview, topProducers, theme);
+            PhScheduleName, SyntheticReportType, PhPeriodLabel, overview, topProducers, theme, assetsBaseUrl);
     }
 
     /// <summary>
@@ -79,7 +79,7 @@ public static class AnalyticsEmailPreviewSample
     /// valor y ventana sintéticos, y fecha de disparo FIJA (AC2 — determinista, no depende del
     /// reloj del sistema).
     /// </summary>
-    public static (string Subject, string Html) BuildAlert(EmailTheme? theme = null) =>
+    public static (string Subject, string Html) BuildAlert(EmailTheme? theme = null, string? assetsBaseUrl = null) =>
         SchedulerEmailComposer.BuildAlert(
             PhRuleName,
             SyntheticMetric,
@@ -89,5 +89,6 @@ public static class AnalyticsEmailPreviewSample
             SyntheticWindowMinutes,
             TriggeredAtUtc,
             ColombiaTime.Zone,
-            theme);
+            theme,
+            assetsBaseUrl);
 }

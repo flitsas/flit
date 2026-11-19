@@ -198,8 +198,8 @@ public sealed class SecurityEmailPreviewSampleTests
         var muestra = SecurityEmailPreviewSample.BuildWelcomeRegistration();
 
         muestra.HtmlBody.Should().Contain(SecurityEmailPreviewSample.SampleLoginUrl);
-        muestra.HtmlBody.Should().Contain("tramite-cambio-estado-header.png");
-        muestra.HtmlBody.Should().Contain("flit-logo.png");
+        muestra.HtmlBody.Should().Contain("flit-banner-correo.png");
+        muestra.HtmlBody.Should().Contain("flit-logo-firma.png");
         muestra.HtmlBody.Should().Contain("GRACIAS POR REGISTRARTE");
     }
 }

@@ -122,7 +122,7 @@ public static class PlantillasEndpoints
         // HU #14616: sin comparendo el documento sale con datos de EJEMPLO y así se dice (marca de agua en el PDF, banda en el correo).
         var ejemplo = pedido.ComparendoId is null;
         if (string.Equals(pedido.Formato, "pdf", StringComparison.OrdinalIgnoreCase) && !ServicioPlantillas.EsCorreo(tipo))
-            return Results.File(ServicioPlantillas.Pdf(armado, ejemplo ? "VISTA PREVIA · DATOS DE EJEMPLO" : "VISTA PREVIA"), "application/pdf");
+            return Results.File(ServicioPlantillas.Pdf(armado, ejemplo ? "VISTA PREVIA · DATOS DE EJEMPLO" : "VISTA PREVIA", membrete: ServicioPlantillas.MembreteDeDocumento(conjunto)), "application/pdf");
         var html = ejemplo ? ConBandaDeEjemplo(armado.Html) : armado.Html;
         return Results.Ok(new { armado.Asunto, Html = html, desconocidas = validacion.Desconocidas, ejemplo });
     }

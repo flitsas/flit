@@ -272,7 +272,7 @@ public sealed class AvisosTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         await SchedulerAsync(empresa);
         var (_, html1, canal) = await CorreoAsync(id, TipoComunicacion.Aviso1);
         canal.Should().Be(CanalCorreo.FlitSmtp);
-        html1.Should().Contain("/assets/correo/flit-cabecera.png").And.Contain("AVISO DE COMPARENDO").And.Contain("50% de descuento")
+        html1.Should().Contain("/assets/correo/flit-banner-correo.png").And.Contain("AVISO DE COMPARENDO").And.Contain("50% de descuento")
             .And.Contain("Juan P&#233;rez").And.NotContain("Los plazos de descuento ya terminaron");
 
         api.Reloj.Hoy(new DateOnly(2026, 10, 20));

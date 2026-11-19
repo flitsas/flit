@@ -64,6 +64,7 @@ public sealed class PdfDeudaTests
         PdfTextExtractor.Contains(texto, "No vigente").Should().BeTrue();
         PdfTextExtractor.Contains(texto, "Pago en trámite").Should().BeTrue();
         PdfTextExtractor.Contains(texto, "En gestión").Should().BeTrue();
+        PdfTextExtractor.Contains(texto, "Deuda del vehículo · Página 1 de").Should().BeTrue("el pie conserva el número de página sobre la banda del membrete");
     }
 
     // SP-18 — el nombre del archivo solo lleva [A-Z0-9] de la placa. AP-3: si no queda nada, deuda-sin-placa.pdf (antes

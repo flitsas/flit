@@ -349,7 +349,7 @@ public sealed class AnalyticsSchedulerProcessorTests
 
         sent.Should().ContainSingle();
         sent[0].Subject.Should().Contain("Informe diario");
-        sent[0].HtmlBody.Should().Contain("Pendientes de hoy").And.Contain("Resultados:</strong> 1");
+        Flit.Tests.Shared.EmailCopyGolden.VisibleText(sent[0].HtmlBody).Should().Contain("Pendientes de hoy").And.Contain("Resultados: 1");
         sent[0].Attachments.Should().ContainSingle();
         sent[0].Attachments[0].FileName.Should().EndWith(".xlsx");
         sent[0].Attachments[0].Content.Length.Should().BeGreaterThan(0);
@@ -387,7 +387,7 @@ public sealed class AnalyticsSchedulerProcessorTests
         await processor.ProcessSchedulesAsync(NowUtc, Ct);
 
         sent.Should().ContainSingle();
-        sent[0].HtmlBody.Should().Contain("Aprobados de todas las").And.Contain("Resultados:</strong> 2");
+        Flit.Tests.Shared.EmailCopyGolden.VisibleText(sent[0].HtmlBody).Should().Contain("Aprobados de todas las").And.Contain("Resultados: 2");
         sent[0].Attachments.Should().ContainSingle();
         await companyQueries.Received(1).ExecuteForSuperAdminAsync(Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>());
         await companyQueries.DidNotReceive().ExecuteAsync(Arg.Any<Guid>(), Arg.Any<QueryRequest>(), Arg.Any<CancellationToken>());
@@ -451,7 +451,7 @@ public sealed class AnalyticsSchedulerProcessorTests
 
         sent.Should().ContainSingle();
         sent[0].Subject.Should().Contain("Informe diario");
-        sent[0].HtmlBody.Should().Contain("Novedades de hoy").And.Contain("Resultados:</strong> 1");
+        Flit.Tests.Shared.EmailCopyGolden.VisibleText(sent[0].HtmlBody).Should().Contain("Novedades de hoy").And.Contain("Resultados: 1");
         sent[0].Attachments.Should().ContainSingle();
         sent[0].Attachments[0].FileName.Should().EndWith(".xlsx");
         sent[0].Attachments[0].Content.Length.Should().BeGreaterThan(0);
