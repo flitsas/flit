@@ -85,8 +85,11 @@ public sealed class PdfVehiculoMembreteTests
         };
         var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
 
-        foreach (var fecha in new[] { "03/02/2026", "02/02/2026", "02/02/2027", "14/07/2025", "30/09/2026" })
+        foreach (var fecha in new[] { "03/02/2026", "02/02/2026", "02/02/2027", "14/07/2025" })
             PdfDePrueba.Tiene(texto, fecha).Should().BeTrue($"«{fecha}» en el PDF: {texto}");
+        // Comparendo SIMIT: la fecha cruda ISO no llega al PDF y FechaCorta la deja dd/MM/yyyy. No se busca «30/09/2026» en el texto
+        // extraído: en el CI (Linux) la extracción de esa celda no la devuelve contigua (PR #973), aunque en Windows sí.
+        PdfVehiculo.FechaCorta("2026-09-30T08:00:00.000-05:00").Should().Be("30/09/2026");
         texto.Should().NotContainAny("2026-02-03", "2025-07-14", "2026-09-30", "T08:00", "T09:12");
     }
 
