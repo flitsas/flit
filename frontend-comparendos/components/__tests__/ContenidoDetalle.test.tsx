@@ -75,10 +75,13 @@ function ExtPago() {
 const extensiones = { acciones: () => <button type="button">Enviar aviso</button>, dp: (ctx: ContextoDetalle) => <ExtDp ctx={ctx} />, pago: () => <ExtPago /> };
 
 // IntersectionObserver simulado: la prueba decide qué secciones «se acercan».
-const observadores: { cb: IntersectionObserverCallback; els: Element[] }[] = [];
+const observadores: { cb: IntersectionObserverCallback; els: Element[]; opciones?: IntersectionObserverInit }[] = [];
 class IOFalso {
   els: Element[] = [];
-  constructor(public cb: IntersectionObserverCallback) {
+  constructor(
+    public cb: IntersectionObserverCallback,
+    public opciones?: IntersectionObserverInit,
+  ) {
     observadores.push(this);
   }
   observe(el: Element) {
@@ -97,11 +100,19 @@ function acercar(el: Element) {
 }
 
 function montar(props: Partial<Parameters<typeof ContenidoDetalle>[0]> = {}) {
+  // Como en la app: la página se desplaza dentro del contenedor del shell, no en la ventana.
   return render(
     <ToastProvider>
-      <ContenidoDetalle id="c1" extensiones={extensiones} {...props} />
+      <div data-shell-scroll data-testid="shell-scroll">
+        <ContenidoDetalle id="c1" extensiones={extensiones} {...props} />
+      </div>
     </ToastProvider>,
   );
+}
+function avisar(el: Element, visible: boolean) {
+  act(() => {
+    for (const o of observadores) if (o.els.includes(el)) o.cb([{ target: el, isIntersecting: visible } as IntersectionObserverEntry], o as unknown as IntersectionObserver);
+  });
 }
 
 beforeEach(() => {
@@ -200,6 +211,76 @@ describe("detalle del comparendo como página (rediseño S1)", () => {
     expect(destinos).toContain("detalle-pago");
     expect(destinos).not.toContain("detalle-dp");
     vi.useRealTimers();
+  });
+
+  it("control: sin gesto, una sección corrida sí se re-ubica", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    montar();
+    await screen.findByTestId("detalle-cabecera");
+    const dp = screen.getByTestId("detalle-dp");
+    dp.getBoundingClientRect = () => ({ top: 500 }) as DOMRect;
+    const scroll = Element.prototype.scrollIntoView as unknown as ReturnType<typeof vi.fn>;
+    fireEvent.click(within(screen.getByTestId("detalle-barra")).getByRole("button", { name: /DP/ }));
+    await act(async () => vi.advanceTimersByTime(10));
+    scroll.mockClear();
+    await act(async () => vi.advanceTimersByTime(2000));
+    expect(scroll.mock.contexts.map((el) => (el as Element).id)).toContain("detalle-dp");
+    vi.useRealTimers();
+  });
+
+  it("con «reducir movimiento» el salto es directo, sin scroll suave", async () => {
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q.includes("reduce"), media: q, addEventListener() {}, removeEventListener() {} }));
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    montar();
+    await screen.findByTestId("detalle-cabecera");
+    const scroll = Element.prototype.scrollIntoView as unknown as ReturnType<typeof vi.fn>;
+    scroll.mockClear();
+    fireEvent.click(within(screen.getByTestId("detalle-barra")).getByRole("button", { name: /Pago/ }));
+    await act(async () => vi.advanceTimersByTime(10));
+    expect(scroll).toHaveBeenCalledWith({ behavior: "auto", block: "start" });
+    expect(scroll).not.toHaveBeenCalledWith(expect.objectContaining({ behavior: "smooth" }));
+    vi.useRealTimers();
+  });
+
+  it("los observadores miden dentro del contenedor de scroll del shell, no en la ventana", async () => {
+    montar();
+    await screen.findByTestId("detalle-cabecera");
+    const shell = screen.getByTestId("shell-scroll");
+    expect(observadores.length).toBeGreaterThan(0);
+    for (const o of observadores) expect(o.opciones?.root).toBe(shell);
+  });
+
+  it("sin IntersectionObserver las acciones se montan de una (no se esconden)", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    montar();
+    expect(await screen.findByText("extension DP")).toBeInTheDocument();
+    expect(await screen.findByText("extension Pago")).toBeInTheDocument();
+  });
+
+  it("la barra mantiene la sección pulsada durante el salto y vuelve a seguir el scroll tras un gesto", async () => {
+    montar();
+    await screen.findByTestId("detalle-cabecera");
+    const barra = screen.getByTestId("detalle-barra");
+    const boton = (n: RegExp) => within(barra).getByRole("button", { name: n });
+    fireEvent.click(boton(/Pago/));
+    // Durante el scroll suave cruza el DP: la barra no lo subraya.
+    avisar(screen.getByTestId("detalle-dp"), true);
+    expect(boton(/Pago/)).toHaveAttribute("aria-current", "location");
+    // Un gesto de la gestora devuelve el control al scroll.
+    fireEvent.wheel(window);
+    avisar(screen.getByTestId("detalle-dp"), true);
+    expect(boton(/DP/)).toHaveAttribute("aria-current", "location");
+  });
+
+  it("al llegar al fondo marca la última sección aunque no alcance a subir", async () => {
+    montar();
+    await screen.findByTestId("detalle-cabecera");
+    const shell = screen.getByTestId("shell-scroll");
+    Object.defineProperties(shell, { scrollTop: { value: 900, configurable: true }, clientHeight: { value: 600, configurable: true }, scrollHeight: { value: 1500, configurable: true } });
+    act(() => {
+      shell.dispatchEvent(new Event("scroll"));
+    });
+    expect(within(screen.getByTestId("detalle-barra")).getByRole("button", { name: /Datos/ })).toHaveAttribute("aria-current", "location");
   });
 
   it("si la gestora mueve la rueda, no se re-ubica después", async () => {

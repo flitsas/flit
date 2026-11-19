@@ -19,23 +19,54 @@ export function BarraSecciones({ secciones, onIr }: { secciones: SeccionBarra[];
   const [activa, setActiva] = useState(secciones[0]?.id ?? "");
   const barra = useRef<HTMLElement>(null);
 
+  // Sección pulsada: manda hasta el siguiente gesto de la gestora. Así el scroll suave no subraya las intermedias y, en
+  // pantallas altas donde la última sección no alcanza a subir, la barra no marca otra distinta a la pulsada.
+  const pulsada = useRef<string | null>(null);
+
   useEffect(() => {
-    if (typeof IntersectionObserver === "undefined") return;
+    const contenedor = contenedorScroll(barra.current);
+    const alFondo = () => {
+      const c = contenedor ?? document.scrollingElement;
+      // Solo si hay algo que desplazar: una página que cabe entera no tiene «fondo» al que llegar.
+      return !!c && c.scrollHeight > c.clientHeight && c.scrollTop + c.clientHeight >= c.scrollHeight - 1;
+    };
+    const ultima = secciones[secciones.length - 1]?.id;
     const visibles = new Map<string, boolean>();
-    const obs = new IntersectionObserver(
-      (entradas) => {
-        for (const e of entradas) visibles.set(e.target.id, e.isIntersecting);
-        // La activa es la primera sección (en orden de la página) que cruza la franja bajo la barra.
-        const primera = secciones.find((s) => visibles.get(s.id));
-        if (primera) setActiva(primera.id);
-      },
-      { root: contenedorScroll(barra.current), rootMargin: "-25% 0px -65% 0px" },
-    );
+    const elegir = () => {
+      if (pulsada.current) return;
+      // Al fondo, la última: puede que nunca cruce la franja de arriba porque no hay más página que desplazar.
+      if (alFondo() && ultima) return setActiva(ultima);
+      // Si no, la primera sección (en orden de la página) que cruza la franja bajo la barra.
+      const primera = secciones.find((s) => visibles.get(s.id));
+      if (primera) setActiva(primera.id);
+    };
+    const gesto = (e: Event) => {
+      if (e.target instanceof Node && barra.current?.contains(e.target)) return;
+      pulsada.current = null;
+    };
+    const eventos = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+    eventos.forEach((e) => window.addEventListener(e, gesto, { capture: true, passive: true }));
+    const raizScroll: EventTarget = contenedor ?? window;
+    raizScroll.addEventListener("scroll", elegir, { passive: true });
+    const obs =
+      typeof IntersectionObserver === "undefined"
+        ? null
+        : new IntersectionObserver(
+            (entradas) => {
+              for (const e of entradas) visibles.set(e.target.id, e.isIntersecting);
+              elegir();
+            },
+            { root: contenedor, rootMargin: "-25% 0px -65% 0px" },
+          );
     for (const s of secciones) {
       const el = document.getElementById(s.id);
-      if (el) obs.observe(el);
+      if (el) obs?.observe(el);
     }
-    return () => obs.disconnect();
+    return () => {
+      obs?.disconnect();
+      raizScroll.removeEventListener("scroll", elegir);
+      eventos.forEach((e) => window.removeEventListener(e, gesto, { capture: true }));
+    };
   }, [secciones]);
 
   // En celular la barra desliza dentro de sí misma: la activa se mantiene a la vista. Se mueve solo el scroll horizontal
@@ -64,6 +95,7 @@ export function BarraSecciones({ secciones, onIr }: { secciones: SeccionBarra[];
             aria-current={activa === s.id ? "location" : undefined}
             className={pestanaClass(activa === s.id)}
             onClick={() => {
+              pulsada.current = s.id;
               setActiva(s.id);
               onIr(s.id);
             }}
