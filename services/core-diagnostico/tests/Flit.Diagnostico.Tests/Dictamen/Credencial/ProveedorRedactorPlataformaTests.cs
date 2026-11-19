@@ -63,7 +63,7 @@ public sealed class ProveedorRedactorPlataformaTests
         http.Llamadas.Should().Be(0);
         resultado.RedactadoPor.Should().Be("PLANTILLA");
         resultado.TipoFallo.Should().Be(TipoFalloRedactor.NoConfigurado);
-        EmisorDictamen.DisponibleDesde(resultado, DateTimeOffset.UnixEpoch).Should().BeNull("sin proveedor el dictamen sale de la cola");
+        EmisorDictamen.DisponibleDesde(resultado, DateTimeOffset.UnixEpoch, TimeSpan.FromSeconds(30)).Should().BeNull("sin proveedor el dictamen sale de la cola");
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public sealed class ProveedorRedactorPlataformaTests
         salida.TipoFallo.Should().Be(TipoFalloRedactor.Red);
         http.Llamadas.Should().Be(0);
         resultado.TipoFallo.Should().Be(TipoFalloRedactor.Red);
-        EmisorDictamen.DisponibleDesde(resultado, DateTimeOffset.UnixEpoch).Should().NotBeNull("un fallo técnico se reintenta (H8)");
+        EmisorDictamen.DisponibleDesde(resultado, DateTimeOffset.UnixEpoch, TimeSpan.FromSeconds(30)).Should().NotBeNull("un fallo técnico se reintenta (H8)");
     }
 
     /// <summary>
@@ -107,7 +107,7 @@ public sealed class ProveedorRedactorPlataformaTests
         http.Llamadas.Should().Be(0);
         resultado.TipoFallo.Should().Be(TipoFalloRedactor.Red);
         resultado.ReintentarEn.Should().Be(TimeSpan.FromSeconds(120));
-        EmisorDictamen.DisponibleDesde(resultado, ahora).Should().Be(ahora.AddSeconds(120));
+        EmisorDictamen.DisponibleDesde(resultado, ahora, TimeSpan.FromSeconds(30)).Should().Be(ahora.AddSeconds(120));
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public sealed class ProveedorRedactorPlataformaTests
         tercera.ReintentarEn.Should().Be(TimeSpan.FromSeconds(50));
         http.Llamadas.Should().Be(2);
         var resultado = new ResultadoRedaccion("t", "PLANTILLA", "PENDIENTE", 1, "m", tercera.TipoFallo, tercera.ReintentarEn);
-        EmisorDictamen.DisponibleDesde(resultado, DateTimeOffset.UnixEpoch).Should().Be(DateTimeOffset.UnixEpoch.AddSeconds(50));
+        EmisorDictamen.DisponibleDesde(resultado, DateTimeOffset.UnixEpoch, TimeSpan.FromSeconds(30)).Should().Be(DateTimeOffset.UnixEpoch.AddSeconds(50));
 
         reloj.Avanzar(TimeSpan.FromSeconds(51));
         (await proveedor.RedactarAsync("prompt", ct)).TipoFallo.Should().BeNull();

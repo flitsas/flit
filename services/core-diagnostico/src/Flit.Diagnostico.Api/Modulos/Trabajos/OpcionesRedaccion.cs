@@ -17,8 +17,17 @@ public sealed class OpcionesRedaccion
     /// <summary>Vigencia del lease de una redacción tomada. Si el proceso muere, otra réplica la retoma al vencer.</summary>
     public TimeSpan DuracionLease { get; set; } = TimeSpan.FromMinutes(5);
 
-    /// <summary>Reintentos tras un fallo técnico (por defecto 2). Pasado ese número, la fila sigue pendiente y ya no se agenda.</summary>
+    /// <summary>
+    /// Reintentos tras un fallo técnico (por defecto 2). Cada uno espera <see cref="EsperaReintento"/> × 2^(toma−1) si el
+    /// proveedor no indicó espera. Pasado ese número, la fila sigue pendiente y ya no se agenda.
+    /// </summary>
     public int MaxReintentos { get; set; } = 2;
+
+    /// <summary>Espera base tras un 5xx, timeout o falla de red sin espera indicada (por defecto 30 s); se dobla en cada toma.</summary>
+    public TimeSpan EsperaReintento { get; set; } = EsperaReintentoPorDefecto;
+
+    /// <summary>Valor por defecto de <see cref="EsperaReintento"/>.</summary>
+    public static readonly TimeSpan EsperaReintentoPorDefecto = TimeSpan.FromSeconds(30);
 
     /// <summary>Lo que está fuera de rango (vacío si todo es válido); el servicio no arranca con un valor inválido.</summary>
     public IReadOnlyList<string> Errores()
@@ -30,6 +39,8 @@ public sealed class OpcionesRedaccion
             errores.Add("DuracionLease debe ser de al menos 30 segundos");
         if (MaxReintentos is < 0 or > 5)
             errores.Add("MaxReintentos debe estar entre 0 y 5");
+        if (EsperaReintento <= TimeSpan.Zero)
+            errores.Add("EsperaReintento debe ser mayor que cero");
         return errores;
     }
 }
