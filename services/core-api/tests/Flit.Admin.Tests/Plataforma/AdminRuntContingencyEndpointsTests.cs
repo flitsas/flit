@@ -164,6 +164,50 @@ public sealed class AdminRuntContingencyEndpointsTests : IClassFixture<AdminRunt
     }
 
     [Fact]
+    public async Task Revision9_SiLaAuditoriaFalla_ElCambioSigueValido_YQuedaUnWarningSinElMotivo()
+    {
+        var logs = new RegistroLogs();
+        var gateway = new FakeGateway();
+        var auditoria = Substitute.For<IAdminAuditWriter>();
+        auditoria.WriteAsync(Arg.Any<AdminAuditEntry>(), Arg.Any<CancellationToken>()).Returns(Task.FromException(new InvalidOperationException("auditoría caída")));
+        var handler = new SaveRuntContingencyHandler(gateway, auditoria, logs);
+
+        var result = await handler.HandleAsync(
+            new SaveRuntContingencyCommand("vehicle_plate", "verifik", "Motivo confidencial del cambio", SuperAdminUserId, "Ana"), TestContext.Current.CancellationToken);
+
+        result.Outcome.Should().Be(SaveRuntContingencyOutcome.Ok);
+        gateway.Items["vehicle_plate"].Provider.Should().Be("verifik");
+        logs.Advertencias.Should().ContainSingle().Which.Should().NotContain("Motivo confidencial");
+    }
+
+    [Fact]
+    public async Task Revision9_Endpoint_ConAuditoriaCaida_Responde200()
+    {
+        _factory.AuditWriter.WriteAsync(Arg.Any<AdminAuditEntry>(), Arg.Any<CancellationToken>()).Returns(Task.FromException(new InvalidOperationException("caída")));
+        using var client = ClientWith(SuperAdminToken());
+
+        var response = await client.PutAsJsonAsync($"{BaseUrl}/conductor", new { provider = "verifik_conductor", reason = "Motivo" }, TestContext.Current.CancellationToken);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        _factory.Gateway.Items["conductor"].Provider.Should().Be("verifik_conductor");
+    }
+
+    private sealed class RegistroLogs : Microsoft.Extensions.Logging.ILogger<SaveRuntContingencyHandler>
+    {
+        public List<string> Advertencias { get; } = [];
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (logLevel == Microsoft.Extensions.Logging.LogLevel.Warning)
+                Advertencias.Add(formatter(state, exception));
+        }
+    }
+
+    [Fact]
     public async Task Put_ConValidacionFallida_NoAudita()
     {
         using var client = ClientWith(SuperAdminToken());
@@ -266,6 +310,8 @@ public sealed class AdminRuntContingencyEndpointsTests : IClassFixture<AdminRunt
         public void Reset()
         {
             Gateway.Reset();
+            AuditWriter.ClearReceivedCalls();
+            AuditWriter.WriteAsync(Arg.Any<AdminAuditEntry>(), Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
             AuditWriter.ClearReceivedCalls();
         }
 

@@ -176,3 +176,20 @@ public sealed class InvitationPendingRule(OverrideTargetLookup lookup) : IPermis
             : null;
     }
 }
+
+/// <summary>
+/// Épica #14644: un permiso que afecta a todas las empresas (<see cref="Roles.PrivilegeCeiling.IsSuperAdminOnly"/>, p. ej.
+/// <c>runt_contingency.manage</c>) solo lo tiene el rol SuperAdmin: no se otorga ni se deniega por usuario, ni siquiera por el
+/// Super Admin. Quitar uno que ya exista (REVOKE) sí se permite, para limpiar. No depende de la marca <c>enforced</c> de la base.
+/// </summary>
+public sealed class SuperAdminOnlyPermissionRule : IPermissionOverrideRule
+{
+    public Task<string?> CheckAsync(PermissionOverrideRequest request, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        return Task.FromResult(
+            !PermissionOverrideActions.IsRead(request.Action) && request.Action != "REVOKE" && Roles.PrivilegeCeiling.IsSuperAdminOnly(request.PermissionSlug)
+                ? PermissionOverrideReasons.SuperAdminOnly
+                : null);
+    }
+}

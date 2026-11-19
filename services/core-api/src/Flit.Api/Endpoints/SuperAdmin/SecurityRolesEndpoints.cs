@@ -96,6 +96,10 @@ internal static class SecurityRolesEndpoints
             {
                 return Results.BadRequest(new { code = "ROLE_PERMISSION_PRODUCT_MISMATCH" });
             }
+            catch (SuperAdminOnlyPermissionException ex) // Épica #14644
+            {
+                return Results.BadRequest(new { code = "SUPERADMIN_ONLY", permissions = ex.Slugs });
+            }
             catch (OtPermissionNotApplicableToRoleException) // HU #13644
             {
                 return Results.BadRequest(new { code = "OT_NOT_APPLICABLE" });
