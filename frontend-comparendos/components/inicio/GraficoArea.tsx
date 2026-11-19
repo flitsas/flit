@@ -40,7 +40,7 @@ export function GraficoArea({ puntos, series, formatoEje = String, formato = Str
             </defs>
             <CartesianGrid {...REJILLA} vertical={false} />
             <XAxis dataKey="etiqueta" tick={EJE_TICK} axisLine={false} tickLine={false} minTickGap={8} />
-            <YAxis tick={EJE_TICK} axisLine={false} tickLine={false} tickFormatter={formatoEje} allowDecimals={false} width={64} />
+            <YAxis tick={EJE_TICK} axisLine={false} tickLine={false} tickFormatter={formatoEje} allowDecimals={false} width={84} />
             <Tooltip contentStyle={TOOLTIP_CONTENIDO} labelStyle={TOOLTIP_ETIQUETA} formatter={(v: number, nombre: string) => [formato(v), nombre]} />
             {series.map((s, i) => (
               <Area key={s.clave} type="monotone" dataKey={s.clave} name={s.etiqueta} stroke={s.color} strokeWidth={2} fill={`url(#${base}-${i})`} />

@@ -7,7 +7,7 @@ export const EJE_TICK = { fontSize: 11, fill: "var(--di-text-tertiary)" } as con
 export const REJILLA = { strokeDasharray: "3 4", stroke: "var(--kit-linea)" } as const;
 
 export const TOOLTIP_CONTENIDO = {
-  background: "rgba(22,39,68,0.95)",
+  background: "color-mix(in srgb, var(--kit-tinta) 95%, transparent)",
   border: "none",
   borderRadius: 10,
   color: "white",

@@ -48,16 +48,16 @@ export function BarrasApiladas({
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={[...filas]} layout={horizontal ? "vertical" : "horizontal"} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid {...REJILLA} horizontal={!horizontal} vertical={false} />
+            {/* Sin fragmentos: recharts 2 busca los ejes entre sus hijos directos y no entra a un <>…</>. */}
             {horizontal ? (
-              <>
-                <XAxis type="number" tick={EJE_TICK} axisLine={false} tickLine={false} allowDecimals={false} tickFormatter={formatoEje} />
-                <YAxis type="category" dataKey="etiqueta" tick={EJE_TICK} axisLine={false} tickLine={false} width={anchoRotulo} tickFormatter={recortar} />
-              </>
+              <XAxis type="number" tick={EJE_TICK} axisLine={false} tickLine={false} allowDecimals={false} tickFormatter={formatoEje} />
             ) : (
-              <>
-                <XAxis dataKey="etiqueta" tick={EJE_TICK} axisLine={false} tickLine={false} minTickGap={4} />
-                <YAxis tick={EJE_TICK} axisLine={false} tickLine={false} allowDecimals={false} tickFormatter={formatoEje} width={64} />
-              </>
+              <XAxis dataKey="etiqueta" tick={EJE_TICK} axisLine={false} tickLine={false} minTickGap={4} />
+            )}
+            {horizontal ? (
+              <YAxis type="category" dataKey="etiqueta" tick={EJE_TICK} axisLine={false} tickLine={false} width={anchoRotulo} tickFormatter={recortar} />
+            ) : (
+              <YAxis tick={EJE_TICK} axisLine={false} tickLine={false} allowDecimals={false} tickFormatter={formatoEje} width={84} />
             )}
             <Tooltip cursor={TOOLTIP_CURSOR} contentStyle={TOOLTIP_CONTENIDO} labelStyle={TOOLTIP_ETIQUETA} formatter={(v: number, nombre: string) => [formato(v), nombre]} />
             {series.map((s, i) => (

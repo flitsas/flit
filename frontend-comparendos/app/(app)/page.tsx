@@ -1,57 +1,27 @@
 "use client";
 
 import { Suspense, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { InlineAlert } from "@flit/ui";
 import { EstadoVacio } from "@flit/ui/EstadoVacio";
 import { Cargador } from "@flit/ui/Loader";
-import { METRICAS_GRID_CLS, TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
+import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
-import { BarrasApiladas } from "@/components/inicio/BarrasApiladas";
-import { GraficoArea } from "@/components/inicio/GraficoArea";
-import { GraficoDona } from "@/components/inicio/GraficoDona";
 import { PanelInicio } from "@/components/inicio/PanelInicio";
 import { apiFetch } from "@/lib/api";
-import { ESTADO_LEGAL } from "@/lib/etiquetas";
 import { diaColombia, formatoPesos } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import {
-  etiquetaMes,
-  FRENTES,
-  hrefBandeja,
-  inicioDeMes,
-  numeroCorto,
-  pesosCorto,
-  textoPeriodo,
-  type Frentes,
-  type Monto,
-  type RespuestaDinero,
-} from "@/lib/reportes";
+import { FRENTES, hrefBandeja, inicioDeMes, pesosCorto, type Frentes, type Monto, type RespuestaDinero } from "@/lib/reportes";
 import { capacidades, tienePermiso } from "@/lib/sesion";
 import type { Contadores } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 
-/** Color de cada estado legal: el mismo tono que su etiqueta en la bandeja. */
-const COLOR_TONO: Record<string, string> = {
-  neutral: "var(--kit-gris)",
-  success: "var(--kit-verde)",
-  danger: "var(--kit-rojo)",
-  warning: "var(--kit-naranja)",
-  info: "var(--kit-azul)",
-};
-
-const SERIES_MENSUAL = [
-  { clave: "valorIngresado", etiqueta: "Valor de lo que ingresó", color: "var(--kit-azul)" },
-  { clave: "pagado", etiqueta: "Pagado", color: "var(--kit-verde)" },
-];
-
-const SERIES_ORGANISMO = [
-  { clave: "exigible", etiqueta: "Se puede cobrar", color: "var(--kit-azul)" },
-  { clave: "noExigible", etiqueta: "Caducado o prescrito", color: "var(--kit-gris)" },
-];
+/** El bloque de dinero (y recharts) se baja solo si la empresa tiene reportes; mientras, el mismo cargador de antes. */
+const DineroInicio = dynamic(() => import("@/components/inicio/DineroInicio").then((m) => m.DineroInicio), { loading: () => <Cargador /> });
 
 /** Frentes sin el módulo de reportes: solo cantidades, de los mismos contadores de la bandeja. */
 function useFrentesSinDinero(listo: boolean, empresa: string | null): { frentes: Record<keyof Frentes, Monto | null> | null; error: string | null } {
@@ -98,7 +68,8 @@ function ParaHoy({
       : `Hay ${conCifra} ${conCifra === 1 ? "frente" : "frentes"} por atender. Cada tarjeta abre la bandeja con ese filtro.`;
   return (
     <PanelInicio titulo="Para hoy" subtitulo={subtitulo} icono="alerta" data-testid="para-hoy">
-      <div className={METRICAS_GRID_CLS}>
+      {/* 150 px por casilla: los 7 frentes caben en una fila desde ~1280 px y no queda uno huérfano a 1512. */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
         {FRENTES.map((f) => {
           const m = frentes?.[f.clave] ?? null;
           const cantidad = m?.cantidad ?? null;
@@ -112,6 +83,7 @@ function ParaHoy({
               pendiente={!!f.pendiente && !!cantidad}
               colorCifra={vacio ? "var(--di-text-tertiary)" : undefined}
               title={conDinero && m ? `${cantidad?.toLocaleString("es-CO")} comparendos · ${formatoPesos(m.valor)}` : undefined}
+              aria-label={`${f.titulo}: ${cantidad === null ? "sin dato" : cantidad.toLocaleString("es-CO")} comparendos${conDinero && m ? ` · ${formatoPesos(m.valor)}` : ""}. ${f.accion}`}
               pie={conDinero && m && !vacio ? `${pesosCorto(m.valor)} · ${f.accion}` : f.accion}
               href={vacio || cantidad === null ? undefined : hrefBandeja(f.query, { empresa })}
               enlace={Link}
@@ -130,97 +102,6 @@ function ParaHoy({
         )}
       </div>
     </PanelInicio>
-  );
-}
-
-function Dinero({ datos, empresa }: { datos: RespuestaDinero; empresa: string | null }) {
-  const d = datos.dinero;
-  const periodo = textoPeriodo(datos.alcance.desde, datos.alcance.hasta);
-  const total = d.exigible.valor + d.noExigible.valor;
-  const porciones = d.estados.map((e) => ({
-    clave: e.estado,
-    etiqueta: ESTADO_LEGAL[e.estado]?.texto ?? e.estado,
-    valor: e.valor,
-    color: COLOR_TONO[ESTADO_LEGAL[e.estado]?.tono ?? "neutral"] ?? "var(--kit-gris)",
-    detalle: e.cantidad.toLocaleString("es-CO"),
-  }));
-  return (
-    <>
-      <div className={METRICAS_GRID_CLS} data-testid="kpis-dinero">
-        <TarjetaMetrica
-          etiqueta="Deuda que se puede cobrar"
-          cifra={pesosCorto(d.exigible.valor)}
-          title={formatoPesos(d.exigible.valor)}
-          pie={`${d.exigible.cantidad.toLocaleString("es-CO")} comparendos sin notificar, en tiempo o vencidos`}
-        />
-        <TarjetaMetrica
-          etiqueta="Caducada o prescrita"
-          cifra={pesosCorto(d.noExigible.valor)}
-          colorCifra="var(--di-text-secondary)"
-          title={formatoPesos(d.noExigible.valor)}
-          pie={`${d.noExigible.cantidad.toLocaleString("es-CO")} comparendos que el organismo ya no puede cobrar`}
-        />
-        <TarjetaMetrica
-          etiqueta="Ahorro logrado"
-          cifra={pesosCorto(d.ahorroLogrado)}
-          colorCifra="var(--flit-success-ink)"
-          title={formatoPesos(d.ahorroLogrado)}
-          pie={`Derechos de petición favorables · ${periodo}`}
-        />
-        <TarjetaMetrica
-          etiqueta="Pagado"
-          cifra={pesosCorto(d.pagado.total)}
-          title={`${formatoPesos(d.pagado.total)} · CC ${formatoPesos(d.pagado.cc)} · PC ${formatoPesos(d.pagado.pc)} · BC ${formatoPesos(d.pagado.bc)}`}
-          pie={`${d.pagado.cantidad.toLocaleString("es-CO")} pagos · ${periodo}`}
-        />
-        {d.cobroCoactivo.cantidad > 0 && (
-          <TarjetaMetrica
-            etiqueta="En cobro coactivo"
-            cifra={pesosCorto(d.cobroCoactivo.valor)}
-            pendiente
-            title={formatoPesos(d.cobroCoactivo.valor)}
-            pie={`${d.cobroCoactivo.cantidad.toLocaleString("es-CO")} comparendos · ver en la bandeja`}
-            href={hrefBandeja({ cobroCoactivo: "true" }, { empresa })}
-            enlace={Link}
-          />
-        )}
-      </div>
-
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <PanelInicio titulo="Tendencia de los últimos 12 meses" subtitulo="Valor de los comparendos que ingresaron y lo que se pagó, mes a mes." icono="reportes">
-          <GraficoArea
-            puntos={d.mensual.map((m) => ({ etiqueta: etiquetaMes(m.periodo), valorIngresado: m.valorIngresado, pagado: m.pagado }))}
-            series={SERIES_MENSUAL}
-            formatoEje={(v) => (v === 0 ? "0" : `$${numeroCorto(v)}`)}
-            formato={formatoPesos}
-          />
-        </PanelInicio>
-        <PanelInicio titulo="Deuda por estado legal" subtitulo="Lo activo y sin pagar, a hoy." icono="mazo">
-          <GraficoDona
-            porciones={porciones}
-            total={d.exigible.cantidad + d.noExigible.cantidad}
-            centro={pesosCorto(total).replace("$ ", "$")}
-            rotuloCentro="en deuda"
-            formato={pesosCorto}
-            titulo={(p) => formatoPesos(p.valor)}
-          />
-        </PanelInicio>
-      </div>
-
-      <PanelInicio titulo="Dinero por organismo de tránsito" subtitulo="Los 10 con más deuda; la parte gris ya caducó o prescribió." icono="pesos">
-        {d.organismos.length === 0 ? (
-          <EstadoVacio titulo="Sin deuda pendiente" mensaje="No hay comparendos activos sin pagar." />
-        ) : (
-          <BarrasApiladas
-            filas={d.organismos.map((o) => ({ etiqueta: o.nombre, exigible: o.exigible, noExigible: o.valor - o.exigible }))}
-            series={SERIES_ORGANISMO}
-            formatoEje={(v) => (v === 0 ? "0" : `$${numeroCorto(v)}`)}
-            formato={formatoPesos}
-            anchoRotulo={150}
-          />
-        )}
-      </PanelInicio>
-    </>
   );
 }
 
@@ -278,7 +159,7 @@ function Contenido() {
         />
       )}
       {conDinero && dinero.estado === "loading" && <Cargador />}
-      {conDinero && dinero.datos && <Dinero datos={dinero.datos} empresa={empresaQuery} />}
+      {conDinero && dinero.datos && <DineroInicio datos={dinero.datos} empresa={empresaQuery} />}
     </section>
   );
 }

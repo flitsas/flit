@@ -42,8 +42,8 @@ const PAGOS = [
 ] as const;
 
 /** Cifra del tablero con la tarjeta de la propuesta (HU #14486, `TarjetaMetrica` de @flit/ui). */
-function Kpi({ titulo, valor, detalle, title, onClick }: { titulo: string; valor: string; detalle?: string; title?: string; onClick?: () => void }) {
-  return <TarjetaMetrica etiqueta={titulo} cifra={valor} pie={detalle} title={title} onClick={onClick} />;
+function Kpi({ titulo, valor, detalle, title, ariaLabel, onClick }: { titulo: string; valor: string; detalle?: string; title?: string; ariaLabel?: string; onClick?: () => void }) {
+  return <TarjetaMetrica etiqueta={titulo} cifra={valor} pie={detalle} title={title} aria-label={ariaLabel} onClick={onClick} />;
 }
 
 function SelectorNit({ empresa, valor, onCambio }: { empresa: string | null; valor: string | null; onCambio: (id: string | null) => void }) {
@@ -145,6 +145,7 @@ function Contenido() {
               valor={d.kpis.radarCantidad.toLocaleString("es-CO")}
               detalle={`${pesosCorto(d.kpis.radarValor)} · vencen antes del ${formatoFecha(d.kpis.radarHasta)}`}
               title={formatoPesos(d.kpis.radarValor)}
+              ariaLabel={`Radar de vencimientos: ${d.kpis.radarCantidad.toLocaleString("es-CO")} comparendos · ${formatoPesos(d.kpis.radarValor)}. Ver en la bandeja`}
               onClick={() => {
                 // Clic en el radar → la bandeja filtrada con el mismo criterio (§7.8).
                 const q = new URLSearchParams({ rapido: "Radar" });
