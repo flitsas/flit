@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, StatusBadge } from "@flit/ui";
+import { DataTable, InlineAlert, Modal, StatusBadge, VehicleLoader } from "@flit/ui";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useToast } from "@/components/Toast";
 import { Interruptor } from "@/components/ui/Interruptor";
@@ -67,7 +67,7 @@ function Horas({ horas, onCambio }: { horas: string[]; onCambio: (h: string[]) =
           Agregar
         </button>
       </div>
-      {error && <span className="text-[11px] text-destructive">{error}</span>}
+      {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   );
 }
@@ -105,7 +105,7 @@ function Canal({ empresaId, canal, proveedores, onGuardado }: { empresaId: strin
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <legend className="text-sm font-semibold">{canal.etiqueta}</legend>
-          <span className="text-[11px] opacity-70">
+          <span className="text-xs text-muted-foreground">
             Última: {canal.ultimaConsulta ? formatoFechaHora(canal.ultimaConsulta) : "nunca"}
             {canal.ultimoResultado && ` (${RESULTADO_CICLO[canal.ultimoResultado] ?? canal.ultimoResultado})`} · Próxima:{" "}
             {canal.proximaConsulta ? horaColombia(canal.proximaConsulta) : "—"}
@@ -130,7 +130,7 @@ function Canal({ empresaId, canal, proveedores, onGuardado }: { empresaId: strin
           {opciones
             .filter((p) => !p.conectado && (!f.proveedor || p.clave === f.proveedor))
             .map((p) => (
-              <span key={p.clave} className="font-normal opacity-70">
+              <span key={p.clave} className="font-normal text-muted-foreground">
                 {p.nombre}: {p.motivo ?? "no conectado"}
               </span>
             ))}
@@ -142,10 +142,9 @@ function Canal({ empresaId, canal, proveedores, onGuardado }: { empresaId: strin
             <option value="Intervalo">Cada cierto tiempo</option>
           </select>
         </label>
-        <label className="flex items-center gap-2 self-end pb-2 text-xs font-semibold">
-          <input type="checkbox" checked={f.soloDiasHabiles} onChange={(e) => cambiar({ soloDiasHabiles: e.target.checked })} />
-          Solo días hábiles
-        </label>
+        <div className="self-end pb-2">
+          <Interruptor activo={f.soloDiasHabiles} onCambio={(v) => cambiar({ soloDiasHabiles: v })} etiqueta="Solo días hábiles" />
+        </div>
       </div>
 
       {f.modo === "HorasFijas" ? (
@@ -195,7 +194,7 @@ export function ConsultasAdmin({ empresaId }: { empresaId: string }) {
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (vista.estado === "loading") return <p className="text-sm opacity-60">Cargando configuración de consultas…</p>;
+  if (vista.estado === "loading") return <VehicleLoader label="Cargando configuración de consultas…" />;
   if (vista.estado === "error" || !vista.datos) return <InlineAlert tone="error">{vista.error ?? "No se pudo cargar."}</InlineAlert>;
 
   const v = vista.datos;
@@ -224,7 +223,7 @@ export function ConsultasAdmin({ empresaId }: { empresaId: string }) {
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-sm font-semibold">Consultas automáticas</span>
           <StatusBadge label={estado.etiqueta} tone={estado.tono} />
-          {v.activadaEn && <span className="text-[11px] opacity-70">Activada el {formatoFechaHora(v.activadaEn)}</span>}
+          {v.activadaEn && <span className="text-xs text-muted-foreground">Activada el {formatoFechaHora(v.activadaEn)}</span>}
         </div>
         <div className="flex gap-2">
           {v.estado === "Activa" ? (
@@ -247,7 +246,7 @@ export function ConsultasAdmin({ empresaId }: { empresaId: string }) {
         </InlineAlert>
       )}
       {v.estado !== "Activa" && v.productoHabilitado !== false && (
-        <p className="text-xs opacity-70">
+        <p className="text-xs text-muted-foreground">
           Configura y guarda cada canal; al activar empiezan las consultas en la agenda de cada uno. Tener el producto encendido no consulta nada por sí solo.
         </p>
       )}

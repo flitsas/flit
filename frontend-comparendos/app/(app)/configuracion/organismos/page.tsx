@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, StatusBadge } from "@flit/ui";
+import { DataTable, InlineAlert, StatusBadge, EstadoVacio } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -77,7 +77,7 @@ export default function PermisosPorOrganismo() {
           </div>
         )}
         {clave === null ? (
-          <p className="text-sm opacity-70">Elige una empresa para ver sus permisos.</p>
+          <EstadoVacio titulo="Elige una empresa" mensaje="Elige una empresa para ver sus permisos." />
         ) : (
           <DataTable
             ariaLabel="Permisos por organismo"

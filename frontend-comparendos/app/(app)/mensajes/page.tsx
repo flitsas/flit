@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, StatusBadge, usePaginacion } from "@flit/ui";
+import { DataTable, InlineAlert, Modal, StatusBadge, usePaginacion, VehicleLoader } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -57,7 +57,7 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
 
   return (
     <Modal icono="correo" open onClose={onCerrar} size="2xl" title={m?.asunto ?? "Mensaje"} description={m ? `${TIPO_COMUNICACION[m.tipo] ?? m.tipo} · ${formatoFechaHora(m.creadoEn)}` : undefined}>
-      {detalle.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
+      {detalle.estado === "loading" && <VehicleLoader label="Cargando…" />}
       {detalle.estado === "error" && <InlineAlert tone="error">{detalle.error}</InlineAlert>}
       {m && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
@@ -81,7 +81,7 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
               <p>
                 <span className="font-semibold">Apertura:</span> {m.abiertoEn ? `posiblemente abierto el ${formatoFechaHora(m.abiertoEn)} (${m.aperturas} ${m.aperturas === 1 ? "vez" : "veces"})` : "sin registro"}
               </p>
-              <p className="mt-1 opacity-70">{m.avisoApertura}</p>
+              <p className="mt-1 text-muted-foreground">{m.avisoApertura}</p>
             </div>
             {m.plantilla && <p className="text-xs"><span className="font-semibold">Plantilla:</span> v{m.plantilla.numeroVersion}</p>}
             {m.adjuntos.length > 0 && (
@@ -97,14 +97,14 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
             )}
             <div className="flex flex-col gap-1">
               <h3 className="text-xs font-semibold">Intentos de envío</h3>
-              {m.intentos.length === 0 && <p className="text-xs opacity-60">Todavía no se ha intentado enviar.</p>}
+              {m.intentos.length === 0 && <p className="text-xs text-muted-foreground">Todavía no se ha intentado enviar.</p>}
               {m.intentos.map((i) => (
                 <p key={i.numero} className="text-xs">
                   #{i.numero} · {formatoFechaHora(i.intentadoEn)} · {i.resultadoPlataforma ?? "—"}
                   {i.mensaje ? ` · ${i.mensaje}` : ""}
                 </p>
               ))}
-              {m.proximoIntentoEn && <p className="text-xs opacity-70">Próximo intento: {formatoFechaHora(m.proximoIntentoEn)}</p>}
+              {m.proximoIntentoEn && <p className="text-xs text-muted-foreground">Próximo intento: {formatoFechaHora(m.proximoIntentoEn)}</p>}
             </div>
             {puedeReintentar && (
               <button type="button" className={controlCls(false)} disabled={ocupado} onClick={reintentar}>
@@ -241,7 +241,7 @@ function Centro() {
             render: (m) => (
               <div className="flex flex-col">
                 <span>{m.remitente ?? "—"}</span>
-                {m.canalCorreo && <span className="text-[11px] opacity-60">{CANAL_CORREO[m.canalCorreo] ?? m.canalCorreo}</span>}
+                {m.canalCorreo && <span className="text-xs text-muted-foreground">{CANAL_CORREO[m.canalCorreo] ?? m.canalCorreo}</span>}
               </div>
             ),
           },
@@ -263,7 +263,7 @@ function Centro() {
         ]}
         pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: lista.datos?.total ?? 0, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
       />
-      <p className="text-[11px] opacity-60">La apertura es un dato informativo: no constituye prueba de notificación.</p>
+      <p className="text-xs text-muted-foreground">La apertura es un dato informativo: no constituye prueba de notificación.</p>
       {abierto && <DetalleMensaje key={abierto} id={abierto} onCerrar={() => setAbierto(null)} onCambio={lista.recargar} onComparendo={setVerComparendo} />}
       <DetalleComparendo id={verComparendo} onCerrar={() => setVerComparendo(null)} onCambio={lista.recargar} />
     </section>
@@ -274,7 +274,7 @@ function Centro() {
 export default function CentroMensajes() {
   return (
     <Requiere permiso={P.mensajesVer}>
-      <Suspense fallback={<p className="text-sm opacity-60">Cargando…</p>}>
+      <Suspense fallback={<VehicleLoader label="Cargando…" />}>
         <Centro />
       </Suspense>
     </Requiere>

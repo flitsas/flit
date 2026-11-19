@@ -110,7 +110,7 @@ function Nits({ empresa, puedeGestionar }: { empresa: string | null; puedeGestio
         )}
       </div>
       {conAutomatica && (
-        <p className="text-[11px] text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Conductor «Automático»: el sistema busca quién tenía el vehículo en la fecha de la infracción. «Manual»: el
           conductor se asigna a mano. Si necesitas cambiarlo, solicítalo a FLIT.
         </p>
@@ -364,7 +364,7 @@ function Placas({ empresa, puedeGestionar }: { empresa: string | null; puedeGest
         <div className="flex flex-col gap-3">
           <textarea className={TEXTAREA_CLS} rows={8} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={"ABC123\nXYZ987"} aria-label="Placas" />
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="opacity-70">O carga un Excel con una columna «placa» (hasta 1.000):</span>
+            <span className="text-muted-foreground">O carga un Excel con una columna «placa» (hasta 1.000):</span>
             <input
               ref={archivo}
               type="file"
