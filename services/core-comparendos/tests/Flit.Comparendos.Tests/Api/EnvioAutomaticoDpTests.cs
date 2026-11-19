@@ -864,6 +864,14 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         });
     }
 
+    /// <summary>
+    /// Límite de la prueba de rendimiento: 30 s en una máquina de desarrollo y 120 s en el CI (GitHub Actions define
+    /// CI=true). El runner compartido de GitHub tarda entre 36 s y 1 min 30 s con el mismo código, así que con 30 s la
+    /// prueba fallaba por la máquina y no por el trabajo. 120 s sigue atrapando una regresión real (minutos).
+    /// </summary>
+    private static readonly TimeSpan LimiteRendimiento =
+        TimeSpan.FromSeconds(Environment.GetEnvironmentVariable("CI") == "true" ? 120 : 30);
+
     [Fact]
     public async Task Rendimiento_con_2000_comparendos_sin_dp_la_corrida_termina_en_un_tiempo_razonable()
     {
@@ -893,7 +901,7 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         await CorrerAsync(conOrganismo);
         segundo.Stop();
         (await api.EnDbAsync(db => db.Timeline.CountAsync(t => t.TenantId == conOrganismo && t.Tipo == TipoEventoTimeline.DpAutomaticoOmitido))).Should().Be(2000, "el segundo día no agrega anotaciones");
-        segundo.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
+        segundo.Elapsed.Should().BeLessThan(LimiteRendimiento);
 
         // Con firma: sale el tope (50) y el resto espera.
         var rlId = await api.EnDbAsync(db => db.RepresentantesLegales.Where(r => r.TenantId == conOrganismo).Select(r => r.Id).SingleAsync());
@@ -906,7 +914,7 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         (await DpsAsync(conOrganismo)).Should().HaveCount(50);
 
         TestContext.Current.TestOutputHelper?.WriteLine($"RENDIMIENTO 2000 comparendos: crear datos {creacion.Elapsed.TotalSeconds:0.0}s; trabajo sin organismo que admita {a.Elapsed.TotalSeconds:0.0}s; trabajo 100% elegibles todos omitidos {b.Elapsed.TotalSeconds:0.0}s; segundo día {segundo.Elapsed.TotalSeconds:0.0}s; con firma y tope 50 {c.Elapsed.TotalSeconds:0.0}s");
-        a.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
-        b.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
+        a.Elapsed.Should().BeLessThan(LimiteRendimiento);
+        b.Elapsed.Should().BeLessThan(LimiteRendimiento);
     }
 }

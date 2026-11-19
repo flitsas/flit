@@ -41,7 +41,7 @@ public sealed record FilaProductividad(Guid UsuarioId, string Usuario, int Gesti
 /// Dashboard ejecutivo y productividad (HU #13498; §6.12, §6.16). Consultas directas en tiempo real; los montos son
 /// del comparendo o del DP al radicar. Las acciones automáticas (API, scheduler, favorable automático) no se atribuyen.
 /// </summary>
-public sealed class ServicioReportes(ComparendosDb db, CalendarioService calendario, Reloj reloj)
+public sealed partial class ServicioReportes(ComparendosDb db, CalendarioService calendario, Reloj reloj)
 {
     public static readonly string[] Metricas = ["gestionados", "dpEnviados", "contraventoresAsignados", "pagos", "avisosManuales", "ocrRegistrados", "respuestasOt"];
 
@@ -87,14 +87,19 @@ public sealed class ServicioReportes(ComparendosDb db, CalendarioService calenda
         var desf = await respondidas.CountAsync(d => d.RespuestaSentido == SentidoRespuestaOt.Desfavorable, ct).ConfigureAwait(false);
         var sinRespuesta = await Dps(a).CountAsync(d => d.Estado == EstadoDp.Enviado, ct).ConfigureAwait(false);
 
-        // Ahorro: cada comparendo una vez (el último DP favorable del periodo).
-        var ahorros = await respondidas.Where(d => d.RespuestaSentido == SentidoRespuestaOt.Favorable)
-            .GroupBy(d => d.ComparendoId).Select(g => g.OrderByDescending(d => d.RespuestaFecha).Select(d => d.ValorAlRadicar).First())
-            .ToListAsync(ct).ConfigureAwait(false);
-
+        var ahorro = await AhorroAsync(a, ct).ConfigureAwait(false);
         var (cantidad, valor, hasta) = await RadarAsync(a, ct).ConfigureAwait(false);
         return new Kpis(deudaTotal, deudaCuenta, fav, desf, fav + desf == 0 ? null : Math.Round((decimal)fav / (fav + desf), 4), sinRespuesta,
-            ahorros.Sum(v => v ?? 0), cantidad, valor, hasta);
+            ahorro, cantidad, valor, hasta);
+    }
+
+    /// <summary>Ahorro del periodo: cada comparendo una vez (el último DP favorable respondido en el periodo, por su valor al radicar).</summary>
+    private async Task<decimal> AhorroAsync(Alcance a, CancellationToken ct)
+    {
+        var ahorros = await Dps(a).Where(d => d.Estado == EstadoDp.Respondido && d.RespuestaSentido == SentidoRespuestaOt.Favorable && d.RespuestaFecha >= a.Desde && d.RespuestaFecha <= a.Hasta)
+            .GroupBy(d => d.ComparendoId).Select(g => g.OrderByDescending(d => d.RespuestaFecha).Select(d => d.ValorAlRadicar).First())
+            .ToListAsync(ct).ConfigureAwait(false);
+        return ahorros.Sum(v => v ?? 0);
     }
 
     /// <summary>Radar de vencimientos (S-56): en tiempo, sin DP ni pago, con límite de gestión en los próximos 7 días hábiles.</summary>

@@ -33,16 +33,16 @@ export function FiltrosPeriodo({ valor, onAplicar, extra }: { valor: Periodo; on
       <div className="flex flex-wrap items-end gap-3">
         <label className={ETIQUETA_CLS}>
           Desde
-          <input type="date" className={`${INPUT_CLS} w-40`} value={borrador.desde} onChange={(e) => setBorrador({ ...borrador, desde: e.target.value })} />
+          <input type="date" className={`${INPUT_CLS} w-full sm:w-40`} value={borrador.desde} onChange={(e) => setBorrador({ ...borrador, desde: e.target.value })} />
         </label>
         <label className={ETIQUETA_CLS}>
           Hasta
-          <input type="date" className={`${INPUT_CLS} w-40`} value={borrador.hasta} onChange={(e) => setBorrador({ ...borrador, hasta: e.target.value })} />
+          <input type="date" className={`${INPUT_CLS} w-full sm:w-40`} value={borrador.hasta} onChange={(e) => setBorrador({ ...borrador, hasta: e.target.value })} />
         </label>
         {sesion?.usuario.esSuperAdmin && (
           <div className="flex flex-col gap-1">
             <SelectorEmpresa valor={borrador.empresa} onCambio={(empresa) => setBorrador({ ...borrador, empresa })} />
-            <span className="text-[11px] opacity-60">Sin empresa elegida se ven todas.</span>
+            <span className="text-xs text-[color:var(--di-text-tertiary)]">Sin empresa elegida se ven todas.</span>
           </div>
         )}
         {extra}

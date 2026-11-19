@@ -1,35 +1,53 @@
 "use client";
 
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DataTable, InlineAlert, usePaginacion } from "@flit/ui";
+import { ChipFiltro, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
+import { Cargador } from "@flit/ui/Loader";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { FiltrosPeriodo, periodoInicial, type Periodo } from "@/components/reportes/FiltrosPeriodo";
-import { GraficoBarras } from "@/components/reportes/GraficoBarras";
+import { BarrasApiladas } from "@/components/inicio/BarrasApiladas";
+import { PanelInicio } from "@/components/inicio/PanelInicio";
 import { RequiereReportes } from "@/components/reportes/RequiereReportes";
 import { ETIQUETA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { formatoFecha, formatoPesos } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { etiquetaMes, formatoTasa, nombreMes, SERIES, valorSerie, type Dashboard as DatosDashboard, type Serie } from "@/lib/reportes";
+import {
+  etiquetaMes,
+  formatoTasa,
+  nombreMes,
+  numeroCorto,
+  pesosCorto,
+  SERIES,
+  valorSerie,
+  type Dashboard as DatosDashboard,
+  type RespuestaDinero,
+  type Serie,
+} from "@/lib/reportes";
 import { tienePermiso } from "@/lib/sesion";
 import type { Nit } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
-import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 
-const AZUL = "var(--color-flit-brand)";
-const AZUL_CLARO = "color-mix(in srgb, var(--color-flit-brand) 35%, transparent)";
+/** Las gráficas de dinero (recharts) se cargan aparte: el resto de Reportes pinta sin esperarlas. */
+const DineroGraficas = dynamic(() => import("@/components/reportes/DineroGraficas").then((m) => m.DineroGraficas), { loading: () => <Cargador /> });
+import { METRICAS_GRID_CLS, TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
+
+const AZUL = "var(--kit-azul)";
+const AZUL_CLARO = "color-mix(in srgb, var(--kit-azul) 35%, transparent)";
 const PAGOS = [
-  { nombre: "CC · cambio de contraventor", color: "var(--color-flit-brand)", clave: "pagosCc" },
-  { nombre: "PC · pagó el contraventor", color: "var(--flit-success-ink)", clave: "pagosPc" },
-  { nombre: "BC · banco / empresa", color: "var(--color-flit-alert)", clave: "pagosBc" },
+  { etiqueta: "CC · cambio de contraventor", color: "var(--kit-azul)", clave: "pagosCc" },
+  { etiqueta: "PC · pagó el contraventor", color: "var(--kit-verde)", clave: "pagosPc" },
+  { etiqueta: "BC · banco / empresa", color: "var(--kit-naranja)", clave: "pagosBc" },
 ] as const;
 
 /** Cifra del tablero con la tarjeta de la propuesta (HU #14486, `TarjetaMetrica` de @flit/ui). */
-function Kpi({ titulo, valor, detalle, onClick }: { titulo: string; valor: string; detalle?: string; onClick?: () => void }) {
-  return <TarjetaMetrica etiqueta={titulo} cifra={valor} pie={detalle} onClick={onClick} />;
+function Kpi({ titulo, valor, detalle, title, ariaLabel, onClick }: { titulo: string; valor: string; detalle?: string; title?: string; ariaLabel?: string; onClick?: () => void }) {
+  return <TarjetaMetrica etiqueta={titulo} cifra={valor} pie={detalle} title={title} aria-label={ariaLabel} onClick={onClick} />;
 }
 
 function SelectorNit({ empresa, valor, onCambio }: { empresa: string | null; valor: string | null; onCambio: (id: string | null) => void }) {
@@ -37,7 +55,7 @@ function SelectorNit({ empresa, valor, onCambio }: { empresa: string | null; val
   return (
     <label className={ETIQUETA_CLS}>
       NIT
-      <select className={`${INPUT_CLS} w-60`} value={valor ?? ""} onChange={(e) => onCambio(e.target.value || null)} disabled={nits.estado !== "ready"}>
+      <select className={`${INPUT_CLS} w-full sm:w-60`} value={valor ?? ""} onChange={(e) => onCambio(e.target.value || null)} disabled={nits.estado !== "ready"}>
         <option value="">Todos los NIT</option>
         {(nits.datos ?? []).map((n) => (
           <option key={n.id} value={n.id}>
@@ -60,11 +78,18 @@ function Contenido() {
   const datos = useCarga(JSON.stringify({ ...periodo, nit }), (signal) =>
     apiFetch<DatosDashboard>("/reportes/dashboard", { signal, query: { empresa: periodo.empresa, nit, desde: periodo.desde, hasta: periodo.hasta } }),
   );
+  // R2: la lente de dinero completa vive aquí (tendencia, dona, organismos y cobro coactivo salieron del Inicio). Su
+  // reparto por estado también rotula el indicador de deuda: una sola llamada para las dos cosas.
+  const dinero = useCarga(`dinero:${JSON.stringify({ ...periodo, nit })}`, (signal) =>
+    apiFetch<RespuestaDinero>("/reportes/dinero", { signal, query: { empresa: periodo.empresa, nit, desde: periodo.desde, hasta: periodo.hasta } }),
+  );
+  const reparto = dinero.datos?.dinero;
   const d = datos.datos;
   const empresaNits = sesion?.usuario.esSuperAdmin ? periodo.empresa : (sesion?.empresa?.id ?? null);
   const puedeVerNits = !!empresaNits && tienePermiso(sesion, P.monitoreoVer);
   const def = SERIES.find((s) => s.clave === serie) ?? SERIES[0];
   const formato = (n: number) => (def.pesos ? formatoPesos(n) : n.toLocaleString("es-CO"));
+  const formatoEje = (n: number) => (def.pesos ? (n === 0 ? "0" : `$${numeroCorto(n)}`) : numeroCorto(n));
   const anioActual = Number(periodo.hasta.slice(0, 4));
 
   const aplicar = (p: Periodo) => {
@@ -76,7 +101,7 @@ function Contenido() {
     <section className="flex flex-col gap-6">
       <Encabezado
         titulo="Dashboard ejecutivo"
-        descripcion="Deuda, resultados de los derechos de petición, ahorro y lo que está por vencer. La deuda y el radar son a hoy; las tasas y el ahorro, del periodo."
+        descripcion="Deuda, resultados de los derechos de petición, ahorro y lo que está por vencer. La deuda y el radar son a hoy; las tasas y el ahorro, del periodo. La deuda sin pagar incluye lo caducado y lo prescrito."
         acciones={
           tienePermiso(sesion, P.productividadVer) ? (
             <Link href="/reportes/productividad" className={controlCls(false)}>
@@ -91,7 +116,7 @@ function Contenido() {
         extra={puedeVerNits ? <SelectorNit key={empresaNits} empresa={empresaNits} valor={nit} onCambio={setNit} /> : undefined}
       />
 
-      {datos.estado === "loading" && <p className="text-sm opacity-60">Calculando indicadores…</p>}
+      {datos.estado === "loading" && <Cargador />}
       {datos.estado === "error" && (
         <InlineAlert tone="error" title="No se pudo cargar el dashboard">
           {datos.error}{" "}
@@ -103,56 +128,73 @@ function Contenido() {
 
       {d && datos.estado === "ready" && (
         <>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <Kpi titulo="Deuda activa total" valor={formatoPesos(d.kpis.deudaActivaTotal)} detalle={`${d.kpis.comparendosConDeuda.toLocaleString("es-CO")} comparendos activos sin pagar`} />
+          <div className={METRICAS_GRID_CLS}>
+            <Kpi
+              titulo="Deuda sin pagar"
+              valor={pesosCorto(d.kpis.deudaActivaTotal)}
+              title={formatoPesos(d.kpis.deudaActivaTotal)}
+              detalle={
+                reparto
+                  ? `${pesosCorto(reparto.exigible.valor)} se puede cobrar · ${pesosCorto(reparto.noExigible.valor)} ya caducó o prescribió`
+                  : `${d.kpis.comparendosConDeuda.toLocaleString("es-CO")} comparendos activos sin pagar, incluidos los caducados y prescritos`
+              }
+            />
             <Kpi
               titulo="Tasa de éxito de DP"
               valor={formatoTasa(d.kpis.tasaExitoDp)}
               detalle={`${d.kpis.dpFavorables} favorables · ${d.kpis.dpDesfavorables} desfavorables · ${d.kpis.dpSinRespuesta} esperando respuesta`}
             />
-            <Kpi titulo="Ahorro acumulado" valor={formatoPesos(d.kpis.ahorroAcumulado)} detalle="Valor al radicar de los DP favorables del periodo" />
+            <Kpi titulo="Ahorro acumulado" valor={pesosCorto(d.kpis.ahorroAcumulado)} title={formatoPesos(d.kpis.ahorroAcumulado)} detalle="Valor al radicar de los DP favorables del periodo" />
             <Kpi
               titulo="Radar de vencimientos"
               valor={d.kpis.radarCantidad.toLocaleString("es-CO")}
-              detalle={`${formatoPesos(d.kpis.radarValor)} · vencen antes del ${formatoFecha(d.kpis.radarHasta)}`}
+              detalle={`${pesosCorto(d.kpis.radarValor)} · vencen antes del ${formatoFecha(d.kpis.radarHasta)}`}
+              title={formatoPesos(d.kpis.radarValor)}
+              ariaLabel={`Radar de vencimientos: ${d.kpis.radarCantidad.toLocaleString("es-CO")} comparendos · ${formatoPesos(d.kpis.radarValor)}. Ver en la bandeja`}
               onClick={() => {
                 // Clic en el radar → la bandeja filtrada con el mismo criterio (§7.8).
                 const q = new URLSearchParams({ rapido: "Radar" });
                 if (nit) q.set("nit", nit);
                 if (sesion?.usuario.esSuperAdmin && periodo.empresa) q.set("empresa", periodo.empresa);
-                router.push(`/?${q.toString()}`);
+                router.push(`/bandeja?${q.toString()}`);
               }}
             />
           </div>
 
-          <div className="flex flex-wrap gap-2" role="group" aria-label="Indicador de las gráficas">
+          {reparto && <DineroGraficas d={reparto} empresa={sesion?.usuario.esSuperAdmin ? periodo.empresa : null} />}
+
+          <div className={CHIPS_FILTRO_FILA_CLS} role="group" aria-label="Indicador de las gráficas">
             {SERIES.map((s) => (
-              <button key={s.clave} type="button" className={controlCls(serie === s.clave)} aria-pressed={serie === s.clave} onClick={() => setSerie(s.clave)}>
-                {s.titulo}
-              </button>
+              <ChipFiltro key={s.clave} etiqueta={s.titulo} activo={serie === s.clave} onClick={() => setSerie(s.clave)} />
             ))}
           </div>
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
-            <GraficoBarras
-              titulo={`${def.titulo} · últimos 12 meses`}
-              categorias={d.mensual.map((p) => etiquetaMes(p.periodo))}
-              apilado={serie === "pagos"}
-              formato={formato}
-              series={
-                serie === "pagos"
-                  ? PAGOS.map((t) => ({ nombre: t.nombre, color: t.color, valores: d.mensual.map((p) => p[t.clave]) }))
-                  : [{ nombre: def.titulo, color: AZUL, valores: d.mensual.map((p) => valorSerie(p, serie)) }]
-              }
-            />
-            <GraficoBarras
-              titulo={`${def.titulo} · ${anioActual} contra ${anioActual - 1}`}
-              categorias={Array.from({ length: 12 }, (_, i) => nombreMes(i))}
-              formato={formato}
-              series={[
-                { nombre: String(anioActual - 1), color: AZUL_CLARO, valores: d.anual.anterior.map((p) => valorSerie(p, serie)) },
-                { nombre: String(anioActual), color: AZUL, valores: d.anual.actual.map((p) => valorSerie(p, serie)) },
-              ]}
-            />
+            <PanelInicio titulo={`${def.titulo} · últimos 12 meses`} icono="reportes">
+              <BarrasApiladas
+                orientacion="vertical"
+                filas={d.mensual.map((p) => ({ etiqueta: etiquetaMes(p.periodo), valor: valorSerie(p, serie), pagosCc: p.pagosCc, pagosPc: p.pagosPc, pagosBc: p.pagosBc }))}
+                series={serie === "pagos" ? PAGOS : [{ clave: "valor", etiqueta: def.titulo, color: AZUL }]}
+                formatoEje={formatoEje}
+                formato={formato}
+              />
+            </PanelInicio>
+            <PanelInicio titulo={`${def.titulo} · ${anioActual} contra ${anioActual - 1}`} icono="calendario">
+              <BarrasApiladas
+                orientacion="vertical"
+                agrupadas
+                filas={Array.from({ length: 12 }, (_, i) => ({
+                  etiqueta: nombreMes(i),
+                  anterior: valorSerie(d.anual.anterior[i], serie),
+                  actual: valorSerie(d.anual.actual[i], serie),
+                }))}
+                series={[
+                  { clave: "anterior", etiqueta: String(anioActual - 1), color: AZUL_CLARO },
+                  { clave: "actual", etiqueta: String(anioActual), color: AZUL },
+                ]}
+                formatoEje={formatoEje}
+                formato={formato}
+              />
+            </PanelInicio>
           </div>
 
           <div className="flex flex-col gap-2">
@@ -168,7 +210,7 @@ function Contenido() {
                 { key: "titular", header: "Titular", render: (f) => f.titular ?? "—" },
                 { key: "total", header: "Comparendos", align: "right", render: (f) => f.total.toLocaleString("es-CO") },
                 { key: "activos", header: "Activos", align: "right", render: (f) => f.activos.toLocaleString("es-CO") },
-                { key: "deuda", header: "Deuda activa", align: "right", render: (f) => formatoPesos(f.deudaActiva) },
+                { key: "deuda", header: "Deuda sin pagar", align: "right", render: (f) => formatoPesos(f.deudaActiva) },
                 { key: "dp", header: "Con DP", align: "right", render: (f) => f.conDp.toLocaleString("es-CO") },
                 { key: "pagados", header: "Pagados", align: "right", render: (f) => f.pagados.toLocaleString("es-CO") },
               ]}

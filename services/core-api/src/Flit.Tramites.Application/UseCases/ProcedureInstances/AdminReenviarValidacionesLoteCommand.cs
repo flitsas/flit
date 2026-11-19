@@ -5,8 +5,14 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
-/// <summary>Una persona del reenvío múltiple: su validación y, opcional, el correo corregido.</summary>
-public sealed record AdminReenviarValidacionLoteItem(Guid ValidationId, string? Email);
+/// <summary>
+/// Una persona del reenvío múltiple: su validación y, opcional, el correo corregido. HU #14627 —
+/// <see cref="ValidationId"/> es OPCIONAL: cuando el actor nunca tuvo una fila propia (DTO
+/// <c>no_iniciada</c> de <see cref="ListValidacionesReenviablesHandler"/>), el item identifica a la
+/// persona por <see cref="PartyRole"/>/<see cref="Ordinal"/> en su lugar, y
+/// <see cref="AdminReenviarValidacionIdentidadHandler"/> la envía por primera vez.
+/// </summary>
+public sealed record AdminReenviarValidacionLoteItem(Guid? ValidationId, string? PartyRole, int? Ordinal, string? Email);
 
 public sealed record AdminReenviarValidacionesLoteCommand(
     Guid InstanceId,
@@ -15,12 +21,18 @@ public sealed record AdminReenviarValidacionesLoteCommand(
     Guid? ChangedByUserId);
 
 /// <summary>
-/// Resultado POR PERSONA. Con <see cref="Error"/> null el reenvío salió (o quedó en cola: <see cref="Queued"/>);
-/// si no, <see cref="Error"/> trae el mismo código que el reenvío individual y <see cref="ErrorDetail"/> el
-/// detalle cuando lo hay.
+/// Resultado POR PERSONA. Con <see cref="Error"/> null el reenvío salió (o quedó en cola: <see cref="Queued"/>
+/// de <see cref="Result"/>); si no, <see cref="Error"/> trae el mismo código que el reenvío individual y
+/// <see cref="ErrorDetail"/> el detalle cuando lo hay. <see cref="ValidationId"/> es el id REAL: el existente
+/// si el item lo traía, o el de la fila recién creada cuando era un envío por primera vez (HU #14627); puede
+/// ser <c>null</c> si falló antes de crear la fila. <see cref="PartyRole"/>/<see cref="Ordinal"/> hacen eco
+/// del item original para que el llamador empareje la respuesta incluso sin <see cref="ValidationId"/> en la
+/// solicitud.
 /// </summary>
 public sealed record AdminReenviarValidacionLoteItemResult(
-    Guid ValidationId,
+    Guid? ValidationId,
+    string? PartyRole,
+    int? Ordinal,
     string? Error,
     string? ErrorDetail,
     int? CooldownMinutos,
@@ -56,9 +68,15 @@ public sealed class AdminReenviarValidacionesLoteHandler(
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        // HU #14627 — un item es válido si trae ValidationId (persona con fila propia) O PartyRole+Ordinal
+        // (persona sin fila: "enviar por primera vez"). El dedupe usa ValidationId cuando existe; si no,
+        // la clave compuesta (PartyRole, Ordinal) identifica a la persona igual de unívocamente.
         var items = (command.Items ?? [])
-            .Where(i => i.ValidationId != Guid.Empty)
-            .DistinctBy(i => i.ValidationId)
+            .Where(i => (i.ValidationId is Guid vid && vid != Guid.Empty)
+                || (!string.IsNullOrWhiteSpace(i.PartyRole) && i.Ordinal is not null))
+            .DistinctBy(i => i.ValidationId is Guid vid && vid != Guid.Empty
+                ? vid.ToString()
+                : $"{i.PartyRole?.Trim().ToLowerInvariant()}|{i.Ordinal}")
             .ToList();
         if (items.Count == 0)
             return (null, SolicitudVacia, "Selecciona al menos una persona para reenviar.");
@@ -78,13 +96,17 @@ public sealed class AdminReenviarValidacionesLoteHandler(
 
             var (result, error, errorDetail, cooldown) = await reenviar.HandleAsync(
                 new AdminReenviarValidacionIdentidadCommand(
-                    command.InstanceId, item.ValidationId, command.TenantId, item.Email, command.ChangedByUserId),
+                    command.InstanceId, item.ValidationId, item.PartyRole, item.Ordinal,
+                    command.TenantId, item.Email, command.ChangedByUserId),
                 ct).ConfigureAwait(false);
 
             if (error == TramiteEstadoErrores.IdentidadReenvioNoDisponible)
                 return (null, error, errorDetail);
 
-            resultados.Add(new AdminReenviarValidacionLoteItemResult(item.ValidationId, error, errorDetail, cooldown, result));
+            // HU #14627 — cuando el item llegó sin ValidationId (envío por primera vez), el id REAL es el
+            // de la fila recién creada por el handler; sin resultado (falló antes de crearla) se deja null.
+            var validationId = item.ValidationId ?? result?.Validation.Id;
+            resultados.Add(new AdminReenviarValidacionLoteItemResult(validationId, item.PartyRole, item.Ordinal, error, errorDetail, cooldown, result));
         }
 
         return (new AdminReenviarValidacionesLoteResult(resultados), null, null);

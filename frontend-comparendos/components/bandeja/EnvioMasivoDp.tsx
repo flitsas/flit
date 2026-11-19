@@ -88,7 +88,7 @@ export function EnvioMasivoDp({ filas, onCerrar }: { filas: FilaBandeja[]; onCer
             </select>
           </label>
         )}
-        <p className="text-xs opacity-70">
+        <p className="text-xs text-muted-foreground">
           Cada comparendo se revisa al enviarlo: los que no cumplan (estado legal, representante legal, ya tienen DP…) quedan omitidos con su motivo y no
           detienen el lote.
         </p>

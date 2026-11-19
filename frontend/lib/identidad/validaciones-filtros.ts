@@ -15,12 +15,18 @@ import { SEARCH_TEXT_MAX_LENGTH, sanitizeNoAngleBrackets } from '@/lib/validatio
  */
 
 /** Filtros efectivamente aplicados (forma plana; es lo que se traduce a la API). */
+/**
+ * «En proceso» de la franja de Identidad: el backend cuenta enviado + en_proceso en esa cifra, así que el filtro pide
+ * los dos (el servidor acepta varios estados separados por coma) para que la lista cuadre con el número.
+ */
+export const ESTADO_EN_CURSO = 'enviado,en_proceso' as const;
+
 export interface ValidacionesUiFilters {
   name: string;
   documentNumber: string;
   /** Ajuste 2026-11-10 (D1=a) — radicado FT escrito en la caja única (mayúsculas; parcial en servidor). */
   referenceNumber: string;
-  status: '' | BiometricEstado;
+  status: '' | BiometricEstado | typeof ESTADO_EN_CURSO;
   vigenciaEstado: '' | BiometricVigenciaEstado;
   /** `yyyy-mm-dd` local. */
   createdFrom: string;
@@ -219,7 +225,10 @@ export function describeIdentityFilter(condition: IdentityFilterCondition): stri
   const field = identityFilterField(condition.fieldId);
   switch (field.kind) {
     case 'opcion': {
-      const label = field.options.find((o) => o.value === condition.values[0])?.label ?? condition.values[0];
+      const label =
+        condition.values[0] === ESTADO_EN_CURSO
+          ? 'En proceso (enviado o en proceso)'
+          : (field.options.find((o) => o.value === condition.values[0])?.label ?? condition.values[0]);
       return `${field.label}: ${label}`;
     }
     case 'numero':

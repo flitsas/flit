@@ -725,8 +725,8 @@ public static class InfrastructureExtensions
         });
 
         // Contrato ia-consumo v1 (ADR-0090): cada llamada HTTP a un proveedor de IA deja una fila en
-        // admin.ia_consumo_log, escrita en segundo plano por lotes. Banderas IA_CONSUMO_LOG / IA_CONSUMO_DETALLE /
-        // IA_CONSUMO_DETALLE_DIAS; nunca bloquea ni rompe la llamada.
+        // admin.ia_consumo_log, escrita en segundo plano por lotes. Banderas IA_CONSUMO_LOG / IA_CONSUMO_DETALLE
+        // (ambas encendidas por defecto, sin purga); nunca bloquea ni rompe la llamada.
         services.AddFlitIaConsumo<FlitDbContext>(configuration, aplicativo: "flit", servicio: "core-api");
         services.AddScoped<Flit.Tramites.Application.Ocr.IIaConsumoAmbito, IaConsumoAmbitoTramites>();
 

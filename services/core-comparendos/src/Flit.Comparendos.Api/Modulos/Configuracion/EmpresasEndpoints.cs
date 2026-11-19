@@ -147,25 +147,19 @@ public static partial class EmpresasEndpoints
             consultas = db.ConfiguracionesConsultas.Where(k => k.TenantId == c.TenantId).Select(k => (EstadoConfiguracionConsultas?)k.Estado).FirstOrDefault(),
             representante = db.RepresentantesLegales.Any(r => r.TenantId == c.TenantId && r.Activo),
             tipologias = db.TipologiasEmpresa.Any(t => t.TenantId == c.TenantId && t.Habilitada),
+            c.CorreoRespuesta,
         }).ToListAsync(ct).ConfigureAwait(false);
         // Estado de configuración (Epic GDC-3): azul activa, gris inactiva (consultas pausadas), naranja pendiente de
-        // configuración, con lo que le falta para operar.
+        // configuración, con lo que le falta para operar. La regla vive en FaltantesEmpresa (también la usa /admin/resumen).
         return Results.Ok(filas.Select(f =>
         {
-            var faltantes = new List<string>();
-            if (!f.monitoreo)
-                faltantes.Add("Sin NIT ni placa monitoreados");
-            if (f.consultas is null or EstadoConfiguracionConsultas.Borrador)
-                faltantes.Add("Consultas sin activar");
-            if ((f.HasRightPetitionModule || f.AllowsContravenerChange) && !f.representante)
-                faltantes.Add("Sin representante legal");
-            if (f.HasRightPetitionModule && !f.tipologias)
-                faltantes.Add("Sin tipologías de DP habilitadas");
-            var estado = f.consultas == EstadoConfiguracionConsultas.Pausada ? "Inactiva" : faltantes.Count > 0 ? "Pendiente" : "Activa";
+            var faltantes = FaltantesEmpresa.Calcular(f.monitoreo, f.consultas, f.HasRightPetitionModule, f.AllowsContravenerChange, f.representante, f.tipologias);
             return new
             {
                 f.id, f.nombre, f.HasRightPetitionModule, f.HasOcrAccess, f.HasReportesModule, f.AllowsContravenerChange, f.AllowsContravenerConsultation,
-                f.comparendosActivos, estadoConfiguracion = estado, faltantes,
+                f.comparendosActivos, estadoConfiguracion = FaltantesEmpresa.Estado(f.consultas, faltantes), faltantes,
+                // Rediseño R2: si tiene el correo para respuestas (sin él se bloquean el DP y el cambio de contraventor).
+                correoRespuesta = !string.IsNullOrWhiteSpace(f.CorreoRespuesta),
             };
         }));
     }
