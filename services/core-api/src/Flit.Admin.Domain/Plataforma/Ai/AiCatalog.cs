@@ -6,13 +6,21 @@ public static class AiToolCodes
     public const string Ocr = "ocr";
     public const string DrFlit = "dr_flit";
 
+    /// <summary>
+    /// Redacción del dictamen de Diagnóstico (ADR-0091). Sembrada por el DDL 203; solo admite anthropic
+    /// (<c>AiProviderCapabilities</c>). core-api no la ejecuta: entrega su configuración y la llave sellada a core-diagnostico.
+    /// </summary>
+    public const string DiagnosticoDictamen = "diagnostico_dictamen";
+
     public static bool IsKnown(string? toolCode) =>
         string.Equals(toolCode, Ocr, StringComparison.OrdinalIgnoreCase)
-        || string.Equals(toolCode, DrFlit, StringComparison.OrdinalIgnoreCase);
+        || string.Equals(toolCode, DrFlit, StringComparison.OrdinalIgnoreCase)
+        || string.Equals(toolCode, DiagnosticoDictamen, StringComparison.OrdinalIgnoreCase);
 
     public static string Normalize(string toolCode) =>
         string.Equals(toolCode, DrFlit, StringComparison.OrdinalIgnoreCase) ? DrFlit
         : string.Equals(toolCode, Ocr, StringComparison.OrdinalIgnoreCase) ? Ocr
+        : string.Equals(toolCode, DiagnosticoDictamen, StringComparison.OrdinalIgnoreCase) ? DiagnosticoDictamen
         : toolCode.Trim().ToLowerInvariant();
 }
 

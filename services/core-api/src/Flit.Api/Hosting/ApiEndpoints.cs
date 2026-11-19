@@ -36,6 +36,8 @@ internal static class ApiEndpoints
         Flit.Api.Derivacion.DerivacionExtensions.MapDerivacionDiagnostico(app);
         // ADR-0089 (HU #14587): usuarios de Diagnóstico gestionados desde el producto; solo svc-diagnostico con su scope.
         Flit.Api.Usuarios.UsuariosProductoExtensions.MapUsuariosProducto(app);
+        // ADR-0091: configuración de IA con la llave sellada; solo svc-diagnostico con platform.ia.diagnostico.
+        Flit.Api.Plataforma.Ai.ConfiguracionIaExtensions.MapConfiguracionIaDiagnostico(app);
 
         // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
         app.MapInternalJwksEndpoints(); // JWKS público del token de usuario (core-ict valida con él)
