@@ -1,5 +1,6 @@
 using Flit.Admin.Domain.Plataforma.Ai;
 using Flit.Infrastructure.Ai.Routing;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Tramites.Application.Ocr;
 using Microsoft.Extensions.Logging;
 
@@ -11,8 +12,11 @@ namespace Flit.Infrastructure.Ocr;
 /// </summary>
 internal sealed class RoutedDocumentOcrAnalyzer(
     IAiProviderRouter router,
-    ILogger<RoutedDocumentOcrAnalyzer> logger) : IDocumentOcrAnalyzer
+    ILogger<RoutedDocumentOcrAnalyzer> logger,
+    IIaCallContext? iaContexto = null) : IDocumentOcrAnalyzer
 {
+    private readonly IIaCallContext _ia = iaContexto ?? IaCallContext.Instancia;
+
     public async Task<DocumentOcrAnalysis> AnalyzeAsync(
         string tipo,
         ReadOnlyMemory<byte> content,
@@ -24,6 +28,7 @@ internal sealed class RoutedDocumentOcrAnalyzer(
             return new DocumentOcrAnalysis(false, null, 400, $"Tipo no soportado: {tipo}");
 
         var base64 = Convert.ToBase64String(content.Span);
+        using var ambito = IaAmbitosOcr.AbrirOcr(_ia, tipo, content.Span, mediaType);
         var routed = await router
             .InvokeVisionAsync(AiToolCodes.Ocr, base64, mediaType, prompt, ct)
             .ConfigureAwait(false);

@@ -25,8 +25,15 @@ public sealed class RegisterRowValidator : AbstractValidator<RegisterRowInput>
         // ===== Campos de integración / gestor (obligatorios en todo tipo) =====
         RuleFor(r => r.TransactionType).InclusiveBetween(1, 16)
             .WithMessage("transaction_type debe estar entre 1 y 16");
-        RuleFor(r => r.TransactionOperation).GreaterThan(0)
-            .WithMessage("transaction_operation es obligatorio");
+        // Hallazgo P3: FLIT 2 solo sabe CREAR. 2 (Actualizar) y 3 (Eliminar) se trataban como Crear y
+        // duplicaban pre-trámites; solo se acepta 1.
+        RuleFor(r => r.TransactionOperation).Must(op => op == 1)
+            .WithMessage(r => r.TransactionOperation switch
+            {
+                2 or 3 => "transaction_operation no soportada en el registro: para actualizar use la edición del pre-trámite y para eliminar use abortProcess",
+                <= 0 => "transaction_operation es obligatorio",
+                _ => "transaction_operation invalido",
+            });
 
         RuleFor(r => r.CompanyManagerDocument).NotEmpty()
             .WithMessage("company_manager_document es obligatorio");
@@ -310,6 +317,13 @@ public sealed class RegisterLegalRepresentativeInputValidator : AbstractValidato
         RuleFor(r => r.DocumentType).MaximumLength(5)
             .When(r => !string.IsNullOrEmpty(r.DocumentType))
             .WithMessage("legal_representative_document_type debe tener máximo 5 caracteres");
+        // Hallazgo P4: el tipo debe pertenecer al catálogo (CC, CE, NIT, PAS, TI) tras normalizar alias.
+        // Guarda de longitud cruda: la normalización no debe recibir un valor desmedido.
+        RuleFor(r => r.DocumentType)
+            .Must(dt => IctPayloadNormalizer.NormalizeDocumentType(dt) is not null)
+            .When(r => !string.IsNullOrWhiteSpace(r.DocumentType)
+                && r.DocumentType.Length <= RegisterActorInputValidator.MaxRawLength)
+            .WithMessage("legal_representative_document_type no es valido (use CC, CE, NIT, PAS o TI)");
 
         RuleFor(r => r.DocumentNumber).NotEmpty().WithMessage("legal_representative_document_number es obligatorio");
         RuleFor(r => r.DocumentNumber).MaximumLength(12)
@@ -330,9 +344,17 @@ public sealed class RegisterLegalRepresentativeInputValidator : AbstractValidato
             .When(r => !string.IsNullOrEmpty(r.SecondLastName));
 
         // Bug #13304: topes de columna (legal_representative_*) para rechazar la fila en vez de dar 500.
-        RuleFor(r => r.Phone).MaximumLength(50)
+        RuleFor(r => r.Phone).MaximumLength(RegisterActorInputValidator.MaxRawLength)
             .When(r => !string.IsNullOrEmpty(r.Phone))
-            .WithMessage("legal_representative_phone debe tener máximo 50 caracteres");
+            .WithMessage("legal_representative_phone debe tener máximo 64 caracteres");
+        RuleFor(r => r.Phone)
+            .Must(p => IctPayloadNormalizer.NormalizePhone(p).Length <= IctPayloadNormalizer.MaxActorPhoneLength)
+            .When(r => !string.IsNullOrEmpty(r.Phone) && r.Phone.Length <= RegisterActorInputValidator.MaxRawLength)
+            .WithMessage("legal_representative_phone debe tener máximo 50 dígitos (sin contar espacios ni símbolos)");
+        // AC8: el correo vacío no rechaza; si viene, debe tener formato válido.
+        RuleFor(r => r.Email).EmailAddress()
+            .When(r => !string.IsNullOrWhiteSpace(r.Email))
+            .WithMessage("legal_representative_email formato invalido");
         RuleFor(r => r.Email).MaximumLength(255)
             .When(r => !string.IsNullOrEmpty(r.Email))
             .WithMessage("legal_representative_email debe tener máximo 255 caracteres");
@@ -366,6 +388,12 @@ public sealed class RegisterPrincipalMandanteInputValidator : AbstractValidator<
         RuleFor(m => m.DocumentType).MaximumLength(5)
             .When(m => !string.IsNullOrEmpty(m.DocumentType))
             .WithMessage("principal_mandante_document_type debe tener máximo 5 caracteres");
+        // Hallazgo P5: tipo dentro del catálogo tras normalizar alias (con guarda de longitud cruda).
+        RuleFor(m => m.DocumentType)
+            .Must(dt => IctPayloadNormalizer.NormalizeDocumentType(dt) is not null)
+            .When(m => !string.IsNullOrWhiteSpace(m.DocumentType)
+                && m.DocumentType.Length <= RegisterActorInputValidator.MaxRawLength)
+            .WithMessage("principal_mandante_document_type no es valido (use CC, CE, NIT, PAS o TI)");
         RuleFor(m => m.DocumentNumber).MaximumLength(12)
             .When(m => !string.IsNullOrEmpty(m.DocumentNumber))
             .WithMessage("principal_mandante_document_number debe tener máximo 12 caracteres");
@@ -391,6 +419,12 @@ public sealed class RegisterTransformationInputValidator : AbstractValidator<Reg
     {
         RuleFor(t => t.TransactionType).GreaterThan(0)
             .WithMessage("more_transaction_transaction_type.transactionType es obligatorio");
+        // HU #14600 (paridad v1 #85): el código debe estar en el catálogo de transformaciones. Antes se
+        // descartaba en silencio al mapear y el cliente recibía «registrado» sin la transformación.
+        RuleFor(t => t.TransactionType)
+            .Must(code => IctPayloadNormalizer.KnownTransformationCodes.Contains(code))
+            .When(t => t.TransactionType > 0)
+            .WithMessage("more_transaction_transaction_type/transactionType no tiene un valor valido (use 5, 9 o 17)");
         RuleFor(t => t.Description).MaximumLength(50)
             .When(t => !string.IsNullOrEmpty(t.Description));
     }

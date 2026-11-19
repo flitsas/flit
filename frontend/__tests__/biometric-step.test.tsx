@@ -265,17 +265,23 @@ describe('BiometricStep — kyverum (validación real)', () => {
     expect(input).toEqual({ parte: 'comprador' });
   });
 
-  it('en proceso muestra el enlace de captura y el QR', async () => {
+  // Bug #14626: la URL de captura NO se muestra en texto en el paso 4 (los clientes la abrían en el equipo
+  // del asesor y el enlace de Kyverum quedaba atado a ese dispositivo). Se mantienen QR, CTA y copiar.
+  it('en proceso muestra el QR y las acciones de captura, pero NO la URL en texto (Bug #14626)', async () => {
     mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO], provider: 'kyverum' });
     render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     expect(
       await screen.findByText(/Esperando validación de Ana Comprador/),
     ).toBeInTheDocument();
-    expect(
-      screen.getByRole('link', { name: EN_PROCESO.captureUrl! }),
-    ).toHaveAttribute('href', EN_PROCESO.captureUrl);
+    expect(screen.queryByText(EN_PROCESO.captureUrl!)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: EN_PROCESO.captureUrl! })).not.toBeInTheDocument();
     expect(screen.getByLabelText('Código QR del enlace de captura')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Abrir captura Kyverum' })).toHaveAttribute(
+      'href',
+      EN_PROCESO.captureUrl,
+    );
+    expect(screen.getByRole('button', { name: 'Copiar enlace de captura' })).toBeInTheDocument();
   });
 
   // Regresión (VERONICA): el resultado de Kyverum llega async por webhook. El polling debe avisar al

@@ -1,3 +1,4 @@
+using Flit.Platform.Sdk.IaConsumo;
 using System.Globalization;
 using System.Text;
 using System.Text.Json;
@@ -246,7 +247,23 @@ public sealed class ServicioEvaluacionPrompt(ComparendosDb db, RegistroArchivos 
     {
         for (var intento = 1; ; intento++)
         {
-            var r = await proveedor.ExtraerAsync(m.Contenido, m.ContentType, p.Texto, p.Modelo, ct).ConfigureAwait(false);
+            ResultadoOcr r;
+            // ADR-0090: las pruebas de prompt se registran aparte (origen prueba_prompt) para no mezclarlas con la operación.
+            using (IaCallContext.Instancia.Iniciar(new IaAmbito
+                   {
+                       Modulo = IaProcesosFlit.ModuloComparendos,
+                       Proceso = IaProcesosFlit.EvaluarPrompt,
+                       TipoTarea = IaTiposTarea.Ocr,
+                       Origen = IaOrigenes.PruebaPrompt,
+                       TenantId = null,
+                       EntidadTipo = "documento_ocr",
+                       EntidadId = m.Id.ToString(),
+                       PromptCodigo = IaProcesosFlit.OcrComparendo,
+                       PromptVersion = p.NumeroVersion.ToString(System.Globalization.CultureInfo.InvariantCulture),
+                   }))
+            {
+                r = await proveedor.ExtraerAsync(m.Contenido, m.ContentType, p.Texto, p.Modelo, ct).ConfigureAwait(false);
+            }
             if (!ResultadoOcr.EsTecnico(r.TipoFallo) || intento >= MaximoIntentos)
                 return r;
             await Task.Delay(r.ReintentarEn is { } e && e > TimeSpan.Zero ? e : TimeSpan.FromSeconds(5 * intento), ct).ConfigureAwait(false);

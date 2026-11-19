@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useCallback, useMemo } from "react";
 import { ToastProvider } from "@/components/admin/Toast";
 import { OtHubLayout } from "@/components/admin/transit-offices/OtHubLayout";
@@ -55,6 +55,7 @@ function OtPortalPersonaNaturalPageInner() {
 
 function PortalPnContenido({ transitOfficeId }: { transitOfficeId: string }) {
   const search = useSearchParams();
+  const router = useRouter();
   // Solo se monta tras PortalPnAccess (efecto de cliente): el token ya se puede leer.
   const rol = useMemo(() => rolDeCaja(), []);
   const soloCaja = rol === "cajero";
@@ -63,8 +64,20 @@ function PortalPnContenido({ transitOfficeId }: { transitOfficeId: string }) {
   // solo tiene Caja: cualquier otro valor la lleva a ella. Sin valor, el administrador abre Reportes.
   const tabParam = search.get("tab") ?? "";
   const pedida = (PESTANAS as readonly string[]).includes(tabParam) ? (tabParam as PortalPnTabId) : "reportes";
-  const seccion: PortalPnTabId = soloCaja ? "caja" : pedida;
+  // Admin FLIT y admin del organismo: las cuatro pestañas, la activa sale de `?tab=`. La persona de caja solo tiene Caja.
+  const activa: PortalPnTabId = soloCaja ? "caja" : pedida;
   const initialSub = subDesdeQuery(search.get("sub"), rol);
+
+  /** Pone la pestaña en la URL (`?tab=`) sin apilar historial; si no es Caja, quita la subpestaña. */
+  const tabAUrl = useCallback(
+    (id: PortalPnTabId) => {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", id);
+      if (id !== "caja") url.searchParams.delete("sub");
+      router.replace(`${url.pathname}${url.search}`, { scroll: false });
+    },
+    [router],
+  );
 
   /** Refleja la subpestaña de Caja en la URL sin recargar ni apilar historial. */
   const subAUrl = useCallback((id: CajaSubId) => {
@@ -84,7 +97,10 @@ function PortalPnContenido({ transitOfficeId }: { transitOfficeId: string }) {
       </nav>
       <PortalPnTabs
         transitOfficeId={transitOfficeId}
-        seccion={seccion}
+        // La persona de caja solo tiene Caja: sin fila de pestañas (modo de sección única).
+        seccion={soloCaja ? "caja" : undefined}
+        activeTab={activa}
+        onTabChange={tabAUrl}
         reportes={soloCaja ? undefined : <OtReportesSection transitOfficeId={transitOfficeId} />}
         cobro={soloCaja ? undefined : <OtCobroTab transitOfficeId={transitOfficeId} />}
         caja={<OtCajaTab transitOfficeId={transitOfficeId} rol={rol} initialSub={initialSub} onSubChange={subAUrl} />}
