@@ -294,15 +294,15 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
 
   it("el nombre accesible del enlace de la celda lleva fuente, identificador, estado y que abre una pestaña nueva", () => {
     pintar();
-    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado${NUEVA}` })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: RUNT · Ejecutado${NUEVA}` })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: `Ver detalle de Impuesto departamental de TST001: Novedad${NUEVA}` })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST003: Sin ejecutar${NUEVA}` })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: `Ver detalle de SIMIT propietario de TST002: Error${NUEVA}` })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST003: RUNT · Sin ejecutar${NUEVA}` })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de SIMIT propietario de TST002: SIMIT · Error${NUEVA}` })).toBeInTheDocument();
   });
 
   it("HU #14087: el semáforo es un enlace a la página del detalle en pestaña nueva (target _blank, noopener noreferrer, texto sr-only)", () => {
     const { container } = pintar();
-    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado${NUEVA}` });
+    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: RUNT · Ejecutado${NUEVA}` });
     const td = enlace.closest("td")!;
     const vehiculoId = td.closest("tr")!.getAttribute("data-vehiculo")!;
     expect(enlace).toHaveAttribute("href", `/diagnosticos/${grilla().id}/vehiculos/${vehiculoId}/consultas/RUNT`);
@@ -317,7 +317,7 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
 
   it("con hrefDetalle propio (backoffice) el enlace va a esa ruta", () => {
     pintar(grilla(), false, { hrefDetalle: (c, v) => `/backoffice/x/${v.id}/${c.fuente}?empresa=e` });
-    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado${NUEVA}` });
+    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: RUNT · Ejecutado${NUEVA}` });
     expect(enlace.getAttribute("href")).toMatch(/^\/backoffice\/x\/.+\/RUNT\?empresa=e$/);
   });
 });
@@ -616,8 +616,8 @@ describe("GrillaSemaforos — columnas por sujeto: dos badges RUNT/SIMIT por cel
     expect(enlaces).toHaveLength(2);
     expect(enlaces[0]).toHaveAttribute("href", `/diagnosticos/${grilla().id}/vehiculos/vehiculo-9/consultas/${runt}`);
     expect(enlaces[1]).toHaveAttribute("href", `/diagnosticos/${grilla().id}/vehiculos/vehiculo-9/consultas/${simit}`);
-    expect(enlaces[0]).toHaveAccessibleName(`Ver detalle de ${nombreFuente(runt)} de ${v.identificador}: Ejecutado${NUEVA}`);
-    expect(enlaces[1]).toHaveAccessibleName(`Ver detalle de ${nombreFuente(simit)} de ${v.identificador}: Error${NUEVA}`);
+    expect(enlaces[0]).toHaveAccessibleName(`Ver detalle de ${nombreFuente(runt)} de ${v.identificador}: RUNT · Ejecutado${NUEVA}`);
+    expect(enlaces[1]).toHaveAccessibleName(`Ver detalle de ${nombreFuente(simit)} de ${v.identificador}: SIMIT · Error${NUEVA}`);
   });
 
   it("hrefDetalle propio (backoffice) se aplica a cada badge con su propia fuente", () => {

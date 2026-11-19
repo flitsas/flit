@@ -353,7 +353,7 @@ internal static partial class PdfVehiculo
     }
 
     /// <summary>Rojo del veredicto BLOQUEADO (solo en el recuadro del dictamen).</summary>
-    private const string RojoBloqueado = "#E5484D";
+    private const string RojoBloqueado = FlitDocumentTheme.Rojo;
 
     /// <summary>
     /// Recuadro del dictamen al final del documento (membrete 2026-11-19): borde azul de 1 pt con esquinas redondeadas y fondo

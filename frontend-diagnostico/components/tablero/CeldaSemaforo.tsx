@@ -275,7 +275,7 @@ export function CeldaSemaforo({
               href={hrefDetalle}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${texto} ${NUEVA_PESTANA}`}
+              aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${prefijo ? `${prefijo} · ${texto}` : texto} ${NUEVA_PESTANA}`}
               className={`inline-flex cursor-pointer items-center gap-1 rounded-full transition duration-[var(--dx-motion-rapido)] hover:opacity-90 motion-reduce:transition-none ${FOCO_CLS}`}
             >
               <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} prefijo={prefijo} />

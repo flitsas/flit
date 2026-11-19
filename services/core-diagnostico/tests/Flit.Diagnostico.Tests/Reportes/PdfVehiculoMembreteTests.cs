@@ -129,7 +129,7 @@ public sealed class PdfVehiculoMembreteTests
     public void Iconos_y_colores_del_veredicto()
     {
         PdfVehiculo.IconoVeredicto("BLOQUEADO").Svg.Should().Contain("<line");
-        PdfVehiculo.IconoVeredicto("BLOQUEADO").Color.Should().Be("#E5484D");
+        PdfVehiculo.IconoVeredicto("BLOQUEADO").Color.Should().Be("#C10000");
         PdfVehiculo.IconoVeredicto("VIABLE").Svg.Should().Contain("<path");
         PdfVehiculo.IconoVeredicto("VIABLE").Color.Should().Be(Flit.Diagnostico.Api.Modulos.Reportes.Marca.FlitDocumentTheme.Verde);
         PdfVehiculo.IconoVeredicto("OTRO").Svg.Should().BeNull();

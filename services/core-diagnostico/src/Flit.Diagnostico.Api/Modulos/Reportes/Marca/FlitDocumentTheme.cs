@@ -34,6 +34,9 @@ internal static class FlitDocumentTheme
     /// <summary>Verde de los estados favorables («Vigente», «Aprobada», «Pagada»).</summary>
     public const string Verde = "#7AC143";
 
+    /// <summary>Rojo de error del kit (`danger` #C10000, `--dx-estado-error`): ~6:1 sobre FondoFila, AA para texto.</summary>
+    public const string Rojo = "#C10000";
+
     /// <summary>Texto sobre el degradado de los encabezados.</summary>
     public const string Blanco = "#FFFFFF";
 
