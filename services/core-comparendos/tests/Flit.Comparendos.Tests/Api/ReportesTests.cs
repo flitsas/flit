@@ -247,6 +247,36 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
     }
 
     [Fact]
+    public async Task R4_Impacto_DelAnio_EntreTodasLasEmpresas_ConTop5()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        // El impacto suma TODAS las empresas de la base de pruebas: se compara antes y después del escenario.
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var antes = await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/resumen?partes=impacto", ct);
+        var (empresa, usuario, _) = await EscenarioAsync(ct);
+        var despues = await Super.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/admin/resumen?partes=impacto", ct);
+
+        (despues.GetProperty("anio").GetInt32(), despues.GetProperty("desde").GetString()).Should().Be((2026, "2026-01-01"));
+        decimal D(JsonElement e, params string[] ruta) => ruta.Aggregate(e, (x, k) => x.GetProperty(k)).GetDecimal();
+        int I(JsonElement e, params string[] ruta) => ruta.Aggregate(e, (x, k) => x.GetProperty(k)).GetInt32();
+        (D(despues, "ahorroLogrado") - D(antes, "ahorroLogrado")).Should().Be(604100m, "R-2 salió favorable");
+        (I(despues, "dp", "enviados") - I(antes, "dp", "enviados")).Should().Be(2);
+        (I(despues, "dp", "favorables") - I(antes, "dp", "favorables")).Should().Be(1);
+        (I(despues, "comparendosGestionados") - I(antes, "comparendosGestionados")).Should().Be(4, "pago, dos DP y un contraventor, cada comparendo una vez");
+        (I(despues, "avisosEnviados") - I(antes, "avisosEnviados")).Should().Be(0);
+        (I(despues, "cambiosContraventor", "solicitados") - I(antes, "cambiosContraventor", "solicitados")).Should().Be(0);
+        despues.GetProperty("dp").GetProperty("tasa").ValueKind.Should().Be(JsonValueKind.Number);
+        var top = despues.GetProperty("topEmpresas").EnumerateArray().ToList();
+        top.Count.Should().BeLessThanOrEqualTo(5);
+        top.Select(e => e.GetProperty("ahorro").GetDecimal()).Should().BeInDescendingOrder();
+        top.Single(e => e.GetProperty("empresaId").GetGuid() == empresa).GetProperty("dpFavorables").GetInt32().Should().Be(1);
+
+        (await api.Cliente(usuario).GetAsync("/api/v1/comparendos/admin/resumen?partes=impacto", ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden, "solo el SuperAdmin");
+        (await Super.GetAsync("/api/v1/comparendos/admin/resumen?partes=otra", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
     public async Task AC2_ReporteSemanal_ADestinatarios_ConCopiaOcultaInterna_UnaVezPorDia()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

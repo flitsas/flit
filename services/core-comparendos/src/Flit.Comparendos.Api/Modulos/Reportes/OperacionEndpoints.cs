@@ -28,6 +28,13 @@ public static class OperacionEndpoints
         return Results.Ok(new { empresa = tenant, operacion = await reportes.OperacionAsync(tenant, conValores, bandeja, ct).ConfigureAwait(false) });
     }
 
-    private static async Task<IResult> Resumen(ServicioReportes reportes, CancellationToken ct) =>
-        Results.Ok(await reportes.ResumenPlataformaAsync(ct).ConfigureAwait(false));
+    /// <remarks><c>?partes=impacto</c> (R4): «Impacto de FLIT» del año en curso; sin <c>partes</c>, la salud y las empresas que necesitan algo.</remarks>
+    private static async Task<IResult> Resumen(string? partes, ServicioReportes reportes, CancellationToken ct)
+    {
+        if (partes is not null && partes != "impacto")
+            throw new ReglaException("PARTES_INVALIDAS", "El único valor de «partes» es «impacto».");
+        return partes == "impacto"
+            ? Results.Ok(await reportes.ImpactoPlataformaAsync(ct).ConfigureAwait(false))
+            : Results.Ok(await reportes.ResumenPlataformaAsync(ct).ConfigureAwait(false));
+    }
 }

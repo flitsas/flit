@@ -8,8 +8,6 @@ public sealed record SaludEmpresas(int Total, int Activas, int Pendientes, int I
 
 public sealed record SaludIngesta(int Consultas, int ConError, int EmpresasConError);
 
-public sealed record SaludDp(int Enviados, int Favorables);
-
 public sealed record EmpresaQueNecesita(Guid EmpresaId, string Nombre, IReadOnlyList<string> Motivos);
 
 public sealed record ResumenPlataforma(
@@ -18,19 +16,15 @@ public sealed record ResumenPlataforma(
     SaludIngesta Ingesta24h,
     int CorreosFallidos7d,
     DateOnly CorreosDesde,
-    int OcrPorRevisar,
-    SaludDp DpDelMes,
     IReadOnlyList<EmpresaQueNecesita> NecesitanAlgo);
 
 /// <summary>
-/// Inicio del SuperAdmin (rediseño R2): salud de la plataforma entre todas las empresas y las que necesitan algo. Solo
+/// Inicio del SuperAdmin (rediseño R2; R4 quitó OCR por revisar y DP del mes, que pasan al impacto): salud de la
+/// plataforma entre todas las empresas y las que necesitan algo. Solo
 /// lectura y sin N+1: una consulta agrupada (o un DISTINCT tenant) por tabla, nunca una subconsulta por empresa.
 /// </summary>
 public sealed partial class ServicioReportes
 {
-    /// <summary>Lo que el SuperAdmin tiene que revisar a mano en OCR: leído pero sin registrar.</summary>
-    private static readonly EstadoDocumentoOcr[] OcrPorRevisar = [EstadoDocumentoOcr.Completo, EstadoDocumentoOcr.Incompleto, EstadoDocumentoOcr.Duplicado];
-
     public async Task<ResumenPlataforma> ResumenPlataformaAsync(CancellationToken ct)
     {
         var ahora = reloj.Ahora;
@@ -74,14 +68,6 @@ public sealed partial class ServicioReportes
         var hace7d = Alcance.Utc(correosDesde);
         var fallidos = await db.Comunicaciones.AsNoTracking()
             .CountAsync(c => c.CreadoEn >= hace7d && (c.Estado == EstadoComunicacion.Fallido || c.Estado == EstadoComunicacion.Rebotado), ct).ConfigureAwait(false);
-        var ocr = await db.DocumentosOcr.AsNoTracking().CountAsync(d => OcrPorRevisar.Contains(d.Estado), ct).ConfigureAwait(false);
-
-        var inicioMes = new DateOnly(hoy.Year, hoy.Month, 1);
-        var dp = await db.DerechosPeticion.AsNoTracking().GroupBy(_ => 1).Select(g => new
-        {
-            Enviados = g.Count(d => (d.Estado == EstadoDp.Enviado || d.Estado == EstadoDp.Respondido) && d.FechaRadicacion >= inicioMes),
-            Favorables = g.Count(d => d.Estado == EstadoDp.Respondido && d.RespuestaSentido == SentidoRespuestaOt.Favorable && d.RespuestaFecha >= inicioMes),
-        }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
 
         return new ResumenPlataforma(
             hoy,
@@ -89,8 +75,6 @@ public sealed partial class ServicioReportes
             new SaludIngesta(ingesta?.N ?? 0, ingesta?.Error ?? 0, ingesta?.Empresas ?? 0),
             fallidos,
             correosDesde,
-            ocr,
-            new SaludDp(dp?.Enviados ?? 0, dp?.Favorables ?? 0),
             necesitan.OrderByDescending(n => n.Motivos.Count).ThenBy(n => n.Nombre, StringComparer.Ordinal).ToList());
     }
 }
