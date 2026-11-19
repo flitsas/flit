@@ -133,7 +133,7 @@ public sealed class FlitEmailCopyGoldenTests
     }
 
     private static (string Subject, string Html) MandateSimulatorEmail() =>
-        ("Simulación de Contrato de Mandato · Secretaría de Movilidad de Prueba",
+        (MandateSimulatorService.BuildEmailSubject("Secretaría de Movilidad de Prueba"),
             MandateSimulatorService.BuildEmailHtml("Secretaría de Movilidad de Prueba", AssetsBaseUrl));
 
     private static void Copy((string Subject, string Html) mail, string plantilla) =>

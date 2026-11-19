@@ -158,7 +158,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
             return documento;
 
         var office = _catalog.GetById(request.OfficeId);
-        var asunto = $"Simulación de Contrato de Mandato · {office?.Name ?? "Organismo de tránsito"}";
+        var asunto = BuildEmailSubject(office?.Name);
 
         var html = BuildEmailHtml(office?.Name, _emailAssetsBaseUrl);
 
@@ -191,6 +191,10 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
                 documento.FileName)
             : new MandateSimulationResult(MandateSimulationOutcome.SendFailed, envio.Message);
     }
+
+    /// <summary>Asunto del correo de la simulación (puro, para que el golden de copy lo congele).</summary>
+    internal static string BuildEmailSubject(string? officeName) =>
+        $"Simulación de Contrato de Mandato · {officeName ?? "Organismo de tránsito"}";
 
     /// <summary>
     /// Cuerpo del correo de la simulación. El texto dice explícitamente que es una simulación: el
