@@ -3,6 +3,8 @@
 @import "@flit/ui/tokens.css";
 /* Puntero de la suite (flecha de marca y mano en lo clicable), igual en todas las apps. */
 @import "@flit/ui/cursor.css";
+/* Animación del cargador del kit (VehicleLoader/Cargador), como en Trámites y Diagnóstico. */
+@import "@flit/ui/loader.css";
 /* Barra común y dock de la suite (B-10). */
 @import "@flit/shell/shell.css";
 
