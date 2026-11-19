@@ -8,7 +8,7 @@ public static class IaConsumoServiceCollectionExtensions
     /// <summary>
     /// Registro de consumo de IA (contrato ia-consumo v1) sobre la base de <typeparamref name="TContext"/>, que debe mapear
     /// las tablas con <see cref="IaConsumoModelBuilderExtensions.AddFlitIaConsumo"/>. Registra el contexto ambiental, el
-    /// registrador que usan los clientes HTTP, el escritor por lotes y la purga diaria del detalle.
+    /// registrador que usan los clientes HTTP, y el escritor por lotes. No hay purga: el registro y el detalle se conservan.
     /// </summary>
     /// <param name="aplicativo">flit | flito | ...</param>
     /// <param name="servicio">core-api | core-comparendos | core-diagnostico | ...</param>
@@ -33,7 +33,6 @@ public static class IaConsumoServiceCollectionExtensions
         services.AddSingleton<IIaConsumoRegistrador, IaConsumoRegistrador>();
         services.AddScoped<IIaConsumoAlmacen, EfIaConsumoAlmacen<TContext>>();
         services.AddHostedService<IaConsumoEscritor>();
-        services.AddHostedService<IaConsumoRetencion>();
         return services;
     }
 }

@@ -44,7 +44,7 @@ public sealed class IaConsumoPostgresTests(PostgresDatabaseFixture fixture) : Po
     }
 
     [PostgresFact]
-    public async Task GuardaElLoteLeeLasTarifasSembradasYPurgaElDetalleViejo()
+    public async Task GuardaElLoteConSuDetalleYLeeLasTarifasSembradas()
     {
         var ct = TestContext.Current.CancellationToken;
         await using (var db = NewContext())
@@ -55,14 +55,11 @@ public sealed class IaConsumoPostgresTests(PostgresDatabaseFixture fixture) : Po
 
             var tarifas = await almacen.TarifasAsync(ct);
             tarifas.Should().Contain(t => t.Proveedor == "anthropic" && t.Modelo == "claude-haiku-4-5" && t.PrecioEntradaMtok == 1m);
-
-            var borradas = await almacen.PurgarDetalleAsync(DateTimeOffset.UtcNow.AddDays(-30), ct);
-            borradas.Should().Be(1);
         }
 
         await using var lectura = NewContext();
-        (await lectura.Set<IaConsumoLog>().CountAsync(ct)).Should().Be(2, "la purga borra el detalle, no la fila");
-        (await lectura.Set<IaConsumoDetalle>().CountAsync(ct)).Should().Be(1);
+        (await lectura.Set<IaConsumoLog>().CountAsync(ct)).Should().Be(2);
+        (await lectura.Set<IaConsumoDetalle>().CountAsync(ct)).Should().Be(2, "el detalle no se purga, ni el de hace 40 días");
         var fila = await lectura.Set<IaConsumoLog>().OrderBy(f => f.FechaInicio).FirstAsync(ct);
         fila.Intento.Should().Be((short)1, "el DEFAULT del contrato");
         fila.CostoUsdEstimado.Should().Be(0.00125m);
