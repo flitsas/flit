@@ -761,7 +761,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
   const AVISO_CONSOLIDADO = /Trámite enviado al OT\. El expediente consolidado se está generando/;
 
   it('Bug #14631 — fallo TÉCNICO del consolidado NO bloquea: 1 solo intento, se llama /submit y avisa', async () => {
-    mocks.generarConsolidado.mockRejectedValue(new Error('502 Bad Gateway'));
+    mocks.generarConsolidado.mockRejectedValue(new FakeTramitesApiError(502, 'Bad Gateway', null));
     await radicarDesdePreparado();
 
     await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
@@ -796,6 +796,22 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(await screen.findByText(/No se puede radicar: Expediente incompleto: faltan Cédula/)).toBeInTheDocument();
     expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
     expect(mocks.submitInstance).not.toHaveBeenCalled();
+  });
+
+  it('Bug #14631 — un 4xx de negocio del consolidado (adjunto no disponible) SÍ bloquea con el detalle', async () => {
+    mocks.generarConsolidado.mockRejectedValue(
+      new FakeTramitesApiError(409, 'Un adjunto del expediente no está disponible.', {
+        code: 'adjunto_no_disponible',
+      }),
+    );
+    await radicarDesdePreparado();
+
+    expect(
+      await screen.findByText(/No se puede radicar: Un adjunto del expediente no está disponible\./),
+    ).toBeInTheDocument();
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.submitInstance).not.toHaveBeenCalled();
+    expect(toastShow).not.toHaveBeenCalledWith(expect.stringMatching(AVISO_CONSOLIDADO), 'success');
   });
 
   it('Bug #14631 — timeout del cliente en el consolidado aborta la espera y se radica igual', async () => {
