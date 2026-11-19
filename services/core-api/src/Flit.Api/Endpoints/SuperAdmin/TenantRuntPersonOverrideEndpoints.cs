@@ -31,9 +31,10 @@ internal static class TenantRuntPersonOverrideEndpoints
             ClaimsPrincipal caller,
             CancellationToken ct) =>
         {
-            Guid.TryParse(
-                caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub"),
-                out var callerId);
+            var rawCaller = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
+            Guid? requestedBy = Guid.TryParse(rawCaller, out var callerId) && callerId != Guid.Empty
+                ? callerId
+                : null;
 
             var request = new CreateTenantRuntPersonOverrideRequest(
                 TenantId: tenantId,
@@ -51,7 +52,7 @@ internal static class TenantRuntPersonOverrideEndpoints
                 NroPazYSalvo: body.NroPazYSalvo,
                 Reason: body.Reason,
                 ExpiresAt: body.ExpiresAt,
-                RequestedBy: callerId == Guid.Empty ? null : callerId);
+                RequestedBy: requestedBy);
 
             var result = await handler.HandleAsync(request, ct).ConfigureAwait(false);
 
@@ -69,9 +70,10 @@ internal static class TenantRuntPersonOverrideEndpoints
             ClaimsPrincipal caller,
             CancellationToken ct) =>
         {
-            Guid.TryParse(
-                caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub"),
-                out var callerId);
+            var rawCaller = caller.FindFirstValue(ClaimTypes.NameIdentifier) ?? caller.FindFirstValue("sub");
+            Guid? requestedBy = Guid.TryParse(rawCaller, out var callerId) && callerId != Guid.Empty
+                ? callerId
+                : null;
 
             // tenantId en la ruta es informativo para el routing; la validación de pertenencia es
             // responsabilidad del repositorio (el id es global único, el tenantId en la ruta se
@@ -90,7 +92,7 @@ internal static class TenantRuntPersonOverrideEndpoints
                 Reason: body.Reason,
                 IsActive: body.IsActive,
                 ExpiresAt: body.ExpiresAt,
-                RequestedBy: callerId == Guid.Empty ? null : callerId);
+                RequestedBy: requestedBy);
 
             var result = await handler.HandleAsync(id, request, ct).ConfigureAwait(false);
 
