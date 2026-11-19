@@ -238,6 +238,12 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
         solo.GetProperty("noExigible").GetRawText().Should().Be(todo.GetProperty("noExigible").GetRawText());
         solo.GetProperty("estados").GetRawText().Should().Be(todo.GetProperty("estados").GetRawText());
         (await cliente.GetAsync("/api/v1/comparendos/reportes/dinero?partes=todo", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+
+        // ?partes=inicio: solo lo que pinta el Inicio, con los mismos valores que la respuesta completa.
+        var inicio = (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero?partes=inicio", ct)).GetProperty("dinero");
+        inicio.EnumerateObject().Select(x => x.Name).Should().BeEquivalentTo(["hoy", "exigible", "noExigible", "descuento", "pagado", "frentes", "ahorroLogrado"]);
+        foreach (var campo in new[] { "exigible", "noExigible", "descuento", "pagado", "frentes", "ahorroLogrado" })
+            inicio.GetProperty(campo).GetRawText().Should().Be(todo.GetProperty(campo).GetRawText(), campo);
     }
 
     [Fact]

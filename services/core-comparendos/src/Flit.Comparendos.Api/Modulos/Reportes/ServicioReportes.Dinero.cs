@@ -23,6 +23,12 @@ public sealed record DineroFrentes(Monto ProximosAVencer, Monto SinContraventor,
 
 public sealed record DineroMes(string Periodo, decimal ValorIngresado, decimal Pagado);
 
+/// <summary>
+/// <c>?partes=inicio</c>: lo que pinta el Inicio de la gestora con el módulo de reportes (los frentes de «Para hoy», la
+/// ventana de descuento y las cuatro tarjetas de la franja de dinero). Sin organismos, cobro coactivo ni serie mensual.
+/// </summary>
+public sealed record DineroInicio(DateOnly Hoy, Monto Exigible, Monto NoExigible, DineroDescuento Descuento, DineroPagado Pagado, DineroFrentes Frentes, decimal AhorroLogrado);
+
 /// <summary>Solo el reparto de la deuda por estado legal (<c>?partes=estados</c>): lo que necesita el indicador de Reportes.</summary>
 public sealed record DineroEstados(DateOnly Hoy, IReadOnlyList<DineroEstado> Estados, Monto Exigible, Monto NoExigible);
 
@@ -105,6 +111,42 @@ public sealed partial class ServicioReportes
         return new DineroEstados(hoy, estados, exigible, noExigible);
     }
 
+    /// <summary>La versión acotada para el Inicio (<c>?partes=inicio</c>): misma deuda, frentes y pagado, menos consultas.</summary>
+    public async Task<DineroInicio> InicioAsync(Alcance a, ConsultaBandeja bandeja, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(bandeja);
+        var h = await bandeja.HoyAsync(ct).ConfigureAwait(false);
+        var grupos = await GruposDeudaAsync(a, h.Dia, ct).ConfigureAwait(false);
+        var (_, exigible, noExigible) = Repartir(grupos);
+        var v50 = grupos.Sum(g => g.V50);
+        var v25 = grupos.Sum(g => g.V25);
+        return new DineroInicio(h.Dia, exigible, noExigible,
+            new DineroDescuento(new MontoConAhorro(grupos.Sum(g => g.N50), v50, v50 * 0.5m), new MontoConAhorro(grupos.Sum(g => g.N25), v25, v25 * 0.25m)),
+            await PagadoAsync(a, ct).ConfigureAwait(false),
+            await FrentesAsync(a, bandeja, h, ct).ConfigureAwait(false),
+            await AhorroAsync(a, ct).ConfigureAwait(false));
+    }
+
+    private async Task<DineroPagado> PagadoAsync(Alcance a, CancellationToken ct)
+    {
+        var pagos = await (from p in Pagos(a)
+                           join c in Comparendos(a) on p.ComparendoId equals c.Id
+                           where p.FechaPago >= a.Desde && p.FechaPago <= a.Hasta
+                           group p by p.TipoPago into g
+                           select new { Tipo = g.Key, N = g.Count(), V = g.Sum(p => p.ValorPagado) }).ToListAsync(ct).ConfigureAwait(false);
+        decimal De(TipoPago t) => pagos.Where(p => p.Tipo == t).Sum(p => p.V);
+        return new DineroPagado(pagos.Sum(p => p.N), pagos.Sum(p => p.V), De(TipoPago.CC), De(TipoPago.PC), De(TipoPago.BC));
+    }
+
+    private static async Task<DineroFrentes> FrentesAsync(Alcance a, ConsultaBandeja bandeja, ConsultaBandeja.Hoy h, CancellationToken ct) => new(
+        await FrenteAsync(bandeja, a, new FiltrosBandeja { Rapido = "ProximosAVencer" }, h, ct).ConfigureAwait(false),
+        await FrenteAsync(bandeja, a, new FiltrosBandeja { Rapido = "SinContraventor" }, h, ct).ConfigureAwait(false),
+        await FrenteAsync(bandeja, a, new FiltrosBandeja { Rapido = "RechazadosOt" }, h, ct).ConfigureAwait(false),
+        await FrenteAsync(bandeja, a, new FiltrosBandeja { SinGestion = true }, h, ct).ConfigureAwait(false),
+        await FrenteAsync(bandeja, a, new FiltrosBandeja { EstadoLegal = ["Vencido"] }, h, ct).ConfigureAwait(false),
+        await FrenteAsync(bandeja, a, new FiltrosBandeja { Juridico = "CaducidadInmediata" }, h, ct).ConfigureAwait(false));
+
     public async Task<Dinero> DineroAsync(Alcance a, ConsultaBandeja bandeja, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(a);
@@ -124,29 +166,14 @@ public sealed partial class ServicioReportes
             g.Organismo is { } id && nombres.TryGetValue(id, out var nombre) ? nombre : "Sin organismo identificado",
             g.N, g.V, g.VSin + g.VTiempo + g.VVencido)).ToList();
 
-        var pagosPeriodo = await (from p in Pagos(a)
-                                  join c in Comparendos(a) on p.ComparendoId equals c.Id
-                                  where p.FechaPago >= a.Desde && p.FechaPago <= a.Hasta
-                                  group p by p.TipoPago into g
-                                  select new { Tipo = g.Key, N = g.Count(), V = g.Sum(p => p.ValorPagado) }).ToListAsync(ct).ConfigureAwait(false);
-        decimal Pagado(TipoPago t) => pagosPeriodo.Where(p => p.Tipo == t).Sum(p => p.V);
-
-        var frentes = new DineroFrentes(
-            await FrenteAsync(bandeja, a, new FiltrosBandeja { Rapido = "ProximosAVencer" }, h, ct).ConfigureAwait(false),
-            await FrenteAsync(bandeja, a, new FiltrosBandeja { Rapido = "SinContraventor" }, h, ct).ConfigureAwait(false),
-            await FrenteAsync(bandeja, a, new FiltrosBandeja { Rapido = "RechazadosOt" }, h, ct).ConfigureAwait(false),
-            await FrenteAsync(bandeja, a, new FiltrosBandeja { SinGestion = true }, h, ct).ConfigureAwait(false),
-            await FrenteAsync(bandeja, a, new FiltrosBandeja { EstadoLegal = ["Vencido"] }, h, ct).ConfigureAwait(false),
-            await FrenteAsync(bandeja, a, new FiltrosBandeja { Juridico = "CaducidadInmediata" }, h, ct).ConfigureAwait(false));
-
         // Como los frentes: la cifra es la de /bandeja?cobroCoactivo=true y el monto es el valor de esos comparendos.
         var coactivo = await FrenteAsync(bandeja, a, new FiltrosBandeja { CobroCoactivo = true }, h, ct).ConfigureAwait(false);
 
         return new Dinero(hoy, estados, exigible, noExigible, coactivo,
             new DineroDescuento(new MontoConAhorro(grupos.Sum(g => g.N50), v50, v50 * 0.5m), new MontoConAhorro(grupos.Sum(g => g.N25), v25, v25 * 0.25m)),
             organismos,
-            new DineroPagado(pagosPeriodo.Sum(p => p.N), pagosPeriodo.Sum(p => p.V), Pagado(TipoPago.CC), Pagado(TipoPago.PC), Pagado(TipoPago.BC)),
-            frentes,
+            await PagadoAsync(a, ct).ConfigureAwait(false),
+            await FrentesAsync(a, bandeja, h, ct).ConfigureAwait(false),
             await AhorroAsync(a, ct).ConfigureAwait(false),
             await MensualDineroAsync(a, hoy, ct).ConfigureAwait(false));
     }

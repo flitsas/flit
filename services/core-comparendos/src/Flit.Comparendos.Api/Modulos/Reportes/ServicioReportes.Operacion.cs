@@ -80,6 +80,9 @@ public sealed partial class ServicioReportes
             V4 = g.Sum(c => c.FechaImposicion >= d3a && c.FechaImposicion < d1a ? c.ValorTotal ?? 0 : 0),
             N5 = g.Count(c => c.FechaImposicion < d3a),
             V5 = g.Sum(c => c.FechaImposicion < d3a ? c.ValorTotal ?? 0 : 0),
+            // Lo que entró por OCR puede no traer fecha de imposición: va aparte para que los tramos sumen lo pendiente.
+            N6 = g.Count(c => c.FechaImposicion == null),
+            V6 = g.Sum(c => c.FechaImposicion == null ? c.ValorTotal ?? 0 : 0),
             NSoat = g.Count(c => c.CodigoInfraccion == CodigoSoat),
             VSoat = g.Sum(c => c.CodigoInfraccion == CodigoSoat ? c.ValorTotal ?? 0 : 0),
             NRtm = g.Count(c => c.CodigoInfraccion == CodigoTecnicoMecanica),
@@ -93,6 +96,8 @@ public sealed partial class ServicioReportes
             new("De 6 a 12 meses", t?.N3 ?? 0, V(t?.V3 ?? 0), d1a, d6m.AddDays(-1)),
             new("De 1 a 3 años", t?.N4 ?? 0, V(t?.V4 ?? 0), d3a, d1a.AddDays(-1)),
             new("Más de 3 años", t?.N5 ?? 0, V(t?.V5 ?? 0), null, d3a.AddDays(-1)),
+            // Sin desde ni hasta: la bandeja no filtra «sin fecha», así que este tramo no lleva enlace.
+            new("Sin fecha de imposición", t?.N6 ?? 0, V(t?.V6 ?? 0), null, null),
         };
 
         // 2. Vehículos: una fila por placa (unos miles a lo sumo); el top y la concentración se arman en memoria.
@@ -109,7 +114,7 @@ public sealed partial class ServicioReportes
         // 3. Infracciones más frecuentes (con su descripción del catálogo).
         var codigos = await pendientes.Where(c => c.CodigoInfraccion != null).GroupBy(c => c.CodigoInfraccion!)
             .Select(g => new { Codigo = g.Key, N = g.Count(), V = g.Sum(c => c.ValorTotal ?? 0), Descripcion = g.Max(c => c.DescripcionInfraccion) })
-            .OrderByDescending(x => x.N).Take(5).ToListAsync(ct).ConfigureAwait(false);
+            .OrderByDescending(x => x.N).ThenBy(x => x.Codigo).Take(5).ToListAsync(ct).ConfigureAwait(false);
         var claves = codigos.Select(c => c.Codigo).ToList();
         var catalogo = await db.InfraccionesCatalogo.AsNoTracking().Where(i => claves.Contains(i.Codigo))
             .ToDictionaryAsync(i => i.Codigo, i => i.Descripcion, ct).ConfigureAwait(false);
@@ -160,7 +165,7 @@ public sealed partial class ServicioReportes
                 Dias = respondidos.Count == 0 ? (decimal?)null
                     : Math.Round((decimal)respondidos.Average(d => d.RespuestaFecha!.Value.DayNumber - d.FechaRadicacion!.Value.DayNumber), 1),
             };
-        }).OrderByDescending(x => x.Enviados).Take(8).ToList();
+        }).OrderByDescending(x => x.Enviados).ThenBy(x => x.Organismo).Take(8).ToList();
         var ids = porOrganismo.Where(o => o.Organismo != null).Select(o => o.Organismo!.Value).ToList();
         var nombres = await db.OrganismosTransito.AsNoTracking().Where(o => ids.Contains(o.Id)).ToDictionaryAsync(o => o.Id, o => o.Nombre, ct).ConfigureAwait(false);
 
