@@ -103,7 +103,7 @@ describe("ListadoVehiculos — AC21: tabla de placas con paginación en el servi
     expect(within(f1).getByRole("rowheader")).toHaveAttribute("scope", "row");
     expect(within(f1).getByText("Flota de prueba 1")).toBeInTheDocument();
     expect(within(f1).getByText("10/11/2026 09:00")).toBeInTheDocument();
-    expect(within(f1).getByText("Con Análisis IA")).toBeInTheDocument();
+    expect(within(f1).getByText("Con análisis")).toBeInTheDocument();
     expect(within(f1).getByText("Terminado")).toBeInTheDocument();
     expect(within(f1).getByText("Bloqueado")).toBeInTheDocument();
     const f2 = fila("TST002");

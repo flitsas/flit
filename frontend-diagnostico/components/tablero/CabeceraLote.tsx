@@ -18,7 +18,7 @@ import { fechaDelDato } from "./CeldaSemaforo";
 export function metadatosLote(grilla: Grilla): string | null {
   const { lote } = grilla;
   if (!lote) return null;
-  const partes = [`ID ${idCorto(grilla.id)}`, lote.modo === "CON_ANALISIS" ? "Con análisis IA" : "Simple"];
+  const partes = [`ID ${idCorto(grilla.id)}`, lote.modo === "CON_ANALISIS" ? "Con análisis" : "Simple"];
   if (lote.tipo_tramite?.nombre) partes.push(lote.tipo_tramite.nombre);
   partes.push(`Creado ${fechaDelDato(lote.creado_en)}`);
   if (lote.usuario_creador?.nombre) partes.push(`Por ${lote.usuario_creador.nombre}`);

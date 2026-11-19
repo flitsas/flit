@@ -222,7 +222,7 @@ const TABLERO = /\/diagnosticos\/[0-9a-f-]{36}$/i;
 
 /** Marca «Con Análisis IA» y el primer tipo de trámite si el contrato de la compañía lo permite. Devuelve si quedó. */
 async function elegirConAnalisis(page: Page): Promise<boolean> {
-  const radio = page.getByRole("radio", { name: "Con Análisis IA" });
+  const radio = page.getByRole("radio", { name: "Con análisis" });
   if (!(await radio.count()) || !(await radio.first().isEnabled())) return false;
   await radio.first().check();
   const tipo = page.getByRole("combobox", { name: /Tipo de trámite/ });

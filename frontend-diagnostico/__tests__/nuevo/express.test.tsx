@@ -143,7 +143,7 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     const api = montar({ query: "modo=express&placa=TST123" });
     await nombre();
     fireEvent.click(screen.getByRole("checkbox", { name: "SIMIT vehículo" }));
-    fireEvent.click(screen.getByRole("radio", { name: "Con Análisis IA" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Con análisis" }));
     fireEvent.change(await screen.findByRole("combobox", { name: /tipo de trámite/i }), { target: { value: "TRASPASO_STANDARD" } });
     await continuar();
     expect(await iniciado()).toBeInTheDocument();
@@ -369,10 +369,10 @@ describe("Express — pie, cargando y validaciones de Nuevo (AC16, AC17)", () =>
     expect(screen.queryByRole("radiogroup", { name: "Tipo de diagnóstico" })).toBeNull();
   });
 
-  it("AC17: Con Análisis IA sin tipo de trámite no envía y el foco va al tipo de trámite con su error", async () => {
+  it("AC17: Con análisis sin tipo de trámite no envía y el foco va al tipo de trámite con su error", async () => {
     const api = montar({ query: "modo=express&placa=TST123" });
     await nombre();
-    fireEvent.click(screen.getByRole("radio", { name: "Con Análisis IA" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Con análisis" }));
     const tipo = await screen.findByRole("combobox", { name: /tipo de trámite/i });
     await continuar();
     await waitFor(() => expect(tipo).toHaveFocus());

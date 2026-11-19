@@ -201,7 +201,7 @@ describe("ListaLotesBackoffice — Punto 6: selector de compañía", () => {
     montar({ empresa: EMPRESA_A });
     const tabla = await screen.findByRole("table", { name: /lotes de la compañía/i });
     const filas = within(tabla).getAllByRole("row");
-    expect(filas[1]).toHaveTextContent(/00000000-0000-7000-8000-00000000b001 · Con análisis IA · TRASPASO/);
+    expect(filas[1]).toHaveTextContent(/00000000-0000-7000-8000-00000000b001 · Con análisis · TRASPASO/);
     expect(filas[2]).toHaveTextContent(/00000000-0000-7000-8000-00000000b002 · Simple · Express/);
   });
 

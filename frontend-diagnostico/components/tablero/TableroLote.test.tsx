@@ -407,8 +407,8 @@ const filas = () => within(tablaLote()).getAllByRole("rowheader").map((th) => th
 describe("/diagnosticos/{id} — HU #14562 AC23: cabecera con metadatos del lote", () => {
   it("muestra «ID · modo · trámite · fecha de creación · creador» de grilla.lote y las descargas", async () => {
     await montar({ [GRILLA]: () => Response.json(grilla({ lote: LOTE_META })) }, { verDiagnosticos: true, descargarReportes: true });
-    expect(screen.getByText(/con análisis ia/i)).toHaveTextContent(
-      "ID 00000000 · Con análisis IA · Traspaso · Creado 12/11/2026 09:42 · Por Usuaria Prueba",
+    expect(screen.getByText(/con análisis/i)).toHaveTextContent(
+      "ID 00000000 · Con análisis · Traspaso · Creado 12/11/2026 09:42 · Por Usuaria Prueba",
     );
     expect(estadoGlobal()).toHaveTextContent("En proceso");
     const descargas = screen.getByRole("region", { name: /descargas del lote/i });

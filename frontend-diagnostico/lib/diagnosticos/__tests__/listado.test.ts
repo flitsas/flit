@@ -123,7 +123,7 @@ describe("presentación de cada fila", () => {
     expect(etiquetaEstado("EN_PROCESO").texto).toBe("En proceso");
     expect(etiquetaEstado("INCOMPLETO").texto).toBe("Incompleto");
     expect(nombreModo("SIMPLE")).toBe("Diagnóstico Simple");
-    expect(nombreModo("CON_ANALISIS")).toBe("Con Análisis IA");
+    expect(nombreModo("CON_ANALISIS")).toBe("Con análisis");
     expect(idCorto("0192f0a1-0000-7000-8000-000000000001")).toBe("0192F0A1");
   });
 });
