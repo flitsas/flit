@@ -18,4 +18,9 @@
     <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- HU #14642 — tests unitarios del validator internal de overrides RUNT. -->
+    <InternalsVisibleTo Include="Flit.Admin.Tests" />
+  </ItemGroup>
+
 </Project>
