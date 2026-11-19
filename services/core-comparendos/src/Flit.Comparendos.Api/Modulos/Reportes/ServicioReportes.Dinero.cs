@@ -1,0 +1,155 @@
+using System.Globalization;
+using Flit.Comparendos.Api.Modulos.Bandeja;
+using Flit.Comparendos.Domain.Modelo;
+using Flit.Comparendos.Domain.Tiempo;
+using Microsoft.EntityFrameworkCore;
+
+namespace Flit.Comparendos.Api.Modulos.Reportes;
+
+public sealed record Monto(int Cantidad, decimal Valor);
+
+public sealed record MontoConAhorro(int Cantidad, decimal Valor, decimal AhorroEstimado);
+
+public sealed record DineroEstado(string Estado, int Cantidad, decimal Valor);
+
+public sealed record DineroOrganismo(Guid? OrganismoId, string Nombre, int Cantidad, decimal Valor, decimal Exigible);
+
+public sealed record DineroPagado(int Cantidad, decimal Total, decimal Cc, decimal Pc, decimal Bc);
+
+public sealed record DineroDescuento(MontoConAhorro D50, MontoConAhorro D25);
+
+public sealed record DineroFrentes(Monto ProximosAVencer, Monto SinContraventor, Monto RechazadosOt, Monto SinGestion, Monto Vencidos, Monto CaducidadInmediata);
+
+public sealed record DineroMes(string Periodo, decimal ValorIngresado, decimal Pagado);
+
+public sealed record Dinero(
+    DateOnly Hoy,
+    IReadOnlyList<DineroEstado> Estados,
+    Monto Exigible,
+    Monto NoExigible,
+    Monto CobroCoactivo,
+    DineroDescuento Descuento,
+    IReadOnlyList<DineroOrganismo> Organismos,
+    DineroPagado Pagado,
+    DineroFrentes Frentes,
+    decimal AhorroLogrado,
+    IReadOnlyList<DineroMes> Mensual);
+
+/// <summary>
+/// La lente de dinero del Inicio y de Reportes (rediseño de Comparendos, S2). Solo lectura. La deuda es la misma que la del
+/// indicador del dashboard (activo, sin pagar y sin DP favorable); el estado legal sale de las mismas fechas que la bandeja,
+/// y cada frente cuenta con el filtro de la bandeja para que la cifra sea la que se ve al hacer clic.
+/// </summary>
+public sealed partial class ServicioReportes
+{
+    private static readonly string[] EstadosLegales = ["SinNotificar", "EnTiempo", "Vencido", "Caducado", "Prescrito"];
+
+    public async Task<Dinero> DineroAsync(Alcance a, ConsultaBandeja bandeja, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(bandeja);
+        var h = await bandeja.HoyAsync(ct).ConfigureAwait(false);
+        var hoy = h.Dia;
+        var conFavorable = ConDpFavorable(a);
+
+        // Una sola pasada agrupada por organismo: los totales por estado salen de sumar los grupos.
+        var grupos = await Comparendos(a).Where(c => c.Activo && !c.Pagado && !conFavorable.Contains(c.Id))
+            .GroupBy(c => c.OrganismoTransitoId)
+            .Select(g => new
+            {
+                Organismo = g.Key,
+                N = g.Count(),
+                V = g.Sum(c => c.ValorTotal ?? 0),
+                NSin = g.Count(c => c.FechaLimiteGestion == null),
+                VSin = g.Sum(c => c.FechaLimiteGestion == null ? c.ValorTotal ?? 0 : 0),
+                NTiempo = g.Count(c => c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion),
+                VTiempo = g.Sum(c => c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion ? c.ValorTotal ?? 0 : 0),
+                NVencido = g.Count(c => c.FechaLimiteGestion != null && hoy > c.FechaLimiteGestion && hoy <= c.FechaCaducidad),
+                VVencido = g.Sum(c => c.FechaLimiteGestion != null && hoy > c.FechaLimiteGestion && hoy <= c.FechaCaducidad ? c.ValorTotal ?? 0 : 0),
+                NCaducado = g.Count(c => hoy > c.FechaCaducidad && hoy <= c.FechaPrescripcion),
+                VCaducado = g.Sum(c => hoy > c.FechaCaducidad && hoy <= c.FechaPrescripcion ? c.ValorTotal ?? 0 : 0),
+                NPrescrito = g.Count(c => hoy > c.FechaPrescripcion),
+                VPrescrito = g.Sum(c => hoy > c.FechaPrescripcion ? c.ValorTotal ?? 0 : 0),
+                NCoactivo = g.Count(c => c.EnCobroCoactivo),
+                VCoactivo = g.Sum(c => c.EnCobroCoactivo ? c.ValorTotal ?? 0 : 0),
+                N50 = g.Count(c => c.FechaFinDescuento50 != null && hoy <= c.FechaFinDescuento50),
+                V50 = g.Sum(c => c.FechaFinDescuento50 != null && hoy <= c.FechaFinDescuento50 ? c.ValorTotal ?? 0 : 0),
+                N25 = g.Count(c => (c.FechaFinDescuento50 == null || hoy > c.FechaFinDescuento50) && c.FechaFinDescuento25 != null && hoy <= c.FechaFinDescuento25),
+                V25 = g.Sum(c => (c.FechaFinDescuento50 == null || hoy > c.FechaFinDescuento50) && c.FechaFinDescuento25 != null && hoy <= c.FechaFinDescuento25 ? c.ValorTotal ?? 0 : 0),
+            }).ToListAsync(ct).ConfigureAwait(false);
+
+        var estados = new[]
+        {
+            new DineroEstado(EstadosLegales[0], grupos.Sum(g => g.NSin), grupos.Sum(g => g.VSin)),
+            new DineroEstado(EstadosLegales[1], grupos.Sum(g => g.NTiempo), grupos.Sum(g => g.VTiempo)),
+            new DineroEstado(EstadosLegales[2], grupos.Sum(g => g.NVencido), grupos.Sum(g => g.VVencido)),
+            new DineroEstado(EstadosLegales[3], grupos.Sum(g => g.NCaducado), grupos.Sum(g => g.VCaducado)),
+            new DineroEstado(EstadosLegales[4], grupos.Sum(g => g.NPrescrito), grupos.Sum(g => g.VPrescrito)),
+        };
+        var exigible = new Monto(estados.Take(3).Sum(e => e.Cantidad), estados.Take(3).Sum(e => e.Valor));
+        var noExigible = new Monto(estados.Skip(3).Sum(e => e.Cantidad), estados.Skip(3).Sum(e => e.Valor));
+        var v50 = grupos.Sum(g => g.V50);
+        var v25 = grupos.Sum(g => g.V25);
+
+        var top = grupos.OrderByDescending(g => g.V).ThenByDescending(g => g.N).Take(10).ToList();
+        var idsTop = top.Where(g => g.Organismo != null).Select(g => g.Organismo!.Value).ToList();
+        var nombres = await db.OrganismosTransito.AsNoTracking().Where(o => idsTop.Contains(o.Id)).ToDictionaryAsync(o => o.Id, o => o.Nombre, ct).ConfigureAwait(false);
+        var organismos = top.Select(g => new DineroOrganismo(g.Organismo,
+            g.Organismo is { } id && nombres.TryGetValue(id, out var nombre) ? nombre : "Sin organismo identificado",
+            g.N, g.V, g.VSin + g.VTiempo + g.VVencido)).ToList();
+
+        var pagosPeriodo = await (from p in db.Pagos.AsNoTracking()
+                                  join c in Comparendos(a) on p.ComparendoId equals c.Id
+                                  where p.FechaPago >= a.Desde && p.FechaPago <= a.Hasta
+                                  group p by p.TipoPago into g
+                                  select new { Tipo = g.Key, N = g.Count(), V = g.Sum(p => p.ValorPagado) }).ToListAsync(ct).ConfigureAwait(false);
+        decimal Pagado(TipoPago t) => pagosPeriodo.Where(p => p.Tipo == t).Sum(p => p.V);
+
+        var frentes = new DineroFrentes(
+            await FrenteAsync(bandeja, a, new FiltrosBandeja { Rapido = "ProximosAVencer" }, h, ct).ConfigureAwait(false),
+            await FrenteAsync(bandeja, a, new FiltrosBandeja { Rapido = "SinContraventor" }, h, ct).ConfigureAwait(false),
+            await FrenteAsync(bandeja, a, new FiltrosBandeja { Rapido = "RechazadosOt" }, h, ct).ConfigureAwait(false),
+            await FrenteAsync(bandeja, a, new FiltrosBandeja { SinGestion = true }, h, ct).ConfigureAwait(false),
+            await FrenteAsync(bandeja, a, new FiltrosBandeja { EstadoLegal = ["Vencido"] }, h, ct).ConfigureAwait(false),
+            await FrenteAsync(bandeja, a, new FiltrosBandeja { Juridico = "CaducidadInmediata" }, h, ct).ConfigureAwait(false));
+
+        return new Dinero(hoy, estados, exigible, noExigible, new Monto(grupos.Sum(g => g.NCoactivo), grupos.Sum(g => g.VCoactivo)),
+            new DineroDescuento(new MontoConAhorro(grupos.Sum(g => g.N50), v50, v50 * 0.5m), new MontoConAhorro(grupos.Sum(g => g.N25), v25, v25 * 0.25m)),
+            organismos,
+            new DineroPagado(pagosPeriodo.Sum(p => p.N), pagosPeriodo.Sum(p => p.V), Pagado(TipoPago.CC), Pagado(TipoPago.PC), Pagado(TipoPago.BC)),
+            frentes,
+            await AhorroAsync(a, ct).ConfigureAwait(false),
+            await MensualDineroAsync(a, hoy, ct).ConfigureAwait(false));
+    }
+
+    /// <summary>Cantidad y valor de un frente con el mismo filtro de la bandeja (y el NIT del reporte, si lo hay).</summary>
+    private static async Task<Monto> FrenteAsync(ConsultaBandeja bandeja, Alcance a, FiltrosBandeja f, ConsultaBandeja.Hoy h, CancellationToken ct)
+    {
+        var filtros = a.Nit is { } nit ? f with { Nits = [nit] } : f;
+        var r = await bandeja.Filtrar(a.Tenant, filtros, h).GroupBy(_ => 1).Select(g => new { N = g.Count(), V = g.Sum(c => c.ValorTotal ?? 0) })
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        return r is null ? new Monto(0, 0) : new Monto(r.N, r.V);
+    }
+
+    /// <summary>Últimos 12 meses: valor ingresado (por fecha de registro, en hora de Colombia) y pagado (por fecha de pago).</summary>
+    private async Task<List<DineroMes>> MensualDineroAsync(Alcance a, DateOnly hoy, CancellationToken ct)
+    {
+        var primerMes = new DateOnly(hoy.Year, hoy.Month, 1).AddMonths(-11);
+        var inicio = Alcance.Utc(primerMes);
+        // Colombia no tiene horario de verano: correr −5 h deja el mes local.
+        var desfase = ColombiaTime.Offset;
+        var ingresos = await Comparendos(a).Where(c => c.CreadoEn >= inicio)
+            .Select(c => new { Local = c.CreadoEn + desfase, c.ValorTotal })
+            .GroupBy(x => new { x.Local.Year, x.Local.Month })
+            .Select(g => new { g.Key.Year, g.Key.Month, V = g.Sum(x => x.ValorTotal ?? 0) }).ToListAsync(ct).ConfigureAwait(false);
+        var pagos = await (from p in db.Pagos.AsNoTracking()
+                           join c in Comparendos(a) on p.ComparendoId equals c.Id
+                           where p.FechaPago >= primerMes
+                           group p by new { p.FechaPago.Year, p.FechaPago.Month } into g
+                           select new { g.Key.Year, g.Key.Month, V = g.Sum(p => p.ValorPagado) }).ToListAsync(ct).ConfigureAwait(false);
+        return Enumerable.Range(0, 12).Select(i => primerMes.AddMonths(i)).Select(m => new DineroMes(
+            m.ToString("yyyy-MM", CultureInfo.InvariantCulture),
+            ingresos.Where(x => x.Year == m.Year && x.Month == m.Month).Sum(x => x.V),
+            pagos.Where(x => x.Year == m.Year && x.Month == m.Month).Sum(x => x.V))).ToList();
+    }
+}
