@@ -61,6 +61,16 @@ function Archivo({ id, nombre }: { id: string; nombre: string }) {
 
 type PestanaDetalle = "datos" | "fuentes" | "cambios";
 
+/** En celular las tres pestañas caben con su rótulo corto; desde `sm` va el completo. */
+function Rotulo({ corto, largo }: { corto: string; largo: string }) {
+  return (
+    <>
+      <span className="sm:hidden">{corto}</span>
+      <span className="hidden sm:inline">{largo}</span>
+    </>
+  );
+}
+
 /** Pestañas del final: todos los datos, las fuentes y el historial de cambios que trajo cada fuente. */
 function PestanasDetalle({ d, activa, onCambiar }: { d: Detalle; activa: PestanaDetalle; onCambiar: (p: PestanaDetalle) => void }) {
   // El historial se pide solo al abrir su pestaña, como antes.
@@ -163,9 +173,9 @@ function PestanasDetalle({ d, activa, onCambiar }: { d: Detalle; activa: Pestana
       active={activa}
       onChange={onCambiar}
       tabs={[
-        { id: "datos", label: "Datos completos", content: datos },
+        { id: "datos", label: <Rotulo corto="Datos" largo="Datos completos" />, content: datos },
         { id: "fuentes", label: "Fuentes", content: fuentes },
-        { id: "cambios", label: "Historial de cambios", content: historial },
+        { id: "cambios", label: <Rotulo corto="Historial" largo="Historial de cambios" />, content: historial },
       ]}
     />
   );
@@ -452,13 +462,14 @@ function Cabecera({ d, acciones }: { d: Detalle; acciones: ReactNode }) {
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
-        {/* B6-1: los dos chips pueden decir «Sin procesar»; cada uno con su rótulo. */}
-        <span className="inline-flex items-center gap-1.5">
+      {/* B6-1: los dos chips pueden decir «Sin procesar»; cada uno con su rótulo. En celular el rótulo va encima y la
+          etiqueta larga («Notificado a secretaría — derecho de petición») parte en dos líneas en vez de salirse. */}
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-3 text-sm [&_.kit-etiqueta]:max-w-full [&_.kit-etiqueta]:whitespace-normal">
+        <span className="flex min-w-0 max-w-full flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-1.5">
           <span className="text-muted-foreground">Proceso</span>
           <Chip e={estadoProceso(d.estadoProceso)} />
         </span>
-        <span className="inline-flex items-center gap-1.5">
+        <span className="flex min-w-0 max-w-full flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-1.5">
           <span className="text-muted-foreground">Último aviso</span>
           <Chip e={ultimoHito(d.ultimoHito)} />
         </span>

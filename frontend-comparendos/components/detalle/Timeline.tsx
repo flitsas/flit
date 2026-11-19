@@ -129,7 +129,7 @@ export function Timeline({
                 {narracion && ` · ${narracion}`} · {nombreActor(e.actorNombre)}
               </span>
             </div>
-            <p className="whitespace-pre-wrap text-sm text-foreground">{textoParaGestora(e.descripcion)}</p>
+            <p className="max-w-[80ch] whitespace-pre-wrap text-sm text-foreground">{textoParaGestora(e.descripcion)}</p>
             {/* §7.2: el evento lleva a lo que lo originó: el correo al Centro de mensajes; el DP, el pago y los documentos a su sección del detalle. */}
             {e.relacionadoTipo === "comunicacion_saliente" && e.relacionadoId && verMensajes && (
               <Link href={`/mensajes?mensaje=${e.relacionadoId}`} className="text-xs font-semibold text-flit-brand-ink hover:underline">

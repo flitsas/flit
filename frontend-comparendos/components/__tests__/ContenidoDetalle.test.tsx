@@ -121,7 +121,7 @@ describe("detalle del comparendo como página (rediseño S1)", () => {
     montar();
     await screen.findByTestId("detalle-cabecera");
     expect(apiFetch.mock.calls.some(([r]) => String(r).endsWith("/cambios"))).toBe(false);
-    fireEvent.click(screen.getByRole("tab", { name: "Historial de cambios" }));
+    fireEvent.click(screen.getByRole("tab", { name: /Historial de cambios/ }));
     await waitFor(() => expect(apiFetch.mock.calls.some(([r]) => String(r).endsWith("/cambios"))).toBe(true));
   });
 });
