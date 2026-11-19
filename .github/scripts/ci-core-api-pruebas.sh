@@ -6,7 +6,8 @@
 #
 # ADMIN_SHARDS es aparte de SHARDS porque la matriz de GitHub pone SHARDS=4 a todos los carriles y allí admin va entero;
 # solo el pool propio (ci-core-api-vps.sh) parte admin.
-# Reparto por clase (Integration y admin partido): las clases se reparten por turno entre los N shards; los 0..N-2 filtran por SUS
+# Reparto por clase (Integration y admin partido): las clases se reparten entre los N shards (por TIEMPO si hay
+# .github/ci/tiempos-<carril>.tsv, si no por turno; ver por_clase); los 0..N-2 filtran por SUS
 # clases y el ULTIMO corre «todo lo que no tomaron los demás». Así una prueba que no se pueda clasificar (DisplayName propio, clase anidada)
 # cae en el último shard y nunca se pierde. Cada proceso crea su propia base flit_it_* (PostgresDatabaseFixture).
 # Con LISTAR=1 solo imprime cuántas pruebas tomaría el shard (para comprobar que la suma da el total).
@@ -35,12 +36,27 @@ por_clase() {
     [ "$total" -gt 0 ] && [ "$n" -gt 0 ] || { echo "::error::$p sin pruebas listadas (total=$total clases=$n)"; exit 1; }
     # Los caracteres especiales del filtro de VSTest se escapan con \.
     esc() { sed 's/[()&|=!~\\]/\\&/g'; }
-    if [ "$SHARD" -lt $((n_shards-1)) ]; then
-      f=$(echo "$clases" | esc | awk -v s="$SHARD" -v n="$n_shards" '(NR-1)%n==s {printf "%sFullyQualifiedName~%s.", (c++?"|":""), $0}')
+    # Reparto: «shard<TAB>clase» por cada clase. Con $TIEMPOS (TSV «clase<TAB>segundos» de ci-tiempos-por-clase.py) se
+    # reparte por tiempo: de la clase más lenta a la más rápida, cada una al shard con menos carga (LPT). Una clase que no
+    # está en el archivo (nueva) pesa $TIEMPO_NUEVA s. Sin archivo, por turno como antes. Mismo resultado en todos los
+    # shards: la lista de clases y el archivo son los mismos, y el orden se desempata por nombre.
+    local reparto modo
+    if [ -n "${TIEMPOS:-}" ] && [ -s "$TIEMPOS" ]; then
+      modo="por tiempo ($(basename "$TIEMPOS"))"
+      reparto=$(echo "$clases" | awk -F'\t' -v nueva="${TIEMPO_NUEVA:-10}" 'NR==FNR {t[$1]=$2; next} {print (($0 in t) ? t[$0] : nueva) "\t" $0}' "$TIEMPOS" - \
+        | LC_ALL=C sort -t$'\t' -k1,1gr -k2,2 \
+        | awk -F'\t' -v n="$n_shards" '{m=0; for (i=1;i<n;i++) if (carga[i] < carga[m]) m=i; carga[m]+=$1; print m "\t" $2}
+                                       END {for (i=0;i<n;i++) printf "  shard %d: %.0f s estimados\n", i, carga[i] > "/dev/stderr"}')
     else
-      f=$(echo "$clases" | esc | awk -v n="$n_shards" '(NR-1)%n!=n-1 {printf "%sFullyQualifiedName!~%s.", (c++?"&":""), $0}')
+      modo="por turno"
+      reparto=$(echo "$clases" | awk -v n="$n_shards" '{print (NR-1)%n "\t" $0}')
     fi
-    echo "$(basename "$p"): $total pruebas en $n clases; shard $SHARD de $n_shards"
+    if [ "$SHARD" -lt $((n_shards-1)) ]; then
+      f=$(echo "$reparto" | awk -F'\t' -v s="$SHARD" '$1==s {print $2}' | esc | awk '{printf "%sFullyQualifiedName~%s.", (c++?"|":""), $0}')
+    else
+      f=$(echo "$reparto" | awk -F'\t' -v s="$SHARD" '$1!=s {print $2}' | esc | awk '{printf "%sFullyQualifiedName!~%s.", (c++?"&":""), $0}')
+    fi
+    echo "$(basename "$p"): $total pruebas en $n clases; shard $SHARD de $n_shards, reparto $modo"
     if [ -n "${LISTAR:-}" ]; then
       if [ -n "$f" ]; then dotnet test "$p" --no-build -c Release --list-tests --filter "$f" | contar; else echo "$total"; fi
       exit 0
@@ -52,11 +68,13 @@ por_clase() {
 
 case "$carril" in
   admin)
-    if [ "${ADMIN_SHARDS:-1}" -gt 1 ]; then por_clase tests/Flit.Admin.Tests "$ADMIN_SHARDS" "admin-$SHARD" "${colgada[@]}"; fi
+    if [ "${ADMIN_SHARDS:-1}" -gt 1 ]; then
+      TIEMPOS=${TIEMPOS-../../.github/ci/tiempos-admin.tsv} por_clase tests/Flit.Admin.Tests "$ADMIN_SHARDS" "admin-$SHARD" "${colgada[@]}"
+    fi
     exec dotnet test tests/Flit.Admin.Tests --no-build -c Release --logger "trx;LogFileName=admin.trx" "${colgada[@]}" "${cob[@]}" "${hilos[@]}" ;;
 
   integration)
-    por_clase tests/Flit.Integration.Tests "$SHARDS" "integration-$SHARD" ;;
+    TIEMPOS=${TIEMPOS-../../.github/ci/tiempos-integration.tsv} por_clase tests/Flit.Integration.Tests "$SHARDS" "integration-$SHARD" ;;
 
   resto)
     # Proyectos con pruebas de TIEMPO (LoginTimingTests compara la latencia de dos caminos del login con una

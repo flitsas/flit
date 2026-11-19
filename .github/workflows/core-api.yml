@@ -62,7 +62,7 @@ jobs:
           # Sin grep -q: con pipefail, -q cierra el pipe en la primera coincidencia, el grep -v muere con SIGPIPE y una lista
           # grande de archivos se leía como «No toca core-api» (las pruebas se saltaban y el check salía verde).
           if [ "$archivos" = TODO ] || echo "$archivos" | grep -v '^services/core-api/src/Flit.Api/Content/dr-flit/' | grep -E \
-               '^(services/core-(api|identity|consultas|personanatural)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-(core-api-pruebas|core-api-vps|servicios|limpiar-runner)\.sh$)' > /dev/null; then
+               '^(services/core-(api|identity|consultas|personanatural)/|contracts/proto/|contracts/openapi/(core-api\.v1\.yaml|external-api\.v1\.json)$|\.github/workflows/core-api\.yml$|\.github/scripts/ci-(core-api-pruebas|core-api-vps|servicios|limpiar-runner)\.sh$|\.github/scripts/ci-tiempos-por-clase\.py$|\.github/ci/)' > /dev/null; then
             echo "core=true" >> "$GITHUB_OUTPUT"; echo "Toca core-api: corren las pruebas."
           else
             echo "core=false" >> "$GITHUB_OUTPUT"; echo "No toca core-api: se saltan las pruebas."
@@ -84,9 +84,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # admin va en 2 shards por clase (ADMIN_SHARDS): cada uno en su runner de GitHub, con su Postgres.
+          # admin va en 4 shards por clase (ADMIN_SHARDS), repartidos por tiempo (.github/ci/tiempos-admin.tsv): cada uno en su
+          # runner de GitHub, con su Postgres. Con 2 la parte de pruebas no bajaba de ~7,5 min por shard.
           - { nombre: admin-0, carril: admin, shard: 0 }
           - { nombre: admin-1, carril: admin, shard: 1 }
+          - { nombre: admin-2, carril: admin, shard: 2 }
+          - { nombre: admin-3, carril: admin, shard: 3 }
           - { nombre: integration-0, carril: integration, shard: 0 }
           - { nombre: integration-1, carril: integration, shard: 1 }
           - { nombre: integration-2, carril: integration, shard: 2 }
@@ -137,20 +140,29 @@ jobs:
       - name: Restore
         run: dotnet restore
 
-      - name: Build
-        run: dotnet build --no-restore --configuration Release
+      # Sin analizadores (CA, estilo, AOT/trim): los carriles solo necesitan los binarios para probar. Los analizadores,
+      # con TreatWarningsAsErrors, corren UNA vez en el job «analizadores» (en paralelo, fuera del camino crítico).
+      - name: Build (sin analizadores)
+        run: dotnet build --no-restore --configuration Release /p:RunAnalyzers=false
 
       # El contenedor de Postgres trae max_connections=100. Las pruebas crean muchas bases propias y cada una
       # deja su pool de Npgsql abierto: en «admin» se agotaban («too many clients already») desde el minuto ~30
       # y la suite pasaba de ~30 a más de 65 min esperando conexión (PR #860, que solo llegó a staging). Los
       # services no aceptan argumentos del servidor, así que se ajusta por ALTER SYSTEM y se reinicia el contenedor.
-      - name: Postgres con más conexiones
+      #
+      # Mismo reinicio para quitarle la durabilidad: es una base de prueba que se tira al terminar. Sin fsync ni
+      # escrituras de página completa, los CREATE DATABASE y las migraciones de cada fixture no esperan al disco.
+      # No se usa tmpfs: `docker restart` vacía un tmpfs y se perdería el ALTER SYSTEM.
+      - name: Postgres con más conexiones y sin durabilidad
         run: |
           pg=${{ job.services.postgres.id }}
           docker exec "$pg" psql -U postgres -c "ALTER SYSTEM SET max_connections = 500;"
+          for ajuste in "fsync = off" "synchronous_commit = off" "full_page_writes = off"; do
+            docker exec "$pg" psql -U postgres -c "ALTER SYSTEM SET $ajuste;"
+          done
           docker restart "$pg"
           for i in $(seq 1 30); do docker exec "$pg" pg_isready -U postgres -d flit_dev && break; sleep 2; done
-          docker exec "$pg" psql -U postgres -tAc "SHOW max_connections;"
+          docker exec "$pg" psql -U postgres -tAc "SELECT name || '=' || setting FROM pg_settings WHERE name IN ('max_connections','fsync','synchronous_commit','full_page_writes');"
 
       - name: Apply migrations
         run: |
@@ -165,7 +177,7 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           SHARDS: '4'
-          ADMIN_SHARDS: '2'
+          ADMIN_SHARDS: '4'
           # La cobertura solo se recoge en push: en el PR alarga la corrida sin que nadie la mire.
           COBERTURA: ${{ github.event_name == 'push' && '1' || '' }}
 
@@ -182,7 +194,7 @@ jobs:
   # todo pasó o si el cambio no toca core-api; en rojo si algo falló o se canceló.
   core-api:
     if: always()
-    needs: [cambios, pruebas, aot-publish, pruebas-vps]
+    needs: [cambios, pruebas, analizadores, aot-publish, pruebas-vps]
     runs-on: ubuntu-latest
     steps:
       - name: Resultado
@@ -191,13 +203,35 @@ jobs:
           CORE: ${{ needs.cambios.outputs.core }}
           PRUEBAS: ${{ needs.pruebas.result }}
           AOT: ${{ needs.aot-publish.result }}
+          ANALIZADORES: ${{ needs.analizadores.result }}
           VPS: ${{ needs.pruebas-vps.result }}
           EN_VPS: ${{ (inputs.runner || vars.RUNNER_CORE_API) && 'true' || 'false' }}
         run: |
-          echo "cambios=$CAMBIOS core=$CORE pruebas=$PRUEBAS aot-publish=$AOT pruebas-vps=$VPS (pool propio: $EN_VPS)"
+          echo "cambios=$CAMBIOS core=$CORE pruebas=$PRUEBAS analizadores=$ANALIZADORES aot-publish=$AOT pruebas-vps=$VPS (pool propio: $EN_VPS)"
           [ "$CAMBIOS" = success ] || { echo "::error::falló la detección de cambios"; exit 1; }
           if [ "$CORE" != true ]; then echo "El cambio no toca core-api: no aplica."; exit 0; fi
-          if [ "$EN_VPS" = true ]; then [ "$VPS" = success ]; else [ "$PRUEBAS" = success ] && [ "$AOT" = success ]; fi
+          if [ "$EN_VPS" = true ]; then [ "$VPS" = success ]; else [ "$PRUEBAS" = success ] && [ "$ANALIZADORES" = success ] && [ "$AOT" = success ]; fi
+
+  # Compilación completa CON analizadores (CA, estilo, AOT/trim) y TreatWarningsAsErrors: es el control de calidad que
+  # los carriles de «pruebas» ya no hacen (compilan con RunAnalyzers=false para llegar antes a las pruebas). En paralelo.
+  analizadores:
+    needs: cambios
+    if: needs.cambios.outputs.core == 'true' && !(inputs.runner || vars.RUNNER_CORE_API)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: services/core-api
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: services/core-api/global.json
+      - name: Restore
+        run: dotnet restore
+      - name: Build con analizadores
+        run: dotnet build --no-restore --configuration Release
 
   # No espera a las pruebas: corre en paralelo y solo comprueba que el publish siga funcionando.
   aot-publish:
