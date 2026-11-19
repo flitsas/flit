@@ -95,8 +95,7 @@ internal sealed class MandatoEmisor(
     IMandateSignerDirectory mandateDirectory,
     IMandateCustomTemplateBlobReader mandateTemplateBlob,
     IMandateFormatTemplateProvider? mandateFormatTemplates,
-    IIdentitySignatureCapture? identitySignatureCapture,
-    IMandatoFirmaPolicy mandatoFirmaPolicy)
+    IIdentitySignatureCapture? identitySignatureCapture)
 {
     /// <summary>¿Hay generador de mandato? Sin él (tests/DI que no lo ejercitan) no se emite nada.</summary>
     public bool Disponible => mandatoGenerator is not null;
@@ -275,7 +274,7 @@ internal sealed class MandatoEmisor(
                         var (firma, sello, metadatos, firmaIdentidad) =
                             await ResolveMandatarioFirmaAsync(data, signer, ct).ConfigureAwait(false);
                         mandatario = new MandatarioFirmante(
-                            signer.Nombre, signer.Documento, firma, sello, metadatos, firmaIdentidad);
+                            signer.Nombre, signer.Documento, firma, sello, metadatos, firmaIdentidad, signer.SignerModel);
 
                         if (recalcular)
                             instance.MandateSignerId = signerId;
@@ -291,14 +290,6 @@ internal sealed class MandatoEmisor(
         if (modo == ModoFirmanteMandato.RecalcularSiempre && mandatario is null)
             instance.MandateSignerId = null;
 
-        // El convenio se llavea por (compañía del trámite, organismo). El organismo del trámite se
-        // conoce aquí por su CÓDIGO; el id lo aporta la configuración del OT, que ya se resolvió arriba
-        // por ese mismo código: sin fila de configuración no hay id y el mandato conserva el bloque, que
-        // es el default seguro.
-        var modoFirma = await mandatoFirmaPolicy
-            .ResolveAsync(data.TenantIdParaFirmas, config?.TransitOfficeId ?? Guid.Empty, resolvedSignerId, ct)
-            .ConfigureAwait(false);
-
         var customKind = MandatoCustomTemplateKindCodes.Resolve(config?.CustomTemplateKind);
         byte[]? customPdf = null;
         if (customKind == MandatoCustomTemplateKindCodes.Pdf
@@ -309,11 +300,10 @@ internal sealed class MandatoEmisor(
                 .ConfigureAwait(false);
         }
 
-        // Institucional / convenio: sin bloque MANDATARIO.
+        // Persona jurídica: sin bloque MANDATARIO.
         // Abierto o sin estampa: líneas. Si hay baúl o sello, se estampa aunque el modelo sea a mano.
         var modoFirmaMandatario = MandatoFirmaModoResolver.Resolve(
             assignmentMode,
-            modoFirma.TieneConvenio,
             MandatoFirmaModoResolver.TieneEstampa(mandatario));
 
         var mandatoData = new MandatoData(

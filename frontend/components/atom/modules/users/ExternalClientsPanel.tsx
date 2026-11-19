@@ -7,10 +7,13 @@
 // El secreto solo existe en memoria mientras se muestra la tarjeta (AC2/AC4): no se guarda en estado
 // persistente, almacenamiento del navegador ni logs, y al cerrar la tarjeta se descarta.
 import { useCallback, useEffect, useState } from "react";
-import { Check, Copy, KeyRound, LockOpen, Pencil, PlugZap, Power, RefreshCcw, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { RowActions, type RowAction } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { formatFechaHora } from "@/lib/format/date";
 import {
   EXTERNAL_SCOPE_ATTACHMENTS,
@@ -26,9 +29,6 @@ import {
 import { ExternalClientActionDialog, type ExternalClientAction } from "./ExternalClientActionDialog";
 import { ExternalClientFormModal } from "./ExternalClientFormModal";
 
-const TH_CLS = "px-4 py-2.5 text-left text-xs font-semibold uppercase tracking-wider";
-const TD_CLS = "px-4 py-3 align-top";
-
 function formatOptional(iso: string | null): string {
   return iso ? formatFechaHora(new Date(iso)) : "—";
 }
@@ -43,6 +43,8 @@ export function ExternalClientsPanel() {
   const [pending, setPending] = useState<ActionState>(null);
   const [revealed, setRevealed] = useState<{ clientId: string; secret: string } | null>(null);
   const [copied, setCopied] = useState(false);
+  // HU #13918 — tabla estándar con paginación en cliente: el listado llega completo.
+  const pg = usePaginacion("users.ExternalClientsPanel");
 
   const load = useCallback(async () => {
     setStatus("loading");
@@ -98,9 +100,9 @@ export function ExternalClientsPanel() {
 
   function actionsFor(client: ExternalClient): RowAction[] {
     const actions: RowAction[] = [
-      { icon: Pencil, label: `Editar ${client.clientId}`, onClick: () => setForm({ mode: "edit", client }) },
+      { icon: iconoComo("lapiz"), label: `Editar ${client.clientId}`, onClick: () => setForm({ mode: "edit", client }) },
       {
-        icon: RefreshCcw,
+        icon: iconoComo("reintento"),
         label: `Regenerar secreto de ${client.clientId}`,
         tone: "primary",
         onClick: () => setPending({ action: "regenerate", client }),
@@ -109,7 +111,7 @@ export function ExternalClientsPanel() {
     // AC5: «Desbloquear» solo tiene sentido si está bloqueado.
     if (isExternalClientLocked(client)) {
       actions.push({
-        icon: LockOpen,
+        icon: iconoComo("candado-abierto"),
         label: `Desbloquear ${client.clientId}`,
         tone: "primary",
         onClick: () => setPending({ action: "unlock", client }),
@@ -117,14 +119,14 @@ export function ExternalClientsPanel() {
     }
     if (!client.mustRotate) {
       actions.push({
-        icon: KeyRound,
+        icon: iconoComo("rol"),
         label: `Obligar a rotar el secreto de ${client.clientId}`,
         tone: "danger",
         onClick: () => setPending({ action: "must-rotate", client }),
       });
     }
     actions.push({
-      icon: Power,
+      icon: iconoComo("encendido"),
       label: `${client.isActive ? "Desactivar" : "Activar"} ${client.clientId}`,
       tone: client.isActive ? "danger" : "primary",
       onClick: () => setPending({ action: "toggle-active", client }),
@@ -132,20 +134,91 @@ export function ExternalClientsPanel() {
     return actions;
   }
 
+  const columns: DataTableColumn<ExternalClient>[] = [
+    {
+      key: "cliente",
+      header: "Cliente",
+      render: (c) => (
+        <>
+          <span className="block font-mono text-sm font-semibold">{c.clientId}</span>
+          <span className="block text-xs text-muted-foreground">{c.displayName}</span>
+        </>
+      ),
+    },
+    {
+      key: "finalidad",
+      header: "Finalidad",
+      cellClassName: "max-w-[280px] text-xs text-muted-foreground",
+      render: (c) => c.purpose,
+    },
+    {
+      key: "permisos",
+      header: "Permisos",
+      render: (c) => (
+        <div className="flex flex-wrap gap-1">
+          <StatusBadge label="Lectura" tone="info" ariaLabel="Permiso: lectura de trámites" />
+          {c.scopes.includes(EXTERNAL_SCOPE_PII) ? (
+            <StatusBadge label="Datos personales" tone="info" ariaLabel="Permiso: datos personales sin enmascarar" />
+          ) : (
+            <StatusBadge label="Enmascarado" tone="neutral" ariaLabel="Sin permiso de datos personales: llegan enmascarados" />
+          )}
+          {c.scopes.includes(EXTERNAL_SCOPE_ATTACHMENTS) && (
+            <StatusBadge label="Adjuntos" tone="info" ariaLabel="Permiso: envío de adjuntos" />
+          )}
+        </div>
+      ),
+    },
+    {
+      key: "estado",
+      header: "Estado",
+      render: (c) => (
+        <div className="flex flex-wrap gap-1">
+          <StatusBadge label={c.isActive ? "Activo" : "Inactivo"} tone={c.isActive ? "success" : "neutral"} />
+          {isExternalClientLocked(c) && (
+            <StatusBadge
+              label={`Bloqueado hasta ${formatOptional(c.lockedUntil)}`}
+              tone="danger"
+              ariaLabel={`Bloqueado por intentos fallidos hasta ${formatOptional(c.lockedUntil)}`}
+            />
+          )}
+          {c.mustRotate && <StatusBadge label="Debe rotar" tone="warning" ariaLabel="Debe rotar el secreto" />}
+        </div>
+      ),
+    },
+    {
+      key: "ultimo-pase",
+      header: "Último pase",
+      cellClassName: "whitespace-nowrap text-xs",
+      render: (c) => formatOptional(c.lastTokenAt),
+    },
+    {
+      key: "alta",
+      header: "Alta",
+      cellClassName: "whitespace-nowrap text-xs",
+      render: (c) => formatOptional(c.createdAt),
+    },
+    {
+      key: "acciones",
+      header: "Acciones",
+      align: "right",
+      render: (c) => <RowActions actions={actionsFor(c)} />,
+    },
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-3xl text-sm text-[#59677D] dark:text-white/78">
+        <p className="max-w-3xl text-sm text-muted-foreground">
           Sistemas externos que leen el feed de trámites de todas las compañías (p. ej. Flito), uno por ambiente.
           El secreto se genera al crear o regenerar y se muestra una sola vez.
         </p>
         <button
           type="button"
           onClick={() => setForm({ mode: "create" })}
-          className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
+          className="inline-flex shrink-0 items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow-button)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          style={{ background: "var(--gradient-action)" }}
         >
-          <PlugZap className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="integraciones" className="h-4 w-4" />
           Nuevo cliente
         </button>
       </div>
@@ -153,19 +226,19 @@ export function ExternalClientsPanel() {
       {revealed && (
         <section
           aria-labelledby="external-client-secret-title"
-          className="rounded-[18px] border border-flit-brand/35 bg-white p-4 shadow-[0_8px_24px_rgba(22,39,68,0.08)] dark:border-white/15 dark:bg-[#162744]"
+          className="rounded-[18px] border border-flit-brand/35 bg-card p-4 shadow-[var(--shadow-card)] dark:border-border"
         >
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div className="flex min-w-0 flex-col gap-2">
-              <h3 id="external-client-secret-title" className="flex items-center gap-2 text-sm font-bold text-flit-primary dark:text-white">
-                <KeyRound className="h-4 w-4 text-flit-brand" aria-hidden="true" />
+              <h3 id="external-client-secret-title" className="flex items-center gap-2 text-sm font-bold text-flit-primary">
+                <Icono nombre="rol" className="h-4 w-4 text-flit-brand" />
                 Secreto de «{revealed.clientId}»
               </h3>
-              <p className="text-xs font-semibold text-[#C2410C]">
+              <p className="text-xs font-semibold text-destructive">
                 Cópielo ahora: no se volverá a mostrar ni se puede recuperar. Entrégueselo al sistema externo por un
                 canal seguro.
               </p>
-              <code className="break-all rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] px-3 py-2 font-mono text-sm text-flit-primary dark:border-white/15 dark:bg-white/5 dark:text-white">
+              <code className="break-all rounded-[10px] border border-border bg-secondary px-3 py-2 font-mono text-sm text-flit-primary">
                 {revealed.secret}
               </code>
             </div>
@@ -173,18 +246,18 @@ export function ExternalClientsPanel() {
               <button
                 type="button"
                 onClick={() => void copySecret()}
-                className="inline-flex items-center gap-1.5 rounded-full border border-flit-brand px-4 py-2 text-xs font-semibold text-[color:var(--flit-brand-ink)] hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:hover:bg-white/5"
+                className="inline-flex items-center gap-1.5 rounded-full border border-flit-brand px-4 py-2 text-xs font-semibold text-[color:var(--flit-brand-ink)] hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               >
-                {copied ? <Check className="h-4 w-4" aria-hidden="true" /> : <Copy className="h-4 w-4" aria-hidden="true" />}
+                {copied ? <Icono nombre="check" className="h-4 w-4" /> : <Icono nombre="copiar" className="h-4 w-4" />}
                 {copied ? "Copiado" : "Copiar secreto"}
               </button>
               <button
                 type="button"
                 aria-label="Cerrar: el secreto no se volverá a mostrar"
                 onClick={() => setRevealed(null)}
-                className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:text-white dark:hover:bg-white/5"
+                className="inline-flex min-h-[40px] min-w-[40px] items-center justify-center rounded-full text-flit-primary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
               >
-                <X className="h-4 w-4" aria-hidden="true" />
+                <Icono nombre="cerrar" className="h-4 w-4" />
               </button>
             </div>
           </div>
@@ -198,70 +271,19 @@ export function ExternalClientsPanel() {
         onRetry={() => void load()}
         skeletonRows={3}
       >
-        <div className="overflow-x-auto rounded-[18px] border border-[#DFE5ED] bg-white dark:border-white/10 dark:bg-[#162744]">
-          <table className="w-full text-sm">
-            <caption className="sr-only">Clientes de integración externos</caption>
-            <thead className="bg-[#DFE5ED] text-flit-primary dark:bg-white/6 dark:text-white/72">
-              <tr>
-                <th scope="col" className={TH_CLS}>Cliente</th>
-                <th scope="col" className={TH_CLS}>Finalidad</th>
-                <th scope="col" className={TH_CLS}>Permisos</th>
-                <th scope="col" className={TH_CLS}>Estado</th>
-                <th scope="col" className={TH_CLS}>Último pase</th>
-                <th scope="col" className={TH_CLS}>Alta</th>
-                <th scope="col" className={`${TH_CLS} text-right`}>Acciones</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((c) => {
-                const locked = isExternalClientLocked(c);
-                return (
-                  <tr
-                    key={c.id}
-                    className="border-t border-[#DFE5ED] text-flit-primary hover:bg-[#F4F8FF] dark:border-white/10 dark:text-white dark:hover:bg-white/4"
-                  >
-                    <td className={TD_CLS}>
-                      <span className="block font-mono text-sm font-semibold">{c.clientId}</span>
-                      <span className="block text-xs text-[#59677D] dark:text-white/70">{c.displayName}</span>
-                    </td>
-                    <td className={`${TD_CLS} max-w-[280px] text-xs text-[#59677D] dark:text-white/78`}>{c.purpose}</td>
-                    <td className={TD_CLS}>
-                      <div className="flex flex-wrap gap-1">
-                        <StatusBadge label="Lectura" tone="info" ariaLabel="Permiso: lectura de trámites" />
-                        {c.scopes.includes(EXTERNAL_SCOPE_PII) ? (
-                          <StatusBadge label="Datos personales" tone="info" ariaLabel="Permiso: datos personales sin enmascarar" />
-                        ) : (
-                          <StatusBadge label="Enmascarado" tone="neutral" ariaLabel="Sin permiso de datos personales: llegan enmascarados" />
-                        )}
-                        {c.scopes.includes(EXTERNAL_SCOPE_ATTACHMENTS) && (
-                          <StatusBadge label="Adjuntos" tone="info" ariaLabel="Permiso: envío de adjuntos" />
-                        )}
-                      </div>
-                    </td>
-                    <td className={TD_CLS}>
-                      <div className="flex flex-wrap gap-1">
-                        <StatusBadge label={c.isActive ? "Activo" : "Inactivo"} tone={c.isActive ? "success" : "neutral"} />
-                        {locked && (
-                          <StatusBadge
-                            label={`Bloqueado hasta ${formatOptional(c.lockedUntil)}`}
-                            tone="danger"
-                            ariaLabel={`Bloqueado por intentos fallidos hasta ${formatOptional(c.lockedUntil)}`}
-                          />
-                        )}
-                        {c.mustRotate && <StatusBadge label="Debe rotar" tone="warning" ariaLabel="Debe rotar el secreto" />}
-                      </div>
-                    </td>
-                    <td className={`${TD_CLS} whitespace-nowrap text-xs`}>{formatOptional(c.lastTokenAt)}</td>
-                    <td className={`${TD_CLS} whitespace-nowrap text-xs`}>{formatOptional(c.createdAt)}</td>
-                    <td className={`${TD_CLS} text-right`}>
-                      <RowActions actions={actionsFor(c)} />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable<ExternalClient>
+          ariaLabel="Clientes de integración externos"
+          columns={columns}
+          rows={pg.paginar(clients)}
+          getRowKey={(c) => c.id}
+          pagination={{
+            page: pg.page,
+            pageSize: pg.pageSize,
+            totalCount: clients.length,
+            onPageChange: pg.setPage,
+            onPageSizeChange: pg.setPageSize,
+          }}
+        />
       </UiStateBoundary>
 
       {form && (
@@ -271,6 +293,7 @@ export function ExternalClientsPanel() {
           onCreate={async (body) => {
             const res = await createExternalClient(body);
             setClients((prev) => [res.client, ...prev]);
+            pg.setPage(1); // el cliente nuevo queda arriba: se muestra la primera página
             setStatus("ready");
             setForm(null);
             reveal(res.client.clientId, res.clientSecret);

@@ -91,7 +91,6 @@ public sealed class BusquedaRapidaDemasiadoAmpliaException(int total, int tope)
 /// </summary>
 public sealed class BusquedaRapidaResolver(
     IProcedureInstanceRepository repo,
-    IChecklistCompanyParamsProvider? companyParams = null,
     IResolvedChecklistMatrixProvider? matrixProvider = null,
     IDocumentTypeCatalog? documentTypes = null,
     TimeProvider? clock = null)
@@ -148,12 +147,12 @@ public sealed class BusquedaRapidaResolver(
                 ids.Add(fila.Id);
         }
 
-        if (quiereDocumentos && companyParams is not null)
+        if (quiereDocumentos)
         {
             // Misma completitud que el gate de radicación, con las lecturas memorizadas durante esta
-            // consulta: la matriz se repite por (tipo, organismo) y los parámetros por compañía.
+            // consulta: la matriz se repite por (tipo, organismo). Sin proveedor de matriz la completitud
+            // no aplica y no se marca ningún borrador.
             var completitud = new ChecklistMatrixCompleteness(
-                new ParametrosMemorizados(companyParams),
                 matrixProvider is null ? null : new MatrizMemorizada(matrixProvider),
                 documentTypes is null ? null : new CatalogoMemorizado(documentTypes));
             foreach (var instancia in candidatos)
@@ -176,14 +175,6 @@ public sealed class BusquedaRapidaResolver(
     private static bool SinFirmar(InstanceSummaryDto fila) =>
         (fila.FirmaVendedorEstado is { } v && v != FirmaParteEstados.Firmado)
         || (fila.FirmaCompradorEstado is { } c && c != FirmaParteEstados.Firmado);
-
-    private sealed class ParametrosMemorizados(IChecklistCompanyParamsProvider inner) : IChecklistCompanyParamsProvider
-    {
-        private readonly ConcurrentDictionary<Guid, Task<IReadOnlyList<CompanyDocumentParam>>> _cache = new();
-
-        public Task<IReadOnlyList<CompanyDocumentParam>> GetForTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
-            _cache.GetOrAdd(tenantId, id => inner.GetForTenantAsync(id, cancellationToken));
-    }
 
     private sealed class MatrizMemorizada(IResolvedChecklistMatrixProvider inner) : IResolvedChecklistMatrixProvider
     {

@@ -338,7 +338,6 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
     whitelistSlot: <div>panel-lista-blanca</div>,
     otSlot: <div>panel-organismos</div>,
     auditSlot: <div>panel-historial</div>,
-    documentosSlot: <div>panel-documentos</div>,
     legalRepresentativesSlot: <div>panel-representantes</div>,
     mandatariosSlot: <div>panel-mandatarios</div>,
   };
@@ -358,7 +357,7 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
     expect(screen.getByRole("tab", { name: /representantes legales/i })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("panel-representantes")).toBeInTheDocument();
     // Ninguna sección reservada llega a montarse, ni el «Guardar todo» de la configuración.
-    for (const reservado of ["panel-lista-blanca", "panel-organismos", "panel-historial", "panel-documentos"]) {
+    for (const reservado of ["panel-lista-blanca", "panel-organismos", "panel-historial"]) {
       expect(screen.queryByText(reservado)).not.toBeInTheDocument();
     }
     expect(screen.queryByRole("button", { name: /guardar todo/i })).not.toBeInTheDocument();
@@ -388,6 +387,7 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
     expect(tabs).toEqual(["Representantes legales", "Mandatarios", "Usuarios"]);
   });
 
+  // HU #14409 AC1 — la pestaña Documentos de la ficha se retiró; las demás siguen en su orden.
   it("AC7 — sin restricción (SuperAdmin) conserva todas las pestañas", () => {
     render(
       <CompanyConfigTabs
@@ -402,7 +402,6 @@ describe("CompanyConfigTabs restringido a representantes (HU #12710)", () => {
       "Productos",
       "Trámites",
       "Configuración Empresa",
-      "Documentos",
       "Representantes legales",
       "Mandatarios",
       "Historial de Cambios",

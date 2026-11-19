@@ -1,17 +1,28 @@
 "use client";
 
-import { Lock, Pencil, Settings2 } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { isB2BTenantType, tenantTypeLabel } from "@/lib/api/types";
 import type { CompanyListItem } from "@/lib/api/types";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { RowActions } from "@/components/atom/RowActions";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { Pagination } from "@/components/atom/Pagination";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import type { TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
 import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 
 import { formatFechaHora } from "@/lib/format/date";
@@ -31,6 +42,10 @@ export interface CompanyListTableProps {
   onEdit: (company: CompanyListItem) => void;
   /** Solicita activar/desactivar la compañía (el contenedor muestra la confirmación). */
   onToggleStatus: (company: CompanyListItem) => void;
+  /** Filtros por columna (embudo en el encabezado, HU #13999). Sin esto, encabezados planos. */
+  filtros?: TablaFiltrosEstado;
+  /** Si se pasa y no hay filas, la tabla sigue montada (embudos visibles) con una fila de «sin coincidencias». */
+  onLimpiarFiltros?: () => void;
 }
 
 export function CompanyListTable({
@@ -43,58 +58,78 @@ export function CompanyListTable({
   onConfigure,
   onEdit,
   onToggleStatus,
+  filtros,
+  onLimpiarFiltros,
 }: CompanyListTableProps) {
+  const enc = (id: string, titulo: string) =>
+    filtros ? (
+      <EncabezadoFiltrable filtros={filtros} columnaId={id}>
+        {titulo}
+      </EncabezadoFiltrable>
+    ) : (
+      titulo
+    );
   return (
-    <div className="flex flex-1 flex-col">
+    <div className={`flex flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
       {/* Bug #13055 — tabla homologada con el modelo de trámites */}
       <table
         aria-label="Compañías"
-        className="min-w-[760px] text-xs"
+        className={`min-w-[760px] text-xs ${TABLA_MOVIL_TABLE_CLS}`}
         style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
       >
-        <thead>
+        <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Código
+              {enc("codigo", "Código")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              NIT
+              {enc("nit", "NIT")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Razón Social
+              {enc("razonSocial", "Razón Social")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Tipo
+              {enc("tipo", "Tipo")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Estado
+              {enc("estado", "Estado")}
             </th>
             <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
-              Fecha creación
+              {enc("fechaCreacion", "Fecha creación")}
             </th>
             <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>
               Acciones
             </th>
           </tr>
         </thead>
-        <tbody>
+        <tbody className={TABLA_MOVIL_TBODY_CLS}>
+          {items.length === 0 && onLimpiarFiltros ? (
+            <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
+              <td colSpan={7} className={TABLA_MOVIL_FILA_ANCHA_CLS}>
+                <TablaFiltrosVacio
+                  onLimpiar={onLimpiarFiltros}
+                  mensaje="Ninguna compañía coincide con los filtros"
+                />
+              </td>
+            </tr>
+          ) : null}
           {items.map((c) => {
             // Solo las compañías del catálogo B2B son editables; los tenants de tipo
             // heredado (sistema / organismos de tránsito) se muestran solo-lectura.
             const editable = isB2BTenantType(c.tenantType) && !c.isTransitOffice;
             return (
-            <tr key={c.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-              <td className="whitespace-nowrap border-y border-l px-4 py-3 font-mono font-semibold rounded-l-xl" style={{ borderColor: "#DFE5ED" }}>
+            <tr key={c.id} className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+              <td data-label="Código" className={`whitespace-nowrap border-y border-l px-4 py-3 font-mono font-semibold rounded-l-xl ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {c.code}
               </td>
-              <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="NIT" className={`border-y px-4 py-3 font-mono ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {c.nit}
               </td>
-              <td className="border-y px-4 py-3 font-semibold" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="Razón Social" className={`border-y px-4 py-3 font-semibold ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {c.razonSocial}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="Tipo" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {c.isTransitOffice ? (
                   <StatusBadge label="OT" tone="info" ariaLabel="Tipo: Organismo de Tránsito" />
                 ) : (
@@ -105,22 +140,22 @@ export function CompanyListTable({
                   />
                 )}
               </td>
-              <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="Estado" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {c.estadoActivo ? (
                   <StatusBadge label="Activa" tone="success" />
                 ) : (
                   <StatusBadge label="Inactiva" tone="danger" />
                 )}
               </td>
-              <td className="border-y px-4 py-3 opacity-70" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="Fecha creación" className={`border-y px-4 py-3 opacity-70 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 {formatDate(c.fechaCreacion)}
               </td>
-              <td className="border-y border-r px-4 py-3 text-right rounded-r-xl" style={{ borderColor: "#DFE5ED" }}>
+              <td data-label="Acciones" className={`border-y border-r px-4 py-3 text-right rounded-r-xl ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
                 <div className="flex items-center justify-end gap-1">
                   <RowActions
                     actions={[
                       {
-                        icon: editable ? Pencil : Lock,
+                        icon: editable ? iconoComo("lapiz") : iconoComo("candado"),
                         label: `Editar ${c.razonSocial}`,
                         onClick: () => editable && onEdit(c),
                         tone: "primary",
@@ -138,7 +173,7 @@ export function CompanyListTable({
                   <RowActions
                     actions={[
                       {
-                        icon: Settings2,
+                        icon: iconoComo("ajustes"),
                         label: `Configurar ${c.razonSocial}`,
                         onClick: () => onConfigure(c.id),
                         tone: "primary",
@@ -154,6 +189,7 @@ export function CompanyListTable({
       </table>
       </div>
 
+      {items.length === 0 && onLimpiarFiltros ? null : (
       <Pagination
         page={page}
         pageSize={pageSize}
@@ -162,6 +198,7 @@ export function CompanyListTable({
         onPageSizeChange={onPageSizeChange}
         className="mt-auto"
       />
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import type { ComponentType } from 'react';
-import { CheckCircle2, Clock, Hourglass, Timer, XCircle } from 'lucide-react';
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { StatusTone } from '@/components/atom/StatusBadge';
 import type { ManualOrigin, ManualStatus } from '@/lib/api/types/manual-review';
 
@@ -14,17 +14,17 @@ export interface ManualStatusMeta {
 }
 
 export const MANUAL_STATUS_META: Record<ManualStatus, ManualStatusMeta> = {
-  manual_activo: { label: 'Esperando captura', tone: 'info', icon: Hourglass },
-  pendiente_revision_manual: { label: 'Pendiente de revisión', tone: 'info', icon: Clock },
-  aprobado: { label: 'Aprobada manual', tone: 'success', icon: CheckCircle2 },
-  rechazado: { label: 'Rechazada', tone: 'danger', icon: XCircle },
-  expirado: { label: 'Vencida', tone: 'neutral', icon: Timer },
+  manual_activo: { label: 'Esperando captura', tone: 'info', icon: iconoComo("espera") },
+  pendiente_revision_manual: { label: 'Pendiente de revisión', tone: 'info', icon: iconoComo("reloj") },
+  aprobado: { label: 'Aprobada manual', tone: 'success', icon: iconoComo("check") },
+  rechazado: { label: 'Rechazada', tone: 'danger', icon: iconoComo("cerrar") },
+  expirado: { label: 'Vencida', tone: 'neutral', icon: iconoComo("cronometro") },
 };
 
 /** Estado desconocido (el backend puede añadir uno): neutral, con el código visible. */
 export function manualStatusMeta(status: string): ManualStatusMeta {
   return (
-    MANUAL_STATUS_META[status as ManualStatus] ?? { label: status, tone: 'neutral', icon: Timer }
+    MANUAL_STATUS_META[status as ManualStatus] ?? { label: status, tone: 'neutral', icon: iconoComo("cronometro") }
   );
 }
 

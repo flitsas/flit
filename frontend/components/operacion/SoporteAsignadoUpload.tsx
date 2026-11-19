@@ -1,7 +1,7 @@
 'use client';
 
 import { useId, useState } from 'react';
-import { ChevronDown, FileUp } from 'lucide-react';
+import { Icono } from '@flit/ui/Icono';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 
 /** Lo que muestra la caja tras procesar el archivo. */
@@ -64,10 +64,7 @@ export function SoporteAsignadoUpload({
         disabled={disabled}
       >
         {etiqueta}
-        <ChevronDown
-          aria-hidden="true"
-          className={`h-4 w-4 transition-transform ${abierto ? 'rotate-180' : ''}`}
-        />
+        <Icono nombre="abajo" className={`h-4 w-4 transition-transform ${abierto ? 'rotate-180' : ''}`} />
       </button>
       {abierto ? (
         <div id={panelId} className="mt-2">
@@ -81,7 +78,7 @@ export function SoporteAsignadoUpload({
               opacity: disabled || cargando ? 0.6 : 1,
             }}
           >
-            <FileUp aria-hidden="true" className="h-5 w-5" />
+            <Icono nombre="archivo-subir" className="h-5 w-5" />
             {cargando ? textoCargando : textoSeleccionar}
             <input
               id={inputId}

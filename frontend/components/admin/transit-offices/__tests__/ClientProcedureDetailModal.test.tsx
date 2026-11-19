@@ -9,6 +9,7 @@ import userEvent from "@testing-library/user-event";
 import { ToastProvider } from "@/components/admin/Toast";
 import { ClientProcedureDetailModal } from "../ClientProcedureDetailModal";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
+import { formatFechaHora } from "@/lib/format/date";
 
 const fetchOtClientProcedure = vi.fn();
 const fetchOtDocuments = vi.fn();
@@ -326,5 +327,102 @@ describe("ClientProcedureDetailModal (HU #11930 · rediseño HU #12060)", () => 
 
     expect(await screen.findByText(/No se pudo cargar el historial de estados/i)).toBeInTheDocument();
     expect(acordeon(ACORDEONES[0]!)).toBeInTheDocument();
+  });
+
+  it("HU #14182 AC1 — un trámite visible muestra sus modificaciones, la más reciente primero", async () => {
+    const reciente = "2026-10-28T20:21:00.000Z";
+    const enBorrador = "2026-10-02T13:00:00.000Z";
+    const conMods: OtClientProcedure = {
+      ...PROCEDURE,
+      statusHistory: [
+        {
+          fromStatus: "borrador",
+          toStatus: "entregado",
+          changedAt: reciente,
+          reason: "Enviado",
+          changedByName: "Solo En Timeline",
+          changedByEmail: "solo-timeline@flit.test",
+          changedByCompania: "OT Demo",
+        },
+      ],
+      modificaciones: [
+        {
+          etiqueta: "Estado",
+          campo: "estado",
+          anterior: "borrador",
+          nuevo: "entregado",
+          changedAt: reciente,
+          actorNombre: "Ana Gómez",
+          actorCompania: "Empresa Demo",
+        },
+        {
+          etiqueta: "Color",
+          campo: "color",
+          anterior: "",
+          nuevo: "Rojo",
+          changedAt: enBorrador,
+          actorNombre: null,
+          actorCompania: null,
+        },
+      ],
+    };
+    fetchOtClientProcedure.mockResolvedValue(conMods);
+    render(
+      <ToastProvider>
+        <ClientProcedureDetailModal
+          open
+          procedure={conMods}
+          onClose={vi.fn()}
+          initialPanel="timeline"
+        />
+      </ToastProvider>,
+    );
+
+    const lista = await screen.findByRole("list", { name: "Línea de tiempo del trámite" });
+    const items = within(lista).getAllByRole("listitem");
+    expect(items).toHaveLength(2);
+
+    // El carril va del más antiguo al vigente, con las mismas tarjetas del gestor.
+    expect(items[0]).toHaveTextContent("Color");
+    expect(items[0]).toHaveTextContent("Gestor");
+    expect(items[0]).toHaveTextContent("Fecha y hora");
+    expect(items[0]).toHaveTextContent(formatFechaHora(enBorrador));
+    expect(items[0]).toHaveTextContent("Sistema");
+    expect(items[0]).toHaveTextContent("Rojo");
+
+    expect(items[1]).toHaveTextContent("Entregado");
+    expect(items[1]).toHaveTextContent("Ana Gómez");
+    expect(items[1]).toHaveTextContent("Empresa Demo");
+    expect(items[1]).toHaveTextContent("Entregado desde Borrador");
+    expect(items[1]).toHaveTextContent("Vigente");
+
+    // La misma transición ya está en modificaciones: el carril de estados no la repite.
+    expect(screen.queryByText("solo-timeline@flit.test")).not.toBeInTheDocument();
+    expect(screen.queryByText("Solo En Timeline")).not.toBeInTheDocument();
+  });
+
+  it("HU #14182 AC2 — sin modificaciones no hay entradas ni una consulta de historial aparte", async () => {
+    const sinMods: OtClientProcedure = { ...PROCEDURE, statusHistory: [], modificaciones: [] };
+    fetchOtClientProcedure.mockResolvedValue(sinMods);
+    render(
+      <ToastProvider>
+        <ClientProcedureDetailModal
+          open
+          procedure={sinMods}
+          onClose={vi.fn()}
+          initialPanel="timeline"
+        />
+      </ToastProvider>,
+    );
+
+    expect(await screen.findByText("Todavía no hay modificaciones")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("list", { name: "Modificaciones del trámite" }),
+    ).not.toBeInTheDocument();
+
+    const src = readFileSync(join(__dirname, "../ClientProcedureDetailModal.tsx"), "utf8");
+    expect(src).not.toMatch(/status-history/);
+    expect(JSON.stringify(fetchOtClientProcedure.mock.calls)).not.toMatch(/status-history/i);
+    expect(JSON.stringify(fetchOtDocuments.mock.calls)).not.toMatch(/status-history/i);
   });
 });

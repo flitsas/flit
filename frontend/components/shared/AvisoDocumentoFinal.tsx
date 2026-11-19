@@ -1,6 +1,6 @@
 'use client';
 
-import { BadgeCheck } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   COPY_DOCUMENTO_FINAL_DETALLE,
   COPY_DOCUMENTO_FINAL_TITULO,
@@ -8,7 +8,7 @@ import {
 
 /**
  * HU #12786 (AC4) / HU #12787 (AC3) — aviso de que el consolidado mostrado es el documento FINAL
- * del trámite (estado aprobado/anulado/revocado) y no se regenera.
+ * del trámite (estado aprobado/anulado/revocado); solo se reconstruye si un administrador actualiza un documento.
  *
  * Mismo tratamiento de «estado válido» que la tarjeta de identidad verificada (`MatriculaResumen`):
  * fondo verde suave, borde verde y tinta `--flit-success-ink`. No depende solo del color: lleva
@@ -22,11 +22,7 @@ export function AvisoDocumentoFinal({ className }: { className?: string }) {
       role="status"
       data-testid="aviso-documento-final"
     >
-      <BadgeCheck
-        className="mt-0.5 h-4 w-4 shrink-0"
-        style={{ color: 'var(--flit-success-ink)' }}
-        aria-hidden="true"
-      />
+      <Icono nombre="check" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: 'var(--flit-success-ink)' }} />
       <p className="text-xs">
         <span className="font-bold" style={{ color: 'var(--flit-success-ink)' }}>
           {COPY_DOCUMENTO_FINAL_TITULO}.

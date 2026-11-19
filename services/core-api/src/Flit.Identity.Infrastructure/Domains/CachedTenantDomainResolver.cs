@@ -1,5 +1,6 @@
 using Flit.Admin.Application.Companies.Domains;
 using Flit.Admin.Domain.Companies.Domains;
+using Flit.Admin.Domain.Companies.TransitOffices.PortalDominio;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging;
 
@@ -19,7 +20,8 @@ namespace Flit.Infrastructure.Domains;
 internal sealed class CachedTenantDomainResolver(
     ITenantDomainRepository repository,
     IMemoryCache cache,
-    ILogger<CachedTenantDomainResolver> logger) : ITenantDomainResolver
+    ILogger<CachedTenantDomainResolver> logger,
+    IPortalDominioRepository? portales = null) : ITenantDomainResolver
 {
     private static readonly TimeSpan Ttl = TimeSpan.FromSeconds(60);
     private const string ResolveCacheKeyPrefix = "flit:domain-resolve:";
@@ -60,14 +62,18 @@ internal sealed class CachedTenantDomainResolver(
             }
             else
             {
-                resolution = NetworkResolution.None;
+                // HU #14383: si no es de una red, puede ser el dominio activo del portal de un organismo.
+                // Eso NO es una red: no abre el login de FLIT ni acota el acceso de ninguna.
+                var organismo = portales is null ? null : await portales.ObtenerOrganismoActivoPorHostAsync(normalizedHost, cancellationToken).ConfigureAwait(false);
+                resolution = organismo is { } o ? NetworkResolution.Portal(o.TransitOfficeId) : NetworkResolution.None;
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Fail-closed (AC4): un fallo del resolutor nunca produce una red — siempre "sin red".
+            // No se cachea: un fallo pasajero no debe dejar 60 s a un dominio de portal tratado como si no lo fuera.
             DomainResolverLog.ResolveFailed(_logger, normalizedHost, ex);
-            resolution = NetworkResolution.None;
+            return NetworkResolution.None;
         }
 
         _cache.Set(cacheKey, resolution, Ttl);

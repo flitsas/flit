@@ -1,0 +1,49 @@
+{
+  // core-diagnostico en tu máquina (docs/suite/local.md). Copia este archivo a appsettings.Development.json (ignorado
+  // por git) y reemplaza cada CAMBIAR. Puertos de la ronda D0 (plan v2, RD-4, modificado el 2026-11-04): API 4032, gRPC interno 8088.
+  "Urls": "http://127.0.0.1:4032",
+  "Servicio": { "GrpcPort": 8088, "MigrateOnStartup": true },
+  "ConnectionStrings": {
+    // La misma base de core-api; el servicio usa su esquema propio «diagnostico» y lo migra al arrancar.
+    "Servicio": "Host=127.0.0.1;Port=5432;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
+  },
+  // Evidencias y PDF del informe (HU #13846): el mismo file-manager de core-api, en su propia categoría. Sin BaseUrl no arranca.
+  "FileManager": {
+    "BaseUrl": "https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/",
+    "FilesPath": "api/v1/files",
+    "Category": "diagnostico",
+    "TimeoutSeconds": 30
+  },
+  "Diagnostico": {
+    "Ambiente": "LOCAL",
+    // ADR-0075: las consultas de las celdas van por RabbitMQ a core-consultas, que es quien simula los proveedores en LOCAL y DEV
+    // (levántalo con su simulación y el broker de deploy/rabbitmq/docker-compose.local.yml). El consumidor de resultados (cola
+    // diagnostico.consultas-resultados) y el reconciliador solo corren con ConsumidorHabilitado=true. Address es el gRPC de
+    // core-consultas, que aquí solo sirve para la réplica de departamentos con impuesto.
+    "Consultas": {
+      "Address": "http://127.0.0.1:8084",
+      "Bus": { "ConsumidorHabilitado": true }
+    },
+    // El impuesto además exige ≥ 1 departamento en la réplica (la sincroniza ListarDepartamentosImpuesto de core-consultas).
+    "Fuentes": { "ImpuestoDisponible": true },
+    // Solo en local: la empresa queda suscrita al producto sin preguntarle a Identidad. Nunca en DEV, QA ni PDN.
+    "Identidad": { "SimularSuscripcionActiva": true },
+    // Catálogo de tipos de trámite (HU #13742): gRPC de core-api con Ict__GrpcPort=8082 (docs/suite/local.md). Sin esta
+    // dirección GET /tipos-tramite responde 503: no hay lista de respaldo.
+    "Tramites": { "Address": "http://127.0.0.1:8082" }
+  },
+  "Platform": {
+    "Auth": {
+      "JwksUri": "http://127.0.0.1:4003/.well-known/jwks.json",
+      "Issuers": [ "http://127.0.0.1:4022/" ]
+    },
+    "ServiceClient": {
+      "ClientSecret": "CAMBIAR-igual-a-svc-diagnostico-en-core-api",
+      "TokenEndpoint": "http://127.0.0.1:4003/connect/token"
+    },
+    "Messaging": {
+      // Usuario «diagnostico» con deploy/rabbitmq/usuario-de-servicio.sh (entregable P1 del plan v2).
+      "ConnectionString": "amqp://diagnostico:CAMBIAR@127.0.0.1:5672/flit"
+    }
+  }
+}

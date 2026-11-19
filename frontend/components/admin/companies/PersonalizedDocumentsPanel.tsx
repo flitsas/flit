@@ -5,25 +5,13 @@
 // Visibilidad condicionada al canal (DT-7): solo se monta si `enrutamientoSMTP === "TENANT_API"`, leído
 // SIEMPRE de la configuración que devuelve la API (nunca de una lista fija en el bundle). Precedente
 // visual: panel de escrituras/representantes legales (`DeedsFormPanel`, `RepresentativesAndVaultTab`).
-import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  AlertTriangle,
-  Eye,
-  FileText,
-  History,
-  Loader2,
-  RotateCcw,
-  Undo2,
-  UploadCloud,
-} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from "@/components/atom/Modal";
 import { RowActions } from "@/components/atom/RowActions";
-import {
-  TABLA_HEADER_BG,
-  TABLA_HEADER_CELL_CLS,
-  TABLA_HEADER_FG,
-  TABLA_ROW_HOVER_CLS,
-} from "@/components/atom/table-styles";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -44,6 +32,7 @@ import { ApiValidationError } from "@/lib/api/types";
 import type { EnrutamientoSMTP } from "@/lib/api/types";
 
 import { formatFechaHora } from "@/lib/format/date";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 export interface PersonalizedDocumentsPanelProps {
 
   tenantId: string;
@@ -121,7 +110,7 @@ function PersonalizedDocumentsPanelContent({ tenantId }: { tenantId: string }) {
     <section aria-label="Documentos personalizados de la compañía" className="space-y-4">
       <header>
         <h2 className="flex items-center gap-2 text-sm font-semibold">
-          <FileText className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} aria-hidden />
+          <Icono nombre="documento" className="h-4 w-4" style={{ color: "var(--color-flit-brand)" }} />
           Documentos personalizados
         </h2>
         <p className="mt-0.5 max-w-2xl text-xs opacity-60">
@@ -185,6 +174,12 @@ function PersonalizedDocumentSection({
   const active = group?.active ?? null;
   const history = group?.history ?? [];
   const hasAnything = active !== null || history.length > 0;
+  // HU #13918 — misma clave para los dos tipos de documento: es la misma tabla de historial de versiones.
+  const pg = usePaginacion("companies.PersonalizedDocumentsPanel.historial");
+  const sortedHistory = useMemo(
+    () => [...(group?.history ?? [])].sort((x, y) => y.version - x.version),
+    [group],
+  );
 
   const inputId = `personalized-doc-file-${documentType}`;
 
@@ -304,8 +299,68 @@ function PersonalizedDocumentSection({
     else void runDeactivate();
   };
 
+  const historyColumns: DataTableColumn<PersonalizedDocumentVersion>[] = [
+    {
+      key: "version",
+      header: "Versión",
+      cellClassName: "font-mono",
+      render: (v) => `v${v.version}`,
+    },
+    {
+      key: "autor",
+      header: "Autor",
+      cellClassName: "font-mono",
+      render: (v) => <span title={v.createdBy ?? undefined}>{shortId(v.createdBy)}</span>,
+    },
+    { key: "fecha", header: "Fecha", render: (v) => formatDate(v.createdAt) },
+    { key: "paginas", header: "Páginas", render: (v) => v.pageCount ?? "—" },
+    {
+      key: "vigencia",
+      header: "Vigencia",
+      render: (v) =>
+        v.isActive ? (
+          <span
+            {...etiquetaKit("success")}
+          >
+            <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
+            Vigente
+          </span>
+        ) : (
+          <span className="opacity-60">Histórico</span>
+        ),
+    },
+    {
+      key: "acciones",
+      header: "Acciones",
+      align: "right",
+      render: (v) => (
+        <RowActions
+          actions={[
+            {
+              icon: iconoComo("ojo"),
+              label: `Ver versión ${v.version}`,
+              onClick: () => void openPreview(v),
+              tone: "primary",
+            },
+            ...(!v.isActive
+              ? [
+                  {
+                    icon: iconoComo("reintento"),
+                    label: `Reactivar versión ${v.version}`,
+                    onClick: () => setDialog({ kind: "reactivate", versionId: v.id, version: v.version }),
+                    tone: "primary" as const,
+                    disabled: rowBusyId === v.id,
+                  },
+                ]
+              : []),
+          ]}
+        />
+      ),
+    },
+  ];
+
   return (
-    <div className="rounded-2xl border p-4" style={{ borderColor: "#DFE5ED" }}>
+    <div className="rounded-2xl border p-4" style={{ borderColor: "var(--border)" }}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h3 className="text-xs font-semibold">{meta.title}</h3>
@@ -317,9 +372,9 @@ function PersonalizedDocumentSection({
             onClick={() => setDialog({ kind: "deactivate" })}
             disabled={submitting}
             className="flex shrink-0 items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-semibold disabled:opacity-50"
-            style={{ borderColor: "#DFE5ED" }}
+            style={{ borderColor: "var(--border)" }}
           >
-            <Undo2 className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="devolucion" className="h-3.5 w-3.5" />
             Volver al documento del sistema
           </button>
         )}
@@ -333,7 +388,7 @@ function PersonalizedDocumentSection({
             style={{ borderColor: "var(--color-flit-tech)", background: "color-mix(in srgb, var(--color-flit-tech) 6%, transparent)" }}
           >
             <div className="flex min-w-0 items-center gap-2">
-              <FileText className="h-4 w-4 shrink-0" style={{ color: "#0a8f8b" }} aria-hidden />
+              <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: "var(--flit-success-ink)" }} />
               <span className="min-w-0">
                 <span className="block truncate text-xs font-semibold">
                   {active.filename} <span className="opacity-60">· v{active.version}</span>
@@ -349,14 +404,14 @@ function PersonalizedDocumentSection({
               className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold text-white"
               style={{ background: "var(--color-flit-brand)" }}
             >
-              <Eye className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="ojo" className="h-3.5 w-3.5" />
               Vista previa
             </button>
           </div>
         ) : (
           <p
             className="rounded-xl border px-3 py-2 text-xs opacity-70"
-            style={{ borderColor: "#DFE5ED" }}
+            style={{ borderColor: "var(--border)" }}
             data-testid={`personalized-doc-empty-${documentType}`}
           >
             Ningún documento personalizado activo: se usa el generado por FLIT.
@@ -367,7 +422,7 @@ function PersonalizedDocumentSection({
       {/* Carga de un PDF nuevo */}
       <div className="mt-3">
         {uploadError && (
-          <p role="alert" className="mb-2 text-xs font-medium" style={{ color: "#FF4E00" }}>
+          <p role="alert" className="mb-2 text-xs font-medium" style={{ color: "var(--destructive)" }}>
             {uploadError}
           </p>
         )}
@@ -375,12 +430,12 @@ function PersonalizedDocumentSection({
           <label
             htmlFor={inputId}
             className="flex flex-1 cursor-pointer items-center gap-2 rounded-xl border border-dashed px-3 py-2.5 text-xs"
-            style={file ? { borderColor: "var(--color-flit-brand)" } : { borderColor: "#DFE5ED" }}
+            style={file ? { borderColor: "var(--color-flit-brand)" } : { borderColor: "var(--border)" }}
           >
             {file ? (
-              <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} aria-hidden />
+              <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: "var(--color-flit-brand)" }} />
             ) : (
-              <UploadCloud className="h-4 w-4 shrink-0 opacity-60" aria-hidden />
+              <Icono nombre="archivo-subir" className="h-4 w-4 shrink-0 opacity-60" />
             )}
             <span className="min-w-0 truncate font-medium">
               {file ? file.name : "Selecciona el PDF del documento personalizado"}
@@ -402,9 +457,9 @@ function PersonalizedDocumentSection({
             disabled={!file || submitting}
             onClick={() => file && setDialog({ kind: "activate", file })}
             className="flex shrink-0 items-center gap-2 rounded-xl px-4 py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            style={{ background: "var(--gradient-action)" }}
           >
-            {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+            {submitting && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
             Cargar y activar
           </button>
         </div>
@@ -417,78 +472,24 @@ function PersonalizedDocumentSection({
       {hasAnything && (
         <div className="mt-4">
           <h4 className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold opacity-70">
-            <History className="h-3.5 w-3.5" aria-hidden />
+            <Icono nombre="reloj" className="h-3.5 w-3.5" />
             Historial
           </h4>
-          {/* Bug #13055 — tabla homologada con el modelo de trámites (fija: historial de versiones, sin paginar) */}
-          <div className="overflow-x-auto">
-            <table
-              className="text-xs"
-              aria-label={`Historial de ${meta.title}`}
-              style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
-            >
-              <thead>
-                <tr>
-                  <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Versión</th>
-                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Autor</th>
-                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Fecha</th>
-                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Páginas</th>
-                  <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Vigencia</th>
-                  <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {[...history]
-                  .sort((a, b) => b.version - a.version)
-                  .map((v) => (
-                    <tr key={v.id} className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-                      <td className="rounded-l-xl border-y border-l px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }}>v{v.version}</td>
-                      <td className="border-y px-4 py-3 font-mono" style={{ borderColor: "#DFE5ED" }} title={v.createdBy ?? undefined}>
-                        {shortId(v.createdBy)}
-                      </td>
-                      <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>{formatDate(v.createdAt)}</td>
-                      <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>{v.pageCount ?? "—"}</td>
-                      <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
-                        {v.isActive ? (
-                          <span
-                            className="rounded-md px-1.5 py-0.5 text-xs font-semibold"
-                            style={{ color: "#0a8f8b", background: "color-mix(in srgb, var(--color-flit-tech) 12%, transparent)" }}
-                          >
-                            Vigente
-                          </span>
-                        ) : (
-                          <span className="opacity-60">Histórico</span>
-                        )}
-                      </td>
-                      <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
-                        <RowActions
-                          actions={[
-                            {
-                              icon: Eye,
-                              label: `Ver versión ${v.version}`,
-                              onClick: () => void openPreview(v),
-                              tone: "primary",
-                            },
-                            ...(!v.isActive
-                              ? [
-                                  {
-                                    icon: RotateCcw,
-                                    label: `Reactivar versión ${v.version}`,
-                                    onClick: () =>
-                                      setDialog({ kind: "reactivate", versionId: v.id, version: v.version }),
-                                    tone: "primary" as const,
-                                    disabled: rowBusyId === v.id,
-                                  },
-                                ]
-                              : []),
-                          ]}
-                        />
-                      </td>
-                    </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+          {/* HU #13918 — historial con DataTable y paginación estándar en cliente. */}
+          <DataTable<PersonalizedDocumentVersion>
+            tarjeta={false}
+            ariaLabel={`Historial de ${meta.title}`}
+            rows={pg.paginar(sortedHistory)}
+            getRowKey={(v) => v.id}
+            columns={historyColumns}
+            pagination={{
+              page: pg.page,
+              pageSize: pg.pageSize,
+              totalCount: sortedHistory.length,
+              onPageChange: pg.setPage,
+              onPageSizeChange: pg.setPageSize,
+            }}
+          />
         </div>
       )}
 
@@ -509,15 +510,15 @@ function PersonalizedDocumentSection({
           onClose={closePreview}
           title={`Vista previa · ${preview.label}`}
           size="lg"
-          icon={Eye}
+          icono="ojo"
         >
           {preview.loading && (
             <p className="flex items-center gap-2 text-sm opacity-70">
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Generando vista previa…
+              <Icono nombre="girador" className="h-4 w-4 animate-spin" /> Generando vista previa…
             </p>
           )}
           {preview.error && (
-            <p role="alert" className="text-sm" style={{ color: "#FF4E00" }}>
+            <p role="alert" className="text-sm" style={{ color: "var(--destructive)" }}>
               {preview.error}
             </p>
           )}
@@ -526,7 +527,7 @@ function PersonalizedDocumentSection({
               src={preview.url}
               title={`Vista previa de ${preview.label}`}
               className="h-[70vh] w-full rounded-xl border"
-              style={{ borderColor: "#DFE5ED" }}
+              style={{ borderColor: "var(--border)" }}
             />
           )}
         </Modal>
@@ -573,8 +574,8 @@ function DocumentActionDialog({
       onClose={onCancel}
       busy={busy}
       size="sm"
-      icon={isActivation ? AlertTriangle : Undo2}
-      iconBg={isActivation ? "#F9AC00" : "var(--color-flit-brand)"}
+      icono={isActivation ? "alerta" : "devolucion"}
+      iconBg={isActivation ? "var(--color-flit-alert)" : "var(--color-flit-brand)"}
       title={title}
     >
       {isActivation ? (
@@ -582,7 +583,7 @@ function DocumentActionDialog({
           <div
             role="alert"
             className="mt-2 rounded-xl border px-3 py-2 text-xs"
-            style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+            style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           >
             {warningText}
           </div>

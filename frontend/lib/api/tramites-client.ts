@@ -343,6 +343,20 @@ function parseProblem(body: string): Record<string, unknown> | null {
  * funcionando sin cambios; los que necesitan reaccionar a un código de error concreto (p. ej. AC1
  * de HU #10882, 409 `DUPLICATE_ACTIVE_PROCEDURE`) leen `.status` / `.problem`.
  */
+/** Bug #14604 — tipo de documento habilitado para la carga administrativa. */
+export interface AdminTipoDocumento {
+  tipo: string;
+  nombre: string;
+}
+
+/** Bug #14604 — respuesta 201 de la carga administrativa de un documento. */
+export interface AdminCargarDocumentoResult {
+  attachmentId: string;
+  tipo: string;
+  filename: string;
+  previousAttachmentIds: string[];
+}
+
 export class TramitesApiError extends Error {
   constructor(
     public readonly status: number,
@@ -2775,6 +2789,43 @@ export const tramitesClient = {
     return (await res.json()) as ProcedureAttachment;
   },
 
+  /** Bug #14604 — tipos de documento que el admin puede cargar en el trámite. */
+  adminListarTiposDocumento: (
+    instanceId: string,
+    tenantId?: string,
+  ): Promise<AdminTipoDocumento[]> =>
+    request<AdminTipoDocumento[]>(`/api/v1/admin/tramites/${instanceId}/documentos/tipos`, {
+      headers: tenantHeader(tenantId),
+    }),
+
+  /**
+   * Bug #14604 — carga un documento en el trámite en CUALQUIER estado, con observación obligatoria.
+   * Multipart (`file`, `tipo`, `observacion`): NO usa `request()` (fija Content-Type: application/json),
+   * mismo patrón que `adminCargarConsolidado`. Errores: `TramitesApiError` con `.status` y el
+   * ProblemDetails (`detail` ya viaja en `.message`): 400 missing_file | invalid_mime | file_too_large |
+   * observacion_requerida, 422 tipo_no_habilitado, 404, 409 bloqueo FLITO.
+   */
+  adminCargarDocumento: async (
+    instanceId: string,
+    input: { file: File; tipo: string; observacion: string },
+    tenantId?: string,
+  ): Promise<AdminCargarDocumentoResult> => {
+    const form = new FormData();
+    form.append('file', input.file);
+    form.append('tipo', input.tipo);
+    form.append('observacion', input.observacion);
+    const res = await fetch(apiUrl(`/api/v1/admin/tramites/${instanceId}/documentos`), {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    }
+    return (await res.json()) as AdminCargarDocumentoResult;
+  },
+
   /** HU #12159 — cambia `status` sin restricciones de flujo (rechaza 422 si origen/destino es 'aprobado'). */
   adminCambiarEstado: (
     instanceId: string,
@@ -2815,6 +2866,35 @@ export const tramitesClient = {
         method: 'POST',
         headers: tenantHeader(tenantId),
         body: JSON.stringify({ email }),
+      },
+    ),
+
+  /** HU #13825 (backend #13824) — vence una identidad aprobada y vigente (solo Super Admin; sin body). */
+  vencerIdentidad: (validationId: string) =>
+    request<VencerIdentidadResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/vencer`,
+      { method: 'POST' },
+    ),
+
+  /** HU #13822 (Feature #13819) — personas SIN firmar a las que se puede reenviar la validación. */
+  adminListValidacionesReenviables: (instanceId: string, tenantId?: string) =>
+    request<AdminValidacionesReenviablesResult>(
+      `/api/v1/admin/tramites/${instanceId}/validaciones-identidad/reenviables`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  /** HU #13822 — reenvía la validación a varias personas a la vez (1..8), resultado por persona. */
+  adminReenviarValidacionesLote: (
+    instanceId: string,
+    items: AdminReenviarLoteItemInput[],
+    tenantId?: string,
+  ) =>
+    request<AdminReenviarLoteResult>(
+      `/api/v1/admin/tramites/${instanceId}/validaciones-identidad/reenviar`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ items }),
       },
     ),
 
@@ -2894,6 +2974,61 @@ export interface AdminReenviarValidacionResult {
   emailActualizado: boolean;
   /** `true` = 202 Accepted (falla transitoria del proveedor; el worker reintenta). */
   queued: boolean;
+}
+
+/** HU #13825 — resultado de vencer una identidad (espejo de `VencerIdentidadResult`). */
+export interface VencerIdentidadResult {
+  validationId: string;
+  tenantId: string;
+  procedureInstanceId: string | null;
+  vencidaAt: string;
+  borradoresAfectados: number;
+  enlaceEnviado: boolean;
+  nuevaValidacionId: string | null;
+  tramiteBorradorId: string | null;
+  tramiteBorradorReferencia: string | null;
+  /** Absoluta con Kyverum; relativa (`/biometric/{token}`) con el proveedor mock. */
+  enlaceCaptura: string | null;
+  enCola: boolean;
+  /** sin_borradores | validacion_en_curso | proveedor_error | proveedor_no_disponible | datos_incompletos | actor_requerido */
+  motivoSinEnlace: string | null;
+}
+
+/** HU #13822 — persona sin firmar que admite reenvío (espejo del contrato HU #13821). */
+export interface AdminValidacionReenviable {
+  validationId: string;
+  partyRole: string | null;
+  ordinal: number | null;
+  name: string;
+  email: string | null;
+  status: string;
+  captureUrl: string | null;
+  captureExpiresAt: string | null;
+  esFlujoManual: boolean;
+}
+
+export interface AdminValidacionesReenviablesResult {
+  personas: AdminValidacionReenviable[];
+}
+
+export interface AdminReenviarLoteItemInput {
+  validationId: string;
+  email: string | null;
+}
+
+export interface AdminReenviarLoteItemResult {
+  validationId: string;
+  ok: boolean;
+  queued: boolean;
+  captureUrl: string | null;
+  emailActualizado: boolean;
+  email: string | null;
+  error: string | null;
+  mensaje: string | null;
+}
+
+export interface AdminReenviarLoteResult {
+  items: AdminReenviarLoteItemResult[];
 }
 
 /** HU #12162 — resultado de la reasignación administrativa de gestor. */

@@ -53,6 +53,12 @@ public static class AdminAuthorization
     /// <summary>Valor del claim de rol para administrador OT.</summary>
     public const string OtAdminRole = "ot_admin";
 
+    /// <summary>
+    /// Rol de la caja del organismo (HU #14454, ADR-0082): cobra en el portal del punto y NO entra a FLIT 2.0. Atado a un organismo
+    /// (<c>TRANSIT_OFFICE</c>), producto <c>caja</c>.
+    /// </summary>
+    public const string OtCajaRole = "ot_caja";
+
     /// <summary>Mensaje de error 403 cuando falta el rol ot_admin.</summary>
     public const string OtAdminForbiddenMessage = "Acceso restringido: se requiere rol ot_admin";
 

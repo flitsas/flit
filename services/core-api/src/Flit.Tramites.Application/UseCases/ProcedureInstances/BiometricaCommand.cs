@@ -249,7 +249,9 @@ public sealed class IniciarBiometriaHandler(
         var existing = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
             && (actoresDelRol <= 1 || BiometricRules.DocumentoCoincide(v, tipoDoc, documento))
-            && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.Aprobado);
+            && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso or BiometricEstados.Aprobado
+            // HU #13824 — una aprobada que un Super Admin venció a mano ya no bloquea: es justo lo que se revalida.
+            && !(v.ExpiredManuallyAt != null && !BiometricRules.EsAprobadaVigente(v, now)));
         if (existing is not null)
             return (null, "biometria_activa", null);
 
@@ -569,11 +571,16 @@ public sealed class ListBiometriaHandler(
                     }
                 }
 
+                // HU #13824 - salida de borrador: una identidad vencida a mano solo vale si el tramite salio ANTES del vencimiento.
+                var salidaDeBorrador = IdentityApprovalResolver.TieneVencidaManualLocal(instance)
+                    ? await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct)
+                    : null;
+
                 // Filas PROPIAS de la parte que ya están aprobadas y vigentes para el documento del sujeto:
                 // son las únicas que pueden representar el estado de la parte sin referenciar otro trámite.
                 var vigentesLocales = instance.BiometricValidations
                     .Where(v => string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
-                                && BiometricRules.EsAprobadaVigente(v, now)
+                                && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now, salidaDeBorrador)
                                 && BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, documentoSujeto))
                     .ToList();
                 if (vigentesLocales.Count > 0)
@@ -589,6 +596,14 @@ public sealed class ListBiometriaHandler(
 
                 var source = await repo.FindVigenteApprovedByDocumentAsync(
                     instance.TenantId, subject.TipoDocumento.Trim(), documentoSujeto, now, ct);
+                // HU #13824 — fuera de borrador se sigue mostrando la identidad que un Super Admin venció a mano.
+                if (source is null
+                    && !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
+                {
+                    salidaDeBorrador ??= await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct);
+                    source = await repo.FindProtegidaPorVencimientoManualAsync(
+                        instance.TenantId, subject.TipoDocumento.Trim(), documentoSujeto, now, salidaDeBorrador, ct);
+                }
                 if (source is null)
                     continue;
 
@@ -875,7 +890,9 @@ public sealed class CompletarBiometriaHandler(
 /// crea/actualiza la validación con estado <c>aprobado</c>, score 95, proveedor/scorer "mock" y los
 /// datos del actor. Devuelve el mismo <see cref="BiometricValidationDto"/> que la lista.
 /// </summary>
-public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
+public sealed class SimularBiometriaHandler(
+    IProcedureInstanceRepository repo,
+    IdentityValidationResultApplier? bitacora = null)
 {
     private const int MockScore = 95;
 
@@ -980,6 +997,11 @@ public sealed class SimularBiometriaHandler(IProcedureInstanceRepository repo)
             // PK store-generated (uuidv7) con Id ya seteado: marcar Added explícito para forzar INSERT.
             repo.Add(validation);
         }
+
+        // La frase va en el mismo guardado. ApplyAsync no sirve aquí: la fila ya quedó Aprobado
+        // y esa ruta sale sin escribir. CreatedBy sigue null → «Sistema · Validación de identidad».
+        if (bitacora is not null)
+            await bitacora.EncolarFraseDeParteAsync(validation, approved: true, now, ct);
 
         await repo.SaveChangesAsync(ct);
         return (IniciarBiometriaHandler.ToDto(validation, now, actor.Ordinal), null);

@@ -56,7 +56,8 @@ public static class AdminCompaniesEndpoints
                 + "estado y rango de fechas de creación. Requiere SuperAdmin.")
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
+            .Produces(StatusCodes.Status403Forbidden)
+            .Produces(StatusCodes.Status422UnprocessableEntity);
 
         // GET /api/v1/admin/companies/{tenantId} — identidad de la compañía (#11062). Alimenta el
         // encabezado de la consola de configuración: razón social + NIT visibles en toda la pantalla.
@@ -242,31 +243,6 @@ public static class AdminCompaniesEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status404NotFound);
 
-        // PUT /api/v1/admin/companies/{tenantId}/transit-agreements/{transitOfficeId} — convenio comercial.
-        group.MapPut("/{tenantId:guid}/transit-agreements/{transitOfficeId:guid}", SetTransitAgreementAsync)
-            .AddEndpointFilter<CompanyOwnTenantFilter>()
-            // HU #12710 — sección reservada al SuperAdmin (también frente a una cabeza de red).
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
-            .WithName("AdminCompanySetTransitAgreement")
-            .WithSummary("Marca o desmarca el convenio de la compañía con un Organismo de Tránsito")
-            .WithDescription("El convenio NO es el permiso para radicar (eso son los transit-grants): es un "
-                + "acuerdo comercial cuyo efecto es documental — con convenio, el contrato de mandato no "
-                + "lleva bloque de firma del mandatario. Idempotente. Requiere SuperAdmin.")
-            .Produces(StatusCodes.Status204NoContent)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
-
-        // GET /api/v1/admin/companies/{tenantId}/transit-agreements — OT con convenio activo.
-        group.MapGet("/{tenantId:guid}/transit-agreements", GetTransitAgreementsAsync)
-            .AddEndpointFilter<CompanyOwnTenantFilter>()
-            // HU #12710 — sección reservada al SuperAdmin (también frente a una cabeza de red).
-            .RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
-            .WithName("AdminCompanyGetTransitAgreements")
-            .WithSummary("Lista los OT con los que la compañía tiene convenio")
-            .Produces(StatusCodes.Status200OK)
-            .Produces(StatusCodes.Status401Unauthorized)
-            .Produces(StatusCodes.Status403Forbidden);
-
         // GET /api/v1/admin/companies/{tenantId}/audit-log — historial de gobernanza paginado (#10192 AC4).
         group.MapGet("/{tenantId:guid}/audit-log", GetAuditLogAsync)
             .AddEndpointFilter<CompanyOwnTenantFilter>()
@@ -275,7 +251,10 @@ public static class AdminCompaniesEndpoints
             .WithName("AdminCompanyGetAuditLog")
             .WithSummary("Lista el historial de auditoría del tenant")
             .WithDescription("Historial de gobernanza (cambios de settings, whitelist y grants) paginado. "
+                + "Filtros opcionales: fechaDesde/fechaHasta (yyyy-MM-dd, día America/Bogota inclusivo), "
+                + "campo, valorAnterior, operador (contiene, sin distinguir mayúsculas). "
                 + "Requiere SuperAdmin.")
+            .Produces(StatusCodes.Status422UnprocessableEntity)
             .Produces(StatusCodes.Status200OK)
             .Produces(StatusCodes.Status401Unauthorized)
             .Produces(StatusCodes.Status403Forbidden);
@@ -382,6 +361,8 @@ public static class AdminCompaniesEndpoints
         CancellationToken cancellationToken,
         [FromQuery] string? nit = null,
         [FromQuery] string? razonSocial = null,
+        [FromQuery] string? codigo = null,
+        [FromQuery] string[]? tenantType = null,
         [FromQuery] bool? estadoActivo = null,
         [FromQuery] DateOnly? fechaDesde = null,
         [FromQuery] DateOnly? fechaHasta = null,
@@ -398,6 +379,8 @@ public static class AdminCompaniesEndpoints
         {
             Nit = nit,
             RazonSocial = razonSocial,
+            Codigo = codigo,
+            TenantType = tenantType,
             EstadoActivo = estadoActivo,
             FechaDesde = fechaDesde,
             FechaHasta = fechaHasta,
@@ -408,7 +391,11 @@ public static class AdminCompaniesEndpoints
 
         var result = await handler.HandleAsync(query, cancellationToken).ConfigureAwait(false);
 
-        return Results.Ok(result);
+        return result.IsValid
+            ? Results.Ok(result)
+            : Results.Json(
+                new CompanyValidationErrorResponse(result.Errors),
+                statusCode: StatusCodes.Status422UnprocessableEntity);
     }
 
     private static async Task<IResult> CreateCompanyAsync(
@@ -621,41 +608,6 @@ public static class AdminCompaniesEndpoints
         return Results.Ok(result);
     }
 
-    /// <summary>
-    /// Marca o desmarca el convenio comercial de la compañía con un organismo. Distinto del grant: aquel
-    /// habilita la radicación, este solo decide si el mandato lleva bloque de firma del mandatario.
-    /// </summary>
-    private static async Task<IResult> SetTransitAgreementAsync(
-        Guid tenantId,
-        Guid transitOfficeId,
-        SetTransitAgreementRequest request,
-        HttpContext httpContext,
-        [FromServices] ICompanyAgreementRepository repository,
-        CancellationToken cancellationToken)
-    {
-        await repository
-            .SetAsync(
-                tenantId, transitOfficeId, request?.Active ?? false,
-                ResolveUserId(httpContext.User), cancellationToken)
-            .ConfigureAwait(false);
-
-        return Results.NoContent();
-    }
-
-    private static async Task<IResult> GetTransitAgreementsAsync(
-        Guid tenantId,
-        [FromServices] ICompanyAgreementRepository repository,
-        CancellationToken cancellationToken)
-    {
-        var ids = await repository
-            .ListActiveOfficeIdsAsync(tenantId, cancellationToken).ConfigureAwait(false);
-
-        return Results.Ok(new { transitOfficeIds = ids });
-    }
-
-    /// <summary>Cuerpo del convenio: si queda activo o no.</summary>
-    public sealed record SetTransitAgreementRequest(bool Active);
-
     private static async Task<IResult> AddTransitGrantAsync(
         Guid tenantId,
         AddTransitGrantRequest request,
@@ -808,15 +760,31 @@ public static class AdminCompaniesEndpoints
         [FromServices] GetTenantAuditLogHandler handler,
         CancellationToken cancellationToken,
         [FromQuery] int? page = null,
-        [FromQuery] int? pageSize = null)
+        [FromQuery] int? pageSize = null,
+        [FromQuery] DateOnly? fechaDesde = null,
+        [FromQuery] DateOnly? fechaHasta = null,
+        [FromQuery] string? campo = null,
+        [FromQuery] string? valorAnterior = null,
+        [FromQuery] string? operador = null,
+        [FromQuery] string? campoClaves = null,
+        [FromQuery] string? valorAnteriorAlternativas = null)
     {
-        var result = await handler
-            .HandleAsync(
-                new GetTenantAuditLogQuery { TenantId = tenantId, Page = page, PageSize = pageSize },
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        return Results.Ok(result);
+        return await TenantAuditLogResponses.ExecuteAsync(
+            handler,
+            new GetTenantAuditLogQuery
+            {
+                TenantId = tenantId,
+                Page = page,
+                PageSize = pageSize,
+                FechaDesde = fechaDesde,
+                FechaHasta = fechaHasta,
+                Campo = campo,
+                ValorAnterior = valorAnterior,
+                Operador = operador,
+                CampoClaves = campoClaves,
+                ValorAnteriorAlternativas = valorAnteriorAlternativas,
+            },
+            cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task<IResult> GetOtConsultationRestrictionsAsync(

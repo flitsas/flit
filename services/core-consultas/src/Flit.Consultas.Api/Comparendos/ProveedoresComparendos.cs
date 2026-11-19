@@ -66,7 +66,19 @@ internal static class Fuente
         ["septiembre"] = 9, ["setiembre"] = 9, ["octubre"] = 10, ["noviembre"] = 11, ["diciembre"] = 12,
     };
 
+    /// <summary>
+    /// HU #13784 (hallazgo B16-1): SIMIT y la fuente municipal escriben 01-01-2000 cuando no tienen la fecha. Tomarla por
+    /// real daba comparendos «Prescritos» sin avisos ni descuentos: se trata como ausente.
+    /// </summary>
+    private static readonly DateOnly FechaVaciaDeLasFuentes = new(2000, 1, 1);
+
     private static DateTime? Instante(string? s)
+    {
+        var d = Leer(s);
+        return d is { } v && DateOnly.FromDateTime(v) == FechaVaciaDeLasFuentes ? null : d;
+    }
+
+    private static DateTime? Leer(string? s)
     {
         if (string.IsNullOrWhiteSpace(s))
             return null;

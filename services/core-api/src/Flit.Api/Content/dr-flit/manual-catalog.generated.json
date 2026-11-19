@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "generatedFrom": "frontend/lib/manual (pnpm manual:export)",
-  "articleCount": 47,
+  "articleCount": 53,
   "articles": [
     {
       "slug": "0-introduccion/1-bienvenida",
@@ -348,6 +348,90 @@
       "sources": []
     },
     {
+      "slug": "0-introduccion/7-tablas-y-paginacion",
+      "title": "Tablas: cómo leerlas y moverte entre páginas",
+      "href": "/manual/0-introduccion/7-tablas-y-paginacion",
+      "audience": "Todos",
+      "sectionId": "introduccion",
+      "summary": "Todas las tablas de FLIT se ven y se usan igual: cómo filtrar por columna, cambiar de página, ir al principio o al final y elegir cuántas filas ver.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "mismo-diseno",
+          "title": "1. Todas las tablas funcionan igual",
+          "paragraphs": [
+            "Trámites, usuarios, compañías, reportes, auditoría o cualquier otra lista: todas las tablas de FLIT tienen el mismo aspecto y los mismos controles. La cabecera gris se queda fija al bajar, cada fila es una tarjeta que se ilumina al pasar el puntero y las acciones de la fila son iconos con su nombre al acercar el puntero."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "navegar",
+          "title": "2. Moverte entre páginas",
+          "paragraphs": [
+            "Al pie de cada tabla, a la derecha, está la barra de páginas:"
+          ],
+          "bullets": [
+            "«Primera» lleva a la primera página.",
+            "‹ y › van a la página anterior y a la siguiente.",
+            "Los números saltan directo a esa página; la página en la que estás se ve resaltada en azul.",
+            "«Última» lleva a la última página.",
+            "Si ya estás en la primera página, «Primera» y ‹ se ven apagados; en la última, › y «Última» también."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El texto «Mostrando 21–30 de 95» te dice qué registros estás viendo y cuántos hay en total. Si todo cabe en una sola página, no aparecen los botones de navegación."
+            }
+          ]
+        },
+        {
+          "id": "filas-por-pagina",
+          "title": "3. Elegir cuántas filas ver",
+          "paragraphs": [
+            "A la izquierda del pie, «Filas por página» deja elegir 10, 20, 30 o 50 registros. Toda tabla abre con 10. Al cambiar la cantidad, la tabla vuelve a la primera página para que no te pierdas.",
+            "Tu elección se recuerda mientras tengas abierta la sesión del navegador: si eliges 50 en Usuarios, sales a otro módulo y vuelves, sigues viendo 50. Cada tabla recuerda lo suyo, así que cambiar Usuarios no cambia Auditoría. Al cerrar la pestaña y entrar de nuevo, todas vuelven a 10."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "filtrar-tabla",
+          "title": "4. Cómo filtrar una tabla",
+          "paragraphs": [
+            "Hay dos lugares para filtrar, y se usan igual en Compañías, Usuarios, Auditoría y las demás listas: aprendes una vez y la usas en todas."
+          ],
+          "bullets": [
+            "En cada columna: todas las columnas con datos tienen un pequeño embudo en su encabezado (la columna Acciones no lo tiene). Al pulsarlo se despliega el filtro de esa columna.",
+            "Si la columna es de texto (nombre, documento, código…), escribe lo que buscas en la caja «X contiene»: el cursor ya queda ahí. Pulsa Enter o «Aplicar».",
+            "Si la columna tiene opciones (estado, tipo, catálogos), marca una o varias casillas y pulsa «Aplicar».",
+            "Si la columna es una fecha, elige un periodo: Sin periodo, Hoy, Últimos 7 días, Últimos 30 días, Últimos 90 días, Mes actual, Mes anterior o Rango propio con fecha inicial y final. Si la fecha inicial es posterior a la final, te avisa y no aplica el filtro.",
+            "Para quitar un filtro, abre el embudo de esa columna y pulsa «Quitar filtro». Cuando una columna tiene filtro, su embudo se pinta en azul para que lo reconozcas de un vistazo.",
+            "Arriba de la tabla: cada pantalla conserva los filtros que ya tenía (por ejemplo, el panel de NIT, Razón social, Estado y fechas con «Buscar» y «Limpiar» en el listado de Compañías, o un buscador por nombre, documento o código en otras listas). No hay un botón «+ Filtro» ni un «Periodo» arriba: lo de las columnas se hace desde el embudo.",
+            "Los filtros de arriba y los de las columnas se combinan: la tabla muestra solo lo que cumple todos a la vez."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si ningún registro cumple los filtros, la tabla sigue mostrando sus encabezados y filtros, y avisa «Ningún registro coincide con los filtros» con el botón «Limpiar filtros» para volver a ver todo. También puedes quitar un solo filtro desde su embudo."
+            }
+          ]
+        },
+        {
+          "id": "filtros",
+          "title": "5. Filtros y exportaciones",
+          "paragraphs": [
+            "Las páginas se calculan sobre el resultado filtrado: si aplicas un filtro que deja pocos registros, la tabla te lleva a la página que existe en vez de mostrarte una vacía. Exportar a Excel o CSV siempre incluye todo el resultado del filtro, no solo la página que estás viendo."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
       "slug": "5-normativa/1-resolucion-20233040017145-2023",
       "title": "Resolución 20233040017145 de 2023 (Ministerio de Transporte)",
       "href": "/manual/5-normativa/1-resolucion-20233040017145-2023",
@@ -658,6 +742,8 @@
           "paragraphs": [
             "Usa el paso Documentos del asistente para subir cada archivo. Formatos típicos: PDF, JPG, PNG.",
             "Un nombre descriptivo ayuda al revisor del organismo. Evita fotos borrosas o PDFs protegidos con contraseña.",
+            "En casi todas las casillas cabe un solo archivo: «Reemplazar archivo» cambia el que había por el nuevo.",
+            "Las casillas «Otro» y «Anexos generales» admiten varios archivos. Cada archivo aparece en su propia fila, con su fecha, el ojo para verlo y «Eliminar». Para sumar uno, pulsa «Agregar otro documento»: el nuevo se añade y los anteriores se quedan. Si cargaste uno por error, elimínalo en su fila; agregar el correcto no lo quita. Todos los archivos de estas casillas van en el consolidado que recibe el organismo.",
             "Impronta: si tu compañía tiene deshabilitada la generación de improntas, el sistema no la genera ni ofrece «Generar impronta». En la casilla de la impronta verás «Cargue la impronta; no se genera automáticamente» y debes adjuntarla tú. Si es obligatoria, no podrás radicar hasta cargarla."
           ],
           "bullets": [],
@@ -676,7 +762,8 @@
           "bullets": [
             "Documento ilegible → vuelve a escanear o fotografiar con buena luz.",
             "Persona equivocada en el mandato → verifica actores antes de adjuntar.",
-            "Falta un obligatorio → el asistente bloquea el avance hasta que lo completes."
+            "Falta un obligatorio → el asistente bloquea el avance hasta que lo completes.",
+            "El organismo rechazó un archivo de «Otro» → en la subsanación, elimina el archivo errado en su fila y agrega el corregido; si solo agregas el nuevo, el errado sigue en el expediente."
           ],
           "callouts": []
         }
@@ -740,7 +827,7 @@
       "href": "/manual/1-gestor/5-seguimiento",
       "audience": "Gestor",
       "sectionId": "gestor",
-      "summary": "Cómo encontrar un trámite (radicado, placa, VIN, filtros), qué significa cada estado y qué hacer en cada uno.",
+      "summary": "Cómo encontrar un trámite (radicado, placa, VIN, filtros), qué significa cada estado, qué hacer en cada uno y cómo reenviar la validación de identidad a quien falta por firmar.",
       "primarySource": false,
       "blocks": [
         {
@@ -791,8 +878,12 @@
           "title": "3. El detalle del trámite",
           "paragraphs": [
             "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
+            "Dentro del trámite abierto, en cualquier estado, cada cambio queda registrado: fecha y hora de Colombia, quién lo hizo (su nombre y su compañía, o Sistema), el dato, el valor anterior y el nuevo. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. En borrador o en subsanación está en el acordeón «Expediente — Trazabilidad cronológica» del resumen, del más reciente al más antiguo. En los demás estados, la sección Expediente usa esa misma lista. «Línea de Tiempo del Trámite» conserva sus tarjetas: el título es el dato, y dentro van gestor, correo, empresa, rol, fecha y hora, y el detalle con el valor anterior y el nuevo. La tarjeta de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice y puedes pulsar «Reintentar». «Ver más» trae el resto. El recuadro «Estado del trámite», si lo abres sin entrar al detalle, solo muestra el estado y los actos administrativos.",
+            "Si el equipo FLIT actualizó un documento del trámite, la línea de tiempo muestra «Documento actualizado por el administrador» con el estado en que estaba el trámite, la observación y un bloque con el documento, el archivo nuevo y el archivo anterior, cada uno con «Ver». El archivo reemplazado no se pierde: aparece como «Versión anterior» en «Ver documentos».",
+            "Los documentos se abren en una pestaña nueva del navegador, a pantalla completa. Si el documento trae un aviso (por ejemplo «Documento final» del consolidado), aparece unos segundos en la pantalla donde estabas. Si no se puede abrir o ver, el aviso sale en la pantalla con «Descargar». Si tu navegador bloquea las ventanas emergentes, el documento se muestra en la misma pantalla.",
             "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora.",
-            "El panel del vehículo muestra también el Canal por el que entró el trámite y, si llegó del punto de atención de un organismo, el «OT del punto». En un trámite en borrador los verás en la barra superior del asistente. Son datos de solo lectura: los pone el sistema al crear el trámite."
+            "El panel del vehículo muestra también el Canal por el que entró el trámite y, si llegó del punto de atención de un organismo, el «OT del punto». En un trámite en borrador los verás en la barra superior del asistente. Son datos de solo lectura: los pone el sistema al crear el trámite.",
+            "Si el trámite llegó del punto de atención ya pagado, el mismo panel muestra «Pagado en caja» con el valor, el medio (efectivo, datáfono, transferencia u otro) y la fecha, o «Sin cobro» si el total era $0. Ese trámite no se vuelve a cobrar."
           ],
           "bullets": [],
           "callouts": []
@@ -805,6 +896,40 @@
           ],
           "bullets": [],
           "callouts": []
+        },
+        {
+          "id": "reenviar-validacion",
+          "title": "5. Reenviar la validación de identidad",
+          "paragraphs": [
+            "Si una persona del trámite no recibió el correo de validación de identidad, o el correo estaba mal escrito, puedes reenviárselo desde el menú de la fila (tres rayas) → «Reenviar validación». La opción aparece si tu rol tiene el permiso «Reenviar validación de identidad»; el administrador de tu compañía puede asignarlo.",
+            "Validar la identidad es firmar el trámite. Por eso el cuadro solo muestra a las personas que todavía no han firmado: si el comprador ya validó y el vendedor no, solo verás al vendedor."
+          ],
+          "bullets": [
+            "Paso 1: abre las tres rayas del trámite y elige «Reenviar validación».",
+            "Paso 2: marca a quién reenviar. Hay una casilla por persona («Vendedor · nombre», «Comprador · nombre»); si hay varios propietarios, cada uno aparece por separado. Puedes marcar una o varias.",
+            "Paso 3 (opcional): si el correo registrado está mal, escribe el correcto en «Nuevo correo» de esa persona. Se guarda en el trámite y en Validaciones de Identidad, y el enlace sale a ese correo. Si lo dejas vacío, se envía al correo de siempre.",
+            "Paso 4: pulsa «Reenviar». El cuadro no se cierra: te muestra el resultado de cada persona y el enlace nuevo con «Copiar enlace», por si prefieres enviárselo tú.",
+            "Si la persona ya tiene un enlace vigente, puedes copiarlo con «Copiar enlace» sin reenviar.",
+            "Matrícula: solo aparece el comprador. Otros trámites: aparecen las personas que ese trámite pide validar.",
+            "Cada reenvío queda en el seguimiento del trámite: quién lo hizo, a qué persona y, si se corrigió, el correo anterior y el nuevo."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": "Mensajes que puedes ver",
+              "text": "«El comprador ya firmó…» (matrícula y otros trámites, que tienen un solo actor) o «Comprador y vendedor ya firmaron…» (traspaso): todas las personas ya validaron. «Correo inválido.»: revisa el correo escrito. «El reenvío quedó en cola…»: el proveedor tuvo una falla momentánea y se reintenta solo; el enlace aparecerá después. «En validación manual…»: esa persona está en captura manual y su enlace se regenera desde la revisión manual."
+            },
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Si una persona ya validó su identidad en otro trámite y sigue vigente, no aparece para reenviar: para este trámite ya cuenta como firmada."
+            },
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Un trámite aprobado, anulado o revocado no admite reenviar la validación."
+            }
+          ]
         }
       ],
       "sources": []
@@ -959,7 +1084,7 @@
       "href": "/manual/1-gestor/8-identidad",
       "audience": "Gestor",
       "sectionId": "gestor",
-      "summary": "Qué muestra el módulo Identidad, cómo buscar una persona, leer estados y vigencias y desatascar una validación.",
+      "summary": "Qué muestra el módulo Identidad, cómo buscar una persona, leer estados y vigencias, desatascar una validación y quién puede vencer una identidad aprobada.",
       "primarySource": false,
       "blocks": [
         {
@@ -991,13 +1116,19 @@
           "bullets": [
             "«Nueva» crea una prevalidación de persona natural: se envía un enlace de captura al correo indicado y el resultado queda disponible para trámites posteriores.",
             "Abre una fila para ver el detalle en un panel lateral (drawer): proceso ante el proveedor, reintentos y línea de tiempo del registro.",
-            "«Ver alertas de validación» abre el panel de validaciones atascadas (sin respuesta del proveedor), agrupadas por persona, con opción de reintentar todas de una vez o una por una."
+            "«Ver alertas de validación» abre el panel de validaciones atascadas (sin respuesta del proveedor), agrupadas por persona, con opción de reintentar todas de una vez o una por una.",
+            "«Vencer» (solo Super Admin de FLIT, en el menú «Acciones» de una validación aprobada y vigente): termina la vigencia en ese momento para que la persona repita la validación. En el mismo paso se le envía un enlace nuevo, que queda en pantalla con «Copiar enlace». El certificado anterior se conserva en el historial."
           ],
           "callouts": [
             {
               "variant": "info",
               "title": null,
               "text": "Una validación aprobada tiene vigencia. Al acercarse la fecha, el sistema la marca; una validación vencida no sirve para firmar y hay que repetirla."
+            },
+            {
+              "variant": "warning",
+              "title": "Qué pasa al vencer una identidad",
+              "text": "Los trámites en borrador que usaban esa identidad quedan sin firmar para esa persona: hasta que apruebe la validación nueva no se pueden radicar, salvo la matrícula inicial radicada directamente ante el organismo que todavía no tiene placa. Los trámites que ya salieron de borrador conservan la firma con la que salieron. Si ningún trámite en borrador la necesita, se vence sin enviar enlace y el aviso lo dice. Si tu compañía necesita vencer una identidad, pídeselo al equipo FLIT."
             }
           ]
         },
@@ -1196,7 +1327,7 @@
             "Píldora «Usuarios» del dock (visible para el Administrador de la compañía). Según tu perfil y permisos verás hasta tres pestañas:"
           ],
           "bullets": [
-            "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía.",
+            "Usuarios: invitar, editar y gestionar el acceso de las personas de tu compañía. Para encontrar a alguien usa el buscador, los selectores de perfil, rol y estado, o el embudo del encabezado de cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha); ver «Tablas: cómo leerlas y moverte entre páginas».",
             "Roles y permisos: crea y edita los roles de tu compañía y consulta los roles de FLIT. Solo la ve el Administrador de la compañía.",
             "Clientes ICT: solo si tu compañía integra con terceros y tienes el permiso correspondiente (ver bloque 7)."
           ],
@@ -1237,7 +1368,8 @@
             "1. En la fila de la persona abre «Acciones» y elige «Permisos por módulo». La ficha es una sola lista: primero «Módulos» y después «Tipos de servicio».",
             "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
             "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
-            "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear»."
+            "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear».",
+            "«Reenviar validación de identidad» (módulo de gestión avanzada de trámites) lo puedes dar a cualquier persona o rol de tu compañía: con él ve la opción «Reenviar validación» en las tres rayas del trámite, corrige el correo y copia el enlace. Las demás acciones avanzadas (cambiar estado, anular, consolidado, reasignar gestor) siguen siendo del Super Admin. La persona ve el permiso al volver a ingresar."
           ],
           "callouts": [
             {
@@ -1586,7 +1718,10 @@
           "title": "3. Revisión y decisión",
           "paragraphs": [
             "Abre un trámite para ver el expediente, organizado en acordeones independientes que puedes tener abiertos a la vez: vehículo, propietario y actores; transformaciones declaradas (si el vehículo cambió color, combustible o carrocería frente a lo que dice RUNT, aquí ves el antes y el después); documentos del gestor («Ver documentos»), consolidado («Ver consolidado») y el historial. El panel «Pendientes antes de decidir» lista lo que falta (por ejemplo SOAT vigente cuando la regla aplica).",
-            "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio."
+            "«Línea de Tiempo del Trámite», o el chip de estado, muestra cada cambio en tarjetas, también lo ocurrido cuando el trámite todavía estaba en borrador. El título de la tarjeta es el dato. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. Dentro van gestor, correo, empresa, rol, fecha y hora de Colombia, y el detalle con el valor anterior y el nuevo. La de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice. Solo lo ves en un trámite que ya puedes abrir: un borrador que no te corresponde no llega a esta bandeja.",
+            "El consolidado se mantiene al día solo: si el gestor o el organismo cambian un dato, un documento o la placa, el FUR y el consolidado se vuelven a generar en segundos. No hace falta pedir que lo limpien para ver el cambio.",
+            "Si el equipo FLIT actualizó un documento, en la línea de tiempo verás «Documento actualizado por el administrador» con la observación y un bloque con el documento, el archivo nuevo y el archivo anterior, cada uno con «Ver». En los documentos del trámite, el reemplazado aparece como «Versión anterior».",
+            "Los documentos y el consolidado se abren en una pestaña nueva del navegador, a pantalla completa; el documento que abres queda marcado como revisado igual que antes. Si no se puede abrir o ver, el aviso sale en la pantalla con «Descargar»."
           ],
           "bullets": [
             "Aprobar: opcionalmente adjunta la Licencia de Tránsito (PDF). El sistema la analiza con OCR y te dice si parece una LT y si la placa/VIN leídos coinciden con el trámite; el análisis nunca bloquea. Si hay varios mandatarios válidos, eliges uno de los que te muestra el sistema. La LT también se puede adjuntar después desde la fila aprobada («Adjuntar LT»).",
@@ -1751,7 +1886,7 @@
           "id": "auditoria-permisos",
           "title": "5. Auditoría de permisos",
           "paragraphs": [
-            "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas y el botón «Invitar usuario») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
+            "Usuarios tiene dos pestañas: «Usuarios» (la tabla de personas, con buscador, selectores de perfil, rol y estado, un embudo en cada columna para filtrarla, y el botón «Invitar usuario»; ver «Tablas: cómo leerlas y moverte entre páginas») y «Auditoría de permisos», con el registro de cada cambio de permisos individuales hecho en tu organismo: fecha y hora (DD/MM/AAAA HH:mm), el administrador que lo hizo, la persona afectada, el permiso, la acción (otorgó, denegó, volvió al rol) y el valor antes y después. La pestaña «Usuarios» te devuelve a la tabla.",
             "Solo ves los registros de las personas de tu organismo. Puedes filtrar por usuario y por administrador; no hay filtro de compañía porque siempre es el tuyo. Si el servicio no responde, verás un aviso de error con el botón «Reintentar»."
           ],
           "bullets": [],
@@ -2140,6 +2275,202 @@
       "sources": []
     },
     {
+      "slug": "2-ot/14-portal-persona-natural",
+      "title": "Portal Persona Natural del organismo: reportes, cobro, diseño y dominios",
+      "href": "/manual/2-ot/14-portal-persona-natural",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Cómo el organismo administra su portal de Persona Natural: ve los trámites que llegan por él, define qué se cobra, maneja su caja, le pone su marca y lo publica en sus propios dominios.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "entrada",
+          "title": "1. Dónde está",
+          "paragraphs": [
+            "En el hub del organismo, la pestaña «Portal Persona Natural» tiene cuatro secciones: «Reportes», «Cobro», «Caja» y «Diseño». La ve el administrador del organismo, que solo trabaja con su propio organismo. El Super Admin entra al hub del organismo que necesite y ve lo mismo.",
+            "Los cambios de cobro, de diseño publicado y de dominios llegan al portal sin pasos adicionales: quien lo abra después del cambio ya lo ve. Un trámite ya radicado conserva el valor con el que se radicó."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "reportes",
+          "title": "2. Reportes",
+          "paragraphs": [
+            "«Trámites del portal Persona Natural» lista los trámites que llegaron por el portal de tu organismo, con su canal, tipo de trámite, radicado, estado, fecha en que cayó, modalidad, valor del trámite y valor de la gestión. Solo ves los de tu organismo.",
+            "Filtra por los campos de la barra y descarga el resultado en Excel: el archivo trae las mismas filas y columnas que ves en pantalla. Si nada coincide, verás «No hay trámites del portal en FLIT 2.0 con esos filtros.»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "cobro",
+          "title": "3. Cobro: medios de pago y precios",
+          "paragraphs": [
+            "La subpestaña «Cobro» tiene dos pasos, que ves como pestañas: «1 · Precios» (cuánto cuesta cada trámite) y «2 · Medios de pago» (en qué medio se cobra). Empieza por el paso 1 y sigue con el 2; solo ves una tabla a la vez.",
+            "«Medios de pago» (paso 2) muestra una tarjeta por medio («Pasarela de pago» y «PIN en caja») con su interruptor y cuántos trámites se ofrecen. Debajo, cada trámite tiene una fila con su «Valor del trámite» y su «Valor de la gestión», que son los mismos en todos los medios y se definen en Precios. Al lado, por cada medio, eliges si cada valor se cobra y ves el total de ese medio y si «Se ofrece» en el portal. El total no incluye el envío ni las transformaciones, que se suman cuando aplican.",
+            "«Precios» (paso 1) muestra lo que paga la persona por cada trámite en tu organismo. Un valor marcado «Valor general» lo define FLIT para todos los organismos y no se edita aquí. Si registras un precio propio, ese tiene prioridad sobre el general."
+          ],
+          "bullets": [
+            "Ofrecer o quitar un medio: usa el interruptor de su tarjeta, que cambia entre «Activado» y «Desactivado». Apagado, la persona no lo ve, y puedes dejar listos sus valores para cuando lo enciendas.",
+            "Dejar de cobrar un valor en un medio: apaga su interruptor en la columna de ese medio; pasa a «No se cobra» solo ahí. Si apagas los dos, el aviso dice que ese medio no se ofrecerá para ese trámite.",
+            "Cambiar el tiempo para anular un cobro de caja: debajo de las dos tarjetas de medios está la franja «Anulación de cobros en caja», con el campo «Tiempo para anular» (en minutos; se habilita si «PIN en caja» está activado). Escribe un número entero entre 0 y el máximo que indica el mensaje (hasta 60) y pulsa «Guardar» (se habilita cuando cambias el valor). Mientras corre ese tiempo, el administrador del organismo puede anular el cobro; después, el trámite se envía al organismo. Si no lo has cambiado, verás «Valor por defecto» (15 minutos). Con 0, el trámite se envía en el momento de cobrar y el cobro ya no se puede anular. El cambio aplica solo a los cobros nuevos, no a los que ya se hicieron. Con «Ver historial» ves quién cambió el tiempo, cuándo y de cuántos minutos a cuántos. Lo cambian el administrador del organismo y el Super Admin; la persona de caja no ve este campo.",
+            "Encender un valor sin monto: no se guarda. Junto a ese valor aparece «Definir precio», que abre el formulario del trámite en Precios; al guardar o cerrar, vuelves a Medios de pago con el monto ya cargado."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "El valor de la gestión (servicio FLIT y envío) solo lo cambia el superadministrador de FLIT."
+            }
+          ]
+        },
+        {
+          "id": "caja",
+          "title": "4. Caja: usuarios y cobros",
+          "paragraphs": [
+            "En el punto, la persona paga en la caja de tu organismo con el ID de su trámite. La pestaña «Caja» tiene dos partes: «Usuarios de caja», para decidir quién cobra, y «Cobros de caja», para revisar lo cobrado y corregir errores.",
+            "Un usuario de caja entra a FLIT 2 con su correo y su contraseña y solo ve el módulo «Caja» del menú: no ve los demás módulos ni los trámites de otros organismos. Tú, como administrador, también ves «Caja» en el menú y puedes cobrar desde ahí. Crea un usuario por cada persona que cobra, así queda registrado quién hizo cada cobro."
+          ],
+          "bullets": [
+            "Crear un usuario de caja: pulsa «Crear usuario», escribe el nombre y el correo y guarda. Le llega una invitación para definir su contraseña; mientras no la use, aparece como «Invitación pendiente» y puedes reenviarla desde «Acciones».",
+            "Desactivar o reactivar: en «Acciones» de la fila. Un usuario desactivado ya no puede cobrar desde su siguiente intento.",
+            "Ver los cobros: «Cobros de caja» muestra los del día elegido con el ID, el valor, el medio, la hora y quién cobró, y el total del día sin contar los anulados.",
+            "Anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Solo se puede durante los 15 minutos siguientes al cobro, antes de que el trámite pase a FLIT 2; después, la opción aparece deshabilitada con el motivo. El trámite anulado vuelve a quedar pendiente de pago. La devolución del dinero, si aplica, se hace por fuera de la plataforma."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si la caja no está habilitada para tu organismo, la pestaña lo indica. Pide al administrador de FLIT que la habilite."
+            }
+          ]
+        },
+        {
+          "id": "diseno",
+          "title": "5. Diseño: tu marca en el portal",
+          "paragraphs": [
+            "Aquí le pones al portal el nombre, el logo, los banners y los colores de tu organismo. La vista previa muestra cómo quedará. Lo que cambias se guarda como borrador y la persona no lo ve hasta que lo publiques."
+          ],
+          "bullets": [
+            "Colores: elige el principal y el secundario. Si con ellos el portal no se leería bien, un mensaje lo dice y no deja publicar; «Ajustar automáticamente» los corrige por ti.",
+            "Logo: cárgalo desde su recuadro, donde se indican los formatos y el tamaño máximo. Es opcional.",
+            "Banners: es el banner principal que ve la persona arriba de tu portal; si agregas varios, rotan como carrusel. Puedes tener hasta 6. Usa «Agregar banner», elige el archivo (PNG, JPEG o WebP, máximo 2 MB cada uno) y escribe el texto alternativo, que describe el banner para quien no puede verlo. El enlace es opcional y debe empezar por http:// o https://. Tamaño recomendado: 1600 × 366 px (proporción cercana a 4,4:1); deja lo importante en el 80 % central porque en pantallas angostas se recortan los lados. Si la proporción es muy distinta, te avisamos, pero puedes subirlo igual.",
+            "Orden y cambios de los banners: en el botón «Acciones» de cada banner puedes editarlo, subirlo, bajarlo o quitarlo (pide confirmación). Si no hay banners, el portal usa el banner de FLIT. Estos cambios van al borrador y se ven en el portal cuando publiques.",
+            "Carrusel de imágenes: se muestra en la columna derecha del portal, en lugar de «Servicios Adicionales». Puedes tener hasta 6 imágenes. Usa «Agregar imagen», elige el archivo (JPG, PNG o WebP, máximo 512 KB) y escribe el texto alternativo, que describe la imagen para quien no puede verla. El enlace es opcional y debe empezar por http:// o https://. Tamaño recomendado: 900 × 600 px (proporción 3:2); deja lo importante en el 80 % central porque en pantallas angostas se recortan los lados.",
+            "Orden y cambios del carrusel: en el botón «Acciones» de cada imagen puedes editarla, subirla, bajarla o quitarla (pide confirmación). Si no hay imágenes, el portal muestra los servicios de siempre. Estos cambios van al borrador y se ven en el portal cuando publicas.",
+            "Publicar: el portal muestra tu marca desde la siguiente carga. La vista previa y la confirmación de publicar solo dicen que se usa lo de FLIT para lo que te falte (logo o banners).",
+            "Retirar: el portal vuelve a la marca FLIT y tu borrador se conserva para publicarlo otra vez."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": "Si otra persona editó al mismo tiempo",
+              "text": "El borrador no se guarda sobre el cambio de la otra persona. Vuelve a cargar la pantalla y aplica de nuevo tus cambios."
+            }
+          ]
+        },
+        {
+          "id": "dominios",
+          "title": "6. Dominios del organismo",
+          "paragraphs": [
+            "En «Diseño» también están los dominios: las direcciones web propias por las que se abre tu portal. Un organismo puede tener varios, hasta 10, y todos llevan al mismo portal. Por estas direcciones solo se abre el portal: no hay inicio de sesión de FLIT.",
+            "Cada dominio tiene su propio estado. Si uno falla, los demás siguen funcionando. Uno de los activos es el principal: el enlace y el QR del punto usan ese."
+          ],
+          "bullets": [
+            "Agregar un dominio: escribe la dirección y regístrala. Queda pendiente de comprobación y la pantalla muestra los registros DNS que debes crear con tu proveedor del dominio.",
+            "Comprobar: cuando crees los registros, pulsa «Comprobar ahora». Si no se puede confirmar, verás el motivo y podrás intentarlo de nuevo.",
+            "Principal: el primero que se activa queda como principal. Para cambiarlo, usa «Hacer principal» en otro dominio activo.",
+            "Retirar: pulsa «Retirar» y confirma. El portal sigue en tus otros dominios y en el enlace del punto. Si retiras el principal, otro dominio activo toma su lugar."
+          ],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Si no tienes ningún dominio activo, el portal sigue disponible en el enlace del punto de atención."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "2-ot/15-portal-de-caja",
+      "title": "Caja: cobrar un trámite del punto desde FLIT 2.0",
+      "href": "/manual/2-ot/15-portal-de-caja",
+      "audience": "Organismo de Tránsito",
+      "sectionId": "ot",
+      "summary": "Cómo el organismo cobra desde FLIT 2.0 un trámite que la persona inició en el punto: quién entra, qué ve, cómo cobra, cómo revisa los cobros del día y cómo anula el administrador del organismo.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "entrar",
+          "title": "1. Quién entra y qué ve",
+          "paragraphs": [
+            "En el menú de abajo, «Administración» tiene «Portal Persona Natural», que se despliega en cuatro opciones: Reportes, Cobro, Caja y Diseño. La caja está en Administración → Portal Persona Natural → Caja, con tres pestañas: «Cobrar», «Cobros del día» y «Usuarios de caja». No es un ítem aparte del menú ni un portal distinto: la persona de caja entra a FLIT 2.0 por el inicio de sesión de siempre, con el correo y la contraseña de su usuario. El administrador del organismo la crea en la subpestaña «Usuarios de caja» y le llega una invitación para definir su contraseña.",
+            "Si tu único rol es el de caja, el menú muestra solo Administración → Portal Persona Natural → Caja y al entrar a FLIT 2.0 llegas directo a ella, con las pestañas «Cobrar» y «Cobros del día»: no ves Reportes, Cobro ni Diseño, ni «Usuarios de caja». El administrador del organismo ve las tres subpestañas y, en «Cobros del día», puede elegir el día y anular. El Super Admin entra al organismo que elija y administra «Usuarios de caja» y «Cobros de caja» (con anulación); no cobra."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si ves «La caja no está habilitada para tu organismo», pide al administrador de FLIT que la habilite."
+            }
+          ]
+        },
+        {
+          "id": "cobrar",
+          "title": "2. Cobrar un trámite",
+          "paragraphs": [
+            "En la subpestaña «Cobrar», cada cobro se hace con el ID del trámite que la persona generó en el punto. Sigue estos pasos:"
+          ],
+          "bullets": [
+            "Escribe el ID que te muestra la persona (por ejemplo PN-2026-000123) y pulsa «Buscar».",
+            "Revisa el tipo de trámite, lo que se paga y el total. El total no se puede cambiar: es el que calcula la plataforma en ese momento.",
+            "Elige el medio con que pagó: efectivo, datáfono, transferencia u otro (en «Otro», escribe cuál).",
+            "Si tienes la prefactura, adjúntala (PDF, JPG o PNG de hasta 5 MB). Es opcional.",
+            "Pulsa «Confirmar cobro». Verás «Pago registrado.» y la pantalla de la persona pasa sola al cierre. Para seguir, pulsa «Cobrar otro trámite»."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": "Si el total cambió",
+              "text": "Si el precio cambió desde que buscaste el trámite, la pantalla muestra el total nuevo y te pide confirmar otra vez. Cobra siempre el total que muestra la pantalla."
+            }
+          ]
+        },
+        {
+          "id": "mensajes",
+          "title": "3. Mensajes frecuentes",
+          "paragraphs": [
+            "Si la búsqueda no deja cobrar, la pantalla dice por qué:"
+          ],
+          "bullets": [
+            "«No encontramos ese trámite.»: revisa el ID con la persona.",
+            "«Este trámite ya fue pagado.» (en amarillo): no lo cobres otra vez.",
+            "«Este trámite no es de este organismo.»: la persona debe pagar en el organismo donde lo inició.",
+            "«El pago en caja de este trámite venció.»: el ID vale solo el día en que se generó; la persona debe generarlo de nuevo en el punto.",
+            "«Este trámite no tiene el pago en caja habilitado.»: el trámite no se paga en caja.",
+            "«Demasiadas búsquedas sin resultado. Espere N minutos.»: si buscas varios ID que no existen seguidos, la caja se bloquea unos minutos por seguridad y te dice cuánto esperar."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "cobros-dia",
+          "title": "4. Cobros del día y anulaciones",
+          "paragraphs": [
+            "La subpestaña «Cobros del día» lista lo que se cobró en tu organismo, con el ID, el valor, el medio, la fecha y hora, quién cobró y el estado, y el total del día. Los cobros anulados aparecen marcados y tachados, y no suman al total. La tabla se pagina de 10, 20, 30 o 50 filas.",
+            "El administrador del organismo puede elegir otro día y anular un cobro hecho por error: en «Acciones», «Anular», escribe el motivo (entre 10 y 300 caracteres) y confirma. Un cobro se puede anular solo durante un tiempo después de cobrarlo: mientras corre, el cobro dice «Anulable hasta» con la hora (por ejemplo, «Anulable hasta 9:41 p. m.»); cuando esa hora pasa, la opción «Anular» desaparece y el trámite se envía al organismo. Ese tiempo lo define el administrador del organismo en Cobro → Medios de pago (15 minutos si no lo cambia). Si el cobro ya no se puede anular porque el trámite ya llegó a FLIT 2.0, la opción aparece deshabilitada con su motivo. La devolución del dinero, si aplica, se hace por fuera de la plataforma.",
+            "Si eres de caja y te equivocaste en un cobro, avisa al administrador de tu organismo: solo él puede anularlo."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
       "slug": "3-admin-company/1-consola",
       "title": "Consola de administración de la compañía",
       "href": "/manual/3-admin-company/1-consola",
@@ -2152,8 +2483,8 @@
           "id": "entrar",
           "title": "1. Qué ves al entrar",
           "paragraphs": [
-            "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Documentos, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
-            "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios."
+            "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
+            "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios. La tabla tiene buscador, selectores de perfil, rol y estado, y un embudo en cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha)."
           ],
           "bullets": [],
           "callouts": [
@@ -2185,7 +2516,7 @@
           "bullets": [
             "Trámites: qué familias puede radicar tu compañía (matrículas, traspasos, otros) y sus restricciones («Solo vehículos propios», validar SOAT ante el RUNT, etc.).",
             "Configuración Empresa: proveedores de consulta y de avalúo, a quién avisar al aprobar o rechazar un trámite, la lista blanca de correos para invitaciones, y los organismos de tránsito habilitados para tu compañía.",
-            "Documentos: plantillas y documentos personalizados que se generan dentro de los trámites.",
+            "Plantillas y documentos personalizados: los que se generan dentro de los trámites.",
             "Placas preasignadas: consulta de las placas que los organismos te han asignado.",
             "Historial de Cambios: quién cambió qué configuración de tu compañía y cuándo."
           ],
@@ -2226,7 +2557,8 @@
           "bullets": [
             "Registra la persona (tipo y número de documento, nombre; correo, dirección y ciudad opcionales).",
             "Dentro de su ficha, asocia las empresas que representa: por cada NIT, adjunta la escritura de constitución o poder (PDF) que respalda esa representación en los documentos del trámite.",
-            "Asocia la firma del baúl para que los documentos la estampen automáticamente."
+            "Asocia la firma del baúl para que los documentos la estampen automáticamente.",
+            "Encontrar a alguien: encima del directorio hay un buscador por nombre o documento y, en el encabezado de cada columna (Representante, Documento, Trámites, Firma / Identidad), un embudo para filtrarla; los dos se combinan. La firma de cada representante se gestiona en su ficha. Cómo funcionan los embudos: ver «Tablas: cómo leerlas y moverte entre páginas»."
           ],
           "callouts": []
         },
@@ -2241,6 +2573,7 @@
             "Validación de identidad del mandatario: al guardar un mandatario nuevo con Validación de identidad, le enviamos un enlace al correo para que valide su identidad; antes de guardar el formulario te lo avisa. Solo cuenta la validación hecha para ese mandatario (no la que la misma persona haya hecho como comprador o vendedor). Al editar, la ficha muestra el estado: «Pendiente de validación» (aún sin firma válida), «En curso», «Aprobada» o «Enlace vencido», y el botón «Reenviar validación» para volver a enviar el enlace (te confirma el correo de destino y se deshabilita mientras envía). Si cambias el tipo o el número de documento, o pasas de Baúl de firmas a Validación de identidad, el formulario te avisa antes de guardar que se enviará una nueva validación y que la anterior deja de contar. Con Baúl de firmas, Persona jurídica o Formato en blanco no aparece este bloque. Reactivar un mandatario no envía ninguna validación. Los mandatarios anteriores con Validación de identidad aparecen como «Pendiente de validación» hasta que completen el nuevo flujo; los de Baúl de firmas siguen igual.",
             "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. La firma de forma física ya no se ofrece.",
             "Sobre la lista se indica el formato de contrato de cada organismo habilitado, con el nombre vigente del catálogo. Lista de mandatarios: cada fila muestra el modelo, una columna «Validación» (solo con Validación de identidad) y una etiqueta de vigencia con texto e ícono: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos para el fin), rojo «Vencido», rojo «Inactivo» y azul «Aún no vigente» si el rango todavía no empieza. En rango de fechas se indica hasta cuándo. Si el organismo de tránsito configuró un mandatario para tu compañía, su fila se ve en gris con un candado y la leyenda «Configurado por el organismo de tránsito»: puedes consultarlo, pero no editarlo ni eliminarlo (solo el organismo). Los mandatarios que registraste tú conservan sus acciones.",
+            "Encontrar un mandatario: encima de la lista hay un buscador por nombre o documento y un embudo en el encabezado de columnas como Mandatario, Documento, Modelo, Vigencia, Validación y Organismos. Si ningún mandatario cumple, verás «Ningún registro coincide con los filtros» y «Limpiar filtros».",
             "Desactivar, reactivar y eliminar: en cada fila tienes los iconos de editar, desactivar (o reactivar si está inactivo) y eliminar. Antes de desactivar o eliminar, el sistema revisa qué afecta. Si es el único mandatario activo de una compañía en un organismo, o es un default, el diálogo lista las compañías y organismos que quedarían sin mandatario y pide que confirmes; los trámites radicados sin aprobar se reasignan con la prelación (mandatario propio, asociado de otra compañía o default del organismo) y, si no queda nadie, el organismo decide al aprobar. Sin impacto basta una confirmación corta. Eliminar conserva el historial. Al terminar te dice cuántos trámites se reasignaron y cuántos quedan para el organismo. Reactivar no desplaza al mandatario que ya esté vigente: si hubo otro activo, el vínculo queda inactivo y se te avisa. Si el servidor responde «No tienes permiso», la fila no cambia. Persona jurídica y Formato en blanco no tienen vigencia y muestran un guion. Un mandatario eliminado no aparece.",
             "Compañías asociadas: el formulario se abre como una ventana (modal) por pasos (¿Quién firma?, Datos, ¿Cómo firma?, Vigencia y Dónde aplica) con un resumen que se actualiza mientras lo llenas. En «Dónde aplica», si tu compañía tiene compañías hijas, las ves completas, sin páginas: escribe en el buscador parte del nombre o del NIT para filtrar, marca las que quieras (quedan como chips con una «x» para quitarlas y un contador), y usa «Seleccionar las filtradas» o «Limpiar» para marcar o quitar varias de una vez. Es opcional: sin marcar ninguna, el mandatario aplica solo a tu compañía. Los organismos funcionan igual: con ocho o menos se muestran como chips que activas con un clic, y con más aparece el buscador. Si no tienes compañías hijas no hay lista y el formulario dice «Este mandatario aplica solo a su compañía». Ya no aparecen las empresas de los Representantes Legales."
           ],
@@ -2253,11 +2586,14 @@
           ]
         },
         {
-          "id": "convenio",
-          "title": "3. Convenio con el organismo",
+          "id": "firma-mandatario",
+          "title": "3. Cómo firma el mandatario el contrato de mandato",
           "paragraphs": [
-            "Cuando existe un convenio comercial registrado entre tu compañía y el organismo, el contrato de mandato no lleva recuadro de firma del mandatario: firma solo el mandante. Los datos del mandatario siguen en el cuerpo del contrato.",
-            "Sin convenio, el recuadro del mandatario lleva su firma así: con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash; con Validación de identidad, el trazo de la firma que hizo al validar su identidad con el mismo sello que el mandante: documento, UUID, firma y fecha de aprobación (y, si su vigencia es por rango, la fecha en que vence). Si su validación no está aprobada o está fuera de vigencia, el recuadro queda «Sin firmar»."
+            "Cómo sale el recuadro del mandatario en el contrato depende de dos cosas: el modelo, que eliges al registrar al mandatario, y el tipo de mandato, que fija Plataforma para cada compañía y organismo; por defecto es «Mandatario de la compañía». Con ese tipo, los datos del mandatario van en el cuerpo del contrato de mandato y el recuadro sale según el modelo, salvo que la configuración de mandato del organismo disponga otra cosa.",
+            "Persona natural: el recuadro lleva la firma así: con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash; con Validación de identidad, el trazo de la firma que hizo al validar su identidad con el mismo sello que el mandante: documento, UUID, firma y fecha de aprobación (y, si su vigencia es por rango, la fecha en que vence). Si su validación no está aprobada o está fuera de vigencia, el recuadro queda «Sin firmar».",
+            "Persona jurídica: no tiene firma personal, así que el recuadro sale «Sin firmar», con la línea para firmar a mano y los datos de la entidad. Si en el baúl de firmas hay una firma vigente registrada con el NIT de la entidad, esa firma se estampa.",
+            "Formato en blanco: el recuadro sale «Sin firmar», con la línea para firmar a mano y el documento en blanco.",
+            "Si Plataforma fijó otro tipo de mandato para tu compañía en ese organismo, el modelo no cambia el resultado. Con «Institucional (organismo)», el contrato no lleva recuadro del mandatario y firma solo el mandante; el cuerpo nombra al organismo o a su unión temporal con su nombre y NIT si el formato de contrato los incluye; si no, esos datos quedan en blanco. Con «Abierto (sin mandatario)», nombre, documento y firma quedan en líneas en blanco, en el cuerpo y en el recuadro, para llenarse a mano; si el organismo tiene datos institucionales, pueden aparecer en el contrato. El recuadro también lleva la marca «Sin firmar»."
           ],
           "bullets": [],
           "callouts": []
@@ -2293,6 +2629,7 @@
           "bullets": [
             "Agregar cliente a la red: razón social, NIT y tipo de compañía. El código lo asigna el sistema (COMP-XXXX). Nace vinculado a tu red.",
             "Activar / Desactivar cliente, con confirmación.",
+            "Encontrar un cliente: la tabla del Panel de red no tiene filtros arriba: usa el embudo del encabezado de cada columna (Cliente, NIT, Tipo, Estado y la fecha de vinculación).",
             "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
             "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
             "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red."
@@ -2413,18 +2750,18 @@
           "id": "companias",
           "title": "1. Compañías",
           "paragraphs": [
-            "Administradores → Compañías. Catálogo de compañías B2B con filtros, estado y el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
-            "Abrir una fila lleva a la ficha completa de la compañía, con 8 pestañas:"
+            "Administradores → Compañías. Catálogo de compañías B2B con el toggle «incluir OT» para ver también los organismos de tránsito en el mismo listado. Arriba de la tabla está el panel con NIT, Razón social, Estado y Fecha desde/hasta, con «Buscar» y «Limpiar». Además, cada columna con datos tiene un embudo en su encabezado para filtrarla (ver «Tablas: cómo leerlas y moverte entre páginas»); los filtros del panel y los de las columnas se combinan. La primera columna, «Código», muestra el consecutivo de cada compañía (COMP-0001, COMP-0002…); las compañías que ya existían recibieron el suyo según su antigüedad. «Crear compañía»: razón social, NIT, tipo de compañía (normal, Concesión o Marca Blanca) y, para Marca Blanca, dominio propio. El código no se escribe: el sistema asigna el siguiente consecutivo (COMP-0001, COMP-0002…) al guardar. «Activar / Desactivar» cambia el estado con confirmación; una compañía de tipo de sistema no se edita desde aquí.",
+            "Abrir una fila lleva a la ficha completa de la compañía, con 8 pestañas (más «Clientes hijos» y «Marca» si es cabeza de red):"
           ],
           "bullets": [
             "Productos: enciende o apaga los productos de la suite para la compañía (Trámites, Comparendos, Diagnóstico). El cambio se aplica al instante, sin «Guardar todo», y queda en el historial. Cada producto muestra su estado escrito: Encendido, Apagado o Próximamente.",
             "Trámites: familias habilitadas (Matrículas, Traspaso, Otros), cada una en un acordeón con un resumen («Sin restricciones» o «N restricciones activas») y con el estado de cada opción escrito junto a su switch (por ejemplo Permitido o Bloqueado), más la lista blanca de trámites permitidos. Debajo, la sección «Improntas» tiene el interruptor «Generación de improntas» (visible solo para el Super Admin), con el estado escrito junto a él: Habilitada o Deshabilitada. Si lo desactivas, el asistente no genera la impronta automáticamente y el radicador la carga a mano; solo aplica a trámites nuevos. Se guarda con «Guardar todo».",
-            "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. El buscador de esa tabla (por nombre o código, con o sin tildes) recorre todos los organismos, no solo la página que estás viendo.",
-            "Documentos: parámetros documentales de la gestora, en una tabla con cada tipo de documento y su estado (Obligatorio, Opcional u Oculto). «Agregar parámetro» o el ícono de editar abren la ventana para elegir el documento y su estado.",
-            "Representantes legales: buscador por nombre o documento, un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página».",
-            "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
-            "Usuarios: usuarios de la compañía con buscador y filtros por perfil, rol y estado, e «Invitar usuario».",
-            "Historial de Cambios: quién cambió qué y cuándo, con el campo en lenguaje claro y el valor anterior y el nuevo como etiquetas. «Ver detalle» abre los valores extensos. Los filtros (fechas, tipo de cambio y texto) se aplican a la página cargada."
+            "Configuración Empresa: cinco bloques con un índice de acceso rápido arriba. «Firma y documentos» (firma precargada desde el baúl y módulo de Resoluciones), «Notificaciones» (enrutamiento, avisos al aprobar o rechazar y sus destinatarios), «Cobro y recaudo» (métodos de recaudo), «Consultas y fuentes» (validar SOAT ante RUNT, fuente de comparendos, proveedores de consulta y de avalúo; el tiempo de espera de contingencia está en «Opciones avanzadas») y «Organismos de tránsito», con los bloqueos y restricciones que aplica cada uno. Las opciones elegidas se marcan en verde y la de Fasecolda aparece como obligatoria. Esa tabla y la de Bloqueos tienen un buscador arriba por nombre o código y, además, un embudo en el encabezado de cada columna (Organismo, Código, Estado; en Bloqueos, Estado en red); recorren todos los organismos, no solo la página que estás viendo.",
+            "Representantes legales: un resumen de cuántos representantes no tienen firma ni identidad y paginación con «Filas por página». Encima hay un buscador por nombre o documento y, en el encabezado de cada columna (Representante, Documento, Trámites, Firma / Identidad), un embudo para filtrarla. La firma de cada representante se gestiona en su ficha.",
+            "Mandatarios: el mismo formulario que ve el Administrador de la compañía, con modelo (Persona natural, Persona jurídica o Formato en blanco), forma de firma y vigencia. La lista muestra el modelo y la etiqueta de vigencia (Vigente, Por vencer, Vencido, Inactivo, Aún no vigente; guion en Persona jurídica y Formato en blanco). Tiene buscador por nombre o documento y un embudo en el encabezado de columnas como Mandatario, Documento, Modelo, Vigencia, Validación y Organismos; las acciones de cada fila son íconos (editar, dar de baja o reactivar, eliminar) con su nombre al pasar el mouse. Ver el artículo «Representantes legales y mandatarios» de Administrador de compañía.",
+            "Usuarios: usuarios de la compañía con buscador y selectores de perfil, rol y estado arriba, un embudo en cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha) e «Invitar usuario».",
+            "Integraciones externas: la conexión del portal de Persona Natural con la compañía (solo la ve el Super Admin). Se explica en el apartado «5. Integraciones externas de la compañía».",
+            "Historial de Cambios: quién cambió qué y cuándo, con el campo en lenguaje claro y el valor anterior y el nuevo como etiquetas. «Ver detalle» abre los valores extensos. Arriba hay fechas, tipo de cambio y buscador, que actúan sobre la página cargada. Los embudos de las columnas (Fecha, Campo modificado, Valor anterior, Operador) filtran todo el historial de la compañía, no solo la página que ves; puedes buscar por lo que se ve, por ejemplo «Inicio de sesión» en Campo modificado o «Deshabilitada» en Valor anterior. Si en el rango propio la fecha inicial es posterior a la final, te avisa y no aplica."
           ],
           "callouts": [
             {
@@ -2438,7 +2775,7 @@
           "id": "companias-red",
           "title": "2. Cabezas de red",
           "paragraphs": [
-            "Si la compañía es cabeza de red (Concesión o Marca Blanca), su ficha suma el panel de hijas: agregar un cliente a la red, activar o inactivar una hija e invitar usuarios para que la administren.",
+            "Si la compañía es cabeza de red (Concesión o Marca Blanca), su ficha suma el panel de hijas: agregar un cliente a la red, activar o inactivar una hija e invitar usuarios para que la administren. La tabla de hijas y el Panel de red no tienen filtros arriba: se filtran con el embudo de cada columna (Razón social, NIT, Tipo, Estado y la fecha de vinculación).",
             "Si además es Marca Blanca, configura la marca y el dominio propio de la red: registrar el dominio, cambiarlo, retirarlo y comprobarlo (validación de propiedad). Estas cuatro acciones son exclusivas del Super Admin; el Administrador de la cabeza de red solo las ve en modo lectura."
           ],
           "bullets": [],
@@ -2472,6 +2809,33 @@
           ],
           "bullets": [],
           "callouts": []
+        },
+        {
+          "id": "integraciones-externas",
+          "title": "5. Integraciones externas de la compañía",
+          "paragraphs": [
+            "En la ficha de la compañía, la pestaña «Integraciones externas» (solo Super Admin; los demás perfiles no la ven) administra la conexión que permite al portal público de Persona Natural hablar con FLIT 2 en nombre de esa compañía. La conexión solo puede consultar información, no modificarla. Cada compañía puede tener una sola conexión de Persona Natural activa a la vez.",
+            "La tabla muestra, por cada conexión: el nombre y su identificador, el tipo (Persona Natural), la finalidad, el alcance (Solo lectura), el estado, el último acceso y la fecha en que se creó. Tiene filtros por Conexión y Estado, y paginación con «Filas por página». Los estados son: Activa; Bloqueada (indica hasta cuándo, o «Bloqueada hasta que se desbloquee» cuando la bloqueó una persona del equipo FLIT; también puede bloquearse sola por intentos fallidos) y Desactivada. Si una conexión activa aparece con la marca «Debe cambiar la clave», hay que generarle una clave nueva."
+          ],
+          "bullets": [
+            "Crear: botón «Crear conexión». Escribe el nombre y, si quieres, la finalidad (los dos son opcionales: sin nombre se usa uno por defecto) y confirma con «Crear conexión». El botón aparece desactivado, con su explicación al lado, si la compañía ya tiene una conexión activa: primero hay que desactivarla.",
+            "Ver la clave: al crear (y al generar una clave nueva) se abre una ventana con el identificador de la conexión y la clave secreta, y el botón «Copiar clave». La clave se muestra una sola vez: no se puede volver a ver ni recuperar. Cópiala, entrégala al servicio del portal por un canal seguro y cierra con «Ya la copié, cerrar». Si la pierdes, tendrás que generar una nueva.",
+            "Generar una clave nueva: ícono de la llave en la fila → «Generar clave nueva». Se crea una clave nueva y se muestra una sola vez. Por defecto la clave anterior sigue sirviendo 24 horas para que el portal alcance a cambiarla; si sospechas que se filtró, marca «Dejar sin efecto la clave anterior ahora mismo». No se puede generar una clave nueva en una conexión bloqueada: primero desbloquéala.",
+            "Bloquear y desbloquear: el candado de la fila. Bloquear impide que la conexión obtenga accesos nuevos hasta que alguien la desbloquee; los accesos que ya tenía siguen valiendo hasta que vencen (máximo 30 minutos). Desbloquear le permite volver a pedir accesos de inmediato con su clave vigente.",
+            "Desactivar: ícono de apagar → «Desactivar». Es definitivo: la conexión no podrá obtener accesos ni volver a activarse; para reconectar el portal hay que crear una nueva. Una conexión desactivada ya no ofrece acciones."
+          ],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": null,
+              "text": "Cada acción pide confirmación. Si el sistema no la puede aplicar (por ejemplo, otra persona ya la desactivó), el motivo se muestra en la misma ventana y no se cierra; recarga el listado para ver el estado actual."
+            },
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si el listado no carga verás «No se pudieron cargar las conexiones» con la opción de reintentar; si la compañía aún no tiene conexiones, la pestaña te invita a crear la de Persona Natural con «Crear conexión»."
+            }
+          ]
         }
       ],
       "sources": []
@@ -2734,6 +3098,268 @@
       "sources": []
     },
     {
+      "slug": "4-superadmin/7-plataforma-persona-natural",
+      "title": "Plataforma: Persona Natural (trámites, organismos, tarifas, ajustes, contenido, reportes y diseño web)",
+      "href": "/manual/4-superadmin/7-plataforma-persona-natural",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Cómo el Super Admin deja listo el portal de Persona Natural: qué trámites se ofrecen y en qué organismos, cuánto cuestan, los medios de pago, los ajustes, los textos que ve el ciudadano, los reportes y el diseño de la web.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "entrada",
+          "title": "1. Dónde está y qué falta configurar",
+          "paragraphs": [
+            "Plataforma → «Persona Natural». Es la pantalla desde la que el equipo FLIT decide qué trámites puede hacer una persona natural desde el portal público, en qué organismos de tránsito y cuánto cuestan. Solo la ve el Super Admin con el permiso de administrar Persona Natural: los demás perfiles no tienen la entrada en el menú y, si abren la dirección directa, ven el mensaje «No tienes permiso para administrar el portal de Persona Natural.».",
+            "Arriba está el «Estado de la configuración». Dice que para ofrecer un trámite al ciudadano necesitas tres cosas, y muestra cada una como «Hecho» o «Pendiente» con un botón que te lleva directo a donde se resuelve: 1. «Un tipo de trámite» (botón «Elegir trámites»), 2. «Un organismo de tránsito» (botón «Elegir organismos») y 3. «Una tarifa vigente» (botón «Configurar tarifas»). Debajo, una frase resume lo que el ciudadano ve hoy, por ejemplo «Hoy el ciudadano puede iniciar 2 tipos de trámite en 5 organismos de tránsito», o qué falta si todavía no puede iniciar ninguno. Si hay organismos habilitados sin tarifa, un aviso lo dice. Cuando los tres pasos están hechos, el panel se reduce a una sola línea («Configuración completa. Hoy el ciudadano puede iniciar…») con el botón «Ver pasos» para expandirlo; si falta algo, se muestra completo. El estado se actualiza solo cuando cambias algo.",
+            "Debajo hay siete pestañas, en el orden de los pasos: «Trámites» (paso 1), «Organismos» (paso 2), «Tarifas» (paso 3), «Ajustes del portal», «Contenido», «Reportes» y «Diseño web». Un trámite que no está listo o un organismo que ya no está activo en FLIT no cuentan como «Hecho». Cada una carga cuando entras en ella y muestra los cuatro estados de siempre: cargando, vacío, error con «Reintentar» y con datos. Para conectar el portal con una compañía se usa, además, la pestaña «Integraciones externas» de la ficha de la compañía (ver «Compañías, organismos de tránsito y causales»)."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "organismos-tramites",
+          "title": "2. Trámites y organismos",
+          "paragraphs": [
+            "Aquí decides qué se ofrece en el portal, en dos pestañas separadas. Una regla manda sobre todo lo demás, y la pestaña «Trámites» la recuerda arriba: un trámite aparece cuando está activado, el organismo está habilitado y existe una tarifa vigente para esa combinación. Si falta algo, el ciudadano no lo ve.",
+            "«Trámites» (paso 1, «Trámites que ofrece el portal») lista los trámites activos y publicados en FLIT 2. Solo aparecen los trámites que en FLIT 2 están activos, publicados y con el asistente encendido; si uno deja de cumplirlo, sale de la lista y el portal deja de ofrecerlo. Cada uno muestra su categoría, el interruptor «Ofrecer en el portal», si «Lo ve el ciudadano» (Sí, No o «Falta tarifa») y en cuántos organismos tiene tarifa. La tabla lista solo los trámites habilitados en FLIT 2, y todos se pueden ofrecer: ningún trámite de la lista tiene el interruptor bloqueado. En el portal web y en el punto, cada trámite pide los mismos datos propios que en FLIT 2 (por ejemplo, en un cambio de color se escoge el color nuevo y se adjunta el soporte), y el portal sigue siendo solo para personas naturales.",
+            "«Organismos» (paso 2, «Organismos de tránsito») lista solo los organismos de tránsito activos en FLIT. Cada uno muestra su municipio y departamento, el interruptor «Ofrecer en el portal», el interruptor «Canal del punto» y cuántos trámites tiene con tarifa. Si un organismo habilitado deja de estar activo en FLIT, sigue en la lista marcado «Ya no está activo en FLIT» y solo puedes dejar de ofrecerlo. Tiene un buscador por nombre, municipio o departamento y filtros por Organismo, Departamento, «Ofrecer en el portal» y «Canal del punto». Ambas tablas tienen paginación con «Filas por página».",
+            "«Canal del punto» es independiente de «Ofrecer en el portal». Encenderlo no publica el organismo en el portal, y apagar el portal no apaga el punto. Con el canal apagado la fila no muestra «Enlace y QR». Con el canal encendido, «Enlace y QR» abre un cuadro con la dirección de ese organismo, el botón «Copiar enlace» y el código QR de esa misma dirección. «Descargar QR» guarda la imagen para imprimirla. Si el organismo tiene dominios propios activos, la dirección y el QR usan su dominio principal y el cuadro lista los demás en «Otras direcciones activas del organismo». La placa y el documento no van en la dirección: quien atiende en el organismo entrega el enlace o el QR, y la persona los abre en el punto. Ahí ve «Iniciar» y «Consultar» (sin Cotizar), con los mismos trámites que el portal ofrece en ese organismo. Tras Iniciar con placa, documento y tipo, el punto muestra el Diagnóstico: si puede continuar o no, con los motivos, igual que en el portal web. Después de «Actores» sigue «Requisitos», con la misma pantalla del portal web: los documentos que pide FLIT 2.0 para ese tipo y organismo, que la persona carga o reemplaza ahí mismo, y en el traspaso el valor de venta, precargado con el avalúo de Fasecolda y editable. «Continuar» solo pasa a Pago cuando están todos los obligatorios; si falta alguno, la pantalla dice cuáles. Si el canal está apagado, el código no existe o el organismo no está activo en FLIT, la página explica el motivo y no deja entrar. Si el organismo ya no está activo en FLIT, el interruptor del canal queda bloqueado mientras esté apagado."
+          ],
+          "bullets": [
+            "Ofrecer un trámite u organismo: usa el interruptor de la fila. Verás un aviso como «… ahora se ofrece en el portal.».",
+            "Dejar de ofrecerlo: apaga el interruptor. Antes se abre una confirmación que explica que el ciudadano dejará de verlo hasta que lo vuelvas a activar (las tarifas ya configuradas se conservan); confirma con «Dejar de ofrecer» o cancela y no cambia nada.",
+            "Encender el canal del punto: usa «Canal del punto» en la fila. El estado pasa a «Encendido» y aparece «Enlace y QR». Entrega esa dirección y el QR al organismo para que los publique en su sitio y en el punto.",
+            "Apagar el canal: el interruptor vuelve a «Apagado» y «Enlace y QR» desaparece. Quien abra la dirección ve el motivo y no entra al trámite.",
+            "Aviso «Falta tarifa»: el trámite o el organismo está activado pero no tiene tarifa vigente, así que el ciudadano no puede cotizar. El botón «Crear tarifa» de ese aviso te lleva a la pestaña «Tarifas».",
+            "Si falta el sitio público del canal, el cuadro de «Enlace y QR» lo avisa y la dirección queda incompleta. Hay que configurarlo antes de entregar el enlace al organismo."
+          ],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Habilitar un organismo no basta: también necesita una tarifa vigente. Si no ves un trámite en el portal, revisa primero las tres condiciones de la regla o mira el «Estado de la configuración»."
+            }
+          ]
+        },
+        {
+          "id": "tarifas",
+          "title": "3. Tarifas",
+          "paragraphs": [
+            "Lista cuánto paga el ciudadano por cada trámite en el portal, agrupado por organismo y trámite. Cada fila muestra el organismo (o «Todos los organismos» si el valor aplica a todos), el trámite, los Derechos de tránsito, el Servicio digital FLIT, el Envío, otros cargos, desde cuándo rige y su estado: Vigente, Próxima (aún no rige) o Anterior (ya no rige). Los valores se ven en pesos, con puntos de miles. Tiene filtros por Organismo, Trámite, «Vigente desde» y Estado, y por defecto no muestra las anteriores: para verlas, filtra por Estado en el encabezado de esa columna.",
+            "Una tarifa de un organismo tiene prioridad sobre el valor general del trámite. Los cargos que se pueden registrar son Derechos de tránsito, Servicio digital, Cambio de color, Conversión de combustible, Cambio de carrocería y Envío del documento. Si un trámite de transformación (color, combustible o carrocería) no tiene valor para ese cargo en la tarifa del organismo, el ciudadano ve «No aplican en este organismo» en lugar de un valor."
+          ],
+          "bullets": [
+            "Crear una tarifa nueva: botón «Nueva tarifa». Elige el trámite y el organismo (o «Todos los organismos (valor general)»), indica desde qué fecha rige («Rige desde»; debajo ves «Desde el … el portal cotiza con estos valores») y escribe el valor en pesos de al menos un cargo; los puntos de miles se acomodan al escribir y también al borrar un dígito. Los Derechos de tránsito y el Servicio digital siempre se registran para un trámite concreto; «Todos los trámites (solo cargos adicionales)» sirve solo para los demás cargos.",
+            "Cambiar los valores de una tarifa: en la fila, el lápiz «Cambiar valores de…». No se edita la tarifa anterior: se registra una nueva con otra fecha. Cada campo muestra el valor de hoy y solo viajan los que cambies. La tarifa anterior deja de regir el día antes del inicio de la nueva; si la nueva empieza la misma fecha, la reemplaza. Las tarifas anteriores ya no ofrecen cambiar valores.",
+            "Fecha de inicio: puede ser hoy o una fecha futura; no se admite una fecha pasada.",
+            "Ver el historial: ícono de historial en la fila («Ver historial de…»). Muestra, por cargo, los valores anteriores con su vigencia, estado y la fecha en que se registraron."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Las cotizaciones que ya se emitieron no cambian: una tarifa nueva solo aplica desde su fecha de inicio."
+            },
+            {
+              "variant": "warning",
+              "title": "Mensajes frecuentes",
+              "text": "«La fecha de inicio no puede ser anterior a hoy.» Elige hoy o una fecha futura. «Ya hay una tarifa para este trámite y organismo que se cruza con esa fecha. Elige otra fecha de inicio.» Cambia la fecha de inicio. «Cambia al menos un valor para registrar el cambio.» No modificaste ningún valor. «Los derechos de tránsito y el servicio digital se registran siempre para un trámite concreto: elige el trámite.»"
+            }
+          ]
+        },
+        {
+          "id": "ajustes",
+          "title": "4. Ajustes del portal",
+          "paragraphs": [
+            "Ajustes generales de cómo se comporta el portal para el ciudadano, ordenados en tarjetas. Si dejas un campo vacío, el portal usa su valor habitual, y ese valor se lee debajo del campo junto con el rango permitido. La unidad (minutos, días, consultas) se ve dentro del campo.",
+            "Tres tarjetas: «Tiempos y límites» (Duración de la sesión, habitual 60 minutos; Días que se guarda un trámite sin enviar, habitual 30 días; Consultas por persona al día, habitual 10 consultas por hora; Consultas de todo el portal al día, habitual 2000 consultas), «Verificación anti-robots» (el captcha puede quedar en «Lo habitual del portal (activada)», «Activada» o «Desactivada») y «Contacto de soporte»: correo, teléfono y horario de atención (opcionales), pensados para que el ciudadano pida ayuda.",
+            "Abajo hay una barra con el estado («Hay cambios sin guardar» o «No hay cambios por guardar») y la fecha de la última actualización. Para guardar usa «Guardar ajustes»; el botón queda inactivo mientras no haya cambios. Si hay cambios, «Descartar cambios» devuelve el formulario a lo guardado. Si un valor está fuera de rango o el correo no es válido, el mensaje aparece bajo el campo y no se guarda nada."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "warning",
+              "title": "Si otra persona editó al mismo tiempo",
+              "text": "Verás el aviso «Alguien más cambió estos ajustes». Lo que escribiste se conserva en pantalla, pero para guardarlo debes pulsar «Cargar valores actuales» y volver a aplicar tus cambios."
+            }
+          ]
+        },
+        {
+          "id": "contenido",
+          "title": "5. Contenido del portal",
+          "paragraphs": [
+            "Administra lo que el ciudadano lee en el portal sin intervención técnica, en tres secciones: «Preguntas frecuentes», «Banners» y «Enlaces legales y de contacto». Lo que cambias aquí no lo ve el ciudadano hasta que lo publiques. El panel «Publicación del contenido» muestra «Lo que ve hoy el ciudadano» (el contenido por defecto del portal, o el que publicaste con su fecha y hora), dice «Hay cambios sin publicar» o «Todo está publicado» y trae «Ver cómo quedaría», «Publicaciones anteriores» y «Publicar cambios». Cada sección tiene su encabezado con un contador (por ejemplo «3 preguntas · 2 visibles») y su botón de agregar, y la tabla debajo."
+          ],
+          "bullets": [
+            "Preguntas frecuentes: la lista abre con las preguntas que el portal ya muestra al ciudadano, para que puedas editarlas. «Nueva pregunta» pide la pregunta y la respuesta (texto simple, sin formato ni código) y si se muestra en el portal. En cada fila puedes editar, subir o bajar para cambiar el orden y usar el interruptor para mostrar u ocultar (ocultar pide confirmación). El formulario cuenta los caracteres (300 la pregunta, 2000 la respuesta) y muestra cómo se verá en el portal. Estado: Visible u Oculta. Filtra por Pregunta y Estado. El ciudadano sigue viendo el texto de siempre hasta que publiques.",
+            "Banners: «Nuevo banner» pide el título, la imagen (JPG, PNG o WEBP de hasta 2 MB), una descripción de la imagen para quienes no pueden verla, un enlace opcional y, si quieres, «Mostrar desde» y «Mostrar hasta». Cada banner se puede editar, mover de orden y mostrar u ocultar con su interruptor (ocultar pide confirmación). Su estado es Vigente, Programado (aún no empieza), Vencido (ya terminó) u Oculto. La descripción de la imagen es para personas con discapacidad visual que usan lector de pantalla.",
+            "Enlaces del portal: la Política de tratamiento de datos, los Términos y condiciones, el Contacto de ventas y el Video explicativo. Cada enlace dice «Configurado» o «Falta configurar»; son cuatro filas fijas, sin paginación. Edita cada uno con el lápiz (la dirección debe empezar por http:// o https://); en los dos enlaces legales, si no hay documento oficial déjalo vacío y el portal conserva su aviso actual. Los demás aceptan una página web, un correo o un teléfono según el caso.",
+            "Ver cómo quedaría: muestra cómo lo vería el ciudadano con tus cambios, sin publicarlos todavía.",
+            "Publicar cambios: pide confirmación y dice cuántas preguntas y banners visibles verá el ciudadano desde ahora. Avisa que lo que publicas reemplaza las preguntas y los banners que el portal muestra por defecto y que una publicación no se puede editar: para cambiar algo, haces el cambio y publicas otra vez. Confirma con «Sí, publicar». El botón está inactivo si no hay cambios por publicar.",
+            "Publicaciones anteriores: lista cada publicación con su fecha y cuántas preguntas y banners tenía, de la más reciente a la más antigua."
+          ],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Cada cambio de una pregunta, banner o enlace dice «… guardado. El ciudadano lo verá cuando publiques». Nada llega al ciudadano hasta que pulses «Publicar cambios»."
+            }
+          ]
+        },
+        {
+          "id": "medios-de-pago",
+          "title": "6. Medios de pago de la web",
+          "paragraphs": [
+            "La pestaña «Tarifas» tiene dos pasos, que ves como pestañas: «1 · Tarifas» (cuánto cuesta cada trámite) y «2 · Medios de pago» (en qué medio se cobra). En el paso 2, «Medios de pago» define qué se cobra en la web de persona. Si un valor no tiene monto, el botón «Definir precio» abre el formulario de la tarifa de ese trámite y, al cerrarlo, vuelves al paso 2 con el monto ya cargado. La tarjeta de «Pasarela de pago» enciende o apaga el medio y dice cuántos trámites se ofrecen. Debajo, cada trámite tiene una fila con su «Valor del trámite» y su «Valor de la gestión», y en la columna del medio eliges si cada uno se cobra, con el total y si «Se ofrece» en el portal. El total no incluye el envío ni las transformaciones, que se suman cuando aplican. La web no ofrece «PIN en caja»: ese medio solo existe en el punto de un organismo. El monto se define en las tarifas; aquí solo se ve.",
+            "Si un trámite no tiene valor general, se muestra el mayor valor por organismo, porque a quien elija ese organismo sí se le cobrará. Cada organismo administra lo suyo desde su hub (ver «Portal Persona Natural del organismo: reportes, cobro, diseño y dominios»); el valor de la gestión solo lo mueve el Super Admin."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "reportes",
+          "title": "7. Reportes",
+          "paragraphs": [
+            "La pestaña «Reportes» lista los trámites que llegaron por la web de persona y por los puntos de los organismos, con su canal, organismo, tipo de trámite, radicado, estado, fecha en que cayó, modalidad, valor del trámite y valor de la gestión. Filtra por los campos de la barra y descarga el resultado en Excel, con las mismas filas y columnas que ves en pantalla."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "diseno-web",
+          "title": "8. Diseño web",
+          "paragraphs": [
+            "La pestaña «Diseño web» define el nombre, el logo y los colores de la web de persona. Lo que cambias se guarda como borrador y la vista previa muestra cómo quedará. Al publicar, la web muestra los colores y el logo desde la siguiente carga; los portales de los organismos no cambian.",
+            "Sin diseño publicado, la web usa la marca FLIT. Al retirarlo, vuelve a la marca FLIT y tu borrador se conserva para publicarlo otra vez. Si los colores no se leerían bien, un mensaje lo dice y «Ajustar automáticamente» los corrige."
+          ],
+          "bullets": [],
+          "callouts": []
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/8-portal-persona-natural-recorrido",
+      "title": "Portal de Persona Natural y canal del punto: recorrido paso a paso",
+      "href": "/manual/4-superadmin/8-portal-persona-natural-recorrido",
+      "audience": "Todos",
+      "sectionId": "superadmin",
+      "summary": "Qué hace y qué ve la persona que inicia un trámite en el portal web o en el punto del organismo, desde Inicio hasta la confirmación, y cómo llega ese trámite a FLIT 2.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "inicio",
+          "title": "1. Inicio",
+          "paragraphs": [
+            "La persona escribe la placa, su documento y elige el tipo de trámite. Antes de seguir, FLIT muestra el Diagnóstico: si puede continuar o no, con los motivos.",
+            "En el portal web, si el organismo donde está registrada la placa no está habilitado, el portal no deja continuar y lo explica. En el punto, si la placa pertenece a otro organismo, el trámite no sigue y aparece el mensaje «Esta placa está registrada en X, no en Y. Este trámite debe hacerse en X.», donde X es el organismo de la placa y Y el del punto.",
+            "Si el vehículo ya tiene un trámite abierto, aparece «Esta placa ya tiene un trámite en proceso…» y no se puede iniciar otro hasta que termine."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "actores-web",
+          "title": "2. Actores en el portal web",
+          "paragraphs": [
+            "Al llegar a «Actores», FLIT consulta automáticamente al RUNT los datos del titular, de la licencia de conducción y de las multas, y los muestra con sus etiquetas. El documento del titular se ve pero no se puede editar.",
+            "Si la consulta falla o la persona no aparece en el RUNT, se muestra el botón «Volver a consultar», que repite la consulta con el mismo documento. Si el sistema pide esperar, el botón se habilita cuando termina la cuenta regresiva. No aparece cuando ya se agotaron las consultas de la solicitud ni cuando las consultas están pausadas por el día.",
+            "Al pulsar «Continuar», la validación de identidad se envía al correo de la persona. Si no llega, el botón de reenvío la manda otra vez. El estado se actualiza solo, en vivo, mientras la persona valida; cuando termina se ve «¡Identidad validada!».",
+            "«Continuar» no espera a que la identidad esté aprobada, así la persona puede avanzar con los requisitos. El envío final del trámite sí la exige: sin identidad aprobada no se puede enviar."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "actores-punto",
+          "title": "3. Actores en el punto del organismo",
+          "paragraphs": [
+            "En el punto la identidad se hace de forma automática en la misma estación: el botón «Abrir validación» lleva a la persona a validar ahí mismo.",
+            "Aquí «Continuar» sí espera: solo avanza cuando el radicante aprobó la identidad.",
+            "Si la consulta al RUNT falla o la persona no aparece, también está disponible el botón «Volver a consultar»."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "requisitos",
+          "title": "4. Requisitos",
+          "paragraphs": [
+            "Cada tipo de trámite pide sus propios datos, igual que en FLIT 2, además de los documentos del organismo. «Continuar» solo pasa a Pago cuando están todos los obligatorios; si falta alguno, la pantalla dice cuáles.",
+            "Transformaciones (color, combustible, carrocería): cada una se muestra en su tarjeta, con la opción que se elige, el valor actual según el RUNT y el documento que se adjunta dentro de la misma tarjeta.",
+            "Prenda: se muestra la información del RUNT, con el acreedor y su NIT ya cargados. Si el vehículo tiene prenda, aparece la pregunta «¿Qué se hará con ella?» con tres opciones, ninguna preseleccionada; responderla es obligatorio.",
+            "Levantar la prenda dentro de un traspaso: el acreedor es opcional y se adjunta el documento del levantamiento. Levantar prenda como trámite propio: se muestra el acreedor que reporta el RUNT, se indica la entidad ante la que se levantó y se adjunta el documento."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "En el traspaso el valor de venta viene precargado con el avalúo de Fasecolda y se puede editar."
+            }
+          ]
+        },
+        {
+          "id": "resumen",
+          "title": "5. Resumen y confirmación",
+          "paragraphs": [
+            "El Resumen reúne, en este orden: Trámite, Vehículo, Titular y actores, Validación de identidad, Información del trámite, Documentos cargados y Valores. Cada sección trae el botón «Editar» para volver a corregirla.",
+            "En el portal web, la pantalla de confirmación al enviar no muestra datos personales y sí el estado real de la identidad: aprobada o pendiente.",
+            "En el punto del organismo no hay paso de Resumen: los pasos son Diagnóstico, Actores, Requisitos, Pago y Envío, y «Continuar» en Requisitos lleva directo a Pago. Allí no se envía el trámite desde el Resumen: el valor se ve en Pago."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "pago-punto",
+          "title": "6. Pago en el punto del organismo",
+          "paragraphs": [
+            "En el punto, el trámite se paga en la caja del organismo. Antes de pagar, todas las personas del trámite deben haber validado su identidad: si falta alguna, la pantalla muestra quién falta y no deja pagar; cuando la última valida, el pago se habilita solo.",
+            "La pantalla abre con la tarjeta «Resumen del cobro»: placa, tipo de trámite, la tarifa del organismo, el valor de FLIT y el total a pagar. Debajo está la tarjeta «Pago en caja». No hay envío a domicilio: el documento se recoge en el organismo. El botón «Atrás» regresa a Requisitos."
+          ],
+          "bullets": [
+            "Al llegar a Pago, el pago en caja se genera solo: no hay que pulsar nada. Aparece el ID del trámite (por ejemplo PN-2026-000123), con un botón para copiarlo, el total y «Vale hasta hoy a las 11:59 p. m.».",
+            "La persona va a la caja con ese ID. Cuando la caja confirma el cobro, la pantalla del punto pasa sola al cierre.",
+            "Si el día terminó sin pagar, el ID vence: pulsa «Generar pago en caja de nuevo» y el total se calcula de nuevo con los precios vigentes.",
+            "Si recargaste la página o la caja anuló el cobro, entra a «Consultar mi trámite» con la placa y el código, pulsa «Retomar el pago» y escribe la cédula de quien radicó. Si la caja anula el cobro mientras ves el cierre, la pantalla vuelve sola a Pago con el aviso «La caja anuló el cobro. Genera el pago de nuevo.».",
+            "Si no se alcanza a generar el pago, la pantalla dice el motivo y ofrece «Reintentar».",
+            "Si el total es $0, la pantalla muestra «Confirmar» y sigue al cierre sin ir a la caja.",
+            "Si el trámite no tiene precio en el organismo, o el organismo no tiene habilitado el pago en caja, la pantalla lo dice y no deja continuar."
+          ],
+          "callouts": []
+        },
+        {
+          "id": "cierre-punto",
+          "title": "7. Envío (cierre) en el punto",
+          "paragraphs": [
+            "Con el pago confirmado, la persona ve un círculo verde con el mensaje «¡Tu trámite quedó! Recoge en este organismo.» y una tabla con el ID del trámite, el tipo, el número de radicado (o «En registro» si aún no llega) y el organismo, con el botón «Copiar ID». Más abajo están las tarjetas «Valor pagado» (con el medio) y «Vehículo». Si ya llegó a FLIT 2, la tabla muestra su radicado de FLIT 2.",
+            "Durante los primeros 15 minutos después del cobro en caja, el organismo todavía puede anular un cobro hecho por error; en ese tiempo el cierre dice «Tu trámite está en proceso de registro» (con un reloj en vez del visto bueno) y se consulta después con el ID del trámite. Luego el trámite pasa a FLIT 2.",
+            "Si la persona dio un correo propio, le llega un aviso con su ID y el lugar donde recoge. «Consultar trámite» abre la consulta con el ID ya escrito."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "flit2",
+          "title": "8. Qué pasa en FLIT 2",
+          "paragraphs": [
+            "Los trámites que llegan del portal quedan en FLIT 2 como borrador, con todos sus documentos cargados, incluido el consolidado. El equipo del organismo los revisa y los radica como cualquier otro trámite.",
+            "Los del punto del organismo llegan solo después de pagar, y su detalle muestra «Pagado en caja» (o «Sin cobro») con el valor, el medio y la fecha. No se vuelve a cobrar en FLIT 2."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Capturas pendientes: este artículo aún no tiene imágenes del portal ni del punto; se agregarán cuando el pipeline de capturas cubra esos portales."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
       "slug": "4-superadmin/9-validaciones-manuales",
       "title": "Validación de identidad manual",
       "href": "/manual/4-superadmin/9-validaciones-manuales",
@@ -2795,7 +3421,8 @@
           ],
           "bullets": [
             "Aprobar: la identidad queda aprobada por 30 días y el estado cambia a «Aprobada manual».",
-            "Rechazar: eliges uno de los motivos de la lista. La persona recibe el motivo por correo junto con un enlace nuevo para repetir la captura."
+            "Rechazar: eliges uno de los motivos de la lista. La persona recibe el motivo por correo junto con un enlace nuevo para repetir la captura.",
+            "Queda registrado quién decidió y cuándo: el detalle del caso muestra, por ejemplo, «Aprobada por Ana Pérez el 18/11/2026 10:30» o «Rechazada por …»."
           ],
           "callouts": []
         },
@@ -2909,6 +3536,97 @@
               "variant": "info",
               "title": null,
               "text": "Si ves «Certificado en preparación», la carta aún no está lista. La aprobación sigue vigente: vuelve a intentarlo en unos minutos. Si al descargar aparece un mensaje de que aún no está disponible, también se resuelve intentando de nuevo."
+            }
+          ]
+        }
+      ],
+      "sources": []
+    },
+    {
+      "slug": "4-superadmin/12-actualizar-documento",
+      "title": "Actualizar un documento de un trámite en cualquier estado",
+      "href": "/manual/4-superadmin/12-actualizar-documento",
+      "audience": "Super Admin",
+      "sectionId": "superadmin",
+      "summary": "Cómo el equipo FLIT reemplaza un documento de un trámite sin pasarlo a Borrador: qué queda como versión anterior, cómo se ve en la línea de tiempo y qué pasa con el consolidado.",
+      "primarySource": false,
+      "blocks": [
+        {
+          "id": "que-es",
+          "title": "1. Qué es y quién lo puede hacer",
+          "paragraphs": [
+            "«Actualizar documento» permite cargar o reemplazar un documento de un trámite en cualquier estado: Borrador, Preparado, Asignado, Entregado, Aprobado, Anulado o Revocado. Ya no hace falta pasar el trámite a Borrador, subir el archivo y volver a moverlo.",
+            "Solo lo tiene el Super Admin de FLIT. El gestor sigue subiendo documentos como siempre, solo en Borrador o en Subsanación."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "pasos",
+          "title": "2. Paso a paso",
+          "paragraphs": [
+            "Paso 1. En Trámites, busca el trámite y abre «Acciones» en su fila.",
+            "Paso 2. Elige «Actualizar documento». La ventana muestra el radicado y el estado actual del trámite.",
+            "Paso 3. En «Tipo de documento» elige uno de los que pide ese tipo de trámite. Si ya hay un archivo de ese tipo, verás «El documento actual quedará como versión anterior».",
+            "Paso 4. Elige el archivo (PDF, JPG, PNG o WEBP, hasta 20 MB).",
+            "Paso 5. Escribe la observación: por qué actualizas el documento. Es obligatoria (hasta 1.000 caracteres) y el botón no se activa sin ella.",
+            "Paso 6. Pulsa «Actualizar documento». Verás «Documento actualizado.» y el trámite sigue en el mismo estado."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "info",
+              "title": null,
+              "text": "Si otro proceso ya cargó ese mismo documento al mismo tiempo, el sistema te lo avisa y no reemplaza nada: vuelve a abrir el trámite y revisa antes de intentarlo de nuevo."
+            }
+          ]
+        },
+        {
+          "id": "anterior",
+          "title": "3. Qué pasa con el archivo anterior",
+          "paragraphs": [
+            "El archivo anterior no se borra: queda como «Versión anterior» y se puede ver y descargar en «Ver documentos», en el detalle del trámite y en la vista del organismo de tránsito.",
+            "El documento que cuenta para el trámite (el que va al consolidado y el que ve el organismo como vigente) es siempre el nuevo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "trazabilidad",
+          "title": "4. Trazabilidad en la línea de tiempo",
+          "paragraphs": [
+            "Cada actualización queda en «Línea de Tiempo del Trámite» como «Documento actualizado por el administrador», con fecha y hora, quién lo hizo, el estado en que estaba el trámite y la observación.",
+            "La tarjeta incluye el bloque «Documento» (por ejemplo, Improntas), «Archivo nuevo» y «Archivo anterior», cada uno con «Ver» para abrirlo. Si era la primera vez que se cargaba ese tipo, dice «No había un archivo anterior».",
+            "La misma tarjeta la ven la compañía y el organismo de tránsito en su línea de tiempo."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "consolidado",
+          "title": "5. El consolidado",
+          "paragraphs": [
+            "No tienes que hacer nada: al abrir «Ver consolidado» después de la actualización, el consolidado se vuelve a generar con el documento nuevo, también en Aprobado, Anulado o Revocado.",
+            "En un trámite en estado final verás el aviso «Documento final»: es su expediente definitivo y solo se vuelve a generar si un administrador actualiza un documento.",
+            "Los trámites migrados de FLIT 1 en estado final conservan su consolidado original."
+          ],
+          "bullets": [],
+          "callouts": []
+        },
+        {
+          "id": "ver",
+          "title": "6. Cómo se ven los documentos",
+          "paragraphs": [
+            "Al pulsar el ojo o «Ver», el documento se abre en una pestaña nueva del navegador, a pantalla completa. Mientras carga verás el carrito de FLIT.",
+            "Si el documento trae un aviso (por ejemplo «Documento final»), aparece unos segundos en la pantalla donde estabas, abajo a la derecha.",
+            "Si el archivo no se puede abrir o no se puede ver en el navegador, el aviso aparece en la pantalla actual con el botón «Descargar»."
+          ],
+          "bullets": [],
+          "callouts": [
+            {
+              "variant": "tip",
+              "title": null,
+              "text": "Si el navegador bloquea las ventanas emergentes de FLIT, el documento se muestra en la misma pantalla, como antes. Para verlo en pestaña nueva, permite las ventanas emergentes de FLIT."
             }
           ]
         }

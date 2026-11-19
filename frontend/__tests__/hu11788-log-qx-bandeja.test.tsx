@@ -322,7 +322,8 @@ describe("LOG QX — bandeja (HU #11788)", () => {
     // 148 h = 6 días 4 horas, por encima del umbral de 48 h.
     expect(screen.getByText(/6 d 4 h/)).toBeInTheDocument();
     const resuelta = screen.getByText("TRM-2026-000265").closest("tr")!;
-    expect(within(resuelta).queryByText(/⚠/)).not.toBeInTheDocument();
+    // La marca de espera alta es el triángulo de alerta del kit (img aviso-alerta), no un «⚠» de texto.
+    expect(resuelta.querySelector('img[src$="/aviso-alerta.svg"]')).toBeNull();
   });
 
   it("AC7: un fallo de la API muestra el error con opción de reintentar", async () => {
@@ -349,7 +350,8 @@ describe("LOG QX — bandeja (HU #11788)", () => {
     const { container } = render(<LogQx />);
     await screen.findByText("TRM-2026-000271");
 
-    expect(container.querySelector(".dark\\:text-white")).not.toBeNull();
+    // HU #14484: el tema oscuro lo resuelven los tokens (text-flit-primary cambia solo), no un dark: fijo.
+    expect(container.querySelector(".text-flit-primary")).not.toBeNull();
     // El body nunca desplaza en horizontal: lo hace el contenedor de la tabla.
     expect(container.querySelector(".overflow-x-auto")).not.toBeNull();
   });

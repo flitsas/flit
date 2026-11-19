@@ -935,6 +935,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("ultimo_evento_en");
 
+                    b.Property<DateOnly?>("UltimoIntentoConsultaContraventor")
+                        .HasColumnType("date")
+                        .HasColumnName("ultimo_intento_consulta_contraventor");
+
                     b.Property<decimal?>("ValorAdicional")
                         .HasPrecision(14, 2)
                         .HasColumnType("numeric(14,2)")
@@ -1553,6 +1557,18 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("destinatarios_reportes");
 
+                    b.Property<bool>("DpAutomaticoActivo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("dp_automatico_activo");
+
+                    b.Property<short>("DpAutomaticoTopeDiario")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)50)
+                        .HasColumnName("dp_automatico_tope_diario");
+
                     b.Property<string>("EmpresaNit")
                         .HasMaxLength(15)
                         .HasColumnType("character varying(15)")
@@ -1728,7 +1744,6 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnName("nombres");
 
                     b.Property<string>("NumeroDocumento")
-                        .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)")
                         .HasColumnName("numero_documento");
@@ -1759,7 +1774,6 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnName("tipo_contrato");
 
                     b.Property<string>("TipoDocumento")
-                        .IsRequired()
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)")
                         .HasColumnName("tipo_documento");
@@ -1877,6 +1891,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<Guid>("EnviadoPor")
                         .HasColumnType("uuid")
                         .HasColumnName("enviado_por");
+
+                    b.Property<bool>("EnvioAutomatico")
+                        .HasColumnType("boolean")
+                        .HasColumnName("envio_automatico");
 
                     b.Property<string>("Estado")
                         .IsRequired()
@@ -2084,6 +2102,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("procesado_en");
 
+                    b.Property<Guid?>("PromptVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("prompt_version_id");
+
                     b.Property<string>("ProveedorModelo")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
@@ -2092,6 +2114,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<DateTimeOffset?>("ProximoIntentoEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("proximo_intento_en");
+
+                    b.Property<short>("Reprocesos")
+                        .HasColumnType("smallint")
+                        .HasColumnName("reprocesos");
 
                     b.Property<string>("RespuestaLlm")
                         .HasColumnType("jsonb")
@@ -2497,6 +2523,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<Guid?>("ActualizadoPor")
                         .HasColumnType("uuid")
                         .HasColumnName("actualizado_por");
+
+                    b.Property<bool>("ConsultaContratoApi")
+                        .HasColumnType("boolean")
+                        .HasColumnName("consulta_contrato_api");
 
                     b.Property<DateTimeOffset>("CreadoEn")
                         .HasColumnType("timestamp with time zone")
@@ -2954,6 +2984,39 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.ToTable("organismo_transito_alias", "comparendos");
                 });
 
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.OrganismoTransitoDp", b =>
+                {
+                    b.Property<Guid>("OrganismoTransitoId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("organismo_transito_id");
+
+                    b.Property<DateTimeOffset?>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid?>("ActualizadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actualizado_por");
+
+                    b.Property<bool>("AdmiteDpPorCorreo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("admite_dp_por_correo");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid?>("CreadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por");
+
+                    b.HasKey("OrganismoTransitoId")
+                        .HasName("pk_organismo_transito_dp");
+
+                    b.ToTable("organismo_transito_dp", "comparendos");
+                });
+
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.Pago", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3349,6 +3412,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("nota_cambio");
 
+                    b.Property<string>("NotaRevisionJuridica")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("nota_revision_juridica");
+
                     b.Property<int>("NumeroVersion")
                         .HasColumnType("integer")
                         .HasColumnName("numero_version");
@@ -3364,6 +3432,19 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<Guid?>("PublicadaPor")
                         .HasColumnType("uuid")
                         .HasColumnName("publicada_por");
+
+                    b.Property<DateTimeOffset?>("RevisadaJuridicamenteEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revisada_juridicamente_en");
+
+                    b.Property<Guid?>("RevisadaJuridicamentePor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revisada_juridicamente_por");
+
+                    b.Property<string>("RevisadaJuridicamentePorNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("revisada_juridicamente_por_nombre");
 
                     b.PrimitiveCollection<List<string>>("VariablesUsadas")
                         .IsRequired()
@@ -3866,6 +3947,12 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<Guid?>("ActualizadoPor")
                         .HasColumnType("uuid")
                         .HasColumnName("actualizado_por");
+
+                    b.Property<bool>("Automatizable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("automatizable");
 
                     b.Property<DateTimeOffset>("CreadoEn")
                         .HasColumnType("timestamp with time zone")

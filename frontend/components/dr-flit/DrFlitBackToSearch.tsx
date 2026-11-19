@@ -1,6 +1,6 @@
 "use client";
 
-import { RotateCcw } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DR_FLIT_BACK_LABEL } from "./dr-flit-intents";
 
 export function DrFlitBackToSearch({
@@ -22,7 +22,7 @@ export function DrFlitBackToSearch({
         background: "var(--dr-flit-card-bg)",
       }}
     >
-      <RotateCcw className="h-4 w-4" aria-hidden="true" />
+      <Icono nombre="reintento" className="h-4 w-4" />
       {DR_FLIT_BACK_LABEL}
     </button>
   );

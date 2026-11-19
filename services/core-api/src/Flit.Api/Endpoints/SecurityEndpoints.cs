@@ -196,6 +196,12 @@ public static class SecurityEndpoints
                     return SuperAdminRoleNotAssignable();
             }
 
+            // HU #14454 (ADR-0082): el rol de caja se reparte solo desde «Usuarios de caja».
+            if (await CajaRoleExclusivity.ContainsCajaRoleAsync(db, roleIds, cancellationToken))
+                return Results.Json(
+                    new ErrorResponse(CajaRoleExclusivity.Code, CajaRoleExclusivity.Message),
+                    statusCode: StatusCodes.Status400BadRequest);
+
             try
             {
                 var result = await handler.HandleAsync(
@@ -487,7 +493,8 @@ public static class SecurityEndpoints
             var roles = (await roleRepo.ListVisibleToTenantAsync(tenantId, targetEntityType, cancellationToken))
                 .Where(r => r.IsActive
                     && !string.Equals(r.Code, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase)
-                    && !ProductRoleCodes.IsProductAdmin(r.Code))
+                    && !ProductRoleCodes.IsProductAdmin(r.Code)
+                    && r.Code != AdminAuthorization.OtCajaRole)
                 .ToList();
             return Results.Ok(roles);
         });
@@ -532,6 +539,13 @@ public static class SecurityEndpoints
                 && string.Equals(c.Value, AdminAuthorization.SuperAdminRole, StringComparison.OrdinalIgnoreCase));
             if (!callerIsSuperAdmin && await ContainsSuperAdminRoleAsync(db, [request.RoleId], cancellationToken))
                 return SuperAdminRoleNotAssignable();
+
+            // HU #14454 (ADR-0082): ni se asigna el rol de caja ni se le suma otro rol a quien ya es de caja.
+            if (await CajaRoleExclusivity.ContainsCajaRoleAsync(db, [request.RoleId], cancellationToken)
+                || await CajaRoleExclusivity.UserIsCajaAsync(db, userId, cancellationToken))
+                return Results.Json(
+                    new ErrorResponse(CajaRoleExclusivity.Code, CajaRoleExclusivity.Message),
+                    statusCode: StatusCodes.Status400BadRequest);
 
             // Roles vigentes ANTES del cambio, para que el rastro diga qué rol tenía y cuál
             // quedó — un "assign_role" a secas no le sirve a quien audita.

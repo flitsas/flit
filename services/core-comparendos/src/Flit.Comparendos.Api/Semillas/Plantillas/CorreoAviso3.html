@@ -1,6 +1,8 @@
-<!-- nombre: Aviso 3 al conductor (sin descuento) -->
+<!-- nombre: Aviso 3 al conductor -->
 <!-- asunto: Terminó el descuento del comparendo {{comparendo.numero}} -->
-<p>Hola, {{conductor.nombres}}:</p>
-<p>Terminó el plazo de descuento del comparendo <b>{{comparendo.numero}}</b> (placa {{comparendo.placa}}). Desde hoy el valor a pagar es el 100%: <b>{{comparendo.valor_total}}</b>, más los intereses que liquide el organismo de tránsito.</p>
-<p><a href="{{portal.enlace}}">Ver el comparendo</a></p>
-{{#si empresa.correo_respuesta}}<p>Si tienes preguntas, responde a {{empresa.correo_respuesta}}.</p>{{/si}}
+<h1 style="margin:4px 0 18px;text-align:center;color:#2F6FED;font-size:19px;letter-spacing:0.02em">RECORDATORIO DE PAGO</h1>
+<p style="margin:0 0 12px">Estimado/a <strong style="color:#2F6FED">{{conductor.nombres}}</strong>.</p>
+<p style="margin:0 0 12px">Los plazos de descuento del comparendo <strong>{{comparendo.numero}}</strong> (placa {{comparendo.placa}}) terminaron. El valor a pagar es el 100%: <strong>{{comparendo.valor_total}}</strong>, más los intereses que liquide el organismo de tránsito. Te pedimos pagarlo lo antes posible.</p>
+<p style="margin:0 0 12px"><strong style="color:#2F6FED">Infracción:</strong> {{comparendo.codigo_infraccion}}. {{comparendo.descripcion_infraccion}}.<br><strong style="color:#2F6FED">Organismo de tránsito:</strong> {{ot.nombre}}</p>
+<p style="margin:0 0 12px">{{#si adjuntos.autorizacion}}Adjuntamos de nuevo la autorización de cambio de infractor{{#si adjuntos.poder}} y el poder de la empresa{{/si}}: el organismo de tránsito te dirá si aún es posible hacer el cambio de contraventor.{{/si}}{{#si portal.enlace}} Puedes <a href="{{portal.enlace}}" style="color:#2F6FED">ver el comparendo aquí</a> (enlace disponible hasta el {{portal.vence}}).{{/si}}</p>
+<p style="margin:0 0 12px">Si ya lo resolviste, ignora este mensaje.{{#si empresa.correo_respuesta}} Si tienes preguntas, escríbenos a <strong>{{empresa.correo_respuesta}}</strong>.{{/si}}</p>

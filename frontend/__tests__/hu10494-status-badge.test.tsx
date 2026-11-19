@@ -21,8 +21,9 @@ describe("HU #10494 — StatusBadge (componente tintado)", () => {
     );
     const chip = screen.getByRole("status", { name: "Estado: Aprobado" });
     expect(chip).toHaveTextContent("Aprobado");
-    expect(chip.className).toContain("rounded-full");
-    expect(chip.className).toContain("border");
+    // UI Kit 2026 (propuesta-2): etiqueta con punta (`.kit-etiqueta`), ya no píldora redonda.
+    expect(chip.className).toContain("kit-etiqueta");
+    expect(chip.style.borderColor).toBeTruthy();
     expect(chip.style.color).toBeTruthy();
     expect(chip.style.background).toBeTruthy();
   });

@@ -149,6 +149,8 @@ builder.Services.AddHttpClient();
 
 var app = builder.Build();
 
+// GDC punto 10: antes que todo lo demás, para que el límite propio de la carga OCR rija antes de leer el cuerpo.
+app.UseMiddleware<LimiteCargaMiddleware>();
 app.UseSerilogRequestLogging();
 
 // HU #12417 AC3/AC4 — orígenes dinámicos: SetIsOriginAllowed (NO WithOrigins estático) se evalúa

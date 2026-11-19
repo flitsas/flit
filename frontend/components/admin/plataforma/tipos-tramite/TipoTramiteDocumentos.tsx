@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Loader2, Trash2 } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { fetchDocumentTypes } from '@/lib/api/admin-document-types';
 import type { DocumentType } from '@/lib/api/types-documents';
@@ -108,10 +108,10 @@ export function TipoTramiteDocumentos({
           {borrador.map((r, i) => (
             <li
               key={r.documentTypeCode}
-              className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
+              className="flex items-center justify-between gap-3 rounded-xl border px-3 py-2 border-border"
             >
               <span className="min-w-0">
-                <span className="block text-xs font-medium text-flit-primary dark:text-white">
+                <span className="block text-xs font-medium text-flit-primary">
                   {nombrePorCodigo.get(r.documentTypeCode) ?? r.documentTypeCode}
                 </span>
                 <code className="block text-xs opacity-55">{r.documentTypeCode}</code>
@@ -132,17 +132,17 @@ export function TipoTramiteDocumentos({
                     className="h-3.5 w-3.5 accent-flit-brand"
                     aria-label={`${r.documentTypeCode} obligatorio`}
                   />
-                  <span className="text-flit-primary dark:text-white">Obligatorio</span>
+                  <span className="text-flit-primary">Obligatorio</span>
                 </label>
                 <button
                   type="button"
                   aria-label={`Quitar ${r.documentTypeCode}`}
                   title="Quitar"
                   onClick={() => tocar(borrador.filter((_, k) => k !== i))}
-                  className="rounded-lg border p-1.5 border-[#DFE5ED] transition hover:bg-flit-brand/10 dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+                  className="rounded-lg border p-1.5 border-border transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
                   style={{ color: 'var(--color-flit-brand)' }}
                 >
-                  <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="papelera" className="h-3.5 w-3.5" />
                 </button>
               </span>
             </li>
@@ -152,7 +152,7 @@ export function TipoTramiteDocumentos({
 
       <div className="flex flex-wrap items-center gap-2">
         <select
-          className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-xs border-[#DFE5ED] bg-white text-flit-primary dark:border-white/10 dark:bg-[#0B0F14] dark:text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+          className="min-w-0 flex-1 rounded-xl border px-3 py-2 text-xs border-input bg-background text-flit-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           value={porAgregar}
           onChange={(e) => setPorAgregar(e.target.value)}
           aria-label="Documento a añadir"
@@ -168,7 +168,7 @@ export function TipoTramiteDocumentos({
           type="button"
           onClick={agregar}
           disabled={!porAgregar}
-          className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold border-[#DFE5ED] disabled:opacity-40 dark:border-white/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
+          className="inline-flex items-center gap-1.5 rounded-xl border px-3 py-2 text-xs font-semibold border-border disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
           style={{ color: 'var(--color-flit-brand)' }}
         >
           Añadir
@@ -181,11 +181,11 @@ export function TipoTramiteDocumentos({
           onClick={() => void guardar()}
           disabled={guardando}
           className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-40 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
-          style={{ background: 'linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))' }}
+          style={{ background: 'var(--gradient-action)' }}
         >
           {guardando ? (
             <span className="inline-flex items-center gap-1.5">
-              <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />
+              <Icono nombre="girador" className="h-3 w-3 animate-spin" />
               Guardando…
             </span>
           ) : (
@@ -193,14 +193,14 @@ export function TipoTramiteDocumentos({
           )}
         </button>
         {ok && (
-          <span className="text-xs font-medium" style={{ color: '#0E9F6E' }} role="status">
+          <span className="text-xs font-medium" style={{ color: 'var(--flit-success-ink)' }} role="status">
             Guardado
           </span>
         )}
       </div>
 
       {error && (
-        <p className="text-xs" role="alert" style={{ color: '#C2410C' }}>
+        <p className="text-xs" role="alert" style={{ color: 'var(--destructive)' }}>
           {error}
         </p>
       )}

@@ -9,6 +9,7 @@ sus datos, en su esquema y con su usuario. Ningún servicio lee el esquema de ot
 |---|---|---|---|
 | core-consultas | `flit_consultas` | `consultas` | Con este script, antes de su primer despliegue |
 | core-notificaciones | `flit_notificaciones` | `notificaciones` | Con este script, antes de su primer despliegue |
+| core-diagnostico | `flit_diagnostico` | `diagnostico` | Con este script (`-v servicio=diagnostico`), antes de su primer despliegue (HU #13734) |
 | core-api, core-identity, core-ict | el actual de `CONNECTION_STRING_CORE` | varios | **Sin cambios por ahora**: Trámites todavía lee las tablas de Identidad y los tres comparten el usuario dueño. Se separan cuando se pague esa deuda (ver la Epic #13316, «después») |
 
 La regla estricta aplica desde los servicios nuevos: nacen aislados y no hay que separarlos después.
@@ -64,3 +65,14 @@ psql "$ADMIN_URL" -v ON_ERROR_STOP=1 -f deploy/postgres/migrar-valores-mock-aval
 
 Copia `tramites.avaluo_mock_values` a `consultas.valores_mock_avaluo` (los que se hayan agregado a mano en el ambiente);
 si alguno no queda igual, no confirma nada. Es idempotente. En producción no hace falta: la tabla de origen está vacía.
+
+## Empresa «Persona Natural» (Épica #14021)
+
+Antes de encender la fachada del portal de persona natural se crea la empresa a cuyo nombre nacen sus trámites (ya no la
+siembra una migración). Una vez por ambiente, idempotente:
+
+```bash
+psql "$CONNECTION_STRING_CORE_ADMIN" -v ON_ERROR_STOP=1 -f deploy/postgres/crear-empresa-persona-natural.sql
+```
+
+Detalle y verificación en `docs/suite/handoff-vps-personanatural.md`, §3.

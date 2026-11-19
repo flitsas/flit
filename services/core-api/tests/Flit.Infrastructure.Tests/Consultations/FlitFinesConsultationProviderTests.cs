@@ -213,7 +213,7 @@ public sealed class FlitFinesConsultationProviderTests
     [InlineData(HttpStatusCode.InternalServerError)]
     [InlineData(HttpStatusCode.BadGateway)]
     [InlineData(HttpStatusCode.Unauthorized)]
-    public async Task ConsultAsync_ModoReal_RespuestaNoExitosa_DevuelveErrorSinLanzar(HttpStatusCode status)
+    public async Task ConsultAsync_ModoReal_RespuestaNoExitosa_DevuelveAvisoSinLanzar(HttpStatusCode status)
     {
         // AC4: nunca lanza excepción de transporte al orquestador.
         var ct = TestContext.Current.CancellationToken;
@@ -221,21 +221,21 @@ public sealed class FlitFinesConsultationProviderTests
 
         var result = await BuildProvider("real", handler).ConsultAsync(Ctx(), ct);
 
-        result.Overall.Should().Be("red");
-        result.Checks.Should().ContainSingle(c => c.Status == "error");
+        result.Overall.Should().Be("yellow");
+        result.Checks.Should().ContainSingle(c => c.Status == "warn");
         result.Checks.Single().Message.Should().NotContainAny("http", "500", "502", "401");
     }
 
     [Fact]
-    public async Task ConsultAsync_ModoReal_JsonIlegible_DevuelveErrorSinLanzar()
+    public async Task ConsultAsync_ModoReal_JsonIlegible_DevuelveAvisoSinLanzar()
     {
         var ct = TestContext.Current.CancellationToken;
         var handler = new CapturingHandler("<html>gateway timeout</html>");
 
         var result = await BuildProvider("real", handler).ConsultAsync(Ctx(), ct);
 
-        result.Overall.Should().Be("red");
-        result.Checks.Should().ContainSingle(c => c.Status == "error");
+        result.Overall.Should().Be("yellow");
+        result.Checks.Should().ContainSingle(c => c.Status == "warn");
     }
 
     [Theory]

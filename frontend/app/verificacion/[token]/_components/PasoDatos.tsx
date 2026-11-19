@@ -1,6 +1,7 @@
 "use client";
 
 import { BRAND_BTN } from "@/lib/captura-manual/styles";
+import { TABLA_HEADER_BG, TABLA_HEADER_CELL_CLS, TABLA_HEADER_FG, TABLA_TARJETA_CLS } from "@/components/atom/table-styles";
 import { useId, useState } from "react";
 import {
   CAPTURE_TIPS,
@@ -82,32 +83,64 @@ export function PasoDatos({
         </p>
       </div>
 
-      <table className="w-full border-collapse text-base">
+      {/* HU #13919 — ficha de pares fijos con el MISMO diseño de toda tabla (cabecera gris y filas-
+          tarjeta); no se pagina porque no recorre ninguna colección. */}
+      <div className={TABLA_TARJETA_CLS}>
+      <table className="w-full border-separate border-spacing-y-2 text-base">
         <caption className="sr-only">Tus datos</caption>
+        <thead>
+          <tr>
+            <th
+              scope="col"
+              colSpan={2}
+              className={`${TABLA_HEADER_CELL_CLS} rounded-xl`}
+              style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+            >
+              Tus datos
+            </th>
+          </tr>
+        </thead>
         <tbody>
-          <tr className="border-b border-flit-gray">
-            <th scope="row" className="py-2 pr-3 text-left text-sm font-medium text-muted-foreground">
+          <tr className="bg-card">
+            <th
+              scope="row"
+              className="rounded-l-xl border-y border-l px-4 py-3 text-left text-sm font-medium text-muted-foreground"
+              style={{ borderColor: "var(--table-row-border)" }}
+            >
               Nombre
             </th>
-            <td className="py-2 text-right font-semibold text-flit-primary">{view.fullName}</td>
+            <td
+              className="rounded-r-xl border-y border-r px-4 py-3 text-right font-semibold text-flit-primary"
+              style={{ borderColor: "var(--table-row-border)" }}
+            >
+              {view.fullName}
+            </td>
           </tr>
-          <tr className="border-b border-flit-gray">
-            <th scope="row" className="py-2 pr-3 text-left text-sm font-medium text-muted-foreground">
+          <tr className="bg-card">
+            <th
+              scope="row"
+              className="rounded-l-xl border-y border-l px-4 py-3 text-left text-sm font-medium text-muted-foreground"
+              style={{ borderColor: "var(--table-row-border)" }}
+            >
               Documento
             </th>
-            <td className="py-2 text-right font-semibold text-flit-primary">
+            <td
+              className="rounded-r-xl border-y border-r px-4 py-3 text-right font-semibold text-flit-primary"
+              style={{ borderColor: "var(--table-row-border)" }}
+            >
               {view.documentType} {view.documentNumber}
             </td>
           </tr>
         </tbody>
       </table>
+      </div>
 
       <p className="text-base text-muted-foreground">
         Estos datos ya los tiene quien te envió el enlace. No tienes que escribirlos otra vez. Haremos una
         verificación facial, de tu documento (anverso y reverso) y tu firma. Toma menos de un minuto.
       </p>
 
-      <aside aria-labelledby="consejos-titulo" className="rounded-xl bg-flit-bg p-4">
+      <aside aria-labelledby="consejos-titulo" className="rounded-xl bg-secondary p-4">
         <h2 id="consejos-titulo" className="text-base font-semibold text-flit-primary">
           Para que salga bien
         </h2>
@@ -134,13 +167,13 @@ export function PasoDatos({
       </div>
 
       {versionMismatch ? (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+        <p role="alert" className="rounded-xl bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]">
           El texto de consentimiento cambió; recarga la página.
         </p>
       ) : null}
 
       {error && !staleText ? (
-        <p role="alert" className="rounded-xl bg-red-50 p-3 text-sm text-red-900">
+        <p role="alert" className="rounded-xl bg-[var(--badge-danger-bg)] p-3 text-sm text-[var(--badge-danger-fg)]">
           No pudimos registrar tu autorización. Inténtalo de nuevo.
         </p>
       ) : null}

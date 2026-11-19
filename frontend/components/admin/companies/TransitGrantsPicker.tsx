@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Loader2, Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { fetchTransitOffices } from "@/lib/api/admin-companies";
 import { fetchTransitOfficesOperationalStatus } from "@/lib/api/admin-transit-office-tenants";
 import type { TransitOffice } from "@/lib/api/types";
@@ -90,7 +90,7 @@ export function TransitGrantsPicker({
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-4 text-xs opacity-70" role="status">
-        <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+        <Icono nombre="girador" className="h-4 w-4 animate-spin" />
         Cargando organismos de tránsito…
       </div>
     );
@@ -99,7 +99,7 @@ export function TransitGrantsPicker({
   if (loadError) {
     return (
       <div className="space-y-2">
-        <p className="text-xs" style={{ color: "#FF4E00" }} role="alert">
+        <p className="text-xs" style={{ color: "var(--destructive)" }} role="alert">
           {loadError}
         </p>
         <button
@@ -129,7 +129,7 @@ export function TransitGrantsPicker({
         Buscar organismo de tránsito
       </label>
       <div className="relative">
-        <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 opacity-40" aria-hidden />
+        <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 opacity-40" />
         <input
           id="ot-grants-search"
           type="search"
@@ -137,12 +137,12 @@ export function TransitGrantsPicker({
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Buscar por nombre, código o municipio…"
           className="w-full rounded-xl border py-2 pl-8 pr-3 text-xs focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand"
-          style={{ borderColor: "#DFE5ED" }}
+          style={{ borderColor: "var(--border)" }}
         />
       </div>
       <div
         className="max-h-48 overflow-y-auto rounded-xl border p-2"
-        style={{ borderColor: error ? "#FF4E00" : "#DFE5ED" }}
+        style={{ borderColor: error ? "var(--destructive)" : "var(--border)" }}
         role="group"
         aria-label="Organismos de tránsito disponibles"
       >
@@ -178,7 +178,7 @@ export function TransitGrantsPicker({
         )}
       </div>
       {error && (
-        <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}

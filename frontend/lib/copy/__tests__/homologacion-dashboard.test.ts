@@ -1,14 +1,9 @@
 // HU #12700 (Feature #12692, épica #12551) — palabras de estado en dashboard (A18, A19, E03).
+// Rediseño del Inicio en 3 dashboards: «Total trámites», «Esperan mi decisión» y «Entregados hoy» ya no son KPIs del
+// Inicio; se conserva lo que sigue vigente (héroes sin unificar y el casing de E03).
 import { describe, expect, it } from 'vitest';
-import {
-  DASHBOARD_HERO_PREFIX,
-  DASHBOARD_KPI_TOTAL_LABEL,
-} from '@/components/atom/modules/Dashboard';
-import {
-  OT_DASHBOARD_HERO_TITLE,
-  OT_KPI_ENTREGADOS_HOY,
-  OT_KPI_ESPERAN_MI_DECISION,
-} from '@/components/atom/modules/OtDashboard';
+import { DASHBOARD_HERO_PREFIX } from '@/components/atom/modules/GestorDashboard';
+import { OT_DASHBOARD_HERO_TITLE, OT_KPI_PENDIENTES_HOY } from '@/components/atom/modules/OtDashboard';
 import { COPY, copyLabel, isNaCopyKey } from '../copy-catalog';
 import { estadoLabel } from '@/lib/tramites/estados';
 
@@ -23,19 +18,13 @@ describe('homologación dashboard (HU #12700)', () => {
     expect(estadoLabel('aprobado')).toBe('Aprobado');
   });
 
-  it('AC2 — A19 N/A no clona KPI Total trámites ↔ Esperan mi decisión ni unifica Entregados hoy', () => {
+  it('AC2 — A19 N/A: los KPIs de la cola OT no se unifican con el catálogo', () => {
     expect(isNaCopyKey('A19')).toBe(true);
     expect(copyLabel('A19')).toBeUndefined();
-    expect(DASHBOARD_KPI_TOTAL_LABEL).toBe(COPY.E03);
-    expect(OT_KPI_ESPERAN_MI_DECISION).toBe('Esperan mi decisión');
-    expect(OT_KPI_ESPERAN_MI_DECISION).not.toBe(COPY.E03);
-    expect(OT_KPI_ENTREGADOS_HOY).toBe('Entregados hoy');
-    expect(OT_KPI_ENTREGADOS_HOY).not.toBe(estadoLabel('entregado'));
+    expect(OT_KPI_PENDIENTES_HOY).not.toBe(COPY.E03);
   });
 
-  it('AC3 — E03 unifica casing Total trámites en dashboard y reportes gestor', () => {
+  it('AC3 — E03 conserva el casing «Total trámites»', () => {
     expect(COPY.E03).toBe('Total trámites');
-    expect(DASHBOARD_KPI_TOTAL_LABEL).toBe(COPY.E03);
-    expect(DASHBOARD_KPI_TOTAL_LABEL).not.toBe('Total Trámites');
   });
 });

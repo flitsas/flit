@@ -526,11 +526,11 @@ public sealed class GenerarConsolidadoHandler(
 
         if (configurado.Count == 0)
             return SanitizeConsolidadoParts(
-                ConsolidadoOrderingResolver.Select(instance.Attachments, instance.FamilyCode));
+                ConsolidadoOrderingResolver.Select(instance.AdjuntosEfectivos().ToList(), instance.FamilyCode));
 
         return SanitizeConsolidadoParts(
             GenericConsolidadoOrdering.SelectByPrecedence(
-                instance.Attachments,
+                instance.AdjuntosEfectivos().ToList(),
                 ConsolidadoDocumentCodeMap.ToPrecedence(configurado)));
     }
 
@@ -554,12 +554,19 @@ public sealed class GenerarConsolidadoHandler(
     /// <c>tramite_virtual</c> por la precedencia declarada de <see cref="AttachmentSourcePrecedence"/>
     /// (DT-4); para CUALQUIER OTRO tipo —incluida la <c>compraventa</c>— por el criterio de siempre,
     /// la más reciente por <c>UploadedAt</c>, SIN cambios de comportamiento.
+    /// <para>
+    /// Excepción (Bug #14570): los tipos «bolsa» de <see cref="AttachmentRules.TiposMultiples"/>
+    /// (<c>otro</c>, <c>anexos_generales</c>) acumulan archivos al subir (HU #12046) y «Ver documentos»
+    /// los lista todos; el consolidado también los incluye TODOS, en orden de carga
+    /// (<c>UploadedAt</c> ascendente), en la posición que ocupa el tipo.
+    /// </para>
     /// </summary>
     internal static IReadOnlyList<ProcedureInstanceAttachment> SanitizeConsolidadoParts(
         IReadOnlyList<ProcedureInstanceAttachment> ordered)
     {
         var latestByTipo = ordered
             .Where(a => a.Tipo.Contains("consolidado", StringComparison.OrdinalIgnoreCase) is false)
+            .Where(a => !AttachmentRules.TiposMultiples.Contains(a.Tipo.Trim()))
             .GroupBy(a => a.Tipo, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
@@ -576,6 +583,15 @@ public sealed class GenerarConsolidadoHandler(
                 continue;
             if (!seen.Add(a.Tipo))
                 continue;
+            if (AttachmentRules.TiposMultiples.Contains(a.Tipo.Trim()))
+            {
+                // Bolsa: todos los de este tipo, en orden de carga (estable ante empates).
+                result.AddRange(ordered
+                    .Where(x => string.Equals(x.Tipo, a.Tipo, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(x => x.UploadedAt));
+                continue;
+            }
+
             result.Add(latestByTipo[a.Tipo]);
         }
 

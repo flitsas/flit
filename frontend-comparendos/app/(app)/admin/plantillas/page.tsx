@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Copy, FilePlus2, Send } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { EditorHtml } from "@/components/plantillas/EditorHtml";
@@ -101,7 +101,7 @@ function Editor({ plantilla, onCerrar, onCambio }: { plantilla: PlantillaResumen
     }, "Plantilla de Renting creada con un borrador copiado de FLIT.");
 
   return (
-    <Modal open onClose={onCerrar} size="2xl" title={TIPO_PLANTILLA[plantilla.tipo] ?? plantilla.tipo} description={`${plantilla.conjunto === "Renting" ? "Renting" : "FLIT"}${plantilla.tipologia ? ` · ${plantilla.tipologia}` : ""}`}>
+    <Modal icono="documento" open onClose={onCerrar} size="2xl" title={TIPO_PLANTILLA[plantilla.tipo] ?? plantilla.tipo} description={`${plantilla.conjunto === "Renting" ? "Renting" : "FLIT"}${plantilla.tipologia ? ` · ${plantilla.tipologia}` : ""}`}>
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[200px_1fr_1fr]">
         <aside className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold">Versiones</h3>
@@ -113,13 +113,13 @@ function Editor({ plantilla, onCerrar, onCambio }: { plantilla: PlantillaResumen
           ))}
           {v && !editable && (
             <button type="button" className={controlCls(false)} disabled={ocupado} onClick={nuevaVersion}>
-              <FilePlus2 className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
               Nueva versión desde v{v.numeroVersion}
             </button>
           )}
           {plantilla.conjunto === "Flit" && (
             <button type="button" className={controlCls(false)} disabled={ocupado} onClick={copiarARenting} title="Si Renting no tiene la suya, usa la de FLIT">
-              <Copy className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="copiar" className="h-3.5 w-3.5" />
               Crear versión para Renting
             </button>
           )}
@@ -139,7 +139,7 @@ function Editor({ plantilla, onCerrar, onCambio }: { plantilla: PlantillaResumen
               {editable ? (
                 <EditorHtml key={actual.versionId} inicial={actual.cuerpoHtml} variables={catalogo.datos ?? []} onCambio={(cuerpoHtml) => editar({ cuerpoHtml })} />
               ) : (
-                <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-xl border border-[#DFE5ED] p-3 font-mono text-[11px] dark:border-white/15">{actual.cuerpoHtml}</pre>
+                <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-xl border border-border p-3 font-mono text-[11px]">{actual.cuerpoHtml}</pre>
               )}
               {desconocidas.length > 0 && (
                 <InlineAlert tone="warning" compact>
@@ -157,7 +157,7 @@ function Editor({ plantilla, onCerrar, onCambio }: { plantilla: PlantillaResumen
                       Guardar borrador
                     </button>
                     <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || !nota.trim()} onClick={publicar}>
-                      <Send className="h-3.5 w-3.5" aria-hidden />
+                      <Icono nombre="radicacion" className="h-3.5 w-3.5" />
                       Publicar
                     </button>
                   </div>

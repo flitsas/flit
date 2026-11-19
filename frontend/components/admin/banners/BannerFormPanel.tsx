@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { AlertTriangle, Loader2, UploadCloud } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { ToggleSwitch } from "@/components/admin/companies/ToggleSwitch";
 import {
@@ -10,6 +10,7 @@ import {
   type Banner,
   type BannerFormInput,
 } from "@/lib/api/admin-banners";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 const INPUT_CLS =
   "w-full rounded-xl border bg-transparent px-3 py-2.5 text-xs outline-none focus:border-flit-brand disabled:opacity-60";
@@ -138,6 +139,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
 
   return (
     <Modal
+      icono="megafono"
       open={open}
       onClose={onClose}
       title={editing ? "Editar banner" : "Nuevo banner"}
@@ -150,9 +152,9 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
           <p
             role="alert"
             className="flex items-start gap-2 rounded-xl border px-3 py-2 text-[11px] font-medium"
-            style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+            style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           >
-            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <IconoAviso tipo="error" className="mt-0.5 h-3.5 w-3.5 shrink-0" />
             <span>{banner}</span>
           </p>
         )}
@@ -168,7 +170,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
             value={form.name}
             onChange={(e) => patch({ name: e.target.value })}
             className={INPUT_CLS}
-            style={missingName ? { borderColor: "#FF4E00" } : { borderColor: "#DFE5ED" }}
+            style={missingName ? { borderColor: "var(--destructive)" } : { borderColor: "var(--border)" }}
             placeholder="Promo verano 2026"
             aria-required="true"
             aria-invalid={missingName}
@@ -183,7 +185,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
             value={form.linkUrl}
             onChange={(e) => patch({ linkUrl: e.target.value })}
             className={INPUT_CLS}
-            style={{ borderColor: "#DFE5ED" }}
+            style={{ borderColor: "var(--border)" }}
             placeholder="https://flitsas.com/promo"
           />
         </Field>
@@ -213,7 +215,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
               value={form.validFrom}
               onChange={(e) => patch({ validFrom: e.target.value })}
               className={INPUT_CLS}
-              style={missingDatePair ? { borderColor: "#FF4E00" } : { borderColor: "#DFE5ED" }}
+              style={missingDatePair ? { borderColor: "var(--destructive)" } : { borderColor: "var(--border)" }}
               aria-invalid={missingDatePair}
             />
           </Field>
@@ -224,7 +226,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
               value={form.validUntil}
               onChange={(e) => patch({ validUntil: e.target.value })}
               className={INPUT_CLS}
-              style={missingDatePair ? { borderColor: "#FF4E00" } : { borderColor: "#DFE5ED" }}
+              style={missingDatePair ? { borderColor: "var(--destructive)" } : { borderColor: "var(--border)" }}
               aria-invalid={missingDatePair}
             />
           </Field>
@@ -240,7 +242,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
           <span className="mb-1 block text-xs font-semibold">
             Imagen del banner
             {fileRequired ? (
-              <span aria-hidden="true"> *</span>
+              <span aria-hidden="true"> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
             ) : (
               " (opcional: reemplaza la actual)"
             )}
@@ -251,13 +253,13 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
             style={{
               borderColor:
                 missingFile || invalidImageType || invalidImageSize
-                  ? "#FF4E00"
+                  ? "var(--destructive)"
                   : form.file
                     ? "var(--color-flit-brand)"
-                    : "#DFE5ED",
+                    : "var(--border)",
             }}
           >
-            <UploadCloud className="h-4 w-4 shrink-0 opacity-60" aria-hidden="true" />
+            <Icono nombre="archivo-subir" className="h-4 w-4 shrink-0 opacity-60" />
             <span className="truncate font-medium">
               {form.file
                 ? form.file.name
@@ -284,17 +286,17 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
             2MB.
           </p>
           {missingFile && (
-            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "var(--destructive)" }}>
               La imagen del banner es obligatoria.
             </p>
           )}
           {invalidImageType && (
-            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "var(--destructive)" }}>
               Formato no permitido. Usa PNG, JPEG o WEBP.
             </p>
           )}
           {invalidImageSize && (
-            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }}>
+            <p role="alert" className="mt-1 text-[11px] font-medium" style={{ color: "var(--destructive)" }}>
               La imagen supera el tamaño máximo de 2MB.
             </p>
           )}
@@ -303,7 +305,7 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
         {previewUrl && (
           <div>
             <span className="mb-1 block text-xs font-semibold">Vista previa</span>
-            <div className="overflow-hidden rounded-xl border" style={{ borderColor: "#DFE5ED" }}>
+            <div className="overflow-hidden rounded-xl border" style={{ borderColor: "var(--border)" }}>
               {/* eslint-disable-next-line @next/next/no-img-element -- blob local o binario del endpoint público, no un asset estático */}
               <img src={previewUrl} alt="Vista previa en vivo del banner" className="max-h-40 w-full object-cover" />
             </div>
@@ -311,15 +313,15 @@ export function BannerFormPanel({ open, editing, onClose, onSubmit, onSaved }: B
         )}
       </div>
 
-      <div className="mt-5 border-t pt-4" style={{ borderColor: "#DFE5ED" }}>
+      <div className="mt-5 border-t pt-4" style={{ borderColor: "var(--border)" }}>
         <button
           type="button"
           disabled={submitting}
           onClick={() => void handleSubmit()}
           className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand) 0%,var(--color-flit-tech) 100%)" }}
+          style={{ background: "var(--gradient-action)" }}
         >
-          {submitting && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+          {submitting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
           {editing ? "Guardar cambios" : "Crear banner"}
         </button>
       </div>
@@ -345,7 +347,7 @@ function Field({
       <label htmlFor={id} className="mb-1 block text-xs font-semibold">
         {label}
         {required && (
-          <span aria-hidden="true" style={{ color: "#FF4E00" }}>
+          <span aria-hidden="true" style={{ color: "var(--destructive)" }}>
             {" "}
             *
           </span>
@@ -353,7 +355,7 @@ function Field({
       </label>
       {children}
       {error && (
-        <p id={`${id}-error`} className="mt-1 text-[11px] font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p id={`${id}-error`} className="mt-1 text-[11px] font-medium" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}

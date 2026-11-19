@@ -1,9 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef, useState } from "react";
-import { AlertTriangle, Eye, FileSignature, History } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { Modal } from "@/components/atom/Modal";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
+import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
+import { RowActions } from "@/components/atom/RowActions";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   getMandatoFormat,
   getMandatoFormatVersion,
@@ -11,6 +15,7 @@ import {
   readFormatError,
   updateMandatoFormat,
   type MandatoFormatDetail,
+  type MandatoFormatVersionInfo,
   type MandatoFormatView,
   type MandatoUnknownVariable,
   type UpdateMandatoFormatBody,
@@ -31,12 +36,12 @@ import {
 } from "@/lib/plataforma/mandato-variables";
 
 const FIELD =
-  "w-full rounded-xl border border-[#DFE5ED] bg-white px-3 py-2 text-sm text-[#162244] disabled:opacity-50 dark:border-white/10 dark:bg-[#0B0F14] dark:text-white";
+  "w-full rounded-xl border border-border bg-card px-3 py-2 text-sm text-foreground disabled:opacity-50";
 const BTN_OUTLINE =
   "rounded-xl border px-4 py-2 text-xs font-semibold disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand";
 const BTN_PRIMARY =
   "rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2";
-const GRADIENT = { background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" };
+const GRADIENT = { background: "var(--gradient-action)" };
 
 export interface MandatoFormatoEditorProps {
   /** Código del formato a editar (el catálogo no permite crear ni eliminar). */
@@ -68,6 +73,8 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
   const [showHistory, setShowHistory] = useState(false);
   const [oldVersion, setOldVersion] = useState<{ number: number; body: string } | null>(null);
   const [loadingVersion, setLoadingVersion] = useState<number | null>(null);
+  // HU #13918 — el historial de versiones es una colección: tabla estándar con paginación en cliente.
+  const pgVersiones = usePaginacion("plataforma.MandatoFormatoEditor");
 
   const load = useCallback(
     async (keepDrafts: boolean) => {
@@ -197,6 +204,35 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
     }
   };
 
+  const versionColumns: DataTableColumn<MandatoFormatVersionInfo>[] = [
+    { key: "version", header: "Versión", cellClassName: "font-semibold", render: (v) => `v${v.versionNumber}` },
+    {
+      key: "autor",
+      header: "Autor",
+      cellClassName: "font-mono text-[11px]",
+      render: (v) => <span title={v.createdBy ?? undefined}>{v.createdBy ? v.createdBy.slice(0, 8) : "Sistema"}</span>,
+    },
+    { key: "fecha", header: "Fecha", render: (v) => formatFechaHora(v.createdAt) },
+    {
+      key: "texto",
+      header: "Texto",
+      align: "right",
+      render: (v) => (
+        <RowActions
+          actions={[
+            {
+              icon: iconoComo("ojo"),
+              label: `Ver el texto de la versión ${v.versionNumber}`,
+              onClick: () => void openVersion(v.versionNumber),
+              tone: "primary",
+              disabled: busy || loadingVersion !== null,
+            },
+          ]}
+        />
+      ),
+    },
+  ];
+
   const title = format ? `Editar formato: ${format.name}` : "Editar formato";
 
   return (
@@ -205,7 +241,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
         open
         onClose={onClose}
         busy={busy}
-        icon={FileSignature}
+        icono="firma"
         iconBg="var(--color-flit-brand)"
         title={title}
         titleClassName="text-base font-bold text-flit-primary"
@@ -217,14 +253,14 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
               role="status"
               aria-live="polite"
               data-testid="mandato-formato-loading"
-              className="text-[#59677D]"
+              className="text-muted-foreground"
             >
               Cargando el formato…
             </p>
           ) : state === "error" || !format ? (
             <div
               role="alert"
-              className="flex flex-wrap items-center gap-2 text-[#FF4E00]"
+              className="flex flex-wrap items-center gap-2 text-destructive"
               data-testid="mandato-formato-error"
             >
               <span>No se pudo cargar el formato.</span>
@@ -236,7 +272,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
             <>
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="block space-y-1.5" htmlFor={`${uid}-nombre`}>
-                  <span className="font-semibold text-[#162244]">Nombre del formato</span>
+                  <span className="font-semibold text-foreground">Nombre del formato</span>
                   <input
                     id={`${uid}-nombre`}
                     value={name}
@@ -249,7 +285,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   />
                 </label>
                 <label className="block space-y-1.5" htmlFor={`${uid}-tipo`}>
-                  <span className="font-semibold text-[#162244]">Tipo de mandato</span>
+                  <span className="font-semibold text-foreground">Tipo de mandato</span>
                   <select
                     id={`${uid}-tipo`}
                     value={tipo}
@@ -266,16 +302,16 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   </select>
                 </label>
               </div>
-              <p className="text-[11px] text-[#59677D]">
+              <p className="text-[11px] text-muted-foreground">
                 El tipo es el valor por defecto del formato; la regla por compañía y organismo sigue
                 mandando sobre él.
               </p>
 
               {redaction ? (
                 <section aria-labelledby={`${uid}-plantilla`} className="space-y-2">
-                  <h3 id={`${uid}-plantilla`} className="font-semibold text-[#162244]">
+                  <h3 id={`${uid}-plantilla`} className="font-semibold text-foreground">
                     Plantilla del contrato{" "}
-                    <span className="font-normal text-[#59677D]">
+                    <span className="font-normal text-muted-foreground">
                       {format.currentVersion > 0
                         ? `(versión vigente ${format.currentVersion})`
                         : "(redacción de fábrica)"}
@@ -295,7 +331,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                         onClick={() => insertVariable(v.name)}
                         disabled={busy}
                         aria-label={`Insertar variable ${v.name}: ${v.description}`}
-                        className="rounded-full border border-flit-brand/40 px-2.5 py-1 font-mono text-[11px] text-[#162244] hover:bg-flit-brand/10 disabled:opacity-50 dark:text-white"
+                        className="rounded-full border border-flit-brand/40 px-2.5 py-1 font-mono text-[11px] text-foreground hover:bg-flit-brand/10 disabled:opacity-50"
                       >
                         {`{{${v.name}}}`}
                       </button>
@@ -320,7 +356,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   </label>
                 </section>
               ) : (
-                <p className="rounded-xl border border-[#DFE5ED] px-3 py-2 text-[#59677D]" role="note">
+                <p className="rounded-xl border border-border px-3 py-2 text-muted-foreground" role="note">
                   Este formato no tiene plantilla propia: usa la redacción de cada organismo. Aquí solo
                   puedes cambiar su nombre y su tipo de mandato.
                 </p>
@@ -331,7 +367,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   id={`${uid}-vars-err`}
                   role="alert"
                   data-testid="mandato-formato-variables-invalidas"
-                  className="rounded-xl border border-[#FF4E00]/40 bg-[rgba(255,78,0,0.06)] px-3 py-2 text-[#FF4E00]"
+                  className="rounded-xl border border-[var(--badge-danger-border)] bg-[var(--badge-danger-bg)] px-3 py-2 text-destructive"
                 >
                   <p className="font-semibold">Variables que no existen:</p>
                   <ul className="mt-1 list-disc space-y-0.5 pl-5">
@@ -349,7 +385,7 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                 <div
                   role="alert"
                   data-testid="mandato-formato-mensaje"
-                  className="space-y-1 text-[11px] text-[#FF4E00]"
+                  className="space-y-1 text-[11px] text-destructive"
                 >
                   <p>{error}</p>
                   {conflict ? (
@@ -373,66 +409,34 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
                   className="inline-flex items-center gap-1.5 font-semibold text-flit-brand disabled:opacity-50"
                   data-testid="mandato-formato-historial-toggle"
                 >
-                  <History className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="reloj" className="h-3.5 w-3.5" />
                   Historial de versiones ({detail?.versions.length ?? 0})
                 </button>
                 {showHistory ? (
                   detail && detail.versions.length > 0 ? (
-                    <table
-                      className="w-full border-collapse text-left"
-                      data-testid="mandato-formato-historial"
-                    >
-                      <caption className="sr-only">Versiones publicadas de la plantilla</caption>
-                      <thead>
-                        <tr className="text-[11px] text-[#59677D]">
-                          <th scope="col" className="py-1 pr-3 font-semibold">
-                            Versión
-                          </th>
-                          <th scope="col" className="py-1 pr-3 font-semibold">
-                            Autor
-                          </th>
-                          <th scope="col" className="py-1 pr-3 font-semibold">
-                            Fecha
-                          </th>
-                          <th scope="col" className="py-1 text-right font-semibold">
-                            Texto
-                          </th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {detail.versions.map((v) => (
-                          <tr key={v.versionNumber} className="border-t border-[#DFE5ED]">
-                            <td className="py-1.5 pr-3 font-semibold">v{v.versionNumber}</td>
-                            <td
-                              className="py-1.5 pr-3 font-mono text-[11px]"
-                              title={v.createdBy ?? undefined}
-                            >
-                              {v.createdBy ? v.createdBy.slice(0, 8) : "Sistema"}
-                            </td>
-                            <td className="py-1.5 pr-3">{formatFechaHora(v.createdAt)}</td>
-                            <td className="py-1.5 text-right">
-                              <button
-                                type="button"
-                                onClick={() => void openVersion(v.versionNumber)}
-                                disabled={busy || loadingVersion !== null}
-                                aria-label={`Ver el texto de la versión ${v.versionNumber}`}
-                                className="inline-flex items-center gap-1 font-semibold text-flit-brand disabled:opacity-50"
-                              >
-                                <Eye className="h-3.5 w-3.5" aria-hidden="true" />
-                                Ver
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                    <div data-testid="mandato-formato-historial">
+                      <DataTable<MandatoFormatVersionInfo>
+                        tarjeta={false}
+                        ariaLabel="Versiones publicadas de la plantilla"
+                        columns={versionColumns}
+                        rows={pgVersiones.paginar(detail.versions)}
+                        getRowKey={(v) => String(v.versionNumber)}
+                        pagination={{
+                          page: pgVersiones.page,
+                          pageSize: pgVersiones.pageSize,
+                          totalCount: detail.versions.length,
+                          onPageChange: pgVersiones.setPage,
+                          onPageSizeChange: pgVersiones.setPageSize,
+                        }}
+                      />
+                    </div>
                   ) : (
-                    <p className="text-[#59677D]">Este formato aún no tiene versiones publicadas.</p>
+                    <p className="text-muted-foreground">Este formato aún no tiene versiones publicadas.</p>
                   )
                 ) : null}
                 {oldVersion ? (
                   <div className="space-y-1" data-testid="mandato-formato-version-texto">
-                    <p className="font-semibold text-[#162244]">
+                    <p className="font-semibold text-foreground">
                       Texto de la versión {oldVersion.number} (solo lectura; no se restaura desde aquí)
                     </p>
                     <textarea
@@ -479,8 +483,8 @@ export function MandatoFormatoEditor({ code, onSaved, onConflict, onClose }: Man
         <Modal
           open
           onClose={() => setConfirming(false)}
-          icon={AlertTriangle}
-          iconBg="#F9AC00"
+          icono="alerta"
+          iconBg="var(--color-flit-alert)"
           title="Confirmar publicación de la plantilla"
           titleClassName="text-base font-bold text-flit-primary"
           size="md"

@@ -191,6 +191,16 @@ public sealed class ListProcedureInstancesHandler(
         IReadOnlySet<string> identidadKeys = await repo.ListVigenteApprovedIdentityKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
 
+        // HU #13824 — identidades vencidas a mano por un Super Admin que los trámites fuera de borrador siguen honrando
+        // (una consulta en lote sobre el índice parcial de las filas vencidas a mano).
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>> protegidasKeys = await repo.ListProtegidasPorVencimientoManualKeysAsync(
+            instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? EmptyProtegidas;
+
+        // Salida de borrador (en lote, sin N+1) de los tramites a los que importa: una identidad vencida a mano solo
+        // vale para quien salio de borrador ANTES del vencimiento (BiometricRules.ConservaFirmaTrasVencimientoManual).
+        var salidas = await ListProcedureInstancesHandler
+            .ResolverSalidasDeBorradorAsync(repo, instances, protegidasKeys, ct).ConfigureAwait(false);
+
         // Ajuste del PO sobre HU #11056 — las columnas "Firmado" acreditan por identidad O por firma del
         // baúl, y tienen que distinguir «baúl vigente» de «baúl vencido». UNA consulta para todos los
         // tenants del listado, con la MISMA llave que la identidad (tenant|TIPO|NÚMERO).
@@ -226,7 +236,7 @@ public sealed class ListProcedureInstancesHandler(
                 return ToSummary(
                     e,
                     IdentityApprovalResolver.ApprovedPartiesFromKeys(
-                        e, identidadKeys, now, baulDeE),
+                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salida) ? salida : null),
                     nombres.GetValueOrDefault(e.TenantId),
                     // HU #12162 — mismo id EFECTIVO usado para resolver el lote de arriba.
                     gestores.GetValueOrDefault(e.GestorEfectivoUserId),
@@ -236,7 +246,7 @@ public sealed class ListProcedureInstancesHandler(
                     exentas.Contains(e.Id),
                     // ADR-0053 — misma comprobación, actor por actor, para el desplegable de copropietarios.
                     IdentityApprovalResolver.ApprovedActorsFromKeys(
-                        e, identidadKeys, now, baulDeE));
+                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salidaActores) ? salidaActores : null));
             })
             .ToList();
     }
@@ -287,6 +297,34 @@ public sealed class ListProcedureInstancesHandler(
     private static readonly IReadOnlyDictionary<Guid, string> EmptyNames = new Dictionary<Guid, string>();
 
     private static readonly IReadOnlyDictionary<string, bool> EmptyFirmaBaul = new Dictionary<string, bool>();
+
+    internal static readonly IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>> EmptyProtegidas =
+        new Dictionary<string, IReadOnlyList<IdentidadVencidaManual>>();
+
+    /// <summary>
+    /// Salida de borrador (UNA consulta) de las filas a las que les importa: las que ya salieron de borrador y bien hay
+    /// identidades vencidas a mano en su tenant o ellas mismas tienen una fila propia vencida a mano. Sin candidatas no
+    /// se consulta nada.
+    /// </summary>
+    internal static async Task<IReadOnlyDictionary<Guid, DateTimeOffset>> ResolverSalidasDeBorradorAsync(
+        IProcedureInstanceRepository repo,
+        IEnumerable<ProcedureInstance> instances,
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>> protegidasKeys,
+        CancellationToken ct)
+    {
+        var candidatas = instances
+            .Where(i => !string.Equals(i.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase)
+                        && (protegidasKeys.Count > 0 || IdentityApprovalResolver.TieneVencidaManualLocal(i)))
+            .ToList();
+        if (candidatas.Count == 0)
+            return new Dictionary<Guid, DateTimeOffset>();
+
+        // Filtra por tenant además de por id: la vista de red es multi-tenant.
+        var tenantIds = candidatas.Select(i => i.TenantId).Distinct().ToList();
+        var ids = candidatas.Select(i => i.Id).ToList();
+        return await repo.ListSalidasDeBorradorAsync(tenantIds, ids, ct).ConfigureAwait(false)
+               ?? new Dictionary<Guid, DateTimeOffset>();
+    }
 
     internal static InstanceSummaryDto ToSummary(
         ProcedureInstance e,

@@ -90,6 +90,20 @@ public sealed class CachedTenantDomainResolverTests
     }
 
     [Fact]
+    public async Task FalloDelResolutor_NoSeCachea_LaSiguienteResolucionVuelveAConsultar()
+    {
+        var repo = NewRepo();
+        repo.FindActiveHeadTenantIdAsync("portal.example.com", Arg.Any<CancellationToken>())
+            .Returns<Guid?>(_ => throw new InvalidOperationException("caída simulada de BD"), _ => (Guid?)null);
+        var resolver = NewResolver(repo);
+
+        await resolver.ResolveAsync("portal.example.com", TestContext.Current.CancellationToken);
+        await resolver.ResolveAsync("portal.example.com", TestContext.Current.CancellationToken);
+
+        await repo.Received(2).FindActiveHeadTenantIdAsync("portal.example.com", Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task ListActiveHostsAsync_SeCachea_UnaSolaConsultaParaDosLlamadas()
     {
         var repo = NewRepo();

@@ -73,6 +73,10 @@ message Adjunto {
 
 message EnviarCorreoRequest {
   Correo correo = 1;
+  // HU #13881: solo el banco de pruebas de core-api lo marca, porque su destinatario es un buzón controlado (HU #11372).
+  // Sin la marca, el canal de la empresa aplica el desvío al buzón de pruebas del ambiente. core-notificaciones solo la
+  // acepta cuando la pide core-api.
+  bool buzon_de_pruebas = 2;
 }
 
 message EnviarCorreoResponse {

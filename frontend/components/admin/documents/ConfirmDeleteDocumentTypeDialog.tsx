@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { Trash2 } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import type { DocumentType } from "@/lib/api/types-documents";
 
@@ -34,17 +33,17 @@ export function ConfirmDeleteDocumentTypeDialog({
       onClose={onClose}
       busy={busy}
       size="sm"
-      icon={Trash2}
-      iconBg="#FF4E00"
+      icono="papelera"
+      iconBg="var(--destructive)"
       title="Eliminar tipo de documento"
-      titleClassName="text-base font-bold text-[#FF4E00]"
+      titleClassName="text-base font-bold text-destructive"
     >
       <p className="text-xs opacity-80">
         ¿Eliminar <strong>«{documentType.nombre}»</strong> del catálogo? Se quitará
         también de los trámites donde esté asociado. Esta acción no se puede deshacer.
       </p>
       {error && (
-        <p role="alert" className="mt-3 text-xs font-medium" style={{ color: "#FF4E00" }}>
+        <p role="alert" className="mt-3 text-xs font-medium" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}
@@ -62,7 +61,7 @@ export function ConfirmDeleteDocumentTypeDialog({
           onClick={() => void confirm()}
           disabled={busy}
           className="rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "#FF4E00" }}
+          style={{ background: "var(--destructive)", color: "var(--destructive-foreground)" }}
         >
           {busy ? "Eliminando…" : "Eliminar"}
         </button>

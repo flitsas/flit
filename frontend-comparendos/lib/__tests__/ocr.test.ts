@@ -5,12 +5,17 @@ import {
   agregarArchivos,
   armarPaquete,
   cambiosCampos,
-  confianza,
   errorArchivoOcr,
   erroresPaquete,
   etiquetaEvaluacion,
   hayEnCurso,
+  hojaPaquete,
+  marcasRevision,
+  registroEnLote,
   MAXIMO_BYTES,
+  MAXIMO_DOCUMENTOS,
+  motivoDocumento,
+  motivoFallo,
   progreso,
   resumenEvaluacion,
   valorInicial,
@@ -21,6 +26,10 @@ import {
 const archivo = (name: string, size = 100) => new File([new Uint8Array(size)], name);
 
 describe("errorArchivoOcr", () => {
+  it("HU #14370 / GDC ID10: límites FE alineados a 20 MB / 200 archivos", () => {
+    expect(MAXIMO_BYTES).toBe(20 * 1024 * 1024);
+    expect(MAXIMO_DOCUMENTOS).toBe(200);
+  });
   it("acepta JPG, PNG, TIFF y PDF sin importar mayúsculas", () => {
     for (const n of ["a.jpg", "b.JPEG", "c.png", "d.tif", "e.TIFF", "f.pdf"]) expect(errorArchivoOcr({ name: n, size: 10 })).toBeNull();
   });
@@ -86,22 +95,85 @@ describe("revisión de campos", () => {
       nombre_infractor: null,
     });
   });
-  it("clasifica la confianza", () => {
-    expect(confianza(0.934)).toEqual({ texto: "93 %", tono: "alta" });
-    expect(confianza(0.7)?.tono).toBe("media");
-    expect(confianza(0.2)?.tono).toBe("baja");
-    expect(confianza(null)).toBeNull();
-  });
   it("elige cómo mostrar el original", () => {
     expect(vistaOriginal("PDF", "a.pdf")).toBe("pdf");
     expect(vistaOriginal("IMAGE", "a.TIF")).toBe("descarga");
     expect(vistaOriginal("IMAGE", "a.jpg")).toBe("imagen");
   });
   it("decide los botones por estado", () => {
-    expect(accionesDocumento({ estado: "Completo", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: true, registrar: true, descartar: true, reintentar: false });
+    expect(accionesDocumento({ estado: "Completo", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: true, registrar: true, descartar: true, reintentar: false, reprocesar: false });
     expect(accionesDocumento({ estado: "Duplicado", reintentable: false, fuenteDuplicado: "ARCHIVO" }).editar).toBe(false);
     expect(accionesDocumento({ estado: "Fallido", reintentable: true, fuenteDuplicado: null }).reintentar).toBe(true);
-    expect(accionesDocumento({ estado: "Registrado", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: false, registrar: false, descartar: false, reintentar: false });
+    expect(accionesDocumento({ estado: "Registrado", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: false, registrar: false, descartar: false, reintentar: false, reprocesar: false });
+    // HU #13828: se reprocesa un incompleto o un ilegible; un fallido técnico se reintenta.
+    expect(accionesDocumento({ estado: "Incompleto", reintentable: false, fuenteDuplicado: null }).reprocesar).toBe(true);
+    expect(accionesDocumento({ estado: "Fallido", reintentable: false, fuenteDuplicado: null, tipoFallo: "Ilegible" }).reprocesar).toBe(true);
+    expect(accionesDocumento({ estado: "Fallido", reintentable: true, fuenteDuplicado: null, tipoFallo: "Http5xx" }).reprocesar).toBe(false);
+  });
+});
+
+describe("qué revisar (HU #13830)", () => {
+  const campo = (nombreCampo: string, valorFinal: string | null, confianza: number | null = 0.95, valorCorregido: string | null = null) => ({
+    nombreCampo,
+    valorFinal,
+    confianza,
+    valorCorregido,
+  });
+
+  it("marca por reglas comprobables, no por el 95 % del modelo", () => {
+    const marcas = marcasRevision({
+      campos: [
+        campo("numero_comparendo", "7600100000005652501"),
+        campo("valor", null, null),
+        campo("placa", "ABC123", 0.95),
+        campo("nombre_infractor", "JUAN", 0.5),
+        campo("fecha_notificacion", "2026-10-01"),
+      ],
+      camposFaltantes: ["valor"],
+      avisoNumero: "El número tiene 19 dígitos…",
+    });
+    expect(Object.keys(marcas).sort()).toEqual(["fecha_notificacion", "nombre_infractor", "numero_comparendo", "valor"]);
+    expect(marcas.valor).toBe("Falta o no es válido.");
+    expect(marcas.numero_comparendo).toMatch(/19 dígitos/);
+    expect(marcas.placa).toBeUndefined();
+  });
+
+  it("lo que ya corrigió el operador no se vuelve a marcar", () => {
+    expect(marcasRevision({ campos: [campo("nombre_infractor", "JUAN", 0.5, "JUAN")], camposFaltantes: [] })).toEqual({});
+  });
+});
+
+describe("resumen del paquete en Excel (HU #13831)", () => {
+  const doc = (estado: string, extra: Record<string, unknown> = {}) => ({
+    nombreArchivo: `${estado}.pdf`,
+    estado,
+    numeroComparendoExtraido: "1",
+    camposFaltantes: [] as string[],
+    tipoFallo: null,
+    mensajeError: null,
+    fuenteDuplicado: null,
+    comparendoId: null,
+    ...extra,
+  });
+
+  it("explica cada estado en una frase", () => {
+    expect(motivoDocumento(doc("Fallido", { tipoFallo: "Ilegible", mensajeError: "La respuesta del modelo quedó cortada" }))).toBe("La respuesta del modelo quedó cortada");
+    expect(motivoDocumento(doc("Duplicado", { fuenteDuplicado: "SIMIT" }))).toBe("SIMIT");
+    expect(motivoDocumento(doc("Descartado", { motivoDescarte: "No es un comparendo" }))).toBe("No es un comparendo");
+    expect(motivoDocumento(doc("Incompleto", { camposFaltantes: ["valor", "placa"] }))).toBe("Valor, Placa");
+  });
+
+  it("un renglón por documento y los totales en la nota", () => {
+    const hoja = hojaPaquete({ nombre: "Lote octubre", creadoEn: "2026-10-19T15:30:00Z" }, [
+      doc("Registrado", { comparendoId: "c1" }),
+      doc("Incompleto", { camposFaltantes: ["valor"], avisoNumero: "Verifica", reprocesos: 2 }),
+      doc("Registrado", { comparendoId: "c2" }),
+    ]);
+    expect(hoja.rows).toHaveLength(3);
+    expect(hoja.rows[1]).toEqual(["Incompleto.pdf", "Incompleto", "1", "Verifica", "Valor", 2, "No"]);
+    expect(hoja.rows[0][6]).toBe("Sí");
+    expect(hoja.notes?.[0]).toBe("Paquete «Lote octubre», creado 19/10/2026 10:30 (hora de Colombia).");
+    expect(hoja.notes?.[1]).toBe("3 documentos. Incompleto: 1, Registrado: 2.");
   });
 });
 
@@ -134,5 +206,37 @@ describe("evaluación del prompt", () => {
     ];
     expect(versionAnterior(vs)?.id).toBe("2");
     expect(versionAnterior([vs[0], vs[3]])).toBeNull();
+  });
+});
+
+describe("motivo de un documento fallido (HU #13787, B12-7)", () => {
+  it("muestra el mensaje real del servidor antes que la etiqueta del tipo", () => {
+    expect(motivoFallo("Ilegible", "La respuesta del modelo llegó cortada")).toBe("La respuesta del modelo llegó cortada");
+  });
+
+  it("sin mensaje, usa la etiqueta del tipo; sin nada, «Falló»", () => {
+    expect(motivoFallo("Timeout", null)).toBe("La lectura tardó demasiado");
+    expect(motivoFallo(null, "  ")).toBe("Falló");
+  });
+});
+
+describe("número por verificar (GDC punto 14)", () => {
+  it("el registro en lote no cuenta los completos con el número por confirmar y dice qué hacer", () => {
+    expect(registroEnLote(3, 0)).toEqual({ registrables: 3, aviso: null });
+    const r = registroEnLote(3, 2);
+    expect(r.registrables).toBe(1);
+    expect(r.aviso).toContain("2 documentos completos tienen el número por verificar");
+    expect(r.aviso).toContain("corrígelo o confirma");
+    expect(registroEnLote(1, 1)).toMatchObject({ registrables: 0 });
+    expect(registroEnLote(1, 1).aviso).toContain("1 documento completo tiene");
+  });
+
+  it("el número confirmado deja de marcarse", () => {
+    const campos = [{ nombreCampo: "numero_comparendo", confianza: 0.98, valorFinal: "D056150000000055727159", valorCorregido: null }];
+    const aviso = "El número tiene 21 dígitos…";
+    expect(marcasRevision({ campos, camposFaltantes: [], avisoNumero: aviso, numeroPorConfirmar: true })).toEqual({ numero_comparendo: aviso });
+    expect(
+      marcasRevision({ campos: [{ ...campos[0], valorCorregido: campos[0].valorFinal }], camposFaltantes: [], avisoNumero: aviso, numeroPorConfirmar: false }),
+    ).toEqual({});
   });
 });

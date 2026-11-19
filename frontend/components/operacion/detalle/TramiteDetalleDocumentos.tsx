@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download, Eye } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import {
   AttachmentPreview,
   AvisoDescargaFallida,
@@ -17,6 +17,7 @@ import {
 import { documentLabel } from '@/lib/tramites/document-labels';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { findAttachmentByDocTipo } from '@/lib/documents/doc-tipo';
+import { soloHistoricos, soloVigentes } from '@/lib/documents/vigencia';
 import { formatFechaHora } from '@/lib/format/date';
 import {
   ATTACHMENT_SOURCE_LABELS,
@@ -31,7 +32,8 @@ import {
   DetalleBadgeSoft,
   type SeccionDetalleProps,
 } from './primitivos';
-import { DETALLE_BLUE, DETALLE_GREEN, DETALLE_GOLD, DETALLE_GREY } from './detalle-visual';
+import { DETALLE_BLUE, DETALLE_GREEN, DETALLE_GOLD } from './detalle-visual';
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 
 /**
  * Sección «Documentos» del modal de detalle (Frente C, `Paso3` de la propuesta).
@@ -83,10 +85,10 @@ function DownloadButton({
       onClick={onClick}
       aria-label={`Descargar ${filename}`}
       title="Descargar"
-      className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 border-[#DFE5ED] dark:border-white/10"
+      className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 border-border"
       style={{ color: AZUL }}
     >
-      <Download className="h-3.5 w-3.5" aria-hidden="true" />
+      <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
     </button>
   );
 }
@@ -103,20 +105,21 @@ function RequisitoRow({
 }) {
   return (
     <li
-      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
+      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-border"
     >
       <span className="min-w-0">
-        <span className="block truncate text-xs font-medium text-flit-primary dark:text-white">
+        <span className="block truncate text-xs font-medium text-foreground">
           <DocumentCatalogCaption nombre={item.label} codigo={item.docTipo ?? item.key} />
         </span>
         {!item.obligatorio ? (
-          <span className="block text-xs text-flit-primary/70 dark:text-white/70">Opcional</span>
+          <span className="block text-xs text-muted-foreground">Opcional</span>
         ) : null}
       </span>
       <span className="flex shrink-0 items-center gap-2">
         <DetalleBadgeSoft
           text={item.satisfied ? '✓ Adjunto' : 'Sin adjuntar'}
           color={item.satisfied ? DETALLE_GREEN : DETALLE_GOLD}
+          sinMarca={item.satisfied}
         />
         {attachment ? (
           <DownloadButton filename={attachment.filename} onClick={() => onDownload(attachment)} />
@@ -136,18 +139,57 @@ function AdjuntoRow({
 }) {
   return (
     <li
-      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
+      className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-border"
     >
       <span className="min-w-0">
-        <span className="block truncate text-xs font-medium text-flit-primary dark:text-white">
+        <span className="block truncate text-xs font-medium text-foreground">
           {documentLabel(attachment.tipo)} · {attachment.filename}
         </span>
-        <span className="block text-xs text-flit-primary/70 dark:text-white/70">
+        <span className="block text-xs text-muted-foreground">
           {formatBytes(attachment.sizeBytes)} · {formatFechaHora(attachment.uploadedAt)}
         </span>
       </span>
       <DownloadButton filename={attachment.filename} onClick={() => onDownload(attachment)} />
     </li>
+  );
+}
+
+/**
+ * Bug #14604 — versiones anteriores de documentos (reemplazadas por una carga del administrador).
+ * Colapsable y sin contar para el checklist: solo se pueden abrir/descargar, con su fecha de carga.
+ */
+function VersionesAnteriores({
+  historicos,
+  onDownload,
+}: {
+  historicos: ProcedureAttachment[];
+  onDownload: (attachment: ProcedureAttachment) => void;
+}) {
+  if (historicos.length === 0) return null;
+  return (
+    <details className="rounded-xl border border-border px-3 py-2">
+      <summary className="cursor-pointer text-xs font-semibold text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand">
+        Versiones anteriores ({historicos.length})
+      </summary>
+      <ul className="mt-2 flex flex-col gap-2" aria-label="Versiones anteriores de documentos">
+        {historicos.map((a) => (
+          <li
+            key={a.id}
+            className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-border"
+          >
+            <span className="min-w-0">
+              <span className="block truncate text-xs font-medium text-foreground">
+                {documentLabel(a.tipo)} · {a.filename}
+              </span>
+              <span className="block text-xs text-muted-foreground">
+                Versión anterior · Cargado el {formatFechaHora(a.uploadedAt)}
+              </span>
+            </span>
+            <DownloadButton filename={a.filename} onClick={() => onDownload(a)} />
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 
@@ -167,12 +209,12 @@ function ConsultaRow({
 }) {
   const origen = ATTACHMENT_SOURCE_LABELS[attachment.source] ?? attachment.source;
   return (
-    <li className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10">
+    <li className="flex items-center justify-between gap-2 rounded-xl border px-3 py-2 border-border">
       <span className="min-w-0">
-        <span className="block truncate text-xs font-medium text-flit-primary dark:text-white">
+        <span className="block truncate text-xs font-medium text-foreground">
           {documentLabel(attachment.tipo)} · {attachment.filename}
         </span>
-        <span className="block text-xs text-flit-primary/70 dark:text-white/70">
+        <span className="block text-xs text-muted-foreground">
           {formatBytes(attachment.sizeBytes)} · {formatFechaHora(attachment.uploadedAt)}
           {origen ? ` · ${origen}` : ''}
         </span>
@@ -183,10 +225,10 @@ function ConsultaRow({
           onClick={() => onVer(attachment)}
           aria-label={`Ver ${attachment.filename}`}
           title="Ver"
-          className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 border-[#DFE5ED] dark:border-white/10"
+          className="shrink-0 rounded-lg border p-1.5 transition hover:bg-flit-brand/10 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 border-border"
           style={{ color: AZUL }}
         >
-          <Eye className="h-3.5 w-3.5" aria-hidden="true" />
+          <Icono nombre="ojo" className="h-3.5 w-3.5" />
         </button>
         <DownloadButton filename={attachment.filename} onClick={() => onDescargar(attachment)} />
       </span>
@@ -198,10 +240,9 @@ function ConsultaRow({
 function RotuloSoloConsulta() {
   return (
     <span
-      className="inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[10px] font-semibold"
-      style={{ background: `${DETALLE_GREY}22`, color: '#475569' }}
+      {...etiquetaKit('neutral', { className: 'shrink-0' })}
     >
-      <Eye className="h-3 w-3" aria-hidden="true" />
+      <Icono nombre="ojo" className="h-3.5 w-3.5" />
       {ETIQUETA_SOLO_CONSULTA}
     </span>
   );
@@ -277,6 +318,8 @@ function TramiteDetalleDocumentosConsulta({ instanceId, tenantId }: SeccionDetal
     );
   }
 
+  const historicosConsulta = soloHistoricos(attachments);
+
   if (attachments.length === 0) {
     return (
       <TarjetaDetalle titulo={titulo} accion={<RotuloSoloConsulta />}>
@@ -292,7 +335,7 @@ function TramiteDetalleDocumentosConsulta({ instanceId, tenantId }: SeccionDetal
           className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3"
           aria-label="Documentos del trámite (solo consulta)"
         >
-          {attachments.map((a) => (
+          {soloVigentes(attachments).map((a) => (
             <ConsultaRow
               key={a.id}
               attachment={a}
@@ -302,6 +345,11 @@ function TramiteDetalleDocumentosConsulta({ instanceId, tenantId }: SeccionDetal
           ))}
         </ul>
       </TarjetaDetalle>
+
+      <VersionesAnteriores
+        historicos={historicosConsulta}
+        onDownload={(att) => void preview.download(att)}
+      />
 
       {/* 403/404 de alcance: solo texto. 503 audit_unavailable: texto + «Reintentar». */}
       <AvisoDescargaFallida preview={preview} />
@@ -373,7 +421,10 @@ function TramiteDetalleDocumentosPropio({ instanceId, tenantId }: SeccionDetalle
   const checklistDocTipos = new Set(
     checklist.map((i) => i.docTipo?.toLowerCase()).filter(Boolean),
   );
-  const otrosAdjuntos = attachments.filter(
+  const vigentes = soloVigentes(attachments);
+  // Bug #14604 — versiones anteriores: se ven y se descargan, pero no cuentan como el documento vigente.
+  const historicos = soloHistoricos(attachments);
+  const otrosAdjuntos = vigentes.filter(
     (a) => a.source !== 'system' && !checklistDocTipos.has(a.tipo.toLowerCase()),
   );
   const isEmpty = checklist.length === 0 && otrosAdjuntos.length === 0;
@@ -412,7 +463,7 @@ function TramiteDetalleDocumentosPropio({ instanceId, tenantId }: SeccionDetalle
         titulo="Documentos del trámite"
         className="h-full"
         accion={
-          <span className="shrink-0 text-xs font-semibold text-flit-primary dark:text-white">
+          <span className="shrink-0 text-xs font-semibold text-foreground">
             {satisfiedCount} de {checklist.length} requisitos cumplidos
           </span>
         }
@@ -422,7 +473,7 @@ function TramiteDetalleDocumentosPropio({ instanceId, tenantId }: SeccionDetalle
         ) : (
           <ul className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3" aria-label="Requisitos del trámite">
             {checklist.map((item) => {
-              const attachment = findAttachmentByDocTipo(attachments, item.docTipo);
+              const attachment = findAttachmentByDocTipo(vigentes, item.docTipo);
               return (
                 <RequisitoRow
                   key={item.key}
@@ -450,10 +501,12 @@ function TramiteDetalleDocumentosPropio({ instanceId, tenantId }: SeccionDetalle
         </TarjetaDetalle>
       ) : null}
 
+      <VersionesAnteriores historicos={historicos} onDownload={(att) => void preview.download(att)} />
+
       {/* Fallo de una descarga directa: el visor no llega a abrirse, así que el aviso va aquí (mismo
           patrón que TramiteDetalleModal / TramiteDocumentosModal). */}
       {preview.doc === null && preview.error ? (
-        <p className="text-xs" style={{ color: '#C2410C' }} role="alert">
+        <p className="text-xs" style={{ color: 'var(--destructive)' }} role="alert">
           {preview.error}
         </p>
       ) : null}

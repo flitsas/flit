@@ -63,7 +63,8 @@ describe("HU #10495 / Bug #13055 — Pagination estándar ('Mostrando X–Y de N
     render(<Pagination page={1} pageSize={10} totalCount={25} onPageChange={onPageChange} />);
     expect(screen.getByText(/Mostrando 1–10 de 25/)).toBeInTheDocument();
     const nav = screen.getByRole("navigation", { name: /paginación/i });
-    expect(nav.className).toContain("justify-end");
+    // HU #14476 — el `.paginador` del prototipo reparte conteo y botones a los extremos.
+    expect(nav.className).toContain("justify-between");
     expect(screen.getByRole("button", { name: "Página 2" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: /página siguiente/i }));
     expect(onPageChange).toHaveBeenCalledWith(2);
@@ -74,15 +75,15 @@ describe("HU #10495 / Bug #13055 — Pagination estándar ('Mostrando X–Y de N
     expect(screen.getByRole("button", { name: /página anterior/i })).toBeDisabled();
   });
 
-  it("con onPageSizeChange muestra «Filas por página» (10/25/50/100) y el cambio llega al manejador", () => {
+  it("con onPageSizeChange muestra «Filas por página» (10/20/30/50, HU #13916) y el cambio llega al manejador", () => {
     const onPageSizeChange = vi.fn();
     render(
       <Pagination page={1} pageSize={10} totalCount={25} onPageChange={vi.fn()} onPageSizeChange={onPageSizeChange} />,
     );
     const select = screen.getByRole("combobox", { name: "Filas por página" });
-    expect([...(select as HTMLSelectElement).options].map((o) => o.value)).toEqual(["10", "25", "50", "100"]);
-    fireEvent.change(select, { target: { value: "25" } });
-    expect(onPageSizeChange).toHaveBeenCalledWith(25);
+    expect([...(select as HTMLSelectElement).options].map((o) => o.value)).toEqual(["10", "20", "30", "50"]);
+    fireEvent.change(select, { target: { value: "30" } });
+    expect(onPageSizeChange).toHaveBeenCalledWith(30);
   });
 
   it("edge: una sola página muestra el conteo pero oculta los controles de navegación", () => {
