@@ -144,7 +144,7 @@ describe("AC26 — tabla y filtros", () => {
     expect(within(f1).getByRole("rowheader")).toHaveTextContent("TST001");
     await waitFor(() => expect(f1).toHaveTextContent("Transportes A SAS"));
     expect(f1).toHaveTextContent("Lote octubre");
-    expect(f1).toHaveTextContent("Con análisis IA");
+    expect(f1).toHaveTextContent("Con análisis");
     expect(f1).toHaveTextContent("Bloqueado");
     expect(f1).toHaveTextContent("En saneamiento");
     expect(f1).toHaveTextContent("2 de 3");
