@@ -150,7 +150,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
             <FlaskConical className="h-3.5 w-3.5" aria-hidden />
             {probando ? "Extrayendo…" : "Elegir archivo de muestra"}
           </button>
-          <span className="text-xs opacity-70">JPG, PNG, TIFF o PDF de hasta 20 MB.</span>
+          <span className="text-xs text-muted-foreground">JPG, PNG, TIFF o PDF de hasta 20 MB.</span>
         </div>
         {error && <InlineAlert tone="error">{error}</InlineAlert>}
         {resultado && !resultado.exitoso && (
@@ -167,7 +167,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
             emptyMessage="El modelo no devolvió campos."
             columns={[
               { key: "campo", header: "Campo", render: ([k]) => ETIQUETA_CAMPO[k] ?? k },
-              { key: "valor", header: "Valor", render: ([, c]) => c.valor ?? <span className="opacity-50">null</span> },
+              { key: "valor", header: "Valor", render: ([, c]) => c.valor ?? <span className="text-muted-foreground">null</span> },
               { key: "conf", header: "Confianza", align: "right", render: ([, c]) => (c.confianza === null ? "—" : `${Math.round(c.confianza * 100)} %`) },
             ]}
           />
@@ -175,7 +175,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
         {resultado?.crudo && (
           <details className="text-xs">
             <summary className="cursor-pointer font-semibold">JSON devuelto por {resultado.modelo}</summary>
-            <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-secondary p-3 text-[11px]">{formatear(resultado.crudo)}</pre>
+            <pre className="mt-2 max-h-80 overflow-auto rounded-xl bg-secondary p-3 text-xs">{formatear(resultado.crudo)}</pre>
           </details>
         )}
       </div>
@@ -184,7 +184,7 @@ function Probar({ v, onCerrar }: { v: Version; onCerrar: () => void }) {
 }
 
 function Valor({ v, ok }: { v: string | null; ok: boolean }) {
-  return <span className={ok ? "" : "font-semibold text-destructive"}>{v ?? <span className="opacity-50">vacío</span>}</span>;
+  return <span className={ok ? "" : "font-semibold text-destructive"}>{v ?? <span className="text-muted-foreground">vacío</span>}</span>;
 }
 
 /** Campo por campo, solo donde alguna de las dos versiones no acertó. */
@@ -225,9 +225,9 @@ function ResultadoEvaluacion({ id, onCerrar }: { id: string; onCerrar: () => voi
             getRowKey={(f) => f.clave}
             emptyMessage="Las dos versiones acertaron todos los campos."
             columns={[
-              { key: "archivo", header: "Documento", render: (f) => <span className="text-[11px]">{f.archivo}</span> },
+              { key: "archivo", header: "Documento", render: (f) => <span className="text-xs">{f.archivo}</span> },
               { key: "campo", header: "Campo", render: (f) => ETIQUETA_CAMPO[f.campo] ?? f.campo },
-              { key: "esperado", header: "Registrado", render: (f) => f.esperado ?? <span className="opacity-50">vacío</span> },
+              { key: "esperado", header: "Registrado", render: (f) => f.esperado ?? <span className="text-muted-foreground">vacío</span> },
               { key: "candidata", header: `Versión ${e.versionNumero}`, render: (f) => <Valor v={f.candidata} ok={f.aciertaCandidata} /> },
               { key: "vigente", header: e.vigenteNumero ? `Publicada (v${e.vigenteNumero})` : "Publicada", render: (f) => <Valor v={f.vigente} ok={f.aciertaVigente} /> },
             ]}
@@ -324,7 +324,7 @@ function Prompts() {
         renderExpanded={(v) => (
           <details className="px-3 pb-3 text-xs">
             <summary className="cursor-pointer font-semibold">Ver el texto</summary>
-            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-secondary p-3 text-[11px]">{v.texto}</pre>
+            <pre className="mt-2 max-h-72 overflow-auto whitespace-pre-wrap rounded-xl bg-secondary p-3 text-xs">{v.texto}</pre>
           </details>
         )}
         columns={[
@@ -339,16 +339,16 @@ function Prompts() {
             header: "Evaluación",
             render: (v) =>
               v.publicada || v.retiradaEn ? (
-                <span className="opacity-50">—</span>
+                <span className="text-muted-foreground">—</span>
               ) : (
                 <div className="flex flex-col items-start gap-0.5">
                   <Chip e={etiquetaEvaluacion(v.evaluacion)} title={v.evaluacion?.mensaje ?? undefined} />
-                  {v.evaluacion && resumenEvaluacion(v.evaluacion) && <span className="text-[11px] tabular-nums opacity-70">{resumenEvaluacion(v.evaluacion)}</span>}
+                  {v.evaluacion && resumenEvaluacion(v.evaluacion) && <span className="text-xs tabular-nums text-muted-foreground">{resumenEvaluacion(v.evaluacion)}</span>}
                 </div>
               ),
           },
           { key: "proveedor", header: "Proveedor", render: (v) => v.proveedor },
-          { key: "modelo", header: "Modelo", render: (v) => <span className="font-mono text-[11px]">{v.modelo}</span> },
+          { key: "modelo", header: "Modelo", render: (v) => <span className="font-mono text-xs">{v.modelo}</span> },
           { key: "creada", header: "Creada", render: (v) => formatoFechaHora(v.creadoEn) },
           { key: "actualizada", header: "Actualizada", render: (v) => formatoFechaHora(v.actualizadoEn) },
           {

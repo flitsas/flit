@@ -61,12 +61,9 @@ function EditarOrganismo({ ot, onCerrar, onGuardado }: { ot: Organismo; onCerrar
         <label className={ETIQUETA_CLS}>
           Correos de notificaciones judiciales (radicación de DP y solicitudes)
           <textarea className={TEXTAREA_CLS} rows={4} value={correos} onChange={(e) => setCorreos(e.target.value)} placeholder="uno por línea" />
-          <span className="font-normal opacity-70">Sin correo, no se pueden enviar derechos de petición ni solicitudes de cambio a este organismo.</span>
+          <span className="font-normal text-muted-foreground">Sin correo, no se pueden enviar derechos de petición ni solicitudes de cambio a este organismo.</span>
         </label>
-        <label className="flex items-center gap-2 text-xs font-semibold">
-          <input type="checkbox" checked={permite} onChange={(e) => setPermite(e.target.checked)} />
-          Admite el cambio de contraventor
-        </label>
+        <Interruptor activo={permite} onCambio={setPermite} etiqueta="Admite el cambio de contraventor" />
         <Interruptor
           activo={admiteDp}
           onCambio={setAdmiteDp}
@@ -146,7 +143,7 @@ function Alias() {
             header: "",
             align: "right",
             render: (a) => (
-              <button type="button" aria-label={`Borrar alias ${a.texto}`} className="text-destructive hover:opacity-70" onClick={() => borrar(a)}>
+              <button type="button" aria-label={`Borrar alias ${a.texto}`} className="text-destructive hover:text-destructive/80" onClick={() => borrar(a)}>
                 <Icono nombre="papelera" className="h-4 w-4" />
               </button>
             ),
@@ -187,10 +184,7 @@ export default function Organismos() {
           <>
             <div className="flex flex-wrap items-center gap-3">
               <SearchInput value={buscar} onChange={(v) => { setBuscar(v); pg.setPage(1); }} label="Buscar organismo" placeholder="Nombre, código o municipio" />
-              <label className="flex items-center gap-2 text-xs font-semibold">
-                <input type="checkbox" checked={sinCorreo} onChange={(e) => { setSinCorreo(e.target.checked); pg.setPage(1); }} />
-                Solo los que no tienen correo
-              </label>
+              <Interruptor activo={sinCorreo} onCambio={(v) => { setSinCorreo(v); pg.setPage(1); }} etiqueta="Solo los que no tienen correo" />
             </div>
             <DataTable
               ariaLabel="Organismos de tránsito"
