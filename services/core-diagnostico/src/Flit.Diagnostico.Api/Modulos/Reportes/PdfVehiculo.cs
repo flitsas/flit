@@ -38,8 +38,8 @@ internal static partial class PdfVehiculo
     /// <summary>
     /// Versión del diseño: entra en la huella (súbela al cambiar lo que se pinta o cómo). 6 = impuesto con deuda sin valor, sin deuda y
     /// «No confirmado». 7 = rótulos de negocio (punto 5, 2026-11-11): estados de las fuentes en tipo oración y «Análisis en preparación».
-    /// 8 = ajustes visuales (2026-11-18): cabecera de 3 filas, NOTA en el pie, «No hay datos», grillas por palabra, tablas de 2 campos
-    /// centradas y fechas ISO de la persona en dd/MM/yyyy.
+    /// 8 = ajustes visuales (2026-11-18): cabecera de 3 filas, NOTA en el pie, «No hay datos», grillas por palabra con encabezado único,
+    /// tablas de 2 campos centradas, avalúo y persona sin partirse, y fechas ISO de la persona y del avalúo en dd/MM/yyyy.
     /// </summary>
     public const int VersionPlantilla = 8;
 
@@ -381,29 +381,33 @@ internal static partial class PdfVehiculo
     private static string VeredictoEnPalabra(string veredicto) => RotulosDiagnostico.DeVeredicto(veredicto);
 
     /// <summary>
-    /// Tabla de identificación de la cabecera (ajustes 2026-11-18): solo Diagnóstico ID, Placa y Fecha de generación, etiqueta a la
-    /// izquierda y valor a la derecha, con los anchos de <see cref="AnchosCabecera"/> para que cada valor quepa en una línea.
+    /// Tabla de identificación de la cabecera (ajustes 2026-11-18): solo Diagnóstico ID, Placa (o VIN si no hay placa) y Fecha de
+    /// generación, etiqueta a la izquierda y valor a la derecha, con los anchos de <see cref="AnchosCabecera"/> para que cada valor
+    /// quepa en una línea.
     /// </summary>
     private static void DatosDelDiagnostico(IContainer contenedor, EncabezadoReporte e, DateTimeOffset generado, float etiqueta, float valor) =>
         TablaFlit.Pares(contenedor, FilasCabecera(e, generado), etiqueta, valor);
 
+    /// <summary>Filas de la cabecera; <paramref name="generado"/> ya viene en hora Colombia (<see cref="Documento"/>). Sin placa, el VIN (o el identificador).</summary>
     private static List<(string Etiqueta, string Valor)> FilasCabecera(EncabezadoReporte e, DateTimeOffset generado) =>
     [
         ("Diagnóstico ID", e.DiagnosticoId.ToString()),
-        ("Placa", e.Placa ?? NoRegistra),
-        ("Fecha de generación", generado.ToOffset(VigenciaDelDia.OffsetColombia).ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture)),
+        e.Placa is { } placa ? ("Placa", placa) : ("VIN", e.Vin ?? e.Identificador),
+        ("Fecha de generación", generado.ToString("dd/MM/yyyy HH:mm:ss", CultureInfo.InvariantCulture)),
     ];
 
     /// <summary>
     /// Anchos (pt) de las columnas etiqueta y valor de la tabla de la cabecera: la etiqueta y el valor más anchos en una línea (el
-    /// GUID de 36 caracteres no se parte). Junto con <see cref="AnchoLogo"/> caben en <see cref="AnchoContenido"/>.
+    /// GUID de 36 caracteres no se parte). Junto con <see cref="AnchoLogo"/> nunca pasan de <see cref="AnchoContenido"/>: un valor más
+    /// largo (un identificador raro) se queda con lo que reste y se parte.
     /// </summary>
     internal static (float Etiqueta, float Valor) AnchosCabecera(EncabezadoReporte e, DateTimeOffset generado)
     {
         ArgumentNullException.ThrowIfNull(e);
         var filas = FilasCabecera(e, generado);
-        return (filas.Max(f => TablaFlit.AnchoCelda(f.Etiqueta, TablaFlit.TamanoTexto, medium: true)),
-            filas.Max(f => TablaFlit.AnchoCelda(f.Valor, TablaFlit.TamanoTexto)));
+        var etiqueta = filas.Max(f => TablaFlit.AnchoCelda(f.Etiqueta, TablaFlit.TamanoTexto, medium: true));
+        var valor = filas.Max(f => TablaFlit.AnchoCelda(f.Valor, TablaFlit.TamanoTexto));
+        return (etiqueta, Math.Min(valor, AnchoContenido - AnchoLogo - etiqueta - TablaFlit.Separador));
     }
 
     /// <summary>Texto de la NOTA, repetido al pie de cada página.</summary>
@@ -424,10 +428,12 @@ internal static partial class PdfVehiculo
 
     /// <summary>
     /// Bloque de sección: sobretítulo opcional centrado en azul, título centrado en mayúsculas Poppins Bold azul oscuro, «Consultado
-    /// el …» pequeño gris si hay fecha del dato, y el cuerpo. Pide espacio al inicio para no dejar el título huérfano al pie.
+    /// el …» pequeño gris si hay fecha del dato, y el cuerpo. Pide <paramref name="espacio"/> pt al inicio (por defecto 90) para no
+    /// dejar el título huérfano al pie.
     /// </summary>
-    private static void SeccionConTitulo(IContainer contenedor, string titulo, DateTimeOffset? dato, Action<ColumnDescriptor> cuerpo, string? sobretitulo = null) =>
-        contenedor.EnsureSpace(90).Column(col =>
+    private static void SeccionConTitulo(
+        IContainer contenedor, string titulo, DateTimeOffset? dato, Action<ColumnDescriptor> cuerpo, string? sobretitulo = null, float espacio = EspacioTitulo) =>
+        contenedor.EnsureSpace(espacio).Column(col =>
         {
             col.Spacing(5);
             if (sobretitulo is not null)
@@ -444,6 +450,33 @@ internal static partial class PdfVehiculo
     /// <summary>Texto gris centrado de los estados sin dato (No aplica, consulta no disponible, pendiente, sin resultados).</summary>
     private static void Aviso(IContainer contenedor, string texto) =>
         contenedor.AlignCenter().Text(texto).FontSize(TablaFlit.TamanoTexto).FontColor(FlitDocumentTheme.Gris);
+
+    /// <summary>Espacio mínimo (pt) que pide una sección antes de empezar: su título y la primera tabla.</summary>
+    private const float EspacioTitulo = 90;
+
+    /// <summary>Tope (pt) del espacio que pide un bloque para no partirse: menos que el alto útil de una página (~590 pt).</summary>
+    private const float EspacioMaximo = 480;
+
+    /// <summary>
+    /// Espacio que pide una sección (auditoría visual 2026-11-18): el avalúo entero (resumen y grilla de fuentes) y, en las secciones
+    /// de persona, el título con la primera persona, para que la grilla no quede en otra página sin su título. Estimado y acotado a
+    /// <see cref="EspacioMaximo"/>: si el bloque es más alto que eso, se parte como siempre.
+    /// </summary>
+    private static float EspacioSeccion(SeccionReporte seccion) => Math.Min(EspacioMaximo, seccion switch
+    {
+        { Resultado: ResultadoAvaluoDetalle avaluo } => 60 + 45 + (avaluo.Fuentes is { Count: > 0 } f ? 35 + (25 * f.Count) : 0),
+        { Personas: [var primera, ..] } => 60 + AltoPersona(primera),
+        _ => EspacioTitulo,
+    });
+
+    /// <summary>Alto estimado (pt) de una persona: subtítulo, su tabla, la del RUNT y hasta 4 filas de licencias.</summary>
+    private static float AltoPersona(PersonaReporte persona) => 20 + 45 + persona.Resultado switch
+    {
+        ResultadoRuntPersonaDetalle { Licencias: { Count: > 0 } licencias } => 45 + 30 + (40 * Math.Min(licencias.Count, 4)),
+        ResultadoRuntPersonaDetalle => 60,
+        null => 20,
+        _ => 90,
+    };
 
     private static void Seccion(IContainer contenedor, SeccionReporte seccion, string? sobretitulo, DetalleRuntReporte? detalle) => SeccionConTitulo(contenedor,
         RotulosDiagnostico.DeTituloSeccion(seccion.Fuente), seccion.DatoObtenidoEn, col =>
@@ -470,13 +503,13 @@ internal static partial class PdfVehiculo
             if (seccion.Personas is { Count: > 0 } personas)
             {
                 foreach (var persona in personas)
-                    col.Item().PaddingTop(4).Element(c => Persona(c, persona));
+                    col.Item().PaddingTop(4).EnsureSpace(Math.Min(EspacioMaximo, AltoPersona(persona))).Element(c => Persona(c, persona));
             }
             else if (seccion.Personas is not null && seccion.Estado == EstadoSeccion.Completado)
             {
                 col.Item().Element(c => Aviso(c, "No hay personas registradas para esta consulta."));
             }
-        }, sobretitulo);
+        }, sobretitulo, EspacioSeccion(seccion));
 
     /// <summary>Una persona de una sección de persona: subtítulo «Propietario n» / «Locatario n» en azul, su tabla y su resultado.</summary>
     private static void Persona(IContainer contenedor, PersonaReporte persona) => contenedor.Column(col =>
@@ -618,9 +651,10 @@ internal static partial class PdfVehiculo
 
     private static string Suspension(LicenciaDetalle licencia)
     {
-        if (licencia.SuspensionDesde is null && licencia.SuspensionHasta is null)
+        if (string.IsNullOrWhiteSpace(licencia.SuspensionDesde) && string.IsNullOrWhiteSpace(licencia.SuspensionHasta))
             return NoRegistra;
-        return $"{(licencia.SuspensionDesde is null ? "—" : FechaCorta(licencia.SuspensionDesde))} – {(licencia.SuspensionHasta is null ? "—" : FechaCorta(licencia.SuspensionHasta))}";
+        static string Extremo(string? fecha) => string.IsNullOrWhiteSpace(fecha) ? "—" : FechaCorta(fecha);
+        return $"{Extremo(licencia.SuspensionDesde)} – {Extremo(licencia.SuspensionHasta)}";
     }
 
     private static void Avaluo(IContainer contenedor, ResultadoAvaluoDetalle avaluo) => contenedor.Column(col =>
@@ -645,7 +679,7 @@ internal static partial class PdfVehiculo
                 [.. fuentes.Select(f => new[]
                 {
                     NombreFuenteAvaluo(f.Fuente), Estado(f.Estado), f.Valor is { } v ? Moneda(v) : NoRegistra,
-                    f.Muestras?.ToString(CultureInfo.InvariantCulture) ?? NoRegistra, f.Fecha ?? NoRegistra,
+                    f.Muestras?.ToString(CultureInfo.InvariantCulture) ?? NoRegistra, FechaCorta(f.Fecha),
                 })]));
         }
     });
@@ -712,8 +746,8 @@ internal static partial class PdfVehiculo
     /// </summary>
     private static void Grilla(IContainer contenedor, IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas, string? sinFilas = null)
     {
-        var distribucion = TablaFlit.Distribuir(columnas, filas, AnchoContenido);
-        TablaFlit.Grilla(contenedor, columnas, filas, sinFilas, distribucion.Anchos, distribucion.TamanoEncabezado);
+        var d = DistribuirGrilla(columnas, filas);
+        TablaFlit.Grilla(contenedor, columnas, filas, sinFilas, d.Anchos, d.TamanoEncabezado, d.TamanoCuerpo, d.Relleno);
     }
 
     /// <summary>Fecha y hora (sin segundos) en hora Colombia: dd/MM/yyyy HH:mm.</summary>
@@ -747,6 +781,17 @@ internal static partial class PdfVehiculo
 
     [GeneratedRegex(@"^(\d{4}-\d{2}-\d{2})(?:[T ].*)?$", RegexOptions.CultureInvariant, matchTimeoutMilliseconds: 1000)]
     private static partial Regex FechaIso();
+
+    /// <summary>
+    /// Tamaño único del encabezado de todas las grillas del PDF del vehículo (auditoría visual 2026-11-18, punto 5). Con 9,5 pt no caben
+    /// sin partir palabras las grillas de 8 columnas (licencias: faltan ~46 pt; limitaciones con datos: ~65 pt); con 8 pt caben todas
+    /// y las licencias conservan el cuerpo de 9,5 pt.
+    /// </summary>
+    internal const float TamanoEncabezadoGrilla = 8;
+
+    /// <summary>Anchos, cuerpo y relleno de una grilla del PDF del vehículo con el encabezado <see cref="TamanoEncabezadoGrilla"/>.</summary>
+    internal static TablaFlit.DistribucionGrilla DistribuirGrilla(IReadOnlyList<string> columnas, IReadOnlyList<string[]> filas) =>
+        TablaFlit.Distribuir(columnas, filas, AnchoContenido, TamanoEncabezadoGrilla);
 
     [GeneratedRegex("[^A-Za-z0-9]", RegexOptions.CultureInvariant)]
     private static partial Regex NoAlfanumerico();
