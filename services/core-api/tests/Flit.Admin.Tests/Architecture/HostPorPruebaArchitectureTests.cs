@@ -65,6 +65,8 @@ public sealed class HostPorPruebaArchitectureTests
         "SessionPolicyEndpointTests",
     };
 
+    private static readonly string[] ProyectosBarridos = ["Flit.Admin.Tests", "Flit.Integration.Tests"];
+
     private const string ComoMigrar =
         "cada prueba arranca la API completa. Crea una clase anidada `public sealed class Anfitrion : HostPorClase`, " +
         "mueve lo que hacía el WithWebHostBuilder a `Configurar(factory)`, usa `IClassFixture<MiClase.Anfitrion>` y " +
@@ -166,7 +168,7 @@ public sealed class HostPorPruebaArchitectureTests
     private static List<HostPorPruebaHallazgo> Barrer()
     {
         var tests = LocalizarCarpetaTests();
-        var archivos = new[] { "Flit.Admin.Tests", "Flit.Integration.Tests" }
+        var archivos = ProyectosBarridos
             .SelectMany(p => Directory.EnumerateFiles(Path.Combine(tests, p), "*.cs", SearchOption.AllDirectories))
             .Where(f => !f.Contains($"{Path.DirectorySeparatorChar}obj{Path.DirectorySeparatorChar}", StringComparison.Ordinal)
                         && !f.Contains($"{Path.DirectorySeparatorChar}bin{Path.DirectorySeparatorChar}", StringComparison.Ordinal))
