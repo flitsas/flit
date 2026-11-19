@@ -124,7 +124,8 @@ Los valores `<secreto>` se generan por ambiente y van a un sealed secret. Nunca 
 | `Diagnostico__DataProtection__CertificadoClave` (`DIAGNOSTICO_DP_CERT_PASSWORD`) | Sí | Ninguno | Clave del `.pfx` | `<secreto>` | `D/Plataforma/ProteccionDocumentos.cs:32`, `:52` |
 | Archivo `.pfx` (`DIAGNOSTICO_DP_CERT_FILE` en compose) | Sí | Ninguno | Certificado RSA. Se monta como archivo | `<secreto>` | `DC:1325-1326` |
 | `FILE_MANAGER_AUTH_TOKEN` | Opcional | Vacío | Token del file-manager. El mismo de core-api | `<secreto>` | `D/Infraestructura/Archivos/AlmacenArchivos.cs:92` |
-| `Diagnostico__Anthropic__ApiKey` | Opcional | Vacío | Llave del redactor del dictamen. **El compose no la pasa** | `<secreto>` | `D/Modulos/Dictamen/RegistroRedactor.cs:32` |
+| `Diagnostico__Ia__ClavePrivada` (`DIAGNOSTICO_IA_CLAVE_PRIVADA`) | Opcional | Vacío | Privada RSA-3072 (PKCS#8 en base64) que descifra la llave de IA que entrega core-api por gRPC (ADR-0091). Va con `DIAGNOSTICO_IA_KID`; su pública va a core-api en `AI_ENTREGA_DIAGNOSTICO_CLAVE_PUBLICA`. Sin ella el dictamen sale «Sin análisis». Comandos en `.env.prod.example` | `<secreto>` | `D/Modulos/Dictamen/Credencial/SobreLlaveIa.cs` |
+| `Diagnostico__Anthropic__ApiKey` | Solo `Origen=local` | Vacío | Ya no se usa en servidores: la llave sale de «Configuración de IA» de core-api (`ANTHROPIC_API_KEY`). **El compose no la pasa** | `<secreto>` | `D/Modulos/Dictamen/RegistroRedactor.cs` |
 
 ### 3.2 core-diagnostico: configuración
 
@@ -147,7 +148,7 @@ Los valores `<secreto>` se generan por ambiente y van a un sealed secret. Nunca 
 | `Diagnostico__Consultas__Address` (`DIAGNOSTICO_CONSULTAS_ADDRESS`) | Opcional | Vacío | **Solo** la réplica de departamentos con impuesto. No enciende fuentes | `http://core-consultas:8084` | `D/Modulos/Consultas/Fuentes/ClienteConsultas.cs:37`, `:116` |
 | `Diagnostico__Fuentes__ImpuestoDisponible` (`DIAGNOSTICO_IMPUESTO_DISPONIBLE`) | Opcional | `false` | Ofrecer la fuente de impuesto | `false` | `D/Modulos/Configuracion/DisponibilidadFuentes.cs:14`, `:17` |
 | `Diagnostico__Ambiente` (`DIAGNOSTICO_AMBIENTE`) | Opcional | Vacío | Ambiente lógico. Hoy solo decide si el redactor puede simular | `DEV` | `D/Modulos/Modulos.cs:18`, `RegistroRedactor.cs:16` |
-| `Diagnostico__Anthropic__Simulado` | Opcional | `false` | Redactor simulado. Solo con `Diagnostico__Ambiente` LOCAL o DEV. **El compose no la pasa** | `true` | `RegistroRedactor.cs:21` |
+| `Diagnostico__Anthropic__Simulado` | Opcional | `false` | Redactor simulado. Solo con `Diagnostico__Ia__Origen=local` y `Diagnostico__Ambiente` LOCAL o DEV; con `plataforma` nunca simula. **El compose no la pasa** | `true` | `RegistroRedactor.cs:21` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Opcional | Vacío | Trazas | El de los demás servicios | `DC:541` |
 
 **No poner en ningún ambiente:** `Diagnostico__Identidad__SimularSuscripcionActiva` (`GuardSuscripcion.cs:46`) ni
@@ -205,7 +206,7 @@ Ya corre en DEV. Lo marcado **nuevo** es lo que este despliegue agrega.
 | `IMPUESTO_API_BASE_URL` **(nuevo)** | Config sensible | No poner en este despliegue | Vacío = no listo | Impuesto real | Vacía | `C/Impuesto/OpcionesImpuesto.cs:35` |
 | `IMPUESTO_API_PATH` **(nuevo)** | Config | No poner en este despliegue | Vacío | Ruta del impuesto | Vacía | `OpcionesImpuesto.cs:36` |
 | `IMPUESTO_API_TIMEOUT_SECONDS` **(nuevo)** | Config | Opcional | 280 | **Con 300 o más, core-consultas no arranca** | `280` | `OpcionesImpuesto.cs:37-38`, `:56-57` |
-| `IMPUESTO_CONTACTO_*` (18 variables) **(nuevo)** | Config sensible | No poner en este despliegue | Vacío | Datos fijos del paso 3. Lista exacta en `.env.impuesto.example:6-23` | Vacías | `OpcionesImpuesto.cs:67-73` |
+| `IMPUESTO_CONTACTO_*` (18 variables) **(nuevo)** | Config sensible | No poner en este despliegue | Vacío | Datos fijos del paso 3. Lista exacta en `.env.impuesto.example:5-22` | Vacías | `OpcionesImpuesto.cs:67-73` |
 
 **Proveedores reales** (`VERIFIK_*`, `KYVERUM_*`, `FASECOLDA_*`, `RUES_*`): ya existen en DEV. Remítase a
 [handoff-vps-consultas-notificaciones.md](handoff-vps-consultas-notificaciones.md). Este despliegue no los cambia.
@@ -252,7 +253,7 @@ Recomendación para el **primer** despliegue en DEV: todo simulado, para probar 
 | `INTEMPO_API_BASE_URL` | Vacía mientras se simula | Por decidir | Por decidir | Sin ella la fuente queda «no conectada» y el servicio arranca igual |
 | `Diagnostico__Fuentes__ImpuestoDisponible` | `false` | `false` | `false` | Ver §4.3 |
 | `IMPUESTO_API_*`, `IMPUESTO_CONTACTO_*` | Sin valor | Sin valor | Sin valor | El encendido real no entra (§9, punto 5) |
-| `Diagnostico__Anthropic__*` | Ver PC-9 | Por decidir | Por decidir | Sin llave ni simulación, el redactor responde «no configurado» (`RedactorLlm.cs:189-197`) |
+| `Diagnostico__Redaccion__Habilitado` + `Diagnostico__Ia__*` | `true`, par RSA propio | `true`, par RSA propio | `false` hasta que el PO decida | Origen `plataforma` (defecto del compose; en DEV va en el configmap, ver PC-9): proveedor, modelo y llave salen de «Configuración de IA» (herramienta `diagnostico_dictamen`) cifrados por gRPC, ADR-0091. Sin privada o sin llave en core-api, el dictamen sale «Sin análisis» |
 | `FILE_MANAGER_BASE_URL` | El de core-api en DEV | El de core-api en QA | El de core-api en PDN | **No use el defecto del compose: es la URL de PDN** (`DC:560`). Ver PC-5 |
 | Certificado `.pfx` | Propio | Propio | Propio | No copiar entre ambientes |
 | `DIAGNOSTICO_PORT` | 4024 | 5024 | 6024 | `cd.yml:93`, `:107`, `:120` |
@@ -321,8 +322,8 @@ No use `conexiones` menor que el `Maximum Pool Size` de la cadena.
 migración para estos dos esquemas. Cada historial vive en su esquema (`__EFMigrationsHistory`). Las migraciones de un
 servicio no tocan al otro.
 
-**Qué agrega la de consultas.** Crea `consultas.vehicle_tax_departments` y siembra 5 filas: activas 50, 52 y 94; apagadas 17 y 63.
-No tiene datos personales. Con la lista vacía o sin URL, no se consulta nada.
+**Qué agrega la de consultas.** Crea `consultas.vehicle_tax_departments` y siembra 5 filas (activas 50, 52 y 94; apagadas 17 y 63). La migración `20261117044000_ImpuestoDepartamentosActivos` (2026-11-16) deja activas solo 05 Antioquia, 08 Atlántico y 11 Bogotá y apaga el resto con borrado lógico.
+No tiene datos personales. Sin departamentos activos en la tabla o sin URL, no se consulta nada.
 
 **Conexiones.** Diagnóstico cabe en 20 (handoff §2.4). **core-consultas no cabe con lo que tiene DEV:** tope 10 y pool 8, y los
 nuevos consumidores suman 17 mensajes a la vez (8 + 4 + 4 + 1). Cada consumidor abre la transacción antes del efecto
@@ -693,13 +694,9 @@ Nada de esto se corrigió en este documento. Las rutas se verificaron en el comm
 8. **Nombres errados en el mensaje de arranque.** `D/ServicioSettings.cs:24-25` pide `DIAGNOSTICO_DP_CERTIFICADO_RUTA` y `_CLAVE`.
    El compose usa `DIAGNOSTICO_DP_CERT_FILE` y `DIAGNOSTICO_DP_CERT_PASSWORD` (`DC:569`, `:1326`). Si un operador sigue el log, crea variables
    que nadie lee. Lo correcto en el contenedor: `Diagnostico__DataProtection__CertificadoRuta` y `__CertificadoClave`.
-9. **`IMPUESTO_CONTACTO_*`.** El compose no las pasa (`DC:681-684`). Además, `handoff-vps-diagnostico.md:283-288` usa
-   `IMPUESTO_CONTACTO_DEPARTAMENTO`, `_CIUDAD` y `_DIRECCION`, y el código lee `_DIRECCION_DEPARTAMENTO`, `_DIRECCION_CIUDAD` y
-   `_DIRECCION_COMPLETA` (`OpcionesImpuesto.cs:70-73`). Con los nombres del handoff, quedan vacías sin error.
-10. **`handoff-vps-diagnostico.md:282` rompe el arranque.** Propone `IMPUESTO_API_TIMEOUT_SECONDS=300`, y con 300 core-consultas **no
-    arranca** (`OpcionesImpuesto.cs:56-57`). El defecto real es 280 (`DC:683`).
-11. **`IMPUESTO_DEPARTAMENTOS` ya no tiene efecto** (ADR-0080). Sigue en `DC:684` y `.env.impuesto.example:5`, y el handoff aún habla de «vaciar la
-    lista» (`:292-293`, `:317`). `OpcionesImpuesto.cs:31` y `:49-63` ya no la leen. Para apagar: la tabla.
+9. **Resuelto (2026-11-16).** `IMPUESTO_CONTACTO_*`: el compose ya pasa las 18 variables y el handoff usa los nombres que lee `OpcionesImpuesto.cs:70-73`.
+10. **Resuelto (2026-11-16).** El handoff propone ahora `IMPUESTO_API_TIMEOUT_SECONDS=280`, el defecto real (`DC:702`); con 300 core-consultas no arranca (`OpcionesImpuesto.cs:56-57`).
+11. **Resuelto (2026-11-16).** `IMPUESTO_DEPARTAMENTOS` salió del compose y de `.env.impuesto.example`; el handoff apaga por la tabla `consultas.vehicle_tax_departments`.
 12. **Comentario desfasado en el compose.** `DC:551-555` dice que `Diagnostico__Consultas__Address` enciende juntas todas las fuentes y que
     la simulación se valida en Diagnóstico. Desde ADR-0075, solo sirve para la réplica, y la simulación vive en core-consultas
     (`ClienteConsultas.cs:19-21`).
@@ -712,7 +709,7 @@ Nada de esto se corrigió en este documento. Las rutas se verificaron en el comm
     `despliegue-dev-k3s-comparendos.md:6` dice que QA sigue con compose, y `cd.yml:1370-1375` dice que no. `handoff-vps-diagnostico.md:59-62` dice que
     el `.env` debe tener `RABBITMQ_URL_DIAGNOSTICO` antes de fusionar: solo aplica a quien usa el compose. Manda el `cd.yml`.
 17. **`Diagnostico:Simulacion:Habilitada` sigue leyéndose.** `guia-entorno-local-suite.md:11` dice que ya no existe. `RegistroRedactor.cs:23` la usa para simular
-    el redactor. Prefiera `Diagnostico__Anthropic__Simulado`.
+    el redactor, y solo con `Diagnostico__Ia__Origen=local`. Prefiera `Diagnostico__Anthropic__Simulado`.
 18. **Quitar «Próximamente» por PR.** `handoff-vps-diagnostico.md:386` pide un PR «para ese ambiente», pero `appsettings.json:209` es uno solo para todos.
     Un PR sacaría a Diagnóstico también de QA y PDN.
 
@@ -740,7 +737,7 @@ Quedaron abiertos porque dependen de `flit-gitops` o de decisiones que no están
 | PC-6 | Tiempo de lectura que necesita la descarga de PDF y ZIP. El clúster del gateway corta a 30 s y nginx de Comparendos a 120 s: medir en el humo. No hay ingress: ver la tabla inicial | Líder Técnico |
 | PC-7 | Sacar a Diagnóstico de «Próximamente» solo en DEV: `Suite__Hosts__Overrides__diagnostico` en core-api y core-identity (`ConfiguredProductHosts.cs:31`). **No quite** `Suite__Hosts__ComingSoon__0=diagnostico`: Comparendos volvería a «Próximamente», porque ese índice lo reemplaza en `appsettings.json`. No se probó en un ambiente | Líder Técnico |
 | PC-8 | Si el scope `platform.consultas` queda como variable por ambiente o entra a `appsettings.json` (con su prueba) | Líder Técnico con backend-agent |
-| PC-9 | Redactor en DEV: llave real de Anthropic, simulado o sin configurar | Líder Técnico con PO |
+| PC-9 | **Cerrado por ADR-0091:** en DEV la llave sale de «Configuración de IA» (core-api, `ANTHROPIC_API_KEY`) cifrada por gRPC. En `flit-gitops/services/flit2-dev/`: configmap de core-diagnostico con `Diagnostico__Ia__Origen=plataforma`, `Diagnostico__Ia__Kid=diag-dev-<aaaamm>` y `Diagnostico__Redaccion__Habilitado=true`; sealed secret con `Diagnostico__Ia__ClavePrivada`; configmap de core-api con `Ai__Entrega__Diagnostico__Kid` (el mismo kid) y `Ai__Entrega__Diagnostico__ClavePublica`. Quitar `Diagnostico__Anthropic__ApiKey` de DEV si existe. Sin esto DEV queda con `Origen=local` (defecto de `appsettings.json`). Generar el par: `.env.prod.example`, bloque de Diagnóstico | Líder Técnico |
 | PC-10 | Alerta de DLQ en k3s | Líder Técnico |
 | PC-11 | Cómo se monta el `.pfx` en k3s y con qué ruta | Líder Técnico |
 | PC-12 | **Cerrado:** `core-identity` expone 8083 en DEV | |

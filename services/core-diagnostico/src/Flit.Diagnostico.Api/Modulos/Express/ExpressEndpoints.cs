@@ -18,8 +18,10 @@ internal static class ExpressEndpoints
 
     public static void Map(RouteGroupBuilder api)
     {
-        api.MapPost(Ruta, Crear).RequirePermiso(Permisos.DiagnosticosCrear).WithName("CrearDiagnosticoExpress");
-        api.MapPost(RutaEstimado, Estimar).RequirePermiso(Permisos.DiagnosticosCrear).WithName("EstimarDiagnosticoExpress");
+        // HU #14582 (SP-5): límite por usuario en los dos (429 DEMASIADAS_SOLICITUDES).
+        api.MapPost(Ruta, Crear).RequirePermiso(Permisos.DiagnosticosCrear).RequireRateLimiting(LimitesSolicitudes.Express).WithName("CrearDiagnosticoExpress");
+        api.MapPost(RutaEstimado, Estimar).RequirePermiso(Permisos.DiagnosticosCrear).RequireRateLimiting(LimitesSolicitudes.Express)
+            .WithName("EstimarDiagnosticoExpress");
     }
 
     private static async Task<IResult> Crear(ExpressEntradaDto cuerpo, ServicioExpress servicio, CancellationToken ct)
@@ -28,8 +30,7 @@ internal static class ExpressEndpoints
         var vehiculo = confirmacion.Vehiculos.Single();
         var validado = confirmacion.Resultado.Validos.Single();
         var vehiculoDto = new VehiculoConfirmadoDto(
-            vehiculo.Id, vehiculo.Orden, validado.IdentificadorOriginal, validado.IdentificadorNorm, CodigosDeEnum.Codigo(validado.Tipo),
-            validado.TipoDocumentoLocatario, validado.DocumentoLocatario is null ? null : AnalizadorCarga.Enmascarar(validado.DocumentoLocatario));
+            vehiculo.Id, vehiculo.Orden, validado.IdentificadorOriginal, validado.IdentificadorNorm, CodigosDeEnum.Codigo(validado.Tipo));
         var estimado = confirmacion.MostrarEstimado
             ? confirmacion.Resultado.Estimado.Select(EstimadoFuenteDto.De).ToList()
             : null;

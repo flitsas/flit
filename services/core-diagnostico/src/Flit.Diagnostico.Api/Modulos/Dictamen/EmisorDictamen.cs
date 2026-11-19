@@ -16,6 +16,7 @@ using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Dictamen;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Diagnostico.Api.Modulos.Dictamen;
 
@@ -46,12 +47,23 @@ internal readonly record struct TransicionVersion(VersionEmitida? Anterior, Vers
 /// <c>diagnostico.dictamen.emitido</c> (corte 7).
 /// </summary>
 internal sealed partial class EmisorDictamen(
-    DiagnosticoDb db, IProtectorRespuestaFuente protector, IProveedorRedactor proveedor, IPlatformOutbox outbox, ILogger<EmisorDictamen> log)
+    DiagnosticoDb db, IProtectorRespuestaFuente protector, IProveedorRedactor proveedor, IPlatformOutbox outbox,
+    IOptions<Trabajos.OpcionesRedaccion> redaccion, ILogger<EmisorDictamen> log)
 {
-    /// <summary>El payload solo guarda cuántos locatarios había. El lector pregunta si el número viene con texto.</summary>
-    private const string DocumentoSoloParaElLector = "1";
-
     private static readonly JsonSerializerOptions Json = new();
+
+    /// <summary>
+    /// HU-2: la cola de redacción puede tomar lo que deje este emisor. Con <c>Diagnostico:Redaccion:Habilitado=false</c> no hay
+    /// trabajador, así que el cierre no deja fecha de toma aunque haya proveedor.
+    /// </summary>
+    public bool RedaccionActiva => RedaccionActivaCon(proveedor.Configurado, redaccion.Value);
+
+    /// <summary>HU-2: proveedor configurado y redacción encendida. Lo usan el cierre y el reemplazo del backoffice.</summary>
+    public static bool RedaccionActivaCon(bool proveedorConfigurado, Trabajos.OpcionesRedaccion opciones)
+    {
+        ArgumentNullException.ThrowIfNull(opciones);
+        return proveedorConfigurado && opciones.Habilitado;
+    }
 
     /// <summary>
     /// true si el vehículo no estaba terminado con el estado anterior de esta celda y el actual de las hermanas, y sí lo está
@@ -87,18 +99,7 @@ internal sealed partial class EmisorDictamen(
         if (!Admite(modo, tipoTramiteCodigo))
             return null;
 
-        var hoy = DateOnly.FromDateTime(ahora.ToOffset(VigenciaDelDia.OffsetColombia).DateTime);
-        return new PedidoLectura(
-            tipoTramiteCodigo!,
-            hoy,
-            lecturas.RuntDetalle,
-            lecturas.RuntNormalizado,
-            lecturas.SimitVehiculo,
-            lecturas.RuntPropietario,
-            lecturas.SimitPropietario,
-            lecturas.SimitLocatario,
-            lecturas.RuntLocatario,
-            lecturas.Impuesto);
+        return LecturasVehiculo.Pedido(tipoTramiteCodigo!, ahora, lecturas);
     }
 
     /// <summary>Un objeto por regla, en ese orden. En pendiente el texto es la plantilla del catálogo; en completada, el del modelo.</summary>
@@ -153,9 +154,13 @@ internal sealed partial class EmisorDictamen(
         return JsonSerializer.Serialize(lista, Json);
     }
 
-    /// <summary>La fila que se agrega. <paramref name="version"/> ya salió de <see cref="SiguienteVersion"/>.</summary>
+    /// <summary>
+    /// La fila que se agrega. <paramref name="version"/> ya salió de <see cref="SiguienteVersion"/>. <paramref name="esperaReintento"/>
+    /// es la espera de la toma 1 si <paramref name="redaccion"/> trae un fallo técnico sin espera indicada.
+    /// </summary>
     public static DictamenVehiculo Materializar(
-        Guid tenantId, Guid vehiculoId, int version, string tipoTramiteCodigo, DictamenEvaluado evaluado, ResultadoRedaccion redaccion, DateTimeOffset ahora)
+        Guid tenantId, Guid vehiculoId, int version, string tipoTramiteCodigo, DictamenEvaluado evaluado, ResultadoRedaccion redaccion,
+        TimeSpan esperaReintento, DateTimeOffset ahora)
     {
         ArgumentNullException.ThrowIfNull(evaluado);
         ArgumentNullException.ThrowIfNull(redaccion);
@@ -172,7 +177,7 @@ internal sealed partial class EmisorDictamen(
             RedactadoPor = redaccion.RedactadoPor,
             EstadoRedaccion = redaccion.EstadoRedaccion,
             RedaccionIntentos = redaccion.Intentos,
-            RedaccionDisponibleDesde = DisponibleDesde(redaccion, ahora),
+            RedaccionDisponibleDesde = DisponibleDesde(redaccion, ahora, esperaReintento),
             RedaccionLeaseHasta = null,
             AnalisisOverride = false,
             UsuarioOverrideId = null,
@@ -243,7 +248,8 @@ internal sealed partial class EmisorDictamen(
     {
         var fila = Materializar(
             tenantId, vehiculoId, version, tipoTramiteCodigo, evaluado,
-            new ResultadoRedaccion(string.Empty, "PLANTILLA", "PENDIENTE", 0, string.Empty, null), ahora);
+            new ResultadoRedaccion(string.Empty, "PLANTILLA", "PENDIENTE", 0, string.Empty, null),
+            Trabajos.OpcionesRedaccion.EsperaReintentoPorDefecto, ahora);
         fila.RedaccionDisponibleDesde = DisponibleAlCerrar(redaccionSuspendida, proveedorConfigurado, ahora);
         return fila;
     }
@@ -284,26 +290,109 @@ internal sealed partial class EmisorDictamen(
             AnalisisOverride = true,
             UsuarioOverrideId = usuarioId,
             OverrideEn = ahora,
+            AjustadoDesdeVersion = vigente.Version,
             CreadoEn = ahora,
         };
     }
 
     /// <summary>
-    /// Null salvo un fallo técnico (<see cref="TipoFalloRedactor.Timeout"/>, <see cref="TipoFalloRedactor.Http5xx"/>,
-    /// <see cref="TipoFalloRedactor.RateLimit"/> o <see cref="TipoFalloRedactor.Red"/>). Con espera, el reloj más esa espera;
-    /// sin ella, el reloj. Suspensión, proveedor apagado y contradicción quedan null. La usa la cola después de un fallo, no el cierre.
+    /// La fila del ajuste FLIT con alertamientos (HU #14563 B7, ADR-0086 D-2): el estado completo pedido por soporte. Nace
+    /// <c>MANUAL</c> y <c>COMPLETADA</c> (la cola del LLM no la toma), con el autor, el instante, el motivo y la versión de
+    /// origen. Cada alertamiento lleva <c>ajuste</c> <c>AGREGADO</c> (no estaba en la vigente con ese código y fuente) o
+    /// <c>EDITADO</c> (cambió el texto o el efecto); uno igual no la lleva. Los eliminados no se guardan: se calculan al leer las
+    /// versiones. Si nada cambia (veredicto y alertamientos iguales) es 409 <c>VEREDICTO_SIN_CAMBIO</c> y la vigente sigue.
     /// </summary>
-    public static DateTimeOffset? DisponibleDesde(ResultadoRedaccion redaccion, DateTimeOffset ahora)
+    internal static DictamenVehiculo FilaDeAjuste(
+        DictamenVehiculo vigente, string veredicto, IReadOnlyList<AlertamientoAjuste> alertamientos, string motivo, Guid usuarioId, DateTimeOffset ahora)
+    {
+        ArgumentNullException.ThrowIfNull(vigente);
+        ArgumentNullException.ThrowIfNull(alertamientos);
+        ArgumentException.ThrowIfNullOrWhiteSpace(motivo);
+        if (veredicto is not ("VIABLE" or "BLOQUEADO"))
+            throw new ReglaException(CodigosDictamen.VeredictoInvalido, "El veredicto debe ser Viable o Bloqueado.");
+
+        var pendientes = AlertasGuardadas(vigente.Alertamientos);
+        var anteriores = pendientes.Count;
+        var marcadas = new List<AlertaAjustadaJson>(alertamientos.Count);
+        foreach (var pedido in alertamientos)
+        {
+            var fuente = pedido.Fuente ?? string.Empty;
+            var previa = pendientes.FindIndex(a => a.Codigo == pedido.Codigo && a.Fuente == fuente);
+            string? ajuste = "AGREGADO";
+            if (previa >= 0)
+            {
+                var guardada = pendientes[previa];
+                pendientes.RemoveAt(previa);
+                ajuste = guardada.Texto == pedido.Texto && guardada.Efecto == pedido.Efecto ? null : "EDITADO";
+            }
+
+            marcadas.Add(new AlertaAjustadaJson(pedido.Codigo, pedido.Texto, pedido.Efecto, fuente, ajuste));
+        }
+
+        if (veredicto == vigente.Veredicto && pendientes.Count == 0 && marcadas.Count == anteriores && marcadas.TrueForAll(a => a.Ajuste is null))
+            throw ReglaException.Conflicto(CodigosDictamen.VeredictoSinCambio, "El veredicto y los alertamientos pedidos son los del dictamen vigente.");
+
+        var transicion = SiguienteVersion(vigente.Version);
+        vigente.Vigente = false;
+        return new DictamenVehiculo
+        {
+            Id = Guid.CreateVersion7(ahora),
+            TenantId = vigente.TenantId,
+            VehiculoId = vigente.VehiculoId,
+            Version = transicion.Nueva.Version,
+            Vigente = true,
+            Veredicto = veredicto,
+            Alertamientos = JsonSerializer.Serialize(marcadas, Json),
+            CatalogoVersion = vigente.CatalogoVersion,
+            RedactadoPor = "MANUAL",
+            EstadoRedaccion = "COMPLETADA",
+            RedaccionIntentos = 0,
+            RedaccionDisponibleDesde = null,
+            RedaccionLeaseHasta = null,
+            AnalisisOverride = true,
+            UsuarioOverrideId = usuarioId,
+            OverrideEn = ahora,
+            AjusteMotivo = motivo,
+            AjustadoDesdeVersion = vigente.Version,
+            CreadoEn = ahora,
+        };
+    }
+
+    /// <summary>Los alertamientos guardados (código, texto, efecto, fuente), en orden; los campos que falten quedan vacíos.</summary>
+    internal static List<AlertamientoAjuste> AlertasGuardadas(string alertamientos)
+    {
+        using var documento = JsonDocument.Parse(string.IsNullOrWhiteSpace(alertamientos) ? "[]" : alertamientos);
+        var lista = new List<AlertamientoAjuste>();
+        if (documento.RootElement.ValueKind != JsonValueKind.Array)
+            return lista;
+        foreach (var item in documento.RootElement.EnumerateArray())
+        {
+            string Campo(string nombre) =>
+                item.TryGetProperty(nombre, out var valor) && valor.ValueKind == JsonValueKind.String ? valor.GetString() ?? string.Empty : string.Empty;
+            lista.Add(new AlertamientoAjuste(Campo("codigo"), Campo("texto"), Campo("efecto"), Campo("fuente")));
+        }
+
+        return lista;
+    }
+
+    /// <summary>
+    /// Null salvo un fallo técnico (<see cref="TipoFalloRedactor.Timeout"/>, <see cref="TipoFalloRedactor.Http5xx"/>,
+    /// <see cref="TipoFalloRedactor.RateLimit"/> o <see cref="TipoFalloRedactor.Red"/>). Con espera indicada (Retry-After, tope
+    /// local, plataforma caída), el reloj más esa espera; sin ella, el reloj más <paramref name="esperaSinIndicacion"/>.
+    /// Suspensión, proveedor apagado y contradicción quedan null. La usa la cola después de un fallo, no el cierre.
+    /// </summary>
+    public static DateTimeOffset? DisponibleDesde(ResultadoRedaccion redaccion, DateTimeOffset ahora, TimeSpan esperaSinIndicacion)
     {
         ArgumentNullException.ThrowIfNull(redaccion);
         if (redaccion.TipoFallo is not (TipoFalloRedactor.Timeout or TipoFalloRedactor.Http5xx or TipoFalloRedactor.RateLimit or TipoFalloRedactor.Red))
             return null;
-        return redaccion.ReintentarEn is { } espera ? ahora.Add(espera) : ahora;
+        return ahora.Add(redaccion.ReintentarEn ?? esperaSinIndicacion);
     }
 
     /// <summary>
     /// Foto al entrar al cierre, antes de publicar celdas anidadas. Null si este lote no dictamina: simple, sin tipo o fuera
-    /// de la familia.
+    /// de la familia. Quien llama ya tiene el lock de la cabecera (la versión del tablero subida en su transacción, HU #14576
+    /// H-8): sin él, dos cierres simultáneos del mismo vehículo se ven EN_CURSO entre sí y ninguno detecta el flanco.
     /// </summary>
     public async Task<FotoFlanco?> PrepararAsync(CeldaConsulta celda, CancellationToken ct)
     {
@@ -350,7 +439,10 @@ internal sealed partial class EmisorDictamen(
             vigente.Vigente = false;
 
         var fila = FilaAlCerrar(
-            celda.TenantId, celda.VehiculoId, transicion.Nueva.Version, pedido.TipoTramiteCodigo, evaluado, suspendida, proveedor.Configurado, ahora);
+            celda.TenantId, celda.VehiculoId, transicion.Nueva.Version, pedido.TipoTramiteCodigo, evaluado, suspendida, RedaccionActiva, ahora);
+        // HU #14563 (ADR-0086 D-1, AC7): la fila toma la versión de la celda que cierra; la cabecera no sube otra vez.
+        await EscritorCeldas.MarcarFilaAsync(
+            db, celda.VehiculoId, celda.VersionTablero, ct, db.ParaEditarDeLaEmpresa<VehiculoDiagnostico>(celda.TenantId)).ConfigureAwait(false);
         db.Add(fila);
         DictamenEmitido.Encolar(outbox, cabecera, fila, esOverride: false);
         Escrito(log, celda.VehiculoId, fila.Version, fila.Veredicto, fila.EstadoRedaccion);
@@ -366,101 +458,9 @@ internal sealed partial class EmisorDictamen(
             .Where(c => c.VehiculoId == celda.VehiculoId)
             .ToListAsync(ct)
             .ConfigureAwait(false);
-        CeldaConsulta? De(Fuente fuente) => celdas.FirstOrDefault(c => c.Fuente == fuente);
-        var runt = De(Fuente.Runt);
-        return new LecturasParaDictamen(
-            Detalle(runt),
-            Normalizado(runt),
-            SimitVehiculo(De(Fuente.SimitVehiculo)),
-            PersonasRunt(De(Fuente.RuntPropietario)),
-            PersonasSimit(De(Fuente.SimitPropietario)),
-            PersonasSimit(De(Fuente.SimitLocatario)),
-            PersonasRunt(De(Fuente.RuntLocatario)),
-            Impuesto(De(Fuente.ImpuestoDepartamental)));
+        // Brief C5 (HU #14576): el armado de las lecturas vive en LecturasVehiculo, que también usa el saneamiento.
+        return new LecturasVehiculo(protector).Armar(celdas);
     }
-
-    private LecturaCelda<DetalleRuntReporte>? Detalle(CeldaConsulta? celda) =>
-        celda is null ? null : new LecturaCelda<DetalleRuntReporte>(celda.Estado, LectorDetalleRunt.Leer(protector, celda.RespuestaFuenteCifrada));
-
-    private static LecturaCelda<VehiculoRunt>? Normalizado(CeldaConsulta? celda)
-    {
-        if (celda is null)
-            return null;
-        VehiculoRunt? vehiculo = null;
-        if (celda.Estado == EstadoCelda.Completado && ProyectorDetalleCelda.ResultadoVehiculo(Fuente.Runt, celda.Payload) is ResultadoRuntDetalle detalle)
-        {
-            var propietarios = (detalle.Propietarios ?? []).Select(p => new PropietarioRunt(
-                p.TipoDocumento ?? string.Empty,
-                string.Empty,
-                CodigosDeEnum.TryLeer<TipoPropiedad>(p.TipoPropiedad, out var tipo) ? tipo : TipoPropiedad.Desconocido,
-                [])).ToArray();
-            var locatarios = detalle.Locatarios > 0 ? new[] { new LocatarioRunt(string.Empty, DocumentoSoloParaElLector) } : Array.Empty<LocatarioRunt>();
-            vehiculo = new VehiculoRunt(detalle.Placa, detalle.Vin, detalle.Servicio, detalle.Clase, detalle.Organismo, propietarios, locatarios, string.Empty, null);
-        }
-
-        return new LecturaCelda<VehiculoRunt>(celda.Estado, vehiculo);
-    }
-
-    private LecturaCelda<IReadOnlyList<ResultadoSimitDetalle>>? SimitVehiculo(CeldaConsulta? celda)
-    {
-        if (celda is null)
-            return null;
-        var resultado = ProyectorDetalleCelda.ResultadoVehiculo(Fuente.SimitVehiculo, celda.Payload) as ResultadoSimitDetalle;
-        if (resultado is not null
-            && RespuestaFuenteCelda.TryLeerVehiculo(protector, celda.RespuestaFuenteCifrada, out var cruda)
-            && cruda is { } elemento
-            && ProyectorDetalleCelda.RespuestaProveedor(elemento, out _) is { } cuerpo)
-            resultado = SimitVisible.Completar(resultado, cuerpo);
-        return new LecturaCelda<IReadOnlyList<ResultadoSimitDetalle>>(celda.Estado, resultado is null ? null : [resultado]);
-    }
-
-    private LecturaCelda<IReadOnlyList<ResultadoRuntPersonaDetalle>>? PersonasRunt(CeldaConsulta? celda) =>
-        Personas<ResultadoRuntPersonaDetalle>(celda, EjecutorCeldaRuntPersona.ConsultaRuntPersona, static (detalle, crudo) => LicenciasConductor.Completar(detalle, crudo));
-
-    private LecturaCelda<IReadOnlyList<ResultadoSimitDetalle>>? PersonasSimit(CeldaConsulta? celda) =>
-        Personas<ResultadoSimitDetalle>(celda, EjecutorCeldaSimitPersona.ConsultaSimit, static (detalle, crudo) => SimitVisible.Completar(detalle, crudo));
-
-    private LecturaCelda<IReadOnlyList<T>>? Personas<T>(CeldaConsulta? celda, string consulta, Func<T, JsonElement, T> completar)
-        where T : class
-    {
-        if (celda is null)
-            return null;
-        var payload = EjecutorPorPersonas.Leer(celda.Payload);
-        if (payload is null)
-            return new LecturaCelda<IReadOnlyList<T>>(celda.Estado, null);
-        if (!RespuestaFuenteCelda.TryLeerPersonas(protector, celda.RespuestaFuenteCifrada, out var respuestas))
-            respuestas = new Dictionary<int, JsonElement>();
-
-        var lista = new List<T>();
-        foreach (var persona in payload.Personas)
-        {
-            if (persona.Consulta != consulta || persona.Estado != EjecutorPorPersonas.EstadoOk || persona.Resultado is not { } json)
-                continue;
-            T? detalle;
-            try
-            {
-                detalle = json.Deserialize<T>(Json);
-            }
-            catch (JsonException)
-            {
-                detalle = null;
-            }
-
-            if (detalle is null)
-                continue;
-            if (respuestas.TryGetValue(persona.Orden, out var cruda) && ProyectorDetalleCelda.RespuestaProveedor(cruda, out _) is { } cuerpo)
-                detalle = completar(detalle, cuerpo);
-            lista.Add(detalle);
-        }
-
-        return new LecturaCelda<IReadOnlyList<T>>(celda.Estado, lista);
-    }
-
-    private static LecturaCelda<ResultadoImpuestoDetalle>? Impuesto(CeldaConsulta? celda) =>
-        celda is null
-            ? null
-            : new LecturaCelda<ResultadoImpuestoDetalle>(
-                celda.Estado, ProyectorDetalleCelda.ResultadoVehiculo(Fuente.ImpuestoDepartamental, celda.Payload) as ResultadoImpuestoDetalle);
 
     private static bool Admite(ModoDiagnostico modo, string? tipoTramiteCodigo) =>
         modo == ModoDiagnostico.ConAnalisis
@@ -472,6 +472,13 @@ internal sealed partial class EmisorDictamen(
     [LoggerMessage(EventId = 126785, Level = LogLevel.Information,
         Message = "El vehículo {VehiculoId} escribió el dictamen versión {Version} ({Veredicto}, redacción {EstadoRedaccion})")]
     private static partial void Escrito(ILogger logger, Guid vehiculoId, int version, string veredicto, string estadoRedaccion);
+
+    private sealed record AlertaAjustadaJson(
+        [property: JsonPropertyName("codigo")] string Codigo,
+        [property: JsonPropertyName("texto")] string Texto,
+        [property: JsonPropertyName("efecto")] string Efecto,
+        [property: JsonPropertyName("fuente")] string Fuente,
+        [property: JsonPropertyName("ajuste"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Ajuste);
 
     private sealed record AlertaJson(
         [property: JsonPropertyName("codigo")] string Codigo,

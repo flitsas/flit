@@ -1,7 +1,9 @@
 import type { ManualCallout } from "@/lib/manual/types";
-import { Lightbulb } from "lucide-react";
 import type { ComponentType } from "react";
 import { iconoComo, type IconoComoProps } from "@flit/ui/iconoComo";
+import { avisoComo } from "@flit/ui/IconoAviso";
+
+const ICONO_DESTELLO = iconoComo("destello");
 
 const styles: Record<
   ManualCallout["variant"],
@@ -10,19 +12,19 @@ const styles: Record<
   info: {
     border: "var(--di-sky-line)",
     bg: "var(--di-accent-soft)",
-    icon: iconoComo("exclamacion"),
+    icon: avisoComo("info"),
     label: "Información",
   },
   tip: {
     border: "color-mix(in srgb, var(--di-highlight-decor) 45%, transparent)",
     bg: "color-mix(in srgb, var(--di-highlight-decor) 10%, transparent)",
-    icon: Lightbulb,
+    icon: ICONO_DESTELLO,
     label: "Consejo",
   },
   warning: {
     border: "var(--badge-warning-border)",
     bg: "var(--badge-warning-bg)",
-    icon: iconoComo("alerta"),
+    icon: avisoComo("alerta"),
     label: "Importante",
   },
 };

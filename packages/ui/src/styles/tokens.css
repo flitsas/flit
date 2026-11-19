@@ -141,29 +141,29 @@
   --sidebar-border: #a9c9fc;
   --sidebar-ring: #1d53ff;
 
-  /* Etiquetas por tono: relleno al 10 %, borde en el color pleno y texto oscurecido a AA (README, contraste). */
-  --badge-success-bg: #8cc63f1a;
+  /* Etiquetas por tono: relleno al 10 % compuesto opaco sobre --card (contraste independiente del fondo), borde en el color pleno y texto oscurecido a AA (README, contraste). */
+  --badge-success-bg: #f3f9eb;
   --badge-success-fg: #4f7121;
   --badge-success-border: #8cc63f;
-  --badge-warning-bg: #ff4e001a;
+  --badge-warning-bg: #ffede5;
   --badge-warning-fg: #bd3a00;
   --badge-warning-border: #ff4e00;
-  --badge-danger-bg: #c100001a;
+  --badge-danger-bg: #f9e5e5;
   --badge-danger-fg: #c10000;
   --badge-danger-border: #c10000;
-  --badge-pending-bg: #ff4e001a;
+  --badge-pending-bg: #ffede5;
   --badge-pending-fg: #bd3a00;
   --badge-pending-border: #ff4e00;
-  --badge-info-bg: #557eff1a;
+  --badge-info-bg: #eef2ff;
   --badge-info-fg: var(--brand-ink, #1d53ff);
   --badge-info-border: var(--brand-ink, #1d53ff);
-  --badge-neutral-bg: #5e6a7b1a;
+  --badge-neutral-bg: #eff0f2;
   --badge-neutral-fg: #5e6a7b;
   --badge-neutral-border: #5e6a7b;
-  --badge-purple-bg: #f9ac001a;
+  --badge-purple-bg: #fef7e5;
   --badge-purple-fg: #8b6000;
   --badge-purple-border: #f9ac00;
-  --badge-tinta-bg: #1627441a;
+  --badge-tinta-bg: #e7e9ec;
   --badge-tinta-fg: #162744;
   --badge-tinta-border: #162744;
 
@@ -372,28 +372,28 @@
   --sidebar-border: #3a5688;
   --sidebar-ring: #8fb0ff;
 
-  --badge-success-bg: #8cc63f1a;
+  --badge-success-bg: #223743;
   --badge-success-fg: #a6d95f;
   --badge-success-border: #a6d95f;
-  --badge-warning-bg: #ff4e001a;
+  --badge-warning-bg: #2e2b3d;
   --badge-warning-fg: #ff7a40;
   --badge-warning-border: #ff7a40;
-  --badge-danger-bg: #c100001a;
+  --badge-danger-bg: #27233d;
   --badge-danger-fg: #ff6b6b;
   --badge-danger-border: #ff6b6b;
-  --badge-pending-bg: #ff4e001a;
+  --badge-pending-bg: #2e2b3d;
   --badge-pending-fg: #ff7a40;
   --badge-pending-border: #ff7a40;
-  --badge-info-bg: #557eff1a;
+  --badge-info-bg: #1c3057;
   --badge-info-fg: var(--brand-ink, #8fb0ff);
   --badge-info-border: var(--brand-ink, #8fb0ff);
-  --badge-neutral-bg: #a9b8d41a;
+  --badge-neutral-bg: #253653;
   --badge-neutral-fg: #a9b8d4;
   --badge-neutral-border: #a9b8d4;
-  --badge-purple-bg: #f9ac001a;
+  --badge-purple-bg: #2d353d;
   --badge-purple-fg: #f9ac00;
   --badge-purple-border: #f9ac00;
-  --badge-tinta-bg: #e6f0ff1a;
+  --badge-tinta-bg: #2b3b57;
   --badge-tinta-fg: #e6f0ff;
   --badge-tinta-border: #e6f0ff;
 

@@ -62,7 +62,7 @@ internal sealed class RadicacionGrpcService(PersonaNaturalDb db, PersonaService 
         var partesClaro = await personas.LeerAsync(id, Actor, ct, PersonaService.AccionLecturaParaRadicar).ConfigureAwait(false);
         var validaciones = await db.Set<PersonaSolicitante>().AsNoTracking().Where(p => p.SolicitudId == id)
             .Select(p => new { p.Parte, p.Ordinal, p.ValidacionId, p.ValidacionEstado }).ToListAsync(ct).ConfigureAwait(false);
-        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == id).OrderBy(a => a.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
+        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == id && a.Tipo != Flit.PersonaNatural.Api.Adjuntos.AdjuntosService.TipoPrefacturaCaja).OrderBy(a => a.CreatedAt).ToListAsync(ct).ConfigureAwait(false);
 
         var respuesta = new ObtenerSolicitudParaRadicarResponse
         {
@@ -82,6 +82,21 @@ internal sealed class RadicacionGrpcService(PersonaNaturalDb db, PersonaService 
         };
         foreach (var (clave, valor) in LeerCampos(s.FieldValues))
             respuesta.FieldValues[clave] = valor;
+
+        // HU #14468: el pago viaja solo por este RPC (el evento no lleva valores). Solo canal del punto y solo si está pagada.
+        if (SolicitudesService.EsCanalPunto(s.Datos)
+            && await db.Set<CobroSolicitud>().AsNoTracking().FirstOrDefaultAsync(c => c.SolicitudId == id && c.Estado == EstadoCobro.Pagado, ct).ConfigureAwait(false) is { } pago)
+        {
+            respuesta.Pago = new PagoPortal
+            {
+                ValorCop = pago.ValorCop ?? 0,
+                Medio = pago.Medio ?? string.Empty,
+                MedioCaja = pago.MedioCaja ?? string.Empty,
+                MedioDetalle = pago.MedioDetalle ?? string.Empty,
+                PagadoEn = (pago.PagadoEn ?? s.UpdatedAt).UtcDateTime.ToString("yyyy-MM-dd'T'HH:mm:ss.fff'Z'", System.Globalization.CultureInfo.InvariantCulture),
+                CobroId = pago.Id.ToString(),
+            };
+        }
         foreach (var p in partesClaro)
         {
             var v = validaciones.FirstOrDefault(x => x.Parte == p.Parte && x.Ordinal == p.Ordinal);

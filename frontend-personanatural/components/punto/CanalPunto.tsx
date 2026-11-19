@@ -21,7 +21,7 @@ import { SomosFlit } from "@/components/landing/SomosFlit";
 import { boton } from "@/components/landing/estilos";
 import { useTiposTramite } from "@/components/landing/useCatalogos";
 import { useConfiguracion } from "@/components/landing/useConfiguracion";
-import { ConsultarModal } from "@/components/modales/ConsultarModal";
+import { ConsultarModal, type RetomarPagoDatos } from "@/components/modales/ConsultarModal";
 import { CotizarModal } from "@/components/modales/CotizarModal";
 import { useMarca } from "@/components/marca/MarcaPunto";
 import { portal, type ClientePortal, type EntradaPunto } from "@/lib/api/cliente";
@@ -37,6 +37,8 @@ export function CanalPunto({ codigo, cliente = portal }: { codigo: string; clien
   const [mensaje, setMensaje] = useState("");
   const [punto, setPunto] = useState<EntradaPunto | null>(null);
   const [consultando, setConsultando] = useState(false);
+  // Pago retomado desde Consultar: el asistente se abre directamente en el paso Pago de esa solicitud.
+  const [retomando, setRetomando] = useState<RetomarPagoDatos | null>(null);
   // `null` = cerrado; con valor = abierto y, si viene de «Ver valor», con ese trámite elegido ("" = ninguno).
   const [cotizando, setCotizando] = useState<{ tipo: string } | null>(null);
   const marca = useMarca();
@@ -109,6 +111,8 @@ export function CanalPunto({ codigo, cliente = portal }: { codigo: string; clien
                 organismoNombre={punto.nombre}
                 onConsultar={() => setConsultando(true)}
                 onCotizar={() => setCotizando({ tipo: "" })}
+                retomando={retomando}
+                onRetomoTerminado={() => setRetomando(null)}
                 onAviso={avisar}
                 onWizard={alWizard}
               />
@@ -144,6 +148,11 @@ export function CanalPunto({ codigo, cliente = portal }: { codigo: string; clien
         onCerrar={() => setConsultando(false)}
         cliente={cliente}
         tipos={tipos.data}
+        consultaPunto
+        onRetomarPago={(datos) => {
+          setConsultando(false);
+          setRetomando(datos);
+        }}
       />
       {punto && (
         <CotizarModal

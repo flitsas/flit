@@ -80,6 +80,16 @@ export function formatearFechaHora(iso: string | null | undefined): string | nul
   return `${dos(local.getUTCDate())}/${dos(local.getUTCMonth() + 1)}/${local.getUTCFullYear()} ${dos(local.getUTCHours())}:${dos(local.getUTCMinutes())}`;
 }
 
+/** «9:41 p. m.» (12 horas) en hora de Colombia, o null si no hay fecha o no se puede leer. */
+export function formatearHora12(iso: string | null | undefined): string | null {
+  if (!iso) return null;
+  const instante = new Date(iso);
+  if (Number.isNaN(instante.getTime())) return null;
+  const local = new Date(instante.getTime() + UTC_COLOMBIA_HORAS * 3_600_000);
+  const h = local.getUTCHours();
+  return `${h % 12 === 0 ? 12 : h % 12}:${dos(local.getUTCMinutes())} ${h < 12 ? "a. m." : "p. m."}`;
+}
+
 /** «dd/mm/aaaa» de una fecha ISO con o sin hora (se lee del texto: una fecha sin hora no se corre por la zona horaria), o null. */
 export function formatearFecha(iso: string | null | undefined): string | null {
   const m = iso ? /^(\d{4})-(\d{2})-(\d{2})/.exec(iso) : null;

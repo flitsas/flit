@@ -149,6 +149,17 @@ public interface IPlateRangeRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// ¿La placa existe en el inventario del (compañía, OT) y está <c>disponible</c>? Solo lectura (no reserva):
+    /// la usa la integración ICT (<c>plate_assignment_type</c> = 4) para validar el rango antes de crear el
+    /// trámite. <c>false</c> si no existe, o está preasignada/utilizada/bloqueada/revocada.
+    /// </summary>
+    Task<bool> IsPlateAvailableAsync(
+        Guid companyTenantId,
+        Guid transitOfficeId,
+        string plate,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// HU #10800 — asigna una placa FUERA DE RANGO al trámite: si la placa no existe en el inventario del
     /// (compañía, OT), la registra creando un rango ad-hoc de 1 placa (prefijo + número parseados de la
     /// placa) y la reserva (preasignada) al trámite; si ya existe y está <c>disponible</c>, la reserva; si

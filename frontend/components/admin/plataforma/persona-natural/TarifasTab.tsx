@@ -5,7 +5,6 @@
 // estado de cada versión (vigente, futura o cerrada), filtros por columna estándar, historial por fila y creación o
 // versionado en un modal. Las cotizaciones ya emitidas no cambian al registrar una tarifa nueva. Sin datos bancarios.
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ReceiptText } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -36,6 +35,8 @@ import { PnSeccionHeader } from "./pn-componentes";
 import { TarifaFormModal, type TarifaFormMode } from "./TarifaFormModal";
 import { ESTADO_TARIFA_LABEL, ESTADO_TARIFA_TONE, TarifaHistorialModal } from "./TarifaHistorialModal";
 import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_PAGO = iconoComo("pago");
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   { id: "organismo", label: "Organismo", tipo: "texto" },
@@ -291,7 +292,7 @@ export function TarifasTab({ onCambio, solicitudPrecio, onSolicitudCerrada, api 
           "Cuánto paga el ciudadano por cada trámite: derechos de tránsito, servicio digital y otros cargos. Si necesitas otro valor, registra un cambio: el anterior queda en el historial y no se edita. Se ven las tarifas vigentes y próximas; para ver las anteriores, filtra por Estado."
         }
         accion={
-          <CreateButton label="Nueva tarifa" icon={ReceiptText} onClick={() => abrirFormulario({ kind: "create" })} />
+          <CreateButton label="Nueva tarifa" icon={ICONO_PAGO} onClick={() => abrirFormulario({ kind: "create" })} />
         }
       />
       <InlineAlert tone="info">

@@ -1,5 +1,6 @@
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Domain.Modelo;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Design;
@@ -27,6 +28,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
     public DbSet<OrganismoTransito> OrganismosTransito => Set<OrganismoTransito>();
     public DbSet<OrganismoTransitoAlias> OrganismosTransitoAlias => Set<OrganismoTransitoAlias>();
     public DbSet<PermisoOtEmpresa> PermisosOtEmpresa => Set<PermisoOtEmpresa>();
+    public DbSet<OrganismoTransitoDp> OrganismosTransitoDp => Set<OrganismoTransitoDp>();
     public DbSet<MunicipioFuente> MunicipiosFuente => Set<MunicipioFuente>();
     public DbSet<TipologiaDp> Tipologias => Set<TipologiaDp>();
     public DbSet<TipologiaEmpresa> TipologiasEmpresa => Set<TipologiaEmpresa>();
@@ -88,6 +90,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
         modelBuilder.HasDefaultSchema(Schema);
         modelBuilder.AddFlitOutbox(Schema);
         modelBuilder.AddFlitInbox(Schema);
+        modelBuilder.AddFlitIaConsumo(Schema);
 
         Base(modelBuilder);
         Configuracion(modelBuilder);
@@ -156,6 +159,9 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.Property(x => x.CorreoRespuesta).HasMaxLength(254);
             e.Property(x => x.Cc).HasColumnType("jsonb");
             e.Property(x => x.Bcc).HasColumnType("jsonb");
+            // HU #14614: las empresas que ya existen quedan con el envío automático apagado y el tope en 50.
+            e.Property(x => x.DpAutomaticoActivo).HasDefaultValue(false);
+            e.Property(x => x.DpAutomaticoTopeDiario).HasDefaultValue((short)50);
         });
         m.Entity<IdentificacionMonitoreada>(e =>
         {
@@ -209,6 +215,11 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.HasIndex(x => x.TextoNormalizado).IsUnique();
             e.HasOne<OrganismoTransito>().WithMany().HasForeignKey(x => x.OrganismoTransitoId);
         });
+        m.Entity<OrganismoTransitoDp>(e =>
+        {
+            e.ToTable("organismo_transito_dp");
+            e.HasKey(x => x.OrganismoTransitoId);
+        });
         m.Entity<PermisoOtEmpresa>(e =>
         {
             e.ToTable("permiso_ot_empresa");
@@ -239,6 +250,7 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.ToTable("tipologia_empresa");
             e.HasKey(x => new { x.TenantId, x.TipologiaId });
             e.HasOne<TipologiaDp>().WithMany().HasForeignKey(x => x.TipologiaId);
+            e.Property(x => x.Automatizable).HasDefaultValue(false);
         });
         m.Entity<Plantilla>(e =>
         {
@@ -252,6 +264,8 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.ToTable("plantilla_version");
             e.HasKey(x => x.Id);
             e.Property(x => x.Asunto).HasMaxLength(300);
+            e.Property(x => x.NotaRevisionJuridica).HasMaxLength(1000);
+            e.Property(x => x.RevisadaJuridicamentePorNombre).HasMaxLength(200);
             e.HasIndex(x => new { x.PlantillaId, x.NumeroVersion }).IsUnique();
             e.HasOne<Plantilla>().WithMany().HasForeignKey(x => x.PlantillaId);
         });

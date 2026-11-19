@@ -48,6 +48,11 @@ public sealed class SaveAiToolSettingsHandler
             .Select(p => new AiProviderSlot(AiProviderCodes.Normalize(p.ProviderCode), p.Enabled, p.PriorityRank))
             .ToList();
 
+        if (HabilitaUnProveedorNoCapaz(normalizedTool, before, slots))
+        {
+            return new SaveAiToolSettingsResult(false, null, ProveedorNoAplica);
+        }
+
         var saved = await _repository
             .SaveSettingsAsync(
                 normalizedTool,
@@ -83,6 +88,31 @@ public sealed class SaveAiToolSettingsHandler
             cancellationToken).ConfigureAwait(false);
 
         return new SaveAiToolSettingsResult(true, view, null);
+    }
+
+    /// <summary>Mismo código que la activación rechazada por capacidad (<c>ProviderNotCapable</c> ⇒ 400 proveedor_no_aplica).</summary>
+    internal const string ProveedorNoAplica = "proveedor_no_aplica";
+
+    /// <summary>
+    /// ADR-0091: en <c>diagnostico_dictamen</c> no se puede <b>habilitar</b> un proveedor que no es capaz (DELTA P1=a: solo
+    /// anthropic). Un slot que ya estaba habilitado se deja como está: la cola lo filtra igual y guardar sin cambiarlo no es
+    /// habilitar. Review HU-6 CR-5: ocr y dr_flit siguen como antes (se puede deshabilitar y rehabilitar cualquier proveedor).
+    /// </summary>
+    private static bool HabilitaUnProveedorNoCapaz(string toolCode, AiToolProviderSettings before, IReadOnlyList<AiProviderSlot> slots)
+    {
+        if (!string.Equals(toolCode, AiToolCodes.DiagnosticoDictamen, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var yaHabilitados = before.Providers
+            .Where(p => p.Enabled)
+            .Select(p => AiProviderCodes.Normalize(p.ProviderCode))
+            .ToHashSet(StringComparer.Ordinal);
+
+        return slots.Any(s => s.Enabled
+            && !yaHabilitados.Contains(s.ProviderCode)
+            && !AiProviderCapabilities.SupportsTool(toolCode, s.ProviderCode));
     }
 
     private static string? ValidateProviders(IReadOnlyList<AiProviderSlotCommand> providers)

@@ -7,7 +7,7 @@ import { ApiError } from "./types";
 
 const base = "/api/v1/admin/plataforma/ai";
 
-export type AiToolCode = "ocr" | "dr_flit" | (string & {});
+export type AiToolCode = "ocr" | "dr_flit" | "diagnostico_dictamen" | (string & {});
 export type AiProviderCode = "anthropic" | "openai" | "kimi" | "deepseek" | (string & {});
 export type AiTransitionReason = "manual" | "failover_auto" | "auto_return" | "seed" | (string & {});
 export type AiProviderHealth = "unknown" | "healthy" | "degraded" | "down" | (string & {});

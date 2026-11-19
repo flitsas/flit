@@ -40,8 +40,8 @@ describe("filtros del listado — consulta desde la URL (AC2)", () => {
     expect(filtrosDesdeUrl(new URLSearchParams("tamano=25")).tamano).toBe(10);
     expect(filtrosDesdeUrl(new URLSearchParams("tamano=100")).tamano).toBe(10);
     for (const n of [10, 20, 30, 50]) expect(filtrosDesdeUrl(new URLSearchParams(`tamano=${n}`)).tamano).toBe(n);
-    expect(urlListado(filtros({ tamano: 10 }))).toBe("/");
-    expect(urlListado(filtros({ tamano: 30 }))).toBe("/?tamano=30");
+    expect(urlListado(filtros({ tamano: 10 }))).toBe("/diagnosticos");
+    expect(urlListado(filtros({ tamano: 30 }))).toBe("/diagnosticos?tamano=30");
   });
 
   it("la consulta a la API omite los filtros vacíos, recorta el nombre y lleva siempre página y tamaño", () => {
@@ -50,10 +50,10 @@ describe("filtros del listado — consulta desde la URL (AC2)", () => {
   });
 
   it("la URL del inicio refleja los filtros y omite la página 1 y el tamaño por defecto", () => {
-    expect(urlListado(filtros())).toBe("/");
-    expect(urlListado(filtros({ estado: "COMPLETADO", nombre: "Flota" }))).toBe("/?estado=COMPLETADO&nombre=Flota");
+    expect(urlListado(filtros())).toBe("/diagnosticos");
+    expect(urlListado(filtros({ estado: "COMPLETADO", nombre: "Flota" }))).toBe("/diagnosticos?estado=COMPLETADO&nombre=Flota");
     expect(urlListado(filtros({ desde: "2026-10-01", hasta: "2026-10-22", modo: "CON_ANALISIS", pagina: 2, tamano: 50 }))).toBe(
-      "/?desde=2026-10-01&hasta=2026-10-22&modo=CON_ANALISIS&pagina=2&tamano=50",
+      "/diagnosticos?desde=2026-10-01&hasta=2026-10-22&modo=CON_ANALISIS&pagina=2&tamano=50",
     );
   });
 
@@ -123,7 +123,7 @@ describe("presentación de cada fila", () => {
     expect(etiquetaEstado("EN_PROCESO").texto).toBe("En proceso");
     expect(etiquetaEstado("INCOMPLETO").texto).toBe("Incompleto");
     expect(nombreModo("SIMPLE")).toBe("Diagnóstico Simple");
-    expect(nombreModo("CON_ANALISIS")).toBe("Con Análisis IA");
+    expect(nombreModo("CON_ANALISIS")).toBe("Con análisis");
     expect(idCorto("0192f0a1-0000-7000-8000-000000000001")).toBe("0192F0A1");
   });
 });

@@ -28,7 +28,8 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 public sealed class AdjuntarLicenciaTransitoHandler(
     IProcedureInstanceRepository repo,
     IAttachmentStorage storage,
-    AnalyzeDocumentHandler? ocr = null)
+    AnalyzeDocumentHandler? ocr = null,
+    IIaConsumoAmbito? consumo = null)
 {
     /// <summary>
     /// Prompt con el que se verifica la LT. Es el mismo documento que la casilla del wizard, así que
@@ -74,13 +75,13 @@ public sealed class AdjuntarLicenciaTransitoHandler(
         var bytes = await LeerTodoAsync(input.Content, ct).ConfigureAwait(false);
         var ocrResultado = ocrPrecomputado is not null
             ? new DocumentOcrResponse(true, TipoOcr, ocrPrecomputado)
-            : await AnalizarSinBloquearAsync(bytes, ct).ConfigureAwait(false);
+            : await AnalizarSinBloquearAsync(bytes, instance.Plate, id, ct).ConfigureAwait(false);
 
         var now = DateTimeOffset.UtcNow;
 
         // Reemplazo de la LT previa (misma semántica que el consolidado re-generado).
         foreach (var prev in instance.Attachments
-                     .Where(a => string.Equals(a.Tipo, Tipo, StringComparison.OrdinalIgnoreCase))
+                     .Where(a => !a.IsHistorico && string.Equals(a.Tipo, Tipo, StringComparison.OrdinalIgnoreCase))
                      .ToList())
         {
             storage.Delete(prev.StoragePath);
@@ -184,10 +185,13 @@ public sealed class AdjuntarLicenciaTransitoHandler(
         return sb.ToString();
     }
 
-    private async Task<DocumentOcrResponse?> AnalizarSinBloquearAsync(byte[] bytes, CancellationToken ct)
+    private async Task<DocumentOcrResponse?> AnalizarSinBloquearAsync(byte[] bytes, string? placa, Guid tramiteId, CancellationToken ct)
     {
         if (ocr is null)
             return null;
+        // ADR-0090: la verificación queda en el registro de consumo de IA con la placa y el trámite.
+        using var ambito = consumo?.Abrir(
+            IaProcesosTramites.OcrLicenciaTransito, placa, IaProcesosTramites.EntidadTramite, tramiteId.ToString());
         try
         {
             var (resultado, _) = await ocr.HandleAsync(TipoOcr, bytes, ct).ConfigureAwait(false);

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { ERRORES_EXPRESS } from "@/lib/express/api";
 import { FECHA, ID_EXPRESS, creadoOk, cuerpoDe, llamadas, montarNuevo, type Navegacion } from "./datos";
 
 // Uso de ejemplo: /diagnosticos/nuevo?modo=express&placa=TST123 abre el Express (HU #14085) con la placa precargada a la
@@ -26,18 +27,23 @@ afterEach(() => {
 });
 
 const navegacion = nav as unknown as Navegacion;
+const SECRETO = "mensaje del servidor que no debe verse";
 type Opciones = Parameters<typeof montarNuevo>[1];
 const montar = (opciones: Opciones = {}) => montarNuevo(navegacion, { query: "modo=express", ...opciones });
 
-const nombre = () => screen.findByRole("textbox", { name: "Nombre del diagnóstico" });
+// El primer montaje del archivo importa la página en frío: con la suite en paralelo puede pasar de 1 s.
+const nombre = () => screen.findByRole("textbox", { name: "Nombre del diagnóstico" }, { timeout: 5000 });
 /** La placa con la configuración ya cargada (mientras llega, el campo se ve deshabilitado). */
 const placa = async () => {
   await nombre();
   return screen.getByRole("textbox", { name: "Placa o VIN" });
 };
-const documento = () => screen.getByRole("textbox", { name: /número de documento del locatario/i });
-const tipoDocumento = () => screen.getByRole("combobox", { name: /tipo de documento del locatario/i });
-const continuar = async () => fireEvent.click(await screen.findByRole("button", { name: "Continuar" }));
+const documento = () => screen.getByRole("textbox", { name: /número de documento del propietario actual/i });
+const tipoDocumento = () => screen.getByRole("combobox", { name: /tipo de documento del propietario actual/i });
+const iniciado = () => screen.findByRole("heading", { name: "Diagnóstico iniciado con 1 vehículo" });
+/** HU #14562: «Continuar» cuando la operación muestra el estimado antes de lanzar; si no, «Iniciar diagnóstico». */
+const PRINCIPAL = /^(Continuar|Iniciar diagnóstico)$/;
+const continuar = async () => fireEvent.click(await screen.findByRole("button", { name: PRINCIPAL }));
 
 describe("Express — placa y nombre autogenerado (AC2)", () => {
   it("con ?placa= precarga la placa normalizada y el nombre «Express TST123»", async () => {
@@ -58,9 +64,20 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     expect(cuerpoDe(llamadas(api, "POST", "/express")[0])).toMatchObject({ nombre: "Revisión flota", identificador: "TST125" });
   });
 
+  it("FE-3: con el nombre vacío y sin placa, el foco va al primer inválido, que ahora es el nombre (Parámetros arriba)", async () => {
+    const api = montar();
+    fireEvent.change(await nombre(), { target: { value: "" } });
+    await continuar();
+    expect(await nombre()).toHaveAttribute("aria-invalid", "true");
+    expect(await placa()).toHaveAttribute("aria-invalid", "true");
+    expect(await nombre()).toHaveFocus();
+    expect(llamadas(api, "POST", "/express")).toHaveLength(0);
+  });
+
   it("placa vacía: pide la placa o el VIN en su campo y no llama a la API", async () => {
     const api = montar();
-    await nombre();
+    // FE-3: con Parámetros arriba, un nombre vacío sería el primer inválido; aquí se aísla el error de la placa.
+    fireEvent.change(await nombre(), { target: { value: "Revisión flota" } });
     await continuar();
     expect(await placa()).toHaveAttribute("aria-invalid", "true");
     expect(await placa()).toHaveAccessibleDescription(/escribe la placa o el vin/i);
@@ -93,12 +110,12 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     expect(llamadas(api, "POST", "/express")).toHaveLength(0);
   });
 
-  it("documento del locatario sin tipo: pide el tipo y no lanza", async () => {
+  it("documento del propietario actual sin tipo: pide el tipo y no lanza (HU #14585)", async () => {
     const api = montar({ query: "modo=express&placa=TST123" });
     await nombre();
     fireEvent.change(documento(), { target: { value: "12345678" } });
     await continuar();
-    expect(await screen.findByText(/elige el tipo de documento del locatario/i)).toBeInTheDocument();
+    expect(await screen.findByText(/elige el tipo de documento del propietario actual/i)).toBeInTheDocument();
     expect(tipoDocumento()).toHaveAttribute("aria-invalid", "true");
     expect(llamadas(api, "POST", "/express")).toHaveLength(0);
   });
@@ -116,7 +133,7 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     expect(documento()).toHaveValue("****5678");
     await continuar();
     await waitFor(() => expect(llamadas(api, "POST", "/express")).toHaveLength(1));
-    expect(cuerpoDe(llamadas(api, "POST", "/express")[0])).toMatchObject({ tipo_documento_locatario: "CC", documento_locatario: "12345678" });
+    expect(cuerpoDe(llamadas(api, "POST", "/express")[0])).toMatchObject({ tipo_documento_propietario: "CC", documento_propietario: "12345678" });
     expect(JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage })).not.toContain("12345678");
     expect(log.mock.calls.flat().join(" ")).not.toContain("12345678");
     log.mockRestore();
@@ -126,10 +143,10 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     const api = montar({ query: "modo=express&placa=TST123" });
     await nombre();
     fireEvent.click(screen.getByRole("checkbox", { name: "SIMIT vehículo" }));
-    fireEvent.click(screen.getByRole("radio", { name: "Con Análisis IA" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Con análisis" }));
     fireEvent.change(await screen.findByRole("combobox", { name: /tipo de trámite/i }), { target: { value: "TRASPASO_STANDARD" } });
     await continuar();
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID_EXPRESS}`));
+    expect(await iniciado()).toBeInTheDocument();
     expect(llamadas(api, "POST", "/express/estimado")).toHaveLength(0);
     expect(cuerpoDe(llamadas(api, "POST", "/express")[0])).toEqual({
       nombre: "Express TST123",
@@ -137,8 +154,8 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
       tipo_tramite_codigo: "TRASPASO_STANDARD",
       alcance: { por_vehiculo: ["RUNT", "SIMIT_VEHICULO"], por_propietario: [], por_locatario: [] },
       identificador: "TST123",
-      tipo_documento_locatario: null,
-      documento_locatario: null,
+      tipo_documento_propietario: null,
+      documento_propietario: null,
     });
   });
 
@@ -160,12 +177,13 @@ describe("Express — placa y nombre autogenerado (AC2)", () => {
     await nombre();
     await continuar();
     const estimado = await screen.findByRole("region", { name: "Estimado de consultas" });
-    expect(screen.getByRole("region", { name: "Parámetros" })).toContainElement(estimado);
+    // FE-3: el estimado va en la barra final de la pantalla (S5), no dentro de Parámetros.
+    expect(document.querySelector("[data-parte='pie-creacion']")).toContainElement(estimado);
     expect(estimado).toHaveTextContent("SIMIT vehículo");
     expect(within(estimado).getByText("RUNT propietario").nextSibling).toHaveTextContent(/^al menos 1$/);
     expect(llamadas(api, "POST", "/express")).toHaveLength(0);
     fireEvent.click(screen.getByRole("button", { name: "Lanzar diagnóstico" }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID_EXPRESS}`));
+    expect(await iniciado()).toBeInTheDocument();
   });
 
   it("«Anterior» en el estimado vuelve a editar sin lanzar", async () => {
@@ -189,12 +207,13 @@ describe("Express — errores (AC4)", () => {
       query: "modo=express&placa=TST123",
       rutas: {
         "POST /express": () =>
-          Response.json({ code: "IDENTIFICADOR_DEMASIADO_LARGO", error: "El identificador es demasiado largo.", campo: "identificador" }, { status: 422 }),
+          Response.json({ code: "IDENTIFICADOR_DEMASIADO_LARGO", error: SECRETO, campo: "identificador" }, { status: 422 }),
       },
     });
     await nombre();
     await continuar();
-    await waitFor(async () => expect(await placa()).toHaveAccessibleDescription("El identificador es demasiado largo."));
+    // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API; ahora el texto fijo del code.
+    await waitFor(async () => expect(await placa()).toHaveAccessibleDescription(ERRORES_EXPRESS.IDENTIFICADOR_DEMASIADO_LARGO));
     expect(await placa()).toHaveAttribute("aria-invalid", "true");
     expect(await placa()).toHaveValue("TST123");
     expect(nav.push).not.toHaveBeenCalled();
@@ -203,15 +222,61 @@ describe("Express — errores (AC4)", () => {
   it("el 422 del documento se pinta en su campo", async () => {
     montar({
       query: "modo=express&placa=TST123",
-      rutas: { "POST /express": () => Response.json({ code: "DOCUMENTO_INVALIDO", error: "El documento no es válido.", campo: "documento_locatario" }, { status: 422 }) },
+      rutas: { "POST /express": () => Response.json({ code: "DOCUMENTO_INVALIDO", error: SECRETO, campo: "documento_propietario" }, { status: 422 }) },
     });
     await nombre();
     fireEvent.change(tipoDocumento(), { target: { value: "CC" } });
     fireEvent.change(documento(), { target: { value: "12" } });
     await continuar();
-    expect(await screen.findByText("El documento no es válido.")).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API.
+    expect(await screen.findByText(ERRORES_EXPRESS.DOCUMENTO_INVALIDO)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
     expect(documento()).toHaveAttribute("aria-invalid", "true");
     expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("AP-9: el 422 del tipo de documento se pinta en su campo con el texto fijo del code", async () => {
+    montar({
+      query: "modo=express&placa=TST123",
+      rutas: { "POST /express": () => Response.json({ code: "TIPO_DOCUMENTO_INVALIDO", error: SECRETO, campo: "tipo_documento_propietario" }, { status: 422 }) },
+    });
+    await nombre();
+    fireEvent.change(tipoDocumento(), { target: { value: "CC" } });
+    fireEvent.change(documento(), { target: { value: "12345" } });
+    await continuar();
+    expect(await screen.findByText(ERRORES_EXPRESS.TIPO_DOCUMENTO_INVALIDO)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+  });
+
+  it("AP-9: un 503 CATALOGO_NO_DISPONIBLE da el aviso general con el texto fijo del code", async () => {
+    montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => Response.json({ code: "CATALOGO_NO_DISPONIBLE", error: SECRETO }, { status: 503 }) } });
+    await nombre();
+    await continuar();
+    expect(await screen.findByText("No se pudo lanzar el diagnóstico")).toBeInTheDocument();
+    expect(screen.getByText(ERRORES_EXPRESS.CATALOGO_NO_DISPONIBLE)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+  });
+
+  // CR-7 (code review del kit): el límite de POST /express (429 + Retry-After) llega a la pantalla con su texto fijo.
+  it("429 DEMASIADAS_SOLICITUDES: aviso con el texto fijo de espera, sin el mensaje del servidor ni navegar", async () => {
+    montar({
+      query: "modo=express&placa=TST123",
+      rutas: { "POST /express": () => Response.json({ code: "DEMASIADAS_SOLICITUDES", error: SECRETO }, { status: 429, headers: { "Retry-After": "30" } }) },
+    });
+    await nombre();
+    await continuar();
+    expect(await screen.findByText(ERRORES_EXPRESS.DEMASIADAS_SOLICITUDES)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
+  });
+
+  it("AP-9: un 422 sin campo da «Revisa la parametrización» con el texto fijo del code", async () => {
+    montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => Response.json({ code: "FUENTE_NO_HABILITADA", error: SECRETO }, { status: 422 }) } });
+    await nombre();
+    await continuar();
+    expect(await screen.findByText("Revisa la parametrización")).toBeInTheDocument();
+    expect(screen.getByText(ERRORES_EXPRESS.FUENTE_NO_HABILITADA)).toBeInTheDocument();
+    expect(screen.queryByText(SECRETO)).not.toBeInTheDocument();
   });
 
   it("403 sin código: «Sin permiso para crear diagnósticos», sin navegar y conservando el modo y lo digitado", async () => {
@@ -242,9 +307,149 @@ describe("Express — errores (AC4)", () => {
     await nombre();
     await continuar();
     expect(await screen.findByText("No se pudo lanzar el diagnóstico")).toBeInTheDocument();
-    expect(screen.getByText(/diagnóstico no respondió/i)).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(screen.getByText("No se pudo completar la acción.")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-    await waitFor(() => expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID_EXPRESS}`));
+    expect(await iniciado()).toBeInTheDocument();
     expect(llamadas(api, "POST", "/express")).toHaveLength(2);
+  });
+});
+
+describe("Express — resultado «Diagnóstico iniciado» con redirección de 5 s (AC18, AC19)", () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date", "setInterval", "clearInterval"], shouldAdvanceTime: true });
+    vi.setSystemTime(FECHA);
+  });
+
+  it("AC18: tras crear muestra el resultado con Ver tablero, Volver y Quedarme aquí y a los 5 s navega al tablero", async () => {
+    montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    await continuar();
+    expect(await iniciado()).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Ver tablero" })).toHaveAttribute("href", `/diagnosticos/${ID_EXPRESS}`);
+    expect(screen.getByRole("link", { name: "Volver" })).toHaveAttribute("href", "/diagnosticos");
+    expect(screen.getByRole("button", { name: "Quedarme aquí" })).toBeInTheDocument();
+    expect(nav.push).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(nav.push).toHaveBeenCalledWith(`/diagnosticos/${ID_EXPRESS}`);
+  });
+
+  it("AC19: «Quedarme aquí» cancela la redirección y lo anuncia en una región polite sin mover el foco", async () => {
+    montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    await continuar();
+    await iniciado();
+    fireEvent.click(screen.getByRole("button", { name: "Quedarme aquí" }));
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(nav.push).not.toHaveBeenCalled();
+    expect(screen.getByText("Detuvimos la redirección. Sigues en esta página.")).toHaveAttribute("aria-live", "polite");
+  });
+});
+
+describe("Express — pie, cargando y validaciones de Nuevo (AC16, AC17)", () => {
+  it("AC16: el pie ofrece Cancelar hacia el inicio y el botón principal entra en estado cargando mientras se crea", async () => {
+    let soltar: (r: Response) => void = () => {};
+    montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => new Promise<Response>((r) => (soltar = r)) } });
+    await nombre();
+    // FE-3: la barra con Cancelar y la acción va al final de la pantalla, fuera de Parámetros. FE-4: vuelve a /diagnosticos.
+    expect(screen.getByRole("link", { name: "Cancelar" })).toHaveAttribute("href", "/diagnosticos");
+    expect(within(screen.getByRole("region", { name: "Parámetros" })).queryByRole("link", { name: "Cancelar" })).toBeNull();
+    await continuar();
+    await waitFor(() => expect(screen.getByRole("button", { name: PRINCIPAL })).toHaveAttribute("aria-busy", "true"));
+    soltar(creadoOk());
+    expect(await iniciado()).toBeInTheDocument();
+  });
+
+  it("AC16: con el resultado a la vista el selector Express/Masivo se oculta", async () => {
+    montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    expect(screen.getByRole("radiogroup", { name: "Tipo de diagnóstico" })).toBeInTheDocument();
+    await continuar();
+    await iniciado();
+    expect(screen.queryByRole("radiogroup", { name: "Tipo de diagnóstico" })).toBeNull();
+  });
+
+  it("AC17: Con análisis sin tipo de trámite no envía y el foco va al tipo de trámite con su error", async () => {
+    const api = montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    fireEvent.click(screen.getByRole("radio", { name: "Con análisis" }));
+    const tipo = await screen.findByRole("combobox", { name: /tipo de trámite/i });
+    await continuar();
+    await waitFor(() => expect(tipo).toHaveFocus());
+    expect(tipo).toHaveAttribute("aria-invalid", "true");
+    expect(tipo).toHaveAccessibleDescription(/.+/);
+    expect(llamadas(api, "POST", "/express")).toHaveLength(0);
+  });
+
+  it("AC17: un nombre de más de 150 caracteres se indica en el contador al escribir y bloquea el envío", async () => {
+    const api = montar({ query: "modo=express&placa=TST123" });
+    fireEvent.change(await nombre(), { target: { value: "N".repeat(151) } });
+    expect(screen.getByText(/151\/150/)).toBeInTheDocument();
+    await continuar();
+    expect(await screen.findByText(/admite hasta 150 caracteres/i)).toBeInTheDocument();
+    expect(llamadas(api, "POST", "/express")).toHaveLength(0);
+  });
+
+  it("AC17: si el API responde error, el botón sale de cargando y se conserva lo digitado", async () => {
+    montar({ query: "modo=express&placa=TST123", rutas: { "POST /express": () => Response.json({}, { status: 500 }) } });
+    fireEvent.change(await nombre(), { target: { value: "Flota de prueba" } });
+    await continuar();
+    expect(await screen.findByText("No se pudo lanzar el diagnóstico")).toBeInTheDocument();
+    const boton = screen.getByRole("button", { name: PRINCIPAL });
+    expect(boton).not.toHaveAttribute("aria-busy");
+    expect(boton).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: "Nombre del diagnóstico" })).toHaveValue("Flota de prueba");
+    expect(screen.getByRole("textbox", { name: "Placa o VIN" })).toHaveValue("TST123");
+  });
+});
+
+// HU #14562 (auditoría §4.3, AC16): el botón principal del Express dice lo que hace. Sin estimado lanza directo: «Iniciar
+// diagnóstico»; con estimado ANTES_DE_LANZAR lleva al paso del estimado: «Continuar».
+describe("Express — HU #14562 rótulo del botón principal", () => {
+  it("sin estimado (NO_MOSTRAR) el botón dice «Iniciar diagnóstico»", async () => {
+    montar({ query: "modo=express&placa=TST123", estimado: "NO_MOSTRAR" });
+    await nombre();
+    expect(screen.getByRole("button", { name: "Iniciar diagnóstico" })).toHaveAttribute("type", "submit");
+    expect(screen.queryByRole("button", { name: "Continuar" })).toBeNull();
+  });
+
+  it("con estimado ANTES_DE_LANZAR el botón sigue diciendo «Continuar»", async () => {
+    montar({ query: "modo=express&placa=TST123", estimado: "ANTES_DE_LANZAR" });
+    await nombre();
+    expect(screen.getByRole("button", { name: "Continuar" })).toHaveAttribute("type", "submit");
+    expect(screen.queryByRole("button", { name: "Iniciar diagnóstico" })).toBeNull();
+  });
+});
+
+// HU #14585 (spec-ui §8, contrato §1 C1): el documento declarado es el del propietario actual; la API recibe
+// tipo_documento_propietario / documento_propietario y la respuesta ya no trae documento (C5).
+describe("Express — propietario actual (opcional) (HU #14585)", () => {
+  it("rótulo «Propietario actual (opcional)» con la insignia «Declarado por el cliente» y la ayuda de la comparación", async () => {
+    montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    const seccion = screen.getByRole("region", { name: /propietario actual \(opcional\)/i });
+    expect(within(seccion).getByText(/declarado por el cliente/i)).toBeInTheDocument();
+    expect(within(seccion).getByText(/lo comparamos con el propietario actual que reporta el RUNT/i)).toBeInTheDocument();
+    expect(screen.queryByText(/^locatario$/i)).toBeNull();
+  });
+
+  it("el cuerpo no lleva los nombres viejos *_locatario", async () => {
+    const api = montar({ query: "modo=express&placa=TST123" });
+    await nombre();
+    fireEvent.change(tipoDocumento(), { target: { value: "CC" } });
+    fireEvent.change(documento(), { target: { value: "12345678" } });
+    await continuar();
+    await waitFor(() => expect(llamadas(api, "POST", "/express")).toHaveLength(1));
+    const cuerpo = cuerpoDe(llamadas(api, "POST", "/express")[0]) as Record<string, unknown>;
+    expect(cuerpo).not.toHaveProperty("tipo_documento_locatario");
+    expect(cuerpo).not.toHaveProperty("documento_locatario");
+  });
+
+  it("los mensajes de documento hablan del propietario actual", () => {
+    for (const code of ["TIPO_DOCUMENTO_INVALIDO", "DOCUMENTO_INVALIDO", "DOCUMENTO_INCOMPLETO"]) {
+      expect(ERRORES_EXPRESS[code]).toMatch(/propietario actual/);
+      expect(ERRORES_EXPRESS[code]).not.toMatch(/locatario/);
+    }
+    expect(ERRORES_EXPRESS.DEMASIADAS_SOLICITUDES).toBeTruthy();
   });
 });

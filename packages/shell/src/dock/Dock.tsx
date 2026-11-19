@@ -1,9 +1,9 @@
 "use client";
 
-import { useId, type RefObject } from "react";
+import { useId, useState, type RefObject } from "react";
 import Link from "next/link";
 import { Icono } from "@flit/ui/Icono";
-import type { DockEntry, DockGroup } from "../nav";
+import { formatoInsignia, type DockEntry, type DockGroup } from "../nav";
 import { DockGlyph } from "./DockGlyph";
 import { useDisclosureNav } from "./useDisclosureNav";
 import { useDockScrollCondense } from "./useDockScrollCondense";
@@ -24,9 +24,27 @@ type Props = {
   homeActive: boolean;
   /** Contenedor con scroll (layout `app`); sin él, la ventana. El dock queda dentro de ese contenedor, no fijo. */
   scrollRef?: RefObject<HTMLElement | null>;
+  /**
+   * HU #14583 (spec-ui §9), opt-in. `lados` (por defecto): cada grupo en su `side` y el lado corto relleno con
+   * espaciadores, como siempre. `equilibrada`: se ignora `side`; los grupos visibles, en orden de catálogo, se reparten
+   * ceil(n/2) a la izquierda del inicio y el resto a la derecha (impar: sobra a la izquierda), sin espaciadores, así la
+   * cápsula mide solo su contenido.
+   */
+  distribucion?: DistribucionDock;
 };
 
-export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scrollRef }: Props) {
+export type DistribucionDock = "lados" | "equilibrada";
+
+/** Lados del dock según la distribución (ver `Props.distribucion`). */
+export function repartirDock(groups: DockGroup[], distribucion: DistribucionDock = "lados"): { left: DockGroup[]; right: DockGroup[]; pad: boolean } {
+  if (distribucion === "equilibrada") {
+    const corte = Math.ceil(groups.length / 2);
+    return { left: groups.slice(0, corte), right: groups.slice(corte), pad: false };
+  }
+  return { left: groups.filter((g) => g.side === "left"), right: groups.filter((g) => g.side === "right"), pad: true };
+}
+
+export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scrollRef, distribucion = "lados" }: Props) {
   const { openSection, toggle, close, navRef, triggerId, panelId } = useDisclosureNav("flit-suite-dock");
   // Guía §8: al bajar, solo la ilustración (como el dock del prototipo en tableta); al subir o cerca del inicio, con
   // el nombre.
@@ -34,9 +52,8 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
   const showLabels = !atBottom || !!openSection;
   const home = useDockHomeMark(homeIconSrc);
 
-  const left = groups.filter((g) => g.side === "left");
-  const right = groups.filter((g) => g.side === "right");
-  const sideLen = Math.max(left.length, right.length);
+  const { left, right, pad } = repartirDock(groups, distribucion);
+  const sideLen = pad ? Math.max(left.length, right.length) : 0;
 
   const pill = (g: DockGroup) => (
     <DockGroupPill
@@ -54,7 +71,7 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
   return (
     <div className={`pointer-events-none ${scrollRef ? "absolute" : "fixed"} inset-x-0 bottom-0 z-40 hidden justify-center px-2 pb-[18px] lg:flex`}>
       <nav ref={navRef} aria-label="Navegación principal" className="dock-capsula pointer-events-auto relative inline-flex max-w-full items-center">
-        {Array.from({ length: sideLen - left.length }).map((_, i) => (
+        {Array.from({ length: Math.max(0, sideLen - left.length) }).map((_, i) => (
           <DockSpacer key={`lp-${i}`} showLabels={showLabels} />
         ))}
         {left.map(pill)}
@@ -68,7 +85,7 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
           {home.content}
         </Link>
         {right.map(pill)}
-        {Array.from({ length: sideLen - right.length }).map((_, i) => (
+        {Array.from({ length: Math.max(0, sideLen - right.length) }).map((_, i) => (
           <DockSpacer key={`rp-${i}`} showLabels={showLabels} />
         ))}
       </nav>
@@ -94,7 +111,7 @@ type Block = { key: string; title?: string; icon?: DockEntry["icon"]; ilustracio
 function blocks(entries: DockEntry[]): Block[] {
   const out: Block[] = [];
   for (const it of entries) {
-    if (it.children?.length) {
+    if (it.children?.length && !it.desplegable) {
       out.push({ key: it.key, title: it.label, icon: it.icon, ilustracion: it.ilustracion, items: it.children });
       continue;
     }
@@ -136,7 +153,16 @@ function DockGroupPill({
 
   const pillClass = `dock-pill ${showLabels ? "" : "dock-pill--compacta"}`;
   const label = <span className={showLabels ? "truncate" : "sr-only"}>{pillLabel}</span>;
-  const art = <DockGlyph icon={glyph.icon} ilustracion={glyph.ilustracion} className="dock-pill__glifo" />;
+  // Insignia del grupo (spec-ui §1.4): el submenú está cerrado por defecto, así que la suma va sobre el glifo. El número
+  // visible es decorativo; el nombre accesible lleva el real («Backoffice, 150 pendientes»).
+  const insignia = formatoInsignia(group.badge);
+  const pillName = insignia ? `${pillLabel}, ${group.badge} pendientes` : pillLabel;
+  const art = (
+    <>
+      <DockGlyph icon={glyph.icon} ilustracion={glyph.ilustracion} className="dock-pill__glifo" />
+      {insignia && <Insignia texto={insignia} flotante />}
+    </>
+  );
 
   if (sole) {
     return (
@@ -145,7 +171,7 @@ function DockGroupPill({
         href={sole.href}
         onClick={onNavigate}
         className={pillClass}
-        aria-label={pillLabel}
+        aria-label={pillName}
         title={!showLabels ? pillLabel : undefined}
         aria-current={sole.active ? "page" : undefined}
       >
@@ -163,7 +189,7 @@ function DockGroupPill({
         type="button"
         onClick={onToggle}
         className={pillClass}
-        aria-label={pillLabel}
+        aria-label={pillName}
         title={!showLabels ? pillLabel : undefined}
         aria-expanded={open}
         aria-controls={panelId}
@@ -210,7 +236,11 @@ function DockBlock({ block, panelId, onNavigate }: { block: Block; panelId: stri
     <ul className="dock-menu__entradas">
       {block.items.map((it) => (
         <li key={it.key}>
-          <DockEntryLink item={it} onNavigate={onNavigate} />
+          {it.desplegable && it.children?.length ? (
+            <DockSubmenu item={it} onNavigate={onNavigate} />
+          ) : (
+            <DockEntryLink item={it} onNavigate={onNavigate} />
+          )}
         </li>
       ))}
     </ul>
@@ -231,18 +261,59 @@ function DockBlock({ block, panelId, onNavigate }: { block: Block; panelId: stri
 }
 
 /**
+ * Submenú desplegable dentro del panel (p. ej. Administración → Portal Persona Natural ▸ Reportes, Cobro, Caja, Diseño):
+ * un botón con el ícono y el nombre, el indicador ▸/▾ y `aria-expanded`; Enter/Espacio lo abren y cierran, y sus hijos son
+ * enlaces normales en el orden de tabulación. Se abre solo si una de sus opciones es la página actual.
+ */
+export function DockSubmenu({ item, onNavigate }: { item: DockEntry; onNavigate: () => void }) {
+  const uid = useId();
+  const listId = `${uid}-submenu`;
+  const [abierto, setAbierto] = useState(() => Boolean(item.children?.some((c) => c.active)));
+  return (
+    <div className="dock-submenu">
+      <button
+        type="button"
+        className="dock-entrada dock-submenu__boton"
+        aria-expanded={abierto}
+        aria-controls={listId}
+        onClick={() => setAbierto((v) => !v)}
+      >
+        <DockGlyph icon={item.icon} ilustracion={item.ilustracion} className="dock-entrada__glifo" />
+        <span className="dock-entrada__texto">
+          <strong>{item.label}</strong>
+          {item.descripcion && <small>{item.descripcion}</small>}
+        </span>
+        <span aria-hidden="true" className="dock-submenu__indicador">
+          {abierto ? "▾" : "▸"}
+        </span>
+      </button>
+      {abierto && (
+        <ul id={listId} className="dock-menu__entradas dock-submenu__lista">
+          {item.children?.map((c) => (
+            <li key={c.key}>
+              <DockEntryLink item={c} onNavigate={onNavigate} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
  * Entrada del submenú (también la usa la hoja móvil): ícono del kit, nombre y, si el catálogo la trae, la descripción
  * corta (UI Kit 2026, `.dock__menu` de la propuesta-2). El nombre accesible es solo el nombre; la descripción se anuncia como descripción.
  */
 export function DockEntryLink({ item, onNavigate }: { item: DockEntry; onNavigate: () => void }) {
   const uid = useId();
   const descId = item.descripcion ? `${uid}-desc` : undefined;
+  const insignia = formatoInsignia(item.badge);
   return (
     <Link
       href={item.href}
       onClick={onNavigate}
       className="dock-entrada"
-      aria-label={item.label}
+      aria-label={insignia ? `${item.label}, ${item.badge} ${item.badgeTexto ?? "pendientes"}` : item.label}
       aria-describedby={descId}
       aria-current={item.active ? "page" : undefined}
     >
@@ -252,6 +323,19 @@ export function DockEntryLink({ item, onNavigate }: { item: DockEntry; onNavigat
         <strong>{item.label}</strong>
         {item.descripcion && <small id={descId}>{item.descripcion}</small>}
       </span>
+      {insignia && <Insignia texto={insignia} />}
     </Link>
+  );
+}
+
+/**
+ * Insignia del dock (spec-ui §1.4, `.dock-insignia`): «n» o «99+», decorativa (aria-hidden); el número real va en el nombre
+ * accesible del control que la lleva. `flotante`: en la esquina del glifo (píldora y lanzador móvil); si no, en línea.
+ */
+export function Insignia({ texto, flotante = false }: { texto: string; flotante?: boolean }) {
+  return (
+    <span aria-hidden="true" className={flotante ? "dock-insignia dock-insignia--flotante" : "dock-insignia"}>
+      {texto}
+    </span>
   );
 }

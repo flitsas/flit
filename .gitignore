@@ -35,6 +35,10 @@ venv/
 infra/secrets/
 **/secrets/
 *.pem
+# ADR-0091: material del par RSA de la llave de IA de Diagnóstico (runbook de .env.prod.example).
+*.der
+*.p8
+diag-ia*
 *.key
 *.p12
 *.pfx
@@ -139,3 +143,6 @@ services/core-api/artifacts/fur-analysis*/
 
 # Caché de pnpm: si alguien instala con --store-dir dentro del repo, no debe aparecer como cambios.
 .pnpm-store/
+
+# Caché de ESLint (CI y local con --cache)
+.eslintcache

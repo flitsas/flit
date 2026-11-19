@@ -25,17 +25,29 @@ namespace Flit.Admin.Tests.Derivacion;
 /// empresa, organismo, tipo y usuario con datos inventados.
 /// </summary>
 /// <remarks>Uso de ejemplo: <c>await cliente.CrearBorradorDesdeDiagnosticoAsync(e.Solicitud(), cancellationToken: ct)</c>.</remarks>
-public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(CrearBorradorDesdeDiagnosticoPostgresTests.Anfitrion anfitrion) : IClassFixture<CrearBorradorDesdeDiagnosticoPostgresTests.Anfitrion>
 {
+    /// <summary>Un host por clase (ver <see cref="HostPorClase"/>): antes cada prueba arrancaba el suyo y no lo liberaba.</summary>
+    public sealed class Anfitrion : HostPorClase
+    {
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) => Construir(factory);
+    }
+
     private const string Scope = "platform.tramites.derivacion";
     private const string Diagnostico = "svc-diagnostico";
 
-    private WebApplicationFactory<Program> Host(bool habilitada = true, bool exigirPermisos = true) =>
+    // Cliente de servicio ajeno con nombre propio de esta clase. El registro OIDC vive en la base compartida de la suite y
+    // cada host lo reescribe al arrancar (OidcClientSync, crear o actualizar). PersonaNaturalGrpcTests registra
+    // «svc-otro-prueba» con el scope de persona natural: con el mismo client_id, la clase que arrancaba su host después
+    // dejaba a la otra sin su scope y /connect/token respondía 400 (CI del PR #892, las dos pruebas en rojo a la vez).
+    private const string OtroServicio = "svc-otro-derivacion-prueba";
+
+    private static WebApplicationFactory<Program> Construir(WebApplicationFactory<Program> factory, bool habilitada = true, bool exigirPermisos = true) =>
         OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
         {
             b.UseSetting("Tramites:Derivacion:Habilitada", habilitada ? "true" : "false");
             b.UseSetting("Security:ModulePermissionEnforcement:Enabled", exigirPermisos ? "true" : "false");
-            foreach (var cliente in new[] { Diagnostico, "svc-otro-prueba" })
+            foreach (var cliente in new[] { Diagnostico, OtroServicio })
             {
                 b.UseSetting($"Suite:Oidc:ServiceClients:{cliente}:Secret", OidcServerTests.ServiceSecret);
                 b.UseSetting($"Suite:Oidc:ServiceClients:{cliente}:Scopes:0", Scope);
@@ -47,7 +59,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task CreaElBorrador_ConOrigenReferenciaCanalAutorYOrganismo()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
 
@@ -70,7 +82,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task DosLlamadasConLaMismaReferencia_UnaSolaCreacion()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
 
@@ -85,7 +97,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task DosLlamadasConcurrentes_NuncaDuplican()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
 
@@ -98,7 +110,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task LaReferenciaYaUsadaPorOtroOrigen_SeRechaza()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct);
         await e.SembrarTramiteDeOtroOrigenAsync(Ct);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
@@ -112,7 +124,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task UnUsuarioInactivo_SeRechazaConUsuarioSinPermiso()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct, estadoUsuario: "inactive");
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
 
@@ -125,7 +137,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task UnUsuarioDeOtraCompania_SeRechazaConUsuarioSinPermiso()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct, rolEnOtraEmpresa: true);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
 
@@ -140,7 +152,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [InlineData("traspasos.create")]
     public async Task UnUsuarioSinUnoDeLosDosPermisos_SeRechazaConUsuarioSinPermiso(string permisoQueFalta)
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct, sinPermiso: permisoQueFalta);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
 
@@ -152,7 +164,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task UnOrganismoFueraDeLaListaEfectiva_SeRechazaConOtNoHabilitado()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
 
@@ -165,7 +177,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task SinNombreQueCase_ElOrganismoSeResuelvePorCodigo()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
 
@@ -178,7 +190,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task UnTipoInexistente_SeRechazaConTipoNoDisponible()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
 
@@ -190,7 +202,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task ObtenerTramitesPorReferencia_DevuelveElCreado()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
         var creado = await cliente.CrearBorradorDesdeDiagnosticoAsync(e.Solicitud(), cancellationToken: Ct);
@@ -206,9 +218,9 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task OtroClienteDeServicio_ConElMismoScope_NoEntra()
     {
-        using var host = Host();
+        var host = anfitrion.Factory;
         await using var e = await Escenario.CrearAsync(host, Ct);
-        var cliente = await ClienteAsync(host, "svc-otro-prueba", e.Empresa);
+        var cliente = await ClienteAsync(host, OtroServicio, e.Empresa);
 
         var llamada = () => cliente.CrearBorradorDesdeDiagnosticoAsync(e.Solicitud(), cancellationToken: Ct).ResponseAsync;
 
@@ -219,7 +231,7 @@ public sealed class CrearBorradorDesdeDiagnosticoPostgresTests(WebApplicationFac
     [Fact]
     public async Task ApagadaPorConfiguracion_ElServicioNoExiste()
     {
-        using var host = Host(habilitada: false);
+        using var host = Construir(anfitrion.Base, habilitada: false);
         await using var e = await Escenario.CrearAsync(host, Ct);
         var cliente = await ClienteAsync(host, Diagnostico, e.Empresa);
 

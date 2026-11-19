@@ -2269,7 +2269,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const icono = await screen.findByAltText('Con prenda');
-    expect(icono).toHaveAttribute('src', '/assets/marcas/prenda.svg');
+    expect(icono).toHaveAttribute('src', '/assets/kit/tramite-prenda.svg');
     expect(screen.queryByAltText('Con transformación')).not.toBeInTheDocument();
   });
 
@@ -2278,7 +2278,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const icono = await screen.findByAltText('Con transformación');
-    expect(icono).toHaveAttribute('src', '/assets/marcas/transformacion.svg');
+    expect(icono).toHaveAttribute('src', '/assets/kit/tramite-transformacion.svg');
     expect(screen.queryByAltText('Con prenda')).not.toBeInTheDocument();
   });
 

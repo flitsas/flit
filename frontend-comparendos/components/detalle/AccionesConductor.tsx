@@ -1,7 +1,6 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { UserRoundPen } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
@@ -13,6 +12,9 @@ import { armarAsignacion, DECLARACION_LEY_1581, erroresAsignacion, type FormCond
 import { P } from "@/lib/nav";
 import { capacidades, tienePermiso } from "@/lib/sesion";
 import type { Contraventor } from "@/lib/tipos";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_PERSONA = iconoComo("persona");
 
 const TIPOS_DOCUMENTO = ["CC", "CE", "PA", "TI", "NIT"];
 
@@ -147,7 +149,7 @@ function CargarDocumento({ ctx }: { ctx: ContextoDetalle }) {
       </select>
       <input ref={input} type="file" accept="application/pdf,image/jpeg,image/png" className="hidden" onChange={(e) => e.target.files?.[0] && subir(e.target.files[0])} />
       <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => input.current?.click()}>
-        <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
+        <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
         {ocupado ? "Cargando…" : "Cargar documento"}
       </button>
     </div>
@@ -267,7 +269,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
       <div className="flex flex-wrap items-center gap-2">
         {puedeAsignar && (
           <button type="button" className={controlCls(false)} onClick={() => setModal(true)}>
-            <UserRoundPen className="h-3.5 w-3.5" aria-hidden />
+            <ICONO_PERSONA className="h-3.5 w-3.5" aria-hidden />
             {d.contraventor ? "Cambiar conductor" : "Asignar conductor"}
           </button>
         )}
@@ -287,7 +289,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
       </div>
       {puedeAsignar && d.contraventor?.documentoPendiente && <CompletarDocumento ctx={ctx} />}
       {puedeAsignar && (
-        <Interruptor activo={d.notificadoFisicamente} onCambio={notificado} etiqueta="Notificado en persona" ayuda="El conductor ya conoce el comparendo: no recibe avisos automáticos." />
+        <Interruptor soloControl activo={d.notificadoFisicamente} onCambio={notificado} etiqueta="Notificado en persona" ayuda="El conductor ya conoce el comparendo: no recibe avisos automáticos." />
       )}
       {confirmar && (
         <InlineAlert

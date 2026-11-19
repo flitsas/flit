@@ -4,6 +4,8 @@ import { type ReactNode } from 'react';
 import { Shell } from '@/components/atom/Shell';
 import { useAccessibleModules } from '@/hooks/useAccessibleModules';
 import { useAuthGate } from '@/hooks/useAuthGate';
+import { getToken } from '@/lib/api/client';
+import { decodeJwtPayload, isSoloCaja } from '@/lib/auth/jwt';
 
 /**
  * Layout de /admin/transit-offices/*. Igual que el de /admin/companies: replica el chrome
@@ -15,7 +17,9 @@ import { useAuthGate } from '@/hooks/useAuthGate';
 export default function AdminTransitOfficesLayout({ children }: { children: ReactNode }) {
   const { authed, hydrated, logout } = useAuthGate();
 
-  const { modules: accessibleModules, loading: modulesLoading } = useAccessibleModules(authed);
+  // La persona de caja (solo `ot_caja`) no puede pedir el catálogo de módulos (403 `caja_sin_acceso`): su menú no depende de él.
+  const soloCaja = hydrated && authed && isSoloCaja(decodeJwtPayload(getToken()));
+  const { modules: accessibleModules, loading: modulesLoading } = useAccessibleModules(authed && !soloCaja);
   const accessibleCodes = accessibleModules.map((m) => m.code);
 
   if (!hydrated || !authed) return null;

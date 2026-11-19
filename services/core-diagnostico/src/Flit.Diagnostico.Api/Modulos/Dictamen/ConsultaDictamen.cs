@@ -27,7 +27,9 @@ internal sealed record AlertaDictamenDto(
 }
 
 /// <summary>
-/// Dictamen vigente que ve la compañía. No trae override, lease, intentos ni la empresa.
+/// Dictamen vigente que ve la compañía. No trae override, lease, intentos ni la empresa. Desde HU #14563 (D6, P1 = a) trae la
+/// marca <c>ajustado_por_flit</c> y su fecha <c>ajustado_en</c>; nunca el autor, el motivo, la versión anterior ni la marca
+/// <c>ajuste</c> de cada alertamiento. Desde HU #14582 trae <c>cambio_propietario</c> del vehículo (persistido; sin documentos).
 /// </summary>
 internal sealed record DictamenCompaniaDto(
     [property: JsonPropertyName("version")] int Version,
@@ -35,9 +37,16 @@ internal sealed record DictamenCompaniaDto(
     [property: JsonPropertyName("estado_redaccion")] string EstadoRedaccion,
     [property: JsonPropertyName("alertamientos")] IReadOnlyList<AlertaDictamenDto> Alertamientos,
     [property: JsonPropertyName("catalogo_version")] int CatalogoVersion,
-    [property: JsonPropertyName("creado_en")] DateTimeOffset CreadoEn);
+    [property: JsonPropertyName("creado_en")] DateTimeOffset CreadoEn,
+    [property: JsonPropertyName("ajustado_por_flit")] bool AjustadoPorFlit = false,
+    [property: JsonPropertyName("ajustado_en")] DateTimeOffset? AjustadoEn = null,
+    [property: JsonPropertyName("cambio_propietario")] bool? CambioPropietario = null,
+    [property: JsonPropertyName("redaccion_en_cola")] bool RedaccionEnCola = false);
 
-/// <summary>Lo de la compañía más quién reemplazó el veredicto y cuándo. Sigue sin lease, intentos ni texto de cola.</summary>
+/// <summary>
+/// Lo de la compañía más quién reemplazó el veredicto y cuándo. Sigue sin lease, intentos ni texto de cola. Con
+/// <c>cambio_propietario</c> del vehículo (HU #14582).
+/// </summary>
 internal sealed record DictamenBackofficeDto(
     [property: JsonPropertyName("version")] int Version,
     [property: JsonPropertyName("veredicto")] string Veredicto,
@@ -47,7 +56,9 @@ internal sealed record DictamenBackofficeDto(
     [property: JsonPropertyName("creado_en")] DateTimeOffset CreadoEn,
     [property: JsonPropertyName("analisis_override")] bool AnalisisOverride,
     [property: JsonPropertyName("usuario_override_id")] Guid? UsuarioOverrideId,
-    [property: JsonPropertyName("override_en")] DateTimeOffset? OverrideEn);
+    [property: JsonPropertyName("override_en")] DateTimeOffset? OverrideEn,
+    [property: JsonPropertyName("cambio_propietario")] bool? CambioPropietario = null,
+    [property: JsonPropertyName("redaccion_en_cola")] bool RedaccionEnCola = false);
 
 /// <summary>
 /// Lectura de la vigente (corte 7). La compañía pasa por <see cref="AccesoLote"/>. El backoffice arma el mismo DTO con los
@@ -57,21 +68,61 @@ internal static class ConsultaDictamen
 {
     private static readonly System.Text.Json.JsonSerializerOptions Json = new();
 
-    /// <summary>DTO de la compañía. No proyecta override, lease, intentos ni empresa.</summary>
-    public static DictamenCompaniaDto Compania(DictamenVehiculo fila)
+    /// <summary>DTO de la compañía. No proyecta override, lease, intentos ni empresa; <paramref name="cambioPropietario"/> es el del vehículo.</summary>
+    public static DictamenCompaniaDto Compania(DictamenVehiculo fila, bool? cambioPropietario, Trabajos.OpcionesRedaccion redaccion)
     {
         ArgumentNullException.ThrowIfNull(fila);
-        return new DictamenCompaniaDto(fila.Version, fila.Veredicto, fila.EstadoRedaccion, Alertas(fila.Alertamientos), fila.CatalogoVersion, fila.CreadoEn);
+        var ajustado = AjustadoPorFlit(fila);
+        return new DictamenCompaniaDto(
+            fila.Version, fila.Veredicto, fila.EstadoRedaccion, Alertas(fila.Alertamientos), fila.CatalogoVersion, fila.CreadoEn,
+            ajustado, ajustado ? fila.OverrideEn : null, cambioPropietario, RedaccionEnCola(fila, redaccion));
     }
 
-    /// <summary>DTO de backoffice: el de la compañía y los tres campos de override.</summary>
-    public static DictamenBackofficeDto Backoffice(DictamenVehiculo fila)
+    /// <summary>
+    /// P1 = a (2026-11-12): la marca «ajustado por FLIT» es <c>ajuste_motivo IS NOT NULL</c>, así que solo la llevan los ajustes
+    /// posteriores al despliegue de B7. D7: un recálculo nace sin motivo y la marca desaparece.
+    /// </summary>
+    public static bool AjustadoPorFlit(DictamenVehiculo fila)
     {
         ArgumentNullException.ThrowIfNull(fila);
-        var comun = Compania(fila);
+        return fila.AjusteMotivo is not null;
+    }
+
+    /// <summary>DTO de backoffice: el de la compañía y los tres campos de override; <paramref name="cambioPropietario"/> es el del vehículo.</summary>
+    public static DictamenBackofficeDto Backoffice(DictamenVehiculo fila, bool? cambioPropietario, Trabajos.OpcionesRedaccion redaccion)
+    {
+        ArgumentNullException.ThrowIfNull(fila);
+        var comun = Compania(fila, cambioPropietario, redaccion);
         return new DictamenBackofficeDto(
             comun.Version, comun.Veredicto, comun.EstadoRedaccion, comun.Alertamientos, comun.CatalogoVersion, comun.CreadoEn,
-            fila.AnalisisOverride, fila.UsuarioOverrideId, fila.OverrideEn);
+            fila.AnalisisOverride, fila.UsuarioOverrideId, fila.OverrideEn, cambioPropietario, comun.RedaccionEnCola);
+    }
+
+    /// <summary>
+    /// HU-2: <c>redaccion_en_cola</c> de la fila ya leída (<see cref="Trabajos.RedactorEnCola.EnCola"/>), sin otra consulta. Ni los
+    /// intentos, ni el lease, ni la fecha de toma salen al DTO.
+    /// </summary>
+    public static bool RedaccionEnCola(DictamenVehiculo fila, Trabajos.OpcionesRedaccion redaccion)
+    {
+        ArgumentNullException.ThrowIfNull(fila);
+        ArgumentNullException.ThrowIfNull(redaccion);
+        return Trabajos.RedactorEnCola.EnCola(fila.EstadoRedaccion, fila.RedaccionDisponibleDesde, redaccion);
+    }
+
+    /// <summary>
+    /// Veredicto, catálogo y alertamientos para los lectores que no publican <c>redaccion_en_cola</c> (el panel de deuda del
+    /// saneamiento). <see cref="DictamenCompaniaDto.RedaccionEnCola"/> queda en false; no se serializa en esos lectores.
+    /// </summary>
+    public static DictamenCompaniaDto CompaniaSinCola(DictamenVehiculo fila) => Compania(fila, null, SinCola);
+
+    /// <summary>Redacción apagada: ninguna fila está en cola.</summary>
+    private static readonly Trabajos.OpcionesRedaccion SinCola = new() { Habilitado = false };
+
+    /// <summary><c>cambio_propietario</c> del vehículo tal como está guardado (HU #14582, SP-1: sin descifrar); null si no hay fila.</summary>
+    public static Task<bool?> CambioPropietarioAsync(IQueryable<VehiculoDiagnostico> vehiculos, Guid vehiculoId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(vehiculos);
+        return vehiculos.AsNoTracking().Where(v => v.Id == vehiculoId).Select(v => v.CambioPropietario).FirstOrDefaultAsync(ct);
     }
 
     /// <summary>
@@ -79,20 +130,22 @@ internal static class ConsultaDictamen
     /// <c>NO_ENCONTRADO</c>. Sin fila vigente: 404 <c>SIN_DICTAMEN</c>.
     /// </summary>
     public static async Task<DictamenCompaniaDto> LeerDeLaCompaniaAsync(
-        DiagnosticoDb db, UsuarioActual usuario, Guid diagnosticoId, Guid vehiculoId, CancellationToken ct)
+        DiagnosticoDb db, UsuarioActual usuario, Guid diagnosticoId, Guid vehiculoId, Trabajos.OpcionesRedaccion redaccion,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(usuario);
         await AccesoLote.LeerVisibleAsync(db, usuario, diagnosticoId, seguir: false, ct).ConfigureAwait(false);
-        var delLote = await db.Set<VehiculoDiagnostico>().AsNoTracking()
-            .AnyAsync(v => v.Id == vehiculoId && v.DiagnosticoId == diagnosticoId, ct).ConfigureAwait(false);
-        if (!delLote)
-            throw ReglaException.NoEncontrado("El vehículo");
+        var vehiculo = await db.Set<VehiculoDiagnostico>().AsNoTracking()
+            .Where(v => v.Id == vehiculoId && v.DiagnosticoId == diagnosticoId)
+            .Select(v => new { v.CambioPropietario })
+            .FirstOrDefaultAsync(ct).ConfigureAwait(false)
+            ?? throw ReglaException.NoEncontrado("El vehículo");
 
         var fila = await db.Set<DictamenVehiculo>().AsNoTracking()
             .SingleOrDefaultAsync(d => d.VehiculoId == vehiculoId && d.Vigente, ct).ConfigureAwait(false)
             ?? throw SinFila();
-        return Compania(fila);
+        return Compania(fila, vehiculo.CambioPropietario, redaccion);
     }
 
     /// <summary>404 <c>SIN_DICTAMEN</c>: el vehículo se ve y no tiene dictamen vigente.</summary>

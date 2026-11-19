@@ -10,6 +10,7 @@ import type { ManualReviewClient } from '@/lib/api/manual-review-client';
 import { ApiError } from '@/lib/api/types';
 import type { ManualDetail } from '@/lib/api/types/manual-review';
 import { MOTIVOS_RECHAZO_MANUAL } from '@/lib/identidad/motivos-rechazo-manual';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * Aprobar y rechazar una validación manual (HU-C7). Solo se ofrecen con el registro en
@@ -182,7 +183,7 @@ function AprobarDialog({ detail, client, onClose, onDone, onStale }: DialogoProp
         </p>
         {error && (
           <p role="alert" className={`${MANUAL_AVISO_BASE} items-center font-medium ${MANUAL_AVISO.danger}`}>
-            <Icono nombre="alerta" className="h-4 w-4 shrink-0" /> {error}
+            <IconoAviso tipo="error" className="h-4 w-4 shrink-0" /> {error}
           </p>
         )}
         <div className="flex justify-end gap-3">
@@ -252,7 +253,7 @@ function RechazarDialog({ detail, client, onClose, onDone, onStale }: DialogoPro
         </p>
         {error && (
           <p role="alert" className={`${MANUAL_AVISO_BASE} items-center font-medium ${MANUAL_AVISO.danger}`}>
-            <Icono nombre="alerta" className="h-4 w-4 shrink-0" /> {error}
+            <IconoAviso tipo="error" className="h-4 w-4 shrink-0" /> {error}
           </p>
         )}
         <div className="flex justify-end gap-3">

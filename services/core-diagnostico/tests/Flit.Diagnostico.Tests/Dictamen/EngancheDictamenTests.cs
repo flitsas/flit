@@ -98,7 +98,7 @@ public sealed class EngancheDictamenTests
         var vacio = new DictamenEvaluado("VIABLE", []);
         var fila = EmisorDictamen.Materializar(
             Guid.CreateVersion7(), Guid.CreateVersion7(), 1, tipo, vacio,
-            new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", "PENDIENTE", 0, "no-configurado", null), Ahora);
+            new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", "PENDIENTE", 0, "no-configurado", null), TimeSpan.FromSeconds(30), Ahora);
 
         fila.Veredicto.Should().Be("VIABLE");
         fila.Alertamientos.Should().Be("[]");
@@ -152,11 +152,11 @@ public sealed class EngancheDictamenTests
         sinDetalle.Should().Be(new DatosBien("VIN123", null, null, null, null, "Particular"));
 
         var fallo = new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", "PENDIENTE", 1, "claude", TipoFalloRedactor.Timeout, TimeSpan.FromSeconds(15));
-        EmisorDictamen.DisponibleDesde(fallo, Ahora).Should().Be(Ahora.AddSeconds(15));
+        EmisorDictamen.DisponibleDesde(fallo, Ahora, TimeSpan.FromSeconds(30)).Should().Be(Ahora.AddSeconds(15), "la espera informada manda");
         var sinEspera = fallo with { TipoFallo = TipoFalloRedactor.Red, ReintentarEn = null };
-        EmisorDictamen.DisponibleDesde(sinEspera, Ahora).Should().Be(Ahora);
+        EmisorDictamen.DisponibleDesde(sinEspera, Ahora, TimeSpan.FromSeconds(30)).Should().Be(Ahora.AddSeconds(30), "sin espera informada, la base de la toma");
         var suspension = fallo with { TipoFallo = null, ReintentarEn = TimeSpan.FromMinutes(5) };
-        EmisorDictamen.DisponibleDesde(suspension, Ahora).Should().BeNull();
+        EmisorDictamen.DisponibleDesde(suspension, Ahora, TimeSpan.FromSeconds(30)).Should().BeNull();
     }
 
     private static VehiculoRunt Vehiculo() =>

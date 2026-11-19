@@ -6,6 +6,7 @@ import type { CapacidadesDiagnostico } from "@/lib/sesion";
 import type { FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { EMPRESA } from "@/__tests__/configuracion/datos";
 import { ID, V1, V2, V3, desdesPedidos, grilla, llamadas, sesion, simularApi } from "@/lib/tablero/__tests__/datos";
+import { accionFila, accionesEnTodas, disparadorDe, quizaAccionFila } from "./menuFila";
 
 // Uso de ejemplo: en el tablero /diagnosticos/{id}, con la capacidad `derivar`, cada placa elegible (VIABLE y sin trámite)
 // tiene «Crear trámite» (Punto 4, incremento 2: AC 1, 3, 6, 7 y 8). En un lote Con análisis crea el borrador con el tipo del
@@ -57,10 +58,19 @@ function lote(cambios: Partial<Grilla> = {}, filas: Partial<Record<"v1" | "v2" |
 }
 
 const creado = (numero = "57", yaExistia = false) => () => Response.json({ tramite: { id: TRAMITE_ID, numero }, ya_existia: yaExistia }, { status: 201 });
-const tabla = () => screen.getByRole("table", { name: /semáforo de consultas/i });
-const botonCrear = (placa = "TST001") => within(tabla()).queryByRole("button", { name: `Crear trámite para la placa ${placa}` });
+// FE-2: «Crear trámite» / «Ver trámite #N» son ítems del menú «Acciones» de la fila (portalizado a body).
+const botonCrear = (placa = "TST001") => quizaAccionFila(placa, `Crear trámite para la placa ${placa}`);
+
+/** HU #14562 AC37: en el lote Con análisis IA, «Crear trámite» de la fila abre la confirmación y su botón crea el borrador. */
+async function crearConConfirmacion(placa = "TST001") {
+  fireEvent.click(accionFila(placa, `Crear trámite para la placa ${placa}`));
+  await avanzar();
+  fireEvent.click(within(screen.getByRole("dialog", { name: `¿Crear el trámite de ${placa}?` })).getByRole("button", { name: "Crear trámite" }));
+}
 
 beforeEach(() => {
+  // La pestaña del borrador (AC37) la abre el navegador; jsdom no la implementa: aquí queda bloqueada.
+  vi.stubGlobal("open", vi.fn(() => null));
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "setInterval", "clearInterval", "Date"] });
   navegacion.push.mockReset();
   navegacion.replace.mockReset();
@@ -73,23 +83,27 @@ afterEach(() => {
 describe("Punto 4 AC1/AC8 — la acción solo con la capacidad y en la fila elegible", () => {
   it("con `derivar`: «Crear trámite» en la placa elegible y no en la no elegible ni en la que ya tiene trámite", async () => {
     await montar({ [GRILLA]: () => Response.json(lote()) });
-    expect(botonCrear("TST001")).toBeEnabled();
-    expect(botonCrear("TST002")).not.toBeInTheDocument();
-    expect(botonCrear("TST003")).not.toBeInTheDocument();
+    expect(botonCrear("TST001")).not.toHaveAttribute("aria-disabled");
+    // FE-2 (spec-ui §2.3): la fila no elegible ofrece el ítem deshabilitado con su motivo; la que ya tiene trámite, no.
+    expect(botonCrear("TST002")).toHaveAttribute("aria-disabled", "true");
+    expect(botonCrear("TST003")).toBeNull();
   });
 
-  it("la fila no elegible no tiene acción y expone el motivo en lenguaje de negocio, asociado a la placa", async () => {
+  it("la fila no elegible: «Crear trámite» deshabilitado con el motivo en lenguaje de negocio, visible y asociado a la placa", async () => {
     await montar({ [GRILLA]: () => Response.json(lote()) });
-    const fila = within(tabla()).getAllByRole("row").find((r) => r.getAttribute("data-vehiculo") === "vehiculo-2")!;
-    const motivo = within(fila).getByText(/dictamen no es viable/i);
-    expect(motivo).toBeVisible();
-    expect(motivo.textContent).toMatch(/no se puede crear trámite para la placa TST002.*dictamen no es viable/i);
-    expect(within(fila).queryByRole("button", { name: /crear trámite/i })).not.toBeInTheDocument();
+    const item = accionFila("TST002", "Crear trámite para la placa TST002");
+    expect(item).toHaveAttribute("aria-disabled", "true");
+    expect(item).toHaveAccessibleDescription(/dictamen no es viable/i);
+    expect(within(screen.getByRole("menu")).getByText(/dictamen no es viable/i)).toBeVisible();
+    fireEvent.click(item);
+    await avanzar();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("la fila que ya tiene trámite muestra «Ver trámite #41», enlace al borrador en Trámites en una pestaña nueva", async () => {
     await montar({ [GRILLA]: () => Response.json(lote()) });
-    const enlace = within(tabla()).getByRole("link", { name: /ver trámite #41 de la placa TST003/i });
+    const enlace = accionFila("TST003", /ver trámite #41 de la placa TST003 \(se abre en una pestaña nueva\)/i);
+    expect(enlace.tagName).toBe("A");
     expect(enlace).toHaveTextContent("Ver trámite #41");
     expect(enlace).toHaveAttribute("href", `${TRAMITES_URL}/tramites/tramite-41?t=${EMPRESA}`);
     expect(enlace).toHaveAttribute("target", "_blank");
@@ -98,6 +112,7 @@ describe("Punto 4 AC1/AC8 — la acción solo con la capacidad y en la fila eleg
 
   it("sin la capacidad `derivar` no aparece nada: ni «Crear trámite», ni «Ver trámite», ni el motivo", async () => {
     await montar({ [GRILLA]: () => Response.json(lote()) }, SIN_DERIVAR);
+    expect(accionesEnTodas(/trámite/i)).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /crear trámite/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /ver trámite/i })).not.toBeInTheDocument();
     expect(screen.queryByText(/dictamen no es viable/i)).not.toBeInTheDocument();
@@ -105,31 +120,34 @@ describe("Punto 4 AC1/AC8 — la acción solo con la capacidad y en la fila eleg
 
   it("backend previo (la fila sin `elegible_tramite` ni `tramite`): no se pinta ninguna acción de trámite", async () => {
     await montar({ [GRILLA]: () => Response.json(grilla({ estado: "COMPLETADO", vehiculos: [V1] })) });
+    expect(accionesEnTodas(/trámite/i)).toHaveLength(0);
     expect(screen.queryByRole("button", { name: /crear trámite/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /ver trámite/i })).not.toBeInTheDocument();
   });
 });
 
 describe("Punto 4 AC3 — «Crear trámite» individual crea el borrador y la fila pasa a «Ver trámite #N»", () => {
-  it("lote Con análisis: POST sin pedir tipo, cargando mientras responde y luego el enlace al borrador", async () => {
+  it("lote Con análisis: tras confirmar, POST sin pedir tipo, cargando mientras responde y luego el enlace al borrador", async () => {
     let responder: (r: Response) => void = () => {};
     const api = await montar({
       [GRILLA]: () => Response.json(lote()),
       [CREAR]: () => new Promise<Response>((r) => (responder = r)),
     });
-    fireEvent.click(botonCrear()!);
+    await crearConConfirmacion();
     await avanzar();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    const enCurso = within(tabla()).getByRole("button", { name: "Crear trámite para la placa TST001" });
-    expect(enCurso).toBeDisabled();
-    expect(enCurso).toHaveAttribute("aria-busy", "true");
+    // FE-2: en vuelo, el ítem dice «Creando…» y queda deshabilitado; el disparador lleva aria-busy.
+    expect(disparadorDe("TST001")).toHaveAttribute("aria-busy", "true");
+    const enCurso = accionFila("TST001", "Crear trámite para la placa TST001");
+    expect(enCurso).toHaveAttribute("aria-disabled", "true");
+    expect(enCurso).toHaveTextContent("Creando…");
     expect(llamadas(api, "POST", RUTA_CREAR)).toHaveLength(1);
     const cuerpo = (llamadas(api, "POST", RUTA_CREAR)[0][1] as RequestInit).body;
     expect(cuerpo === undefined || JSON.parse(String(cuerpo)).tipo_tramite_codigo === undefined).toBe(true);
 
     responder(creado("57")());
     await avanzar();
-    const enlace = within(tabla()).getByRole("link", { name: /ver trámite #57 de la placa TST001/i });
+    const enlace = accionFila("TST001", /ver trámite #57 de la placa TST001/i);
     expect(enlace).toHaveAttribute("href", `${TRAMITES_URL}/tramites/${TRAMITE_ID}?t=${EMPRESA}`);
     expect(botonCrear()).not.toBeInTheDocument();
   });
@@ -141,11 +159,11 @@ describe("Punto 4 AC3 — «Crear trámite» individual crea el borrador y la fi
         Response.json({ tipos: [{ codigo: "TRASPASO", nombre: "Traspaso", familia: "TRASPASO", fuentesObligatorias: [] }, { codigo: "UNILATERAL", nombre: "Traspaso unilateral", familia: "TRASPASO", fuentesObligatorias: [] }] }),
       [CREAR]: creado("58"),
     });
-    fireEvent.click(botonCrear()!);
+    fireEvent.click(accionFila("TST001", "Crear trámite para la placa TST001"));
     await avanzar();
-    const dialogo = screen.getByRole("dialog", { name: /tipo de trámite/i });
+    const dialogo = screen.getByRole("dialog", { name: "Crear trámite para TST001" });
     expect(llamadas(api, "POST", RUTA_CREAR)).toHaveLength(0);
-    const confirmar = within(dialogo).getByRole("button", { name: /crear trámite/i });
+    const confirmar = within(dialogo).getByRole("button", { name: "Ir al wizard" });
     expect(confirmar).toBeDisabled();
     fireEvent.change(within(dialogo).getByLabelText(/tipo de trámite/i), { target: { value: "UNILATERAL" } });
     fireEvent.click(confirmar);
@@ -153,7 +171,7 @@ describe("Punto 4 AC3 — «Crear trámite» individual crea el borrador y la fi
     const [, init] = llamadas(api, "POST", RUTA_CREAR)[0] as [string, RequestInit];
     expect(JSON.parse(String(init.body))).toEqual({ tipo_tramite_codigo: "UNILATERAL" });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(within(tabla()).getByRole("link", { name: /ver trámite #58 de la placa TST001/i })).toBeInTheDocument();
+    expect(accionFila("TST001", /ver trámite #58 de la placa TST001/i)).toBeInTheDocument();
   });
 
   it("lote Simple con el catálogo caído: el modal muestra el error con Reintentar, que vuelve a pedirlo", async () => {
@@ -163,9 +181,9 @@ describe("Punto 4 AC3 — «Crear trámite» individual crea el borrador y la fi
       "GET /tipos-tramite": () =>
         n++ === 0 ? Response.json({ error: "x" }, { status: 503 }) : Response.json({ tipos: [{ codigo: "TRASPASO", nombre: "Traspaso", familia: "TRASPASO", fuentesObligatorias: [] }] }),
     });
-    fireEvent.click(botonCrear()!);
+    fireEvent.click(accionFila("TST001", "Crear trámite para la placa TST001"));
     await avanzar();
-    const dialogo = screen.getByRole("dialog", { name: /tipo de trámite/i });
+    const dialogo = screen.getByRole("dialog", { name: "Crear trámite para TST001" });
     expect(within(dialogo).getByRole("alert")).toHaveTextContent(/no se pudieron cargar los tipos de trámite/i);
     fireEvent.click(within(dialogo).getByRole("button", { name: "Reintentar" }));
     await avanzar();
@@ -183,12 +201,12 @@ describe("Punto 4 AC6 — un segundo intento sobre un vehículo con trámite no 
       [CREAR]: () => Response.json({ code: "YA_TIENE_TRAMITE", title: "El vehículo ya tiene trámite" }, { status: 409 }),
     });
     const antes = desdesPedidos(api).length;
-    fireEvent.click(botonCrear()!);
+    await crearConConfirmacion();
     await avanzar();
     await avanzar();
     expect(screen.getByRole("status", { name: /resultado de crear trámite para la placa TST001/i })).toHaveTextContent(/ya tenía trámite/i);
     expect(desdesPedidos(api).length).toBeGreaterThan(antes);
-    expect(within(tabla()).getByRole("link", { name: /ver trámite #60 de la placa TST001/i })).toBeInTheDocument();
+    expect(accionFila("TST001", /ver trámite #60 de la placa TST001/i)).toBeInTheDocument();
   });
 });
 
@@ -198,10 +216,10 @@ describe("Punto 4 AC7/AC8 — errores de negocio y de permiso visibles en la fil
       [GRILLA]: () => Response.json(lote()),
       [CREAR]: () => Response.json({ code: "NO_ELEGIBLE", title: "No elegible", detail: "OT no habilitado para la compañía" }, { status: 422 }),
     });
-    fireEvent.click(botonCrear()!);
+    await crearConConfirmacion();
     await avanzar();
     expect(screen.getByRole("alert", { name: /resultado de crear trámite para la placa TST001/i })).toHaveTextContent("OT no habilitado para la compañía");
-    expect(botonCrear()).toBeEnabled();
+    expect(botonCrear()).not.toHaveAttribute("aria-disabled");
   });
 
   it("403: mensaje claro de permiso", async () => {
@@ -209,7 +227,7 @@ describe("Punto 4 AC7/AC8 — errores de negocio y de permiso visibles en la fil
       [GRILLA]: () => Response.json(lote()),
       [CREAR]: () => Response.json({}, { status: 403 }),
     });
-    fireEvent.click(botonCrear()!);
+    await crearConConfirmacion();
     await avanzar();
     expect(screen.getByRole("alert", { name: /resultado de crear trámite para la placa TST001/i })).toHaveTextContent(/no tienes permiso para crear trámites/i);
   });

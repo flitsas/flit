@@ -23,6 +23,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Modules.Notificaciones;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Platform;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Infrastructure.Security;
 using Flit.Infrastructure.Storage;
 using Flit.Tramites.Application.Documents;
@@ -220,12 +221,14 @@ public static class InfrastructureExtensions
 
         // ── Dashboard analítico (Feature #10139, HU #10243/#10245) ───────────
         services.AddScoped<IAnalyticsReadRepository, AnalyticsReadRepository>();
+        services.AddScoped<IGestorDashboardReadRepository, GestorDashboardReadRepository>(); // Inicio del Gestor (rediseño de los 3 dashboards)
         // HU #13076 (Épica #12737) — lectura entre compañías del feed de sincronización externa (ámbito exclusivo).
         services.AddScoped<Flit.Tramites.Domain.ExternalSync.IProcedureSyncReadRepository, ProcedureSyncReadRepository>();
         // HU #13263 (Épica #12741) — escritura del envío de adjuntos del cliente externo (fila del trámite bloqueada).
         services.AddScoped<Flit.Tramites.Domain.ExternalSync.IExternalAttachmentRepository, ExternalAttachmentRepository>();
         services.AddScoped<INetworkAnalyticsReadRepository, AnalyticsNetworkReadRepository>(); // HU #12359 - estadisticas de red
         services.AddScoped<IAnalyticsMetricsReadRepository, AnalyticsMetricsReadRepository>(); // Reportes2 HU-B
+        services.AddScoped<Flit.Analytics.Application.Queries.SuperAdminDashboard.ISuperAdminDashboardReadRepository, SuperAdminDashboardReadRepository>(); // Inicio del SuperAdmin (entre tenants)
         services.AddScoped<Flit.Analytics.Application.Abstractions.IDetailedReportReadRepository, DetailedReportReadRepository>(); // Feature #10813
         services.AddScoped<Flit.Analytics.Application.Queries.IDetailedReportExcelExporter, Documents.DetailedReportExcelExporter>(); // Feature #10813 HU #10816
         services.AddScoped<Flit.Analytics.Application.Abstractions.INetworkDetailedReportReadRepository, DetailedReportNetworkReadRepository>(); // HU #12360 - reporte de red
@@ -720,6 +723,12 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(
                 Math.Max(Math.Max(o.TimeoutSeconds, o.ClassifierTimeoutSeconds), o.DrFlitTimeoutSeconds));
         });
+
+        // Contrato ia-consumo v1 (ADR-0090): cada llamada HTTP a un proveedor de IA deja una fila en
+        // admin.ia_consumo_log, escrita en segundo plano por lotes. Banderas IA_CONSUMO_LOG / IA_CONSUMO_DETALLE
+        // (ambas encendidas por defecto, sin purga); nunca bloquea ni rompe la llamada.
+        services.AddFlitIaConsumo<FlitDbContext>(configuration, aplicativo: "flit", servicio: "core-api");
+        services.AddScoped<Flit.Tramites.Application.Ocr.IIaConsumoAmbito, IaConsumoAmbitoTramites>();
 
         // HU #13510 — clientes OpenAI-compatible (openai / kimi / deepseek) + adapters + router.
         BindOpenAiCompatibleOptions(services, configuration, Cfg);

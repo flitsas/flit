@@ -275,6 +275,10 @@ class ClienteDeServicio(unittest.TestCase):
                 "platform.manifest", "platform.identidad.read", "platform.tramites.catalogos", "platform.identidad.empresas",
                 # ADR-0084 (P4): el rpc CrearBorradorDesdeDiagnostico de core-api exige este scope.
                 "platform.tramites.derivacion",
+                # HU #14587: UsuariosProductoService de core-api (autogestión de usuarios de Diagnóstico y sus conteos).
+                "platform.usuarios.diagnostico", "platform.usuarios.diagnostico.conteos",
+                # ADR-0091: ConfiguracionIaService de core-api (proveedor, modelo y llave de IA cifrada para el dictamen).
+                "platform.ia.diagnostico",
             ]),
         )
 
@@ -290,6 +294,17 @@ class ClienteDeServicio(unittest.TestCase):
             "DIAGNOSTICO_PORT",
             "CORE_DIAGNOSTICO_PORT",
             "CORE_DIAGNOSTICO_GRPC_PORT",
+            # ADR-0091 (decisión 2026-11-19): la privada de Diagnóstico entra por variable de entorno.
+            "DIAGNOSTICO_IA_ORIGEN",
+            "DIAGNOSTICO_IA_KID",
+            "DIAGNOSTICO_IA_CLAVE_PRIVADA",
+            "DIAGNOSTICO_IA_KID_ANTERIOR",
+            "DIAGNOSTICO_IA_CLAVE_PRIVADA_ANTERIOR",
+            # Pública de Diagnóstico en core-api (no es secreta) y la de la rotación.
+            "AI_ENTREGA_DIAGNOSTICO_KID",
+            "AI_ENTREGA_DIAGNOSTICO_CLAVE_PUBLICA",
+            "AI_ENTREGA_DIAGNOSTICO_KID_SIGUIENTE",
+            "AI_ENTREGA_DIAGNOSTICO_CLAVE_PUBLICA_SIGUIENTE",
         ):
             self.assertIn(esperada, nombres, f".env.prod.example no documenta {esperada}")
         for linea in lineas:
@@ -304,6 +319,40 @@ class ClienteDeServicio(unittest.TestCase):
             for clave, valor in env.items():
                 if re.search(r"Secret|SECRET|ConnectionString|ApiKey|Password", clave):
                     self.assertRegex(str(valor), INTERPOLACION_VACIA, f"{clave} debe salir del .env, sin valor por defecto")
+
+
+class LlaveDeIaCifrada(unittest.TestCase):
+    """ADR-0091: Diagnóstico ya no tiene llave de Anthropic propia; la recibe cifrada de core-api por gRPC."""
+
+    def test_core_diagnostico_sin_llave_propia_y_con_la_privada_por_variable(self):
+        env = _servicio("core-diagnostico")["environment"]
+        self.assertNotIn("Diagnostico__Anthropic__ApiKey", env, "la llave de Anthropic queda solo en ANTHROPIC_API_KEY de core-api")
+        self.assertNotIn("DIAGNOSTICO_ANTHROPIC_API_KEY", _texto(COMPOSE))
+        self.assertEqual(env.get("Diagnostico__Ia__Origen"), "${DIAGNOSTICO_IA_ORIGEN:-plataforma}")
+        for clave, variable in (
+            ("Diagnostico__Ia__Kid", "DIAGNOSTICO_IA_KID"),
+            ("Diagnostico__Ia__ClavePrivada", "DIAGNOSTICO_IA_CLAVE_PRIVADA"),
+            ("Diagnostico__Ia__KidAnterior", "DIAGNOSTICO_IA_KID_ANTERIOR"),
+            ("Diagnostico__Ia__ClavePrivadaAnterior", "DIAGNOSTICO_IA_CLAVE_PRIVADA_ANTERIOR"),
+        ):
+            # Sin valor por defecto: sin privada arranca igual y el dictamen sale con la plantilla.
+            self.assertEqual(env.get(clave), "${" + variable + ":-}", f"{clave} debe salir del .env, sin valor por defecto")
+        # Defectos de la imagen: no se declaran en el compose.
+        self.assertNotIn("Diagnostico__Ia__ModelosPermitidos", env)
+        self.assertNotIn("Diagnostico__Ia__MaxLlamadasPorMinuto", env)
+        self.assertEqual(env.get("Diagnostico__Redaccion__Habilitado"), "${DIAGNOSTICO_REDACCION_HABILITADO:-false}")
+
+    def test_core_api_declara_la_publica_de_diagnostico(self):
+        env = _servicio("core-api")["environment"]
+        for clave, variable in (
+            ("Ai__Entrega__Diagnostico__Kid", "AI_ENTREGA_DIAGNOSTICO_KID"),
+            ("Ai__Entrega__Diagnostico__ClavePublica", "AI_ENTREGA_DIAGNOSTICO_CLAVE_PUBLICA"),
+            ("Ai__Entrega__Diagnostico__KidSiguiente", "AI_ENTREGA_DIAGNOSTICO_KID_SIGUIENTE"),
+            ("Ai__Entrega__Diagnostico__ClavePublicaSiguiente", "AI_ENTREGA_DIAGNOSTICO_CLAVE_PUBLICA_SIGUIENTE"),
+        ):
+            self.assertEqual(env.get(clave), "${" + variable + ":-}", f"core-api debe declarar {clave}")
+        # Fuera del ancla x-core-api-env: core-identity no la hereda.
+        self.assertFalse([k for k in _servicio("core-identity")["environment"] if k.startswith("Ai__Entrega__")])
 
 
 if __name__ == "__main__":

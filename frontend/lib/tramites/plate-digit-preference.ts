@@ -98,6 +98,34 @@ export function toPlateDigitUiValue(params: {
 export const PLATE_SOURCE_OT = 'ot';
 
 /**
+ * `source` del field_value `plate` cuando la entregó la integración (ICT) en una matrícula con placa
+ * completa o de rango del OT. No es placa del RUNT (no hay Ruta Corta) ni asignada por el OT.
+ */
+export const PLATE_SOURCE_ICT = 'ict';
+
+/** Clave del field_value con el tipo de asignación de placa que declaró la integración ("2"/"3"/"4"). */
+export const PLATE_ASSIGNMENT_TYPE_KEY = 'plate_assignment_type';
+
+/** Tipo de asignación "4": placa reservada en el rango del organismo del trámite. */
+export const PLATE_ASSIGNMENT_RANGO_OT = '4';
+
+/**
+ * La secretaría queda fijada cuando la placa llegó por la integración (`source === 'ict'`) y es de
+ * tipo 4: está reservada en el rango de ESE organismo, así que cambiarlo la dejaría huérfana. El
+ * tipo 3 (placa completa) NO fija nada. Devuelve la placa para poder nombrarla, o `null` si no aplica.
+ */
+export function placaQueFijaSecretaria(
+  fields: ReadonlyArray<{ fieldKey: string; valueText?: string | null; source?: string | null }>,
+): string | null {
+  const placa = fields.find((f) => f.fieldKey === 'plate' && f.source === PLATE_SOURCE_ICT);
+  const valor = placa?.valueText?.trim() ?? '';
+  if (!valor) return null;
+  const tipo =
+    fields.find((f) => f.fieldKey === PLATE_ASSIGNMENT_TYPE_KEY)?.valueText?.trim() ?? '';
+  return tipo === PLATE_ASSIGNMENT_RANGO_OT ? valor : null;
+}
+
+/**
  * Verdadero cuando la placa la asignó el organismo de tránsito: `source === 'ot'`, o una placa no
  * vacía con source vacío/nulo (las asignadas antes de que el backend marcara el origen). La del RUNT
  * (`consultation`) y la elegida por el gestor en borradores antiguos (`user`) no cuentan.

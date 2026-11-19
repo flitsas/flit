@@ -6,7 +6,6 @@
 // Siempre se muestra lo último guardado: ante un fallo no se cambia nada y se informa el motivo exacto.
 import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 import { useCallback, useEffect, useId, useMemo, useState, type ComponentType, type ReactNode } from "react";
-import { Store } from "lucide-react";
 import type { IconoComoProps } from "@flit/ui/iconoComo";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
@@ -20,6 +19,7 @@ import {
   PnLinkButton,
   PnSeccionHeader,
 } from "@/components/admin/plataforma/persona-natural/pn-componentes";
+import { CajaAnulacionCampo } from "./CajaAnulacionCampo";
 import { pnErrorMessage } from "@/components/admin/plataforma/persona-natural/pnErrors";
 import type {
   CobroApi,
@@ -29,6 +29,8 @@ import type {
   MedioPago,
   TipoCobro,
 } from "@/lib/api/admin-ot-portal-cobro";
+
+const ICONO_PESOS = iconoComo("pesos");
 
 export const COBRO_ON = "var(--flit-success-ink)";
 export const COBRO_OFF = "var(--border-strong)";
@@ -48,8 +50,9 @@ const AYUDA_MEDIO: Record<MedioPago, string> = {
   PIN: "La persona paga en la caja del organismo con un PIN.",
 };
 const ICONO_MEDIO: Record<MedioPago, ComponentType<IconoComoProps>> = {
-  PASARELA: iconoComo("credencial"),
-  PIN: Store,
+  // PDF: Credencial es el documento de identidad; los medios de pago llevan Pago.
+  PASARELA: iconoComo("pago"),
+  PIN: ICONO_PESOS,
 };
 const NOMBRE_CONCEPTO: Record<ConceptoCobro, string> = {
   TRAMITE: "Valor del trámite",
@@ -440,6 +443,15 @@ export function OtCobroMediosSection({
           <div className={medios.length > 1 ? "grid gap-4 lg:grid-cols-2" : "grid gap-4"}>
             {medios.map(tarjetaMedio)}
           </div>
+
+          {cobro?.cajaAnulacion && api.guardarCajaAnulacion && (
+            <CajaAnulacionCampo
+              api={api}
+              valor={cobro.cajaAnulacion}
+              deshabilitado={!medios.some((x) => x.method === "PIN" && x.enabled)}
+              onGuardado={(nuevo) => setCobro((c) => (c ? { ...c, cajaAnulacion: nuevo } : c))}
+            />
+          )}
 
           {aviso && !aviso.conAccesoAPrecios && (
             <InlineAlert tone="warning" title="Medio sin cobro">

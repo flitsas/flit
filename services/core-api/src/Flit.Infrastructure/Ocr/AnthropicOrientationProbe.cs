@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Tramites.Application.Ocr;
 using Microsoft.Extensions.Logging;
 
@@ -12,8 +13,11 @@ namespace Flit.Infrastructure.Ocr;
 /// </summary>
 internal sealed class AnthropicOrientationProbe(
     AnthropicMessagesClient client,
-    ILogger<AnthropicOrientationProbe> logger) : IDocumentOrientationProbe
+    ILogger<AnthropicOrientationProbe> logger,
+    IIaCallContext? iaContexto = null) : IDocumentOrientationProbe
 {
+    private readonly IIaCallContext _ia = iaContexto ?? IaCallContext.Instancia;
+
     /// <summary>La respuesta es <c>{"derecha":true}</c>: no hace falta más techo que este.</summary>
     private const int MaxTokens = 100;
 
@@ -23,6 +27,9 @@ internal sealed class AnthropicOrientationProbe(
     public async Task<PageOrientation> ProbeAsync(ReadOnlyMemory<byte> pdf, CancellationToken ct)
     {
         var base64 = Convert.ToBase64String(pdf.Span);
+        // ADR-0090: cada sonda (hasta cuatro por documento) es una fila de tramites/orientacion_pagina.
+        using var ambito = IaAmbitosOcr.Abrir(
+            _ia, IaProcesosFlit.OrientacionPagina, IaTiposTarea.Orientacion, "orientacion", pdf.Span, "application/pdf");
         var vision = await client.SendVisionAsync(
             base64, "application/pdf", DocumentOcrPrompts.OrientationProbePrompt, ct,
             maxTokens: MaxTokens, timeoutSeconds: TimeoutSeconds);

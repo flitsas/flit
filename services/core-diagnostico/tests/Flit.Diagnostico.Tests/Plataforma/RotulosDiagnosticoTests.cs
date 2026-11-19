@@ -32,6 +32,14 @@ public sealed class RotulosDiagnosticoTests
 {
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
+    /// <summary>HU-3 (decisión del usuario 2026-11-18): literales exactos del rótulo del dictamen en el PDF.</summary>
+    [Fact]
+    public void HU3_rotulos_del_dictamen_pendiente_son_literales_exactos()
+    {
+        RotulosDiagnostico.SinAnalisis.Should().Be("Sin análisis");
+        RotulosDiagnostico.AnalisisEnPreparacion.Should().Be("Análisis en preparación");
+    }
+
     // ---- AC5: cobertura de todos los códigos ----
 
     [Fact]
@@ -103,6 +111,7 @@ public sealed class RotulosDiagnosticoTests
     [InlineData("INFRACCION_RUNT", "Infracciones registradas en el RUNT")]
     [InlineData("IMPUESTO", "Impuesto vehicular pendiente")]
     [InlineData("SOAT_MAQUINARIA", "SOAT de maquinaria no vigente")]
+    [InlineData("AJUSTE_FLIT", "Ajuste FLIT")] // Cierre BE: alertamiento redactado por soporte (B7); antes salía «Novedad sin clasificar»
     public void Tabla_aprobada_de_rotulos_de_alertas(string codigo, string rotulo) =>
         RotulosDiagnostico.DeAlerta(codigo, "RUNT").Should().Be(rotulo);
 
@@ -158,7 +167,7 @@ public sealed class RotulosDiagnosticoTests
         na["estado"]!.GetValue<string>().Should().Be("NA");
         na["estado_etiqueta"]!.GetValue<string>().Should().Be("No aplica");
         na["motivo_na"]!.GetValue<string>().Should().Be("SIN_DOCUMENTO_LOCATARIO");
-        na["motivo_na_etiqueta"]!.GetValue<string>().Should().Be("El vehículo está sin el documento del locatario: no hay a quién consultar.");
+        na["motivo_na_etiqueta"]!.GetValue<string>().Should().Be("El RUNT no reporta locatario", "HU #14582: el declarado ya no es locatario");
 
         var curso = Json(new CeldaGrillaDto(Guid.CreateVersion7(), "RUNT", "EN_CURSO", null, null, null, false, 2));
         curso["estado_etiqueta"]!.GetValue<string>().Should().Be("En curso");
@@ -169,7 +178,7 @@ public sealed class RotulosDiagnosticoTests
     [Fact]
     public void Fila_y_grilla_llevan_tipo_identificador_etiqueta_y_estado_etiqueta()
     {
-        var fila = new FilaVehiculoDto(Guid.CreateVersion7(), 1, "123ABC", "PLACA_MOTOCARRO", "123ABC", null, false, [], null, [], false);
+        var fila = new FilaVehiculoDto(Guid.CreateVersion7(), 1, "123ABC", "PLACA_MOTOCARRO", "123ABC", null, false, [], null, false);
         Json(fila)["tipo_identificador_etiqueta"]!.GetValue<string>().Should().Be("Placa de motocarro");
 
         var grilla = new GrillaDto(Guid.CreateVersion7(), "Lote", "CREADO", 0, 0, new AlcanceDto([], [], []), new AvanceLoteDto(1, 0), [fila], null, 0, []);
@@ -191,7 +200,7 @@ public sealed class RotulosDiagnosticoTests
         celda["estado_etiqueta"]!.GetValue<string>().Should().Be("No aplica");
         celda["motivo_na_etiqueta"]!.GetValue<string>().Should().Be("El vehículo es de servicio público: esta consulta no aplica.");
 
-        var fila = Json(new FilaVehiculoBackofficeDto(Guid.CreateVersion7(), 1, "ABC123", "PLACA_CARRO", "ABC123", null, true, [], null, []));
+        var fila = Json(new FilaVehiculoBackofficeDto(Guid.CreateVersion7(), 1, "ABC123", "PLACA_CARRO", "ABC123", null, true, [], null));
         fila["tipo_identificador_etiqueta"]!.GetValue<string>().Should().Be("Placa de carro");
 
         var lote = Json(new DiagnosticoBackofficeDto(Guid.CreateVersion7(), "Lote", "INCOMPLETO", DateTimeOffset.UnixEpoch, 1, 1));

@@ -82,6 +82,25 @@ export async function listarTiposTramite(signal?: AbortSignal): Promise<TipoTram
   return respuesta?.tipos ?? [];
 }
 
+/**
+ * AP-9 (SF-6): texto fijo por `code` de POST /diagnosticos y PUT /diagnosticos/{id} (contrato diagnostico.v1.yaml).
+ * Equivale a la regla que incumple la cabecera, sin los nombres de fuente ni los números del servidor.
+ */
+export const ERRORES_CABECERA: Readonly<Record<string, string>> = {
+  NOMBRE_INVALIDO: "El nombre es obligatorio y tiene como máximo 150 caracteres.",
+  FUENTE_EN_GRUPO_AJENO: "Una de las fuentes elegidas no pertenece a su grupo del alcance.",
+  ALCANCE_SIN_RUNT: "El alcance siempre incluye RUNT.",
+  FUENTE_NO_HABILITADA: "Tu compañía no tiene habilitada una de las fuentes elegidas.",
+  FUENTE_NO_DISPONIBLE: "Una de las fuentes elegidas todavía no se puede consultar.",
+  TIPO_TRAMITE_REQUERIDO: "Con análisis exige el tipo de trámite.",
+  TIPO_TRAMITE_NO_DISPONIBLE: "El tipo de trámite no está entre los que ofrece Diagnóstico.",
+  FUENTES_OBLIGATORIAS_FALTANTES: "El tipo de trámite elegido exige fuentes que no están en el alcance.",
+  VALOR_FUERA_DE_CONJUNTO: "Uno de los valores elegidos no es válido.",
+  NO_ENCONTRADO: "No encontramos este diagnóstico en tu compañía.",
+  DIAGNOSTICO_NO_EDITABLE: "El diagnóstico ya se lanzó: su cabecera no se puede editar.",
+  CATALOGO_NO_DISPONIBLE: "El catálogo de tipos de trámite no está disponible en este momento. Intenta de nuevo en unos segundos.",
+};
+
 export function crearDiagnostico(cabecera: CabeceraEntrada): Promise<Diagnostico> {
   return apiFetch<Diagnostico>("/diagnosticos", { method: "POST", body: cabecera });
 }

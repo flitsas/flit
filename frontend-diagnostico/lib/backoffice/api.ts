@@ -4,9 +4,11 @@
 // El origen manual de una celda solo se muestra en esta pantalla (Q5); la vista de la compañía no lo conoce.
 import { ApiError, apiFetch } from "@/lib/api";
 import { esEmpresaValida, type Fuente } from "@/lib/configuracion";
+import { mensajeErrorFijo } from "@/lib/errores";
 import type { EstadoDiagnostico } from "@/lib/diagnosticos/api";
 import { BLOQUEADA_POR_RUNT, type CeldaGrilla, type EstadoCelda, type FilaVehiculo, type Grilla } from "@/lib/tablero/api";
 import type { CargadorDetalle, ConsultaPersona, DetalleCelda } from "@/lib/tablero/detalle";
+import type { SaneamientoFilaBackoffice } from "@/lib/backoffice/saneamientos";
 
 export type OrigenCelda = "API" | "MANUAL";
 
@@ -17,8 +19,10 @@ export interface CeldaGrillaBackoffice extends CeldaGrilla {
   usuario_manual_id: string | null;
 }
 
-export interface FilaVehiculoBackoffice extends Omit<FilaVehiculo, "celdas"> {
+export interface FilaVehiculoBackoffice extends Omit<FilaVehiculo, "celdas" | "saneamiento"> {
   celdas: CeldaGrillaBackoffice[];
+  /** Saneamiento de la fila en el backoffice (plan §6.1): estado e id para enlazar a la gestión, sin elegibilidad. */
+  saneamiento?: SaneamientoFilaBackoffice | null;
 }
 
 export interface GrillaBackoffice extends Omit<Grilla, "vehiculos"> {
@@ -35,6 +39,12 @@ export interface DiagnosticoBackoffice {
   creado_en: string;
   vehiculos: number;
   celdas_en_error: number;
+  /** HU #14563 (B3): modo del lote. */
+  modo?: "SIMPLE" | "CON_ANALISIS";
+  /** HU #14563 (B3): null en SIMPLE; nombre del catálogo o el código. */
+  tipo_tramite?: { codigo: string; nombre: string } | null;
+  /** HU #14563 (B3). */
+  es_express?: boolean;
 }
 
 export interface ListaDiagnosticosBackoffice {
@@ -110,6 +120,16 @@ export class EmpresaNoElegida extends Error {
   }
 }
 
+/**
+ * AP-8 (security-fase3 SF-6): texto para el usuario de un error del backoffice. Nunca el `message` de un ApiError ni de
+ * un Error cualquiera: delega en el traductor común `mensajeErrorFijo` (AP-9, `@/lib/errores`). EmpresaNoElegida
+ * conserva su mensaje: es un error propio del front con texto fijo.
+ */
+export function mensajeErrorBackoffice(error: unknown, respaldo: string, porCodigo: Readonly<Record<string, string>> = {}): string {
+  if (error instanceof EmpresaNoElegida) return error.message;
+  return mensajeErrorFijo(error, respaldo, porCodigo);
+}
+
 /** `?empresa=` (y el resto de la consulta) o EmpresaNoElegida, antes de cualquier petición. */
 function consulta(empresa: string, extra: Record<string, string | number | undefined> = {}): string {
   const id = empresa.trim();
@@ -134,9 +154,15 @@ export async function listarLotesBackoffice(empresa: string, filtros: FiltrosLot
 }
 
 /** GET /backoffice/diagnosticos/{id}/grilla?empresa=&desde=: misma semántica incremental que la grilla de la compañía. */
-export async function obtenerGrillaBackoffice(id: string, empresa: string, desde: number, signal?: AbortSignal): Promise<GrillaBackoffice> {
+export async function obtenerGrillaBackoffice(
+  id: string,
+  empresa: string,
+  desde: number,
+  signal?: AbortSignal,
+  cache?: RequestCache,
+): Promise<GrillaBackoffice> {
   const q = consulta(empresa, { desde });
-  return apiFetch<GrillaBackoffice>(`${BASE}/diagnosticos/${seg(id)}/grilla?${q}`, { signal });
+  return apiFetch<GrillaBackoffice>(`${BASE}/diagnosticos/${seg(id)}/grilla?${q}`, { signal, cache });
 }
 
 /** Detalle de una celda del backoffice con su origen (solo el backoffice lo muestra, Q5). */
@@ -154,7 +180,8 @@ export function rutaDetalleBackoffice(id: string, vehiculoId: string, fuente: Fu
  */
 export function cargadorDetalleBackoffice(empresa: string): CargadorDetalle {
   return async (loteId, vehiculoId, fuente, signal): Promise<DetalleCeldaBackoffice> => {
-    const grilla = await obtenerGrillaBackoffice(loteId, empresa, 0, signal);
+    // HU #14562 (seguridad M2, D19): la lectura del detalle no se guarda en la caché del navegador.
+    const grilla = await obtenerGrillaBackoffice(loteId, empresa, 0, signal, "no-store");
     const v = grilla.vehiculos.find((x) => x.id === vehiculoId);
     const c = v?.celdas.find((x) => x.fuente === fuente);
     if (!v || !c) throw new ApiError(404, "No se encontró la celda.", "NO_ENCONTRADO");
@@ -218,20 +245,28 @@ const AVISOS_409: Record<string, string> = {
   CELDA_BLOQUEADA_POR_RUNT: "Esta celda depende del RUNT del vehículo, que también falló: no se llena a mano.",
 };
 
-/** 422 con campo → junto al campo; 409, 403, 404 y el resto → aviso del formulario. Nada cambia en ningún error. */
+/** AP-8 (SF-6): textos fijos de los 422 por campo del PUT manual (los dos `code` del contrato que traen `campo`). */
+const CAMPOS_422: Record<string, string> = {
+  RESULTADO_INVALIDO: "Revisa este dato: no cumple lo que pide esta fuente.",
+  PERSONA_NO_EN_ERROR: "Esta persona ya no está en error: no se llena a mano.",
+};
+
+/** AP-8 (SF-6): un 409 con un `code` fuera de AVISOS_409 también es «la celda cambió»; nunca el mensaje de la API. */
+const AVISO_409_GENERICO = "La celda cambió mientras la llenabas. La grilla se vuelve a leer; ábrela de nuevo si sigue en error.";
+
+/** 422 con campo → junto al campo; 409, 403, 404 y el resto → aviso del formulario, siempre con texto fijo. Nada cambia. */
 export function traducirErrorLlenado(error: unknown): ErrorLlenado {
   if (error instanceof ApiError) {
-    if (error.status === 422 && error.campo && (error.code === "RESULTADO_INVALIDO" || error.code === "PERSONA_NO_EN_ERROR"))
-      return { tipo: "CAMPO", campo: error.campo, mensaje: error.message, recargarGrilla: false };
+    if (error.status === 422 && error.campo && error.code && Object.prototype.hasOwnProperty.call(CAMPOS_422, error.code))
+      return { tipo: "CAMPO", campo: error.campo, mensaje: CAMPOS_422[error.code], recargarGrilla: false };
     if (error.status === 409)
-      return { tipo: "AVISO", mensaje: (error.code && AVISOS_409[error.code]) || error.message, recargarGrilla: true };
+      return { tipo: "AVISO", mensaje: (error.code && AVISOS_409[error.code]) || AVISO_409_GENERICO, recargarGrilla: true };
     if (error.status === 422 && error.code === "FUENTE_NO_ADMITE_MANUAL")
       return { tipo: "AVISO", mensaje: "Esta fuente no se llena a mano.", recargarGrilla: false };
     if (error.status === 403) return { tipo: "AVISO", mensaje: "No tienes permiso para llenar consultas a mano.", recargarGrilla: false };
     if (error.status === 404) return { tipo: "AVISO", mensaje: "La consulta no existe en esta compañía.", recargarGrilla: true };
   }
-  if (error instanceof EmpresaNoElegida) return { tipo: "AVISO", mensaje: error.message, recargarGrilla: false };
-  return { tipo: "AVISO", mensaje: error instanceof Error ? error.message : "No se pudo llenar la consulta.", recargarGrilla: false };
+  return { tipo: "AVISO", mensaje: mensajeErrorBackoffice(error, "No se pudo llenar la consulta. Intenta de nuevo en un momento."), recargarGrilla: false };
 }
 
 const RESUELTA = (c: CeldaGrilla) => c.estado === "COMPLETADO" || c.estado === "NA";
@@ -263,4 +298,43 @@ export function aplicarLlenado(grilla: GrillaBackoffice, respuesta: RespuestaLle
     vehiculos,
     avance: { ...grilla.avance, terminados: vehiculos.filter((v) => v.terminado).length },
   };
+}
+
+/**
+ * Versión del dictamen en la auditoría del backoffice (HU #14562 · AC47, B7, D6/D7). Tipada contra diseno.md §B7 y
+ * ADR-0086 mientras el OpenAPI no publica `…/dictamen/versiones`; lo que puede no llegar va opcional o nulo.
+ */
+export interface AlertamientoVersion {
+  codigo: string;
+  texto: string;
+  efecto: string;
+  fuente: string;
+  /** Lo que hizo el ajuste con este alertamiento; null en los heredados o automáticos. */
+  ajuste?: "AGREGADO" | "EDITADO" | null;
+}
+
+export interface VersionDictamen {
+  version: number;
+  veredicto: "VIABLE" | "BLOQUEADO";
+  origen: "AUTOMATICO" | "AJUSTE_FLIT";
+  /** Quién ajustó (el nombre lo resuelve Identidad); null en las automáticas o si Identidad no respondió. */
+  usuario?: { id: string; nombre: string | null } | null;
+  motivo?: string | null;
+  en: string;
+  /** D7: el ajuste quedó superado por un recálculo automático posterior. */
+  superado_por_recalculo?: boolean;
+  alertamientos: AlertamientoVersion[];
+  /** Calculados contra la versión anterior. */
+  eliminados?: AlertamientoVersion[];
+}
+
+/** GET /backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen/versiones?empresa= (solo backoffice). Acepta lista o `{ versiones }`. */
+export async function obtenerVersionesDictamen(id: string, vehiculoId: string, empresa: string, signal?: AbortSignal): Promise<VersionDictamen[]> {
+  const q = consulta(empresa, {});
+  const r = await apiFetch<VersionDictamen[] | { versiones: VersionDictamen[] }>(
+    `${BASE}/diagnosticos/${seg(id)}/vehiculos/${seg(vehiculoId)}/dictamen/versiones?${q}`,
+    { signal },
+  );
+  const lista = Array.isArray(r) ? r : (r?.versiones ?? []);
+  return [...lista].sort((a, b) => b.version - a.version);
 }

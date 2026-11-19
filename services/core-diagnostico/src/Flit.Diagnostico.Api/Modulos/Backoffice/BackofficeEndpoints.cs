@@ -38,6 +38,7 @@ public static class BackofficeEndpoints
         DiagnosticosBackofficeEndpoints.Map(backoffice);
         LlenadoManualEndpoints.Map(backoffice);
         OverrideDictamenEndpoints.Map(backoffice);
+        VersionesDictamenEndpoints.Map(backoffice);
 
         // HU #13741 (escenario 15): la lista de empresas de la plataforma no lee datos de ninguna compañía, así que no pide
         // empresa explícita ni se audita como lectura entre compañías; la política del backoffice sí aplica.
@@ -46,6 +47,17 @@ public static class BackofficeEndpoints
         // ADR-0078: el catálogo de fuentes obligatorias es de FLIT, igual que la lista de empresas. La política aplica;
         // no pide ?empresa=, no audita lecturas_backoffice y no abre AutorizarEscrituraDe.
         FuentesObligatoriasBackofficeEndpoints.Map(api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre));
+
+        // HU #14576 (ADR-0087 D-5): la gestión FLIT del saneamiento, en sus dos grupos (A sin empresa explícita y B con ella).
+        SaneamientosBackofficeEndpoints.Map(api);
+
+        // HU #14579, BE-0 (ADR-0088): estadísticas (E2, E3) y reportes (B0–B6) del backoffice, cada uno con sus grupos; E3 y B4–B6 llevan
+        // .SoloEmpresaHabilitada() antes de ConEmpresaExplicita (SP-3). Reciben el grupo raíz de la API, no el de ConEmpresaExplicita.
+        EstadisticasBackofficeEndpoints.Map(api);
+        ReportesBackofficeEndpoints.Map(api);
+
+        // HU #14587 (ADR-0089, contrato-api §3.2): el backoffice de usuarios es solo del SuperAdmin (PoliticaUsuariosBackoffice), con sus grupos.
+        UsuariosBackofficeEndpoints.Map(api);
 
         api.MapGroup(Grupo).RequireAuthorization(PoliticaBackoffice.Nombre).MapFallback(() => Results.NotFound());
     }

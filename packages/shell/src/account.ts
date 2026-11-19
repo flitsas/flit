@@ -18,7 +18,7 @@ export function suiteAccountLinks(accountUrl = ""): AccountLink[] {
   const base = accountUrl.replace(/\/+$/, "");
   return [
     { label: "Ayuda", href: `${base}/manual`, icon: iconoComo("ayuda") },
-    { label: "Cambio de contraseña", href: `${base}/profile/change-password`, icon: iconoComo("rol") },
+    { label: "Cambio de contraseña", href: `${base}/profile/change-password`, icon: iconoComo("candado") },
   ];
 }
 
@@ -27,6 +27,8 @@ const ROLE_LABELS: Record<string, string> = {
   AdminCompany: "Admin de Compañía",
   ot_admin: "Admin OT",
   gestor_tramites_ot: "Gestor OT",
+  // Feature #14453 — persona de caja del organismo (solo usa el módulo Caja de FLIT 2.0).
+  ot_caja: "Caja",
 };
 
 /** Nombre del rol en la barra: los de plataforma con su rótulo; cualquier otro, tal cual; sin roles, «Usuario». */

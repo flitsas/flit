@@ -11,6 +11,7 @@ using Flit.Modules.Quipux.Domain.Trazabilidad;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.RevocationRequests;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -72,6 +73,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<TenantWhitelistUser> TenantWhitelistUsers => Set<TenantWhitelistUser>();
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
+
+    public DbSet<OtUserClientScopeEntity> OtUserClientScopes => Set<OtUserClientScopeEntity>();
+
+    public DbSet<OtUserClientScopeClientEntity> OtUserClientScopeClients => Set<OtUserClientScopeClientEntity>();
+
+    public DbSet<OtInvitationClientScopeClientEntity> OtInvitationClientScopeClients => Set<OtInvitationClientScopeClientEntity>();
 
     /// <summary>HU #12407 — bloqueos de OT para cabezas Marca Blanca.</summary>
     public DbSet<TenantTransitOfficeBlock> TenantTransitOfficeBlocks => Set<TenantTransitOfficeBlock>();
@@ -204,6 +211,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<UserPermissionOverrideEntity> UserPermissionOverrides => Set<UserPermissionOverrideEntity>();
 
     public DbSet<UserPermissionAuditEntity> UserPermissionAudits => Set<UserPermissionAuditEntity>();
+
+    // Suspensión de un usuario en UN producto (ADR-0089, HU #14587): la cuenta y los demás productos no cambian.
+    public DbSet<ProductRoleSuspensionEntity> ProductRoleSuspensions => Set<ProductRoleSuspensionEntity>();
 
     // Consultas que cada usuario del organismo arma y guarda sobre los trámites.
     public DbSet<OtSavedQueryEntity> OtSavedQueries => Set<OtSavedQueryEntity>();
@@ -447,6 +457,8 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
         modelBuilder.AddFlitOutbox("tramites");
         // HU #13351: bandeja de entrada de los eventos que Trámites consume (avisos de Kyverum desde Consultas).
         modelBuilder.AddFlitInbox("tramites");
+        // Contrato ia-consumo v1 (ADR-0090): registro de consumo de IA en admin.*; lo crea el DDL 202, no EF.
+        modelBuilder.AddFlitIaConsumo(Flit.Infrastructure.Persistence.Schemas.SchemaNames.Admin, excluirDeMigraciones: true);
     }
 
     // ── Vigencia del expediente consolidado (Feature #10701 / HU #10860) ─────────────────────

@@ -15,6 +15,7 @@ import {
   DIALOGO_PIE,
 } from '@/components/operacion/dialogo-propio';
 import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * Formulario de edición de una prevalidación STANDALONE (HU #10944 — Feature #10864, CF-03;
@@ -242,7 +243,7 @@ export function PrevalidacionEditForm({
                 role="alert"
                 aria-live="assertive"
               >
-                <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" />
+                <IconoAviso tipo="error" className="h-4 w-4 shrink-0 mt-0.5" />
                 <div className="space-y-2">
                   <span>{apiError}</span>
                   {offerNueva && (
@@ -370,7 +371,7 @@ export function PrevalidacionResendResultPanel({
               className={buttonClass({ variant: 'secondary', size: 'sm', className: 'mt-3' })}
               aria-live="polite"
             >
-              {copied ? 'Copiado ✓' : 'Copiar enlace'}
+              {copied ? <><IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />Copiado</> : 'Copiar enlace'}
             </button>
           </>
         )}

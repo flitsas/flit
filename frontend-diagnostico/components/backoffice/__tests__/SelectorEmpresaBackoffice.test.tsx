@@ -123,3 +123,66 @@ describe("SelectorEmpresaBackoffice — AC2: empresa ya elegida (de la URL)", ()
     expect(screen.queryByText("Todavía no has elegido una empresa.")).toBeNull();
   });
 });
+
+// HU #14562 · D3 (axe color-contrast): la etiqueta «Empresa» del SearchableSelect daba 4,15:1 (#162744 al 60 % sobre
+// blanco). Va con --di-text-tertiary (#546b7d: 5,56:1 sobre blanco; #a9b8d4 en oscuro: 7,45:1 sobre #162744), sin opacidad.
+describe("SelectorEmpresaBackoffice — D3: contraste de la etiqueta del combobox", () => {
+  it("la etiqueta visible usa el token de texto terciario y no se apaga con opacidad", async () => {
+    empresasOk();
+    render(<SelectorEmpresaBackoffice value="" onChange={vi.fn()} />);
+
+    await screen.findByRole("combobox", { name: "Empresa" });
+    const etiqueta = screen.getByText("Empresa", { selector: "label" });
+    expect(etiqueta).toHaveClass("text-[color:var(--di-text-tertiary)]");
+    expect(etiqueta.className).not.toMatch(/\bopacity-/);
+  });
+});
+
+// HU #14562 · O-6 (auditoría D1–D3): el `hint` de cada opción (el NIT) tenía el mismo patrón que la etiqueta de D3
+// (`opacity-60` sobre tinta). Va con --di-text-tertiary, sin opacidad. axe no lo vio porque la lista estaba cerrada.
+describe("SelectorEmpresaBackoffice — O-6: contraste del hint de las opciones", () => {
+  it("el NIT bajo cada empresa usa el token de texto terciario y no se apaga con opacidad", async () => {
+    empresasOk();
+    render(<SelectorEmpresaBackoffice value="" onChange={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("combobox", { name: "Empresa" }));
+    const hint = within(screen.getByRole("listbox")).getByText("NIT 900000001");
+    expect(hint).toHaveClass("text-[color:var(--di-text-tertiary)]");
+    expect(hint.className).not.toMatch(/\bopacity-/);
+  });
+});
+
+// HU #14562 · N-1 (reauditoría O-1–O-7): el texto de lista vacía («Ninguna empresa coincide») tenía `opacity-60`
+// (≈4,13:1 en claro). Mismo tratamiento que O-6: --di-text-tertiary, sin opacidad.
+describe("SelectorEmpresaBackoffice — N-1: contraste del «sin resultados»", () => {
+  it("el texto de lista vacía usa el token de texto terciario y no se apaga con opacidad", async () => {
+    empresasOk();
+    render(<SelectorEmpresaBackoffice value="" onChange={vi.fn()} />);
+
+    fireEvent.change(await screen.findByRole("combobox", { name: "Empresa" }), { target: { value: "Empresa inexistente" } });
+    const vacio = within(screen.getByRole("listbox")).getByText("Ninguna empresa coincide");
+    expect(vacio).toHaveClass("text-[color:var(--di-text-tertiary)]");
+    expect(vacio.className).not.toMatch(/\bopacity-/);
+  });
+});
+
+// AP-8 (security-fase3 SF-6): el aviso de error del listado de empresas no muestra el mensaje del servidor.
+const SECRETO_AP8 = "Npgsql detalle interno 23514 en diagnostico.consultas";
+
+describe("SelectorEmpresaBackoffice — AP-8: textos fijos", () => {
+  it("503 IDENTIDAD_NO_DISPONIBLE: texto fijo de Identidad, no el mensaje de la API", async () => {
+    simularApi({ "GET /backoffice/empresas": () => Response.json({ code: "IDENTIDAD_NO_DISPONIBLE", error: SECRETO_AP8 }, { status: 503 }) });
+    render(<SelectorEmpresaBackoffice value="" onChange={vi.fn()} />);
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("Identidad no respondió. Intenta de nuevo en un momento.");
+    expect(alerta).not.toHaveTextContent(SECRETO_AP8);
+  });
+
+  it("400 con mensaje del servidor: texto genérico fijo", async () => {
+    simularApi({ "GET /backoffice/empresas": () => Response.json({ code: "OTRO_ERROR", error: SECRETO_AP8 }, { status: 400 }) });
+    render(<SelectorEmpresaBackoffice value="" onChange={vi.fn()} />);
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("Intenta de nuevo en un momento.");
+    expect(alerta).not.toHaveTextContent(SECRETO_AP8);
+  });
+});

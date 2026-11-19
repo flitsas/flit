@@ -170,6 +170,8 @@ export function useParametrizacion(configuracion: Configuracion) {
     tipos,
     reintentarTipos,
     habilitadas,
+    /** Las del contrato sin filtrar por disponibilidad: el alcance muestra las aún no disponibles (AC16). */
+    contratadas: configuracion.contrato.fuentes_habilitadas,
     disponibles,
     seleccionadas: efectivas,
     obligatorias,

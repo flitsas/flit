@@ -4,7 +4,6 @@
 // (editar, activar o desactivar, subir y bajar), orden editable y los cuatro estados. La imagen del borrador se
 // descarga con la sesión del administrador (el endpoint exige Authorization).
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ImageIcon } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CreateButton } from "@/components/atom/CreateButton";
@@ -32,6 +31,8 @@ import { BannerFormModal } from "./BannerFormModal";
 import { BannerImagen } from "./BannerImagen";
 import { moverId } from "./PreguntasSection";
 import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_MEGAFONO = iconoComo("megafono");
 
 const COLUMNAS_FILTRO: ColumnaFiltro[] = [
   { id: "banner", label: "Banner", tipo: "texto" },
@@ -199,7 +200,7 @@ export function BannersSection({ onCambio }: { onCambio: () => void }) {
         contador={status === "ready" || status === "empty" ? `${plural(banners.length, "banner", "banners")} · ${plural(banners.filter((b) => b.activo).length, "visible", "visibles")}` : undefined}
         titulo="Banners"
         descripcion="Imágenes destacadas del portal, en este orden (usa las flechas para subir o bajar). Usa JPG, PNG o WEBP de hasta 2 MB. Los ocultos o vencidos no aparecen."
-        accion={<CreateButton label="Nuevo banner" icon={ImageIcon} onClick={nuevo} />}
+        accion={<CreateButton label="Nuevo banner" icon={ICONO_MEGAFONO} onClick={nuevo} />}
       />
       {status === "loading" ? (
         <CarLoaderModal label="Cargando banners…" />

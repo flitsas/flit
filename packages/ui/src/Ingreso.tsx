@@ -215,7 +215,7 @@ export function CampoClave({ className, ...props }: Omit<InputHTMLAttributes<HTM
           visible ? "text-[color:var(--di-action)]" : "text-[color:var(--di-text-tertiary)]",
         )}
       >
-        <Icono nombre="ojo" size={18} />
+        <Icono nombre={visible ? "ojo-tachado" : "ojo"} size={18} />
       </button>
     </div>
   );

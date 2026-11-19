@@ -1,11 +1,13 @@
 'use client';
 
-import { iconoComo } from "@flit/ui/iconoComo";
 import { avisoDigitoPlacaOt } from '@/lib/tramites/plate-digit-preference';
+import { avisoComo } from "@flit/ui/IconoAviso";
+
+// Discos de aviso del PDF definitivo (disco verde con check / azul con «i» / rojo con X).
+const AVISO_OK = avisoComo("ok");
+const AVISO_INFO = avisoComo("info");
 
 /** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
-const ICONO_EXCLAMACION = iconoComo("exclamacion");
-const ICONO_CHECK = iconoComo("check");
 
 /**
  * Registro diferido 2026-11-09 (HU 3) — aviso al gestor: la placa que asignó el organismo de
@@ -35,7 +37,7 @@ export function AvisoDigitoPlacaOt({
   const aviso = avisoDigitoPlacaOt({ placa, source, digito, clase });
   if (!aviso) return null;
   const exito = aviso.tono === 'exito';
-  const Icon = exito ? ICONO_CHECK : ICONO_EXCLAMACION;
+  const Icon = exito ? AVISO_OK : AVISO_INFO;
   return (
     <p
       role="status"

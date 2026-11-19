@@ -140,6 +140,20 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> transitOfficeIds, CancellationToken ct = default);
 
     /// <summary>
+    /// HU #14469 — pago del portal (punto de atención) ligado al trámite; null si el trámite no tiene (web, histórico,
+    /// otro origen). Lectura lean por trámite, sin cargar el grafo.
+    /// </summary>
+    Task<Flit.Tramites.Domain.Tramites.PersonaNatural.PagoPortalTramite?> GetPagoPortalAsync(
+        Guid procedureInstanceId, Guid tenantId, CancellationToken ct = default);
+
+    /// <summary>
+    /// HU #14469 — guarda el pago del portal ligado al trámite. Idempotente: el mismo trámite o el mismo cobro del portal
+    /// no se vuelve a guardar. Devuelve true si insertó una fila nueva.
+    /// </summary>
+    Task<bool> RegistrarPagoPortalAsync(
+        Guid procedureInstanceId, Guid tenantId, Flit.Tramites.Domain.Tramites.PersonaNatural.PagoPortalTramite pago, CancellationToken ct = default);
+
+    /// <summary>
     /// HU #11056 — resuelve el nombre visible de cada usuario indicado, para la columna "Gestor" del
     /// listado (la persona que radica, <c>created_by_user_id</c>). Devuelve un mapa id→nombre en UNA
     /// consulta (<c>WHERE id IN …</c>): la columna no debe costar una petición por fila. Los ids sin
@@ -977,7 +991,21 @@ public sealed record ProcedureInstanceModificacionEntry(
     DateTimeOffset ChangedAt,
     Guid? ChangedByUserId,
     string? ChangedByName,
-    string? ChangedByCompania);
+    string? ChangedByCompania,
+    // Bug #14604 — solo en «documento actualizado por el administrador»: qué documento cambió y los
+    // adjuntos nuevo y anterior, para abrirlos desde la línea de tiempo.
+    DocumentoActualizadoLectura? Documento = null);
+
+/// <summary>
+/// Bug #14604 — documento que el administrador actualizó: tipo, adjunto nuevo y el que estaba antes (si
+/// había uno). Los ids son de <c>procedure_instance_attachments</c> del mismo trámite.
+/// </summary>
+public sealed record DocumentoActualizadoLectura(
+    string Tipo,
+    Guid AttachmentId,
+    string Filename,
+    Guid? AnteriorAttachmentId,
+    string? AnteriorFilename);
 
 /// <summary>
 /// Proyección de lectura de una fila de <c>procedure_instance_status_history</c> con el nombre

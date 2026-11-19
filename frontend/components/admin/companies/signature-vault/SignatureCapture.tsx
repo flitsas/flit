@@ -3,6 +3,7 @@
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
 import { Eraser } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 // Captura del artefacto de firma (ADR D9 · v1): dibujo en pantalla (canvas nativo,
 // sin librería externa) o carga de un PNG. Ambos modos reducen la firma a un data URL
@@ -129,7 +130,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
           <Icono nombre="lapiz" className="h-3.5 w-3.5" /> Dibujar en pantalla
         </ModeButton>
         <ModeButton active={mode === "upload"} disabled={disabled} onClick={() => switchMode("upload")}>
-          <Icono nombre="nube-subir" className="h-3.5 w-3.5" /> Cargar PNG
+          <Icono nombre="archivo-subir" className="h-3.5 w-3.5" /> Cargar PNG
         </ModeButton>
       </div>
 
@@ -161,7 +162,8 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
           </button>
           {value && mode === "draw" && (
             <span className="text-xs font-semibold" style={{ color: "var(--flit-success-ink)" }}>
-              ✓ Firma capturada
+              <IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />
+              Firma capturada
             </span>
           )}
         </div>
@@ -176,7 +178,7 @@ export function SignatureCapture({ value, onChange, disabled = false, error }: S
           className="flex cursor-pointer flex-col items-center gap-2 rounded-xl border-2 border-dashed py-8 text-xs font-semibold"
           style={{ borderColor: "var(--color-flit-brand)", color: "var(--color-flit-brand)" }}
         >
-          <Icono nombre="nube-subir" className="h-6 w-6" />
+          <Icono nombre="archivo-subir" className="h-6 w-6" />
           Selecciona un archivo PNG con la firma
           <input
             id="sv-upload"

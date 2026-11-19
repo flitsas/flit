@@ -36,7 +36,8 @@ public sealed class PersonaNaturalGrpcService(
     Flit.Tramites.Domain.Tramites.Catalog.IVehicleColorCatalog catalogoColores,
     Flit.Tramites.Domain.Tramites.Catalog.IVehicleBodyworkCatalog catalogoCarrocerias,
     Flit.Admin.Application.Companies.TransitOffices.PortalMarca.PortalMarcaPuntoHandler marcaPunto,
-    Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioPuntoHandler dominioPunto)
+    Flit.Admin.Application.Companies.TransitOffices.PortalDominio.PortalDominioPuntoHandler dominioPunto,
+    Flit.Modules.Security.Application.Products.IProductAccessResolver accesoProductos)
     : PersonaNaturalService.PersonaNaturalServiceBase
 {
     /// <summary>Razón estable de un método que todavía no tiene implementación.</summary>
@@ -226,6 +227,32 @@ public sealed class PersonaNaturalGrpcService(
             ? await dominioPunto.PorCodigoAsync(request.Codigo, context.CancellationToken).ConfigureAwait(false)
             : await dominioPunto.PorHostAsync(request.Host, context.CancellationToken).ConfigureAwait(false);
         return new ObtenerDominioPuntoResponse { Activo = d.Activo, Codigo = d.Codigo ?? string.Empty, Host = d.Host ?? string.Empty };
+    }
+
+    /// <summary>
+    /// HU #14454 (Feature #14453, Épica #14210, ADR-0082) — quién es este usuario de caja y de qué organismo. El BFF lo llama en CADA
+    /// petición de caja, sin caché: <c>activo = true</c> solo si el usuario está activo, sin suspensión, con el rol <c>ot_caja</c> vigente
+    /// y el producto <c>caja</c> encendido en un organismo activo. Ante cualquier otro caso (o ids inválidos) responde <c>activo = false</c>
+    /// sin datos ni la causa, para no revelar qué falló. <c>tenant_id</c> es la empresa del usuario (del token), no la de la llamada.
+    /// </summary>
+    public override async Task<ResolverUsuarioCajaResponse> ResolverUsuarioCaja(ResolverUsuarioCajaRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Verificar(context);
+        if (!Guid.TryParse(Texto(request.TenantId), out var tenantId) || !Guid.TryParse(Texto(request.UserId), out var userId))
+            return new ResolverUsuarioCajaResponse { Activo = false };
+
+        var resuelto = await CajaUsuarios.ResolverAsync(db, accesoProductos, tenantId, userId, DateTimeOffset.UtcNow, context.CancellationToken).ConfigureAwait(false);
+        return resuelto.Activo
+            ? new ResolverUsuarioCajaResponse
+            {
+                Activo = true,
+                OrganismoId = resuelto.OrganismoId.ToString(),
+                OrganismoCodigo = resuelto.OrganismoCodigo,
+                OrganismoNombre = resuelto.OrganismoNombre,
+                UsuarioNombre = resuelto.UsuarioNombre,
+            }
+            : new ResolverUsuarioCajaResponse { Activo = false };
     }
 
     /// <summary>HU #14378 — imagen de marca PUBLICADA. Una de borrador, retirada o inexistente responde <c>encontrado = false</c>.</summary>

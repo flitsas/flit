@@ -5,6 +5,7 @@
 import { ApiError, apiFetch } from "@/lib/api";
 import type { Fuente } from "@/lib/configuracion";
 import type { EstadoDiagnostico, ModoDiagnostico } from "@/lib/diagnosticos/api";
+import type { SaneamientoFila } from "@/lib/saneamiento/api";
 
 export type EstadoCelda = "PENDIENTE" | "EN_CURSO" | "COMPLETADO" | "ERROR" | "NA";
 export type MotivoNa = "SERVICIO_PUBLICO" | "DEPARTAMENTO_NO_SOPORTADO" | "SIN_DOCUMENTO_LOCATARIO";
@@ -30,19 +31,6 @@ export interface CeldaGrilla {
   tiene_deuda?: boolean;
 }
 
-/** Documento de persona que declaró el cliente en el lote (HU #14087); llega enmascarado («****» y los 4 últimos). */
-export interface DocumentoDeclaradoFila {
-  rol: "PROPIETARIO" | "LOCATARIO";
-  tipo_documento: string;
-  documento_enmascarado: string;
-}
-
-/** Documento de un propietario del vehículo según el RUNT (HU #14087); llega enmascarado. */
-export interface DocumentoPropietarioFila {
-  tipo_documento: string;
-  documento_enmascarado: string;
-}
-
 export interface FilaVehiculo {
   id: string;
   orden: number;
@@ -54,13 +42,19 @@ export interface FilaVehiculo {
   vin: string | null;
   /** Todas sus celdas en COMPLETADO o NA (R-7), calculado con todas, no solo con las recibidas. */
   terminado: boolean;
+  /** HU #14563 B1: veredicto vigente; null (o sin la clave) = Pendiente o modo Simple. */
+  veredicto?: "VIABLE" | "BLOQUEADO" | null;
+  /** HU #14563 B7 (D6): el dictamen vigente lo ajustó soporte FLIT. Opcional hasta que B7 lo exponga. */
+  dictamen_ajustado?: boolean;
+  /** HU #14563 B1: versión de fila (sube con cualquier cambio de la fila). Sin la clave, se fusiona como antes. */
+  version?: number;
   /**
-   * HU #14087: documento declarado por el cliente (null si no declaró ninguno). Opcional en el tipo porque la fila solo viaja
-   * en el sondeo cuando cambia una celda y la grilla del backoffice puede no traerlo: sin la clave, la pantalla pinta «—».
+   * Contrato 1.6.0 §1.2 (HU #14584/#14585): el documento declarado (propietario actual) no coincide con ningún propietario
+   * que reporta el RUNT. `true` pinta el ícono junto a la placa; `false` (coincide) y `null` (sin declarado, sin RUNT o tipo no
+   * homologable) no pintan nada. La comparación es del backend: la fila ya no trae documentos (C5, SP-4). Opcional en el tipo
+   * solo para tolerar un backend previo a 1.6.0; sin la clave se trata como `null`.
    */
-  documento_declarado?: DocumentoDeclaradoFila | null;
-  /** HU #14087: documentos de los propietarios del vehículo, en orden; vacío si aún no se conocen. */
-  propietarios?: DocumentoPropietarioFila[];
+  cambio_propietario?: boolean | null;
   /**
    * Punto 3 (ola 2026-11-11): alguna celda en ERROR o en PENDIENTE/EN_CURSO sin respuesta hace más de 10 min. Solo entonces
    * hay «Reintentar placa». Sin la clave (backend previo o fila sin cambios), se trata como false.
@@ -85,6 +79,11 @@ export interface FilaVehiculo {
     estado: "PENDIENTE" | "ENVIADO" | "CREADO" | "OMITIDO" | "FALLIDO" | null;
     tramite: TramiteFila | null;
   } | null;
+  /**
+   * Saneamiento (plan §6.1, HU #14577): estado no anulado, elegibilidad y motivo. Opcional: un backend anterior, o una fila
+   * del sondeo sin cambios, no lo trae; sin la clave la fila se trata como sin saneamiento.
+   */
+  saneamiento?: SaneamientoFila | null;
   celdas: CeldaGrilla[];
 }
 
@@ -133,6 +132,28 @@ export interface Grilla {
   vehiculos_pegados?: string[];
   /** Punto 4 (provisional): modo del lote; en SIMPLE, «Crear trámite» pide el tipo. Sin la clave, se pregunta solo si la API lo exige. */
   modo?: ModoDiagnostico;
+  /** HU #14563 B1: conteos de todo el lote (también con ?desde=). Sin la clave, las tarjetas que dependen de ellos se ocultan. */
+  conteos?: ConteosGrilla;
+  /** HU #14563 B2: metadatos del lote. Sin la clave, la cabecera los omite. */
+  lote?: LoteGrilla;
+}
+
+export interface ConteosGrilla {
+  vehiculos: number;
+  terminados: number;
+  con_error: number;
+  con_deuda: number;
+  bloqueados: number;
+  listos_tramite: number;
+}
+
+export interface LoteGrilla {
+  modo: "SIMPLE" | "CON_ANALISIS";
+  /** Null en SIMPLE. */
+  tipo_tramite: { codigo: string; nombre: string } | null;
+  creado_en: string;
+  es_express: boolean;
+  usuario_creador: { id: string; nombre: string | null };
 }
 
 export interface PanelCerrado {

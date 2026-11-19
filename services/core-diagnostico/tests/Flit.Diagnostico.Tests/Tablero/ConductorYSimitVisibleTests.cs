@@ -77,4 +77,62 @@ public sealed class ConductorYSimitVisibleTests
         completo.Acuerdos.Should().ContainSingle().Which.Estado.Should().Be("Acuerdo de pago");
         JsonSerializer.Serialize(completo).Should().NotContain("NOMBRE OCULTO").And.NotContain("1000000001");
     }
+
+    // HU #14563 B4 AC13 — resoluciones, cantidad_resoluciones e infracciones {codigo, descripcion} desde la respuesta guardada.
+    [Fact]
+    public void Simit_B4_proyecta_resoluciones_e_infracciones_con_descripcion()
+    {
+        using var doc = JsonDocument.Parse("""
+            {
+              "data": {
+                "pazSalvo": true, "totalGeneral": "922115", "totalMultasPagar": "1",
+                "multas": [
+                  { "numeroComparendo": "CMP-0002", "valor": "100", "estadoCartera": "Cobro coactivo",
+                    "infracciones": [{ "codigoInfraccion": "C24", "descripcionInfraccion": "Descripcion de prueba", "valorInfraccion": "100" }],
+                    "infractor": { "nombre": "NOMBRE OCULTO", "numeroDocumento": "1000000002" } }
+                ],
+                "resoluciones": [
+                  { "numeroResolucion": "RES-0001", "fechaResolucion": "07/08/2016 00:00:00", "estado": "Vigente", "valor": "500", "organismoTransito": "ORGANISMO DE PRUEBA",
+                    "infractor": { "nombre": "NOMBRE OCULTO", "numeroDocumento": "1000000002" } }
+                ]
+              }
+            }
+            """);
+
+        var completo = SimitVisible.Completar(new ResultadoSimitDetalle(null, 0, [], false), doc.RootElement);
+
+        completo.Multas.Should().ContainSingle().Which.Infracciones.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new InfraccionSimitDetalle("C24", "Descripcion de prueba"));
+        completo.Resoluciones.Should().ContainSingle().Which.Should().BeEquivalentTo(
+            new ResolucionSimitDetalle("RES-0001", "07/08/2016 00:00:00", "Vigente", "500", "ORGANISMO DE PRUEBA"));
+        completo.CantidadResoluciones.Should().Be(1);
+        var json = JsonSerializer.Serialize(completo);
+        json.Should().Contain("\"resoluciones\"").And.Contain("\"cantidad_resoluciones\":1").And.Contain("\"infracciones\"");
+        // AC15 — sin el infractor en la proyección tipada.
+        json.Should().NotContain("NOMBRE OCULTO").And.NotContain("1000000002");
+    }
+
+    // HU #14563 B4 AC14 — lo que la fuente no trae queda nulo: resoluciones, descripción, paz y salvo con 0 comparendos, totales.
+    [Fact]
+    public void Simit_B4_lo_ausente_queda_nulo_nunca_inferido()
+    {
+        using var doc = JsonDocument.Parse("""
+            { "data": { "comparendos": [], "multas": [ { "numeroComparendo": "CMP-0003", "valor": "100", "infracciones": [{ "codigoInfraccion": "D02" }] } ] } }
+            """);
+
+        var completo = SimitVisible.Completar(new ResultadoSimitDetalle(null, 0, [], false), doc.RootElement);
+
+        completo.Resoluciones.Should().BeNull();
+        completo.CantidadResoluciones.Should().BeNull("sin resoluciones en la fuente no es 0");
+        completo.Multas.Should().ContainSingle().Which.Infracciones.Should().ContainSingle()
+            .Which.Should().BeEquivalentTo(new InfraccionSimitDetalle("D02", null));
+        completo.PazYSalvo.Should().BeNull("0 comparendos no es paz y salvo");
+        completo.TotalGeneral.Should().BeNull();
+        completo.TotalPorPagar.Should().BeNull();
+
+        using var vacias = JsonDocument.Parse("""{ "data": { "resoluciones": [] } }""");
+        var conVacias = SimitVisible.Completar(new ResultadoSimitDetalle(null, 0, [], false), vacias.RootElement);
+        conVacias.Resoluciones.Should().BeEmpty("la fuente afirma que no hay");
+        conVacias.CantidadResoluciones.Should().Be(0);
+    }
 }

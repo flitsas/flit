@@ -2,6 +2,7 @@ using Flit.Api.Telemetry;
 using Flit.PersonaNatural.Api.Configuracion;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Abuso;
+using Flit.PersonaNatural.Api.Caja;
 using Flit.PersonaNatural.Api.Catalogos;
 using Flit.PersonaNatural.Api.Adjuntos;
 using Flit.PersonaNatural.Api.Consentimientos;
@@ -58,7 +59,7 @@ public static class Program
         builder.Services.AddDbContext<PersonaNaturalDb>(o => PersonaNaturalDb.Configure(o, connectionString));
         builder.Services.AddFlitPlatformAuthentication(builder.Configuration);
         builder.Services.AddAuthorization();
-        builder.Services.AddFlitGrpcServer().AddRadicacionGrpc(); // HU #14049: lectura por pull para radicar (token de svc-tramites)
+        builder.Services.AddFlitGrpcServer().AddRadicacionGrpc().AddCajaAdminGrpc(); // HU #14049: lectura por pull para radicar (token de svc-tramites)
         builder.Services.AddFlitOutbox<PersonaNaturalDb>(builder.Configuration);
 
         // HU #14035: sesión efímera por trámite (el portal no tiene cuentas) y huellas HMAC de la cédula y la IP.
@@ -90,6 +91,9 @@ public static class Program
 
         // HU #14043: catálogo de organismos y tipos, cotización de 2 líneas y envío por correo (fachada gRPC de core-api).
         builder.Services.AddCotizacionesPortal(builder.Configuration);
+
+        // Feature #14453: portal de caja del organismo (apagado por defecto). Va antes del punto: fija las opciones de la ventana de anulación.
+        builder.Services.AddCajaPortal(builder.Configuration);
 
         // HU #14216: canal del punto (cookie del organismo). La fachada gRPC la registra AddCotizacionesPortal.
         builder.Services.AddPuntoPortal();
@@ -168,6 +172,7 @@ public static class Program
         var grpcHost = $"*:{grpcPort}";
         app.MapFlitGrpcPlatform(app.Environment, grpcHost);
         app.MapRadicacionGrpc(grpcHost);
+        app.MapCajaAdminGrpc(grpcHost);
         return app;
     }
 

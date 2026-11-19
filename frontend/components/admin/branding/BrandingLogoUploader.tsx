@@ -1,11 +1,13 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { ImageUp } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { brandingErrorMessage } from "@/lib/brand/error-messages";
 import { logoDimensionsHint, validateLogoFile } from "@/lib/brand/validate-logo";
 import { brandingErrorCode, uploadBrandLogo, type BrandLogoResponse, type BrandingSource } from "@/lib/api/branding";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_ARCHIVO_SUBIR = iconoComo("archivo-subir");
 
 export interface BrandingLogoUploaderProps<T = BrandLogoResponse> {
   /** Marca blanca: base de endpoints. No hace falta cuando se inyecta `upload`. */
@@ -137,7 +139,7 @@ export function BrandingLogoUploader<T = BrandLogoResponse>({
             // eslint-disable-next-line @next/next/no-img-element
             <img src={previewSrc} alt={imageAlt} className="h-full w-full object-contain" />
           ) : (
-            <ImageUp className="h-6 w-6 opacity-40" aria-hidden />
+            <ICONO_ARCHIVO_SUBIR className="h-6 w-6 opacity-40" aria-hidden />
           )}
         </div>
         <div className="flex flex-col gap-1">

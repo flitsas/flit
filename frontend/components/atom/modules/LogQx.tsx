@@ -47,6 +47,7 @@ import {
 } from "@/lib/logqx/labels";
 import { buttonClass } from "@flit/ui/Button";
 import { TRAMITES_INPUT_CLS } from "@/components/operacion/tramites-control-styles";
+import { avisoComo, IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * Módulo "LOG QX" — bandeja (HU #11788, Feature #11784). Reemplaza la pantalla que exigía una
@@ -581,12 +582,12 @@ const COLUMNAS = [
 /** Icono por estado, en la línea de `ESTADO_ICON` de la tira de KPIs de trámites. */
 const ESTADO_ICON: Record<LogQxBandejaEstado, ComponentType<IconoComoProps>> = {
   sin_radicar: iconoComo("espera"),
-  pendiente: iconoComo("documento"),
+  pendiente: avisoComo("pendiente"),
   radicado: iconoComo("check"),
   en_tramite: iconoComo("reintento"),
-  aprobado: iconoComo("check"),
-  rechazado: iconoComo("cerrar"),
-  fallido: iconoComo("distinto"),
+  aprobado: avisoComo("ok"),
+  rechazado: avisoComo("error"),
+  fallido: avisoComo("error"),
 };
 
 const tdCls = "border-y px-4 py-3 align-middle";
@@ -696,7 +697,7 @@ function FilaTramite({
               className={`whitespace-nowrap font-mono tabular-nums ${alta ? "font-bold text-destructive" : ""}`}
             >
               {espera}
-              {alta ? " ⚠" : ""}
+              {alta ? <IconoAviso tipo="alerta" className="ml-1 inline-block h-3.5 w-3.5 align-text-bottom" /> : null}
             </span>
           ) : (
             <span className="opacity-40">—</span>
@@ -873,10 +874,10 @@ function pasos(e: LogQxBandejaEntry): { Icon: ComponentType<IconoComoProps>; col
   if (e.estado === "radicado") {
     out.push({ Icon: iconoComo("reloj"), color: espera, label: "Primera consulta pendiente" });
   }
-  if (e.estado === "aprobado") out.push({ Icon: iconoComo("check"), color: ok, label: "Aprobado" });
-  if (e.estado === "rechazado") out.push({ Icon: iconoComo("cerrar"), color: mal, label: "Rechazado" });
+  if (e.estado === "aprobado") out.push({ Icon: avisoComo("ok"), color: ok, label: "Aprobado" });
+  if (e.estado === "rechazado") out.push({ Icon: avisoComo("error"), color: mal, label: "Rechazado" });
   if (e.estado === "fallido") {
-    out.push({ Icon: iconoComo("distinto"), color: ESTADO_BANDEJA.fallido.style.accent, label: "Radicación fallida" });
+    out.push({ Icon: avisoComo("error"), color: ESTADO_BANDEJA.fallido.style.accent, label: "Radicación fallida" });
   }
 
   return out;

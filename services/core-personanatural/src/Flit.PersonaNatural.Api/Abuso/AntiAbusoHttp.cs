@@ -59,7 +59,7 @@ public static class AntiAbusoHttp
     }
 
     /// <summary>
-    /// Tope global del cuerpo JSON. Las cargas de archivos (multipart, <c>…/adjuntos</c> y <c>…/pago/comprobante</c>) quedan
+    /// Tope global del cuerpo JSON. Las cargas de archivos (multipart, <c>…/adjuntos</c> y <c>…/pago/comprobante</c> y el gRPC <c>ConfirmarCobro</c> de la caja) quedan
     /// fuera: tienen su propio tope por tipo y por configuración. Con <c>Content-Length</c> se rechaza sin leer nada; sin él
     /// (chunked) el flujo se envuelve y corta al pasar el tope.
     /// </summary>
@@ -91,7 +91,9 @@ public static class AntiAbusoHttp
     private static bool EsCargaDeArchivo(HttpRequest peticion) =>
         peticion.HasFormContentType
         || peticion.Path.Value?.EndsWith("/adjuntos", StringComparison.OrdinalIgnoreCase) == true
-        || peticion.Path.Value?.EndsWith("/pago/comprobante", StringComparison.OrdinalIgnoreCase) == true;
+        || peticion.Path.Value?.EndsWith("/pago/comprobante", StringComparison.OrdinalIgnoreCase) == true
+        // ConfirmarCobro por gRPC lleva la prefactura (hasta 5 MB): su tope es el del mensaje gRPC (CajaAdminGrpcExtensions.MensajeMaxBytes).
+        || peticion.Path.Value?.EndsWith(".CajaAdminService/ConfirmarCobro", StringComparison.OrdinalIgnoreCase) == true;
 }
 
 /// <summary>Redes de confianza y saltos para <c>X-Forwarded-For</c> (HU #14036).</summary>

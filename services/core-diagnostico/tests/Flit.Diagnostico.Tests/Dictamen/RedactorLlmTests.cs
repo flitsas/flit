@@ -171,6 +171,59 @@ public sealed class RedactorLlmTests
         prompt.Should().NotContain("documento").And.NotContain("nombre").And.NotContain("propietario").And.NotContain("locatario");
     }
 
+    /// <summary>
+    /// SP-6 (HU-2): una respuesta 200 sin <c>content</c>, con <c>content</c> que no es arreglo o con un bloque de texto sin
+    /// <c>text</c> queda <see cref="TipoFalloRedactor.Ilegible"/> sin lanzar. Antes lanzaba y la vuelta fallida dejaba la fila
+    /// tomada sin cerrar: al vencer el lease se volvía a llamar al proveedor, sin tope.
+    /// </summary>
+    [Theory]
+    [InlineData("""{"stop_reason":"end_turn"}""")]
+    [InlineData("""{"stop_reason":"end_turn","content":"texto suelto"}""")]
+    [InlineData("""{"stop_reason":"end_turn","content":[{"type":"text"}]}""")]
+    [InlineData("""{"stop_reason":"end_turn","content":[{"type":"text","text":7}]}""")]
+    public async Task SP6_Respuesta200SinContentLegible_QuedaIlegible_YNoSeReagenda(string cuerpo)
+    {
+        var proveedor = Anthropic(new Captura(cuerpo));
+
+        var salida = await proveedor.RedactarAsync(PromptRedactor.Construir(Pedido()), CancellationToken.None);
+        salida.TipoFallo.Should().Be(TipoFalloRedactor.Ilegible);
+        salida.Texto.Should().BeNull();
+        salida.Mensaje.Should().NotContain(Llave);
+
+        var resultado = await Servicio(Anthropic(new Captura(cuerpo))).RedactarAsync(Pedido(), CancellationToken.None);
+        resultado.RedactadoPor.Should().Be("PLANTILLA");
+        resultado.EstadoRedaccion.Should().Be("PENDIENTE");
+        resultado.TipoFallo.Should().Be(TipoFalloRedactor.Ilegible);
+        EmisorDictamen.DisponibleDesde(resultado, DateTimeOffset.UnixEpoch, TimeSpan.FromSeconds(30)).Should().BeNull("un ilegible no se reintenta");
+    }
+
+    /// <summary>
+    /// SP-3 (HU-2): lista blanca exacta de lo que viaja al proveedor, en el cuerpo HTTP real: el sobre de la Messages API y,
+    /// dentro del texto, solo veredicto, reglas (código, fuente, efecto, monto) y el bien (placa, clase, marca, línea, modelo, servicio).
+    /// </summary>
+    [Fact]
+    public async Task SP3_ElCuerpoEnviadoSoloLlevaLaListaBlanca()
+    {
+        var handler = new Captura(CuerpoModelo("end_turn", "El dictamen del bien es VIABLE."));
+        await Anthropic(handler).RedactarAsync(PromptRedactor.Construir(Pedido()), CancellationToken.None);
+
+        using var doc = JsonDocument.Parse(handler.Pedido!);
+        var raiz = doc.RootElement;
+        raiz.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["model", "max_tokens", "messages"]);
+        raiz.GetProperty("messages").GetArrayLength().Should().Be(1);
+        var mensaje = raiz.GetProperty("messages")[0];
+        mensaje.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["role", "content"]);
+        var bloque = mensaje.GetProperty("content")[0];
+        bloque.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["type", "text"]);
+        var texto = bloque.GetProperty("text").GetString()!;
+        using var datos = JsonDocument.Parse(texto[texto.IndexOf('{')..]);
+        var json = datos.RootElement;
+        json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["veredicto", "reglas", "bien"]);
+        foreach (var regla in json.GetProperty("reglas").EnumerateArray())
+            regla.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["codigo", "fuente", "efecto", "monto_pesos"]);
+        json.GetProperty("bien").EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["placa", "clase", "marca", "linea", "modelo", "servicio"]);
+    }
+
     [Fact]
     public void PromptDeBloqueado_NoMencionaElVeredictoContrario()
     {

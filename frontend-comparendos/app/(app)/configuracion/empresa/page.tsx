@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
+import { useState, type ReactNode } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { InlineAlert, StatusBadge } from "@flit/ui";
+import { EstadoVacio, InlineAlert, ListaDefinicion, StatusBadge, VehicleLoader } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { ConsultasEmpresa } from "@/components/consultas/ConsultasAdmin";
 import { TipologiasEmpresa } from "@/components/consultas/TipologiasEmpresa";
@@ -26,7 +27,7 @@ function Copias({ titulo, ayuda, valor, onCambio, soloLectura }: { titulo: strin
   return (
     <fieldset className="flex flex-col gap-2">
       <legend className="text-sm font-semibold">{titulo}</legend>
-      <p className="text-[11px] text-muted-foreground">{ayuda}</p>
+      <p className="text-xs text-muted-foreground">{ayuda}</p>
       {valor.map((c, i) => (
         <div key={i} className="grid grid-cols-1 items-center gap-2 md:grid-cols-[1fr_1fr_auto]">
           <input className={INPUT_CLS} value={c.correo} disabled={soloLectura} aria-label={`${titulo}: correo ${i + 1}`} placeholder="correo@empresa.com"
@@ -38,7 +39,7 @@ function Copias({ titulo, ayuda, valor, onCambio, soloLectura }: { titulo: strin
               onCambio={(tipos) => onCambio(valor.map((x, j) => (j === i ? { ...x, tipos } : x)))} />
           )}
           {!soloLectura && (
-            <button type="button" aria-label="Quitar" className="text-destructive hover:opacity-70" onClick={() => onCambio(valor.filter((_, j) => j !== i))}>
+            <button type="button" aria-label="Quitar" className="text-destructive hover:text-destructive/80" onClick={() => onCambio(valor.filter((_, j) => j !== i))}>
               <Icono nombre="papelera" className="h-4 w-4" />
             </button>
           )}
@@ -74,6 +75,25 @@ function aForm(c: ConfiguracionEmpresa): FormCorreo {
   };
 }
 
+/** Tarjeta de un bloque: título y propósito fuera, contenido dentro. */
+function Bloque({ titulo, proposito, children, sinTarjeta }: { titulo: string; proposito: string; children: ReactNode; sinTarjeta?: boolean }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div className="flex flex-col gap-0.5">
+        <h2 className="text-base font-semibold">{titulo}</h2>
+        <p className="text-sm text-muted-foreground">{proposito}</p>
+      </div>
+      {sinTarjeta ? children : <div className="flex flex-col gap-5 rounded-xl border border-border bg-card p-4 md:p-5">{children}</div>}
+    </section>
+  );
+}
+
+const AYUDA_CLS = "font-normal text-muted-foreground";
+
+function Incluido({ si }: { si: boolean }) {
+  return <StatusBadge label={si ? "Incluido" : "No incluido"} tone={si ? "success" : "neutral"} />;
+}
+
 function Configuracion({ empresa }: { empresa: string | null }) {
   const toast = useToast();
   const { sesion } = useSesion();
@@ -85,8 +105,8 @@ function Configuracion({ empresa }: { empresa: string | null }) {
   const [ocupado, setOcupado] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!ruta) return <p className="text-sm opacity-70">Elige una empresa para ver su configuración.</p>;
-  if (config.estado === "loading") return <p className="text-sm opacity-60">Cargando…</p>;
+  if (!ruta) return <EstadoVacio titulo="Elige una empresa" mensaje="Selecciona una empresa para ver cómo salen sus correos y lo que tiene contratado." />;
+  if (config.estado === "loading") return <VehicleLoader label="Cargando la configuración…" />;
   if (config.estado === "error" || !config.datos) return <InlineAlert tone="error">{config.error ?? "No se pudo cargar."}</InlineAlert>;
 
   const c = config.datos;
@@ -123,75 +143,123 @@ function Configuracion({ empresa }: { empresa: string | null }) {
 
   const soloLectura = !esSuper && !puedeEditar;
   const sucio = JSON.stringify(f) !== clave;
+  const cuentaPropia = c.canalCorreo === "EmpresaApi";
+  // El SuperAdmin no ve el enlace: representantes no recibe la empresa elegida y caería en el selector vacío.
+  const verRepresentantes = !esSuper && tienePermiso(sesion, P.representantesVer);
 
   return (
-    <div className="flex flex-col gap-6">
-      <section className="flex flex-col gap-2">
-        <h2 className="text-sm font-semibold">Lo que define el administrador de FLIT</h2>
-        <div className="flex flex-wrap gap-2">
-          {[
-            ["Derechos de petición", c.hasRightPetitionModule],
-            ["Carga por OCR", c.hasOcrAccess],
-            ["Consulta de contraventor", c.allowsContravenerConsultation],
-            ["Cambio de contraventor", c.allowsContravenerChange],
-            ["Reportes", c.hasReportesModule],
-          ].map(([t, v]) => (
-            <StatusBadge key={t as string} label={`${t as string}: ${v ? "sí" : "no"}`} tone={v ? "success" : "neutral"} />
-          ))}
-          <StatusBadge label={`Conductor: ${c.tipoIntegracionConductor === "ApiRenting" ? "consulta automática" : "manual"}`} tone="info" />
-          <StatusBadge label={`Plantillas: ${c.conjuntoPlantillas === "Renting" ? "Renting" : "FLIT"}`} tone="info" />
-          <StatusBadge label={c.requiereRepresentanteLegal ? "Exige representante legal" : "No exige representante legal"} tone="info" />
+    <div className="flex flex-col gap-8">
+      <div className="flex flex-col gap-8">
+        <Bloque titulo="Cómo salen tus correos" proposito="Así ve el organismo de tránsito los correos que enviamos en nombre de tu empresa.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {/* HU #13882: el canal sale del «Enrutamiento de notificaciones» de la empresa en la plataforma; aquí solo se ve. */}
+            <div className={ETIQUETA_CLS}>
+              Se envían desde
+              <span className="flex min-h-10 items-center text-sm font-semibold text-foreground">{cuentaPropia ? "Cuenta de correo propia de la empresa" : "Cuenta de FLIT"}</span>
+              <span className={AYUDA_CLS}>
+                {esSuper ? "Sigue el «Enrutamiento de notificaciones» de la empresa en Trámites (Administración → Compañías)." : "Lo define FLIT para tu empresa."}
+              </span>
+            </div>
+            <label className={ETIQUETA_CLS}>
+              Nombre del remitente
+              <input className={INPUT_CLS} value={f.remitenteNombre} maxLength={120} disabled={soloLectura} onChange={(e) => cambiar({ remitenteNombre: e.target.value })} placeholder="Si se deja vacío, la razón social" />
+              <span className={AYUDA_CLS}>
+                {cuentaPropia
+                  ? "Con la cuenta propia de la empresa, los correos salen con el remitente de esa cuenta."
+                  : "El nombre que ve el organismo como remitente. Si lo dejas vacío, usamos la razón social."}
+              </span>
+            </label>
+            <label className={ETIQUETA_CLS}>
+              Correo para respuestas del organismo
+              <input className={INPUT_CLS} value={f.correoRespuesta} disabled={soloLectura} onChange={(e) => cambiar({ correoRespuesta: e.target.value })} placeholder="Ej.: juridico@tuempresa.com" />
+              <span className={AYUDA_CLS}>
+                Va escrito dentro del derecho de petición y de la solicitud de cambio de contraventor, para que el organismo responda a ese correo. No cambia el remitente de los correos.
+              </span>
+            </label>
+          </div>
+          {!f.correoRespuesta.trim() && (
+            <InlineAlert tone="warning" compact>
+              Sin este correo usamos el del representante legal. Si tampoco hay, no se podrán radicar derechos de petición ni pedir cambios de contraventor para vehículos de la empresa.
+              {verRepresentantes && (
+                <>
+                  {" "}
+                  <Link href="/configuracion/representantes" className="font-semibold underline underline-offset-2">
+                    Revisar representantes legales
+                  </Link>
+                </>
+              )}
+            </InlineAlert>
+          )}
+          <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+            <Copias titulo="Copias visibles (CC)" ayuda="Reciben una copia visible de los envíos que elijas; si no eliges ninguno, de todos." valor={f.cc} onCambio={(cc) => cambiar({ cc })} soloLectura={soloLectura} />
+            <Copias titulo="Copias ocultas (BCC)" ayuda="Igual que las copias visibles, pero el organismo no ve estos correos." valor={f.bcc} onCambio={(bcc) => cambiar({ bcc })} soloLectura={soloLectura} />
+          </div>
+        </Bloque>
+
+        <Bloque titulo="Quién recibe reportes y alertas" proposito="Correos internos de tu empresa: aquí no se escribe al organismo.">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+            <label className={ETIQUETA_CLS}>
+              Reporte semanal y mensual
+              <textarea className={TEXTAREA_CLS} rows={3} value={f.destinatariosReportes} disabled={soloLectura} onChange={(e) => cambiar({ destinatariosReportes: e.target.value })} placeholder="Un correo por línea" />
+              <span className={AYUDA_CLS}>Reciben el resumen de la gestión de comparendos.</span>
+            </label>
+            <label className={ETIQUETA_CLS}>
+              Alertas operativas
+              <textarea className={TEXTAREA_CLS} rows={3} value={f.correosAlertaOperativa} disabled={soloLectura} onChange={(e) => cambiar({ correosAlertaOperativa: e.target.value })} placeholder="Un correo por línea" />
+              <span className={AYUDA_CLS}>Avisan cuando falta un representante legal y eso frena un derecho de petición. Si lo dejas vacío, avisamos a quienes gestionan los representantes.</span>
+            </label>
+          </div>
+          {!c.hasReportesModule && (
+            <InlineAlert tone="info" compact>
+              {esSuper ? "La empresa no tiene" : "Tu empresa no tiene"} el módulo de Reportes: los correos del reporte semanal y mensual no recibirán nada hasta que se contrate.
+            </InlineAlert>
+          )}
+          {invalidos.length > 0 && <InlineAlert tone="warning" compact>No son correos válidos: {invalidos.join(", ")}</InlineAlert>}
+        </Bloque>
+
+        {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
+
+        {!soloLectura && (
+          <div
+            className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-end ${
+              sucio ? "sticky bottom-3 z-10 rounded-xl border border-border bg-card p-3 shadow-[var(--kit-sombra)]" : ""
+            }`}
+          >
+            {sucio && <p className="text-xs font-semibold text-muted-foreground sm:mr-auto" role="status">Tienes cambios sin guardar.</p>}
+            <div className="grid grid-cols-2 gap-2 sm:flex">
+              <button type="button" className={controlCls(false)} disabled={!sucio} onClick={() => setForm(null)}>
+                Descartar
+              </button>
+              <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!sucio || ocupado || invalidos.length > 0} onClick={guardar}>
+                {ocupado ? "Guardando…" : "Guardar cambios"}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <Bloque
+        titulo={esSuper ? "Lo que tiene contratado la empresa" : "Lo que tienes contratado con FLIT"}
+        proposito="Solo lectura. Si necesitas cambiar algo, solicítalo a operaciones de FLIT."
+        sinTarjeta
+      >
+        <div className="rounded-xl border border-border bg-card p-4 md:p-5">
+          <ListaDefinicion
+            columnas={2}
+            className="gap-y-4 lg:grid-cols-4"
+            items={[
+              { termino: "Derechos de petición", valor: <Incluido si={c.hasRightPetitionModule} /> },
+              { termino: "Lectura automática de documentos", valor: <Incluido si={c.hasOcrAccess} /> },
+              { termino: "Consulta del contraventor", valor: <Incluido si={c.allowsContravenerConsultation} /> },
+              { termino: "Cambio de contraventor", valor: <Incluido si={c.allowsContravenerChange} /> },
+              { termino: "Reportes", valor: <Incluido si={c.hasReportesModule} /> },
+              { termino: "Datos del conductor", valor: c.tipoIntegracionConductor === "ApiRenting" ? "Se consultan automáticamente" : "Se registran a mano" },
+              { termino: "Plantillas de documentos", valor: c.conjuntoPlantillas === "Renting" ? "Renting" : "FLIT" },
+              { termino: "Representante legal", valor: c.requiereRepresentanteLegal ? "Obligatorio para radicar" : "No obligatorio" },
+            ]}
+          />
         </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        {/* HU #13882: el canal sale del «Enrutamiento de notificaciones» de la empresa en la plataforma; aquí solo se ve. */}
-        <div className={ETIQUETA_CLS}>
-          Canal de correo
-          <p className={`${INPUT_CLS} flex items-center bg-secondary`}>
-            {c.canalCorreo === "EmpresaApi" ? "Cuenta de correo propia de la empresa" : "Cuenta de FLIT"}
-          </p>
-          <span className="font-normal opacity-70">
-            {esSuper ? "Sigue el «Enrutamiento de notificaciones» de la empresa en Trámites (Administración → Compañías)." : "Lo define FLIT para tu empresa."}
-          </span>
-        </div>
-        <label className={ETIQUETA_CLS}>
-          Nombre del remitente
-          <input className={INPUT_CLS} value={f.remitenteNombre} maxLength={120} disabled={soloLectura} onChange={(e) => cambiar({ remitenteNombre: e.target.value })} placeholder="Si se deja vacío, la razón social" />
-          {c.canalCorreo === "EmpresaApi" && <span className="font-normal opacity-70">Con la cuenta propia de la empresa, los correos salen con el remitente de esa cuenta.</span>}
-        </label>
-        <label className={ETIQUETA_CLS}>
-          Correo para respuestas
-          <input className={INPUT_CLS} value={f.correoRespuesta} disabled={soloLectura} onChange={(e) => cambiar({ correoRespuesta: e.target.value })} placeholder="juridico@empresa.com" />
-        </label>
-      </section>
-
-      <Copias titulo="Copias (CC)" ayuda="Reciben una copia visible de los envíos que elijas. Sin tipos, de todos." valor={f.cc} onCambio={(cc) => cambiar({ cc })} soloLectura={soloLectura} />
-      <Copias titulo="Copias ocultas (BCC)" ayuda="Igual que las copias, pero ocultas para el destinatario." valor={f.bcc} onCambio={(bcc) => cambiar({ bcc })} soloLectura={soloLectura} />
-
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <label className={ETIQUETA_CLS}>
-          Destinatarios de los reportes semanal y mensual
-          <textarea className={TEXTAREA_CLS} rows={3} value={f.destinatariosReportes} disabled={soloLectura} onChange={(e) => cambiar({ destinatariosReportes: e.target.value })} placeholder="uno por línea" />
-        </label>
-        <label className={ETIQUETA_CLS}>
-          Correos de alerta operativa (falta de representante legal)
-          <textarea className={TEXTAREA_CLS} rows={3} value={f.correosAlertaOperativa} disabled={soloLectura} onChange={(e) => cambiar({ correosAlertaOperativa: e.target.value })} placeholder="uno por línea" />
-        </label>
-      </section>
-
-      {invalidos.length > 0 && <InlineAlert tone="warning" compact>No son correos válidos: {invalidos.join(", ")}</InlineAlert>}
-      {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
-      {!soloLectura && (
-        <div className="flex justify-end gap-2">
-          <button type="button" className={controlCls(false)} disabled={!sucio} onClick={() => setForm(null)}>
-            Descartar
-          </button>
-          <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!sucio || ocupado || invalidos.length > 0} onClick={guardar}>
-            {ocupado ? "Guardando…" : "Guardar"}
-          </button>
-        </div>
-      )}
+      </Bloque>
     </div>
   );
 }
@@ -202,12 +270,17 @@ export default function EmpresaYCorreo() {
   const [empresa, setEmpresa] = useState<string | null>(null);
   return (
     <Requiere permiso={P.configuracionVer}>
-      <section className="flex flex-col gap-4">
-        <Encabezado titulo="Empresa y correo" descripcion="Cómo salen los correos de la empresa: remitente, respuestas y copias." />
+      <section className="flex flex-col gap-6">
+        <Encabezado titulo="Empresa y correo" descripcion="Cómo salen los correos de tu empresa, quién recibe los avisos y qué tienes contratado con FLIT." />
         {sesion?.usuario.esSuperAdmin && <SelectorEmpresa valor={empresa} onCambio={setEmpresa} />}
         <Configuracion key={empresa ?? "propia"} empresa={empresa} />
-        {(!sesion?.usuario.esSuperAdmin || empresa) && <ConsultasEmpresa key={`consultas:${empresa ?? "propia"}`} empresa={empresa} />}
-        {(!sesion?.usuario.esSuperAdmin || empresa) && <TipologiasEmpresa key={`tipologias:${empresa ?? "propia"}`} empresa={empresa} />}
+        {/* Fuera de `Configuracion`: tienen su propio endpoint y deben verse aunque falle GET /configuracion. */}
+        {(!sesion?.usuario.esSuperAdmin || empresa) && (
+          <div className="flex flex-col gap-6">
+            <ConsultasEmpresa key={`consultas:${empresa ?? "propia"}`} empresa={empresa} />
+            <TipologiasEmpresa key={`tipologias:${empresa ?? "propia"}`} empresa={empresa} />
+          </div>
+        )}
       </section>
     </Requiere>
   );

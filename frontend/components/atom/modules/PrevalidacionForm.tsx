@@ -17,6 +17,7 @@ import {
   DIALOGO_PIE,
 } from '@/components/operacion/dialogo-propio';
 import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 /**
 
  * Resultado de REUTILIZAR una validación existente en vez de crear una nueva (módulo unificado de
@@ -277,7 +278,7 @@ export function PrevalidacionForm({
           <div className="space-y-4 overflow-y-auto max-h-[70vh] px-6 py-5">
             <div>
               <label htmlFor="pv-docType" className="mb-1 block text-xs font-medium text-foreground">
-                Tipo de documento <span aria-hidden="true" className="text-destructive">*</span>
+                Tipo de documento <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
               </label>
               <select
                 id="pv-docType"
@@ -309,7 +310,7 @@ export function PrevalidacionForm({
             </div>
             <div>
               <label htmlFor="pv-docNum" className="mb-1 block text-xs font-medium text-foreground">
-                Número de documento <span aria-hidden="true" className="text-destructive">*</span>
+                Número de documento <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
               </label>
               <input
                 id="pv-docNum"
@@ -336,7 +337,7 @@ export function PrevalidacionForm({
             {/* Nombre */}
             <div>
               <label htmlFor="pv-name" className="mb-1 block text-xs font-medium text-foreground">
-                Nombre completo <span aria-hidden="true" className="text-destructive">*</span>
+                Nombre completo <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
               </label>
               <input
                 id="pv-name"
@@ -359,7 +360,7 @@ export function PrevalidacionForm({
             {/* Correo */}
             <div>
               <label htmlFor="pv-email" className="mb-1 block text-xs font-medium text-foreground">
-                Correo electrónico <span aria-hidden="true" className="text-destructive">*</span>
+                Correo electrónico <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
               </label>
               <input
                 id="pv-email"
@@ -427,7 +428,7 @@ export function PrevalidacionForm({
                 role="alert"
                 aria-live="polite"
               >
-                <Icono nombre="alerta" className="h-4 w-4 shrink-0 mt-0.5" />
+                <IconoAviso tipo="error" className="h-4 w-4 shrink-0 mt-0.5" />
                 <span>{apiError}</span>
               </div>
             )}
@@ -573,7 +574,7 @@ export function PrevalidacionSuccessPanel({
               className={buttonClass({ variant: 'secondary', size: 'sm', className: 'mt-3' })}
               aria-live="polite"
             >
-              {copied ? 'Copiado ✓' : 'Copiar enlace'}
+              {copied ? <><IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />Copiado</> : 'Copiar enlace'}
             </button>
           </>
         ) : (

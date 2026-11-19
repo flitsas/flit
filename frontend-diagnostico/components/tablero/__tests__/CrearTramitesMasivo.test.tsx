@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { EVENTO_SONDEAR_NOTIFICACIONES } from "@/lib/notificaciones/useNotificaciones";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
 import TableroDiagnostico from "@/app/(app)/diagnosticos/[id]/page";
@@ -110,9 +111,9 @@ describe("Punto 4 AC1/AC2 — casillas por fila, sin preselección", () => {
     within(tabla())
       .getAllByRole("checkbox")
       .forEach((c) => expect(c).not.toBeChecked());
-    expect(within(barra()).getByText("0 seleccionadas")).toBeInTheDocument();
-    expect(botonMasivo()).toHaveTextContent("Crear trámites (0)");
-    expect(botonMasivo()).toBeDisabled();
+    // HU #14562 AC32: la barra de acciones en bloque (BarraSeleccion) solo aparece con algo seleccionado.
+    expect(screen.queryByRole("region", { name: "Selección" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^crear trámites/i })).not.toBeInTheDocument();
   });
 
   it("solo las elegibles tienen la casilla activa; las demás, deshabilitadas con el motivo como descripción accesible", async () => {
@@ -129,25 +130,25 @@ describe("Punto 4 AC1/AC2 — casillas por fila, sin preselección", () => {
     await montar({ [GRILLA]: () => Response.json(lote()) });
     fireEvent.click(casilla("TST004"));
     expect(casilla("TST004")).toBeChecked();
-    expect(within(barra()).getByText("1 seleccionada")).toBeInTheDocument();
+    expect(within(barra()).getByText("1 vehículo seleccionado")).toBeInTheDocument();
     expect(botonMasivo()).toHaveTextContent("Crear trámites (1)");
     expect(botonMasivo()).toBeEnabled();
   });
 
   it("«Seleccionar todas las elegibles» marca solo las elegibles y «Quitar selección» las desmarca", async () => {
     await montar({ [GRILLA]: () => Response.json(lote()) });
-    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todas las elegibles/i }));
+    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todos los elegibles/i }));
     expect(casilla("TST001")).toBeChecked();
     expect(casilla("TST004")).toBeChecked();
     expect(casilla("TST002")).not.toBeChecked();
     expect(casilla("TST003")).not.toBeChecked();
-    expect(within(barra()).getByText("2 seleccionadas")).toBeInTheDocument();
+    expect(within(barra()).getByText("2 vehículos seleccionados")).toBeInTheDocument();
     expect(botonMasivo()).toHaveTextContent("Crear trámites (2)");
 
     fireEvent.click(within(barra()).getByRole("button", { name: /quitar selección/i }));
     expect(casilla("TST001")).not.toBeChecked();
     expect(casilla("TST004")).not.toBeChecked();
-    expect(within(barra()).getByText("0 seleccionadas")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Selección" })).not.toBeInTheDocument();
   });
 });
 
@@ -191,7 +192,7 @@ describe("Punto 4 AC4 — «Crear trámites (N)» encola y muestra el progreso",
     expect(barraProgreso).toHaveAttribute("aria-valuenow", "1");
     expect(barraProgreso).toHaveAttribute("aria-valuemax", "2");
     // La selección se vacía y las placas encoladas ya no se pueden volver a marcar.
-    expect(within(barra()).getByText("0 seleccionadas")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "Selección" })).not.toBeInTheDocument();
     expect(casilla("TST001")).toBeDisabled();
     expect(casilla("TST004")).toBeDisabled();
   });
@@ -204,7 +205,7 @@ describe("Punto 4 AC4 — «Crear trámites (N)» encola y muestra el progreso",
       [MASIVO]: encolada(),
       [PROGRESO]: () => Response.json(progreso()),
     });
-    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todas las elegibles/i }));
+    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todos los elegibles/i }));
     fireEvent.click(botonMasivo());
     await avanzar();
     const dialogos = screen.getAllByRole("dialog", { name: /tipo de trámite/i });
@@ -313,9 +314,19 @@ describe("Punto 4 AC4/AC5/AC6/AC7 — resumen al terminar con omitidas por motiv
     expect(panel()).not.toHaveTextContent(/OT_NO_HABILITADO|NO_VIABLE|TRAMITES_NO_DISPONIBLE|YA_TIENE_TRAMITE/);
   });
 
-  it("al terminar vuelve a leer la grilla completa para pintar «Ver trámite #N» en las filas creadas", async () => {
+  it("HU #14562 AC51: al terminar la creación masiva la campana sondea de inmediato", async () => {
+    const oyente = vi.fn();
+    window.addEventListener(EVENTO_SONDEAR_NOTIFICACIONES, oyente);
+    await hastaElResumen();
+    expect(oyente).toHaveBeenCalledTimes(1);
+    window.removeEventListener(EVENTO_SONDEAR_NOTIFICACIONES, oyente);
+  });
+
+  it("HU #14562 AC30: al terminar no recarga la grilla completa; la fila llega por su versión en el sondeo incremental", async () => {
     const api = await hastaElResumen();
-    expect(desdesPedidos(api).slice(1)).toContain(0);
+    const desdes = desdesPedidos(api);
+    expect(desdes.length).toBeGreaterThan(1);
+    expect(desdes.slice(1)).not.toContain(0);
   });
 
   it("«Reintentar fallidas» reencola las fallidas y vuelve a sondear el progreso", async () => {
@@ -357,5 +368,92 @@ describe("Punto 4 AC4 — se puede salir de la pantalla: al volver se retoma la 
   it("sin operación (lista vacía o el backend no la expone): no hay panel", async () => {
     await montar({ [GRILLA]: () => Response.json(lote()), [ULTIMA]: () => Response.json([]) });
     expect(screen.queryByRole("region", { name: /creación de trámites/i })).not.toBeInTheDocument();
+  });
+});
+
+// HU #14562 AC32: «Seleccionar todos los elegibles» (Viables sin trámite), «Creando trámites» y «Quitar selección» en BarraSeleccion.
+describe("HU #14562 AC32 — selección y acciones en bloque", () => {
+  it("la barra de selección es una región con el conteo, «Crear trámites (N)», «Quitar selección» y la regla de elegibilidad", async () => {
+    await montar({ [GRILLA]: () => Response.json(lote()) });
+    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todos los elegibles/i }));
+    const region = screen.getByRole("region", { name: "Selección" });
+    expect(region).toHaveTextContent("2 vehículos seleccionados");
+    expect(region).toHaveTextContent(/solo se seleccionan vehículos viables y sin trámite/i);
+    expect(within(region).getByRole("button", { name: "Crear trámites (2)" })).toBeEnabled();
+    fireEvent.click(within(region).getByRole("button", { name: /quitar selección/i }));
+    expect(screen.queryByRole("region", { name: "Selección" })).not.toBeInTheDocument();
+  });
+
+  it("al pulsar «Crear trámites» se ve «Creando trámites» hasta que la operación termina", async () => {
+    let soltar: (r: Response) => void = () => {};
+    const pendiente = new Promise<Response>((r) => {
+      soltar = r;
+    });
+    await montar({ [GRILLA]: () => Response.json(lote()), [MASIVO]: () => pendiente, [PROGRESO]: () => Response.json(progreso()) });
+    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todos los elegibles/i }));
+    fireEvent.click(botonMasivo());
+    await avanzar();
+    expect(within(barra()).getByRole("button", { name: /creando trámites/i })).toHaveAttribute("aria-busy", "true");
+    await act(async () => {
+      soltar(encolada()());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(within(panel()).getByText(/creando trámites/i)).toBeInTheDocument();
+  });
+});
+
+// Uso de ejemplo (HU #14577 AC12, spec-ui §2.5): en la confirmación masiva (modal del tipo del lote Simple), si alguno de los
+// seleccionados elegibles para crear tiene saneamiento SOLICITADO o EN_GESTION, el aviso dice cuántos; no bloquea.
+describe("HU #14577 AC12 — aviso de saneamiento en curso en la creación masiva", () => {
+  const TIPOS_MASIVO = () =>
+    Response.json({ tipos: [{ codigo: "TRASPASO", nombre: "Traspaso", familia: "TRASPASO", fuentesObligatorias: [] }] });
+  const conSaneamiento = (estados: Record<string, "SOLICITADO" | "EN_GESTION" | "SANEADO" | null>): Grilla => {
+    const g = lote({ modo: "SIMPLE" });
+    return {
+      ...g,
+      vehiculos: g.vehiculos.map((v) =>
+        v.id in estados ? { ...v, saneamiento: { estado: estados[v.id], elegible: false, motivo_no_elegible: estados[v.id] ? "YA_SOLICITADO" : null } } : v,
+      ),
+    };
+  };
+
+  it("uno de los dos seleccionados en curso: «1 de los vehículos seleccionados tiene un saneamiento en curso» y crea igual", async () => {
+    const api = await montar({
+      [GRILLA]: () => Response.json(conSaneamiento({ "vehiculo-1": "EN_GESTION", "vehiculo-4": "SANEADO" })),
+      "GET /tipos-tramite": TIPOS_MASIVO,
+      [MASIVO]: encolada(),
+      [PROGRESO]: () => Response.json(progreso()),
+    });
+    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todos los elegibles/i }));
+    fireEvent.click(botonMasivo());
+    await avanzar();
+    const dialogo = screen.getByRole("dialog", { name: /tipo de trámite/i });
+    expect(within(dialogo).getByRole("alert")).toHaveTextContent("Saneamiento en curso");
+    expect(dialogo).toHaveTextContent("1 de los vehículos seleccionados tiene un saneamiento en curso. Puedes crear los trámites igual.");
+    fireEvent.change(within(dialogo).getByLabelText(/tipo de trámite/i), { target: { value: "TRASPASO" } });
+    fireEvent.click(within(dialogo).getByRole("button", { name: /crear trámites \(2\)/i }));
+    await avanzar();
+    expect(llamadas(api, "POST", RUTA_MASIVO)).toHaveLength(1);
+  });
+
+  it("los dos en curso: plural «2 de los vehículos seleccionados tienen…»", async () => {
+    await montar({
+      [GRILLA]: () => Response.json(conSaneamiento({ "vehiculo-1": "SOLICITADO", "vehiculo-4": "EN_GESTION" })),
+      "GET /tipos-tramite": TIPOS_MASIVO,
+    });
+    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todos los elegibles/i }));
+    fireEvent.click(botonMasivo());
+    await avanzar();
+    expect(screen.getByRole("dialog", { name: /tipo de trámite/i })).toHaveTextContent(
+      "2 de los vehículos seleccionados tienen un saneamiento en curso. Puedes crear los trámites igual.",
+    );
+  });
+
+  it("ninguno en curso (SANEADO o sin saneamiento): sin aviso", async () => {
+    await montar({ [GRILLA]: () => Response.json(conSaneamiento({ "vehiculo-1": "SANEADO", "vehiculo-4": null })), "GET /tipos-tramite": TIPOS_MASIVO });
+    fireEvent.click(within(barra()).getByRole("button", { name: /seleccionar todos los elegibles/i }));
+    fireEvent.click(botonMasivo());
+    await avanzar();
+    expect(screen.getByRole("dialog", { name: /tipo de trámite/i })).not.toHaveTextContent(/saneamiento en curso/i);
   });
 });

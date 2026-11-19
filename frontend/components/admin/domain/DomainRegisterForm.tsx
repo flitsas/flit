@@ -146,7 +146,6 @@ export function DomainRegisterForm({ tenantId, purpose, label = "Dominio de la r
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
           style={{ background: "var(--gradient-action)" }}
         >
-          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
           {saving ? "Guardando…" : isChange ? "Cambiar dominio" : "Registrar dominio"}
         </button>
         )}

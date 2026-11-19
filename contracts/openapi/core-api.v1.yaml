@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.1.3"
+  version: "1.1.5"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -1573,7 +1573,7 @@ paths:
       operationId: adminPlataformaAiListTools
       summary: Lista tools IA y estado de proveedores (HU #13509)
       description: >
-        Settings por tool (ocr, dr_flit) con activeProvider, prioridades y presencia de API key
+        Settings por tool (ocr, dr_flit, diagnostico_dictamen) con activeProvider, prioridades y presencia de API key
         enmascarada. Nunca incluye el secreto. Requiere JWT SuperAdmin.
       security:
         - bearerAuth: []
@@ -3837,6 +3837,85 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: No existe un tenant OT vinculado al transitOfficeId indicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/client-companies:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtListClientCompanies
+      summary: Compañías cliente visibles del OT (selector de alcance de usuarios)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Compañías cliente del OT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtClientCompaniesResponse"
+        "403":
+          description: Sin permiso.
+
+  /api/v1/admin/ot/users/{userId}/client-scope:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtGetUserClientScope
+      summary: Alcance de clientes de un usuario del OT
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Alcance vigente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtClientScopeResponse"
+        "403":
+          description: Sin permiso.
+    put:
+      tags: [Admin · OT]
+      operationId: adminOtSetUserClientScope
+      summary: Define el alcance de clientes de un usuario del OT
+      description: >
+        Solo Admin OT y Super Admin. Nadie edita su propio alcance (403 CLIENT_SCOPE_SELF).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtClientScopeRequest"
+      responses:
+        "204":
+          description: Alcance actualizado.
+        "400":
+          description: CLIENT_SCOPE_EMPTY o CLIENT_SCOPE_INVALID_CLIENT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: >
+            CLIENT_SCOPE_SELF, CLIENT_SCOPE_EXCEEDS_ACTOR (el actor tiene alcance `especificos` y pide `todos` o
+            compañías fuera del suyo) o sin permiso.
           content:
             application/json:
               schema:
@@ -9600,6 +9679,79 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
+  /api/v1/analytics/gestor/cola-inactividad:
+    get:
+      tags: [Analytics · Inicio del Gestor]
+      operationId: gestorDashboardColaInactividad
+      summary: Trámites de la compañía con más días sin movimiento (Inicio del Gestor, «Cola de gestión»)
+      description: >
+        Devuelve hasta `limit` trámites ordenados del más quieto al menos, y el `total` que cumple el filtro.
+        El último movimiento es lo más reciente entre el último cambio de estado, la última actualización y la
+        creación. El tenant sale del claim JWT `tenant_id`; un SuperAdmin debe indicar `tenantId` (no hay vista
+        global). Ver por familia (HU #13664): una familia sin Ver no se lista, y pedirla devuelve la cola vacía.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: estado
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [borrador, preparado, preasignacion, asignado, entregado, subsanacion, aprobado, rechazado, anulado, revocado]
+          description: Estado del trámite (status crudo, como estado-counts). Sin valor, todos menos los finales (aprobado, anulado, revocado).
+        - name: familia
+          in: query
+          required: false
+          schema: { type: string, enum: [matriculas, traspasos, otros] }
+          description: Familia del tipo de trámite. Sin valor, todas las que el usuario puede ver.
+        - name: limit
+          in: query
+          required: false
+          schema: { type: integer, default: 5, minimum: 1, maximum: 20 }
+          description: Cuántos trámites devolver (se acota a 1–20).
+        - name: tenantId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Solo SuperAdmin (obligatorio para él); cualquier otro usuario solo puede indicar el suyo.
+      responses:
+        "200":
+          description: Cola de gestión.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, total]
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, estado, familia, diasSinMovimiento]
+                      properties:
+                        id: { type: string, format: uuid }
+                        referencia: { type: string, nullable: true }
+                        placa: { type: string, nullable: true }
+                        vin: { type: string, nullable: true }
+                        estado: { type: string }
+                        familia: { type: string, enum: [matriculas, traspasos, otros] }
+                        diasSinMovimiento: { type: integer, minimum: 0 }
+                  total: { type: integer, minimum: 0 }
+        "400":
+          description: Estado o familia inválidos, o SuperAdmin sin `tenantId`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: No autenticado (sin token JWT).
+        "403":
+          description: Sin permiso del Inicio, o `tenantId` de otra compañía.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
   /api/v1/analytics/productivity/top:
     get:
       tags: [Analytics · Dashboard]
@@ -12095,6 +12247,88 @@ paths:
         "404": { description: "Trámite no encontrado." }
         "409": { description: "Trámite migrado (solo lectura)." }
 
+  # ── Admin · Trámites · Cargar documentos en cualquier estado (Bug #14604) ─────────────────────
+
+  /api/v1/admin/tramites/{id}/documentos/tipos:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Tipos de documento que el admin puede cargar a un trámite
+      operationId: adminTramiteDocumentoTipos
+      security:
+        - bearerAuth: []
+      description: >
+        Bug #14604. Tipos de documento habilitados para el tipo de trámite de la instancia: la misma matriz documental
+        viva que alimenta el checklist del wizard (con reglas condicionales aplicadas y sin los documentos que genera
+        el sistema). No depende del estado del trámite. Requiere el permiso `AdminTramiteCargarDocumento`
+        (SuperAdmin bypassa).
+      responses:
+        "200":
+          description: Lista de tipos habilitados (puede ser vacía).
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AdminDocumentoTipoDto" }
+        "400": { description: "Falta el header X-Tenant-Id." }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteCargarDocumento." }
+        "404": { description: "Trámite no encontrado." }
+
+  /api/v1/admin/tramites/{id}/documentos:
+    parameters:
+      - $ref: "#/components/parameters/TenantIdHeader"
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+    post:
+      tags: [Admin · Trámites · Gestión avanzada]
+      summary: Cargar un documento a un trámite en cualquier estado (admin FLIT)
+      operationId: adminTramiteCargarDocumento
+      security:
+        - bearerAuth: []
+      description: >
+        Bug #14604. Acción administrativa con permiso propio `AdminTramiteCargarDocumento` (SuperAdmin bypassa), válida en
+        TODOS los estados (aprobado, anulado y revocado incluidos). El gate de estado del gestor no cambia. Solo tipos
+        habilitados para el tipo de trámite (ver `/documentos/tipos`) y observación obligatoria. Si había un adjunto
+        vigente del mismo tipo (tipos que reemplazan al subir), NO se borra: queda con `isHistorico=true`, visible y
+        descargable como versión anterior; en los tipos «bolsa» (`otro`, `anexos_generales`) se añade sin retirar nada.
+        «Gana quien carga primero»: si FLITO ya cargó ese tipo, responde 409 `adjunto_bloqueado_flito`. El consolidado se
+        regenera solo (las marcas de vigencia bajan al guardar). La bitácora registra el evento `documento_cargado_admin`
+        con `{ tipo, filename, attachmentId, previousAttachmentIds, estado, observacion }` y el usuario.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file: { type: string, format: binary, description: "Archivo (PDF, JPEG, PNG o WebP; máx. 20 MB o el límite del tipo)." }
+                tipo: { type: string, example: soat, description: "Código del tipo de documento." }
+                observacion: { type: string, maxLength: 1000, description: "Obligatoria; se recorta." }
+              required: [file, tipo, observacion]
+      responses:
+        "201":
+          description: Documento cargado.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AdminCargarDocumentoResult" }
+        "400":
+          description: >
+            Falta el header X-Tenant-Id o ProblemDetails con `error` en `missing_file`, `invalid_tipo`, `invalid_mime`,
+            `file_too_large`, `observacion_requerida` u `observacion_demasiado_larga`.
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso AdminTramiteCargarDocumento (o escritura sobre un trámite de la red)." }
+        "404": { description: "Trámite no encontrado." }
+        "409": { description: "Un adjunto del tipo cargado por FLITO está vigente (`adjunto_bloqueado_flito`)." }
+        "422": { description: "`tipo_no_habilitado`: el tipo no está habilitado para el tipo de este trámite." }
+
   # ── Admin · Trámites · Cambiar estado sin restricción de flujo (Feature #12155, HU #12159) ─────
 
   /api/v1/admin/tramites/{id}/mandato/regenerar:
@@ -12377,12 +12611,19 @@ paths:
                     items:
                       type: object
                       properties:
-                        validationId: { type: string, format: uuid }
+                        validationId:
+                          type: string
+                          format: uuid
+                          nullable: true
+                          description: >-
+                            HU #14627 — null cuando la persona NUNCA tuvo una validación en este trámite
+                            (status "no_iniciada"): se puede enviar por primera vez identificándola por
+                            partyRole + ordinal en el POST de reenvío.
                         partyRole: { type: string, example: vendedor }
                         ordinal: { type: integer, minimum: 1, maximum: 4 }
                         name: { type: string, nullable: true }
                         email: { type: string, nullable: true }
-                        status: { type: string }
+                        status: { type: string, description: "Incluye \"no_iniciada\" (HU #14627)." }
                         captureUrl: { type: string, nullable: true }
                         captureExpiresAt: { type: string, format: date-time, nullable: true }
                         esFlujoManual: { type: boolean }
@@ -12412,6 +12653,10 @@ paths:
         el historial del trámite registra el correo anterior y el nuevo. Un trámite `aprobado`,
         `anulado` o `revocado` rechaza toda la solicitud (422). Requiere el permiso
         `AdminTramiteReenviarValidacion`.
+
+        HU #14627 — cada item acepta `validationId` (reenvío de una fila existente, comportamiento de
+        siempre) O `partyRole` + `ordinal` (persona sin fila propia, listada con status "no_iniciada":
+        se le envía la validación por primera vez). Un item debe traer uno de los dos pares.
       requestBody:
         required: true
         content:
@@ -12426,9 +12671,11 @@ paths:
                   maxItems: 8
                   items:
                     type: object
-                    required: [validationId]
+                    description: "Trae validationId, o partyRole + ordinal (HU #14627)."
                     properties:
-                      validationId: { type: string, format: uuid }
+                      validationId: { type: string, format: uuid, nullable: true }
+                      partyRole: { type: string, example: vendedor, nullable: true }
+                      ordinal: { type: integer, minimum: 1, maximum: 4, nullable: true }
                       email: { type: string, format: email, nullable: true }
       responses:
         "200":
@@ -12443,7 +12690,15 @@ paths:
                     items:
                       type: object
                       properties:
-                        validationId: { type: string, format: uuid }
+                        validationId:
+                          type: string
+                          format: uuid
+                          nullable: true
+                          description: >-
+                            Id REAL: el existente, o el de la fila recién creada si el item llegó solo
+                            con partyRole/ordinal (HU #14627). Null si falló antes de crear la fila.
+                        partyRole: { type: string, nullable: true, description: "Eco del item original (HU #14627)." }
+                        ordinal: { type: integer, nullable: true, description: "Eco del item original (HU #14627)." }
                         ok: { type: boolean }
                         queued: { type: boolean }
                         captureUrl: { type: string, nullable: true, description: "Solo si el enlace ya existe (no en cola)." }
@@ -15627,6 +15882,95 @@ paths:
         "400": { description: "PORTAL_COBRO_ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId en la ruta del OT)." }
         "401": { description: Sin sesión. }
         "403": { description: Sin alcance sobre el organismo. }
+  /api/v1/admin/ot/portal-cobro/caja-anulacion:
+    put:
+      tags: ["Admin · OT · Portal Persona Natural · Cobro"]
+      summary: Cambia la ventana de anulación del cobro en caja del organismo
+      description: >-
+        Rol ot_admin (su organismo) o SuperAdmin (transitOfficeId obligatorio). 0 = el trámite se radica al cobrar y el cobro no se puede anular;
+        el máximo sale de PortalCaja:VentanaAnulacionMaxMinutos (60). Solo aplica a cobros nuevos: cada cobro guarda su límite al confirmarse.
+        El cajero (ot_caja) recibe 403.
+      operationId: AdminOtPortalCobroPutCajaAnulacion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarVentanaAnulacionCajaRequest" }
+      responses:
+        "200":
+          description: Ventana guardada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VentanaAnulacionCaja" }
+        "400": { description: "ventana_anulacion_invalida (nula o fuera de 0..max) o PORTAL_COBRO_ORGANISMO_REQUERIDO." }
+        "401": { description: Sin sesión. }
+        "403": { description: "Sin alcance sobre el organismo, o rol ot_caja." }
+        "404": { description: PORTAL_COBRO_ORGANISMO_NO_EXISTE. }
+  /api/v1/admin/ot/portal-cobro/caja-anulacion/historial:
+    get:
+      tags: ["Admin · OT · Portal Persona Natural · Cobro"]
+      summary: Historial de cambios de la ventana de anulación (más reciente primero, máximo 50)
+      operationId: AdminOtPortalCobroGetCajaAnulacionHistorial
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Cambios (quién, antes, después, cuándo).
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistorialVentanaAnulacionCaja" }
+        "400": { description: PORTAL_COBRO_ORGANISMO_REQUERIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: "Sin alcance sobre el organismo, o rol ot_caja." }
+  /api/v1/admin/plataforma/persona-natural/cobro/caja-anulacion:
+    put:
+      tags: ["Admin · Plataforma · Persona Natural · Cobro"]
+      summary: Cambia la ventana de anulación del cobro en caja de un organismo (SuperAdmin)
+      description: Igual que la ruta del OT; transitOfficeId es obligatorio (la web de persona no tiene caja).
+      operationId: AdminPlataformaPortalCobroPutCajaAnulacion
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/GuardarVentanaAnulacionCajaRequest" }
+      responses:
+        "200":
+          description: Ventana guardada.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VentanaAnulacionCaja" }
+        "400": { description: "ventana_anulacion_invalida o PORTAL_COBRO_ORGANISMO_REQUERIDO." }
+        "401": { description: Sin sesión. }
+        "403": { description: No es SuperAdmin. }
+        "404": { description: PORTAL_COBRO_ORGANISMO_NO_EXISTE. }
+  /api/v1/admin/plataforma/persona-natural/cobro/caja-anulacion/historial:
+    get:
+      tags: ["Admin · Plataforma · Persona Natural · Cobro"]
+      summary: Historial de cambios de la ventana de anulación de un organismo (SuperAdmin)
+      operationId: AdminPlataformaPortalCobroGetCajaAnulacionHistorial
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Cambios.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/HistorialVentanaAnulacionCaja" }
+        "400": { description: PORTAL_COBRO_ORGANISMO_REQUERIDO. }
+        "401": { description: Sin sesión. }
+        "403": { description: No es SuperAdmin. }
   /api/v1/admin/plataforma/persona-natural/cobro/medios:
     put:
       tags: ["Admin · Plataforma · Persona Natural · Cobro"]
@@ -15777,6 +16121,252 @@ paths:
         "400": { description: Igual que el listado. }
         "401": { description: Sin sesión. }
         "403": { description: Otro rol o sin el permiso. }
+  /api/v1/admin/ot/portal-caja/users:
+    get:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Usuarios de caja del organismo: activos, desactivados e invitaciones pendientes"
+      description: "Rol ot_admin o SuperAdmin (HU #14454, ADR-0082). El ot_admin trabaja con el organismo de su token y si nombra otro recibe 403 OTRO_ORGANISMO; el SuperAdmin envía transitOfficeId (obligatorio). Responde 404 con PortalCaja:Habilitado apagado."
+      operationId: AdminOtPortalCajaUsersList
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: "Usuarios de caja."
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/CajaUsuario" }
+        "400": { description: "ORGANISMO_REQUERIDO (SuperAdmin sin transitOfficeId)." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo." }
+        "404": { description: "Función apagada o ORGANISMO_NO_EXISTE." }
+    post:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Invita a un usuario de caja (rol ot_caja) por correo"
+      description: "Rol fijo ot_caja: no se envía rol. Enciende el producto caja en el organismo si hacía falta. La persona define su contraseña al activar la cuenta."
+      operationId: AdminOtPortalCajaUsersInvite
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CajaInvitarRequest" }
+      responses:
+        "201": { description: "Invitación creada.", content: { application/json: { schema: { $ref: "#/components/schemas/CajaInvitacionCreada" } } } }
+        "400": { description: "EMAIL_REQUIRED o FULL_NAME_REQUIRED." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo." }
+        "409": { description: "EMAIL_ALREADY_IN_USE con el motivo exacto, CAJA_NO_CONFIGURADA o PRODUCT_NOT_ENABLED_FOR_HEAD." }
+  /api/v1/admin/ot/portal-caja/users/{userId}/suspend:
+    post:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Desactiva a un usuario de caja"
+      description: "Pierde el acceso en su siguiente petición: el portal consulta su estado en cada llamada."
+      operationId: AdminOtPortalCajaUsersSuspend
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: "Desactivado." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo." }
+        "404": { description: "USER_NOT_FOUND: no es un usuario de caja de este organismo." }
+    delete:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Reactiva a un usuario de caja desactivado"
+      operationId: AdminOtPortalCajaUsersUnsuspend
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: userId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: "Reactivado." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo." }
+        "404": { description: "USER_NOT_FOUND o NO_ACTIVE_SUSPENSION." }
+  /api/v1/admin/ot/portal-caja/invitations/{invitationId}/resend:
+    post:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Reenvía la invitación pendiente de un usuario de caja"
+      operationId: AdminOtPortalCajaInvitationResend
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: invitationId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      responses:
+        "204": { description: "Reenviada." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo." }
+        "404": { description: "INVITATION_NOT_FOUND: no es una invitación de caja de este organismo." }
+        "409": { description: "INVITATION_NOT_PENDING." }
+        "429": { description: "RESEND_COOLDOWN con Retry-After." }
+  /api/v1/admin/ot/portal-caja/cobros:
+    get:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Cobros en caja del organismo en un día de Colombia"
+      description: "Rol ot_admin o SuperAdmin (HU #14461, ADR-0082). Fachada: core-api consulta al portal por gRPC (CajaAdminService.ListarCobros) con el organismo de su token. El total del día no suma los cobros anulados. 503 PORTAL_NO_DISPONIBLE si el portal no responde."
+      operationId: AdminOtPortalCajaCobrosList
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+        - { name: date, in: query, required: false, description: "Día de Colombia AAAA-MM-DD; vacío es hoy.", schema: { type: string, format: date } }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 100, default: 20 } }
+      responses:
+        "200":
+          description: "Cobros del día."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CajaCobroLista" }
+        "400": { description: "INVALID_DATE u ORGANISMO_REQUERIDO." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "Sin alcance sobre el organismo (OTRO_ORGANISMO) o rol sin permiso: la caja no consulta desde el hub." }
+        "503": { description: "PORTAL_NO_DISPONIBLE." }
+  /api/v1/admin/ot/portal-caja/cobros/{cobroId}/anular:
+    post:
+      tags: ["Admin · OT · Caja del portal"]
+      summary: "Anula un cobro en caja con motivo obligatorio"
+      description: "Solo el administrador del OT o el SuperAdmin; el usuario de caja no anula. Posible mientras el trámite no haya llegado a FLIT 2.0 (ventana de 15 minutos desde el cobro). La anulación devuelve la solicitud a pendiente de pago."
+      operationId: AdminOtPortalCajaCobrosAnular
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: cobroId, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: transitOfficeId, in: query, required: false, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CajaAnularRequest" }
+      responses:
+        "200": { description: "Anulado.", content: { application/json: { schema: { $ref: "#/components/schemas/CajaAnulacion" } } } }
+        "400": { description: "REASON_REQUIRED (sin motivo) o REASON_LENGTH (fuera de 10 a 300 caracteres)." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "OTRO_ORGANISMO o rol sin permiso." }
+        "404": { description: "COBRO_NO_ENCONTRADO en este organismo." }
+        "409": { description: "COBRO_NO_ANULABLE: el trámite ya llegó a FLIT 2.0 o pasó la ventana." }
+        "503": { description: "PORTAL_NO_DISPONIBLE." }
+  /api/v1/ot/caja/tramites/{codigo}:
+    get:
+      tags: ["OT · Caja"]
+      summary: "Busca el trámite por su ID y devuelve el desglose a cobrar"
+      description: "La caja del organismo como módulo de FLIT 2.0 (Feature #14453, ADR-0082). Roles ot_caja u ot_admin del organismo (no SuperAdmin). El organismo y el usuario salen del token, nunca del cliente; el usuario ot_caja se revalida en cada petición. Fachada: core-api consulta al portal por gRPC (CajaAdminService.BuscarTramite). Solo existe con PortalCaja:Habilitado=true (404 si está apagado). Errores { code, message }. Las búsquedas sin resultado cuentan contra un tope por usuario e IP (429 demasiados_intentos con Retry-After)."
+      operationId: OtCajaBuscarTramite
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: codigo, in: path, required: true, description: "ID público PN-AAAA-NNNNNN (no distingue mayúsculas).", schema: { type: string } }
+      responses:
+        "200":
+          description: "El trámite por cobrar (sin nombre, documento ni placa de las partes)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtCajaTramite" }
+        "401": { description: "Sin sesión." }
+        "403": { description: "sin_permiso (rol, usuario desactivado u organismo sin caja) u otro_organismo (el trámite es de otro organismo)." }
+        "404": { description: "no_encontrado, o la caja apagada." }
+        "409": { description: "ya_pagado, cobro_vencido o no_habilitado." }
+        "429": { description: "demasiados_intentos; Retry-After en segundos." }
+        "503": { description: "portal_no_disponible." }
+  /api/v1/ot/caja/tramites/{codigo}/confirmar:
+    post:
+      tags: ["OT · Caja"]
+      summary: "Confirma el cobro en caja"
+      description: "Medio de cobro obligatorio (efectivo, datafono, transferencia u otro con detalle de hasta 120 caracteres), prefactura opcional (PDF, JPG o PNG de hasta 5 MB, validada por la firma del archivo) e Idempotency-Key obligatoria (reintentar con la misma clave no cobra dos veces). Se cobra siempre el total del servidor; totalVisto solo se compara (409 total_cambio con el nuevo totalActualCop). El primero que confirma gana (409 ya_pagado). El trámite se radica en FLIT 2.0 pasada la ventana de anulación. Mismos roles y reglas que la búsqueda."
+      operationId: OtCajaConfirmarCobro
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: codigo, in: path, required: true, schema: { type: string } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 100 } }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [medioCaja]
+              properties:
+                medioCaja: { type: string, enum: [efectivo, datafono, transferencia, otro], description: "También se acepta el nombre anterior medio." }
+                detalle: { type: string, maxLength: 120, description: "Obligatorio con medio otro. También se acepta medioDetalle." }
+                totalVisto: { type: integer, format: int64, description: "El total que la caja tenía a la vista (COP). También se acepta totalVistoCop." }
+                prefactura: { type: string, format: binary }
+      responses:
+        "200":
+          description: "Pago registrado (idempotente: la misma clave devuelve el mismo resultado)."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtCajaCobroConfirmado" }
+        "400": { description: "medio_invalido, detalle_requerido, idempotency_key_requerida o prefactura_invalida." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "sin_permiso u otro_organismo." }
+        "404": { description: "no_encontrado, o la caja apagada." }
+        "409": { description: "total_cambio (con totalActualCop), ya_pagado, cobro_vencido, no_habilitado o idempotency_key_reutilizada." }
+        "413": { description: "prefactura_invalida: el cuerpo supera el tope." }
+        "429": { description: "demasiados_intentos; Retry-After en segundos." }
+        "503": { description: "portal_no_disponible." }
+  /api/v1/ot/caja/cobros:
+    get:
+      tags: ["OT · Caja"]
+      summary: "Cobros en caja del organismo en un día de Colombia (por defecto hoy)"
+      description: "Roles ot_caja u ot_admin del organismo. El total del día no suma los cobros anulados. Cada fila trae cobroId, anulable y rowVersion para que el administrador del OT anule."
+      operationId: OtCajaCobros
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: date, in: query, required: false, description: "Día de Colombia AAAA-MM-DD; vacío es hoy.", schema: { type: string, format: date } }
+        - { name: page, in: query, required: false, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: pageSize, in: query, required: false, schema: { type: integer, minimum: 1, maximum: 50, default: 10 } }
+      responses:
+        "200":
+          description: "Cobros del día."
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/OtCajaCobrosDelDia" }
+        "400": { description: "fecha_invalida." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "sin_permiso." }
+        "404": { description: "Caja apagada." }
+        "503": { description: "portal_no_disponible." }
+  /api/v1/ot/caja/cobros/{cobroId}/anular:
+    post:
+      tags: ["OT · Caja"]
+      summary: "Anula un cobro en caja con motivo obligatorio"
+      description: "SOLO el administrador del OT del organismo; el usuario ot_caja recibe 403 sin_permiso y el SuperAdmin anula desde la administración del organismo. Posible mientras el trámite no haya llegado a FLIT 2.0 (ventana de anulación)."
+      operationId: OtCajaAnularCobro
+      security:
+        - bearerAuth: []
+      parameters:
+        - { name: cobroId, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motivo, rowVersion]
+              properties:
+                motivo: { type: string, minLength: 10, maxLength: 300, description: "También se acepta reason." }
+                rowVersion: { type: integer, format: int64, minimum: 1, description: "El rowVersion del cobro que se vio en la lista." }
+      responses:
+        "200": { description: "Anulado.", content: { application/json: { schema: { $ref: "#/components/schemas/CajaAnulacion" } } } }
+        "400": { description: "motivo_requerido, motivo_longitud (fuera de 10 a 300) o version_requerida." }
+        "401": { description: "Sin sesión." }
+        "403": { description: "sin_permiso (incluye al usuario ot_caja)." }
+        "404": { description: "cobro_no_encontrado en este organismo, o la caja apagada." }
+        "409": { description: "cobro_no_anulable: el trámite ya llegó a FLIT 2.0 o pasó la ventana." }
+        "503": { description: "portal_no_disponible." }
 
 components:
   securitySchemes:
@@ -15813,7 +16403,7 @@ components:
       required: true
       schema:
         $ref: "#/components/schemas/AiToolCode"
-      description: Código de herramienta IA (ocr | dr_flit).
+      description: Código de herramienta IA (ocr | dr_flit | diagnostico_dictamen).
     NetworkStatsFrom:
       name: from
       in: query
@@ -15951,10 +16541,127 @@ components:
       description: Identificador del tenant (compañía) dueño del trámite.
 
   schemas:
+    CajaUsuario:
+      type: object
+      required: [fullName, email, status]
+      properties:
+        userId: { type: string, format: uuid, nullable: true, description: "Vacío mientras es una invitación pendiente." }
+        invitationId: { type: string, format: uuid, nullable: true, description: "Solo en estado invited; sirve para reenviar." }
+        fullName: { type: string }
+        email: { type: string }
+        status: { type: string, enum: [invited, active, suspended] }
+        createdAt: { type: string, format: date-time, nullable: true }
+    CajaInvitarRequest:
+      type: object
+      required: [email, fullName]
+      properties:
+        email: { type: string }
+        fullName: { type: string }
+    CajaInvitacionCreada:
+      type: object
+      required: [invitationId, email, emailSent]
+      properties:
+        invitationId: { type: string, format: uuid }
+        email: { type: string }
+        emailSent: { type: boolean }
+    CajaCobro:
+      type: object
+      required: [cobroId, codigo, valorCop, medio, estado, anulable, rowVersion]
+      properties:
+        cobroId: { type: string, format: uuid }
+        codigo: { type: string, description: "Código público del trámite, PN-AAAA-NNNNNN." }
+        valorCop: { type: integer, format: int64 }
+        medio: { type: string, description: "efectivo, datafono, transferencia u otro." }
+        medioDetalle: { type: string }
+        pagadoEn: { type: string }
+        pagadoPorNombre: { type: string }
+        estado: { type: string, enum: [pagado, anulado] }
+        anulable: { type: boolean }
+        motivoNoAnulable: { type: string, description: "Por qué no se puede anular; vacío si anulable es true." }
+        anuladoEn: { type: string }
+        anuladoPorNombre: { type: string }
+        anulacionMotivo: { type: string }
+        rowVersion: { type: integer, format: int64 }
+    CajaCobroLista:
+      type: object
+      required: [items, total, totalDiaCop]
+      properties:
+        items:
+          type: array
+          items: { $ref: "#/components/schemas/CajaCobro" }
+        total: { type: integer }
+        totalDiaCop: { type: integer, format: int64, description: "Suma del día sin los cobros anulados." }
+    CajaAnularRequest:
+      type: object
+      required: [reason]
+      properties:
+        reason: { type: string, minLength: 10, maxLength: 300 }
+        rowVersion: { type: integer, format: int64, description: "El rowVersion del cobro que se vio en la lista." }
+    CajaAnulacion:
+      type: object
+      required: [cobroId, estado]
+      properties:
+        cobroId: { type: string, format: uuid }
+        estado: { type: string }
+    OtCajaTramite:
+      type: object
+      required: [codigo, tipoTramite, organismo, lineas, totalCop, versionTarifa, venceEn]
+      properties:
+        codigo: { type: string }
+        tipoTramite: { type: object, properties: { codigo: { type: string }, nombre: { type: string } } }
+        organismo: { type: object, properties: { codigo: { type: string }, nombre: { type: string } } }
+        lineas:
+          type: array
+          items: { type: object, properties: { concepto: { type: string }, valorCop: { type: integer, format: int64 } } }
+        totalCop: { type: integer, format: int64 }
+        versionTarifa: { type: string }
+        venceEn: { type: string, format: date-time }
+    OtCajaCobroConfirmado:
+      type: object
+      required: [codigo, valorCop, medio, pagadoEn, mensaje]
+      properties:
+        codigo: { type: string }
+        valorCop: { type: integer, format: int64 }
+        medio: { type: string }
+        medioDetalle: { type: string, nullable: true }
+        pagadoEn: { type: string, format: date-time }
+        mensaje: { type: string }
+    OtCajaCobrosDelDia:
+      type: object
+      required: [fecha, totalDiaCop, items, total, pagina, tamano]
+      properties:
+        fecha: { type: string, format: date }
+        totalDiaCop: { type: integer, format: int64 }
+        total: { type: integer }
+        pagina: { type: integer }
+        tamano: { type: integer }
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              codigo: { type: string }
+              valorCop: { type: integer, format: int64 }
+              medio: { type: string }
+              medioDetalle: { type: string, nullable: true }
+              hora: { type: string, description: "HH:mm, hora de Colombia." }
+              pagadoEn: { type: string, format: date-time }
+              usuario: { type: string }
+              estado: { type: string, enum: [pagado, anulado] }
+              cobroId: { type: string, format: uuid }
+              anulable: { type: boolean }
+              motivoNoAnulable: { type: string, nullable: true }
+              anuladoEn: { type: string, nullable: true }
+              anuladoPorNombre: { type: string, nullable: true }
+              anulacionMotivo: { type: string, nullable: true }
+              rowVersion: { type: integer, format: int64 }
+              anulableHasta: { type: string, format: date-time, nullable: true, description: "Límite de anulación guardado en el cobro al confirmarlo (pagado_en + ventana del organismo); null si ya no aplica (anulado, radicado o ventana 0)." }
     CobroPortal:
       type: object
       required: [medios, tipos]
       properties:
+        cajaAnulacion:
+          $ref: "#/components/schemas/VentanaAnulacionCaja"
         medios:
           type: array
           items:
@@ -15989,6 +16696,32 @@ components:
                           enabled: { type: boolean, description: "Sin fila guardada vale encendido si montoCop > 0." }
                           montoCop: { type: integer, format: int64, description: Monto del renglón base (derechos de tránsito; servicio FLIT). }
                           editable: { type: boolean }
+    VentanaAnulacionCaja:
+      type: object
+      required: [minutos, porDefecto, maxMinutos]
+      properties:
+        minutos: { type: integer, minimum: 0, description: "Ventana efectiva en minutos (el valor por defecto, 15, si el organismo no la configuró)." }
+        porDefecto: { type: boolean, description: "true si el organismo no configuró la ventana." }
+        maxMinutos: { type: integer, description: "Tope vigente (PortalCaja:VentanaAnulacionMaxMinutos, 60)." }
+    GuardarVentanaAnulacionCajaRequest:
+      type: object
+      required: [minutos]
+      properties:
+        minutos: { type: integer, minimum: 0, description: "0 hasta maxMinutos; 0 = se radica al cobrar y no se puede anular." }
+    HistorialVentanaAnulacionCaja:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            required: [minutosAntes, minutosDespues, cambiadoEn]
+            properties:
+              minutosAntes: { type: integer }
+              minutosDespues: { type: integer }
+              actorNombre: { type: string, nullable: true }
+              cambiadoEn: { type: string, format: date-time }
     GuardarMedioCobroRequest:
       type: object
       required: [method, enabled]
@@ -17946,6 +18679,38 @@ components:
         sha256: { type: string }
         source: { type: string, example: user }
         uploadedAt: { type: string, format: date-time }
+        isHistorico:
+          type: boolean
+          description: >
+            Bug #14604. true = versión anterior que dejó una carga administrativa (o la revocatoria): se muestra y se
+            descarga, pero ya no es el documento vigente del tipo.
+        ocrStatus:
+          type: string
+          nullable: true
+          enum: [verified, rejected, skipped]
+          description: Veredicto OCR declarado por el cliente al registrar. Informativo; no es compuerta (ADR-0085, Bug #14559).
+        ocrReason:
+          type: string
+          nullable: true
+          enum: [vin_mismatch, tipo_invalido, no_confirmado, ilegible, excede_tamano, analisis_fallido]
+          description: Código cerrado del motivo, solo con ocrStatus rejected/skipped. Informativo; no es compuerta (ADR-0085).
+    AdminDocumentoTipoDto:
+      type: object
+      required: [tipo, nombre]
+      properties:
+        tipo: { type: string, example: soat }
+        nombre: { type: string, example: SOAT }
+    AdminCargarDocumentoResult:
+      type: object
+      required: [attachmentId, tipo, filename, previousAttachmentIds]
+      properties:
+        attachmentId: { type: string, format: uuid }
+        tipo: { type: string, example: soat }
+        filename: { type: string }
+        previousAttachmentIds:
+          type: array
+          description: Adjuntos que quedaron como versión anterior (isHistorico=true); vacío si no había o el tipo no reemplaza.
+          items: { type: string, format: uuid }
     PresignAttachmentRequest:
       type: object
       required: [tipo, filename, mimetype, sizeBytes]
@@ -17964,6 +18729,16 @@ components:
         sizeBytes: { type: integer, format: int64 }
         sha256: { type: string }
         storagePath: { type: string }
+        ocrStatus:
+          type: string
+          nullable: true
+          enum: [verified, rejected, skipped]
+          description: Opcional. Veredicto OCR calculado por el cliente; el servidor normaliza (trim + minúsculas) y guarda null si es desconocido, sin 400 (ADR-0085, Bug #14559).
+        ocrReason:
+          type: string
+          nullable: true
+          enum: [vin_mismatch, tipo_invalido, no_confirmado, ilegible, excede_tamano, analisis_fallido]
+          description: Opcional. Código cerrado; se descarta (null) si es desconocido o si ocrStatus no es rejected/skipped (ADR-0085).
     ChecklistItemDto:
       type: object
       properties:
@@ -18428,7 +19203,7 @@ components:
 
     AiToolCode:
       type: string
-      enum: [ocr, dr_flit]
+      enum: [ocr, dr_flit, diagnostico_dictamen]
       description: Código de herramienta IA de plataforma.
 
     AiProviderCode:
@@ -19587,7 +20362,64 @@ components:
           minItems: 1
           maxItems: 1
           items: { type: string, format: uuid }
+        clientScope:
+          $ref: "#/components/schemas/OtClientScopeRequest"
       required: [email, roleIds]
+
+    OtClientScopeRequest:
+      type: object
+      description: >
+        Compañías cliente del OT que gestiona el usuario. Ausente = todos los clientes.
+        `especificos` exige al menos un `clientTenantIds` (400 CLIENT_SCOPE_EMPTY) y todos
+        deben ser clientes del OT (400 CLIENT_SCOPE_INVALID_CLIENT). Quien invita o edita con alcance
+        `especificos` no puede dar `todos` ni compañías fuera de su alcance (403 CLIENT_SCOPE_EXCEEDS_ACTOR);
+        si invita sin `clientScope`, el invitado hereda exactamente el alcance de quien invita.
+      properties:
+        mode: { type: string, enum: [todos, especificos] }
+        clientTenantIds:
+          type: array
+          items: { type: string, format: uuid }
+      required: [mode, clientTenantIds]
+
+    OtClientScopeSummary:
+      type: object
+      properties:
+        mode: { type: string, enum: [todos, especificos] }
+        clientCount: { type: integer }
+      required: [mode, clientCount]
+
+    OtClientScopeResponse:
+      type: object
+      properties:
+        mode: { type: string, enum: [todos, especificos] }
+        clients:
+          type: array
+          items:
+            type: object
+            properties:
+              tenantId: { type: string, format: uuid }
+              name: { type: string }
+            required: [tenantId, name]
+      required: [mode, clients]
+
+    OtClientCompaniesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              tenantId: { type: string, format: uuid }
+              name: { type: string }
+              nit: { type: string, nullable: true }
+            required: [tenantId, name]
+        actorRestricted:
+          type: boolean
+          description: >
+            `true` si quien consulta tiene alcance `especificos`: `items` ya viene limitado a SU alcance (no puede
+            repartir más de lo que ve). `false` = sin restricción, `items` son todas las compañías cliente del OT.
+      required: [items, actorRestricted]
 
     InviteOtUserResponse:
       type: object
@@ -19656,6 +20488,8 @@ components:
             Fecha de eliminación (soft-delete, #10623). `null` en el listado
             normal; siempre poblado cuando se listó con `?onlyDeleted=true`
             (#10624).
+        clientScope:
+          $ref: "#/components/schemas/OtClientScopeSummary"
       required: [id, fullName, email, status, isSuspended, rowVersion]
 
     UpdateOtUserRequest:
@@ -20997,6 +21831,34 @@ components:
           type: string
           nullable: true
           description: HU #14318 — nombre del organismo de `channelTransitOfficeId`; `null` si no aplica. Aditivo.
+        pagoPortal:
+          type: object
+          description: >
+            HU #14469 — pago confirmado en caja del punto de atención que el portal entregó al radicar. Solo
+            existe en trámites con `channel = pn_punto` ya pagados; en los demás la propiedad no viene. Aditivo.
+          properties:
+            valorCop:
+              type: integer
+              format: int64
+              description: "Total cobrado en pesos colombianos, sin decimales."
+            medio:
+              type: string
+              enum: [caja, sin_cobro]
+              description: "Medio del cobro: caja o sin_cobro."
+            medioCaja:
+              type: string
+              nullable: true
+              enum: [efectivo, datafono, transferencia, otro, null]
+              description: "Forma de pago en caja; null si medio = sin_cobro."
+            medioDetalle:
+              type: string
+              nullable: true
+              description: "Detalle libre cuando medioCaja = otro; null en los demás casos."
+            pagadoEn:
+              type: string
+              format: date-time
+              description: "Fecha y hora del pago (UTC)."
+          required: [valorCop, medio, pagadoEn]
         improntaGeneracionHabilitada:
           type: boolean
           description: >

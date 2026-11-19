@@ -43,6 +43,26 @@ internal static partial class RotulosDiagnostico
     /// <summary>Aviso del dictamen en el PDF mientras el texto definitivo no está (decisión 5.2: no nombra la IA).</summary>
     public const string AnalisisEnPreparacion = "Análisis en preparación";
 
+    /// <summary>
+    /// HU-3 (decisión del usuario 2026-11-18): aviso del dictamen en el PDF cuando está PENDIENTE y ya no está en la cola de
+    /// redacción (redacción apagada o suspendida, reintentos agotados, dictámenes viejos sin fecha de toma): nunca se redactará.
+    /// </summary>
+    public const string SinAnalisis = "Sin análisis";
+
+    /// <summary>«Cambio de propietario» en los reportes (HU #14582, §1.3) cuando <c>cambio_propietario</c> es true.</summary>
+    public const string CambioPropietarioSi = "Sí";
+
+    /// <summary>«Cambio de propietario» en los reportes cuando <c>cambio_propietario</c> es false.</summary>
+    public const string CambioPropietarioNo = "No";
+
+    /// <summary>Texto de <c>cambio_propietario</c> para el Excel del lote y el reporte <c>vehiculos</c>: «Sí», «No» o null (vacío).</summary>
+    public static string? DeCambioPropietario(bool? cambio) => cambio switch
+    {
+        true => CambioPropietarioSi,
+        false => CambioPropietarioNo,
+        null => null,
+    };
+
     private const string PrefijoFuentePendiente = "Consulta pendiente";
 
     private static ILogger _log = NullLogger.Instance;
@@ -90,6 +110,8 @@ internal static partial class RotulosDiagnostico
         ["INFRACCION_RUNT"] = "Infracciones registradas en el RUNT",
         ["IMPUESTO"] = "Impuesto vehicular pendiente",
         ["FUENTE_PENDIENTE"] = PrefijoFuentePendiente,
+        // Alertamiento redactado por soporte en un ajuste FLIT (HU #14563 B7); no es una regla del catálogo.
+        ["AJUSTE_FLIT"] = "Ajuste FLIT",
     };
 
     /// <summary>Nombre de cada fuente de consulta (pantalla, encabezados del Excel, hoja «Consultas»).</summary>
@@ -156,7 +178,7 @@ internal static partial class RotulosDiagnostico
     {
         ["SERVICIO_PUBLICO"] = "El vehículo es de servicio público: esta consulta no aplica.",
         ["DEPARTAMENTO_NO_SOPORTADO"] = "El departamento del vehículo todavía no está soportado.",
-        ["SIN_DOCUMENTO_LOCATARIO"] = "El vehículo está sin el documento del locatario: no hay a quién consultar.",
+        ["SIN_DOCUMENTO_LOCATARIO"] = "El RUNT no reporta locatario",
     };
 
     /// <summary>Tipo de error de una celda o persona (los de <see cref="ClasificadorErrores"/> y los propios del orquestador).</summary>

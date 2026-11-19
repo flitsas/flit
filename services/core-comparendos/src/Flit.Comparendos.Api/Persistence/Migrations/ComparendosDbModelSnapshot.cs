@@ -1557,6 +1557,18 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("text[]")
                         .HasColumnName("destinatarios_reportes");
 
+                    b.Property<bool>("DpAutomaticoActivo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("dp_automatico_activo");
+
+                    b.Property<short>("DpAutomaticoTopeDiario")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)50)
+                        .HasColumnName("dp_automatico_tope_diario");
+
                     b.Property<string>("EmpresaNit")
                         .HasMaxLength(15)
                         .HasColumnType("character varying(15)")
@@ -1879,6 +1891,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<Guid>("EnviadoPor")
                         .HasColumnType("uuid")
                         .HasColumnName("enviado_por");
+
+                    b.Property<bool>("EnvioAutomatico")
+                        .HasColumnType("boolean")
+                        .HasColumnName("envio_automatico");
 
                     b.Property<string>("Estado")
                         .IsRequired()
@@ -2968,6 +2984,39 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.ToTable("organismo_transito_alias", "comparendos");
                 });
 
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.OrganismoTransitoDp", b =>
+                {
+                    b.Property<Guid>("OrganismoTransitoId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("organismo_transito_id");
+
+                    b.Property<DateTimeOffset?>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<Guid?>("ActualizadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actualizado_por");
+
+                    b.Property<bool>("AdmiteDpPorCorreo")
+                        .HasColumnType("boolean")
+                        .HasColumnName("admite_dp_por_correo");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid?>("CreadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por");
+
+                    b.HasKey("OrganismoTransitoId")
+                        .HasName("pk_organismo_transito_dp");
+
+                    b.ToTable("organismo_transito_dp", "comparendos");
+                });
+
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.Pago", b =>
                 {
                     b.Property<Guid>("Id")
@@ -3363,6 +3412,11 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("nota_cambio");
 
+                    b.Property<string>("NotaRevisionJuridica")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("nota_revision_juridica");
+
                     b.Property<int>("NumeroVersion")
                         .HasColumnType("integer")
                         .HasColumnName("numero_version");
@@ -3378,6 +3432,19 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.Property<Guid?>("PublicadaPor")
                         .HasColumnType("uuid")
                         .HasColumnName("publicada_por");
+
+                    b.Property<DateTimeOffset?>("RevisadaJuridicamenteEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("revisada_juridicamente_en");
+
+                    b.Property<Guid?>("RevisadaJuridicamentePor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("revisada_juridicamente_por");
+
+                    b.Property<string>("RevisadaJuridicamentePorNombre")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("revisada_juridicamente_por_nombre");
 
                     b.PrimitiveCollection<List<string>>("VariablesUsadas")
                         .IsRequired()
@@ -3881,6 +3948,12 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("actualizado_por");
 
+                    b.Property<bool>("Automatizable")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("automatizable");
+
                     b.Property<DateTimeOffset>("CreadoEn")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("creado_en");
@@ -3962,6 +4035,318 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasDatabaseName("ix_trabajo_programado_tipo");
 
                     b.ToTable("trabajo_programado", "comparendos");
+                });
+
+            modelBuilder.Entity("Flit.Platform.Sdk.IaConsumo.IaConsumoDetalle", b =>
+                {
+                    b.Property<Guid>("ConsumoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("consumo_id");
+
+                    b.Property<DateTimeOffset>("FechaInicio")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_inicio");
+
+                    b.Property<string>("PromptTexto")
+                        .HasColumnType("text")
+                        .HasColumnName("prompt_texto");
+
+                    b.Property<string>("RespuestaTexto")
+                        .HasColumnType("text")
+                        .HasColumnName("respuesta_texto");
+
+                    b.HasKey("ConsumoId")
+                        .HasName("pk_ia_consumo_detalle");
+
+                    b.HasIndex("FechaInicio")
+                        .HasDatabaseName("ix_ia_consumo_detalle_fecha");
+
+                    b.ToTable("ia_consumo_detalle", "comparendos");
+                });
+
+            modelBuilder.Entity("Flit.Platform.Sdk.IaConsumo.IaConsumoLog", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("Ambiente")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("ambiente");
+
+                    b.Property<string>("Aplicativo")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("aplicativo");
+
+                    b.Property<long?>("ArchivoBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("archivo_bytes");
+
+                    b.Property<string>("ArchivoMime")
+                        .HasColumnType("text")
+                        .HasColumnName("archivo_mime");
+
+                    b.Property<int?>("ArchivoPaginas")
+                        .HasColumnType("integer")
+                        .HasColumnName("archivo_paginas");
+
+                    b.Property<string>("ArchivoSha256")
+                        .HasColumnType("text")
+                        .HasColumnName("archivo_sha256");
+
+                    b.Property<Guid>("CorrelacionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("correlacion_id");
+
+                    b.Property<decimal?>("CostoUsdEstimado")
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)")
+                        .HasColumnName("costo_usd_estimado");
+
+                    b.Property<string>("EntidadId")
+                        .HasColumnType("text")
+                        .HasColumnName("entidad_id");
+
+                    b.Property<string>("EntidadTipo")
+                        .HasColumnType("text")
+                        .HasColumnName("entidad_tipo");
+
+                    b.Property<string>("ErrorCodigo")
+                        .HasColumnType("text")
+                        .HasColumnName("error_codigo");
+
+                    b.Property<string>("ErrorMensaje")
+                        .HasColumnType("text")
+                        .HasColumnName("error_mensaje");
+
+                    b.Property<DateTimeOffset>("FechaFin")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_fin");
+
+                    b.Property<DateTimeOffset>("FechaInicio")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("fecha_inicio");
+
+                    b.Property<int>("HttpStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("http_status");
+
+                    b.Property<string>("IdRespuestaProveedor")
+                        .HasColumnType("text")
+                        .HasColumnName("id_respuesta_proveedor");
+
+                    b.Property<short>("Intento")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)1)
+                        .HasColumnName("intento");
+
+                    b.Property<int>("LatenciaMs")
+                        .HasColumnType("integer")
+                        .HasColumnName("latencia_ms");
+
+                    b.Property<int?>("MaxTokens")
+                        .HasColumnType("integer")
+                        .HasColumnName("max_tokens");
+
+                    b.Property<string>("Metadatos")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("metadatos");
+
+                    b.Property<string>("ModeloRespondido")
+                        .HasColumnType("text")
+                        .HasColumnName("modelo_respondido");
+
+                    b.Property<string>("ModeloSolicitado")
+                        .HasColumnType("text")
+                        .HasColumnName("modelo_solicitado");
+
+                    b.Property<string>("Modulo")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("modulo");
+
+                    b.Property<string>("Origen")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("origen");
+
+                    b.Property<short>("Pasada")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)1)
+                        .HasColumnName("pasada");
+
+                    b.Property<string>("Placa")
+                        .HasColumnType("text")
+                        .HasColumnName("placa");
+
+                    b.Property<string>("Proceso")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("proceso");
+
+                    b.Property<string>("PromptCodigo")
+                        .HasColumnType("text")
+                        .HasColumnName("prompt_codigo");
+
+                    b.Property<string>("PromptHash")
+                        .HasColumnType("text")
+                        .HasColumnName("prompt_hash");
+
+                    b.Property<string>("PromptVersion")
+                        .HasColumnType("text")
+                        .HasColumnName("prompt_version");
+
+                    b.Property<string>("Proveedor")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("proveedor");
+
+                    b.Property<string>("Resultado")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("resultado");
+
+                    b.Property<string>("Servicio")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("servicio");
+
+                    b.Property<string>("StopReason")
+                        .HasColumnType("text")
+                        .HasColumnName("stop_reason");
+
+                    b.Property<string>("TenantId")
+                        .HasColumnType("text")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<string>("TipoTarea")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("tipo_tarea");
+
+                    b.Property<int>("TokensCacheEscritura")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("tokens_cache_escritura");
+
+                    b.Property<int>("TokensCacheLectura")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("tokens_cache_lectura");
+
+                    b.Property<int>("TokensEntrada")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("tokens_entrada");
+
+                    b.Property<int>("TokensSalida")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("tokens_salida");
+
+                    b.Property<string>("UsuarioId")
+                        .HasColumnType("text")
+                        .HasColumnName("usuario_id");
+
+                    b.Property<string>("UsuarioLogin")
+                        .HasColumnType("text")
+                        .HasColumnName("usuario_login");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ia_consumo_log");
+
+                    b.HasIndex("CorrelacionId")
+                        .HasDatabaseName("ix_ia_consumo_log_correlacion");
+
+                    b.HasIndex("FechaInicio")
+                        .HasDatabaseName("ix_ia_consumo_log_fecha");
+
+                    b.HasIndex("Placa")
+                        .HasDatabaseName("ix_ia_consumo_log_placa")
+                        .HasFilter("placa IS NOT NULL");
+
+                    b.HasIndex("Modulo", "FechaInicio")
+                        .HasDatabaseName("ix_ia_consumo_log_modulo_fecha");
+
+                    b.HasIndex("UsuarioId", "FechaInicio")
+                        .HasDatabaseName("ix_ia_consumo_log_usuario")
+                        .HasFilter("usuario_id IS NOT NULL");
+
+                    b.ToTable("ia_consumo_log", "comparendos");
+                });
+
+            modelBuilder.Entity("Flit.Platform.Sdk.IaConsumo.IaTarifaModelo", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasColumnName("id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<string>("Modelo")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("modelo");
+
+                    b.Property<string>("Moneda")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("text")
+                        .HasDefaultValue("USD")
+                        .HasColumnName("moneda");
+
+                    b.Property<decimal>("PrecioCacheEscrituraMtok")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("precio_cache_escritura_mtok");
+
+                    b.Property<decimal>("PrecioCacheLecturaMtok")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)")
+                        .HasDefaultValue(0m)
+                        .HasColumnName("precio_cache_lectura_mtok");
+
+                    b.Property<decimal>("PrecioEntradaMtok")
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)")
+                        .HasColumnName("precio_entrada_mtok");
+
+                    b.Property<decimal>("PrecioSalidaMtok")
+                        .HasPrecision(12, 6)
+                        .HasColumnType("numeric(12,6)")
+                        .HasColumnName("precio_salida_mtok");
+
+                    b.Property<string>("Proveedor")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("proveedor");
+
+                    b.Property<DateOnly>("VigenteDesde")
+                        .HasColumnType("date")
+                        .HasColumnName("vigente_desde");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ia_tarifa_modelo");
+
+                    b.HasIndex("Proveedor", "Modelo", "VigenteDesde")
+                        .IsUnique()
+                        .HasDatabaseName("uq_ia_tarifa_modelo_proveedor_modelo_vigente");
+
+                    b.ToTable("ia_tarifa_modelo", "comparendos");
                 });
 
             modelBuilder.Entity("Flit.Platform.Sdk.Messaging.InboxMessage", b =>
@@ -4179,6 +4564,16 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_tipologia_empresa_tipologia_dp_tipologia_id");
+                });
+
+            modelBuilder.Entity("Flit.Platform.Sdk.IaConsumo.IaConsumoDetalle", b =>
+                {
+                    b.HasOne("Flit.Platform.Sdk.IaConsumo.IaConsumoLog", null)
+                        .WithOne()
+                        .HasForeignKey("Flit.Platform.Sdk.IaConsumo.IaConsumoDetalle", "ConsumoId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ia_consumo_detalle_log");
                 });
 
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.Comparendo", b =>

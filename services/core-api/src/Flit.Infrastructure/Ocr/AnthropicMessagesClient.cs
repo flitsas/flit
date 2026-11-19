@@ -2,6 +2,7 @@ using System.Net.Http.Json;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Flit.Platform.Sdk.IaConsumo;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
@@ -40,7 +41,8 @@ internal sealed record AnthropicChatResult(bool Ok, string? Text, AnthropicUsage
 internal sealed class AnthropicMessagesClient(
     HttpClient http,
     IOptions<AnthropicOptions> options,
-    ILogger<AnthropicMessagesClient> logger)
+    ILogger<AnthropicMessagesClient> logger,
+    IIaConsumoRegistrador? consumo = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -54,11 +56,15 @@ internal sealed class AnthropicMessagesClient(
 
     private readonly AnthropicOptions _options = options.Value;
 
+    /// <summary>Registro de consumo (ADR-0090). Sin registrador (clientes armados a mano en pruebas) no registra nada.</summary>
+    private readonly IIaConsumoRegistrador _consumo = consumo ?? NullIaConsumoRegistrador.Instancia;
+
     /// <summary>
     /// Envía el documento (base64) + prompt a <c>POST /v1/messages</c> y devuelve el texto del modelo.
     /// Reintenta 1 vez ante fallo de transporte (red/timeout). Ante ausencia de API key, respuesta
     /// no-200, error del proveedor o respuesta inválida devuelve <c>Ok=false</c> con status 503 y un
-    /// mensaje de carga manual (degradación graceful).
+    /// mensaje de carga manual (degradación graceful). Cada intento HTTP deja una fila en el registro de
+    /// consumo de IA (contrato ia-consumo v1), con el ámbito que haya abierto quien llama.
     /// </summary>
     /// <param name="model">Modelo a usar; null → el de <see cref="AnthropicOptions.Model"/> (analizador por tipo).</param>
     /// <param name="maxTokens">Tope de salida; null → el de <see cref="AnthropicOptions.MaxTokens"/>.</param>
@@ -76,16 +82,24 @@ internal sealed class AnthropicMessagesClient(
         int? maxTokens = null,
         int? timeoutSeconds = null)
     {
+        var modelo = model ?? _options.Model;
+        var tope = maxTokens ?? _options.MaxTokens;
+        // Mismo ámbito para los dos intentos: comparten correlacion_id aunque nadie haya abierto uno afuera.
+        using var operacion = _consumo.Contexto.Iniciar(new IaAmbito());
+        var medicion = new Medicion(_consumo, IaTiposTarea.Ocr, modelo, tope, prompt, PromptBase: null, mediaType,
+            IaConsumoTexto.BytesDeBase64(base64));
+
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
             AnthropicLog.NoKey(logger);
+            medicion.Registrar(DateTimeOffset.UtcNow, 1, IaResultados.NoConfigurado, 0, null, "sin_api_key", null, null);
             return new AnthropicVisionResult(false, null, 503, MsgNoKey);
         }
 
         var blockType = mediaType == "application/pdf" ? "document" : "image";
         var payload = new AnthropicMessagesRequest(
-            Model: model ?? _options.Model,
-            MaxTokens: maxTokens ?? _options.MaxTokens,
+            Model: modelo,
+            MaxTokens: tope,
             Messages:
             [
                 new AnthropicMessage("user",
@@ -100,6 +114,10 @@ internal sealed class AnthropicMessagesClient(
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             var isLastAttempt = attempt == MaxAttempts;
+            var inicio = DateTimeOffset.UtcNow;
+            var intento = (short)attempt;
+            var status = 0;
+            var meta = new StreamMeta();
             try
             {
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -116,42 +134,56 @@ internal sealed class AnthropicMessagesClient(
                 // consume evento a evento.
                 using var response = await http.SendAsync(
                     message, HttpCompletionOption.ResponseHeadersRead, timeoutCts.Token);
+                status = (int)response.StatusCode;
 
                 // Una respuesta HTTP completa (aun no-200) NO se reintenta: es un fallo del proveedor,
                 // no de transporte. Se degrada a 503 con mensaje de carga manual.
                 if (!response.StatusCode.Equals(System.Net.HttpStatusCode.OK))
                 {
-                    AnthropicLog.NonSuccess(logger, (int)response.StatusCode);
+                    AnthropicLog.NonSuccess(logger, status);
+                    var (codigo, detalle) = await LeerErrorAsync(response, timeoutCts.Token).ConfigureAwait(false);
+                    medicion.Registrar(inicio, intento, IaResultados.DesdeHttp(status), status, null, codigo, detalle, null);
                     return new AnthropicVisionResult(false, null, 503, MsgManual);
                 }
 
                 var (text, stopReason, providerError) =
-                    await ReadStreamAsync(response, timeoutCts.Token).ConfigureAwait(false);
+                    await ReadStreamAsync(response, meta, timeoutCts.Token).ConfigureAwait(false);
+                meta.StopReason = stopReason;
 
                 // En streaming el proveedor puede fallar DESPUÉS del 200, con un evento `error` a
                 // mitad del stream. Sin este caso el fallo pasaría por respuesta vacía.
                 if (providerError is not null)
                 {
                     AnthropicLog.ProviderError(logger, providerError);
+                    medicion.Registrar(inicio, intento, ResultadoDeErrorEnStream(providerError), status, meta, providerError, null, text);
                     return new AnthropicVisionResult(false, null, 503, MsgManual);
                 }
 
                 // El tope de salida cortó la respuesta: el JSON viene a media llave y no hay objeto
                 // que rescatar. Se avisa aparte porque la salida es subir max_tokens, no reintentar.
-                if (string.Equals(stopReason, "max_tokens", StringComparison.Ordinal))
+                var cortada = string.Equals(stopReason, "max_tokens", StringComparison.Ordinal);
+                var invalida = cortada || string.Equals(stopReason, "refusal", StringComparison.Ordinal);
+                if (cortada)
                     AnthropicLog.Truncated(logger);
 
                 if (string.IsNullOrWhiteSpace(text))
+                {
+                    medicion.Registrar(inicio, intento, IaResultados.RespuestaInvalida, status, meta, "respuesta_vacia", null, text);
                     return new AnthropicVisionResult(false, null, 503, MsgManual);
+                }
 
+                medicion.Registrar(inicio, intento, invalida ? IaResultados.RespuestaInvalida : IaResultados.Exito, status, meta,
+                    invalida ? stopReason : null, null, text);
                 return new AnthropicVisionResult(true, text, 200, null);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                medicion.Registrar(inicio, intento, IaResultados.Cancelado, status, meta, "cancelado", null, null);
                 throw;
             }
             catch (TaskCanceledException)
             {
+                medicion.Registrar(inicio, intento, IaResultados.Timeout, status, meta, "timeout", null, null);
                 // Timeout del HttpClient: reintentable. En el último intento, degrada.
                 if (isLastAttempt)
                 {
@@ -162,6 +194,8 @@ internal sealed class AnthropicMessagesClient(
             }
             catch (Exception ex) when (ex is HttpRequestException or IOException)
             {
+                medicion.Registrar(inicio, intento, IaResultados.Red, status, meta,
+                    status == 200 ? "stream_cortado" : ex.GetType().Name, ex.Message, null);
                 // Error de red, o el stream se cortó a mitad (IOException). Reintentable: el texto
                 // parcial acumulado se descarta y se pide de nuevo. En el último intento, degrada.
                 if (isLastAttempt)
@@ -173,6 +207,7 @@ internal sealed class AnthropicMessagesClient(
             }
             catch (JsonException)
             {
+                medicion.Registrar(inicio, intento, IaResultados.RespuestaInvalida, status, meta, "json_invalido", null, null);
                 // Respuesta no interpretable (llegó pero no es JSON válido): no se reintenta.
                 AnthropicLog.InvalidResponse(logger);
                 return new AnthropicVisionResult(false, null, 503, MsgManual);
@@ -199,9 +234,16 @@ internal sealed class AnthropicMessagesClient(
         int timeoutSeconds,
         CancellationToken ct)
     {
+        using var operacion = _consumo.Contexto.Iniciar(new IaAmbito());
+        var systemTexto = string.Join("\n\n", system.Select(b => b.Text));
+        var medicion = new Medicion(_consumo, IaTiposTarea.Chat, model, maxTokens,
+            _consumo.DetalleActivo ? ChatComoTexto(systemTexto, turns.Select(t => (t.Role, t.Text))) : null,
+            systemTexto, null, null);
+
         if (string.IsNullOrWhiteSpace(_options.ApiKey))
         {
             AnthropicLog.NoKey(logger);
+            medicion.Registrar(DateTimeOffset.UtcNow, 1, IaResultados.NoConfigurado, 0, null, "sin_api_key", null, null);
             return AnthropicChatResult.Failed;
         }
 
@@ -217,6 +259,9 @@ internal sealed class AnthropicMessagesClient(
         for (var attempt = 1; attempt <= MaxAttempts; attempt++)
         {
             var isLastAttempt = attempt == MaxAttempts;
+            var inicio = DateTimeOffset.UtcNow;
+            var intento = (short)attempt;
+            var status = 0;
             try
             {
                 using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -230,9 +275,12 @@ internal sealed class AnthropicMessagesClient(
                 message.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
 
                 using var response = await http.SendAsync(message, timeoutCts.Token).ConfigureAwait(false);
+                status = (int)response.StatusCode;
                 if (!response.StatusCode.Equals(System.Net.HttpStatusCode.OK))
                 {
-                    AnthropicLog.NonSuccess(logger, (int)response.StatusCode);
+                    AnthropicLog.NonSuccess(logger, status);
+                    var (codigo, detalle) = await LeerErrorAsync(response, timeoutCts.Token).ConfigureAwait(false);
+                    medicion.Registrar(inicio, intento, IaResultados.DesdeHttp(status), status, null, codigo, detalle, null);
                     return AnthropicChatResult.Failed;
                 }
 
@@ -243,12 +291,30 @@ internal sealed class AnthropicMessagesClient(
                 var text = string.Concat(
                     (body?.Content ?? []).Where(c => c.Type == "text").Select(c => c.Text));
 
-                if (string.Equals(body?.StopReason, "max_tokens", StringComparison.Ordinal))
+                var cortada = string.Equals(body?.StopReason, "max_tokens", StringComparison.Ordinal);
+                if (cortada)
                     AnthropicLog.Truncated(logger);
+                var invalida = cortada || string.Equals(body?.StopReason, "refusal", StringComparison.Ordinal);
+
+                var meta = new StreamMeta
+                {
+                    Id = body?.Id,
+                    Model = body?.Model,
+                    StopReason = body?.StopReason,
+                    InputTokens = body?.Usage?.InputTokens ?? 0,
+                    OutputTokens = body?.Usage?.OutputTokens ?? 0,
+                    CacheRead = body?.Usage?.CacheReadInputTokens ?? 0,
+                    CacheWrite = body?.Usage?.CacheCreationInputTokens ?? 0,
+                };
 
                 if (string.IsNullOrWhiteSpace(text))
+                {
+                    medicion.Registrar(inicio, intento, IaResultados.RespuestaInvalida, status, meta, "respuesta_vacia", null, text);
                     return AnthropicChatResult.Failed;
+                }
 
+                medicion.Registrar(inicio, intento, invalida ? IaResultados.RespuestaInvalida : IaResultados.Exito, status, meta,
+                    invalida ? body?.StopReason : null, null, text);
                 var usage = body!.Usage is { } u
                     ? new AnthropicUsage(u.InputTokens, u.OutputTokens, u.CacheReadInputTokens, u.CacheCreationInputTokens)
                     : null;
@@ -256,10 +322,12 @@ internal sealed class AnthropicMessagesClient(
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested)
             {
+                medicion.Registrar(inicio, intento, IaResultados.Cancelado, status, null, "cancelado", null, null);
                 throw;
             }
             catch (TaskCanceledException)
             {
+                medicion.Registrar(inicio, intento, IaResultados.Timeout, status, null, "timeout", null, null);
                 if (isLastAttempt)
                 {
                     AnthropicLog.Timeout(logger);
@@ -269,6 +337,7 @@ internal sealed class AnthropicMessagesClient(
             }
             catch (Exception ex) when (ex is HttpRequestException or IOException)
             {
+                medicion.Registrar(inicio, intento, IaResultados.Red, status, null, ex.GetType().Name, ex.Message, null);
                 if (isLastAttempt)
                 {
                     AnthropicLog.Network(logger, ex.Message);
@@ -278,6 +347,7 @@ internal sealed class AnthropicMessagesClient(
             }
             catch (JsonException)
             {
+                medicion.Registrar(inicio, intento, IaResultados.RespuestaInvalida, status, null, "json_invalido", null, null);
                 AnthropicLog.InvalidResponse(logger);
                 return AnthropicChatResult.Failed;
             }
@@ -286,13 +356,117 @@ internal sealed class AnthropicMessagesClient(
         return AnthropicChatResult.Failed;
     }
 
+    /// <summary>Texto de una conversación para <c>ia_consumo_detalle.prompt_texto</c> (solo con el detalle activo).</summary>
+    internal static string ChatComoTexto(string system, IEnumerable<(string Role, string Text)> turns)
+    {
+        var sb = new StringBuilder();
+        sb.Append("[system]\n").Append(system);
+        foreach (var (role, text) in turns)
+            sb.Append("\n\n[").Append(role).Append("]\n").Append(text);
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Tipo y mensaje del error del cuerpo de una respuesta no-200 (<c>{"error":{"type":..,"message":..}}</c>). Nunca
+    /// lanza por el contenido: si el cuerpo no es ese JSON, devuelve <c>http_&lt;status&gt;</c>.
+    /// </summary>
+    private static async Task<(string Codigo, string? Mensaje)> LeerErrorAsync(HttpResponseMessage response, CancellationToken ct)
+    {
+        var porDefecto = $"http_{(int)response.StatusCode}";
+#pragma warning disable CA1031 // Leer el detalle del error es una ayuda para el registro; nunca cambia el resultado.
+        try
+        {
+            var cuerpo = await response.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(cuerpo);
+            if (doc.RootElement.ValueKind == JsonValueKind.Object
+                && doc.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object)
+            {
+                return (Cadena(error, "type") ?? porDefecto, Cadena(error, "message"));
+            }
+        }
+        catch (Exception)
+        {
+            // Incluye el corte por deadline mientras se lee el cuerpo: el intento ya terminó en no-200 y se
+            // registra una sola vez como tal; leer el detalle nunca debe convertirlo en un timeout aparte.
+        }
+#pragma warning restore CA1031
+        return (porDefecto, null);
+    }
+
+    /// <summary>Evento <c>error</c> a mitad del stream → resultado del contrato.</summary>
+    private static string ResultadoDeErrorEnStream(string tipo) => tipo switch
+    {
+        "rate_limit_error" => IaResultados.RateLimit,
+        "invalid_request_error" => IaResultados.Rechazado,
+        _ => IaResultados.ErrorProveedor,
+    };
+
+    /// <summary>Lo que se va sabiendo de la respuesta: id, modelo, motivo de parada y tokens.</summary>
+    private sealed class StreamMeta
+    {
+        public string? Id { get; set; }
+        public string? Model { get; set; }
+        public string? StopReason { get; set; }
+        public int InputTokens { get; set; }
+        public int OutputTokens { get; set; }
+        public int CacheRead { get; set; }
+        public int CacheWrite { get; set; }
+    }
+
+    /// <summary>Lo fijo de una llamada (los dos intentos comparten modelo, tope y prompt).</summary>
+    private sealed record Medicion(
+        IIaConsumoRegistrador Consumo,
+        string TipoTarea,
+        string Modelo,
+        int MaxTokens,
+        string? Prompt,
+        string? PromptBase,
+        string? Mime,
+        long? Bytes)
+    {
+        public void Registrar(
+            DateTimeOffset inicio, short intento, string resultado, int status, StreamMeta? meta,
+            string? errorCodigo, string? errorMensaje, string? respuesta)
+        {
+            if (!Consumo.Activo)
+                return;
+            Consumo.Registrar(new IaLlamada
+            {
+                Proveedor = IaProveedores.Anthropic,
+                TipoTareaPorDefecto = TipoTarea,
+                FechaInicio = inicio,
+                Intento = intento,
+                Resultado = resultado,
+                HttpStatus = status,
+                ModeloSolicitado = Modelo,
+                ModeloRespondido = meta?.Model,
+                IdRespuestaProveedor = meta?.Id,
+                MaxTokens = MaxTokens,
+                StopReason = meta?.StopReason,
+                ErrorCodigo = errorCodigo,
+                ErrorMensaje = errorMensaje,
+                TokensEntrada = meta?.InputTokens ?? 0,
+                TokensSalida = meta?.OutputTokens ?? 0,
+                TokensCacheLectura = meta?.CacheRead ?? 0,
+                TokensCacheEscritura = meta?.CacheWrite ?? 0,
+                PromptTexto = Prompt,
+                PromptBase = PromptBase,
+                RespuestaTexto = Consumo.DetalleActivo ? respuesta : null,
+                ArchivoMime = Mime,
+                ArchivoBytes = Bytes,
+            });
+        }
+    }
+
     /// <summary>
     /// Consume el stream SSE y devuelve el texto concatenado de los bloques de texto, el
     /// <c>stop_reason</c> final y el tipo de error del proveedor si llegó uno a mitad del stream.
-    /// Los eventos que no aportan texto (ping, content_block_start/stop) se ignoran a propósito.
+    /// Id, modelo y tokens (<c>message_start</c> / <c>message_delta</c>) se anotan en <paramref name="meta"/>
+    /// para el registro de consumo. Los eventos que no aportan nada (ping, content_block_start/stop) se ignoran.
     /// </summary>
     private static async Task<(string Text, string? StopReason, string? Error)> ReadStreamAsync(
         HttpResponseMessage response,
+        StreamMeta meta,
         CancellationToken ct)
     {
         var text = new StringBuilder();
@@ -319,6 +493,16 @@ internal sealed class AnthropicMessagesClient(
 
                 switch (typeProperty.GetString())
                 {
+                    case "message_start":
+                        if (root.TryGetProperty("message", out var started) && started.ValueKind == JsonValueKind.Object)
+                        {
+                            meta.Id = Cadena(started, "id");
+                            meta.Model = Cadena(started, "model");
+                            if (started.TryGetProperty("usage", out var u0))
+                                AnotarUso(meta, u0);
+                        }
+                        break;
+
                     case "content_block_delta":
                         if (root.TryGetProperty("delta", out var delta)
                             && delta.TryGetProperty("type", out var deltaType)
@@ -336,6 +520,9 @@ internal sealed class AnthropicMessagesClient(
                         {
                             stopReason = reason.GetString();
                         }
+                        // El usage del message_delta es ACUMULADO: trae los output_tokens finales.
+                        if (root.TryGetProperty("usage", out var u1))
+                            AnotarUso(meta, u1);
                         break;
 
                     case "error":
@@ -353,6 +540,27 @@ internal sealed class AnthropicMessagesClient(
 
         return (text.ToString(), stopReason, null);
     }
+
+    private static string? Cadena(JsonElement e, string nombre) =>
+        e.TryGetProperty(nombre, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    /// <summary>Solo pisa lo que viene con valor: el message_delta trae output_tokens y no siempre repite la entrada.</summary>
+    private static void AnotarUso(StreamMeta meta, JsonElement usage)
+    {
+        if (usage.ValueKind != JsonValueKind.Object)
+            return;
+        if (Entero(usage, "input_tokens") is { } i && i > 0)
+            meta.InputTokens = i;
+        if (Entero(usage, "output_tokens") is { } o)
+            meta.OutputTokens = o;
+        if (Entero(usage, "cache_read_input_tokens") is { } r && r > 0)
+            meta.CacheRead = r;
+        if (Entero(usage, "cache_creation_input_tokens") is { } w && w > 0)
+            meta.CacheWrite = w;
+    }
+
+    private static int? Entero(JsonElement e, string nombre) =>
+        e.TryGetProperty(nombre, out var v) && v.ValueKind == JsonValueKind.Number && v.TryGetInt32(out var n) ? n : null;
 
     // ── Contrato Anthropic Messages API (payload de visión) ───────────────────
     /// <param name="Stream">
@@ -403,6 +611,8 @@ internal sealed class AnthropicMessagesClient(
         [property: JsonPropertyName("content")] string Content);
 
     private sealed record AnthropicChatResponse(
+        [property: JsonPropertyName("id")] string? Id,
+        [property: JsonPropertyName("model")] string? Model,
         [property: JsonPropertyName("content")] IReadOnlyList<AnthropicChatResponseBlock>? Content,
         [property: JsonPropertyName("stop_reason")] string? StopReason,
         [property: JsonPropertyName("usage")] AnthropicChatResponseUsage? Usage);

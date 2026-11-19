@@ -12,6 +12,7 @@ import { WIZARD_INPUT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-s
 import { WizardCardHeader } from './wizard-atoms';
 import { InlineAlert, INLINE_ALERT_TONES } from '@/components/atom/InlineAlert';
 import { cn } from '@/lib/utils';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /** Handle imperativo: la shell del wizard dispara guardar+validar. */
 export type CommercialFormHandle = WizardStepFormHandle;
@@ -260,7 +261,8 @@ export const CommercialForm = forwardRef<CommercialFormHandle, Props>(
               role="status"
               aria-live="polite"
             >
-              Datos comerciales guardados ✓
+              <IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />
+              Datos comerciales guardados
             </span>
           ) : (
             <span className="text-xs opacity-70">{loading ? 'Cargando…' : ''}</span>

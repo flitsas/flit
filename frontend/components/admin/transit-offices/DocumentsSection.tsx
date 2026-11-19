@@ -3,7 +3,6 @@
 import { buttonClass } from "@flit/ui/Button";
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Tag } from "lucide-react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { getToken } from "@/lib/api/client";
@@ -30,6 +29,8 @@ import { OtTabBar } from "./OtTabBar";
 import { OT_INPUT_CLS } from "./ot-form-styles";
 import { TAG_COLOR_OPTIONS, TagFormPanel } from "./TagFormPanel";
 import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_MARCADOR = iconoComo("marcador");
 
 /** Nombre accesible/legible del color de una etiqueta (HU #12883 AC3 — paleta cerrada). */
 function tagColorLabel(hex: string): string {
@@ -300,7 +301,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
           <div className="flex justify-end">
             <CreateButton
               label="Nueva etiqueta"
-              icon={Tag}
+              icon={ICONO_MARCADOR}
               onClick={() => setTagFormOpen(true)}
             />
           </div>
@@ -314,7 +315,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
             emptyCta={
               <CreateButton
                 label="Crear primera etiqueta"
-                icon={Tag}
+                icon={ICONO_MARCADOR}
                 onClick={() => setTagFormOpen(true)}
               />
             }

@@ -7,6 +7,7 @@ import { AccionFila } from "@/components/landing/AccionesPrincipales";
 import { boton } from "@/components/landing/estilos";
 import { SelectorTipoTramite } from "@/components/landing/SelectorTipoTramite";
 import { MobilityLoader } from "@/components/MobilityLoader";
+import type { RetomarPagoDatos } from "@/components/modales/ConsultarModal";
 import { DiagnosticoPunto } from "@/components/punto/DiagnosticoPunto";
 import { useTiposTramitePunto } from "@/components/landing/useCatalogos";
 import { textoArranque, type ClientePortal } from "@/lib/api/cliente";
@@ -33,6 +34,8 @@ export function AccionesPunto({
   onCotizar,
   onAviso,
   onWizard,
+  retomando = null,
+  onRetomoTerminado,
 }: {
   cliente: ClientePortal;
   /** Organismo de la sesión del punto: sus tipos son los que tienen tarifa vigente ahí. */
@@ -44,6 +47,9 @@ export function AccionesPunto({
   onAviso: (titulo: string, mensaje: string, tono?: "alerta" | "exito" | "info") => void;
   /** El padre cambia el shell (dashboard → cascarón del wizard). */
   onWizard?: (activo: boolean) => void;
+  /** Solicitud con pago pendiente retomada desde Consultar: abre el asistente directamente en Pago. */
+  retomando?: RetomarPagoDatos | null;
+  onRetomoTerminado?: () => void;
 }) {
   const [placa, setPlaca] = useState("");
   const [documento, setDocumento] = useState("");
@@ -57,8 +63,8 @@ export function AccionesPunto({
   const listo = placa !== "" && documento !== "" && tipo !== "";
 
   useEffect(() => {
-    onWizard?.(fase === "diagnostico");
-  }, [fase, onWizard]);
+    onWizard?.(fase === "diagnostico" || retomando !== null);
+  }, [fase, onWizard, retomando]);
 
   async function arrancar() {
     if (!listo) return;
@@ -75,6 +81,24 @@ export function AccionesPunto({
       onAviso("No pudimos continuar", mensajeDeFallo(err));
       setFase("formulario");
     }
+  }
+
+  if (retomando) {
+    return (
+      <DiagnosticoPunto
+        key={retomando.solicitudId}
+        cliente={cliente}
+        placa={retomando.placa}
+        documento={retomando.documento}
+        tipoCodigo={retomando.tipoCodigo}
+        tipoNombre={opciones.find((o) => o.code === retomando.tipoCodigo)?.name}
+        organismoNombre={organismoNombre}
+        reanudar={{ solicitudId: retomando.solicitudId }}
+        onVolver={() => onRetomoTerminado?.()}
+        onTerminar={() => onRetomoTerminado?.()}
+        onAviso={onAviso}
+      />
+    );
   }
 
   if (fase === "diagnostico") {

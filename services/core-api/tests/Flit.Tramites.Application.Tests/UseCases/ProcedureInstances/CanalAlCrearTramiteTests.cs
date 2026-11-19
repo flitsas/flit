@@ -7,6 +7,7 @@ using Flit.Tramites.Domain.ReadModels;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Enums;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.PersonaNatural;
 using Flit.Tramites.Domain.Tramites.ValueObjects;
 using FluentAssertions;
 using NSubstitute;
@@ -324,6 +325,57 @@ public sealed class CanalAlCrearTramiteTests
         json.RootElement.GetProperty("channel").GetString().Should().Be("pn_punto");
         json.RootElement.GetProperty("channelTransitOfficeId").GetGuid().Should().Be(ot);
         json.RootElement.GetProperty("channelTransitOfficeName").GetString().Should().Be("Organismo de prueba");
+    }
+
+    // ── HU #14469: el detalle trae el pago del portal solo en el canal del punto ─────────────────
+
+    private static readonly PagoPortalTramite PagoDePrueba =
+        new(125_500, "caja", "efectivo", null, new DateTimeOffset(2026, 11, 9, 15, 30, 0, TimeSpan.Zero), "cobro-1");
+
+    [Fact]
+    public async Task HU14469_ElDetalleDelPuntoConPago_TraeElBloquePagoPortal_SinElIdDelCobro()
+    {
+        var instancia = Instancia("pn_punto", Guid.NewGuid());
+        _repo.GetPagoPortalAsync(instancia.Id, instancia.TenantId, Arg.Any<CancellationToken>()).Returns(PagoDePrueba);
+
+        var (detalle, _) = await Detalle(instancia);
+
+        detalle!.PagoPortal.Should().Be(new ProcedureInstancePagoPortalDto(125_500, "caja", "efectivo", null, PagoDePrueba.PagadoEn));
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(detalle, JsonSerializerOptions.Web));
+        var pago = json.RootElement.GetProperty("pagoPortal");
+        pago.GetProperty("valorCop").GetInt64().Should().Be(125_500);
+        pago.GetProperty("medio").GetString().Should().Be("caja");
+        pago.GetProperty("medioCaja").GetString().Should().Be("efectivo");
+        pago.GetProperty("pagadoEn").GetDateTimeOffset().Should().Be(PagoDePrueba.PagadoEn);
+        pago.TryGetProperty("cobroId", out _).Should().BeFalse("el id del cobro del portal no sale en el detalle");
+    }
+
+    [Fact]
+    public async Task HU14469_ElDetalleDelPuntoSinPago_NoEscribeLaPropiedad()
+    {
+        var instancia = Instancia("pn_punto", Guid.NewGuid());
+
+        var (detalle, _) = await Detalle(instancia);
+
+        detalle!.PagoPortal.Should().BeNull();
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(detalle, JsonSerializerOptions.Web));
+        json.RootElement.TryGetProperty("pagoPortal", out _).Should().BeFalse();
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("tramites")]
+    [InlineData("pn_web")]
+    [InlineData("integracion")]
+    public async Task HU14469_OtroCanal_NoConsultaNiMuestraPago(string? canal)
+    {
+        var instancia = Instancia(canal, null);
+        _repo.GetPagoPortalAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>()).Returns(PagoDePrueba);
+
+        var (detalle, _) = await Detalle(instancia);
+
+        detalle!.PagoPortal.Should().BeNull();
+        await _repo.DidNotReceive().GetPagoPortalAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>());
     }
 
     private async Task<(ProcedureInstanceDetailDto? Result, string? Error)> Detalle(ProcedureInstance instancia)

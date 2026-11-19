@@ -6,7 +6,8 @@ import { DISPONIBLES_CON_IMPUESTO } from "@/components/parametrizacion/__tests__
 import { ID, archivo, configuracion, diagnostico, llamadas, montarNuevo, resumen, type Navegacion } from "./datos";
 
 // Uso de ejemplo: /diagnosticos/nuevo?modo=masivo abre la pantalla única de creación (HU #14085) con el selector
-// Express | Masivo, la zona Vehículos a la izquierda y la zona Parámetros (sticky) a la derecha desde 1024 px.
+// Express | Masivo y, desde la ola UX 2026-11-15 (FE-3), una sola columna: Parámetros arriba (en horizontal), Vehículos
+// debajo y al final la barra con el estimado y la acción.
 
 const nav = vi.hoisted(() => ({ push: vi.fn(), replace: vi.fn(), refresh: vi.fn(), params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({
@@ -38,19 +39,43 @@ describe("Pantalla única — selector y zonas (AC1)", () => {
     expect(screen.getByRole("region", { name: "Vehículos" })).toContainElement(screen.getByRole("textbox", { name: "Placa o VIN" }));
   });
 
-  it("en ≥1024 px las zonas van en dos columnas con Parámetros sticky; en móvil se apilan sin desbordar", async () => {
+  it("FE-3: una columna con Parámetros arriba y sin sticky, Vehículos debajo y la acción al final; sin desbordar en móvil", async () => {
     montarNuevo(navegacion);
     await screen.findByRole("textbox", { name: "Nombre del diagnóstico" });
     const vehiculos = screen.getByRole("region", { name: "Vehículos" });
     const parametros = screen.getByRole("region", { name: "Parámetros" });
     const rejilla = vehiculos.parentElement as HTMLElement;
     expect(rejilla).toBe(parametros.parentElement);
-    expect(rejilla.className).toMatch(/(^|\s)grid(\s|$)/);
-    expect(rejilla.className).toMatch(/lg:grid-cols-/);
-    expect(parametros.className).toMatch(/lg:sticky/);
+    expect(rejilla.className).not.toMatch(/grid-cols-/);
+    expect(parametros.className).not.toMatch(/sticky/);
+    expect(parametros.compareDocumentPosition(vehiculos) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const accion = screen.getByRole("button", { name: /iniciar diagnóstico|continuar/i });
+    expect(vehiculos.compareDocumentPosition(accion) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(parametros.contains(accion)).toBe(false);
     // Sin ancho mínimo propio en las columnas: en móvil se apilan y no generan scroll horizontal.
     expect(vehiculos.className).toContain("min-w-0");
     expect(parametros.className).toContain("min-w-0");
+  });
+
+  it("FE-3: dentro de Parámetros, Información general, Modo y Alcance lado a lado desde md (3 columnas desde xl), en ese orden", async () => {
+    montarNuevo(navegacion);
+    await screen.findByRole("textbox", { name: "Nombre del diagnóstico" });
+    const parametros = screen.getByRole("region", { name: "Parámetros" });
+    const info = within(parametros).getByRole("heading", { name: "Información general" });
+    const modo = within(parametros).getByRole("heading", { name: "Modo" });
+    const alcance = within(parametros).getByRole("heading", { name: "Alcance" });
+    expect(info.compareDocumentPosition(modo) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(modo.compareDocumentPosition(alcance) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    const rejilla = parametros.querySelector("[data-disposicion='horizontal']") as HTMLElement;
+    expect(rejilla).not.toBeNull();
+    for (const c of ["grid", "grid-cols-1", "md:grid-cols-2", "xl:grid-cols-[minmax(14rem,1fr)_minmax(16rem,1fr)_minmax(0,2fr)]"]) {
+      expect(rejilla.className.split(/\s+/)).toContain(c);
+    }
+    // Alcance ocupa el ancho de la tableta y su tercio (doble) en xl; sus grupos van en 3 columnas desde sm.
+    const seccionAlcance = alcance.closest("[data-zona='alcance']") as HTMLElement;
+    expect(seccionAlcance.className).toContain("md:col-span-2");
+    expect(seccionAlcance.className).toContain("xl:col-span-1");
+    expect(seccionAlcance.querySelector(".sm\\:grid-cols-3")).not.toBeNull();
   });
 
   it("?modo=masivo abre en Masivo con la plantilla, la zona de archivo y «Validar archivo»", async () => {
@@ -78,10 +103,19 @@ describe("Pantalla única — selector y zonas (AC1)", () => {
     });
     expect(await screen.findByRole("status", { name: "Cargando la parametrización…" })).toBeInTheDocument();
     expect(await screen.findByText("No se pudo cargar la parametrización")).toBeInTheDocument();
-    expect(screen.getByText(/diagnóstico no respondió/i)).toBeInTheDocument();
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(screen.getByText("No se pudo cargar la configuración.")).toBeInTheDocument();
     falla = false;
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByRole("textbox", { name: "Nombre del diagnóstico" })).toBeInTheDocument();
+  });
+
+  it("AP-9: un 4xx al leer la configuración muestra el respaldo fijo, nunca el mensaje del servidor", async () => {
+    montarNuevo(navegacion, {
+      rutas: { "GET /configuracion": () => Response.json({ code: "OTRO", error: "mensaje del servidor que no debe verse" }, { status: 422 }) },
+    });
+    expect(await screen.findByText("No se pudo cargar la configuración.")).toBeInTheDocument();
+    expect(screen.queryByText("mensaje del servidor que no debe verse")).not.toBeInTheDocument();
   });
 
   it("un 403 de sesión al leer la configuración lleva a /403 con su código", async () => {
@@ -99,10 +133,13 @@ describe("Pantalla única — selector y zonas (AC1)", () => {
     expect(impuesto).toBeChecked();
   });
 
-  it("sin el impuesto en fuentes_disponibles no lo ofrece aunque esté contratado", async () => {
+  it("AC16: sin el impuesto en fuentes_disponibles lo muestra deshabilitado con «Disponible cuando…» y no lo envía", async () => {
     montarNuevo(navegacion, { config: configuracion({ contrato: { fuentes_habilitadas: ["RUNT", "IMPUESTO_DEPARTAMENTAL"] } }) });
-    await screen.findByRole("group", { name: "Por Vehículo" });
-    expect(screen.queryByRole("checkbox", { name: "Impuesto departamental" })).toBeNull();
+    const grupo = await screen.findByRole("group", { name: "Por Vehículo" });
+    const impuesto = within(grupo).getByRole("checkbox", { name: "Impuesto departamental" });
+    expect(impuesto).toBeDisabled();
+    expect(impuesto).not.toBeChecked();
+    expect(impuesto).toHaveAccessibleDescription(/Disponible cuando la consulta automatizada esté en producción/);
   });
 });
 
@@ -111,14 +148,14 @@ describe("Pantalla única — cambio de modo (AC5)", () => {
     montarNuevo(navegacion);
     fireEvent.change(await screen.findByRole("textbox", { name: "Placa o VIN" }), { target: { value: "tst123" } });
     fireEvent.click(await screen.findByRole("checkbox", { name: "SIMIT vehículo" }));
-    fireEvent.click(screen.getByRole("radio", { name: "Con Análisis IA" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Con análisis" }));
     fireEvent.change(await screen.findByRole("combobox", { name: /tipo de trámite/i }), { target: { value: "TRASPASO_STANDARD" } });
 
     fireEvent.click(radioModo("Masivo"));
     expect(radioModo("Masivo")).toHaveAttribute("aria-checked", "true");
     expect(await screen.findByLabelText(/archivo de vehículos/i)).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: "SIMIT vehículo" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "Con Análisis IA" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "Con análisis" })).toBeChecked();
     expect(screen.getByRole("combobox", { name: /tipo de trámite/i })).toHaveValue("TRASPASO_STANDARD");
     expect(window.location.search).toContain("modo=masivo");
 
@@ -213,5 +250,22 @@ describe("Pantalla única — sin la ruta /carga intermedia (AC3)", () => {
     await screen.findByRole("region", { name: "Resumen de validación" });
     expect(screen.queryByRole("link", { name: /cargar vehículos/i })).not.toBeInTheDocument();
     expect(nav.push).not.toHaveBeenCalled();
+  });
+});
+
+describe("Pantalla única — rediseño del kit 2026 (AC16)", () => {
+  it("el selector Express/Masivo es el SelectorSegmentado del kit", async () => {
+    montarNuevo(navegacion);
+    const grupo = await selector();
+    expect(grupo.className).toContain("--di-surface-sunken");
+  });
+
+  it("el alcance dice «N de 8 fuentes» y se actualiza al marcar", async () => {
+    montarNuevo(navegacion);
+    await screen.findByRole("textbox", { name: "Nombre del diagnóstico" });
+    const parametros = screen.getByRole("region", { name: "Parámetros" });
+    expect(within(parametros).getByText("1 de 8 fuentes")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("checkbox", { name: "SIMIT vehículo" }));
+    expect(within(parametros).getByText("2 de 8 fuentes")).toBeInTheDocument();
   });
 });

@@ -42,11 +42,13 @@ internal sealed partial class RedactorEnCola(
     /// <summary>
     /// Qué hacer con la fila tomada. <paramref name="resultado"/> null: no se llamó al modelo (suspensión o proveedor apagado).
     /// Un fallo técnico agenda <see cref="EmisorDictamen.DisponibleDesde"/> salvo que <paramref name="intentos"/> ya pasó de
-    /// <paramref name="maxReintentos"/>. Contradicción agotada, <see cref="TipoFalloRedactor.NoConfigurado"/> e
+    /// <paramref name="maxReintentos"/>. Sin espera indicada, la base es <see cref="EsperaDeLaToma"/>: con 30 s, la toma 1
+    /// agenda +30 s y la 2, +60 s. Contradicción agotada, <see cref="TipoFalloRedactor.NoConfigurado"/> e
     /// <see cref="TipoFalloRedactor.Ilegible"/> no se reintentan. No hay estado ERROR.
     /// </summary>
     public static CierreDeRedaccion Decidir(
-        string veredicto, string alertamientos, int intentos, ResultadoRedaccion? resultado, int maxReintentos, DateTimeOffset ahora)
+        string veredicto, string alertamientos, int intentos, ResultadoRedaccion? resultado, int maxReintentos, TimeSpan esperaReintento,
+        DateTimeOffset ahora)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(veredicto);
         ArgumentNullException.ThrowIfNull(alertamientos);
@@ -55,8 +57,39 @@ internal sealed partial class RedactorEnCola(
             return new CierreDeRedaccion(ConTexto(alertamientos, resultado.Texto), "LLM", ColaRedaccion.Completada, null, null, true);
         }
 
-        var desde = intentos > maxReintentos || resultado is null ? null : EmisorDictamen.DisponibleDesde(resultado, ahora);
+        var desde = AgotoReintentos(intentos, maxReintentos) || resultado is null ? null : EmisorDictamen.DisponibleDesde(resultado, ahora, EsperaDeLaToma(esperaReintento, intentos));
         return new CierreDeRedaccion(alertamientos, "PLANTILLA", ColaRedaccion.Pendiente, desde, null, false);
+    }
+
+    /// <summary>
+    /// Espera de un fallo técnico sin indicación del proveedor: <c>esperaReintento × 2^(toma−1)</c>. Una toma menor que 1 cuenta
+    /// como 1. El exponente se acota a 30 para no desbordar; con MaxReintentos ≤ 5 nunca llega ahí.
+    /// </summary>
+    public static TimeSpan EsperaDeLaToma(TimeSpan esperaReintento, int toma)
+    {
+        var exponente = Math.Clamp(toma, 1, 31) - 1;
+        return TimeSpan.FromTicks(checked(esperaReintento.Ticks * (1L << exponente)));
+    }
+
+    /// <summary>
+    /// true si una toma con <paramref name="intentos"/> (contando esa toma) ya pasó del tope: <c>intentos &gt; maxReintentos</c>.
+    /// Es el único borde de reintentos y lo usa <see cref="Decidir"/>: con MaxReintentos=2 hay tres tomas (1, 2 y 3) y el fallo
+    /// de la tercera deja la fecha de toma en null, así que la fila sale de <see cref="EnCola"/>.
+    /// </summary>
+    public static bool AgotoReintentos(int intentos, int maxReintentos) => intentos > maxReintentos;
+
+    /// <summary>
+    /// HU-2 (<c>redaccion_en_cola</c>): la fila espera una redacción del modelo. Función pura de la fila ya leída, con el
+    /// predicado de la toma (<see cref="ColaRedaccion"/>: <c>PENDIENTE</c> y <c>redaccion_disponible_desde</c> no nula) más la
+    /// redacción encendida (<see cref="OpcionesRedaccion.Habilitado"/>; si no, ningún trabajador toma la cola). Los reintentos
+    /// agotados ya quedan fuera porque <see cref="Decidir"/> deja la fecha en null. No mira el lease: una fila tomada sigue en cola.
+    /// </summary>
+    public static bool EnCola(string estadoRedaccion, DateTimeOffset? disponibleDesde, OpcionesRedaccion opciones)
+    {
+        ArgumentNullException.ThrowIfNull(opciones);
+        return opciones.Habilitado
+            && estadoRedaccion == ColaRedaccion.Pendiente
+            && disponibleDesde is not null;
     }
 
     /// <summary>
@@ -166,10 +199,20 @@ internal sealed partial class RedactorEnCola(
                 EmisorDictamen.BienDe(detalle, vehiculo.Placa, vehiculo.Servicio, vehiculo.IdentificadorNorm),
                 suspendida,
                 MontoImpuesto(celdas));
-            resultado = await servicios.GetRequiredService<ServicioRedactor>().RedactarAsync(pedido, ct).ConfigureAwait(false);
+            // ADR-0090: la cola corre sin petición: el registro de consumo de IA toma empresa y dictamen de la fila.
+            using (Flit.Platform.Sdk.IaConsumo.IaCallContext.Instancia.Iniciar(new Flit.Platform.Sdk.IaConsumo.IaAmbito
+                   {
+                       Origen = Flit.Platform.Sdk.IaConsumo.IaOrigenes.Job,
+                       TenantId = tomada.TenantId.ToString(),
+                       EntidadTipo = "dictamen",
+                       EntidadId = fila.Id.ToString(),
+                   }))
+            {
+                resultado = await servicios.GetRequiredService<ServicioRedactor>().RedactarAsync(pedido, ct).ConfigureAwait(false);
+            }
         }
 
-        var cierre = Decidir(fila.Veredicto, fila.Alertamientos, tomada.Intentos, resultado, opciones.Value.MaxReintentos, reloj.GetUtcNow());
+        var cierre = Decidir(fila.Veredicto, fila.Alertamientos, tomada.Intentos, resultado, opciones.Value.MaxReintentos, opciones.Value.EsperaReintento, reloj.GetUtcNow());
         var veredicto = fila.Veredicto;
         fila.Alertamientos = cierre.Alertamientos;
         fila.RedactadoPor = cierre.RedactadoPor;

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 const STEPS = [
   "Consulta del Vehículo",
@@ -192,7 +193,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                   )}
                 </div>
                 <button onClick={() => setPazSalvo(true)} className="w-full rounded-xl border-2 border-dashed border-flit-brand py-8 text-sm text-flit-brand hover:bg-flit-brand/5 transition flex flex-col items-center gap-2">
-                  <Icono nombre="nube-subir" className="h-6 w-6" />
+                  <Icono nombre="archivo-subir" className="h-6 w-6" />
                   Adjuntar Paz y Salvo Corporativo (Drag &amp; Drop)
                 </button>
               </div>
@@ -276,9 +277,9 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {["Motor", "Chasis", "Serie", "VIN"].map((l) => (
                     <div key={l} className="rounded-xl bg-card/70 border border-dashed border-border p-4 text-center">
-                      <Icono nombre="nube-subir" className="h-5 w-5 mx-auto text-muted-foreground" />
+                      <Icono nombre="archivo-subir" className="h-5 w-5 mx-auto text-muted-foreground" />
                       <p className="text-xs font-mono mt-2 text-muted-foreground">{l}</p>
-                      {ocrPct > 30 && <p className="text-[10px]" style={{ color: "var(--badge-success-fg)" }}>✓ Capturado</p>}
+                      {ocrPct > 30 && <p className="text-[10px]" style={{ color: "var(--badge-success-fg)" }}><IconoAviso tipo="ok" className="mr-0.5 inline-block h-3 w-3 align-text-bottom" />Capturado</p>}
                     </div>
                   ))}
                 </div>
@@ -294,9 +295,9 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                     <button onClick={() => { setOcrPct(0); setOcrRunning(true); }} disabled={ocrRunning} className="rounded-xl px-4 py-2.5 text-sm font-semibold text-white inline-flex items-center gap-2" style={{ background: "var(--color-flit-brand)" }}>
                       {ocrRunning ? <Icono nombre="girador" className="h-4 w-4 animate-spin" /> : <Icono nombre="destello" className="h-4 w-4" />} Simular Procesamiento OCR (IA)
                     </button>
-                    {ocrPct >= 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-success-fg)" }}>✓ Coincidencia ≥90% · Aprobación automática</p>}
-                    {ocrPct >= 70 && ocrPct < 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-warning-fg)" }}>⚠ Coincidencia 70-89% · Advertencia ámbar inyectada</p>}
-                    {ocrPct > 0 && ocrPct < 70 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-pending-fg)" }}>✕ &lt;70% · Improntas deficientes, recargar</p>}
+                    {ocrPct >= 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-success-fg)" }}><IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />Coincidencia ≥90% · Aprobación automática</p>}
+                    {ocrPct >= 70 && ocrPct < 90 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-warning-fg)" }}><IconoAviso tipo="alerta" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />Coincidencia 70-89% · Advertencia ámbar inyectada</p>}
+                    {ocrPct > 0 && ocrPct < 70 && <p className="text-xs mt-2 font-semibold" style={{ color: "var(--badge-pending-fg)" }}><IconoAviso tipo="error" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />&lt;70% · Improntas deficientes, recargar</p>}
                   </div>
                 </div>
               </div>
@@ -314,7 +315,7 @@ export function StepperForm({ onExit }: { onExit: () => void }) {
                 </div>
                 <div className="flex justify-between items-center">
                   <button onClick={clearCanvas} className="text-xs px-3 py-1.5 rounded-lg bg-card/70 text-muted-foreground hover:bg-card">Limpiar Canvas</button>
-                  {signedVendor && <span className="text-xs" style={{ color: "var(--badge-success-fg)" }}>✓ Firma capturada</span>}
+                  {signedVendor && <span className="text-xs" style={{ color: "var(--badge-success-fg)" }}><IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />Firma capturada</span>}
                 </div>
                 <pre className="text-[10px] bg-secondary text-muted-foreground rounded-lg p-2 font-mono overflow-x-auto">[IP: 192.168.1.45 | UA: Mozilla/5.0 (Windows NT 10.0; Win64) | RequestPath: /api/v2/tramites/sign]</pre>
               </div>

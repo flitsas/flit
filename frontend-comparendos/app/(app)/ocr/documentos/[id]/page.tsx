@@ -5,14 +5,14 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ZoomOut } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal } from "@flit/ui";
+import { DataTable, InlineAlert, Miga, Modal, VehicleLoader } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
-import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
+import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { EstadoDocumento, useSondeo } from "@/components/ocr/comunes";
 import { OfertaPlacas } from "@/components/ocr/OfertaPlacas";
-import { Requiere } from "@/components/Pantalla";
+import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
-import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS, TITULO_CLS } from "@/components/ui/estilos";
+import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { API_PREFIX, apiDownload, apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
@@ -130,7 +130,7 @@ function Original({ d }: { d: Documento }) {
         )}
         {vista === "pdf" && <iframe title={`Original de ${d.nombreArchivo}`} src={url} className="h-full min-h-[70vh] w-full" />}
         {vista === "descarga" && (
-          <p className="p-6 text-xs opacity-70">El navegador no muestra archivos TIFF. Descárgalo para verlo junto al formulario.</p>
+          <p className="p-6 text-xs text-muted-foreground">El navegador no muestra archivos TIFF. Descárgalo para verlo junto al formulario.</p>
         )}
       </div>
     </div>
@@ -187,7 +187,7 @@ function CampoEntrada({
         onChange={(e) => onCambio(esNit ? mascaraNit(e.target.value) : e.target.value)}
       />
       {esNit && (
-        <span id={`${campo}-nit-ayuda`} className={`text-[11px] font-normal ${error ? "text-destructive" : "opacity-70"}`}>
+        <span id={`${campo}-nit-ayuda`} className={`text-xs font-normal ${error ? "text-destructive" : "text-muted-foreground"}`}>
           {error ?? "Puedes escribir el dígito de verificación; el sistema lo valida (formato 900.123.456-7)."}
         </span>
       )}
@@ -329,7 +329,6 @@ function Formulario({
       )}
       {editable && (
         <button type="button" className={controlCls(sucio)} disabled={ocupado || !sucio} onClick={() => setModal("guardar")}>
-          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
           Guardar cambios
         </button>
       )}
@@ -368,7 +367,7 @@ function Formulario({
                 <Icono nombre="check" className="h-3.5 w-3.5" />
                 El número está bien
               </button>
-              <span className="text-[11px] opacity-70">Si está mal, corrígelo en el campo y guarda.</span>
+              <span className="text-xs text-muted-foreground">Si está mal, corrígelo en el campo y guarda.</span>
             </div>
           )}
         </InlineAlert>
@@ -426,18 +425,18 @@ function Formulario({
                 <span className="flex items-center justify-between gap-2">
                   <span className={faltante ? "text-destructive" : undefined}>
                     {ETIQUETA_CAMPO[c.nombreCampo] ?? c.nombreCampo}
-                    {c.obligatorio && <span aria-hidden> *</span>}
+                    {c.obligatorio && <span aria-hidden> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>}
                     {faltante && <span className="ml-1 font-normal">· falta o no es válido</span>}
                   </span>
                   <span className="flex items-center gap-2 font-normal">
-                    {c.valorCorregido !== null && <span className="opacity-60">corregido</span>}
+                    {c.valorCorregido !== null && <span className="text-muted-foreground">corregido</span>}
                     {marca && !faltante ? (
                       <span className="inline-flex items-center gap-1 font-semibold text-[var(--badge-warning-fg)]">
                         <Icono nombre="alerta" className="h-3 w-3" />
                         Revisar
                       </span>
                     ) : c.esNull && !faltante ? (
-                      <span className="opacity-50">no leído</span>
+                      <span className="text-muted-foreground">no leído</span>
                     ) : null}
                   </span>
                 </span>
@@ -450,9 +449,9 @@ function Formulario({
                     onCambio={(v) => setEditados((e) => ({ ...e, [c.nombreCampo]: v }))}
                   />
                 </div>
-                {marca && !faltante && c.nombreCampo !== "fecha_notificacion" && <span className="text-[11px] font-normal text-[var(--badge-warning-fg)]">{marca}</span>}
+                {marca && !faltante && c.nombreCampo !== "fecha_notificacion" && <span className="text-xs font-normal text-[var(--badge-warning-fg)]">{marca}</span>}
                 {c.nombreCampo === "fecha_notificacion" && (
-                  <span className="text-[11px] font-normal opacity-70">
+                  <span className="text-xs font-normal text-muted-foreground">
                     En las fotomultas casi nunca viene impresa: se toma del sello de recibido o radicado de la empresa. Confírmala, porque de ella cuentan los plazos.
                   </span>
                 )}
@@ -523,7 +522,7 @@ function Historial({ d }: { d: Documento }) {
             { key: "campo", header: "Campo", render: (e) => ETIQUETA_CAMPO[e.campo] ?? e.campo },
             { key: "antes", header: "Anterior", render: (e) => e.valorAnterior ?? "—" },
             { key: "nuevo", header: "Nuevo", render: (e) => e.valorNuevo ?? "—" },
-            { key: "usuario", header: "Usuario", render: (e) => (e.usuarioNombre ? <span title={e.usuarioId}>{e.usuarioNombre}</span> : <span title={e.usuarioId} className="font-mono text-[11px] opacity-70">{e.usuarioId.slice(0, 8)}</span>) },
+            { key: "usuario", header: "Usuario", render: (e) => (e.usuarioNombre ? <span title={e.usuarioId}>{e.usuarioNombre}</span> : <span title={e.usuarioId} className="font-mono text-xs text-muted-foreground">{e.usuarioId.slice(0, 8)}</span>) },
             { key: "motivo", header: "Motivo", render: (e) => e.motivo ?? "—" },
           ]}
         />
@@ -558,30 +557,43 @@ function Revision({ id }: { id: string }) {
   const carga = useCarga(`ocr-documento:${id}`, (signal) => apiFetch<Documento>(`/ocr/documentos/${id}`, { signal }));
   const d = carga.datos;
   const [registro, setRegistro] = useState<Registro | null>(null);
-  const [verComparendo, setVerComparendo] = useState<string | null>(null);
+  const setVerComparendo = useAbrirDetalle();
   useSondeo(!!d && hayEnCurso([d.estado]), carga.recargar);
 
   if (carga.estado === "error" && !d) return <InlineAlert tone="error">{carga.error}</InlineAlert>;
-  if (!d) return <p className="text-sm opacity-60">Cargando documento…</p>;
+  if (!d) return <VehicleLoader label="Cargando documento…" />;
 
   return (
     <section className="flex flex-col gap-4">
-      <Link href={`/ocr/paquetes/${d.paqueteId}`} className="inline-flex items-center gap-1 text-xs font-semibold text-flit-brand-ink hover:underline">
-        <Icono nombre="izquierda" className="h-3.5 w-3.5" />
-        Volver al paquete
-      </Link>
-      <header className="flex flex-wrap items-center gap-3">
-        <h1 className={TITULO_CLS}>{d.numeroComparendoExtraido ?? "Documento sin número"}</h1>
-        <EstadoDocumento estado={d.estado} />
-        <span className="text-xs opacity-70">
-          {d.procesadoEn ? `Procesado ${formatoFechaHora(d.procesadoEn)}` : "En cola"}
-          {/* Versión del prompt, proveedor y modelo: solo los recibe el SuperAdmin. */}
-          {d.versionPrompt !== null && ` · Prompt v${d.versionPrompt}`}
-          {d.reprocesos > 0 && ` · Reprocesado ${d.reprocesos} de ${d.maximoReprocesos}`}
-          {d.proveedorModelo && ` · ${d.proveedorModelo}`}
-          {d.motivoDescarte && ` · Descartado: ${d.motivoDescarte}`}
-        </span>
-      </header>
+      <Miga
+        items={[
+          { etiqueta: "Paquetes OCR", href: "/ocr" },
+          { etiqueta: "Paquete", href: `/ocr/paquetes/${d.paqueteId}` },
+          { etiqueta: d.numeroComparendoExtraido ?? d.nombreArchivo },
+        ]}
+        enlace={({ href, className, children }) => (
+          <Link href={href} className={className}>
+            {children}
+          </Link>
+        )}
+      />
+      <Encabezado
+        titulo={d.numeroComparendoExtraido ?? "Documento sin número"}
+        ilustracion="documentos"
+        descripcion={
+          <span className="flex flex-wrap items-center gap-2">
+            <EstadoDocumento estado={d.estado} />
+            {/* Versión del prompt, proveedor y modelo: solo los recibe el SuperAdmin, y aun así van en el title, no en la línea. */}
+            <span
+              title={[d.versionPrompt !== null ? `Prompt v${d.versionPrompt}` : null, d.proveedorModelo].filter(Boolean).join(" · ") || undefined}
+            >
+              {d.procesadoEn ? `Procesado ${formatoFechaHora(d.procesadoEn)}` : "En cola"}
+              {d.reprocesos > 0 && ` · Reprocesado ${d.reprocesos} de ${d.maximoReprocesos}`}
+              {d.motivoDescarte && ` · Descartado: ${d.motivoDescarte}`}
+            </span>
+          </span>
+        }
+      />
       {registro && (
         <div className="flex flex-col gap-2">
           <InlineAlert tone="success" title={`Comparendo ${registro.numero} registrado`}>
@@ -606,7 +618,6 @@ function Revision({ id }: { id: string }) {
         />
       </div>
       <Historial d={d} />
-      <DetalleComparendo id={verComparendo} onCerrar={() => setVerComparendo(null)} />
     </section>
   );
 }

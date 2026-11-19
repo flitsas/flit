@@ -1,7 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { PestanaOperacion } from "@/components/configuracion/PestanaOperacion";
+import { ERRORES_OPERACION } from "@/lib/configuracion";
 import { DISPONIBLES_CON_IMPUESTO, configuracion, cuerpo } from "./datos";
+
+const SECRETO = "mensaje del servidor que no debe verse";
 
 // Uso de ejemplo: <PestanaOperacion configuracion={cfg} puedeEditar={sesion.capacidades.editarConfiguracion} onGuardado={setCfg} />
 // edita visibilidad, fuentes por defecto (solo entre las habilitadas) y estimado de consultas con PUT /configuracion.
@@ -51,10 +54,11 @@ describe("pestaña Operación", () => {
     expect(screen.getByText(/no tienes permiso para editar/i)).toBeInTheDocument();
   });
 
-  it("muestra el 422 del API sin perder lo digitado", async () => {
+  // AP-9 (SF-6): reescrito. Antes afirmaba el mensaje de la API; ahora el texto fijo del code.
+  it("AP-9: muestra el 422 del API con el texto fijo del code, sin perder lo digitado", async () => {
     const fetchMock = vi
       .fn()
-      .mockResolvedValueOnce(Response.json({ code: "POR_DEFECTO_FUERA_DE_HABILITADAS", error: "Una fuente por defecto no está habilitada en el contrato." }, { status: 422 }));
+      .mockResolvedValueOnce(Response.json({ code: "POR_DEFECTO_FUERA_DE_HABILITADAS", error: SECRETO }, { status: 422 }));
     vi.stubGlobal("fetch", fetchMock);
 
     render(<PestanaOperacion configuracion={configuracion()} puedeEditar />);
@@ -62,7 +66,9 @@ describe("pestaña Operación", () => {
     fireEvent.click(screen.getByRole("radio", { name: /al finalizar/i }));
     fireEvent.click(screen.getByRole("button", { name: "Guardar operación" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Una fuente por defecto no está habilitada en el contrato.");
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent(ERRORES_OPERACION.POR_DEFECTO_FUERA_DE_HABILITADAS);
+    expect(alerta).not.toHaveTextContent(SECRETO);
     expect(screen.getByRole("checkbox", { name: "SIMIT vehículo" })).toBeChecked();
     expect(screen.getByRole("radio", { name: /al finalizar/i })).toBeChecked();
   });
@@ -74,7 +80,8 @@ describe("pestaña Operación", () => {
     render(<PestanaOperacion configuracion={configuracion()} puedeEditar />);
     fireEvent.click(screen.getByRole("button", { name: "Guardar operación" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent(/Diagnóstico no respondió/);
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo guardar la configuración.");
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("Configuración guardada.")).toBeInTheDocument();
     expect(fetchMock).toHaveBeenCalledTimes(2);
@@ -145,5 +152,106 @@ describe("pestaña Operación — fuentes por defecto según fuentes_disponibles
 
     expect(await screen.findByText("Configuración guardada.")).toBeInTheDocument();
     expect((cuerpo(fetchMock, 0) as { fuentes_por_defecto: string[] }).fuentes_por_defecto).toEqual(["RUNT", "IMPUESTO_DEPARTAMENTAL"]);
+  });
+});
+
+// HU #14562 · F-07 · AC42 (UI Kit 2026): RUNT vehículo fijo, pie de alcance, Descartar y conflicto «El contrato cambió».
+describe("pestaña Operación · UI Kit 2026 (AC42)", () => {
+  it("RUNT vehículo queda siempre marcado y bloqueado, y viaja en el PUT aunque no estuviera guardado", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(Response.json(configuracion()));
+    vi.stubGlobal("fetch", fetchMock);
+    render(
+      <PestanaOperacion
+        configuracion={configuracion({ operacion: { visibilidad_usuario: "EMPRESA", fuentes_por_defecto: ["AVALUO"], estimado_consultas: "NO_MOSTRAR" } })}
+        puedeEditar
+      />,
+    );
+    const runt = screen.getByRole("checkbox", { name: "RUNT vehículo" });
+    expect(runt).toBeChecked();
+    expect(runt).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Guardar operación" }));
+    expect(await screen.findByText("Configuración guardada.")).toBeInTheDocument();
+    expect((cuerpo(fetchMock, 0) as { fuentes_por_defecto: string[] }).fuentes_por_defecto).toContain("RUNT");
+  });
+
+  it("muestra el pie «Los cambios aplican a los diagnósticos nuevos» y Descartar restaura lo guardado", () => {
+    render(<PestanaOperacion configuracion={configuracion()} puedeEditar />);
+    expect(screen.getByText("Los cambios aplican a los diagnósticos nuevos")).toBeInTheDocument();
+    const descartar = screen.getByRole("button", { name: "Descartar" });
+    expect(descartar).toBeDisabled();
+    const avaluo = screen.getByRole("checkbox", { name: "Avalúo comercial" });
+    const antes = (avaluo as HTMLInputElement).checked;
+    fireEvent.click(avaluo);
+    expect(descartar).toBeEnabled();
+    fireEvent.click(descartar);
+    expect((screen.getByRole("checkbox", { name: "Avalúo comercial" }) as HTMLInputElement).checked).toBe(antes);
+    expect(screen.getByRole("button", { name: "Descartar" })).toBeDisabled();
+  });
+
+  it("un 409 muestra «El contrato cambió», ofrece Recargar y conserva lo digitado", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(Response.json({ title: "Conflicto", code: "CONFIGURACION_DESACTUALIZADA" }, { status: 409 })));
+    const onRecargar = vi.fn();
+    render(<PestanaOperacion configuracion={configuracion()} puedeEditar onRecargar={onRecargar} />);
+    fireEvent.click(screen.getByRole("radio", { name: /antes de lanzar/i }));
+    fireEvent.click(screen.getByRole("button", { name: "Guardar operación" }));
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("El contrato cambió");
+    expect(screen.getByRole("radio", { name: /antes de lanzar/i })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Recargar" }));
+    expect(onRecargar).toHaveBeenCalledTimes(1);
+  });
+
+  it("mientras guarda, el botón anuncia «Guardando…» y queda deshabilitado", async () => {
+    let resolver: (r: Response) => void = () => {};
+    vi.stubGlobal("fetch", vi.fn().mockReturnValueOnce(new Promise<Response>((r) => (resolver = r))));
+    render(<PestanaOperacion configuracion={configuracion()} puedeEditar />);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar operación" }));
+    const boton = await screen.findByRole("button", { name: /Guardando/ });
+    expect(boton).toBeDisabled();
+    resolver(Response.json(configuracion()));
+    expect(await screen.findByText("Configuración guardada.")).toBeInTheDocument();
+  });
+});
+
+// HU #14562 · M10 (auditoría): «Quién ve los diagnósticos» se nombra con su rótulo visible y la ayuda «Aplica al listado
+// y a los tableros.» queda asociada al radiogroup.
+describe("pestaña Operación: selector de visibilidad (HU #14562 · M10)", () => {
+  it("M10: el radiogroup toma el rótulo visible (sin aria-label duplicado) y describe la ayuda", () => {
+    vi.stubGlobal("fetch", vi.fn());
+    render(<PestanaOperacion configuracion={configuracion()} puedeEditar />);
+    const grupo = screen.getByRole("radiogroup", { name: "Quién ve los diagnósticos" });
+    expect(grupo).toHaveAttribute("aria-labelledby", "operacion-visibilidad");
+    expect(grupo).not.toHaveAttribute("aria-label");
+    expect(grupo).toHaveAccessibleDescription("Aplica al listado y a los tableros.");
+  });
+});
+
+// AP-9 (SF-6): cada code del contrato de PUT /configuracion tiene texto fijo; lo desconocido, el respaldo del sitio.
+describe("pestaña Operación — AP-9: avisos con texto fijo", () => {
+  it.each([
+    [422, "VALOR_FUERA_DE_CONJUNTO"],
+    [422, "VALOR_INVALIDO"],
+    [400, "CUERPO_INVALIDO"],
+    [403, "CAMPO_NO_EDITABLE"],
+  ] as const)("un %i %s muestra el texto fijo del code", async (status, code) => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(Response.json({ code, error: SECRETO }, { status })));
+
+    render(<PestanaOperacion configuracion={configuracion()} puedeEditar />);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar operación" }));
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent(ERRORES_OPERACION[code]);
+    expect(alerta).not.toHaveTextContent(SECRETO);
+  });
+
+  it("un 422 con un code fuera del contrato cae en el respaldo fijo", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(Response.json({ code: "OTRO", error: SECRETO }, { status: 422 })));
+
+    render(<PestanaOperacion configuracion={configuracion()} puedeEditar />);
+    fireEvent.click(screen.getByRole("button", { name: "Guardar operación" }));
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("No se pudo guardar la configuración.");
+    expect(alerta).not.toHaveTextContent(SECRETO);
   });
 });

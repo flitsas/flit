@@ -22,7 +22,7 @@ export function fetchFalso(rutas: Record<string, () => Respuesta>) {
 
 export function renderConQuery(ui: ReactElement) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>);
+  return { ...render(<QueryClientProvider client={client}>{ui}</QueryClientProvider>), client };
 }
 
 export const ORGANISMOS = [

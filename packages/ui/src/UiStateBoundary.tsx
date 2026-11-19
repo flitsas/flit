@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { cn } from "./cn";
+import { IconoAviso } from "./IconoAviso";
 
 // Wrapper reutilizable de los 4 estados UI (HU #10194, AC7): cargando (skeleton),
 // vacío (con CTA opcional), error (con reintentar) y contenido lleno.
@@ -64,7 +65,7 @@ export function UiStateBoundary({
         role="alert"
         data-testid="ui-error"
       >
-        <Icono nombre="alerta" className="h-8 w-8" style={{ color: "var(--color-flit-alert)" }} />
+        <IconoAviso tipo="error" className="h-8 w-8" />
         <p className="text-sm font-medium">{errorMessage}</p>
         {onRetry && (
           <button

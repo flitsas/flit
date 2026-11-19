@@ -79,12 +79,17 @@ vi.mock("@/lib/api/detailed-report", async (importOriginal) => ({
   fetchNetworkDetailedReport: mocks.fetchNetworkDetailedReport,
   exportNetworkDetailedReport: mocks.exportNetworkDetailedReport,
 }));
+vi.mock("@/lib/api/analytics-gestor", () => ({
+  fetchColaInactividad: vi.fn().mockResolvedValue({ items: [], total: 0 }),
+}));
 vi.mock("@/lib/api/admin-companies", () => ({
   fetchAllCompanies: mocks.fetchAllCompanies,
   fetchCompanyChildren: mocks.fetchCompanyChildren,
 }));
 vi.mock("@/lib/api/tramites-client", () => ({
   tramitesClient: {
+    searchEstadoCounts: vi.fn().mockResolvedValue({}),
+    searchInstances: vi.fn().mockResolvedValue({ items: [], total: 0 }),
     listTenantBiometricValidations: mocks.listTenantBiometricValidations,
     listPublishedProcedureTypes: mocks.listPublishedProcedureTypes,
     listTransitOffices: mocks.listTransitOffices,
@@ -110,7 +115,23 @@ vi.mock("@/lib/api/public-banners", () => ({
 }));
 vi.mock("@/hooks/usePermissions", () => ({ usePermissions: mocks.usePermissions }));
 
-import { Dashboard } from "@/components/atom/modules/Dashboard";
+// Rediseño del Inicio: el Inicio del gestor (con su red y su gate de familia) vive ahora en GestorDashboard.
+import { ShellNavProvider } from "@flit/shell/nav-context";
+import type { DockGroup } from "@flit/shell/nav";
+import { GestorDashboard } from "@/components/atom/modules/GestorDashboard";
+
+// Las franjas 2 y 3 del Inicio solo se pintan con «Trámites» en el dock (gate de InicioModulos): el gestor de estas
+// pruebas lo tiene.
+const DOCK_CON_TRAMITES = [
+  { id: "operacion", label: "Operación", side: "left", active: false, items: [{ key: "tramites" }] },
+] as unknown as DockGroup[];
+function Dashboard(props: { onNewTramite: () => void }) {
+  return (
+    <ShellNavProvider value={{ groups: DOCK_CON_TRAMITES, homeHref: "/" }}>
+      <GestorDashboard {...props} />
+    </ShellNavProvider>
+  );
+}
 import { Reportes } from "@/components/atom/modules/Reportes";
 import { DetailedReportPanel } from "@/components/atom/modules/_reportesDetallados/DetailedReportPanel";
 import { NetworkScopeSelector } from "@/components/operacion/NetworkScopeSelector";
@@ -235,19 +256,18 @@ describe("HU #12364 AC1 — estadísticas de la red en la pantalla de analítica
     const [params] = mocks.fetchNetworkAnalyticsOverview.mock.calls[0];
     expect(params.childTenantId).toBeUndefined();
     expect(params).not.toHaveProperty("tenantId");
-    expect(mocks.fetchNetworkMonthlyTrend).toHaveBeenCalled();
-    // Contrato: las rutas propias no se tocan con la red activa.
+    // Contrato: las rutas propias no se tocan con la red activa (el Inicio rediseñado ya no pide tendencia mensual).
     expect(mocks.fetchAnalyticsOverview).not.toHaveBeenCalled();
     expect(mocks.fetchMonthlyTrend).not.toHaveBeenCalled();
 
     // El agregado de la red (40) sustituye al propio (5) en el KPI.
     expect((await screen.findAllByText("40")).length).toBeGreaterThanOrEqual(1);
-    // Distintivo textual en los 4 KPIs y en las dos secciones de trámites.
+    // Distintivo textual en cada KPI de familia.
     const badges = await screen.findAllByRole("status", { name: new RegExp(`^${ETIQUETA_DISTINTIVO_RED}:`) });
-    expect(badges.length).toBeGreaterThanOrEqual(6);
-    expect(screen.getByTestId("kpi-red-Total trámites")).toHaveTextContent(ETIQUETA_DISTINTIVO_RED);
-    // Lo que no tiene ruta de red (biometría) se rotula como propio, no como red.
-    expect(screen.getByTestId("biometria-solo-propia")).toBeInTheDocument();
+    expect(badges.length).toBeGreaterThanOrEqual(3);
+    expect(screen.getByTestId("kpi-red-matriculas")).toHaveTextContent(ETIQUETA_DISTINTIVO_RED);
+    // Lo que no tiene ruta de red (estados, firmas y cola) se rotula como propio, no como red.
+    expect(screen.getAllByTestId("inicio-solo-propia").length).toBeGreaterThanOrEqual(1);
   });
 
   it("con un cliente hijo elegido manda childTenantId y el distintivo nombra al hijo", async () => {
@@ -262,11 +282,7 @@ describe("HU #12364 AC1 — estadísticas de la red en la pantalla de analítica
         expect.anything(),
       ),
     );
-    expect(mocks.fetchNetworkMonthlyTrend).toHaveBeenLastCalledWith(
-      expect.objectContaining({ childTenantId: HIJO }),
-      expect.anything(),
-    );
-    const kpi = await screen.findByTestId("kpi-red-Total trámites");
+    const kpi = await screen.findByTestId("kpi-red-matriculas");
     await waitFor(() => expect(kpi).toHaveTextContent("Concesionario Hijo SAS"));
   });
 
@@ -275,12 +291,10 @@ describe("HU #12364 AC1 — estadísticas de la red en la pantalla de analítica
     render(<Dashboard onNewTramite={() => {}} />);
 
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalled());
-    expect(mocks.fetchAnalyticsOverview).toHaveBeenCalledWith(
-      expect.objectContaining({ tenantId: undefined }),
-      expect.anything(),
-    );
+    // El gestor nunca manda tenantId: el backend lo toma del JWT.
+    expect(mocks.fetchAnalyticsOverview.mock.calls[0][0].tenantId).toBeUndefined();
     expect(mocks.fetchNetworkAnalyticsOverview).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("kpi-red-Total trámites")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kpi-red-matriculas")).not.toBeInTheDocument();
     // Pero sí ve el selector para poder cambiar de alcance.
     expect(screen.getByTestId("dashboard-network-scope-select")).toBeInTheDocument();
   });
@@ -394,13 +408,14 @@ describe("HU #12364 AC4 — un cliente sin jerarquía no percibe cambios", () =>
       { from: expect.any(String), to: expect.any(String), tenantId: undefined },
       expect.anything(),
     );
-    expect(mocks.fetchMonthlyTrend).toHaveBeenCalledTimes(1);
+    // El Inicio rediseñado ya no pide tendencia mensual.
+    expect(mocks.fetchMonthlyTrend).not.toHaveBeenCalled();
     expect(mocks.fetchNetworkAnalyticsOverview).not.toHaveBeenCalled();
     expect(mocks.fetchNetworkMonthlyTrend).not.toHaveBeenCalled();
     expect(mocks.prefsGet).not.toHaveBeenCalled();
     expect(mocks.fetchNetworkChildren).not.toHaveBeenCalled();
     expect(screen.queryByLabelText(ETIQUETA_ALCANCE)).not.toBeInTheDocument();
-    expect(screen.queryByTestId("kpi-red-Total trámites")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kpi-red-matriculas")).not.toBeInTheDocument();
   });
 
   it("Reporte detallado: sin selector, consulta y exportación propias", async () => {
@@ -480,7 +495,7 @@ describe("HU #12364 AC6 — sin documentos ni anexos", () => {
   it("con la red activa ni el Dashboard ni el reporte ofrecen descargar documentos o anexos de los hijos", async () => {
     cabeza({ mode: "network", childTenantId: HIJO });
     const { unmount } = render(<Dashboard onNewTramite={() => {}} />);
-    await screen.findByTestId("kpi-red-Total trámites");
+    await screen.findByTestId("kpi-red-matriculas");
     expect(screen.queryByRole("button", { name: /anexo|documento|paquete|descargar/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: /anexo|documento|paquete|descargar/i })).not.toBeInTheDocument();
     unmount();
@@ -533,14 +548,15 @@ describe("HU #12652 — alcance de red exclusivo del AdminCompany de la cabeza",
     render(<Dashboard onNewTramite={() => {}} />);
 
     await waitFor(() => expect(mocks.fetchAnalyticsOverview).toHaveBeenCalledTimes(1));
-    expect(mocks.fetchMonthlyTrend).toHaveBeenCalledTimes(1);
+    // El Inicio rediseñado ya no pide tendencia mensual.
+    expect(mocks.fetchMonthlyTrend).not.toHaveBeenCalled();
     expect(mocks.fetchNetworkAnalyticsOverview).not.toHaveBeenCalled();
     expect(mocks.fetchNetworkMonthlyTrend).not.toHaveBeenCalled();
     expect(mocks.fetchNetworkChildren).not.toHaveBeenCalled();
     expect(mocks.prefsGet).not.toHaveBeenCalled();
     expect(screen.queryByTestId("dashboard-network-scope-select")).not.toBeInTheDocument();
     expect(screen.queryByLabelText(ETIQUETA_ALCANCE)).not.toBeInTheDocument();
-    expect(screen.queryByTestId("kpi-red-Total trámites")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("kpi-red-matriculas")).not.toBeInTheDocument();
     expect(screen.queryAllByRole("status", { name: new RegExp(`^${ETIQUETA_DISTINTIVO_RED}:`) })).toHaveLength(0);
     expect(screen.queryByText(/No tienes acceso a las métricas de la red/)).not.toBeInTheDocument();
   });

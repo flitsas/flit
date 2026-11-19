@@ -27,6 +27,8 @@ export interface OpcionesProxy {
   /** Sesión del canal del punto. En rutas `/punto/*` reemplaza al token del trámite. */
   tokenPunto?: string;
   ipCliente?: string;
+  /** Orígenes extra (esquema+host) que el proxy acepta además del Host de la petición. */
+  origenesPermitidos?: string[];
   fetchImpl?: typeof fetch;
 }
 
@@ -48,6 +50,8 @@ export function rutaSegura(path: string[]): boolean {
 
 export async function reenviarAlBff(request: Request, path: string[], opciones: OpcionesProxy): Promise<ResultadoProxy> {
   if (!rutaSegura(path)) return problema(400, "ruta_invalida", "Ruta inválida");
+
+  if (!origenPermitido(request, opciones.origenesPermitidos)) return problema(403, "origen_no_permitido", "Origen no permitido");
 
   const destino = new URL(`${opciones.apiOrigin}${PREFIJO_BFF}/${path.map(encodeURIComponent).join("/")}`);
   destino.search = new URL(request.url).search;
@@ -91,6 +95,8 @@ export async function reenviarAlBff(request: Request, path: string[], opciones: 
     const valor = respuesta.headers.get(nombre);
     if (valor) headers.set(nombre, valor);
   }
+  // Lo que lleva sesión (/punto/*, /pago/*, o cualquier petición con token) nunca se cachea.
+  if (!publica && (punto || path[0] === "pago" || opciones.tokenSesion || opciones.tokenPunto)) headers.set("cache-control", "no-store");
 
   // /sesiones y /punto/actores/abrir emiten token de borrador PN → cookie HttpOnly pn_sesion.
   const ruta = path.join("/");
@@ -116,6 +122,37 @@ export async function reenviarAlBff(request: Request, path: string[], opciones: 
   };
 }
 
+/**
+ * Defensa CSRF además de SameSite: en métodos que cambian estado, el Origin debe ser el del propio portal.
+ * El portal del OT puede servirse en dominios propios del organismo, así que se compara contra el Host con que
+ * llegó la petición (X-Forwarded-Host, Host o el de la URL), no contra un dominio fijo. Sin Origin se usa
+ * Sec-Fetch-Site; clientes que no envían ninguno de los dos (no navegadores) pasan, pues no hay CSRF sin navegador.
+ */
+export function origenPermitido(request: Request, extra: string[] = []): boolean {
+  if (request.method === "GET" || request.method === "HEAD") return true;
+  const origen = request.headers.get("origin");
+  if (origen === null) {
+    const sitio = request.headers.get("sec-fetch-site");
+    return sitio === null || sitio === "same-origin" || sitio === "none";
+  }
+  let host: string;
+  try {
+    host = new URL(origen).host.toLowerCase();
+  } catch {
+    return false; // incluye "null" (origen opaco)
+  }
+  const propios = [request.headers.get("x-forwarded-host"), request.headers.get("host"), new URL(request.url).host]
+    .flatMap((h) => (h ? h.split(",").map((x) => x.trim().toLowerCase()) : []));
+  if (propios.includes(host)) return true;
+  return extra.some((o) => {
+    try {
+      return new URL(o).host.toLowerCase() === host;
+    } catch {
+      return false;
+    }
+  });
+}
+
 function esCanalPunto(path: string[]): boolean {
   return path[0] === "punto";
 }
@@ -123,7 +160,7 @@ function esCanalPunto(path: string[]): boolean {
 /** Rutas del punto que ya materializaron borrador PN y usan la sesión del trámite (actores y gate de requisitos). */
 function esActoresPunto(path: string[]): boolean {
   if (path[0] !== "punto") return false;
-  return path[1] === "actores" || (path[1] === "requisitos" && path[2] === "completitud");
+  return path[1] === "actores" || path[1] === "pago" || (path[1] === "requisitos" && path[2] === "completitud");
 }
 
 /** Cookie `pn_punto` del BFF, si vino en Set-Cookie. */
@@ -209,7 +246,7 @@ async function codigoDeRespuesta(respuesta: Response): Promise<string | null> {
 function problema(status: number, code: string, title: string): ResultadoProxy {
   return {
     status,
-    headers: new Headers({ "content-type": "application/problem+json" }),
+    headers: new Headers({ "content-type": "application/problem+json", "cache-control": "no-store" }),
     cuerpo: JSON.stringify({ type: "about:blank", title, status, code }),
   };
 }

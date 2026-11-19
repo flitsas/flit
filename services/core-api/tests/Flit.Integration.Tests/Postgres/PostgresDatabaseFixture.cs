@@ -79,6 +79,9 @@ public sealed class PostgresDatabaseFixture : IAsyncLifetime
         "platform.products",
         // Catálogo global de formatos de mandato (HU #13169, DDL 124): una fila por formato, sin tenant.
         "admin.mandate_format_settings",
+        // Contrato ia-consumo v1 (ADR-0090, DDL 202): tarifas de Anthropic por modelo, sin tenant ni FK; el costo estimado
+        // del registro de consumo de IA las lee.
+        "admin.ia_tarifa_modelo",
     };
 
     /// <summary>

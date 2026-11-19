@@ -1,19 +1,18 @@
 "use client";
 
 import { useId, useRef, useState, type FormEvent } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
-import { errorIdentificador } from "@/lib/express/api";
+import { AYUDA_FORMATOS_PLACA, errorIdentificador } from "@/lib/express/api";
 import { limpiarIdentificador } from "@/lib/validation/fieldRules";
-import { AYUDA_CLS, BOTON_PRIMARIO_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
+import { AYUDA_CLS, BOTON_PRIMARIO_CLS, CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
 import { CAMPO_INVALIDO_CLS, ERROR_CLS } from "@/components/parametrizacion/estilos";
 
 /**
  * Entrada a la creación desde la tarjeta del título del inicio (HU #13755; HU #14085): el usuario escribe una placa o un
  * VIN, que se ve normalizado mientras escribe (mayúsculas, solo letras y números, sin recortar), y con «Diagnosticar» se
  * valida con la regla de Trámites y el rechazo por longitud de Diagnóstico; si es válido abre /diagnosticos/nuevo en
- * Express con la placa precargada, donde se ajustan los parámetros. «Carga masiva» abre la misma pantalla en Masivo.
+ * Express con la placa precargada, donde se ajustan los parámetros. Va en la tarjeta Express del inicio (HU #14562 AC13).
  */
 export function CapturaExpress() {
   const router = useRouter();
@@ -38,7 +37,7 @@ export function CapturaExpress() {
   }
 
   return (
-    <form onSubmit={alEnviar} noValidate aria-label="Nuevo diagnóstico" className="flex w-full flex-col gap-1.5 lg:max-w-xl">
+    <form onSubmit={alEnviar} noValidate aria-label="Nuevo diagnóstico" className="flex w-full flex-col gap-1.5">
       <label htmlFor={campoId} className={ETIQUETA_CLS}>
         Placa o VIN{" "}
         <span aria-hidden="true" className="text-[var(--badge-danger-fg)]">
@@ -65,12 +64,8 @@ export function CapturaExpress() {
         />
         <button type="submit" className={BOTON_PRIMARIO_CLS}>
           <Icono nombre="destello" className="h-4 w-4" />
-          Diagnosticar
+          Diagnosticar en línea
         </button>
-        <Link href="/diagnosticos/nuevo?modo=masivo" className={BOTON_SECUNDARIO_CLS}>
-          <Icono nombre="reporte-detallado" className="h-4 w-4" />
-          Carga masiva
-        </Link>
       </div>
       {error ? (
         <p id={errorId} className={ERROR_CLS}>
@@ -78,7 +73,7 @@ export function CapturaExpress() {
         </p>
       ) : (
         <p id={ayudaId} className={AYUDA_CLS}>
-          Un vehículo por placa o VIN, o varios desde la plantilla Excel con «Carga masiva».
+          {AYUDA_FORMATOS_PLACA}
         </p>
       )}
     </form>

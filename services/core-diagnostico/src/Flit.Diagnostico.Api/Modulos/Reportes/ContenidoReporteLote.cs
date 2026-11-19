@@ -29,6 +29,12 @@ public sealed record ContenidoReporteLote(EncabezadoLoteReporte Encabezado, IRea
             claves[$"vehiculo/{vehiculo.VehiculoId}"] = string.Join(
                 '|', vehiculo.Orden.ToString(CultureInfo.InvariantCulture), vehiculo.Identificador, vehiculo.TipoIdentificador, vehiculo.Placa, vehiculo.Vin);
             SeccionReporte.AgregarPersonas(claves, $"persona/{vehiculo.VehiculoId}", vehiculo.Secciones);
+            // HU #14582 (§1.3): el propietario actual declarado (enmascarado) y el cambio de propietario salen en la hoja.
+            if (vehiculo.PropietarioDeclarado is not null || vehiculo.CambioPropietario is not null)
+            {
+                claves[$"propietario_declarado/{vehiculo.VehiculoId}"] =
+                    $"{vehiculo.PropietarioDeclarado}|{vehiculo.CambioPropietario?.ToString(CultureInfo.InvariantCulture)}";
+            }
         }
 
         return claves;
@@ -55,7 +61,11 @@ public sealed record EncabezadoLoteReporte(
     }
 }
 
-/// <summary>Un vehículo del lote en el Excel: su id (para casar con su PDF en el ZIP), orden, identificación y secciones.</summary>
+/// <summary>
+/// Un vehículo del lote en el Excel: su id (para casar con su PDF en el ZIP), orden, identificación y secciones. HU #14582 (§1.3):
+/// <paramref name="PropietarioDeclarado"/> es el propietario actual declarado ya enmascarado («TIPO ****1234», null sin declarado) y
+/// <paramref name="CambioPropietario"/> el valor persistido de <c>cambio_propietario</c> (no se recalcula al leer, SP-1).
+/// </summary>
 public sealed record VehiculoReporte(
     Guid VehiculoId,
     int Orden,
@@ -63,4 +73,6 @@ public sealed record VehiculoReporte(
     string TipoIdentificador,
     string? Placa,
     string? Vin,
-    IReadOnlyList<SeccionReporte> Secciones);
+    IReadOnlyList<SeccionReporte> Secciones,
+    string? PropietarioDeclarado = null,
+    bool? CambioPropietario = null);

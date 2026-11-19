@@ -88,8 +88,12 @@ public sealed record TenantBiometricValidationListQuery(
         if (ScoreMin is { } min && ScoreMax is { } max && min > max)
             return "scoreMin no puede ser mayor que scoreMax.";
 
-        if (!string.IsNullOrWhiteSpace(Status) && !ValidEstados.Contains(Status.Trim()))
-            return "estado inválido; use enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio o error_envio.";
+        // Uno o varios estados separados por coma (la franja de Identidad pide «enviado,en_proceso»).
+        if (!string.IsNullOrWhiteSpace(Status)
+            && Status.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                is var estados
+            && (estados.Length == 0 || estados.Any(e => !ValidEstados.Contains(e))))
+            return "estado inválido; use enviado, en_proceso, aprobado, rechazado, expirado, pendiente_envio o error_envio (uno o varios separados por coma).";
 
         if (!string.IsNullOrWhiteSpace(PartyRole) && !ValidPartes.Contains(PartyRole.Trim()))
             return "parte inválida; use comprador o vendedor.";

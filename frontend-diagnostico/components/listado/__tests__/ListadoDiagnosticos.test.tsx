@@ -3,6 +3,15 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { ListadoDiagnosticos } from "@/components/listado/ListadoDiagnosticos";
 import { diagnostico, lista } from "@/lib/diagnosticos/__tests__/datosListado";
 import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
+import { esperarCabecera12px, esperarTablaPorDefecto } from "@/components/comun/__tests__/tablaPorDefecto";
+import {
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
+} from "@flit/ui/table-styles";
 
 // Uso de ejemplo: <ListadoDiagnosticos /> en el inicio (/). Lee los filtros de la URL (?desde=&hasta=&modo=&estado=&nombre=
 // &pagina=), pide GET /diagnosticos con ellos y pinta la tabla; cambiar un filtro reescribe la URL con router.replace y
@@ -10,7 +19,7 @@ import { llamadas, simularApi } from "@/lib/tablero/__tests__/datos";
 
 const h = vi.hoisted(() => ({ replace: vi.fn(), push: vi.fn(), params: new URLSearchParams() }));
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/",
+  usePathname: () => "/diagnosticos",
   useSearchParams: () => h.params,
   useRouter: () => ({ replace: h.replace, push: h.push, refresh: vi.fn() }),
 }));
@@ -41,7 +50,7 @@ describe("ListadoDiagnosticos — AC1: tabla con las columnas y la fila abre el 
     const fila = within(t).getByRole("row", { name: /Flota de prueba 001/ });
     expect(within(fila).getByText("0192F0A1")).toBeInTheDocument();
     expect(within(fila).getByText("22/10/2026 09:00")).toBeInTheDocument();
-    expect(within(fila).getByText("Con Análisis IA")).toBeInTheDocument();
+    expect(within(fila).getByText("Con análisis")).toBeInTheDocument();
     expect(within(fila).getByText("TRASPASO")).toBeInTheDocument();
     expect(within(fila).getByText("En proceso")).toBeInTheDocument();
     expect(within(fila).getByText("Ana Prueba")).toBeInTheDocument();
@@ -67,7 +76,7 @@ describe("ListadoDiagnosticos — AC1: tabla con las columnas y la fila abre el 
 
     const express = within(t).getByRole("row", { name: /Express TST001/ });
     expect(within(express).getAllByRole("cell")[iModalidad]).toHaveTextContent(/^Express$/);
-    expect(within(express).getAllByRole("cell")[iTipo]).toHaveTextContent("Con Análisis IA");
+    expect(within(express).getAllByRole("cell")[iTipo]).toHaveTextContent("Con análisis");
     const masivo = within(t).getByRole("row", { name: /Flota de prueba 002/ });
     expect(within(masivo).getAllByRole("cell")[iModalidad]).toHaveTextContent(/^Masivo$/);
     expect(within(masivo).getAllByRole("cell")[iTipo]).toHaveTextContent("Diagnóstico Simple");
@@ -107,7 +116,8 @@ describe("ListadoDiagnosticos — AC1: tabla con las columnas y la fila abre el 
     let n = 0;
     simularApi({ "GET /diagnosticos": () => (++n === 1 ? Response.json({ error: "x" }, { status: 500 }) : Response.json(lista([diagnostico(1)]))) });
     render(<ListadoDiagnosticos />);
-    expect(screen.getByRole("status", { name: "Cargando los diagnósticos…" })).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Cargando diagnósticos…" })).toBeInTheDocument();
+    expect(await screen.findByText("No pudimos cargar el listado")).toBeInTheDocument();
     fireEvent.click(await screen.findByRole("button", { name: "Reintentar" }));
     expect(await tabla()).toBeInTheDocument();
   });
@@ -127,13 +137,13 @@ describe("ListadoDiagnosticos — AC2: filtros en la URL y vuelta a la página 1
     expect(consultas(fetchMock)[0]).toMatchObject({ pagina: "3" });
 
     fireEvent.change(screen.getByLabelText("Estado"), { target: { value: "COMPLETADO" } });
-    expect(h.replace).toHaveBeenLastCalledWith("/?estado=COMPLETADO", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?estado=COMPLETADO", { scroll: false });
 
     const antes = consultas(fetchMock).length;
     fireEvent.change(screen.getByLabelText("Nombre"), { target: { value: "Flota" } });
     // Espera de 300 ms al escribir: no consulta en cada tecla.
     expect(consultas(fetchMock).length).toBe(antes);
-    await waitFor(() => expect(h.replace).toHaveBeenLastCalledWith("/?estado=COMPLETADO&nombre=Flota", { scroll: false }), { timeout: 2000 });
+    await waitFor(() => expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?estado=COMPLETADO&nombre=Flota", { scroll: false }), { timeout: 2000 });
 
     await waitFor(() => expect(within(screen.getByRole("table", { name: "Diagnósticos de la compañía" })).queryByText("Flota de prueba 001")).toBeNull());
     expect(consultas(fetchMock).at(-1)).toEqual({ estado: "COMPLETADO", nombre: "Flota", pagina: "1", tamano: "10" });
@@ -148,7 +158,7 @@ describe("ListadoDiagnosticos — AC2: filtros en la URL y vuelta a la página 1
     expect(consultas(fetchMock)[0]).toEqual({ desde: "2026-10-01", hasta: "2026-10-22", modo: "SIMPLE", estado: "INCOMPLETO", nombre: "TST", pagina: "1", tamano: "10" });
     expect(screen.getByLabelText("Desde")).toHaveValue("2026-10-01");
     expect(screen.getByLabelText("Hasta")).toHaveValue("2026-10-22");
-    expect(screen.getByLabelText("Tipo")).toHaveValue("SIMPLE");
+    expect(within(screen.getByRole("radiogroup", { name: "Tipo" })).getByRole("radio", { name: "Simple" })).toHaveAttribute("aria-checked", "true");
     expect(screen.getByLabelText("Estado")).toHaveValue("INCOMPLETO");
     expect(screen.getByLabelText("Nombre")).toHaveValue("TST");
   });
@@ -159,7 +169,7 @@ describe("ListadoDiagnosticos — AC2: filtros en la URL y vuelta a la página 1
     await tabla();
     const nav = screen.getByRole("navigation", { name: "Paginación de diagnósticos" });
     fireEvent.click(within(nav).getByRole("button", { name: "Página 2" }));
-    expect(h.replace).toHaveBeenLastCalledWith("/?pagina=2", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?pagina=2", { scroll: false });
   });
 
   it("400 con campo marca el filtro: RANGO_INVALIDO deja Hasta inválido con el mensaje junto al campo", async () => {
@@ -210,7 +220,7 @@ describe("ListadoDiagnosticos — AC4: creador «No disponible»", () => {
     const celdas = within(fila).getAllByRole("cell");
     expect(celdas).toHaveLength(8);
     expect(celdas[7]).toHaveTextContent("No disponible");
-    for (const texto of ["0192F0A1", "Flota de prueba 001", "22/10/2026 09:00", "Masivo", "Con Análisis IA", "TRASPASO", "En proceso"])
+    for (const texto of ["0192F0A1", "Flota de prueba 001", "22/10/2026 09:00", "Masivo", "Con análisis", "TRASPASO", "En proceso"])
       expect(within(fila).getByText(texto)).toBeInTheDocument();
   });
 });
@@ -244,25 +254,26 @@ describe("ListadoDiagnosticos — paginación estándar 10/20/30/50 (HU #13916)"
 });
 
 describe("ListadoDiagnosticos — AC5 (negativo): sin resultados con filtros vs compañía sin diagnósticos", () => {
-  it("con filtros y sin resultados: «No hay diagnósticos con estos filtros» con «Limpiar filtros», no el vacío de compañía", async () => {
+  it("con filtros y sin resultados: «Ningún diagnóstico coincide» anunciado (role status) con «Limpiar filtros», no el vacío de compañía", async () => {
     h.params = new URLSearchParams("estado=COMPLETADO&nombre=zzz");
     const fetchMock = simularApi({ "GET /diagnosticos": () => Response.json(lista([])) });
     render(<ListadoDiagnosticos />);
-    expect(await screen.findByText("No hay diagnósticos con estos filtros")).toBeInTheDocument();
-    expect(screen.queryByText("Todavía no hay diagnósticos")).toBeNull();
+    expect(await screen.findByText("Ningún diagnóstico coincide")).toBeInTheDocument();
+    expect(screen.getByText("Ningún diagnóstico coincide").closest('[role="status"]')).not.toBeNull();
+    expect(screen.queryByText("Aún no tienes diagnósticos")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: "Limpiar filtros" }));
-    expect(h.replace).toHaveBeenLastCalledWith("/", { scroll: false });
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos", { scroll: false });
     await waitFor(() => expect(consultas(fetchMock).at(-1)).toEqual({ pagina: "1", tamano: "10" }));
     expect(screen.getByLabelText("Estado")).toHaveValue("");
     expect(screen.getByLabelText("Nombre")).toHaveValue("");
   });
 
-  it("sin filtros y sin resultados: «Todavía no hay diagnósticos» y sin «Limpiar filtros»", async () => {
+  it("sin filtros y sin resultados: «Aún no tienes diagnósticos» y sin «Limpiar filtros»", async () => {
     simularApi({ "GET /diagnosticos": () => Response.json(lista([])) });
     render(<ListadoDiagnosticos />);
-    expect(await screen.findByText("Todavía no hay diagnósticos")).toBeInTheDocument();
-    expect(screen.queryByText("No hay diagnósticos con estos filtros")).toBeNull();
+    expect(await screen.findByText("Aún no tienes diagnósticos")).toBeInTheDocument();
+    expect(screen.queryByText("Ningún diagnóstico coincide")).toBeNull();
     expect(screen.queryByRole("button", { name: "Limpiar filtros" })).toBeNull();
   });
 });
@@ -306,5 +317,92 @@ describe("ListadoDiagnosticos — Punto 5 AC6: errores en lenguaje de negocio, s
     expect(t).not.toHaveTextContent("TIPO_SIN_PUBLICAR");
     expect(within(t).getAllByText("Novedad sin clasificar").length).toBeGreaterThanOrEqual(2);
     aviso.mockRestore();
+  });
+});
+
+describe("ListadoDiagnosticos — AC14 (HU #14562): un estado de URL que el API rechaza no viaja", () => {
+  it("?estado=CREADO se descarta: la consulta sale sin estado, el filtro queda en Todos y no hay aviso de error", async () => {
+    h.params = new URLSearchParams("estado=CREADO");
+    const fetchMock = simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    await tabla();
+    expect(consultas(fetchMock)[0]).toEqual({ pagina: "1", tamano: "10" });
+    expect(screen.getByLabelText("Estado")).toHaveValue("");
+    expect(within(screen.getByLabelText("Estado")).queryByRole("option", { name: /Creado|Sin lanzar/ })).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("ListadoDiagnosticos — rediseño del kit 2026 (HU #14562 AC13)", () => {
+  it("el tipo es un SelectorSegmentado Todos/Simple/Con análisis que reescribe la URL", async () => {
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    await tabla();
+    const tipo = screen.getByRole("radiogroup", { name: "Tipo" });
+    expect(within(tipo).getAllByRole("radio").map((r) => r.textContent)).toEqual(["Todos", "Simple", "Con análisis"]);
+    expect(within(tipo).getByRole("radio", { name: "Todos" })).toHaveAttribute("aria-checked", "true");
+    fireEvent.click(within(tipo).getByRole("radio", { name: "Con análisis" }));
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos?modo=CON_ANALISIS", { scroll: false });
+    fireEvent.click(within(tipo).getByRole("radio", { name: "Todos" }));
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos", { scroll: false });
+  });
+
+  it("con filtros aplicados, «Limpiar» en la barra de filtros los retira de la URL; sin filtros no aparece", async () => {
+    h.params = new URLSearchParams("modo=SIMPLE&nombre=TST");
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    await tabla();
+    fireEvent.click(within(screen.getByRole("group", { name: "Filtros del listado" })).getByRole("button", { name: "Limpiar" }));
+    expect(h.replace).toHaveBeenLastCalledWith("/diagnosticos", { scroll: false });
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Limpiar" })).toBeNull());
+  });
+
+  it("AC49: el error de módulo queda dentro de la tarjeta con Reintentar y el mensaje del kit", async () => {
+    simularApi({ "GET /diagnosticos": () => Promise.reject(new TypeError("Failed to fetch")) });
+    render(<ListadoDiagnosticos />);
+    const tarjeta = (await screen.findByRole("heading", { name: "Diagnósticos" })).closest("section") as HTMLElement;
+    expect(await within(tarjeta).findByText("No pudimos cargar el listado")).toBeInTheDocument();
+    expect(within(tarjeta).getByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+  });
+});
+
+// HU #14562 AC56 (auditoría M6): por debajo de 900 px la tabla pasa a tarjetas con las recetas TABLA_MOVIL_* del repo y cada
+// celda dice su columna; la tabla deja de imponer su ancho mínimo, así que no hay scroll horizontal.
+describe("ListadoDiagnosticos — HU #14562 AC56: tarjetas por debajo de 900 px", () => {
+  const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
+
+  it("tabla, cabecera, cuerpo y filas llevan las recetas de tarjeta y cada celda su data-label", async () => {
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1), diagnostico(2)])) });
+    render(<ListadoDiagnosticos />);
+    const t = await tabla();
+    for (const c of TABLA_MOVIL_TABLE_CLS.split(" ")) expect(clases(t)).toContain(c);
+    for (const c of TABLA_MOVIL_THEAD_CLS.split(" ")) expect(clases(t.querySelector("thead")!)).toContain(c);
+    for (const c of TABLA_MOVIL_TBODY_CLS.split(" ")) expect(clases(t.querySelector("tbody")!)).toContain(c);
+    for (const fila of t.querySelectorAll("tbody tr")) {
+      for (const c of TABLA_MOVIL_ROW_CLS.split(" ")) expect(clases(fila)).toContain(c);
+      const celdas = Array.from(fila.children);
+      expect(celdas.map((td) => td.getAttribute("data-label"))).toEqual(["ID", "Nombre", "Creado", "Modalidad", "Tipo", "Trámite", "Estado", "Creador"]);
+      for (const td of celdas) for (const c of TABLA_MOVIL_CELL_CLS.split(" ")) expect(clases(td)).toContain(c);
+      for (const c of TABLA_MOVIL_CELL_TITULO_CLS.split(" ")) expect(clases(celdas[1])).toContain(c);
+    }
+  });
+
+  it("la fila anima su fondo con --dx-motion-rapido y queda quieta con menos movimiento", async () => {
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    const fila = (await tabla()).querySelector("tbody tr")!;
+    expect(clases(fila)).toContain("motion-reduce:transition-none");
+    expect(clases(fila)).toContain("duration-[var(--dx-motion-rapido)]");
+  });
+});
+
+// HU #14585 (spec-ui §1, A7.1): el listado principal es el referente de la tabla por defecto (contenedor centralizado y
+// cabecera de 12 px). Uso de ejemplo: esperarTablaPorDefecto(await tabla()).
+describe("ListadoDiagnosticos — HU #14585: referente de la tabla por defecto", () => {
+  it("contenedor CONTENEDOR_TABLA_CLS, cabecera de 12 px y hover de fila", async () => {
+    simularApi({ "GET /diagnosticos": () => Response.json(lista([diagnostico(1)])) });
+    render(<ListadoDiagnosticos />);
+    esperarTablaPorDefecto(await tabla());
+    esperarCabecera12px();
   });
 });

@@ -35,6 +35,7 @@ import {
   DIALOGO_PANEL,
 } from '@/components/operacion/dialogo-propio';
 import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 /**
 
  * Detalle multi-validación por persona (HU #11273 / CF-06 / ADR-0040).
@@ -324,7 +325,7 @@ export function PersonIdentityDetailDrawer({
               style={{ borderColor: 'var(--destructive)', background: 'var(--di-danger-soft)', color: 'var(--destructive)' }}
               role="alert"
             >
-              <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" />
+              <IconoAviso tipo="error" className="mt-0.5 h-4 w-4 shrink-0" />
               <div>
                 <p className="font-semibold">No se pudo cargar el historial.</p>
                 <p className="opacity-80">{error}</p>
@@ -398,6 +399,7 @@ export function PersonIdentityDetailDrawer({
                     trackingTick={trackingTick}
                     soloConsulta={soloConsulta}
                     red={esRed}
+                    tenantId={tenantId}
                     onManualChanged={() => {
                       void load();
                       // La lista de abajo y el contador de «Validaciones manuales» se actualizan al instante.
@@ -422,6 +424,7 @@ function ValidationAccordionItem({
   trackingTick,
   soloConsulta = false,
   red = false,
+  tenantId,
   onManualChanged,
   onVerEnManuales,
 }: {
@@ -433,6 +436,8 @@ function ValidationAccordionItem({
   soloConsulta?: boolean;
   /** Persona de una compañía hija: la bitácora se lee por la ruta de red (el mandatario es solo consulta, no red). */
   red?: boolean;
+  /** Compañía de la persona: el enlace a los trámites asociados lleva `?t=` para el Super Admin. */
+  tenantId?: string;
   index: number;
   total: number;
   defaultOpen: boolean;
@@ -519,7 +524,7 @@ function ValidationAccordionItem({
           ) : null}
 
           {associated.length > 0 && (
-            <AssociatedProceduresList procedures={associated} collapsible linkable={!soloConsulta} />
+            <AssociatedProceduresList procedures={associated} collapsible linkable={!soloConsulta} tenantId={tenantId} />
           )}
 
           {v.status === 'rechazado' && motivoRechazo && (

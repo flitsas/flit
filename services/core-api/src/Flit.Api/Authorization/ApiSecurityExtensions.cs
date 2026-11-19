@@ -150,6 +150,11 @@ public static class ApiSecurityExtensions
             .AddPolicy(PersonaNaturalServicioPolicy, PersonaNaturalServicioAuthorization.Configure)
             // ADR-0084 — borradores desde Diagnóstico: solo svc-diagnostico con platform.tramites.derivacion.
             .AddPolicy(DiagnosticoDerivacionServicioAuthorization.Policy, DiagnosticoDerivacionServicioAuthorization.Configure)
+            // ADR-0089 (HU #14587) — usuarios de Diagnóstico: solo svc-diagnostico con platform.usuarios.diagnostico[.conteos].
+            .AddPolicy(DiagnosticoUsuariosServicioAuthorization.Policy, DiagnosticoUsuariosServicioAuthorization.Configure)
+            .AddPolicy(DiagnosticoUsuariosServicioAuthorization.PolicyConteos, DiagnosticoUsuariosServicioAuthorization.ConfigureConteos)
+            // ADR-0091 — configuración de IA con la llave sellada: solo svc-diagnostico con platform.ia.diagnostico.
+            .AddPolicy(DiagnosticoIaServicioAuthorization.Policy, DiagnosticoIaServicioAuthorization.Configure)
             // HU #13087 — endpoints externos: solo el esquema ExternalClient y el permiso del pase.
             .AddPolicy(ExternalClientAuthorization.TramitesReadPolicy, policy => policy
                 .AddAuthenticationSchemes(ExternalClientAuthorization.Scheme)

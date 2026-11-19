@@ -46,7 +46,7 @@ Diagnostico__Ambiente=LOCAL
 Diagnostico__Anthropic__Simulado=true
 ```
 
-Con llave real, en el mismo ambiente:
+Con llave real, solo en local (`Diagnostico__Ia__Origen=local`). En DEV, QA y PDN la llave sale de «Configuración de IA» de core-api por gRPC, cifrada (ADR-0091; variables en `.env.prod.example`):
 
 ```text
 Diagnostico__Anthropic__ApiKey=<la llave del producto>

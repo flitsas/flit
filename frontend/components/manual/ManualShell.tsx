@@ -56,7 +56,7 @@ function SidebarNav({
               onClick={() => setOpenSections((s) => ({ ...s, [section.id]: !open }))}
               aria-expanded={open}
             >
-              <Icono nombre="carpeta" className="h-4 w-4 shrink-0 opacity-70" />
+              <Icono nombre="documento" className="h-4 w-4 shrink-0 opacity-70" />
               <span className="flex-1">{section.label}</span>
               <Icono nombre="abajo" className={`h-4 w-4 shrink-0 opacity-60 transition-transform ${open ? "" : "-rotate-90"}`} />
             </button>

@@ -154,11 +154,15 @@ export function topeEje(maximo: number): number {
 
 /** Número corto para el eje: 1.500.000 → «1,5 M»; 12.000 → «12 mil». */
 export function numeroCorto(n: number): string {
-  const f = (x: number) => String(Math.round(x * 10) / 10).replace(".", ",");
-  if (Math.abs(n) >= 1e9) return `${f(n / 1e9)} mil M`;
-  if (Math.abs(n) >= 1e6) return `${f(n / 1e6)} M`;
-  if (Math.abs(n) >= 1e3) return `${f(n / 1e3)} mil`;
-  return f(n);
+  const f = (x: number) => String(x).replace(".", ",");
+  const r = (x: number) => Math.round(x * 10) / 10;
+  // Se sube de escala cuando el redondeo en la escala menor llega a 1.000: 999.950.000 da «1 mil M», no «1000 M»,
+  // y 960.000.000 sigue siendo «960 M».
+  const a = Math.abs(n);
+  if (a >= 1e9 || r(a / 1e6) >= 1000) return `${f(r(n / 1e9))} mil M`;
+  if (a >= 1e6 || r(a / 1e3) >= 1000) return `${f(r(n / 1e6))} M`;
+  if (a >= 1e3 || r(a) >= 1000) return `${f(r(n / 1e3))} mil`;
+  return f(r(n));
 }
 
 /** Primer día del mes de una fecha «aaaa-mm-dd» (rango por defecto: el mes en curso, como la API). */
@@ -180,4 +184,182 @@ export function totalesProductividad(filas: FilaProductividad[]): Record<Metrica
   const t = Object.fromEntries(METRICAS.map((m) => [m.clave, 0])) as Record<Metrica, number>;
   for (const f of filas) for (const m of METRICAS) t[m.clave] += f[m.clave];
   return t;
+}
+
+// ── Lente de dinero (rediseño de Comparendos, S2: GET /reportes/dinero) ──────────────────────────────────────────────
+
+export interface Monto {
+  cantidad: number;
+  valor: number;
+}
+
+export interface DineroEstado extends Monto {
+  estado: "SinNotificar" | "EnTiempo" | "Vencido" | "Caducado" | "Prescrito";
+}
+
+export interface DineroOrganismo extends Monto {
+  organismoId: string | null;
+  nombre: string;
+  /** La parte que todavía se puede cobrar (sin notificar, en tiempo o vencido). */
+  exigible: number;
+}
+
+export interface Frentes {
+  proximosAVencer: Monto;
+  sinContraventor: Monto;
+  rechazadosOt: Monto;
+  sinGestion: Monto;
+  vencidos: Monto;
+  caducidadInmediata: Monto;
+}
+
+export interface Dinero {
+  hoy: string;
+  /** Deuda (activo, sin pagar y sin DP favorable) repartida por estado legal. */
+  estados: DineroEstado[];
+  exigible: Monto;
+  noExigible: Monto;
+  cobroCoactivo: Monto;
+  descuento: { d50: Monto & { ahorroEstimado: number }; d25: Monto & { ahorroEstimado: number } };
+  organismos: DineroOrganismo[];
+  pagado: { cantidad: number; total: number; cc: number; pc: number; bc: number };
+  frentes: Frentes;
+  ahorroLogrado: number;
+  mensual: { periodo: string; valorIngresado: number; pagado: number }[];
+}
+
+export interface RespuestaDinero {
+  alcance: { empresa: string | null; nit: string | null; desde: string; hasta: string };
+  dinero: Dinero;
+}
+
+/** Pesos abreviados para las cifras grandes: 3.900.000.000 → «$ 3,9 mil M»; 126.200.000 → «$ 126,2 M». */
+export function pesosCorto(valor: number | null | undefined): string {
+  if (valor === null || valor === undefined) return "—";
+  if (Math.abs(valor) < 1e6) return `$ ${Math.round(valor).toLocaleString("es-CO")}`;
+  return `$ ${numeroCorto(valor)}`;
+}
+
+/** Un frente de «Para hoy»: lo que se cuenta, a dónde lleva en la bandeja y si es plata que urge o que se recupera. */
+export interface DefFrente {
+  clave: keyof Frentes;
+  titulo: string;
+  /** Qué hacer, en una línea. */
+  accion: string;
+  /** Filtro de la bandeja con las mismas claves de `aQuery`. */
+  query: Record<string, string>;
+  pendiente?: boolean;
+}
+
+export const FRENTES: DefFrente[] = [
+  { clave: "proximosAVencer", titulo: "Próximos a vencer", accion: "Vencen en 2 días hábiles o menos", query: { rapido: "ProximosAVencer" }, pendiente: true },
+  { clave: "caducidadInmediata", titulo: "Caducidad inmediata", accion: "Caducados o por caducar en 30 días, sin DP", query: { juridico: "CaducidadInmediata" } },
+  { clave: "sinContraventor", titulo: "Sin contraventor", accion: "Falta el conductor responsable", query: { rapido: "SinContraventor" } },
+  { clave: "rechazadosOt", titulo: "Rechazados por el organismo", accion: "El cambio de contraventor no fue aceptado", query: { rapido: "RechazadosOt" }, pendiente: true },
+  { clave: "sinGestion", titulo: "Sin gestión", accion: "Nadie ha hecho nada todavía", query: { sinGestion: "true" } },
+  { clave: "vencidos", titulo: "Vencidos", accion: "Se pasó el plazo de gestión", query: { estadoLegal: "Vencido" } },
+];
+
+/** Enlace a la bandeja con el filtro del frente (y la empresa del SuperAdmin o el NIT, si los hay). */
+export function hrefBandeja(query: Record<string, string>, extra: { empresa?: string | null; nit?: string | null } = {}): string {
+  const q = new URLSearchParams(query);
+  if (extra.empresa) q.set("empresa", extra.empresa);
+  if (extra.nit) q.set("nit", extra.nit);
+  return `/bandeja?${q.toString()}`;
+}
+
+/** «noviembre de 2026» o «1 al 19 de noviembre de 2026» según el rango; es el periodo visible de «Pagado» y «Ahorro». */
+export function textoPeriodo(desde: string, hasta: string): string {
+  const mes = (p: string) => new Intl.DateTimeFormat("es-CO", { month: "long", timeZone: "UTC" }).format(new Date(`${p}T00:00:00Z`));
+  const [ad, md, dd] = desde.split("-");
+  const [ah, mh, dh] = hasta.split("-");
+  if (ad === ah && md === mh) return `${Number(dd)} al ${Number(dh)} de ${mes(hasta)} de ${ah}`;
+  return `${Number(dd)} de ${mes(desde)} de ${ad} al ${Number(dh)} de ${mes(hasta)} de ${ah}`;
+}
+
+/** `GET /reportes/dinero?partes=inicio`: lo que pinta el Inicio (frentes, descuento y las 4 tarjetas de la franja). */
+export interface RespuestaDineroInicio {
+  alcance: RespuestaDinero["alcance"];
+  dinero: Pick<Dinero, "hoy" | "exigible" | "noExigible" | "descuento" | "pagado" | "frentes" | "ahorroLogrado">;
+}
+
+/** `GET /reportes/dinero?partes=estados`: solo el reparto por estado (el indicador «Deuda sin pagar» de Reportes). */
+export interface RespuestaEstados {
+  alcance: RespuestaDinero["alcance"];
+  dinero: Pick<Dinero, "hoy" | "estados" | "exigible" | "noExigible">;
+}
+
+// ── Lente de operación del Inicio (rediseño R2: GET /comparendos/operacion, con BandejaVer) ──────────────────────────
+// Los valores en pesos llegan en null cuando el usuario no tiene el módulo de reportes.
+
+export interface Cifra {
+  cantidad: number;
+  valor: number | null;
+}
+
+export interface Operacion {
+  hoy: string;
+  conValores: boolean;
+  resumen: { pendientes: number; valorPendiente: number | null; vehiculos: number; nuevos30: number; resueltos30: number };
+  gestion: { pasos: { estadoProceso: string; cantidad: number }[]; tasaExito: number | null };
+  vehiculos: { conTresOMas: number; concentracionDiezPorCiento: number | null; top: { placa: string; cantidad: number; organismos: number; valor: number | null }[] };
+  infracciones: { codigo: string; descripcion: string; cantidad: number; valor: number | null }[];
+  evitables: { soat: Cifra; tecnicoMecanica: Cifra };
+  calendario: { periodo: string; caducan: number; prescriben: number }[];
+  antiguedad: { tramo: string; cantidad: number; valor: number | null; desde: string | null; hasta: string | null }[];
+  dpPorOrganismo: { organismoId: string | null; nombre: string; enviados: number; favorables: number; respondidos: number; diasPromedio: number | null }[];
+}
+
+export interface RespuestaOperacion {
+  empresa: string;
+  operacion: Operacion;
+}
+
+/**
+ * Pasos del embudo de gestión: la clave de estadoProceso de la bandeja y cómo se dice. «Sin procesar» (y no «Sin
+ * gestión») porque es otro filtro que el frente «Sin gestión» de «Para hoy», y así se llama en la bandeja al abrirlo.
+ */
+export const PASOS_GESTION: Record<string, string> = {
+  SinProcesar: "Sin procesar",
+  DerechoPeticion: "Con derecho de petición",
+  RespuestaDesfavorable: "Respuesta desfavorable",
+  RespuestaFavorable: "Respuesta favorable",
+};
+
+/**
+ * Enlace a la bandeja con los comparendos pendientes (activos y sin pagar) de un tramo de antigüedad. El tramo «Sin fecha
+ * de imposición» no tiene desde ni hasta y la bandeja no filtra eso: no lleva enlace (null).
+ */
+export function hrefTramo(t: { desde: string | null; hasta: string | null }, empresa?: string | null): string | null {
+  if (!t.desde && !t.hasta) return null;
+  const q: Record<string, string> = { pagado: "false" };
+  if (t.desde) q.imposicionDesde = t.desde;
+  if (t.hasta) q.imposicionHasta = t.hasta;
+  return hrefBandeja(q, { empresa });
+}
+
+// ── Inicio del SuperAdmin (GET /admin/resumen) ──────────────────────────────────────────────────────────────────────
+
+export interface ResumenPlataforma {
+  hoy: string;
+  empresas: { total: number; activas: number; pendientes: number; inactivas: number };
+  ingesta24h: { consultas: number; conError: number; empresasConError: number };
+  correosFallidos7d: number;
+  /** Desde qué día (Colombia) cuenta los correos fallidos: el mismo `desde` del enlace a /mensajes. */
+  correosDesde: string;
+  necesitanAlgo: { empresaId: string; nombre: string; motivos: string[] }[];
+}
+
+/** `GET /admin/resumen?partes=impacto` (R4): lo que FLIT ayudó a hacer a todas las empresas en el año en curso. */
+export interface ImpactoPlataforma {
+  anio: number;
+  desde: string;
+  hasta: string;
+  ahorroLogrado: number;
+  /** tasa: favorables sobre lo respondido en el año (la «tasa de éxito» del dashboard); null sin respuestas. */
+  dp: { enviados: number; favorables: number; tasa: number | null };
+  comparendosGestionados: number;
+  avisosEnviados: number;
+  cambiosContraventor: { solicitados: number; aceptados: number };
+  topEmpresas: { empresaId: string; nombre: string; ahorro: number; dpFavorables: number }[];
 }

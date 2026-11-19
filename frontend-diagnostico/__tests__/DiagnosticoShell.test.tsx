@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react";
 import { DiagnosticoShell } from "@/components/DiagnosticoShell";
+import { useSondeoResumenSaneamientos } from "@/lib/backoffice/useResumenSaneamientos";
 
 // Uso de ejemplo: <DiagnosticoShell user={usuarioDelToken} tramitesUrl="https://tramites">{pantalla}</DiagnosticoShell>
 // pide GET /api/v1/diagnostico/sesion y, con la sesión, dibuja la barra de la suite con la compañía y la pantalla.
@@ -93,6 +94,19 @@ describe("DiagnosticoShell", () => {
     expect(screen.queryByText("pantalla base")).toBeNull();
   });
 
+  it.each([
+    ["un 4xx con el mensaje del servidor en el cuerpo", () => Response.json({ code: "OTRO", error: "mensaje del servidor que no debe verse" }, { status: 422 })],
+    ["un error de red", () => Promise.reject(new TypeError("mensaje del servidor que no debe verse"))],
+  ])("AP-9: %s muestra el respaldo fijo, nunca el mensaje", async (_n, respuesta) => {
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(respuesta));
+
+    montar();
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta).toHaveTextContent("No se pudo abrir Diagnóstico.");
+    expect(alerta).not.toHaveTextContent("mensaje del servidor que no debe verse");
+  });
+
   it("si la API falla muestra el error con Reintentar y, al reintentar, abre la pantalla", async () => {
     const fetchMock = vi
       .fn()
@@ -102,10 +116,264 @@ describe("DiagnosticoShell", () => {
 
     montar();
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("Diagnóstico no respondió");
+    // AP-9 (SF-6): reescrito. Un 5xx cae en el respaldo fijo del sitio, no en el message del ApiError.
+    expect(await screen.findByRole("alert")).toHaveTextContent("No se pudo abrir Diagnóstico.");
     expect(screen.queryByText("pantalla base")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("pantalla base")).toBeInTheDocument();
     expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("HU14562 AC50: con la sesión, la campana de avisos aparece en la barra (headerActions) y pide GET /notificaciones", async () => {
+    const fetchMock = vi.fn(async (u: RequestInfo | URL) =>
+      String(u).startsWith("/api/v1/diagnostico/notificaciones")
+        ? Response.json({ no_leidas: 3, items: [], siguiente: null })
+        : Response.json(sesion),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    montar();
+    const banner = await screen.findByRole("banner");
+    expect(await within(banner).findByRole("button", { name: "Avisos, 3 avisos sin leer" })).toBeInTheDocument();
+    expect(fetchMock.mock.calls.some(([u]) => String(u) === "/api/v1/diagnostico/notificaciones?limite=20")).toBe(true);
+  });
+
+  it("HU14562 AC50: mientras no hay sesión no se pide la campana", () => {
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    montar();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("button", { name: /^Avisos/ })).toBeNull();
+  });
+});
+
+describe("HU14577 AC24/AC25 entrada «Saneamientos» con insignia de pendientes", () => {
+  const conBackoffice = (gestionarSaneamiento: boolean) => ({ ...sesion, capacidades: { ...sesion.capacidades, backoffice: true, gestionarSaneamiento } });
+  const api = (gestionar: boolean, solicitados: number) =>
+    vi.fn(async (u: RequestInfo | URL) => {
+      const url = String(u);
+      if (url.startsWith("/api/v1/diagnostico/notificaciones")) return Response.json({ no_leidas: 0, items: [], siguiente: null });
+      if (url === "/api/v1/diagnostico/backoffice/saneamientos/resumen") return Response.json({ solicitados });
+      return Response.json(conBackoffice(gestionar));
+    });
+  const pedidosResumen = (f: ReturnType<typeof api>) => f.mock.calls.filter(([u]) => String(u) === "/api/v1/diagnostico/backoffice/saneamientos/resumen");
+  const abrirBackoffice = async () => {
+    const [pildora] = await screen.findAllByRole("button", { name: /^Backoffice/ });
+    fireEvent.click(pildora);
+    return pildora;
+  };
+
+  it("con gestionarSaneamiento: la entrada lleva a /backoffice/saneamientos y muestra 12 (en la entrada y en la píldora)", async () => {
+    const f = api(true, 12);
+    vi.stubGlobal("fetch", f);
+    montar();
+    await screen.findByText("pantalla base");
+    await waitFor(() => expect(pedidosResumen(f)).toHaveLength(1));
+    const pildora = await abrirBackoffice();
+    await waitFor(() => expect(pildora).toHaveAccessibleName("Backoffice, 12 pendientes"));
+    const [entrada] = await screen.findAllByRole("link", { name: "Saneamientos, 12 solicitudes sin tomar" });
+    expect(entrada).toHaveAttribute("href", "/backoffice/saneamientos");
+    expect(entrada.querySelector(".dock-insignia")).toHaveTextContent(/^12$/);
+  });
+
+  it("con 0 no pinta insignia", async () => {
+    vi.stubGlobal("fetch", api(true, 0));
+    montar();
+    await screen.findByText("pantalla base");
+    await abrirBackoffice();
+    const [entrada] = await screen.findAllByRole("link", { name: "Saneamientos" });
+    expect(entrada.querySelector(".dock-insignia")).toBeNull();
+  });
+
+  it("con 150 pinta «99+» y el nombre lleva el número real", async () => {
+    vi.stubGlobal("fetch", api(true, 150));
+    montar();
+    await screen.findByText("pantalla base");
+    await abrirBackoffice();
+    const [entrada] = await screen.findAllByRole("link", { name: "Saneamientos, 150 solicitudes sin tomar" });
+    expect(entrada.querySelector(".dock-insignia")).toHaveTextContent(/^99\+$/);
+  });
+
+  it("sin gestionarSaneamiento (aunque tenga backoffice) no ve la entrada ni se pide el resumen", async () => {
+    const f = api(false, 12);
+    vi.stubGlobal("fetch", f);
+    montar();
+    await screen.findByText("pantalla base");
+    await abrirBackoffice();
+    expect(screen.queryAllByRole("link", { name: /^Saneamientos/ })).toHaveLength(0);
+    expect(screen.getAllByRole("link", { name: "Fuentes obligatorias" }).length).toBeGreaterThan(0);
+    expect(pedidosResumen(f)).toHaveLength(0);
+  });
+});
+
+describe("HU14577 AC25 sondeo del resumen cada 60 s solo con la pestaña visible", () => {
+  let visible: DocumentVisibilityState = "visible";
+  beforeEach(() => {
+    visible = "visible";
+    vi.spyOn(document, "visibilityState", "get").mockImplementation(() => visible);
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  const resumen = () => vi.fn(async () => Response.json({ solicitados: 4 }));
+
+  it("pide al montar y cada 60 s mientras está visible; oculta no pide; al volver visible pide en el acto", async () => {
+    const f = resumen();
+    vi.stubGlobal("fetch", f);
+    const { result } = renderHook(() => useSondeoResumenSaneamientos(true));
+    await act(async () => {});
+    expect(f).toHaveBeenCalledTimes(1);
+    expect(result.current.solicitados).toBe(4);
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(f).toHaveBeenCalledTimes(2);
+    visible = "hidden";
+    await act(async () => vi.advanceTimersByTime(120_000));
+    expect(f).toHaveBeenCalledTimes(2);
+    visible = "visible";
+    await act(async () => document.dispatchEvent(new Event("visibilitychange")));
+    expect(f).toHaveBeenCalledTimes(3);
+  });
+
+  it("sin la capacidad no pide nunca; si falla conserva el último valor sin error", async () => {
+    const f = resumen();
+    vi.stubGlobal("fetch", f);
+    renderHook(() => useSondeoResumenSaneamientos(false));
+    await act(async () => vi.advanceTimersByTime(120_000));
+    expect(f).not.toHaveBeenCalled();
+
+    const g = vi.fn().mockResolvedValueOnce(Response.json({ solicitados: 7 })).mockResolvedValue(Response.json({ error: "x" }, { status: 503 }));
+    vi.stubGlobal("fetch", g);
+    const { result } = renderHook(() => useSondeoResumenSaneamientos(true));
+    await act(async () => {});
+    expect(result.current.solicitados).toBe(7);
+    await act(async () => vi.advanceTimersByTime(60_000));
+    expect(g).toHaveBeenCalledTimes(2);
+    expect(result.current.solicitados).toBe(7);
+  });
+});
+
+describe("FE-4 dock: «Diagnósticos» y «Reportes» como enlaces directos (spec-ui §6, V4)", () => {
+  const conCapacidades = (extra: Record<string, boolean>) =>
+    vi.fn(async (u: RequestInfo | URL) =>
+      String(u).startsWith("/api/v1/diagnostico/notificaciones")
+        ? Response.json({ no_leidas: 0, items: [], siguiente: null })
+        : String(u) === "/api/v1/diagnostico/backoffice/saneamientos/resumen"
+          ? Response.json({ solicitados: 0 })
+          : Response.json({ ...sesion, capacidades: { ...sesion.capacidades, ...extra } }),
+    );
+  const enlaces = (nombre: string) => screen.queryAllByRole("link", { name: nombre }).map((a) => a.getAttribute("href"));
+
+  it("con verDiagnosticos ve «Diagnósticos» (/diagnosticos) y sin verReportes no ve «Reportes»", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ verDiagnosticos: true }));
+    montar();
+    await screen.findByText("pantalla base");
+    expect(enlaces("Diagnósticos")).toContain("/diagnosticos");
+    expect(enlaces("Reportes")).toHaveLength(0);
+  });
+
+  it("con verReportes ve «Reportes» (/reportes); con crearDiagnosticos solo, también «Diagnósticos»", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ verDiagnosticos: false, crearDiagnosticos: true, verReportes: true }));
+    montar();
+    await screen.findByText("pantalla base");
+    expect(enlaces("Reportes")).toContain("/reportes");
+    expect(enlaces("Diagnósticos")).toContain("/diagnosticos");
+  });
+
+  it("sin verDiagnosticos ni crearDiagnosticos no hay «Diagnósticos»; la vista global abre «Reportes»", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ verDiagnosticos: false, crearDiagnosticos: false, backoffice: true, verEstadisticasGlobales: true }));
+    montar();
+    await screen.findByText("pantalla base");
+    expect(enlaces("Diagnósticos")).toHaveLength(0);
+    expect(enlaces("Reportes")).toContain("/reportes");
+  });
+
+  it("en el backoffice el orden a la izquierda es Diagnósticos · Reportes · Backoffice", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ backoffice: true, verReportes: true }));
+    const { container } = montar();
+    await screen.findByText("pantalla base");
+    const texto = container.textContent ?? "";
+    const pos = (s: string) => texto.indexOf(s);
+    expect(pos("Diagnósticos")).toBeGreaterThanOrEqual(0);
+    expect(pos("Diagnósticos")).toBeLessThan(pos("Reportes"));
+    expect(pos("Reportes")).toBeLessThan(pos("Backoffice"));
+  });
+});
+
+// HU #14583 (spec-ui §9, A9.3): Diagnóstico activa el dock equilibrado. Con Diagnósticos · Reportes · Backoffice
+// (3 grupos) quedan 2 a la izquierda del inicio y 1 a la derecha, sin espaciadores; antes iban los 3 a la izquierda.
+describe("HU14583 dock equilibrado en Diagnóstico", () => {
+  it("3 grupos → Diagnósticos · Reportes | Inicio | Backoffice, sin espaciadores", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (u: RequestInfo | URL) =>
+        String(u).startsWith("/api/v1/diagnostico/notificaciones")
+          ? Response.json({ no_leidas: 0, items: [], siguiente: null })
+          : Response.json({ ...sesion, capacidades: { ...sesion.capacidades, backoffice: true, verReportes: true } }),
+      ),
+    );
+    montar();
+    await screen.findByText("pantalla base");
+    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
+    const hijos = Array.from(nav.children);
+    const fab = hijos.findIndex((el) => el.getAttribute("aria-label") === "Inicio Diagnóstico");
+    expect(fab).toBe(2);
+    expect(hijos.slice(0, fab).map((el) => el.textContent)).toEqual(["Diagnósticos", "Reportes"]);
+    expect(hijos.slice(fab + 1).map((el) => el.textContent)).toEqual(["Backoffice"]);
+    expect(hijos.filter((el) => el.tagName === "SPAN" && el.getAttribute("aria-hidden") === "true")).toHaveLength(0);
+  });
+});
+
+// HU #14588 (spec-ui §9, A9.4): la entrada «Usuarios» (/usuarios) sale solo con la capacidad gestionarUsuarios y va,
+// en orden de catálogo, entre Backoffice y Configuración. Con el dock equilibrado el admin de compañía queda
+// Diagnósticos · Reportes | Inicio | Usuarios · Configuración.
+describe("HU14588 entrada «Usuarios» del dock", () => {
+  const conCapacidades = (extra: Record<string, boolean>, permisos: string[] = sesion.permisos) =>
+    vi.fn(async (u: RequestInfo | URL) =>
+      String(u).startsWith("/api/v1/diagnostico/notificaciones")
+        ? Response.json({ no_leidas: 0, items: [], siguiente: null })
+        : String(u) === "/api/v1/diagnostico/backoffice/saneamientos/resumen"
+          ? Response.json({ solicitados: 0 })
+          : Response.json({ ...sesion, permisos, capacidades: { ...sesion.capacidades, ...extra } }),
+    );
+  const admin = { ...usuario, permissions: ["diagnostico.diagnosticos.ver", "diagnostico.configuracion.ver"], roles: ["admin_diagnostico"] };
+
+  it("sin gestionarUsuarios no hay enlace «Usuarios»", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ verReportes: true }));
+    montar();
+    await screen.findByText("pantalla base");
+    expect(screen.queryAllByRole("link", { name: "Usuarios" })).toHaveLength(0);
+  });
+
+  it("admin con gestionarUsuarios: «Usuarios» (/usuarios); Diagnósticos · Reportes | Inicio | Usuarios · Configuración (2|2)", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ verReportes: true, gestionarUsuarios: true }));
+    render(
+      <DiagnosticoShell user={admin} tramitesUrl="https://tramites.prueba">
+        <p>pantalla base</p>
+      </DiagnosticoShell>,
+    );
+    await screen.findByText("pantalla base");
+    expect(screen.getAllByRole("link", { name: "Usuarios" }).map((a) => a.getAttribute("href"))).toContain("/usuarios");
+    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
+    const hijos = Array.from(nav.children);
+    const fab = hijos.findIndex((el) => el.getAttribute("aria-label") === "Inicio Diagnóstico");
+    expect(hijos.slice(0, fab).map((el) => el.textContent)).toEqual(["Diagnósticos", "Reportes"]);
+    expect(hijos.slice(fab + 1).map((el) => el.textContent)).toEqual(["Usuarios", "Configuración"]);
+  });
+
+  it("SuperAdmin: Diagnósticos · Reportes · Backoffice | Inicio | Usuarios · Configuración (3|2)", async () => {
+    vi.stubGlobal("fetch", conCapacidades({ backoffice: true, verReportes: true, gestionarUsuarios: true }));
+    render(
+      <DiagnosticoShell user={{ ...admin, isSuperAdmin: true }} tramitesUrl="https://tramites.prueba">
+        <p>pantalla base</p>
+      </DiagnosticoShell>,
+    );
+    await screen.findByText("pantalla base");
+    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
+    const hijos = Array.from(nav.children);
+    const fab = hijos.findIndex((el) => el.getAttribute("aria-label") === "Inicio Diagnóstico");
+    expect(hijos.slice(0, fab).map((el) => el.textContent)).toEqual(["Diagnósticos", "Reportes", "Backoffice"]);
+    expect(hijos.slice(fab + 1).map((el) => el.textContent)).toEqual(["Usuarios", "Configuración"]);
   });
 });

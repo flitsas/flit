@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Modulos.Comun;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Platform.Sdk.Messaging;
 using Flit.Platform.Sdk.Tenancy;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -12,7 +13,8 @@ namespace Flit.Diagnostico.Api.Persistence;
 /// outbox y la bandeja de entrada del SDK; las tablas propias se agregan con su <c>IEntityTypeConfiguration</c> en
 /// <c>Configuraciones/</c> y su migración. Toda entidad de negocio implementa <see cref="IEntidadDeEmpresa"/>: el filtro por
 /// la empresa del token y la validación al guardar los pone <see cref="TenantFilter"/> (HU #13722, ADR-0072). También guarda las
-/// llaves de Data Protection del servicio (<see cref="IDataProtectionKeyContext"/>, HU #13735).
+/// llaves de Data Protection del servicio (<see cref="IDataProtectionKeyContext"/>, HU #13735). <c>accesos_reporte</c> es de solo
+/// inserción también desde la aplicación (HU #14579, BE-0, SP-8): un guardado que la modifique o la borre falla entero.
 /// </summary>
 public sealed class DiagnosticoDb(DbContextOptions<DiagnosticoDb> options, IPlatformTenantAccessor empresa) : DbContext(options), IDataProtectionKeyContext
 {
@@ -52,6 +54,8 @@ public sealed class DiagnosticoDb(DbContextOptions<DiagnosticoDb> options, IPlat
         modelBuilder.HasDefaultSchema(Schema);
         modelBuilder.AddFlitOutbox(Schema);
         modelBuilder.AddFlitInbox(Schema);
+        // Contrato ia-consumo v1 (ADR-0090): tablas del SDK, sin empresa (tenant_id informativo).
+        modelBuilder.AddFlitIaConsumo(Schema);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(DiagnosticoDb).Assembly);
         TenantFilter.Aplicar(modelBuilder, this);
     }
@@ -59,12 +63,14 @@ public sealed class DiagnosticoDb(DbContextOptions<DiagnosticoDb> options, IPlat
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
     {
         TenantFilter.ValidarEscritura(ChangeTracker, EmpresaActual, EscrituraAutorizada);
+        Modulos.Reportes.AccesoReporte.ValidarSoloInsercion(ChangeTracker);
         return base.SaveChanges(acceptAllChangesOnSuccess);
     }
 
     public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
     {
         TenantFilter.ValidarEscritura(ChangeTracker, EmpresaActual, EscrituraAutorizada);
+        Modulos.Reportes.AccesoReporte.ValidarSoloInsercion(ChangeTracker);
         return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
     }
 

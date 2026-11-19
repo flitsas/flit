@@ -34,6 +34,10 @@ internal static class ApiEndpoints
         // ADR-0084 (Punto 4): creación de borradores desde Diagnóstico. APAGADA por defecto (Tramites:Derivacion:Habilitada);
         // solo la atiende svc-diagnostico con el scope platform.tramites.derivacion.
         Flit.Api.Derivacion.DerivacionExtensions.MapDerivacionDiagnostico(app);
+        // ADR-0089 (HU #14587): usuarios de Diagnóstico gestionados desde el producto; solo svc-diagnostico con su scope.
+        Flit.Api.Usuarios.UsuariosProductoExtensions.MapUsuariosProducto(app);
+        // ADR-0091: configuración de IA con la llave sellada; solo svc-diagnostico con platform.ia.diagnostico.
+        Flit.Api.Plataforma.Ai.ConfiguracionIaExtensions.MapConfiguracionIaDiagnostico(app);
 
         // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
         app.MapInternalJwksEndpoints(); // JWKS público del token de usuario (core-ict valida con él)
@@ -93,6 +97,9 @@ internal static class ApiEndpoints
         app.MapAdminPlataformaPersonaNaturalEndpoints(); // Feature J (Épica #14021) — tarifas, configuración y contenido del portal (SuperAdmin)
         app.MapAdminOtPortalTarifasEndpoints(); // Épica #14297 (Feature #14387) — precios del portal Persona Natural desde el dashboard del OT
         app.MapAdminPortalCobroEndpoints(); // HU#14393 (Feature #14392, Épica #14297) — medios de pago y switches de cobro del portal
+        app.MapAdminPortalCajaUsuariosEndpoints(); // HU#14454/#14455 (Épica #14210) — usuarios de caja del organismo (rol ot_caja)
+        app.MapAdminPortalCajaCobrosEndpoints(); // HU#14461 (Épica #14210) — cobros en caja y anulación desde el hub (fachada gRPC)
+        app.MapOtCajaEndpoints(); // Épica #14210 — la caja del organismo como módulo de FLIT 2.0 (ot_caja y Admin OT; fachada gRPC)
         app.MapAdminOtPortalReportesEndpoints(); // Épica #14297 (Feature #14396) — reporte de los trámites del portal por organismo
         app.MapAdminRejectionReasonsEndpoints();
         app.MapAdminProcedureDocumentRequirementsEndpoints();
@@ -141,6 +148,7 @@ internal static class ApiEndpoints
         app.MapTramitesConsolidadoEndpoints();
         app.MapConsolidadoLoteEndpoints(); // Épica #13216 — HU13374: POST /api/v1/tramites/consolidados/lotes (descarga masiva)
         app.MapAdminTramiteConsolidadoEndpoints(); // HU #12158 — limpiar/cargar consolidado (admin)
+        app.MapAdminTramiteDocumentoEndpoints(); // Bug #14604 — carga administrativa de documentos en cualquier estado (admin)
         app.MapAdminTramiteEstadoEndpoints(); // HU #12159 — cambiar estado sin restricción de flujo (admin)
         app.MapAdminTramiteAnularEndpoints(); // HU #12160 — anular desde cualquier estado salvo Aprobado/Revocado
         app.MapAdminTramiteReenviarValidacionEndpoints(); // HU #12161 — reenviar validación de identidad (admin, correo opcional)
@@ -159,6 +167,7 @@ internal static class ApiEndpoints
 
         // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
         app.MapAnalyticsEndpoints();
+        app.MapGestorDashboardEndpoints(); // Inicio del Gestor (rediseño de los 3 dashboards)
         app.MapDashboardActiveModulesEndpoints(); // HU #12251 (Feature #12249) — flags de módulos activos, sin AdminCompanyPolicy
         app.MapDetailedReportEndpoints(); // Feature #10813
         app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
@@ -169,6 +178,7 @@ internal static class ApiEndpoints
         app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
         app.MapCompanyQueriesEndpoints(); // Consultas propias de la empresa
         app.MapSuperAdminQueriesEndpoints(); // Consultas de SuperAdmin sobre todas las compañías
+        app.MapSuperAdminDashboardEndpoints(); // Inicio del SuperAdmin: compañías y organismos (rediseño de los 3 dashboards)
         app.MapIctQueriesEndpoints(); // Consultas propias de la empresa sobre sus pre-trámites de ICT
         app.MapIctReportsEndpoints(); // Reportes de ICT en vivo (HU #11617)
         app.MapUsageEventsEndpoints(); // Reportes2 HU-A

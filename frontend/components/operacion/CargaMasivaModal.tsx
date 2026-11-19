@@ -247,7 +247,7 @@ export function CargaMasivaModal({ open, onClose, onEncolado }: Props) {
             className="inline-flex h-9 items-center gap-1.5 rounded-xl px-4 text-xs font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-45"
             style={{ background: WIZARD_CTA_GRADIENT }}
           >
-            <Icono nombre="nube-subir" className={`h-3.5 w-3.5 ${subiendo ? 'animate-pulse' : ''}`} />
+            <Icono nombre="archivo-subir" className={`h-3.5 w-3.5 ${subiendo ? 'animate-pulse' : ''}`} />
             {subiendo ? 'Subiendo…' : 'Procesar archivo'}
           </button>
         </div>

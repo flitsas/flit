@@ -29,7 +29,8 @@ internal sealed record GrillaBackofficeDto(
     [JsonPropertyName("estado_etiqueta")]
     public string EstadoEtiqueta => RotulosDiagnostico.DeEstadoLote(Estado);
 
-    public static GrillaBackofficeDto De(Guid empresa, GrillaLeida g)
+    /// <param name="saneamientos">El saneamiento no anulado de cada vehículo del lote (HU #14576 AC35); el que no está, null.</param>
+    public static GrillaBackofficeDto De(Guid empresa, GrillaLeida g, IReadOnlyDictionary<Guid, SaneamientoFilaBackofficeDto>? saneamientos = null)
     {
         ArgumentNullException.ThrowIfNull(g);
         return new(
@@ -37,12 +38,15 @@ internal sealed record GrillaBackofficeDto(
             g.Columnas, g.Avance,
             [.. g.Vehiculos.Select(v => new FilaVehiculoBackofficeDto(
                 v.Id, v.Orden, v.Identificador, v.TipoIdentificador, v.Placa, v.Vin, v.Terminado, [.. v.Celdas.Select(CeldaGrillaBackofficeDto.De)],
-                v.DocumentoDeclarado, v.Propietarios))],
+                v.CambioPropietario, saneamientos?.GetValueOrDefault(v.Id)))],
             g.Estimado);
     }
 }
 
-/// <summary>Una fila de la grilla del backoffice: igual a <see cref="FilaVehiculoDto"/> (documentos enmascarados incluidos) con celdas del backoffice.</summary>
+/// <summary>
+/// Una fila de la grilla del backoffice: igual a <see cref="FilaVehiculoDto"/> (con <c>cambio_propietario</c> y sin documentos, HU #14582) con celdas del
+/// backoffice y, desde HU #14576 (AC35), <c>saneamiento: {estado, id} | null</c>, sin elegibilidad: el backoffice no marca.
+/// </summary>
 internal sealed record FilaVehiculoBackofficeDto(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("orden")] int Orden,
@@ -52,8 +56,8 @@ internal sealed record FilaVehiculoBackofficeDto(
     [property: JsonPropertyName("vin")] string? Vin,
     [property: JsonPropertyName("terminado")] bool Terminado,
     [property: JsonPropertyName("celdas")] IReadOnlyList<CeldaGrillaBackofficeDto> Celdas,
-    [property: JsonPropertyName("documento_declarado")] DocumentoDeclaradoDto? DocumentoDeclarado,
-    [property: JsonPropertyName("propietarios")] IReadOnlyList<PropietarioGrillaDto> Propietarios)
+    [property: JsonPropertyName("cambio_propietario")] bool? CambioPropietario,
+    [property: JsonPropertyName("saneamiento")] SaneamientoFilaBackofficeDto? Saneamiento = null)
 {
     /// <summary>Rótulo del tipo de identificador (punto 5).</summary>
     [JsonPropertyName("tipo_identificador_etiqueta")]
@@ -95,14 +99,17 @@ internal sealed record CeldaGrillaBackofficeDto(
     }
 }
 
-/// <summary>Un lote en la lista del backoffice (HU #13799): sin datos de vehículos ni de personas.</summary>
+/// <summary>Un lote en la lista del backoffice (HU #13799): sin datos de vehículos ni de personas. Desde HU #14563 (B3) con modo, tipo de trámite y express.</summary>
 internal sealed record DiagnosticoBackofficeDto(
     [property: JsonPropertyName("id")] Guid Id,
     [property: JsonPropertyName("nombre")] string Nombre,
     [property: JsonPropertyName("estado")] string Estado,
     [property: JsonPropertyName("creado_en")] DateTimeOffset CreadoEn,
     [property: JsonPropertyName("vehiculos")] int Vehiculos,
-    [property: JsonPropertyName("celdas_en_error")] int CeldasEnError)
+    [property: JsonPropertyName("celdas_en_error")] int CeldasEnError,
+    [property: JsonPropertyName("modo")] string? Modo = null,
+    [property: JsonPropertyName("tipo_tramite")] TipoTramiteListadoDto? TipoTramite = null,
+    [property: JsonPropertyName("es_express")] bool EsExpress = false)
 {
     /// <summary>Rótulo del estado del lote (punto 5).</summary>
     [JsonPropertyName("estado_etiqueta")]

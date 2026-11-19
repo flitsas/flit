@@ -36,10 +36,13 @@ internal sealed class ReportePortalReadRepository : IReportePortalReadRepository
     private readonly FlitDbContext _db;
     private readonly OtTenantScope _scope;
 
-    public ReportePortalReadRepository(FlitDbContext db, IEffectiveTransitOfficeListResolver? effectiveOffices = null)
+    public ReportePortalReadRepository(
+        FlitDbContext db,
+        IEffectiveTransitOfficeListResolver? effectiveOffices = null,
+        IOtUserClientScopeResolver? clientScope = null)
     {
         _db = db ?? throw new ArgumentNullException(nameof(db));
-        _scope = new OtTenantScope(db, effectiveOffices);
+        _scope = new OtTenantScope(db, effectiveOffices, clientScope);
     }
 
     public async Task<(PaginaReportePortal? Pagina, string? Error)> ListarAsync(
@@ -127,7 +130,11 @@ internal sealed class ReportePortalReadRepository : IReportePortalReadRepository
             async (organismo, empresas) =>
             {
                 // La empresa del portal tiene que estar entre las que el organismo puede ver; si no, no hay nada que mostrar.
-                await trabajo(Consulta(filtro, [organismo], incluirPortal: empresas.Contains(PlatformTenants.PersonaNatural)))
+                // Usuario del OT con alcance por compañías: solo los trámites de las asignadas (también en el canal aplicación).
+                var restringido = await _scope.GetClientRestrictionAsync(organismo, ct).ConfigureAwait(false);
+                await trabajo(Consulta(
+                        filtro, [organismo], incluirPortal: empresas.Contains(PlatformTenants.PersonaNatural),
+                        soloEmpresas: restringido is null ? null : empresas))
                     .ConfigureAwait(false);
                 return Hecho.Instancia;
             },
@@ -138,7 +145,8 @@ internal sealed class ReportePortalReadRepository : IReportePortalReadRepository
 
     private static Guid[] Limpiar(IReadOnlyList<Guid>? ids) => ids is null ? [] : [.. ids.Where(i => i != Guid.Empty).Distinct()];
 
-    private IQueryable<ProcedureInstance> Consulta(FiltroReportePortal filtro, Guid[] organismos, bool incluirPortal)
+    private IQueryable<ProcedureInstance> Consulta(
+        FiltroReportePortal filtro, Guid[] organismos, bool incluirPortal, IReadOnlyList<Guid>? soloEmpresas = null)
     {
         var portal = PlatformTenants.PersonaNatural;
         var canales = incluirPortal
@@ -155,6 +163,12 @@ internal sealed class ReportePortalReadRepository : IReportePortalReadRepository
                      && _db.ProcedureInstanceStatusHistories.Any(h => h.ProcedureInstanceId == p.Id
                         && h.ToStatus == TramiteEstado.Anulado
                         && h.Reason != null && h.Reason.StartsWith(MotivosAnulacionPortal.RechazoEnCreacion))));
+
+        if (soloEmpresas is not null)
+        {
+            var permitidas = soloEmpresas.ToList();
+            q = q.Where(p => permitidas.Contains(p.TenantId));
+        }
 
         if (organismos.Length > 0)
         {

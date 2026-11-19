@@ -1,7 +1,6 @@
 'use client';
 
 import { type ComponentType, type CSSProperties, useCallback, useEffect, useRef, useState } from 'react';
-import { Coins, FolderCheck } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { InlineAlert } from '@/components/atom/InlineAlert';
@@ -60,6 +59,9 @@ import type {
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { mimetypeDe } from '@/lib/documents/mimetype';
+
+const ICONO_PAGO = iconoComo("pago");
 
 /** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
 const ICONO_DOCUMENTO = iconoComo("documento");
@@ -91,20 +93,20 @@ const PASOS_POR_MODALIDAD: Record<
   TRASPASO: [
     { id: 'vehiculo', label: 'Trámite y vehículo', Icon: ICONO_DOCUMENTO },
     { id: 'actores', label: 'Actores y validación', Icon: ICONO_USUARIOS },
-    { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
-    { id: 'comercial', label: 'Datos comerciales', Icon: Coins },
+    { id: 'documentos', label: 'Documentos', Icon: ICONO_DOCUMENTO },
+    { id: 'comercial', label: 'Datos comerciales', Icon: ICONO_PAGO },
     { id: 'expediente', label: 'FUR y expediente', Icon: ICONO_DOCUMENTO },
   ],
   MATRICULAS: [
     { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: ICONO_DOCUMENTO },
     { id: 'actores', label: 'Comprador y rep. legal', Icon: ICONO_USUARIOS },
-    { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
+    { id: 'documentos', label: 'Documentos', Icon: ICONO_DOCUMENTO },
     { id: 'expediente', label: 'FUR y expediente', Icon: ICONO_DOCUMENTO },
   ],
   OTROS: [
     { id: 'vehiculo', label: 'Consulta VIN y placa', Icon: ICONO_DOCUMENTO },
     { id: 'actores', label: 'Comprador y rep. legal', Icon: ICONO_USUARIOS },
-    { id: 'documentos', label: 'Documentos', Icon: FolderCheck },
+    { id: 'documentos', label: 'Documentos', Icon: ICONO_DOCUMENTO },
     { id: 'expediente', label: 'FUR y expediente', Icon: ICONO_DOCUMENTO },
   ],
 };
@@ -727,7 +729,7 @@ export function TramiteDetalleModal({
                   }
                 >
                   El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes
-                  consultarla y descargarla, pero ya no se regenera.
+                  consultarla y descargarla. Solo cambia si un administrador actualiza un documento.
                 </InlineAlert>
               )
             ) : null}
@@ -825,6 +827,10 @@ export function TramiteDetalleModal({
                                 ),
                               ),
                             )
+                      }
+                      // Bug #14604 — abre el archivo nuevo o el anterior de un documento actualizado.
+                      onVerDocumento={(a) =>
+                        void preview.open({ id: a.id, tipo: a.tipo, filename: a.filename, mimetype: mimetypeDe(a.filename) })
                       }
                       emptyMessage="Sin eventos registrados todavía."
                     />

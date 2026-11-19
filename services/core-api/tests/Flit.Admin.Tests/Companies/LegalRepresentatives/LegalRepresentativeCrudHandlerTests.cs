@@ -49,7 +49,8 @@ public sealed class LegalRepresentativeCrudHandlerTests
             new GetLegalRepresentativeByIdQuery { TenantId = Tenant, Id = result.Id!.Value }, Ct);
         item.Should().NotBeNull();
         item!.SignatureVaultId.Should().Be(signatureId);
-        item.HasSignatureOrIdentity.Should().BeTrue();
+        // La referencia guardada no basta: sin firma VIGENTE en el baúl no puede firmar hoy.
+        item.HasSignatureOrIdentity.Should().BeFalse();
         item.CompanyDocumentNumber.Should().Be(Nit);
         item.ProcedureTypeIds.Should().ContainSingle().Which.Should().Be(procType);
     }
