@@ -53,7 +53,11 @@ jobs:
       matrix: &contratos
         include:
           # OpenAPI. Compartibles (los usan clientes de integración): external-api y core-ict.
-          - { contrato: core-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/core-api.v1.yaml, ruleset: interno, lint: advertencia }
+          # core-api: breaking como advertencia temporalmente por el Bug #14627. `validationId` de
+          # /api/v1/admin/tramites/{id}/validaciones-identidad/{reenviables,reenviar} pasa a nullable
+          # (antes siempre traía valor); oasdiff lo ve como incompatible. El único consumidor es el
+          # panel admin, que se actualiza en el mismo PR. Quitarlo cuando este cambio esté en release.
+          - { contrato: core-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/core-api.v1.yaml, ruleset: interno, lint: advertencia, breaking: advertencia }
           # core-ict de staging aún no cumple lo compartible (45 errores de vacuum): lint: advertencia hasta que llegue la 1.1.0 de develop.
           - { contrato: core-ict, aplicativo: flit2-core-ict, tipo: openapi, ruta: contracts/openapi/core-ict.v1.yaml, ruleset: compartible, lint: advertencia }
           # diagnostico: breaking como advertencia solo para la 1.1.0. Agrega PLACA_MOTOCARRO al enum tipo_identificador de
