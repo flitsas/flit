@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Miga, Modal, TarjetaMetrica, usePaginacion, VehicleLoader } from "@flit/ui";
+import { ChipsFiltro, DataTable, InlineAlert, Miga, Modal, TarjetaMetrica, usePaginacion, VehicleLoader } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { COLOR_CIFRA_DOCUMENTO, CONTADORES_GRID_CLS, EstadoDocumento, Progreso, useSondeo } from "@/components/ocr/comunes";
@@ -141,6 +141,7 @@ function Detalle({ id }: { id: string }) {
     setEstado(e);
     pg.setPage(1);
   };
+  const enCola = estado === "Pendiente" || estado === "EnProcesamiento";
   const FILTROS: [string, string, number][] = [
     ["Completo", "Completos", p.cantidadCompletos],
     ["Incompleto", "Incompletos", p.cantidadIncompletos],
@@ -213,7 +214,14 @@ function Detalle({ id }: { id: string }) {
         <p className="text-xs text-muted-foreground">Toca una cifra para ver solo esos documentos; tócala de nuevo para verlos todos.</p>
         <div className={CONTADORES_GRID_CLS} role="group" aria-label="Filtrar documentos por estado">
           <TarjetaMetrica etiqueta="Documentos" cifra={p.cantidadDocumentos} activa={estado === ""} onAlternar={() => filtrar("")} />
-          <TarjetaMetrica etiqueta="En cola" cifra={p.cantidadPendientes} pendiente={p.cantidadPendientes > 0} pie={p.cantidadPendientes > 0 ? "Se actualiza sola" : undefined} />
+          <TarjetaMetrica
+            etiqueta="En cola"
+            cifra={p.cantidadPendientes}
+            pendiente={p.cantidadPendientes > 0}
+            pie={p.cantidadPendientes > 0 ? "Se actualiza sola" : undefined}
+            activa={enCola}
+            onAlternar={(siguiente) => filtrar(siguiente ? "Pendiente" : "")}
+          />
           {FILTROS.map(([valor, etiqueta, cifra]) => (
             <TarjetaMetrica
               key={valor}
@@ -225,6 +233,21 @@ function Detalle({ id }: { id: string }) {
             />
           ))}
         </div>
+        {/* «En cola» suma dos estados y el filtro acepta uno: al activarla se elige cuál. */}
+        {enCola && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground">En cola:</span>
+            <ChipsFiltro
+              ariaLabel="Documentos en cola"
+              valor={estado}
+              onChange={filtrar}
+              opciones={[
+                { valor: "Pendiente", etiqueta: "Pendiente" },
+                { valor: "EnProcesamiento", etiqueta: "En procesamiento" },
+              ]}
+            />
+          </div>
+        )}
       </div>
 
       {opera && !cerrado && lote.aviso && (
