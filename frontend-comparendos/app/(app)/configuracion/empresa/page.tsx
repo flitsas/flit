@@ -163,7 +163,7 @@ function Configuracion({ empresa }: { empresa: string | null }) {
             },
           ]}
         />
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid max-w-6xl grid-cols-1 gap-4 md:grid-cols-2">
           <label className={ETIQUETA_CLS}>
             Nombre del remitente
             <input className={INPUT_CLS} value={f.remitenteNombre} maxLength={120} disabled={soloLectura} onChange={(e) => cambiar({ remitenteNombre: e.target.value })} placeholder="Si se deja vacío, la razón social" />
@@ -182,18 +182,18 @@ function Configuracion({ empresa }: { empresa: string | null }) {
           </label>
         </div>
         {!f.correoRespuesta.trim() && (
-          <InlineAlert tone="warning" compact>
+          <InlineAlert tone="warning" compact className="max-w-6xl">
             Sin este correo usamos el del representante legal. Si tampoco hay, no se podrán radicar derechos de petición ni pedir cambios de contraventor para vehículos de la empresa.
           </InlineAlert>
         )}
-        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+        <div className="grid max-w-6xl grid-cols-1 gap-5 xl:grid-cols-2">
           <Copias titulo="Copias visibles (CC)" ayuda="Reciben una copia visible de los envíos que elijas; si no eliges ninguno, de todos." valor={f.cc} onCambio={(cc) => cambiar({ cc })} soloLectura={soloLectura} />
           <Copias titulo="Copias ocultas (BCC)" ayuda="Igual que las copias visibles, pero el organismo no ve estos correos." valor={f.bcc} onCambio={(bcc) => cambiar({ bcc })} soloLectura={soloLectura} />
         </div>
       </Bloque>
 
       <Bloque titulo="Quién recibe reportes y alertas" proposito="Correos internos de tu empresa: aquí no se escribe al organismo.">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="grid max-w-6xl grid-cols-1 gap-4 md:grid-cols-2">
           <label className={ETIQUETA_CLS}>
             Reporte semanal y mensual
             <textarea className={TEXTAREA_CLS} rows={3} value={f.destinatariosReportes} disabled={soloLectura} onChange={(e) => cambiar({ destinatariosReportes: e.target.value })} placeholder="Un correo por línea" />

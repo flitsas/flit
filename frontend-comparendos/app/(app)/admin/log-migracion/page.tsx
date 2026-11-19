@@ -100,7 +100,7 @@ function Log() {
         errorMessage={lista.error ?? undefined}
         onRetry={lista.recargar}
         emptyMessage="No hay registros con estos filtros."
-        minWidth={1400}
+        minWidth={1100}
         columns={[
           { key: "fecha", header: "Fecha", render: (l) => <span className="whitespace-nowrap">{formatoFechaHora(l.inicioEn)}</span> },
           { key: "empresa", header: "Empresa", render: (l) => l.empresa ?? l.empresaId },
