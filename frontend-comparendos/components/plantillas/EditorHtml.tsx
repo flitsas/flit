@@ -96,7 +96,7 @@ export function EditorHtml({ inicial, onCambio, variables }: { inicial: string; 
         <div className="max-h-56 overflow-auto rounded-xl border border-border p-2">
           {Object.entries(grupos).map(([grupo, lista]) => (
             <div key={grupo} className="mb-2">
-              <p className="text-[11px] font-semibold uppercase opacity-60">{grupo}</p>
+              <p className="text-xs font-semibold uppercase text-muted-foreground">{grupo}</p>
               <div className="flex flex-wrap gap-1">
                 {lista.map((v) => (
                   <button

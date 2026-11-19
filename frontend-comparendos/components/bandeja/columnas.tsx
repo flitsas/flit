@@ -46,7 +46,7 @@ export const COLUMNAS_BANDEJA: DataTableColumn<FilaBandeja>[] = [
     key: "ot",
     header: "Organismo",
     render: (f) => (
-      <span title={f.secretariaTexto ?? undefined}>{f.organismo ?? (f.secretariaTexto ? <em className="opacity-70">Sin mapear: {f.secretariaTexto}</em> : "—")}</span>
+      <span title={f.secretariaTexto ?? undefined}>{f.organismo ?? (f.secretariaTexto ? <em className="text-muted-foreground">Sin mapear: {f.secretariaTexto}</em> : "—")}</span>
     ),
   },
   { key: "imposicion", header: "Imposición", render: (f) => formatoFecha(f.fechaImposicion) },

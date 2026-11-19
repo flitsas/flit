@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
-import { InlineAlert } from "@flit/ui";
+import { EstadoVacio, InlineAlert, VehicleLoader } from "@flit/ui";
 import { apiFetch, apiPostBlob } from "@/lib/api";
 import { esPlantillaDeCorreo } from "@/lib/etiquetas";
 import { useCarga } from "@/lib/useCarga";
@@ -44,8 +44,8 @@ export function VistaPrevia({
   useEffect(() => () => { if (pdf) URL.revokeObjectURL(pdf); }, [pdf]);
   const resultadoCorreo = useMemo(() => (vista.datos && "correo" in vista.datos ? vista.datos.correo : null), [vista.datos]);
 
-  if (!contenido) return <p className="text-sm opacity-60">Elige una plantilla para ver cómo queda.</p>;
-  if (vista.estado === "loading") return <p className="text-sm opacity-60">Armando la vista previa…</p>;
+  if (!contenido) return <EstadoVacio titulo="Sin vista previa" mensaje="Elige una plantilla para ver cómo queda." nivelTitulo={3} />;
+  if (vista.estado === "loading") return <VehicleLoader label="Armando la vista previa…" />;
   if (vista.estado === "error") return <InlineAlert tone="error">{vista.error}</InlineAlert>;
 
   return (
@@ -66,7 +66,7 @@ export function VistaPrevia({
         </>
       )}
       {pdf && <iframe title="Vista previa del documento" src={pdf} className="w-full rounded-xl border border-border" style={{ height: alto }} />}
-      <p className="text-[11px] opacity-60">Con datos de ejemplo. El documento real usa los datos del comparendo, la empresa y su representante.</p>
+      <p className="text-xs text-muted-foreground">Con datos de ejemplo. El documento real usa los datos del comparendo, la empresa y su representante.</p>
     </div>
   );
 }

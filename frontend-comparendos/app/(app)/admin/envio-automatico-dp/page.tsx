@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
-import { ActionsMenu, DataTable, InlineAlert, Modal, StatusBadge, type ActionsMenuItem } from "@flit/ui";
+import { ActionsMenu, DataTable, EstadoVacio, InlineAlert, Modal, StatusBadge, VehicleLoader, type ActionsMenuItem } from "@flit/ui";
 import { VistaPrevia } from "@/components/plantillas/VistaPrevia";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -68,7 +68,7 @@ function Panel({ titulo, descripcion, estado, children }: { titulo: string; desc
 function Celda({ titulo, children, ancha = false }: { titulo: string; children: ReactNode; ancha?: boolean }) {
   return (
     <div className={`flex min-w-0 flex-col gap-2 rounded-xl border border-border bg-secondary/40 p-3 ${ancha ? "md:col-span-2 xl:col-span-1" : ""}`}>
-      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</h4>
+      <h4 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{titulo}</h4>
       {children}
     </div>
   );
@@ -128,6 +128,7 @@ function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresa
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <Celda titulo="Estado">
           <Interruptor
+            soloControl
             activo={encendido}
             onCambio={alternar}
             deshabilitado={sinModulo || ocupado}
@@ -160,7 +161,7 @@ function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresa
               {ocupado ? "Guardando…" : "Guardar"}
             </button>
           </div>
-          <span className="text-[11px] text-muted-foreground">De {TOPE_MINIMO} a {TOPE_MAXIMO} por día</span>
+          <span className="text-xs text-muted-foreground">De {TOPE_MINIMO} a {TOPE_MAXIMO} por día</span>
         </Celda>
         <Celda titulo="Cómo funciona" ancha>
           <ul className="flex list-disc flex-col gap-1 pl-4 text-xs text-muted-foreground">
@@ -346,7 +347,7 @@ function Tipologias({ datos, empresaId, onCambio }: { datos: Datos; empresaId: s
                     <StatusBadge label={e.texto} tone={e.tono} />
                   </div>
                   {v?.revisadaJuridicamenteEn && (
-                    <p className="break-words text-[11px] text-muted-foreground">
+                    <p className="break-words text-xs text-muted-foreground">
                       Aprobado por {v.revisadaPor ?? "un abogado"} el {formatoFecha(v.revisadaJuridicamenteEn)}
                       {v.notaRevisionJuridica ? ` · «${v.notaRevisionJuridica}»` : ""}
                     </p>
@@ -398,8 +399,8 @@ export default function EnvioAutomaticoDp() {
           descripcion="Elige una empresa para encenderle o apagarle el envío automático, fijar el tope diario y decidir qué tipologías se envían solas."
         />
         <SelectorEmpresa valor={empresaId} onCambio={setEmpresaId} />
-        {!empresaId && <p className="text-sm opacity-70">Elige una empresa para empezar.</p>}
-        {empresaId && carga.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
+        {!empresaId && <EstadoVacio titulo="Elige una empresa" mensaje="Selecciona una empresa para ver y cambiar su envío automático de derechos de petición." />}
+        {empresaId && carga.estado === "loading" && <VehicleLoader label="Cargando el envío automático…" />}
         {empresaId && carga.estado === "error" && (
           <InlineAlert tone="error">
             {carga.error}{" "}
