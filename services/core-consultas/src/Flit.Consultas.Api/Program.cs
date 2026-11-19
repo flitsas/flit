@@ -68,6 +68,7 @@ public static class Program
         builder.Services.AddConsultationProviders(builder.Configuration);
         builder.Services.AddClientesDeDocumentos(builder.Configuration); // HU #13348: impronta, RUES y RUNT crudo
         builder.Services.AddScoped<IConsultationTenantOverrideProvider, ConsultasTenantOverrideProvider>();
+        builder.Services.AddSingleton<IFuenteContingenciaRunt, FuenteContingenciaRuntDb>();
         builder.Services.AddSingleton<ContingenciaRuntVigente>(); // Épica #14644 (HU #14647): contingencia de proveedor RUNT, con caché corta
         builder.Services.AddScoped<IAvaluoProviderPolicy, ConsultasAvaluoPolicy>();
         builder.Services.AddScoped<IAvaluoMockValueSource, ValoresMockDeAvaluo>(); // HU #13348
