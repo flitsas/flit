@@ -116,7 +116,7 @@ public static class AsignacionPlacaEmailComposer
         filas.Add(("Estado Actual:", $"<span style=\"color:{FlitEmailLayout.Accent};font-weight:700;\">{Enc(estado)}</span>"));
 
         var cuerpo = new StringBuilder(2048);
-        cuerpo.Append(FlitEmailLayout.Parrafo($"Estimados Señor/a {FlitEmailLayout.Destacado(cliente)}."));
+        cuerpo.Append(FlitEmailLayout.Parrafo(FlitEmailLayout.Saludo("Estimados Señor/a", cliente, ".")));
         cuerpo.Append(FlitEmailLayout.Parrafo(
             $"Queremos mantenerlos informados sobre el estado actualizado de su matrícula inicial de vehículo. Le confirmamos que la placa asignada es: <strong>{placa}</strong>.",
             margen: "0 0 20px"));

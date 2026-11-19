@@ -43,6 +43,9 @@ public sealed record RevocationRequestEmailModel(
 /// </summary>
 public static class RevocationRequestEmailComposer
 {
+    private const string ApprovedGreen = "#2E7D32";
+    private const string RejectedRed = "#C62828";
+    private const string InfoAmber = "#8A6D00";
     private const string RentingInk = "#1A1A1A";
     private const string RentingMuted = "#4A4A4A";
     private const string RentingLink = "#2F5BEA";
@@ -110,8 +113,8 @@ public static class RevocationRequestEmailComposer
         $"[FLIT] {copy.SubjectPrefix} — {radicado}";
 
     /// <summary>
-    /// Correos 2.0 — variante FLIT sobre <see cref="FlitEmailLayout"/>: título en el azul único del
-    /// layout (el hito se lee en el propio título); radicado, placa y motivo en la tarjeta.
+    /// Correos 2.0 — variante FLIT sobre <see cref="FlitEmailLayout"/>: el título conserva el color
+    /// de su hito (ámbar/verde/rojo, los mismos de develop); radicado, placa y motivo en la tarjeta.
     /// </summary>
     private static string BuildFlitHtml(
         MilestoneCopy copy, RevocationRequestEmailModel model, string assetsBaseUrl)
@@ -126,7 +129,7 @@ public static class RevocationRequestEmailComposer
 
         var cuerpo = new StringBuilder();
         cuerpo.Append(FlitEmailLayout.Parrafo(
-            $"Estimado/a Señor/a {FlitEmailLayout.Destacado(Enc(model.DestinatarioNombre))}."));
+            FlitEmailLayout.Saludo("Estimado/a Señor/a", Enc(model.DestinatarioNombre), ".")));
         cuerpo.Append(FlitEmailLayout.Parrafo(copy.IntroHtml, margen: "0 0 20px"));
         cuerpo.Append(FlitEmailLayout.TarjetaDetalle(null, filas));
         cuerpo.Append(FlitEmailLayout.Parrafo(copy.CierreHtml, centrado: false));
@@ -134,7 +137,7 @@ public static class RevocationRequestEmailComposer
 
         return FlitEmailLayout.Documento(
             assetsBaseUrl,
-            FlitEmailLayout.Titulo(copy.Heading),
+            FlitEmailLayout.Titulo(copy.Heading, color: copy.AccentColor),
             cuerpo.ToString(),
             FlitEmailLayout.PieFlit(assetsBaseUrl, FlitEmailLayout.SoporteEstandarHtml, politicaPrivacidad: true));
     }
@@ -193,7 +196,7 @@ public static class RevocationRequestEmailComposer
     /// <param name="CierreBrandHtml">Cierre para el chrome de marca (HU #12428): sin la mención
     /// literal a FLIT, porque el remitente visual es la marca de la red.</param>
     private sealed record MilestoneCopy(
-        string SubjectPrefix, string Heading, string IntroHtml, string CierreHtml, bool ShowMotivo,
+        string SubjectPrefix, string Heading, string AccentColor, string IntroHtml, string CierreHtml, bool ShowMotivo,
         string CierreBrandHtml);
 
     private const string CierreBrandGenerico =
@@ -204,6 +207,7 @@ public static class RevocationRequestEmailComposer
         RevocationRequestEmailMilestone.Solicitada => new MilestoneCopy(
             SubjectPrefix: "Hemos recibido tu solicitud de revocatoria",
             Heading: "¡SOLICITUD DE REVOCATORIA RECIBIDA!",
+            AccentColor: InfoAmber,
             IntroHtml: "Hemos recibido tu solicitud de revocatoria del trámite. El organismo de tránsito la revisará y te avisaremos por este medio en cuanto haya una decisión.",
             CierreHtml: "En FLIT, nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.",
             ShowMotivo: false,
@@ -211,6 +215,7 @@ public static class RevocationRequestEmailComposer
         RevocationRequestEmailMilestone.Aprobada => new MilestoneCopy(
             SubjectPrefix: "Tu solicitud de revocatoria fue aprobada",
             Heading: "¡SOLICITUD DE REVOCATORIA APROBADA!",
+            AccentColor: ApprovedGreen,
             IntroHtml: "El organismo de tránsito aprobó tu solicitud de revocatoria. El trámite quedó en estado <strong>Revocado</strong>.",
             CierreHtml: "En FLIT, nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.",
             ShowMotivo: false,
@@ -218,6 +223,7 @@ public static class RevocationRequestEmailComposer
         RevocationRequestEmailMilestone.Rechazada => new MilestoneCopy(
             SubjectPrefix: "Tu solicitud de revocatoria fue rechazada",
             Heading: "SOLICITUD DE REVOCATORIA RECHAZADA",
+            AccentColor: RejectedRed,
             IntroHtml: "El organismo de tránsito rechazó tu solicitud de revocatoria. El trámite permanece sin cambios en su estado actual.",
             CierreHtml: "Puedes radicar un nuevo intento de revocatoria cuando corrijas el motivo indicado abajo.",
             ShowMotivo: true,
