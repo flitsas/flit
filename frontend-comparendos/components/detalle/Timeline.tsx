@@ -18,6 +18,9 @@ import { narracionDesdeInfraccion } from "@/components/detalle/narracion";
 
 const ICONO_MAS = iconoComo("mas");
 
+/** Eventos que se ven sin pedir más (R2). */
+export const EVENTOS_VISIBLES = 8;
+
 const COLOR_ACTOR: Record<string, string> = {
   Usuario: "var(--color-flit-brand)",
   Sistema: "var(--muted-foreground)",
@@ -64,6 +67,8 @@ export function Timeline({
   const [nota, setNota] = useState("");
   const [escribiendo, setEscribiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  // R2: las 8 más recientes; «Ver los N» muestra el resto en su sitio (el filtro por tipo sigue igual).
+  const [todos, setTodos] = useState(false);
   const eventos = useCarga(`timeline:${comparendoId}:${tipo}:${version}`, (signal) =>
     apiFetch<EventoTimeline[]>(`/comparendos/${comparendoId}/timeline`, { signal, query: { tipo: tipo || undefined } }),
   );
@@ -117,7 +122,7 @@ export function Timeline({
       {eventos.estado === "ready" && (eventos.datos ?? []).length === 0 && <p className="text-xs text-muted-foreground">Sin eventos para mostrar.</p>}
 
       <ol className="relative ml-2 border-l-2 border-border">
-        {(eventos.datos ?? []).map((e) => {
+        {(todos ? (eventos.datos ?? []) : (eventos.datos ?? []).slice(0, EVENTOS_VISIBLES)).map((e) => {
           const narracion = narracionDesdeInfraccion(fechaInfraccion, e.ocurridoEn);
           return (
           <li key={e.id} className="relative mb-4 ml-5">
@@ -145,6 +150,11 @@ export function Timeline({
           );
         })}
       </ol>
+      {!todos && (eventos.datos ?? []).length > EVENTOS_VISIBLES && (
+        <button type="button" className="self-start text-sm font-semibold text-flit-brand-ink hover:underline" onClick={() => setTodos(true)}>
+          Ver los {(eventos.datos ?? []).length} eventos
+        </button>
+      )}
 
       {/* Epic GDC-8 / MOD06 §5.1: «Agregar observación» flota sobre el timeline y sigue a la vista al bajar por los eventos. */}
       {puedeObservar && !escribiendo && (

@@ -1,13 +1,15 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { Cargador, DataTable, EstadoVacio, InlineAlert, ListaDefinicion, Modal, Pestanas, Placa, StatusBadge, TarjetaPlegable, type ItemDefinicion } from "@flit/ui";
+import { Cargador, DataTable, EstadoVacio, InlineAlert, ListaDefinicion, Modal, Pestanas, Placa, type ItemDefinicion } from "@flit/ui";
+import { BarraSecciones, type SeccionBarra } from "@/components/detalle/BarraSecciones";
+import { Estado } from "@/components/detalle/EstadoTexto";
+import { useCercania } from "@/components/detalle/useCercania";
 import { useSesion } from "@/components/ComparendosShell";
 import { Timeline, type SeccionDetalle } from "@/components/detalle/Timeline";
 import { EXTENSIONES_DETALLE, type ContextoDetalle, type ExtensionesDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
-import { Chip } from "@/components/ui/Chip";
 import { BOTON_PELIGRO_CLS, controlCls, TEXTAREA_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
 import {
@@ -91,7 +93,7 @@ function PestanasDetalle({ d, activa, onCambiar }: { d: Detalle; activa: Pestana
         ["Infracción", [d.infraccion.codigo, d.infraccion.descripcion].filter(Boolean).join(" — ")],
         ["Dirección", d.infraccion.direccion],
         ["Estado en la fuente", d.estadoFuente],
-        ["Fuente", <span key="f" className="inline-flex flex-wrap items-center gap-1"><Chip e={fuente(d.fuente)} />{d.fuentePrincipal && <span className={TEXTO_SUAVE_CLS}>{canal(d.fuentePrincipal).texto}</span>}</span>],
+        ["Fuente", <span key="f" className="inline-flex flex-wrap items-center gap-1"><Estado e={fuente(d.fuente)} />{d.fuentePrincipal && <span className={TEXTO_SUAVE_CLS}>{canal(d.fuentePrincipal).texto}</span>}</span>],
         ["Límite de gestión", formatoFecha(d.plazos.limiteGestion)],
         ["Fin del descuento del 50%", formatoFecha(d.plazos.limite50)],
         ["Fin del descuento del 25%", formatoFecha(d.plazos.limite25)],
@@ -128,7 +130,7 @@ function PestanasDetalle({ d, activa, onCambiar }: { d: Detalle; activa: Pestana
         {
           key: "estado",
           header: "Estado",
-          render: (f) => (f.presente ? <StatusBadge label="Presente" tone="success" /> : <StatusBadge label={`Ausente desde ${formatoFecha(f.ausenteDesde)}`} tone="neutral" />),
+          render: (f) => (f.presente ? <Estado e={{ texto: "Presente", tono: "success" }} /> : <Estado e={{ texto: `Ausente desde ${formatoFecha(f.ausenteDesde)}`, tono: "neutral" }} />),
         },
         { key: "primera", header: "Primera vez", render: (f) => formatoFechaHora(f.primeraVezEn) },
         { key: "ultima", header: "Última vez visto", render: (f) => formatoFechaHora(f.ultimaVezVistaEn) },
@@ -181,6 +183,21 @@ function PestanasDetalle({ d, activa, onCambiar }: { d: Detalle; activa: Pestana
   );
 }
 
+/** Lo secundario y largo de una sección (historiales, intentos, documentos): los primeros y «Ver los N» en su sitio (R2). */
+function ConMas<T>({ items, visibles = 3, texto, children }: { items: T[]; visibles?: number; texto: (n: number) => string; children: (item: T) => ReactNode }) {
+  const [todos, setTodos] = useState(false);
+  return (
+    <>
+      {(todos ? items : items.slice(0, visibles)).map(children)}
+      {!todos && items.length > visibles && (
+        <button type="button" className="self-start text-sm font-semibold text-flit-brand-ink hover:underline" onClick={() => setTodos(true)}>
+          {texto(items.length)}
+        </button>
+      )}
+    </>
+  );
+}
+
 /** «Nombre (CC 123)» desde la foto JSON que guarda el historial de conductores. */
 function conductorDeFoto(json: string | null): string | null {
   if (!json) return null;
@@ -203,7 +220,7 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
       {d.estadoConsultaContraventor !== "NoAplica" && (
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <span className="text-muted-foreground">Consulta automática del conductor:</span>
-          <StatusBadge label={consulta.texto} tone={consulta.tono} />
+          <Estado e={{ texto: consulta.texto, tono: consulta.tono }} />
         </div>
       )}
       {!k && d.estadoConsultaContraventor === "SinHora" && (
@@ -222,13 +239,13 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
         <Datos
           filas={[
             ["Nombre", k.nombres],
-            ["Documento", k.documentoPendiente ? <StatusBadge key="d" label="Pendiente: la consulta automática no lo trae" tone="warning" /> : `${k.tipoDocumento} ${k.numeroDocumento}`],
+            ["Documento", k.documentoPendiente ? <Estado key="d" e={{ texto: "Pendiente: la consulta automática no lo trae", tono: "warning" }} /> : `${k.tipoDocumento} ${k.numeroDocumento}`],
             ["Correo", k.correo],
             ["Teléfono", k.telefono],
             ["Dirección", [k.direccion, k.ciudad].filter(Boolean).join(", ")],
             ["Sucursal", k.sucursal],
             ["Tipo de contrato", k.tipoContrato],
-            ["Origen", <StatusBadge key="o" label={ORIGEN_CONTRAVENTOR[k.origen] ?? k.origen} tone={k.origen === "Api" ? "info" : "neutral"} />],
+            ["Origen", <Estado key="o" e={{ texto: ORIGEN_CONTRAVENTOR[k.origen] ?? k.origen, tono: k.origen === "Api" ? "info" : "neutral" }} />],
           ]}
         />
       ) : (
@@ -239,7 +256,8 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
       {d.documentos.length > 0 && (
         <div className="flex flex-col gap-1">
           <h4 className={SUBTITULO_CLS}>Documentos</h4>
-          {d.documentos.map((doc) => (
+          <ConMas items={d.documentos} texto={(n) => `Ver los ${n} documentos`}>
+            {(doc) => (
             <div key={doc.id} className="flex flex-wrap items-center gap-x-2 text-sm">
               <Archivo id={doc.archivoId} nombre={doc.nombre} />
               <span className="text-muted-foreground">
@@ -247,14 +265,16 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
                 {!doc.vigente && " · reemplazado"}
               </span>
             </div>
-          ))}
+            )}
+          </ConMas>
         </div>
       )}
 
       {d.historialContraventor.length > 0 && (
         <div className="flex flex-col gap-2">
           <h4 className={SUBTITULO_CLS}>Historial de conductores</h4>
-          {d.historialContraventor.map((h) => {
+          <ConMas items={d.historialContraventor} visibles={2} texto={(n) => `Ver los ${n} cambios de conductor`}>
+            {(h) => {
             const anterior = conductorDeFoto(h.datosAnteriores);
             const nuevo = conductorDeFoto(h.datosNuevos);
             return (
@@ -269,7 +289,8 @@ function Contraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
                 </p>
               </div>
             );
-          })}
+            }}
+          </ConMas>
         </div>
       )}
     </div>
@@ -280,19 +301,21 @@ function CambioContraventor({ d, extra }: { d: Detalle; extra?: ReactNode }) {
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 text-sm">
-        Estado: <Chip e={cambioContraventor(d.estadoCambioContraventor)} />
+        Estado: <Estado e={cambioContraventor(d.estadoCambioContraventor)} />
       </div>
-      {d.solicitudesCambio.map((s) => (
+      <ConMas items={d.solicitudesCambio} visibles={2} texto={(n) => `Ver los ${n} intentos`}>
+        {(s) => (
         <div key={s.id} className="flex flex-wrap items-center gap-2 border-t border-border pt-2 text-sm">
           <span className="font-semibold">Intento {s.numeroIntento}</span>
-          <Chip e={estadoSolicitud(s.estado)} />
+          <Estado e={estadoSolicitud(s.estado)} />
           <span className="text-muted-foreground">Solicitado {formatoFechaHora(s.solicitadoEn)}</span>
           {s.fechaRespuestaOt && <span className="text-muted-foreground">Respuesta del OT {formatoFecha(s.fechaRespuestaOt)}</span>}
           {s.causalRechazo && <span className="w-full text-destructive">Causal: {s.causalRechazo}</span>}
           <Archivo id={s.formatoArchivoId} nombre="Formato enviado" />
           {s.soporteRespuestaArchivoId && <Archivo id={s.soporteRespuestaArchivoId} nombre="Soporte de la respuesta" />}
         </div>
-      ))}
+        )}
+      </ConMas>
       {extra}
     </div>
   );
@@ -313,7 +336,7 @@ function ResolucionDp({ d, extra }: { d: Detalle; extra?: ReactNode }) {
         filas={[
           ["Radicado", <span key="r" className="font-mono">{dp.radicado}</span>],
           ["Tipología", dp.tipologia ? `${dp.tipologia.codigo} — ${dp.tipologia.nombre}` : null],
-          ["Estado", <Chip key="e" e={estadoDp(dp.estado)} />],
+          ["Estado", <Estado key="e" e={estadoDp(dp.estado)} />],
           ["Fecha de radicación", formatoFecha(dp.fechaRadicacion)],
           ["Enviado a", dp.correosDestino.join(", ")],
           ["Plazo de respuesta del OT (informativo)", formatoFecha(dp.fechaLimiteRespuestaOt)],
@@ -325,7 +348,7 @@ function ResolucionDp({ d, extra }: { d: Detalle; extra?: ReactNode }) {
           <h4 className="mb-2 text-sm font-semibold">Respuesta del organismo</h4>
           <Datos
             filas={[
-              ["Sentido", <Chip key="s" e={resultadoDp(dp.respuesta.sentido)} />],
+              ["Sentido", <Estado key="s" e={resultadoDp(dp.respuesta.sentido)} />],
               ["Origen", dp.respuesta.origen === "AutomaticaDesaparicion" ? "Automática: el comparendo desapareció de la fuente" : "Registrada por un usuario"],
               ["Radicado del OT", dp.respuesta.respuestaRadicadoOt],
               ["Fecha", formatoFecha(dp.respuesta.respuestaFecha)],
@@ -441,17 +464,17 @@ function Cabecera({ d, acciones }: { d: Detalle; acciones: ReactNode }) {
           <h1 className="m-0 break-all text-xl font-bold leading-tight sm:text-2xl">{d.numero}</h1>
           {infraccion && <p className={TEXTO_SUAVE_CLS}>{infraccion}</p>}
           <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge label={textoSemaforo(s.estadoLegal, s.diasHabilesRestantes)} tone={tonoSemaforo(s.estadoLegal, s.proximoAVencer)} />
-            {d.pagado && <StatusBadge label="Pagado" tone="success" />}
-            {!d.activo && <StatusBadge label={d.motivoInactivacion === "InactivadoOperador" ? "Inactivo (por un usuario)" : "Inactivo (no está en la fuente)"} tone="neutral" />}
-            {d.enCobroCoactivo && <StatusBadge label="Cobro coactivo" tone="danger" />}
+            <Estado e={{ texto: textoSemaforo(s.estadoLegal, s.diasHabilesRestantes), tono: tonoSemaforo(s.estadoLegal, s.proximoAVencer) }} />
+            {d.pagado && <Estado e={{ texto: "Pagado", tono: "success" }} />}
+            {!d.activo && <Estado e={{ texto: d.motivoInactivacion === "InactivadoOperador" ? "Inactivo (por un usuario)" : "Inactivo (no está en la fuente)", tono: "neutral" }} />}
+            {d.enCobroCoactivo && <Estado e={{ texto: "Cobro coactivo", tono: "danger" }} />}
           </div>
         </div>
         <div className="flex shrink-0 flex-col gap-1 md:items-end md:text-right">
           <p className={SUBTITULO_CLS}>Valor total</p>
           <p className="m-0 text-2xl font-bold tabular-nums sm:text-3xl">{formatoPesos(d.valores.valorTotal)}</p>
           <div className="flex flex-wrap items-center gap-2 md:justify-end">
-            <Chip e={ventanaDescuento(s.ventanaDescuento)} />
+            <Estado e={ventanaDescuento(s.ventanaDescuento)} />
             {conDescuento && s.finDescuentoVigente && (
               <span className={TEXTO_SUAVE_CLS}>
                 hasta {formatoFecha(s.finDescuentoVigente)}
@@ -462,18 +485,21 @@ function Cabecera({ d, acciones }: { d: Detalle; acciones: ReactNode }) {
         </div>
       </div>
 
-      {/* B6-1: los dos chips pueden decir «Sin procesar»; cada uno con su rótulo. En celular el rótulo va encima y la
-          etiqueta larga («Notificado a secretaría — derecho de petición») parte en dos líneas en vez de salirse. */}
-      <div className="flex flex-wrap items-start gap-x-6 gap-y-3 text-sm [&_.kit-etiqueta]:max-w-full [&_.kit-etiqueta]:whitespace-normal">
-        <span className="flex min-w-0 max-w-full flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-1.5">
-          <span className="text-muted-foreground">Proceso</span>
-          <Chip e={estadoProceso(d.estadoProceso)} />
-        </span>
-        <span className="flex min-w-0 max-w-full flex-col items-start gap-1 sm:flex-row sm:items-center sm:gap-1.5">
-          <span className="text-muted-foreground">Último aviso</span>
-          <Chip e={ultimoHito(d.ultimoHito)} />
-        </span>
-      </div>
+      {/* B6-1: los dos estados pueden decir «Sin procesar»; cada uno con su rótulo. Los largos van como texto (R2). */}
+      <dl className="grid grid-cols-1 gap-x-6 gap-y-2 text-sm sm:grid-cols-2">
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <dt className="text-muted-foreground">Proceso</dt>
+          <dd className="m-0 min-w-0">
+            <Estado e={estadoProceso(d.estadoProceso)} />
+          </dd>
+        </div>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <dt className="text-muted-foreground">Último aviso</dt>
+          <dd className="m-0 min-w-0">
+            <Estado e={ultimoHito(d.ultimoHito)} />
+          </dd>
+        </div>
+      </dl>
       {!d.activo && d.detalleInactivacion && <p className={TEXTO_SUAVE_CLS}>Motivo de la inactivación: {d.detalleInactivacion}</p>}
 
       {acciones && (
@@ -526,15 +552,15 @@ function TarjetasContexto({ d, soloLectura, onIr, onPestana }: { d: Detalle; sol
         ) : (
           <span className="text-muted-foreground">Sin conductor asignado</span>
         )}
-        {d.estadoCambioContraventor && d.solicitudesCambio.length > 0 && <Chip e={cambioContraventor(d.estadoCambioContraventor)} />}
+        {d.estadoCambioContraventor && d.solicitudesCambio.length > 0 && <Estado e={cambioContraventor(d.estadoCambioContraventor)} />}
       </TarjetaContexto>
       <TarjetaContexto titulo="Derecho de petición" accion={d.dp ? "Ver el derecho de petición" : "Ir al derecho de petición"} onIr={() => onIr("dp")}>
         {d.dp ? (
           <>
             <span className="break-all font-mono font-semibold">{d.dp.radicado}</span>
             <span className="flex flex-wrap gap-1">
-              <Chip e={estadoDp(d.dp.estado)} />
-              {d.dp.respuesta && <Chip e={resultadoDp(d.dp.respuesta.sentido)} />}
+              <Estado e={estadoDp(d.dp.estado)} />
+              {d.dp.respuesta && <Estado e={resultadoDp(d.dp.respuesta.sentido)} />}
             </span>
           </>
         ) : (
@@ -557,20 +583,41 @@ function TarjetasContexto({ d, soloLectura, onIr, onPestana }: { d: Detalle; sol
   );
 }
 
-/** Una sección de gestión plegable; su contenido se monta solo abierta (las acciones cargan al abrirse, como antes). */
-function Seccion({ id, titulo, abierta, onAlternar, children }: { id: string; titulo: string; abierta: boolean; onAlternar: (a: boolean) => void; children: ReactNode }) {
+/** Altura de la barra de secciones: cada sección se ubica debajo de ella. */
+const BAJO_LA_BARRA = "scroll-mt-16";
+
+/** Sección del detalle, siempre abierta, con su título enfocable (?seccion= y la barra llevan el foco ahí). */
+function Seccion({ id, titulo, children, testId, className = "" }: { id: string; titulo: string; children: ReactNode; testId?: string; className?: string }) {
   return (
-    <div id={id} className="scroll-mt-4">
-      <TarjetaPlegable titulo={titulo} abierta={abierta} onAlternar={onAlternar} nivelTitulo={3}>
-        {abierta ? children : null}
-      </TarjetaPlegable>
+    <section id={id} aria-labelledby={`${id}-titulo`} className={`${TARJETA_CLS} ${BAJO_LA_BARRA} flex min-w-0 flex-col gap-3 p-4 ${className}`} data-testid={testId}>
+      <h2 id={`${id}-titulo`} tabIndex={-1} className="m-0 text-base font-semibold focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--di-action)]">
+        {titulo}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+/**
+ * Las acciones de una sección (extensiones de otras Features) se montan cuando la sección se acerca a la vista o cuando
+ * la gestora salta a ella: son las mismas llamadas a la API que antes hacía al abrir el acordeón, en otro momento (R2).
+ * Mientras tanto se reserva su sitio para que la página no salte al montarlas.
+ */
+function AccionesDiferidas({ forzada, children }: { forzada: boolean; children: () => ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const cerca = useCercania(ref);
+  const montada = cerca || forzada;
+  return (
+    <div ref={ref} className={montada ? "" : "min-h-24"} data-acciones-montadas={montada ? "si" : "no"}>
+      {montada ? children() : null}
     </div>
   );
 }
 
 /**
- * Contenido del detalle del comparendo (HU #13499, §7.2), como página propia (rediseño S1): cabecera → acciones →
- * tarjetas de contexto → línea de tiempo con la gestión al lado → pestañas. Las acciones de otras Features entran por
+ * Contenido del detalle del comparendo (HU #13499, §7.2), como página propia (rediseño S1, R2): cabecera con acciones →
+ * barra de secciones fija → resumen → línea de tiempo → contraventor → derecho de petición → pago → datos, en una sola
+ * columna y siempre abiertas. Las acciones de otras Features entran por
  * `extensiones` sin tocar este componente.
  */
 export function ContenidoDetalle({
@@ -601,28 +648,44 @@ export function ContenidoDetalle({
     onCambio?.();
   };
   const ctx: ContextoDetalle | null = d ? { detalle: d, recargar, sesion, soloLectura } : null;
-  const [secciones, setSecciones] = useState<SeccionDetalle[]>(() => (seccionInicial ? [seccionInicial] : []));
+  // Secciones cuyas acciones se montan ya, sin esperar a que se acerquen: a las que se salta y la de ?seccion=.
+  const [forzadas, setForzadas] = useState<SeccionDetalle[]>(() => (seccionInicial ? [seccionInicial] : []));
   const [pestana, setPestana] = useState<PestanaDetalle>("datos");
   const cargado = !!d;
   useEffect(() => {
     if (d) onCargado?.(d);
   }, [d, onCargado]);
+  // Lleva a una sección y deja el foco en su título. Las acciones y el timeline cargan después y empujan el destino: se
+  // vuelve a ubicar mientras el contenido se acomoda (~1 s, B11-2), sin animación para que no «persiga» el destino.
+  const ubicar = (idSeccion: string, suave: boolean) => {
+    const ir = (comportamiento: ScrollBehavior) => {
+      const el = document.getElementById(idSeccion);
+      el?.scrollIntoView({ behavior: comportamiento, block: "start" });
+      return el;
+    };
+    window.setTimeout(() => {
+      ir(suave ? "smooth" : "auto");
+      document.getElementById(`${idSeccion}-titulo`)?.focus({ preventScroll: true });
+    }, 0);
+    return [150, 400, 800, 1200].map((ms) => window.setTimeout(() => ir("auto"), ms));
+  };
   useEffect(() => {
     if (!cargado || !seccionInicial) return;
-    // B11-2: el timeline y las secciones cargan después y empujan la sección hacia abajo; se vuelve a ubicar mientras
-    // el contenido se acomoda (hasta ~1 s), sin animación para que no «persiga» el destino.
-    const ubicar = () => document.getElementById(`detalle-${seccionInicial}`)?.scrollIntoView({ behavior: "auto", block: "start" });
-    const tiempos = [0, 150, 400, 800, 1200].map((ms) => window.setTimeout(ubicar, ms));
+    const tiempos = ubicar(`detalle-${seccionInicial}`, false);
     return () => tiempos.forEach((t) => window.clearTimeout(t));
   }, [cargado, id, seccionInicial]);
-  const alternar = (s: SeccionDetalle) => (abrir: boolean) => setSecciones((actual) => (abrir ? [...actual.filter((x) => x !== s), s] : actual.filter((x) => x !== s)));
   const ir = (s: SeccionDetalle) => {
-    alternar(s)(true);
-    window.setTimeout(() => document.getElementById(`detalle-${s}`)?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+    setForzadas((actual) => (actual.includes(s) ? actual : [...actual, s]));
+    ubicar(`detalle-${s}`, true);
   };
   const irAPestana = (p: PestanaDetalle) => {
     setPestana(p);
-    window.setTimeout(() => document.getElementById("detalle-pestanas")?.scrollIntoView({ behavior: "smooth", block: "start" }), 0);
+    ubicar("detalle-pestanas", true);
+  };
+  const irA = (idSeccion: string) => {
+    const gestion = idSeccion.replace("detalle-", "") as SeccionDetalle;
+    if (["contraventor", "dp", "pago"].includes(gestion)) ir(gestion);
+    else ubicar(idSeccion, true);
   };
 
   if (carga.estado === "error") return <InlineAlert tone="error" action={<button type="button" onClick={carga.recargar}>Reintentar</button>}>{carga.error}</InlineAlert>;
@@ -643,44 +706,62 @@ export function ContenidoDetalle({
     </>
   ) : null;
 
+  const barra: SeccionBarra[] = [
+    { id: "detalle-resumen", texto: "Resumen" },
+    { id: "detalle-timeline", texto: "Línea de tiempo", corto: "Tiempo" },
+    { id: "detalle-contraventor", texto: "Contraventor" },
+    { id: "detalle-dp", texto: "Derecho de petición", corto: "DP" },
+    { id: "detalle-pago", texto: "Pago" },
+    { id: "detalle-pestanas", texto: "Datos" },
+  ];
+
+  // R2: una sola columna de secciones siempre abiertas, con una barra fija que lleva a cada una (nada de dos columnas de
+  // alto libre: abrir una dejaba un hueco al lado).
   return (
     <div className="flex flex-col gap-4">
       <Cabecera d={d} acciones={acciones} />
-      <TarjetasContexto d={d} soloLectura={soloLectura} onIr={ir} onPestana={irAPestana} />
+      <BarraSecciones secciones={barra} onIr={irA} />
 
-      <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,3fr)_minmax(0,2fr)]">
-        <section aria-labelledby="detalle-titulo-timeline" className={`${TARJETA_CLS} flex min-w-0 flex-col gap-3 p-4`} data-testid="detalle-timeline">
-          <h2 id="detalle-titulo-timeline" className="m-0 text-base font-semibold">
-            Línea de tiempo
-          </h2>
-          <Timeline
-            comparendoId={d.id}
-            version={versionTimeline}
-            fechaInfraccion={d.infraccion.fechaImposicion}
-            puedeObservar={!soloLectura && tienePermiso(sesion, "comparendos.comparendo.observar")}
-            onCambio={onCambio}
-            onIr={ir}
+      <section id="detalle-resumen" aria-label="Resumen del comparendo" className={BAJO_LA_BARRA}>
+        <TarjetasContexto d={d} soloLectura={soloLectura} onIr={ir} onPestana={irAPestana} />
+      </section>
+
+      <Seccion id="detalle-timeline" titulo="Línea de tiempo" testId="detalle-timeline">
+        <Timeline
+          comparendoId={d.id}
+          version={versionTimeline}
+          fechaInfraccion={d.infraccion.fechaImposicion}
+          puedeObservar={!soloLectura && tienePermiso(sesion, "comparendos.comparendo.observar")}
+          onCambio={onCambio}
+          onIr={ir}
+        />
+      </Seccion>
+
+      <Seccion id="detalle-contraventor" titulo="Contraventor" testId="detalle-contraventor">
+        <div className="grid grid-cols-1 gap-x-8 gap-y-6 lg:grid-cols-2">
+          <Contraventor
+            d={d}
+            extra={!soloLectura ? <AccionesDiferidas forzada={forzadas.includes("contraventor")}>{() => extensiones.contraventor?.(ctx)}</AccionesDiferidas> : null}
           />
-        </section>
+          <div className="flex min-w-0 flex-col gap-2 border-t border-[color:var(--di-divider)] pt-4 lg:border-l lg:border-t-0 lg:pl-8 lg:pt-0">
+            <h3 className="m-0 text-sm font-semibold">Cambio de contraventor</h3>
+            <CambioContraventor
+              d={d}
+              extra={!soloLectura ? <AccionesDiferidas forzada={forzadas.includes("contraventor")}>{() => extensiones.cambioContraventor?.(ctx)}</AccionesDiferidas> : null}
+            />
+          </div>
+        </div>
+      </Seccion>
 
-        <section aria-label="Gestión del comparendo" className="flex min-w-0 flex-col gap-3" data-testid="detalle-gestion">
-          <Seccion id="detalle-contraventor" titulo="Contraventor" abierta={secciones.includes("contraventor")} onAlternar={alternar("contraventor")}>
-            <Contraventor d={d} extra={!soloLectura ? extensiones.contraventor?.(ctx) : null} />
-            <div className="mt-4 border-t border-border pt-3">
-              <h4 className="mb-2 text-sm font-semibold">Cambio de contraventor</h4>
-              <CambioContraventor d={d} extra={!soloLectura ? extensiones.cambioContraventor?.(ctx) : null} />
-            </div>
-          </Seccion>
-          <Seccion id="detalle-dp" titulo="Resolución OT / derecho de petición" abierta={secciones.includes("dp")} onAlternar={alternar("dp")}>
-            <ResolucionDp d={d} extra={!soloLectura ? extensiones.dp?.(ctx) : null} />
-          </Seccion>
-          <Seccion id="detalle-pago" titulo="Pago" abierta={secciones.includes("pago")} onAlternar={alternar("pago")}>
-            <Pago d={d} extra={!soloLectura ? extensiones.pago?.(ctx) : null} />
-          </Seccion>
-        </section>
-      </div>
+      <Seccion id="detalle-dp" titulo="Resolución OT / derecho de petición" testId="detalle-dp">
+        <ResolucionDp d={d} extra={!soloLectura ? <AccionesDiferidas forzada={forzadas.includes("dp")}>{() => extensiones.dp?.(ctx)}</AccionesDiferidas> : null} />
+      </Seccion>
 
-      <section id="detalle-pestanas" aria-label="Datos, fuentes e historial" className={`${TARJETA_CLS} scroll-mt-4 p-4`} data-testid="detalle-pestanas">
+      <Seccion id="detalle-pago" titulo="Pago" testId="detalle-pago">
+        <Pago d={d} extra={!soloLectura ? <AccionesDiferidas forzada={forzadas.includes("pago")}>{() => extensiones.pago?.(ctx)}</AccionesDiferidas> : null} />
+      </Seccion>
+
+      <section id="detalle-pestanas" aria-label="Datos, fuentes e historial" className={`${TARJETA_CLS} ${BAJO_LA_BARRA} p-4`} data-testid="detalle-pestanas">
         <PestanasDetalle d={d} activa={pestana} onCambiar={setPestana} />
       </section>
     </div>
