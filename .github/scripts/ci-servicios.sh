@@ -32,8 +32,11 @@ puerto() { docker port "$1" "$2/tcp" | head -1 | sed 's/.*://'; }
 # CI_PG_TMPFS=<tamaño> (pool de la 177): los datos en RAM, sin tocar el disco que comparten DEV y QA.
 pg_ram=(); [ -n "${CI_PG_TMPFS:-}" ] && pg_ram=(--tmpfs "/var/lib/postgresql/data:rw,size=$CI_PG_TMPFS")
 levantar_pg() { # $1 nombre del contenedor
-  levantar "$1" 5432 "${pg_ram[@]}" -e POSTGRES_DB=flit_dev -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
-    postgres:16-alpine -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=300
+  # Mismos ajustes que la matriz de GitHub (core-api.yml) salvo shared_buffers: aquí hay un Postgres por carril
+  # dentro del tope de memoria del runner, así que se deja el de por defecto.
+  levantar "$1" 5432 --shm-size=1g "${pg_ram[@]}" -e POSTGRES_DB=flit_dev -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres \
+    postgres:16-alpine -c fsync=off -c synchronous_commit=off -c full_page_writes=off -c max_connections=300 \
+    -c wal_level=minimal -c max_wal_senders=0 -c checkpoint_timeout=1h -c max_wal_size=4GB -c jit=off
 }
 
 # Un Postgres más para un carril del pool propio (ci-core-api-vps.sh). Un servidor por carril y no una base por

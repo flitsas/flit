@@ -104,7 +104,10 @@ jobs:
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
+        # shm de 1 GB: Docker trae 64 MB y con muchas conexiones en paralelo Postgres puede fallar con
+        # «could not resize shared memory segment».
         options: >-
+          --shm-size=1g
           --health-cmd "pg_isready -U postgres -d flit_dev"
           --health-interval 5s
           --health-timeout 5s
@@ -153,16 +156,26 @@ jobs:
       # Mismo reinicio para quitarle la durabilidad: es una base de prueba que se tira al terminar. Sin fsync ni
       # escrituras de página completa, los CREATE DATABASE y las migraciones de cada fixture no esperan al disco.
       # No se usa tmpfs: `docker restart` vacía un tmpfs y se perdería el ALTER SYSTEM.
+      # Además (PR #933): wal_level=minimal (casi sin WAL en CREATE TABLE/TRUNCATE; ninguna prueba usa replicación,
+      # slots ni NOTIFY), sin checkpoints durante la corrida, shared_buffers de 1 GB y sin JIT. Nunca así en DEV/QA/PDN.
       - name: Postgres con más conexiones y sin durabilidad
         run: |
           pg=${{ job.services.postgres.id }}
-          docker exec "$pg" psql -U postgres -c "ALTER SYSTEM SET max_connections = 500;"
-          for ajuste in "fsync = off" "synchronous_commit = off" "full_page_writes = off"; do
-            docker exec "$pg" psql -U postgres -c "ALTER SYSTEM SET $ajuste;"
-          done
+          docker exec "$pg" psql -U postgres -v ON_ERROR_STOP=1 \
+            -c "ALTER SYSTEM SET max_connections = 500" \
+            -c "ALTER SYSTEM SET fsync = off" \
+            -c "ALTER SYSTEM SET synchronous_commit = off" \
+            -c "ALTER SYSTEM SET full_page_writes = off" \
+            -c "ALTER SYSTEM SET wal_level = minimal" \
+            -c "ALTER SYSTEM SET max_wal_senders = 0" \
+            -c "ALTER SYSTEM SET checkpoint_timeout = '1h'" \
+            -c "ALTER SYSTEM SET max_wal_size = '4GB'" \
+            -c "ALTER SYSTEM SET shared_buffers = '1GB'" \
+            -c "ALTER SYSTEM SET jit = off"
           docker restart "$pg"
           for i in $(seq 1 30); do docker exec "$pg" pg_isready -U postgres -d flit_dev && break; sleep 2; done
-          docker exec "$pg" psql -U postgres -tAc "SELECT name || '=' || setting FROM pg_settings WHERE name IN ('max_connections','fsync','synchronous_commit','full_page_writes');"
+          docker exec "$pg" psql -U postgres -tAc "SELECT name || '=' || setting FROM pg_settings WHERE name IN
+            ('max_connections','fsync','synchronous_commit','full_page_writes','wal_level','shared_buffers','jit') ORDER BY name;"
 
       - name: Apply migrations
         run: |
