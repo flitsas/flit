@@ -59,7 +59,6 @@ internal sealed class AnalyticsSchedulerProcessor(
         }
     }
 
-    /// <summary>Un ciclo completo (informes + alertas); cada mitad aislada en su try/catch.</summary>
     /// <summary>
     /// Correos 2.0 — base de los assets del correo (banner y logo): <c>Notifications:EmailAssets:BaseUrl</c>
     /// del ambiente. Con <c>GetService</c>: si el host no registró las options, el composer cae al
@@ -68,6 +67,7 @@ internal sealed class AnalyticsSchedulerProcessor(
     private static string? AssetsBase(IServiceProvider services) =>
         services.GetService<IOptions<NotificationEmailAssetsOptions>>()?.Value.BaseUrl;
 
+    /// <summary>Un ciclo completo (informes + alertas); cada mitad aislada en su try/catch.</summary>
     internal async Task RunCycleAsync(CancellationToken ct)
     {
         var nowUtc = DateTimeOffset.UtcNow;

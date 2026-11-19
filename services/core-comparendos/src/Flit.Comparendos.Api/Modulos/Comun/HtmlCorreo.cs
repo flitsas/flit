@@ -177,13 +177,15 @@ public static class HtmlCorreo
     /// con color sólido de respaldo para Outlook, que no pinta degradados.
     /// </summary>
     public static string Boton(string texto, string url) =>
-        "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:16px auto\"><tr><td align=\"center\" bgcolor=\"" + Azul
-        + "\" style=\"border-radius:22px;background:" + Azul + ";background-image:linear-gradient(90deg,#00C2C7," + Azul + ")\"><a href=\""
+        "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:16px auto\"><tr><td align=\"center\" bgcolor=\"" + AzulAccion
+        + "\" style=\"border-radius:22px;background:" + AzulAccion + ";background-image:linear-gradient(90deg,#007D79," + AzulAccion + ");mso-padding-alt:11px 24px\"><a href=\""
         + WebUtility.HtmlEncode(url) + "\" target=\"_blank\" style=\"display:inline-block;padding:11px 24px;font-family:Poppins,Arial,Helvetica,sans-serif;font-size:14px;"
         + "font-weight:600;color:#FFFFFF;text-decoration:none;border-radius:22px\">" + WebUtility.HtmlEncode(texto) + "</a></td></tr></table>";
 
     // ── Piezas del marco FLIT (Correos 2.0) ─────────────────────────────────────────────────────────────────────────────
     private const string Azul = "#6080F0";
+    /// <summary>Fondo del botón: el azul de acción del UI Kit (contraste 5,3:1 con texto blanco, AA), igual que core-api.</summary>
+    private const string AzulAccion = "#1D53FF";
     private const string Tinta = "#162244";
     private const string Gris = "#6B778C";
     private const string Borde = "#E5EAF2";
