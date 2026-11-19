@@ -285,7 +285,7 @@ export function DrFlitChatPanel({
           )}
 
           {state.showSupportInfo && !state.isTyping && (
-            <DrFlitSupportPanel onOpenCase={onNavigate} onOpenCaseForm={onOpenSupportCase} />
+            <DrFlitSupportPanel onOpenCaseForm={onOpenSupportCase} />
           )}
 
           {state.phase === "collecting_support_case" && state.supportDraft && (
@@ -317,7 +317,6 @@ export function DrFlitChatPanel({
               message={state.supportError ?? "No pudimos radicar tu caso en este momento."}
               onRetry={onSubmitSupportCase}
               onEdit={onEditSupportCase}
-              onOpen={onNavigate}
             />
           )}
 
