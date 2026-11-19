@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   simulateBiometric: vi.fn(),
   getActors: vi.fn(),
   reconcileBiometric: vi.fn(),
+  adminReenviarValidacionIdentidad: vi.fn(),
 }));
 
 vi.mock('@/lib/api/tramites-client', () => ({
@@ -20,7 +21,11 @@ vi.mock('@/lib/api/tramites-client', () => ({
     simulateBiometric: mocks.simulateBiometric,
     getActors: mocks.getActors,
     reconcileBiometric: mocks.reconcileBiometric,
+    adminReenviarValidacionIdentidad: mocks.adminReenviarValidacionIdentidad,
   },
+  // `getIdentitySendConflict` lo importa BiometricStep.tsx junto con `tramitesClient`; no se usa
+  // en estos tests, pero sin un mock explícito `vi.mock` lo deja `undefined` y rompe el import.
+  getIdentitySendConflict: () => null,
 }));
 
 import { BiometricStep } from '@/components/operacion/BiometricStep';
@@ -669,5 +674,129 @@ describe('BiometricStep — ReconcileAction (regresión del hook compartido)', (
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+// HU #14627 — "Regenerar enlace" dentro del wizard (paso 4): el enlace de captura Kyverum queda
+// atado al primer dispositivo que lo abre; esta acción reenvía la validación por la ruta
+// administrativa (un solo ítem, fila ya existente) para obtener un token nuevo. Solo visible con
+// el permiso `AdminTramiteReenviarValidacion` y fuera de solo lectura.
+describe('BiometricStep — HU #14627 "Regenerar enlace" (wizard)', () => {
+  const NOMBRE_BOTON = 'Regenerar enlace de captura';
+
+  const EN_PROCESO_NUEVO_ENLACE: BiometricValidation = {
+    ...EN_PROCESO,
+    captureUrl: 'https://verify.kyverum.com/capture.html?t=nuevo',
+  };
+
+  /** Mismo patrón que `hu12163-admin-tramite-acciones.test.tsx`: token leído por `usePermissions`
+   *  vía cookie, nunca mockeando el hook directamente. */
+  function tokenConPermisos(permissions: string[]): string {
+    const b64 = (o: unknown) =>
+      btoa(JSON.stringify(o)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    return `${b64({ alg: 'none' })}.${b64({ sub: 'user-1', role: 'AdminCompany', permissions })}.`;
+  }
+  function setToken(permissions: string[]): void {
+    document.cookie = `flit_token=${tokenConPermisos(permissions)}; path=/`;
+  }
+  function clearToken(): void {
+    document.cookie = 'flit_token=; path=/; Max-Age=0';
+  }
+
+  afterEach(() => {
+    clearToken();
+  });
+
+  it('sin el permiso AdminTramiteReenviarValidacion no se ofrece', async () => {
+    setToken([]);
+    mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO], provider: 'kyverum' });
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await screen.findByText(/Esperando validación de Ana Comprador/);
+    expect(screen.queryByRole('button', { name: NOMBRE_BOTON })).not.toBeInTheDocument();
+  });
+
+  it('con el permiso, se ofrece junto al panel de captura y llama al reenvío administrativo', async () => {
+    setToken(['AdminTramiteReenviarValidacion']);
+    mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO], provider: 'kyverum' });
+    mocks.adminReenviarValidacionIdentidad.mockResolvedValue({
+      validation: EN_PROCESO,
+      captureUrl: EN_PROCESO.captureUrl,
+      emailActualizado: false,
+      queued: false,
+    });
+    const user = userEvent.setup();
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await screen.findByText(/Esperando validación de Ana Comprador/);
+    const boton = await screen.findByRole('button', { name: NOMBRE_BOTON });
+    await user.click(boton);
+
+    await waitFor(() =>
+      expect(mocks.adminReenviarValidacionIdentidad).toHaveBeenCalledWith(
+        INSTANCE,
+        EN_PROCESO.id,
+        null,
+      ),
+    );
+  });
+
+  it('tras regenerar, vuelve a pedir el estado y el QR/enlace mostrados pasan al nuevo captureUrl', async () => {
+    setToken(['AdminTramiteReenviarValidacion']);
+    mocks.getBiometricState
+      .mockResolvedValueOnce({ validations: [EN_PROCESO], provider: 'kyverum' })
+      .mockResolvedValue({ validations: [EN_PROCESO_NUEVO_ENLACE], provider: 'kyverum' });
+    mocks.adminReenviarValidacionIdentidad.mockResolvedValue({
+      validation: EN_PROCESO_NUEVO_ENLACE,
+      captureUrl: EN_PROCESO_NUEVO_ENLACE.captureUrl,
+      emailActualizado: false,
+      queued: false,
+    });
+    const user = userEvent.setup();
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await screen.findByText(/Esperando validación de Ana Comprador/);
+    expect(screen.getByRole('link', { name: 'Abrir captura Kyverum' })).toHaveAttribute(
+      'href',
+      EN_PROCESO.captureUrl,
+    );
+
+    await user.click(screen.getByRole('button', { name: NOMBRE_BOTON }));
+
+    // No se muta estado local a mano: se vuelve a pedir el estado del wizard (mismo mecanismo que
+    // `ReconcileAction`/`StartAction`), que trae el nuevo `captureUrl`.
+    await waitFor(() => expect(mocks.getBiometricState).toHaveBeenCalledTimes(2));
+    await waitFor(() =>
+      expect(screen.getByRole('link', { name: 'Abrir captura Kyverum' })).toHaveAttribute(
+        'href',
+        EN_PROCESO_NUEVO_ENLACE.captureUrl,
+      ),
+    );
+  });
+
+  it('en solo lectura no se ofrece aunque tenga el permiso', async () => {
+    setToken(['AdminTramiteReenviarValidacion']);
+    mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO], provider: 'kyverum' });
+    render(
+      <WizardReadOnlyProvider readOnly>
+        <BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />
+      </WizardReadOnlyProvider>,
+    );
+
+    await screen.findByText(/Esperando validación de Ana Comprador/);
+    expect(screen.queryByRole('button', { name: NOMBRE_BOTON })).not.toBeInTheDocument();
+  });
+
+  it('un error del proveedor se muestra como alerta (role="alert")', async () => {
+    setToken(['AdminTramiteReenviarValidacion']);
+    mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO], provider: 'kyverum' });
+    mocks.adminReenviarValidacionIdentidad.mockRejectedValue(new Error('El trámite está anulado.'));
+    const user = userEvent.setup();
+    render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
+
+    await screen.findByText(/Esperando validación de Ana Comprador/);
+    await user.click(await screen.findByRole('button', { name: NOMBRE_BOTON }));
+
+    expect(await screen.findByText('El trámite está anulado.')).toBeInTheDocument();
   });
 });

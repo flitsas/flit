@@ -9,6 +9,8 @@ import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { useReconcileIdentity } from '@/hooks/useReconcileIdentity';
+import { usePermissions } from '@/hooks/usePermissions';
+import { ADMIN_TRAMITE_PERMISSIONS } from '@/lib/tramites/admin-tramite-permissions';
 import { WizardCardHeader } from './wizard-atoms';
 import { WizardAccordion } from './WizardAccordion';
 import {
@@ -1047,6 +1049,7 @@ function KyverumPendingIntro({
         desde el panel de captura.
       </p>
 
+      <RegenerarEnlaceAction instanceId={instanceId} validationId={v.id} onRegenerated={onChanged} />
       <ReconcileAction instanceId={instanceId} validationId={v.id} onReconciled={onChanged} />
     </div>
   );
@@ -1094,6 +1097,72 @@ function KyverumCapturePanel({ validation: v }: { validation: BiometricValidatio
       </button>
       {/* Bug #14626: la URL ya no se muestra en texto; los clientes la abrían en el equipo del asesor y el
           enlace de Kyverum quedaba atado a ese dispositivo. Se comparte por el QR o «Copiar enlace». */}
+    </div>
+  );
+}
+
+/**
+ * HU #14627 — "Regenerar enlace": el enlace de captura Kyverum queda atado al primer dispositivo que lo
+ * abre (p. ej. el cliente lo abrió por error en el equipo del asesor). Reenvía la validación por la
+ * ruta administrativa (mismo endpoint que "Reenviar validación" del Dashboard/Validaciones, un solo
+ * ítem con fila ya existente) para obtener un token nuevo, sin cambiar el correo del destinatario.
+ *
+ * Solo visible con el permiso `AdminTramiteReenviarValidacion` (mismo slug que gatea esa acción en
+ * `AdminTramiteAcciones.tsx`) y fuera de solo lectura. Tras un reenvío exitoso NO se muta estado local:
+ * se notifica al wizard (`onRegenerated` → `onChanged`/`handleRefresh`) para que vuelva a pedir el
+ * estado de la validación, que traerá el nuevo `captureUrl` — mismo patrón que `ReconcileAction` y
+ * `StartAction` en este archivo.
+ */
+function RegenerarEnlaceAction({
+  instanceId,
+  validationId,
+  onRegenerated,
+}: {
+  instanceId: string | null;
+  validationId: string;
+  onRegenerated: () => void;
+}) {
+  const readOnly = useWizardReadOnly();
+  const { permissions, isSuperAdmin } = usePermissions();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const puedeRegenerar =
+    isSuperAdmin || permissions.includes(ADMIN_TRAMITE_PERMISSIONS.reenviarValidacion);
+
+  if (readOnly || !puedeRegenerar) return null;
+
+  const handleRegenerar = async () => {
+    if (!instanceId) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      await tramitesClient.adminReenviarValidacionIdentidad(instanceId, validationId, null);
+      onRegenerated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo regenerar el enlace.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1.5 border-t pt-3">
+      <p className="text-xs opacity-70">
+        ¿El cliente abrió el enlace desde otro dispositivo? Genera uno nuevo.
+      </p>
+      <button
+        type="button"
+        onClick={() => void handleRegenerar()}
+        disabled={submitting || !instanceId}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
+        aria-label="Regenerar enlace de captura"
+      >
+        <Icono nombre="reintento" className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} />
+        {submitting ? 'Regenerando…' : 'Regenerar enlace'}
+      </button>
+      {error && <InlineAlert tone="error">{error}</InlineAlert>}
     </div>
   );
 }
