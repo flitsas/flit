@@ -811,7 +811,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
     await waitFor(() => {
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, false);
     });
     await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
     expect(mocks.transitionInstance).not.toHaveBeenCalledWith('inst-1', 'entregado');
@@ -825,6 +825,37 @@ describe('TramiteWizard — Finalizar y blockers', () => {
 
     await user.click(screen.getByRole('button', { name: /Ir al listado de trámites/ }));
     expect(onExit).toHaveBeenCalledTimes(1);
+  });
+
+  it('Bug #14631 — si el consolidado falla, el reintento NO regenera el FUR ni fuerza el consolidado', async () => {
+    const PREPARADO: WizardState = {
+      ...TRASPASO_WIZARD,
+      canSubmit: true,
+      blockers: [],
+      status: 'preparado',
+      allowedTransitions: ['entregado'],
+      steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
+    };
+    mocks.getWizardState.mockResolvedValue(PREPARADO);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'preparado', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'entregado' });
+    // Primer intento: el gateway corta (504). El segundo encuentra el consolidado ya listo.
+    mocks.generarConsolidado
+      .mockRejectedValueOnce(new Error('El servicio no está disponible en este momento.'))
+      .mockResolvedValueOnce({ incompleto: false });
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={vi.fn()} />);
+
+    const radicar = await screen.findByRole('button', { name: /Finalizar y enviar trámite/ });
+    await waitFor(() => expect(radicar).toBeEnabled());
+    await user.click(radicar);
+    await screen.findByText('Confirmar radicación');
+    await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
+
+    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(2);
+    expect(mocks.generarConsolidado).not.toHaveBeenCalledWith('inst-1', undefined, true);
+    expect(mocks.generarFur).toHaveBeenCalledTimes(1);
   });
 
   it('ADR-0059 — Ruta Larga: si /submit deja el trámite en `preasignacion`, el acuse lo dice', async () => {
@@ -928,7 +959,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       await radicar();
       await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
       expect(mocks.generarFur).toHaveBeenCalled();
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, false);
       expect(mocks.generarImpronta).not.toHaveBeenCalled();
     });
 

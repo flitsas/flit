@@ -270,6 +270,89 @@ public sealed class ConsolidadoVigenciaTrackerTests
         (await LeerMarcasAsync(dbName, id)).Should().Be((true, true));
     }
 
+    private static async Task<Guid> SeedValidacionAsync(string dbName, Guid instanceId)
+    {
+        var validacionId = Guid.NewGuid();
+        await using var db = NewDb(dbName);
+        db.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = validacionId,
+            TenantId = TenantId,
+            ProcedureInstanceId = instanceId,
+            Name = "Ana Pérez",
+            DocumentType = "CC",
+            DocumentNumber = "123",
+            Email = "ana@example.com",
+            RegisteredEmail = "ana@example.com",
+            Status = "en_proceso",
+            TokenHash = "hash",
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(30),
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-9),
+        });
+        await db.SaveChangesAsync(Ct);
+        return validacionId;
+    }
+
+    [Fact]
+    public async Task SondeoDeValidacionSinNovedad_NoInvalidaNiSellaElExpediente()
+    {
+        // Bug #14631 — el worker de Kyverum sella updated_at y suma el contador de sondeos cada 10 min
+        // mientras la validación sigue «en proceso». Eso no cambia nada que imprima el FUR: si contara,
+        // cada sondeo regeneraba el expediente completo (en PDN, ~1.190 veces por trámite en 9 días).
+        var dbName = Guid.NewGuid().ToString();
+        var id = await SeedAsync(dbName);
+        var validacionId = await SeedValidacionAsync(dbName, id);
+
+        // Con FUR: es el caso en que un dato del FUR sellaría expediente_actualizado_en.
+        await using (var db = NewDb(dbName))
+        {
+            var instancia = await db.ProcedureInstances.SingleAsync(p => p.Id == id, Ct);
+            Adjuntar(db, instancia, "fur");
+            await db.SaveChangesAsync(Ct);
+        }
+        await using (var db = NewDb(dbName))
+        {
+            var instancia = await db.ProcedureInstances.SingleAsync(p => p.Id == id, Ct);
+            instancia.ConsolidadoMaestroVigente = true;
+            instancia.ConsolidadoWizardVigente = true;
+            instancia.ExpedienteActualizadoEn = null;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        await using (var db = NewDb(dbName))
+        {
+            var v = await db.Set<ProcedureInstanceBiometricValidation>().SingleAsync(x => x.Id == validacionId, Ct);
+            v.UpdatedAt = DateTimeOffset.UtcNow;
+            v.ReconcilePollCount += 1;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        (await LeerMarcasAsync(dbName, id)).Should().Be((true, true));
+        await using var check = NewDb(dbName);
+        (await check.ProcedureInstances.AsNoTracking().SingleAsync(p => p.Id == id, Ct))
+            .ExpedienteActualizadoEn.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task ValidacionQueCambiaDeEstado_SiInvalidaAmbosConsolidados()
+    {
+        // La otra cara: cuando el sondeo SÍ trae novedad (aprobada, rechazada) el FUR cambia (sellos de
+        // firma, serie del certificado) y el consolidado debe regenerarse como siempre.
+        var dbName = Guid.NewGuid().ToString();
+        var id = await SeedAsync(dbName);
+        var validacionId = await SeedValidacionAsync(dbName, id);
+
+        await using (var db = NewDb(dbName))
+        {
+            var v = await db.Set<ProcedureInstanceBiometricValidation>().SingleAsync(x => x.Id == validacionId, Ct);
+            v.Status = "aprobado";
+            v.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(Ct);
+        }
+
+        (await LeerMarcasAsync(dbName, id)).Should().Be((false, false));
+    }
+
     [Fact]
     public async Task DevuelveElConteoDelSaveDelLlamador()
     {

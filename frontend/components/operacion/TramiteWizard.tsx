@@ -1461,17 +1461,26 @@ export function TramiteWizard(props: Props) {
 
     setPaqueteDocsStatus('loading');
     let lastError: string | null = null;
+    // Bug #14631 — FUR e impronta se generan UNA vez por radicación: regenerarlos en cada reintento
+    // invalidaba el consolidado que el intento anterior pudo dejar listo en el servidor aunque el
+    // navegador ya hubiera cortado la espera, y obligaba a recomponerlo desde cero.
+    let furListo = false;
+    let improntaIntentada = false;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       try {
-        try {
-          await tramitesClient.generarFur(id);
-        } catch {
-          // Puede existir ya; el consolidado fallará si realmente falta.
+        if (!furListo) {
+          try {
+            await tramitesClient.generarFur(id);
+            furListo = true;
+          } catch {
+            // Puede existir ya; el consolidado lo genera en cascada si realmente falta.
+          }
         }
         // Solo si el checklist la marca obligatoria. Opcional: el gestor la genera con el clic
         // de la casilla; aquí un 409 o un fallo de Kyverum no debe ni intentarse.
-        if (improntaGeneracionRef.current) {
+        if (improntaGeneracionRef.current && !improntaIntentada) {
+          improntaIntentada = true;
           let improntaObligatoria = false;
           try {
             const chk = await tramitesClient.getChecklist(id);
@@ -1487,7 +1496,11 @@ export function TramiteWizard(props: Props) {
             }
           }
         }
-        const result = await tramitesClient.generarConsolidado(id, undefined, true);
+        // Bug #14631 — sin `force`: el backend ya regenera cuando el expediente cambió (marcas de
+        // vigencia, ADR-0032; FUR desactualizado o faltante en cascada) y, si el consolidado sigue
+        // vigente, lo entrega sin recomponerlo. Con `force=true` cada intento volvía a generar FUR,
+        // mandato y el PDF completo, y un reintento tardaba lo mismo que el intento que falló.
+        const result = await tramitesClient.generarConsolidado(id, undefined, false);
         if (!result.incompleto) {
           setPaqueteDocsStatus('ready');
           return null;
