@@ -583,13 +583,13 @@ function Revision({ id }: { id: string }) {
         descripcion={
           <span className="flex flex-wrap items-center gap-2">
             <EstadoDocumento estado={d.estado} />
-            <span>
-          {d.procesadoEn ? `Procesado ${formatoFechaHora(d.procesadoEn)}` : "En cola"}
-          {/* Versión del prompt, proveedor y modelo: solo los recibe el SuperAdmin. */}
-          {d.versionPrompt !== null && ` · Prompt v${d.versionPrompt}`}
-          {d.reprocesos > 0 && ` · Reprocesado ${d.reprocesos} de ${d.maximoReprocesos}`}
-          {d.proveedorModelo && ` · ${d.proveedorModelo}`}
-          {d.motivoDescarte && ` · Descartado: ${d.motivoDescarte}`}
+            {/* Versión del prompt, proveedor y modelo: solo los recibe el SuperAdmin, y aun así van en el title, no en la línea. */}
+            <span
+              title={[d.versionPrompt !== null ? `Prompt v${d.versionPrompt}` : null, d.proveedorModelo].filter(Boolean).join(" · ") || undefined}
+            >
+              {d.procesadoEn ? `Procesado ${formatoFechaHora(d.procesadoEn)}` : "En cola"}
+              {d.reprocesos > 0 && ` · Reprocesado ${d.reprocesos} de ${d.maximoReprocesos}`}
+              {d.motivoDescarte && ` · Descartado: ${d.motivoDescarte}`}
             </span>
           </span>
         }

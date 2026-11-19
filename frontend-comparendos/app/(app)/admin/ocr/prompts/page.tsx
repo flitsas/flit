@@ -83,7 +83,7 @@ function Editor({ inicial, onCerrar, onGuardado }: { inicial: Edicion; onCerrar:
       busy={enviando}
       size="2xl"
       title={inicial.id ? "Editar versión del prompt" : "Nueva versión del prompt"}
-      description="Por ahora solo está conectado Anthropic; OpenAI y Gemini quedan para cuando se comparen con la muestra real."
+      description="Servicio de lectura y modelo de esta versión."
       footer={
         <div className="flex justify-end gap-2">
           <button type="button" className={controlCls(false)} onClick={onCerrar}>
@@ -310,7 +310,7 @@ function Prompts() {
       />
       {publicada && (
         <p className="text-xs">
-          Publicada: <b>versión {publicada.numeroVersion}</b> · {publicada.proveedor} / {publicada.modelo}
+          Publicada: <b title={`${publicada.proveedor} / ${publicada.modelo}`}>versión {publicada.numeroVersion}</b>
         </p>
       )}
       <DataTable
