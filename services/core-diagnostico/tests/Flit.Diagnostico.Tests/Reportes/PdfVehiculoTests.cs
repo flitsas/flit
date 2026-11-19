@@ -96,7 +96,7 @@ public sealed class PdfVehiculoTests
         foreach (var esperado in new[]
                  {
                      lote.Id.ToString(), "Ana Prueba", "Empresa de prueba", "TST301",
-                     "Página 1 de ", "Fecha de generación", "Certificado de Diagnóstico",
+                     "Página 1/", "Fecha y hora de generación", "Certificado de Diagnóstico",
                  })
             PdfDePrueba.Tiene(texto, esperado).Should().BeTrue($"el texto del PDF trae «{esperado}»: {texto}");
         texto.Should().NotContainAny([.. CabeceraRetirada.Select(PdfDePrueba.Plano)]);
@@ -667,7 +667,7 @@ internal static class PdfDePrueba
 
     /// <summary>El texto aplanado sin los pies de página («Certificado de Diagnóstico … Página X de Y»), para leer una sección partida entre páginas.</summary>
     public static string SinPies(string texto) =>
-        System.Text.RegularExpressions.Regex.Replace(texto, @"CertificadodeDiagnóstico.*?Página\d+de\d+", string.Empty, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5));
+        System.Text.RegularExpressions.Regex.Replace(texto, @"CertificadodeDiagnóstico.*?Página\d+(?:de|/)\d+", string.Empty, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5));
 
     /// <summary>
     /// La sección que empieza en <paramref name="titulo"/>, hasta el título de la sección siguiente, la nota o el pie, lo
@@ -709,7 +709,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     private const string Vin = "9BWZZZ377VT004251";
 
     [Fact]
-    public void Version_de_plantilla_es_8() => PdfVehiculo.VersionPlantilla.Should().Be(8);
+    public void Version_de_plantilla_es_9() => PdfVehiculo.VersionPlantilla.Should().Be(9);
 
     /// <summary>Sin fila de dictamen el PDF sigue igual: no hay sección ni aviso de redacción.</summary>
     [Fact]
@@ -724,10 +724,11 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     }
 
     /// <summary>
-    /// Pendiente y bloqueado: la palabra, el aviso y los dos párrafos distintos, en ese orden, antes de «DATOS DEL VEHÍCULO».
+    /// Pendiente y bloqueado: la palabra, el aviso y los dos párrafos distintos, en ese orden, al final del documento (membrete
+    /// 2026-11-19: el recuadro del dictamen va después de la última sección).
     /// </summary>
     [Fact]
-    public void Dictamen_pendiente_bloqueado_pinta_veredicto_aviso_y_los_dos_parrafos_antes_de_datos_del_vehiculo()
+    public void Dictamen_pendiente_bloqueado_pinta_veredicto_aviso_y_los_dos_parrafos_despues_de_la_ultima_seccion()
     {
         const string primero = "qx17 alfa dictamen bloqueo unico";
         const string segundo = "qy28 beta dictamen multa unica";
@@ -737,7 +738,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         };
         var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
 
-        var orden = new[] { "Bloqueado", "Análisis en preparación", primero, segundo, "DATOS DEL VEHÍCULO" };
+        var orden = new[] { "DATOS DEL VEHÍCULO", "IMPUESTO VEHICULAR DEPARTAMENTAL", "DICTAMEN:", "Bloqueado", "Análisis en preparación", primero, segundo };
         var desde = 0;
         foreach (var literal in orden)
         {
@@ -803,7 +804,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         };
         var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
 
-        var orden = new[] { "Bloqueado", "Ajustado por FLIT el 13/11/2026 10:30", parrafo };
+        var orden = new[] { "Bloqueado", "Ajustado por FLIT el 13/11/2026", parrafo };
         var desde = 0;
         foreach (var literal in orden)
         {
@@ -845,8 +846,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
 
         var orden = new[]
         {
-            "Diagnóstico vehicular",
-            $"Diagnóstico ID {Id}", "Placa ABC123", "Fecha de generación 27/10/2026 10:04:05",
+            "DIAGNÓSTICO VEHICULAR", "Placa: ABC123", "Fecha y hora de generación: 27/10/2026 10:04:05",
             "DATOS DEL VEHÍCULO", "INFORMACIÓN DEL VEHÍCULO", "Placa VIN Servicio", "PROPIETARIOS", "Propietario 1",
             "COMPARENDOS DEL VEHÍCULO", "Número Fecha Valor Estado Organismo", "COMPARENDOS DE LOS PROPIETARIOS", "No aplica.",
             "AVALÚO COMERCIAL", "$ 48.500.000", "IMPUESTO VEHICULAR DEPARTAMENTAL", "Vigencia Valor Estado 2025 $ 180.000 Pagada",
@@ -861,7 +861,8 @@ public sealed partial class PdfVehiculoDisenoV2Tests
 
         PdfDePrueba.Tiene(texto, "DATOS DEL DIAGNÓSTICO").Should().BeFalse(texto);
         PdfDePrueba.Tiene(texto, "Este documento reúne").Should().BeFalse(texto);
-        PdfDePrueba.Tiene(texto, "Consultado el 22/10/2026 10:00 (hora Colombia)").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "Consultado el 22/10/2026").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "(hora Colombia)").Should().BeFalse(texto);
         PdfDePrueba.Tiene(texto, "Este informe se elaboró a solicitud de Ana Prueba, de Empresa de prueba, para la placa ABC123.").Should().BeTrue(texto);
         PdfDePrueba.Tiene(texto, "NOTA").Should().BeTrue(texto);
     }
@@ -872,7 +873,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(Contenido("ABC123"), GeneradoEn));
 
         PdfDePrueba.Tiene(texto, "Certificado de Diagnóstico").Should().BeTrue(texto);
-        System.Text.RegularExpressions.Regex.IsMatch(texto, @"Página1de[2-9]").Should().BeTrue($"el contenido de muestra ocupa varias páginas: {texto}");
+        System.Text.RegularExpressions.Regex.IsMatch(texto, @"Página1/[2-9]").Should().BeTrue($"el contenido de muestra ocupa varias páginas: {texto}");
         texto.Should().NotContainAny([PdfDePrueba.Plano("Generado el"), PdfDePrueba.Plano(PdfVehiculo.Titulo), "RUNT—", "SIMIT—"]);
     }
 
