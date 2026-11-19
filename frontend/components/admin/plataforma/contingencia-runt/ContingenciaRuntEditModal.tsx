@@ -101,15 +101,25 @@ export function ContingenciaRuntEditModal({
     >
       {confirmando ? (
         <div className="flex flex-col gap-4">
+          {/* Región viva: al cambiar de paso el lector de pantalla anuncia título y pregunta, y el foco cae aquí. */}
           <div
             ref={confirmRef}
+            role="region"
+            aria-live="polite"
+            aria-labelledby={`${uid}-confirm-title`}
+            aria-describedby={`${uid}-confirm-desc`}
             tabIndex={-1}
-            className="text-sm text-flit-primary outline-none"
+            className="flex flex-col gap-1 text-sm text-flit-primary outline-none"
             data-testid="contingencia-runt-confirmar"
           >
-            {provider === ""
-              ? `¿Apagar la contingencia de ${tipo}? Volverá a usarse la configuración de cada empresa.`
-              : `¿Consultar ${tipo} con ${destino}? Aplica a toda la plataforma.`}
+            <p id={`${uid}-confirm-title`} className="font-semibold">
+              Confirma el cambio
+            </p>
+            <p id={`${uid}-confirm-desc`}>
+              {provider === ""
+                ? `¿Apagar la contingencia de ${tipo}? Volverá a usarse la configuración de cada empresa.`
+                : `¿Consultar ${tipo} con ${destino}? Aplica a toda la plataforma.`}
+            </p>
           </div>
           <div className="flex flex-wrap justify-end gap-2">
             <button type="button" onClick={() => setConfirmando(false)} disabled={guardando} className={botonSecundarioCls}>
@@ -170,12 +180,12 @@ export function ContingenciaRuntEditModal({
               required
               aria-required="true"
               aria-invalid={tocado && sinMotivo ? true : undefined}
-              aria-describedby={`${reasonId}-hint`}
+              aria-describedby={`${reasonId}-hint ${reasonId}-privacy`}
               className={`${campoCls} ${tocado && sinMotivo ? "border-destructive" : "border-border"}`}
             />
             <p
               id={`${reasonId}-hint`}
-              className={`flex justify-between gap-2 text-[11px] leading-snug ${
+              className={`flex justify-between gap-2 text-xs leading-snug ${
                 tocado && sinMotivo ? "font-semibold text-destructive" : "text-muted-foreground"
               }`}
             >
@@ -183,6 +193,9 @@ export function ContingenciaRuntEditModal({
               <span>
                 {reason.length}/{RUNT_CONTINGENCY_REASON_MAX}
               </span>
+            </p>
+            <p id={`${reasonId}-privacy`} className="text-xs leading-snug text-muted-foreground">
+              No incluyas datos personales.
             </p>
           </div>
 
