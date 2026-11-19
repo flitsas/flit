@@ -160,4 +160,44 @@ public sealed class IctPlacaCarroceriaTests
     [Fact]
     public void CoincidenciaCarroceria_ConCatalogoVacio_NoCoincide() =>
         IctPlacaCarroceria.CoincidenciaCarroceria("VOLQUETA", []).Should().BeNull();
+
+    // ---------- Color (transformación 5) ----------
+
+    private static readonly IReadOnlyList<VehicleColorEntry> Colores =
+    [
+        new(Guid.NewGuid(), "01", "AZUL"),
+        new(Guid.NewGuid(), "02", "AZUL  OSCURO"),
+        new(Guid.NewGuid(), "03", "ROJO"),
+    ];
+
+    [Fact]
+    public void WarningColor_EsElContratoConCoreIct() =>
+        IctPlacaCarroceria.WarningColorFueraDeCatalogo.Should().Be("color_warning:fuera_de_catalogo");
+
+    [Theory]
+    [InlineData("AZUL", "AZUL")]
+    [InlineData("  rojo ", "ROJO")]
+    [InlineData("azul oscuro", "AZUL  OSCURO")]
+    [InlineData("AZUL   OSCURO", "AZUL  OSCURO")]
+    public void CoincidenciaColor_ExactaSalvoMayusculasYEspacios(string enviado, string nombreEsperado) =>
+        IctPlacaCarroceria.CoincidenciaColor(enviado, Colores)!.Name.Should().Be(nombreEsperado);
+
+    [Theory]
+    [InlineData("Cambio color Verde")]
+    [InlineData("AZU")]
+    [InlineData("ROJO VINO")]
+    [InlineData("OSCURO")]
+    [InlineData("")]
+    [InlineData("   ")]
+    [InlineData(null)]
+    public void CoincidenciaColor_SinFuzzyNiContains_NoCoincide(string? enviado) =>
+        IctPlacaCarroceria.CoincidenciaColor(enviado, Colores).Should().BeNull();
+
+    [Fact]
+    public void CoincidenciaColor_ConCatalogoVacio_NoCoincide() =>
+        IctPlacaCarroceria.CoincidenciaColor("AZUL", []).Should().BeNull();
+
+    [Fact]
+    public void CoincidenciaColor_NoAlteraLaCoincidenciaDeCarroceria() =>
+        IctPlacaCarroceria.CoincidenciaCarroceria("volqueta", Catalogo)!.Name.Should().Be("VOLQUETA");
 }

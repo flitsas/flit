@@ -89,14 +89,13 @@ public static class IctPayloadNormalizer
     /// <c>ict.external_integration_transformation_type</c> (28-ICT-transformation-type-catalogo-b.sql); 6 y 7
     /// quedan inactivos.
     /// </summary>
-    private static readonly int[] KnownTransformationCodes = [5, 9, 17];
+    internal static readonly int[] KnownTransformationCodes = [5, 9, 17];
 
     /// <summary>
-    /// Aplana <c>more_transaction_transaction_type</c> al puente master↔transformación. Se ignoran
-    /// los códigos fuera del catálogo (la FK los rechazaría y tumbaría el registro completo) y los
-    /// repetidos (la PK es compuesta por master + código).
-    /// TODO(ICT-TRANSFORM-VALIDATION): v1 validaba el código en el SP de negocio como NOVEDAD
-    /// (business.sql reglas 85/86); aquí se descartan en silencio hasta portar esas reglas.
+    /// Aplana <c>more_transaction_transaction_type</c> al puente master↔transformación. Los códigos fuera
+    /// del catálogo ya los rechaza <c>RegisterTransformationInputValidator</c> (HU #14600, paridad v1 #85);
+    /// el filtro de aquí queda como defensa (la FK los rechazaría y tumbaría el registro completo), junto
+    /// con el descarte de repetidos (la PK es compuesta por master + código).
     /// </summary>
     private static void AddTransformations(
         ExternalIntegrationMaster master,
@@ -196,12 +195,14 @@ public static class IctPayloadNormalizer
             var rl = a.LegalRepresentative;
             if (rl is not null)
             {
-                actor.LegalRepresentativeDocumentType = Clean(rl.DocumentType);
+                actor.LegalRepresentativeDocumentType = NormalizeDocumentType(rl.DocumentType) ?? Clean(rl.DocumentType);
                 actor.LegalRepresentativeDocumentNumber = Clean(rl.DocumentNumber);
                 actor.LegalRepresentativeName = Clean(rl.Name);
                 actor.LegalRepresentativeFirstLastName = Clean(rl.FirstLastName);
                 actor.LegalRepresentativeSecondLastName = Clean(rl.SecondLastName);
-                actor.LegalRepresentativePhone = Clean(rl.Phone);
+                // HU #14600: se guarda normalizado (solo dígitos), igual que el del actor. El validador acepta hasta
+                // 64 caracteres crudos con ≤ 50 dígitos; guardarlo crudo desbordaría varchar(50) (Bug #13304).
+                actor.LegalRepresentativePhone = Clean(NormalizePhone(rl.Phone));
                 actor.LegalRepresentativeEmail = Clean(rl.Email);
                 actor.LegalRepresentativeCity = Clean(rl.City);
                 actor.LegalRepresentativeState = Clean(rl.State);
@@ -211,7 +212,7 @@ public static class IctPayloadNormalizer
             var pm = a.PrincipalMandante;
             if (pm is not null)
             {
-                actor.PrincipalMandanteDocumentType = Clean(pm.DocumentType);
+                actor.PrincipalMandanteDocumentType = NormalizeDocumentType(pm.DocumentType) ?? Clean(pm.DocumentType);
                 actor.PrincipalMandanteDocumentNumber = Clean(pm.DocumentNumber);
                 actor.PrincipalMandanteName = Clean(pm.Name);
                 actor.PrincipalMandanteFirstLastName = Clean(pm.FirstLastName);
