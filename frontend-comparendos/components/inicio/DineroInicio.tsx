@@ -79,9 +79,11 @@ export function DineroInicio({ datos, empresa }: { datos: RespuestaDinero; empre
             etiqueta="En cobro coactivo"
             cifra={pesosCorto(d.cobroCoactivo.valor)}
             pendiente
-            title={formatoPesos(d.cobroCoactivo.valor)}
-            aria-label={`En cobro coactivo: ${d.cobroCoactivo.cantidad.toLocaleString("es-CO")} comparendos · ${formatoPesos(d.cobroCoactivo.valor)}. Ver en la bandeja`}
-            pie={`${d.cobroCoactivo.cantidad.toLocaleString("es-CO")} comparendos · ver en la bandeja`}
+            // Cuenta como la bandeja con ese filtro (pagados y DP favorables incluidos): el monto es el valor de esos
+            // comparendos, no deuda.
+            title={`Valor de los comparendos en cobro coactivo: ${formatoPesos(d.cobroCoactivo.valor)}`}
+            aria-label={`En cobro coactivo: ${d.cobroCoactivo.cantidad.toLocaleString("es-CO")} comparendos por un valor de ${formatoPesos(d.cobroCoactivo.valor)}. Ver en la bandeja`}
+            pie={`Valor de ${d.cobroCoactivo.cantidad.toLocaleString("es-CO")} comparendos · ver en la bandeja`}
             href={hrefBandeja({ cobroCoactivo: "true" }, { empresa })}
             enlace={Link}
           />
@@ -118,7 +120,6 @@ export function DineroInicio({ datos, empresa }: { datos: RespuestaDinero; empre
             series={SERIES_ORGANISMO}
             formatoEje={(v) => (v === 0 ? "0" : `$${numeroCorto(v)}`)}
             formato={formatoPesos}
-            anchoRotulo={150}
           />
         )}
       </PanelInicio>

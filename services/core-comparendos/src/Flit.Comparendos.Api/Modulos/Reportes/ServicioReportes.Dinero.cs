@@ -23,6 +23,9 @@ public sealed record DineroFrentes(Monto ProximosAVencer, Monto SinContraventor,
 
 public sealed record DineroMes(string Periodo, decimal ValorIngresado, decimal Pagado);
 
+/// <summary>Solo el reparto de la deuda por estado legal (<c>?partes=estados</c>): lo que necesita el indicador de Reportes.</summary>
+public sealed record DineroEstados(DateOnly Hoy, IReadOnlyList<DineroEstado> Estados, Monto Exigible, Monto NoExigible);
+
 public sealed record Dinero(
     DateOnly Hoy,
     IReadOnlyList<DineroEstado> Estados,
@@ -45,44 +48,41 @@ public sealed partial class ServicioReportes
 {
     private static readonly string[] EstadosLegales = ["SinNotificar", "EnTiempo", "Vencido", "Caducado", "Prescrito"];
 
-    public async Task<Dinero> DineroAsync(Alcance a, ConsultaBandeja bandeja, CancellationToken ct)
-    {
-        ArgumentNullException.ThrowIfNull(a);
-        ArgumentNullException.ThrowIfNull(bandeja);
-        var h = await bandeja.HoyAsync(ct).ConfigureAwait(false);
-        var hoy = h.Dia;
+    /// <summary>Una fila por organismo con la deuda (activo, sin pagar y sin DP favorable) repartida por estado y descuento.</summary>
+    private sealed record GrupoDeuda(Guid? Organismo, int N, decimal V, int NSin, decimal VSin, int NTiempo, decimal VTiempo, int NVencido, decimal VVencido,
+        int NCaducado, decimal VCaducado, int NPrescrito, decimal VPrescrito, int N50, decimal V50, int N25, decimal V25);
 
+    private async Task<List<GrupoDeuda>> GruposDeudaAsync(Alcance a, DateOnly hoy, CancellationToken ct) =>
         // Una sola pasada agrupada por organismo: los totales por estado salen de sumar los grupos.
         // La misma deuda que KpisAsync (sin DP favorable), escrita como NOT EXISTS: anti join por el índice único de
         // derecho_peticion.comparendo_id en vez de un NOT IN que vuelve a recorrer los comparendos de la empresa (DRE:
         // 11 ms contra 21 ms con 61.620 comparendos).
-        var grupos = await Comparendos(a)
+        await Comparendos(a)
             .Where(c => c.Activo && !c.Pagado
                 && !db.DerechosPeticion.Any(d => d.ComparendoId == c.Id && d.Estado == EstadoDp.Respondido && d.RespuestaSentido == SentidoRespuestaOt.Favorable))
             .GroupBy(c => c.OrganismoTransitoId)
-            .Select(g => new
-            {
-                Organismo = g.Key,
-                N = g.Count(),
-                V = g.Sum(c => c.ValorTotal ?? 0),
-                NSin = g.Count(c => c.FechaLimiteGestion == null),
-                VSin = g.Sum(c => c.FechaLimiteGestion == null ? c.ValorTotal ?? 0 : 0),
-                NTiempo = g.Count(c => c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion),
-                VTiempo = g.Sum(c => c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion ? c.ValorTotal ?? 0 : 0),
-                NVencido = g.Count(c => c.FechaLimiteGestion != null && hoy > c.FechaLimiteGestion && hoy <= c.FechaCaducidad),
-                VVencido = g.Sum(c => c.FechaLimiteGestion != null && hoy > c.FechaLimiteGestion && hoy <= c.FechaCaducidad ? c.ValorTotal ?? 0 : 0),
-                NCaducado = g.Count(c => hoy > c.FechaCaducidad && hoy <= c.FechaPrescripcion),
-                VCaducado = g.Sum(c => hoy > c.FechaCaducidad && hoy <= c.FechaPrescripcion ? c.ValorTotal ?? 0 : 0),
-                NPrescrito = g.Count(c => hoy > c.FechaPrescripcion),
-                VPrescrito = g.Sum(c => hoy > c.FechaPrescripcion ? c.ValorTotal ?? 0 : 0),
-                NCoactivo = g.Count(c => c.EnCobroCoactivo),
-                VCoactivo = g.Sum(c => c.EnCobroCoactivo ? c.ValorTotal ?? 0 : 0),
-                N50 = g.Count(c => c.FechaFinDescuento50 != null && hoy <= c.FechaFinDescuento50),
-                V50 = g.Sum(c => c.FechaFinDescuento50 != null && hoy <= c.FechaFinDescuento50 ? c.ValorTotal ?? 0 : 0),
-                N25 = g.Count(c => (c.FechaFinDescuento50 == null || hoy > c.FechaFinDescuento50) && c.FechaFinDescuento25 != null && hoy <= c.FechaFinDescuento25),
-                V25 = g.Sum(c => (c.FechaFinDescuento50 == null || hoy > c.FechaFinDescuento50) && c.FechaFinDescuento25 != null && hoy <= c.FechaFinDescuento25 ? c.ValorTotal ?? 0 : 0),
-            }).ToListAsync(ct).ConfigureAwait(false);
+            .Select(g => new GrupoDeuda(
+                g.Key,
+                g.Count(),
+                g.Sum(c => c.ValorTotal ?? 0),
+                g.Count(c => c.FechaLimiteGestion == null),
+                g.Sum(c => c.FechaLimiteGestion == null ? c.ValorTotal ?? 0 : 0),
+                g.Count(c => c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion),
+                g.Sum(c => c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion ? c.ValorTotal ?? 0 : 0),
+                g.Count(c => c.FechaLimiteGestion != null && hoy > c.FechaLimiteGestion && hoy <= c.FechaCaducidad),
+                g.Sum(c => c.FechaLimiteGestion != null && hoy > c.FechaLimiteGestion && hoy <= c.FechaCaducidad ? c.ValorTotal ?? 0 : 0),
+                g.Count(c => hoy > c.FechaCaducidad && hoy <= c.FechaPrescripcion),
+                g.Sum(c => hoy > c.FechaCaducidad && hoy <= c.FechaPrescripcion ? c.ValorTotal ?? 0 : 0),
+                g.Count(c => hoy > c.FechaPrescripcion),
+                g.Sum(c => hoy > c.FechaPrescripcion ? c.ValorTotal ?? 0 : 0),
+                g.Count(c => c.FechaFinDescuento50 != null && hoy <= c.FechaFinDescuento50),
+                g.Sum(c => c.FechaFinDescuento50 != null && hoy <= c.FechaFinDescuento50 ? c.ValorTotal ?? 0 : 0),
+                g.Count(c => (c.FechaFinDescuento50 == null || hoy > c.FechaFinDescuento50) && c.FechaFinDescuento25 != null && hoy <= c.FechaFinDescuento25),
+                g.Sum(c => (c.FechaFinDescuento50 == null || hoy > c.FechaFinDescuento50) && c.FechaFinDescuento25 != null && hoy <= c.FechaFinDescuento25 ? c.ValorTotal ?? 0 : 0)))
+            .ToListAsync(ct).ConfigureAwait(false);
 
+    private static (DineroEstado[] Estados, Monto Exigible, Monto NoExigible) Repartir(List<GrupoDeuda> grupos)
+    {
         var estados = new[]
         {
             new DineroEstado(EstadosLegales[0], grupos.Sum(g => g.NSin), grupos.Sum(g => g.VSin)),
@@ -91,8 +91,29 @@ public sealed partial class ServicioReportes
             new DineroEstado(EstadosLegales[3], grupos.Sum(g => g.NCaducado), grupos.Sum(g => g.VCaducado)),
             new DineroEstado(EstadosLegales[4], grupos.Sum(g => g.NPrescrito), grupos.Sum(g => g.VPrescrito)),
         };
-        var exigible = new Monto(estados.Take(3).Sum(e => e.Cantidad), estados.Take(3).Sum(e => e.Valor));
-        var noExigible = new Monto(estados.Skip(3).Sum(e => e.Cantidad), estados.Skip(3).Sum(e => e.Valor));
+        return (estados, new Monto(estados.Take(3).Sum(e => e.Cantidad), estados.Take(3).Sum(e => e.Valor)),
+            new Monto(estados.Skip(3).Sum(e => e.Cantidad), estados.Skip(3).Sum(e => e.Valor)));
+    }
+
+    /// <summary>Solo el reparto por estado: una consulta, sin frentes, pagos, organismos ni serie (indicador de Reportes).</summary>
+    public async Task<DineroEstados> EstadosAsync(Alcance a, ConsultaBandeja bandeja, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(bandeja);
+        var hoy = (await bandeja.HoyAsync(ct).ConfigureAwait(false)).Dia;
+        var (estados, exigible, noExigible) = Repartir(await GruposDeudaAsync(a, hoy, ct).ConfigureAwait(false));
+        return new DineroEstados(hoy, estados, exigible, noExigible);
+    }
+
+    public async Task<Dinero> DineroAsync(Alcance a, ConsultaBandeja bandeja, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        ArgumentNullException.ThrowIfNull(bandeja);
+        var h = await bandeja.HoyAsync(ct).ConfigureAwait(false);
+        var hoy = h.Dia;
+        var grupos = await GruposDeudaAsync(a, hoy, ct).ConfigureAwait(false);
+
+        var (estados, exigible, noExigible) = Repartir(grupos);
         var v50 = grupos.Sum(g => g.V50);
         var v25 = grupos.Sum(g => g.V25);
 
@@ -118,7 +139,10 @@ public sealed partial class ServicioReportes
             await FrenteAsync(bandeja, a, new FiltrosBandeja { EstadoLegal = ["Vencido"] }, h, ct).ConfigureAwait(false),
             await FrenteAsync(bandeja, a, new FiltrosBandeja { Juridico = "CaducidadInmediata" }, h, ct).ConfigureAwait(false));
 
-        return new Dinero(hoy, estados, exigible, noExigible, new Monto(grupos.Sum(g => g.NCoactivo), grupos.Sum(g => g.VCoactivo)),
+        // Como los frentes: la cifra es la de /bandeja?cobroCoactivo=true y el monto es el valor de esos comparendos.
+        var coactivo = await FrenteAsync(bandeja, a, new FiltrosBandeja { CobroCoactivo = true }, h, ct).ConfigureAwait(false);
+
+        return new Dinero(hoy, estados, exigible, noExigible, coactivo,
             new DineroDescuento(new MontoConAhorro(grupos.Sum(g => g.N50), v50, v50 * 0.5m), new MontoConAhorro(grupos.Sum(g => g.N25), v25, v25 * 0.25m)),
             organismos,
             new DineroPagado(pagosPeriodo.Sum(p => p.N), pagosPeriodo.Sum(p => p.V), Pagado(TipoPago.CC), Pagado(TipoPago.PC), Pagado(TipoPago.BC)),

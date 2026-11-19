@@ -215,6 +215,32 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
     }
 
     [Fact]
+    public async Task S2_Dinero_PartesEstados_YCobroCoactivoComoLaBandeja()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, usuario, ids) = await EscenarioAsync(ct);
+        // R-1 está pagado y R-4 es deuda: los dos en cobro coactivo. La bandeja cuenta los dos; la tarjeta también.
+        await api.EnDbAsync(db => db.Comparendos.Where(c => c.Id == ids["R1"] || c.Id == ids["R4"])
+            .ExecuteUpdateAsync(u => u.SetProperty(c => c.EnCobroCoactivo, true), ct));
+        var cliente = api.Cliente(usuario);
+
+        var todo = (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero", ct)).GetProperty("dinero");
+        var bandeja = await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/comparendos?cobroCoactivo=true", ct);
+        (todo.GetProperty("cobroCoactivo").GetProperty("cantidad").GetInt32(), todo.GetProperty("cobroCoactivo").GetProperty("valor").GetDecimal())
+            .Should().Be((bandeja.GetProperty("total").GetInt32(), 1604100m), "la cifra es la de la bandeja al hacer clic, pagados incluidos");
+        bandeja.GetProperty("total").GetInt32().Should().Be(2);
+
+        // ?partes=estados: solo el reparto, igual al de la respuesta completa.
+        var solo = (await cliente.GetFromJsonAsync<JsonElement>("/api/v1/comparendos/reportes/dinero?partes=estados", ct)).GetProperty("dinero");
+        solo.EnumerateObject().Select(x => x.Name).Should().BeEquivalentTo(["hoy", "estados", "exigible", "noExigible"]);
+        solo.GetProperty("exigible").GetRawText().Should().Be(todo.GetProperty("exigible").GetRawText());
+        solo.GetProperty("noExigible").GetRawText().Should().Be(todo.GetProperty("noExigible").GetRawText());
+        solo.GetProperty("estados").GetRawText().Should().Be(todo.GetProperty("estados").GetRawText());
+        (await cliente.GetAsync("/api/v1/comparendos/reportes/dinero?partes=todo", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+    }
+
+    [Fact]
     public async Task AC2_ReporteSemanal_ADestinatarios_ConCopiaOcultaInterna_UnaVezPorDia()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);

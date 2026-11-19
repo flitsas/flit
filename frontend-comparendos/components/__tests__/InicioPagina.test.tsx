@@ -8,7 +8,8 @@ const apiFetch = vi.fn();
 vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), apiFetch: (...a: unknown[]) => apiFetch(...a) }));
 let sesion: unknown = null;
 vi.mock("@/components/ComparendosShell", () => ({ useSesion: () => ({ sesion, cargando: false, error: null }) }));
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams() }));
+const replace = vi.fn();
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(), useRouter: () => ({ replace, push: vi.fn() }) }));
 // recharts necesita medir el contenedor: en jsdom basta con no pintar el SVG (la lectura accesible va en listas ocultas).
 vi.mock("recharts", async (original) => {
   const r = await original<typeof import("recharts")>();
@@ -74,8 +75,9 @@ describe("Inicio de Comparendos", () => {
     expect(apiFetch.mock.calls.some(([ruta]) => String(ruta).startsWith("/reportes"))).toBe(false);
     expect(screen.queryByTestId("kpis-dinero")).toBeNull();
     expect(screen.queryByText(/\$/)).toBeNull();
-    // Un frente en cero no lleva a una bandeja vacía.
+    // Un frente en cero no lleva a una bandeja vacía, y sin enlace no lleva aria-label (el contenido se lee solo).
     expect(screen.getByTestId("frente-sinContraventor").getAttribute("href")).toBeNull();
+    expect(screen.getByTestId("frente-sinContraventor").getAttribute("aria-label")).toBeNull();
   });
 
   it("con el módulo muestra el dinero abreviado, el periodo de lo pagado y el ahorro posible como estimado", async () => {
@@ -89,11 +91,18 @@ describe("Inicio de Comparendos", () => {
     expect(apiFetch.mock.calls.filter(([ruta]) => ruta === "/comparendos/contadores")).toHaveLength(0);
     expect(document.body.textContent).not.toMatch(/\bAPI\b/);
     // El title no tapa el nombre accesible: cada enlace dice qué frente es (MAIA).
-    expect(screen.getByTestId("frente-vencidos").getAttribute("aria-label")).toMatch(/^Vencidos: 10 comparendos · \$\s3\.800\.000\. Se pasó el plazo de gestión$/);
-    const coactivo = screen.getByRole("link", { name: /^En cobro coactivo: 3 comparendos · \$\s2\.500\.000/ });
+    expect(screen.getByTestId("frente-vencidos").getAttribute("aria-label")).toMatch(/^Vencidos: 10 comparendos por un valor de \$\s3\.800\.000\. Se pasó el plazo de gestión$/);
+    const coactivo = screen.getByRole("link", { name: /^En cobro coactivo: 3 comparendos por un valor de \$\s2\.500\.000/ });
     expect(coactivo.getAttribute("href")).toBe("/bandeja?cobroCoactivo=true");
     // La lectura accesible del gráfico por organismo separa lo cobrable de lo caducado (valor − exigible).
     expect(screen.getByText(/^Secretaría de Movilidad de Bogotá: Se puede cobrar \$\s130\.000\.000, Caducado o prescrito \$\s900\.000$/)).toBeTruthy();
+  });
+
+  it("sin bandeja ni reportes explica por qué no hay nada, sin pedir datos", async () => {
+    sesion = gestora(false, []);
+    render(<Inicio />);
+    expect(await screen.findByText("Tu Inicio está vacío por ahora")).toBeTruthy();
+    expect(apiFetch).not.toHaveBeenCalled();
   });
 
   it("el SuperAdmin elige una empresa antes de ver nada", async () => {

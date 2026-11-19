@@ -25,7 +25,7 @@ import {
   SERIES,
   valorSerie,
   type Dashboard as DatosDashboard,
-  type RespuestaDinero,
+  type RespuestaEstados,
   type Serie,
 } from "@/lib/reportes";
 import { tienePermiso } from "@/lib/sesion";
@@ -74,9 +74,10 @@ function Contenido() {
   const datos = useCarga(JSON.stringify({ ...periodo, nit }), (signal) =>
     apiFetch<DatosDashboard>("/reportes/dashboard", { signal, query: { empresa: periodo.empresa, nit, desde: periodo.desde, hasta: periodo.hasta } }),
   );
-  // Solo el reparto de la deuda (lo que se puede cobrar frente a lo caducado o prescrito) para rotular bien el indicador.
+  // Solo el reparto de la deuda (lo que se puede cobrar frente a lo caducado o prescrito) para rotular bien el indicador:
+  // ?partes=estados es una consulta, no las ~11 de la lente completa del Inicio.
   const dinero = useCarga(`dinero:${JSON.stringify({ ...periodo, nit })}`, (signal) =>
-    apiFetch<RespuestaDinero>("/reportes/dinero", { signal, query: { empresa: periodo.empresa, nit, desde: periodo.desde, hasta: periodo.hasta } }),
+    apiFetch<RespuestaEstados>("/reportes/dinero", { signal, query: { empresa: periodo.empresa, nit, desde: periodo.desde, hasta: periodo.hasta, partes: "estados" } }),
   );
   const reparto = dinero.datos?.dinero;
   const d = datos.datos;

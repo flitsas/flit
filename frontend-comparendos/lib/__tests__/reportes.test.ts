@@ -24,6 +24,12 @@ describe("reportes", () => {
     expect(numeroCorto(1604100)).toBe("1,6 M");
     expect(numeroCorto(12000)).toBe("12 mil");
     expect(numeroCorto(7)).toBe("7");
+    // Se sube de escala cuando el redondeo llega a 1.000 (REX): nunca «1000 M» ni «1000 mil».
+    expect(numeroCorto(999_950_000)).toBe("1 mil M");
+    expect(numeroCorto(960_000_000)).toBe("960 M");
+    expect(numeroCorto(999_960)).toBe("1 M");
+    expect(numeroCorto(999.96)).toBe("1 mil");
+    expect(numeroCorto(-999_950_000)).toBe("-1 mil M");
   });
 
   it("etiqueta meses y calcula el inicio de mes", () => {

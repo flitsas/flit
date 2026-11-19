@@ -154,11 +154,15 @@ export function topeEje(maximo: number): number {
 
 /** Número corto para el eje: 1.500.000 → «1,5 M»; 12.000 → «12 mil». */
 export function numeroCorto(n: number): string {
-  const f = (x: number) => String(Math.round(x * 10) / 10).replace(".", ",");
-  if (Math.abs(n) >= 1e9) return `${f(n / 1e9)} mil M`;
-  if (Math.abs(n) >= 1e6) return `${f(n / 1e6)} M`;
-  if (Math.abs(n) >= 1e3) return `${f(n / 1e3)} mil`;
-  return f(n);
+  const f = (x: number) => String(x).replace(".", ",");
+  const r = (x: number) => Math.round(x * 10) / 10;
+  // Se sube de escala cuando el redondeo en la escala menor llega a 1.000: 999.950.000 da «1 mil M», no «1000 M»,
+  // y 960.000.000 sigue siendo «960 M».
+  const a = Math.abs(n);
+  if (a >= 1e9 || r(a / 1e6) >= 1000) return `${f(r(n / 1e9))} mil M`;
+  if (a >= 1e6 || r(a / 1e3) >= 1000) return `${f(r(n / 1e6))} M`;
+  if (a >= 1e3 || r(a) >= 1000) return `${f(r(n / 1e3))} mil`;
+  return f(r(n));
 }
 
 /** Primer día del mes de una fecha «aaaa-mm-dd» (rango por defecto: el mes en curso, como la API). */
@@ -271,4 +275,10 @@ export function textoPeriodo(desde: string, hasta: string): string {
   const [ah, mh, dh] = hasta.split("-");
   if (ad === ah && md === mh) return `${Number(dd)} al ${Number(dh)} de ${mes(hasta)} de ${ah}`;
   return `${Number(dd)} de ${mes(desde)} de ${ad} al ${Number(dh)} de ${mes(hasta)} de ${ah}`;
+}
+
+/** `GET /reportes/dinero?partes=estados`: solo el reparto por estado (el indicador «Deuda sin pagar» de Reportes). */
+export interface RespuestaEstados {
+  alcance: RespuestaDinero["alcance"];
+  dinero: Pick<Dinero, "hoy" | "estados" | "exigible" | "noExigible">;
 }
