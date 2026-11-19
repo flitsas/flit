@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Flit.Admin.Application.Auditing;
+using Microsoft.Extensions.Logging;
 
 namespace Flit.Admin.Application.Plataforma.RuntContingency;
 
@@ -75,7 +76,7 @@ public sealed record SaveRuntContingencyResult(
 /// auditoría de PLATAFORMA (<c>TenantId = null</c>: ningún historial de empresa registra nada) con quién, cuándo, el motivo y los
 /// valores anterior y nuevo. Nada cambia si la validación falla.
 /// </summary>
-public sealed class SaveRuntContingencyHandler(IRuntContingencyGateway gateway, IAdminAuditWriter auditWriter)
+public sealed partial class SaveRuntContingencyHandler(IRuntContingencyGateway gateway, IAdminAuditWriter auditWriter, ILogger<SaveRuntContingencyHandler> logger)
 {
     public const string ReasonRequiredMessage = "Escribe el motivo del cambio.";
     public const string ProviderInvalidMessage = "Ese proveedor no atiende este tipo de consulta.";
@@ -105,7 +106,9 @@ public sealed class SaveRuntContingencyHandler(IRuntContingencyGateway gateway, 
         var actorName = string.IsNullOrWhiteSpace(command.ActorName) ? "Super Admin FLIT" : command.ActorName.Trim();
         var saved = await gateway.SaveAsync(command.Kind, provider, reason, actorName, command.ActorUserId, cancellationToken).ConfigureAwait(false);
 
-        await auditWriter.WriteAsync(
+        try
+        {
+            await auditWriter.WriteAsync(
             new AdminAuditEntry(
                 TenantId: null,
                 TenantType: null,
@@ -122,9 +125,18 @@ public sealed class SaveRuntContingencyHandler(IRuntContingencyGateway gateway, 
                 OldValue: Serialize(command.Kind, before?.Provider, before?.Reason),
                 NewValue: Serialize(command.Kind, saved.Provider, reason)),
             cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // El cambio ya está guardado en core-consultas: la auditoría fallida no lo revierte ni rompe la respuesta. Sin el motivo en el log.
+            AuditoriaFallida(command.Kind, command.ActorUserId, ex);
+        }
 
         return new SaveRuntContingencyResult(SaveRuntContingencyOutcome.Ok, saved, SaveRuntContingencyResult.NoErrors);
     }
+
+    [LoggerMessage(EventId = 1, Level = LogLevel.Warning, Message = "No se pudo escribir la auditoría de Plataforma del cambio de contingencia RUNT (tipo={Kind}, actor={ActorUserId}).")]
+    private partial void AuditoriaFallida(string kind, Guid? actorUserId, Exception ex);
 
     private static string Serialize(string kind, string? provider, string? reason)
     {

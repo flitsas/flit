@@ -297,7 +297,7 @@ public sealed class ManageUserPermissionOverridesHandler(
         // Los permisos cuyo flag de enforcement está apagado no se ofrecen: otorgarlos o denegarlos no tendría efecto en la API.
         // Tampoco los OT (ot.*) en un tenant que no es organismo de tránsito: ahí la política OtModule rechaza la ruta igual.
         var otApplies = targets is null || await targets.IsTransitOfficeTenantAsync(tenantId, ct).ConfigureAwait(false);
-        return [.. all.Where(p => cap.Contains(p.Id) && IsLive(p.Slug) && (otApplies || !OtPermissions.IsOt(p.Slug)))];
+        return [.. all.Where(p => cap.Contains(p.Id) && IsLive(p.Slug) && !Roles.PrivilegeCeiling.IsSuperAdminOnly(p.Slug) && (otApplies || !OtPermissions.IsOt(p.Slug)))];
     }
 
     // ── HU #13666: regla «crear exige ver» por familia sobre permisos individuales ─────────────────────────────

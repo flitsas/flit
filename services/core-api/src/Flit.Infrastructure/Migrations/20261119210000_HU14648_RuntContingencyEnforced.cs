@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Flit.Infrastructure.Migrations;
 
 /// <summary>
-/// Épica #14644 (HU #14648) — marca como exigido (<c>enforced = 'true'</c>) el permiso <c>runt_contingency.manage</c> de la
+/// Épica #14644 (HU #14648) — marca como excluido (<c>enforced = 'excluded'</c>: nunca por usuario ni por rol de empresa) el permiso <c>runt_contingency.manage</c> de la
 /// contingencia de proveedor RUNT. DDL: <c>204-HU14648-runt-contingency-enforced.sql</c>. Lleva los atributos inline (sin
 /// Designer): sin ellos la migración no se descubre y no corre al arrancar.
 /// </summary>

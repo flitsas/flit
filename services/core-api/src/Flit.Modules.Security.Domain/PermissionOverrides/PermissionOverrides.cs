@@ -144,6 +144,9 @@ public static class PermissionOverrideReasons
     /// <summary>HU #13645: permiso con <c>enforced = 'excluded'</c> (no se configura jamás).</summary>
     public const string Excluded = "EXCLUDED";
 
+    /// <summary>Épica #14644: permiso que afecta a todas las empresas y solo tiene el rol SuperAdmin (p. ej. <c>runt_contingency.manage</c>).</summary>
+    public const string SuperAdminOnly = "SUPERADMIN_ONLY";
+
     /// <summary>HU #13645: el usuario destino no pertenece al tenant en el que se opera (hija, otra compañía, otra OT).</summary>
     public const string OutOfScope = "OUT_OF_SCOPE";
 
