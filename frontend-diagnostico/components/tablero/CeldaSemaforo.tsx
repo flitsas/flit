@@ -85,7 +85,7 @@ const NOTAS_ERROR: Record<string, string> = {
 };
 
 /**
- * Línea secundaria del estado (HU #14584, spec-ui §6.2): va en el tooltip del chip y, por debajo de 900 px, en línea bajo él.
+ * Línea secundaria del estado (HU #14584, spec-ui §6.2): va en el tooltip del chip y, por debajo de 1024 px, en línea bajo él.
  * Ejecutado / Con deuda: la fecha del dato (o «Consultado en este lote»); Error: la nota; Novedad: el motivo; Sin ejecutar:
  * «La consulta aún no termina».
  */
@@ -109,10 +109,10 @@ function ContenidoTooltip({ texto, nota }: { texto: string; nota: string | null 
   );
 }
 
-/** La línea secundaria en la celda solo por debajo de 900 px (tarjeta); arriba la lleva el tooltip, que ya la anuncia. */
+/** La línea secundaria en la celda solo por debajo de 1024 px (tarjeta); arriba la lleva el tooltip, que ya la anuncia. */
 function LineaMovil({ children }: { children: ReactNode }) {
   return (
-    <span aria-hidden="true" className="text-xs text-muted-foreground min-[900px]:hidden">
+    <span aria-hidden="true" className="text-xs text-muted-foreground lg:hidden">
       {children}
     </span>
   );
@@ -188,10 +188,10 @@ export interface CeldaSemaforoProps extends Pick<BotonReprocesarProps, "onReproc
   accion?: ReactNode;
 }
 
-/** Celda de la grilla; por debajo de 900 px, renglón de la tarjeta del vehículo con el nombre de la fuente (HU #14562 AC56). */
+/** Celda de la grilla; por debajo de 1024 px, renglón de la tarjeta del vehículo con el nombre de la fuente (HU #14562 AC56). */
 const TD_CLS = `px-3 py-2.5 align-top ${TABLA_MOVIL_CELL_CLS}`;
 /** Contenido de la celda: arriba a la izquierda en la tabla, a la derecha en la tarjeta. */
-const CONTENIDO_CLS = "flex flex-col items-start gap-1 max-[900px]:items-end";
+const CONTENIDO_CLS = "flex flex-col items-start gap-1 max-lg:items-end";
 
 /** Aviso para lectores de pantalla del enlace al detalle (HU #14087): va en el nombre accesible y como texto sr-only. */
 const NUEVA_PESTANA = "(se abre en una pestaña nueva)";

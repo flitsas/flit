@@ -4,7 +4,7 @@ import { useState } from "react";
 import { InlineAlert } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
-import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, FECHA_CLS } from "@/components/ui/estilos";
 import { diaColombia } from "@/lib/format/date";
 import { errorRango, inicioDeMes } from "@/lib/reportes";
 
@@ -33,11 +33,11 @@ export function FiltrosPeriodo({ valor, onAplicar, extra }: { valor: Periodo; on
       <div className="flex flex-wrap items-end gap-3">
         <label className={ETIQUETA_CLS}>
           Desde
-          <input type="date" className={`${INPUT_CLS} w-full sm:w-40`} value={borrador.desde} onChange={(e) => setBorrador({ ...borrador, desde: e.target.value })} />
+          <input type="date" className={`${FECHA_CLS} w-full sm:w-40`} value={borrador.desde} onChange={(e) => setBorrador({ ...borrador, desde: e.target.value })} />
         </label>
         <label className={ETIQUETA_CLS}>
           Hasta
-          <input type="date" className={`${INPUT_CLS} w-full sm:w-40`} value={borrador.hasta} onChange={(e) => setBorrador({ ...borrador, hasta: e.target.value })} />
+          <input type="date" className={`${FECHA_CLS} w-full sm:w-40`} value={borrador.hasta} onChange={(e) => setBorrador({ ...borrador, hasta: e.target.value })} />
         </label>
         {sesion?.usuario.esSuperAdmin && (
           <div className="flex flex-col gap-1">

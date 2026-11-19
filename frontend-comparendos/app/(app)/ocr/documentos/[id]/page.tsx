@@ -12,7 +12,7 @@ import { EstadoDocumento, useSondeo } from "@/components/ocr/comunes";
 import { OfertaPlacas } from "@/components/ocr/OfertaPlacas";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
-import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, ETIQUETA_CLS, FECHA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
 import { API_PREFIX, apiDownload, apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
@@ -176,7 +176,7 @@ function CampoEntrada({
   return (
     <div className="flex flex-col gap-1">
       <input
-        className={INPUT_CLS}
+        className={tipo === "fecha" || tipo === "hora" ? FECHA_CLS : INPUT_CLS}
         type={tipo === "fecha" ? "date" : tipo === "hora" ? "time" : "text"}
         value={valor}
         disabled={deshabilitado}

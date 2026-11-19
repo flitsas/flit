@@ -30,7 +30,7 @@ export function SearchInput({
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={label}
-        className="min-w-0 flex-1 bg-transparent py-1 text-xs outline-none"
+        className="min-w-0 flex-1 bg-transparent py-1 text-base outline-none sm:text-xs"
       />
     </div>
   );

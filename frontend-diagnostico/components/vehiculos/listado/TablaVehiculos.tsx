@@ -24,7 +24,7 @@ import { seleccionDe, type SeleccionFila } from "./seleccion";
 
 // PS-3 (CR-5): la tabla de placas. Por fila: placa, diagnóstico, fecha, modo, estado, dictamen, saneamiento y trámite, y
 // la celda de acciones que pinta la pantalla (`accionesFila`). La fila no es clicable entera: tiene varias acciones. Por
-// debajo de 900 px cada fila es una tarjeta (TABLA_MOVIL_*).
+// debajo de 1024 px cada fila es una tarjeta (TABLA_MOVIL_*).
 
 const COLUMNAS = ["Placa", "Diagnóstico", "Fecha", "Modo", "Estado", "Dictamen", "Saneamiento", "Trámite", "Acciones"] as const;
 const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
@@ -125,7 +125,7 @@ function FilaVehiculo({ f, seleccionFila, marcada, hayCasillas, onCambiarSelecci
 export function TablaVehiculos({ vehiculos, selecciones, seleccion, focoPendienteRef, ...fila }: TablaVehiculosProps) {
   const columnas = fila.hayCasillas ? (["Selección", ...COLUMNAS] as const) : COLUMNAS;
   return (
-    <div className={`${CONTENEDOR_TABLA_CLS} max-[900px]:overflow-visible max-[900px]:border-0`}>
+    <div className={`${CONTENEDOR_TABLA_CLS} max-lg:overflow-visible max-lg:border-0`}>
       <table
         ref={(el) => {
           if (el && focoPendienteRef.current) {

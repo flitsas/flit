@@ -5,7 +5,7 @@ import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
-import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, FECHA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
 import { SelectorArchivo } from "@/components/ui/SelectorArchivo";
 import { apiFetch } from "@/lib/api";
 import { diaColombia, formatoFecha, formatoPesos } from "@/lib/format/date";
@@ -86,7 +86,7 @@ function ModalPago({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => vo
         </label>
         <label className={ETIQUETA_CLS}>
           Fecha de pago
-          <input className={INPUT_CLS} type="date" max={hoy} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
+          <input className={FECHA_CLS} type="date" max={hoy} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
         </label>
         <div className={`${ETIQUETA_CLS} md:col-span-3`}>
           Comprobante (opcional: PDF, JPG o PNG)

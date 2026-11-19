@@ -153,7 +153,7 @@ export function ModalMotivo({ titulo, texto, verbo, ocupado, error, errorCampo, 
             readOnly={ocupado}
             aria-invalid={mensaje ? "true" : undefined}
             aria-describedby={`${id}-ayuda${mensaje ? ` ${id}-error` : ""}`}
-            className={`${CAMPO_CLS} h-auto min-h-20 py-2 text-sm`}
+            className={`${CAMPO_CLS} h-auto min-h-20 py-2 sm:text-sm`}
           />
           <p id={`${id}-ayuda`} className={`${AYUDA_CLS} flex justify-between gap-2`}>
             <span>Entre 10 y 500 caracteres. La compañía lo verá.</span>

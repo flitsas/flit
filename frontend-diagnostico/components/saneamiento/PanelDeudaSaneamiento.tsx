@@ -128,7 +128,7 @@ const es403 = (error: unknown): error is ApiError => error instanceof ApiError &
 function EnlaceEvidencia({ href, concepto }: { href: string; concepto: string }) {
   const { descargando, error, alHacerClic } = useDescarga("evidencia.pdf");
   return (
-    <span className="inline-flex flex-col items-end gap-1 min-[901px]:items-start">
+    <span className="inline-flex flex-col items-end gap-1 lg:items-start">
       <a href={href} download onClick={alHacerClic} aria-label={`Descargar evidencia de ${concepto}`} aria-busy={descargando || undefined} className={ENLACE_ACCION_CLS}>
         {descargando ? "Descargando…" : "Descargar evidencia"}
       </a>

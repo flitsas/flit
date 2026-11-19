@@ -5,7 +5,7 @@ import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
-import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, FECHA_CLS, TEXTAREA_CLS, controlCls } from "@/components/ui/estilos";
 import { SelectorArchivo } from "@/components/ui/SelectorArchivo";
 import { apiAbrirPdf, apiFetch } from "@/lib/api";
 import { armarRespuestaCambio, erroresRespuestaCambio, solicitudPendiente, type FormRespuestaCambio, type Viabilidad } from "@/lib/cambio";
@@ -79,7 +79,7 @@ function ResponderCambio({ ctx, solicitud, onCerrar }: { ctx: ContextoDetalle; s
         </fieldset>
         <label className={ETIQUETA_CLS}>
           Fecha de la respuesta
-          <input className={INPUT_CLS} type="date" min={diaSolicitud} max={hoy} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
+          <input className={FECHA_CLS} type="date" min={diaSolicitud} max={hoy} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
         </label>
         {f.resultado === "Rechazado" && (
           <label className={`${ETIQUETA_CLS} md:col-span-2`}>
