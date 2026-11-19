@@ -300,9 +300,9 @@ public sealed class ProveedorRedactorAnthropic(HttpClient http, IOptions<Opcione
                     return Fallo(o.Modelo, TipoFalloRedactor.Ilegible, "El modelo rechazó la redacción.");
             }
 
-            var salida = string.Concat(doc.RootElement.GetProperty("content").EnumerateArray()
-                .Where(b => b.TryGetProperty("type", out var tipo) && tipo.GetString() == "text")
-                .Select(b => b.GetProperty("text").GetString()));
+            // SP-6 (HU-2): sin content, content que no es arreglo o un bloque de texto sin text queda ilegible (no se reintenta).
+            // Antes lanzaba: la vuelta fallaba con la fila tomada y, al vencer el lease, se volvía a llamar al proveedor sin tope.
+            var salida = TextoDe(doc.RootElement);
             return string.IsNullOrWhiteSpace(salida)
                 ? Fallo(o.Modelo, TipoFalloRedactor.Ilegible, "La respuesta del modelo no trae texto.")
                 : new SalidaModelo(salida, o.Modelo);
@@ -319,6 +319,26 @@ public sealed class ProveedorRedactorAnthropic(HttpClient http, IOptions<Opcione
         {
             return Fallo(o.Modelo, TipoFalloRedactor.Http5xx, "Respuesta del proveedor no interpretable.");
         }
+    }
+
+    /// <summary>Los bloques <c>text</c> concatenados; null si <c>content</c> falta, no es arreglo o un bloque de texto no trae texto.</summary>
+    private static string? TextoDe(JsonElement raiz)
+    {
+        if (raiz.ValueKind != JsonValueKind.Object
+            || !raiz.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
+            return null;
+        var partes = new List<string>();
+        foreach (var bloque in content.EnumerateArray())
+        {
+            if (bloque.ValueKind != JsonValueKind.Object
+                || !bloque.TryGetProperty("type", out var tipo) || tipo.ValueKind != JsonValueKind.String || tipo.GetString() != "text")
+                continue;
+            if (!bloque.TryGetProperty("text", out var texto) || texto.ValueKind != JsonValueKind.String)
+                return null;
+            partes.Add(texto.GetString()!);
+        }
+
+        return string.Concat(partes);
     }
 
     private static SalidaModelo Fallo(string modelo, TipoFalloRedactor tipo, string mensaje, TimeSpan? reintentarEn = null) =>

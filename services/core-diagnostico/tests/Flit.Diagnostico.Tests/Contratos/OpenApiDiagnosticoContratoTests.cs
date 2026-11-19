@@ -27,7 +27,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     {
         var info = Bloque("info:", sangria: 0);
 
-        info.Should().Contain("version: \"1.6.0\"", "HU #14582 sube a 1.6.0 (propietario actual declarado)");
+        info.Should().Contain("version: \"1.6.1\"", "HU #14582 sube a 1.6.0 (propietario actual declarado)");
         info.Should().Contain("Versión 1.3.1").And.Contain("backoffice_diagnostico").And.Contain("SuperAdmin");
         info.Should().Contain("1.3.0").And.Contain("/backoffice/diagnosticos/{id}/vehiculos/{vid}/dictamen").And.Contain("motivo");
         Bloque("CuerpoOverrideDictamen:", sangria: 4).Should().Contain("required: [veredicto, motivo, version_esperada]", "B-PR6 retiró el cuerpo legado");
@@ -184,7 +184,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void BE0_version_1_5_0_con_rutas_esquemas_y_codigos_de_estadisticas_y_reportes()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.0\"").And.Contain("Versión 1.5.0").And.Contain("aditivo");
+        info.Should().Contain("version: \"1.6.1\"").And.Contain("Versión 1.5.0").And.Contain("aditivo");
         var paths = Bloque("paths:", sangria: 0).Split('\n');
         foreach (var ruta in RutasEstadisticasYReportes)
             paths.Should().Contain("  /api/v1/diagnostico" + ruta, $"el contrato declara {ruta}");
@@ -273,7 +273,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void HU14582_version_1_6_0_propietario_declarado_y_cambio_propietario()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.0\"").And.Contain("Versión 1.6.0").And.Contain("propietario actual");
+        info.Should().Contain("version: \"1.6.1\"").And.Contain("Versión 1.6.0").And.Contain("propietario actual");
 
         var fila = Bloque("FilaVehiculo:", sangria: 4);
         fila.Should().Contain("required: [id, orden, identificador, tipo_identificador, tipo_identificador_etiqueta, placa, vin, terminado, celdas, cambio_propietario]");
@@ -303,7 +303,7 @@ public sealed class OpenApiDiagnosticoContratoTests
     public void HU14587_usuarios_de_Diagnostico_en_la_version_1_6_0()
     {
         var info = Bloque("info:", sangria: 0);
-        info.Should().Contain("version: \"1.6.0\"").And.Contain("ADR-0089").And.Contain("diagnostico.usuarios.gestionar");
+        info.Should().Contain("version: \"1.6.1\"").And.Contain("ADR-0089").And.Contain("diagnostico.usuarios.gestionar");
 
         string[] rutas =
         [
@@ -356,6 +356,22 @@ public sealed class OpenApiDiagnosticoContratoTests
 
     /// <summary>Desde la línea <paramref name="cabecera"/> con esa sangría hasta la siguiente clave del mismo nivel.</summary>
     /// <param name="desde">Si viene, la cabecera es la última anterior a la primera línea que contiene este texto.</param>
+    // HU-2 (redactor IA, registro diferido) — 1.6.1: redaccion_en_cola requerido en el dictamen de la compañía y del backoffice,
+    // sin intentos, lease ni fecha de toma.
+    [Fact]
+    public void HU2_version_1_6_1_redaccion_en_cola_requerido_en_el_dictamen()
+    {
+        var info = Bloque("info:", sangria: 0);
+        info.Should().Contain("version: \"1.6.1\"").And.Contain("Versión 1.6.1").And.Contain("redaccion_en_cola");
+        foreach (var esquema in new[] { "DictamenVehiculo:", "DictamenVehiculoBackoffice:" })
+        {
+            var bloque = Bloque(esquema, sangria: 4);
+            var requeridos = bloque.Split('\n').Single(l => l.TrimStart().StartsWith("required:", StringComparison.Ordinal));
+            requeridos.Should().Contain("redaccion_en_cola", esquema);
+            bloque.Should().Contain("redaccion_en_cola:").And.NotContain("intentos:").And.NotContain("lease_hasta:").And.NotContain("disponible_desde:", esquema);
+        }
+    }
+
     private static string Bloque(string cabecera, int sangria, string? desde = null)
     {
         var prefijo = new string(' ', sangria);

@@ -320,7 +320,7 @@ internal static partial class PdfVehiculo
 
     /// <summary>
     /// Cuerpo de la sección Dictamen, después de los pares del diagnóstico: la palabra del veredicto, el aviso si el estado es
-    /// exactamente <c>PENDIENTE</c>, y los párrafos de <see cref="DictamenEnHuella.Texto"/> en orden. Si un párrafo es igual al
+    /// exactamente <c>PENDIENTE</c> (según <see cref="DictamenEnHuella.EnCola"/>), y los párrafos de <see cref="DictamenEnHuella.Texto"/> en orden. Si un párrafo es igual al
     /// anterior, no se repite. No pinta código, efecto, fuente ni placa.
     /// </summary>
     private static void CuerpoDictamen(ColumnDescriptor cuerpo, DictamenEnHuella dictamen)
@@ -329,8 +329,9 @@ internal static partial class PdfVehiculo
         // HU #14563 AC32 (D6): la marca va junto al veredicto, con la fecha del ajuste en hora Colombia.
         if (dictamen.AjustadoEn is { } ajustado)
             cuerpo.Item().Text($"{MarcaAjusteFlit} el {Fecha(ajustado)}");
-        if (dictamen.Estado == "PENDIENTE")
-            cuerpo.Item().Text(RotulosDiagnostico.AnalisisEnPreparacion);
+        // HU-3: PENDIENTE en cola → «Análisis en preparación»; PENDIENTE fuera de cola → «Sin análisis»; COMPLETADA sin aviso.
+        if (dictamen.Estado == DictamenEnHuella.Pendiente)
+            cuerpo.Item().Text(dictamen.EnCola ? RotulosDiagnostico.AnalisisEnPreparacion : RotulosDiagnostico.SinAnalisis);
 
         string? anterior = null;
         foreach (var parrafo in dictamen.Texto.Split('\n'))
