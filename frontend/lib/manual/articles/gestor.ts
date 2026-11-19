@@ -187,6 +187,13 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Una matrícula inicial puede tomar la ruta de placa: Preasignación → Asignado → Entregado. Consulta «Matrícula inicial: ruta de placa» para saber qué te corresponde en cada estado.",
           "Haz seguimiento desde el listado (búsqueda por radicado, placa o VIN) o pregúntale a DR. FLIT.",
         ],
+        callouts: [
+          {
+            variant: "info",
+            title: "Si el expediente tarda en generarse",
+            text: "Al enviar, la plataforma genera el expediente consolidado (FUR y documentos). Si tarda o falla por un problema momentáneo, el trámite se envía igual al organismo y verás «Trámite enviado al OT. El expediente consolidado se está generando y estará disponible en unos minutos.». No tienes que volver a enviarlo. Si en cambio falta un documento obligatorio, verás «No se puede radicar: Expediente incompleto» con lo que falta, y el trámite no se envía hasta que lo cargues.",
+          },
+        ],
       },
     ],
   },
@@ -290,6 +297,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "Desde el wizard, en el paso de identidad, se invita a cada parte (enlace o QR según configuración).",
+          "Hazle llegar el enlace a la persona con el código QR o con «Copiar enlace». No lo abras en tu equipo: el enlace queda asociado al primer dispositivo que lo abre y luego la persona no podría completar la captura desde el suyo.",
           "La persona completa el flujo biométrico en el dispositivo indicado.",
           "El estado vuelve al trámite: pendiente, aprobado, rechazado o vencido.",
           "Con todas las identidades aprobadas, el wizard puede quitar el bloqueo correspondiente.",
