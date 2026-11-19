@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.0.7"
+  version: "1.0.8"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -3484,6 +3484,85 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "404":
           description: No existe un tenant OT vinculado al transitOfficeId indicado.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /api/v1/admin/ot/client-companies:
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtListClientCompanies
+      summary: Compañías cliente visibles del OT (selector de alcance de usuarios)
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: transitOfficeId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+      responses:
+        "200":
+          description: Compañías cliente del OT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtClientCompaniesResponse"
+        "403":
+          description: Sin permiso.
+
+  /api/v1/admin/ot/users/{userId}/client-scope:
+    parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: transitOfficeId
+        in: query
+        required: false
+        schema: { type: string, format: uuid }
+    get:
+      tags: [Admin · OT]
+      operationId: adminOtGetUserClientScope
+      summary: Alcance de clientes de un usuario del OT
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: Alcance vigente.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/OtClientScopeResponse"
+        "403":
+          description: Sin permiso.
+    put:
+      tags: [Admin · OT]
+      operationId: adminOtSetUserClientScope
+      summary: Define el alcance de clientes de un usuario del OT
+      description: >
+        Solo Admin OT y Super Admin. Nadie edita su propio alcance (403 CLIENT_SCOPE_SELF).
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OtClientScopeRequest"
+      responses:
+        "204":
+          description: Alcance actualizado.
+        "400":
+          description: CLIENT_SCOPE_EMPTY o CLIENT_SCOPE_INVALID_CLIENT.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: >
+            CLIENT_SCOPE_SELF, CLIENT_SCOPE_EXCEEDS_ACTOR (el actor tiene alcance `especificos` y pide `todos` o
+            compañías fuera del suyo) o sin permiso.
           content:
             application/json:
               schema:
@@ -17110,7 +17189,64 @@ components:
           minItems: 1
           maxItems: 1
           items: { type: string, format: uuid }
+        clientScope:
+          $ref: "#/components/schemas/OtClientScopeRequest"
       required: [email, roleIds]
+
+    OtClientScopeRequest:
+      type: object
+      description: >
+        Compañías cliente del OT que gestiona el usuario. Ausente = todos los clientes.
+        `especificos` exige al menos un `clientTenantIds` (400 CLIENT_SCOPE_EMPTY) y todos
+        deben ser clientes del OT (400 CLIENT_SCOPE_INVALID_CLIENT). Quien invita o edita con alcance
+        `especificos` no puede dar `todos` ni compañías fuera de su alcance (403 CLIENT_SCOPE_EXCEEDS_ACTOR);
+        si invita sin `clientScope`, el invitado hereda exactamente el alcance de quien invita.
+      properties:
+        mode: { type: string, enum: [todos, especificos] }
+        clientTenantIds:
+          type: array
+          items: { type: string, format: uuid }
+      required: [mode, clientTenantIds]
+
+    OtClientScopeSummary:
+      type: object
+      properties:
+        mode: { type: string, enum: [todos, especificos] }
+        clientCount: { type: integer }
+      required: [mode, clientCount]
+
+    OtClientScopeResponse:
+      type: object
+      properties:
+        mode: { type: string, enum: [todos, especificos] }
+        clients:
+          type: array
+          items:
+            type: object
+            properties:
+              tenantId: { type: string, format: uuid }
+              name: { type: string }
+            required: [tenantId, name]
+      required: [mode, clients]
+
+    OtClientCompaniesResponse:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            type: object
+            properties:
+              tenantId: { type: string, format: uuid }
+              name: { type: string }
+              nit: { type: string, nullable: true }
+            required: [tenantId, name]
+        actorRestricted:
+          type: boolean
+          description: >
+            `true` si quien consulta tiene alcance `especificos`: `items` ya viene limitado a SU alcance (no puede
+            repartir más de lo que ve). `false` = sin restricción, `items` son todas las compañías cliente del OT.
+      required: [items, actorRestricted]
 
     InviteOtUserResponse:
       type: object
@@ -17179,6 +17315,8 @@ components:
             Fecha de eliminación (soft-delete, #10623). `null` en el listado
             normal; siempre poblado cuando se listó con `?onlyDeleted=true`
             (#10624).
+        clientScope:
+          $ref: "#/components/schemas/OtClientScopeSummary"
       required: [id, fullName, email, status, isSuspended, rowVersion]
 
     UpdateOtUserRequest:

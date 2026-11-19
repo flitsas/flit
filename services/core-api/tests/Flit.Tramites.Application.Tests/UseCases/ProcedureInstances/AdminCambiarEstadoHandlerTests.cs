@@ -101,6 +101,37 @@ public sealed class AdminCambiarEstadoHandlerTests
         await _repo.Received(1).SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>());
     }
 
+    /// <summary>
+    /// Los estados de la ruta de placa y <c>revocado</c> también se ofrecen en «Cambiar estado»: el cambio
+    /// queda en el historial (tracking) y en el evento propio <c>cambio_estado_admin</c>, igual que los demás.
+    /// </summary>
+    [Theory]
+    [InlineData(TramiteEstado.Entregado, TramiteEstado.Preasignacion)]
+    [InlineData(TramiteEstado.Entregado, TramiteEstado.Asignado)]
+    [InlineData(TramiteEstado.Asignado, TramiteEstado.Preasignacion)]
+    [InlineData(TramiteEstado.Rechazado, TramiteEstado.Revocado)]
+    public async Task AC1_EstadosRutaDePlacaYRevocado_QuedanEnHistorialYBitacora(string origen, string destino)
+    {
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var userId = Guid.NewGuid();
+        var instance = Instance(id, tenantId, origen);
+        _repo.GetByIdAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        _repo.SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>()).Returns(true);
+
+        var command = new AdminCambiarEstadoCommand(id, tenantId, destino, "corrección", userId);
+        var (result, error, _) = await Handler().HandleAsync(command, CancellationToken.None);
+
+        error.Should().BeNull();
+        result!.NewStatus.Should().Be(destino);
+        instance.Status.Should().Be(destino);
+        _recorder.Records.Should().ContainSingle(r =>
+            r.FromStatus == origen && r.ToStatus == destino && r.ChangedByUserId == userId && r.Reason == "corrección");
+        await _repo.Received(1).AddEventAsync(
+            Arg.Is<ProcedureInstanceEvent>(e => e.Tipo == AdminCambiarEstadoHandler.EventoTipo && e.CreatedBy == userId),
+            Arg.Any<CancellationToken>());
+    }
+
     [Fact]
     public async Task AC1_EstadoDestinoDesconocido_Rechaza_SinAplicarNingunCambio()
     {

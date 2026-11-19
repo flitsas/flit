@@ -38,11 +38,6 @@ function valueOf(fields: FieldValue[], key: string): string {
   return fields.find((f) => f.fieldKey === key)?.valueText?.trim() ?? '';
 }
 
-/** Hay cambio declarado si el snapshot RUNT existe y el valor efectivo difiere (trim + case-insensitive). */
-function hasChanged(runt: string, efectivo: string): boolean {
-  return Boolean(runt) && Boolean(efectivo) && runt.toUpperCase() !== efectivo.toUpperCase();
-}
-
 function display(value: string): string {
   return value ? value.toUpperCase() : '-';
 }
@@ -66,20 +61,24 @@ export function furAutoObservations(fields: FieldValue[] | null | undefined): st
 
   // ADR-0029 — transformaciones declaradas: solo se imprime el valor NUEVO, porque los campos del
   // vehículo en el FUR conservan el dato original del RUNT.
-  const cambios: [boolean, string][] = [];
-  if (hasChanged(valueOf(fields, 'vehicle_color_runt'), valueOf(fields, 'vehicle_color'))
-    || valueOf(fields, 'cambio_color').toLowerCase() === 'true') {
-    cambios.push([true, `Color nuevo(NUEVO COLOR: ${display(valueOf(fields, 'vehicle_color'))})`]);
+  // La bandera `cambio_*` por sí sola NO basta: con el valor efectivo vacío o igual al del RUNT no hay
+  // valor nuevo que declarar, y la línea saldría diciendo «NUEVA CARROCERIA: SIN CARROCERIA».
+  const hayValorNuevo = (flagKey: string, runtKey: string, efectivoKey: string): boolean => {
+    const runt = valueOf(fields, runtKey);
+    const efectivo = valueOf(fields, efectivoKey);
+    if (!efectivo) return false;
+    if (runt.toUpperCase() === efectivo.toUpperCase()) return false;
+    return Boolean(runt) || valueOf(fields, flagKey).toLowerCase() === 'true';
+  };
+  if (hayValorNuevo('cambio_color', 'vehicle_color_runt', 'vehicle_color')) {
+    segments.push(`Color nuevo(NUEVO COLOR: ${display(valueOf(fields, 'vehicle_color'))})`);
   }
-  if (hasChanged(valueOf(fields, 'vehicle_body_type_runt'), valueOf(fields, 'vehicle_body_type'))
-    || valueOf(fields, 'cambio_carroceria').toLowerCase() === 'true') {
-    cambios.push([true, `Carroceria nueva(NUEVA CARROCERIA: ${display(valueOf(fields, 'vehicle_body_type'))})`]);
+  if (hayValorNuevo('cambio_carroceria', 'vehicle_body_type_runt', 'vehicle_body_type')) {
+    segments.push(`Carroceria nueva(NUEVA CARROCERIA: ${display(valueOf(fields, 'vehicle_body_type'))})`);
   }
-  if (hasChanged(valueOf(fields, 'vehicle_fuel_runt'), valueOf(fields, 'vehicle_fuel'))
-    || valueOf(fields, 'cambio_combustible').toLowerCase() === 'true') {
-    cambios.push([true, `COMBUSTIBLE_NUEVO: ${display(valueOf(fields, 'vehicle_fuel'))}`]);
+  if (hayValorNuevo('cambio_combustible', 'vehicle_fuel_runt', 'vehicle_fuel')) {
+    segments.push(`COMBUSTIBLE_NUEVO: ${display(valueOf(fields, 'vehicle_fuel'))}`);
   }
-  for (const [, texto] of cambios) segments.push(texto);
 
   // Blindaje: el nivel (o el desmonte) no tiene casilla donde declararse —la del formulario es un
   // SÍ/NO— así que el detalle vive aquí. `blindaje_nivel` solo lo escribe la tarjeta del tipo

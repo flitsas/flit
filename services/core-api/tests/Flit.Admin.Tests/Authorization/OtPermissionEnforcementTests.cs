@@ -105,8 +105,12 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
             .Where(r => r.Endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Any(a =>
                 a.Policy == AdminAuthorization.OtModulePolicy || a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy))
             .Select(r => r.Firma).Distinct().ToList();
-        conPolicyOt.Should().HaveCount(125); // 123 + las 2 de la invitación masiva OT (HU #14425)
-        conPolicyOt.Except(OtPermissionMap.BySignature.Keys).Should().HaveCount(33);
+        // 123 + las 2 de la invitación masiva OT (HU #14425) + las 3 del alcance de clientes por usuario
+        // (client-companies y GET/PUT client-scope).
+        conPolicyOt.Should().HaveCount(128);
+        // Las 33 del Anexo A + las 3 del alcance de clientes: son solo del Admin OT y del Super Admin aunque el Gestor
+        // tenga «Usuarios» delegado, así que no llevan slug (un slug las abriría a quien lo tenga).
+        conPolicyOt.Except(OtPermissionMap.BySignature.Keys).Should().HaveCount(36);
     }
 
     // ── AC5: flag apagado (default) → solo política de rol, como hoy ────────────────────────────
