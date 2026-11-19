@@ -165,7 +165,7 @@ export function SuiteShell({
   if (app) {
     return (
       <ShellNavProvider value={shellNav}>
-      <div className="flex h-screen w-full flex-col overflow-hidden bg-[var(--di-surface)] text-[var(--color-flit-primary)] dark:text-white">
+      <div className="flex h-dvh w-full flex-col overflow-hidden bg-[var(--di-surface)] text-[var(--color-flit-primary)] dark:text-white">
         {header}
         <main className="relative min-h-0 flex-1 overflow-hidden">
           {/* UI Kit 2026: fondo plano --di-surface, sin los círculos decorativos del diseño anterior. Sin `isolate` ni
@@ -191,7 +191,7 @@ export function SuiteShell({
 
   return (
     <ShellNavProvider value={shellNav}>
-    <div className="min-h-screen bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:text-white">
+    <div className="min-h-dvh bg-[var(--color-flit-bg)] text-[var(--color-flit-primary)] dark:text-white">
       {header}
       {/* Colchón para que el dock fijo no tape el final del contenido (guía §4.3). */}
       <main className="mx-auto max-w-screen-2xl px-4 pb-28 pt-6">{children}</main>

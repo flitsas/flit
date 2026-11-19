@@ -38,9 +38,9 @@ import {
  * En modo controlado, «Descartar» y «Guardar» solo aparecen si la fila tiene una edición propia (estado interno editado,
  * o guardando desde «Guardar»): un «guardando» que impone el padre, como «Revalidando», no ofrece esas acciones.
  *
- * HU #14562 · M6 (AC56): por debajo de 900 px la tabla pasa a tarjetas con las recetas `TABLA_MOVIL_*` del kit: la
+ * HU #14562 · M6 (AC56): por debajo de 1024 px la tabla pasa a tarjetas con las recetas `TABLA_MOVIL_*` del kit: la
  * cabecera queda para lectores de pantalla (`sr-only`), cada fila es una tarjeta y cada celda muestra su columna con
- * `data-label`. Solo se suman clases `max-[900px]:`; en escritorio el marcado y la API son los de antes.
+ * `data-label`. Solo se suman clases `max-lg:`; en escritorio el marcado y la API son los de antes.
  *
  * HU #14562 · N3 y observación 4 del code review: `nombreFila` da el nombre accesible de la fila, de sus campos y
  * botones, y el de sus anuncios («Fila 3: Corregida»). Sin la prop se usa `clave`, como antes; la clave sigue siendo solo
@@ -97,7 +97,7 @@ export interface ColumnaEditable<F> {
   guardarAlCambiarMs?: number;
 }
 
-/** "pantalla" (por defecto): tarjetas por debajo de 900 px de viewport. "contenedor": por el ancho del envoltorio (H-10). */
+/** "pantalla" (por defecto): tarjetas por debajo de 1024 px de viewport. "contenedor": por el ancho del envoltorio (H-10). */
 export type ApiladoTabla = "pantalla" | "contenedor";
 
 /** Recetas de tarjeta de cada modo de apilado. */
@@ -440,7 +440,7 @@ function FilaEditable<F>({
               readOnly={guardando}
               aria-readonly={guardando ? "true" : undefined}
               onChange={(e) => cambiar(c, e.target.value as F[keyof F & string])}
-              className="min-h-9 w-full rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface)] px-2 text-sm text-[color:var(--di-text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)]"
+              className="min-h-9 w-full rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface)] px-2 text-base text-[color:var(--di-text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)] sm:text-sm"
             />
           );
         } else {

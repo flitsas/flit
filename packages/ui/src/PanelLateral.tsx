@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { cn } from "./cn";
 import { Icono } from "./Icono";
 import { MODAL_TITULO_CLS, MODAL_VELO_CLS } from "./Modal";
+import { useBloqueoScroll } from "./useBloqueoScroll";
 import { ProfundidadCapa, useTrampaFoco } from "./useTrampaFoco";
 
 /**
@@ -62,6 +63,9 @@ export function PanelLateral({
     },
   });
 
+  // iOS (Safari y Chrome): sin esto la página de atrás se mueve al arrastrar dentro del panel.
+  useBloqueoScroll(abierto);
+
   if (!abierto || typeof document === "undefined") return null;
 
   const pedirCierre = () => {
@@ -109,8 +113,17 @@ export function PanelLateral({
             {etiquetaCerrar}
           </button>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto px-6 py-4">{children}</div>
-        {pie ? <div className="shrink-0 border-t border-[color:var(--di-divider)] px-6 py-4">{pie}</div> : null}
+        <div
+          className={cn(
+            "min-h-0 flex-1 overflow-y-auto overscroll-contain px-6 py-4",
+            !pie && "pb-[calc(1rem+env(safe-area-inset-bottom))]",
+          )}
+        >
+          {children}
+        </div>
+        {pie ? (
+          <div className="shrink-0 border-t border-[color:var(--di-divider)] px-6 py-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">{pie}</div>
+        ) : null}
       </div>
     </div>
     </ProfundidadCapa.Provider>,
