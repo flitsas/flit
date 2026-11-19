@@ -88,14 +88,27 @@ const operacion = (conValores: boolean) => {
   };
 };
 
+const impacto = {
+  anio: 2026,
+  desde: "2026-01-01",
+  hasta: "2026-11-19",
+  ahorroLogrado: 26_300_000,
+  dp: { enviados: 971, favorables: 45, tasa: 0.046 },
+  comparendosGestionados: 1200,
+  avisosEnviados: 340,
+  cambiosContraventor: { solicitados: 12, aceptados: 9 },
+  topEmpresas: [
+    { empresaId: "e1", nombre: "Bancolombia", ahorro: 26_000_000, dpFavorables: 44 },
+    { empresaId: "e2", nombre: "Renting", ahorro: 300_000, dpFavorables: 1 },
+  ],
+};
+
 const resumen = {
   hoy: "2026-11-19",
   empresas: { total: 4, activas: 3, pendientes: 1, inactivas: 0 },
   ingesta24h: { consultas: 120, conError: 0, empresasConError: 0 },
   correosFallidos7d: 2,
   correosDesde: "2026-11-12",
-  ocrPorRevisar: 5,
-  dpDelMes: { enviados: 9, favorables: 2 },
   necesitanAlgo: [{ empresaId: "e2", nombre: "Renting", motivos: ["Sin representante legal", "Sin correo para respuestas"] }],
 };
 
@@ -105,7 +118,7 @@ describe("Inicio de Comparendos", () => {
     apiFetch.mockImplementation(async (ruta: string, op?: { query?: Record<string, unknown> }) => {
       if (ruta === "/reportes/dinero") return dinero;
       if (ruta === "/comparendos/operacion") return operacion(!!(sesion as { empresa?: { capacidades?: { reportes?: boolean } } })?.empresa?.capacidades?.reportes);
-      if (ruta === "/admin/resumen") return resumen;
+      if (ruta === "/admin/resumen") return op?.query?.partes === "impacto" ? impacto : resumen;
       if (ruta === "/admin/empresas") return [];
       if (ruta === "/comparendos/contadores") return op?.query?.sinGestion ? { ...contadores, total: 12 } : op?.query?.juridico ? { ...contadores, total: 2 } : contadores;
       throw new Error(`ruta sin simular: ${ruta}`);
@@ -219,7 +232,23 @@ describe("Inicio de Comparendos", () => {
     expect(within(salud).getByText("3 de 4")).toBeTruthy();
     const necesitan = screen.getByTestId("necesitan-algo");
     expect(within(necesitan).getByRole("link", { name: /^Renting: Sin representante legal, Sin correo para respuestas\. Ir al Parametrizador$/ }).getAttribute("href")).toBe("/admin/empresas");
-    // Con «Todas» no se pide la operación de ninguna empresa (eso es al elegir una).
-    expect(apiFetch.mock.calls.map(([ruta]) => ruta).sort()).toEqual(["/admin/empresas", "/admin/resumen"]);
+    // R4: sin OCR por revisar ni DP del mes en la salud (3 tarjetas), y el impacto del año entre la salud y las empresas.
+    expect(within(salud).queryByText("OCR por revisar")).toBeNull();
+    expect(within(salud).queryByText("Derechos de petición del mes")).toBeNull();
+    const impactoPanel = await screen.findByTestId("impacto");
+    expect(within(impactoPanel).getByText("Impacto de FLIT en 2026")).toBeTruthy();
+    expect(within(impactoPanel).getByText("$ 26,3 M")).toBeTruthy();
+    expect(within(impactoPanel).getByText(/^45 favorables \(4,6 % de los respondidos\)$/)).toBeTruthy();
+    expect(within(impactoPanel).getByText("Aceptados de 12 solicitados")).toBeTruthy();
+    expect(within(impactoPanel).getByText("Bancolombia")).toBeTruthy();
+    const despues = (a: Element, b: Element) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(despues(salud, impactoPanel)).toBeTruthy();
+    expect(despues(impactoPanel, necesitan)).toBeTruthy();
+    // Con «Todas» no se pide la operación de ninguna empresa (eso es al elegir una); el impacto va en su propia llamada.
+    expect(apiFetch.mock.calls.map(([ruta, op]) => `${ruta}${op?.query?.partes ? `?partes=${op.query.partes}` : ""}`).sort()).toEqual([
+      "/admin/empresas",
+      "/admin/resumen",
+      "/admin/resumen?partes=impacto",
+    ]);
   });
 });
