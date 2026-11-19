@@ -36,6 +36,7 @@ internal static class OcrEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             IFormFile? file,
             AnalyzeDocumentHandler handler,
+            IIaConsumoAmbito consumo,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -48,6 +49,8 @@ internal static class OcrEndpoints
             using var ms = new MemoryStream();
             await file.CopyToAsync(ms, ct);
 
+            // ADR-0090: las llamadas a la IA de este análisis quedan en el registro como tramites/ocr_documento.
+            using var ambito = consumo.Abrir(IaProcesosTramites.OcrDocumento);
             var (result, failure) = await handler.HandleAsync(tipo, ms.ToArray(), ct);
             return failure is not null
                 ? Results.Problem(statusCode: failure.Status, title: "OCR", detail: failure.Message)
@@ -66,6 +69,7 @@ internal static class OcrEndpoints
             [FromForm] string? tipos,
             IFormFileCollection files,
             AnalyzeBatchHandler handler,
+            IIaConsumoAmbito consumo,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -91,6 +95,9 @@ internal static class OcrEndpoints
                 entradas.Add(new BatchInputFile(file.FileName, ms.ToArray()));
             }
 
+            // ADR-0090: el OCR de cada pieza queda como tramites/ocr_lote; la clasificación y el enderezado
+            // abren su propio proceso dentro de este ámbito (mismo correlacion_id para toda la carga).
+            using var ambito = consumo.Abrir(IaProcesosTramites.OcrLote);
             var (result, failure) = await handler.HandleAsync(esperados, entradas, ct);
             return failure is not null
                 ? Results.Problem(statusCode: failure.Status, title: "OCR", detail: failure.Message)
