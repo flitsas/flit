@@ -27,7 +27,7 @@ export interface DateRangePickerProps {
 }
 
 const FIELD_CLS =
-  "inline-flex h-10 w-full min-w-0 items-center gap-2 rounded-[10px] border border-border bg-card px-3 text-base sm:text-xs font-medium text-flit-primary outline-none transition hover:bg-secondary focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-border dark:bg-card dark:text-foreground dark:hover:bg-white/5";
+  "inline-flex h-10 w-full min-w-0 items-center gap-2 rounded-[10px] border border-border bg-card px-3 text-xs font-medium text-flit-primary outline-none transition hover:bg-secondary focus-visible:border-flit-brand focus-visible:ring-2 focus-visible:ring-flit-brand/30 disabled:cursor-not-allowed disabled:opacity-60 dark:border-border dark:bg-card dark:text-foreground dark:hover:bg-white/5";
 
 const POPOVER_CLS =
   "absolute left-0 top-full z-40 mt-2 rounded-xl border border-border bg-card p-3 shadow-[var(--kit-sombra)] dark:border-border dark:bg-card dark:text-foreground";

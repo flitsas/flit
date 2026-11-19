@@ -77,9 +77,9 @@
 .di-carga:hover { background: var(--di-accent-soft); }
 .di-carga--lista { border-style: solid; border-color: var(--di-success-line); background: var(--di-success-soft); color: var(--di-success); }
 
-/* ── Listado como tarjetas en celular (excepción de UX aprobada). Cada <td> trae su `data-label`;
+/* ── Listado como tarjetas por debajo de 1024 (celular y iPad vertical; decisión de Samuel 2026-11-19, igual que el kit). Cada <td> trae su `data-label`;
    la cabecera se oculta a la vista pero sigue en el DOM. El orden de las celdas no cambia. ── */
-@media (max-width: 639.98px) {
+@media (max-width: 1023.98px) {
   .di-tabla-tarjetas { min-width: 0 !important; table-layout: auto !important; border-spacing: 0 12px !important; }
   .di-tabla-tarjetas colgroup { display: none; }
   .di-tabla-tarjetas thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
@@ -118,6 +118,6 @@
 .di-carga { border-radius: 9px; border: 1.5px dashed var(--kit-azul-texto); }
 .di-carga:hover { background: var(--kit-hover); }
 .di-carga--lista { border: 1.5px solid var(--kit-verde); background: #8cc63f1a; color: var(--di-success); }
-@media (max-width: 639.98px) {
+@media (max-width: 1023.98px) {
   .di-tabla-tarjetas tbody > tr { border-radius: 9px; box-shadow: none; padding: 4px 14px 8px; }
 }
