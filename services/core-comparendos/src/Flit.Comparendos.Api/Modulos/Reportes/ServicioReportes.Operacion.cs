@@ -53,6 +53,13 @@ public sealed partial class ServicioReportes
     public const string CodigoSoat = "D02";
     public const string CodigoTecnicoMecanica = "C35";
 
+    /// <summary>
+    /// Los 8 organismos con más DP enviados; en empate, por nombre (REX R3: un orden estable que además se entiende,
+    /// no el del identificador).
+    /// </summary>
+    public static List<DpOrganismo> OrdenarDpPorOrganismo(IEnumerable<DpOrganismo> filas) =>
+        filas.OrderByDescending(x => x.Enviados).ThenBy(x => x.Nombre, StringComparer.Ordinal).Take(8).ToList();
+
     public async Task<Operacion> OperacionAsync(Guid tenant, bool conValores, ConsultaBandeja bandeja, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(bandeja);
@@ -165,9 +172,12 @@ public sealed partial class ServicioReportes
                 Dias = respondidos.Count == 0 ? (decimal?)null
                     : Math.Round((decimal)respondidos.Average(d => d.RespuestaFecha!.Value.DayNumber - d.FechaRadicacion!.Value.DayNumber), 1),
             };
-        }).OrderByDescending(x => x.Enviados).ThenBy(x => x.Organismo).Take(8).ToList();
+        }).ToList();
         var ids = porOrganismo.Where(o => o.Organismo != null).Select(o => o.Organismo!.Value).ToList();
         var nombres = await db.OrganismosTransito.AsNoTracking().Where(o => ids.Contains(o.Id)).ToDictionaryAsync(o => o.Id, o => o.Nombre, ct).ConfigureAwait(false);
+        var dpPorOrganismo = OrdenarDpPorOrganismo(porOrganismo.Select(o => new DpOrganismo(o.Organismo,
+            o.Organismo is { } id && nombres.TryGetValue(id, out var n) ? n : "Sin organismo identificado",
+            o.Enviados, o.Favorables, o.Respondidos, o.Dias)));
 
         return new Operacion(
             hoy,
@@ -179,8 +189,6 @@ public sealed partial class ServicioReportes
             new EvitablesOperacion(new Cifra(t?.NSoat ?? 0, V(t?.VSoat ?? 0)), new Cifra(t?.NRtm ?? 0, V(t?.VRtm ?? 0))),
             calendario,
             antiguedad,
-            porOrganismo.Select(o => new DpOrganismo(o.Organismo,
-                o.Organismo is { } id && nombres.TryGetValue(id, out var n) ? n : "Sin organismo identificado",
-                o.Enviados, o.Favorables, o.Respondidos, o.Dias)).ToList());
+            dpPorOrganismo);
     }
 }

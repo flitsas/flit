@@ -142,14 +142,18 @@ export function OperacionInicio({ o, empresa }: { o: Operacion; empresa: string 
         <PanelInicio titulo="Antigüedad de lo pendiente" subtitulo="Hace cuánto ocurrió la infracción. Cada tramo abre la bandeja." icono="reloj" data-testid="antiguedad">
           <BarrasSimples
             color="var(--kit-gris)"
-            filas={o.antiguedad.map((t) => ({
-              clave: t.tramo,
-              etiqueta: t.tramo,
-              valor: t.cantidad,
-              cifra: `${n(t.cantidad)}${conPesos(t.valor)}`,
-              href: t.cantidad > 0 ? (hrefTramo(t, empresa) ?? undefined) : undefined,
-              ariaLabel: `${t.tramo}: ${comparendos(t.cantidad)}${t.valor === null ? "" : `, por un valor de ${formatoPesos(t.valor)}`}. Ver en la bandeja`,
-            }))}
+            filas={o.antiguedad.map((t) => {
+              // «Sin fecha de imposición» no tiene filtro en la bandeja: ni enlace ni «Ver en la bandeja».
+              const href = t.cantidad > 0 ? (hrefTramo(t, empresa) ?? undefined) : undefined;
+              return {
+                clave: t.tramo,
+                etiqueta: t.tramo,
+                valor: t.cantidad,
+                cifra: `${n(t.cantidad)}${conPesos(t.valor)}`,
+                href,
+                ariaLabel: href ? `${t.tramo}: ${comparendos(t.cantidad)}${t.valor === null ? "" : `, por un valor de ${formatoPesos(t.valor)}`}. Ver en la bandeja` : undefined,
+              };
+            })}
           />
         </PanelInicio>
       </div>

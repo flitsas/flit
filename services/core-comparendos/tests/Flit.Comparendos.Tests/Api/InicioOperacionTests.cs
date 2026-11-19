@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Comparendos.Api.Modulos.Ingesta.Fuentes;
+using Flit.Comparendos.Api.Modulos.Reportes;
 using Flit.Comparendos.Api.Plataforma;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -171,6 +172,15 @@ public sealed class InicioOperacionTests(ApiConFuente api) : IClassFixture<ApiCo
         // Empate a dos en C02, C14 y C29: se desempata por código.
         o.GetProperty("infracciones").EnumerateArray().Select(i => (i.GetProperty("codigo").GetString(), i.GetProperty("cantidad").GetInt32()))
             .Should().Equal(("C02", 2), ("C14", 2), ("C29", 2));
+    }
+
+    [Fact]
+    public void DpPorOrganismo_MasEnviadosPrimero_YEnEmpatePorNombre()
+    {
+        DpOrganismo F(string nombre, int enviados) => new(Guid.NewGuid(), nombre, enviados, 0, 0, null);
+        var filas = Enumerable.Range(1, 7).Select(i => F($"Org {i:00}", 1)).Concat([F("Zipaquirá", 5), F("Bello", 5), F("Cali", 2)]);
+        ServicioReportes.OrdenarDpPorOrganismo(filas).Select(o => o.Nombre).Should()
+            .Equal("Bello", "Zipaquirá", "Cali", "Org 01", "Org 02", "Org 03", "Org 04", "Org 05");
     }
 
     [Fact]
