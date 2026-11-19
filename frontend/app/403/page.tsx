@@ -44,7 +44,7 @@ export default async function ForbiddenPage({ searchParams }: { searchParams: Pr
   const href = denied && hubUrl ? `${hubUrl}/?inicio=1` : "/";
 
   return (
-    <main className="app-bg flex min-h-screen flex-col items-center justify-center px-4 py-10 text-center">
+    <main className="app-bg flex min-h-dvh flex-col items-center justify-center px-4 py-10 text-center">
       {/* Homologación (HU #14511): estado vacío de la propuesta (`.vacio`), tarjeta con ilustración y botón del kit. */}
       <div className="flex w-full max-w-lg flex-col items-center gap-4 rounded-2xl border border-border bg-card px-6 py-10 shadow-[var(--shadow-card)] sm:px-10">
         <IconoModulo clave="seguridad" disco size={96} />

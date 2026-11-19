@@ -36,6 +36,7 @@ import {
 } from '@/components/operacion/dialogo-propio';
 import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { IconoAviso } from "@flit/ui/IconoAviso";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 /**
 
  * Detalle multi-validación por persona (HU #11273 / CF-06 / ADR-0040).
@@ -124,6 +125,7 @@ export function PersonIdentityDetailDrawer({
   const soloConsulta = esRed || mandatario;
   const puedeConsultarProveedor = canManage && !soloConsulta;
   const reconcile = useReconcileIdentity();
+  useBloqueoScroll(true);
   /** Consulta al proveedor en vuelo: corta el doble clic del mismo tick y pausa el polling. */
   const inFlightRef = useRef(false);
   const [data, setData] = useState<PersonBiometricValidationsResponse | null>(null);
@@ -265,7 +267,7 @@ export function PersonIdentityDetailDrawer({
         onClick={onClose}
       />
       <div
-        className={`${DIALOGO_PANEL} z-10 flex max-h-[90vh] w-full max-w-5xl flex-col`}
+        className={`${DIALOGO_PANEL} z-10 flex max-h-[90dvh] w-full max-w-5xl flex-col`}
       >
         <header className={`${MODAL_CABECERA_CLS} mb-4`}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
@@ -309,7 +311,7 @@ export function PersonIdentityDetailDrawer({
           </div>
         </header>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-5">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-6 pb-5">
           {loading && !data && !error && (
             <div role="status" aria-live="polite" aria-busy="true" className="space-y-3">
               <span className="sr-only">Cargando proceso…</span>

@@ -268,7 +268,7 @@ export function HistorialPlaca({
     // respiro px-6/pt-6/pb-10 y tinta de marca. Antes era `p-4` sin `app-bg`, que dejaba el
     // módulo con menos aire y sin el fondo azul claro del prototipo.
     <div
-      className="app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10 text-foreground"
+      className="app-bg flex flex-col gap-4 px-6 pt-6 pb-10 text-foreground"
       data-testid="historial-placa-module"
     >
       {/* El título de una pantalla interna va SIEMPRE en tarjeta blanca (prototipo FLIT +

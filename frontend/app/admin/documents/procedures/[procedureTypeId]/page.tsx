@@ -27,7 +27,7 @@ function DocumentProcedureConsole() {
   const procedureType = items.find((p) => p.id === procedureTypeId);
 
   return (
-    <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
+    <main className="app-bg flex flex-col gap-4 px-6 py-6">
       <button
         type="button"
         onClick={() => router.push("/admin/documents/procedures")}

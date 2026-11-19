@@ -5,6 +5,7 @@ import { Icono } from "@flit/ui/Icono";
 import { useWizardFocusTrap } from './use-wizard-focus-trap';
 import { DIALOGO_FRANJA, DIALOGO_FRANJA_CIRCULO, DIALOGO_FRANJA_TITULO, DIALOGO_PANEL } from './dialogo-propio';
 import { MODAL_VELO_CLS } from '@flit/ui/Modal';
+import { useBloqueoScroll } from '@flit/ui/useBloqueoScroll';
 
 /**
  * Modal centrado del asistente, en la forma de la propuesta: overlay opaco de marca, tarjeta de
@@ -35,6 +36,7 @@ export function WizardModal({
   const cardRef = useRef<HTMLDivElement>(null);
 
   useWizardFocusTrap(cardRef, { active: true, onEscape: onClose });
+  useBloqueoScroll(true);
 
   return (
     <div className={`fixed inset-0 z-[1150] grid place-items-center p-6 ${MODAL_VELO_CLS}`}>
@@ -47,7 +49,7 @@ export function WizardModal({
         role="dialog"
         aria-modal="true"
         aria-label={title}
-        className={`${DIALOGO_PANEL} flex max-h-[85vh] w-full ${
+        className={`${DIALOGO_PANEL} flex max-h-[85dvh] w-full ${
           wide ? 'max-w-2xl' : 'max-w-md'
         } flex-col outline-none focus:ring-0`}
       >
@@ -64,7 +66,7 @@ export function WizardModal({
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
           <h3 className={DIALOGO_FRANJA_TITULO}>{title}</h3>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6">{children}</div>
       </div>
     </div>
   );

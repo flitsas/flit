@@ -9,6 +9,13 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
 import { UiStateBoundary } from "@/components/admin/UiStateBoundary";
@@ -163,8 +170,8 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
         {data && data.data.length > 0 && (
           <>
             <div className="overflow-x-auto px-4 pt-3">
-              <table className="w-full min-w-[820px] text-xs" style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
-                <thead>
+              <table className={`w-full min-w-[820px] text-xs ${TABLA_MOVIL_TABLE_CLS}`} style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
+                <thead className={TABLA_MOVIL_THEAD_CLS}>
                   <tr>
                     <th
                       scope="col"
@@ -192,7 +199,7 @@ export function LogCompleto({ submissionId }: { submissionId: string }) {
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={TABLA_MOVIL_TBODY_CLS}>
                   {data.data.map((ev, i) => (
                     <FilaEvento
                       key={`${ev.occurredAt}-${i}`}
@@ -255,7 +262,7 @@ function FilaEvento({
   return (
     <>
       <tr
-        className={`cursor-pointer bg-card ${TABLA_ROW_HOVER_CLS} ${
+        className={`cursor-pointer bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS} ${
           abierto ? "bg-[var(--kit-hover)]" : ""
         }`}
         onClick={onToggle}
@@ -269,14 +276,14 @@ function FilaEvento({
           }
         }}
       >
-        <td className={`${tdCls} rounded-l-xl border-l px-3`}>
+        <td className={`${tdCls} rounded-l-xl border-l px-3 max-lg:hidden`}>
           <Icono nombre="derecha" className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierto ? "rotate-90" : ""}`} />
         </td>
-        <td className={`${tdCls} whitespace-nowrap font-mono tabular-nums`}>
+        <td data-label="Fecha y hora" className={`${tdCls} whitespace-nowrap font-mono tabular-nums ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>
           {formatFecha(evento.occurredAt)}
         </td>
-        <td className={tdCls}>{etapa(evento.stage)}</td>
-        <td className={tdCls}>
+        <td data-label="Etapa" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>{etapa(evento.stage)}</td>
+        <td data-label="Resultado" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>
           <span
             className={`text-[10px] font-bold uppercase ${
               esError
@@ -290,15 +297,15 @@ function FilaEvento({
           </span>
         </td>
         {/* Código de negocio de Quipux con su significado. NUNCA rotulado como HTTP. */}
-        <td className={`${tdCls} whitespace-nowrap`}>{codigoQx(evento.responseCode)}</td>
-        <td className={`${tdCls} font-mono tabular-nums`}>
+        <td data-label="Código" className={`${tdCls} whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}>{codigoQx(evento.responseCode)}</td>
+        <td data-label="Duración" className={`${tdCls} font-mono tabular-nums ${TABLA_MOVIL_CELL_CLS}`}>
           {formatDuracion(evento.durationMs) ?? "—"}
         </td>
-        <td className={`${tdCls} rounded-r-xl border-r`}>{origen(evento.origin)}</td>
+        <td data-label="Origen" className={`${tdCls} rounded-r-xl border-r ${TABLA_MOVIL_CELL_CLS}`}>{origen(evento.origin)}</td>
       </tr>
       {abierto && (
-        <tr>
-          <td colSpan={7} className="rounded-xl border bg-secondary p-0">
+        <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
+          <td colSpan={7} className={`rounded-xl border bg-secondary p-0 ${TABLA_MOVIL_FILA_ANCHA_CLS}`}>
             <Payloads evento={evento} indice={indice} />
           </td>
         </tr>

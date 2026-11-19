@@ -15,12 +15,14 @@ import { SESSION_EXPIRED_EVENT } from "@/lib/auth/session";
 import { isOidcSession } from "@/lib/auth/session-mode";
 import { buttonClass } from "@flit/ui/Button";
 import { MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
 export function SessionExpiredListener() {
   const [open, setOpen] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
+  useBloqueoScroll(open || reconnecting);
 
   useEffect(() => {
     const handler = () => {
