@@ -3001,9 +3001,15 @@ export interface VencerIdentidadResult {
   motivoSinEnlace: string | null;
 }
 
-/** HU #13822 — persona sin firmar que admite reenvío (espejo del contrato HU #13821). */
+/**
+ * HU #13822 — persona sin firmar que admite reenvío (espejo del contrato HU #13821).
+ *
+ * HU #14627 — `validationId` pasa a ser `string | null`: `null` = la persona NUNCA tuvo una
+ * validación de identidad (no hay fila que reenviar, status `'no_iniciada'`), caso que antes el
+ * backend no contemplaba en este listado — solo exponía personas con fila ya existente.
+ */
 export interface AdminValidacionReenviable {
-  validationId: string;
+  validationId: string | null;
   partyRole: string | null;
   ordinal: number | null;
   name: string;
@@ -3018,13 +3024,34 @@ export interface AdminValidacionesReenviablesResult {
   personas: AdminValidacionReenviable[];
 }
 
+/**
+ * HU #14627 — `validationId` nullable (fila sin iniciar) y `partyRole`/`ordinal` NUEVOS, obligatorios
+ * cuando `validationId` es `null` (el backend no tiene otra forma de saber a qué persona crear la
+ * fila); se envían siempre, también con `validationId` presente, para que el backend los pueda
+ * usar igual como echo en el resultado.
+ */
 export interface AdminReenviarLoteItemInput {
-  validationId: string;
+  validationId: string | null;
+  partyRole: string | null;
+  ordinal: number | null;
   email: string | null;
 }
 
+/**
+ * HU #14627 — `validationId` del resultado es `string | null`: id REAL (el existente, o el recién
+ * creado al enviar por primera vez) cuando el ítem tuvo éxito; `null` solo si falló ANTES de crear la
+ * fila (`ok: false`). `partyRole`/`ordinal` son el echo del item enviado — clave de emparejamiento
+ * estable entre request y resultado, tanto para filas existentes como nuevas.
+ *
+ * Nota de implementación — verificado contra el backend ya mergeado en esta rama (commit
+ * `4d4985300`, `AdminReenviarValidacionLoteItemResponse` en `AdminReenviarValidacionEndpoints.cs`):
+ * el contrato que se dio para implementar el frontend decía `validationId: string` SIN cambio de
+ * tipo en el resultado; el backend real lo deja `Guid?` (nullable). Se ajusta aquí al tipo real.
+ */
 export interface AdminReenviarLoteItemResult {
-  validationId: string;
+  validationId: string | null;
+  partyRole: string | null;
+  ordinal: number | null;
   ok: boolean;
   queued: boolean;
   captureUrl: string | null;
