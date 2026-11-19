@@ -6,6 +6,9 @@ import { INTERRUPTOR_CLS, INTERRUPTOR_PERILLA_CLS } from "@flit/ui/Interruptor";
 /**
  * Interruptor accesible (role=switch) con su etiqueta y una ayuda opcional. Todo va dentro de un <label>: un clic en el
  * texto activa el interruptor, y la ayuda queda enlazada con aria-describedby.
+ *
+ * `soloControl`: para los que GUARDAN AL INSTANTE (sin botón Guardar). El texto no se envuelve en el <label>, así que
+ * solo el interruptor cambia el valor y un clic en el título o la ayuda no dispara nada.
  */
 export function Interruptor({
   activo,
@@ -13,16 +16,19 @@ export function Interruptor({
   etiqueta,
   ayuda,
   deshabilitado,
+  soloControl = false,
 }: {
   activo: boolean;
   onCambio: (v: boolean) => void;
   etiqueta: string;
   ayuda?: string;
   deshabilitado?: boolean;
+  soloControl?: boolean;
 }) {
   const idAyuda = useId();
+  const Contenedor = soloControl ? "div" : "label";
   return (
-    <label className={`flex items-start gap-3 ${deshabilitado ? "cursor-default opacity-60" : "cursor-pointer"}`}>
+    <Contenedor className={`flex items-start gap-3 ${deshabilitado ? "cursor-default opacity-60" : soloControl ? "" : "cursor-pointer"}`}>
       <button
         type="button"
         role="switch"
@@ -43,6 +49,6 @@ export function Interruptor({
           </span>
         )}
       </span>
-    </label>
+    </Contenedor>
   );
 }

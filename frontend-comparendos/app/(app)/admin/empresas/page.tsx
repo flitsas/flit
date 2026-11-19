@@ -271,6 +271,7 @@ function NitsConsultaContrato({ empresaId, integracionApi }: { empresaId: string
             align: "right",
             render: (n) => (
               <Interruptor
+                soloControl
                 activo={n.consultaContratoApi}
                 onCambio={(v) => cambiar(n, v)}
                 etiqueta="Consultar por API"
@@ -479,6 +480,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
               align: "right",
               render: (t) => (
                 <Interruptor
+                  soloControl
                   activo={!!t.habilitada}
                   onCambio={(v) => habilitar(t, v)}
                   etiqueta={`Habilitar ${t.codigo}`}

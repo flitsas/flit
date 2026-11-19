@@ -96,7 +96,7 @@ export default function PermisosPorOrganismo() {
                 key: "consulta",
                 header: "Consultar contraventor",
                 render: (p) => (
-                  <Interruptor activo={p.permiteConsultaContraventor} deshabilitado={esSuper} etiqueta={p.permiteConsultaContraventor ? "Permitido" : "Bloqueado"}
+                  <Interruptor soloControl activo={p.permiteConsultaContraventor} deshabilitado={esSuper} etiqueta={p.permiteConsultaContraventor ? "Permitido" : "Bloqueado"}
                     onCambio={(v) => guardar(p.organismoTransitoId, p.representanteLegalId, v, p.permiteCambioContraventor)} />
                 ),
               },
@@ -107,7 +107,7 @@ export default function PermisosPorOrganismo() {
                   p.cambioBloqueadoGlobal ? (
                     <StatusBadge label="El organismo no lo admite" tone="danger" title="Bloqueo global del catálogo de organismos" />
                   ) : (
-                    <Interruptor activo={p.permiteCambioContraventor} deshabilitado={esSuper} etiqueta={p.permiteCambioContraventor ? "Permitido" : "Bloqueado"}
+                    <Interruptor soloControl activo={p.permiteCambioContraventor} deshabilitado={esSuper} etiqueta={p.permiteCambioContraventor ? "Permitido" : "Bloqueado"}
                       onCambio={(v) => guardar(p.organismoTransitoId, p.representanteLegalId, p.permiteConsultaContraventor, v)} />
                   ),
               },

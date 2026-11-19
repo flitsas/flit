@@ -128,6 +128,7 @@ function Interruptores({ datos, empresaId, onGuardado }: { datos: Datos; empresa
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
         <Celda titulo="Estado">
           <Interruptor
+            soloControl
             activo={encendido}
             onCambio={alternar}
             deshabilitado={sinModulo || ocupado}
