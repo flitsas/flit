@@ -7,7 +7,7 @@ import { ZoomOut } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
-import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
+import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { EstadoDocumento, useSondeo } from "@/components/ocr/comunes";
 import { OfertaPlacas } from "@/components/ocr/OfertaPlacas";
 import { Requiere } from "@/components/Pantalla";
@@ -557,7 +557,7 @@ function Revision({ id }: { id: string }) {
   const carga = useCarga(`ocr-documento:${id}`, (signal) => apiFetch<Documento>(`/ocr/documentos/${id}`, { signal }));
   const d = carga.datos;
   const [registro, setRegistro] = useState<Registro | null>(null);
-  const [verComparendo, setVerComparendo] = useState<string | null>(null);
+  const setVerComparendo = useAbrirDetalle();
   useSondeo(!!d && hayEnCurso([d.estado]), carga.recargar);
 
   if (carga.estado === "error" && !d) return <InlineAlert tone="error">{carga.error}</InlineAlert>;
@@ -605,7 +605,6 @@ function Revision({ id }: { id: string }) {
         />
       </div>
       <Historial d={d} />
-      <DetalleComparendo id={verComparendo} onCerrar={() => setVerComparendo(null)} />
     </section>
   );
 }

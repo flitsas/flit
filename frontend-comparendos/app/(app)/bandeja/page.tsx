@@ -1,10 +1,10 @@
 "use client";
 
-import { Suspense, useRef, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowDownWideNarrow, ArrowUpNarrowWide } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
-import { ActionsMenu, DataTable, InlineAlert, Modal, usePaginacion, type DataTableColumn } from "@flit/ui";
+import { ActionsMenu, Cargador, DataTable, EstadoVacio, InlineAlert, Modal, type DataTableColumn } from "@flit/ui";
 import { BusquedaRapida } from "@/components/bandeja/BusquedaRapida";
 import { COLUMNAS_BANDEJA } from "@/components/bandeja/columnas";
 import { EnvioMasivoAviso } from "@/components/bandeja/EnvioMasivoAviso";
@@ -13,8 +13,7 @@ import { EtiquetasFiltros } from "@/components/bandeja/EtiquetasFiltros";
 import { MenuFiltros } from "@/components/bandeja/MenuFiltros";
 import { TarjetasEstadoLegal } from "@/components/bandeja/TarjetasEstadoLegal";
 import { SelectorColumnas } from "@/components/ui/SelectorColumnas";
-import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
-import type { SeccionDetalle } from "@/components/detalle/Timeline";
+import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -25,7 +24,7 @@ import { textoCambioOrden, textoOrden } from "@/lib/orden";
 import { COLUMNA_FIJA, guardadas, guardar, ocultasDesde } from "@/lib/columnas";
 import { MAXIMO_LOTE } from "@/lib/dp";
 import { FILAS_POR_PARTE, mensajeExportacion, nombreParte, PARTES_SIN_CONFIRMAR, partesDe } from "@/lib/exportar";
-import { aQuery, etiquetasAplicadas, FILTROS_VACIOS, quitarEtiqueta, type FiltrosBandeja } from "@/lib/filtros";
+import { aQuery, etiquetasAplicadas, FILTROS_VACIOS, filtrosAParams, filtrosDeParams, quitarEtiqueta, type FiltrosBandeja } from "@/lib/filtros";
 import { P } from "@/lib/nav";
 import { capacidades, tienePermiso } from "@/lib/sesion";
 import type { Contadores, FilaBandeja, Nit, Pagina } from "@/lib/tipos";
@@ -45,44 +44,77 @@ const ORDENES = [
  */
 export default function Bandeja() {
   return (
-    <Suspense fallback={<p className="text-sm opacity-60">Cargando…</p>}>
-      <ContenidoBandeja />
+    <Suspense fallback={<Cargando texto="Cargando…" />}>
+      <BandejaConUrl />
     </Suspense>
   );
+}
+
+function Cargando({ texto }: { texto: string }) {
+  return (
+    <div className="flex flex-col items-center gap-2 py-16" role="status">
+      <Cargador />
+      <p className="text-sm text-muted-foreground">{texto}</p>
+    </div>
+  );
+}
+
+// La última query que la bandeja escribió en su propia URL. Si la URL cambia por otra vía (el dock, un enlace del
+// Inicio), la bandeja se rearma con la URL nueva; si es su propio eco, no.
+let ultimaEscrita = "";
+
+/** Rediseño S1: filtros, orden, página y empresa viven en la URL; al volver del detalle la bandeja queda igual. */
+function BandejaConUrl() {
+  const qs = useSearchParams().toString();
+  const [base, setBase] = useState({ qs, version: 0 });
+  if (qs !== base.qs && qs !== ultimaEscrita) setBase({ qs, version: base.version + 1 });
+  return <ContenidoBandeja key={base.version} />;
 }
 
 function ContenidoBandeja() {
   const { sesion, cargando: cargandoSesion, error: errorSesion } = useSesion();
   const toast = useToast();
   const esSuperAdmin = !!sesion?.usuario.esSuperAdmin;
-  // Desde el KPI «Radar de vencimientos» del dashboard llega ?rapido=Radar (y el NIT y la empresa elegidos allá).
+  // La URL trae el estado al llegar: lo que dejó la bandeja al ir al detalle, o un enlace del dashboard o del Inicio
+  // (?rapido=Radar, ?nit=…, ?empresa=…).
   const params = useSearchParams();
-  const [empresa, setEmpresa] = useState<string | null>(() => params.get("empresa"));
-  const [filtros, setFiltrosEstado] = useState<FiltrosBandeja>(() => {
-    const nit = params.get("nit");
-    return { ...FILTROS_VACIOS, rapido: params.get("rapido") === "Radar" ? "Radar" : null, nits: nit ? [nit] : [] };
-  });
+  const router = useRouter();
+  const [inicial] = useState(() => filtrosDeParams(params));
+  const [empresa, setEmpresa] = useState<string | null>(inicial.vista.empresa);
+  const [filtros, setFiltrosEstado] = useState<FiltrosBandeja>(inicial.filtros);
   // HU #13870: la caja busca en número y placa; consulta cuando se deja de escribir, sin pulsar nada.
-  const [textoBuscar, setTextoBuscar] = useState("");
+  const [textoBuscar, setTextoBuscar] = useState(inicial.filtros.buscar);
   const espera = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Nombres de los NIT y organismos elegidos, para las etiquetas de lo aplicado.
   const [nombresElegidos, setNombresElegidos] = useState<Record<string, string>>({});
-  const [orden, setOrden] = useState("");
-  const [descendente, setDescendente] = useState(false);
+  const [orden, setOrden] = useState(inicial.vista.orden);
+  const [descendente, setDescendente] = useState(inicial.vista.descendente);
   // Lo que dice el botón mientras se descargan las partes («Parte 2 de 3…»); null = no se está exportando.
   const [exportando, setExportando] = useState<string | null>(null);
   const [confirmarPartes, setConfirmarPartes] = useState<number | null>(null);
-  const [seleccionado, setSeleccionado] = useState<string | null>(null);
-  const [seccion, setSeccion] = useState<SeccionDetalle | null>(null);
-  const abrir = (id: string, s: SeccionDetalle | null = null) => {
-    setSeccion(s);
-    setSeleccionado(id);
-  };
+  const abrir = useAbrirDetalle();
   // Selección para el envío masivo de DP: se conserva al cambiar de página, se limpia al cambiar los filtros.
   const [marcados, setMarcados] = useState<Map<string, FilaBandeja>>(new Map());
   const [envioMasivo, setEnvioMasivo] = useState(false);
-  const pg = usePaginacion(50);
-  const { setPage } = pg;
+  const [page, setPage] = useState(inicial.vista.pagina);
+  const [pageSize, setPageSizeEstado] = useState(inicial.vista.tamano);
+  const pg = {
+    page,
+    pageSize,
+    setPage,
+    setPageSize: (n: number) => {
+      setPageSizeEstado(n);
+      setPage(1);
+    },
+  };
+  // Cada cambio de filtros, orden, página o empresa queda en la URL sin sumar pasos al historial.
+  const nuevaQuery = filtrosAParams(filtros, { orden, descendente, pagina: page, tamano: pageSize, empresa: esSuperAdmin ? empresa : null }).toString();
+  useEffect(() => {
+    // Mientras carga la sesión no se sabe si es SuperAdmin: no se escribe para no borrar la empresa de la URL.
+    if (cargandoSesion || nuevaQuery === new URLSearchParams(window.location.search).toString()) return;
+    ultimaEscrita = nuevaQuery;
+    router.replace(nuevaQuery ? `/bandeja?${nuevaQuery}` : "/bandeja", { scroll: false });
+  }, [cargandoSesion, nuevaQuery, router]);
   const puedeLote = !esSuperAdmin && tienePermiso(sesion, P.dpEnviarMasivo) && capacidades(sesion).derechosPeticion;
   const puedeAvisos = !esSuperAdmin && tienePermiso(sesion, P.avisosEnviar);
   const seleccionable = puedeLote || puedeAvisos;
@@ -162,7 +194,7 @@ function ContenidoBandeja() {
     else void exportar(partes);
   };
 
-  if (cargandoSesion) return <p className="text-sm opacity-60">Abriendo Comparendos…</p>;
+  if (cargandoSesion) return <Cargando texto="Abriendo Comparendos…" />;
   if (errorSesion) return <InlineAlert tone="error">{errorSesion}</InlineAlert>;
 
   const etiquetas = etiquetasAplicadas(filtros, nombres);
@@ -245,7 +277,7 @@ function ContenidoBandeja() {
       {listo && (
         <>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative w-full sm:w-64">
+            <div className="relative min-w-0 flex-[1_1_16rem] sm:max-w-md">
               <Icono nombre="buscar" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-flit-brand" />
               <input
                 type="search"
@@ -372,6 +404,14 @@ function ContenidoBandeja() {
             errorMessage={lista.error ?? undefined}
             onRetry={lista.recargar}
             emptyMessage="No hay comparendos con estos filtros."
+            emptyContent={
+              <EstadoVacio
+                nivelTitulo={3}
+                titulo="No hay comparendos con estos filtros"
+                mensaje={fueraDeFabrica ? "Quita algún filtro o límpialos todos para ver más." : undefined}
+                acciones={fueraDeFabrica ? [<button key="limpiar" type="button" className={controlCls(false)} onClick={limpiarTodo}>Limpiar todo</button>] : undefined}
+              />
+            }
             minWidth={Math.max(900, columnas.length * 110)}
             pagination={{
               page: pg.page,
@@ -384,16 +424,6 @@ function ContenidoBandeja() {
         </>
       )}
 
-      <DetalleComparendo
-        key={`${seleccionado}:${seccion ?? ""}`}
-        id={seleccionado}
-        seccionInicial={seccion}
-        onCerrar={() => setSeleccionado(null)}
-        onCambio={() => {
-          lista.recargar();
-          contadores.recargar();
-        }}
-      />
       {confirmarPartes !== null && (
         <Modal icono="nube-bajar"
           open
