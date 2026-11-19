@@ -144,7 +144,7 @@ public static class HtmlCorreo
         if (!marcaFlit)
             return TablaSencilla(filas);
         var sb = new StringBuilder("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"width:100%;margin:16px 0;border-collapse:separate;");
-        sb.Append("background:#FFFFFF;border:1px solid ").Append(Borde).Append(";border-radius:12px;box-shadow:0 2px 8px rgba(22,34,68,0.12)\"><tr><td style=\"padding:12px\">");
+        sb.Append("background:#FFFFFF;border:1px solid ").Append(Borde).Append(";border-radius:12px;box-shadow:0 2px 8px rgba(22,39,68,0.12)\"><tr><td style=\"padding:12px\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"border-collapse:collapse;width:100%;font-size:13px;line-height:1.45\">");
         var par = false;
         foreach (var (etiqueta, valor) in filas)
@@ -177,16 +177,17 @@ public static class HtmlCorreo
     /// con color sólido de respaldo para Outlook, que no pinta degradados.
     /// </summary>
     public static string Boton(string texto, string url) =>
-        "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:16px auto\"><tr><td align=\"center\" bgcolor=\"" + AzulAccion
-        + "\" style=\"border-radius:22px;background:" + AzulAccion + ";background-image:linear-gradient(90deg,#007D79," + AzulAccion + ");mso-padding-alt:11px 24px\"><a href=\""
+        "<table role=\"presentation\" cellpadding=\"0\" cellspacing=\"0\" style=\"margin:16px auto\"><tr><td align=\"center\" bgcolor=\"" + Azul
+        + "\" style=\"border-radius:22px;background:" + Azul + ";background-image:linear-gradient(90deg," + Turquesa + "," + Azul + ");mso-padding-alt:11px 24px\"><a href=\""
         + WebUtility.HtmlEncode(url) + "\" target=\"_blank\" style=\"display:inline-block;padding:11px 24px;font-family:Poppins,Arial,Helvetica,sans-serif;font-size:14px;"
         + "font-weight:600;color:#FFFFFF;text-decoration:none;border-radius:22px\">" + WebUtility.HtmlEncode(texto) + "</a></td></tr></table>";
 
     // ── Piezas del marco FLIT (Correos 2.0) ─────────────────────────────────────────────────────────────────────────────
-    private const string Azul = "#6080F0";
-    /// <summary>Fondo del botón: el azul de acción del UI Kit (contraste 5,3:1 con texto blanco, AA), igual que core-api.</summary>
-    private const string AzulAccion = "#1D53FF";
-    private const string Tinta = "#162244";
+    /// <summary>El azul de la marca según Diseño (el de sus SVG): títulos, divisor, enlaces, política y botón.</summary>
+    private const string Azul = "#557EFF";
+    /// <summary>El turquesa de la marca (SVG de Diseño): inicio del degradado del botón.</summary>
+    private const string Turquesa = "#00DBD5";
+    private const string Tinta = "#162744";
     private const string Gris = "#6B778C";
     private const string Borde = "#E5EAF2";
 
