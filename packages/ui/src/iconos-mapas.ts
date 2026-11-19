@@ -32,6 +32,7 @@ export const MAPA_ICONO: Record<string, NombreIcono | `@${string}`> = {
  "matricula": "@tramite-matricula",
  "notificaciones": "campana",
  "organismos": "banco",
+ "pago": "pago",
  "pendientes": "espera",
  "perfil": "persona",
  "preasignacion": "placa",

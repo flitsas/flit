@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { StrictMode } from "react";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { GrillaBackoffice } from "@/components/backoffice/GrillaBackoffice";
 import { GrillaSemaforos } from "@/components/tablero/GrillaSemaforos";
@@ -38,6 +39,13 @@ function montar(g: TGrilla = grillaBo(), extra: Parameters<typeof simularApi>[0]
 const tabla = () => screen.findByRole("table", { name: /semáforo de consultas/i });
 const td = (container: HTMLElement, id: string) => container.querySelector<HTMLElement>(`[data-celda="${id}"]`)!;
 const semaforo = (fuente: string, placa: string) => screen.getByRole("link", { name: new RegExp(`^Ver detalle de ${fuente} de ${placa}`) });
+/** Abre el menú «Acciones» de la fila (HU #14584 §6.4) y devuelve su disparador. */
+function abrirMenu(placa: string) {
+  const disparador = screen.getByRole("button", { name: `Acciones de la placa ${placa}` });
+  disparador.focus();
+  fireEvent.click(disparador);
+  return disparador;
+}
 const llenar = (fuente: string, placa: string) => screen.queryByRole("button", { name: `Llenar a mano ${fuente} de ${placa}` });
 
 describe("GrillaBackoffice — cuatro estados y empresa explícita", () => {
@@ -78,12 +86,14 @@ describe("GrillaBackoffice — cuatro estados y empresa explícita", () => {
 });
 
 describe("GrillaBackoffice — HU #14087 AC6: la misma tabla por pilares que la compañía", () => {
-  it("cabecera por pilar, columnas de vehículo y documentos, y las 8 fuentes en cada fila", async () => {
+  it("cabecera por pilar, Placa o VIN sin columnas de documento (HU #14585), «Acciones» al final y las 8 fuentes en cada fila", async () => {
     const { container } = montar();
     const t = await tabla();
     expect(within(t).getByRole("columnheader", { name: "RUNT" })).toHaveAttribute("colspan", "3");
     expect(within(t).getByRole("columnheader", { name: "SIMIT" })).toHaveAttribute("colspan", "3");
-    for (const nombre of ["Placa o VIN", "Documento declarado", "Documento del propietario"]) expect(within(t).getByRole("columnheader", { name: nombre })).toBeInTheDocument();
+    expect(within(t).getByRole("columnheader", { name: "Placa o VIN" })).toBeInTheDocument();
+    expect(within(t).getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
+    expect(within(t).queryByRole("columnheader", { name: /documento/i })).toBeNull();
     expect(container.querySelector('[data-vehiculo="vehiculo-1"]')!.querySelectorAll("[data-fuente]")).toHaveLength(8);
   });
 });
@@ -245,15 +255,95 @@ describe("HU14562 AC47 y D6 en la grilla del backoffice", () => {
       [`GET /backoffice/diagnosticos/${LOTE}/vehiculos/vehiculo-1/dictamen/versiones`]: () => Response.json({ versiones: [] }),
     });
     await tabla();
-    fireEvent.click(screen.getByRole("button", { name: "Auditoría del dictamen de TST001" }));
+    abrirMenu("TST001");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Auditoría del dictamen de TST001" }));
     const panel = await screen.findByRole("dialog", { name: "Auditoría del dictamen · TST001" });
     expect(await within(panel).findByText("Este vehículo aún no tiene dictamen.")).toBeInTheDocument();
+    // FE-1: modal de la suite de 640 px; sin campos, el velo cierra como el panel.
+    expect(panel.firstElementChild?.className).toContain("max-w-[640px]");
+    fireEvent.mouseDown(panel);
+    expect(screen.queryByRole("dialog", { name: "Auditoría del dictamen · TST001" })).toBeNull();
+  });
+
+  it("FE-1: Escape en «Auditoría del dictamen» devuelve el foco al disparador «Acciones» también con StrictMode (next dev)", async () => {
+    h.capacidades = { ...h.capacidades, verAuditoria: true };
+    simularApi({
+      [RUTA_GRILLA]: () => Response.json(grillaBo()),
+      [`GET /backoffice/diagnosticos/${LOTE}/vehiculos/vehiculo-1/dictamen/versiones`]: () => Response.json({ versiones: [] }),
+    });
+    render(
+      <StrictMode>
+        <GrillaBackoffice diagnosticoId={LOTE} empresa={EMPRESA_A} />
+      </StrictMode>,
+    );
+    await tabla();
+    const disparador = abrirMenu("TST001");
+    fireEvent.click(screen.getByRole("menuitem", { name: "Auditoría del dictamen de TST001" }));
+    const panel = await screen.findByRole("dialog", { name: "Auditoría del dictamen · TST001" });
+    await within(panel).findByText("Este vehículo aún no tiene dictamen.");
+    expect(panel.contains(document.activeElement)).toBe(true);
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(document.activeElement).toBe(disparador);
   });
 
   it("AC47: sin verAuditoria no se ofrece la auditoría", async () => {
     montar();
     await tabla();
+    abrirMenu("TST001");
+    expect(screen.queryByRole("menuitem", { name: /^Auditoría del dictamen/ })).toBeNull();
     expect(screen.queryByRole("button", { name: /^Auditoría del dictamen/ })).toBeNull();
+  });
+});
+
+describe("GrillaBackoffice — HU #14584 §6.4 (A6.6): Dictamen y Auditoría en el menú «Acciones»", () => {
+  it("la celda de la placa no tiene botones de Dictamen ni Auditoría; quedan solo las marcas", async () => {
+    h.capacidades = { ...h.capacidades, verAuditoria: true };
+    const { container } = montar();
+    await tabla();
+    const placa = within(container.querySelector<HTMLElement>('[data-vehiculo="vehiculo-1"]')!).getByRole("rowheader");
+    expect(within(placa).queryByRole("button")).toBeNull();
+  });
+
+  it("«Ver dictamen de PLACA» en el menú abre el panel del dictamen y la auditoría solo con verAuditoria", async () => {
+    h.capacidades = { ...h.capacidades, verAuditoria: true };
+    montar(grillaBo(), {
+      [`GET /backoffice/diagnosticos/${LOTE}/vehiculos/vehiculo-1/dictamen`]: () => Response.json({ code: "SIN_DICTAMEN", error: "Sin dictamen" }, { status: 404 }),
+    });
+    await tabla();
+    abrirMenu("TST001");
+    const items = screen.getAllByRole("menuitem").map((i) => i.getAttribute("aria-label") ?? i.textContent);
+    expect(items).toEqual(["Ver dictamen de TST001", "Auditoría del dictamen de TST001"]);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Ver dictamen de TST001" }));
+    expect(await screen.findByRole("dialog", { name: "Dictamen · TST001" })).toBeInTheDocument();
+  });
+
+  it("el ícono de cambio de propietario va junto a la placa también en el backoffice", async () => {
+    const g = grillaBo();
+    g.vehiculos[0] = { ...g.vehiculos[0], cambio_propietario: true };
+    montar(g);
+    await tabla();
+    expect(screen.getByRole("button", { name: "Cambio de propietario" })).toBeInTheDocument();
+  });
+
+  it("decisión del orquestador: la misma barra de filtros que el cliente (fuente + estado y Limpiar filtros)", async () => {
+    montar();
+    await tabla();
+    expect(screen.getByLabelText("Buscar por placa o VIN")).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Fuente" })).toBeInTheDocument();
+    expect(screen.getByRole("combobox", { name: "Estado" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Limpiar filtros" })).toBeDisabled();
+  });
+
+  it("CR-3: «Limpiar filtros» del vacío por filtro restablece la grilla y lleva el foco al buscador", async () => {
+    montar();
+    await tabla();
+    fireEvent.change(screen.getByLabelText("Buscar por placa o VIN"), { target: { value: "ZZZ999" } });
+    expect(await screen.findByText("Ningún vehículo coincide")).toBeInTheDocument();
+    fireEvent.click(screen.getAllByRole("button", { name: "Limpiar filtros" }).at(-1)!);
+    expect(screen.getByLabelText("Buscar por placa o VIN")).toHaveValue("");
+    expect(screen.getByLabelText("Buscar por placa o VIN")).toHaveFocus();
+    expect(await tabla()).toBeInTheDocument();
   });
 });
 
@@ -269,5 +359,62 @@ describe("GrillaBackoffice — HU #14562 AC56: tarjetas por debajo de 900 px", (
       expect(clases(placa)).not.toContain("sticky");
       expect(placa).toHaveAttribute("data-label", "Placa o VIN");
     }
+  });
+});
+
+describe("GrillaBackoffice — HU #14577 AC38: etiqueta del saneamiento con enlace a la gestión", () => {
+  const conSaneamiento = (estado: string) => {
+    const g = grillaBo();
+    const [v1, v2] = g.vehiculos;
+    return grillaBo({ vehiculos: [{ ...v1, saneamiento: { estado: estado as never, id: "00000000-0000-7000-8000-00000000d001" } }, { ...v2, saneamiento: null }] });
+  };
+
+  it("con gestionarSaneamiento, la fila con saneamiento muestra la etiqueta enlazada a PS-5 con ?empresa=", async () => {
+    h.capacidades = { ...h.capacidades, gestionarSaneamiento: true };
+    montar(conSaneamiento("EN_GESTION"));
+    await tabla();
+    const enlace = screen.getByRole("link", { name: "Gestionar saneamiento de TST001: En saneamiento" });
+    expect(enlace).toHaveAttribute("href", `/backoffice/saneamientos/00000000-0000-7000-8000-00000000d001?empresa=${EMPRESA_A}`);
+    expect(enlace).toHaveTextContent("En saneamiento");
+    expect(screen.queryAllByRole("link", { name: /^Gestionar saneamiento de TST002/ })).toHaveLength(0);
+  });
+
+  it("sin gestionarSaneamiento, la etiqueta sin enlace", async () => {
+    montar(conSaneamiento("SOLICITADO"));
+    await tabla();
+    expect(screen.getByText("Saneamiento solicitado")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^Gestionar saneamiento/ })).toBeNull();
+  });
+
+  it("el backoffice no ofrece la bandera para marcar", async () => {
+    h.capacidades = { ...h.capacidades, gestionarSaneamiento: true, sanear: true };
+    montar(conSaneamiento("SANEADO"));
+    await tabla();
+    expect(screen.queryByRole("button", { name: /Solicitar saneamiento|Sanear/ })).toBeNull();
+  });
+});
+
+// AP-8 (security-fase3 SF-6): ni la carga ni la relectura muestran el mensaje del servidor.
+const SECRETO_AP8 = "Npgsql detalle interno 23514 en diagnostico.consultas";
+
+describe("GrillaBackoffice — AP-8: textos fijos", () => {
+  it("400 al cargar: aviso con texto fijo, sin el mensaje de la API", async () => {
+    simularApi({ [RUTA_GRILLA]: () => Response.json({ code: "OTRO_ERROR", error: SECRETO_AP8 }, { status: 400 }) });
+    render(<GrillaBackoffice diagnosticoId={LOTE} empresa={EMPRESA_A} />);
+    const aviso = await screen.findByRole("alert");
+    expect(aviso).toHaveTextContent("Intenta de nuevo en un momento.");
+    expect(aviso).not.toHaveTextContent(SECRETO_AP8);
+  });
+
+  it("falla al volver a leer con «Actualizar»: aviso con texto fijo, sin el mensaje de la API", async () => {
+    let n = 0;
+    simularApi({
+      [RUTA_GRILLA]: () => (++n === 1 ? Response.json(grillaBo()) : Response.json({ code: "OTRO_ERROR", error: SECRETO_AP8 }, { status: 400 })),
+    });
+    render(<GrillaBackoffice diagnosticoId={LOTE} empresa={EMPRESA_A} />);
+    await tabla();
+    fireEvent.click(screen.getByRole("button", { name: "Actualizar" }));
+    expect(await screen.findByText("No se pudo volver a leer la grilla. Intenta de nuevo en un momento.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(SECRETO_AP8);
   });
 });

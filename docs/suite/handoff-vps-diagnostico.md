@@ -279,18 +279,31 @@ No se ponen en ningún ambiente hasta el checklist de abajo. Sin valor en el rep
 ```
 IMPUESTO_API_BASE_URL=
 IMPUESTO_API_PATH=
-IMPUESTO_API_TIMEOUT_SECONDS=300
+IMPUESTO_API_TIMEOUT_SECONDS=280
 IMPUESTO_CONTACTO_CELULAR=
 IMPUESTO_CONTACTO_TELEFONO=
 IMPUESTO_CONTACTO_CORREO=
-IMPUESTO_CONTACTO_DEPARTAMENTO=
-IMPUESTO_CONTACTO_CIUDAD=
-IMPUESTO_CONTACTO_DIRECCION=
+IMPUESTO_CONTACTO_DIRECCION_DEPARTAMENTO=
+IMPUESTO_CONTACTO_DIRECCION_CIUDAD=
+IMPUESTO_CONTACTO_TIPO_VIA=
+IMPUESTO_CONTACTO_NUMERO_1=
+IMPUESTO_CONTACTO_LETRA_1=
+IMPUESTO_CONTACTO_BIS_1=
+IMPUESTO_CONTACTO_SUFIJO_1=
+IMPUESTO_CONTACTO_CARDINALIDAD_1=
+IMPUESTO_CONTACTO_NUMERO_2=
+IMPUESTO_CONTACTO_LETRA_2=
+IMPUESTO_CONTACTO_BIS_2=
+IMPUESTO_CONTACTO_SUFIJO_2=
+IMPUESTO_CONTACTO_PLACA=
+IMPUESTO_CONTACTO_CARDINALIDAD_2=
+IMPUESTO_CONTACTO_DIRECCION_COMPLETA=
 DIAGNOSTICO_IMPUESTO_DISPONIBLE=false
 ```
 
-`DIAGNOSTICO_IMPUESTO_DISPONIBLE` es `Diagnostico__Fuentes__ImpuestoDisponible`. Con la lista de departamentos vacía
-la fuente no se ofrece aunque la bandera esté en true.
+`DIAGNOSTICO_IMPUESTO_DISPONIBLE` es `Diagnostico__Fuentes__ImpuestoDisponible`. Los departamentos no van en el `.env`:
+la lista efectiva es la tabla `consultas.vehicle_tax_departments` (filas activas sin `deleted_at`, ADR-0080). Sin
+ningún departamento activo la fuente no se ofrece aunque la bandera esté en true.
 
 Colas nuevas, con TTL 24 h y DLQ 7 días: `consultas.diagnostico-impuesto` (concurrencia 4) y
 `consultas.diagnostico-impuesto-express` (concurrencia 1).
@@ -306,15 +319,17 @@ Checklist, por ambiente. No se ejecuta en este corte:
 3. Seguridad valida que el servicio no autentica y decide si eso se acepta en esa red.
 4. El Líder Técnico ratifica la fachada. El ADR sigue en Propuesto hasta esa aceptación.
 5. Host de DEV/QA y dueño del servicio cerrados.
-6. Variables de arriba puestas. Con la lista vacía, comprobar que la fuente no se ofrece.
-7. Migración aplicada. Los organismos candidatos tienen municipio.
+6. Variables de arriba puestas. Sin departamentos activos en `consultas.vehicle_tax_departments`, comprobar que la
+   fuente no se ofrece.
+7. Antes de migrar, guardar el estado previo (`SELECT department_code, is_active, deleted_at FROM consultas.vehicle_tax_departments`): la migración `20261117044000` deja activos solo 05, 08 y 11 y su Down no restaura lo encendido por API. Migración aplicada. Los organismos candidatos tienen municipio.
 8. Orden de despliegue: broker (colas y permisos), core-consultas, core-diagnostico.
 9. `scripts/smoke/humo-impuesto.py` contra un vehículo de prueba autorizado, por departamento. Espera una clase, no
    un valor. Si incluye Valle y devuelve sin deuda en blanco, Valle no se enciende.
 10. Un solo cambio de la tabla de departamentos.
 11. Un diagnóstico real por departamento. Revisar celda, detalle, PDF y Excel. Los logs no llevan URL, placa,
     documento ni nombre.
-12. Para apagar: vaciar la lista. La réplica conserva las filas y deja de ofrecer la fuente.
+12. Para apagar: desactivar el departamento en `consultas.vehicle_tax_departments` (o por la API). La réplica conserva
+    las filas y deja de ofrecer la fuente.
 13. Tras el primer lote, medir respuestas vacías, `NO_CONFIRMADO`, sin deuda en blanco y duración por departamento.
 
 Archivos (evidencias y PDF del informe, HU #13846): el compose pasa las mismas `FILE_MANAGER_*` de core-api, con el mismo

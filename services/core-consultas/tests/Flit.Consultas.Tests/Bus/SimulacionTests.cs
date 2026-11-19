@@ -100,9 +100,12 @@ public sealed class SimulacionTests
         var ddl = Path.Combine(raiz, "services", "core-api", "src", "Flit.Infrastructure", "Persistence", "Sql", "Ddl");
         var catalogo = File.ReadAllText(Path.Combine(ddl, "27-HU10659-transit-offices-runt-catalog-seed.sql"));
         var municipios = File.ReadAllText(Path.Combine(ddl, "34-transit-offices-city-department-names.sql"));
-        var semilla = File.ReadAllText(Path.Combine(raiz, "services", "core-consultas", "src", "Flit.Consultas.Api", "Persistence", "Migrations", "20261104150611_ImpuestoDepartamentosHabilitados.cs"));
-        var activos = Regex.Matches(semilla, @"'(?<codigo>\d{2})',\s*'[^']+',\s*true,").Select(m => m.Groups["codigo"].Value).ToList();
-        activos.Should().BeEquivalentTo("50", "52", "94");
+        // La última migración que fija la lista de activos; solo su Up (el Down restaura la semilla anterior).
+        // Actualizar al crear una migración posterior que cambie los departamentos activos.
+        var vigente = File.ReadAllText(Path.Combine(raiz, "services", "core-consultas", "src", "Flit.Consultas.Api", "Persistence", "Migrations", "20261117044000_ImpuestoDepartamentosActivos.cs"));
+        var up = vigente[..vigente.IndexOf("void Down(", StringComparison.Ordinal)];
+        var activos = Regex.Matches(up, @"'(?<codigo>\d{2})',\s*'[^']+',\s*true,").Select(m => m.Groups["codigo"].Value).ToList();
+        activos.Should().BeEquivalentTo("05", "08", "11");
         var fixture = new JsonParser(JsonParser.Settings.Default.WithIgnoreUnknownFields(false)).Parse<ConsultarVehiculoIntempoResponse>(FixturesIntempo.Todos()["intempo-impuesto.json"]);
         var organismo = fixture.Vehiculo.InformacionGeneral.OrganismoTransito;
 

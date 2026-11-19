@@ -3,6 +3,7 @@ import { lanzarExpress } from "./express";
 
 /**
  * HU #13852 (F08-H2) — listado de diagnósticos con filtros en el inicio.
+ * Ola 2026-11-15 (FE-4): el inicio del listado es /diagnosticos; «/» es el Dashboard.
  *
  * Artefacto E2E para QA: necesita la suite levantada (hub en 4022, gateway en 4002, core-diagnostico en 4032 con
  * `Diagnostico__Ambiente=LOCAL|DEV` y `Diagnostico__Simulacion__Habilitada=true`, y esta app en 4024). Excluido de `tsc` y
@@ -18,6 +19,8 @@ import { lanzarExpress } from "./express";
  * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
  *   - button «/ingresar|iniciar sesión/i»
  *   - heading «Diagnóstico vehicular»
+ *   - tablist «Vista del inicio» · tab «Diagnósticos» · tabpanel «Diagnósticos» (HU #14577 AC20: la pestaña, su panel y el
+ *     h2 del listado se llaman igual; se distinguen por rol)
  *   - searchbox «Nombre»
  *   - table «Diagnósticos de la compañía»
  *   - row (sin nombre)
@@ -40,12 +43,13 @@ const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 const PLACA = process.env.E2E_PLACA_EXPRESS ?? "TST101";
 
 async function entrar(page: Page, usuario: string, clave: string) {
-  await page.goto(`${APP}/`);
+  // Ola 2026-11-15 (FE-4): «/» es el Dashboard; el listado y la tarjeta «Placa o VIN» viven en /diagnosticos.
+  await page.goto(`${APP}/diagnosticos`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
   await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
-  await page.waitForURL(`${APP}/`);
+  await page.waitForURL(`${APP}/diagnosticos`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
 }
 
@@ -61,10 +65,14 @@ test.describe("listado de diagnósticos del inicio", () => {
     const tablero = page.url();
 
     // AC2: el filtro por nombre se refleja en la URL y la tabla solo muestra lo que cumple.
-    await page.goto(`${APP}/`);
-    await page.getByRole("searchbox", { name: "Nombre" }).fill(nombre);
+    // HU #14577 AC20: el listado vive en la pestaña «Diagnósticos» (activa sin ?vista=); se busca dentro de su panel.
+    await page.goto(`${APP}/diagnosticos`);
+    const pestana = page.getByRole("tablist", { name: "Vista del inicio" }).getByRole("tab", { name: "Diagnósticos" });
+    await expect(pestana).toHaveAttribute("aria-selected", "true");
+    const panel = page.getByRole("tabpanel", { name: "Diagnósticos" });
+    await panel.getByRole("searchbox", { name: "Nombre" }).fill(nombre);
     await page.waitForURL((url) => url.searchParams.get("nombre") === nombre);
-    const tabla = page.getByRole("table", { name: "Diagnósticos de la compañía" });
+    const tabla = panel.getByRole("table", { name: "Diagnósticos de la compañía" });
     await expect(tabla.getByRole("row")).toHaveCount(2);
     const fila = tabla.getByRole("row", { name: new RegExp(nombre) });
     await expect(fila).toBeVisible();
@@ -76,8 +84,9 @@ test.describe("listado de diagnósticos del inicio", () => {
     await page.waitForURL((url) => url.pathname === new URL(tablero).pathname);
     await expect(page.getByRole("table", { name: /semáforo de consultas/i })).toBeVisible();
 
-    // Volver atrás conserva el filtro en la URL y en el campo.
+    // Volver atrás conserva el filtro en la URL y en el campo, en la pestaña «Diagnósticos».
     await page.goBack();
-    await expect(page.getByRole("searchbox", { name: "Nombre" })).toHaveValue(nombre);
+    await expect(pestana).toHaveAttribute("aria-selected", "true");
+    await expect(panel.getByRole("searchbox", { name: "Nombre" })).toHaveValue(nombre);
   });
 });

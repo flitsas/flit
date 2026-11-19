@@ -103,14 +103,14 @@ public sealed class PersonasVehiculoTests
 
         vehiculo.LocatarioDocOrigen.Should().Be(OrigenDocumento.Proveedor);
         protector.Desproteger(vehiculo.LocatarioDocCifrado!).Should().Be(Locatario1);
-        vehiculo.LocatarioDeclaradoDocTipo.Should().Be("CC");
-        protector.Desproteger(vehiculo.LocatarioDeclaradoDocCifrado!).Should().Be(LocatarioDeclarado, "el declarado sigue en su respaldo");
+        vehiculo.PropietarioDeclaradoDocTipo.Should().Be("CC");
+        protector.Desproteger(vehiculo.PropietarioDeclaradoDocCifrado!).Should().Be(LocatarioDeclarado, "HU #14582: es el propietario actual declarado");
     }
 
-    // AC2 / decisión 1 (F05-C3) — sin locatario del proveedor, el declarado por el cliente entra como persona con origen
-    // DECLARADO_CLIENTE y el mismo cifrado de su columna; sin declarado no hay fila LOCATARIO.
+    // HU #14582 AC7 — sin locatario del proveedor, el declarado por el cliente ya NO entra como persona LOCATARIO: solo el
+    // propietario del RUNT; sin declarado tampoco hay fila LOCATARIO.
     [Fact]
-    public async Task Sin_locatario_del_proveedor_guarda_el_declarado()
+    public async Task HU14582_AC7_sin_locatario_del_proveedor_el_declarado_no_entra_como_persona()
     {
         var ct = TestContext.Current.CancellationToken;
         var (api, _, _) = await ArrancarAsync();
@@ -123,13 +123,10 @@ public sealed class PersonasVehiculoTests
 
         var conDeclarado = await MotorRunt.VehiculoAsync(api, empresa, lote, "TST001", ct);
         var personas = await PersonasAsync(empresa, conDeclarado.Id, ct);
-        var locatario = personas.Should().ContainSingle(p => p.Rol == RolPersona.Locatario).Subject;
-        locatario.Origen.Should().Be(OrigenDocumento.DeclaradoCliente);
-        locatario.Orden.Should().Be(1);
-        locatario.DocTipo.Should().Be("CE");
-        locatario.DocCifrado.Should().Equal(conDeclarado.LocatarioDocCifrado!, "se guarda el mismo cifrado de la columna, sin volver a cifrar");
-        protector.Desproteger(locatario.DocCifrado).Should().Be(LocatarioDeclarado);
+        personas.Should().ContainSingle().Which.Rol.Should().Be(RolPersona.Propietario, "el declarado no alimenta RUNT_LOCATARIO / SIMIT_LOCATARIO");
         protector.Desproteger(personas.Single(p => p.Rol == RolPersona.Propietario).DocCifrado).Should().Be(PropietarioNatural);
+        conDeclarado.LocatarioDocOrigen.Should().BeNull();
+        protector.Desproteger(conDeclarado.PropietarioDeclaradoDocCifrado!).Should().Be(LocatarioDeclarado);
 
         var sinDeclarado = await MotorRunt.VehiculoAsync(api, empresa, lote, "TST011", ct);
         (await PersonasAsync(empresa, sinDeclarado.Id, ct)).Should().ContainSingle().Which.Rol.Should().Be(RolPersona.Propietario);
@@ -165,10 +162,9 @@ public sealed class PersonasVehiculoTests
         var naturalCopia = await PersonasAsync(empresa, (await MotorRunt.VehiculoAsync(api, empresa, segundo, "TST001", ct)).Id, ct);
         naturalCopia.Single(p => p.Rol == RolPersona.Propietario).DocCifrado
             .Should().Equal(naturalOrigen.Single(p => p.Rol == RolPersona.Propietario).DocCifrado);
-        var declarado = naturalCopia.Single(p => p.Rol == RolPersona.Locatario);
-        declarado.Origen.Should().Be(OrigenDocumento.DeclaradoCliente);
-        declarado.DocTipo.Should().Be("CE");
-        protector.Desproteger(declarado.DocCifrado).Should().Be(OtroDeclarado, "el declarado del otro vehículo no se copia");
+        naturalCopia.Should().NotContain(p => p.Rol == RolPersona.Locatario, "HU #14582: el declarado no entra como persona");
+        protector.Desproteger((await MotorRunt.VehiculoAsync(api, empresa, segundo, "TST001", ct)).PropietarioDeclaradoDocCifrado!)
+            .Should().Be(OtroDeclarado, "el declarado del otro vehículo no se copia");
     }
 
     // AC4 (F05-C14, prueba de fuga) — dos compañías: cada filtro devuelve solo sus personas, y una persona de B no se puede

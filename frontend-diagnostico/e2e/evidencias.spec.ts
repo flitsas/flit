@@ -19,7 +19,8 @@ import { lanzarExpress } from "./express";
  * Si uno cambia por decisión de UX, el spec se ajusta en el mismo PR de la pantalla.
  *   - button «/ingresar|iniciar sesión/i»
  *   - table «/semáforo de consultas/i»
- *   - link «Descargar PDF de ${PLACA}»
+ *   - button «Acciones de la placa ${PLACA}» · menu · menuitem «/^Descargar PDF/» (ola 2026-11-15, FE-2: el PDF pasó del
+ *     enlace suelto «Descargar PDF de ${PLACA}» al menú «Acciones» de la fila; deshabilitado con motivo hasta que termina)
  *   - region «Descargas del lote»
  *   - link «Excel del lote»
  *   - etiqueta «/correo|usuario/i»
@@ -37,12 +38,13 @@ const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 const PLACA = process.env.E2E_PLACA_EXPRESS ?? "TST101";
 
 async function entrar(page: Page, usuario: string, clave: string) {
-  await page.goto(`${APP}/`);
+  // Ola 2026-11-15 (FE-4): «/» es el Dashboard; el listado y la tarjeta «Placa o VIN» viven en /diagnosticos.
+  await page.goto(`${APP}/diagnosticos`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
   await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
-  await page.waitForURL(`${APP}/`);
+  await page.waitForURL(`${APP}/diagnosticos`);
 }
 
 test.describe("descargas del tablero", () => {
@@ -55,9 +57,19 @@ test.describe("descargas del tablero", () => {
 
     const grilla = page.getByRole("table", { name: /semáforo de consultas/i });
     await expect(grilla).toBeVisible();
-    // AC1: el PDF se habilita cuando el vehículo termina (todas sus celdas en verde o N/A).
-    const pdf = grilla.getByRole("link", { name: `Descargar PDF de ${PLACA}` });
-    await expect(pdf).toBeVisible({ timeout: 90_000 });
+    // AC1: el PDF se habilita cuando el vehículo termina (todas sus celdas en verde o N/A). Ola 2026-11-15 (FE-2): el ítem
+    // vive en el menú «Acciones» de la fila y, mientras no termina, sale con aria-disabled y su motivo; se reabre el menú
+    // hasta que quede habilitado.
+    const acciones = grilla.getByRole("button", { name: `Acciones de la placa ${PLACA}`, exact: true });
+    const pdf = page.getByRole("menu").getByRole("menuitem", { name: /^Descargar PDF/ });
+    await expect(async () => {
+      if ((await acciones.getAttribute("aria-expanded")) !== "true") await acciones.click();
+      await expect(pdf).toBeVisible({ timeout: 2_000 });
+      if ((await pdf.getAttribute("aria-disabled")) === "true") {
+        await page.keyboard.press("Escape");
+        throw new Error("PDF aún deshabilitado");
+      }
+    }).toPass({ timeout: 90_000, intervals: [3_000] });
 
     const [respuestaPdf, descargaPdf] = await Promise.all([
       page.waitForResponse((r) => /\/vehiculos\/[^/]+\/pdf$/.test(new URL(r.url()).pathname)),

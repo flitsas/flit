@@ -45,6 +45,7 @@
     "./iconoComo": "./src/iconoComo.tsx",
     "./EstadoVacio": "./src/EstadoVacio.tsx",
     "./PanelLateral": "./src/PanelLateral.tsx",
+    "./PanelModal": "./src/PanelModal.tsx",
     "./BarraSeleccion": "./src/BarraSeleccion.tsx",
     "./PaginaExcepcion": "./src/PaginaExcepcion.tsx",
     "./PantallaResultado": "./src/PantallaResultado.tsx",
@@ -56,6 +57,7 @@
     "./SelectorSegmentado": "./src/SelectorSegmentado.tsx",
     "./ZonaArrastre": "./src/ZonaArrastre.tsx",
     "./NotificacionPersistente": "./src/NotificacionPersistente.tsx",
+    "./Tooltip": "./src/Tooltip.tsx",
     "./useTrampaFoco": "./src/useTrampaFoco.ts",
     "./useRegionViva": "./src/useRegionViva.ts"
   },

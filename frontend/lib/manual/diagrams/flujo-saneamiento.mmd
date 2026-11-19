@@ -1,0 +1,13 @@
+flowchart TD
+    A["Vehículo terminado"] --> B["La compañía elige «Solicitar saneamiento»\nen el menú «Acciones»"]
+    B --> C["Saneamiento solicitado"]
+    C -- "La compañía quita la solicitud\no FLIT anula con motivo" --> X["Anulado: se puede volver a pedir"]
+    C -- "FLIT lo toma" --> D["En saneamiento: un concepto por fuente\ncon hallazgo (SIMIT, impuesto, SOAT, RTM)"]
+    D --> E["FLIT marca cada concepto y puede\nadjuntar un PDF de evidencia"]
+    E --> F{"Cierre de FLIT"}
+    F -- "Cerrar como saneado" --> G["Saneado"]
+    F -- "Cerrar como no procede\n(con motivo)" --> H["Saneamiento no procede"]
+    D -- "FLIT anula con motivo" --> X
+    G -- "FLIT reabre con motivo" --> D
+    H -- "FLIT reabre con motivo" --> D
+    G -.-> Z["El dictamen no cambia: para desbloquear,\nFLIT ajusta el dictamen o se reprocesa"]

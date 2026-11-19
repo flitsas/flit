@@ -8,6 +8,8 @@ import { PasosHorizontal, type EstadoPaso } from "@flit/ui/PasosHorizontal";
 import { useSesion } from "@/components/DiagnosticoShell";
 import { ApiError } from "@/lib/api";
 import {
+  ERRORES_CARGA,
+  ERRORES_DE_DOCUMENTO,
   accesoNegado,
   confirmarVehiculos,
   esDocumentoEnmascarado,
@@ -16,6 +18,7 @@ import {
   type FilaResumen,
   type ResumenValidacion as Resumen,
 } from "@/lib/carga/api";
+import { mensajeErrorFijo } from "@/lib/errores";
 import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, TARJETA_CLS } from "@/components/configuracion/estilos";
 import { ResumenValidacion } from "./ResumenValidacion";
 import { SubidaArchivo } from "./SubidaArchivo";
@@ -23,7 +26,7 @@ import { TABLA_FILAS_ID, TablaFilasCorregibles } from "./TablaFilasCorregibles";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
 
 export interface Analisis {
-  /** El archivo analizado, solo en memoria: la confirmación lo reenvía (trae el documento del locatario completo). */
+  /** El archivo analizado, solo en memoria: la confirmación lo reenvía (trae el documento del propietario actual completo). */
   archivo: File;
   /** Resumen original de la carga (duplicados, límite, estimado). */
   resumen: Resumen;
@@ -53,7 +56,6 @@ export function resumenVigente({ resumen, filas }: Pick<Analisis, "resumen" | "f
   };
 }
 
-const ERRORES_DE_DOCUMENTO: readonly string[] = ["Tipo_Documento_Locatario", "Documento_Locatario"];
 
 /**
  * Correcciones de la confirmación: una por fila corregida que quedó válida, en el orden del archivo. El identificador
@@ -68,13 +70,13 @@ export function correccionesAConfirmar({ filas, capturadas, erroneas }: Pick<Ana
     if (!f.valida || !c || !original) return [];
     const correccion: CorreccionFila = { fila: f.fila };
     if (c.identificador !== original.identificador) correccion.identificador = c.identificador;
-    const documento = esDocumentoEnmascarado(c.documento_locatario) ? null : c.documento_locatario;
+    const documento = esDocumentoEnmascarado(c.documento_propietario) ? null : c.documento_propietario;
     if (documento) {
-      correccion.tipo_documento_locatario = c.tipo_documento_locatario;
-      correccion.documento_locatario = documento;
+      correccion.tipo_documento_propietario = c.tipo_documento_propietario;
+      correccion.documento_propietario = documento;
     } else if (original.errores.some((e) => ERRORES_DE_DOCUMENTO.includes(e.campo))) {
-      correccion.tipo_documento_locatario = null;
-      correccion.documento_locatario = null;
+      correccion.tipo_documento_propietario = null;
+      correccion.documento_propietario = null;
     }
     return Object.keys(correccion).length > 1 ? [correccion] : [];
   });
@@ -134,7 +136,8 @@ export function CargaMasiva({ diagnosticoId }: { diagnosticoId: string }) {
       const code = accesoNegado(e);
       if (code) return irA403(code);
       const reintentable = !(e instanceof ApiError) || e.status >= 500;
-      setConfirmacion({ tipo: "error", mensaje: e instanceof Error ? e.message : "No se pudieron confirmar los vehículos.", reintentable });
+      // AP-9 (SF-6): texto fijo por code; nunca el mensaje del servidor ni el de una excepción.
+      setConfirmacion({ tipo: "error", mensaje: mensajeErrorFijo(e, "No se pudieron confirmar los vehículos.", ERRORES_CARGA), reintentable });
     }
   }
 

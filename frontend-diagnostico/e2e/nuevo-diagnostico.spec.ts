@@ -26,6 +26,8 @@ import { expect, test, type Page } from "@playwright/test";
  *   - radio «Express»
  *   - radio «Masivo»
  *   - region «Resumen de validación»
+ *   Ola 2026-11-15 (FE-3): la carga es de una columna (Parámetros arriba, sin sticky) y la CTA «Validar archivo» sale de
+ *   la región «Parámetros» a la barra de acción del final. El detalle del layout lo cubre carga-una-columna.spec.ts.
  *   - radiogroup «Tipo de diagnóstico»
  *   - etiqueta «/correo|usuario/i»
  *   - etiqueta «Contraseña» (exacta: el hub añadió el botón «Mostrar contraseña»)
@@ -35,12 +37,13 @@ const APP = process.env.DIAGNOSTICO_URL ?? "http://127.0.0.1:4024";
 const PLACA = process.env.E2E_PLACA_EXPRESS ?? "TST101";
 
 async function entrar(page: Page, usuario: string, clave: string) {
-  await page.goto(`${APP}/`);
+  // Ola 2026-11-15 (FE-4): «/» es el Dashboard; el listado y la tarjeta «Placa o VIN» viven en /diagnosticos.
+  await page.goto(`${APP}/diagnosticos`);
   await page.waitForURL((url) => !url.href.startsWith(APP));
   await page.getByLabel(/correo|usuario/i).fill(usuario);
   await page.getByLabel("Contraseña", { exact: true }).fill(clave);
   await page.getByRole("button", { name: /ingresar|iniciar sesión/i }).click();
-  await page.waitForURL(`${APP}/`);
+  await page.waitForURL(`${APP}/diagnosticos`);
   await expect(page.getByRole("heading", { level: 1, name: "Diagnóstico vehicular" })).toBeVisible();
 }
 
@@ -56,7 +59,7 @@ test.describe("pantalla única de creación", () => {
     await entrar(page, process.env.E2E_USUARIO!, process.env.E2E_CLAVE!);
   });
 
-  test("AC1/AC6: desde el inicio, Diagnosticar en línea abre Express con la placa; en 1280 px dos columnas con Parámetros sticky", async ({ page }) => {
+  test("AC1/AC6: desde el inicio, Diagnosticar en línea abre Express con la placa; en 1280 px Parámetros arriba de Vehículos, sin sticky (FE-3)", async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 800 });
     await page.getByRole("textbox", { name: "Placa o VIN" }).fill(PLACA);
     await page.getByRole("button", { name: "Diagnosticar en línea" }).click();
@@ -66,8 +69,9 @@ test.describe("pantalla única de creación", () => {
     const parametros = page.getByRole("region", { name: "Parámetros" });
     await expect(parametros.getByRole("textbox", { name: "Nombre del diagnóstico" })).toHaveValue(new RegExp(`^Express ${PLACA}$`));
     const [v, p] = [await vehiculos.boundingBox(), await parametros.boundingBox()];
-    expect(v && p && p.x > v.x + v.width - 1).toBeTruthy();
-    expect(await parametros.evaluate((el) => getComputedStyle(el).position)).toBe("sticky");
+    // Ola 2026-11-15 (FE-3): una columna; antes Parámetros iba a la derecha y sticky.
+    expect(v && p && p.y + p.height <= v.y + 1).toBeTruthy();
+    expect(await parametros.evaluate((el) => getComputedStyle(el).position)).not.toBe("sticky");
     await sinDesbordeHorizontal(page);
   });
 
@@ -76,9 +80,12 @@ test.describe("pantalla única de creación", () => {
     await page.goto(`${APP}/diagnosticos/nuevo?modo=masivo`);
     const vehiculos = page.getByRole("region", { name: "Vehículos" });
     const parametros = page.getByRole("region", { name: "Parámetros" });
-    await expect(parametros.getByRole("button", { name: "Validar archivo" })).toBeVisible();
-    const [v, p] = [await vehiculos.boundingBox(), await parametros.boundingBox()];
-    expect(v && p && p.y >= v.y + v.height - 1).toBeTruthy();
+    // Ola 2026-11-15 (FE-3): la CTA va en la barra de acción del final (fuera de Parámetros) y Parámetros va primero.
+    const validar = page.getByRole("button", { name: "Validar archivo" });
+    await expect(validar).toBeVisible();
+    const [v, p, b] = [await vehiculos.boundingBox(), await parametros.boundingBox(), await validar.boundingBox()];
+    expect(v && p && v.y >= p.y + p.height - 1).toBeTruthy();
+    expect(v && b && b.y >= v.y + v.height - 1).toBeTruthy();
     await sinDesbordeHorizontal(page);
   });
 

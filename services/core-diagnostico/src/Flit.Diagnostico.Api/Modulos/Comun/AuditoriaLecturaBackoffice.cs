@@ -14,20 +14,36 @@ public sealed class AuditoriaLecturaBackoffice(DiagnosticoDb db, UsuarioActual u
     /// <summary>Largo de la columna <c>ruta</c> (<c>LecturaBackofficeConfig</c>).</summary>
     public const int LargoMaximoRuta = 500;
 
-    public async Task RegistrarAsync(Guid empresaConsultada, HttpRequest request, CancellationToken ct)
+    public Task RegistrarAsync(Guid empresaConsultada, HttpRequest request, CancellationToken ct) =>
+        RegistrarVariasAsync([empresaConsultada], request, ct);
+
+    /// <summary>
+    /// Una fila por cada empresa distinta de <paramref name="empresasConsultadas"/>, en un solo <c>SaveChanges</c> (HU #14576, SP-4: la
+    /// bandeja entre compañías audita las empresas de la página antes de responder; si falla, la petición falla sin filas). Sin
+    /// empresas no escribe nada, pero exige igual un usuario identificado.
+    /// </summary>
+    public async Task RegistrarVariasAsync(IEnumerable<Guid> empresasConsultadas, HttpRequest request, CancellationToken ct)
     {
+        ArgumentNullException.ThrowIfNull(empresasConsultadas);
         ArgumentNullException.ThrowIfNull(request);
         usuario.EmpresaPropia();
         if (usuario.Id == Guid.Empty)
             throw ReglaException.Prohibido("SIN_USUARIO", "El token no identifica al usuario: la lectura no se puede auditar.");
 
         var ruta = $"{request.PathBase}{request.Path}{request.QueryString}";
-        db.Add(new LecturaBackoffice
+        var empresas = empresasConsultadas.Distinct().ToList();
+        if (empresas.Count == 0)
+            return;
+        foreach (var empresa in empresas)
         {
-            EmpresaConsultada = empresaConsultada,
-            UsuarioId = usuario.Id,
-            Ruta = ruta.Length > LargoMaximoRuta ? ruta[..LargoMaximoRuta] : ruta,
-        });
+            db.Add(new LecturaBackoffice
+            {
+                EmpresaConsultada = empresa,
+                UsuarioId = usuario.Id,
+                Ruta = ruta.Length > LargoMaximoRuta ? ruta[..LargoMaximoRuta] : ruta,
+            });
+        }
+
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
     }
 }

@@ -12,7 +12,7 @@ namespace Flit.Diagnostico.Api.Modulos.Carga;
 /// </summary>
 /// <example>
 /// <code>
-/// LectorCsv.Leer(Encoding.UTF8.GetBytes("Identificador_Vehiculo;Documento_Locatario\nABC123;\n")) // → 1 fila, número 2
+/// LectorCsv.Leer(Encoding.UTF8.GetBytes("Identificador_Vehiculo;Documento_Propietario\nABC123;\n")) // → 1 fila, número 2
 /// </code>
 /// </example>
 internal static class LectorCsv

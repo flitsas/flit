@@ -50,9 +50,9 @@ public sealed class ConsultaDictamenTests
     {
         // HU #14563 AC26 (D6): la compañía solo gana la marca del ajuste FLIT y su fecha.
         Nombres(typeof(DictamenCompaniaDto)).Should().BeEquivalentTo(
-            ["Version", "Veredicto", "EstadoRedaccion", "Alertamientos", "CatalogoVersion", "CreadoEn", "AjustadoPorFlit", "AjustadoEn"]);
+            ["Version", "Veredicto", "EstadoRedaccion", "Alertamientos", "CatalogoVersion", "CreadoEn", "AjustadoPorFlit", "AjustadoEn", "CambioPropietario"]);
         Nombres(typeof(DictamenBackofficeDto)).Should().BeEquivalentTo(
-            ["Version", "Veredicto", "EstadoRedaccion", "Alertamientos", "CatalogoVersion", "CreadoEn", "AnalisisOverride", "UsuarioOverrideId", "OverrideEn"]);
+            ["Version", "Veredicto", "EstadoRedaccion", "Alertamientos", "CatalogoVersion", "CreadoEn", "AnalisisOverride", "UsuarioOverrideId", "OverrideEn", "CambioPropietario"]);
         Nombres(typeof(AlertaDictamenDto)).Should().BeEquivalentTo(["Codigo", "Texto", "Efecto", "Fuente", "Etiqueta", "FuenteEtiqueta"]);
 
         var fila = Fila();
@@ -63,13 +63,13 @@ public sealed class ConsultaDictamenTests
         var backoffice = JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(fila), Web)!.AsObject();
 
         compania.Select(p => p.Key).Should().BeEquivalentTo(
-            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en"]);
+            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en", "cambio_propietario"]);
         // P1 = a: un override histórico (sin motivo) no lleva la marca.
         compania["ajustado_por_flit"]!.GetValue<bool>().Should().BeFalse();
         backoffice.Select(p => p.Key).Should().BeEquivalentTo(
         [
             "version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en",
-            "analisis_override", "usuario_override_id", "override_en",
+            "analisis_override", "usuario_override_id", "override_en", "cambio_propietario",
         ]);
         compania["alertamientos"]![0]!.AsObject().Select(p => p.Key).Should().Equal("codigo", "texto", "efecto", "fuente", "etiqueta", "fuente_etiqueta");
         backoffice["analisis_override"]!.GetValue<bool>().Should().BeTrue();
@@ -274,7 +274,7 @@ public sealed class ConsultaDictamenTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await TableroAyudas.JsonAsync(respuesta, ct);
         json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
-            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en"]);
+            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en", "cambio_propietario"]);
         json.GetProperty("ajustado_por_flit").GetBoolean().Should().BeFalse();
         json.GetProperty("veredicto").GetString().Should().Be("VIABLE");
         json.GetProperty("alertamientos").EnumerateArray().Select(a => a.GetProperty("codigo").GetString()).Should().Equal("SOAT_NO_VIGENTE", "NO_ESTA");
@@ -318,7 +318,7 @@ public sealed class ConsultaDictamenTests
         json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
         [
             "version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en",
-            "analisis_override", "usuario_override_id", "override_en",
+            "analisis_override", "usuario_override_id", "override_en", "cambio_propietario",
         ]);
         json.GetProperty("analisis_override").GetBoolean().Should().BeFalse();
         json.GetProperty("usuario_override_id").ValueKind.Should().Be(JsonValueKind.Null);
@@ -740,7 +740,7 @@ public sealed class ConsultaDictamenTests
         var textoCompania = await compania.Content.ReadAsStringAsync(ct);
         var dictamen = JsonElement.Parse(textoCompania);
         dictamen.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
-            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en"]);
+            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en", "cambio_propietario"]);
         dictamen.GetProperty("ajustado_por_flit").GetBoolean().Should().BeTrue();
         dictamen.GetProperty("ajustado_en").ValueKind.Should().Be(JsonValueKind.String);
         textoCompania.Should().NotContain(MotivoAjuste).And.NotContain("\"ajuste\"").And.NotContain(flit.ToString()).And.NotContain("motivo");

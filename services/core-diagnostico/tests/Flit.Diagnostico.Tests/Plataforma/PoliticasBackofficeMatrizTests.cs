@@ -47,7 +47,7 @@ public sealed class PoliticasBackofficeMatrizTests
     private static readonly string[] PermisosBackoffice =
     [
         Permisos.BackofficeVer, Permisos.ConfiguracionContratoEditar, Permisos.AuditoriaVer, Permisos.ConsultasLlenar,
-        Permisos.DictamenOverride, Permisos.ConfiguracionVer,
+        Permisos.DictamenOverride, Permisos.ConfiguracionVer, Permisos.SaneamientoGestionar,
     ];
 
     private enum Senal
@@ -65,7 +65,7 @@ public sealed class PoliticasBackofficeMatrizTests
         NoDenegada,
     }
 
-    private sealed record Seccion(string Nombre, HttpMethod Metodo, string Url, string? Cuerpo, bool Operacion, Senal Pasa);
+    private sealed record Seccion(string Nombre, HttpMethod Metodo, string Url, string? Cuerpo, bool Operacion, Senal Pasa, bool SoloSuperAdmin = false);
 
     private sealed record Actor(string Nombre, bool Configuracion, bool Operacion, Func<ApiDePrueba, string> Token);
 
@@ -74,6 +74,7 @@ public sealed class PoliticasBackofficeMatrizTests
     private static readonly Guid Consulta = Guid.NewGuid();
     private static readonly Guid EmpresaRuta = Guid.NewGuid();
     private static readonly Guid OtraEmpresa = Guid.NewGuid();
+    private static readonly Guid Saneamiento = Guid.NewGuid();
 
     private static readonly Seccion[] Secciones =
     [
@@ -94,6 +95,20 @@ public sealed class PoliticasBackofficeMatrizTests
         new("override del dictamen PUT", HttpMethod.Put, $"{Base}/diagnosticos/{Lote}/vehiculos/{Vehiculo}/dictamen", "{}", true, Senal.EmpresaRequerida),
         new("llenado manual GET", HttpMethod.Get, $"{Base}/consultas/{Consulta}/manual", null, true, Senal.EmpresaRequerida),
         new("llenado manual PUT", HttpMethod.Put, $"{Base}/consultas/{Consulta}/manual", "{}", true, Senal.EmpresaRequerida),
+        // HU #14576 (ADR-0087 D-5): la bandeja entre compañías (grupo A, sin empresa explícita: sin base no se deniega) y la gestión
+        // de un saneamiento (grupo B, con empresa explícita) son de la operación FLIT.
+        new("bandeja de saneamientos", HttpMethod.Get, $"{Base}/saneamientos", null, true, Senal.NoDenegada),
+        new("resumen de saneamientos", HttpMethod.Get, $"{Base}/saneamientos/resumen", null, true, Senal.NoDenegada),
+        new("tomar varios saneamientos", HttpMethod.Post, $"{Base}/saneamientos/tomar", """{ "items": [] }""", true, Senal.NoDenegada),
+        new("detalle de un saneamiento", HttpMethod.Get, $"{Base}/saneamientos/{Saneamiento}", null, true, Senal.EmpresaRequerida),
+        new("cerrar un saneamiento", HttpMethod.Post, $"{Base}/saneamientos/{Saneamiento}/cerrar", "{}", true, Senal.EmpresaRequerida),
+        // HU #14587 (contrato-api §3.2, PoliticaUsuariosBackoffice): el backoffice de usuarios es SOLO del SuperAdmin; el operador FLIT con
+        // diagnostico.backoffice.ver recibe 403. Sin plataforma configurada, quien pasa recibe 503 PLATAFORMA_NO_CONFIGURADA o, en la
+        // tabla de compañías, 503 IDENTIDAD_NO_CONFIGURADA.
+        new("usuarios de una compañía (invitar)", HttpMethod.Post, $"{Base}/empresas/{EmpresaRuta}/usuarios/invitaciones",
+            """{ "correo": "a@b.test", "nombre": "Persona", "rol": "usuario_diagnostico" }""", false, Senal.NoDenegada, SoloSuperAdmin: true),
+        new("usuarios de una compañía (suspender)", HttpMethod.Post, $"{Base}/empresas/{EmpresaRuta}/usuarios/{Vehiculo}/suspension", null, false, Senal.NoDenegada, SoloSuperAdmin: true),
+        new("tabla de compañías de usuarios", HttpMethod.Get, $"{Base}/usuarios/empresas", null, false, Senal.IdentidadNoConfigurada, SoloSuperAdmin: true),
     ];
 
     private static readonly Dictionary<string, Actor> Actores = new Actor[]
@@ -132,7 +147,8 @@ public sealed class PoliticasBackofficeMatrizTests
                 pedido.Content = new StringContent(seccion.Cuerpo, Encoding.UTF8, "application/json");
             using var respuesta = await cliente.SendAsync(pedido, ct);
             var texto = await respuesta.Content.ReadAsStringAsync(ct);
-            var debePasar = seccion.Operacion ? actor.Operacion : actor.Configuracion;
+            var debePasar = seccion.SoloSuperAdmin ? nombre.StartsWith("superadmin", StringComparison.Ordinal)
+                : seccion.Operacion ? actor.Operacion : actor.Configuracion;
             var error = debePasar ? Pasa(seccion.Pasa, respuesta.StatusCode, texto) : NoPasa(nombre, respuesta.StatusCode);
             if (error is not null)
                 fallos.Add($"{seccion.Nombre} ({seccion.Metodo} {seccion.Url}): {error}");

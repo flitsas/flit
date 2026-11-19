@@ -5,6 +5,7 @@ import { InlineAlert } from "@flit/ui/InlineAlert";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { SearchableSelect, type SearchableSelectOption } from "@flit/ui/SearchableSelect";
 import { ApiError } from "@/lib/api";
+import { mensajeErrorBackoffice } from "@/lib/backoffice/api";
 import { CODIGO_IDENTIDAD_NO_CONFIGURADA, etiquetaNit, listarEmpresasBackoffice, type EmpresaBackoffice } from "@/lib/configuracion";
 import { AYUDA_CLS, BOTON_REINTENTAR_CLS } from "@/components/configuracion/estilos";
 
@@ -20,6 +21,11 @@ export interface SelectorEmpresaBackofficeProps {
   /** Texto bajo el combobox cuando el listado cargó y no hay empresa elegida. */
   avisoSinElegir?: string;
 }
+
+/** AP-8 (SF-6): texto fijo del 503 de Identidad con reintento; el resto cae en el respaldo fijo. */
+const ERRORES_EMPRESAS: Readonly<Record<string, string>> = {
+  IDENTIDAD_NO_DISPONIBLE: "Identidad no respondió. Intenta de nuevo en un momento.",
+};
 
 type Listado =
   | { tipo: "cargando" }
@@ -49,7 +55,7 @@ export function SelectorEmpresaBackoffice({ value, onChange, id = "backoffice-em
         setListado({
           tipo: "error",
           noConfigurado: e instanceof ApiError && e.code === CODIGO_IDENTIDAD_NO_CONFIGURADA,
-          mensaje: e instanceof Error ? e.message : "Intenta de nuevo en un momento.",
+          mensaje: mensajeErrorBackoffice(e, "Intenta de nuevo en un momento.", ERRORES_EMPRESAS),
         });
       },
     );
