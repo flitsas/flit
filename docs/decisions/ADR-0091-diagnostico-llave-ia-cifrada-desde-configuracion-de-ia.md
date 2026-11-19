@@ -122,7 +122,7 @@ Limitar `diagnostico_dictamen` a `anthropic` cuesta resiliencia, porque no hay f
 | FAILED_PRECONDITION | `CLAVE_DESTINATARIO_DESCONOCIDA` | `kid` no registrado en core-api | reintenta una vez con `KidAnterior`; si no, sin configurar |
 | UNAVAILABLE / DEADLINE_EXCEEDED / INTERNAL | — | core-api reiniciando, BD caída | fallo técnico reintentable (espera 120 s); nunca sin configurar |
 
-`disponible=false` (sin proveedor con llave, `SIN_PROVEEDOR_CON_LLAVE`) no es error: respuesta OK que Diagnóstico guarda 60 s.
+`disponible=false` (sin proveedor con llave, `MOTIVO_NO_DISPONIBLE_SIN_PROVEEDOR_CON_LLAVE`) no es error: respuesta OK que Diagnóstico guarda 60 s.
 
 ## ADRs relacionados
 

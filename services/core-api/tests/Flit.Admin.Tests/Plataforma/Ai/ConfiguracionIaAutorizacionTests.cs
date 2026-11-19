@@ -25,7 +25,7 @@ public sealed class ConfiguracionIaAutorizacionTests(ConfiguracionIaAutorizacion
     : IClassFixture<ConfiguracionIaAutorizacionTests.Host>
 {
     private const string RutaObtener = "/flit.platform.v1.ConfiguracionIaService/ObtenerConfiguracionIa";
-    private const string TokenCentinela = "eyJhbGciOiJSUzI1NiJ9.CENTINELA-TOKEN.firma";
+    private const string TokenCentinela = "eyJhbGciOiJSUzI1NiJ9.CENTINELA-TOKEN.firma"; // gitleaks:allow — valor de prueba
     private const string Jti = "jti-0123456789abcdef";
 
     /// <summary>Un host para la clase, con un proveedor de logs que captura los eventos.</summary>

@@ -50,7 +50,7 @@ Base: `https://<host del ambiente>/api/v1/diagnostico/integracion`. Pase en `Aut
 ```http
 POST /api/v1/diagnostico/integracion/diagnosticos
 Authorization: Bearer <pase>
-Idempotency-Key: 3f1c2a9e-7b4d-4c1e-9a55-0d2b8e6f1a77
+Idempotency-Key: 00000000-0000-4000-8000-000000000000
 Content-Type: application/json
 ```
 

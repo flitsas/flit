@@ -58,6 +58,6 @@ message LlaveCifrada {
 
 enum MotivoNoDisponible {
   MOTIVO_NO_DISPONIBLE_UNSPECIFIED = 0;
-  HERRAMIENTA_SIN_CONFIGURAR = 1;   // no hay fila en admin.ai_tool_provider_settings para el tool_code
-  SIN_PROVEEDOR_CON_LLAVE = 2;      // ningún proveedor enabled ∩ capaz ∩ con llave en env de core-api
+  MOTIVO_NO_DISPONIBLE_HERRAMIENTA_SIN_CONFIGURAR = 1;   // no hay fila en admin.ai_tool_provider_settings para el tool_code
+  MOTIVO_NO_DISPONIBLE_SIN_PROVEEDOR_CON_LLAVE = 2;      // ningún proveedor enabled ∩ capaz ∩ con llave en env de core-api
 }
