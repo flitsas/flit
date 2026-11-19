@@ -163,8 +163,8 @@ public static class DescifradorLlaveIa
 }
 
 /// <summary>
-/// Privadas de Diagnóstico por <c>kid</c> (actual y, durante una rotación, la anterior). Se importan una vez al arrancar desde el
-/// archivo (SP-16) y los bytes leídos se ponen a cero. Una clave de menos de 3072 bits no se acepta (SP-9). Del PEM solo se acepta la
+/// Privadas de Diagnóstico por <c>kid</c> (actual y, durante una rotación, la anterior). Se importan una vez al arrancar desde la
+/// variable de entorno o, si está vacía, desde el archivo (SP-16), y los búferes leídos se ponen a cero. Una clave de menos de 3072 bits no se acepta (SP-9). Del PEM solo se acepta la
 /// etiqueta <c>PRIVATE KEY</c> (PKCS#8) y toda clave cargada pasa una ida y vuelta OAEP-SHA256: una pública (<c>PUBLIC KEY</c>,
 /// <c>RSA PUBLIC KEY</c>) da <c>PRIVADA_NO_ES_PRIVADA</c> y el redactor queda sin configurar (CR-4).
 /// </summary>
@@ -222,22 +222,17 @@ public sealed class ClavesPrivadasIa : IDisposable
             return null;
         }
 
-        if (string.IsNullOrWhiteSpace(opciones.ClavePrivadaArchivo))
-        {
-            motivo = "SIN_PRIVADA";
-            return null;
-        }
-
-        var actual = Importar(opciones.ClavePrivadaArchivo.Trim(), out motivo);
+        var actual = Importar(opciones.ClavePrivada, opciones.ClavePrivadaArchivo, out motivo);
         if (actual is null)
             return null;
 
         RSA? anterior = null;
         var kidAnterior = opciones.KidAnterior?.Trim();
-        if (!string.IsNullOrEmpty(kidAnterior) || !string.IsNullOrWhiteSpace(opciones.ClavePrivadaAnteriorArchivo))
+        var hayAnterior = !string.IsNullOrWhiteSpace(opciones.ClavePrivadaAnterior) || !string.IsNullOrWhiteSpace(opciones.ClavePrivadaAnteriorArchivo);
+        if (!string.IsNullOrEmpty(kidAnterior) || hayAnterior)
         {
-            anterior = SobreLlaveIa.KidValido(kidAnterior) && kidAnterior != kid && !string.IsNullOrWhiteSpace(opciones.ClavePrivadaAnteriorArchivo)
-                ? Importar(opciones.ClavePrivadaAnteriorArchivo.Trim(), out var motivoAnterior) is { } rsa ? rsa : Ignorar(out avisoAnterior, motivoAnterior)
+            anterior = SobreLlaveIa.KidValido(kidAnterior) && kidAnterior != kid && hayAnterior
+                ? Importar(opciones.ClavePrivadaAnterior, opciones.ClavePrivadaAnteriorArchivo, out var motivoAnterior) is { } rsa ? rsa : Ignorar(out avisoAnterior, motivoAnterior)
                 : Ignorar(out avisoAnterior, "ANTERIOR_INCOMPLETA");
         }
 
@@ -257,7 +252,52 @@ public sealed class ClavesPrivadasIa : IDisposable
         return null;
     }
 
-    private static RSA? Importar(string ruta, out string motivo)
+    /// <summary>
+    /// La variable (<paramref name="enLinea"/>) gana si tiene valor; si no, el archivo. Ambas pasan por <see cref="ImportarContenido"/>.
+    /// <c>SIN_PRIVADA</c> si no hay ninguna.
+    /// </summary>
+    private static RSA? Importar(string? enLinea, string? archivo, out string motivo)
+    {
+        if (!string.IsNullOrWhiteSpace(enLinea))
+            return ImportarEnLinea(enLinea, out motivo);
+        if (!string.IsNullOrWhiteSpace(archivo))
+            return ImportarArchivo(archivo.Trim(), out motivo);
+        motivo = "SIN_PRIVADA";
+        return null;
+    }
+
+    /// <summary>
+    /// Copia la variable a un búfer propio y convierte la secuencia de dos caracteres <c>\n</c> en salto de línea (PEM en una línea
+    /// de un <c>.env</c>). El búfer se limpia al terminar; la <c>string</c> de configuración es inmutable y no se puede borrar.
+    /// </summary>
+    private static RSA? ImportarEnLinea(string enLinea, out string motivo)
+    {
+        var texto = new char[enLinea.Length];
+        try
+        {
+            var n = 0;
+            for (var i = 0; i < enLinea.Length; i++)
+            {
+                if (enLinea[i] == '\\' && i + 1 < enLinea.Length && enLinea[i + 1] == 'n')
+                {
+                    texto[n++] = '\n';
+                    i++;
+                }
+                else
+                {
+                    texto[n++] = enLinea[i];
+                }
+            }
+
+            return ImportarContenido(texto.AsSpan(0, n), out motivo);
+        }
+        finally
+        {
+            Array.Clear(texto);
+        }
+    }
+
+    private static RSA? ImportarArchivo(string ruta, out string motivo)
     {
         byte[] bytes;
         try
@@ -271,12 +311,26 @@ public sealed class ClavesPrivadasIa : IDisposable
         }
 
         var texto = new char[bytes.Length];
+        try
+        {
+            var n = Encoding.ASCII.GetChars(bytes, texto);
+            return ImportarContenido(texto.AsSpan(0, n), out motivo);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(bytes);
+            Array.Clear(texto);
+        }
+    }
+
+    /// <summary>Base64 DER PKCS#8 o PEM <c>PRIVATE KEY</c>; al menos 3072 bits e ida y vuelta OAEP (CR-4). Los bytes DER se ponen a cero.</summary>
+    private static RSA? ImportarContenido(ReadOnlySpan<char> texto, out string motivo)
+    {
         byte[]? der = null;
         var rsa = RSA.Create();
         try
         {
-            var n = Encoding.ASCII.GetChars(bytes, texto);
-            var contenido = texto.AsSpan(0, n).Trim();
+            var contenido = texto.Trim();
             ReadOnlySpan<char> base64 = contenido;
             if (contenido.StartsWith("-----BEGIN", StringComparison.Ordinal))
             {
@@ -325,8 +379,6 @@ public sealed class ClavesPrivadasIa : IDisposable
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(bytes);
-            Array.Clear(texto);
             if (der is not null)
                 CryptographicOperations.ZeroMemory(der);
         }

@@ -161,6 +161,132 @@ public sealed class RegistroRedactorOrigenTests : IDisposable
         logs.Todo.Should().Contain("PRIVADA_NO_ES_PRIVADA").And.NotContain(_dir);
     }
 
+    private static string Marca => V.PrivadaBase64[..24];
+
+    /// <summary>HU-7b: PEM PRIVATE KEY en una línea con <c>\n</c> literales (como queda en un .env) se convierte y carga.</summary>
+    [Fact]
+    public void SP16_PrivadaEnVariablePemConSaltosEscapados_Carga()
+    {
+        using var rsa = V.Privada();
+        var pemEscapada = rsa.ExportPkcs8PrivateKeyPem().Replace("\n", "\\n", StringComparison.Ordinal);
+        pemEscapada.Should().NotContain("\n").And.Contain("\\n");
+
+        using var claves = ClavesPrivadasIa.Cargar(new OpcionesIa { Kid = V.Kid, ClavePrivada = pemEscapada }, out var motivo, out _);
+        motivo.Should().Be("OK");
+        claves.Should().NotBeNull();
+
+        using var sp = Construir(Plataforma(c =>
+        {
+            c["Diagnostico:Ia:ClavePrivadaArchivo"] = string.Empty;
+            c["Diagnostico:Ia:ClavePrivada"] = pemEscapada;
+        }));
+        sp.GetRequiredService<IProveedorRedactor>().Should().BeOfType<ProveedorRedactorAnthropic>();
+    }
+
+    /// <summary>HU-7b: con variable y archivo a la vez gana la variable (en ambos sentidos: buena/mala y mala/buena).</summary>
+    [Fact]
+    public void SP16_VariableYArchivoALaVez_GanaLaVariable()
+    {
+        var archivoMalo = Archivo("mala.p8", "esto no es una clave");
+        var archivoBueno = Archivo("buena.p8", V.PrivadaBase64);
+
+        using var conVariableBuena = ClavesPrivadasIa.Cargar(
+            new OpcionesIa { Kid = V.Kid, ClavePrivada = V.PrivadaBase64, ClavePrivadaArchivo = archivoMalo }, out var motivoBuena, out _);
+        motivoBuena.Should().Be("OK");
+        conVariableBuena.Should().NotBeNull();
+
+        using var conVariableMala = ClavesPrivadasIa.Cargar(
+            new OpcionesIa { Kid = V.Kid, ClavePrivada = "esto no es una clave", ClavePrivadaArchivo = archivoBueno }, out var motivoMala, out _);
+        motivoMala.Should().Be("PRIVADA_ILEGIBLE");
+        conVariableMala.Should().BeNull();
+    }
+
+    /// <summary>HU-7b + CR-4: una PEM pública en la variable da PRIVADA_NO_ES_PRIVADA, igual que en archivo.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void CR4_PemPublicaEnVariable_EsPrivadaNoEsPrivada(bool spki)
+    {
+        var claves = ClavesPrivadasIa.Cargar(new OpcionesIa { Kid = V.Kid, ClavePrivada = PublicaPem(spki) }, out var motivo, out _);
+
+        claves.Should().BeNull();
+        motivo.Should().Be("PRIVADA_NO_ES_PRIVADA");
+    }
+
+    /// <summary>HU-7b + SP-9: una privada de 2048 bits en variable da el mismo motivo que en archivo.</summary>
+    [Fact]
+    public void SP9_Privada2048EnVariable_MismoMotivoQueEnArchivo()
+    {
+        using var rsa2048 = RSA.Create(2048);
+        var base64 = Convert.ToBase64String(rsa2048.ExportPkcs8PrivateKey());
+
+        var enArchivo = ClavesPrivadasIa.Cargar(new OpcionesIa { Kid = V.Kid, ClavePrivadaArchivo = Archivo("corta.p8", base64) }, out var motivoArchivo, out _);
+        var enVariable = ClavesPrivadasIa.Cargar(new OpcionesIa { Kid = V.Kid, ClavePrivada = base64 }, out var motivoVariable, out _);
+
+        enArchivo.Should().BeNull();
+        enVariable.Should().BeNull();
+        motivoVariable.Should().Be(motivoArchivo).And.Be("PRIVADA_MENOR_3072");
+    }
+
+    /// <summary>HU-7b + SP-16: ToString dice presente/ausente y el origen de cada privada, nunca un fragmento del valor.</summary>
+    [Fact]
+    public void SP16_ToString_DiceOrigenDeCadaPrivada_SinFragmentos()
+    {
+        using var anterior = RSA.Create(3072);
+        var anteriorBase64 = Convert.ToBase64String(anterior.ExportPkcs8PrivateKey());
+        var porVariable = new OpcionesIa { Kid = V.Kid, ClavePrivada = V.PrivadaBase64, KidAnterior = "diag-prueba-202610", ClavePrivadaAnterior = anteriorBase64 };
+        var porArchivo = new OpcionesIa { Kid = V.Kid, ClavePrivadaArchivo = Archivo("privada.p8", V.PrivadaBase64) };
+
+        porVariable.ToString().Should().Contain("privada=presente(variable)").And.Contain("privada_anterior=presente(variable)")
+            .And.NotContain(Marca).And.NotContain(anteriorBase64[..24]);
+        porArchivo.ToString().Should().Contain("privada=presente(archivo)").And.Contain("privada_anterior=ausente")
+            .And.NotContain(Marca).And.NotContain(_dir);
+        new OpcionesIa().ToString().Should().Contain("privada=ausente");
+    }
+
+    /// <summary>HU-7b: el log de arranque dice <c>privada=presente(variable)</c> o <c>presente(archivo)</c> sin fragmentos de la privada.</summary>
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task SP16_ElLogDeArranqueDiceElOrigenDeLaPrivada_SinFragmentos(bool porVariable)
+    {
+        var logs = new LogsIa();
+        using var sp = Construir(Plataforma(c =>
+        {
+            if (porVariable)
+            {
+                c["Diagnostico:Ia:ClavePrivadaArchivo"] = string.Empty;
+                c["Diagnostico:Ia:ClavePrivada"] = V.PrivadaBase64;
+            }
+        }), logs);
+
+        sp.GetRequiredService<IProveedorRedactor>().Should().BeOfType<ProveedorRedactorAnthropic>();
+        foreach (var h in sp.GetServices<IHostedService>())
+            await h.StartAsync(TestContext.Current.CancellationToken);
+
+        logs.Todo.Should().Contain(porVariable ? "privada=presente(variable)" : "privada=presente(archivo)")
+            .And.NotContain(Marca).And.NotContain(_dir);
+    }
+
+    /// <summary>HU-7b: variable ilegible deja la plataforma sin configurar (plantilla) sin tumbar el host; el aviso no lleva el valor.</summary>
+    [Fact]
+    public async Task SP16_VariableIlegible_QuedaSinConfigurar_YElAvisoNoLlevaElValor()
+    {
+        var logs = new LogsIa();
+        var mala = Marca + "%%no-es-base64%%";
+        using var sp = Construir(Plataforma(c =>
+        {
+            c["Diagnostico:Ia:ClavePrivadaArchivo"] = string.Empty;
+            c["Diagnostico:Ia:ClavePrivada"] = mala;
+        }), logs);
+
+        sp.GetRequiredService<IProveedorRedactor>().Should().BeOfType<ProveedorRedactorNoConfigurado>();
+        foreach (var h in sp.GetServices<IHostedService>())
+            await h.StartAsync(TestContext.Current.CancellationToken);
+
+        logs.Todo.Should().Contain("PRIVADA_ILEGIBLE").And.Contain("privada=presente(variable)").And.NotContain(Marca);
+    }
+
     [Fact]
     public void OrigenDesconocido_QuedaSinConfigurar()
     {

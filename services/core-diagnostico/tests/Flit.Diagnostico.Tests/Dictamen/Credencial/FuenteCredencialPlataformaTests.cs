@@ -222,6 +222,36 @@ public sealed class FuenteCredencialPlataformaTests : IAsyncLifetime
         publicaAnterior.Dispose();
     }
 
+    /// <summary>HU-7b: la anterior en variable (base64 PKCS#8) sirve en el reintento por <c>kid</c> igual que la de archivo.</summary>
+    [Fact]
+    public async Task KidDesconocido_ConAnteriorEnVariable_ReintentaYDescifraConLaAnterior()
+    {
+        using var publicaAnterior = RSA.Create();
+        publicaAnterior.ImportSubjectPublicKeyInfo(ParAnterior.Value.ExportSubjectPublicKeyInfo(), out _);
+        _core.Responder = p => p.Kid == V.Kid
+            ? throw PlatformRpcErrors.ToRpcException("CLAVE_DESTINATARIO_DESCONOCIDA", "kid", StatusCode.FailedPrecondition)
+            : Task.FromResult(CoreApiIaFalso.Valida(p, publicaAnterior, _reloj.GetUtcNow()));
+        var opciones = new OpcionesIa
+        {
+            Origen = OpcionesIa.OrigenPlataforma,
+            Kid = V.Kid,
+            ClavePrivada = V.PrivadaBase64,
+            KidAnterior = "diag-prueba-202610",
+            ClavePrivadaAnterior = Convert.ToBase64String(ParAnterior.Value.ExportPkcs8PrivateKey()),
+        };
+        var claves = ClavesPrivadasIa.Cargar(opciones, out var motivo, out var aviso);
+        motivo.Should().Be("OK");
+        aviso.Should().BeNull();
+        claves!.KidAnterior.Should().Be("diag-prueba-202610");
+        using var fuente = new FuenteCredencialPlataforma(_core.Cliente, claves, Options.Create(opciones), _reloj, _logs.Logger<FuenteCredencialPlataforma>());
+
+        var r = await fuente.ObtenerAsync(Ct);
+
+        r.Falla.Should().Be(FallaCredencial.Ninguna);
+        r.Credencial!.ApiKey.Should().Be(Centinela);
+        _core.Pedidos.Select(p => p.Kid).Should().Equal(V.Kid, "diag-prueba-202610");
+    }
+
     [Fact]
     public async Task SP12_UnaRespuestaValidaReenviadaAOtraSolicitud_SeRechazaComoTecnica()
     {
