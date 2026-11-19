@@ -14,8 +14,12 @@ import { tienePermiso } from "@/lib/sesion";
 import type { EventoTimeline } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 import { iconoComo } from "@flit/ui/iconoComo";
+import { narracionDesdeInfraccion } from "@/components/detalle/narracion";
 
 const ICONO_MAS = iconoComo("mas");
+
+/** Eventos que se ven sin pedir más (R2). */
+export const EVENTOS_VISIBLES = 8;
 
 const COLOR_ACTOR: Record<string, string> = {
   Usuario: "var(--color-flit-brand)",
@@ -44,8 +48,11 @@ export function Timeline({
   puedeObservar,
   onCambio,
   onIr,
+  fechaInfraccion = null,
 }: {
   comparendoId: string;
+  /** Fecha de imposición: cada evento dice cuántos días después de la infracción ocurrió (junto a su fecha). */
+  fechaInfraccion?: string | null;
   /** Sube cuando el detalle cambia por una acción: el timeline vuelve a cargar. */
   version?: number;
   puedeObservar: boolean;
@@ -60,6 +67,8 @@ export function Timeline({
   const [nota, setNota] = useState("");
   const [escribiendo, setEscribiendo] = useState(false);
   const [guardando, setGuardando] = useState(false);
+  // R2: las 8 más recientes; «Ver los N» muestra el resto en su sitio (el filtro por tipo sigue igual).
+  const [todos, setTodos] = useState(false);
   const eventos = useCarga(`timeline:${comparendoId}:${tipo}:${version}`, (signal) =>
     apiFetch<EventoTimeline[]>(`/comparendos/${comparendoId}/timeline`, { signal, query: { tipo: tipo || undefined } }),
   );
@@ -83,7 +92,7 @@ export function Timeline({
   return (
     <div className="flex flex-col gap-3">
       <div className="flex flex-wrap items-center gap-2">
-        <select className={`${INPUT_CLS} w-56`} value={tipo} onChange={(e) => setTipo(e.target.value)} aria-label="Filtrar por tipo de evento">
+        <select className={`${INPUT_CLS} w-full sm:w-auto sm:max-w-full`} value={tipo} onChange={(e) => setTipo(e.target.value)} aria-label="Filtrar por tipo de evento">
           <option value="">Todos los eventos</option>
           {Object.entries(EVENTO_TIMELINE).map(([valor, texto]) => (
             <option key={valor} value={valor}>
@@ -100,43 +109,53 @@ export function Timeline({
             <button type="button" className={BOTON_PRIMARIO_CLS} disabled={guardando || nota.trim().length === 0} onClick={guardar}>
               {guardando ? "Guardando…" : "Guardar observación"}
             </button>
-            <button type="button" className="text-xs font-semibold opacity-70 hover:underline" onClick={() => setEscribiendo(false)}>
+            <button type="button" className="text-xs font-semibold text-muted-foreground hover:underline" onClick={() => setEscribiendo(false)}>
               Cancelar
             </button>
-            <span className="ml-auto text-[11px] opacity-60">{nota.length}/2000 · No se puede editar después</span>
+            <span className="ml-auto text-xs text-muted-foreground">{nota.length}/2000 · No se puede editar después</span>
           </div>
         </div>
       )}
 
-      {eventos.estado === "loading" && <p className="text-xs opacity-60">Cargando eventos…</p>}
+      {/* Reserva el alto de unos eventos mientras carga: lo de abajo no salta cuando llegan (R2, HANNAH). */}
+      {eventos.estado === "loading" && <p className="min-h-48 text-xs text-muted-foreground">Cargando eventos…</p>}
       {eventos.estado === "error" && <InlineAlert tone="error" action={<button type="button" onClick={eventos.recargar}>Reintentar</button>}>{eventos.error}</InlineAlert>}
-      {eventos.estado === "ready" && (eventos.datos ?? []).length === 0 && <p className="text-xs opacity-60">Sin eventos para mostrar.</p>}
+      {eventos.estado === "ready" && (eventos.datos ?? []).length === 0 && <p className="text-xs text-muted-foreground">Sin eventos para mostrar.</p>}
 
       <ol className="relative ml-2 border-l-2 border-border">
-        {(eventos.datos ?? []).map((e) => (
+        {(todos ? (eventos.datos ?? []) : (eventos.datos ?? []).slice(0, EVENTOS_VISIBLES)).map((e) => {
+          const narracion = narracionDesdeInfraccion(fechaInfraccion, e.ocurridoEn);
+          return (
           <li key={e.id} className="relative mb-4 ml-5">
             <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full ring-4 ring-card" style={{ background: COLOR_ACTOR[e.actorTipo] ?? "var(--muted-foreground)" }} aria-hidden />
             <div className="flex flex-wrap items-baseline gap-x-2">
-              <span className="text-xs font-semibold">{EVENTO_TIMELINE[e.tipo] ?? e.tipo}</span>
-              <span className="text-[11px] opacity-60">
-                {formatoFechaHora(e.ocurridoEn)} · {nombreActor(e.actorNombre)}
+              <span className="text-sm font-semibold">{EVENTO_TIMELINE[e.tipo] ?? e.tipo}</span>
+              <span className="text-xs text-muted-foreground">
+                {formatoFechaHora(e.ocurridoEn)}
+                {narracion && ` · ${narracion}`} · {nombreActor(e.actorNombre)}
               </span>
             </div>
-            <p className="whitespace-pre-wrap text-xs text-foreground">{textoParaGestora(e.descripcion)}</p>
+            <p className="max-w-[80ch] whitespace-pre-wrap text-sm text-foreground">{textoParaGestora(e.descripcion)}</p>
             {/* §7.2: el evento lleva a lo que lo originó: el correo al Centro de mensajes; el DP, el pago y los documentos a su sección del detalle. */}
             {e.relacionadoTipo === "comunicacion_saliente" && e.relacionadoId && verMensajes && (
-              <Link href={`/mensajes?mensaje=${e.relacionadoId}`} className="text-[11px] font-semibold text-flit-brand hover:underline">
+              <Link href={`/mensajes?mensaje=${e.relacionadoId}`} className="text-xs font-semibold text-flit-brand-ink hover:underline">
                 Ver el correo
               </Link>
             )}
             {e.relacionadoTipo && ENLACE_SECCION[e.relacionadoTipo] && onIr && (
-              <button type="button" className="text-[11px] font-semibold text-flit-brand hover:underline" onClick={() => onIr(ENLACE_SECCION[e.relacionadoTipo!]!.seccion)}>
+              <button type="button" className="text-xs font-semibold text-flit-brand-ink hover:underline" onClick={() => onIr(ENLACE_SECCION[e.relacionadoTipo!]!.seccion)}>
                 {ENLACE_SECCION[e.relacionadoTipo]!.texto}
               </button>
             )}
           </li>
-        ))}
+          );
+        })}
       </ol>
+      {!todos && (eventos.datos ?? []).length > EVENTOS_VISIBLES && (
+        <button type="button" className="self-start text-sm font-semibold text-flit-brand-ink hover:underline" onClick={() => setTodos(true)}>
+          Ver los {(eventos.datos ?? []).length} eventos
+        </button>
+      )}
 
       {/* Epic GDC-8 / MOD06 §5.1: «Agregar observación» flota sobre el timeline y sigue a la vista al bajar por los eventos. */}
       {puedeObservar && !escribiendo && (

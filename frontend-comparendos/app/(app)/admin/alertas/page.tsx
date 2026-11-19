@@ -5,6 +5,7 @@ import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, StatusBadge, activeTone } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
+import { Interruptor } from "@/components/ui/Interruptor";
 import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { partirCorreos } from "@/lib/correos";
@@ -38,14 +39,13 @@ function Configuracion({ inicial, onGuardado }: { inicial: ConfigAlertas; onGuar
 
   return (
     <div className="grid grid-cols-1 gap-3 rounded-2xl border border-border p-4 sm:grid-cols-2">
-      <label className="flex items-center gap-2 text-sm font-semibold sm:col-span-2">
-        <input type="checkbox" checked={c.alertasHabilitadas} onChange={(e) => setC({ ...c, alertasHabilitadas: e.target.checked })} />
-        Enviar alertas (interruptor general)
-      </label>
+      <div className="sm:col-span-2">
+        <Interruptor activo={c.alertasHabilitadas} onCambio={(v) => setC({ ...c, alertasHabilitadas: v })} etiqueta="Enviar alertas" ayuda="Interruptor general: apagado, no sale ninguna alerta." />
+      </div>
       <label className={ETIQUETA_CLS}>
         Umbral de fallos por ciclo
         <input type="number" min={0} className={INPUT_CLS} value={c.umbralFallosCiclo} onChange={(e) => setC({ ...c, umbralFallosCiclo: Number(e.target.value) })} />
-        <span className="font-normal opacity-70">0 = un correo por cada clave que falle. Un número N = un solo correo al final del ciclo si fallan más de N.</span>
+        <span className="font-normal text-muted-foreground">0 = un correo por cada clave que falle. Un número N = un solo correo al final del ciclo si fallan más de N.</span>
       </label>
       <label className={ETIQUETA_CLS}>
         Nombre del remitente
@@ -54,12 +54,12 @@ function Configuracion({ inicial, onGuardado }: { inicial: ConfigAlertas; onGuar
       <label className={`${ETIQUETA_CLS} sm:col-span-2`}>
         Asunto
         <input className={INPUT_CLS} value={c.plantillaAsunto} onChange={(e) => setC({ ...c, plantillaAsunto: e.target.value })} />
-        <span className="font-normal opacity-70">Puedes usar {"{FUENTE}"} y {"{TIMESTAMP}"}.</span>
+        <span className="font-normal text-muted-foreground">Puedes usar {"{FUENTE}"} y {"{TIMESTAMP}"}.</span>
       </label>
       <label className={`${ETIQUETA_CLS} sm:col-span-2`}>
         Correos internos para reportes
         <input className={INPUT_CLS} value={internos} placeholder="cuentas@flit.com.co, gerencia@flit.com.co" onChange={(e) => setInternos(e.target.value)} />
-        <span className="font-normal opacity-70">
+        <span className="font-normal text-muted-foreground">
           Reciben en copia oculta los cierres semanal y mensual de todas las empresas con reportes. Separa con coma.
           {listaInternos.invalidos.length > 0 && <b className="text-destructive"> Inválidos: {listaInternos.invalidos.join(", ")}</b>}
         </span>
@@ -113,19 +113,19 @@ export default function Alertas() {
         {config.estado === "error" && <InlineAlert tone="error">{config.error}</InlineAlert>}
         {config.datos && <Configuracion key={JSON.stringify(config.datos)} inicial={config.datos} onGuardado={config.recargar} />}
 
-        <h2 className="text-lg font-semibold">Destinatarios</h2>
-        <div className="flex flex-wrap items-end gap-2">
+        <h2 className="text-base font-semibold">Destinatarios</h2>
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:flex-wrap sm:items-end">
           <label className={ETIQUETA_CLS}>
             Correo
-            <input className={`${INPUT_CLS} w-64`} value={correo} onChange={(e) => setCorreo(e.target.value)} />
+            <input className={`${INPUT_CLS} w-full sm:w-64`} value={correo} onChange={(e) => setCorreo(e.target.value)} />
           </label>
           <label className={ETIQUETA_CLS}>
             Nombre
-            <input className={`${INPUT_CLS} w-48`} value={nombre} onChange={(e) => setNombre(e.target.value)} />
+            <input className={`${INPUT_CLS} w-full sm:w-48`} value={nombre} onChange={(e) => setNombre(e.target.value)} />
           </label>
           <label className={ETIQUETA_CLS}>
             Recibe
-            <select className={`${INPUT_CLS} w-44`} value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <select className={`${INPUT_CLS} w-full sm:w-44`} value={tipo} onChange={(e) => setTipo(e.target.value)}>
               {Object.entries(TIPO_ALERTA).map(([v, t]) => (
                 <option key={v} value={v}>
                   {t}
@@ -153,7 +153,7 @@ export default function Alertas() {
               key: "tipo",
               header: "Recibe",
               render: (d) => (
-                <select className={`${INPUT_CLS} w-44`} value={d.tipoAlerta} onChange={(e) => cambiar(d, { tipoAlerta: e.target.value })} aria-label={`Qué recibe ${d.correo}`}>
+                <select className={`${INPUT_CLS} w-full sm:w-44`} value={d.tipoAlerta} onChange={(e) => cambiar(d, { tipoAlerta: e.target.value })} aria-label={`Qué recibe ${d.correo}`}>
                   {Object.entries(TIPO_ALERTA).map(([v, t]) => (
                     <option key={v} value={v}>
                       {t}
