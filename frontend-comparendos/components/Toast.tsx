@@ -11,6 +11,10 @@ export type ToastType = "success" | "warning" | "error";
 
 const COLOR_TOAST: Record<ToastType, string> = { success: "var(--di-success-dot)", warning: "var(--di-alerta-punto)", error: "var(--di-alerta-punto)" };
 
+/** Cierre del toast: el ícono es de 14 px; el ::after extiende el toque a 40×40 sin mover nada (iPhone/iPad). */
+export const CERRAR_TOAST_CLS =
+  "relative after:absolute after:left-1/2 after:top-1/2 after:size-10 after:-translate-x-1/2 after:-translate-y-1/2 after:content-['']";
+
 interface ToastItem {
   id: number;
   type: ToastType;
@@ -68,7 +72,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               <IconoAviso tipo="error" className="h-4 w-4 shrink-0" />
             )}
             <p className="flex-1 font-medium">{toast.message}</p>
-            <button type="button" aria-label="Cerrar notificación" onClick={() => dismiss(toast.id)}>
+            {/* Área táctil de 40×40 con un ::after centrado: el botón, el ícono y su anillo de foco miden lo mismo que antes. */}
+            <button type="button" aria-label="Cerrar notificación" onClick={() => dismiss(toast.id)} className={CERRAR_TOAST_CLS}>
               <Icono nombre="cerrar" className="h-3.5 w-3.5 opacity-60" />
             </button>
           </div>
