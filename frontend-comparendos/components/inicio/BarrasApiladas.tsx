@@ -44,7 +44,6 @@ export function BarrasApiladas({
   anchoRotulo = 280,
 }: BarrasApiladasProps) {
   const horizontal = orientacion === "horizontal";
-  const altura = alto ?? (horizontal ? Math.max(120, filas.length * altoFila + 32) : 260);
   const caja = useRef<HTMLDivElement>(null);
   const [ancho, setAncho] = useState(0);
   useEffect(() => {
@@ -55,8 +54,12 @@ export function BarrasApiladas({
     return () => ro.disconnect();
   }, []);
   const rotulo = ancho > 0 ? Math.round(Math.min(Math.max(110, ancho * 0.22), anchoRotulo)) : Math.min(132, anchoRotulo);
-  // ~6,3 px por carácter a 11 px: el nombre se corta a lo que cabe en dos líneas del eje.
-  const maxCaracteres = Math.max(14, Math.floor((rotulo / 6.3) * 2));
+  // ~8 px por carácter en MAYÚSCULAS a 11 px (los organismos vienen en mayúsculas): se corta a lo que cabe en dos
+  // líneas. recharts parte por palabras, así que en un eje angosto (celular) un nombre llega a cuatro líneas: ahí la
+  // fila crece a 56 px (4 × 13 px) para que no se monte sobre la vecina, como pasaba a 390 px.
+  const maxCaracteres = Math.max(14, Math.floor(rotulo / 8) * 2);
+  const altoFilaReal = horizontal && rotulo < 160 ? Math.max(altoFila, 56) : altoFila;
+  const altura = alto ?? (horizontal ? Math.max(120, filas.length * altoFilaReal + 32) : 260);
   const recortar = (t: string) => (t.length > maxCaracteres ? `${t.slice(0, maxCaracteres - 1)}…` : t);
   return (
     <div>
