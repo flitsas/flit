@@ -897,7 +897,13 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     {
         var destino = Environment.GetEnvironmentVariable("FLIT_PDF_MUESTRA");
         Assert.SkipWhen(string.IsNullOrWhiteSpace(destino), "Sin FLIT_PDF_MUESTRA: no se escribe el PDF de muestra.");
-        var documento = PdfVehiculo.Documento(ContenidoConDetalle("ABC123"), GeneradoEn);
+        var conDictamen = ContenidoConDetalle("ABC123") with
+        {
+            Dictamen = new DictamenEnHuella("BLOQUEADO", "COMPLETADA",
+                "El SOAT no está vigente, así que el traspaso queda bloqueado.\nLa revisión técnico-mecánica no está vigente y el vehículo ya cumplió el plazo de su primera revisión, así que el traspaso queda bloqueado.\nFalta el resultado de una consulta obligatoria. El dictamen se emite con la información disponible y esta novedad queda advertida.",
+                Version: 1),
+        };
+        var documento = PdfVehiculo.Documento(conDictamen, GeneradoEn);
         File.WriteAllBytes(destino!, QuestPDF.Fluent.GenerateExtensions.GeneratePdf(documento));
         var pagina = 0;
         foreach (var imagen in QuestPDF.Fluent.GenerateExtensions.GenerateImages(documento, new QuestPDF.Infrastructure.ImageGenerationSettings { RasterDpi = 110 }))

@@ -25,7 +25,7 @@ import {
 } from "./ola-ux-comun";
 
 /**
- * FE-2 · Detalle express/masivo: menú «Acciones» por fila y encabezados RUNT/SIMIT agrupados (spec-ui §2; V2 y V3 adoptados).
+ * FE-2 · Detalle express/masivo: menú «Acciones» por fila y una columna por sujeto con badges RUNT/SIMIT (spec-ui §2; V2 y V3 adoptados).
  *
  * Gherkin (particion-hus.md FE-2): «desplegable de acciones» y «encabezados agrupados».
  * Orden de ítems: el de spec-ui §2.3 con V2 (Sanear/Ver saneamiento · Crear/Ver trámite · Ver deuda · PDF · Reintentar). El
@@ -44,7 +44,8 @@ import {
  *     «Descargar PDF» · «Reintentar consultas»
  *   - texto sr-only «Sin acciones para la placa <placa>» (el chip «Saneamiento: …» de la fila no se usa: el carril fe1 lo
  *     retira; el estado se lee del nombre del menuitem)
- *   - columnheader «Acciones» · th[scope=colgroup] «RUNT» / «SIMIT» · columnheader «RUNT vehículo», «SIMIT propietario»…
+ *   - columnheader «Acciones» · columnheader «Vehículo», «Propietario», «Locatario» · td[data-label=<sujeto>] con dos
+ *     badges [data-fuente][data-celda][data-estado] («RUNT · <estado>» / «SIMIT · <estado>») · link «Ver detalle de RUNT vehículo de <placa>: …»
  *   - table «/semáforo de consultas/i» · rowheader «<placa>»
  */
 test.describe.configure({ mode: "serial" });
@@ -60,14 +61,14 @@ async function textoVisible(el: Locator): Promise<string> {
   });
 }
 
-test.describe("FE-2 menú de acciones y cabecera RUNT/SIMIT", () => {
+test.describe("FE-2 menú de acciones y columnas por sujeto", () => {
   let lote = "";
   let V1 = "";
   let V2 = "";
   let V7 = "";
   let sesion: Sesion;
 
-  test("encabezados: «RUNT» y «SIMIT» centrados, subcolumnas sin prefijo visible y con nombre completo; columna «Acciones»", async ({ page }) => {
+  test("encabezados: una columna por sujeto con badges RUNT/SIMIT apilados que enlazan a su fuente; columna «Acciones»", async ({ page }) => {
     exigirCliente();
     test.setTimeout(420_000);
     const prefijo = prefijoFicticio();
@@ -80,31 +81,33 @@ test.describe("FE-2 menú de acciones y cabecera RUNT/SIMIT", () => {
     const tabla = grilla(page);
     await expect(tabla).toBeVisible();
 
-    for (const grupo of ["RUNT", "SIMIT"]) {
-      const th = tabla.locator('th[scope="colgroup"]').filter({ hasText: new RegExp(`^\\s*${grupo}\\s*$`) });
-      await expect(th).toHaveCount(1);
-      await expect(th).toBeVisible();
-      expect(await th.evaluate((n) => getComputedStyle(n).textAlign), `${grupo}: text-align`).toBe("center");
-      // RotuloConIcono con justify-center: el centro del contenido coincide con el centro de la celda (± 4 px).
-      const [celda, contenido] = await th.evaluate((n) => {
-        const r = n.getBoundingClientRect();
-        const hijo = (n.firstElementChild ?? n) as HTMLElement;
-        const range = document.createRange();
-        range.selectNodeContents(hijo);
-        const c = range.getBoundingClientRect();
-        return [r.left + r.width / 2, c.left + c.width / 2];
-      });
-      expect(Math.abs(celda - contenido), `${grupo}: contenido centrado`).toBeLessThanOrEqual(4);
+    // Cabecera de un solo nivel: una columna por sujeto (Vehículo / Propietario / Locatario) más avalúo e impuesto.
+    for (const nombre of ["Placa o VIN", "Vehículo", "Propietario", "Locatario", "Avalúo comercial", "Impuesto departamental"]) {
+      await expect(tabla.getByRole("columnheader", { name: nombre, exact: true }), `columnheader «${nombre}»`).toHaveCount(1);
     }
-
-    // Subcolumnas: visibles «vehículo» / «propietario» / «locatario»; el nombre accesible conserva el grupo (sr-only).
-    for (const nombre of ["RUNT vehículo", "RUNT propietario", "RUNT locatario", "SIMIT vehículo", "SIMIT propietario", "SIMIT locatario"]) {
-      const th = tabla.getByRole("columnheader", { name: nombre, exact: true });
-      await expect(th, `columnheader «${nombre}»`).toHaveCount(1);
-      const visible = await textoVisible(th);
-      expect(visible, `texto visible de «${nombre}»`).toBe(nombre.split(" ")[1]);
-      expect(await th.evaluate((n) => getComputedStyle(n).textAlign)).toMatch(/^(left|start)$/);
+    // Cada td de sujeto apila dos badges, uno por fuente, con prefijo visible y enlace al detalle de su fuente.
+    const filaV1 = tabla.getByRole("row").filter({ has: page.getByRole("rowheader", { name: new RegExp(V1) }) });
+    const sujetos = [
+      { sujeto: "Vehículo", runt: "RUNT", simit: "SIMIT_VEHICULO" },
+      { sujeto: "Propietario", runt: "RUNT_PROPIETARIO", simit: "SIMIT_PROPIETARIO" },
+      { sujeto: "Locatario", runt: "RUNT_LOCATARIO", simit: "SIMIT_LOCATARIO" },
+    ];
+    for (const { sujeto, runt, simit } of sujetos) {
+      const td = filaV1.locator(`td[data-label="${sujeto}"]`);
+      await expect(td, `td del sujeto «${sujeto}»`).toHaveCount(1);
+      await expect(td.locator("[data-fuente]")).toHaveCount(2);
+      await expect(td.locator(`[data-fuente="${runt}"]`)).toHaveCount(1);
+      await expect(td.locator(`[data-fuente="${simit}"]`)).toHaveCount(1);
     }
+    // Badge terminado: texto «RUNT · <estado>» y enlace con el nombre completo de la fuente.
+    const runtV1 = filaV1.locator('[data-fuente="RUNT"][data-celda]');
+    const enlaceRunt = runtV1.getByRole("link", { name: new RegExp(`^Ver detalle de RUNT vehículo de ${V1}: `) });
+    await expect(enlaceRunt).toHaveCount(1);
+    expect(await textoVisible(enlaceRunt), "texto visible del badge RUNT").toMatch(/^RUNT · \S/);
+    const simitV1 = filaV1.locator('[data-fuente="SIMIT_VEHICULO"][data-celda]');
+    const enlaceSimit = simitV1.getByRole("link", { name: new RegExp(`^Ver detalle de SIMIT vehículo de ${V1}: `) });
+    await expect(enlaceSimit).toHaveCount(1);
+    expect(await textoVisible(enlaceSimit), "texto visible del badge SIMIT").toMatch(/^SIMIT · \S/);
 
     // Columna de acciones: siempre «Acciones» (desaparece «Reporte»).
     await expect(tabla.getByRole("columnheader", { name: "Acciones", exact: true })).toBeVisible();
@@ -118,7 +121,9 @@ test.describe("FE-2 menú de acciones y cabecera RUNT/SIMIT", () => {
     // Móvil (< 900 px, tarjetas): el data-label conserva el nombre completo de la fuente (spec-ui §2.6).
     await ancho(page, 360);
     const etiquetas = await tabla.locator("td[data-label]").evaluateAll((tds) => tds.map((t) => t.getAttribute("data-label")));
-    expect(etiquetas).toEqual(expect.arrayContaining(["RUNT vehículo", "SIMIT vehículo"]));
+    expect(etiquetas).toEqual(expect.arrayContaining(["Vehículo", "Propietario", "Locatario"]));
+    const fuentes = await tabla.locator("[data-fuente][data-label]").evaluateAll((ns) => ns.map((n) => n.getAttribute("data-label")));
+    expect(fuentes).toEqual(expect.arrayContaining(["RUNT vehículo", "SIMIT vehículo"]));
     await sinDesbordeHorizontal(page, "detalle-360");
     await revisarTemasOla(page, "detalle-360", { captura: "A-1" });
     await ancho(page, 1280);
