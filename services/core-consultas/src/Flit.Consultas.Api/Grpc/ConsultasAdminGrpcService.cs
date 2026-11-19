@@ -23,6 +23,9 @@ internal sealed class ConsultasAdminGrpcService(
     /// <summary>Largo máximo del motivo de un cambio de contingencia.</summary>
     internal const int MotivoMaximo = 500;
 
+    /// <summary>Único cliente de servicio que puede escribir la contingencia (core-api).</summary>
+    internal const string ClienteQueGuardaContingencia = "svc-tramites";
+
     /// <summary>
     /// Épica #14644 (HU #14648): los tres tipos con su contingencia, siempre en el mismo orden. Global: no usa la empresa.
     /// </summary>
@@ -44,6 +47,9 @@ internal sealed class ConsultasAdminGrpcService(
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
+        // Defensa en profundidad: solo core-api (svc-tramites, que atiende al Super Admin FLIT) puede cambiar la contingencia.
+        if (!string.Equals(PlatformServiceCaller.From(context).ClientId, ClienteQueGuardaContingencia, StringComparison.Ordinal))
+            throw new RpcException(new Status(StatusCode.PermissionDenied, "Solo core-api puede cambiar la contingencia de proveedor RUNT."));
         var ct = context.CancellationToken;
 
         var tipo = request.Tipo?.Trim() ?? string.Empty;
@@ -62,22 +68,21 @@ internal sealed class ConsultasAdminGrpcService(
         if (nombre.Length > 200)
             nombre = nombre[..200];
 
+        // Upsert atómico: dos primeras escrituras concurrentes del mismo tipo no chocan con el índice único (la última gana).
         var ahora = time.GetUtcNow();
-        var fila = await db.ContingenciasRunt.FirstOrDefaultAsync(c => c.Kind == tipo, ct).ConfigureAwait(false);
-        if (fila is null)
-        {
-            fila = new Persistence.ContingenciaProveedorRunt { Id = Guid.CreateVersion7(), Kind = tipo, CreatedAt = ahora };
-            db.ContingenciasRunt.Add(fila);
-        }
-
-        fila.Provider = proveedor.Length == 0 ? null : proveedor;
-        fila.Reason = motivo;
-        fila.UpdatedByName = nombre;
-        fila.UpdatedById = Guid.TryParse(request.ActualizadoPorId, out var actor) ? actor : null;
-        fila.UpdatedAt = ahora;
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        var proveedorFinal = proveedor.Length == 0 ? null : proveedor;
+        Guid? actor = Guid.TryParse(request.ActualizadoPorId, out var actorId) ? actorId : null;
+        await db.Database.ExecuteSqlInterpolatedAsync(
+            $"""
+            INSERT INTO consultas.runt_contingencies (id, kind, provider, reason, updated_by_name, updated_by_id, created_at, updated_at)
+            VALUES ({Guid.CreateVersion7()}, {tipo}, {proveedorFinal}::varchar, {motivo}, {nombre}, {actor}::uuid, {ahora}, {ahora})
+            ON CONFLICT (kind) DO UPDATE
+               SET provider = EXCLUDED.provider, reason = EXCLUDED.reason, updated_by_name = EXCLUDED.updated_by_name,
+                   updated_by_id = EXCLUDED.updated_by_id, updated_at = EXCLUDED.updated_at
+            """, ct).ConfigureAwait(false);
 
         contingencia.Invalidar();
+        var fila = await db.ContingenciasRunt.AsNoTracking().SingleAsync(c => c.Kind == tipo, ct).ConfigureAwait(false);
         return AProto(tipo, fila);
     }
 

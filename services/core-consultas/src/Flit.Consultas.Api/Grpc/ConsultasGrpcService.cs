@@ -231,10 +231,13 @@ internal sealed partial class ConsultasGrpcService(
     {
         if (!Configuracion.ContingenciaRuntReglas.AplicaAlLlamador(caller.ClientId))
             return null;
-        if (proveedorPedido is not null && !Configuracion.ContingenciaRuntReglas.ProveedoresDe(tipo).Contains(proveedorPedido, StringComparer.Ordinal))
+        if (proveedorPedido is not null && !Configuracion.ContingenciaRuntReglas.ProveedoresDe(tipo).Contains(proveedorPedido.Trim(), StringComparer.OrdinalIgnoreCase))
             return null;
 
-        return await contingencia.ForzadoAsync(tipo, ct).ConfigureAwait(false);
+        var forzado = await contingencia.ForzadoAsync(tipo, ct).ConfigureAwait(false);
+        if (forzado is not null)
+            contingencia.RegistrarDesvio(tipo, forzado, caller.ClientId);
+        return forzado;
     }
 
     /// <summary>Cadena de esta llamada: el forzado primero y la de la empresa (o la global) de respaldo, sin repetirlo.</summary>

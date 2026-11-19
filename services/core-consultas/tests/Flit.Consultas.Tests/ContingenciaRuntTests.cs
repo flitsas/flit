@@ -398,6 +398,71 @@ public sealed class ContingenciaRuntTests : IAsyncLifetime
         columnas.Should().NotBeEmpty().And.NotContain("tenant_id");
     }
 
+    // ── Ajustes de revisión ───────────────────────────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Revision3_DosPrimerasEscriturasConcurrentesDelMismoTipo_NoChocan_YQuedaUnaSolaFila()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+
+        var resultados = await Task.WhenAll(Enumerable.Range(0, 6).Select(i => Guardar("vehicle_plate", i % 2 == 0 ? "verifik" : "kyverum_runt", $"Cambio {i}")));
+
+        resultados.Should().HaveCount(6);
+        await using var scope = _app!.Services.CreateAsyncScope();
+        var filas = await scope.ServiceProvider.GetRequiredService<ConsultasDb>().ContingenciasRunt.AsNoTracking()
+            .Where(c => c.Kind == "vehicle_plate").ToListAsync(TestContext.Current.CancellationToken);
+        filas.Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Revision4_ProveedorExplicitoSeComparaSinDistinguirMayusculas()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        await Activar("vehicle_plate", "kyverum_runt");
+
+        var respuesta = await ConsultarPlaca("svc-tramites", _empresaVerifik, proveedorFijo: "VERIFIK");
+
+        respuesta.Resultado.Proveedor.Should().Be("kyverum_runt");
+        Llamadas().Should().Equal("kyverum_runt");
+    }
+
+    [Theory]
+    [InlineData("svc-ict")]
+    [InlineData("svc-personanatural")]
+    [InlineData("svc-diagnostico")]
+    public async Task Revision7_GuardarContingencia_ConOtroClienteQueNoEsCoreApi_PermissionDenied_YNadaCambia(string cliente)
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var admin = new ConsultasAdminService.ConsultasAdminServiceClient(Canal(Token(Admin, cliente)));
+
+        var llamada = async () => await admin.GuardarContingenciaRuntAsync(
+            new GuardarContingenciaRuntRequest { Tipo = "vehicle_plate", Proveedor = "verifik", Motivo = "Intento", ActualizadoPor = "X" },
+            cancellationToken: TestContext.Current.CancellationToken);
+
+        (await llamada.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.PermissionDenied);
+        await using var scope = _app!.Services.CreateAsyncScope();
+        (await scope.ServiceProvider.GetRequiredService<ConsultasDb>().ContingenciasRunt.CountAsync(TestContext.Current.CancellationToken)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Revision6_LaExencionDeEmpresaEsUnaListaCerrada_OtrosMetodosDeAdminSiLaExigen()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+
+        // En la lista: sin empresa responde (ListarDepartamentosImpuesto es de ConsultasService).
+        var departamentos = await Cliente(Token("platform.consultas", "svc-tramites")).ListarDepartamentosImpuestoAsync(new ListarDepartamentosImpuestoRequest(), cancellationToken: ct);
+        departamentos.Should().NotBeNull();
+
+        // Fuera de la lista (mismo servicio de administración): sin empresa, INVALID_ARGUMENT.
+        var sinEmpresa = async () => await AdminCliente().ObtenerConsumoAsync(new ObtenerConsumoRequest
+        {
+            Desde = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow.AddHours(-1)),
+            Hasta = Google.Protobuf.WellKnownTypes.Timestamp.FromDateTimeOffset(DateTimeOffset.UtcNow),
+        }, cancellationToken: ct);
+        (await sinEmpresa.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
+    }
+
     // ── Apoyo ─────────────────────────────────────────────────────────────────────────────────────────────────────
 
     private string[] Llamadas() => [.. _llamadas];
