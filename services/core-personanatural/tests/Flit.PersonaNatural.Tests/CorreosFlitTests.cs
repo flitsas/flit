@@ -11,14 +11,11 @@ namespace Flit.PersonaNatural.Tests;
 
 /// <summary>
 /// Correos 2.0 — guarda del copy de los 3 correos del portal (cotización, cierre y anulación) al pasar al marco FLIT. El texto
-/// visible del cuerpo es la línea base tomada ANTES del cambio (2026-11-19); el marco solo agrega el pie FLIT (soporte y
-/// política). Cualquier diferencia de copy hace fallar la prueba.
+/// visible es IDÉNTICO a la línea base tomada ANTES del cambio (2026-11-19): el marco no agrega texto (el pie es solo logo y
+/// divisor). Cualquier diferencia de copy hace fallar la prueba.
 /// </summary>
 public sealed class CorreosFlitTests
 {
-    private const string Pie =
-        "Si tienes alguna pregunta o necesitas ayuda, no dudes en ponerte en contacto con nosotros. Puedes hacerlo a través de soporte@flitsas.com o nuestro chat online . POLÍTICA DE PRIVACIDAD";
-
     private const string Organismo = "Secretaría de Movilidad de Medellín";
 
     [Fact]
@@ -34,7 +31,7 @@ public sealed class CorreosFlitTests
         Texto(html).Should().Be(
             "Tu cotización Derechos del organismo Traspaso particular $ 250.000 COP Servicio FLIT $ 45.900 COP "
             + "Estampilla <pro> & más Departamental $ 1.234.567 COP Total $ 1.530.467 COP "
-            + "Valores vigentes al momento de enviar este correo; pueden cambiar. No guardamos tu correo. " + Pie);
+            + "Valores vigentes al momento de enviar este correo; pueden cambiar. No guardamos tu correo.");
     }
 
     [Theory]
@@ -43,7 +40,7 @@ public sealed class CorreosFlitTests
     public void Cierre_conserva_el_copy(string? nombre, string saludo) =>
         Texto(CorreoDeCierre.ArmarHtml(nombre, "PN-7K3QX9", Organismo)).Should().Be(
             $"Tu trámite quedó pagado {saludo} Recibimos el pago de tu trámite. Tu código para consultarlo es PN-7K3QX9 . "
-            + $"Recógelo en {Organismo} . Guarda este código: con él puedes consultar el estado de tu trámite. " + Pie);
+            + $"Recógelo en {Organismo} . Guarda este código: con él puedes consultar el estado de tu trámite.");
 
     [Theory]
     [InlineData("María José Pérez", "Hola María José Pérez,")]
@@ -52,7 +49,7 @@ public sealed class CorreosFlitTests
         Texto(CorreoDeAnulacion.ArmarHtml(nombre, "PN-7K3QX9", Organismo)).Should().Be(
             $"Tu pago fue anulado {saludo} El pago en caja de tu trámite PN-7K3QX9 fue anulado por el organismo. "
             + $"Acércate a la caja de {Organismo} para generar el pago de nuevo. "
-            + "Guarda este código: con él puedes consultar el estado de tu trámite. " + Pie);
+            + "Guarda este código: con él puedes consultar el estado de tu trámite.");
 
     [Fact]
     public void Las_imagenes_van_por_url_absoluta_desde_la_misma_clave_de_core_api()

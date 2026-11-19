@@ -5,8 +5,9 @@ namespace Flit.PersonaNatural.Api.CorreoFlit;
 
 /// <summary>
 /// Marco FLIT de los correos del portal (Correos 2.0): banner, título azul en mayúsculas, cuerpo, tarjeta de detalle y pie con
-/// logo, soporte y política de privacidad. Copia local del layout FLIT de core-api (<c>FlitBrandedEmailLayout</c>): este es un
-/// servicio aparte y no depende de otro. Solo pone el marco; el texto lo trae cada correo y no cambia.
+/// logo y divisor. Copia local del layout FLIT de core-api (<c>FlitBrandedEmailLayout</c>): este es un servicio aparte y no
+/// depende de otro. Solo pone el marco; el texto lo trae cada correo y no cambia. El pie NO lleva el texto de soporte ni la
+/// política de privacidad: estos correos nunca lo tuvieron y el copy está congelado.
 /// <para>
 /// CSS en línea (Gmail descarta <c>&lt;style&gt;</c>) y sin anchos fijos: la tabla mide 100 % hasta 600 px, así que a 360 px no
 /// hay desborde horizontal. Las imágenes van por URL absoluta desde <see cref="ClaveBaseUrl"/>, la misma clave que usa core-api.
@@ -22,8 +23,6 @@ internal static class LayoutCorreoFlit
 
     public const string Banner = "flit-banner-correo.png";
     public const string LogoFirma = "flit-logo-firma.png";
-    public const string CorreoSoporte = "soporte@flitsas.com";
-    public const string PoliticaPrivacidad = "https://flitsas.com.co/privacy-policy/";
 
     private const string Azul = "#557EFF";
     private const string AzulOscuro = "#162744";
@@ -53,13 +52,8 @@ internal static class LayoutCorreoFlit
             .Append($"<tr><td style=\"padding:28px 20px 4px;text-align:center;\"><h1 style=\"margin:0;font-family:{Fuente};font-size:20px;line-height:1.35;font-weight:700;letter-spacing:0.02em;text-transform:uppercase;color:{Azul};\">{Enc(titulo)}</h1></td></tr>")
             .Append($"<tr><td style=\"padding:16px 20px 8px;text-align:center;font-size:15px;line-height:1.6;color:{Tinta};\">{cuerpoHtml}</td></tr>")
             .Append($"<tr><td style=\"padding:20px 20px 16px;text-align:center;\"><img src=\"{Attr(b + "/" + LogoFirma)}\" alt=\"FLIT\" width=\"120\" style=\"display:inline-block;width:120px;max-width:120px;height:auto;border:0;\"/></td></tr>")
-            .Append("<tr><td style=\"padding:0 20px 28px;\">")
-            .Append($"<hr style=\"border:none;border-top:1px solid {Azul};margin:0 0 14px;\"/>")
-            .Append($"<p style=\"margin:0 0 10px;font-size:12px;line-height:1.5;color:{Gris};text-align:center;\">")
-            .Append("Si tienes alguna pregunta o necesitas ayuda, no dudes en ponerte en contacto con nosotros. ")
-            .Append($"Puedes hacerlo a través de <strong>{Enc(CorreoSoporte)}</strong> o nuestro <strong>chat online</strong>.</p>")
-            .Append($"<p style=\"margin:0;text-align:center;\"><a href=\"{Attr(PoliticaPrivacidad)}\" style=\"color:{Azul};font-size:11px;text-decoration:none;letter-spacing:0.02em;\">POLÍTICA DE PRIVACIDAD</a></p>")
-            .Append("</td></tr></table></body></html>");
+            .Append($"<tr><td style=\"padding:0 20px 28px;\"><hr style=\"border:none;border-top:1px solid {Azul};margin:0;\"/></td></tr>")
+            .Append("</table></body></html>");
         return sb.ToString();
     }
 
