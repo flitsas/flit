@@ -65,7 +65,7 @@ export function EnvioMasivoAviso({ filas, onCerrar, onHecho }: { filas: FilaBand
       <div className="flex flex-col gap-3">
         {!resultado && (
           <>
-            {cuenta.estado === "loading" && !demasiados && <p className="text-xs opacity-70">Revisando qué aviso corresponde a cada comparendo…</p>}
+            {cuenta.estado === "loading" && !demasiados && <p className="text-xs text-muted-foreground">Revisando qué aviso corresponde a cada comparendo…</p>}
             {cuenta.error && <InlineAlert tone="error">{cuenta.error}</InlineAlert>}
             {cuenta.estado === "ready" && !demasiados && opciones.length === 0 && (
               <InlineAlert tone="warning" compact>
@@ -84,7 +84,7 @@ export function EnvioMasivoAviso({ filas, onCerrar, onHecho }: { filas: FilaBand
                 </select>
               </label>
             )}
-            <p className="text-xs opacity-70">Los que no procedan quedan omitidos con su motivo y no detienen el envío.</p>
+            <p className="text-xs text-muted-foreground">Los que no procedan quedan omitidos con su motivo y no detienen el envío.</p>
             {demasiados && <InlineAlert tone="warning" compact>Selecciona máximo {MAXIMO_AVISOS_MASIVO} comparendos por envío.</InlineAlert>}
           </>
         )}

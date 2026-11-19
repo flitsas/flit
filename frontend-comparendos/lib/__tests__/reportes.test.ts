@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { accionesProductividad, errorRango, etiquetaMes, formatoTasa, inicioDeMes, numeroCorto, topeEje, totalesProductividad, valorSerie, type PuntoMensual } from "@/lib/reportes";
+import { accionesProductividad, errorRango, etiquetaMes, formatoTasa, FRENTES, hrefBandeja, pesosCorto, textoPeriodo, inicioDeMes, numeroCorto, topeEje, totalesProductividad, valorSerie, type PuntoMensual } from "@/lib/reportes";
 
 const punto: PuntoMensual = { periodo: "2026-10", ingresados: 4, valorIngresado: 100, dpEnviados: 2, dpFavorables: 1, ahorro: 50, pagosCc: 1, pagosPc: 2, pagosBc: 3 };
 
@@ -24,6 +24,12 @@ describe("reportes", () => {
     expect(numeroCorto(1604100)).toBe("1,6 M");
     expect(numeroCorto(12000)).toBe("12 mil");
     expect(numeroCorto(7)).toBe("7");
+    // Se sube de escala cuando el redondeo llega a 1.000 (REX): nunca «1000 M» ni «1000 mil».
+    expect(numeroCorto(999_950_000)).toBe("1 mil M");
+    expect(numeroCorto(960_000_000)).toBe("960 M");
+    expect(numeroCorto(999_960)).toBe("1 M");
+    expect(numeroCorto(999.96)).toBe("1 mil");
+    expect(numeroCorto(-999_950_000)).toBe("-1 mil M");
   });
 
   it("etiqueta meses y calcula el inicio de mes", () => {
@@ -51,5 +57,32 @@ describe("accionesProductividad", () => {
   it("dice lo que hizo el usuario, en el orden de las columnas", () => {
     expect(accionesProductividad(["avisosManuales", "contraventoresAsignados"])).toBe("Asignó contraventor · Envió aviso");
     expect(accionesProductividad([])).toBe("—");
+  });
+});
+
+describe("lente de dinero (rediseño S2)", () => {
+  it("abrevia las cifras grandes en pesos y deja enteras las chicas", () => {
+    expect(pesosCorto(3_900_000_000)).toBe("$ 3,9 mil M");
+    expect(pesosCorto(126_200_000)).toBe("$ 126,2 M");
+    expect(pesosCorto(604_100)).toBe("$ 604.100");
+    expect(pesosCorto(null)).toBe("—");
+  });
+
+  it("cada frente lleva a la bandeja con las claves de aQuery, la empresa y el NIT", () => {
+    const porClave = Object.fromEntries(FRENTES.map((f) => [f.clave, hrefBandeja(f.query)]));
+    expect(porClave).toEqual({
+      proximosAVencer: "/bandeja?rapido=ProximosAVencer",
+      caducidadInmediata: "/bandeja?juridico=CaducidadInmediata",
+      sinContraventor: "/bandeja?rapido=SinContraventor",
+      rechazadosOt: "/bandeja?rapido=RechazadosOt",
+      sinGestion: "/bandeja?sinGestion=true",
+      vencidos: "/bandeja?estadoLegal=Vencido",
+    });
+    expect(hrefBandeja({ rapido: "Radar" }, { empresa: "e1", nit: "n1" })).toBe("/bandeja?rapido=Radar&empresa=e1&nit=n1");
+  });
+
+  it("escribe el periodo visible de lo pagado", () => {
+    expect(textoPeriodo("2026-11-01", "2026-11-19")).toBe("1 al 19 de noviembre de 2026");
+    expect(textoPeriodo("2026-10-15", "2026-11-19")).toBe("15 de octubre de 2026 al 19 de noviembre de 2026");
   });
 });

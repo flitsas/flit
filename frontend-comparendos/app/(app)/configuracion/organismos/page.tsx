@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, StatusBadge } from "@flit/ui";
+import { DataTable, InlineAlert, StatusBadge, EstadoVacio } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -77,7 +77,7 @@ export default function PermisosPorOrganismo() {
           </div>
         )}
         {clave === null ? (
-          <p className="text-sm opacity-70">Elige una empresa para ver sus permisos.</p>
+          <EstadoVacio titulo="Elige una empresa" mensaje="Elige una empresa para ver sus permisos." />
         ) : (
           <DataTable
             ariaLabel="Permisos por organismo"
@@ -96,7 +96,7 @@ export default function PermisosPorOrganismo() {
                 key: "consulta",
                 header: "Consultar contraventor",
                 render: (p) => (
-                  <Interruptor activo={p.permiteConsultaContraventor} deshabilitado={esSuper} etiqueta={p.permiteConsultaContraventor ? "Permitido" : "Bloqueado"}
+                  <Interruptor soloControl activo={p.permiteConsultaContraventor} deshabilitado={esSuper} etiqueta={p.permiteConsultaContraventor ? "Permitido" : "Bloqueado"}
                     onCambio={(v) => guardar(p.organismoTransitoId, p.representanteLegalId, v, p.permiteCambioContraventor)} />
                 ),
               },
@@ -107,7 +107,7 @@ export default function PermisosPorOrganismo() {
                   p.cambioBloqueadoGlobal ? (
                     <StatusBadge label="El organismo no lo admite" tone="danger" title="Bloqueo global del catálogo de organismos" />
                   ) : (
-                    <Interruptor activo={p.permiteCambioContraventor} deshabilitado={esSuper} etiqueta={p.permiteCambioContraventor ? "Permitido" : "Bloqueado"}
+                    <Interruptor soloControl activo={p.permiteCambioContraventor} deshabilitado={esSuper} etiqueta={p.permiteCambioContraventor ? "Permitido" : "Bloqueado"}
                       onCambio={(v) => guardar(p.organismoTransitoId, p.representanteLegalId, p.permiteConsultaContraventor, v)} />
                   ),
               },

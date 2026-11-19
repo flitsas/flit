@@ -289,7 +289,7 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
       </div>
       {puedeAsignar && d.contraventor?.documentoPendiente && <CompletarDocumento ctx={ctx} />}
       {puedeAsignar && (
-        <Interruptor activo={d.notificadoFisicamente} onCambio={notificado} etiqueta="Notificado en persona" ayuda="El conductor ya conoce el comparendo: no recibe avisos automáticos." />
+        <Interruptor soloControl activo={d.notificadoFisicamente} onCambio={notificado} etiqueta="Notificado en persona" ayuda="El conductor ya conoce el comparendo: no recibe avisos automáticos." />
       )}
       {confirmar && (
         <InlineAlert
