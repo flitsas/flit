@@ -25,7 +25,7 @@ Se crea el rpc `flit.platform.v1.ConfiguracionIaService/ObtenerConfiguracionIa`,
 - la cola de proveedores (las mismas reglas que `AiProviderQueue`: habilitado, capaz y con llave);
 - el modelo de cada proveedor;
 - `row_version` y un TTL sugerido;
-- la llave de cada proveedor en un **sobre híbrido RSA-OAEP-256 + AES-256-GCM**, cifrado con la clave pública de Diagnóstico (`kid`). El AAD une audiencia, herramienta, proveedor, `row_version`, `kid`, un nonce que envía el cliente y la hora de emisión.
+- la llave de cada proveedor en un **sobre híbrido RSA-OAEP-256 + AES-256-GCM**, cifrado con la clave pública de Diagnóstico (`kid`). El AAD une audiencia, herramienta, proveedor, modelo, `row_version`, `kid`, un nonce que envía el cliente y la hora de emisión.
 
 Diagnóstico descifra con su clave privada y guarda la llave solo en memoria, en una caché con TTL. Si no hay configuración, usa la plantilla (fallo cerrado). En v1, `diagnostico_dictamen` solo admite `anthropic`.
 
@@ -101,7 +101,7 @@ Limitar `diagnostico_dictamen` a `anthropic` cuesta resiliencia, porque no hay f
 
 ### Cambios operacionales
 - core-api: la herramienta usa la **misma `ANTHROPIC_API_KEY` general** de OCR y DR. FLIT (decisión del usuario P2=b, 2026-11-18). No existe `DIAGNOSTICO_ANTHROPIC_API_KEY`. Se añaden `Ai__Entrega__Diagnostico__ClavePublica`/`__Kid` (y las `Siguiente`) y el modelo en `Ai:Herramientas:diagnostico_dictamen:Modelos:anthropic`, que por defecto es `claude-haiku-4-5`.
-- core-diagnostico: `Diagnostico__Ia__Origen=plataforma`, `Diagnostico__Ia__ClavePrivadaArchivo` (docker secret, SP-16) y `__Kid` (y las `Anterior`), `Diagnostico__Ia__ModelosPermitidos` (SP-14) y `Diagnostico__Ia__MaxLlamadasPorMinuto` (SP-17). `Diagnostico__Anthropic__ApiKey` sale del compose y queda solo para `Origen=local`.
+- core-diagnostico: `Diagnostico__Ia__Origen=plataforma`, `Diagnostico__Ia__ClavePrivadaArchivo` (docker secret, SP-16), `__Kid`, `__ClavePrivadaAnteriorArchivo` y `__KidAnterior` (rotación; no hay variable inline de la privada), `Diagnostico__Ia__ModelosPermitidos` (SP-14) y `Diagnostico__Ia__MaxLlamadasPorMinuto` (SP-17). `Diagnostico__Anthropic__ApiKey` sale del compose y queda solo para `Origen=local`.
 
 ### Riesgos aceptados (decisión del usuario, 2026-11-18)
 - **Llave general compartida (SP-17).** Con P2=b, la llave que sale cifrada hacia Diagnóstico es la misma que usan OCR y DR. FLIT para todos los tenants. Si core-diagnostico o su clave privada se comprometen, un atacante puede agotar la cuota y dejar sin servicio a OCR y DR. FLIT, o generar gasto a cuenta de FLIT; revocarla obliga a cortar los tres usos a la vez. Mitigaciones: tope local de llamadas por minuto en Diagnóstico, límite de gasto con alerta en el workspace de Anthropic y runbook de revocación (estas dos últimas, a cargo del Líder Técnico). Una llave propia de Diagnóstico sigue siendo la salida si el riesgo deja de ser aceptable: es un cambio de configuración en core-api.
