@@ -7,10 +7,10 @@ using Xunit;
 namespace Flit.Integration.Tests.Tramites;
 
 /// <summary>
-/// HU #13264 AC4 (Feature #13261, Épica #12741) — el trigger <c>tramites.trg_field_value_immutable</c> (DDL 130) deja
-/// escribir <c>impuesto_departamental_pagado</c> en <c>preasignacion</c> (además de <c>asignado</c> y
-/// <c>rechazado</c> con subsanación) y sigue rechazando con <c>check_violation</c> en <c>entregado</c> y en cualquier
-/// otra llave de <c>preasignacion</c>.
+/// HU #13264 AC4 (Feature #13261, Épica #12741) y Bug #14625 — el trigger <c>tramites.trg_field_value_immutable</c>
+/// (DDL 130, ampliado por el 203) deja escribir <c>impuesto_departamental_pagado</c> en <c>preasignacion</c>, <c>asignado</c>
+/// y <c>rechazado</c> con subsanación. En los demás estados, salvo anulado y revocado, la admite solo con
+/// <c>source = flito</c>. Sigue rechazando con <c>check_violation</c> cualquier otra llave de <c>preasignacion</c>.
 /// <para>Uso de ejemplo: con la instancia en <c>preasignacion</c>, <c>INSERT … 'impuesto_departamental_pagado'</c> pasa y
 /// <c>INSERT … 'soat_pagado'</c> falla con 23514.</para>
 /// </summary>
@@ -45,16 +45,6 @@ public sealed class FieldValueImpuestoPagadoFlitoTriggerTests(PostgresDatabaseFi
         }
     }
 
-    [PostgresFact]
-    public async Task AC4_Entregado_SigueLanzandoCheckViolationParaLaMarca()
-    {
-        await SembrarAsync("entregado");
-        await using var conn = await Fixture.OpenConnectionAsync();
-
-        var rechazo = async () => await EjecutarAsync(conn, "INSERT INTO tramites.procedure_instance_field_values (tenant_id, procedure_instance_id, field_key, value_text, source) VALUES (@tenant, @id, @clave, 'true', 'flito')", Clave);
-        (await rechazo.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(CheckViolation);
-    }
-
     [PostgresTheory]
     [InlineData("asignado", false)]
     [InlineData("rechazado", true)]
@@ -66,10 +56,36 @@ public sealed class FieldValueImpuestoPagadoFlitoTriggerTests(PostgresDatabaseFi
         await EjecutarAsync(conn, "INSERT INTO tramites.procedure_instance_field_values (tenant_id, procedure_instance_id, field_key, value_text, source) VALUES (@tenant, @id, @clave, 'true', 'flito')", Clave);
     }
 
-    [PostgresFact]
-    public async Task AC4_RechazadoSinSubsanacion_NoLaAdmite()
+    /// <summary>
+    /// Bug #14625 (DDL 203) — en los estados cerrados o no editables la marca se admite solo con <c>source = flito</c>.
+    /// Con otra fuente sigue el <c>check_violation</c>, así que el gestor no gana ninguna edición.
+    /// </summary>
+    [PostgresTheory]
+    [InlineData("entregado", false)]
+    [InlineData("aprobado", false)]
+    [InlineData("preparado", false)]
+    [InlineData("rechazado", false)]
+    public async Task BUG14625_EnEstadosNoEditablesSoloAdmiteLaMarcaConSourceFlito(string estado, bool subsanacion)
     {
-        await SembrarAsync("rechazado", subsanacion: false);
+        await SembrarAsync(estado, subsanacion);
+        await using var conn = await Fixture.OpenConnectionAsync();
+
+        var delGestor = async () => await EjecutarAsync(conn, "INSERT INTO tramites.procedure_instance_field_values (tenant_id, procedure_instance_id, field_key, value_text, source) VALUES (@tenant, @id, @clave, 'true', 'user')", Clave);
+        (await delGestor.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(CheckViolation);
+
+        await EjecutarAsync(conn, "INSERT INTO tramites.procedure_instance_field_values (tenant_id, procedure_instance_id, field_key, value_text, source) VALUES (@tenant, @id, @clave, 'true', 'flito')", Clave);
+        await EjecutarAsync(conn, "UPDATE tramites.procedure_instance_field_values SET value_text = 'true', source = 'flito', updated_at = now() WHERE procedure_instance_id = @id AND field_key = @clave", Clave);
+
+        var borrar = async () => await EjecutarAsync(conn, "DELETE FROM tramites.procedure_instance_field_values WHERE procedure_instance_id = @id AND field_key = @clave", Clave);
+        (await borrar.Should().ThrowAsync<PostgresException>()).Which.SqlState.Should().Be(CheckViolation, "solo INSERT/UPDATE de FLITO");
+    }
+
+    [PostgresTheory]
+    [InlineData("anulado")]
+    [InlineData("revocado")]
+    public async Task BUG14625_AnuladoYRevocadoRechazanLaMarcaAunConSourceFlito(string estado)
+    {
+        await SembrarAsync(estado);
         await using var conn = await Fixture.OpenConnectionAsync();
 
         var rechazo = async () => await EjecutarAsync(conn, "INSERT INTO tramites.procedure_instance_field_values (tenant_id, procedure_instance_id, field_key, value_text, source) VALUES (@tenant, @id, @clave, 'true', 'flito')", Clave);

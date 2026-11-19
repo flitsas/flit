@@ -45,8 +45,8 @@ public sealed record SubmitExternalAttachmentResult(
 /// reemplaza el suyo anterior (<c>reemplazoDe</c>) y el mismo contenido es idempotente. Todo ocurre con la fila del
 /// trámite bloqueada. El archivo se guarda en el almacenamiento ANTES de tocar la base y el binario viejo se retira
 /// DESPUÉS de confirmar: si algo falla el cliente conserva lo que tenía.</para>
-/// <para>HU #13264: en preasignación, asignado y rechazado con subsanación el 201 también deja
-/// <c>impuesto_departamental_pagado = true</c> (<c>source = flito</c>) en la misma transacción; en entregado no.</para>
+/// <para>HU #13264 / Bug #14625: en todo estado admitido (todos salvo anulado y revocado) el 201 también deja
+/// <c>impuesto_departamental_pagado = true</c> (<c>source = flito</c>) en la misma transacción.</para>
 /// </summary>
 public sealed class SubmitExternalAttachmentHandler(
     IExternalAttachmentRepository repository,
@@ -116,8 +116,8 @@ public sealed class SubmitExternalAttachmentHandler(
         var igual = propios.FirstOrDefault(a => string.Equals(a.Sha256, sha256, StringComparison.OrdinalIgnoreCase));
         if (igual is not null)
         {
-            // HU #13264 — el 200 no toca el adjunto, pero si el estado marca y la marca de flito falta (p. ej. el adjunto se
-            // cargó en entregado y el trámite volvió a un estado editable) la pone, en la misma transacción bloqueada.
+            // HU #13264 / Bug #14625 — el 200 no toca el adjunto, pero si la marca de flito falta (p. ej. el adjunto se cargó
+            // antes del Bug #14625 en un estado que no marcaba) la pone, en la misma transacción bloqueada.
             var marcado = target.PagadoMarcado;
             if (!marcado && ExternalAttachmentRules.MarksPaid(target.Status, target.SubsanacionActiva))
             {
@@ -160,8 +160,8 @@ public sealed class SubmitExternalAttachmentHandler(
             return new(Rejected("attachment_exists", target.TenantId), []);
         }
 
-        // HU #13264 — en los estados editables el comprobante marca el impuesto como pagado (misma transacción que el
-        // insert); en entregado se archiva sin tocar la marca y la respuesta refleja la que ya hubiera.
+        // HU #13264 / Bug #14625 — en todo estado admitido el comprobante marca el impuesto como pagado (misma transacción
+        // que el insert).
         var pagadoMarcado = target.PagadoMarcado;
         if (ExternalAttachmentRules.MarksPaid(target.Status, target.SubsanacionActiva))
         {
