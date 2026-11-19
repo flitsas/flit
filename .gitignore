@@ -143,3 +143,6 @@ services/core-api/artifacts/fur-analysis*/
 
 # Caché de pnpm: si alguien instala con --store-dir dentro del repo, no debe aparecer como cambios.
 .pnpm-store/
+
+# Caché de ESLint (CI y local con --cache)
+.eslintcache
