@@ -1,6 +1,7 @@
 "use client";
 
 import { Suspense, useEffect, useState } from "react";
+import { useSesion } from "@/components/ComparendosShell";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, Modal, usePaginacion } from "@flit/ui";
@@ -75,7 +76,10 @@ function Contenido() {
   const router = useRouter();
   const [porDefecto] = useState(periodoInicial);
   const [inicial] = useState(() => productividadDeParams(params, porDefecto));
-  const [periodo, setPeriodo] = useState<Periodo>(inicial.periodo);
+  const { sesion } = useSesion();
+  const [periodoElegido, setPeriodo] = useState<Periodo>(inicial.periodo);
+  // La empresa solo la elige el SuperAdmin: una ?empresa= puesta a mano no viaja para nadie más.
+  const periodo: Periodo = sesion?.usuario.esSuperAdmin ? periodoElegido : { ...periodoElegido, empresa: null };
   const [cifra, setCifra] = useState<CifraAbierta | null>(inicial.cifra);
   const setVer = useAbrirDetalle();
   const pg = usePaginacion(25);
@@ -88,7 +92,9 @@ function Contenido() {
   const filaCifra = cifra ? filas.find((f) => f.usuarioId === cifra.usuarioId) : undefined;
   const sel: Seleccion | null = cifra && filaCifra ? { usuarioId: cifra.usuarioId, usuario: filaCifra.usuario, metrica: cifra.metrica } : null;
 
-  const nuevaQuery = productividadAParams(periodo, cifra, porDefecto).toString();
+  // Una cifra cuyo usuario no está en el periodo ya cargado no se guarda: no debe reabrirse sola más adelante.
+  const cifraVigente = datos.estado === "ready" && cifra && !filaCifra ? null : cifra;
+  const nuevaQuery = productividadAParams(periodo, cifraVigente, porDefecto).toString();
   useEffect(() => {
     UrlProductividad.registrar(nuevaQuery);
     if (nuevaQuery === new URLSearchParams(window.location.search).toString()) return;
@@ -112,7 +118,14 @@ function Contenido() {
           </button>
         }
       />
-      <FiltrosPeriodo valor={periodo} onAplicar={setPeriodo} />
+      <FiltrosPeriodo
+        valor={periodo}
+        onAplicar={(p) => {
+          // Otro periodo es otra consulta: la cifra abierta se cierra.
+          setPeriodo(p);
+          setCifra(null);
+        }}
+      />
       {filas.length > 0 && (
         <div className={METRICAS_GRID_CLS} aria-label="Totales del periodo" role="group">
           <TarjetaMetrica etiqueta="Comparendos gestionados" cifra={totales.gestionados.toLocaleString("es-CO")} pie={`${filas.length.toLocaleString("es-CO")} usuarios en el periodo`} />
@@ -153,7 +166,7 @@ function Contenido() {
         pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: filas.length, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
       />
       {/* Al ver un comparendo la cifra sigue abierta en la URL: así «volver» la reabre. */}
-      {sel && <DetalleCifra sel={sel} periodo={periodo} onCerrar={() => setCifra(null)} onVer={(id) => setVer(id)} />}
+      {sel && <DetalleCifra sel={sel} periodo={periodo} onCerrar={() => setCifra(null)} onVer={(id) => setVer(id, null, `/reportes/productividad?${nuevaQuery}`)} />}
     </section>
   );
 }
