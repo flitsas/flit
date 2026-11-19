@@ -38,6 +38,7 @@ describe("ruta del detalle y «volver» (rediseño S1)", () => {
       '<div role="dialog"></div>',
       '<div role="alertdialog"></div>',
       '<ul role="menu"></ul>',
+      '<ul role="listbox"></ul>',
       '<div id="flit-suite-account" role="region"></div>',
       '<div id="flit-suite-products" role="region"></div>',
       '<nav aria-label="Navegación principal"><button aria-expanded="true"></button></nav>',
