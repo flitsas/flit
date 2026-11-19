@@ -166,6 +166,31 @@ public sealed class IniciarKyverumVerifyHandler(
         if (bloqueo is not null)
             return (null, "biometria_activa", IdentityInFlightRelease.Conflicto(bloqueo));
 
+        return await EnviarYCrearValidacionAsync(instance, tenantId, parte!, nombre, tipoDoc, documento, email, ct);
+    }
+
+    /// <summary>
+    /// HU #14627 (Bug #14627, FLIT - SOPORTE) — núcleo de "llamar a Kyverum y crear/encolar la fila",
+    /// extraído de <see cref="HandleCoreAsync"/> para que <see cref="AdminReenviarValidacionIdentidadHandler"/>
+    /// lo reutilice en el caso "enviar la validación por primera vez" desde el cuadro administrativo (un
+    /// actor que nunca tuvo una fila propia). Deliberadamente NO incluye el gate de estado del trámite
+    /// (<c>not_draft</c>) ni el guard de "ya existe una activa para esta parte": esos dos los decide cada
+    /// llamador (el wizard los tiene arriba en <see cref="HandleCoreAsync"/>; el admin aplica el suyo,
+    /// propio, antes de invocar este método). Requiere <paramref name="instance"/> con
+    /// <c>BiometricValidations</c> cargada (se le agrega la fila nueva/encolada directamente).
+    /// </summary>
+    internal async Task<(IniciarKyverumVerifyResult? Result, string? Error, IdentitySendDecision? Conflict)> EnviarYCrearValidacionAsync(
+        ProcedureInstance instance,
+        Guid tenantId,
+        string parte,
+        string nombre,
+        string tipoDoc,
+        string documento,
+        string email,
+        CancellationToken ct)
+    {
+        var id = instance.Id;
+
         // Id de NUESTRA validación: se genera ANTES de llamar al proveedor para incrustarlo en la
         // webhookUrl (el webhook de Kyverum no repite el id en el cuerpo → correlación por URL).
         var validationId = Guid.NewGuid();
