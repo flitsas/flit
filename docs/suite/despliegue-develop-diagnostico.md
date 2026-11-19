@@ -148,7 +148,7 @@ Los valores `<secreto>` se generan por ambiente y van a un sealed secret. Nunca 
 | `Diagnostico__Consultas__Address` (`DIAGNOSTICO_CONSULTAS_ADDRESS`) | Opcional | Vacío | **Solo** la réplica de departamentos con impuesto. No enciende fuentes | `http://core-consultas:8084` | `D/Modulos/Consultas/Fuentes/ClienteConsultas.cs:37`, `:116` |
 | `Diagnostico__Fuentes__ImpuestoDisponible` (`DIAGNOSTICO_IMPUESTO_DISPONIBLE`) | Opcional | `false` | Ofrecer la fuente de impuesto | `false` | `D/Modulos/Configuracion/DisponibilidadFuentes.cs:14`, `:17` |
 | `Diagnostico__Ambiente` (`DIAGNOSTICO_AMBIENTE`) | Opcional | Vacío | Ambiente lógico. Hoy solo decide si el redactor puede simular | `DEV` | `D/Modulos/Modulos.cs:18`, `RegistroRedactor.cs:16` |
-| `Diagnostico__Anthropic__Simulado` | Opcional | `false` | Redactor simulado. Solo con `Diagnostico__Ambiente` LOCAL o DEV. **El compose no la pasa** | `true` | `RegistroRedactor.cs:21` |
+| `Diagnostico__Anthropic__Simulado` | Opcional | `false` | Redactor simulado. Solo con `Diagnostico__Ia__Origen=local` y `Diagnostico__Ambiente` LOCAL o DEV; con `plataforma` nunca simula. **El compose no la pasa** | `true` | `RegistroRedactor.cs:21` |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | Opcional | Vacío | Trazas | El de los demás servicios | `DC:541` |
 
 **No poner en ningún ambiente:** `Diagnostico__Identidad__SimularSuscripcionActiva` (`GuardSuscripcion.cs:46`) ni
@@ -253,7 +253,7 @@ Recomendación para el **primer** despliegue en DEV: todo simulado, para probar 
 | `INTEMPO_API_BASE_URL` | Vacía mientras se simula | Por decidir | Por decidir | Sin ella la fuente queda «no conectada» y el servicio arranca igual |
 | `Diagnostico__Fuentes__ImpuestoDisponible` | `false` | `false` | `false` | Ver §4.3 |
 | `IMPUESTO_API_*`, `IMPUESTO_CONTACTO_*` | Sin valor | Sin valor | Sin valor | El encendido real no entra (§9, punto 5) |
-| `Diagnostico__Redaccion__Habilitado` + `Diagnostico__Ia__*` | `true`, par RSA propio | `true`, par RSA propio | `false` hasta que el PO decida | Origen `plataforma` (defecto del compose): proveedor, modelo y llave salen de «Configuración de IA» (herramienta `diagnostico_dictamen`) cifrados por gRPC, ADR-0091. Sin privada o sin llave en core-api, el dictamen sale «Sin análisis» |
+| `Diagnostico__Redaccion__Habilitado` + `Diagnostico__Ia__*` | `true`, par RSA propio | `true`, par RSA propio | `false` hasta que el PO decida | Origen `plataforma` (defecto del compose; en DEV va en el configmap, ver PC-9): proveedor, modelo y llave salen de «Configuración de IA» (herramienta `diagnostico_dictamen`) cifrados por gRPC, ADR-0091. Sin privada o sin llave en core-api, el dictamen sale «Sin análisis» |
 | `FILE_MANAGER_BASE_URL` | El de core-api en DEV | El de core-api en QA | El de core-api en PDN | **No use el defecto del compose: es la URL de PDN** (`DC:560`). Ver PC-5 |
 | Certificado `.pfx` | Propio | Propio | Propio | No copiar entre ambientes |
 | `DIAGNOSTICO_PORT` | 4024 | 5024 | 6024 | `cd.yml:93`, `:107`, `:120` |
@@ -709,7 +709,7 @@ Nada de esto se corrigió en este documento. Las rutas se verificaron en el comm
     `despliegue-dev-k3s-comparendos.md:6` dice que QA sigue con compose, y `cd.yml:1370-1375` dice que no. `handoff-vps-diagnostico.md:59-62` dice que
     el `.env` debe tener `RABBITMQ_URL_DIAGNOSTICO` antes de fusionar: solo aplica a quien usa el compose. Manda el `cd.yml`.
 17. **`Diagnostico:Simulacion:Habilitada` sigue leyéndose.** `guia-entorno-local-suite.md:11` dice que ya no existe. `RegistroRedactor.cs:23` la usa para simular
-    el redactor. Prefiera `Diagnostico__Anthropic__Simulado`.
+    el redactor, y solo con `Diagnostico__Ia__Origen=local`. Prefiera `Diagnostico__Anthropic__Simulado`.
 18. **Quitar «Próximamente» por PR.** `handoff-vps-diagnostico.md:386` pide un PR «para ese ambiente», pero `appsettings.json:209` es uno solo para todos.
     Un PR sacaría a Diagnóstico también de QA y PDN.
 
@@ -737,7 +737,7 @@ Quedaron abiertos porque dependen de `flit-gitops` o de decisiones que no están
 | PC-6 | Tiempo de lectura que necesita la descarga de PDF y ZIP. El clúster del gateway corta a 30 s y nginx de Comparendos a 120 s: medir en el humo. No hay ingress: ver la tabla inicial | Líder Técnico |
 | PC-7 | Sacar a Diagnóstico de «Próximamente» solo en DEV: `Suite__Hosts__Overrides__diagnostico` en core-api y core-identity (`ConfiguredProductHosts.cs:31`). **No quite** `Suite__Hosts__ComingSoon__0=diagnostico`: Comparendos volvería a «Próximamente», porque ese índice lo reemplaza en `appsettings.json`. No se probó en un ambiente | Líder Técnico |
 | PC-8 | Si el scope `platform.consultas` queda como variable por ambiente o entra a `appsettings.json` (con su prueba) | Líder Técnico con backend-agent |
-| PC-9 | Redactor en DEV: llave real de Anthropic, simulado o sin configurar | Líder Técnico con PO |
+| PC-9 | **Cerrado por ADR-0091:** en DEV la llave sale de «Configuración de IA» (core-api, `ANTHROPIC_API_KEY`) cifrada por gRPC. En `flit-gitops/services/flit2-dev/`: configmap de core-diagnostico con `Diagnostico__Ia__Origen=plataforma`, `Diagnostico__Ia__Kid=diag-dev-<aaaamm>` y `Diagnostico__Redaccion__Habilitado=true`; sealed secret con `Diagnostico__Ia__ClavePrivada`; configmap de core-api con `Ai__Entrega__Diagnostico__Kid` (el mismo kid) y `Ai__Entrega__Diagnostico__ClavePublica`. Quitar `Diagnostico__Anthropic__ApiKey` de DEV si existe. Sin esto DEV queda con `Origen=local` (defecto de `appsettings.json`). Generar el par: `.env.prod.example`, bloque de Diagnóstico | Líder Técnico |
 | PC-10 | Alerta de DLQ en k3s | Líder Técnico |
 | PC-11 | Cómo se monta el `.pfx` en k3s y con qué ruta | Líder Técnico |
 | PC-12 | **Cerrado:** `core-identity` expone 8083 en DEV | |

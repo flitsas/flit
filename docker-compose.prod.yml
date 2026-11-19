@@ -352,6 +352,9 @@ services:
     # HU #13331 (Epic #13316): límites por contenedor. Sin la variable (o en 0) no hay límite: los valores los fija el
     # líder en el .env de cada ambiente después de medir (handoff-vps-identidad.md, paso 3).
     mem_limit: ${CORE_API_MEM_LIMIT:-0}
+    # ADR-0091 (SP-18): sin volcados de memoria; uno tendría ANTHROPIC_API_KEY en claro.
+    ulimits:
+      core: 0
     cpus: ${CORE_API_CPUS:-0}
     oom_score_adj: ${CORE_API_OOM_SCORE_ADJ:-0}
     logging: *default-logging
@@ -584,7 +587,7 @@ services:
       # hasta que el PO decida por costo. Diagnóstico ya no tiene llave propia (ADR-0091): proveedor, modelo y llave salen
       # de «Configuración de IA» de core-api por gRPC (el mismo Diagnostico__Tramites__Address), con la llave cifrada para
       # la pública de Diagnóstico; aquí entra la privada que la descifra (base64 DER PKCS#8 en una línea), por variable
-      # como ANTHROPIC_API_KEY de core-api. Kid/ClavePrivada actuales; Anterior solo durante una rotación. Sin privada
+      # como ANTHROPIC_API_KEY de core-api. Kid diag-<ambiente>-<aaaamm> (p. ej. diag-dev-202611). Kid/ClavePrivada actuales; Anterior solo durante una rotación. Sin privada
       # arranca igual y el dictamen sale con la plantilla «sin análisis»: no rompe el deploy. ModelosPermitidos y
       # MaxLlamadasPorMinuto no se declaran (defectos de la imagen).
       Diagnostico__Redaccion__Habilitado: ${DIAGNOSTICO_REDACCION_HABILITADO:-false}
@@ -615,6 +618,9 @@ services:
       start_period: 40s
     restart: *restart
     mem_limit: ${CORE_DIAGNOSTICO_MEM_LIMIT:-0}
+    # ADR-0091 (SP-18): sin volcados de memoria; uno tendría la privada RSA y la llave de IA en claro.
+    ulimits:
+      core: 0
     cpus: ${CORE_DIAGNOSTICO_CPUS:-0}
     logging: *default-logging
 

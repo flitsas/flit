@@ -35,6 +35,10 @@ venv/
 infra/secrets/
 **/secrets/
 *.pem
+# ADR-0091: material del par RSA de la llave de IA de Diagnóstico (runbook de .env.prod.example).
+*.der
+*.p8
+diag-ia*
 *.key
 *.p12
 *.pfx

@@ -7,7 +7,7 @@
 **Tags**: arquitectura, backend, seguridad, criptografía, grpc, llm, diagnostico, modulo-admin-ia, ley-1581
 **Supersedes**: ninguno.
 **Enmienda**: ADR-0070 de core-api, «Multi-proveedor de IA por herramienta» (`services/core-api/docs/adr/ADR-0070-multi-proveedor-ia-por-herramienta.md`, Propuesto). Hasta ahora las llaves no salían de core-api. Desde este ADR, core-api puede entregar la llave de **una herramienta propia de un servicio consumidor** a ese servicio, cifrada para él. Las herramientas `ocr` y `dr_flit` nunca se entregan por este canal; pero como `diagnostico_dictamen` reutiliza la `ANTHROPIC_API_KEY` general (P2=b), el valor de esa llave sí sale cifrado hacia Diagnóstico (ver «Riesgos aceptados»).
-**Contrato**: `.claude/state/ola-llm-flito/contrato-ia-grpc.md` (proto, errores, sobre, mapa de archivos).
+**Contrato**: `contracts/proto/flit/platform/v1/configuracion_ia.proto` (servicio y mensajes), el vector de prueba `contracts/proto/flit/platform/v1/testdata/configuracion_ia_vector.json` (AAD y sobre byte a byte) y la tabla «Códigos de error del rpc» de este ADR.
 
 ## Contexto
 
@@ -110,6 +110,19 @@ Limitar `diagnostico_dictamen` a `anthropic` cuesta resiliencia, porque no hay f
 - BD: DDL `203-ai-tool-diagnostico-dictamen.sql` y su migración EF. Amplía los tres CHECK de `tool_code` y siembra la fila de la herramienta.
 - OpenAPI de core-api: el enum de `toolCode` incluye `diagnostico_dictamen` (sube el patch).
 - Identity: el scope `platform.ia.diagnostico` se añade al cliente `svc-diagnostico`.
+
+### Códigos de error del rpc
+
+| gRPC | reason (ErrorInfo) | Cuándo | Diagnóstico hace |
+|---|---|---|---|
+| UNAUTHENTICATED | — | token ausente o inválido | fallo técnico reintentable (espera 120 s) + log Error |
+| PERMISSION_DENIED | `CLIENTE_NO_PERMITIDO` | `sub` distinto de svc-diagnostico o sin scope (la policy lo audita como `POLICY_RECHAZADA`) | sin configurar + log Error |
+| PERMISSION_DENIED | `HERRAMIENTA_NO_PERMITIDA` | herramienta fuera de su lista (`ocr`, `dr_flit`…) | sin configurar |
+| INVALID_ARGUMENT | `TOOL_CODE_REQUERIDO` · `NONCE_INVALIDO` · `KID_INVALIDO` | validación de la petición | sin configurar |
+| FAILED_PRECONDITION | `CLAVE_DESTINATARIO_DESCONOCIDA` | `kid` no registrado en core-api | reintenta una vez con `KidAnterior`; si no, sin configurar |
+| UNAVAILABLE / DEADLINE_EXCEEDED / INTERNAL | — | core-api reiniciando, BD caída | fallo técnico reintentable (espera 120 s); nunca sin configurar |
+
+`disponible=false` (sin proveedor con llave, `SIN_PROVEEDOR_CON_LLAVE`) no es error: respuesta OK que Diagnóstico guarda 60 s.
 
 ## ADRs relacionados
 
