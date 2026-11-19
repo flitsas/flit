@@ -34,10 +34,13 @@ import {
 
 export type ParteId = "transferente" | "adquirente";
 
+// HU #14642 — TI y PPT añadidos: backend mapea TI→TI (Kyverum T); PPT ya soportado.
 const TIPOS_DOC = [
   { value: "CC", label: "CC" },
   { value: "CE", label: "CE" },
+  { value: "TI", label: "Tarjeta de identidad" },
   { value: "PAS", label: "Pasaporte" },
+  { value: "PPT", label: "PPT" },
   { value: "NIT", label: "NIT" },
 ];
 

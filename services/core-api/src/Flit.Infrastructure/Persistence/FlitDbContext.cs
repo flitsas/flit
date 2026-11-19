@@ -167,6 +167,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     // HU #11313 (Feature #11309, ADR-0042) — versiones de documento personalizado por compañía.
     public DbSet<CompanyPersonalizedDocumentEntity> CompanyPersonalizedDocuments => Set<CompanyPersonalizedDocumentEntity>();
 
+    /// <summary>HU #14642 — overrides manuales de respuesta de conductor RUNT por tenant (SuperAdmin).</summary>
+    public DbSet<TenantRuntPersonOverrideEntity> TenantRuntPersonOverrides => Set<TenantRuntPersonOverrideEntity>();
+
     // HU #12412 (Feature #12366, Épica #12237, ADR-0060 D1) — identidad de marca de la cabeza
     // MARCA_BLANCA (borrador + publicada) y versiones de su logotipo.
     public DbSet<TenantBrandingEntity> TenantBrandings => Set<TenantBrandingEntity>();
