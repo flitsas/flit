@@ -1,4 +1,5 @@
 using System.Net;
+using Flit.PersonaNatural.Api.CorreoFlit;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Persistence;
 using Flit.PersonaNatural.Api.Pii;
@@ -73,17 +74,19 @@ public sealed partial class CorreoDeAnulacion(
         if (destino is null)
             return false;
 
-        return await enviador.EnviarAsync(destino, Asunto, ArmarHtml(radicante?.Nombre, s.CodigoPublico, s.OrganismoNombre), Plantilla, ct).ConfigureAwait(false);
+        return await enviador.EnviarAsync(destino, Asunto, ArmarHtml(radicante?.Nombre, s.CodigoPublico, s.OrganismoNombre, LayoutCorreoFlit.BaseDesde(configuracion)), Plantilla, ct).ConfigureAwait(false);
     }
 
-    internal static string ArmarHtml(string? nombre, string codigoPublico, string organismo)
+    internal static string ArmarHtml(string? nombre, string codigoPublico, string organismo, string? baseAssets = null)
     {
         var saludo = string.IsNullOrWhiteSpace(nombre) ? "Hola" : "Hola " + WebUtility.HtmlEncode(nombre.Trim());
-        return "<div style=\"font-family:Arial,sans-serif;max-width:560px\"><h2>Tu pago fue anulado</h2>"
-            + $"<p>{saludo},</p>"
-            + $"<p>El pago en caja de tu trámite <b>{WebUtility.HtmlEncode(codigoPublico)}</b> fue anulado por el organismo.</p>"
-            + $"<p>Acércate a la caja de <b>{WebUtility.HtmlEncode(organismo)}</b> para generar el pago de nuevo.</p>"
-            + "<p style=\"color:#555\">Guarda este código: con él puedes consultar el estado de tu trámite.</p></div>";
+        return LayoutCorreoFlit.Envolver(
+            "Tu pago fue anulado",
+            LayoutCorreoFlit.Parrafo(saludo + ",")
+            + LayoutCorreoFlit.Parrafo($"El pago en caja de tu trámite {LayoutCorreoFlit.Destacado(codigoPublico)} fue anulado por el organismo.")
+            + LayoutCorreoFlit.Parrafo($"Acércate a la caja de {LayoutCorreoFlit.Destacado(organismo)} para generar el pago de nuevo.")
+            + LayoutCorreoFlit.Nota("Guarda este código: con él puedes consultar el estado de tu trámite."),
+            baseAssets);
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo enviar el correo de anulación del pago ({Tipo}); la anulación sigue firme")]
