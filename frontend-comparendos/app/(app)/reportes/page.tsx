@@ -120,7 +120,7 @@ function Contenido() {
                 const q = new URLSearchParams({ rapido: "Radar" });
                 if (nit) q.set("nit", nit);
                 if (sesion?.usuario.esSuperAdmin && periodo.empresa) q.set("empresa", periodo.empresa);
-                router.push(`/?${q.toString()}`);
+                router.push(`/bandeja?${q.toString()}`);
               }}
             />
           </div>
