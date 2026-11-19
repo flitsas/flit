@@ -1092,16 +1092,8 @@ function KyverumCapturePanel({ validation: v }: { validation: BiometricValidatio
         <Icono nombre="copiar" className="h-3 w-3" />
         {copied ? 'Copiado' : 'Copiar enlace'}
       </button>
-      <a
-        href={captureUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block max-w-full truncate text-xs underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ color: WIZARD_BTN_SOLID }}
-        title={captureUrl}
-      >
-        {captureUrl}
-      </a>
+      {/* Bug #14626: la URL ya no se muestra en texto; los clientes la abrían en el equipo del asesor y el
+          enlace de Kyverum quedaba atado a ese dispositivo. Se comparte por el QR o «Copiar enlace». */}
     </div>
   );
 }
