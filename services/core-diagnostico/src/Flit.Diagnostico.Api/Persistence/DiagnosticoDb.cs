@@ -1,4 +1,5 @@
 using Flit.Diagnostico.Api.Modulos.Comun;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Platform.Sdk.Messaging;
 using Flit.Platform.Sdk.Tenancy;
 using Microsoft.AspNetCore.DataProtection.EntityFrameworkCore;
@@ -53,6 +54,8 @@ public sealed class DiagnosticoDb(DbContextOptions<DiagnosticoDb> options, IPlat
         modelBuilder.HasDefaultSchema(Schema);
         modelBuilder.AddFlitOutbox(Schema);
         modelBuilder.AddFlitInbox(Schema);
+        // Contrato ia-consumo v1 (ADR-0090): tablas del SDK, sin empresa (tenant_id informativo).
+        modelBuilder.AddFlitIaConsumo(Schema);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(DiagnosticoDb).Assembly);
         TenantFilter.Aplicar(modelBuilder, this);
     }
