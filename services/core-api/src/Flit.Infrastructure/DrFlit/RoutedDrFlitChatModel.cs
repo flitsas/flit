@@ -3,6 +3,7 @@ using Flit.DrFlit.Application.Abstractions;
 using Flit.DrFlit.Application.Chat;
 using Flit.Infrastructure.Ai.Routing;
 using Flit.Infrastructure.Ocr;
+using Flit.Platform.Sdk.IaConsumo;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Infrastructure.DrFlit;
@@ -13,8 +14,11 @@ namespace Flit.Infrastructure.DrFlit;
 /// </summary>
 internal sealed class RoutedDrFlitChatModel(
     IAiProviderRouter router,
-    IOptions<AnthropicOptions> options) : IDrFlitChatModel
+    IOptions<AnthropicOptions> options,
+    IIaCallContext? iaContexto = null) : IDrFlitChatModel
 {
+    private readonly IIaCallContext _ia = iaContexto ?? IaCallContext.Instancia;
+
     private readonly AnthropicOptions _options = options.Value;
 
     public async Task<DrFlitModelCallResult> CompleteAsync(
@@ -28,6 +32,14 @@ internal sealed class RoutedDrFlitChatModel(
         if (!_options.DrFlitEnabled)
             return DrFlitModelCallResult.Disabled();
 
+        // ADR-0090: cada turno del chat queda en el registro como dr_flit/chat.
+        using var ambito = _ia.Iniciar(new IaAmbito
+        {
+            Modulo = IaProcesosFlit.ModuloDrFlit,
+            Proceso = IaProcesosFlit.Chat,
+            TipoTarea = IaTiposTarea.Chat,
+            PromptCodigo = "dr_flit",
+        });
         var routed = await router
             .InvokeChatAsync(
                 AiToolCodes.DrFlit,
