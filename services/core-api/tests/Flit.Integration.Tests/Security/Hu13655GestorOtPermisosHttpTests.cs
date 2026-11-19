@@ -32,7 +32,8 @@ namespace Flit.Integration.Tests.Security;
 ///   (aun con el flag apagado) y, con él delegado, no puede invitar administradores.</item>
 /// </list>
 /// </summary>
-public sealed class Hu13655GestorOtPermisosHttpTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
+public sealed class Hu13655GestorOtPermisosHttpTests(PostgresDatabaseFixture fixture, HostsPorClase hosts)
+    : PostgresTestBase(fixture), IClassFixture<HostsPorClase>
 {
     private const string AdminEmail = "admin-it13655@ot.test";
     private const string OtroAdminEmail = "admin2-it13655@ot.test";
@@ -129,12 +130,11 @@ public sealed class Hu13655GestorOtPermisosHttpTests(PostgresDatabaseFixture fix
     private async Task<HttpResponseMessage> SendAsync(string email, HttpMethod method, string url, object? body = null, bool otFlag = false)
     {
         var token = await LoginAsync(email);
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
-        await using var configured = factory.WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, c) =>
-            c.AddInMemoryCollection(new Dictionary<string, string?>
-            {
-                ["Security:OtPermissionEnforcement:Enabled"] = otFlag ? "true" : "false",
-            })));
+        // Un host por clase y por valor del flag (HostsPorClase): antes se arrancaba uno por CADA petición.
+        var configured = hosts.Obtener(Fixture, new Dictionary<string, string?>
+        {
+            ["Security:OtPermissionEnforcement:Enabled"] = otFlag ? "true" : "false",
+        });
         using var client = configured.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         using var request = new HttpRequestMessage(method, url);

@@ -26,7 +26,8 @@ namespace Flit.Integration.Tests.Tramites;
 /// la de datos sintéticos corre siempre con 2.000. Se marcan por el VIN (<c>SINTVIN…</c>): el radicado
 /// lo reescribe un trigger.
 /// </summary>
-public sealed class ExternalSyncLoadTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
+public sealed class ExternalSyncLoadTests(PostgresDatabaseFixture fixture, HostsPorClase hosts)
+    : PostgresTestBase(fixture), IClassFixture<HostsPorClase>
 {
     private const int Total = 50_000;
     private const int PageSize = 1_000;
@@ -42,7 +43,7 @@ public sealed class ExternalSyncLoadTests(PostgresDatabaseFixture fixture) : Pos
         var siembra = Stopwatch.StartNew();
         await SembrarAsync();
         siembra.Stop();
-        await using var factory = Host();
+        var factory = Host();
         var cliente = Cliente(factory);
         await cliente.GetAsync("/api/v1/external/tramites/sync?pageSize=1", TestContext.Current.CancellationToken); // calentamiento (JIT y pool)
 
@@ -192,9 +193,10 @@ public sealed class ExternalSyncLoadTests(PostgresDatabaseFixture fixture) : Pos
         await analyze.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
     }
 
-    private WebApplicationFactory<Program> Host() =>
-        new MarcaBlancaApiFactory(Fixture).WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, config) =>
-            config.AddInMemoryCollection(new Dictionary<string, string?> { ["ExternalClients:StabilityLagSeconds"] = "0" })));
+    private static readonly Dictionary<string, string?> LagCero = new() { ["ExternalClients:StabilityLagSeconds"] = "0" };
+
+    /// <summary>Un host por clase (HostsPorClase).</summary>
+    private WebApplicationFactory<Program> Host() => hosts.Obtener(Fixture, LagCero);
 
     private static HttpClient Cliente(WebApplicationFactory<Program> factory)
     {
