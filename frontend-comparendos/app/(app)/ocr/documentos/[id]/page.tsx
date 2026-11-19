@@ -24,10 +24,12 @@ import {
   hayEnCurso,
   TIPO_FALLO,
   TIPOS_DOCUMENTO,
+  ETIQUETA_TIPO_DOCUMENTO,
   tipoEntrada,
   valorInicial,
   vistaOriginal,
 } from "@/lib/ocr";
+import { errorNit } from "@/lib/nit";
 import { tienePermiso } from "@/lib/sesion";
 import { useCarga } from "@/lib/useCarga";
 
@@ -130,7 +132,19 @@ function Original({ d }: { d: Documento }) {
   );
 }
 
-function CampoEntrada({ campo, valor, onCambio, deshabilitado }: { campo: string; valor: string; onCambio: (v: string) => void; deshabilitado: boolean }) {
+function CampoEntrada({
+  campo,
+  valor,
+  onCambio,
+  deshabilitado,
+  tipoDocumento,
+}: {
+  campo: string;
+  valor: string;
+  onCambio: (v: string) => void;
+  deshabilitado: boolean;
+  tipoDocumento?: string;
+}) {
   const tipo = tipoEntrada(campo);
   if (tipo === "documento")
     return (
@@ -138,10 +152,10 @@ function CampoEntrada({ campo, valor, onCambio, deshabilitado }: { campo: string
         <option value="">—</option>
         {TIPOS_DOCUMENTO.map((t) => (
           <option key={t} value={t}>
-            {t}
+            {ETIQUETA_TIPO_DOCUMENTO[t]}
           </option>
         ))}
-        {valor && !TIPOS_DOCUMENTO.includes(valor) && <option value={valor}>{valor} (no reconocido)</option>}
+        {valor && !(TIPOS_DOCUMENTO as readonly string[]).includes(valor) && <option value={valor}>{valor} (no reconocido)</option>}
       </select>
     );
   if (tipo === "booleano")
@@ -152,14 +166,27 @@ function CampoEntrada({ campo, valor, onCambio, deshabilitado }: { campo: string
         <option value="false">No, comparendo físico</option>
       </select>
     );
+  const esNit = campo === "numero_documento_infractor" && tipoDocumento === "NIT";
+  const error = esNit ? errorNit(valor) : null;
   return (
-    <input
-      className={INPUT_CLS}
-      type={tipo === "fecha" ? "date" : tipo === "hora" ? "time" : "text"}
-      value={valor}
-      disabled={deshabilitado}
-      onChange={(e) => onCambio(e.target.value)}
-    />
+    <div className="flex flex-col gap-1">
+      <input
+        className={INPUT_CLS}
+        type={tipo === "fecha" ? "date" : tipo === "hora" ? "time" : "text"}
+        value={valor}
+        disabled={deshabilitado}
+        inputMode={esNit ? "numeric" : undefined}
+        placeholder={esNit ? "900.123.456-7" : undefined}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={esNit ? `${campo}-nit-ayuda` : undefined}
+        onChange={(e) => onCambio(e.target.value)}
+      />
+      {esNit && (
+        <span id={`${campo}-nit-ayuda`} className={`text-[11px] font-normal ${error ? "text-[#B42318]" : "opacity-70"}`}>
+          {error ?? "Puedes escribir el dígito de verificación; el sistema lo valida (formato 900.123.456-7)."}
+        </span>
+      )}
+    </div>
   );
 }
 
@@ -336,6 +363,7 @@ function Formulario({
                     campo={c.nombreCampo}
                     valor={editados[c.nombreCampo] ?? ""}
                     deshabilitado={!editable || ocupado}
+                    tipoDocumento={editados.tipo_documento_infractor}
                     onCambio={(v) => setEditados((e) => ({ ...e, [c.nombreCampo]: v }))}
                   />
                 </div>

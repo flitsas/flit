@@ -11,6 +11,7 @@ import {
   etiquetaEvaluacion,
   hayEnCurso,
   MAXIMO_BYTES,
+  MAXIMO_DOCUMENTOS,
   progreso,
   resumenEvaluacion,
   valorInicial,
@@ -21,6 +22,10 @@ import {
 const archivo = (name: string, size = 100) => new File([new Uint8Array(size)], name);
 
 describe("errorArchivoOcr", () => {
+  it("HU #14370 / GDC ID10: límites FE alineados a 20 MB / 200 archivos", () => {
+    expect(MAXIMO_BYTES).toBe(20 * 1024 * 1024);
+    expect(MAXIMO_DOCUMENTOS).toBe(200);
+  });
   it("acepta JPG, PNG, TIFF y PDF sin importar mayúsculas", () => {
     for (const n of ["a.jpg", "b.JPEG", "c.png", "d.tif", "e.TIFF", "f.pdf"]) expect(errorArchivoOcr({ name: n, size: 10 })).toBeNull();
   });

@@ -32,7 +32,8 @@ public sealed class ServicioOcr(
     CalendarioService calendario,
     Capacidades capacidades,
     ServicioCorreo correo,
-    Reloj reloj)
+    Reloj reloj,
+    Contraventor.ServicioContraventor contraventor)
 {
     public const int MaximoDocumentos = 200;
     public const long MaximoBytes = 20L * 1024 * 1024;
@@ -440,9 +441,40 @@ public sealed class ServicioOcr(
             throw ReglaException.Conflicto("COMPARENDO_DUPLICADO", "El comparendo se registró por otra vía mientras lo revisabas.");
         }
 
+        // HU #14364 / GDC ID5: consulta Renting inmediata al registrar; el job 06:00 queda como reintento.
+        if (c.EstadoConsultaContraventor == EstadoConsultaContraventor.Pendiente)
+            await ConsultarContraventorAlRegistrarAsync(c, ct).ConfigureAwait(false);
+
         var yaMonitoreada = c.Placa is { } placa
             && await db.PlacasMonitoreadas.AnyAsync(p => p.TenantId == c.TenantId && p.Placa == placa && p.Activo, ct).ConfigureAwait(false);
         return new Registro(doc.Id, c.Id, c.Numero, c.Placa, yaMonitoreada, c.TipoIngreso);
+    }
+
+    /// <summary>
+    /// Dispara la consulta de conductor en el mismo registro OCR. Un fallo de precondiciones (OT bloqueado, sin
+    /// placa/fecha, NIT sin API) deja el comparendo en asignación manual; cualquier otro error deja el estado que
+    /// haya escrito <see cref="Contraventor.ServicioContraventor.ConsultarAsync"/> (o Pendiente) para el reintento.
+    /// </summary>
+    private async Task ConsultarContraventorAlRegistrarAsync(Comparendo c, CancellationToken ct)
+    {
+        try
+        {
+            await contraventor.ConsultarAsync(c, Actor.Api("Consulta automática al registrar OCR"), confirmarReemplazo: false, ct).ConfigureAwait(false);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (ReglaException ex) when (ex.Codigo is "OT_BLOQUEADO" or "SIN_DATOS_CONSULTA" or "NIT_SIN_API" or "SIN_INTEGRACION")
+        {
+            c.EstadoConsultaContraventor = EstadoConsultaContraventor.NoAplica;
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (ReglaException)
+        {
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch
+        {
+            // El comparendo ya está registrado; el job diario reintentará.
+        }
     }
 
     /// <summary>
