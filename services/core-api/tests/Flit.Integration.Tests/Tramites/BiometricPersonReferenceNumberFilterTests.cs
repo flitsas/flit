@@ -73,6 +73,43 @@ public sealed class BiometricPersonReferenceNumberFilterTests(PostgresDatabaseFi
         combinado.Should().ContainSingle().Which.DocumentNumberNorm.Should().Be("9002");
     }
 
+    [PostgresFact]
+    public async Task Estado_acepta_varios_valores_en_el_SQL_y_los_KPIs_cuentan_el_mismo_conjunto()
+    {
+        await SeedAsync();
+        // 9001 sigue enviado, 9002 pasa a en_proceso y 9003 a aprobado.
+        await using (var ctx = NewContext())
+        {
+            var vs = await ctx.ProcedureInstanceBiometricValidations
+                .Where(v => v.TenantId == Tenant)
+                .ToListAsync(TestContext.Current.CancellationToken);
+            vs.Single(v => v.DocumentNumber == "9002").Status = BiometricEstados.EnProceso;
+            var aprobada = vs.Single(v => v.DocumentNumber == "9003");
+            aprobada.Status = BiometricEstados.Aprobado;
+            aprobada.ValidatedAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+            await ctx.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx2 = NewContext();
+        var repo = new ProcedureInstanceRepository(ctx2);
+        var ct = TestContext.Current.CancellationToken;
+        var now = DateTimeOffset.UtcNow;
+        var scope = TenantScope.Single(Tenant);
+
+        // «En proceso» de la franja de Identidad = enviado + en_proceso (parámetro text[] con ANY).
+        var enCurso = new BiometricPersonGroupFilter { Status = "enviado,en_proceso" };
+        var (rows, total) = await repo.ListBiometricValidationsGroupedByPersonAsync(scope, 0, 50, enCurso, now, ct);
+        total.Should().Be(2);
+        rows.Select(r => r.DocumentNumberNorm).Should().BeEquivalentTo(["9001", "9002"]);
+        (await repo.CountBiometricPersonsByEstadoAsync(scope, enCurso, now, ct)).Values.Sum().Should().Be(2);
+
+        // Un solo estado sigue funcionando igual que antes.
+        var (aprobadas, totalAprobadas) = await repo.ListBiometricValidationsGroupedByPersonAsync(
+            scope, 0, 50, new BiometricPersonGroupFilter { Status = BiometricEstados.Aprobado }, now, ct);
+        totalAprobadas.Should().Be(1);
+        aprobadas.Should().ContainSingle().Which.DocumentNumberNorm.Should().Be("9003");
+    }
+
     /// <summary>Siembra y devuelve los radicados que la BD dejó guardados para TramiteA y TramiteB.</summary>
     private async Task<(string RadicadoA, string RadicadoB)> SeedAsync()
     {

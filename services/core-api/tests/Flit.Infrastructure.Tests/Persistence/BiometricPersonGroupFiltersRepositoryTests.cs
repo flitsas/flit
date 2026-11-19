@@ -153,6 +153,27 @@ public sealed class BiometricPersonGroupFiltersRepositoryTests
     }
 
     [Fact]
+    public async Task Estado_acepta_varios_separados_por_coma_como_la_cifra_en_proceso_de_la_franja()
+    {
+        var repo = await RepoAsync(
+            nameof(Estado_acepta_varios_separados_por_coma_como_la_cifra_en_proceso_de_la_franja),
+            Validacion("501", BiometricEstados.Enviado),
+            Validacion("502", BiometricEstados.EnProceso),
+            Validacion("503", BiometricEstados.Aprobado, validatedAt: Now.AddDays(-1)),
+            Validacion("504", BiometricEstados.Rechazado));
+
+        // «En proceso» de la franja de Identidad = enviado + en_proceso: la lista cuadra con la cifra.
+        var enCurso = await DocumentosAsync(
+            repo, new BiometricPersonGroupFilter { Status = "enviado, en_proceso" });
+        enCurso.Should().BeEquivalentTo(["501", "502"]);
+
+        var (_, total) = await repo.ListBiometricValidationsGroupedByPersonAsync(
+            TenantId, 0, 50, new BiometricPersonGroupFilter { Status = "enviado,en_proceso" }, Now,
+            TestContext.Current.CancellationToken);
+        total.Should().Be(2);
+    }
+
+    [Fact]
     public async Task Nombre_filtra_parcial_y_sin_distinguir_mayusculas()
     {
         var repo = await RepoAsync(
