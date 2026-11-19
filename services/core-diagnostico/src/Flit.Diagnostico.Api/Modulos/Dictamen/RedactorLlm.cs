@@ -256,14 +256,45 @@ public sealed class ProveedorRedactorSimulado : IProveedorRedactor
 /// <summary>
 /// Anthropic Messages API, sin documentos ni imágenes. La llave solo viaja en el encabezado y no se copia a los mensajes
 /// de error. Una respuesta cortada o un rechazo quedan ilegibles; 429, 5xx, red y tiempo agotado quedan clasificados.
+/// ADR-0091 §3.2: la llave y el modelo salen de <see cref="Credencial.IFuenteCredencialRedactor"/> en cada llamada (la local de
+/// <c>Diagnostico:Anthropic</c> o la de la plataforma); <c>BaseUrl</c>, plazo, tokens y reintentos siguen en <see cref="OpcionesAnthropic"/>
+/// (la URL nunca viene de core-api). «No configurado» sale de la cola; un fallo técnico de core-api queda como <see cref="TipoFalloRedactor.Red"/>;
+/// pasado el tope local por minuto (SP-17), <see cref="TipoFalloRedactor.RateLimit"/> sin llamar. Un 401/403 invalida la credencial;
+/// si esa credencial salió de la caché, se pide otra y se reintenta UNA sola vez consumiendo tope (contrato §2.6, CR-7). Un 401/403
+/// con la credencial recién pedida, o en el reintento, queda ilegible.
 /// </summary>
-public sealed class ProveedorRedactorAnthropic(HttpClient http, IOptions<OpcionesAnthropic> opciones, IIaConsumoRegistrador? consumo = null)
-    : IProveedorRedactor
+public sealed class ProveedorRedactorAnthropic : IProveedorRedactor
 {
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web);
 
+    private readonly HttpClient http;
+    private readonly IOptions<OpcionesAnthropic> opciones;
+    private readonly Credencial.IFuenteCredencialRedactor fuente;
+    private readonly Credencial.TopeLlamadasRedactor tope;
+
     /// <summary>Registro de consumo de IA (ADR-0090): una fila por llamada HTTP, con los tokens del <c>usage</c>.</summary>
-    private readonly IIaConsumoRegistrador _consumo = consumo ?? NullIaConsumoRegistrador.Instancia;
+    private readonly IIaConsumoRegistrador _consumo;
+
+    /// <summary>Llave y modelo de <see cref="OpcionesAnthropic"/>, sin tope (<c>Origen=local</c>).</summary>
+    public ProveedorRedactorAnthropic(HttpClient http, IOptions<OpcionesAnthropic> opciones, IIaConsumoRegistrador? consumo = null)
+        : this(http, opciones, new Credencial.FuenteCredencialLocal(opciones), Credencial.TopeLlamadasRedactor.SinTope(), consumo)
+    {
+    }
+
+    [ActivatorUtilitiesConstructor]
+    public ProveedorRedactorAnthropic(HttpClient http, IOptions<OpcionesAnthropic> opciones, Credencial.IFuenteCredencialRedactor fuente, Credencial.TopeLlamadasRedactor tope,
+        IIaConsumoRegistrador? consumo = null)
+    {
+        ArgumentNullException.ThrowIfNull(http);
+        ArgumentNullException.ThrowIfNull(opciones);
+        ArgumentNullException.ThrowIfNull(fuente);
+        ArgumentNullException.ThrowIfNull(tope);
+        this.http = http;
+        this.opciones = opciones;
+        this.fuente = fuente;
+        this.tope = tope;
+        _consumo = consumo ?? NullIaConsumoRegistrador.Instancia;
+    }
 
     public bool Configurado => true;
 
@@ -272,9 +303,48 @@ public sealed class ProveedorRedactorAnthropic(HttpClient http, IOptions<Opcione
     public async Task<SalidaModelo> RedactarAsync(string prompt, CancellationToken ct)
     {
         var o = opciones.Value;
+        var resuelta = await fuente.ObtenerAsync(ct).ConfigureAwait(false);
+        if (SinCredencial(resuelta, o) is { } sinCredencial)
+            return sinCredencial;
+
+        var (salida, rechazada) = await LlamarAsync(resuelta.Credencial!, prompt, o, ct).ConfigureAwait(false);
+        if (!rechazada || !resuelta.DeCache)
+            return salida;
+
+        // §2.6: la credencial guardada ya no sirve (p. ej. la llave rotó en core-api). Ya se invalidó: se pide otra y se reintenta
+        // UNA sola vez; si el reintento también da 401/403, queda ilegible sin tercer intento.
+        var otra = await fuente.ObtenerAsync(ct).ConfigureAwait(false);
+        if (SinCredencial(otra, o) is { } sinOtra)
+            return sinOtra;
+
+        return (await LlamarAsync(otra.Credencial!, prompt, o, ct).ConfigureAwait(false)).Salida;
+    }
+
+    /// <summary>
+    /// Espera antes de reintentar la redacción cuando la configuración de IA de la plataforma no respondió
+    /// (<see cref="Credencial.FallaCredencial.Tecnica"/>: core-api reiniciando, UNAVAILABLE inmediato, token caído). Sin ella la cola
+    /// retomaba el dictamen al instante y gastaba sus tomas en milisegundos (CR-1, review final). Fija: el proveedor no conoce el
+    /// número de toma; con <c>MaxReintentos=2</c> cubre unos 4 minutos de corte.
+    /// </summary>
+    public static readonly TimeSpan EsperaPlataformaCaida = TimeSpan.FromSeconds(120);
+
+    private static SalidaModelo? SinCredencial(Credencial.ResultadoCredencial resuelta, OpcionesAnthropic o) => resuelta.Falla switch
+    {
+        Credencial.FallaCredencial.NoConfigurado => Fallo(o.Modelo, TipoFalloRedactor.NoConfigurado, "El redactor no tiene proveedor configurado en la plataforma."),
+        Credencial.FallaCredencial.Tecnica => Fallo(o.Modelo, TipoFalloRedactor.Red, "La configuración de IA de la plataforma no respondió.", EsperaPlataformaCaida),
+        _ => null,
+    };
+
+    /// <summary>Una llamada al proveedor (consume tope). <c>Rechazada</c> = 401/403: la credencial ya quedó invalidada.</summary>
+    private async Task<(SalidaModelo Salida, bool Rechazada)> LlamarAsync(Credencial.CredencialRedactor credencial, string prompt, OpcionesAnthropic o, CancellationToken ct)
+    {
+        var modelo = credencial.Modelo;
+        if (!tope.IntentarTomar(out var espera))
+            return (Fallo(modelo, TipoFalloRedactor.RateLimit, "Se alcanzó el tope local de llamadas por minuto al proveedor.", espera), false);
+
         var cuerpo = new
         {
-            model = o.Modelo,
+            model = modelo,
             max_tokens = o.MaxTokens,
             messages = new object[]
             {
@@ -303,7 +373,7 @@ public sealed class ProveedorRedactorAnthropic(HttpClient http, IOptions<Opcione
                 FechaInicio = inicio,
                 Resultado = resultado,
                 HttpStatus = status,
-                ModeloSolicitado = o.Modelo,
+                ModeloSolicitado = modelo,
                 ModeloRespondido = Cadena(cuerpoRespuesta, "model"),
                 IdRespuestaProveedor = Cadena(cuerpoRespuesta, "id"),
                 MaxTokens = o.MaxTokens,
@@ -328,7 +398,7 @@ public sealed class ProveedorRedactorAnthropic(HttpClient http, IOptions<Opcione
             {
                 Content = JsonContent.Create(cuerpo, options: Json),
             };
-            pedido.Headers.TryAddWithoutValidation("x-api-key", o.ApiKey);
+            pedido.Headers.TryAddWithoutValidation("x-api-key", credencial.ApiKey);
             pedido.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
             using var respuesta = await http.SendAsync(pedido, limite.Token).ConfigureAwait(false);
             status = (int)respuesta.StatusCode;
@@ -337,12 +407,19 @@ public sealed class ProveedorRedactorAnthropic(HttpClient http, IOptions<Opcione
                 var (codigo, detalle) = await ErrorDeAsync(respuesta, limite.Token).ConfigureAwait(false);
                 Registrar(IaResultados.DesdeHttp(status), codigo, detalle);
             }
+
             if (respuesta.StatusCode == HttpStatusCode.TooManyRequests)
-                return Fallo(o.Modelo, TipoFalloRedactor.RateLimit, "El proveedor limitó las peticiones (429).", RetryAfter(respuesta.Headers.RetryAfter));
+                return (Fallo(modelo, TipoFalloRedactor.RateLimit, "El proveedor limitó las peticiones (429).", RetryAfter(respuesta.Headers.RetryAfter)), false);
             if ((int)respuesta.StatusCode >= 500)
-                return Fallo(o.Modelo, TipoFalloRedactor.Http5xx, $"El proveedor respondió {(int)respuesta.StatusCode}.");
+                return (Fallo(modelo, TipoFalloRedactor.Http5xx, $"El proveedor respondió {(int)respuesta.StatusCode}."), false);
+            if (respuesta.StatusCode is HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden)
+            {
+                fuente.Invalidar();
+                return (Fallo(modelo, TipoFalloRedactor.Ilegible, $"El proveedor rechazó la solicitud ({(int)respuesta.StatusCode})."), true);
+            }
+
             if (!respuesta.IsSuccessStatusCode)
-                return Fallo(o.Modelo, TipoFalloRedactor.Ilegible, $"El proveedor rechazó la solicitud ({(int)respuesta.StatusCode}).");
+                return (Fallo(modelo, TipoFalloRedactor.Ilegible, $"El proveedor rechazó la solicitud ({(int)respuesta.StatusCode})."), false);
 
             var texto = await respuesta.Content.ReadAsStringAsync(limite.Token).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(texto);
@@ -351,26 +428,26 @@ public sealed class ProveedorRedactorAnthropic(HttpClient http, IOptions<Opcione
             {
                 case "max_tokens":
                     Registrar(IaResultados.RespuestaInvalida, "max_tokens", null);
-                    return Fallo(o.Modelo, TipoFalloRedactor.Ilegible, "La respuesta del modelo quedó cortada (se acabó el límite de tokens).");
+                    return (Fallo(modelo, TipoFalloRedactor.Ilegible, "La respuesta del modelo quedó cortada (se acabó el límite de tokens)."), false);
                 case "refusal":
                     Registrar(IaResultados.RespuestaInvalida, "refusal", null);
-                    return Fallo(o.Modelo, TipoFalloRedactor.Ilegible, "El modelo rechazó la redacción.");
+                    return (Fallo(modelo, TipoFalloRedactor.Ilegible, "El modelo rechazó la redacción."), false);
             }
 
-            var salida = string.Concat(doc.RootElement.GetProperty("content").EnumerateArray()
-                .Where(b => b.TryGetProperty("type", out var tipo) && tipo.GetString() == "text")
-                .Select(b => b.GetProperty("text").GetString()));
+            // SP-6 (HU-2): sin content, content que no es arreglo o un bloque de texto sin text queda ilegible (no se reintenta).
+            // Antes lanzaba: la vuelta fallaba con la fila tomada y, al vencer el lease, se volvía a llamar al proveedor sin tope.
+            var salida = TextoDe(doc.RootElement);
             salidaTexto = salida;
             Registrar(string.IsNullOrWhiteSpace(salida) ? IaResultados.RespuestaInvalida : IaResultados.Exito,
                 string.IsNullOrWhiteSpace(salida) ? "respuesta_vacia" : null, null);
-            return string.IsNullOrWhiteSpace(salida)
-                ? Fallo(o.Modelo, TipoFalloRedactor.Ilegible, "La respuesta del modelo no trae texto.")
-                : new SalidaModelo(salida, o.Modelo);
+            return (string.IsNullOrWhiteSpace(salida)
+                ? Fallo(modelo, TipoFalloRedactor.Ilegible, "La respuesta del modelo no trae texto.")
+                : new SalidaModelo(salida, modelo), false);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
             Registrar(IaResultados.Timeout, "timeout", null);
-            return Fallo(o.Modelo, TipoFalloRedactor.Timeout, $"El proveedor no respondió en {o.TimeoutSegundos} s.");
+            return (Fallo(modelo, TipoFalloRedactor.Timeout, $"El proveedor no respondió en {o.TimeoutSegundos} s."), false);
         }
         catch (OperationCanceledException)
         {
@@ -380,12 +457,12 @@ public sealed class ProveedorRedactorAnthropic(HttpClient http, IOptions<Opcione
         catch (HttpRequestException ex)
         {
             Registrar(IaResultados.Red, ex.GetType().Name, ex.Message);
-            return Fallo(o.Modelo, TipoFalloRedactor.Red, $"Error de red: {ex.Message}");
+            return (Fallo(modelo, TipoFalloRedactor.Red, $"Error de red: {ex.Message}"), false);
         }
         catch (JsonException)
         {
             Registrar(IaResultados.RespuestaInvalida, "json_invalido", null);
-            return Fallo(o.Modelo, TipoFalloRedactor.Http5xx, "Respuesta del proveedor no interpretable.");
+            return (Fallo(modelo, TipoFalloRedactor.Http5xx, "Respuesta del proveedor no interpretable."), false);
         }
     }
 
@@ -411,6 +488,26 @@ public sealed class ProveedorRedactorAnthropic(HttpClient http, IOptions<Opcione
         }
 #pragma warning restore CA1031
         return (porDefecto, null);
+    }
+
+    /// <summary>Los bloques <c>text</c> concatenados; null si <c>content</c> falta, no es arreglo o un bloque de texto no trae texto.</summary>
+    private static string? TextoDe(JsonElement raiz)
+    {
+        if (raiz.ValueKind != JsonValueKind.Object
+            || !raiz.TryGetProperty("content", out var content) || content.ValueKind != JsonValueKind.Array)
+            return null;
+        var partes = new List<string>();
+        foreach (var bloque in content.EnumerateArray())
+        {
+            if (bloque.ValueKind != JsonValueKind.Object
+                || !bloque.TryGetProperty("type", out var tipo) || tipo.ValueKind != JsonValueKind.String || tipo.GetString() != "text")
+                continue;
+            if (!bloque.TryGetProperty("text", out var texto) || texto.ValueKind != JsonValueKind.String)
+                return null;
+            partes.Add(texto.GetString()!);
+        }
+
+        return string.Concat(partes);
     }
 
     private static SalidaModelo Fallo(string modelo, TipoFalloRedactor tipo, string mensaje, TimeSpan? reintentarEn = null) =>

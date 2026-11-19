@@ -30,7 +30,7 @@ namespace Flit.Diagnostico.Tests.Reportes;
 /// <summary>
 /// HU #13848 (F07-H3, F07-C1..C4/C8..C11, R-7, R-20, Q4, Q7) — <c>GET /diagnosticos/{id}/vehiculos/{vid}/pdf</c>: el PDF corporativo
 /// de un vehículo con el membrete FLIT. Las pruebas leen el TEXTO del PDF (<see cref="PdfTextExtractor"/>), no solo el código HTTP:
-/// encabezado con ID, lote, creador, empresa, fecha y «Diagnóstico Simple»; solo las secciones del alcance; 200 con el vehículo
+/// encabezado con ID, placa y fecha de generación (la nota del pie nombra creador y empresa); solo las secciones del alcance; 200 con el vehículo
 /// terminado aunque el lote siga EN_PROCESO y 409 <c>VEHICULO_NO_TERMINADO</c> si no; con el lote INCOMPLETO la fuente en ERROR
 /// sale «consulta no disponible»; manual y API dan el mismo texto; sin origen, proveedor ni transacción; documentos «****» + 4;
 /// misma huella → mismos bytes y un cambio de celda invalida el anterior; 404 para otra compañía o PROPIOS ajeno; 403 sin permiso.
@@ -63,11 +63,15 @@ public sealed class PdfVehiculoTests
 
     private static readonly DateTimeOffset Dato = new(2026, 10, 22, 15, 0, 0, TimeSpan.Zero);
 
-    // AC1 (F07-C1, F07-C2, Q4) — lote Simple con un vehículo terminado: el texto trae el ID, el nombre del lote, el creador de
-    // Identidad, la empresa del claim, la fecha y hora de creación en hora Colombia, «Diagnóstico Simple» y la placa; adjunto
-    // diagnostico-{8}-{placa}.pdf sin caché; el membrete y Poppins son copia fiel de la marca de core-api.
+    /// <summary>Datos que la cabecera dejó de pintar (ajustes 2026-11-18): lote, fecha de creación y tipo de análisis.</summary>
+    private static readonly string[] CabeceraRetirada = ["Flota octubre", "22/10/2026 14:30", "Diagnóstico Simple"];
+
+    // AC1 (F07-C1, F07-C2, Q4) — lote Simple con un vehículo terminado: el texto trae el ID, la placa y la fecha de generación, y
+    // la nota del pie nombra al creador de Identidad y la empresa del claim; desde los ajustes del 2026-11-18 la cabecera ya no
+    // pinta el lote, el tipo de análisis ni la fecha de creación. Adjunto diagnostico-{8}-{placa}.pdf sin caché; el membrete y
+    // Poppins son copia fiel de la marca de core-api.
     [Fact]
-    public async Task Encabezado_trae_id_lote_usuario_empresa_fecha_y_tipo_de_analisis()
+    public async Task Encabezado_trae_id_placa_y_fecha_de_generacion_y_la_nota_al_usuario_y_la_empresa()
     {
         var ct = TestContext.Current.CancellationToken;
         var identidad = new UsuariosIdentidadDePrueba();
@@ -91,10 +95,11 @@ public sealed class PdfVehiculoTests
         var texto = await PdfDePrueba.TextoAsync(respuesta, ct);
         foreach (var esperado in new[]
                  {
-                     lote.Id.ToString(), "Flota octubre", "Ana Prueba", "Empresa de prueba", "22/10/2026 14:30", "Diagnóstico Simple", "TST301",
+                     lote.Id.ToString(), "Ana Prueba", "Empresa de prueba", "TST301",
                      "Página 1 de ", "Fecha de generación", "Certificado de Diagnóstico",
                  })
             PdfDePrueba.Tiene(texto, esperado).Should().BeTrue($"el texto del PDF trae «{esperado}»: {texto}");
+        texto.Should().NotContainAny([.. CabeceraRetirada.Select(PdfDePrueba.Plano)]);
 
         // Marca FLIT copiada (no referenciada) de core-api: membrete y Poppins idénticos byte a byte.
         var marca = MarcaCoreApi();
@@ -704,7 +709,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     private const string Vin = "9BWZZZ377VT004251";
 
     [Fact]
-    public void Version_de_plantilla_es_7() => PdfVehiculo.VersionPlantilla.Should().Be(7);
+    public void Version_de_plantilla_es_8() => PdfVehiculo.VersionPlantilla.Should().Be(8);
 
     /// <summary>Sin fila de dictamen el PDF sigue igual: no hay sección ni aviso de redacción.</summary>
     [Fact]
@@ -728,7 +733,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         const string segundo = "qy28 beta dictamen multa unica";
         var contenido = Contenido("ABC123") with
         {
-            Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", primero + "\n" + segundo),
+            Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", primero + "\n" + segundo, EnCola: true),
         };
         var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
 
@@ -775,8 +780,9 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         sin.ParaHuella().Keys.Should().NotContain(k => k.StartsWith("dictamen/", StringComparison.Ordinal));
 
         var con = sin with { Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", textoDictamen) };
+        // HU-3: con PENDIENTE la huella suma dictamen/en_cola (el rótulo depende de él); con COMPLETADA no (B7 abajo).
         con.ParaHuella().Keys.Where(k => k.StartsWith("dictamen/", StringComparison.Ordinal))
-            .Should().BeEquivalentTo(["dictamen/veredicto", "dictamen/estado", "dictamen/texto"]);
+            .Should().BeEquivalentTo(["dictamen/veredicto", "dictamen/estado", "dictamen/texto", "dictamen/en_cola"]);
         con.ParaHuella()["dictamen/veredicto"].Should().Be("BLOQUEADO");
         con.ParaHuella()["dictamen/estado"].Should().Be("PENDIENTE");
         con.ParaHuella()["dictamen/texto"].Should().Be(textoDictamen);
@@ -877,7 +883,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
 
         PdfDePrueba.Tiene(texto, Vin).Should().BeTrue(texto);
         PdfDePrueba.Tiene(texto, $"para el VIN {Vin}").Should().BeTrue(texto);
-        PdfDePrueba.Tiene(texto, "No hay información").Should().BeTrue("sin placa la celda Placa queda vacía de dato");
+        PdfDePrueba.Tiene(texto, "No hay datos").Should().BeTrue("sin placa la celda Placa queda vacía de dato");
     }
 
     /// <summary>

@@ -135,7 +135,7 @@ internal static class PdfDeuda
             filas.Add(("Diagnóstico", nombre));
         if (panel.DiagnosticoCreadoEn is { } creado)
             filas.Add(("Fecha del diagnóstico", Fecha(creado)));
-        filas.Add(("Tipo de análisis", panel.Modo == "CON_ANALISIS" ? "Diagnóstico con Análisis IA" : "Diagnóstico Simple"));
+        filas.Add(("Tipo de análisis", panel.Modo == "CON_ANALISIS" ? "Diagnóstico con análisis" : "Diagnóstico Simple"));
         return filas;
     }
 

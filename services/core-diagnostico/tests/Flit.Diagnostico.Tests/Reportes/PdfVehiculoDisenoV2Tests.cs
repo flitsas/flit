@@ -107,9 +107,9 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(ContenidoConDetalle("ABC123"), GeneradoEn)));
 
         PdfDePrueba.Tiene(Tramo(texto, "SOLICITUDES", "GARANTÍAS A FAVOR"),
-            "Estado Entidad N.º solicitud Fecha solicitud Trámites realizados No hay información").Should().BeTrue(texto);
+            "Estado Entidad N.º solicitud Fecha solicitud Trámites realizados No hay datos").Should().BeTrue(texto);
         PdfDePrueba.Tiene(Tramo(texto, "PÓLIZA DE RESPONSABILIDAD CIVIL", "PROPIETARIOS"),
-            "Estado N.º póliza Tipo póliza Expedición Vencimiento Entidad No hay información").Should().BeTrue(texto);
+            "Estado N.º póliza Tipo póliza Expedición Vencimiento Entidad No hay datos").Should().BeTrue(texto);
     }
 
     [Fact]
@@ -124,7 +124,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         for (var i = 0; i < TitulosAmpliados.Length; i++)
         {
             var tramo = Tramo(texto, TitulosAmpliados[i], siguientes[i]);
-            PdfDePrueba.Tiene(tramo, "No hay información").Should().BeTrue($"«{TitulosAmpliados[i]}» sin detalle dice «No hay información»: {tramo}");
+            PdfDePrueba.Tiene(tramo, "No hay datos").Should().BeTrue($"«{TitulosAmpliados[i]}» sin detalle dice «No hay datos»: {tramo}");
         }
     }
 

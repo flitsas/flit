@@ -1,6 +1,7 @@
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Persistence;
 using Flit.Diagnostico.Api.Plataforma;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Diagnostico.Api.Modulos.Dictamen;
 
@@ -19,6 +20,7 @@ internal static class DictamenEndpoints
         api.MapGet(Ruta, Obtener).RequirePermiso(Permisos.DiagnosticosVer).WithName("ObtenerDictamenVehiculo");
     }
 
-    private static async Task<IResult> Obtener(Guid id, Guid vid, DiagnosticoDb db, UsuarioActual usuario, CancellationToken ct) =>
-        Results.Ok(await ConsultaDictamen.LeerDeLaCompaniaAsync(db, usuario, id, vid, ct).ConfigureAwait(false));
+    private static async Task<IResult> Obtener(
+        Guid id, Guid vid, DiagnosticoDb db, UsuarioActual usuario, IOptions<Trabajos.OpcionesRedaccion> redaccion, CancellationToken ct) =>
+        Results.Ok(await ConsultaDictamen.LeerDeLaCompaniaAsync(db, usuario, id, vid, redaccion.Value, ct).ConfigureAwait(false));
 }

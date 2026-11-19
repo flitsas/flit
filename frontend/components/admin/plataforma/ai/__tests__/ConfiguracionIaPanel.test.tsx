@@ -173,4 +173,42 @@ describe("ConfiguracionIaPanel (HU #13511 / #13512)", () => {
     fireEvent.click(await screen.findByRole("button", { name: /Marcar leída/i }));
     await waitFor(() => expect(ackAiAlert).toHaveBeenCalledWith("alerta-1"));
   });
+  // Uso de ejemplo: la API lista la fila diagnostico_dictamen (solo anthropic capaz)
+  // y el panel la pinta tras DR. FLIT con su etiqueta y «No aplica» en el resto.
+  it("HU-8 — tarjeta diagnostico_dictamen con etiqueta, orden tras DR. FLIT y «No aplica» en openai/kimi/deepseek", async () => {
+    const dictamen = tool({
+      toolCode: "diagnostico_dictamen",
+      providers: tool().providers.map((p) =>
+        p.providerCode === "anthropic"
+          ? p
+          : { ...p, capable: false, enabled: false },
+      ),
+    });
+    listAiTools.mockResolvedValueOnce({
+      tools: [tool({ toolCode: "otra_tool" }), dictamen, tool({ toolCode: "dr_flit" }), tool()],
+    });
+    render(<ConfiguracionIaPanel />);
+
+    const seccion = await screen.findByTestId("ai-tool-diagnostico_dictamen");
+    expect(
+      within(seccion).getByRole("heading", { name: "Redacción del dictamen (Diagnóstico)" }),
+    ).toBeInTheDocument();
+    expect(within(seccion).queryByText("diagnostico_dictamen")).not.toBeInTheDocument();
+
+    const orden = screen
+      .getAllByRole("heading", { level: 2 })
+      .filter((h) => h.id.startsWith("ai-tool-"))
+      .map((h) => h.id.replace(/^ai-tool-/, ""));
+    expect(orden).toEqual(["ocr", "dr_flit", "diagnostico_dictamen", "otra_tool"]);
+
+    const lista = within(seccion).getByRole("list", {
+      name: "Proveedores de Redacción del dictamen (Diagnóstico)",
+    });
+    const filas = within(lista).getAllByRole("listitem");
+    const fila = (nombre: string) => filas.find((li) => within(li).queryByText(nombre) !== null)!;
+    expect(within(fila("Anthropic")).queryByText("No aplica")).not.toBeInTheDocument();
+    for (const nombre of ["OpenAI", "Kimi", "DeepSeek"]) {
+      expect(within(fila(nombre)).getByText("No aplica")).toBeInTheDocument();
+    }
+  });
 });

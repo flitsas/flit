@@ -43,6 +43,12 @@ internal static partial class RotulosDiagnostico
     /// <summary>Aviso del dictamen en el PDF mientras el texto definitivo no está (decisión 5.2: no nombra la IA).</summary>
     public const string AnalisisEnPreparacion = "Análisis en preparación";
 
+    /// <summary>
+    /// HU-3 (decisión del usuario 2026-11-18): aviso del dictamen en el PDF cuando está PENDIENTE y ya no está en la cola de
+    /// redacción (redacción apagada o suspendida, reintentos agotados, dictámenes viejos sin fecha de toma): nunca se redactará.
+    /// </summary>
+    public const string SinAnalisis = "Sin análisis";
+
     /// <summary>«Cambio de propietario» en los reportes (HU #14582, §1.3) cuando <c>cambio_propietario</c> es true.</summary>
     public const string CambioPropietarioSi = "Sí";
 

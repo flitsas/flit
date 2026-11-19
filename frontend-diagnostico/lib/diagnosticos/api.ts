@@ -92,7 +92,7 @@ export const ERRORES_CABECERA: Readonly<Record<string, string>> = {
   ALCANCE_SIN_RUNT: "El alcance siempre incluye RUNT.",
   FUENTE_NO_HABILITADA: "Tu compañía no tiene habilitada una de las fuentes elegidas.",
   FUENTE_NO_DISPONIBLE: "Una de las fuentes elegidas todavía no se puede consultar.",
-  TIPO_TRAMITE_REQUERIDO: "Con Análisis IA exige el tipo de trámite.",
+  TIPO_TRAMITE_REQUERIDO: "Con análisis exige el tipo de trámite.",
   TIPO_TRAMITE_NO_DISPONIBLE: "El tipo de trámite no está entre los que ofrece Diagnóstico.",
   FUENTES_OBLIGATORIAS_FALTANTES: "El tipo de trámite elegido exige fuentes que no están en el alcance.",
   VALOR_FUERA_DE_CONJUNTO: "Uno de los valores elegidos no es válido.",

@@ -153,11 +153,11 @@ describe("Masivo — validaciones en pantalla (AC4)", () => {
     expect(llamadas(api, "POST", "/diagnosticos")).toHaveLength(0);
   });
 
-  it("Con Análisis IA ofrece los tipos del catálogo y no crea sin elegir uno; las fuentes obligatorias quedan marcadas y se envían", async () => {
+  it("Con análisis ofrece los tipos del catálogo y no crea sin elegir uno; las fuentes obligatorias quedan marcadas y se envían", async () => {
     const api = montar();
     await preparar();
     const simit = screen.getByRole("checkbox", { name: "SIMIT vehículo" });
-    fireEvent.click(screen.getByRole("radio", { name: "Con Análisis IA" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Con análisis" }));
     const combo = await screen.findByRole("combobox", { name: /tipo de trámite/i });
     expect(within(combo).getAllByRole("option").map((o) => o.getAttribute("value"))).toEqual(["", ...TIPOS.map((t) => t.codigo)]);
     validar();
@@ -187,7 +187,7 @@ describe("Masivo — validaciones en pantalla (AC4)", () => {
           : Response.json({ tipos: TIPOS }),
     });
     await nombre();
-    fireEvent.click(screen.getByRole("radio", { name: "Con Análisis IA" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Con análisis" }));
     expect(await screen.findByText(/el catálogo de tipos de trámite no está disponible/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Reintentar en 1 s" })).toBeDisabled();
     caido = false;
@@ -220,7 +220,7 @@ describe("Masivo — errores de la API y reintento con PUT (AC4)", () => {
         Response.json({ code: "TIPO_TRAMITE_NO_DISPONIBLE", error: "El tipo ya no está disponible.", campo: "tipo_tramite_codigo" }, { status: 422 }),
     });
     await preparar();
-    fireEvent.click(screen.getByRole("radio", { name: "Con Análisis IA" }));
+    fireEvent.click(screen.getByRole("radio", { name: "Con análisis" }));
     const combo = await screen.findByRole("combobox", { name: /tipo de trámite/i });
     fireEvent.change(combo, { target: { value: "TRASPASO_STANDARD" } });
     validar();

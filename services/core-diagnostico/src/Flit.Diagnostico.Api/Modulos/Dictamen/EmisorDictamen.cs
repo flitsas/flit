@@ -16,6 +16,7 @@ using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Dictamen;
 using Flit.Platform.Sdk.Messaging;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Diagnostico.Api.Modulos.Dictamen;
 
@@ -46,9 +47,23 @@ internal readonly record struct TransicionVersion(VersionEmitida? Anterior, Vers
 /// <c>diagnostico.dictamen.emitido</c> (corte 7).
 /// </summary>
 internal sealed partial class EmisorDictamen(
-    DiagnosticoDb db, IProtectorRespuestaFuente protector, IProveedorRedactor proveedor, IPlatformOutbox outbox, ILogger<EmisorDictamen> log)
+    DiagnosticoDb db, IProtectorRespuestaFuente protector, IProveedorRedactor proveedor, IPlatformOutbox outbox,
+    IOptions<Trabajos.OpcionesRedaccion> redaccion, ILogger<EmisorDictamen> log)
 {
     private static readonly JsonSerializerOptions Json = new();
+
+    /// <summary>
+    /// HU-2: la cola de redacción puede tomar lo que deje este emisor. Con <c>Diagnostico:Redaccion:Habilitado=false</c> no hay
+    /// trabajador, así que el cierre no deja fecha de toma aunque haya proveedor.
+    /// </summary>
+    public bool RedaccionActiva => RedaccionActivaCon(proveedor.Configurado, redaccion.Value);
+
+    /// <summary>HU-2: proveedor configurado y redacción encendida. Lo usan el cierre y el reemplazo del backoffice.</summary>
+    public static bool RedaccionActivaCon(bool proveedorConfigurado, Trabajos.OpcionesRedaccion opciones)
+    {
+        ArgumentNullException.ThrowIfNull(opciones);
+        return proveedorConfigurado && opciones.Habilitado;
+    }
 
     /// <summary>
     /// true si el vehículo no estaba terminado con el estado anterior de esta celda y el actual de las hermanas, y sí lo está
@@ -139,9 +154,13 @@ internal sealed partial class EmisorDictamen(
         return JsonSerializer.Serialize(lista, Json);
     }
 
-    /// <summary>La fila que se agrega. <paramref name="version"/> ya salió de <see cref="SiguienteVersion"/>.</summary>
+    /// <summary>
+    /// La fila que se agrega. <paramref name="version"/> ya salió de <see cref="SiguienteVersion"/>. <paramref name="esperaReintento"/>
+    /// es la espera de la toma 1 si <paramref name="redaccion"/> trae un fallo técnico sin espera indicada.
+    /// </summary>
     public static DictamenVehiculo Materializar(
-        Guid tenantId, Guid vehiculoId, int version, string tipoTramiteCodigo, DictamenEvaluado evaluado, ResultadoRedaccion redaccion, DateTimeOffset ahora)
+        Guid tenantId, Guid vehiculoId, int version, string tipoTramiteCodigo, DictamenEvaluado evaluado, ResultadoRedaccion redaccion,
+        TimeSpan esperaReintento, DateTimeOffset ahora)
     {
         ArgumentNullException.ThrowIfNull(evaluado);
         ArgumentNullException.ThrowIfNull(redaccion);
@@ -158,7 +177,7 @@ internal sealed partial class EmisorDictamen(
             RedactadoPor = redaccion.RedactadoPor,
             EstadoRedaccion = redaccion.EstadoRedaccion,
             RedaccionIntentos = redaccion.Intentos,
-            RedaccionDisponibleDesde = DisponibleDesde(redaccion, ahora),
+            RedaccionDisponibleDesde = DisponibleDesde(redaccion, ahora, esperaReintento),
             RedaccionLeaseHasta = null,
             AnalisisOverride = false,
             UsuarioOverrideId = null,
@@ -229,7 +248,8 @@ internal sealed partial class EmisorDictamen(
     {
         var fila = Materializar(
             tenantId, vehiculoId, version, tipoTramiteCodigo, evaluado,
-            new ResultadoRedaccion(string.Empty, "PLANTILLA", "PENDIENTE", 0, string.Empty, null), ahora);
+            new ResultadoRedaccion(string.Empty, "PLANTILLA", "PENDIENTE", 0, string.Empty, null),
+            Trabajos.OpcionesRedaccion.EsperaReintentoPorDefecto, ahora);
         fila.RedaccionDisponibleDesde = DisponibleAlCerrar(redaccionSuspendida, proveedorConfigurado, ahora);
         return fila;
     }
@@ -357,15 +377,16 @@ internal sealed partial class EmisorDictamen(
 
     /// <summary>
     /// Null salvo un fallo técnico (<see cref="TipoFalloRedactor.Timeout"/>, <see cref="TipoFalloRedactor.Http5xx"/>,
-    /// <see cref="TipoFalloRedactor.RateLimit"/> o <see cref="TipoFalloRedactor.Red"/>). Con espera, el reloj más esa espera;
-    /// sin ella, el reloj. Suspensión, proveedor apagado y contradicción quedan null. La usa la cola después de un fallo, no el cierre.
+    /// <see cref="TipoFalloRedactor.RateLimit"/> o <see cref="TipoFalloRedactor.Red"/>). Con espera indicada (Retry-After, tope
+    /// local, plataforma caída), el reloj más esa espera; sin ella, el reloj más <paramref name="esperaSinIndicacion"/>.
+    /// Suspensión, proveedor apagado y contradicción quedan null. La usa la cola después de un fallo, no el cierre.
     /// </summary>
-    public static DateTimeOffset? DisponibleDesde(ResultadoRedaccion redaccion, DateTimeOffset ahora)
+    public static DateTimeOffset? DisponibleDesde(ResultadoRedaccion redaccion, DateTimeOffset ahora, TimeSpan esperaSinIndicacion)
     {
         ArgumentNullException.ThrowIfNull(redaccion);
         if (redaccion.TipoFallo is not (TipoFalloRedactor.Timeout or TipoFalloRedactor.Http5xx or TipoFalloRedactor.RateLimit or TipoFalloRedactor.Red))
             return null;
-        return redaccion.ReintentarEn is { } espera ? ahora.Add(espera) : ahora;
+        return ahora.Add(redaccion.ReintentarEn ?? esperaSinIndicacion);
     }
 
     /// <summary>
@@ -418,7 +439,7 @@ internal sealed partial class EmisorDictamen(
             vigente.Vigente = false;
 
         var fila = FilaAlCerrar(
-            celda.TenantId, celda.VehiculoId, transicion.Nueva.Version, pedido.TipoTramiteCodigo, evaluado, suspendida, proveedor.Configurado, ahora);
+            celda.TenantId, celda.VehiculoId, transicion.Nueva.Version, pedido.TipoTramiteCodigo, evaluado, suspendida, RedaccionActiva, ahora);
         // HU #14563 (ADR-0086 D-1, AC7): la fila toma la versión de la celda que cierra; la cabecera no sube otra vez.
         await EscritorCeldas.MarcarFilaAsync(
             db, celda.VehiculoId, celda.VersionTablero, ct, db.ParaEditarDeLaEmpresa<VehiculoDiagnostico>(celda.TenantId)).ConfigureAwait(false);

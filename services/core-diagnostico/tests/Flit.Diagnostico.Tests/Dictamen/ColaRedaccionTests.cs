@@ -32,6 +32,8 @@ public sealed class ColaRedaccionTests
 
     private static readonly TimeSpan Lease = TimeSpan.FromMinutes(5);
 
+    private static readonly TimeSpan Espera = TimeSpan.FromSeconds(30);
+
     private static int _placa = 800;
 
     private const string Alertas = """[{"codigo":"ESTADO_VEHICULO","texto":"plantilla del cierre","efecto":"ADVIERTE","fuente":"RUNT"},{"codigo":"IMPUESTO","texto":"plantilla del impuesto","efecto":"ADVIERTE","fuente":"IMPUESTO_DEPARTAMENTAL"}]""";
@@ -99,7 +101,7 @@ public sealed class ColaRedaccionTests
     {
         var fallo = new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", ColaRedaccion.Pendiente, 1, "claude", TipoFalloRedactor.Timeout, TimeSpan.FromSeconds(15));
 
-        var reintento = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos: 2, fallo, maxReintentos: 2, Ahora);
+        var reintento = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos: 2, fallo, maxReintentos: 2, Espera, Ahora);
         reintento.EstadoRedaccion.Should().Be(ColaRedaccion.Pendiente);
         reintento.RedactadoPor.Should().Be("PLANTILLA");
         reintento.Alertamientos.Should().Be(Alertas);
@@ -107,11 +109,202 @@ public sealed class ColaRedaccionTests
         reintento.DisponibleDesde.Should().Be(Ahora.AddSeconds(15));
         reintento.InvalidarPdf.Should().BeFalse();
 
-        var agotado = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos: 3, fallo, maxReintentos: 2, Ahora);
+        var agotado = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos: 3, fallo, maxReintentos: 2, Espera, Ahora);
         agotado.DisponibleDesde.Should().BeNull("el intento 3 pasa de MaxReintentos 2");
         agotado.LeaseHasta.Should().BeNull();
         agotado.EstadoRedaccion.Should().Be(ColaRedaccion.Pendiente);
         agotado.InvalidarPdf.Should().BeFalse();
+    }
+
+    /// <summary>
+    /// 5xx, timeout o red de Anthropic sin indicación de espera: la toma n agenda <c>EsperaReintento × 2^(n−1)</c>
+    /// (30 s, 60 s…), no al instante. Con espera informada (429 Retry-After, tope local, 120 s de la plataforma) manda esa.
+    /// </summary>
+    [Fact]
+    public void Un_5xx_en_la_toma_1_agenda_30_s()
+    {
+        var opciones = new OpcionesRedaccion { Habilitado = true, MaxReintentos = 2 };
+        opciones.EsperaReintento.Should().Be(TimeSpan.FromSeconds(30));
+        var fallo = new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", ColaRedaccion.Pendiente, 1, "claude", TipoFalloRedactor.Http5xx);
+
+        var cierre = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos: 1, fallo, opciones.MaxReintentos, opciones.EsperaReintento, Ahora);
+
+        cierre.DisponibleDesde.Should().Be(Ahora.AddSeconds(30));
+        ColaRedaccion.EsTomable(cierre.EstadoRedaccion, true, cierre.DisponibleDesde, cierre.LeaseHasta, Ahora.AddSeconds(2)).Should().BeFalse("la cola no la retoma en la vuelta siguiente");
+    }
+
+    [Fact]
+    public void Un_timeout_en_la_toma_2_agenda_60_s()
+    {
+        var fallo = new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", ColaRedaccion.Pendiente, 1, "claude", TipoFalloRedactor.Timeout);
+
+        var cierre = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos: 2, fallo, maxReintentos: 2, Espera, Ahora);
+
+        cierre.DisponibleDesde.Should().Be(Ahora.AddSeconds(60));
+    }
+
+    [Theory]
+    [InlineData(0, 10)]
+    [InlineData(1, 10)]
+    [InlineData(2, 20)]
+    [InlineData(3, 40)]
+    [InlineData(6, 320)]
+    public void Una_falla_de_red_sin_espera_crece_por_toma(int toma, int segundos)
+    {
+        var fallo = new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", ColaRedaccion.Pendiente, 1, "claude", TipoFalloRedactor.Red);
+
+        var cierre = RedactorEnCola.Decidir("BLOQUEADO", Alertas, toma, fallo, maxReintentos: 6, TimeSpan.FromSeconds(10), Ahora);
+
+        cierre.DisponibleDesde.Should().Be(Ahora.AddSeconds(segundos), "toma < 1 cuenta como 1");
+    }
+
+    [Fact]
+    public void Un_429_con_Retry_After_respeta_la_espera_del_proveedor()
+    {
+        var fallo = new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", ColaRedaccion.Pendiente, 1, "claude", TipoFalloRedactor.RateLimit, TimeSpan.FromSeconds(5));
+
+        var cierre = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos: 2, fallo, maxReintentos: 2, Espera, Ahora);
+
+        cierre.DisponibleDesde.Should().Be(Ahora.AddSeconds(5), "Retry-After manda sobre la espera exponencial");
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(-1)]
+    public void EsperaReintento_cero_o_negativa_no_es_valida(int segundos)
+    {
+        new OpcionesRedaccion { EsperaReintento = TimeSpan.FromSeconds(segundos) }.Errores()
+            .Should().Contain("EsperaReintento debe ser mayor que cero");
+        new OpcionesRedaccion().Errores().Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// CR-1 (review final): core-api caído (UNAVAILABLE) en una toma deja la fila con <c>redaccion_disponible_desde ≥ ahora + 120 s</c>
+    /// y no tomable en la misma vuelta, en vez de volver a tomarla al instante y gastar las tomas en milisegundos. Cadena real:
+    /// <see cref="Credencial.FuenteCredencialPlataforma"/> → <see cref="ProveedorRedactorAnthropic"/> → <see cref="ServicioRedactor"/> → Decidir.
+    /// </summary>
+    [Fact]
+    public async Task CR1_core_api_caido_agenda_la_toma_a_120_s_y_no_se_retoma_en_la_misma_vuelta()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Credencial.VectorIa.Cargar();
+        using var privada = v.Privada();
+        await using var core = await Credencial.CoreApiIaFalso.IniciarAsync();
+        core.Responder = _ => throw new global::Grpc.Core.RpcException(new global::Grpc.Core.Status(global::Grpc.Core.StatusCode.Unavailable, "reiniciando"));
+        using var fuente = new Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.FuenteCredencialPlataforma(core.Cliente,
+            new Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.ClavesPrivadasIa(v.Kid, privada),
+            Microsoft.Extensions.Options.Options.Create(new Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.OpcionesIa
+            {
+                Origen = Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.OpcionesIa.OrigenPlataforma,
+                Kid = v.Kid,
+            }),
+            new Credencial.RelojMovil(v.Emitida), new Credencial.LogsIa().Logger<Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.FuenteCredencialPlataforma>());
+        using var http = new HttpClient(new SinLlamadas());
+        var anthropic = Microsoft.Extensions.Options.Options.Create(new OpcionesAnthropic { BaseUrl = "https://api.anthropic.com", ReintentosContradiccion = 1 });
+        var proveedor = new ProveedorRedactorAnthropic(http, anthropic, fuente, Flit.Diagnostico.Api.Modulos.Dictamen.Credencial.TopeLlamadasRedactor.SinTope());
+        var pedido = new PedidoRedaccion("BLOQUEADO", [new ReglaDisparada("SOAT_NO_VIGENTE", "RUNT", "BLOQUEA", null)],
+            new DatosBien("ABC123", "AUTOMOVIL", "MARCA", "LINEA", "2020", "PARTICULAR"), false);
+        var opciones = new OpcionesRedaccion { Habilitado = true, MaxReintentos = 2 };
+
+        var resultado = await new ServicioRedactor(proveedor, anthropic).RedactarAsync(pedido, ct);
+        var cierre = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos: 1, resultado, opciones.MaxReintentos, opciones.EsperaReintento, Ahora);
+
+        resultado.TipoFallo.Should().Be(TipoFalloRedactor.Red);
+        cierre.EstadoRedaccion.Should().Be(ColaRedaccion.Pendiente);
+        cierre.DisponibleDesde.Should().NotBeNull().And.BeOnOrAfter(Ahora.AddSeconds(120));
+        ColaRedaccion.EsTomable(cierre.EstadoRedaccion, true, cierre.DisponibleDesde, cierre.LeaseHasta, Ahora).Should().BeFalse("no se retoma en la misma vuelta");
+        ColaRedaccion.EsTomable(cierre.EstadoRedaccion, true, cierre.DisponibleDesde, cierre.LeaseHasta, Ahora.AddSeconds(119)).Should().BeFalse();
+        ColaRedaccion.EsTomable(cierre.EstadoRedaccion, true, cierre.DisponibleDesde, cierre.LeaseHasta, Ahora.AddSeconds(120)).Should().BeTrue("a los 120 s vuelve a la cola");
+        RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, opciones).Should().BeTrue("sigue en cola con reintento agendado");
+    }
+
+    /// <summary>Anthropic falso que falla el test si se le llama: con core-api caído no debe haber llamada al proveedor.</summary>
+    private sealed class SinLlamadas : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("No debía llamarse al proveedor con core-api caído.");
+    }
+
+    /// <summary>
+    /// HU-2 (SP-4, CR-1): <see cref="RedactorEnCola.EnCola"/> es el predicado de la toma (PENDIENTE con fecha). Con un fallo
+    /// técnico, Decidir agenda mientras <c>intentos &lt;= maxReintentos</c> y con <c>intentos &gt; maxReintentos</c> deja la fecha
+    /// en null; la fila que deja es «en cola» exactamente cuando quedó con fecha.
+    /// </summary>
+    [Theory]
+    [InlineData(0)]
+    [InlineData(2)]
+    [InlineData(5)]
+    public void HU2_en_cola_usa_el_mismo_borde_que_Decidir(int maxReintentos)
+    {
+        var fallo = new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", ColaRedaccion.Pendiente, 1, "claude", TipoFalloRedactor.Red);
+        var opciones = new OpcionesRedaccion { Habilitado = true, MaxReintentos = maxReintentos };
+        for (var intentos = 0; intentos <= maxReintentos + 2; intentos++)
+        {
+            var cierre = RedactorEnCola.Decidir("BLOQUEADO", Alertas, intentos, fallo, maxReintentos, Espera, Ahora);
+            var enCola = RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, opciones);
+            enCola.Should().Be(cierre.DisponibleDesde is not null, $"intentos {intentos}, max {maxReintentos}");
+            enCola.Should().Be(intentos <= maxReintentos, $"intentos {intentos}, max {maxReintentos}");
+        }
+    }
+
+    /// <summary>HU-2: con MaxReintentos=2, el tercer fallo técnico saca la fila de la cola y ya no se reencola.</summary>
+    [Fact]
+    public void HU2_tres_fallos_tecnicos_dejan_la_fila_fuera_de_cola()
+    {
+        var opciones = new OpcionesRedaccion { Habilitado = true, MaxReintentos = 2 };
+        var fallo = new ResultadoRedaccion("Redacción IA pendiente.", "PLANTILLA", ColaRedaccion.Pendiente, 1, "claude", TipoFalloRedactor.Http5xx);
+        var estados = new List<bool>();
+        for (var toma = 1; toma <= 3; toma++)
+        {
+            var cierre = RedactorEnCola.Decidir("VIABLE", Alertas, toma, fallo, opciones.MaxReintentos, opciones.EsperaReintento, Ahora);
+            estados.Add(RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, opciones));
+            if (toma == 3)
+            {
+                cierre.DisponibleDesde.Should().BeNull("el tercer fallo no se reencola");
+                cierre.RedactadoPor.Should().Be("PLANTILLA");
+                ColaRedaccion.EsTomable(cierre.EstadoRedaccion, true, cierre.DisponibleDesde, cierre.LeaseHasta, Ahora.AddDays(1)).Should().BeFalse();
+            }
+        }
+
+        estados.Should().Equal(true, true, false);
+    }
+
+    /// <summary>
+    /// HU-2: empresa suspendida (o proveedor apagado) mientras la fila estaba en cola: no hay resultado del modelo, queda la
+    /// plantilla y sale de la cola. La ausencia de llamada la prueban <c>Suspension_o_proveedor_apagado_al_tomar_dejan_la_fecha_en_null</c>
+    /// y <c>RedactorLlmTests.RedaccionSuspendida_NoLlamaAlProveedor</c>.
+    /// </summary>
+    [Fact]
+    public void HU2_suspendida_en_cola_queda_plantilla_y_fuera_de_cola()
+    {
+        var opciones = new OpcionesRedaccion { Habilitado = true, MaxReintentos = 2 };
+        var cierre = RedactorEnCola.Decidir("VIABLE", Alertas, 1, resultado: null, opciones.MaxReintentos, opciones.EsperaReintento, Ahora);
+        cierre.RedactadoPor.Should().Be("PLANTILLA");
+        cierre.Alertamientos.Should().Be(Alertas);
+        cierre.DisponibleDesde.Should().BeNull();
+        RedactorEnCola.EnCola(cierre.EstadoRedaccion, cierre.DisponibleDesde, opciones).Should().BeFalse();
+    }
+
+    /// <summary>
+    /// HU-2: con <c>Diagnostico:Redaccion:Habilitado=false</c> el emisor no deja fecha de toma aunque haya proveedor (el
+    /// simulado de LOCAL); encendida, sí. El host de pruebas trae la bandera en false.
+    /// </summary>
+    [Fact]
+    public async Task HU2_con_la_redaccion_apagada_el_emisor_no_deja_fecha_aunque_haya_proveedor()
+    {
+        await using (var apagado = await ApiDePrueba.SinBaseAsync(configurar: Simulado))
+        {
+            await using var scope = apagado.App.Services.CreateAsyncScope();
+            scope.ServiceProvider.GetRequiredService<IProveedorRedactor>().Configurado.Should().BeTrue();
+            var emisor = scope.ServiceProvider.GetRequiredService<EmisorDictamen>();
+            emisor.RedaccionActiva.Should().BeFalse();
+            EmisorDictamen.FilaAlCerrar(Guid.CreateVersion7(), Guid.CreateVersion7(), 1, "TRASPASO_STANDARD", new DictamenEvaluado("VIABLE", []), false, emisor.RedaccionActiva, Ahora)
+                .RedaccionDisponibleDesde.Should().BeNull();
+        }
+
+        EmisorDictamen.RedaccionActivaCon(proveedorConfigurado: true, new OpcionesRedaccion { Habilitado = false }).Should().BeFalse();
+        EmisorDictamen.RedaccionActivaCon(proveedorConfigurado: false, new OpcionesRedaccion { Habilitado = true }).Should().BeFalse();
+        EmisorDictamen.RedaccionActivaCon(proveedorConfigurado: true, new OpcionesRedaccion { Habilitado = true }).Should().BeTrue();
     }
 
     [Fact]
@@ -125,7 +318,7 @@ public sealed class ColaRedaccionTests
             new("Redacción IA pendiente.", "PLANTILLA", ColaRedaccion.Pendiente, 1, "claude", TipoFalloRedactor.Ilegible),
         })
         {
-            var cierre = RedactorEnCola.Decidir("VIABLE", Alertas, 1, resultado, 2, Ahora);
+            var cierre = RedactorEnCola.Decidir("VIABLE", Alertas, 1, resultado, 2, Espera, Ahora);
             cierre.DisponibleDesde.Should().BeNull();
             cierre.LeaseHasta.Should().BeNull();
             cierre.EstadoRedaccion.Should().Be(ColaRedaccion.Pendiente);
@@ -140,7 +333,7 @@ public sealed class ColaRedaccionTests
     {
         const string veredicto = "BLOQUEADO";
         var cierre = RedactorEnCola.Decidir(
-            veredicto, Alertas, 1, new ResultadoRedaccion("El modelo explicó el bloqueo.", "LLM", ColaRedaccion.Completada, 1, "claude", null), 2, Ahora);
+            veredicto, Alertas, 1, new ResultadoRedaccion("El modelo explicó el bloqueo.", "LLM", ColaRedaccion.Completada, 1, "claude", null), 2, Espera, Ahora);
 
         veredicto.Should().Be("BLOQUEADO");
         cierre.EstadoRedaccion.Should().Be(ColaRedaccion.Completada);
@@ -177,7 +370,7 @@ public sealed class ColaRedaccionTests
         pedido.Reglas[1].MontoPesos.Should().Be(150_000);
         pedido.RedaccionSuspendida.Should().BeFalse();
 
-        var encabezado = new EncabezadoReporte(Guid.Empty, "Lote", "Empresa", "Ana", Ahora, "Con análisis IA", "ABC123", "PLACA_CARRO", "ABC123", null);
+        var encabezado = new EncabezadoReporte(Guid.Empty, "Lote", "Empresa", "Ana", Ahora, "Diagnóstico Con análisis — TRASPASO", "ABC123", "PLACA_CARRO", "ABC123", null);
         var sin = new ContenidoReporteVehiculo(encabezado, []);
         sin.ParaHuella().Keys.Should().NotContain(k => k.StartsWith("dictamen/", StringComparison.Ordinal));
         var con = sin with { Dictamen = new DictamenEnHuella("BLOQUEADO", ColaRedaccion.Completada, ContenidoReporteVehiculo.TextoDeAlertamientos(Alertas)) };

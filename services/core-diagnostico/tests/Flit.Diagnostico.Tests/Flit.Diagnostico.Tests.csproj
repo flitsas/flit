@@ -36,6 +36,11 @@
     <None Include="..\..\..\..\contracts\fixtures\bus\*.v1.json" Link="Fixtures\bus\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Vector criptográfico compartido de ADR-0091 (par RSA-3072 SOLO de prueba): el mismo que consume core-api. -->
+  <ItemGroup>
+    <None Include="..\..\..\..\contracts\proto\flit\platform\v1\testdata\configuracion_ia_vector.json" Link="Fixtures\ia\configuracion_ia_vector.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- Topología del broker (ADR-0075, H5): las pruebas la leen en vez de copiarla a mano (colas, bindings y políticas). -->
   <ItemGroup>
     <None Include="..\..\..\..\deploy\rabbitmq\definitions.json" Link="Fixtures\rabbitmq\definitions.json" CopyToOutputDirectory="PreserveNewest" />

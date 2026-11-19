@@ -24,12 +24,54 @@ public sealed class PdfVehiculoRotulosTests
     [Fact]
     public void Dictamen_pendiente_dice_analisis_en_preparacion_y_no_nombra_la_ia()
     {
-        var contenido = Contenido() with { Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", "qa51 parrafo de prueba") };
+        // HU-3: «Análisis en preparación» solo mientras el dictamen sigue en la cola de redacción.
+        var contenido = Contenido() with { Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", "qa51 parrafo de prueba", EnCola: true) };
         var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn));
 
         PdfDePrueba.Tiene(texto, "Análisis en preparación").Should().BeTrue(texto);
         texto.Should().NotContainAny(PdfDePrueba.Plano("redacción IA"), PdfDePrueba.Plano("Redacción IA"));
     }
+
+    /// <summary>HU-3: en cola → «Análisis en preparación» y nunca «Sin análisis». El texto del modelo sale literal (SP-8).</summary>
+    [Fact]
+    public void HU3_pendiente_en_cola_dice_analisis_en_preparacion()
+    {
+        var contenido = Contenido() with { Dictamen = new DictamenEnHuella("VIABLE", "PENDIENTE", "<b>parrafo</b> **hu3**", EnCola: true) };
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn));
+
+        PdfDePrueba.Tiene(texto, RotulosDiagnostico.AnalisisEnPreparacion).Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "Sin análisis").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "<b>parrafo</b> **hu3**").Should().BeTrue("el texto no se interpreta como HTML ni markdown: " + texto);
+    }
+
+    /// <summary>HU-3: PENDIENTE fuera de cola (nunca se redactará) → literal exacto «Sin análisis», sin «Análisis en preparación».</summary>
+    [Fact]
+    public void HU3_pendiente_fuera_de_cola_dice_sin_analisis()
+    {
+        var contenido = Contenido() with { Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", "parrafo hu3", EnCola: false) };
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn));
+
+        PdfDePrueba.Tiene(texto, "Sin análisis").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, RotulosDiagnostico.AnalisisEnPreparacion).Should().BeFalse(texto);
+    }
+
+    /// <summary>HU-3: COMPLETADA → sin rótulo, esté o no la marca de cola.</summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void HU3_completada_no_lleva_rotulo(bool enCola)
+    {
+        var contenido = Contenido() with { Dictamen = new DictamenEnHuella("VIABLE", "COMPLETADA", "parrafo hu3", EnCola: enCola) };
+        var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn));
+
+        PdfDePrueba.Tiene(texto, "Sin análisis").Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, RotulosDiagnostico.AnalisisEnPreparacion).Should().BeFalse(texto);
+        PdfDePrueba.Tiene(texto, "parrafo hu3").Should().BeTrue(texto);
+    }
+
+    /// <summary>HU-3 no suma su propia subida: la versión queda en la 8 de los ajustes del PDF; el cambio de rótulo lo invalida la huella.</summary>
+    [Fact]
+    public void HU3_no_sube_la_version_de_plantilla() => PdfVehiculo.VersionPlantilla.Should().Be(8);
 
     [Fact]
     public void Seccion_de_fuente_sin_titulo_usa_el_rotulo_generico_y_nunca_el_codigo()
