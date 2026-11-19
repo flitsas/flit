@@ -51,12 +51,15 @@ const CONFIG = {
 const VER = "comparendos.configuracion.ver";
 const REPRESENTANTES = "comparendos.representantes.ver";
 
-function abrir(correoRespuesta: string | null, permisos: string[], esSuperAdmin = false) {
+function abrir(correoRespuesta: string | null, permisos: string[], esSuperAdmin = false, fallaConfiguracion = false) {
   sesion = { usuario: { esSuperAdmin }, permisos };
   apiFetch.mockImplementation(async (ruta: string) => {
-    if (ruta === "/configuracion" || ruta === "/admin/empresas/e1/configuracion") return { ...CONFIG, correoRespuesta };
+    if (ruta === "/configuracion" || ruta === "/admin/empresas/e1/configuracion") {
+      if (fallaConfiguracion) throw new Error("No se pudo cargar la configuración.");
+      return { ...CONFIG, correoRespuesta };
+    }
     if (ruta === "/configuracion/consultas") return { estado: "Activa", canales: [] };
-    if (ruta === "/tipologias") return [];
+    if (ruta === "/tipologias") return [{ id: "t1", codigo: "DA", nombre: "Solicitud de audiencia", estadosLegalesPermitidos: [], plazoRespuestaOtDiasHabiles: 15, permiteMasivo: false }];
     throw new Error(`ruta sin simular: ${ruta}`);
   });
   render(
@@ -100,5 +103,12 @@ describe("aviso del correo para respuestas (rediseño S3)", () => {
     abrir("juridico@empresa.com", [VER, REPRESENTANTES]);
     await screen.findByDisplayValue("juridico@empresa.com");
     expect(aviso()).toBeNull();
+  });
+
+  it("si falla GET /configuracion, las consultas y las tipologías siguen visibles", async () => {
+    abrir(null, [VER], false, true);
+    expect(await screen.findByText("No se pudo cargar la configuración.")).toBeInTheDocument();
+    expect(await screen.findByText("Consultas automáticas de comparendos")).toBeInTheDocument();
+    expect(await screen.findByText("Solicitud de audiencia")).toBeInTheDocument();
   });
 });

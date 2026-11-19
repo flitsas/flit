@@ -266,8 +266,6 @@ function Configuracion({ empresa }: { empresa: string | null }) {
             ]}
           />
         </div>
-        <ConsultasEmpresa key={`consultas:${empresa ?? "propia"}`} empresa={empresa} />
-        <TipologiasEmpresa key={`tipologias:${empresa ?? "propia"}`} empresa={empresa} />
       </Bloque>
     </div>
   );
@@ -283,6 +281,13 @@ export default function EmpresaYCorreo() {
         <Encabezado titulo="Empresa y correo" descripcion="Cómo salen los correos de tu empresa, quién recibe los avisos y qué tienes contratado con FLIT." />
         {sesion?.usuario.esSuperAdmin && <SelectorEmpresa valor={empresa} onCambio={setEmpresa} />}
         <Configuracion key={empresa ?? "propia"} empresa={empresa} />
+        {/* Fuera de `Configuracion`: tienen su propio endpoint y deben verse aunque falle GET /configuracion. */}
+        {(!sesion?.usuario.esSuperAdmin || empresa) && (
+          <div className="flex flex-col gap-6">
+            <ConsultasEmpresa key={`consultas:${empresa ?? "propia"}`} empresa={empresa} />
+            <TipologiasEmpresa key={`tipologias:${empresa ?? "propia"}`} empresa={empresa} />
+          </div>
+        )}
       </section>
     </Requiere>
   );
