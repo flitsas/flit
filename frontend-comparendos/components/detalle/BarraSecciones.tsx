@@ -41,7 +41,11 @@ export function BarraSecciones({ secciones, onIr }: { secciones: SeccionBarra[];
       if (primera) setActiva(primera.id);
     };
     const gesto = (e: Event) => {
-      if (e.target instanceof Node && barra.current?.contains(e.target)) return;
+      // Dentro de la barra, un clic o una tecla es elegir sección, y una rueda horizontal es deslizar la barra: no liberan.
+      // Una rueda vertical o un arrastre que empiecen sobre la barra mueven la página: sí liberan.
+      const enBarra = e.target instanceof Node && !!barra.current?.contains(e.target);
+      const horizontal = e instanceof WheelEvent && Math.abs(e.deltaX) > Math.abs(e.deltaY);
+      if (enBarra && (e.type === "pointerdown" || e.type === "keydown" || horizontal)) return;
       pulsada.current = null;
     };
     const eventos = ["wheel", "touchstart", "pointerdown", "keydown"] as const;

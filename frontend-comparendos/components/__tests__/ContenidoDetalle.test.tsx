@@ -272,6 +272,43 @@ describe("detalle del comparendo como página (rediseño S1)", () => {
     expect(boton(/DP/)).toHaveAttribute("aria-current", "location");
   });
 
+  it("una rueda vertical sobre la barra mueve la página y libera la sección pulsada", async () => {
+    montar();
+    await screen.findByTestId("detalle-cabecera");
+    const barra = screen.getByTestId("detalle-barra");
+    const boton = (n: RegExp) => within(barra).getByRole("button", { name: n });
+    fireEvent.click(boton(/Pago/));
+    fireEvent.wheel(barra, { deltaX: 120, deltaY: 0 }); // deslizar la barra: no libera
+    avisar(screen.getByTestId("detalle-dp"), true);
+    expect(boton(/Pago/)).toHaveAttribute("aria-current", "location");
+    fireEvent.wheel(barra, { deltaY: 300 }); // rueda vertical sobre la barra: libera
+    avisar(screen.getByTestId("detalle-dp"), true);
+    expect(boton(/DP/)).toHaveAttribute("aria-current", "location");
+  });
+
+  it("una página que cabe entera no tiene «fondo»: no marca la última", async () => {
+    montar();
+    await screen.findByTestId("detalle-cabecera");
+    const shell = screen.getByTestId("shell-scroll");
+    Object.defineProperties(shell, { scrollTop: { value: 0, configurable: true }, clientHeight: { value: 900, configurable: true }, scrollHeight: { value: 900, configurable: true } });
+    act(() => {
+      shell.dispatchEvent(new Event("scroll"));
+    });
+    expect(within(screen.getByTestId("detalle-barra")).getByRole("button", { name: /Datos/ })).not.toHaveAttribute("aria-current");
+  });
+
+  it("sin IntersectionObserver la barra sigue respondiendo al scroll (marca la última al fondo)", async () => {
+    vi.stubGlobal("IntersectionObserver", undefined);
+    montar();
+    await screen.findByTestId("detalle-cabecera");
+    const shell = screen.getByTestId("shell-scroll");
+    Object.defineProperties(shell, { scrollTop: { value: 900, configurable: true }, clientHeight: { value: 600, configurable: true }, scrollHeight: { value: 1500, configurable: true } });
+    act(() => {
+      shell.dispatchEvent(new Event("scroll"));
+    });
+    expect(within(screen.getByTestId("detalle-barra")).getByRole("button", { name: /Datos/ })).toHaveAttribute("aria-current", "location");
+  });
+
   it("al llegar al fondo marca la última sección aunque no alcance a subir", async () => {
     montar();
     await screen.findByTestId("detalle-cabecera");
