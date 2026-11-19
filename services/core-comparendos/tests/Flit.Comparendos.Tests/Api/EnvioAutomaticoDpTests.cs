@@ -22,7 +22,6 @@ namespace Flit.Comparendos.Tests.Api;
 /// tope por empresa y día, apagado por defecto y solo con tipologías aprobadas por un abogado. Cada prueba arma su propia
 /// empresa; la versión publicada del conjunto Flit y el organismo aaaaaaaa-0001 son compartidos, así que ninguna depende del orden.
 /// </summary>
-[Collection(EnvioAutomaticoDpSinParalelo.Nombre)]
 public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<ApiConGanchosDp>, IAsyncLifetime
 {
     private const string Base = "/api/v1/comparendos";
@@ -910,15 +909,4 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         a.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
         b.Elapsed.Should().BeLessThan(TimeSpan.FromSeconds(30));
     }
-}
-
-/// <summary>
-/// La prueba de rendimiento de esta clase mide cuánto tarda la corrida con 2.000 comparendos. Si corre en paralelo con
-/// las demás clases sobre el mismo Postgres, la medición depende de la carga del runner y no del trabajo (en el CI pasó
-/// de menos de 30 s a 36–53 s al sumar las pruebas del Inicio). Por eso esta clase corre sola, al final.
-/// </summary>
-[CollectionDefinition(Nombre, DisableParallelization = true)]
-public sealed class EnvioAutomaticoDpSinParalelo
-{
-    public const string Nombre = "Envío automático de DP (sin paralelo)";
 }
