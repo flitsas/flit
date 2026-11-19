@@ -53,8 +53,9 @@ y el OCR en streaming los descarta.
 ## Consecuencias
 
 - Costo por módulo/proceso/usuario/placa y tasa de fallos por proveedor consultables con SQL directo.
-- La semilla de tarifas trae SOLO Anthropic con precio oficial; openai/kimi/deepseek y Claude Haiku 5.5 (precio por tramos
-  de tamaño de prompt) quedan con costo NULL hasta cargar su tarifa.
+- La semilla de tarifas trae SOLO Anthropic con precio oficial; openai/kimi/deepseek quedan con costo NULL hasta cargar
+  su tarifa. Claude Haiku 5.5 (precio por tramos de tamaño de prompt) se siembra con el tramo ≤100K tokens, igual que
+  FLITO: un prompt mayor queda subestimado.
 - Si la cola se llena o la base falla se pierden filas (log de advertencia con contador): es telemetría, no contabilidad.
 - El detalle (prompt/respuesta) puede contener datos personales: apagado por defecto y con retención corta.
 - Cambiar columnas o catálogos exige `ia-consumo` v2 en el contrato común, nunca a mano en un solo servicio.

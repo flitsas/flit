@@ -96,14 +96,16 @@ COMMENT ON TABLE admin.ia_tarifa_modelo IS
   'Contrato ia-consumo v1 — USD por millón de tokens. Sin tarifa el costo queda NULL (no 0).';
 
 -- Semilla: SOLO Anthropic, tabla oficial de precios (USD/MTok; escritura de caché = la de 5 minutos, 1,25× la
--- entrada). openai / kimi / deepseek no se siembran (costo NULL hasta confirmar precio). Claude Haiku 5.5 tampoco:
--- su precio depende del tamaño del prompt (≤100K / >100K tokens) y la tabla no lo puede expresar.
+-- entrada). openai / kimi / deepseek no se siembran (costo NULL hasta confirmar precio). Claude Haiku 5.5 tiene dos
+-- tramos según el tamaño del prompt; se siembra el de ≤100K tokens, igual que FLITO (un prompt mayor queda
+-- subestimado: es un costo ESTIMADO).
 INSERT INTO admin.ia_tarifa_modelo
   (proveedor, modelo, vigente_desde, precio_entrada_mtok, precio_salida_mtok, precio_cache_lectura_mtok, precio_cache_escritura_mtok)
 VALUES
   ('anthropic', 'claude-haiku-4-5',  DATE '2026-11-18',  1.00,  5.00, 0.10,  1.25),
   ('anthropic', 'claude-sonnet-4-6', DATE '2026-11-18',  3.00, 15.00, 0.30,  3.75),
-  ('anthropic', 'claude-sonnet-5',   DATE '2026-11-18',  2.00, 10.00, 0.20,  2.50),
+  ('anthropic', 'claude-haiku-5-5',  DATE '2026-11-18',  0.10,  0.50, 0.01,  0.125),
+  ('anthropic', 'claude-sonnet-5',  DATE '2026-11-18',  2.00, 10.00, 0.20,  2.50),
   ('anthropic', 'claude-sonnet-5-5', DATE '2026-11-18',  2.00, 10.00, 0.10,  2.50),
   ('anthropic', 'claude-opus-4-6',   DATE '2026-11-18',  5.00, 25.00, 0.50,  6.25),
   ('anthropic', 'claude-opus-4-7',   DATE '2026-11-18',  5.00, 25.00, 0.50,  6.25),
