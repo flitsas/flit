@@ -143,7 +143,12 @@ public static class AttachmentRules
         "otro", "anexos_generales",
     };
 
-    /// <summary>¿Subir este tipo debe RETIRAR el adjunto anterior del mismo tipo?</summary>
+    /// <summary>
+    /// ¿Subir este tipo debe RETIRAR el adjunto anterior del mismo tipo? Gobierna la subida del GESTOR
+    /// (<see cref="UploadAttachmentHandler"/>) y el choque con FLITO (<see cref="BloqueadoPorFlito"/>). No
+    /// aplica a <c>AdminCargarDocumentoHandler</c> (Bug #14604): «Actualizar documento» del admin siempre
+    /// reemplaza, incluidos los tipos «bolsa» — el modal le promete lo mismo al admin sin distinguir tipo.
+    /// </summary>
     public static bool ReemplazaAlSubir(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && !TiposMultiples.Contains(tipo.Trim());
 
