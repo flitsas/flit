@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
-import { formatearPesos, obtenerDetalleCelda, rutaDetalleCelda, textoMotivoNa, textoTipoError, traducirErrorDetalle } from "@/lib/tablero/detalle";
+import {
+  FRASE_DEUDA_DATO_PARCIAL,
+  formatearPesos,
+  fraseImpuesto,
+  obtenerDetalleCelda,
+  rutaDetalleCelda,
+  textoAdvertenciaImpuesto,
+  textoMotivoNa,
+  textoTipoError,
+  traducirErrorDetalle,
+} from "@/lib/tablero/detalle";
 import { simitVehiculo } from "./datosDetalle";
 
 // Uso de ejemplo: const detalle = await obtenerDetalleCelda(loteId, vehiculoId, "SIMIT_VEHICULO", signal);
@@ -111,5 +121,47 @@ describe("detalle — textos de error, N/A y pesos", () => {
     expect(espacios(formatearPesos(45000000))).toBe("$ 45.000.000");
     expect(formatearPesos(null)).toBe("—");
     expect(formatearPesos("no-numero")).toBe("—");
+  });
+});
+
+// Uso de ejemplo (ola impuesto-fuente-real, diseno.md §5.2): fraseImpuesto(resultado) dice «Con deuda (dato parcial)…» si la
+// fuente no leyó todas las vigencias; textoAdvertenciaImpuesto(advertencia) nombra el campo que no coincide, nunca su valor.
+describe("detalle — impuesto contra la fuente real: dato parcial, advertencias y errores nuevos", () => {
+  it("deuda con dato parcial: la frase lo dice aunque traiga monto", () => {
+    expect(fraseImpuesto({ tiene_deuda: true, monto_total: 350000, dato_parcial: true, vigencias: [] })).toBe(FRASE_DEUDA_DATO_PARCIAL);
+    expect(FRASE_DEUDA_DATO_PARCIAL).toBe("Con deuda (dato parcial): la fuente no leyó todas las vigencias.");
+  });
+
+  it("sin dato parcial, las frases de siempre", () => {
+    expect(fraseImpuesto({ tiene_deuda: true, monto_total: null, vigencias: [] })).toBe("Deuda sin valor informado");
+    expect(fraseImpuesto({ tiene_deuda: false, monto_total: 0, vigencias: [] })).toBe("Sin deuda");
+    expect(fraseImpuesto({ tiene_deuda: true, monto_total: 350000, dato_parcial: false, vigencias: [] })).toBeNull();
+  });
+
+  it.each([
+    ["vehicleType", "Dato que no coincide con el portal: Clase del vehículo"],
+    ["secretaryCity", "Dato que no coincide con el portal: Ciudad del organismo"],
+    ["vehicleServiceType", "Dato que no coincide con el portal: Servicio"],
+    ["vehicleFuelType", "Dato que no coincide con el portal: Combustible"],
+    ["vehicleBrand", "Dato que no coincide con el portal: Marca"],
+    ["vehicleModel", "Dato que no coincide con el portal: Modelo"],
+    ["OwnerName", "Dato que no coincide con el portal: Nombre del propietario"],
+    ["campoNuevoDelProveedor", "Dato que no coincide con el portal: Otro dato"],
+    ["otro", "Dato que no coincide con el portal: Otro dato"],
+    ["", "Dato que no coincide con el portal: Otro dato"],
+  ])("validación de %s: nombra el campo en español", (campo, texto) => {
+    expect(textoAdvertenciaImpuesto({ tipo: "VALIDACION", campo, anio: null, texto: "valor enviado X / portal Y" })).toBe(texto);
+  });
+
+  it("aviso: dice la vigencia si la trae y nunca repite el texto del servidor", () => {
+    expect(textoAdvertenciaImpuesto({ tipo: "AVISO", campo: "", anio: 2025, texto: "algo del portal" })).toBe(
+      "La fuente del impuesto dejó un aviso sobre la vigencia 2025.",
+    );
+    expect(textoAdvertenciaImpuesto({ tipo: "AVISO", campo: "", anio: null, texto: "algo del portal" })).toBe("La fuente del impuesto dejó un aviso.");
+  });
+
+  it("tipo_error nuevos de la fuente real tienen su texto exacto", () => {
+    expect(textoTipoError("CREDENCIAL_NO_CONFIGURADA")).toBe("Credencial de impuesto no configurada para la compañía.");
+    expect(textoTipoError("NO_CONFIRMADO_TIEMPO")).toBe("No confirmado (tiempo): la fuente no terminó la consulta a tiempo.");
   });
 });

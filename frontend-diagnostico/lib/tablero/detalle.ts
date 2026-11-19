@@ -159,6 +159,12 @@ export interface VigenciaImpuestoDetalle {
   anio: number;
   valor: number;
   pagada: boolean;
+  /** Fuente real (contrato-api.md B1): se omiten si la fuente no los informó. */
+  referencia_pago?: string | null;
+  /** «AAAA-MM-DD». */
+  fecha_vencimiento?: string | null;
+  /** Hay PDF de liquidación de esta vigencia; se baja por vehículo + año, nunca por id de archivo. */
+  tiene_liquidacion?: boolean;
 }
 
 /** Último pago informado. Un campo que no vino no se pinta. */
@@ -180,7 +186,12 @@ export interface ResultadoImpuestoDetalle {
   sanciones?: number | null;
   avaluo_comercial?: number | null;
   ultimo_pago?: UltimoPagoImpuesto | null;
+  /** Deprecated (contrato-api.md B1): el front no lo usa ni lo manda; usa `tiene_liquidacion_consolidada`. */
   liquidacion_consolidada_id?: string | null;
+  /** Hay PDF de la liquidación consolidada. */
+  tiene_liquidacion_consolidada?: boolean;
+  /** La fuente no leyó todas las vigencias (omitido si false). */
+  dato_parcial?: boolean;
   periodo_certificacion?: string | null;
   fecha_consulta?: string | null;
 }
@@ -188,9 +199,14 @@ export interface ResultadoImpuestoDetalle {
 export const FRASE_DEUDA_SIN_VALOR = "Deuda sin valor informado";
 export const FRASE_SIN_DEUDA = "Sin deuda";
 export const FRASE_DATO_PARCIAL = "Dato parcial. El monto que trajo la fuente no se confirma y no se muestra.";
+export const FRASE_DEUDA_DATO_PARCIAL = "Con deuda (dato parcial): la fuente no leyó todas las vigencias.";
 
-/** Frase del impuesto cuando no hay un monto que afirmar. Null si el total informado se muestra tal cual. */
+/**
+ * Frase del impuesto cuando no hay un monto que afirmar (o la deuda es un dato parcial). Null si el total informado se muestra
+ * tal cual.
+ */
 export function fraseImpuesto(resultado: ResultadoImpuestoDetalle): string | null {
+  if (resultado.tiene_deuda && resultado.dato_parcial) return FRASE_DEUDA_DATO_PARCIAL;
   const sinMonto = resultado.monto_total === null || resultado.monto_total === undefined || resultado.monto_total === 0;
   if (resultado.tiene_deuda && sinMonto) return FRASE_DEUDA_SIN_VALOR;
   if (resultado.tiene_deuda === false && sinMonto) return FRASE_SIN_DEUDA;
@@ -247,6 +263,40 @@ export type RespuestaProveedor = unknown;
  */
 export type RespuestaFuenteCompleta = Record<string, unknown>;
 
+/** Advertencia de la fuente del impuesto (contrato-api.md B1). `texto` es el rótulo del servidor; la vista arma el suyo. */
+export interface AdvertenciaImpuestoDetalle {
+  tipo: "VALIDACION" | "AVISO";
+  /** Campo de la solicitud que no coincide (`vehicleType`, `secretaryCity`…), `otro` o vacío. */
+  campo: string;
+  anio: number | null;
+  texto: string;
+}
+
+/** Campo de la solicitud del impuesto → nombre legible. Uno que no esté, «Otro dato». */
+const CAMPOS_ADVERTENCIA_IMPUESTO: Readonly<Record<string, string>> = {
+  vehicleType: "Clase del vehículo",
+  secretaryCity: "Ciudad del organismo",
+  secretaryDepartmentCode: "Departamento del organismo",
+  vehicleServiceType: "Servicio",
+  vehicleFuelType: "Combustible",
+  vehicleBrand: "Marca",
+  vehicleModel: "Modelo",
+  OwnerName: "Nombre del propietario",
+};
+
+/**
+ * Texto de una advertencia del impuesto: el campo que no coincide en español, o el aviso con su vigencia. Nunca el valor
+ * enviado ni el del portal (ni siquiera el `texto` del servidor).
+ */
+export function textoAdvertenciaImpuesto(advertencia: AdvertenciaImpuestoDetalle): string {
+  if (advertencia.tipo === "AVISO")
+    return advertencia.anio !== null && advertencia.anio !== undefined
+      ? `La fuente del impuesto dejó un aviso sobre la vigencia ${advertencia.anio}.`
+      : "La fuente del impuesto dejó un aviso.";
+  const campo = Object.hasOwn(CAMPOS_ADVERTENCIA_IMPUESTO, advertencia.campo) ? CAMPOS_ADVERTENCIA_IMPUESTO[advertencia.campo] : "Otro dato";
+  return `Dato que no coincide con el portal: ${campo}`;
+}
+
 export interface DetalleCelda {
   id: string;
   vehiculo_id: string;
@@ -274,6 +324,8 @@ export interface DetalleCelda {
   respuesta_proveedor?: RespuestaProveedor | null;
   /** Impuesto en ERROR con dato parcial: se rotula y no se muestra el monto. Ausente si es false. */
   dato_parcial?: boolean;
+  /** Solo IMPUESTO_DEPARTAMENTAL, en COMPLETADO y en ERROR; null en las demás fuentes. */
+  advertencias?: AdvertenciaImpuestoDetalle[] | null;
   /** HU #14563 B5. Auditoría saneada; ausente o null en el API anterior o sin intentos no manuales. */
   auditoria?: AuditoriaConsulta | null;
 }
@@ -341,6 +393,8 @@ const TIPOS_ERROR: Record<string, string> = {
   SIN_MODELO: "Falta el modelo del vehículo para consultar el impuesto.",
   ORGANISMO_INCOMPLETO: "El organismo de tránsito no tiene municipio para consultar el impuesto.",
   SIN_NOMBRE_PROPIETARIO: "Falta el nombre del propietario para consultar el impuesto.",
+  CREDENCIAL_NO_CONFIGURADA: "Credencial de impuesto no configurada para la compañía.",
+  NO_CONFIRMADO_TIEMPO: "No confirmado (tiempo): la fuente no terminó la consulta a tiempo.",
 };
 
 /** Texto claro del tipo_error de la celda o de una persona; un código desconocido no se muestra crudo. */

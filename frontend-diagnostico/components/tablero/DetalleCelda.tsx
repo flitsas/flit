@@ -12,6 +12,7 @@ import {
   FUENTES_PERSONA,
   FRASE_DATO_PARCIAL,
   fraseImpuesto,
+  textoAdvertenciaImpuesto,
   textoMotivoNa,
   textoTipoError,
   textoDuracion,
@@ -40,6 +41,14 @@ import {
   Vacio,
 } from "./vistasDetalle/comun";
 import { IconoAviso } from "@flit/ui/IconoAviso";
+import { LiquidacionesImpuesto } from "./vistasDetalle/LiquidacionesImpuesto";
+
+/** Datos para descargar las liquidaciones del impuesto; sin ellos (backoffice, pruebas) no hay botones. */
+export interface DescargasDetalle {
+  diagnosticoId: string;
+  /** Capacidad `descargarReportes` de la sesión de la compañía. */
+  puedeDescargar: boolean;
+}
 
 // Cuerpo del detalle de una celda (HU #13801; HU #14087): desde HU #14087 se pinta en su página, en pestaña nueva
 // (PaginaDetalleConsulta), ya sin modal. Aquí quedan la vista (VistaDetalleCelda) y el foco atrapado que usa el formulario
@@ -431,7 +440,25 @@ function Impuesto({ resultado }: { resultado: ResultadoImpuestoDetalle }) {
  * proveedor de la celda en su tarjeta plegable (D19).
  * Si no está guardada la respuesta completa, el resultado resumido con un aviso.
  */
-function Respuesta({ detalle }: { detalle: Detalle }) {
+/**
+ * «Advertencias de la fuente» del impuesto (COMPLETADO y ERROR): el campo que no coincide en español y los avisos; nunca los
+ * valores enviados ni los del portal. Aviso estático (vivo=false): es contenido de la página, no un cambio en vivo.
+ */
+function AdvertenciasImpuesto({ detalle }: { detalle: Detalle }) {
+  const lista = detalle.fuente === "IMPUESTO_DEPARTAMENTAL" ? (detalle.advertencias ?? []) : [];
+  if (lista.length === 0) return null;
+  return (
+    <InlineAlert tone="warning" vivo={false} title="Advertencias de la fuente">
+      <ul aria-label="Advertencias de la fuente" className="list-disc pl-5">
+        {lista.map((a, i) => (
+          <li key={`${a.tipo}-${a.campo}-${a.anio ?? ""}-${i}`}>{textoAdvertenciaImpuesto(a)}</li>
+        ))}
+      </ul>
+    </InlineAlert>
+  );
+}
+
+function Respuesta({ detalle, descargas }: { detalle: Detalle; descargas?: DescargasDetalle }) {
   const porPersona = FUENTES_PERSONA.has(detalle.fuente) || detalle.personas !== null;
   const personas = detalle.personas ?? [];
   let cuerpo: ReactNode;
@@ -471,9 +498,20 @@ function Respuesta({ detalle }: { detalle: Detalle }) {
   } else {
     cuerpo = <Vacio>Esta consulta no trae campos de respuesta para mostrar.</Vacio>;
   }
+  const impuestoCompletado = detalle.fuente === "IMPUESTO_DEPARTAMENTAL" && detalle.estado === "COMPLETADO" && esImpuesto(detalle.resultado);
   return (
     <Seccion titulo="Respuesta de la fuente">
+      {(detalle.estado === "COMPLETADO" || detalle.estado === "ERROR") && <AdvertenciasImpuesto detalle={detalle} />}
       {cuerpo}
+      {impuestoCompletado && esImpuesto(detalle.resultado) && (
+        <LiquidacionesImpuesto
+          diagnosticoId={descargas?.diagnosticoId ?? ""}
+          vehiculoId={detalle.vehiculo_id}
+          identificador={detalle.identificador}
+          resultado={detalle.resultado}
+          puedeDescargar={Boolean(descargas?.diagnosticoId) && (descargas?.puedeDescargar ?? false)}
+        />
+      )}
       {hayCrudo(detalle.respuesta_proveedor) && <CrudoProveedor datos={detalle.respuesta_proveedor} titulo="Respuesta del proveedor" nivel={3} />}
     </Seccion>
   );
@@ -483,12 +521,12 @@ function Respuesta({ detalle }: { detalle: Detalle }) {
  * Cuerpo del detalle ya cargado (HU #14087): «Auditoría de consulta» de FLIT y «Respuesta de la fuente». Solo lee las claves
  * del contrato (DTO cerrado, R-20): las claves de más que llegaran fuera de `resultado` y `respuesta_fuente` no se pintan.
  */
-export function VistaDetalleCelda({ detalle }: { detalle: Detalle }) {
+export function VistaDetalleCelda({ detalle, descargas }: { detalle: Detalle; descargas?: DescargasDetalle }) {
   return (
     <div className="flex flex-col gap-4">
       <Auditoria detalle={detalle} />
       {esSimitTipado(detalle) && <ResumenSimit resultado={detalle.resultado} />}
-      <Respuesta detalle={detalle} />
+      <Respuesta detalle={detalle} descargas={descargas} />
     </div>
   );
 }
