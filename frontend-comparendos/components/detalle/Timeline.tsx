@@ -117,7 +117,8 @@ export function Timeline({
         </div>
       )}
 
-      {eventos.estado === "loading" && <p className="text-xs text-muted-foreground">Cargando eventos…</p>}
+      {/* Reserva el alto de unos eventos mientras carga: lo de abajo no salta cuando llegan (R2, HANNAH). */}
+      {eventos.estado === "loading" && <p className="min-h-48 text-xs text-muted-foreground">Cargando eventos…</p>}
       {eventos.estado === "error" && <InlineAlert tone="error" action={<button type="button" onClick={eventos.recargar}>Reintentar</button>}>{eventos.error}</InlineAlert>}
       {eventos.estado === "ready" && (eventos.datos ?? []).length === 0 && <p className="text-xs text-muted-foreground">Sin eventos para mostrar.</p>}
 

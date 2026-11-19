@@ -38,9 +38,15 @@ export function BarraSecciones({ secciones, onIr }: { secciones: SeccionBarra[];
     return () => obs.disconnect();
   }, [secciones]);
 
-  // En celular la barra desliza dentro de sí misma: la activa se mantiene a la vista.
+  // En celular la barra desliza dentro de sí misma: la activa se mantiene a la vista. Se mueve solo el scroll horizontal
+  // de la barra (scrollIntoView podría mover también la página en vertical y provocar un salto).
   useEffect(() => {
-    barra.current?.querySelector('[aria-current="location"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+    const pista = barra.current?.querySelector<HTMLElement>("[data-pista]");
+    const boton = pista?.querySelector<HTMLElement>('[aria-current="location"]');
+    if (!pista || !boton) return;
+    const izquierda = boton.offsetLeft - pista.offsetLeft;
+    if (izquierda < pista.scrollLeft) pista.scrollLeft = izquierda;
+    else if (izquierda + boton.offsetWidth > pista.scrollLeft + pista.clientWidth) pista.scrollLeft = izquierda + boton.offsetWidth - pista.clientWidth;
   }, [activa]);
 
   return (
@@ -50,7 +56,7 @@ export function BarraSecciones({ secciones, onIr }: { secciones: SeccionBarra[];
       className="sticky top-0 z-20 -mx-1 border-b border-[color:var(--di-divider)] bg-[var(--di-surface)] px-1"
       data-testid="detalle-barra"
     >
-      <div className="kit-pestanas flex items-end gap-0 overflow-x-auto whitespace-nowrap">
+      <div data-pista className="kit-pestanas flex items-end gap-0 overflow-x-auto whitespace-nowrap">
         {secciones.map((s) => (
           <button
             key={s.id}
