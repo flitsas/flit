@@ -81,6 +81,35 @@ public sealed class ProveedorRedactorPlataformaTests
         EmisorDictamen.DisponibleDesde(resultado, DateTimeOffset.UnixEpoch).Should().NotBeNull("un fallo técnico se reintenta (H8)");
     }
 
+    /// <summary>
+    /// CR-1 (review final): con core-api caído (UNAVAILABLE) la redacción sale <see cref="TipoFalloRedactor.Red"/> con
+    /// <c>ReintentarEn = 120 s</c>, y la cola la agenda a <c>ahora + 120 s</c> en vez de retomarla al instante.
+    /// </summary>
+    [Fact]
+    public async Task CR1_CoreApiUnavailable_EsRedConReintentoA120s_YDisponibleDesdeEsAhoraMas120()
+    {
+        var v = VectorIa.Cargar();
+        using var privada = v.Privada();
+        var reloj = new RelojMovil(v.Emitida);
+        await using var core = await CoreApiIaFalso.IniciarAsync();
+        core.Responder = _ => throw new global::Grpc.Core.RpcException(new global::Grpc.Core.Status(global::Grpc.Core.StatusCode.Unavailable, "reiniciando"));
+        using var fuente = new FuenteCredencialPlataforma(core.Cliente, new ClavesPrivadasIa(v.Kid, privada),
+            Options.Create(new OpcionesIa { Origen = OpcionesIa.OrigenPlataforma, Kid = v.Kid }), reloj, new LogsIa().Logger<FuenteCredencialPlataforma>());
+        var http = new Anthropic();
+        var proveedor = Proveedor(http, fuente);
+        var ahora = DateTimeOffset.Parse("2026-11-19T10:00:00Z", System.Globalization.CultureInfo.InvariantCulture);
+
+        var salida = await proveedor.RedactarAsync("prompt", TestContext.Current.CancellationToken);
+        var resultado = await Servicio(proveedor).RedactarAsync(Pedido(), TestContext.Current.CancellationToken);
+
+        salida.TipoFallo.Should().Be(TipoFalloRedactor.Red);
+        salida.ReintentarEn.Should().Be(TimeSpan.FromSeconds(120));
+        http.Llamadas.Should().Be(0);
+        resultado.TipoFallo.Should().Be(TipoFalloRedactor.Red);
+        resultado.ReintentarEn.Should().Be(TimeSpan.FromSeconds(120));
+        EmisorDictamen.DisponibleDesde(resultado, ahora).Should().Be(ahora.AddSeconds(120));
+    }
+
     [Fact]
     public async Task SP17_PasadoElTopePorMinuto_EsRateLimitReintentable_SinLlamar()
     {
