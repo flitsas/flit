@@ -572,6 +572,10 @@ services:
       # simulación no se declara aquí: QA y PDN nunca la encienden.
       Diagnostico__Consultas__Address: ${DIAGNOSTICO_CONSULTAS_ADDRESS:-}
       Diagnostico__Ambiente: ${DIAGNOSTICO_AMBIENTE:-}
+      # Redacción IA del dictamen (épica #12678): llave propia de Diagnóstico y cola apagada por defecto. Encendida en DEV
+      # y QA; en PDN queda en false hasta que el PO decida por costo. El modelo no se declara aquí (lo trae la imagen).
+      Diagnostico__Anthropic__ApiKey: ${DIAGNOSTICO_ANTHROPIC_API_KEY:-}
+      Diagnostico__Redaccion__Habilitado: ${DIAGNOSTICO_REDACCION_HABILITADO:-false}
       # Evidencias y PDF del informe (HU #13846) por el file-manager corporativo, las mismas variables que core-api y con el
       # mismo defecto (AWS pdn) para que ambos apunten siempre al mismo sitio, en su propia categoría. Sin URL no arranca.
       FILE_MANAGER_BASE_URL: ${FILE_MANAGER_BASE_URL:-https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/}
