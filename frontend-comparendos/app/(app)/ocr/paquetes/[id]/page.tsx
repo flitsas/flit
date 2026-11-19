@@ -6,7 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
-import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
+import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { Contador, EstadoDocumento, Progreso, useSondeo } from "@/components/ocr/comunes";
 import { OfertaPlacas } from "@/components/ocr/OfertaPlacas";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -61,7 +61,7 @@ function Detalle({ id }: { id: string }) {
   const [ocupado, setOcupado] = useState(false);
   const [resultado, setResultado] = useState<ResultadoRegistro | null>(null);
   const [descartando, setDescartando] = useState(false);
-  const [verComparendo, setVerComparendo] = useState<string | null>(null);
+  const setVerComparendo = useAbrirDetalle();
   const [motivo, setMotivo] = useState("Ilegible o no es un comparendo");
   const [reprocesando, setReprocesando] = useState(false);
   const pg = usePaginacion(25);
@@ -309,7 +309,6 @@ function Detalle({ id }: { id: string }) {
         />
       </div>
 
-      <DetalleComparendo id={verComparendo} onCerrar={() => setVerComparendo(null)} />
 
       {reprocesando && (
         <Modal icono="reintento"
