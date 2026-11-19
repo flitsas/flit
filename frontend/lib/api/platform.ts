@@ -32,6 +32,11 @@ export interface TenantProduct {
   updatedByEmail: string | null;
   /** Todavía no desplegado en este ambiente: se puede encender, pero sus usuarios verán «Próximamente». */
   comingSoon: boolean;
+  /**
+   * Solo en `diagnostico`: si la compañía tiene API key de impuesto guardada (`null` en los demás productos). Nunca trae
+   * el valor, ni un prefijo ni una huella.
+   */
+  impuestoApiKeyConfigurada?: boolean | null;
 }
 
 /** GET /api/v1/platform/admin/tenants/{tenantId}/products — solo SuperAdmin. */
@@ -54,4 +59,26 @@ export function setTenantProduct(
     `/api/v1/platform/admin/tenants/${encodeURIComponent(tenantId)}/products/${encodeURIComponent(productCode)}`,
     { method: "PUT", body: { enabled, notes: notes ?? null } },
   );
+}
+
+const credentialPath = (tenantId: string, productCode: string, credentialCode: string) =>
+  `/api/v1/platform/admin/tenants/${encodeURIComponent(tenantId)}/products/${encodeURIComponent(productCode)}` +
+  `/credentials/${encodeURIComponent(credentialCode)}`;
+
+/**
+ * PUT /api/v1/platform/admin/tenants/{tenantId}/products/{productCode}/credentials/{credentialCode} — solo SuperAdmin.
+ * Crea o reemplaza (204). El valor solo viaja en el cuerpo; nunca se guarda ni se devuelve.
+ */
+export function setTenantProductCredential(
+  tenantId: string,
+  productCode: string,
+  credentialCode: string,
+  value: string,
+): Promise<void> {
+  return apiFetch<void>(credentialPath(tenantId, productCode, credentialCode), { method: "PUT", body: { value } });
+}
+
+/** DELETE de la misma ruta — solo SuperAdmin. Idempotente (204). */
+export function deleteTenantProductCredential(tenantId: string, productCode: string, credentialCode: string): Promise<void> {
+  return apiFetch<void>(credentialPath(tenantId, productCode, credentialCode), { method: "DELETE" });
 }

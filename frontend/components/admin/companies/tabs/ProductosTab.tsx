@@ -6,6 +6,7 @@ import { ICONO_TONO, rutaKit } from "@flit/ui/iconos-mapas";
 import { listTenantProducts, setTenantProduct, type TenantProduct } from "@/lib/api/platform";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { ToggleSwitch } from "../ToggleSwitch";
+import { CredencialImpuestoDiagnostico } from "./CredencialImpuestoDiagnostico";
 
 // HU #12967 (Epic #13217) — productos de la FLIT Suite encendidos para la compañía. Lee el estado real
 // (platform.tenant_products), no la configuración de la compañía: funciona aunque la compañía no tenga configuración
@@ -49,6 +50,8 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
   const [error, setError] = useState<string | null>(null);
   /** Producto que se va a apagar, esperando confirmación. */
   const [confirmOff, setConfirmOff] = useState<TenantProduct | null>(null);
+  /** Al encender Diagnóstico sin API key de impuesto se sugiere configurarla (opcional, no bloquea). */
+  const [sugerirLlave, setSugerirLlave] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -67,7 +70,10 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
     try {
       await setTenantProduct(tenantId, product.productCode, enabled);
       // Se relee para mostrar quién y cuándo, tal como quedó en la base.
-      setProducts(await listTenantProducts(tenantId));
+      const list = await listTenantProducts(tenantId);
+      setProducts(list);
+      const diag = list.find((x) => x.productCode === "diagnostico");
+      setSugerirLlave(enabled && product.productCode === "diagnostico" && diag?.impuestoApiKeyConfigurada === false);
     } catch (e) {
       setError(e instanceof Error && e.message ? e.message : `No se pudo cambiar ${product.name}.`);
     } finally {
@@ -120,6 +126,17 @@ export function ProductosTab({ tenantId }: { tenantId: string }) {
                     />
                   </div>
                 </div>
+                {p.productCode === "diagnostico" && typeof p.impuestoApiKeyConfigurada === "boolean" && (
+                  <CredencialImpuestoDiagnostico
+                    tenantId={tenantId}
+                    configurada={p.impuestoApiKeyConfigurada}
+                    sugerirAbierto={sugerirLlave}
+                    onChanged={async () => {
+                      setSugerirLlave(false);
+                      setProducts(await listTenantProducts(tenantId));
+                    }}
+                  />
+                )}
                 {confirmOff?.productCode === p.productCode && (
                   <div
                     role="alertdialog"
