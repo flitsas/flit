@@ -369,6 +369,19 @@ public sealed class IaConsumoTests
     }
 
     [Fact]
+    public async Task SiSeApagaAntesDeQueElBucleArranqueIgualSeVaciaLaCola()
+    {
+        // Reproduce el CI con carga: el host se detiene antes de que ExecuteAsync llegue a correr.
+        var (escritor, _, almacen, registrador) = Escritor();
+        for (var i = 0; i < 3; i++)
+            registrador.Registrar(Llamada());
+
+        await escritor.StopAsync(TestContext.Current.CancellationToken);
+
+        almacen.Guardados.Should().HaveCount(3);
+    }
+
+    [Fact]
     public void ElMensajeDeErrorSeSaneaSinCedulasNiCorreos()
     {
         IaConsumoTexto.SanearError("documento 1.020.304.050 de ana.p@flit.test rechazado; http 429")

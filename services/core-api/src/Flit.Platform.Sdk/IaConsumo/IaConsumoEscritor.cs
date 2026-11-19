@@ -148,8 +148,15 @@ internal sealed class IaConsumoEscritor(
     /// <summary>Tope de cada escritura de lote, para que una base colgada no frene la cola indefinidamente.</summary>
     private static readonly TimeSpan TopeLote = TimeSpan.FromSeconds(30);
 
+    // 0 = nadie ha leído la cola; 1 = la lee ExecuteAsync; 2 = la vació StopAsync. La cola es SingleReader, así que
+    // solo uno de los dos puede leerla.
+    private int _lector;
+
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        if (Interlocked.CompareExchange(ref _lector, 1, 0) != 0)
+            return;
+
         var lote = new List<IaConsumoPendiente>(opciones.TamanoLote);
         try
         {
@@ -166,6 +173,17 @@ internal sealed class IaConsumoEscritor(
         }
 
         await VaciarAsync(lote).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Si el host se detiene antes de que <see cref="ExecuteAsync"/> llegue a correr (BackgroundService lo lanza en
+    /// segundo plano y, con el token ya cancelado, puede no ejecutarlo nunca), la cola se vacía aquí.
+    /// </summary>
+    public override async Task StopAsync(CancellationToken cancellationToken)
+    {
+        await base.StopAsync(cancellationToken).ConfigureAwait(false);
+        if (Interlocked.CompareExchange(ref _lector, 2, 0) == 0)
+            await VaciarAsync(new List<IaConsumoPendiente>(opciones.TamanoLote)).ConfigureAwait(false);
     }
 
     /// <summary>Al apagar: lo que quede en la cola, en lotes, hasta el tope.</summary>
