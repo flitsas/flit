@@ -154,9 +154,13 @@ internal sealed partial class EmisorDictamen(
         return JsonSerializer.Serialize(lista, Json);
     }
 
-    /// <summary>La fila que se agrega. <paramref name="version"/> ya salió de <see cref="SiguienteVersion"/>.</summary>
+    /// <summary>
+    /// La fila que se agrega. <paramref name="version"/> ya salió de <see cref="SiguienteVersion"/>. <paramref name="esperaReintento"/>
+    /// es la espera de la toma 1 si <paramref name="redaccion"/> trae un fallo técnico sin espera indicada.
+    /// </summary>
     public static DictamenVehiculo Materializar(
-        Guid tenantId, Guid vehiculoId, int version, string tipoTramiteCodigo, DictamenEvaluado evaluado, ResultadoRedaccion redaccion, DateTimeOffset ahora)
+        Guid tenantId, Guid vehiculoId, int version, string tipoTramiteCodigo, DictamenEvaluado evaluado, ResultadoRedaccion redaccion,
+        TimeSpan esperaReintento, DateTimeOffset ahora)
     {
         ArgumentNullException.ThrowIfNull(evaluado);
         ArgumentNullException.ThrowIfNull(redaccion);
@@ -173,7 +177,7 @@ internal sealed partial class EmisorDictamen(
             RedactadoPor = redaccion.RedactadoPor,
             EstadoRedaccion = redaccion.EstadoRedaccion,
             RedaccionIntentos = redaccion.Intentos,
-            RedaccionDisponibleDesde = DisponibleDesde(redaccion, ahora),
+            RedaccionDisponibleDesde = DisponibleDesde(redaccion, ahora, esperaReintento),
             RedaccionLeaseHasta = null,
             AnalisisOverride = false,
             UsuarioOverrideId = null,
@@ -244,7 +248,8 @@ internal sealed partial class EmisorDictamen(
     {
         var fila = Materializar(
             tenantId, vehiculoId, version, tipoTramiteCodigo, evaluado,
-            new ResultadoRedaccion(string.Empty, "PLANTILLA", "PENDIENTE", 0, string.Empty, null), ahora);
+            new ResultadoRedaccion(string.Empty, "PLANTILLA", "PENDIENTE", 0, string.Empty, null),
+            Trabajos.OpcionesRedaccion.EsperaReintentoPorDefecto, ahora);
         fila.RedaccionDisponibleDesde = DisponibleAlCerrar(redaccionSuspendida, proveedorConfigurado, ahora);
         return fila;
     }
@@ -372,15 +377,16 @@ internal sealed partial class EmisorDictamen(
 
     /// <summary>
     /// Null salvo un fallo técnico (<see cref="TipoFalloRedactor.Timeout"/>, <see cref="TipoFalloRedactor.Http5xx"/>,
-    /// <see cref="TipoFalloRedactor.RateLimit"/> o <see cref="TipoFalloRedactor.Red"/>). Con espera, el reloj más esa espera;
-    /// sin ella, el reloj. Suspensión, proveedor apagado y contradicción quedan null. La usa la cola después de un fallo, no el cierre.
+    /// <see cref="TipoFalloRedactor.RateLimit"/> o <see cref="TipoFalloRedactor.Red"/>). Con espera indicada (Retry-After, tope
+    /// local, plataforma caída), el reloj más esa espera; sin ella, el reloj más <paramref name="esperaSinIndicacion"/>.
+    /// Suspensión, proveedor apagado y contradicción quedan null. La usa la cola después de un fallo, no el cierre.
     /// </summary>
-    public static DateTimeOffset? DisponibleDesde(ResultadoRedaccion redaccion, DateTimeOffset ahora)
+    public static DateTimeOffset? DisponibleDesde(ResultadoRedaccion redaccion, DateTimeOffset ahora, TimeSpan esperaSinIndicacion)
     {
         ArgumentNullException.ThrowIfNull(redaccion);
         if (redaccion.TipoFallo is not (TipoFalloRedactor.Timeout or TipoFalloRedactor.Http5xx or TipoFalloRedactor.RateLimit or TipoFalloRedactor.Red))
             return null;
-        return redaccion.ReintentarEn is { } espera ? ahora.Add(espera) : ahora;
+        return ahora.Add(redaccion.ReintentarEn ?? esperaSinIndicacion);
     }
 
     /// <summary>

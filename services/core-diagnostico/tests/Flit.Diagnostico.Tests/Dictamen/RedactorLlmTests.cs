@@ -194,7 +194,7 @@ public sealed class RedactorLlmTests
         resultado.RedactadoPor.Should().Be("PLANTILLA");
         resultado.EstadoRedaccion.Should().Be("PENDIENTE");
         resultado.TipoFallo.Should().Be(TipoFalloRedactor.Ilegible);
-        EmisorDictamen.DisponibleDesde(resultado, DateTimeOffset.UnixEpoch).Should().BeNull("un ilegible no se reintenta");
+        EmisorDictamen.DisponibleDesde(resultado, DateTimeOffset.UnixEpoch, TimeSpan.FromSeconds(30)).Should().BeNull("un ilegible no se reintenta");
     }
 
     /// <summary>
