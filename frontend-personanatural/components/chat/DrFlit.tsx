@@ -4,6 +4,7 @@ import { Send, X } from "lucide-react";
 import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { boton } from "@/components/landing/estilos";
 import { ASSETS_DR_FLIT } from "@/lib/assets";
+import { useBloqueoScroll } from "@/lib/ui/useBloqueoScroll";
 import { AVISO_DEMOSTRACION, PREGUNTAS_SUGERIDAS, responder, SALUDO, type ContextoChat } from "@/lib/chat/respuestas";
 import { DrFlitAvatar } from "./DrFlitAvatar";
 
@@ -34,6 +35,8 @@ export function DrFlit({ contexto = {} }: { contexto?: ContextoChat }) {
   const temporizador = useRef<ReturnType<typeof setTimeout> | null>(null);
   const siguiente = useRef(1);
   const aviso = useId();
+  // iOS: con el panel abierto, arrastrar dentro de él no desplaza la página de atrás.
+  useBloqueoScroll(abierto);
 
   useEffect(() => { if (abierto) cerrar.current?.focus(); }, [abierto]);
   useEffect(() => () => { if (temporizador.current) clearTimeout(temporizador.current); }, []);

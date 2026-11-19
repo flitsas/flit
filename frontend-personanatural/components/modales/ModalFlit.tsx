@@ -4,6 +4,7 @@ import { X, type LucideIcon } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { boton } from "@/components/landing/estilos";
 import { clicFueraDelDialogo } from "@/lib/ui/clic-dialogo";
+import { useBloqueoScroll } from "@/lib/ui/useBloqueoScroll";
 
 interface Props {
   abierto: boolean;
@@ -29,6 +30,8 @@ export function ModalFlit({ abierto, onCerrar, titulo, descripcion, icono: Icono
   const ref = useRef<HTMLDialogElement>(null);
   const idTitulo = useId();
   const idDescripcion = useId();
+  // iOS: el <dialog> modal no impide que la página de atrás se desplace al arrastrar; se fija `body` mientras está abierto.
+  useBloqueoScroll(abierto);
 
   useEffect(() => {
     const dialogo = ref.current;
