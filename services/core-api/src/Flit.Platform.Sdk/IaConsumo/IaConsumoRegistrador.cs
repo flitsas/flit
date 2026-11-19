@@ -11,10 +11,8 @@ public sealed class IaConsumoOpciones(IConfiguration configuration, string aplic
 {
     /// <summary>Bandera maestra (contrato regla 6). Por defecto <c>true</c>.</summary>
     public const string ClaveLog = "IA_CONSUMO_LOG";
-    /// <summary>Prompt y respuesta completos en <c>ia_consumo_detalle</c> (regla 5). Por defecto <c>false</c>.</summary>
+    /// <summary>Prompt y respuesta completos en <c>ia_consumo_detalle</c> (regla 5). Por defecto <c>true</c>; se apaga con <c>false</c>/<c>0</c>. Nunca se borra solo.</summary>
     public const string ClaveDetalle = "IA_CONSUMO_DETALLE";
-    /// <summary>Días de retención del detalle. Por defecto 30.</summary>
-    public const string ClaveDetalleDias = "IA_CONSUMO_DETALLE_DIAS";
     /// <summary>dev | qa | pdn | local. Si falta se usa <c>DR_FLIT_DEPLOY_ENVIRONMENT</c> y, si tampoco, <c>local</c>.</summary>
     public const string ClaveAmbiente = "IA_CONSUMO_AMBIENTE";
 
@@ -22,10 +20,7 @@ public sealed class IaConsumoOpciones(IConfiguration configuration, string aplic
     public string Servicio { get; } = servicio;
 
     public bool Activo => Bandera(ClaveLog, porDefecto: true);
-    public bool DetalleActivo => Activo && Bandera(ClaveDetalle, porDefecto: false);
-
-    public int DiasDetalle =>
-        int.TryParse(configuration[ClaveDetalleDias], out var dias) && dias > 0 ? dias : 30;
+    public bool DetalleActivo => Activo && Bandera(ClaveDetalle, porDefecto: true);
 
     public string Ambiente => NormalizarAmbiente(configuration[ClaveAmbiente] ?? configuration["DR_FLIT_DEPLOY_ENVIRONMENT"]);
 
@@ -100,7 +95,7 @@ public interface IIaConsumoRegistrador
     /// <summary>false con <c>IA_CONSUMO_LOG=false</c>: el cliente puede ahorrarse armar la llamada.</summary>
     bool Activo { get; }
 
-    /// <summary>true con <c>IA_CONSUMO_DETALLE=true</c>: solo entonces vale la pena armar el texto del prompt completo.</summary>
+    /// <summary>true salvo <c>IA_CONSUMO_DETALLE=false</c>: solo entonces vale la pena armar el texto del prompt completo.</summary>
     bool DetalleActivo { get; }
 
     void Registrar(IaLlamada llamada);
@@ -266,12 +261,6 @@ internal static partial class IaConsumoBitacora
 
     [LoggerMessage(EventId = 7404, Level = LogLevel.Warning, Message = "IA consumo: no se pudieron leer las tarifas ({Tipo}); costo NULL")]
     public static partial void TarifasNoLeidas(ILogger logger, string tipo);
-
-    [LoggerMessage(EventId = 7405, Level = LogLevel.Information, Message = "IA consumo: purgado el detalle anterior a {Limite} ({Cantidad} filas)")]
-    public static partial void DetallePurgado(ILogger logger, DateTimeOffset limite, int cantidad);
-
-    [LoggerMessage(EventId = 7406, Level = LogLevel.Warning, Message = "IA consumo: falló la purga del detalle ({Tipo})")]
-    public static partial void PurgaFallo(ILogger logger, string tipo);
 
     [LoggerMessage(EventId = 7407, Level = LogLevel.Warning,
         Message = "IA consumo: al apagar quedaron {Cantidad} registros sin guardar (tope de vaciado)")]

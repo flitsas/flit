@@ -31,13 +31,13 @@ y el OCR en streaming los descarta.
 4. **Pieza común en `Flit.Platform.Sdk/IaConsumo`**: modelo EF + `AddFlitIaConsumo(schema)` en el `ModelBuilder` (mismo
    patrón que la outbox), registrador singleton, cola `Channel` acotada (10 000, descarta y cuenta al llenarse), escritor
    `BackgroundService` por lotes (200) que calcula el costo con tarifas cacheadas 10 min y vacía la cola al apagar (tope
-   5 s), y purga diaria del detalle. La persistencia es `EfIaConsumoAlmacen<TContext>`: cada servicio la usa sobre su
+   5 s). Sin purga: el registro y el detalle se conservan (decisión del 2026-11-19). La persistencia es `EfIaConsumoAlmacen<TContext>`: cada servicio la usa sobre su
    propio `DbContext` con `AddFlitIaConsumo<TContext>(configuration, "flit", "<servicio>")`.
 5. En core-api las tablas viven en **`admin`** (globales de plataforma sin RLS, como `admin.ai_tool_provider_settings`;
    `tenant_id` es texto informativo), las crea el DDL `203-ia-consumo-log.sql` y EF las mapea con
    `ExcludeFromMigrations`.
 6. **Banderas** leídas en cada uso (sin congelar al arrancar): `IA_CONSUMO_LOG` (maestra, `true`), `IA_CONSUMO_DETALLE`
-   (`false`), `IA_CONSUMO_DETALLE_DIAS` (30) e `IA_CONSUMO_AMBIENTE` (si falta, `DR_FLIT_DEPLOY_ENVIRONMENT`; si
+   (`true` desde el 2026-11-19; antes `false`) e `IA_CONSUMO_AMBIENTE` (si falta, `DR_FLIT_DEPLOY_ENVIRONMENT`; si
    tampoco, `local`).
 
 ## Alternativas consideradas
@@ -57,5 +57,7 @@ y el OCR en streaming los descarta.
   su tarifa. Claude Haiku 5.5 (precio por tramos de tamaño de prompt) se siembra con el tramo ≤100K tokens, igual que
   FLITO: un prompt mayor queda subestimado.
 - Si la cola se llena o la base falla se pierden filas (log de advertencia con contador): es telemetría, no contabilidad.
-- El detalle (prompt/respuesta) puede contener datos personales: apagado por defecto y con retención corta.
+- El detalle (prompt/respuesta) puede contener datos personales y se conserva sin límite: encendido por defecto y
+  sin purga por decisión del 2026-11-19. Se apaga con `IA_CONSUMO_DETALLE=false`; el DDL 203 conserva en su
+  `COMMENT` la redacción anterior (los DDL aplicados no se editan).
 - Cambiar columnas o catálogos exige `ia-consumo` v2 en el contrato común, nunca a mano en un solo servicio.
