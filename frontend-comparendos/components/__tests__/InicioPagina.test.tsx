@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import Inicio from "@/app/(app)/page";
 import { P } from "@/lib/nav";
 
@@ -9,7 +9,8 @@ vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/
 let sesion: unknown = null;
 vi.mock("@/components/ComparendosShell", () => ({ useSesion: () => ({ sesion, cargando: false, error: null }) }));
 const replace = vi.fn();
-vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(), useRouter: () => ({ replace, push: vi.fn() }) }));
+let busqueda = "";
+vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(busqueda), useRouter: () => ({ replace, push: vi.fn() }) }));
 // recharts necesita medir el contenedor: en jsdom basta con no pintar el SVG (la lectura accesible va en listas ocultas).
 vi.mock("recharts", async (original) => {
   const r = await original<typeof import("recharts")>();
@@ -108,7 +109,10 @@ describe("Inicio de Comparendos", () => {
       throw new Error(`ruta sin simular: ${ruta}`);
     });
   });
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    busqueda = "";
+  });
 
   it("sin el módulo de reportes usa solo los contadores de la bandeja: sin pesos y sin pedir reportes", async () => {
     sesion = gestora(false);
@@ -158,6 +162,20 @@ describe("Inicio de Comparendos", () => {
     render(<Inicio />);
     expect(await screen.findByText("Tu Inicio está vacío por ahora")).toBeTruthy();
     expect(apiFetch).not.toHaveBeenCalled();
+  });
+
+  it("el SuperAdmin con una empresa ve su Inicio y, al volver a «Todas», ya no ve la operación de esa empresa", async () => {
+    // Regresión (R2): useCarga conserva los datos de la empresa anterior cuando su clave pasa a null.
+    sesion = { usuario: { id: "s", email: "s@flit.test", esSuperAdmin: true }, permisos: [], empresa: null };
+    busqueda = "empresa=e1";
+    render(<Inicio />);
+    expect(await screen.findByTestId("vehiculos")).toBeTruthy();
+    expect(apiFetch.mock.calls.some(([ruta, op]) => ruta === "/comparendos/operacion" && op?.query?.empresa === "e1")).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "Todas las empresas" }));
+    expect(await screen.findByTestId("salud")).toBeTruthy();
+    expect(screen.queryByTestId("vehiculos")).toBeNull();
+    expect(screen.queryByTestId("para-hoy")).toBeNull();
+    expect(replace).toHaveBeenLastCalledWith("/", { scroll: false });
   });
 
   it("el SuperAdmin con «Todas» ve la salud de la plataforma y las empresas que necesitan algo", async () => {

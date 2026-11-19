@@ -155,7 +155,8 @@ function Contenido() {
   const d = dinero.datos?.dinero;
   const o = operacion.datos?.operacion;
   const frentes = conDinero ? (d?.frentes ?? null) : sinDinero.frentes;
-  const error = (conDinero ? dinero.error : sinDinero.error) ?? operacion.error;
+  // Solo con una empresa elegida: al volver a «Todas» un error de la empresa anterior no debe quedarse a la vista.
+  const error = listo ? ((conDinero ? dinero.error : sinDinero.error) ?? operacion.error) : null;
   const reintentar = () => {
     if (conDinero && dinero.error) dinero.recargar();
     if (!conDinero && sinDinero.error) sinDinero.recargar();

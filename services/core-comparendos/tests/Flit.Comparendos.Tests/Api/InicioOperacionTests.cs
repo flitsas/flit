@@ -95,6 +95,18 @@ public sealed class InicioOperacionTests(ApiConFuente api) : IClassFixture<ApiCo
         o.GetProperty("resumen").GetProperty("valorPendiente").GetDecimal().Should().Be(4 * 604100m);
         o.GetProperty("vehiculos").GetProperty("top")[0].GetProperty("valor").GetDecimal().Should().Be(3 * 604100m);
 
+        // El embudo coincide con la bandeja también con reportes, y para el SuperAdmin que elige la empresa.
+        var super_ = (await Super.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos/operacion?empresa={empresa}", ct)).GetProperty("operacion");
+        foreach (var (cliente, op, sufijo) in new[] { (gestora, o, ""), (Super, super_, $"&empresa={empresa}") })
+        {
+            foreach (var paso in op.GetProperty("gestion").GetProperty("pasos").EnumerateArray())
+            {
+                var estado = paso.GetProperty("estadoProceso").GetString();
+                var bandeja = await cliente.GetFromJsonAsync<JsonElement>($"/api/v1/comparendos/comparendos?estadoProceso={estado}{sufijo}", ct);
+                paso.GetProperty("cantidad").GetInt32().Should().Be(bandeja.GetProperty("total").GetInt32(), $"{estado}{sufijo}");
+            }
+        }
+
         // Con el módulo pero sin el permiso ReportesVer, tampoco hay pesos.
         var soloBandeja = (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.BandejaVer]))
             .GetFromJsonAsync<JsonElement>("/api/v1/comparendos/comparendos/operacion", ct)).GetProperty("operacion");
