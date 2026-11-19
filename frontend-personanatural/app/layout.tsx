@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { connection } from "next/server";
 import { ConfigPublica } from "@/components/ConfigPublica";
@@ -23,6 +23,10 @@ export const metadata: Metadata = {
   title: "FLIT Persona Natural",
   description: "Trámites de tránsito 100% en línea.",
 };
+
+// iPhone/iPad (contrato responsive §1): `viewportFit: "cover"` habilita `env(safe-area-inset-*)`; sin `maximumScale` ni
+// `userScalable`, porque el zoom es accesibilidad. `themeColor` es el fondo claro de la app (`--flit-soft`).
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#e6effc" };
 
 // El layout se renderiza por petición (`connection()`): el proveedor del captcha y la clave pública del sitio salen de las
 // variables de servidor del ambiente y viajan al navegador en el HTML, no incrustados en el build.

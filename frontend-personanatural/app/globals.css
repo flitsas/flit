@@ -153,10 +153,11 @@
 .dashboard-banner { height: 260px; min-height: 0; padding-bottom: 0; }
 .carousel-dots { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); border-radius: var(--radius); background: color-mix(in oklab, var(--card) 85%, transparent); padding: 2px 6px; }
 .banner-cta { position: absolute; bottom: 36px; left: 20px; max-width: calc(100% - 40px); white-space: normal; }
-.chat-launcher { position: fixed; right: 20px; bottom: 20px; width: 64px; height: 64px; z-index: 40; }
+.chat-launcher { position: fixed; right: 20px; bottom: calc(20px + env(safe-area-inset-bottom)); width: 64px; height: 64px; z-index: 40; }
 /* La altura descuenta lo que el panel se separa del borde inferior (--chat-bottom): así su encabezado nunca queda fuera de la pantalla. */
-.chat-widget { --chat-bottom: 96px; position: fixed; right: 20px; bottom: var(--chat-bottom); width: min(420px, calc(100vw - 24px)); height: min(720px, calc(100dvh - var(--chat-bottom) - 16px)); z-index: 40; }
-.chat-widget .chat-questions { max-height: 180px; overflow-y: auto; }
+.chat-widget { --chat-bottom: calc(96px + env(safe-area-inset-bottom)); position: fixed; right: 20px; bottom: var(--chat-bottom); width: min(420px, calc(100vw - 24px)); height: min(720px, calc(100dvh - var(--chat-bottom) - 16px)); z-index: 40; }
+.chat-widget .chat-questions { max-height: 180px; overflow-y: auto; overscroll-behavior: contain; }
+/* Alto, no ancho (contrato §1): en pantallas bajas las preguntas frecuentes ceden espacio a la conversación. */
 @media (max-height: 700px) { .chat-widget .chat-questions { max-height: 96px; } }
 .timeline-connector { left: calc(50% + 20px); width: calc(100% - 32px); }
 .dashboard-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -183,7 +184,8 @@
 .mobility-track-xs { display: inline-block; width: 20px; height: 20px; flex-shrink: 0; border-width: 1.5px; border-color: color-mix(in oklch, currentColor 45%, transparent); box-shadow: none; }
 .mobility-track-xs .mobility-orbit svg { left: calc(50% - 6px); top: -6px; }
 @keyframes mobility-loop { to { transform: rotate(360deg); } }
-@media (max-height: 740px) and (min-width: 761px) {
+/* Alto, no ancho (contrato §1): portátiles de poca altura compactan el dashboard para que quepa sin scroll interno. */
+@media (max-height: 740px) and (min-width: 768px) {
   .dashboard-layout { padding-top: 8px; padding-bottom: 10px; gap: 12px; }
   .dashboard-main { gap: 8px; }
   .dashboard-card { padding: 12px; }
@@ -191,13 +193,13 @@
   .chat-questions { padding: 8px; }
   .chat-questions > button { padding-top: 6px; padding-bottom: 6px; }
 }
-@media (max-width: 1100px) {
+@media (max-width: 1279.98px) {
   .dashboard-title { font-size: 16px; }
   .dashboard-actions { gap: 10px; }
   .dashboard-card { padding: 12px; }
   .dashboard-field-row .dashboard-label { font-size: 9px; }
 }
-@media (max-width: 760px) {
+@media (max-width: 767.98px) {
   .dashboard-layout { grid-template-columns: minmax(0, 1fr); padding: 8px 12px; }
   .chat-widget { right: 12px; }
   .dashboard-actions { gap: 8px; }
@@ -206,7 +208,7 @@
   .dashboard-footer { font-size: 10px; }
   .dashboard-footer button { font-size: 10px; }
 }
-@media (max-width: 540px) {
+@media (max-width: 639.98px) {
   .dashboard-actions { grid-template-columns: minmax(0, 1fr); }
   .dashboard-card { padding: 8px; }
   .dashboard-action-form { padding-top: 6px; gap: 6px; }
@@ -216,7 +218,6 @@
   .banner-cta { left: 12px; bottom: 30px; font-size: 12px; }
   .dashboard-registration-fields { gap: 4px; }
   .dashboard-field-row .dashboard-label { white-space: normal; }
-  .dashboard-footer { padding-bottom: 90px; }
   .dashboard-card p { margin-top: 4px; font-size: 10px; }
 }
 @media (prefers-reduced-motion: reduce) { .mobility-orbit { animation: none; } }
@@ -247,7 +248,7 @@
 .dashboard-faq button svg { transition: transform 300ms ease-in-out; }
 .chat-launcher { animation: flit-fade-in-up .6s ease-out both, flit-pulse-ring 2.2s 1s infinite; }
 .chat-widget { transform-origin: bottom right; animation: flit-scale-up-br 300ms ease-out; }
-.chat-backdrop { position: fixed; inset: 0; z-index: 30; background: color-mix(in oklch, var(--background) 30%, transparent); backdrop-filter: blur(3px); }
+.chat-backdrop { position: fixed; inset: 0; z-index: 30; background: color-mix(in oklch, var(--background) 30%, transparent); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); }
 @media (prefers-reduced-motion: reduce) {
   .dashboard-banner img, .chat-launcher, .chat-widget, .dr-flit-tab { animation: none !important; }
   .banner-cta:hover, .how-step:hover, .how-step:hover svg { transform: none; }
@@ -257,7 +258,7 @@
 /* Wizard margins unified with Dashboard */
 .wizard-header { padding-inline: 50px; }
 .wizard-main { max-width: none; padding-inline: 50px; }
-@media (max-width: 640px) {
+@media (max-width: 639.98px) {
   .wizard-header { padding-inline: 12px; }
   .wizard-main { padding-inline: 12px; }
 }
@@ -316,27 +317,27 @@
 .service-item { padding-top: 8px; }
 .action-blue .field { color: var(--foreground); }
 .bondades-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); justify-content: center; gap: 12px; }
-.dr-flit-tab { position: fixed; right: 24px; bottom: 72px; z-index: 40; width: min(340px, calc(100vw - 48px)); flex-shrink: 0; transition: border-color 300ms; animation: flit-fade-in-up .6s ease-out both; }
+.dr-flit-tab { position: fixed; right: 24px; bottom: calc(72px + env(safe-area-inset-bottom)); z-index: 40; width: min(340px, calc(100vw - 48px)); flex-shrink: 0; transition: border-color 300ms; animation: flit-fade-in-up .6s ease-out both; }
 .dashboard-footer { padding: 8px 16px; background: var(--background); }
 .dr-flit-tab:hover { color: var(--primary-foreground); }
 .dr-flit-tab:hover { border-color: var(--primary); }
-@media (max-width: 900px) {
+@media (max-width: 1023.98px) {
   .dashboard-two-col { display: block; overflow-y: auto; }
   .dashboard-two-col .dashboard-main { overflow: visible; scrollbar-gutter: auto; }
   .dashboard-side { height: auto; min-height: 0; margin-top: 16px; }
   .bondades-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-  .dashboard-footer { padding-bottom: 8px; }
 }
-@media (max-width: 640px) {
+@media (max-width: 639.98px) {
   .dashboard-header { padding-inline: 12px; }
   .dashboard-two-col { padding-inline: 12px; }
   .dashboard-actions-stack { grid-template-columns: minmax(0, 1fr); }
   .action-blue .dashboard-action-form { grid-template-rows: auto 44px; }
   .action-blue .dashboard-title { min-height: 0; }
-  .dr-flit-tab { right: 12px; bottom: 96px; width: calc(100vw - 24px); }
+  .dr-flit-tab { right: 12px; bottom: calc(96px + env(safe-area-inset-bottom)); width: calc(100vw - 24px); }
   .bondades-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
-@media (max-height: 740px) and (min-width: 901px) {
+/* Alto, no ancho (contrato §1): escritorio de poca altura. */
+@media (max-height: 740px) and (min-width: 1024px) {
   .dashboard-two-col .dashboard-banner { height: 220px; }
   .servicios-slide { height: 220px; flex-basis: 220px; }
   .dashboard-side { gap: 16px; }
@@ -348,7 +349,7 @@
 .dashboard-two-col .dashboard-institutional-card p { line-height: 20px; }
 .dashboard-two-col .dashboard-institutional-card .dashboard-submit { margin-top: 0; height: 40px; }
 .dashboard-two-col .ot-module { flex: 0 0 auto; min-height: 0; }
-@media (max-width: 900px) { .dashboard-two-col .dashboard-institutional-card { height: auto; } }
+@media (max-width: 1023.98px) { .dashboard-two-col .dashboard-institutional-card { height: auto; } }
 
 /* Page-level scrollbar + interactive effects */
 html { scrollbar-width: thin; scrollbar-color: var(--primary) transparent; }
@@ -394,41 +395,41 @@ html::-webkit-scrollbar-thumb { background: var(--primary); border-radius: 6px; 
 /* Shared rows keep both columns aligned as their content changes. */
 .dashboard-shell { padding-bottom: 56px; }
 .dashboard-footer { position: fixed; inset: auto 0 0; z-index: 20; }
-@media (min-width: 901px) {
+@media (min-width: 1024px) {
   .dashboard-two-col { grid-template-rows: auto auto auto auto; }
   .dashboard-two-col .dashboard-main { grid-column: 1; grid-row: 1 / span 4; grid-template-rows: subgrid; }
   .dashboard-side { display: grid; grid-column: 2; grid-row: 1 / span 3; grid-template-rows: auto auto; align-items: start; align-content: start; }
   .dashboard-two-col .ot-module { height: auto; min-height: 0; overflow: visible; }
   .dashboard-footer p { white-space: nowrap; }
 }
-@media (min-width: 901px) and (max-width: 1100px) {
+@media (min-width: 1024px) and (max-width: 1279.98px) {
   .dashboard-footer, .dashboard-footer button { font-size: 10px; }
 }
-@media (max-width: 900px) {
+@media (max-width: 1023.98px) {
   .dashboard-shell { padding-bottom: 88px; }
 }
 
 /* B2C navigation, fleet bridge and fixed assistant. */
 :root { --gradient-enterprise: linear-gradient(135deg, var(--flit-teal), var(--dashboard-action-background)); --icon-glass: color-mix(in oklab, var(--primary-foreground) 10%, transparent); }
 .dashboard-institutional-card { background: var(--dashboard-action-background); }
-.action-top-icon { box-sizing: border-box; display: grid; place-items: center; width: 64px; height: 64px; padding: 12px; border-radius: 50%; background: var(--icon-glass); backdrop-filter: blur(4px); }
+.action-top-icon { box-sizing: border-box; display: grid; place-items: center; width: 64px; height: 64px; padding: 12px; border-radius: 50%; background: var(--icon-glass); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); }
 .pse-official-icon { height: 28px; width: 28px; object-fit: contain; border-radius: 50%; flex-shrink: 0; }
 .iso-badge { display: inline; height: 26px; width: auto; vertical-align: middle; }
 .iso-badge-footer { height: 30px; }
 .trust-row { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 16px; font-size: 12px; color: var(--color-text-secondary); }
 .trust-row .iso-badge { height: 40px; }
-.chat-launcher { bottom: 72px; right: 24px; background: var(--gradient-flit); }
-.chat-widget { --chat-bottom: 176px; }
+.chat-launcher { bottom: calc(72px + env(safe-area-inset-bottom)); right: 24px; background: var(--gradient-flit); }
+.chat-widget { --chat-bottom: calc(176px + env(safe-area-inset-bottom)); }
 html { scroll-behavior: smooth; scrollbar-color: var(--primary) var(--background); }
 [id] { scroll-margin-top: 24px; }
-@media (min-width: 901px) {
+@media (min-width: 1024px) {
  .dashboard-two-col { grid-template-rows: auto auto auto auto auto auto; }
  .dashboard-two-col .dashboard-main { grid-row: 1 / span 6; }
  .dashboard-side { grid-row: 1 / span 6; }
  .dashboard-two-col .ot-module { grid-row: 2; }
 }
-@media (max-width: 1200px) { .b2c-nav { margin-left: auto; justify-content: flex-end; padding-block: 4px; } }
-@media (max-width: 640px) { .b2c-header-actions button { padding-inline: 10px; font-size: 12px; } .b2c-nav { flex-wrap: wrap; gap: 12px; } .dashboard-registration-fields { grid-template-columns: 1fr; gap: 12px; } .chat-launcher { bottom: 104px; } .chat-widget { --chat-bottom: 208px; height: min(600px, calc(100dvh - var(--chat-bottom) - 16px)); } }
+@media (max-width: 1279.98px) { .b2c-nav { margin-left: auto; justify-content: flex-end; padding-block: 4px; } }
+@media (max-width: 639.98px) { .b2c-header-actions button { padding-inline: 10px; font-size: 12px; } .b2c-nav { flex-wrap: wrap; gap: 12px; } .dashboard-registration-fields { grid-template-columns: 1fr; gap: 12px; } .chat-launcher { bottom: calc(104px + env(safe-area-inset-bottom)); } .chat-widget { --chat-bottom: calc(208px + env(safe-area-inset-bottom)); height: min(600px, calc(100dvh - var(--chat-bottom) - 16px)); } }
 @media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
 
 .action-top-icon img { width: 40px; height: 40px; object-fit: contain; }
@@ -452,18 +453,19 @@ html { scroll-behavior: smooth; scrollbar-color: var(--primary) var(--background
 .pse-payment-action { width: 180px; height: 68px; flex-shrink: 0; padding: 0; background: transparent; }
 .pse-payment-action:hover { background: transparent; }
 .pse-payment-action img { width: 100%; height: 100%; object-fit: contain; }
-@media (min-width: 901px) {
-  .dr-flit-tab { right: 50px; bottom: 72px; width: calc((100% - 100px - var(--dashboard-column-gap)) / 4); height: 104px; }
+@media (min-width: 1024px) {
+  .dr-flit-tab { right: 50px; bottom: calc(72px + env(safe-area-inset-bottom)); width: calc((100% - 100px - var(--dashboard-column-gap)) / 4); height: 104px; }
   .dashboard-side { align-self: start; }
   .dashboard-two-col { padding-bottom: 192px; }
 }
-@media (max-width: 900px) {
+@media (max-width: 1023.98px) {
   .dashboard-two-col { padding-bottom: 240px; }
 }
-@media (min-width: 641px) and (max-width: 900px) {
+@media (min-width: 640px) and (max-width: 1023.98px) {
   .dr-flit-tab { right: 50px; width: calc(100% - 100px); }
 }
-@media (max-height: 740px) and (min-width: 901px) {
+/* Alto, no ancho (contrato §1): escritorio de poca altura. */
+@media (max-height: 740px) and (min-width: 1024px) {
   :root { --dashboard-column-gap: 12px; }
 }
 
@@ -481,7 +483,7 @@ html { scroll-behavior: smooth; scrollbar-color: var(--primary) var(--background
 /* Wizard a dos columnas: barra lateral fija + área de trabajo. */
 .wizard-cols { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 24px; align-items: start; }
 .wizard-sidebar { position: sticky; top: 24px; display: flex; flex-direction: column; gap: 14px; padding: 20px; border: 1px solid var(--border); border-radius: 9px; background: var(--card); }
-@media (max-width: 900px) {
+@media (max-width: 1023.98px) {
   .wizard-cols { grid-template-columns: minmax(0, 1fr); }
   .wizard-sidebar { position: static; }
 }
@@ -510,7 +512,7 @@ html { scroll-behavior: smooth; scrollbar-color: var(--primary) var(--background
 .action-row .action-top-icon { width: 48px; height: 48px; padding: 10px; }
 .action-row .action-top-icon img { width: 100%; height: 100%; object-fit: contain; }
 .action-row .dashboard-submit { margin-top: 0; margin-left: auto; width: auto; max-width: none; height: 40px; padding-inline: 16px; }
-@media (max-width: 900px) {
+@media (max-width: 1023.98px) {
   .action-start-fields { grid-template-columns: minmax(0, 1fr); }
   .action-rows { grid-template-rows: none; grid-auto-rows: auto; }
 }
@@ -532,21 +534,21 @@ html { scroll-behavior: smooth; scrollbar-color: var(--primary) var(--background
 .wizard-diag-row > :first-child, .wizard-diag-row { font-size: 13px; }
 .wizard-sidebar { gap: 10px; max-height: calc(100dvh - 48px); overflow-y: auto; scrollbar-width: none; }
 .wizard-sidebar::-webkit-scrollbar { display: none; }
-@media (min-width: 901px) {
+@media (min-width: 1024px) {
   .dashboard-two-col { grid-template-rows: repeat(8, auto); }
   .dashboard-two-col .dashboard-main { grid-row: 1 / span 8; }
   .dashboard-side { grid-row: 1 / span 8; }
 }
 
 /* Regla de oro Oct 26 (b): full-width sections, Somos FLIT, step cards. */
-@media (min-width: 901px) {
+@media (min-width: 1024px) {
   .dashboard-two-col { grid-template-rows: repeat(7, auto); }
   .dashboard-two-col .dashboard-main { grid-row: 1 / span 6; }
   .dashboard-side { grid-row: 1 / span 6; }
   .dashboard-fullwidth { grid-column: 1 / -1; grid-row: 7; }
 }
 .dashboard-fullwidth { display: grid; gap: 16px; min-width: 0; }
-@media (max-width: 900px) { .dashboard-fullwidth { margin-top: 16px; } }
+@media (max-width: 1023.98px) { .dashboard-fullwidth { margin-top: 16px; } }
 .somos-flit { background: color-mix(in oklab, var(--primary) 6%, var(--card)); }
 .somos-kicker { font-size: 12px; font-weight: 600; letter-spacing: .2em; color: var(--primary); }
 .somos-card-num { color: var(--flit-teal); }
@@ -570,8 +572,56 @@ html { scroll-behavior: smooth; scrollbar-color: var(--primary) var(--background
 .dashboard-side .ot-module { width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box; justify-self: stretch; }
 
 /* Organismos: base alineada con el final de Somos FLIT (escritorio). */
-@media (min-width: 901px) {
+@media (min-width: 1024px) {
   .dashboard-two-col .dashboard-side { display: flex; flex-direction: column; align-self: stretch; }
   .dashboard-side .ot-module { flex: 1 1 auto; margin-bottom: 31px; display: flex; flex-direction: column; }
   .dashboard-side .ot-module .ot-list { flex: 1 1 auto; display: flex; flex-direction: column; justify-content: flex-start; }
+}
+
+/*
+ * Responsive iOS (contrato S4): pie fijo, campos y tablas de ficha.
+ * - El pie fijo suma la zona segura de abajo (barra de inicio del iPhone) y el cascarón reserva ese mismo alto extra,
+ *   para que el último contenido no quede debajo del pie. Lanzadores y Dr. Flit ya la suman en su `bottom`.
+ * - Campos: 16 px por debajo de 640 (iOS hace zoom en campos de menos de 16 px); desde 640 quedan como estaban.
+ */
+.dashboard-footer { padding-bottom: calc(8px + env(safe-area-inset-bottom)); }
+.dashboard-shell { padding-bottom: calc(56px + env(safe-area-inset-bottom)); }
+@media (max-width: 1023.98px) {
+  .dashboard-shell { padding-bottom: calc(88px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 639.98px) {
+  .dashboard-label .field, .dashboard-card .field, .dashboard-field-row .field, .dashboard-consultation-form .field,
+  .action-blue .field, .action-blue .dashboard-registration-fields .field { font-size: 16px; }
+}
+/*
+ * Tabla de ficha (una fila de datos con sus encabezados): por debajo de 1024 se ve como tarjeta — cada encabezado a la
+ * izquierda y su valor a la derecha — con el mismo DOM de la tabla (contrato §1, decisión de Samuel). Desde 1024 es tabla.
+ */
+@media (max-width: 1023.98px) {
+  .tabla-ficha { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); grid-auto-flow: column; grid-template-rows: repeat(var(--ficha-filas, 4), auto); }
+  .tabla-ficha > thead, .tabla-ficha > tbody, .tabla-ficha tr { display: contents; }
+  .tabla-ficha th, .tabla-ficha td { display: flex; align-items: center; min-width: 0; padding: 12px 14px; overflow-wrap: anywhere; }
+  .tabla-ficha th { justify-content: flex-start; text-align: left; background: var(--primary); }
+  .tabla-ficha th + th { border-top: 1px solid color-mix(in oklab, var(--primary-foreground) 25%, transparent); }
+  .tabla-ficha td { justify-content: flex-start; text-align: left; background: var(--card); }
+  .tabla-ficha td:first-child { border-top: 0; }
+}
+
+/*
+ * Base para iPhone y iPad (Safari y Chrome iOS, ambos WebKit). Copia de la capa base de F0 (`packages/ui/src/styles/tokens.css`),
+ * porque persona natural no importa los tokens del kit.
+ * - text-size-adjust: iOS no agranda el texto solo al girar a horizontal.
+ * - overflow-x: clip (no hidden): un elemento ancho no arrastra la página de lado, y `sticky` sigue funcionando.
+ * - tap-highlight: sin el recuadro gris al tocar; el foco visible lo da `:focus-visible`.
+ */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html,
+  body {
+    overflow-x: clip;
+  }
 }
