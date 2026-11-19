@@ -169,7 +169,8 @@ public sealed class ServicioDp(
         var firma = p.Representante?.FirmaArchivoId is { } f ? (await archivos.LeerAsync(f, ct).ConfigureAwait(false))?.Contenido : null;
         var valores = await contexto.DeAsync(c, new ExtrasContexto(Representante: p.Representante, FirmaPng: firma, Radicado: radicado, Tipologia: p.Tipologia), ct).ConfigureAwait(false);
         var armado = await plantillas.ArmarAsync(p.Config.ConjuntoPlantillas, TipoPlantilla.DpDocumento, p.Tipologia.Id, valores, ct).ConfigureAwait(false);
-        return (ServicioPlantillas.Pdf(armado, vistaPrevia ? "VISTA PREVIA" : null, $"Derecho de petición {(vistaPrevia ? "(vista previa)" : radicado)} — {c.Numero}"), armado.VersionId);
+        return (ServicioPlantillas.Pdf(armado, vistaPrevia ? "VISTA PREVIA" : null, $"Derecho de petición {(vistaPrevia ? "(vista previa)" : radicado)} — {c.Numero}",
+            ServicioPlantillas.MembreteDeDocumento(p.Config.ConjuntoPlantillas)), armado.VersionId);
     }
 
     public static string RadicadoEnmascarado(TipologiaDp t, DateOnly hoy)

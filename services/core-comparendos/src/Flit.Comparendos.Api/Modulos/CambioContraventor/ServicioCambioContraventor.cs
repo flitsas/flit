@@ -80,7 +80,7 @@ public sealed class ServicioCambioContraventor(
         var firma = rl?.FirmaArchivoId is { } f ? (await archivos.LeerAsync(f, ct).ConfigureAwait(false))?.Contenido : null;
         var valores = await contexto.DeAsync(c, new ExtrasContexto(Representante: rl, FirmaPng: firma), ct).ConfigureAwait(false);
         var armado = await plantillas.ArmarAsync(config.ConjuntoPlantillas, TipoPlantilla.FormatoCambioContraventor, null, valores, ct).ConfigureAwait(false);
-        return ServicioPlantillas.Pdf(armado, marcaDeAgua, $"Formato de cambio de contraventor — {c.Numero}");
+        return ServicioPlantillas.Pdf(armado, marcaDeAgua, $"Formato de cambio de contraventor — {c.Numero}", ServicioPlantillas.MembreteDeDocumento(config.ConjuntoPlantillas));
     }
 
     /// <summary>La carta del aviso 4 al conductor tal como saldría, para revisarla antes de solicitar (§7.4).</summary>
@@ -88,7 +88,8 @@ public sealed class ServicioCambioContraventor(
     {
         var config = await capacidades.DeAsync(c.TenantId, ct).ConfigureAwait(false);
         var valores = await contexto.DeAsync(c, null, ct).ConfigureAwait(false);
-        return ServicioPlantillas.Pdf(await plantillas.ArmarAsync(config.ConjuntoPlantillas, TipoPlantilla.CartaCambioContraventor, null, valores, ct).ConfigureAwait(false), marcaDeAgua, $"Carta al conductor — {c.Numero}");
+        return ServicioPlantillas.Pdf(await plantillas.ArmarAsync(config.ConjuntoPlantillas, TipoPlantilla.CartaCambioContraventor, null, valores, ct).ConfigureAwait(false), marcaDeAgua, $"Carta al conductor — {c.Numero}",
+            ServicioPlantillas.MembreteDeDocumento(config.ConjuntoPlantillas));
     }
 
     public async Task<CambioContraventorSolicitud> SolicitarAsync(Comparendo c, Actor actor, CancellationToken ct)
@@ -102,7 +103,8 @@ public sealed class ServicioCambioContraventor(
         var config = await capacidades.DeAsync(c.TenantId, ct).ConfigureAwait(false);
         var firma = rl?.FirmaArchivoId is { } f ? (await archivos.LeerAsync(f, ct).ConfigureAwait(false))?.Contenido : null;
         var valores = await contexto.DeAsync(c, new ExtrasContexto(Representante: rl, FirmaPng: firma), ct).ConfigureAwait(false);
-        var formato = ServicioPlantillas.Pdf(await plantillas.ArmarAsync(config.ConjuntoPlantillas, TipoPlantilla.FormatoCambioContraventor, null, valores, ct).ConfigureAwait(false));
+        var formato = ServicioPlantillas.Pdf(await plantillas.ArmarAsync(config.ConjuntoPlantillas, TipoPlantilla.FormatoCambioContraventor, null, valores, ct).ConfigureAwait(false),
+            membrete: ServicioPlantillas.MembreteDeDocumento(config.ConjuntoPlantillas));
         var formatoId = await archivos.GuardarAsync(c.TenantId, "formato_cambio_contraventor", $"cambio-contraventor-{c.Numero}.pdf", "application/pdf", formato, ct, actor.UsuarioId).ConfigureAwait(false);
 
         // Anexos: formato, cédula y licencia vigentes del conductor y certificado de representación del RL.

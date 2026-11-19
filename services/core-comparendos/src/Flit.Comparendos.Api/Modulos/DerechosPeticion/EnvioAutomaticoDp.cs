@@ -433,8 +433,9 @@ public sealed partial class EnvioAutomaticoDp(
             : string.Empty;
         var rescate = rescatados > 0 ? $"<p>Además, {rescatados} derecho(s) de petición llevan horas sin confirmación de envío; revísalos en el Centro de Mensajes antes de reintentar.</p>" : string.Empty;
         var parada = detenido ? "<p><b>El envío automático se detuvo por errores repetidos.</b> Revisa que el servicio de archivos y de correo estén funcionando; mañana volverá a intentar con los comparendos que quedaron.</p>" : string.Empty;
-        var cuerpo = $"{parada}{intro}{sinCanal}{rescate}<p><a href=\"{correo.AppUrl}/comparendos\">Ver los comparendos</a></p>";
         var marcaFlit = config.ConjuntoPlantillas == ConjuntoPlantillas.Flit;
+        var enlace = marcaFlit ? HtmlCorreo.Boton("Ver los comparendos", $"{correo.AppUrl}/comparendos") : $"<p><a href=\"{correo.AppUrl}/comparendos\">Ver los comparendos</a></p>";
+        var cuerpo = $"{parada}{intro}{sinCanal}{rescate}{enlace}";
         var enviados = await correo.RegistrarAsync(new CorreoNuevo
         {
             TenantId = tenant,
