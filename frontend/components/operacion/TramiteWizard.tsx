@@ -2743,7 +2743,8 @@ export function TramiteWizard(props: Props) {
   );
 }
 
-const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'NIT', 'PAS', 'PPT'];
+// HU #14642 — TI añadida: backend mapea TI→TI; Kyverum normaliza a T.
+const DOC_TYPES: ActorDocumentType[] = ['CC', 'CE', 'TI', 'NIT', 'PAS', 'PPT'];
 
 /**
  * Trámites principales del selector del paso 1, en el orden y con el copy de la propuesta.

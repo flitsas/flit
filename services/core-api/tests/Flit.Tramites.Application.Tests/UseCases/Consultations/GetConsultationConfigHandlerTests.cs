@@ -24,7 +24,8 @@ public sealed class GetConsultationConfigHandlerTests
 
         result.VehicleVin.Should().Be("kyverum_runt");
         result.VehiclePlate.Should().Be("kyverum_runt");
-        result.Conductor.Should().Be("kyverum_runt_conductor");
+        // HU #14642: primario embebido es el cortocircuito local de override.
+        result.Conductor.Should().Be("tenant_manual_conductor");
     }
 
     [Fact]
@@ -41,7 +42,7 @@ public sealed class GetConsultationConfigHandlerTests
 
         result.VehiclePlate.Should().Be("verifik");     // el tenant lo cambió
         result.VehicleVin.Should().Be("kyverum_runt");  // los otros siguen el default
-        result.Conductor.Should().Be("kyverum_runt_conductor");
+        result.Conductor.Should().Be("tenant_manual_conductor");
     }
 
     // FEATURE 02 — el flag only_own_vehicles del tenant se refleja para que el wizard adapte la captura.
