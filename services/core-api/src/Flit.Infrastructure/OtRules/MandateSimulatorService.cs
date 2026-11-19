@@ -155,14 +155,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         var office = _catalog.GetById(request.OfficeId);
         var asunto = $"Simulación de Contrato de Mandato · {office?.Name ?? "Organismo de tránsito"}";
 
-        // El cuerpo dice explícitamente que es una simulación: el PDF adjunto lleva marcadores donde
-        // van los datos del mandante, y sin ese aviso podría confundirse con un contrato emitido.
-        var html =
-            "<p>Adjunto encontrarás una <b>simulación</b> del Contrato Privado de Mandato "
-            + $"para <b>{System.Net.WebUtility.HtmlEncode(office?.Name ?? "el organismo de tránsito")}</b>.</p>"
-            + "<p>Es un documento de prueba generado desde Plataforma → Mandatos: "
-            + "los datos del mandante, la placa y el trámite aparecen como marcadores y "
-            + "<b>no corresponde a ningún trámite real</b>.</p>";
+        var html = BuildEmailHtml(office?.Name);
 
         var message = new EmailMessage(
             TenantId: null,
@@ -193,6 +186,18 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
                 documento.FileName)
             : new MandateSimulationResult(MandateSimulationOutcome.SendFailed, envio.Message);
     }
+
+    /// <summary>
+    /// Cuerpo del correo de la simulación. El texto dice explícitamente que es una simulación: el
+    /// PDF adjunto lleva marcadores donde van los datos del mandante, y sin ese aviso podría
+    /// confundirse con un contrato emitido.
+    /// </summary>
+    internal static string BuildEmailHtml(string? officeName, string? assetsBaseUrl = null) =>
+        "<p>Adjunto encontrarás una <b>simulación</b> del Contrato Privado de Mandato "
+        + $"para <b>{System.Net.WebUtility.HtmlEncode(officeName ?? "el organismo de tránsito")}</b>.</p>"
+        + "<p>Es un documento de prueba generado desde Plataforma → Mandatos: "
+        + "los datos del mandante, la placa y el trámite aparecen como marcadores y "
+        + "<b>no corresponde a ningún trámite real</b>.</p>";
 
     private async Task<MandateSimulationResult> BuildAsync(
         Guid officeId,
