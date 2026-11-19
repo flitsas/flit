@@ -1,6 +1,7 @@
 // Gestión de sesión en cliente (HU #10172): almacenamiento del JWT en cookie +
 // localStorage y señal de sesión expirada para el modal global.
 import { clearDrFlitSession } from "@/components/dr-flit/dr-flit-session-store";
+import { limpiarTamanosDePagina } from "@flit/ui/usePaginacion";
 import { TOKEN_COOKIE, TOKEN_STORAGE_KEY } from "./jwt";
 
 /** Evento que dispara el modal de "sesión expirada" cuando la API devuelve SESSION_EXPIRED. */
@@ -30,6 +31,8 @@ export function clearToken(): void {
     window.localStorage.removeItem(LEGACY_AUTHED_KEY);
     // DR. FLIT no debe sobrevivir a un cierre de sesión (ni a token inválido).
     clearDrFlitSession();
+    // Los tamaños de tabla son de la sesión de un usuario: no pasan al siguiente (Bug #14593).
+    limpiarTamanosDePagina();
   }
 }
 
