@@ -2530,12 +2530,19 @@ export const tramitesClient = {
   // POST generar expediente consolidado (matrícula inicial). Fusiona FUR + adjuntos.
   // 409 fur_requerido | documentos_incompletos | modalidad_no_soportada.
   // Feature #11066 — `force=true` invalida caché y regenera desde cero (sin duplicar).
-  generarConsolidado: (instanceId: string, tenantId?: string, force = false) =>
+  // Bug #14631 — `signal` opcional: permite al llamador poner un tope de espera (AbortController).
+  generarConsolidado: (
+    instanceId: string,
+    tenantId?: string,
+    force = false,
+    signal?: AbortSignal,
+  ) =>
     request<GenerarConsolidadoResult>(
       `/api/v1/tramites/instances/${instanceId}/consolidado${force ? '?force=true' : ''}`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
+        ...(signal ? { signal } : {}),
       },
     ),
 
