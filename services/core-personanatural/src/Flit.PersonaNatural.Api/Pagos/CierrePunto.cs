@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text.Json;
 using Flit.PersonaNatural.Api.Adjuntos;
+using Flit.PersonaNatural.Api.CorreoFlit;
 using Flit.PersonaNatural.Api.Cotizaciones;
 using Flit.PersonaNatural.Api.Definiciones;
 using Flit.PersonaNatural.Api.Identidad;
@@ -304,7 +305,7 @@ public sealed partial class CorreoDeCierre(
         var enviado = false;
         try
         {
-            enviado = await enviador.EnviarAsync(destino, Asunto, ArmarHtml(radicante?.Nombre, s.CodigoPublico, s.OrganismoNombre), Plantilla, ct).ConfigureAwait(false);
+            enviado = await enviador.EnviarAsync(destino, Asunto, ArmarHtml(radicante?.Nombre, s.CodigoPublico, s.OrganismoNombre, LayoutCorreoFlit.BaseDesde(configuracion)), Plantilla, ct).ConfigureAwait(false);
         }
         finally
         {
@@ -335,14 +336,16 @@ public sealed partial class CorreoDeCierre(
         return limpio;
     }
 
-    internal static string ArmarHtml(string? nombre, string codigoPublico, string organismo)
+    internal static string ArmarHtml(string? nombre, string codigoPublico, string organismo, string? baseAssets = null)
     {
         var saludo = string.IsNullOrWhiteSpace(nombre) ? "Hola" : "Hola " + WebUtility.HtmlEncode(nombre.Trim());
-        return "<div style=\"font-family:Arial,sans-serif;max-width:560px\"><h2>Tu trámite quedó pagado</h2>"
-            + $"<p>{saludo},</p>"
-            + $"<p>Recibimos el pago de tu trámite. Tu código para consultarlo es <b>{WebUtility.HtmlEncode(codigoPublico)}</b>.</p>"
-            + $"<p>Recógelo en <b>{WebUtility.HtmlEncode(organismo)}</b>.</p>"
-            + "<p style=\"color:#555\">Guarda este código: con él puedes consultar el estado de tu trámite.</p></div>";
+        return LayoutCorreoFlit.Envolver(
+            "Tu trámite quedó pagado",
+            LayoutCorreoFlit.Parrafo(saludo + ",")
+            + LayoutCorreoFlit.Parrafo($"Recibimos el pago de tu trámite. Tu código para consultarlo es {LayoutCorreoFlit.Destacado(codigoPublico)}.")
+            + LayoutCorreoFlit.Parrafo($"Recógelo en {LayoutCorreoFlit.Destacado(organismo)}.")
+            + LayoutCorreoFlit.Nota("Guarda este código: con él puedes consultar el estado de tu trámite."),
+            baseAssets);
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo enviar el correo de cierre ({Tipo}); se reintentará al consultar el cierre")]
