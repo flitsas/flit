@@ -199,6 +199,7 @@ builder.Services.AddConsultasRemoto(builder.Configuration); // Epic #13316 · HU
 builder.Services.AddNotificacionesRemoto(builder.Configuration); // Epic #13316 · HU #13359: canales, buzón de pruebas, entregas y mensajes muertos por core-notificaciones
 Flit.Api.Derivacion.DerivacionExtensions.AddDerivacionDiagnostico(builder.Services, builder.Configuration); // ADR-0084 · Punto 4: borradores desde Diagnóstico (rpc apagado por defecto)
 Flit.Api.Usuarios.UsuariosProductoExtensions.AddUsuariosProducto(builder.Services); // ADR-0089 · HU #14587: usuarios de Diagnóstico gestionados desde el producto (gRPC)
+Flit.Api.Plataforma.Ai.ConfiguracionIaExtensions.AddConfiguracionIaDiagnostico(builder.Services); // ADR-0091: configuración de IA y llave sellada para Diagnóstico (gRPC)
 builder.Services.AddPersonaNaturalConsumidor(builder.Configuration); // Épica #14021 · HU #14050/#14051: crea los trámites del portal y devuelve su estado (apagado por defecto)
 builder.Services.AddCajaAnulacionOpciones(builder.Configuration); // ventana de anulación de la caja por organismo (rango y default)
 builder.Services.AddPortalCaja(builder.Configuration); // Épica #14210 · HU #14461: administración de la caja del organismo desde el hub (apagado por defecto)

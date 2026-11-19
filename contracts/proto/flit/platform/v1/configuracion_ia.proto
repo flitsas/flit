@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package flit.platform.v1;
+
+option csharp_namespace = "Flit.Platform.Grpc.V1";
+
+import "google/protobuf/timestamp.proto";
+
+// Configuración de IA por herramienta para un servicio consumidor (ADR-0091, enmienda ADR-0070 de core-api).
+// Lo atiende core-api, dueño de admin.ai_tool_provider_settings y de las llaves de proveedor (env).
+//
+// Autenticación: token de servicio de Identidad con aud=tramites y scope platform.ia.diagnostico. Solo svc-diagnostico.
+// Global: SIN x-flit-tenant-id ni x-flit-actor-id (la configuración de IA es de plataforma, ADR-0058/0070).
+// Cada cliente solo puede pedir sus herramientas: svc-diagnostico -> {"diagnostico_dictamen"}.
+// La llave de cada proveedor viaja CIFRADA para la clave pública registrada en core-api bajo `kid` (sobre §2).
+// core-api NUNCA escribe la llave, el sobre ni su huella en logs. Errores con google.rpc.ErrorInfo (domain flitsas.com).
+service ConfiguracionIaService {
+  // Idempotente y sin efectos: no cambia active_provider ni registra transiciones.
+  rpc ObtenerConfiguracionIa(ObtenerConfiguracionIaRequest) returns (ObtenerConfiguracionIaResponse);
+}
+
+message ObtenerConfiguracionIaRequest {
+  string tool_code = 1;   // "diagnostico_dictamen". Otro -> PERMISSION_DENIED HERRAMIENTA_NO_PERMITIDA
+  string kid = 2;         // id de la clave pública del destinatario; 1..64 [a-z0-9-]
+  bytes nonce = 3;        // exactamente 16 bytes aleatorios por llamada; entra en el AAD y vuelve en eco
+}
+
+message ObtenerConfiguracionIaResponse {
+  string tool_code = 1;
+  bool disponible = 2;                       // false => cola vacía; el consumidor NO llama a ningún proveedor
+  MotivoNoDisponible motivo = 3;             // UNSPECIFIED cuando disponible = true
+  string proveedor_activo = 4;               // active_provider de la fila (informativo; usar cola[0])
+  bool retorno_automatico = 5;               // auto_return_to_primary (informativo)
+  int64 row_version = 6;                     // de la fila; entra en el AAD
+  repeated ProveedorIa cola = 7;             // orden de uso/failover; ya filtrada enabled ∩ capaz ∩ con llave
+  int32 ttl_segundos = 8;                    // caché sugerida (Ai:Entrega:TtlSegundos, default 300; 60 si !disponible)
+  google.protobuf.Timestamp emitida_en = 9;  // reloj de core-api; entra en el AAD
+  bytes nonce = 10;                          // eco del request
+  string kid = 11;                           // eco del request
+}
+
+message ProveedorIa {
+  string proveedor = 1;    // anthropic | openai | kimi | deepseek (v1 para diagnostico_dictamen: solo anthropic)
+  int32 prioridad = 2;     // priorityRank
+  string modelo = 3;       // Ai:Herramientas:<tool>:Modelos:<proveedor>, default de catálogo (claude-haiku-4-5)
+  LlaveCifrada llave = 4;
+}
+
+// Sobre híbrido RSA-OAEP-256 + A256GCM (composición JWE "alg=RSA-OAEP-256, enc=A256GCM", sin dependencia nueva).
+message LlaveCifrada {
+  string alg = 1;          // "RSA-OAEP-256+A256GCM" (único valor v1; otro => el consumidor rechaza)
+  string kid = 2;
+  bytes cek_cifrada = 3;   // CEK de 32 bytes envuelta con RSA-OAEP (SHA-256/MGF1-SHA-256), 384 bytes con RSA-3072
+  bytes iv = 4;            // 12 bytes aleatorios, únicos por sobre
+  bytes texto_cifrado = 5; // UTF-8 de la llave cifrado con AES-256-GCM
+  bytes tag = 6;           // 16 bytes
+}
+
+enum MotivoNoDisponible {
+  MOTIVO_NO_DISPONIBLE_UNSPECIFIED = 0;
+  HERRAMIENTA_SIN_CONFIGURAR = 1;   // no hay fila en admin.ai_tool_provider_settings para el tool_code
+  SIN_PROVEEDOR_CON_LLAVE = 2;      // ningún proveedor enabled ∩ capaz ∩ con llave en env de core-api
+}
