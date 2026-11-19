@@ -38,7 +38,7 @@ public sealed record IaLlamada
     /// <see cref="PromptTexto"/>. Así el hash identifica la versión del prompt y no cambia con cada turno.
     /// </summary>
     public string? PromptBase { get; init; }
-    /// <summary>Solo se guarda con <c>IA_CONSUMO_DETALLE=true</c>.</summary>
+    /// <summary>Se guarda salvo <c>IA_CONSUMO_DETALLE=false</c>.</summary>
     public string? RespuestaTexto { get; init; }
     public string? ArchivoMime { get; init; }
     public long? ArchivoBytes { get; init; }

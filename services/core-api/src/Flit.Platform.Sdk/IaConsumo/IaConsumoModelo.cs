@@ -54,7 +54,7 @@ public sealed class IaConsumoLog
     public string? Metadatos { get; set; }
 }
 
-/// <summary>Prompt y respuesta completos de una llamada; solo con <c>IA_CONSUMO_DETALLE=true</c> (contrato regla 5).</summary>
+/// <summary>Prompt y respuesta completos de una llamada; salvo <c>IA_CONSUMO_DETALLE=false</c> (contrato regla 5).</summary>
 public sealed class IaConsumoDetalle
 {
     public Guid ConsumoId { get; set; }

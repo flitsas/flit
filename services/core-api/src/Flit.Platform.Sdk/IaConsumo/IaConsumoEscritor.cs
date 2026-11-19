@@ -9,9 +9,6 @@ public interface IIaConsumoAlmacen
     Task GuardarAsync(IReadOnlyList<IaConsumoPendiente> lote, CancellationToken ct);
 
     Task<IReadOnlyList<IaTarifaModelo>> TarifasAsync(CancellationToken ct);
-
-    /// <summary>Borra el detalle con <c>fecha_inicio</c> anterior a <paramref name="limite"/>. Devuelve cuántas filas.</summary>
-    Task<int> PurgarDetalleAsync(DateTimeOffset limite, CancellationToken ct);
 }
 
 /// <summary>
@@ -43,9 +40,6 @@ internal sealed class EfIaConsumoAlmacen<TContext>(TContext db) : IIaConsumoAlma
 
     public async Task<IReadOnlyList<IaTarifaModelo>> TarifasAsync(CancellationToken ct) =>
         await db.Set<IaTarifaModelo>().AsNoTracking().ToListAsync(ct).ConfigureAwait(false);
-
-    public Task<int> PurgarDetalleAsync(DateTimeOffset limite, CancellationToken ct) =>
-        db.Set<IaConsumoDetalle>().Where(d => d.FechaInicio < limite).ExecuteDeleteAsync(ct);
 }
 
 /// <summary>
@@ -240,54 +234,6 @@ internal sealed class IaConsumoEscritor(
         catch (Exception ex)
         {
             IaConsumoBitacora.LoteNoGuardado(logger, lote.Count, ex.GetType().Name, ex);
-        }
-#pragma warning restore CA1031
-    }
-}
-
-/// <summary>Retención del detalle (contrato): una vez al día borra el detalle de más de N días.</summary>
-internal sealed class IaConsumoRetencion(
-    IServiceScopeFactory scopes,
-    IaConsumoOpciones opciones,
-    TimeProvider time,
-    ILogger<IaConsumoRetencion> logger) : BackgroundService
-{
-    private static readonly TimeSpan Intervalo = TimeSpan.FromDays(1);
-    private static readonly TimeSpan EsperaInicial = TimeSpan.FromMinutes(2);
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        try
-        {
-            await Task.Delay(EsperaInicial, time, stoppingToken).ConfigureAwait(false);
-            while (!stoppingToken.IsCancellationRequested)
-            {
-                await PurgarAsync(stoppingToken).ConfigureAwait(false);
-                await Task.Delay(Intervalo, time, stoppingToken).ConfigureAwait(false);
-            }
-        }
-        catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
-        {
-        }
-    }
-
-    internal async Task<int> PurgarAsync(CancellationToken ct)
-    {
-#pragma warning disable CA1031 // La purga falla en silencio (log) y se reintenta mañana.
-        try
-        {
-            var limite = time.GetUtcNow() - TimeSpan.FromDays(opciones.DiasDetalle);
-            await using var scope = scopes.CreateAsyncScope();
-            var almacen = scope.ServiceProvider.GetRequiredService<IIaConsumoAlmacen>();
-            var borradas = await almacen.PurgarDetalleAsync(limite, ct).ConfigureAwait(false);
-            if (borradas > 0)
-                IaConsumoBitacora.DetallePurgado(logger, limite, borradas);
-            return borradas;
-        }
-        catch (Exception ex) when (ex is not OperationCanceledException)
-        {
-            IaConsumoBitacora.PurgaFallo(logger, ex.GetType().Name);
-            return 0;
         }
 #pragma warning restore CA1031
     }

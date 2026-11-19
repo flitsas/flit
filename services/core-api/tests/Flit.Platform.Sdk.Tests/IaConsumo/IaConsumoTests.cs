@@ -180,14 +180,14 @@ public sealed class IaConsumoTests
     }
 
     [Fact]
-    public void ElDetalleSoloSeGuardaConSuBanderaYSeRecortaA64KB()
+    public void ElDetalleSeGuardaPorDefectoSeApagaConSuBanderaYSeRecortaA64KB()
     {
-        var sinDetalle = Opciones();
+        var sinDetalle = Opciones(new() { ["IA_CONSUMO_DETALLE"] = "false" });
         var cola1 = new IaConsumoCola(sinDetalle);
         Registrador(sinDetalle, cola1).Registrar(Llamada());
-        Drenar(cola1).Single().Detalle.Should().BeNull("por defecto IA_CONSUMO_DETALLE=false");
+        Drenar(cola1).Single().Detalle.Should().BeNull("IA_CONSUMO_DETALLE=false lo apaga");
 
-        var conDetalle = Opciones(new() { ["IA_CONSUMO_DETALLE"] = "true" });
+        var conDetalle = Opciones();
         var cola2 = new IaConsumoCola(conDetalle);
         Registrador(conDetalle, cola2).Registrar(Llamada() with
         {
@@ -309,7 +309,6 @@ public sealed class IaConsumoTests
         public Task<IReadOnlyList<IaTarifaModelo>> TarifasAsync(CancellationToken ct) =>
             Falla ? throw new InvalidOperationException("caída") : Task.FromResult<IReadOnlyList<IaTarifaModelo>>(Tarifas);
 
-        public Task<int> PurgarDetalleAsync(DateTimeOffset limite, CancellationToken ct) => Task.FromResult(0);
     }
 
     private static (IaConsumoEscritor Escritor, IaConsumoCola Cola, AlmacenFalso Almacen, IaConsumoRegistrador Registrador) Escritor()
