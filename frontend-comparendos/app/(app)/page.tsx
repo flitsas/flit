@@ -3,7 +3,7 @@
 import { Suspense, useState } from "react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { InlineAlert } from "@flit/ui";
 import { EstadoVacio } from "@flit/ui/EstadoVacio";
 import { Cargador } from "@flit/ui/Loader";
@@ -24,7 +24,7 @@ import { useCarga } from "@/lib/useCarga";
 const DineroInicio = dynamic(() => import("@/components/inicio/DineroInicio").then((m) => m.DineroInicio), { loading: () => <Cargador /> });
 
 /** Frentes sin el módulo de reportes: solo cantidades, de los mismos contadores de la bandeja. */
-function useFrentesSinDinero(listo: boolean, empresa: string | null): { frentes: Record<keyof Frentes, Monto | null> | null; error: string | null } {
+function useFrentesSinDinero(listo: boolean, empresa: string | null): { frentes: Record<keyof Frentes, Monto | null> | null; error: string | null; recargar: () => void } {
   const q = { empresa: empresa ?? undefined };
   const base = useCarga(listo ? `inicio-contadores:${empresa}` : null, (signal) => apiFetch<Contadores>("/comparendos/contadores", { signal, query: q }));
   const sinGestion = useCarga(listo ? `inicio-sin-gestion:${empresa}` : null, (signal) =>
@@ -34,10 +34,17 @@ function useFrentesSinDinero(listo: boolean, empresa: string | null): { frentes:
     apiFetch<Contadores>("/comparendos/contadores", { signal, query: { ...q, juridico: "CaducidadInmediata" } }),
   );
   const error = base.error ?? sinGestion.error ?? caducidad.error ?? null;
-  if (!base.datos) return { frentes: null, error };
+  // «Reintentar» vuelve a pedir solo lo que falló, sin recargar la página.
+  const recargar = () => {
+    if (base.error) base.recargar();
+    if (sinGestion.error) sinGestion.recargar();
+    if (caducidad.error) caducidad.recargar();
+  };
+  if (!base.datos) return { frentes: null, error, recargar };
   const n = (cantidad: number | undefined): Monto | null => (cantidad === undefined ? null : { cantidad, valor: 0 });
   return {
     error,
+    recargar,
     frentes: {
       proximosAVencer: n(base.datos.proximosAVencer),
       sinContraventor: n(base.datos.sinContraventor),
@@ -74,6 +81,7 @@ function ParaHoy({
           const m = frentes?.[f.clave] ?? null;
           const cantidad = m?.cantidad ?? null;
           const vacio = cantidad === 0;
+          const enlaza = cantidad !== null && cantidad > 0;
           return (
             <TarjetaMetrica
               key={f.clave}
@@ -82,10 +90,16 @@ function ParaHoy({
               cifra={cantidad === null ? "—" : cantidad.toLocaleString("es-CO")}
               pendiente={!!f.pendiente && !!cantidad}
               colorCifra={vacio ? "var(--di-text-tertiary)" : undefined}
-              title={conDinero && m ? `${cantidad?.toLocaleString("es-CO")} comparendos · ${formatoPesos(m.valor)}` : undefined}
-              aria-label={`${f.titulo}: ${cantidad === null ? "sin dato" : cantidad.toLocaleString("es-CO")} comparendos${conDinero && m ? ` · ${formatoPesos(m.valor)}` : ""}. ${f.accion}`}
-              pie={conDinero && m && !vacio ? `${pesosCorto(m.valor)} · ${f.accion}` : f.accion}
-              href={vacio || cantidad === null ? undefined : hrefBandeja(f.query, { empresa })}
+              // El monto es el valor de esos comparendos (como en la bandeja, pagados incluidos), no la deuda.
+              title={conDinero && m ? `${cantidad?.toLocaleString("es-CO")} comparendos por un valor de ${formatoPesos(m.valor)}` : undefined}
+              // Solo el enlace lleva aria-label: en una tarjeta sin enlace (frente en 0) el contenido ya se lee solo.
+              aria-label={
+                enlaza
+                  ? `${f.titulo}: ${cantidad.toLocaleString("es-CO")} comparendos${conDinero && m ? ` por un valor de ${formatoPesos(m.valor)}` : ""}. ${f.accion}`
+                  : undefined
+              }
+              pie={conDinero && m && !vacio ? `Valor ${pesosCorto(m.valor)} · ${f.accion}` : f.accion}
+              href={enlaza ? hrefBandeja(f.query, { empresa }) : undefined}
               enlace={Link}
             />
           );
@@ -108,8 +122,14 @@ function ParaHoy({
 function Contenido() {
   const { sesion } = useSesion();
   const params = useSearchParams();
+  const router = useRouter();
   const esSuperAdmin = !!sesion?.usuario.esSuperAdmin;
-  const [empresa, setEmpresa] = useState<string | null>(() => params.get("empresa"));
+  const [empresa, setEmpresaEstado] = useState<string | null>(() => params.get("empresa"));
+  // Como la bandeja: la empresa elegida queda en la URL, así «atrás» o recargar vuelven al mismo tablero.
+  const setEmpresa = (id: string | null) => {
+    setEmpresaEstado(id);
+    router.replace(id ? `/?empresa=${encodeURIComponent(id)}` : "/", { scroll: false });
+  };
   const listo = !!sesion && (!esSuperAdmin || !!empresa);
   const conDinero = listo && capacidades(sesion).reportes && tienePermiso(sesion, P.reportesVer);
   const veBandeja = tienePermiso(sesion, P.bandejaVer);
@@ -144,7 +164,7 @@ function Contenido() {
       {error && (
         <InlineAlert tone="error" title="No se pudo cargar el tablero">
           {error}{" "}
-          <button type="button" className="font-semibold underline" onClick={conDinero ? dinero.recargar : () => window.location.reload()}>
+          <button type="button" className="font-semibold underline" onClick={conDinero ? dinero.recargar : sinDinero.recargar}>
             Reintentar
           </button>
         </InlineAlert>
@@ -156,6 +176,12 @@ function Contenido() {
           conDinero={conDinero}
           descuento={d ? { cantidad: d.descuento.d50.cantidad + d.descuento.d25.cantidad, ahorro: d.descuento.d50.ahorroEstimado + d.descuento.d25.ahorroEstimado } : null}
           empresa={empresaQuery}
+        />
+      )}
+      {listo && !veBandeja && !conDinero && (
+        <EstadoVacio
+          titulo="Tu Inicio está vacío por ahora"
+          mensaje="Tu usuario no tiene acceso a la bandeja de comparendos ni a los reportes de la empresa. Pídele al administrador de tu empresa que te dé acceso."
         />
       )}
       {conDinero && dinero.estado === "loading" && <Cargador />}

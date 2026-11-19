@@ -56,12 +56,17 @@ public static class ReportesEndpoints
     }
 
     /// <summary>La lente de dinero del Inicio y de Reportes: deuda por estado legal, descuentos, organismos, pagos y frentes del día.</summary>
-    private static async Task<IResult> LenteDinero(Guid? empresa, Guid? nit, DateOnly? desde, DateOnly? hasta, UsuarioActual usuario, Capacidades capacidades, ServicioReportes reportes,
-        Bandeja.ConsultaBandeja bandeja, Reloj reloj, CancellationToken ct)
+    /// <remarks><c>?partes=estados</c> devuelve solo el reparto por estado (una consulta); sin <c>partes</c>, todo.</remarks>
+    private static async Task<IResult> LenteDinero(Guid? empresa, Guid? nit, DateOnly? desde, DateOnly? hasta, string? partes, UsuarioActual usuario, Capacidades capacidades,
+        ServicioReportes reportes, Bandeja.ConsultaBandeja bandeja, Reloj reloj, CancellationToken ct)
     {
+        if (partes is not null && partes != "estados")
+            throw new ReglaException("PARTES_INVALIDAS", "El único valor de «partes» es «estados».");
         var a = await AlcanceAsync(usuario, capacidades, empresa, nit, desde, hasta, reloj, ct).ConfigureAwait(false);
-        var d = await reportes.DineroAsync(a, bandeja, ct).ConfigureAwait(false);
-        return Results.Ok(new { alcance = new { empresa = a.Tenant, a.Nit, a.Desde, a.Hasta }, dinero = d });
+        var alcance = new { empresa = a.Tenant, a.Nit, a.Desde, a.Hasta };
+        if (partes == "estados")
+            return Results.Ok(new { alcance, dinero = await reportes.EstadosAsync(a, bandeja, ct).ConfigureAwait(false) });
+        return Results.Ok(new { alcance, dinero = await reportes.DineroAsync(a, bandeja, ct).ConfigureAwait(false) });
     }
 
     /// <summary>NITs monitoreados para el filtro del dashboard (sin exigir el permiso de monitoreo).</summary>

@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { EJE_TICK, REJILLA, TOOLTIP_CONTENIDO, TOOLTIP_CURSOR, TOOLTIP_ETIQUETA, type SerieGrafica } from "./graficos-kit";
 import { LeyendaGrafica } from "./LeyendaGrafica";
@@ -19,7 +20,10 @@ export interface BarrasApiladasProps {
   /** Alto por fila en px (horizontal) o alto total (vertical). */
   altoFila?: number;
   alto?: number;
-  /** Ancho del eje de rótulos en horizontal (los nombres de organismo son largos). */
+  /**
+   * Ancho MÁXIMO del eje de rótulos en horizontal (los nombres de organismo son largos). El real es el 22 % del ancho de
+   * la gráfica entre 110 px y este tope, y el corte con «…» se ajusta a ese ancho; el tooltip da el nombre completo.
+   */
   anchoRotulo?: number;
 }
 
@@ -37,14 +41,29 @@ export function BarrasApiladas({
   formato = (v) => v.toLocaleString("es-CO"),
   altoFila = 40,
   alto,
-  anchoRotulo = 132,
+  anchoRotulo = 280,
 }: BarrasApiladasProps) {
   const horizontal = orientacion === "horizontal";
-  const altura = alto ?? (horizontal ? Math.max(120, filas.length * altoFila + 32) : 260);
-  const recortar = (t: string) => (t.length > 22 ? `${t.slice(0, 21)}…` : t);
+  const caja = useRef<HTMLDivElement>(null);
+  const [ancho, setAncho] = useState(0);
+  useEffect(() => {
+    const el = caja.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setAncho(e.contentRect.width));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+  const rotulo = ancho > 0 ? Math.round(Math.min(Math.max(110, ancho * 0.22), anchoRotulo)) : Math.min(132, anchoRotulo);
+  // ~8 px por carácter en MAYÚSCULAS a 11 px (los organismos vienen en mayúsculas): se corta a lo que cabe en dos
+  // líneas. recharts parte por palabras, así que en un eje angosto (celular) un nombre llega a cuatro líneas: ahí la
+  // fila crece a 56 px (4 × 13 px) para que no se monte sobre la vecina, como pasaba a 390 px.
+  const maxCaracteres = Math.max(14, Math.floor(rotulo / 8) * 2);
+  const altoFilaReal = horizontal && rotulo < 160 ? Math.max(altoFila, 56) : altoFila;
+  const altura = alto ?? (horizontal ? Math.max(120, filas.length * altoFilaReal + 32) : 260);
+  const recortar = (t: string) => (t.length > maxCaracteres ? `${t.slice(0, maxCaracteres - 1)}…` : t);
   return (
     <div>
-      <div className="-mx-2" style={{ height: altura }} aria-hidden="true">
+      <div ref={caja} className="-mx-2" style={{ height: altura }} aria-hidden="true">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={[...filas]} layout={horizontal ? "vertical" : "horizontal"} margin={{ top: 4, right: 12, left: 0, bottom: 0 }}>
             <CartesianGrid {...REJILLA} horizontal={!horizontal} vertical={false} />
@@ -55,7 +74,7 @@ export function BarrasApiladas({
               <XAxis dataKey="etiqueta" tick={EJE_TICK} axisLine={false} tickLine={false} minTickGap={4} />
             )}
             {horizontal ? (
-              <YAxis type="category" dataKey="etiqueta" tick={EJE_TICK} axisLine={false} tickLine={false} width={anchoRotulo} tickFormatter={recortar} />
+              <YAxis type="category" dataKey="etiqueta" tick={EJE_TICK} axisLine={false} tickLine={false} width={rotulo} tickFormatter={recortar} />
             ) : (
               <YAxis tick={EJE_TICK} axisLine={false} tickLine={false} allowDecimals={false} tickFormatter={formatoEje} width={84} />
             )}
