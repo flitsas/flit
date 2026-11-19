@@ -8,6 +8,7 @@ using Flit.Diagnostico.Api.Modulos.Backoffice;
 using Flit.Diagnostico.Api.Modulos.Comun;
 using Flit.Diagnostico.Api.Modulos.Diagnosticos;
 using Flit.Diagnostico.Api.Modulos.Dictamen;
+using Flit.Diagnostico.Api.Modulos.Trabajos;
 using Flit.Diagnostico.Api.Plataforma;
 using Flit.Diagnostico.Domain.Consultas;
 using Flit.Diagnostico.Domain.Diagnosticos;
@@ -45,42 +46,91 @@ public sealed class ConsultaDictamenTests
 
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
+    private static readonly OpcionesRedaccion Encendida = new() { Habilitado = true, MaxReintentos = 2 };
+
     [Fact]
     public void El_DTO_de_la_compania_no_tiene_override_y_el_de_backoffice_solo_suma_esos_tres()
     {
         // HU #14563 AC26 (D6): la compañía solo gana la marca del ajuste FLIT y su fecha.
         Nombres(typeof(DictamenCompaniaDto)).Should().BeEquivalentTo(
-            ["Version", "Veredicto", "EstadoRedaccion", "Alertamientos", "CatalogoVersion", "CreadoEn", "AjustadoPorFlit", "AjustadoEn", "CambioPropietario"]);
+            ["Version", "Veredicto", "EstadoRedaccion", "Alertamientos", "CatalogoVersion", "CreadoEn", "AjustadoPorFlit", "AjustadoEn", "CambioPropietario", "RedaccionEnCola"]);
         Nombres(typeof(DictamenBackofficeDto)).Should().BeEquivalentTo(
-            ["Version", "Veredicto", "EstadoRedaccion", "Alertamientos", "CatalogoVersion", "CreadoEn", "AnalisisOverride", "UsuarioOverrideId", "OverrideEn", "CambioPropietario"]);
+            ["Version", "Veredicto", "EstadoRedaccion", "Alertamientos", "CatalogoVersion", "CreadoEn", "AnalisisOverride", "UsuarioOverrideId", "OverrideEn", "CambioPropietario", "RedaccionEnCola"]);
         Nombres(typeof(AlertaDictamenDto)).Should().BeEquivalentTo(["Codigo", "Texto", "Efecto", "Fuente", "Etiqueta", "FuenteEtiqueta"]);
 
         var fila = Fila();
         fila.AnalisisOverride = true;
         fila.UsuarioOverrideId = Guid.CreateVersion7();
         fila.OverrideEn = Ahora;
-        var compania = JsonSerializer.SerializeToNode(ConsultaDictamen.Compania(fila), Web)!.AsObject();
-        var backoffice = JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(fila), Web)!.AsObject();
+        var compania = JsonSerializer.SerializeToNode(ConsultaDictamen.Compania(fila, null, Encendida), Web)!.AsObject();
+        var backoffice = JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(fila, null, Encendida), Web)!.AsObject();
 
         compania.Select(p => p.Key).Should().BeEquivalentTo(
-            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en", "cambio_propietario"]);
+            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en", "cambio_propietario", "redaccion_en_cola"]);
         // P1 = a: un override histórico (sin motivo) no lleva la marca.
         compania["ajustado_por_flit"]!.GetValue<bool>().Should().BeFalse();
         backoffice.Select(p => p.Key).Should().BeEquivalentTo(
         [
             "version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en",
-            "analisis_override", "usuario_override_id", "override_en", "cambio_propietario",
+            "analisis_override", "usuario_override_id", "override_en", "cambio_propietario", "redaccion_en_cola",
         ]);
         compania["alertamientos"]![0]!.AsObject().Select(p => p.Key).Should().Equal("codigo", "texto", "efecto", "fuente", "etiqueta", "fuente_etiqueta");
         backoffice["analisis_override"]!.GetValue<bool>().Should().BeTrue();
         backoffice["usuario_override_id"]!.GetValue<Guid>().Should().Be(fila.UsuarioOverrideId!.Value);
     }
 
+    /// <summary>
+    /// HU-2 (redactor IA, registro diferido; CR-1): <c>redaccion_en_cola</c> es true solo con la redacción encendida, la fila
+    /// PENDIENTE y fecha de toma: el predicado de la toma de <see cref="ColaRedaccion"/>. Los intentos no cuentan (al agotarlos,
+    /// <see cref="RedactorEnCola.Decidir"/> deja la fecha en null). Función pura de la fila ya leída: ni intentos, ni lease, ni la fecha salen.
+    /// </summary>
+    [Theory]
+    [InlineData(true, "PENDIENTE", true, 0, true)]
+    [InlineData(true, "PENDIENTE", true, 2, true)]
+    [InlineData(true, "PENDIENTE", true, 3, true)]
+    [InlineData(true, "PENDIENTE", false, 0, false)]
+    [InlineData(true, "COMPLETADA", false, 1, false)]
+    [InlineData(true, "COMPLETADA", true, 1, false)]
+    [InlineData(false, "PENDIENTE", true, 0, false)]
+    public void HU2_redaccion_en_cola_sigue_el_borde_de_Decidir_y_no_expone_internos(
+        bool habilitado, string estado, bool conFecha, int intentos, bool esperado)
+    {
+        var fila = Fila();
+        fila.EstadoRedaccion = estado;
+        fila.RedactadoPor = estado == "COMPLETADA" ? "LLM" : "PLANTILLA";
+        fila.RedaccionDisponibleDesde = conFecha ? Ahora : null;
+        fila.RedaccionIntentos = intentos;
+        fila.RedaccionLeaseHasta = Ahora.AddMinutes(5);
+        var opciones = new OpcionesRedaccion { Habilitado = habilitado, MaxReintentos = 2 };
+
+        ConsultaDictamen.Compania(fila, null, opciones).RedaccionEnCola.Should().Be(esperado);
+        ConsultaDictamen.Backoffice(fila, null, opciones).RedaccionEnCola.Should().Be(esperado);
+        foreach (var nodo in new[]
+        {
+            JsonSerializer.SerializeToNode(ConsultaDictamen.Compania(fila, null, opciones), Web)!.AsObject(),
+            JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(fila, null, opciones), Web)!.AsObject(),
+        })
+        {
+            nodo["redaccion_en_cola"]!.GetValue<bool>().Should().Be(esperado);
+            nodo.Select(p => p.Key).Should().NotContain(k => k.Contains("intentos") || k.Contains("lease") || k.Contains("disponible"));
+        }
+    }
+
+    /// <summary>HU-2 (CR-2): el lector que no publica la cola (panel de deuda) usa la sobrecarga explícita y nunca declara cola.</summary>
+    [Fact]
+    public void HU2_sin_opciones_de_redaccion_no_esta_en_cola()
+    {
+        var fila = Fila();
+        fila.RedaccionDisponibleDesde = Ahora;
+        ConsultaDictamen.CompaniaSinCola(fila).RedaccionEnCola.Should().BeFalse();
+        ConsultaDictamen.Compania(fila, null, Encendida).RedaccionEnCola.Should().BeTrue();
+    }
+
     /// <summary>Punto 5 (2026-11-11): cada alerta lleva su rótulo y el nombre de su fuente; un código sin rótulo nunca sale crudo.</summary>
     [Fact]
     public void Cada_alerta_lleva_etiqueta_y_fuente_etiqueta_y_el_codigo_sin_rotulo_sale_generico()
     {
-        var compania = JsonSerializer.SerializeToNode(ConsultaDictamen.Compania(Fila()), Web)!.AsObject();
+        var compania = JsonSerializer.SerializeToNode(ConsultaDictamen.Compania(Fila(), null, Encendida), Web)!.AsObject();
         var alertas = compania["alertamientos"]!.AsArray();
 
         alertas[0]!["codigo"]!.GetValue<string>().Should().Be("SOAT_NO_VIGENTE");
@@ -90,7 +140,7 @@ public sealed class ConsultaDictamenTests
         alertas[1]!["etiqueta"]!.GetValue<string>().Should().Be("Novedad sin clasificar");
         alertas[1]!["fuente_etiqueta"]!.GetValue<string>().Should().Be("Novedad sin clasificar");
 
-        var backoffice = JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(Fila()), Web)!.AsObject();
+        var backoffice = JsonSerializer.SerializeToNode(ConsultaDictamen.Backoffice(Fila(), null, Encendida), Web)!.AsObject();
         backoffice["alertamientos"]![0]!["etiqueta"]!.GetValue<string>().Should().Be("SOAT no vigente");
     }
 
@@ -274,7 +324,7 @@ public sealed class ConsultaDictamenTests
         respuesta.StatusCode.Should().Be(HttpStatusCode.OK);
         var json = await TableroAyudas.JsonAsync(respuesta, ct);
         json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
-            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en", "cambio_propietario"]);
+            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en", "cambio_propietario", "redaccion_en_cola"]);
         json.GetProperty("ajustado_por_flit").GetBoolean().Should().BeFalse();
         json.GetProperty("veredicto").GetString().Should().Be("VIABLE");
         json.GetProperty("alertamientos").EnumerateArray().Select(a => a.GetProperty("codigo").GetString()).Should().Equal("SOAT_NO_VIGENTE", "NO_ESTA");
@@ -318,7 +368,7 @@ public sealed class ConsultaDictamenTests
         json.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
         [
             "version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en",
-            "analisis_override", "usuario_override_id", "override_en", "cambio_propietario",
+            "analisis_override", "usuario_override_id", "override_en", "cambio_propietario", "redaccion_en_cola",
         ]);
         json.GetProperty("analisis_override").GetBoolean().Should().BeFalse();
         json.GetProperty("usuario_override_id").ValueKind.Should().Be(JsonValueKind.Null);
@@ -383,7 +433,9 @@ public sealed class ConsultaDictamenTests
         nueva.RedaccionIntentos.Should().Be(0);
         nueva.RedaccionLeaseHasta.Should().BeNull();
         nueva.AnalisisOverride.Should().BeTrue();
-        nueva.RedaccionDisponibleDesde.Should().NotBeNull();
+        // HU-2 (redactor IA): el host de pruebas trae Diagnostico:Redaccion:Habilitado=false, así que el reemplazo no queda en cola.
+        nueva.RedaccionDisponibleDesde.Should().BeNull();
+        json.GetProperty("redaccion_en_cola").GetBoolean().Should().BeFalse();
         Texto(nueva.Alertamientos, 0).Should().Be(Plantilla("TRASPASO_STANDARD", "SOAT_NO_VIGENTE"));
         Texto(nueva.Alertamientos, 1).Should().Be(TextoRaro);
 
@@ -740,7 +792,7 @@ public sealed class ConsultaDictamenTests
         var textoCompania = await compania.Content.ReadAsStringAsync(ct);
         var dictamen = JsonElement.Parse(textoCompania);
         dictamen.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(
-            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en", "cambio_propietario"]);
+            ["version", "veredicto", "estado_redaccion", "alertamientos", "catalogo_version", "creado_en", "ajustado_por_flit", "ajustado_en", "cambio_propietario", "redaccion_en_cola"]);
         dictamen.GetProperty("ajustado_por_flit").GetBoolean().Should().BeTrue();
         dictamen.GetProperty("ajustado_en").ValueKind.Should().Be(JsonValueKind.String);
         textoCompania.Should().NotContain(MotivoAjuste).And.NotContain("\"ajuste\"").And.NotContain(flit.ToString()).And.NotContain("motivo");
