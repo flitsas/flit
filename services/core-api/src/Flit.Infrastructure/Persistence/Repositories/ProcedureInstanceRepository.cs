@@ -1031,6 +1031,20 @@ internal sealed partial class ProcedureInstanceRepository(
     /// el modelo ni el estado persistido.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Estados pedidos en el filtro: uno o varios separados por coma («enviado,en_proceso»), en minúscula y sin
+    /// repetir. <c>null</c> si no se pidió ninguno. La franja de Identidad filtra «En proceso» con dos estados.
+    /// </summary>
+    internal static string[]? EstadosDelFiltro(string? status)
+    {
+        if (string.IsNullOrWhiteSpace(status)) return null;
+        var estados = status.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(e => e.ToLowerInvariant())
+            .Distinct()
+            .ToArray();
+        return estados.Length == 0 ? null : estados;
+    }
+
     private static string EstadoEfectivo(string status, DateTimeOffset expiresAt, DateTimeOffset now) =>
         status != BiometricEstados.Aprobado && expiresAt < now
             ? BiometricEstados.Expirado
@@ -1308,11 +1322,12 @@ internal sealed partial class ProcedureInstanceRepository(
                 -- Filtra por el estado EFECTIVO (el mismo que se pinta y se cuenta): una validación no
                 -- aprobada con el enlace vencido es "expirada" aunque en base siga enviada o en proceso.
                 -- Con el estado crudo, "Expirado" no encontraba filas que en pantalla decían Expirado.
-                WHERE ({5}::text IS NULL
+                -- {5} es una lista: «En proceso» de la franja de Identidad pide enviado + en_proceso.
+                WHERE ({5}::text[] IS NULL
                        OR (CASE
                              WHEN status <> 'aprobado' AND expires_at < {14} THEN 'expirado'
                              ELSE status
-                           END) = {5})
+                           END) = ANY({5}::text[]))
                   AND ({6}::timestamptz IS NULL OR created_at >= {6})
                   AND ({7}::timestamptz IS NULL OR created_at <= {7})
                   AND (
@@ -1403,7 +1418,7 @@ internal sealed partial class ProcedureInstanceRepository(
         var docNumber = string.IsNullOrWhiteSpace(filter?.DocumentNumber)
             ? null
             : EscapeLike(DocumentCanonicalNormalization.NormalizePart(filter!.DocumentNumber));
-        var status = string.IsNullOrWhiteSpace(filter?.Status) ? null : filter!.Status!.Trim().ToLowerInvariant();
+        var status = EstadosDelFiltro(filter?.Status);
         var vigencia = string.IsNullOrWhiteSpace(filter?.VigenciaEstado)
             ? null
             : filter!.VigenciaEstado!.Trim().ToLowerInvariant();
@@ -1595,12 +1610,11 @@ internal sealed partial class ProcedureInstanceRepository(
 
         if (filter is not null)
         {
-            if (!string.IsNullOrWhiteSpace(filter.Status))
+            if (EstadosDelFiltro(filter.Status) is { } estados)
             {
-                // Estado EFECTIVO, igual que el CASE de la consulta Npgsql.
-                var st = filter.Status.Trim();
+                // Estado EFECTIVO, igual que el CASE de la consulta Npgsql; acepta varios separados por coma.
                 groups = groups
-                    .Where(g => string.Equals(EstadoEfectivo(g.Status, g.ExpiresAt, now), st, StringComparison.OrdinalIgnoreCase))
+                    .Where(g => estados.Contains(EstadoEfectivo(g.Status, g.ExpiresAt, now).ToLowerInvariant()))
                     .ToList();
             }
 
@@ -1817,21 +1831,23 @@ internal sealed partial class ProcedureInstanceRepository(
             query = query.Where(v => EF.Functions.ILike(v.DocumentNumber, $"%{term}%", LikeEscapeChar));
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Status))
+        if (EstadosDelFiltro(filter.Status) is { } estados)
         {
-            var estado = filter.Status.Trim().ToLower();
-            if (estado == BiometricEstados.Expirado)
+            // Varios estados separados por coma (p. ej. «enviado,en_proceso»); expirado conserva su regla.
+            var otros = estados.Where(e => e != BiometricEstados.Expirado).ToArray();
+            if (estados.Contains(BiometricEstados.Expirado))
             {
                 // AC3: expirado incluye estado persistido + flag expired calculado (no aprobada y vencida).
                 // HU #13286: una fila manual no aprobada con el enlace de 24 h vencido también cuenta como expirada
                 // (aceptado: es solo presentación; ningún worker la toca y no genera alertas).
                 query = query.Where(v =>
                     v.Status == BiometricEstados.Expirado
-                    || (v.Status != BiometricEstados.Aprobado && v.ExpiresAt < now));
+                    || (v.Status != BiometricEstados.Aprobado && v.ExpiresAt < now)
+                    || otros.Contains(v.Status.ToLower()));
             }
             else
             {
-                query = query.Where(v => v.Status.ToLower() == estado);
+                query = query.Where(v => otros.Contains(v.Status.ToLower()));
             }
         }
 
