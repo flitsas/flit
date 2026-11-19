@@ -37,7 +37,7 @@ const dinero = {
     ],
     exigible: m(40, 130_000_000),
     noExigible: m(2, 900_000),
-    cobroCoactivo: m(0, 0),
+    cobroCoactivo: m(3, 2_500_000),
     descuento: { d50: { ...m(5, 2_000_000), ahorroEstimado: 1_000_000 }, d25: { ...m(0, 0), ahorroEstimado: 0 } },
     organismos: [{ organismoId: "o1", nombre: "Secretaría de Movilidad de Bogotá", cantidad: 42, valor: 130_900_000, exigible: 130_000_000 }],
     pagado: { cantidad: 2, total: 1_208_200, cc: 0, pc: 604_100, bc: 604_100 },
@@ -88,6 +88,12 @@ describe("Inicio de Comparendos", () => {
     expect(screen.getByTestId("frente-vencidos").getAttribute("href")).toBe("/bandeja?estadoLegal=Vencido");
     expect(apiFetch.mock.calls.filter(([ruta]) => ruta === "/comparendos/contadores")).toHaveLength(0);
     expect(document.body.textContent).not.toMatch(/\bAPI\b/);
+    // El title no tapa el nombre accesible: cada enlace dice qué frente es (MAIA).
+    expect(screen.getByTestId("frente-vencidos").getAttribute("aria-label")).toMatch(/^Vencidos: 10 comparendos · \$\s3\.800\.000\. Se pasó el plazo de gestión$/);
+    const coactivo = screen.getByRole("link", { name: /^En cobro coactivo: 3 comparendos · \$\s2\.500\.000/ });
+    expect(coactivo.getAttribute("href")).toBe("/bandeja?cobroCoactivo=true");
+    // La lectura accesible del gráfico por organismo separa lo cobrable de lo caducado (valor − exigible).
+    expect(screen.getByText(/^Secretaría de Movilidad de Bogotá: Se puede cobrar \$\s130\.000\.000, Caducado o prescrito \$\s900\.000$/)).toBeTruthy();
   });
 
   it("el SuperAdmin elige una empresa antes de ver nada", async () => {
