@@ -214,7 +214,8 @@ function Contenido() {
         />
       )}
       {listo && veBandeja && operacion.estado === "loading" && <Cargador />}
-      {o && <OperacionInicio o={o} empresa={empresaQuery} />}
+      {/* listo: al volver a «Todas», useCarga conserva los datos de la empresa anterior y no deben verse. */}
+      {listo && o && <OperacionInicio o={o} empresa={empresaQuery} />}
       {conDinero && dinero.datos && <DineroInicio datos={dinero.datos} />}
     </section>
   );

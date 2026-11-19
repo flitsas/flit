@@ -77,9 +77,9 @@ export function OperacionInicio({ o, empresa }: { o: Operacion; empresa: string 
               etiqueta: <span className="font-semibold tracking-wide">{x.placa}</span>,
               valor: x.cantidad,
               cifra: comparendos(x.cantidad),
-              detalle: `Ante ${n(x.organismos)} ${x.organismos === 1 ? "organismo" : "organismos"}${conPesos(x.valor)}`,
+              detalle: `${x.organismos === 0 ? "Organismo sin identificar" : `Ante ${n(x.organismos)} ${x.organismos === 1 ? "organismo" : "organismos"}`}${conPesos(x.valor)}`,
               href: hrefBandeja({ placas: x.placa }, { empresa }),
-              ariaLabel: `${x.placa}: ${comparendos(x.cantidad)} ante ${n(x.organismos)} organismos${x.valor === null ? "" : `, por un valor de ${formatoPesos(x.valor)}`}. Ver en la bandeja`,
+              ariaLabel: `${x.placa}: ${comparendos(x.cantidad)}${x.organismos === 0 ? "" : ` ante ${n(x.organismos)} ${x.organismos === 1 ? "organismo" : "organismos"}`}${x.valor === null ? "" : `, por un valor de ${formatoPesos(x.valor)}`}. Ver en la bandeja`,
             }))}
           />
         </PanelInicio>
@@ -110,6 +110,7 @@ export function OperacionInicio({ o, empresa }: { o: Operacion; empresa: string 
                     </>
                   ),
                   valor: i.cantidad,
+                  titulo: `${i.codigo} ${i.descripcion}`,
                   cifra: `${n(i.cantidad)}${conPesos(i.valor)}`,
                 }))}
               />
@@ -154,7 +155,7 @@ export function OperacionInicio({ o, empresa }: { o: Operacion; empresa: string 
 
       <PanelInicio
         titulo="Derechos de petición por organismo"
-        subtitulo="Los que más DP han recibido: cuántos salieron favorables y cuánto tardan en responder."
+        subtitulo="Todo lo enviado, también de comparendos ya pagados o cerrados: cuántos salieron favorables y cuánto tardan en responder."
         icono="documento"
         data-testid="dp-organismos"
       >

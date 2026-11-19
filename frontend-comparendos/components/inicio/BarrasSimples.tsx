@@ -14,6 +14,8 @@ export interface FilaBarra {
   href?: string;
   /** Nombre accesible del enlace (la etiqueta sola no dice la cifra). */
   ariaLabel?: string;
+  /** Texto completo cuando la etiqueta se corta a dos líneas (descripciones largas de infracciones). */
+  titulo?: string;
 }
 
 /**
@@ -30,7 +32,9 @@ export function BarrasSimples({ filas, color = "var(--kit-azul)", vacio }: { fil
         const contenido = (
           <>
             <span className="flex items-baseline justify-between gap-3">
-              <span className="min-w-0 text-sm font-medium text-[color:var(--di-text-primary)]">{f.etiqueta}</span>
+              <span title={f.titulo} className="line-clamp-2 min-w-0 text-sm font-medium text-[color:var(--di-text-primary)]">
+                {f.etiqueta}
+              </span>
               <span className="shrink-0 text-sm font-semibold tabular-nums text-[color:var(--di-text-primary)]">{f.cifra}</span>
             </span>
             {f.detalle && <span className="text-xs text-[color:var(--di-text-tertiary)]">{f.detalle}</span>}

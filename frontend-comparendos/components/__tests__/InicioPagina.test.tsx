@@ -124,7 +124,7 @@ describe("Inicio de Comparendos", () => {
     expect(within(screen.getByTestId("antiguedad")).getByRole("link", { name: /^Menos de 30 días: 7 comparendos\. Ver en la bandeja$/ }).getAttribute("href")).toBe(
       "/bandeja?pagado=false&imposicionDesde=2026-10-20",
     );
-    expect(screen.getByRole("button", { name: /^Sin gestión: 20 comparendos\. Ver en la bandeja$/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Sin procesar: 20 comparendos\. Ver en la bandeja$/ })).toBeTruthy();
     expect(screen.getByTestId("dp-organismos").textContent).toMatch(/1 de 4 favorables/);
     expect(screen.queryByText(/\$/)).toBeNull();
     // Un frente en cero no lleva a una bandeja vacía, y sin enlace no lleva aria-label (el contenido se lee solo).

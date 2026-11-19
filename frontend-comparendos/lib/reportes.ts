@@ -309,9 +309,12 @@ export interface RespuestaOperacion {
   operacion: Operacion;
 }
 
-/** Pasos del embudo de gestión: la clave de estadoProceso de la bandeja y cómo se dice. */
+/**
+ * Pasos del embudo de gestión: la clave de estadoProceso de la bandeja y cómo se dice. «Sin procesar» (y no «Sin
+ * gestión») porque es otro filtro que el frente «Sin gestión» de «Para hoy», y así se llama en la bandeja al abrirlo.
+ */
 export const PASOS_GESTION: Record<string, string> = {
-  SinProcesar: "Sin gestión",
+  SinProcesar: "Sin procesar",
   DerechoPeticion: "Con derecho de petición",
   RespuestaDesfavorable: "Respuesta desfavorable",
   RespuestaFavorable: "Respuesta favorable",
