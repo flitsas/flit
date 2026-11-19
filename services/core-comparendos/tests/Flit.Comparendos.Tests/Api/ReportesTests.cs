@@ -157,4 +157,22 @@ public sealed class ReportesTests(ApiConFuente api) : IClassFixture<ApiConFuente
         correo.Destinatarios.Should().Contain("gerencia@cliente.test").And.Contain("cuentas@flit.test");
         correo.Asunto.Should().Contain("Cierre semanal").And.Contain("5 de octubre de 2026");
     }
+
+    [Fact]
+    public async Task Correos20_El_cierre_de_FLIT_lleva_tarjeta_y_boton_y_el_de_Renting_sigue_con_su_tabla_y_enlace_sin_rastro_de_FLIT()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await using var scope = api.App.Services.CreateAsyncScope();
+        var reportes = scope.ServiceProvider.GetServices<IEjecutorTrabajo>().OfType<ReportesAutomaticos>().Single();
+        var alcance = new Alcance(Guid.NewGuid(), null, new DateOnly(2026, 9, 28), new DateOnly(2026, 10, 4));
+
+        var flit = await reportes.ArmarAsync(alcance, "Gestora de Ejemplo S.A.S.", semanal: true, ct, ConjuntoPlantillas.Flit);
+        flit.Should().Contain("flit-banner-correo.png").And.Contain("border-radius:12px;box-shadow").And.Contain("linear-gradient").And.Contain("Ver el dashboard");
+
+        var renting = await reportes.ArmarAsync(alcance, "Gestora de Ejemplo S.A.S.", semanal: true, ct, ConjuntoPlantillas.Renting);
+        renting.Should().Contain("renting-cabecera-dp.jpg").And.Contain("border-bottom:1px solid #EEF1F6").And.Contain("/reportes\">Ver el dashboard</a>");
+        renting.Should().NotContain("box-shadow").And.NotContain("linear-gradient");
+        renting.ToLowerInvariant().Should().NotContain("flit", "D9: el cierre de Renting no lleva rastro de FLIT");
+    }
 }
