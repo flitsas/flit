@@ -404,3 +404,11 @@ function base64UrlDecode(value: string): string {
 
   return Buffer.from(padded, "base64").toString("utf8");
 }
+
+/** Permiso para gestionar la contingencia de proveedor RUNT (Épica #14644, HU #14649). Sembrado solo para el Super Admin FLIT. */
+export const RUNT_CONTINGENCY_MANAGE_PERMISSION = "runt_contingency.manage";
+
+/** Puede ver y editar Plataforma → Contingencia de proveedor RUNT: permiso `runt_contingency.manage` o SuperAdmin. */
+export function canManageRuntContingency(payload: JwtPayload | null): boolean {
+  return isSuperAdmin(payload) || hasPermission(payload, RUNT_CONTINGENCY_MANAGE_PERMISSION);
+}

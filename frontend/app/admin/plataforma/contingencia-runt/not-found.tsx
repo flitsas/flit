@@ -1,0 +1,53 @@
+import Link from "next/link";
+import { Icono } from "@flit/ui/Icono";
+
+/**
+ * 404 del segmento `/admin/plataforma/contingencia-runt` (Plataforma → Contingencia RUNT).
+ * Patrón AlertCard / OtUnderConstructionState: tarjeta blanca dentro del Shell.
+ * Lo reciben tanto una URL inexistente como un usuario sin el permiso de la pestaña
+ * (HU #14649, AC6): a quien no tiene el módulo no se le confirma que existe.
+ */
+export default function AdminContingenciaRuntNotFound() {
+  return (
+    <div className="mx-auto flex max-w-2xl flex-col px-4 py-10 md:px-6">
+      <div
+        role="status"
+        aria-live="polite"
+        data-testid="admin-contingencia-runt-not-found"
+        className="flex flex-col items-center justify-center gap-3 rounded-2xl border border-border bg-card px-6 py-14 text-center"
+      >
+        <div
+          className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--badge-danger-bg)]"
+          style={{ color: "var(--destructive)" }}
+          aria-hidden="true"
+        >
+          <Icono nombre="documento" className="h-6 w-6" />
+        </div>
+        <p
+          className="text-3xl font-bold tracking-tight text-muted-foreground"
+          aria-hidden="true"
+        >
+          404
+        </p>
+        <h1 className="text-base font-semibold text-flit-primary">
+          Contingencia RUNT no disponible
+        </h1>
+        <p className="max-w-md text-sm text-muted-foreground">
+          No tienes acceso a esta sección o la ruta no existe. Vuelve al inicio o elige otra
+          opción del menú Plataforma.
+        </p>
+        <span className="sr-only">
+          404. Contingencia RUNT no disponible. No tienes acceso a esta sección o la ruta no
+          existe.
+        </span>
+        <Link
+          href="/"
+          className="mt-2 rounded-xl px-5 py-2.5 text-sm font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+          style={{ background: "var(--gradient-action)" }}
+        >
+          Volver al inicio
+        </Link>
+      </div>
+    </div>
+  );
+}

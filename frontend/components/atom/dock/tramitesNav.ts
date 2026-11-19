@@ -141,6 +141,14 @@ export function tramitesNav(ctx: TramitesNavContext): NavCatalog {
           icon: iconoComo("check"),
           ...navGatingFor("admin-confirmacion-runt"),
         },
+        // Épica #14644 (HU #14649) — por permiso (`runt_contingency.manage`); hijo de Plataforma, hereda su grupo del dock.
+        {
+          key: "admin-contingencia-runt",
+          label: "Contingencia RUNT",
+          href: "/admin/plataforma/contingencia-runt",
+          icon: iconoComo("alerta"),
+          ...navGatingFor("admin-contingencia-runt"),
+        },
         superAdmin("admin-mandatos", "Mandatos", "/admin/plataforma/mandatos", iconoComo("firma")),
         superAdmin("admin-fur", "FUR", "/admin/plataforma/fur", iconoComo("documento")),
         superAdmin("admin-notificaciones", "Notificaciones", "/admin/plataforma/notificaciones", iconoComo("campana")),
