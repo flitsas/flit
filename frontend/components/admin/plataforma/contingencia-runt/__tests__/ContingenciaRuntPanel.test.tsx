@@ -7,6 +7,7 @@ import { ToastProvider } from "@/components/admin/Toast";
 import { ConsultaProvidersSection } from "@/components/admin/companies/ConsultaProvidersSection";
 import { formFromSettings } from "@/components/admin/companies/settingsForm";
 import { evaluateAdminAccess } from "@/lib/auth/guard";
+import { canAccess, moduleRequirement } from "@/lib/nav/module-access";
 import { canManageRuntContingency, type JwtPayload } from "@/lib/auth/jwt";
 import { ApiError } from "@/lib/api/types";
 import type { RuntContingencyItem } from "@/lib/api/admin-runt-contingency";
@@ -148,6 +149,28 @@ describe("ContingenciaRuntPanel (HU #14649)", () => {
     expect(motivo).toHaveAttribute("maxlength", "500");
   });
 
+  it("AC3 · bajo el motivo hay una ayuda de Habeas Data", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const dialogo = await abrirEditar(user, "Conductor");
+    const ayuda = within(dialogo).getByText("No incluyas datos personales.");
+    expect(within(dialogo).getByLabelText(/Motivo/).getAttribute("aria-describedby")).toContain(ayuda.id);
+  });
+
+  it("AC2 · la confirmación es una región viva con título y descripción, y recibe el foco", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+    const dialogo = await abrirEditar(user, "Conductor");
+    await user.selectOptions(within(dialogo).getByLabelText("Proveedor"), "verifik_conductor");
+    await user.type(within(dialogo).getByLabelText(/Motivo/), "Kyverum caído");
+    await user.click(within(dialogo).getByRole("button", { name: "Guardar" }));
+
+    const region = await screen.findByRole("region", { name: "Confirma el cambio" });
+    expect(region).toHaveAttribute("aria-live", "polite");
+    expect(region).toHaveAccessibleDescription(/¿Consultar Conductor con Verifik?/);
+    await waitFor(() => expect(region).toHaveFocus());
+  });
+
   it("AC3 · el selector del conductor solo ofrece los proveedores de conductor", async () => {
     const user = userEvent.setup();
     renderPanel();
@@ -227,6 +250,18 @@ describe("ContingenciaRuntPanel (HU #14649)", () => {
 describe("ContingenciaRuntPanel · acceso (HU #14649 AC6)", () => {
   const token = (payload: Record<string, unknown>) =>
     `${Buffer.from(JSON.stringify({ alg: "none" })).toString("base64url")}.${Buffer.from(JSON.stringify(payload)).toString("base64url")}.`;
+
+  it("AC6 · la regla es la del backend (SuperAdmin pasa siempre; el resto necesita el permiso), igual en la UI y en la ruta", () => {
+    const sa = { role: "SuperAdmin" } as JwtPayload;
+    const conPermiso = { role: "AdminCompany", permissions: ["runt_contingency.manage"] } as unknown as JwtPayload;
+    const sinPermiso = { role: "AdminCompany", permissions: [] } as unknown as JwtPayload;
+    const ruta = (p: JwtPayload) =>
+      canAccess({ claims: p, accessibleCodes: [] }, moduleRequirement("admin-contingencia-runt"));
+    for (const [p, esperado] of [[sa, true], [conPermiso, true], [sinPermiso, false]] as const) {
+      expect(canManageRuntContingency(p)).toBe(esperado);
+      expect(ruta(p)).toBe(esperado);
+    }
+  });
 
   it("AC6 · solo SuperAdmin o el permiso runt_contingency.manage ven la sección", () => {
     expect(canManageRuntContingency({ role: "SuperAdmin" } as JwtPayload)).toBe(true);
