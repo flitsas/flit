@@ -41,7 +41,7 @@ internal static class AdminReenviarValidacionEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var command = new AdminReenviarValidacionIdentidadCommand(
-                id, validationId, tenantId.Value, request?.Email, ResolveUserId(http.User));
+                id, validationId, null, null, tenantId.Value, request?.Email, ResolveUserId(http.User));
             var (result, error, errorDetail, _) = await handler.HandleAsync(command, ct);
 
             if (error is null)
@@ -110,7 +110,7 @@ internal static class AdminReenviarValidacionEndpoints
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var items = (request?.Items ?? [])
-                .Select(i => new AdminReenviarValidacionLoteItem(i.ValidationId, i.Email))
+                .Select(i => new AdminReenviarValidacionLoteItem(i.ValidationId, i.PartyRole, i.Ordinal, i.Email))
                 .ToList();
             var (result, error, errorDetail) = await handler.HandleAsync(
                 new AdminReenviarValidacionesLoteCommand(id, tenantId.Value, items, ResolveUserId(http.User)), ct);
@@ -127,10 +127,12 @@ internal static class AdminReenviarValidacionEndpoints
             return Results.Ok(new AdminReenviarValidacionesLoteResponse(result!.Items
                 .Select(i => i.Error is null
                     ? new AdminReenviarValidacionLoteItemResponse(
-                        i.ValidationId, true, i.Result!.Queued, i.Result.Queued ? null : i.Result.CaptureUrl,
+                        i.ValidationId, i.PartyRole, i.Ordinal, true, i.Result!.Queued,
+                        i.Result.Queued ? null : i.Result.CaptureUrl,
                         i.Result.EmailActualizado, i.Result.Validation.Email, null, null)
                     : new AdminReenviarValidacionLoteItemResponse(
-                        i.ValidationId, false, false, null, false, null, i.Error, DescribirError(i.Error, i.ErrorDetail).Detail))
+                        i.ValidationId, i.PartyRole, i.Ordinal, false, false, null, false, null,
+                        i.Error, DescribirError(i.Error, i.ErrorDetail).Detail))
                 .ToList()));
         })
         .RequirePermission(AdminTramiteAuthorization.ReenviarValidacionSlug)
@@ -184,17 +186,27 @@ internal sealed record AdminReenviarValidacionRequest(string? Email);
 /// <summary>
 /// Body de <c>POST /api/v1/admin/tramites/{id}/validaciones-identidad/reenviar</c> (HU #13821): una entrada
 /// por persona; <c>Email</c> opcional por persona, misma semántica que el reenvío individual.
+/// <para>
+/// HU #14627 — <c>ValidationId</c> es OPCIONAL: cuando el cuadro lista a una persona SIN fila propia
+/// (<c>status: "no_iniciada"</c>), el item la identifica por <c>PartyRole</c>/<c>Ordinal</c> en su lugar y
+/// el backend la envía por primera vez.
+/// </para>
 /// </summary>
 internal sealed record AdminReenviarValidacionesLoteRequest(IReadOnlyList<AdminReenviarValidacionLoteItemRequest>? Items);
 
-internal sealed record AdminReenviarValidacionLoteItemRequest(Guid ValidationId, string? Email);
+internal sealed record AdminReenviarValidacionLoteItemRequest(Guid? ValidationId, string? PartyRole, int? Ordinal, string? Email);
 
 /// <summary>
 /// Resultado por persona. <c>CaptureUrl</c> solo cuando el enlace ya existe (no en cola). <c>Mensaje</c> es el
-/// texto para el usuario cuando <c>Ok</c> es false.
+/// texto para el usuario cuando <c>Ok</c> es false. <c>ValidationId</c> es el id REAL (el existente, o el
+/// recién creado si la solicitud llegó sin uno — HU #14627); puede ser <c>null</c> si falló antes de crear la
+/// fila. <c>PartyRole</c>/<c>Ordinal</c> hacen eco del item original para que el cliente empareje la
+/// respuesta con la fila "sin iniciar" aunque no trajera <c>ValidationId</c> en la solicitud.
 /// </summary>
 internal sealed record AdminReenviarValidacionLoteItemResponse(
-    Guid ValidationId,
+    Guid? ValidationId,
+    string? PartyRole,
+    int? Ordinal,
     bool Ok,
     bool Queued,
     string? CaptureUrl,

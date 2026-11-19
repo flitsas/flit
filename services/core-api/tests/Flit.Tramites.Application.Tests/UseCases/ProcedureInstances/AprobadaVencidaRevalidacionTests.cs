@@ -174,13 +174,16 @@ public sealed class AprobadaVencidaRevalidacionTests
     {
         var ct = TestContext.Current.CancellationToken;
         var (instance, vencida) = TramiteConAprobadaVencida(TramiteEstado.Entregado);
+        var events = Substitute.For<IIdentityValidationEventPublisher>();
+        var audit = Substitute.For<IIdentityValidationAuditLog>();
+        var protector = new FakeWebhookSecretProtector();
+        var kyverumVerify = new IniciarKyverumVerifyHandler(_repo, _kyverum, protector, events, audit);
         var handler = new AdminReenviarValidacionIdentidadHandler(
             _repo, _kyverum, new BiometricsProviderOptions { Provider = BiometricProviders.Kyverum },
-            new FakeWebhookSecretProtector(), Substitute.For<IIdentityValidationEventPublisher>(),
-            Substitute.For<IIdentityValidationAuditLog>());
+            protector, events, audit, kyverumVerify);
 
         var (result, error, _, _) = await handler.HandleAsync(
-            new AdminReenviarValidacionIdentidadCommand(instance.Id, vencida.Id, _tenantId, null, Guid.NewGuid()), ct);
+            new AdminReenviarValidacionIdentidadCommand(instance.Id, vencida.Id, null, null, _tenantId, null, Guid.NewGuid()), ct);
 
         error.Should().Be(AdminReenviarValidacionIdentidadHandler.IdentidadAprobada);
         result.Should().BeNull();
