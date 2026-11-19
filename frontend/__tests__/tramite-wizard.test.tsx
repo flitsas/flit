@@ -716,13 +716,13 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await screen.findByText('Confirmar radicación');
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
-    await waitFor(() =>
-      expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
-    );
     // ADR-0059: el destino (Entregado / Preasignación) lo decide el backend en `/submit`; el
-    // wizard ya no pide `entregado` a secas.
+    // wizard ya no pide `entregado` a secas. Bug #14631 (punto 3): tampoco pasa a Preparado por su
+    // cuenta ni compone el consolidado: `/submit` encadena borrador→preparado→radicación.
     await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
-    expect(mocks.transitionInstance).not.toHaveBeenCalledWith('inst-1', 'entregado');
+    expect(mocks.transitionInstance).not.toHaveBeenCalled();
+    expect(mocks.generarFur).toHaveBeenCalledWith('inst-1');
+    expect(mocks.generarConsolidado).not.toHaveBeenCalled();
     expect(mocks.finalizeDraft).not.toHaveBeenCalled();
 
     // Flujo del diseño: al radicar se abre el acuse de "trámite completado" en vez de salir con
@@ -735,7 +735,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await waitFor(() => expect(onExit).toHaveBeenCalled());
   });
 
-  it('N 03 — fallo de generación de docs tras preparado bloquea la entrega', async () => {
+  it('Bug #14631 — un fallo al generar el FUR no bloquea en el cliente: decide /submit (sin Preparado a medias)', async () => {
     const BORRADOR_COMPLETO: WizardState = {
       ...TRASPASO_WIZARD,
       canSubmit: true,
@@ -743,46 +743,24 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
     };
     mocks.getWizardState.mockResolvedValue(BORRADOR_COMPLETO);
-    mocks.getInstance.mockResolvedValue({
-      id: 'inst-1',
-      status: 'borrador',
-      fieldValues: [
-        {
-          formFieldId: null,
-          fieldKey: 'transit_office_code',
-          valueText: '11001',
-          valueJson: null,
-          source: 'runt',
-        },
-      ],
-      actors: [],
-      statusHistory: [],
-    });
-    // Pre-gen falla; al radicar: preparado sí, pero sin consolidado no se entrega.
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    // El FUR falla en el cliente; `/submit` lo rechaza con su gate y el trámite NO pasó a Preparado.
     mocks.generarFur.mockRejectedValue(new Error('fur_unavailable'));
-    mocks.generarConsolidado.mockRejectedValue(new Error('fur_unavailable'));
+    mocks.submitInstance.mockRejectedValue(new Error('Debe generar el FUR antes de radicar.'));
 
     const onExit = vi.fn();
     const user = userEvent.setup();
-    render(
-      <TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={onExit} />,
-    );
-    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
-    await user.click(screen.getByRole('button', { name: /^Paso 6: Resumen/ }));
-
-    const radicar = await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ });
-    expect(radicar).toBeEnabled();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={onExit} />);
+    const radicar = await screen.findByRole('button', { name: /Finalizar y enviar trámite/ });
+    await waitFor(() => expect(radicar).toBeEnabled());
     await user.click(radicar);
     await screen.findByText('Confirmar radicación');
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
-    await waitFor(() =>
-      expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
-    );
-    expect(mocks.submitInstance).not.toHaveBeenCalled();
-    expect(
-      await screen.findByText(/No se puede radicar/i),
-    ).toBeInTheDocument();
+    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.transitionInstance).not.toHaveBeenCalled();
+    expect(mocks.generarConsolidado).not.toHaveBeenCalled();
+    expect(await screen.findByText(/Debe generar el FUR antes de radicar/i)).toBeInTheDocument();
     expect(onExit).not.toHaveBeenCalled();
   });
 
@@ -810,10 +788,9 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await screen.findByText('Confirmar radicación');
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
-    await waitFor(() => {
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, false);
-    });
     await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    // Bug #14631 (punto 3): el consolidado no se compone en el navegador antes de radicar.
+    expect(mocks.generarConsolidado).not.toHaveBeenCalled();
     expect(mocks.transitionInstance).not.toHaveBeenCalledWith('inst-1', 'entregado');
 
     // Acuse de radicación del diseño: la salida al listado la dispara el CTA, no la transición.
@@ -827,35 +804,29 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(onExit).toHaveBeenCalledTimes(1);
   });
 
-  it('Bug #14631 — si el consolidado falla, el reintento NO regenera el FUR ni fuerza el consolidado', async () => {
-    const PREPARADO: WizardState = {
+  it('Bug #14631 — si /submit falla desde borrador, el wizard relee el estado del trámite', async () => {
+    // `/submit` pudo dejar el trámite en Preparado antes de que fallara la radicación (gate del OT).
+    const BORRADOR_COMPLETO: WizardState = {
       ...TRASPASO_WIZARD,
       canSubmit: true,
       blockers: [],
-      status: 'preparado',
-      allowedTransitions: ['entregado'],
       steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
     };
-    mocks.getWizardState.mockResolvedValue(PREPARADO);
-    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'preparado', draftFinalizedAt: null, fieldValues: [], actors: [] });
-    mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'entregado' });
-    // Primer intento: el gateway corta (504). El segundo encuentra el consolidado ya listo.
-    mocks.generarConsolidado
-      .mockRejectedValueOnce(new Error('El servicio no está disponible en este momento.'))
-      .mockResolvedValueOnce({ incompleto: false });
+    mocks.getWizardState.mockResolvedValue(BORRADOR_COMPLETO);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'borrador', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    mocks.submitInstance.mockRejectedValue(new Error('El trámite está bloqueado por una regla OT activa.'));
     const user = userEvent.setup();
     render(<TramiteWizard existingInstanceId="inst-1" onExit={vi.fn()} />);
-
     const radicar = await screen.findByRole('button', { name: /Finalizar y enviar trámite/ });
     await waitFor(() => expect(radicar).toBeEnabled());
+    const llamadasAntes = mocks.getInstance.mock.calls.length;
     await user.click(radicar);
     await screen.findByText('Confirmar radicación');
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
-    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
-    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(2);
-    expect(mocks.generarConsolidado).not.toHaveBeenCalledWith('inst-1', undefined, true);
-    expect(mocks.generarFur).toHaveBeenCalledTimes(1);
+    expect(await screen.findByText(/bloqueado por una regla OT activa/i)).toBeInTheDocument();
+    await waitFor(() => expect(mocks.getInstance.mock.calls.length).toBeGreaterThan(llamadasAntes));
+    expect(mocks.transitionInstance).not.toHaveBeenCalled();
   });
 
   it('ADR-0059 — Ruta Larga: si /submit deja el trámite en `preasignacion`, el acuse lo dice', async () => {
@@ -884,7 +855,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(screen.getByText(/La placa la asigna el organismo de tránsito/)).toBeInTheDocument();
   });
 
-  it('N 03 — Radicar bloquea si el consolidado queda incompleto', async () => {
+  it('N 03 — Radicar bloquea si el checklist tiene obligatorios sin cargar (sin componer el consolidado)', async () => {
     const PREPARADO: WizardState = {
       ...TRASPASO_WIZARD,
       canSubmit: true,
@@ -902,11 +873,15 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       actors: [],
     });
     mocks.getPrenda.mockResolvedValue([]);
-  mocks.generarConsolidado.mockResolvedValue({
-      document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
-      regenerado: true,
-      incompleto: true,
-      documentosFaltantes: ['fur', 'impronta'],
+    // Bug #14631 (punto 3): la completitud sale del checklist (una lectura), no del consolidado.
+    mocks.getChecklist.mockResolvedValue({
+      items: [
+        { key: 'soat', label: 'SOAT', obligatorio: true, docTipo: 'soat', satisfied: false },
+        { key: 'impronta', label: 'Impronta', obligatorio: true, docTipo: 'impronta', satisfied: false },
+        { key: 'otro', label: 'Otro', obligatorio: false, docTipo: 'otro', satisfied: false },
+      ],
+      faltanObligatorios: 2,
+      completo: false,
     });
     const onExit = vi.fn();
     const user = userEvent.setup();
@@ -917,9 +892,13 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
     expect(
-      await screen.findByText(/No se puede radicar: Expediente incompleto/i),
+      await screen.findByText(/No se puede radicar: Expediente incompleto: faltan soat\./i),
     ).toBeInTheDocument();
+    // La impronta obligatoria se generó al radicar (generación habilitada): ya no cuenta como faltante.
+    expect(mocks.generarImpronta).toHaveBeenCalledWith('inst-1');
     expect(mocks.transitionInstance).not.toHaveBeenCalled();
+    expect(mocks.submitInstance).not.toHaveBeenCalled();
+    expect(mocks.generarConsolidado).not.toHaveBeenCalled();
     expect(onExit).not.toHaveBeenCalled();
   });
 
@@ -959,7 +938,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       await radicar();
       await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
       expect(mocks.generarFur).toHaveBeenCalled();
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, false);
+      expect(mocks.generarConsolidado).not.toHaveBeenCalled();
       expect(mocks.generarImpronta).not.toHaveBeenCalled();
     });
 
@@ -998,12 +977,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
 
     it('AC3 — impronta obligatoria sin cargar: radicar queda bloqueado y el mensaje nombra la impronta', async () => {
       preparado({ improntaGeneracionHabilitada: false });
-      mocks.generarConsolidado.mockResolvedValue({
-        document: { attachmentId: 'c-1', tipo: 'consolidado', filename: 'c.pdf', sha256: 'abc' },
-        regenerado: true,
-        incompleto: true,
-        documentosFaltantes: ['impronta'],
-      });
+      checklistImpronta(true);
       await radicar();
       expect(
         await screen.findByText(/No se puede radicar: Expediente incompleto: faltan impronta/i),
@@ -1021,7 +995,8 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
     };
     mocks.getWizardState.mockResolvedValue(BORRADOR_COMPLETO);
-    mocks.transitionInstance.mockRejectedValue(
+    // Bug #14631 (punto 3): el gate de preparación lo responde `/submit` (ya no hay transición aparte).
+    mocks.submitInstance.mockRejectedValue(
       new Error('La validación de identidad no está aprobada o no está vigente.'),
     );
     const user = userEvent.setup();

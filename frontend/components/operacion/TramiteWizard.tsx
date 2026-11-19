@@ -156,6 +156,7 @@ import type {
   ActorDocumentType,
   ActorRol,
   BiometricParte,
+  ChecklistView,
   FieldValue,
   FieldValueInput,
   InstanceStatus,
@@ -1450,84 +1451,63 @@ export function TramiteWizard(props: Props) {
       .catch(() => {});
   }, [instanceId]);
 
-  // Feature #11066 — genera FUR/impronta/consolidado sin bloquear la UI de negocio.
-  // Reintenta ante fallos transitorios o consolidado incompleto (p.ej. FUR aún en vuelo).
-  // Devuelve mensaje de error o null si el consolidado quedó completo.
-  const ensureExpedienteDocs = useCallback(async (id: string): Promise<string | null> => {
-    const maxAttempts = 3;
-    // En tests, backoff mínimo para no alargar la suite.
-    const retryMs =
-      typeof process !== 'undefined' && process.env.NODE_ENV === 'test' ? 10 : 1_500;
-
+  // Bug #14631 (punto 3) — antes de radicar solo se prepara lo que los gates de `/submit` exigen:
+  // el FUR (con su paquete de documentos calientes) y, si el checklist la marca obligatoria, la
+  // impronta. Son 1-2 s. El consolidado ya NO se genera aquí: componerlo en el navegador tardaba
+  // 60-150 s con el almacenamiento lento, el gateway o el usuario cortaban la espera y el trámite
+  // quedaba en Preparado sin radicar. Al radicar, el backend encola el consolidado maestro en segundo
+  // plano (HU #12796 AC1) —es el que abre el organismo— y el del gestor se reconstruye al abrirlo
+  // (camino perezoso). Quipux genera su propio maestro al encolar el envío.
+  //
+  // La completitud documental se sigue comprobando antes de radicar, pero con el checklist (una
+  // lectura) en vez del resultado del consolidado: el gate de documentos del backend solo corre al
+  // preparar, y un trámite que ya está en Preparado no lo vuelve a pasar al radicar.
+  // Devuelve el mensaje de bloqueo o null si puede radicarse.
+  const prepararRadicacion = useCallback(async (id: string): Promise<string | null> => {
     setPaqueteDocsStatus('loading');
-    let lastError: string | null = null;
-    // Bug #14631 — FUR e impronta se generan UNA vez por radicación: regenerarlos en cada reintento
-    // invalidaba el consolidado que el intento anterior pudo dejar listo en el servidor aunque el
-    // navegador ya hubiera cortado la espera, y obligaba a recomponerlo desde cero.
-    let furListo = false;
-    let improntaIntentada = false;
+    try {
+      await tramitesClient.generarFur(id);
+    } catch {
+      // Puede existir ya; si falta de verdad, `/submit` responde `fur_requerido`.
+    }
 
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    let checklist: ChecklistView | null = null;
+    try {
+      checklist = await tramitesClient.getChecklist(id);
+    } catch {
+      checklist = null; // Sin checklist no se bloquea aquí: decide el backend.
+    }
+
+    // Solo si el checklist la marca obligatoria. Opcional: el gestor la genera con el clic de la
+    // casilla; aquí un 409 o un fallo de Kyverum no debe ni intentarse.
+    let improntaGenerada = false;
+    if (improntaGeneracionRef.current && checklist && improntaObligatoriaEnChecklist(checklist.items)) {
       try {
-        if (!furListo) {
-          try {
-            await tramitesClient.generarFur(id);
-            furListo = true;
-          } catch {
-            // Puede existir ya; el consolidado lo genera en cascada si realmente falta.
-          }
-        }
-        // Solo si el checklist la marca obligatoria. Opcional: el gestor la genera con el clic
-        // de la casilla; aquí un 409 o un fallo de Kyverum no debe ni intentarse.
-        if (improntaGeneracionRef.current && !improntaIntentada) {
-          improntaIntentada = true;
-          let improntaObligatoria = false;
-          try {
-            const chk = await tramitesClient.getChecklist(id);
-            improntaObligatoria = improntaObligatoriaEnChecklist(chk.items);
-          } catch {
-            improntaObligatoria = false;
-          }
-          if (improntaObligatoria) {
-            try {
-              await tramitesClient.generarImpronta(id);
-            } catch {
-              // Best-effort: sin impronta no bloquea el consolidado en backend (HU #11017).
-            }
-          }
-        }
-        // Bug #14631 — sin `force`: el backend ya regenera cuando el expediente cambió (marcas de
-        // vigencia, ADR-0032; FUR desactualizado o faltante en cascada) y, si el consolidado sigue
-        // vigente, lo entrega sin recomponerlo. Con `force=true` cada intento volvía a generar FUR,
-        // mandato y el PDF completo, y un reintento tardaba lo mismo que el intento que falló.
-        const result = await tramitesClient.generarConsolidado(id, undefined, false);
-        if (!result.incompleto) {
-          setPaqueteDocsStatus('ready');
-          return null;
-        }
-        const faltantes = (result.documentosFaltantes ?? []).filter(Boolean).join(', ');
-        lastError = faltantes
-          ? `Expediente incompleto: faltan ${faltantes}.`
-          : 'Expediente incompleto: faltan documentos obligatorios.';
-      } catch (genErr) {
-        lastError =
-          genErr instanceof Error
-            ? genErr.message
-            : 'No se pudieron generar los documentos del expediente.';
-      }
-
-      if (attempt < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, retryMs * attempt));
+        await tramitesClient.generarImpronta(id);
+        improntaGenerada = true;
+      } catch {
+        // Best-effort: si no se pudo, el checklist la reporta faltante abajo.
       }
     }
 
-    setPaqueteDocsStatus('error');
-    return lastError ?? 'No se pudieron generar los documentos del expediente.';
+    const faltantes = (checklist?.items ?? [])
+      .filter((i) => i.obligatorio && !i.satisfied)
+      .map((i) => i.docTipo ?? i.key)
+      .filter((tipo) => !(improntaGenerada && tipo.toLowerCase() === 'impronta'));
+    if (faltantes.length > 0) {
+      setPaqueteDocsStatus('error');
+      return `Expediente incompleto: faltan ${faltantes.join(', ')}.`;
+    }
+
+    setPaqueteDocsStatus('ready');
+    return null;
   }, []);
 
-  // N 03 — Radicar trámite (un solo click): encadena APIs existentes sin cambiar backend.
-  // En borrador: borrador→preparado y luego preparado→entregado.
-  // En preparado: solo preparado→entregado (misma validación de consolidado).
+  // N 03 — Radicar trámite (un solo click). Bug #14631 (punto 3): UNA sola llamada a `/submit`, que
+  // en el backend encadena borrador→preparado (gate de preparación) y la radicación (Entregado o
+  // Preasignación; Preparado en el canal Quipux). Antes el wizard pasaba a Preparado por su cuenta,
+  // generaba el consolidado y solo entonces llamaba a `/submit`: si el consolidado fallaba o tardaba,
+  // el trámite quedaba en Preparado a medias.
   const handleRadicarTramite = async () => {
     if (!instanceId) return;
     const status = (instanceStatus ?? wizard?.status) as InstanceStatus | null;
@@ -1538,12 +1518,7 @@ export function TramiteWizard(props: Props) {
     setSubmitting(true);
     setSubmitError(null);
     try {
-      if (fromBorrador) {
-        await tramitesClient.transitionInstance(instanceId, 'preparado');
-        setInstanceStatus('preparado');
-      }
-
-      const docsError = await ensureExpedienteDocs(instanceId);
+      const docsError = await prepararRadicacion(instanceId);
       if (docsError) {
         setSubmitError(`No se puede radicar: ${docsError}`);
         setSubmitting(false);
@@ -1554,6 +1529,7 @@ export function TramiteWizard(props: Props) {
       // trámite lleva placa, Preasignación si es matrícula inicial sin placa (Ruta Larga). Pedir
       // `entregado` a secas dejaba la Ruta Larga en 422 (`transicion_requiere_placa`).
       const radicada = await tramitesClient.submitInstance(instanceId);
+      setInstanceStatus(radicada.status);
       telemetry.trackComplete();
       // Flujo del diseño: al radicar se abre el modal de trámite completado en vez de salir de
       // golpe con un toast. El gestor confirma qué quedó radicado y sale desde el CTA. La
@@ -1572,6 +1548,14 @@ export function TramiteWizard(props: Props) {
           (err instanceof Error ? err.message : 'Error al enviar el trámite'),
       );
       setSubmitting(false);
+      // Desde borrador, `/submit` pudo dejar el trámite en Preparado antes de que fallara la
+      // radicación (p. ej. un gate del OT): se relee el estado para no mostrar uno que ya no es.
+      if (fromBorrador) {
+        tramitesClient
+          .getInstance(instanceId)
+          .then((d) => setInstanceStatus(d.status ?? null))
+          .catch(() => {});
+      }
     }
   };
 
