@@ -97,6 +97,8 @@ function PortalPnContenido({ transitOfficeId }: { transitOfficeId: string }) {
       </nav>
       <PortalPnTabs
         transitOfficeId={transitOfficeId}
+        // La persona de caja solo tiene Caja: sin fila de pestañas (modo de sección única).
+        seccion={soloCaja ? "caja" : undefined}
         activeTab={activa}
         onTabChange={tabAUrl}
         reportes={soloCaja ? undefined : <OtReportesSection transitOfficeId={transitOfficeId} />}
