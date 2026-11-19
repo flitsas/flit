@@ -81,6 +81,7 @@ const operacion = (conValores: boolean) => {
       antiguedad: [
         { tramo: "Menos de 30 días", cantidad: 7, valor: v(1_000_000), desde: "2026-10-20", hasta: null },
         { tramo: "De 1 a 6 meses", cantidad: 0, valor: v(0), desde: "2026-05-19", hasta: "2026-10-19" },
+        { tramo: "Sin fecha de imposición", cantidad: 2, valor: v(500_000), desde: null, hasta: null },
       ],
       dpPorOrganismo: [{ organismoId: "o1", nombre: "Secretaría de Movilidad de Bogotá", enviados: 4, favorables: 1, respondidos: 4, diasPromedio: 12.5 }],
     },
@@ -92,6 +93,7 @@ const resumen = {
   empresas: { total: 4, activas: 3, pendientes: 1, inactivas: 0 },
   ingesta24h: { consultas: 120, conError: 0, empresasConError: 0 },
   correosFallidos7d: 2,
+  correosDesde: "2026-11-12",
   ocrPorRevisar: 5,
   dpDelMes: { enviados: 9, favorables: 2 },
   necesitanAlgo: [{ empresaId: "e2", nombre: "Renting", motivos: ["Sin representante legal", "Sin correo para respuestas"] }],
@@ -124,7 +126,10 @@ describe("Inicio de Comparendos", () => {
     expect(screen.queryByTestId("kpis-dinero")).toBeNull();
     // R2: la operación también se ve sin el módulo (pide BandejaVer), y sin pesos.
     const vehiculos = await screen.findByTestId("vehiculos");
-    expect(within(vehiculos).getByRole("link", { name: /^AAA111: 5 comparendos ante 2 organismos\. Ver en la bandeja$/ }).getAttribute("href")).toBe("/bandeja?placas=AAA111");
+    expect(within(vehiculos).getByRole("link", { name: /^AAA111: 5 comparendos ante 2 organismos\. Ver en la bandeja$/ }).getAttribute("href")).toBe("/bandeja?placas=AAA111&pagado=false");
+    // El tramo sin fecha de imposición no tiene filtro en la bandeja: sin enlace.
+    expect(within(screen.getByTestId("antiguedad")).queryByRole("link", { name: /^Sin fecha de imposición/ })).toBeNull();
+    expect(within(screen.getByTestId("antiguedad")).getByText("Sin fecha de imposición")).toBeTruthy();
     expect(within(screen.getByTestId("antiguedad")).getByRole("link", { name: /^Menos de 30 días: 7 comparendos\. Ver en la bandeja$/ }).getAttribute("href")).toBe(
       "/bandeja?pagado=false&imposicionDesde=2026-10-20",
     );
@@ -178,11 +183,35 @@ describe("Inicio de Comparendos", () => {
     expect(replace).toHaveBeenLastCalledWith("/", { scroll: false });
   });
 
+  it("el SuperAdmin que pasa de la empresa A a la B no ve la operación ni los pesos de A mientras carga B", async () => {
+    // Regresión (REX R3): useCarga conserva los datos de A mientras la clave de B no tiene respuesta.
+    sesion = { usuario: { id: "s", email: "s@flit.test", esSuperAdmin: true }, permisos: [], empresa: null };
+    busqueda = "empresa=e1";
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (ruta: string, op?: { query?: Record<string, unknown> }) => {
+      if (ruta === "/admin/empresas") return [{ id: "e1", nombre: "Empresa A" }, { id: "e2", nombre: "Empresa B" }];
+      // B nunca responde en este test: se queda cargando.
+      if (op?.query?.empresa === "e2") return new Promise(() => {});
+      return base(ruta, op);
+    });
+    render(<Inicio />);
+    expect(await screen.findByTestId("vehiculos")).toBeTruthy();
+    expect(await screen.findByTestId("kpis-dinero")).toBeTruthy();
+    expect(screen.getByText(/^42 comparendos pendientes/)).toBeTruthy();
+    fireEvent.change(await screen.findByLabelText("Empresa"), { target: { value: "e2" } });
+    await waitFor(() => expect(screen.queryByTestId("vehiculos")).toBeNull());
+    expect(screen.queryByTestId("kpis-dinero")).toBeNull();
+    expect(screen.queryByText(/^42 comparendos pendientes/)).toBeNull();
+    // Los frentes de B todavía no tienen cifra: se ven en «—», no con las de A.
+    expect(within(screen.getByTestId("frente-vencidos")).getByText("—")).toBeTruthy();
+    expect(apiFetch.mock.calls.some(([ruta, op]) => ruta === "/reportes/dinero" && op?.query?.partes === "inicio")).toBe(true);
+  });
+
   it("el SuperAdmin con «Todas» ve la salud de la plataforma y las empresas que necesitan algo", async () => {
     sesion = { usuario: { id: "s", email: "s@flit.test", esSuperAdmin: true }, permisos: [], empresa: null };
     render(<Inicio />);
     const salud = await screen.findByTestId("salud");
-    expect(within(salud).getByRole("link", { name: /^Correos fallidos o rebotados en 7 días: 2\./ }).getAttribute("href")).toBe("/mensajes?estado=Fallido");
+    expect(within(salud).getByRole("link", { name: /^Correos fallidos o rebotados en 7 días: 2\./ }).getAttribute("href")).toBe("/mensajes?estado=Fallido,Rebotado&desde=2026-11-12");
     expect(within(salud).getByText("3 de 4")).toBeTruthy();
     const necesitan = screen.getByTestId("necesitan-algo");
     expect(within(necesitan).getByRole("link", { name: /^Renting: Sin representante legal, Sin correo para respuestas\. Ir al Parametrizador$/ }).getAttribute("href")).toBe("/admin/empresas");

@@ -59,7 +59,8 @@ export function SuperAdminInicio() {
             cifra={n(r.correosFallidos7d)}
             pendiente={r.correosFallidos7d > 0}
             pie="Fallidos o rebotados"
-            href="/mensajes?estado=Fallido"
+            // Mismo criterio que la cifra: fallidos o rebotados desde la medianoche de hace 7 días (la API acepta la coma).
+            href={`/mensajes?estado=Fallido,Rebotado&desde=${r.correosDesde}`}
             enlace={Link}
             aria-label={`Correos fallidos o rebotados en 7 días: ${n(r.correosFallidos7d)}. Ver los mensajes`}
           />

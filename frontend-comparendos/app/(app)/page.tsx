@@ -18,7 +18,7 @@ import { controlCls } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { diaColombia, formatoPesos } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { FRENTES, hrefBandeja, inicioDeMes, pesosCorto, type Frentes, type Monto, type Operacion, type RespuestaDinero, type RespuestaOperacion } from "@/lib/reportes";
+import { FRENTES, hrefBandeja, inicioDeMes, pesosCorto, type Frentes, type Monto, type Operacion, type RespuestaDineroInicio, type RespuestaOperacion } from "@/lib/reportes";
 import { capacidades, tienePermiso } from "@/lib/sesion";
 import type { Contadores } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
@@ -145,15 +145,18 @@ function Contenido() {
 
   const hoy = diaColombia();
   const dinero = useCarga(conDinero ? `inicio-dinero:${empresaQuery}` : null, (signal) =>
-    apiFetch<RespuestaDinero>("/reportes/dinero", { signal, query: { empresa: empresaQuery, desde: inicioDeMes(hoy), hasta: hoy } }),
+    // partes=inicio: solo los frentes, el descuento y la franja (sin organismos, cobro coactivo ni serie, que son de Reportes).
+    apiFetch<RespuestaDineroInicio>("/reportes/dinero", { signal, query: { empresa: empresaQuery, desde: inicioDeMes(hoy), hasta: hoy, partes: "inicio" } }),
   );
   const sinDinero = useFrentesSinDinero(listo && !conDinero && veBandeja, empresaQuery);
   // Operación (R2): con BandejaVer, tenga o no el módulo de reportes; los pesos vienen en null sin él.
   const operacion = useCarga(listo && veBandeja ? `inicio-operacion:${empresaQuery}` : null, (signal) =>
     apiFetch<RespuestaOperacion>("/comparendos/operacion", { signal, query: { empresa: empresaQuery } }),
   );
-  const d = dinero.datos?.dinero;
-  const o = operacion.datos?.operacion;
+  // Solo lo que corresponde a la clave actual: al pasar del SuperAdmin de la empresa A a la B (o volver a «Todas»), useCarga
+  // conserva los datos de A mientras carga B, y no deben verse (ni sus pesos) bajo el nombre de B.
+  const d = dinero.estado === "ready" ? dinero.datos?.dinero : undefined;
+  const o = operacion.estado === "ready" ? operacion.datos?.operacion : undefined;
   const frentes = conDinero ? (d?.frentes ?? null) : sinDinero.frentes;
   // Solo con una empresa elegida: al volver a «Todas» un error de la empresa anterior no debe quedarse a la vista.
   const error = listo ? ((conDinero ? dinero.error : sinDinero.error) ?? operacion.error) : null;
@@ -217,7 +220,7 @@ function Contenido() {
       {listo && veBandeja && operacion.estado === "loading" && <Cargador />}
       {/* listo: al volver a «Todas», useCarga conserva los datos de la empresa anterior y no deben verse. */}
       {listo && o && <OperacionInicio o={o} empresa={empresaQuery} />}
-      {conDinero && dinero.datos && <DineroInicio datos={dinero.datos} />}
+      {conDinero && dinero.estado === "ready" && dinero.datos && <DineroInicio datos={dinero.datos} />}
     </section>
   );
 }
