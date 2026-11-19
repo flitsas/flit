@@ -39,6 +39,10 @@ function persona(over: Record<string, unknown> = {}) {
 function item(over: Record<string, unknown> = {}) {
   return {
     validationId: 'v-1',
+    // Echo de la persona DEFAULT (`persona()`): vendedor/ordinal 1. Los resultados de otra persona
+    // (ordinal/partyRole distinto) deben sobreescribirlos explícitamente en el `over`.
+    partyRole: 'vendedor',
+    ordinal: 1,
     ok: true,
     queued: false,
     captureUrl: 'https://kyverum.local/nuevo',
@@ -107,7 +111,10 @@ describe('HU #13822 — reenvío por persona', () => {
       ],
     });
     mocks.adminReenviarValidacionesLote.mockResolvedValue({
-      items: [item(), item({ validationId: 'v-3', email: 'p@correo.co' })],
+      items: [
+        item(),
+        item({ validationId: 'v-3', partyRole: 'comprador', email: 'p@correo.co' }),
+      ],
     });
     renderModal();
 
@@ -126,8 +133,8 @@ describe('HU #13822 — reenvío por persona', () => {
     expect(mocks.adminReenviarValidacionesLote).toHaveBeenCalledWith(
       'inst-1',
       [
-        { validationId: 'v-1', email: null },
-        { validationId: 'v-3', email: null },
+        { validationId: 'v-1', partyRole: 'vendedor', ordinal: 1, email: null },
+        { validationId: 'v-3', partyRole: 'comprador', ordinal: 1, email: null },
       ],
       undefined,
     );
@@ -164,7 +171,7 @@ describe('HU #13822 — reenvío por persona', () => {
 
     expect(mocks.adminReenviarValidacionesLote).toHaveBeenCalledWith(
       'inst-1',
-      [{ validationId: 'v-1', email: 'nuevo@correo.com' }],
+      [{ validationId: 'v-1', partyRole: 'vendedor', ordinal: 1, email: 'nuevo@correo.com' }],
       undefined,
     );
   });
@@ -269,6 +276,7 @@ describe('HU #13822 — reenvío por persona', () => {
         item(),
         item({
           validationId: 'v-2',
+          ordinal: 2,
           ok: false,
           captureUrl: null,
           error: 'identidad_aprobada',
@@ -394,5 +402,71 @@ describe('HU #13822 — reenvío por persona', () => {
     expect(await screen.findByText('El trámite está anulado.')).toBeInTheDocument();
     expect(onError).toHaveBeenCalledWith('El trámite está anulado.');
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  // HU #14627 — `validationId: null` (status `no_iniciada`): persona que NUNCA tuvo validación.
+  // Se lista, se marca y se envía igual que las demás, pero el botón dice "Enviar" (nunca hubo
+  // nada que reenviar) y el ítem viaja con `validationId: null` + `partyRole`/`ordinal` para que
+  // el backend sepa a quién crearle la fila.
+  describe('HU #14627 — persona sin validación previa (status no_iniciada)', () => {
+    function personaSinIniciar(over: Record<string, unknown> = {}) {
+      return persona({
+        validationId: null,
+        partyRole: 'comprador',
+        ordinal: 1,
+        name: 'Nunca',
+        status: 'no_iniciada',
+        captureUrl: null,
+        captureExpiresAt: null,
+        ...over,
+      });
+    }
+
+    it('se lista, se puede marcar y el botón dice "Enviar"; el envío manda validationId null + partyRole/ordinal', async () => {
+      const user = setupUser();
+      mocks.adminListValidacionesReenviables.mockResolvedValue({
+        personas: [personaSinIniciar()],
+      });
+      mocks.adminReenviarValidacionesLote.mockResolvedValue({
+        items: [
+          item({
+            validationId: 'v-nuevo',
+            partyRole: 'comprador',
+            ordinal: 1,
+            email: 'nunca@correo.co',
+          }),
+        ],
+      });
+      renderModal();
+
+      // Única persona elegible de la lista: igual que con una sola persona EXISTENTE (HU #13822
+      // AC1), el modal la marca automáticamente.
+      const casilla = await screen.findByRole('checkbox', { name: 'Comprador · Nunca' });
+      expect(casilla).toBeChecked();
+
+      const boton = screen.getByRole('button', { name: 'Enviar' });
+      expect(boton).toBeEnabled();
+      await user.click(boton);
+
+      expect(mocks.adminReenviarValidacionesLote).toHaveBeenCalledWith(
+        'inst-1',
+        [{ validationId: null, partyRole: 'comprador', ordinal: 1, email: null }],
+        undefined,
+      );
+      expect(await screen.findByText('Validación de identidad enviada.')).toBeInTheDocument();
+    });
+
+    it('selección mixta (sin iniciar + existente) muestra el botón neutro "Enviar/Reenviar"', async () => {
+      const user = setupUser();
+      mocks.adminListValidacionesReenviables.mockResolvedValue({
+        personas: [persona(), personaSinIniciar()],
+      });
+      renderModal();
+
+      await user.click(await screen.findByRole('checkbox', { name: 'Vendedor · Ana' }));
+      await user.click(screen.getByRole('checkbox', { name: 'Comprador · Nunca' }));
+
+      expect(screen.getByRole('button', { name: 'Enviar/Reenviar' })).toBeInTheDocument();
+    });
   });
 });

@@ -84,6 +84,27 @@ function etiquetaPersona(p: { partyRole: string | null; name: string }): string 
   return rol ? `${rol} · ${p.name}` : p.name;
 }
 
+/**
+ * HU #14627 — clave única de fila. Antes se indexaba todo por `validationId` (checkbox, correo
+ * capturado, mapa de búsqueda, `key` del `<li>`): con el contrato ampliado, una persona que NUNCA
+ * tuvo validación llega con `validationId: null` (status `no_iniciada`) — no hay id real hasta que
+ * el backend cree la fila al enviar. Se sintetiza una clave estable con `partyRole`/`ordinal` para
+ * esos casos; las filas con fila ya existente siguen usando su `validationId` tal cual.
+ */
+function claveFila(p: Pick<AdminValidacionReenviable, 'validationId' | 'partyRole' | 'ordinal'>): string {
+  return p.validationId ?? `sin-iniciar:${p.partyRole}:${p.ordinal}`;
+}
+
+/**
+ * HU #14627 — clave de emparejamiento request↔resultado. El backend siempre ecoa `partyRole`/
+ * `ordinal` en cada `AdminReenviarLoteItemResult`, también cuando la fila YA existía — es la única
+ * clave estable en ambos lados: `validationId` de la fila nueva solo se conoce DESPUÉS del envío (el
+ * backend lo crea), así que no sirve para encontrar la persona original que se marcó en la lista.
+ */
+function claveParOrdinal(p: { partyRole: string | null; ordinal: number | null }): string {
+  return `${p.partyRole ?? ''}:${p.ordinal ?? ''}`;
+}
+
 /** AC4 — hay enlace que copiar solo si existe y no venció. */
 function enlaceVigente(
   p: Pick<AdminValidacionReenviable, 'captureUrl' | 'captureExpiresAt'>,
@@ -261,13 +282,14 @@ export function ReenviarValidacionIdentidadModal({
         if (cancelled) return;
         const lista = res.personas ?? [];
         setPersonas(lista);
+        // `status === 'no_iniciada'` (sin fila) SIEMPRE es elegible: nunca es `esFlujoManual`.
         const elegibles = lista.filter((p) => !p.esFlujoManual);
         const inicial = initialValidationId
           ? elegibles.find((p) => p.validationId === initialValidationId)
           : undefined;
         setInicialAusente(Boolean(initialValidationId) && !inicial && lista.length > 0);
-        if (inicial) setMarcadas({ [inicial.validationId]: true });
-        else if (elegibles.length === 1) setMarcadas({ [elegibles[0]!.validationId]: true });
+        if (inicial) setMarcadas({ [claveFila(inicial)]: true });
+        else if (elegibles.length === 1) setMarcadas({ [claveFila(elegibles[0]!)]: true });
         else setMarcadas({});
       })
       .catch((e: unknown) => {
@@ -285,13 +307,28 @@ export function ReenviarValidacionIdentidadModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, instanceId, tenantId, reloadKey]);
 
-  const seleccionadas = personas.filter((p) => marcadas[p.validationId] && !p.esFlujoManual);
+  const seleccionadas = personas.filter((p) => marcadas[claveFila(p)] && !p.esFlujoManual);
   // AC3 — el correo es opcional POR PERSONA marcada, pero si se escribe debe tener formato válido.
   const correoInvalido = (id: string) => {
     const v = (correos[id] ?? '').trim();
     return v !== '' && !esCorreoConFormatoValido(v);
   };
-  const hayInvalido = seleccionadas.some((p) => correoInvalido(p.validationId));
+  const hayInvalido = seleccionadas.some((p) => correoInvalido(claveFila(p)));
+
+  // HU #14627 — texto del botón primario / mensaje de éxito: todas sin fila previa → "Enviar" (nunca
+  // se había mandado nada); todas con fila previa (o NINGUNA marcada, el botón sigue disabled) →
+  // "Reenviar" (comportamiento de siempre — `every` en un arreglo vacío es `true` por vacuidad, así
+  // que sin selección se conserva el texto de siempre); selección MIXTA → texto neutro
+  // "Enviar/Reenviar" (no hay un verbo único que describa la acción conjunta sin mentirle a una de
+  // las dos mitades de la selección).
+  const todasNuevas = seleccionadas.length > 0 && seleccionadas.every((p) => p.validationId === null);
+  const todasExistentes = seleccionadas.every((p) => p.validationId !== null);
+  const accionInfinitivo = todasNuevas ? 'Enviar' : todasExistentes ? 'Reenviar' : 'Enviar/Reenviar';
+  const accionGerundio = todasNuevas
+    ? 'Enviando…'
+    : todasExistentes
+      ? 'Reenviando…'
+      : 'Enviando/Reenviando…';
 
   const copiar = async (id: string, url: string) => {
     try {
@@ -311,7 +348,11 @@ export function ReenviarValidacionIdentidadModal({
         instanceId,
         seleccionadas.map((p) => ({
           validationId: p.validationId,
-          email: (correos[p.validationId] ?? '').trim() || null,
+          // NUEVO (HU #14627) — siempre se envían, también cuando `validationId` ya existe: el
+          // backend los usa igual como echo del resultado (clave de emparejamiento universal).
+          partyRole: p.partyRole,
+          ordinal: p.ordinal,
+          email: (correos[claveFila(p)] ?? '').trim() || null,
         })),
         tenantId,
       );
@@ -320,7 +361,12 @@ export function ReenviarValidacionIdentidadModal({
       setCopia(null);
       const oks = items.filter((i) => i.ok);
       if (oks.length > 0) {
-        setAvisoPendiente(oks.every((i) => i.queued) ? MSG_EN_COLA : MSG_REENVIADA);
+        const mensajeExito = todasNuevas
+          ? 'Validación de identidad enviada.'
+          : todasExistentes
+            ? MSG_REENVIADA
+            : 'Validación de identidad enviada/reenviada.';
+        setAvisoPendiente(oks.every((i) => i.queued) ? MSG_EN_COLA : mensajeExito);
       } else {
         onError('No se pudo reenviar la validación de identidad.');
       }
@@ -333,13 +379,20 @@ export function ReenviarValidacionIdentidadModal({
     }
   };
 
-  const porId = new Map(personas.map((p) => [p.validationId, p]));
+  // HU #14627 — emparejamiento por `partyRole`/`ordinal`, no por `validationId`: el resultado de una
+  // fila que no tenía fila previa llega con el id RECIÉN CREADO por el backend, que no existe en
+  // `personas` (la respuesta de carga, anterior al envío). El par partyRole/ordinal sí es estable.
+  const porParOrdinal = new Map(personas.map((p) => [claveParOrdinal(p), p]));
   const exitosos = (resultados ?? []).filter((r) => r.ok);
   const fallidos = (resultados ?? []).filter((r) => !r.ok);
-  const nombreDe = (id: string) => {
-    const p = porId.get(id);
+  const nombreDe = (r: Pick<AdminReenviarLoteItemResult, 'partyRole' | 'ordinal'>) => {
+    const p = porParOrdinal.get(claveParOrdinal(r));
     return p ? etiquetaPersona(p) : 'Persona';
   };
+  // Original (pre-envío) de esta fila, para saber si fue un envío nuevo o un reenvío.
+  const seleccionPorParOrdinal = new Map(seleccionadas.map((p) => [claveParOrdinal(p), p]));
+  const eraEnvioNuevo = (r: Pick<AdminReenviarLoteItemResult, 'partyRole' | 'ordinal'>): boolean =>
+    seleccionPorParOrdinal.get(claveParOrdinal(r))?.validationId === null;
   const copiadoDe = (id: string): boolean | null => (copia?.id === id ? copia.ok : null);
 
   const mostrarVacio = !loading && !loadError && personas.length === 0;
@@ -381,7 +434,7 @@ export function ReenviarValidacionIdentidadModal({
             ) : null}
             <ul className="space-y-3" aria-label="Personas pendientes de firma">
               {personas.map((p) => {
-                const id = p.validationId;
+                const id = claveFila(p);
                 const etiqueta = etiquetaPersona(p);
                 const marcada = Boolean(marcadas[id]) && !p.esFlujoManual;
                 const invalido = marcada && correoInvalido(id);
@@ -411,6 +464,11 @@ export function ReenviarValidacionIdentidadModal({
                     </div>
                     {p.esFlujoManual ? (
                       <p className="text-xs text-muted-foreground">{MSG_MANUAL}</p>
+                    ) : p.status === 'no_iniciada' ? (
+                      <p className="text-xs text-muted-foreground">
+                        Aún no se ha enviado la validación. Correo:{' '}
+                        <span className="font-medium">{p.email ?? '—'}</span>
+                      </p>
                     ) : (
                       <p className="text-xs text-muted-foreground">
                         Correo registrado: <span className="font-medium">{p.email ?? '—'}</span>
@@ -468,7 +526,7 @@ export function ReenviarValidacionIdentidadModal({
                 onClick={() => void confirmar()}
                 disabled={busy || seleccionadas.length === 0 || hayInvalido}
               >
-                {busy ? 'Reenviando…' : 'Reenviar'}
+                {busy ? accionGerundio : accionInfinitivo}
               </PrimaryButton>
             </div>
           </div>
@@ -479,16 +537,21 @@ export function ReenviarValidacionIdentidadModal({
             {fallidos.length > 0 ? (
               <p className="text-xs font-medium text-foreground">
                 {exitosos.length > 0
-                  ? `Salió para: ${exitosos.map((r) => nombreDe(r.validationId)).join(', ')}. No salió para: ${fallidos.map((r) => nombreDe(r.validationId)).join(', ')}.`
-                  : `No salió para: ${fallidos.map((r) => nombreDe(r.validationId)).join(', ')}.`}
+                  ? `Salió para: ${exitosos.map((r) => nombreDe(r)).join(', ')}. No salió para: ${fallidos.map((r) => nombreDe(r)).join(', ')}.`
+                  : `No salió para: ${fallidos.map((r) => nombreDe(r)).join(', ')}.`}
               </p>
             ) : null}
             <ul className="space-y-3" aria-label="Resultado del reenvío">
               {(resultados ?? []).map((r) => {
-                const etiqueta = nombreDe(r.validationId);
+                const etiqueta = nombreDe(r);
+                // HU #14627 — `r.validationId` llega `null` únicamente cuando falló ANTES de crear
+                // la fila (`!r.ok`): como `key` de React usamos `partyRole`/`ordinal` (siempre
+                // presentes, eco del item enviado), nunca `validationId` crudo, que colisionaría
+                // (`null`) entre dos fallos sin fila.
+                const claveResultado = claveParOrdinal(r);
                 return (
                   <li
-                    key={r.validationId}
+                    key={claveResultado}
                     role="group"
                     aria-label={etiqueta}
                     className="space-y-1 rounded-xl border p-3"
@@ -504,7 +567,7 @@ export function ReenviarValidacionIdentidadModal({
                     ) : (
                       <>
                         <p className="text-xs font-medium text-foreground">
-                          {MSG_REENVIADA}
+                          {eraEnvioNuevo(r) ? 'Validación de identidad enviada.' : MSG_REENVIADA}
                         </p>
                         {r.email ? (
                           <p className="text-xs text-muted-foreground">
@@ -514,8 +577,8 @@ export function ReenviarValidacionIdentidadModal({
                         {r.captureUrl ? (
                           <CopiarEnlace
                             url={r.captureUrl}
-                            copiado={copiadoDe(r.validationId)}
-                            onCopiar={(u) => void copiar(r.validationId, u)}
+                            copiado={copiadoDe(claveResultado)}
+                            onCopiar={(u) => void copiar(claveResultado, u)}
                           />
                         ) : null}
                       </>
