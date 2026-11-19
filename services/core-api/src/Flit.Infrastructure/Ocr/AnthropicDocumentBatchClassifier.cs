@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Tramites.Application.Ocr;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -16,8 +17,11 @@ namespace Flit.Infrastructure.Ocr;
 internal sealed class AnthropicDocumentBatchClassifier(
     AnthropicMessagesClient client,
     IOptions<AnthropicOptions> options,
-    ILogger<AnthropicDocumentBatchClassifier> logger) : IDocumentBatchClassifier
+    ILogger<AnthropicDocumentBatchClassifier> logger,
+    IIaCallContext? iaContexto = null) : IDocumentBatchClassifier
 {
+    private readonly IIaCallContext _ia = iaContexto ?? IaCallContext.Instancia;
+
     private readonly AnthropicOptions _options = options.Value;
 
     public async Task<BatchClassification> ClassifyAsync(
@@ -33,6 +37,9 @@ internal sealed class AnthropicDocumentBatchClassifier(
         var prompt = DocumentOcrPrompts.ClassificationPrompt(soportados);
         var base64 = Convert.ToBase64String(content.Span);
 
+        // ADR-0090: la clasificación es su propio proceso, dentro del ámbito de la carga (mismo correlacion_id).
+        using var ambito = IaAmbitosOcr.Abrir(
+            _ia, IaProcesosFlit.ClasificarLote, IaTiposTarea.Clasificacion, "clasificacion_lote", content.Span, mediaType);
         var vision = await client.SendVisionAsync(
             base64, mediaType, prompt, ct,
             model: _options.ClassifierModel,

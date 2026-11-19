@@ -23,6 +23,7 @@ using Flit.Infrastructure.Persistence;
 using Flit.Modules.Notificaciones;
 using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Infrastructure.Platform;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Infrastructure.Security;
 using Flit.Infrastructure.Storage;
 using Flit.Tramites.Application.Documents;
@@ -722,6 +723,12 @@ public static class InfrastructureExtensions
             c.Timeout = TimeSpan.FromSeconds(
                 Math.Max(Math.Max(o.TimeoutSeconds, o.ClassifierTimeoutSeconds), o.DrFlitTimeoutSeconds));
         });
+
+        // Contrato ia-consumo v1 (ADR-0090): cada llamada HTTP a un proveedor de IA deja una fila en
+        // admin.ia_consumo_log, escrita en segundo plano por lotes. Banderas IA_CONSUMO_LOG / IA_CONSUMO_DETALLE
+        // (ambas encendidas por defecto, sin purga); nunca bloquea ni rompe la llamada.
+        services.AddFlitIaConsumo<FlitDbContext>(configuration, aplicativo: "flit", servicio: "core-api");
+        services.AddScoped<Flit.Tramites.Application.Ocr.IIaConsumoAmbito, IaConsumoAmbitoTramites>();
 
         // HU #13510 — clientes OpenAI-compatible (openai / kimi / deepseek) + adapters + router.
         BindOpenAiCompatibleOptions(services, configuration, Cfg);

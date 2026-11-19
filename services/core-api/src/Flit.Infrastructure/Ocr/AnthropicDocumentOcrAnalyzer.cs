@@ -1,4 +1,5 @@
 using System.Text.Json.Nodes;
+using Flit.Platform.Sdk.IaConsumo;
 using Flit.Tramites.Application.Ocr;
 using Microsoft.Extensions.Logging;
 
@@ -13,8 +14,11 @@ namespace Flit.Infrastructure.Ocr;
 /// </summary>
 internal sealed class AnthropicDocumentOcrAnalyzer(
     AnthropicMessagesClient client,
-    ILogger<AnthropicDocumentOcrAnalyzer> logger) : IDocumentOcrAnalyzer
+    ILogger<AnthropicDocumentOcrAnalyzer> logger,
+    IIaCallContext? iaContexto = null) : IDocumentOcrAnalyzer
 {
+    private readonly IIaCallContext _ia = iaContexto ?? IaCallContext.Instancia;
+
     public async Task<DocumentOcrAnalysis> AnalyzeAsync(
         string tipo, ReadOnlyMemory<byte> content, string mediaType, CancellationToken ct)
     {
@@ -23,6 +27,7 @@ internal sealed class AnthropicDocumentOcrAnalyzer(
             return new DocumentOcrAnalysis(false, null, 400, $"Tipo no soportado: {tipo}");
 
         var base64 = Convert.ToBase64String(content.Span);
+        using var ambito = IaAmbitosOcr.AbrirOcr(_ia, tipo, content.Span, mediaType);
         var vision = await client.SendVisionAsync(base64, mediaType, prompt, ct);
         if (!vision.Ok)
             return new DocumentOcrAnalysis(false, null, vision.Status, vision.Message);
