@@ -23,14 +23,23 @@ export interface PortalPnTabsProps {
    * abajo (Reportes, Cobro, Caja, Diseño) y viaja en la URL (`?tab=`). Sin ella, el componente pinta las pestañas de siempre.
    */
   seccion?: PortalPnTabId;
+  /** Pestaña activa controlada desde fuera (p. ej. la página, según `?tab=`). Sin ella, el componente lleva su propio estado. */
+  activeTab?: PortalPnTabId;
+  /** Avisa del cambio de pestaña cuando la controla la página. */
+  onTabChange?: (id: PortalPnTabId) => void;
 }
 
 /**
  * Subpestañas del Portal Persona Natural del organismo (Épica #14297): `Reportes` (la primera), `Cobro`, `Caja` y `Diseño`.
  * Es el mismo componente para el administrador del organismo y para el SuperAdmin: todo se ancla a `transitOfficeId`.
  */
-export function PortalPnTabs({ transitOfficeId, reportes, cobro, caja, domain, initialTab, seccion }: PortalPnTabsProps) {
-  const [active, setActive] = useState<PortalPnTabId>(initialTab ?? "reportes");
+export function PortalPnTabs({ transitOfficeId, reportes, cobro, caja, domain, initialTab, seccion, activeTab, onTabChange }: PortalPnTabsProps) {
+  const [localActive, setLocalActive] = useState<PortalPnTabId>(initialTab ?? "reportes");
+  const active = activeTab ?? localActive;
+  const setActive = (id: PortalPnTabId) => {
+    if (activeTab === undefined) setLocalActive(id);
+    onTabChange?.(id);
+  };
 
   const tabs: SectionTab<PortalPnTabId>[] = [
     {
