@@ -47,15 +47,22 @@ internal static class ConsultasRemoto
         services.Configure<ConsultationChainOptions>(o => configuration.GetSection(ConsultationChainOptions.SectionName).Bind(o));
         services.AddScoped<ConsultasRemotasCliente>();
         services.AddScoped<IConsultationProviderRegistry, ConsultasRemotasRegistry>();
-        // HU #14642: registrar el resolver remoto como concreto para que el decorador lo inyecte,
-        // y el decorador como la interfaz pública. El decorador cortocircuita antes de llamar
-        // a core-consultas cuando existe un override manual activo para el tenant.
+        // HU #14642: resolver remoto concreto + decorador de override si el reader está registrado
+        // (AdminInfrastructure). Sin reader (tests aislados de AddConsultasRemoto) se expone el
+        // remoto directo — mismo contrato que antes del override.
         services.AddScoped<ConsultasRemotasChainResolver>();
         services.AddScoped<IConsultationProviderChainResolver>(sp =>
-            new TenantRuntPersonOverrideChainResolverDecorator(
-                sp.GetRequiredService<ConsultasRemotasChainResolver>(),
-                sp.GetRequiredService<ITenantRuntPersonOverrideReader>(),
-                sp.GetService<Microsoft.Extensions.Logging.ILogger<TenantRuntPersonOverrideChainResolverDecorator>>()));
+        {
+            var inner = sp.GetRequiredService<ConsultasRemotasChainResolver>();
+            var reader = sp.GetService<ITenantRuntPersonOverrideReader>();
+            if (reader is null)
+                return inner;
+
+            return new TenantRuntPersonOverrideChainResolverDecorator(
+                inner,
+                reader,
+                sp.GetService<Microsoft.Extensions.Logging.ILogger<TenantRuntPersonOverrideChainResolverDecorator>>());
+        });
 
         // HU #13348: avalúos, Confirmación RUNT, impronta y certificado RUES.
         services.AddScoped<IAvaluoSugeridor, AvaluoSugeridorRemoto>();
