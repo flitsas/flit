@@ -3,11 +3,11 @@ import { buttonClass } from "@flit/ui/Button";
 export { controlCls, TRAMITES_CONTROL_CLS as CONTROL_CLS } from "@/components/control-styles";
 
 export const INPUT_CLS =
-  "h-10 w-full rounded-[9px] border border-input bg-card px-3 text-sm text-foreground placeholder:text-[color:var(--kit-gris)] " +
+  "h-10 w-full rounded-[9px] border border-input bg-card px-3 text-sm font-normal text-foreground placeholder:text-[color:var(--kit-gris)] " +
   "focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] focus:outline-none disabled:opacity-60";
 
 export const TEXTAREA_CLS =
-  "min-h-[88px] w-full rounded-[9px] border border-input bg-card px-3 py-2 text-sm text-foreground " +
+  "min-h-[88px] w-full rounded-[9px] border border-input bg-card px-3 py-2 text-sm font-normal text-foreground " +
   "focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] focus:outline-none";
 
 // Botones de la propuesta (HU #14486): la familia `.btn` de @flit/ui/Button, en la densidad de 36 px de esta app.
