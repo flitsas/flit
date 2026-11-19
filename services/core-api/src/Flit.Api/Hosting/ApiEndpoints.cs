@@ -146,6 +146,7 @@ internal static class ApiEndpoints
         app.MapTramitesConsolidadoEndpoints();
         app.MapConsolidadoLoteEndpoints(); // Épica #13216 — HU13374: POST /api/v1/tramites/consolidados/lotes (descarga masiva)
         app.MapAdminTramiteConsolidadoEndpoints(); // HU #12158 — limpiar/cargar consolidado (admin)
+        app.MapAdminTramiteDocumentoEndpoints(); // Bug #14604 — carga administrativa de documentos en cualquier estado (admin)
         app.MapAdminTramiteEstadoEndpoints(); // HU #12159 — cambiar estado sin restricción de flujo (admin)
         app.MapAdminTramiteAnularEndpoints(); // HU #12160 — anular desde cualquier estado salvo Aprobado/Revocado
         app.MapAdminTramiteReenviarValidacionEndpoints(); // HU #12161 — reenviar validación de identidad (admin, correo opcional)

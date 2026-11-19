@@ -241,7 +241,7 @@ public sealed class RegistrarPrendaHandler(
                 .ToHashSet(StringComparer.OrdinalIgnoreCase)
             : PrendaDocTipos.All;
 
-        var huerfanos = instance.Attachments
+        var huerfanos = instance.AdjuntosEfectivos()
             .Where(a => candidatos.Contains(a.Tipo) && !exigidos.Contains(a.Tipo))
             .ToList();
         if (huerfanos.Count == 0)

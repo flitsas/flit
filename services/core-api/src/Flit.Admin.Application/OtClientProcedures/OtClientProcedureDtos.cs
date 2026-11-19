@@ -200,6 +200,8 @@ public sealed class OtClientProcedureModificacionResponse
     public DateTimeOffset ChangedAt { get; init; }
     public string? ActorNombre { get; init; }
     public string? ActorCompania { get; init; }
+    /// <summary>Bug #14604 — adjuntos nuevo y anterior de «documento actualizado por el administrador».</summary>
+    public OtDocumentoActualizado? Documento { get; init; }
 }
 
 public sealed class RejectOtClientProcedureRequest
@@ -293,6 +295,7 @@ internal static class OtClientProcedureMapper
                 ChangedAt = m.ChangedAt,
                 ActorNombre = m.ActorNombre,
                 ActorCompania = m.ActorCompania,
+                Documento = m.Documento,
             }).ToList(),
             Placa = procedure.Placa,
             Vin = procedure.Vin,

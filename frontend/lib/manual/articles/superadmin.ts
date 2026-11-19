@@ -1030,4 +1030,105 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       },
     ],
   },
+  {
+    slug: "4-superadmin/12-actualizar-documento",
+    title: "Actualizar un documento de un trámite en cualquier estado",
+    audience: "Super Admin",
+    sectionId: "superadmin",
+    keywords: [
+      "actualizar documento",
+      "cargar documento",
+      "reemplazar documento",
+      "subir documento sin cambiar estado",
+      "documento entregado",
+      "documento aprobado",
+      "version anterior",
+      "historico",
+      "observacion",
+      "linea de tiempo",
+      "trazabilidad",
+      "consolidado",
+      "documento final",
+      "pestaña nueva",
+    ],
+    summary:
+      "Cómo el equipo FLIT reemplaza un documento de un trámite sin pasarlo a Borrador: qué queda como versión anterior, cómo se ve en la línea de tiempo y qué pasa con el consolidado.",
+    blocks: [
+      {
+        id: "que-es",
+        title: "1. Qué es y quién lo puede hacer",
+        paragraphs: [
+          "«Actualizar documento» permite cargar o reemplazar un documento de un trámite en cualquier estado: Borrador, Preparado, Asignado, Entregado, Aprobado, Anulado o Revocado. Ya no hace falta pasar el trámite a Borrador, subir el archivo y volver a moverlo.",
+          "Solo lo tiene el Super Admin de FLIT. El gestor sigue subiendo documentos como siempre, solo en Borrador o en Subsanación.",
+        ],
+      },
+      {
+        id: "pasos",
+        title: "2. Paso a paso",
+        paragraphs: [
+          "Paso 1. En Trámites, busca el trámite y abre «Acciones» en su fila.",
+          "Paso 2. Elige «Actualizar documento». La ventana muestra el radicado y el estado actual del trámite.",
+          "Paso 3. En «Tipo de documento» elige uno de los que pide ese tipo de trámite. Si ya hay un archivo de ese tipo, verás «El documento actual quedará como versión anterior».",
+          "Paso 4. Elige el archivo (PDF, JPG, PNG o WEBP, hasta 20 MB).",
+          "Paso 5. Escribe la observación: por qué actualizas el documento. Es obligatoria (hasta 1.000 caracteres) y el botón no se activa sin ella.",
+          "Paso 6. Pulsa «Actualizar documento». Verás «Documento actualizado.» y el trámite sigue en el mismo estado.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si otro proceso ya cargó ese mismo documento al mismo tiempo, el sistema te lo avisa y no reemplaza nada: vuelve a abrir el trámite y revisa antes de intentarlo de nuevo.",
+          },
+        ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-actualizar-documento-admin",
+            alt: "Flujo para actualizar un documento: desde Acciones se elige Actualizar documento, el tipo, el archivo y la observación obligatoria; el trámite no cambia de estado, el archivo anterior queda como versión anterior, la línea de tiempo registra la actualización y el consolidado se regenera al abrirlo",
+            caption: "Actualizar un documento sin cambiar el estado del trámite.",
+          },
+        ],
+      },
+      {
+        id: "anterior",
+        title: "3. Qué pasa con el archivo anterior",
+        paragraphs: [
+          "El archivo anterior no se borra: queda como «Versión anterior» y se puede ver y descargar en «Ver documentos», en el detalle del trámite y en la vista del organismo de tránsito.",
+          "El documento que cuenta para el trámite (el que va al consolidado y el que ve el organismo como vigente) es siempre el nuevo.",
+        ],
+      },
+      {
+        id: "trazabilidad",
+        title: "4. Trazabilidad en la línea de tiempo",
+        paragraphs: [
+          "Cada actualización queda en «Línea de Tiempo del Trámite» como «Documento actualizado por el administrador», con fecha y hora, quién lo hizo, el estado en que estaba el trámite y la observación.",
+          "La tarjeta incluye el bloque «Documento» (por ejemplo, Improntas), «Archivo nuevo» y «Archivo anterior», cada uno con «Ver» para abrirlo. Si era la primera vez que se cargaba ese tipo, dice «No había un archivo anterior».",
+          "La misma tarjeta la ven la compañía y el organismo de tránsito en su línea de tiempo.",
+        ],
+      },
+      {
+        id: "consolidado",
+        title: "5. El consolidado",
+        paragraphs: [
+          "No tienes que hacer nada: al abrir «Ver consolidado» después de la actualización, el consolidado se vuelve a generar con el documento nuevo, también en Aprobado, Anulado o Revocado.",
+          "En un trámite en estado final verás el aviso «Documento final»: es su expediente definitivo y solo se vuelve a generar si un administrador actualiza un documento.",
+          "Los trámites migrados de FLIT 1 en estado final conservan su consolidado original.",
+        ],
+      },
+      {
+        id: "ver",
+        title: "6. Cómo se ven los documentos",
+        paragraphs: [
+          "Al pulsar el ojo o «Ver», el documento se abre en una pestaña nueva del navegador, a pantalla completa. Mientras carga verás el carrito de FLIT.",
+          "Si el documento trae un aviso (por ejemplo «Documento final»), aparece unos segundos en la pantalla donde estabas, abajo a la derecha.",
+          "Si el archivo no se puede abrir o no se puede ver en el navegador, el aviso aparece en la pantalla actual con el botón «Descargar».",
+        ],
+        callouts: [
+          {
+            variant: "tip",
+            text: "Si el navegador bloquea las ventanas emergentes de FLIT, el documento se muestra en la misma pantalla, como antes. Para verlo en pestaña nueva, permite las ventanas emergentes de FLIT.",
+          },
+        ],
+      },
+    ],
+  },
 ];

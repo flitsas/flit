@@ -327,7 +327,7 @@ public sealed class ConsultaBandeja(ComparendosDb db, CalendarioService calendar
             "CaducidadInmediata" => q.Where(c => c.Activo && !c.TieneDp && c.FechaCaducidad != null
                 && ((hoy > c.FechaCaducidad && hoy <= c.FechaPrescripcion) || (hoy <= c.FechaCaducidad && c.FechaCaducidad <= en30))),
             "NoImpugnables" => q.Where(c => c.FechaLimiteGestion != null && hoy > c.FechaLimiteGestion && hoy <= c.FechaCaducidad),
-            "C038" => q.Where(c => c.EsFotomulta == true && c.TipoDocumentoInfractor == TipoDocumento.NIT),
+            "C038" => q.Where(c => c.EsFotomulta == true && (c.TipoDocumentoInfractor == TipoDocumento.NIT || (c.TipoDocumentoInfractor == null && c.NumeroDocumentoInfractor != null && c.NitConsultado != null && c.NumeroDocumentoInfractor == c.NitConsultado))),
             _ => q,
         };
     }

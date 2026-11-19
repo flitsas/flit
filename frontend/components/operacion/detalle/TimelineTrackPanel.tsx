@@ -17,6 +17,11 @@ export interface TimelineTrackNode {
     fecha: string;
     extra?: string;
   };
+  /**
+   * Bug #14604 — «documento actualizado por el administrador»: qué documento cambió y los archivos nuevo
+   * y anterior, cada uno con «Ver» cuando el panel recibe {@link TimelineTrackPanelProps.onVerDocumento}.
+   */
+  documento?: TimelineDocumento;
   /** El hito vigente (p. ej. el último estado del trámite) se marca con la etiqueta "Vigente". */
   isActive?: boolean;
   /**
@@ -27,10 +32,26 @@ export interface TimelineTrackNode {
   timestamp?: number;
 }
 
+/** Bug #14604 — archivo abrible desde la línea de tiempo (adjunto del mismo trámite). */
+export interface TimelineArchivo {
+  id: string;
+  filename: string;
+  tipo: string;
+}
+
+export interface TimelineDocumento {
+  /** Nombre legible del tipo, p. ej. «Improntas». */
+  tipoLabel: string;
+  nuevo: TimelineArchivo;
+  anterior?: TimelineArchivo;
+}
+
 export interface TimelineTrackPanelProps {
   title: string;
   nodes: TimelineTrackNode[];
   emptyMessage?: string;
+  /** Bug #14604 — abre un archivo de la línea de tiempo en el visor. Sin él, los archivos se listan sin «Ver». */
+  onVerDocumento?: (archivo: TimelineArchivo) => void;
 }
 
 /**
@@ -58,7 +79,7 @@ export interface TimelineTrackPanelProps {
  * en pantalla, pero es exactamente la que el panel promete, y evita depender de hover/click para
  * revelarla.</p>
  */
-export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrackPanelProps) {
+export function TimelineTrackPanel({ title, nodes, emptyMessage, onVerDocumento }: TimelineTrackPanelProps) {
   if (nodes.length === 0) {
     return (
       <div className={CARD}>
@@ -124,10 +145,62 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
                   <CampoValorInline campo="Detalle" valor={n.info.extra} className="sm:col-span-2" />
                 ) : null}
               </dl>
+              {n.documento ? (
+                <DocumentoActualizadoBloque documento={n.documento} onVer={onVerDocumento} />
+              ) : null}
             </div>
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+/**
+ * Bug #14604 — qué documento se actualizó y con qué archivo: el nuevo y el que estaba antes, ambos
+ * abribles en el visor. Sin archivo anterior (primera carga de ese tipo) se dice explícitamente.
+ */
+function DocumentoActualizadoBloque({
+  documento,
+  onVer,
+}: {
+  documento: TimelineDocumento;
+  onVer?: (archivo: TimelineArchivo) => void;
+}) {
+  const fila = (rotulo: string, archivo: TimelineArchivo | undefined, vacio: string) => (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <span className="min-w-[7.5rem] opacity-70">{rotulo}</span>
+      {archivo ? (
+        <>
+          <span className="min-w-0 break-all font-medium" style={{ color: DETALLE_NAVY }}>
+            {archivo.filename}
+          </span>
+          {onVer ? (
+            <button
+              type="button"
+              onClick={() => onVer(archivo)}
+              className="rounded-lg border border-[var(--di-border)] px-2 py-0.5 text-[11px] font-semibold text-[var(--di-action)] hover:bg-[var(--di-accent-soft)]"
+              aria-label={`Ver ${rotulo.toLowerCase()} ${archivo.filename}`}
+            >
+              Ver
+            </button>
+          ) : null}
+        </>
+      ) : (
+        <span className="italic opacity-70">{vacio}</span>
+      )}
+    </div>
+  );
+  return (
+    <div className="mt-2 space-y-1.5 rounded-lg border border-[var(--di-border)] bg-[var(--di-surface)] p-2.5">
+      <div className="flex flex-wrap items-center gap-x-2 text-xs">
+        <span className="min-w-[7.5rem] opacity-70">Documento</span>
+        <span className="font-bold" style={{ color: DETALLE_NAVY }}>
+          {documento.tipoLabel}
+        </span>
+      </div>
+      {fila('Archivo nuevo', documento.nuevo, '—')}
+      {fila('Archivo anterior', documento.anterior, 'No había un archivo anterior')}
     </div>
   );
 }

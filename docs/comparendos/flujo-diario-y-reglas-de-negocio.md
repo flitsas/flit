@@ -12,7 +12,7 @@ Qué hace el sistema solo, qué lo dispara, a qué hora y qué le queda a la ges
 
 [Programado]
 
-Hay pocos procesos atados a una hora: las consultas a las fuentes (según la agenda de cada empresa), el envío diario de avisos, el reintento del conductor, la sincronización de organismos y los reportes. **La hora solo dice cuándo se revisa; la regla de negocio decide si se hace algo.** Por ejemplo, a las 7:00 el proceso de avisos revisa todos los comparendos, pero solo envía a los que cumplen la regla del aviso que les toca.
+Hay pocos procesos atados a una hora: las consultas a las fuentes (según la agenda de cada empresa), el envío diario de avisos, el reintento del conductor, la sincronización de organismos, los reportes y el envío automático de derechos de petición (apagado por defecto). **La hora solo dice cuándo se revisa; la regla de negocio decide si se hace algo.** Por ejemplo, a las 7:00 el proceso de avisos revisa todos los comparendos, pero solo envía a los que cumplen la regla del aviso que les toca.
 
 [Evento]
 
@@ -227,7 +227,7 @@ La desaparición solo cambia el estado a inactivo y agrega un evento; no borra n
 
 **¿Cuándo se activa la consulta automática y qué relación tiene con el derecho de petición?**
 
-La consulta automática del conductor solo aplica si la empresa la tiene contratada, está encendida y el NIT del propietario está marcado para usarla. **No tiene relación con el derecho de petición.** El DP lo inicia siempre la gestora, uno a uno o en lote; ningún proceso lo envía solo.
+La consulta automática del conductor solo aplica si la empresa la tiene contratada, está encendida y el NIT del propietario está marcado para usarla. **No tiene relación con el derecho de petición.** El DP lo inicia la gestora, uno a uno o en lote. La única excepción es el **envío automático de DP** (Epic #14606), apagado por defecto: el SuperAdmin lo enciende por empresa y, una vez por día hábil (11:00 por defecto, o con «Ejecutar ahora»), un proceso envía los DP que cumplen las reglas de V1, hasta el tope diario de la empresa (50 por defecto; el resto sale el siguiente día hábil). Solo usa tipologías que la empresa marcó como automatizables y cuyo texto publicado aprobó un abogado; solo escribe a organismos marcados como que reciben DP por correo y solo con un representante legal que tenga firma cargada. Lo que no puede enviar lo omite, lo anota en la línea de tiempo del comparendo y avisa a la empresa con un resumen (uno por día). Un comparendo nunca tiene más de un DP, y estos DP no cuentan como trabajo de ninguna persona en los reportes de productividad.
 
 **¿El diagrama diferencia eventos de horarios?**
 
@@ -417,6 +417,8 @@ Comparendos no envía directamente: pasa cada correo al servicio de notificacion
 | Aviso 4 | Conductor | [Evento] se entrega la solicitud de cambio al organismo |
 | Solicitud de cambio de contraventor | Correos de radicación del organismo | [Gestora] solicita |
 | Derecho de petición | Correos de radicación del organismo | [Gestora] envía, uno o en lote |
+| Derecho de petición automático | Correos de radicación del organismo | [Programado] día hábil 11:00 o «Ejecutar ahora» del SuperAdmin; solo empresas con el envío automático encendido |
+| Resumen de DP automáticos omitidos | Encargados de la empresa | [Programado] máximo uno por día, con lo que no se pudo enviar y por qué |
 | Alerta sin representante legal | Encargados de la empresa | [Evento] un DP no puede salir por falta de firmante |
 | Alerta de integración | Destinatarios de FLIT | [Evento] falla una consulta a una fuente |
 | Reportes semanal y mensual | Destinatarios de la empresa | [Programado] viernes 17:00 y fin de mes 18:00 |

@@ -390,7 +390,7 @@ const READ_ONLY_NOTICE: Record<string, ReadOnlyNoticeStyle> = {
   aprobado: {
     titulo: 'Trámite aprobado — solo visualización.',
     detalle:
-      'El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes consultarla y descargarla, pero ya no se regenera.',
+      'El organismo de tránsito lo aprobó. Su documentación es definitiva: puedes consultarla y descargarla. Solo cambia si un administrador actualiza un documento.',
     // El borde/fondo conservan el verde de marca crudo (relleno tintado); el texto/icono usan la
     // tinta legible unificada (`--flit-success-ink`, consolidación de verdes de texto).
     border: 'var(--badge-success-border)',

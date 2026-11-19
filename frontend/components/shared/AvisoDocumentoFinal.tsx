@@ -8,7 +8,7 @@ import {
 
 /**
  * HU #12786 (AC4) / HU #12787 (AC3) — aviso de que el consolidado mostrado es el documento FINAL
- * del trámite (estado aprobado/anulado/revocado) y no se regenera.
+ * del trámite (estado aprobado/anulado/revocado); solo se reconstruye si un administrador actualiza un documento.
  *
  * Mismo tratamiento de «estado válido» que la tarjeta de identidad verificada (`MatriculaResumen`):
  * fondo verde suave, borde verde y tinta `--flit-success-ink`. No depende solo del color: lleva

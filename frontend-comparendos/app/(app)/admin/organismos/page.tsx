@@ -8,7 +8,9 @@ import { SearchInput } from "@/components/SearchInput";
 import { SelectorOrganismo } from "@/components/SelectorOrganismo";
 import { useToast } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
+import { Interruptor } from "@/components/ui/Interruptor";
 import { apiFetch } from "@/lib/api";
+import { avisoAdmiteSinCorreo, cambiosOrganismo } from "@/lib/organismos";
 import type { AliasOt, Organismo, Pagina } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
@@ -16,8 +18,10 @@ import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 function EditarOrganismo({ ot, onCerrar, onGuardado }: { ot: Organismo; onCerrar: () => void; onGuardado: () => void }) {
   const [correos, setCorreos] = useState(ot.correosRadicacion.join("\n"));
   const [permite, setPermite] = useState(ot.permiteCambioContraventor);
+  const [admiteDp, setAdmiteDp] = useState(ot.admiteDpPorCorreo ?? false);
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
+  const aviso = avisoAdmiteSinCorreo({ correos, admiteDpPorCorreo: admiteDp });
 
   const guardar = async () => {
     setOcupado(true);
@@ -25,7 +29,7 @@ function EditarOrganismo({ ot, onCerrar, onGuardado }: { ot: Organismo; onCerrar
     try {
       await apiFetch(`/admin/organismos/${ot.id}`, {
         method: "PATCH",
-        body: { correosRadicacion: correos.split(/[\s,;]+/).filter(Boolean), permiteCambioContraventor: permite },
+        body: cambiosOrganismo(ot, { correos, permiteCambioContraventor: permite, admiteDpPorCorreo: admiteDp }),
       });
       onGuardado();
     } catch (e) {
@@ -63,6 +67,13 @@ function EditarOrganismo({ ot, onCerrar, onGuardado }: { ot: Organismo; onCerrar
           <input type="checkbox" checked={permite} onChange={(e) => setPermite(e.target.checked)} />
           Admite el cambio de contraventor
         </label>
+        <Interruptor
+          activo={admiteDp}
+          onCambio={setAdmiteDp}
+          etiqueta="Admite derechos de petición por correo"
+          ayuda="Actívalo solo si esta secretaría recibe peticiones en ese correo; si no, el envío automático la omite."
+        />
+        {aviso && <InlineAlert tone="warning" compact>{aviso}</InlineAlert>}
         {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
       </div>
     </Modal>
@@ -195,6 +206,12 @@ export default function Organismos() {
                 { key: "codigo", header: "Código", render: (o) => o.codigo },
                 { key: "municipio", header: "Municipio", render: (o) => [o.municipio, o.departamento].filter(Boolean).join(", ") || "—" },
                 { key: "correos", header: "Correos de radicación", render: (o) => (o.correosRadicacion.length ? o.correosRadicacion.join(", ") : <StatusBadge label="Sin correo" tone="warning" />) },
+                {
+                  key: "dp",
+                  header: "DP por correo",
+                  render: (o) =>
+                    !o.admiteDpPorCorreo ? "No admite" : o.correosRadicacion.length ? "Admite" : <StatusBadge label="Admite, sin correo" tone="warning" />,
+                },
                 { key: "cambio", header: "Cambio de contraventor", render: (o) => (o.permiteCambioContraventor ? "Permitido" : <StatusBadge label="No admite" tone="danger" />) },
               ]}
               pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: lista.datos?.total ?? 0, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}

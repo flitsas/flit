@@ -34,7 +34,7 @@ public static class FurVigenciaExpediente
         if (marca is null)
             return false;
 
-        var fur = instance.Attachments
+        var fur = instance.AdjuntosEfectivos()
             .Where(a => string.Equals(a.Tipo, TipoFur, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(a => a.UploadedAt)
             .FirstOrDefault();

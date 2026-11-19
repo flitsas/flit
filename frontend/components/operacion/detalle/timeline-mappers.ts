@@ -8,6 +8,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
+import { documentLabel } from '@/lib/tramites/document-labels';
 import { formatFechaHora } from '@/lib/format/date';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import type { TimelineTrackNode } from './TimelineTrackPanel';
@@ -110,6 +111,23 @@ export function mapModificacionesToTimelineNodes(
       },
       isActive: i === sorted.length - 1,
       timestamp: new Date(m.changedAt).getTime(),
+      ...(m.documento
+        ? {
+            documento: {
+              tipoLabel: documentLabel(m.documento.tipo),
+              nuevo: { id: m.documento.attachmentId, filename: m.documento.filename, tipo: m.documento.tipo },
+              ...(m.documento.anteriorAttachmentId
+                ? {
+                    anterior: {
+                      id: m.documento.anteriorAttachmentId,
+                      filename: m.documento.anteriorFilename || "Archivo anterior",
+                      tipo: m.documento.tipo,
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
     };
   });
 }
@@ -257,6 +275,19 @@ export function mapEventsToTimelineNodes(events: ProcedureInstanceEvent[]): Time
   }));
 }
 
+/**
+ * Bug #14604 — detalle de «Documento actualizado por el administrador»: tipo y archivo, estado del trámite
+ * en ese momento y la observación obligatoria. Compartido con el Historial de `TramiteTrackingModal`.
+ */
+export function textoDocumentoCargadoAdmin(e: ProcedureInstanceEvent): string {
+  const tipo = e.documentoTipo ? documentLabel(e.documentoTipo) : 'Documento';
+  const archivo = e.documentoFilename?.trim();
+  const partes = [archivo ? `${tipo} · ${archivo}` : tipo];
+  if (e.estadoAlMomento) partes.push(`Estado del trámite: ${estadoLabel(e.estadoAlMomento)}`);
+  partes.push(`Observación: ${e.observacion?.trim() || 'Sin observación registrada'}`);
+  return partes.join(' · ');
+}
+
 function mapSingleEventToTimelineNode(e: ProcedureInstanceEvent): TimelineTrackNode {
   if (e.tipo === 'reasignar_gestor_admin') {
     return {
@@ -310,6 +341,21 @@ function mapSingleEventToTimelineNode(e: ProcedureInstanceEvent): TimelineTrackN
           : `${aprobada ? 'Aprobada' : 'Rechazada'} por el organismo de tránsito`,
         fecha: formatFechaHora(e.createdAt),
         extra: e.revocationDecisionReason?.trim() || 'Sin motivo adicional registrado',
+      },
+    };
+  }
+
+  if (e.tipo === 'documento_cargado_admin') {
+    return {
+      label: 'Documento actualizado por el administrador',
+      color: BLUE,
+      info: {
+        gestor: e.createdByName || '—',
+        correo: e.createdByEmail || '—',
+        empresa: e.createdByCompania || '—',
+        rol: e.createdByName ? `Cargado por ${e.createdByName}` : 'Cargado por administrador',
+        fecha: formatFechaHora(e.createdAt),
+        extra: textoDocumentoCargadoAdmin(e),
       },
     };
   }
