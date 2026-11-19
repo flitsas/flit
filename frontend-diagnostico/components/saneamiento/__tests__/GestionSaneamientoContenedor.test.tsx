@@ -13,7 +13,7 @@ import { EMPRESAS, EMPRESA_A, RUTA_DETALLE, SID, deudaBackoffice, saneamientoBo,
 //
 // Guarda del hallazgo E2E H-10 (HU #14577, capturas C-10): a 1280 px el segmentado Pendiente/Saneado/No procede se
 // apilaba en vertical, la nota quedaba de ≈30 px y «Reintentar» se cortaba, porque la tabla seguía en modo tabla (el
-// paso a tarjetas solo miraba el viewport, max-[900px]).
+// paso a tarjetas solo miraba el viewport, max-lg).
 
 const h = vi.hoisted(() => ({ capacidades: { backoffice: true, gestionarSaneamiento: true } as Record<string, boolean> }));
 vi.mock("@/components/DiagnosticoShell", () => ({ useSesion: () => ({ sesion: sesion(h.capacidades), cargando: false, error: null, recargar: () => {} }) }));
@@ -95,7 +95,7 @@ describe("H-10 — TablaEditable: `apilado` es aditivo", () => {
     onGuardar: () => {},
   };
 
-  it("sin la prop sigue con las recetas de viewport (max-[900px]) y sin @container", () => {
+  it("sin la prop sigue con las recetas de viewport (max-lg) y sin @container", () => {
     render(<TablaEditable {...props} />);
     const tabla = screen.getByRole("table", { name: "T" });
     expect(tabla.parentElement?.classList).not.toContain("@container");

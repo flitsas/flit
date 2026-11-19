@@ -89,7 +89,7 @@ export function GestionSaneamiento({ sid, empresa }: GestionSaneamientoProps) {
       <ModalesGestion g={g} />
 
       {g.conflicto && (
-        <div className="fixed right-4 top-20 z-[60] max-[640px]:inset-x-2">
+        <div className="fixed right-4 top-20 z-[60] max-sm:inset-x-2">
           <NotificacionPersistente
             titulo="Otra persona cambió este saneamiento"
             mensaje="Recarga para ver los cambios. Lo que escribiste en el concepto con error se conserva hasta que recargues."

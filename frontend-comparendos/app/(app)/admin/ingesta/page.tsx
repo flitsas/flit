@@ -8,7 +8,7 @@ import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { Chip } from "@/components/ui/Chip";
 import { Interruptor } from "@/components/ui/Interruptor";
-import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, FECHA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { CANAL, canal, opciones, RESULTADO_CICLO, resultadoCiclo, TRABAJO } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
@@ -154,7 +154,7 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
                   {prog.horas.map((h, i) => (
                     <span key={i} className="flex items-center gap-1">
                       <input
-                        className={`${INPUT_CLS} w-32`}
+                        className={`${FECHA_CLS} w-32`}
                         type="time"
                         aria-label={`Hora ${i + 1}`}
                         value={h}

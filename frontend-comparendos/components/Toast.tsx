@@ -47,8 +47,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={value}>
       {children}
+      {/* Sobre la safe-area de iOS; bajo 1024 se sube por encima del lanzador del dock móvil (bottom-5) para no taparlo. */}
       <div
-        className="fixed bottom-4 right-4 z-[200] flex flex-col gap-2"
+        className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-[calc(1rem+env(safe-area-inset-right))] z-[200] flex flex-col gap-2 max-lg:bottom-[calc(5.5rem+env(safe-area-inset-bottom))]"
         aria-live="polite"
         aria-atomic="true"
         role="status"

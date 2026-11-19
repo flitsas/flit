@@ -57,7 +57,7 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; error: unknown } | { tipo: 
 const ESTADOS: EstadoDiagnostico[] = ["CREADO", "EN_PROCESO", "COMPLETADO", "INCOMPLETO"];
 /** El estándar de las tablas FLIT (HU #13916). Solo cambia desde el selector, que ofrece 10/20/30/50; no viaja si es este. */
 const TAMANO_INICIAL = TAMANO_DE_PAGINA_POR_DEFECTO;
-/** Celda de la tabla de lotes; por debajo de 900 px, renglón de la tarjeta del lote con su `data-label` (HU #14562 AC56). */
+/** Celda de la tabla de lotes; por debajo de 1024 px, renglón de la tarjeta del lote con su `data-label` (HU #14562 AC56). */
 const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
 
 interface Filtros {

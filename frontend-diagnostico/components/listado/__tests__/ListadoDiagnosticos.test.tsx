@@ -366,9 +366,9 @@ describe("ListadoDiagnosticos — rediseño del kit 2026 (HU #14562 AC13)", () =
   });
 });
 
-// HU #14562 AC56 (auditoría M6): por debajo de 900 px la tabla pasa a tarjetas con las recetas TABLA_MOVIL_* del repo y cada
+// HU #14562 AC56 (auditoría M6): por debajo de 1024 px la tabla pasa a tarjetas con las recetas TABLA_MOVIL_* del repo y cada
 // celda dice su columna; la tabla deja de imponer su ancho mínimo, así que no hay scroll horizontal.
-describe("ListadoDiagnosticos — HU #14562 AC56: tarjetas por debajo de 900 px", () => {
+describe("ListadoDiagnosticos — HU #14562 AC56: tarjetas por debajo de 1024 px", () => {
   const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
 
   it("tabla, cabecera, cuerpo y filas llevan las recetas de tarjeta y cada celda su data-label", async () => {

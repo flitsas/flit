@@ -3,12 +3,16 @@ import { buttonClass } from "@flit/ui/Button";
 export { controlCls, TRAMITES_CONTROL_CLS as CONTROL_CLS } from "@/components/control-styles";
 
 export const INPUT_CLS =
-  "h-10 w-full rounded-[9px] border border-input bg-card px-3 text-sm font-normal text-foreground placeholder:text-[color:var(--kit-gris)] " +
+  "h-10 w-full rounded-[9px] border border-input bg-card px-3 text-base font-normal text-foreground sm:text-sm placeholder:text-[color:var(--kit-gris)] " +
   "focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] focus:outline-none disabled:opacity-60";
 
 export const TEXTAREA_CLS =
-  "min-h-[88px] w-full rounded-[9px] border border-input bg-card px-3 py-2 text-sm font-normal text-foreground " +
+  "min-h-[88px] w-full rounded-[9px] border border-input bg-card px-3 py-2 text-base font-normal text-foreground sm:text-sm " +
   "focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] focus:outline-none";
+
+// `<input type="date">` y `type="time"` en WebKit (iOS): sin `appearance-none` ignora alto y padding y, vacío, colapsa; el valor sale
+// centrado. Mismo campo que INPUT_CLS, al ancho de su celda.
+export const FECHA_CLS = `${INPUT_CLS} appearance-none min-h-10 [&::-webkit-date-and-time-value]:text-left`;
 
 // Botones de la propuesta (HU #14486): la familia `.btn` de @flit/ui/Button, en la densidad de 36 px de esta app.
 export const BOTON_PRIMARIO_CLS = buttonClass({ size: "sm", className: "gap-1.5" });
