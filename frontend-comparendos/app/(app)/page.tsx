@@ -1,7 +1,6 @@
 "use client";
 
 import { Suspense, useState } from "react";
-import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { InlineAlert } from "@flit/ui";
@@ -11,17 +10,26 @@ import { TarjetaMetrica } from "@flit/ui/TarjetaMetrica";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
+import { DineroInicio } from "@/components/inicio/DineroInicio";
+import { OperacionInicio } from "@/components/inicio/OperacionInicio";
 import { PanelInicio } from "@/components/inicio/PanelInicio";
+import { SuperAdminInicio } from "@/components/inicio/SuperAdminInicio";
+import { controlCls } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { diaColombia, formatoPesos } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { FRENTES, hrefBandeja, inicioDeMes, pesosCorto, type Frentes, type Monto, type RespuestaDinero } from "@/lib/reportes";
+import { FRENTES, hrefBandeja, inicioDeMes, pesosCorto, type Frentes, type Monto, type Operacion, type RespuestaDinero, type RespuestaOperacion } from "@/lib/reportes";
 import { capacidades, tienePermiso } from "@/lib/sesion";
 import type { Contadores } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 
-/** El bloque de dinero (y recharts) se baja solo si la empresa tiene reportes; mientras, el mismo cargador de antes. */
-const DineroInicio = dynamic(() => import("@/components/inicio/DineroInicio").then((m) => m.DineroInicio), { loading: () => <Cargador /> });
+/** «412 comparendos pendientes en 287 vehículos · en 30 días entraron 45 y salieron 18». */
+function fraseResumen(o: Operacion): string {
+  const r = o.resumen;
+  const n = (x: number) => x.toLocaleString("es-CO");
+  const valor = r.valorPendiente === null ? "" : ` por ${pesosCorto(r.valorPendiente)}`;
+  return `${n(r.pendientes)} comparendos pendientes${valor} en ${n(r.vehiculos)} ${r.vehiculos === 1 ? "vehículo" : "vehículos"}. En los últimos 30 días entraron ${n(r.nuevos30)} y ${n(r.resueltos30)} dejaron de estar pendientes (pagados o cerrados).`;
+}
 
 /** Frentes sin el módulo de reportes: solo cantidades, de los mismos contadores de la bandeja. */
 function useFrentesSinDinero(listo: boolean, empresa: string | null): { frentes: Record<keyof Frentes, Monto | null> | null; error: string | null; recargar: () => void } {
@@ -140,9 +148,20 @@ function Contenido() {
     apiFetch<RespuestaDinero>("/reportes/dinero", { signal, query: { empresa: empresaQuery, desde: inicioDeMes(hoy), hasta: hoy } }),
   );
   const sinDinero = useFrentesSinDinero(listo && !conDinero && veBandeja, empresaQuery);
+  // Operación (R2): con BandejaVer, tenga o no el módulo de reportes; los pesos vienen en null sin él.
+  const operacion = useCarga(listo && veBandeja ? `inicio-operacion:${empresaQuery}` : null, (signal) =>
+    apiFetch<RespuestaOperacion>("/comparendos/operacion", { signal, query: { empresa: empresaQuery } }),
+  );
   const d = dinero.datos?.dinero;
+  const o = operacion.datos?.operacion;
   const frentes = conDinero ? (d?.frentes ?? null) : sinDinero.frentes;
-  const error = conDinero ? dinero.error : sinDinero.error;
+  // Solo con una empresa elegida: al volver a «Todas» un error de la empresa anterior no debe quedarse a la vista.
+  const error = listo ? ((conDinero ? dinero.error : sinDinero.error) ?? operacion.error) : null;
+  const reintentar = () => {
+    if (conDinero && dinero.error) dinero.recargar();
+    if (!conDinero && sinDinero.error) sinDinero.recargar();
+    if (operacion.error) operacion.recargar();
+  };
 
   return (
     <section className="flex flex-col gap-6">
@@ -150,21 +169,32 @@ function Contenido() {
         titulo="Inicio"
         ilustracion="comparendos"
         descripcion={
-          esSuperAdmin
-            ? "Vista de administración FLIT: elige una empresa para ver su tablero."
-            : `${sesion?.empresa?.nombre ? `${sesion.empresa.nombre} · ` : ""}Lo que hay que atender hoy${conDinero ? " y cómo va la plata" : ""}.`
+          esSuperAdmin && !empresa
+            ? "Vista de administración FLIT: la salud de todas las empresas. Elige una para ver su Inicio."
+            : o
+              ? fraseResumen(o)
+              : `${sesion?.empresa?.nombre ? `${sesion.empresa.nombre} · ` : ""}Lo que hay que atender hoy.`
         }
-        acciones={esSuperAdmin ? <SelectorEmpresa valor={empresa} onCambio={setEmpresa} /> : undefined}
+        acciones={
+          esSuperAdmin ? (
+            <>
+              <SelectorEmpresa valor={empresa} onCambio={setEmpresa} />
+              {empresa && (
+                <button type="button" className={controlCls(false)} onClick={() => setEmpresa(null)}>
+                  Todas las empresas
+                </button>
+              )}
+            </>
+          ) : undefined
+        }
       />
 
       {!sesion && <Cargador />}
-      {sesion && esSuperAdmin && !empresa && (
-        <EstadoVacio titulo="Elige una empresa" mensaje="El tablero muestra los comparendos de una empresa a la vez." />
-      )}
+      {sesion && esSuperAdmin && !empresa && <SuperAdminInicio />}
       {error && (
         <InlineAlert tone="error" title="No se pudo cargar el tablero">
           {error}{" "}
-          <button type="button" className="font-semibold underline" onClick={conDinero ? dinero.recargar : sinDinero.recargar}>
+          <button type="button" className="font-semibold underline" onClick={reintentar}>
             Reintentar
           </button>
         </InlineAlert>
@@ -184,16 +214,19 @@ function Contenido() {
           mensaje="Tu usuario no tiene acceso a la bandeja de comparendos ni a los reportes de la empresa. Pídele al administrador de tu empresa que te dé acceso."
         />
       )}
-      {conDinero && dinero.estado === "loading" && <Cargador />}
-      {conDinero && dinero.datos && <DineroInicio datos={dinero.datos} empresa={empresaQuery} />}
+      {listo && veBandeja && operacion.estado === "loading" && <Cargador />}
+      {/* listo: al volver a «Todas», useCarga conserva los datos de la empresa anterior y no deben verse. */}
+      {listo && o && <OperacionInicio o={o} empresa={empresaQuery} />}
+      {conDinero && dinero.datos && <DineroInicio datos={dinero.datos} />}
     </section>
   );
 }
 
 /**
- * Inicio de Comparendos (rediseño, S2): «Para hoy» con los frentes que llevan a la bandeja filtrada y, si la empresa
- * tiene el módulo de reportes, la lente de dinero (deuda cobrable contra caducada o prescrita, ahorro, pagado,
- * tendencia y organismos). Sin el módulo solo usa los contadores de la bandeja: nada de cifras en pesos ni 403.
+ * Inicio de Comparendos (rediseño S2 y R2). Gestora: «Para hoy» (frentes que llevan a la bandeja filtrada), la operación
+ * (gestión, vehículos, evitables, calendario, antigüedad, DP por organismo; GET /comparendos/operacion con BandejaVer) y,
+ * con el módulo de reportes, una franja plegable de dinero. Sin el módulo no hay pesos ni 403. SuperAdmin: con «Todas»,
+ * la salud de la plataforma y las empresas que necesitan algo; con una empresa, el Inicio de esa gestora.
  */
 export default function Inicio() {
   return (

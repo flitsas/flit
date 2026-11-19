@@ -282,3 +282,60 @@ export interface RespuestaEstados {
   alcance: RespuestaDinero["alcance"];
   dinero: Pick<Dinero, "hoy" | "estados" | "exigible" | "noExigible">;
 }
+
+// ── Lente de operación del Inicio (rediseño R2: GET /comparendos/operacion, con BandejaVer) ──────────────────────────
+// Los valores en pesos llegan en null cuando el usuario no tiene el módulo de reportes.
+
+export interface Cifra {
+  cantidad: number;
+  valor: number | null;
+}
+
+export interface Operacion {
+  hoy: string;
+  conValores: boolean;
+  resumen: { pendientes: number; valorPendiente: number | null; vehiculos: number; nuevos30: number; resueltos30: number };
+  gestion: { pasos: { estadoProceso: string; cantidad: number }[]; tasaExito: number | null };
+  vehiculos: { conTresOMas: number; concentracionDiezPorCiento: number | null; top: { placa: string; cantidad: number; organismos: number; valor: number | null }[] };
+  infracciones: { codigo: string; descripcion: string; cantidad: number; valor: number | null }[];
+  evitables: { soat: Cifra; tecnicoMecanica: Cifra };
+  calendario: { periodo: string; caducan: number; prescriben: number }[];
+  antiguedad: { tramo: string; cantidad: number; valor: number | null; desde: string | null; hasta: string | null }[];
+  dpPorOrganismo: { organismoId: string | null; nombre: string; enviados: number; favorables: number; respondidos: number; diasPromedio: number | null }[];
+}
+
+export interface RespuestaOperacion {
+  empresa: string;
+  operacion: Operacion;
+}
+
+/**
+ * Pasos del embudo de gestión: la clave de estadoProceso de la bandeja y cómo se dice. «Sin procesar» (y no «Sin
+ * gestión») porque es otro filtro que el frente «Sin gestión» de «Para hoy», y así se llama en la bandeja al abrirlo.
+ */
+export const PASOS_GESTION: Record<string, string> = {
+  SinProcesar: "Sin procesar",
+  DerechoPeticion: "Con derecho de petición",
+  RespuestaDesfavorable: "Respuesta desfavorable",
+  RespuestaFavorable: "Respuesta favorable",
+};
+
+/** Enlace a la bandeja con los comparendos pendientes (activos y sin pagar) de un tramo de antigüedad. */
+export function hrefTramo(t: { desde: string | null; hasta: string | null }, empresa?: string | null): string {
+  const q: Record<string, string> = { pagado: "false" };
+  if (t.desde) q.imposicionDesde = t.desde;
+  if (t.hasta) q.imposicionHasta = t.hasta;
+  return hrefBandeja(q, { empresa });
+}
+
+// ── Inicio del SuperAdmin (GET /admin/resumen) ──────────────────────────────────────────────────────────────────────
+
+export interface ResumenPlataforma {
+  hoy: string;
+  empresas: { total: number; activas: number; pendientes: number; inactivas: number };
+  ingesta24h: { consultas: number; conError: number; empresasConError: number };
+  correosFallidos7d: number;
+  ocrPorRevisar: number;
+  dpDelMes: { enviados: number; favorables: number };
+  necesitanAlgo: { empresaId: string; nombre: string; motivos: string[] }[];
+}
