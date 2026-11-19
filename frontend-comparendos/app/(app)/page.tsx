@@ -211,6 +211,10 @@ function Contenido() {
           empresa={empresaQuery}
         />
       )}
+      {/* R4 (Samuel): el dinero va segundo, debajo de «Para hoy». Mientras carga ocupa su sitio (MAIA): si apareciera
+          después, empujaría toda la operación hacia abajo. */}
+      {/* Con error no se queda cargando para siempre: el aviso de arriba ya dice qué pasó y ofrece «Reintentar» (GIA). */}
+      {conDinero && dinero.estado !== "error" && <DineroInicio datos={dinero.estado === "ready" ? dinero.datos : null} />}
       {listo && !veBandeja && !conDinero && (
         <EstadoVacio
           titulo="Tu Inicio está vacío por ahora"
@@ -220,15 +224,14 @@ function Contenido() {
       {listo && veBandeja && operacion.estado === "loading" && <Cargador />}
       {/* listo: al volver a «Todas», useCarga conserva los datos de la empresa anterior y no deben verse. */}
       {listo && o && <OperacionInicio o={o} empresa={empresaQuery} />}
-      {conDinero && dinero.estado === "ready" && dinero.datos && <DineroInicio datos={dinero.datos} />}
     </section>
   );
 }
 
 /**
- * Inicio de Comparendos (rediseño S2 y R2). Gestora: «Para hoy» (frentes que llevan a la bandeja filtrada), la operación
- * (gestión, vehículos, evitables, calendario, antigüedad, DP por organismo; GET /comparendos/operacion con BandejaVer) y,
- * con el módulo de reportes, una franja plegable de dinero. Sin el módulo no hay pesos ni 403. SuperAdmin: con «Todas»,
+ * Inicio de Comparendos (rediseño S2, R2 y R4). Gestora: «Para hoy» (frentes que llevan a la bandeja filtrada), con el
+ * módulo de reportes la franja plegable de dinero (segunda, R4) y la operación (gestión, vehículos, evitables,
+ * calendario, antigüedad, DP por organismo; GET /comparendos/operacion con BandejaVer). Sin el módulo no hay pesos ni 403. SuperAdmin: con «Todas»,
  * la salud de la plataforma y las empresas que necesitan algo; con una empresa, el Inicio de esa gestora.
  */
 export default function Inicio() {

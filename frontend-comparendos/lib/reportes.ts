@@ -347,7 +347,19 @@ export interface ResumenPlataforma {
   correosFallidos7d: number;
   /** Desde qué día (Colombia) cuenta los correos fallidos: el mismo `desde` del enlace a /mensajes. */
   correosDesde: string;
-  ocrPorRevisar: number;
-  dpDelMes: { enviados: number; favorables: number };
   necesitanAlgo: { empresaId: string; nombre: string; motivos: string[] }[];
+}
+
+/** `GET /admin/resumen?partes=impacto` (R4): lo que FLIT ayudó a hacer a todas las empresas en el año en curso. */
+export interface ImpactoPlataforma {
+  anio: number;
+  desde: string;
+  hasta: string;
+  ahorroLogrado: number;
+  /** tasa: favorables sobre lo respondido en el año (la «tasa de éxito» del dashboard); null sin respuestas. */
+  dp: { enviados: number; favorables: number; tasa: number | null };
+  comparendosGestionados: number;
+  avisosEnviados: number;
+  cambiosContraventor: { solicitados: number; aceptados: number };
+  topEmpresas: { empresaId: string; nombre: string; ahorro: number; dpFavorables: number }[];
 }

@@ -88,14 +88,27 @@ const operacion = (conValores: boolean) => {
   };
 };
 
+const impacto = {
+  anio: 2026,
+  desde: "2026-01-01",
+  hasta: "2026-11-19",
+  ahorroLogrado: 26_300_000,
+  dp: { enviados: 971, favorables: 45, tasa: 0.046 },
+  comparendosGestionados: 1200,
+  avisosEnviados: 340,
+  cambiosContraventor: { solicitados: 12, aceptados: 9 },
+  topEmpresas: [
+    { empresaId: "e1", nombre: "Bancolombia", ahorro: 26_000_000, dpFavorables: 44 },
+    { empresaId: "e2", nombre: "Renting", ahorro: 300_000, dpFavorables: 1 },
+  ],
+};
+
 const resumen = {
   hoy: "2026-11-19",
   empresas: { total: 4, activas: 3, pendientes: 1, inactivas: 0 },
   ingesta24h: { consultas: 120, conError: 0, empresasConError: 0 },
   correosFallidos7d: 2,
   correosDesde: "2026-11-12",
-  ocrPorRevisar: 5,
-  dpDelMes: { enviados: 9, favorables: 2 },
   necesitanAlgo: [{ empresaId: "e2", nombre: "Renting", motivos: ["Sin representante legal", "Sin correo para respuestas"] }],
 };
 
@@ -105,7 +118,7 @@ describe("Inicio de Comparendos", () => {
     apiFetch.mockImplementation(async (ruta: string, op?: { query?: Record<string, unknown> }) => {
       if (ruta === "/reportes/dinero") return dinero;
       if (ruta === "/comparendos/operacion") return operacion(!!(sesion as { empresa?: { capacidades?: { reportes?: boolean } } })?.empresa?.capacidades?.reportes);
-      if (ruta === "/admin/resumen") return resumen;
+      if (ruta === "/admin/resumen") return op?.query?.partes === "impacto" ? impacto : resumen;
       if (ruta === "/admin/empresas") return [];
       if (ruta === "/comparendos/contadores") return op?.query?.sinGestion ? { ...contadores, total: 12 } : op?.query?.juridico ? { ...contadores, total: 2 } : contadores;
       throw new Error(`ruta sin simular: ${ruta}`);
@@ -155,6 +168,10 @@ describe("Inicio de Comparendos", () => {
     expect(screen.getByTestId("frente-vencidos").getAttribute("aria-label")).toMatch(/^Vencidos: 10 comparendos por un valor de \$\s3\.800\.000\. Se pasó el plazo de gestión$/);
     // R2: el dinero es una franja de 4 tarjetas; la tendencia, la dona, los organismos y el coactivo están en Reportes.
     expect(kpis.childElementCount).toBe(4);
+    // R4: el dinero va segundo, entre «Para hoy» y la gestión.
+    const orden = (a: Element, b: Element) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(orden(screen.getByTestId("para-hoy"), kpis)).toBeTruthy();
+    expect(orden(kpis, await screen.findByTestId("gestion"))).toBeTruthy();
     expect(screen.queryByRole("link", { name: /^En cobro coactivo/ })).toBeNull();
     expect(screen.queryByText(/Tendencia de los últimos 12 meses/)).toBeNull();
     // La operación con el módulo trae pesos, y la frase de arriba los dice.
@@ -207,6 +224,34 @@ describe("Inicio de Comparendos", () => {
     expect(apiFetch.mock.calls.some(([ruta, op]) => ruta === "/reportes/dinero" && op?.query?.partes === "inicio")).toBe(true);
   });
 
+  it("si el impacto falla, su panel ofrece reintentar y el resto del Inicio del SuperAdmin sigue", async () => {
+    sesion = { usuario: { id: "s", email: "s@flit.test", esSuperAdmin: true }, permisos: [], empresa: null };
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (ruta: string, op?: { query?: Record<string, unknown> }) => {
+      if (ruta === "/admin/resumen" && op?.query?.partes === "impacto") throw new Error("Sin conexión");
+      return base(ruta, op);
+    });
+    render(<Inicio />);
+    const panel = await screen.findByTestId("impacto");
+    expect(await within(panel).findByText(/Sin conexión/)).toBeTruthy();
+    expect(within(panel).getByRole("button", { name: "Reintentar" })).toBeTruthy();
+    expect(screen.getByTestId("necesitan-algo")).toBeTruthy();
+    expect(screen.getByTestId("salud")).toBeTruthy();
+  });
+
+  it("si el dinero falla, la franja no se queda cargando: el aviso general ofrece reintentar", async () => {
+    sesion = gestora(true);
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (ruta: string, op?: { query?: Record<string, unknown> }) => {
+      if (ruta === "/reportes/dinero") throw new Error("Sin conexión");
+      return base(ruta, op);
+    });
+    render(<Inicio />);
+    expect(await screen.findByText("No se pudo cargar el tablero")).toBeTruthy();
+    expect(screen.queryByText("Dinero")).toBeNull();
+    expect(await screen.findByTestId("gestion")).toBeTruthy();
+  });
+
   it("el SuperAdmin con «Todas» ve la salud de la plataforma y las empresas que necesitan algo", async () => {
     sesion = { usuario: { id: "s", email: "s@flit.test", esSuperAdmin: true }, permisos: [], empresa: null };
     render(<Inicio />);
@@ -215,7 +260,23 @@ describe("Inicio de Comparendos", () => {
     expect(within(salud).getByText("3 de 4")).toBeTruthy();
     const necesitan = screen.getByTestId("necesitan-algo");
     expect(within(necesitan).getByRole("link", { name: /^Renting: Sin representante legal, Sin correo para respuestas\. Ir al Parametrizador$/ }).getAttribute("href")).toBe("/admin/empresas");
-    // Con «Todas» no se pide la operación de ninguna empresa (eso es al elegir una).
-    expect(apiFetch.mock.calls.map(([ruta]) => ruta).sort()).toEqual(["/admin/empresas", "/admin/resumen"]);
+    // R4: sin OCR por revisar ni DP del mes en la salud (3 tarjetas), y el impacto del año entre la salud y las empresas.
+    expect(within(salud).queryByText("OCR por revisar")).toBeNull();
+    expect(within(salud).queryByText("Derechos de petición del mes")).toBeNull();
+    const impactoPanel = await screen.findByTestId("impacto");
+    expect(within(impactoPanel).getByText("Impacto de FLIT en 2026")).toBeTruthy();
+    expect(within(impactoPanel).getByText("$ 26,3 M")).toBeTruthy();
+    expect(within(impactoPanel).getByText(/^45 favorables \(4,6 % de los respondidos\)$/)).toBeTruthy();
+    expect(within(impactoPanel).getByText("Aceptados de 12 solicitados")).toBeTruthy();
+    expect(within(impactoPanel).getByText("Bancolombia")).toBeTruthy();
+    const despues = (a: Element, b: Element) => a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING;
+    expect(despues(salud, impactoPanel)).toBeTruthy();
+    expect(despues(impactoPanel, necesitan)).toBeTruthy();
+    // Con «Todas» no se pide la operación de ninguna empresa (eso es al elegir una); el impacto va en su propia llamada.
+    expect(apiFetch.mock.calls.map(([ruta, op]) => `${ruta}${op?.query?.partes ? `?partes=${op.query.partes}` : ""}`).sort()).toEqual([
+      "/admin/empresas",
+      "/admin/resumen",
+      "/admin/resumen?partes=impacto",
+    ]);
   });
 });
