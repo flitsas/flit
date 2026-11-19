@@ -629,3 +629,21 @@
 }
 
 /* «girador» del kit (`.girador`): el ícono gira solo cuando la pieza lo pide con `animate-spin`, como el Loader2 de antes. */
+
+/*
+ * Base para iPhone y iPad (Safari y Chrome iOS, ambos WebKit). Contrato responsive §base.
+ * - text-size-adjust: iOS no agranda el texto solo al girar a horizontal.
+ * - overflow-x: clip (no hidden): un elemento ancho no arrastra la página de lado, y `sticky` sigue funcionando.
+ * - tap-highlight: sin el recuadro gris al tocar; el foco visible lo da `:focus-visible`.
+ */
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -webkit-tap-highlight-color: transparent;
+  }
+  html,
+  body {
+    overflow-x: clip;
+  }
+}
