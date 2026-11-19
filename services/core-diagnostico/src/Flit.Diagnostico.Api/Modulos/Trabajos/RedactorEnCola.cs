@@ -166,7 +166,17 @@ internal sealed partial class RedactorEnCola(
                 EmisorDictamen.BienDe(detalle, vehiculo.Placa, vehiculo.Servicio, vehiculo.IdentificadorNorm),
                 suspendida,
                 MontoImpuesto(celdas));
-            resultado = await servicios.GetRequiredService<ServicioRedactor>().RedactarAsync(pedido, ct).ConfigureAwait(false);
+            // ADR-0090: la cola corre sin petición: el registro de consumo de IA toma empresa y dictamen de la fila.
+            using (Flit.Platform.Sdk.IaConsumo.IaCallContext.Instancia.Iniciar(new Flit.Platform.Sdk.IaConsumo.IaAmbito
+                   {
+                       Origen = Flit.Platform.Sdk.IaConsumo.IaOrigenes.Job,
+                       TenantId = tomada.TenantId.ToString(),
+                       EntidadTipo = "dictamen",
+                       EntidadId = fila.Id.ToString(),
+                   }))
+            {
+                resultado = await servicios.GetRequiredService<ServicioRedactor>().RedactarAsync(pedido, ct).ConfigureAwait(false);
+            }
         }
 
         var cierre = Decidir(fila.Veredicto, fila.Alertamientos, tomada.Intentos, resultado, opciones.Value.MaxReintentos, reloj.GetUtcNow());
