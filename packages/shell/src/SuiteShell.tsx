@@ -10,6 +10,7 @@ import { AccountMenu, type ShellUser } from "./AccountMenu";
 import type { SuiteApp } from "./apps";
 import { Dock, type DistribucionDock } from "./dock/Dock";
 import { DockMobile } from "./dock/DockMobile";
+import { usePieAlto } from "./usePieAlto";
 import { buildDock, isActive, type NavCatalog, type NavViewer } from "./nav";
 import { ProductMenu } from "./ProductMenu";
 import { CommandPalette } from "./CommandPalette";
@@ -110,6 +111,10 @@ export function SuiteShell({
   const pathname = usePathname() ?? "/";
   const brand = useBrand();
   const scrollRef = useRef<HTMLDivElement>(null);
+  // Responsive iOS (ronda 2): el pie del layout `app` y el contenedor que reserva su alto desde `lg`.
+  const pieRef = useRef<HTMLDivElement>(null);
+  const contenedorRef = useRef<HTMLDivElement>(null);
+  usePieAlto(pieRef, contenedorRef);
   const { permissions, isSuperAdmin, roles, modules } = user;
   const groups = useMemo(
     () => buildDock(nav, { permissions, isSuperAdmin, roles, modules }, pathname, search),
@@ -165,7 +170,12 @@ export function SuiteShell({
   if (app) {
     return (
       <ShellNavProvider value={shellNav}>
-      <div className="flex h-dvh w-full flex-col overflow-hidden bg-[var(--di-surface)] text-[var(--color-flit-primary)] dark:text-white">
+      <div
+        ref={contenedorRef}
+        className={`flex h-dvh w-full flex-col overflow-hidden bg-[var(--di-surface)] text-[var(--color-flit-primary)] dark:text-white ${
+          footer ? "lg:pb-[var(--suite-pie-alto,2rem)]" : ""
+        }`}
+      >
         {header}
         <main className="relative min-h-0 flex-1 overflow-hidden">
           {/* UI Kit 2026: fondo plano --di-surface, sin los círculos decorativos del diseño anterior. Sin `isolate` ni
@@ -174,16 +184,26 @@ export function SuiteShell({
               páginas (`.app-bg`) se apaga aquí para que se vea el de la propuesta. */}
           <div
             ref={scrollRef}
-            className="absolute inset-0 overflow-y-auto pb-28 scroll-pb-28 [&_.app-bg]:bg-transparent [&_.app-bg]:bg-none"
+            className={`absolute inset-0 overflow-y-auto pb-28 scroll-pb-28 [&_.app-bg]:bg-transparent [&_.app-bg]:bg-none ${
+              footer ? "max-lg:flex max-lg:flex-col" : ""
+            }`}
             data-shell-scroll
           >
             {/* Sin contenedor centrado: cada página conserva su propio ancho y relleno (decisión de producto, HU #14479). */}
             {children}
+            {/* Responsive iOS (ronda 2, decisión de Samuel): por debajo de lg el pie baja con el contenido, al final del
+                scroll y por encima del colchón del dock (en una página corta, `mt-auto` lo deja abajo y no a media
+                pantalla); desde lg queda fijo abajo como siempre, con su alto reservado en el contenedor (usePieAlto).
+                Un solo nodo: `fixed` no lo recorta ni lo desplaza el scroll. */}
+            {footer ? (
+              <div ref={pieRef} data-shell-pie className="max-lg:mt-auto lg:fixed lg:inset-x-0 lg:bottom-0">
+                {footer}
+              </div>
+            ) : null}
           </div>
           {dock}
           {overlay}
         </main>
-        {footer}
       </div>
       </ShellNavProvider>
     );
