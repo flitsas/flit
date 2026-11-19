@@ -12,8 +12,48 @@ export const TAMANOS_DE_PAGINA = [10, 20, 30, 50] as const;
 /** Tamaño con el que abre toda tabla que no tenga uno recordado. */
 export const TAMANO_DE_PAGINA_POR_DEFECTO: number = TAMANOS_DE_PAGINA[0];
 
-/** Prefijo de las claves en `sessionStorage`; la clave completa es `flit.filasPorPagina.<tabla>`. */
+/** Prefijo de las claves en `sessionStorage`; la clave completa es `flit.filasPorPagina.<ámbito>.<tabla>`. */
 const PREFIJO_CLAVE = "flit.filasPorPagina.";
+
+/**
+ * Ámbito del recuerdo: quién eligió el tamaño. La app lo fija con el id del usuario en sesión (Bug
+ * #14593): sin esto, el 50 que pone un super admin en Usuarios lo heredaba cualquiera que entrara
+ * después en la misma pestaña, incluidos los usuarios de otras compañías. Sin sesión, el ámbito es
+ * vacío y la clave queda sin usuario.
+ */
+let resolverAmbito: () => string | null = () => null;
+
+/** La app indica cómo obtener el id del usuario en sesión (o `null` si no hay sesión). */
+export function configurarAmbitoDePaginacion(resolver: () => string | null): void {
+  resolverAmbito = resolver;
+}
+
+function claveDeAlmacen(clave: string): string {
+  let ambito: string | null = null;
+  try {
+    ambito = resolverAmbito();
+  } catch {
+    ambito = null;
+  }
+  return PREFIJO_CLAVE + (ambito ? `${ambito}.` : "") + clave;
+}
+
+/**
+ * Quita todos los tamaños recordados de la sesión del navegador. Se llama al cerrar sesión para que
+ * ningún tamaño sobreviva al cambio de usuario en la misma pestaña (Bug #14593).
+ */
+export function limpiarTamanosDePagina(): void {
+  try {
+    const claves: string[] = [];
+    for (let i = 0; i < sessionStorage.length; i += 1) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith(PREFIJO_CLAVE)) claves.push(k);
+    }
+    claves.forEach((k) => sessionStorage.removeItem(k));
+  } catch {
+    // Almacenamiento bloqueado: no hay nada que limpiar.
+  }
+}
 
 /**
  * `useSyncExternalStore` exige una suscripción; aquí no hay ninguna a la que suscribirse —
@@ -30,7 +70,7 @@ function suscripcionInerte(): () => void {
  */
 export function leerTamanoDePaginaGuardado(clave: string): number {
   try {
-    const guardado = Number(sessionStorage.getItem(PREFIJO_CLAVE + clave));
+    const guardado = Number(sessionStorage.getItem(claveDeAlmacen(clave)));
     return (TAMANOS_DE_PAGINA as readonly number[]).includes(guardado) ? guardado : TAMANO_DE_PAGINA_POR_DEFECTO;
   } catch {
     return TAMANO_DE_PAGINA_POR_DEFECTO;
@@ -40,7 +80,7 @@ export function leerTamanoDePaginaGuardado(clave: string): number {
 /** Recuerda el tamaño de una tabla para el resto de la sesión. */
 export function guardarTamanoDePagina(clave: string, tamano: number): void {
   try {
-    sessionStorage.setItem(PREFIJO_CLAVE + clave, String(tamano));
+    sessionStorage.setItem(claveDeAlmacen(clave), String(tamano));
   } catch {
     // Ventana privada o almacenamiento bloqueado: el tamaño vale para esta pantalla y no se
     // recuerda. Es una comodidad, no un dato: no merece un aviso.
