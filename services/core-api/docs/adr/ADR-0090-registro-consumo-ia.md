@@ -34,7 +34,7 @@ y el OCR en streaming los descarta.
    5 s), y purga diaria del detalle. La persistencia es `EfIaConsumoAlmacen<TContext>`: cada servicio la usa sobre su
    propio `DbContext` con `AddFlitIaConsumo<TContext>(configuration, "flit", "<servicio>")`.
 5. En core-api las tablas viven en **`admin`** (globales de plataforma sin RLS, como `admin.ai_tool_provider_settings`;
-   `tenant_id` es texto informativo), las crea el DDL `202-ia-consumo-log.sql` y EF las mapea con
+   `tenant_id` es texto informativo), las crea el DDL `203-ia-consumo-log.sql` y EF las mapea con
    `ExcludeFromMigrations`.
 6. **Banderas** leídas en cada uso (sin congelar al arrancar): `IA_CONSUMO_LOG` (maestra, `true`), `IA_CONSUMO_DETALLE`
    (`false`), `IA_CONSUMO_DETALLE_DIAS` (30) e `IA_CONSUMO_AMBIENTE` (si falta, `DR_FLIT_DEPLOY_ENVIRONMENT`; si

@@ -20,7 +20,7 @@ namespace Flit.Infrastructure.Tests.Persistence;
 /// </summary>
 public sealed partial class IaConsumoSchemaTests
 {
-    private const string DdlFile = "202-ia-consumo-log.sql";
+    private const string DdlFile = "203-ia-consumo-log.sql";
 
     private static string LoadDdl()
     {
@@ -169,6 +169,6 @@ public sealed partial class IaConsumoSchemaTests
         up.Should().Contain("CREATE TABLE IF NOT EXISTS admin.ia_consumo_log");
         migracion.DownOperations.OfType<SqlOperation>().Single().Sql.Should().Contain("DROP TABLE IF EXISTS admin.ia_consumo_detalle");
         typeof(IaConsumoTablas).GetCustomAttributes(typeof(MigrationAttribute), false).Cast<MigrationAttribute>().Single().Id
-            .Should().Be("20261118120000_IaConsumoTablas");
+            .Should().Be("20261119120000_IaConsumoTablas");
     }
 }

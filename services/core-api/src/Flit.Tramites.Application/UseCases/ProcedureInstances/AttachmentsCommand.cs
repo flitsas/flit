@@ -31,7 +31,12 @@ public sealed record AttachmentDto(
     /// </summary>
     string? OcrStatus = null,
     /// <summary>Bug #14559 (ADR-0085) — código cerrado del motivo (solo con <c>rejected</c>/<c>skipped</c>) o null.</summary>
-    string? OcrReason = null);
+    string? OcrReason = null,
+    /// <summary>
+    /// Bug #14604 — versión anterior de un documento que la carga administrativa (o la revocatoria) dejó como histórica: se
+    /// muestra y se descarga, pero ya no es el documento vigente del tipo.
+    /// </summary>
+    bool IsHistorico = false);
 
 public sealed record AttachmentsResponse(IReadOnlyList<AttachmentDto> Attachments);
 
@@ -215,7 +220,12 @@ public sealed record RegisterAttachmentInput(
     /// <summary>Bug #14559 (ADR-0085) — veredicto OCR que el cliente calculó antes de registrar; opcional e informativo.</summary>
     string? OcrStatus = null,
     /// <summary>Bug #14559 (ADR-0085) — código cerrado del motivo del veredicto; opcional.</summary>
-    string? OcrReason = null);
+    string? OcrReason = null,
+    /// <summary>
+    /// Bug #14604 — versión anterior de un documento que la carga administrativa (o la revocatoria) dejó como histórica: se
+    /// muestra y se descarga, pero ya no es el documento vigente del tipo.
+    /// </summary>
+    bool IsHistorico = false);
 
 /// <summary>
 /// Sube un adjunto: valida tipo/mime/size, persiste el binario vía <see cref="IAttachmentStorage"/>,
@@ -267,7 +277,7 @@ public sealed class UploadAttachmentHandler(
         // contraria —al limpiar lo generado, respeta lo cargado— y que motivó el Bug #11310.
         var previos = AttachmentRules.ReemplazaAlSubir(tipo)
             ? instance.Attachments
-                .Where(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
+                .Where(a => !a.IsHistorico && string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
                             && !EsDeOtroDueno(a))
                 .ToList()
             : [];
@@ -378,7 +388,7 @@ public sealed class UploadAttachmentHandler(
 
     internal static AttachmentDto ToDto(ProcedureInstanceAttachment a, bool digitallySigned = false) =>
         new(a.Id, a.Tipo, a.Filename, a.Mimetype, a.SizeBytes, a.Sha256, a.Source, a.UploadedAt, a.Provider, digitallySigned,
-            a.OcrStatus, a.OcrReason);
+            a.OcrStatus, a.OcrReason, a.IsHistorico);
 }
 
 /// <summary>
@@ -471,7 +481,7 @@ public sealed class RegisterAttachmentHandler(
         // Paridad HU #12046 con UploadAttachmentHandler: el front usa presign→register.
         var previos = AttachmentRules.ReemplazaAlSubir(tipo)
             ? instance.Attachments
-                .Where(a => string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
+                .Where(a => !a.IsHistorico && string.Equals(a.Tipo, tipo, StringComparison.OrdinalIgnoreCase)
                             && !string.Equals(a.Source, "system", StringComparison.OrdinalIgnoreCase)
                             && !string.Equals(a.Source, "company", StringComparison.OrdinalIgnoreCase))
                 .ToList()

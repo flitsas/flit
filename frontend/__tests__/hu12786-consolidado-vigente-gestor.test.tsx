@@ -361,7 +361,7 @@ describe('HU #12786 AC4 — trámite aprobado: documento definitivo con aviso', 
     const aviso = await within(dialog).findByTestId('aviso-documento-final');
     expect(aviso).toHaveAttribute('role', 'status');
     expect(aviso).toHaveTextContent('Documento final.');
-    expect(aviso).toHaveTextContent(/expediente definitivo y ya no se regenera/);
+    expect(aviso).toHaveTextContent(/expediente definitivo. Solo se vuelve a generar si un administrador actualiza un documento/);
     expect(mocks.generarConsolidado).not.toHaveBeenCalled();
   });
 

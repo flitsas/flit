@@ -9,6 +9,7 @@ import {
   esLecturaDeArchivoDenegada,
 } from '@/lib/tramites/archivo-en-memoria';
 import { CODIGO_ADJUNTO_BLOQUEADO_FLITO, mensajeErrorAdjunto } from '@/lib/tramites/flito';
+import { soloVigentes } from '@/lib/documents/vigencia';
 import type {
   AttachmentOcrReason,
   AttachmentOcrVerdict,
@@ -315,7 +316,8 @@ export function deriveOcrFromAttachments(
   attachments: readonly ProcedureAttachment[],
 ): Record<string, OcrUiResult> {
   const masReciente = new Map<string, ProcedureAttachment>();
-  for (const att of attachments) {
+  // Bug #14604 — una versión anterior (reemplazada) no aporta veredicto a la casilla.
+  for (const att of soloVigentes(attachments)) {
     const key = att.tipo.toLowerCase();
     const previo = masReciente.get(key);
     if (!previo || Date.parse(att.uploadedAt) > Date.parse(previo.uploadedAt)) {
@@ -399,7 +401,8 @@ export function useProcedureDocuments(
         setState((s) => ({
           ...s,
           checklist,
-          attachments,
+          // Bug #14604 — la casilla solo ve los vigentes; las versiones anteriores no cuentan.
+          attachments: soloVigentes(attachments),
           ocrResults: mergeOcrResults(deriveOcrFromAttachments(attachments), s.ocrResults),
           loading: false,
         }));

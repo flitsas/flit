@@ -57,7 +57,7 @@ public sealed class ServicioReportes(ComparendosDb db, CalendarioService calenda
             .Where(e => (t == null || e.TenantId == t) && e.ActorTipo == ActorTipo.Usuario && e.ActorUsuarioId != null && EventosDeGestion.Contains(e.Tipo) && e.OcurridoEn >= i && e.OcurridoEn < f)
             .Select(e => new { Usuario = e.ActorUsuarioId!.Value, e.ComparendoId }).Distinct().ToListAsync(ct).ConfigureAwait(false);
         var dps = await db.DerechosPeticion.AsNoTracking()
-            .Where(d => (t == null || d.TenantId == t) && (d.Estado == EstadoDp.Enviado || d.Estado == EstadoDp.Respondido) && d.FechaRadicacion >= a.Desde && d.FechaRadicacion <= a.Hasta)
+            .Where(d => (t == null || d.TenantId == t) && !d.EnvioAutomatico && (d.Estado == EstadoDp.Enviado || d.Estado == EstadoDp.Respondido) && d.FechaRadicacion >= a.Desde && d.FechaRadicacion <= a.Hasta)
             .Select(d => new { Usuario = d.EnviadoPor, d.ComparendoId }).Distinct().ToListAsync(ct).ConfigureAwait(false);
         return eventos.Select(x => new ParGestion(x.Usuario, x.ComparendoId)).Concat(dps.Select(x => new ParGestion(x.Usuario, x.ComparendoId))).ToList();
     }
@@ -179,7 +179,7 @@ public sealed class ServicioReportes(ComparendosDb db, CalendarioService calenda
         var gestionados = (await GestionesAsync(a, ct).ConfigureAwait(false))
             .GroupBy(p => p.Usuario).ToDictionary(g => g.Key, g => g.Select(p => p.Comparendo).Distinct().Count());
         var dps = await db.DerechosPeticion.AsNoTracking()
-            .Where(d => (t == null || d.TenantId == t) && (d.Estado == EstadoDp.Enviado || d.Estado == EstadoDp.Respondido) && d.FechaRadicacion >= a.Desde && d.FechaRadicacion <= a.Hasta)
+            .Where(d => (t == null || d.TenantId == t) && !d.EnvioAutomatico && (d.Estado == EstadoDp.Enviado || d.Estado == EstadoDp.Respondido) && d.FechaRadicacion >= a.Desde && d.FechaRadicacion <= a.Hasta)
             .GroupBy(d => d.EnviadoPor).Select(g => new { Usuario = g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Usuario, x => x.N, ct).ConfigureAwait(false);
         var contraventores = await db.ContraventorHistorial.AsNoTracking()
             .Where(h => (t == null || h.TenantId == t) && h.Origen == OrigenContraventor.Manual && h.UsuarioId != null && h.RegistradoEn >= i && h.RegistradoEn < f)
@@ -222,7 +222,7 @@ public sealed class ServicioReportes(ComparendosDb db, CalendarioService calenda
                     && EventosDeGestion.Contains(e.Tipo) && e.OcurridoEn >= i && e.OcurridoEn < f).Select(e => e.ComparendoId)
                 .Union(ComparendosDeMetrica(a, usuario, "dpEnviados")),
             "dpEnviados" => db.DerechosPeticion.Where(d => (t == null || d.TenantId == t) && d.EnviadoPor == usuario
-                && (d.Estado == EstadoDp.Enviado || d.Estado == EstadoDp.Respondido) && d.FechaRadicacion >= a.Desde && d.FechaRadicacion <= a.Hasta).Select(d => d.ComparendoId),
+                && !d.EnvioAutomatico && (d.Estado == EstadoDp.Enviado || d.Estado == EstadoDp.Respondido) && d.FechaRadicacion >= a.Desde && d.FechaRadicacion <= a.Hasta).Select(d => d.ComparendoId),
             "contraventoresAsignados" => db.ContraventorHistorial.Where(h => (t == null || h.TenantId == t) && h.Origen == OrigenContraventor.Manual && h.UsuarioId == usuario
                 && h.RegistradoEn >= i && h.RegistradoEn < f).Select(h => h.ComparendoId),
             "pagos" => db.Pagos.Where(p => (t == null || p.TenantId == t) && p.RegistradoPor == usuario && p.RegistradoEn >= i && p.RegistradoEn < f).Select(p => p.ComparendoId),

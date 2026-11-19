@@ -21,7 +21,16 @@ type Resultado = { correo: { asunto: string | null; html: string; desconocidas: 
  * Vista previa de una plantilla con datos de ejemplo (o de un comparendo real): los correos como HTML en un iframe sin
  * scripts; los documentos como el PDF que genera el backend, con marca de agua «VISTA PREVIA».
  */
-export function VistaPrevia({ contenido, alto = 560 }: { contenido: Contenido | null; alto?: number }) {
+export function VistaPrevia({
+  contenido,
+  alto = 560,
+  onEstado,
+}: {
+  contenido: Contenido | null;
+  alto?: number;
+  /** Avisa si la vista previa está cargando, lista o falló (para bloquear acciones que dependen de haberla visto). */
+  onEstado?: (estado: "loading" | "ready" | "error") => void;
+}) {
   const clave = contenido ? JSON.stringify(contenido) : null;
   const correo = contenido ? esPlantillaDeCorreo(contenido.tipo) : false;
   const vista = useCarga<Resultado>(clave, async (signal) => {
@@ -29,6 +38,8 @@ export function VistaPrevia({ contenido, alto = 560 }: { contenido: Contenido | 
     if (correo) return { correo: await apiFetch<{ asunto: string | null; html: string; desconocidas: string[] }>("/plantillas/vista-previa", { method: "POST", body, signal }) };
     return { pdf: URL.createObjectURL(await apiPostBlob("/plantillas/vista-previa", body, signal)) };
   });
+  const estadoVista = contenido ? vista.estado : "loading";
+  useEffect(() => onEstado?.(estadoVista), [estadoVista, onEstado]);
   const pdf = vista.datos && "pdf" in vista.datos ? vista.datos.pdf : null;
   useEffect(() => () => { if (pdf) URL.revokeObjectURL(pdf); }, [pdf]);
   const resultadoCorreo = useMemo(() => (vista.datos && "correo" in vista.datos ? vista.datos.correo : null), [vista.datos]);

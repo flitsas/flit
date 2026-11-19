@@ -1,6 +1,6 @@
 -- ─────────────────────────────────────────────────────────────────────────────
 -- Registro de consumo de APIs de IA — contrato ia-consumo v1 (docs/contratos/ia-consumo.v1.md, ADR-0090).
--- Migración EF: 20261118120000_IaConsumoTablas.
+-- Migración EF: 20261119120000_IaConsumoTablas.
 --
 -- Qué crea (schema admin, GLOBAL de plataforma: tenant_id es texto informativo, sin RLS — mismo precedente
 -- que admin.ai_tool_provider_settings, ADR-0070):

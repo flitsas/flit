@@ -41,7 +41,14 @@ public static partial class EmpresasEndpoints
         bool RequiereRepresentanteLegal,
         IReadOnlyList<string> DestinatariosReportes,
         IReadOnlyList<string> CorreosAlertaOperativa,
-        string? EmpresaNit);
+        string? EmpresaNit,
+        bool DpAutomaticoActivo,
+        int DpAutomaticoTopeDiario);
+
+    /// <summary>HU #14614: enciende el envío automático de derechos de petición y fija cuántos se envían por día.</summary>
+    public sealed record CambioEnvioAutomaticoDp(bool Activo, int TopeDiario);
+
+    public const int TopeDiarioMaximo = 500;
 
     /// <summary>La empresa elegida de la lista de la plataforma (<c>GET /admin/empresas/plataforma</c>).</summary>
     public sealed record NuevaEmpresa(Guid Id);
@@ -78,6 +85,8 @@ public static partial class EmpresasEndpoints
         admin.MapPost("", Registrar);
         admin.MapGet("/{id:guid}/configuracion", DeEmpresa);
         admin.MapPut("/{id:guid}/capacidades", GuardarCapacidades);
+        // HU #14614: enviar documentos legales sin que nadie los dispare es del SuperAdmin, igual que las capacidades.
+        admin.MapPut("/{id:guid}/envio-automatico-dp", GuardarEnvioAutomaticoDp);
         admin.MapPut("/{id:guid}/correo", GuardarCorreoDeEmpresa);
         admin.MapGet("/{id:guid}/auditoria", Historial);
         admin.MapPut("/{id:guid}/nits/{nitId:guid}/consulta-contrato", GuardarConsultaContratoNit);
@@ -94,7 +103,7 @@ public static partial class EmpresasEndpoints
         return new(c.TenantId, c.EmpresaNombre, c.HasRightPetitionModule, c.AllowsContravenerConsultation, c.AllowsContravenerChange, c.HasOcrAccess,
             c.HasReportesModule, c.NotificationChannel.ToString(), c.CanalCorreo.ToString(), c.RemitenteNombre, c.CorreoRespuesta, Copias(c.Cc), Copias(c.Bcc),
             c.TipoIntegracionConductor.ToString(), c.ConjuntoPlantillas.ToString(), c.RequiereRepresentanteLegal, c.DestinatariosReportes, c.CorreosAlertaOperativa,
-            ConDv(c.EmpresaNit));
+            ConDv(c.EmpresaNit), c.DpAutomaticoActivo, c.DpAutomaticoTopeDiario);
     }
 
     public static IReadOnlyList<CopiaDto> Copias(string json) =>
@@ -247,6 +256,32 @@ public static partial class EmpresasEndpoints
 
     private static string? ConDv(string? nitBase) => nitBase is { } nit ? $"{nit}-{Nit.DigitoVerificacion(nit)}" : null;
 
+    /// <summary>
+    /// HU #14614: enciende o apaga el envío automático y fija el tope diario. Exige el módulo de derechos de petición. Encender no
+    /// envía nada por sí solo: además cada tipología debe estar marcada como automatizable (con revisión jurídica).
+    /// </summary>
+    private static async Task<IResult> GuardarEnvioAutomaticoDp(Guid id, CambioEnvioAutomaticoDp pedido, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, Reloj reloj, CancellationToken ct)
+    {
+        var c = await db.ConfiguracionesEmpresa.FirstOrDefaultAsync(x => x.TenantId == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La empresa");
+        if (pedido.TopeDiario is < 1 or > TopeDiarioMaximo)
+            throw new ReglaException("TOPE_INVALIDO", $"El tope diario va de 1 a {TopeDiarioMaximo} derechos de petición.");
+        if (pedido.Activo && !c.HasRightPetitionModule)
+            throw ReglaException.Conflicto("CAPACIDAD_DP_INACTIVA", "La empresa no tiene habilitados los derechos de petición: habilítalos antes de encender el envío automático.");
+
+        var cambios = Auditoria.Diferencias(
+            ("dp_automatico_activo", c.DpAutomaticoActivo, pedido.Activo),
+            ("dp_automatico_tope_diario", (int)c.DpAutomaticoTopeDiario, pedido.TopeDiario));
+        if (cambios.Length == 0)
+            return Results.Ok(Dto(c));
+
+        var accion = c.DpAutomaticoActivo == pedido.Activo ? "ACTUALIZAR" : pedido.Activo ? "ACTIVAR" : "DESACTIVAR";
+        (c.DpAutomaticoActivo, c.DpAutomaticoTopeDiario) = (pedido.Activo, (short)pedido.TopeDiario);
+        (c.ActualizadoEn, c.ActualizadoPor) = (reloj.Ahora, usuario.Id);
+        auditoria.Registrar(id, "configuracion_empresa", id, accion, cambios);
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Results.Ok(Dto(c));
+    }
+
     private static async Task<IResult> GuardarCapacidades(Guid id, CambioCapacidades pedido, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, Reloj reloj, CancellationToken ct)
     {
         var c = await db.ConfiguracionesEmpresa.FirstOrDefaultAsync(x => x.TenantId == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La empresa");
@@ -269,8 +304,14 @@ public static partial class EmpresasEndpoints
         (c.HasRightPetitionModule, c.AllowsContravenerConsultation, c.AllowsContravenerChange, c.HasOcrAccess, c.HasReportesModule) =
             (pedido.HasRightPetitionModule, pedido.AllowsContravenerConsultation, pedido.AllowsContravenerChange, pedido.HasOcrAccess, pedido.HasReportesModule);
         (c.TipoIntegracionConductor, c.RequiereRepresentanteLegal) = (integracion, pedido.RequiereRepresentanteLegal);
+        // HU #14614: sin el módulo de derechos de petición no puede haber envío automático.
+        var apagaAutomatico = !c.HasRightPetitionModule && c.DpAutomaticoActivo;
+        if (apagaAutomatico)
+            c.DpAutomaticoActivo = false;
         (c.ActualizadoEn, c.ActualizadoPor) = (reloj.Ahora, usuario.Id);
         auditoria.Registrar(id, "configuracion_empresa", id, "ACTUALIZAR", cambios);
+        if (apagaAutomatico)
+            auditoria.Registrar(id, "configuracion_empresa", id, "ACTUALIZAR", new CambioCampo("dp_automatico_activo", true, false));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
         // Al activar el cambio de contraventor, los comparendos activos sin solicitud pasan a «sin solicitar» (S-34);

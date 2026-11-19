@@ -32,7 +32,9 @@ public sealed record StatusHistoryModificationDto(
     DateTimeOffset ChangedAt,
     Guid? ChangedByUserId,
     string? ChangedByName,
-    string? ChangedByCompania);
+    string? ChangedByCompania,
+    // Bug #14604 — aditivo: solo en «documento actualizado por el administrador».
+    DocumentoActualizadoLectura? Documento = null);
 
 /// <summary>
 /// Página del historial: más reciente primero.
@@ -106,7 +108,8 @@ public sealed class GetStatusHistoryHandler(IProcedureInstanceRepository repo)
                     m.ChangedAt, m.ChangedByUserId,
                     // HU #14180 — consulta RUNT e identidad sin usuario: nombre de sistema, compañía vacía.
                     StatusHistoryModificacionLectura.NombreActor(m.Campo, m.ChangedByUserId, m.ChangedByName),
-                    StatusHistoryModificacionLectura.CompaniaActor(m.Campo, m.ChangedByUserId, m.ChangedByCompania)))
+                    StatusHistoryModificacionLectura.CompaniaActor(m.Campo, m.ChangedByUserId, m.ChangedByCompania),
+                    m.Documento))
                 .ToList()
             : new List<StatusHistoryModificationDto>();
         var modTotal = modsResult?.Total ?? 0;
@@ -197,7 +200,7 @@ public static class StatusHistoryModificacionLectura
     private const string TipoDatoModificado = "dato_modificado";
     private const int MaxFrase = 2000;
 
-    private static readonly string[] FraseKeys = ["motivo", "accion", "acción", "reason", "decision_reason"];
+    private static readonly string[] FraseKeys = ["motivo", "accion", "acción", "reason", "decision_reason", "observacion"];
 
     private static readonly Dictionary<string, (string Etiqueta, string Campo)> Actos = new(StringComparer.Ordinal)
     {
@@ -206,6 +209,7 @@ public static class StatusHistoryModificacionLectura
         ["revocatoria_solicitada"] = ("Solicitud de revocatoria", "revocatoria"),
         ["revocatoria_aprobada"] = ("Revocatoria aprobada", "revocatoria"),
         ["revocatoria_rechazada"] = ("Revocatoria rechazada", "revocatoria"),
+        ["documento_cargado_admin"] = ("Documento actualizado por el administrador", "documento_admin"), // Bug #14604
     };
 
     /// <summary>Tipos que entran en la línea de Modificaciones. Lista local para que EF la traduzca a IN.</summary>
@@ -217,6 +221,7 @@ public static class StatusHistoryModificacionLectura
         "revocatoria_solicitada",
         "revocatoria_aprobada",
         "revocatoria_rechazada",
+        "documento_cargado_admin", // Bug #14604
     ];
 
     public readonly record struct Fila(
@@ -228,7 +233,8 @@ public static class StatusHistoryModificacionLectura
         string Nuevo,
         DateTimeOffset ChangedAt,
         Guid? CreatedBy,
-        bool EsActoAdministrativo);
+        bool EsActoAdministrativo,
+        DocumentoActualizadoLectura? Documento = null);
 
     /// <summary>
     /// Arma una fila de Modificaciones. Un <c>dato_modificado</c> con payload roto se omite.
@@ -257,6 +263,7 @@ public static class StatusHistoryModificacionLectura
 
         var nuevoActo = map.Etiqueta;
         var anteriorActo = "";
+        DocumentoActualizadoLectura? documento = null;
         var adminDoc = OpenObject(payload);
         if (adminDoc is not null)
         {
@@ -267,11 +274,16 @@ public static class StatusHistoryModificacionLectura
                     nuevoActo = frase;
                 if (AnteriorLegible(root) is { } previo)
                     anteriorActo = previo;
+                if (tipo == TipoDocumentoCargadoAdmin)
+                {
+                    nuevoActo = DetalleDocumentoCargadoAdmin(root, nuevoActo);
+                    documento = DocumentoActualizado(root);
+                }
             }
         }
 
         fila = new Fila(
-            id, tipo, map.Etiqueta, map.Campo, anteriorActo, nuevoActo, createdAt, createdBy, true);
+            id, tipo, map.Etiqueta, map.Campo, anteriorActo, nuevoActo, createdAt, createdBy, true, documento);
         return true;
     }
 
@@ -399,6 +411,76 @@ public static class StatusHistoryModificacionLectura
         {
             return null;
         }
+    }
+
+    private const string TipoDocumentoCargadoAdmin = "documento_cargado_admin";
+
+    /// <summary>
+    /// Bug #14604 — adjunto nuevo y el que estaba antes, para abrirlos desde la línea de tiempo. El anterior
+    /// sale de <c>replacedAttachmentIds</c> (lo que se veía en la casilla); en eventos viejos, de
+    /// <c>previousAttachmentIds</c>. Sin <c>attachmentId</c> válido no hay bloque.
+    /// </summary>
+    private static DocumentoActualizadoLectura? DocumentoActualizado(JsonElement root)
+    {
+        if (!root.TryGetProperty("attachmentId", out var idEl)
+            || idEl.ValueKind != JsonValueKind.String
+            || !idEl.TryGetGuid(out var attachmentId))
+            return null;
+
+        var tipoDoc = ReadString(root, "tipo") ?? "";
+        var archivo = EsFraseCortaSegura(ReadString(root, "filename"), out var seguro) ? seguro : "";
+
+        Guid? anteriorId = PrimerGuid(root, "replacedAttachmentIds") ?? PrimerGuid(root, "previousAttachmentIds");
+        string? anteriorNombre = null;
+        if (anteriorId is not null
+            && root.TryGetProperty("previousFilenames", out var nombres)
+            && nombres.ValueKind == JsonValueKind.Array)
+        {
+            var primero = nombres.EnumerateArray().FirstOrDefault();
+            if (primero.ValueKind == JsonValueKind.String && EsFraseCortaSegura(primero.GetString(), out var n))
+                anteriorNombre = n;
+        }
+
+        return new DocumentoActualizadoLectura(tipoDoc, attachmentId, archivo, anteriorId, anteriorNombre);
+    }
+
+    private static Guid? PrimerGuid(JsonElement root, string propiedad)
+    {
+        if (!root.TryGetProperty(propiedad, out var arr) || arr.ValueKind != JsonValueKind.Array)
+            return null;
+        foreach (var el in arr.EnumerateArray())
+        {
+            if (el.ValueKind == JsonValueKind.String && el.TryGetGuid(out var g))
+                return g;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Bug #14604 — la línea de Modificaciones debe decir QUÉ se cargó y EN QUÉ ESTADO estaba el trámite, no solo
+    /// la observación: «archivo.pdf · Reemplaza a: anterior.pdf · Estado del trámite: Entregado · Observación: …».
+    /// </summary>
+    private static string DetalleDocumentoCargadoAdmin(JsonElement root, string observacion)
+    {
+        var partes = new List<string>(4);
+        var archivo = ReadString(root, "filename");
+        if (EsFraseCortaSegura(archivo, out var archivoSeguro))
+            partes.Add(archivoSeguro);
+        if (root.TryGetProperty("previousFilenames", out var previos) && previos.ValueKind == JsonValueKind.Array)
+        {
+            var anteriores = previos.EnumerateArray()
+                .Where(p => p.ValueKind == JsonValueKind.String)
+                .Select(p => EsFraseCortaSegura(p.GetString(), out var seguro) ? seguro : null)
+                .Where(s => s is not null)
+                .ToList();
+            if (anteriores.Count > 0)
+                partes.Add($"Reemplaza a: {string.Join(", ", anteriores)}");
+        }
+        var estado = ReadString(root, "estado");
+        if (!string.IsNullOrWhiteSpace(estado))
+            partes.Add($"Estado del trámite: {char.ToUpperInvariant(estado[0])}{estado[1..].Replace('_', ' ')}");
+        partes.Add($"Observación: {observacion}");
+        return string.Join(" · ", partes);
     }
 
     private static string? FraseSegura(JsonElement root)
