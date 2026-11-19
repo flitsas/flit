@@ -20,6 +20,9 @@ internal static partial class AadLlaveIa
 
     public static bool KidValido(string? kid) => kid is not null && KidRegex().IsMatch(kid);
 
+    /// <summary>Misma regex que el cliente de core-diagnostico (review HU-6 CR-4): empieza por alfanumérico, hasta 128.</summary>
+    public static bool ModeloValido(string? modelo) => modelo is not null && ModeloRegex().IsMatch(modelo);
+
     public static byte[] Componer(string audiencia, string toolCode, string proveedor, string modelo, long rowVersion, string kid, ReadOnlySpan<byte> nonce, long emitidaEnSegundos)
     {
         if (audiencia is null || !CodigoRegex().IsMatch(audiencia))
@@ -28,7 +31,7 @@ internal static partial class AadLlaveIa
             throw new ArgumentException("Herramienta fuera del catálogo.", nameof(toolCode));
         if (proveedor is null || !AiProviderCodes.IsKnown(proveedor))
             throw new ArgumentException("Proveedor fuera del catálogo.", nameof(proveedor));
-        if (modelo is null || !ModeloRegex().IsMatch(modelo))
+        if (!ModeloValido(modelo))
             throw new ArgumentException("Modelo inválido.", nameof(modelo));
         if (!KidValido(kid))
             throw new ArgumentException("kid inválido.", nameof(kid));
@@ -55,6 +58,6 @@ internal static partial class AadLlaveIa
     [GeneratedRegex(@"^[a-z0-9_]{1,64}\z", RegexOptions.CultureInvariant)]
     private static partial Regex CodigoRegex();
 
-    [GeneratedRegex(@"^[A-Za-z0-9._:-]{1,128}\z", RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\z", RegexOptions.CultureInvariant)]
     private static partial Regex ModeloRegex();
 }

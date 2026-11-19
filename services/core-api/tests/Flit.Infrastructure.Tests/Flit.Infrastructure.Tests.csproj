@@ -40,6 +40,11 @@
     <None Update="Fixtures/Email/*.golden.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Vector criptográfico compartido de ADR-0091 (par RSA-3072 SOLO de prueba): el mismo que consume core-diagnostico. -->
+  <ItemGroup>
+    <None Include="..\..\..\..\contracts\proto\flit\platform\v1\testdata\configuracion_ia_vector.json" Link="Fixtures\ia\configuracion_ia_vector.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />

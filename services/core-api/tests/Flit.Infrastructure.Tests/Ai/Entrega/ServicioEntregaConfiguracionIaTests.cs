@@ -5,6 +5,7 @@ using Flit.Admin.Domain.Plataforma.Ai;
 using Flit.Infrastructure.Ai.Entrega;
 using FluentAssertions;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NSubstitute;
 using Xunit;
@@ -39,7 +40,7 @@ public sealed class ServicioEntregaConfiguracionIaTests
         ],
         RowVersion: 7, CreatedAt: Ahora.AddDays(-1), UpdatedAt: null, UpdatedBy: null);
 
-    private ServicioEntregaConfiguracionIa Servicio(Dictionary<string, string?>? extra = null)
+    private ServicioEntregaConfiguracionIa Servicio(Dictionary<string, string?>? extra = null, LoggerCapturado? logEntrega = null)
     {
         var valores = new Dictionary<string, string?>
         {
@@ -49,7 +50,10 @@ public sealed class ServicioEntregaConfiguracionIaTests
         foreach (var (k, v) in extra ?? [])
             valores[k] = v;
         var config = new ConfigurationBuilder().AddInMemoryCollection(valores).Build();
-        return new ServicioEntregaConfiguracionIa(_repo, _probe, _lector, new RegistroClavesDestinatarioIa(config, _logRegistro), config, new RelojFijo(Ahora));
+        // ActivatorUtilities: el logger del servicio sale del contenedor (parámetro opcional), igual que en DI.
+        var servicios = new ServiceCollection().AddSingleton<ILogger<ServicioEntregaConfiguracionIa>>(logEntrega ?? new LoggerCapturado()).BuildServiceProvider();
+        return ActivatorUtilities.CreateInstance<ServicioEntregaConfiguracionIa>(servicios,
+            _repo, _probe, _lector, new RegistroClavesDestinatarioIa(config, _logRegistro), config, (TimeProvider)new RelojFijo(Ahora));
     }
 
     private void ConLlaves(params string[] proveedores)
@@ -187,6 +191,63 @@ public sealed class ServicioEntregaConfiguracionIaTests
         Servicio(new() { ["Ai:Entrega:Diagnostico:ClavePublica"] = pem }).ConoceKid("diagnostico", SelladorLlaveIaTests.Kid).Should().BeTrue();
     }
 
+    /// <summary>
+    /// Review HU-6 · CR-3 — PEM solo con etiqueta <c>PUBLIC KEY</c>: una privada (PKCS#8 o PKCS#1) o un <c>RSA PUBLIC KEY</c>
+    /// se descartan con motivo <c>no_es_publica</c> y un Warning que no lleva el contenido.
+    /// </summary>
+    [Theory]
+    [InlineData("PRIVATE KEY")]
+    [InlineData("RSA PRIVATE KEY")]
+    [InlineData("RSA PUBLIC KEY")]
+    public void CR3_PemQueNoEsPublicKey_SeDescarta_NoEsPublica_SinElContenido(string etiqueta)
+    {
+        using var par = RSA.Create(3072);
+        var pem = etiqueta switch
+        {
+            "PRIVATE KEY" => par.ExportPkcs8PrivateKeyPem(),
+            "RSA PRIVATE KEY" => par.ExportRSAPrivateKeyPem(),
+            _ => par.ExportRSAPublicKeyPem(),
+        };
+        pem.Should().StartWith($"-----BEGIN {etiqueta}-----");
+        var cuerpo = pem.Split('\n')[1].Trim();
+
+        var servicio = Servicio(new() { ["Ai:Entrega:Diagnostico:ClavePublica"] = pem });
+
+        servicio.ConoceKid("diagnostico", SelladorLlaveIaTests.Kid).Should().BeFalse();
+        _logRegistro.Entradas.Should().Contain(e => e.Nivel == LogLevel.Warning && e.Mensaje.Contains("motivo=no_es_publica", StringComparison.Ordinal));
+        _logRegistro.Entradas.Should().NotContain(e => e.Mensaje.Contains(cuerpo, StringComparison.Ordinal) || e.Mensaje.Contains("BEGIN", StringComparison.Ordinal));
+    }
+
+    /// <summary>Review HU-6 · CR-3 — la base64 de DER SPKI en una línea sigue valiendo.</summary>
+    [Fact]
+    public void CR3_Base64DerSpki_SigueAceptado() =>
+        Servicio().ConoceKid("diagnostico", SelladorLlaveIaTests.Kid).Should().BeTrue();
+
+    public static TheoryData<string> ModelosInvalidos => [".x", "-x", "a\n", "a" + new string('b', 128)];
+
+    /// <summary>
+    /// Review HU-6 · CR-4 — modelo con la regex del cliente (<c>^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\z</c>): si el configurado no
+    /// la cumple, el proveedor sale de la cola; con la cola vacía ⇒ <c>disponible=false</c> / <c>SIN_PROVEEDOR_CON_LLAVE</c>,
+    /// Warning sin el valor y nunca una excepción (INTERNAL).
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(ModelosInvalidos))]
+    public async Task CR4_ModeloInvalido_SacaAlProveedor_NoDisponibleSinProveedorConLlave_ConWarningSinElValor(string modelo)
+    {
+        _repo.GetByToolCodeAsync(Tool, Arg.Any<CancellationToken>()).Returns(FilaSembrada());
+        ConLlaves(AiProviderCodes.Anthropic);
+        var logEntrega = new LoggerCapturado();
+
+        var r = await Servicio(new() { ["Ai:Herramientas:diagnostico_dictamen:Modelos:anthropic"] = modelo }, logEntrega).EntregarAsync(Solicitud(), Ct);
+
+        r.Disponible.Should().BeFalse();
+        r.Motivo.Should().Be(MotivoNoDisponibleIa.SinProveedorConLlave);
+        r.Cola.Should().BeEmpty();
+        logEntrega.Entradas.Should().Contain(e => e.Nivel == LogLevel.Warning && e.Mensaje.Contains("proveedor=anthropic", StringComparison.Ordinal));
+        logEntrega.Entradas.Should().NotContain(e => e.Mensaje.Contains(modelo, StringComparison.Ordinal));
+        _lector.Lecturas.Should().Be(0, "con el modelo inválido no se lee la llave");
+    }
+
     internal sealed class LectorFalso : ILectorLlaveProveedorIa
     {
         public Dictionary<string, string> Llaves { get; } = [];
@@ -205,7 +266,7 @@ public sealed class ServicioEntregaConfiguracionIaTests
         public override DateTimeOffset GetUtcNow() => ahora;
     }
 
-    internal sealed class LoggerCapturado : ILogger<RegistroClavesDestinatarioIa>
+    internal sealed class LoggerCapturado : ILogger<RegistroClavesDestinatarioIa>, ILogger<ServicioEntregaConfiguracionIa>
     {
         public List<(LogLevel Nivel, string Mensaje)> Entradas { get; } = [];
 

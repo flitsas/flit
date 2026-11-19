@@ -8,7 +8,8 @@ namespace Flit.Infrastructure.Ai.Entrega;
 /// <summary>
 /// Claves públicas de los destinatarios de la llave IA (ADR-0091 §2.5-6), por audiencia y <c>kid</c>:
 /// <c>Ai:Entrega:&lt;Audiencia&gt;:Kid</c> + <c>ClavePublica</c> (actual) y <c>KidSiguiente</c> + <c>ClavePublicaSiguiente</c>
-/// (rotación sin corte). La clave es base64 de DER SPKI en una línea (o PEM). La pública no es secreta, pero solo se acepta
+/// (rotación sin corte). La clave es base64 de DER SPKI en una línea o PEM con etiqueta <c>PUBLIC KEY</c> (otra etiqueta ⇒
+/// <c>no_es_publica</c>). La pública no es secreta, pero solo se acepta
 /// RSA ≥ 3072 (SP-9): lo demás se descarta con un Warning que nombra la audiencia y el kid, nunca el valor. Guarda el DER y
 /// crea un <see cref="RSA"/> por uso (las instancias no son seguras entre hilos).
 /// </summary>
@@ -19,6 +20,8 @@ internal sealed partial class RegistroClavesDestinatarioIa
     {
         ["diagnostico"] = "Diagnostico",
     };
+
+    private const string EtiquetaPublica = "PUBLIC KEY";
 
     private readonly Dictionary<(string Audiencia, string Kid), byte[]> _claves = [];
 
@@ -77,9 +80,27 @@ internal sealed partial class RegistroClavesDestinatarioIa
             using var rsa = RSA.Create();
             var texto = valor.Trim();
             if (texto.StartsWith("-----BEGIN", StringComparison.Ordinal))
-                rsa.ImportFromPem(texto);
+            {
+                // Solo la etiqueta PUBLIC KEY (SPKI): una privada (PRIVATE KEY / RSA PRIVATE KEY) o un RSA PUBLIC KEY (PKCS#1)
+                // pegados por error se descartan sin importarlos (review HU-6 CR-3).
+                if (!PemEncoding.TryFind(texto, out var campos))
+                {
+                    motivo = "formato";
+                    return null;
+                }
+
+                if (!texto.AsSpan()[campos.Label].SequenceEqual(EtiquetaPublica.AsSpan()))
+                {
+                    motivo = "no_es_publica";
+                    return null;
+                }
+
+                rsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(texto[campos.Base64Data]), out _);
+            }
             else
+            {
                 rsa.ImportSubjectPublicKeyInfo(Convert.FromBase64String(texto), out _);
+            }
 
             if (rsa.KeySize < SelladorLlaveIa.MinBitsRsa)
             {

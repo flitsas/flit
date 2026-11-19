@@ -149,7 +149,7 @@ internal sealed partial class ConfiguracionIaGrpcService(IEntregaConfiguracionIa
 
     [LoggerMessage(EventId = 7311, EventName = "ia.llave.denegada", Level = LogLevel.Warning,
         Message = "ia.llave.denegada sub={Sub} jti={Jti} tool={Tool} kid={Kid} reason={Reason} ip={Ip}")]
-    private static partial void LogDenegada(ILogger logger, string sub, string? jti, string tool, string kid, string reason, string ip);
+    internal static partial void LogDenegada(ILogger logger, string sub, string? jti, string tool, string kid, string reason, string ip);
 
     [LoggerMessage(EventId = 7312, EventName = "ia.llave.error", Level = LogLevel.Error,
         Message = "ia.llave.error sub={Sub} tool={Tool} tipo={Tipo} ip={Ip}")]

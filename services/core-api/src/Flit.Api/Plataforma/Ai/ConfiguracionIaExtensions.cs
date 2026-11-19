@@ -20,6 +20,9 @@ internal static class ConfiguracionIaExtensions
         services.AddEntregaConfiguracionIa();
         services.AddGrpc()
             .RequireServiceTokenSinEmpresa<ConfiguracionIaGrpcService>(DiagnosticoIaServicioAuthorization.Scope, ServiceAudiences.Tramites);
+        // Review HU-6 CR-2: el rechazo por la policy de IA también deja ia.llave.denegada. Va después de AddApiSecurity
+        // (gana el último registro) y delega en SuperAdminForbiddenResultHandler para el resto de policies.
+        services.AddSingleton<Microsoft.AspNetCore.Authorization.IAuthorizationMiddlewareResultHandler, DiagnosticoIaAuthorizationResultHandler>();
         return services;
     }
 

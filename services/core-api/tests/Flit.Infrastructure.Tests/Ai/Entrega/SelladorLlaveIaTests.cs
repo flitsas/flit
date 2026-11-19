@@ -73,6 +73,25 @@ public sealed class SelladorLlaveIaTests
         FluentActions.Invoking(() => Aad(audiencia: "diag\nnostico")).Should().Throw<ArgumentException>();
     }
 
+    public static TheoryData<string> ModelosInvalidos => [".x", "-x", "a\n", "a" + new string('b', 128)];
+
+    /// <summary>Review HU-6 · CR-4 — el modelo del AAD usa la regex del cliente: <c>^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\z</c>.</summary>
+    [Theory]
+    [MemberData(nameof(ModelosInvalidos))]
+    public void Aad_ModeloFueraDeLaRegexDelCliente_Lanza(string modelo)
+    {
+        FluentActions.Invoking(() => Aad(modelo: modelo)).Should().Throw<ArgumentException>();
+    }
+
+    [Theory]
+    [InlineData("claude-haiku-4-5")]
+    [InlineData("A")]
+    [InlineData("modelo.v2:preview_1")]
+    public void Aad_ModeloValido_NoLanza(string modelo)
+    {
+        FluentActions.Invoking(() => Aad(modelo: modelo)).Should().NotThrow();
+    }
+
     [Fact]
     public void Sellar_IdaYVuelta_ConPar3072_DevuelveLaLlave_ConLosTamanosDelContrato()
     {
@@ -155,40 +174,45 @@ public sealed class SelladorLlaveIaTests
     }
 
     /// <summary>
-    /// Vector compartido con core-diagnostico (<c>contracts/proto/flit/platform/v1/testdata/configuracion_ia_vector.json</c>, lo
-    /// genera HU-7). Se activa al integrar los carriles: quitar el <c>Skip</c> y, si el esquema del JSON difiere, ajustar los
-    /// nombres de las propiedades de abajo. Comprueba AAD byte a byte, texto cifrado y tag con CEK/IV fijos y que la privada del
-    /// vector desenvuelve su CEK.
+    /// Vector compartido con core-diagnostico (<c>contracts/proto/flit/platform/v1/testdata/configuracion_ia_vector.json</c>,
+    /// enlazado al proyecto como en Flit.Diagnostico.Tests). Uso indicado en <c>_uso</c>: sellar con <c>publica_spki_b64</c> y
+    /// CEK/IV fijos y obtener el mismo AAD (vs <c>aad_b64</c>), texto cifrado y tag byte a byte. La <c>cek_cifrada</c> del vector
+    /// es RSA-OAEP (aleatorio) y no se compara: se descifra la propia con <c>privada_pkcs8_b64</c> y debe dar <c>cek_b64</c>.
     /// </summary>
-    [Fact(Skip = "Vector compartido pendiente: lo crea HU-7 (core-diagnostico); el orquestador lo activa al integrar.")]
+    [Fact]
     public void VectorCompartido_CoincideConElDeDiagnostico()
     {
-        string? ruta = null;
-        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null && ruta is null; dir = dir.Parent)
-        {
-            var candidato = Path.Combine(dir.FullName, "contracts", "proto", "flit", "platform", "v1", "testdata", "configuracion_ia_vector.json");
-            if (File.Exists(candidato))
-                ruta = candidato;
-        }
-
-        ruta.Should().NotBeNull("falta el vector compartido");
-        using var json = JsonDocument.Parse(File.ReadAllText(ruta!));
+        var ruta = Path.Combine(AppContext.BaseDirectory, "Fixtures", "ia", "configuracion_ia_vector.json");
+        File.Exists(ruta).Should().BeTrue("el vector compartido se copia a la salida de los tests");
+        using var json = JsonDocument.Parse(File.ReadAllText(ruta));
         var v = json.RootElement;
-        string S(string n) => v.GetProperty(n).GetString()!;
-        byte[] B(string n) => Convert.FromBase64String(S(n));
+        var s = v.GetProperty("sobre");
+        string S(JsonElement e, string n) => e.GetProperty(n).GetString()!;
+        byte[] B(JsonElement e, string n) => Convert.FromBase64String(S(e, n));
 
-        var aad = AadLlaveIa.Componer(S("audiencia"), S("tool_code"), S("proveedor"), S("modelo"), v.GetProperty("row_version").GetInt64(),
-            S("kid"), B("nonce"), v.GetProperty("emitida_en").GetInt64());
-        aad.Should().Equal(Encoding.UTF8.GetBytes(S("aad")));
+        S(v, "version_aad").Should().Be(AadLlaveIa.Version);
+        S(v, "alg").Should().Be(SelladorLlaveIa.Alg);
+        S(s, "alg").Should().Be(SelladorLlaveIa.Alg);
+        S(s, "kid").Should().Be(S(v, "kid"));
+        v.GetProperty("rsa_bits").GetInt32().Should().Be(3072);
+        B(v, "nonce_b64").Should().HaveCount(AadLlaveIa.BytesNonce);
+        System.Buffers.Text.Base64Url.EncodeToString(B(v, "nonce_b64")).Should().Be(S(v, "nonce_b64url"));
+
+        var aad = AadLlaveIa.Componer(S(v, "audiencia"), S(v, "tool_code"), S(v, "proveedor"), S(v, "modelo"), v.GetProperty("row_version").GetInt64(),
+            S(v, "kid"), B(v, "nonce_b64"), v.GetProperty("emitida_en_segundos").GetInt64());
+        aad.Should().Equal(B(v, "aad_b64"), "AAD byte a byte");
+        Encoding.UTF8.GetString(aad).Should().Be(S(v, "aad_utf8"));
+
+        using var publica = RSA.Create();
+        publica.ImportSubjectPublicKeyInfo(B(v, "publica_spki_b64"), out _);
+        var sobre = SelladorLlaveIa.SellarCon(publica, S(v, "kid"), S(v, "llave_en_claro"), aad, B(v, "cek_b64"), B(v, "iv_b64"));
+
+        sobre.Iv.Should().Equal(B(s, "iv_b64"));
+        sobre.TextoCifrado.Should().Equal(B(s, "texto_cifrado_b64"), "texto cifrado byte a byte");
+        sobre.Tag.Should().Equal(B(s, "tag_b64"), "tag byte a byte");
 
         using var privada = RSA.Create();
-        privada.ImportPkcs8PrivateKey(B("clave_privada_pkcs8"), out _);
-        using var publica = RSA.Create();
-        publica.ImportSubjectPublicKeyInfo(privada.ExportSubjectPublicKeyInfo(), out _);
-        var sobre = SelladorLlaveIa.SellarCon(publica, S("kid"), S("llave"), aad, B("cek"), B("iv"));
-
-        sobre.TextoCifrado.Should().Equal(B("texto_cifrado"));
-        sobre.Tag.Should().Equal(B("tag"));
-        privada.Decrypt(B("cek_cifrada"), RSAEncryptionPadding.OaepSHA256).Should().Equal(B("cek"));
+        privada.ImportPkcs8PrivateKey(B(v, "privada_pkcs8_b64"), out _);
+        privada.Decrypt(sobre.CekCifrada, RSAEncryptionPadding.OaepSHA256).Should().Equal(B(v, "cek_b64"), "la CEK propia se desenvuelve con la privada del vector");
     }
 }

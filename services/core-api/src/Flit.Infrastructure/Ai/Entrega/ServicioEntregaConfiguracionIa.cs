@@ -3,6 +3,8 @@ using Flit.Admin.Application.Plataforma.Ai.Entrega;
 using Flit.Admin.Domain.Plataforma.Ai;
 using Flit.Infrastructure.Ai.Routing;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Flit.Infrastructure.Ai.Entrega;
 
@@ -16,16 +18,18 @@ internal interface ILectorLlaveProveedorIa
 /// <see cref="IEntregaConfiguracionIa"/> sobre <c>admin.ai_tool_provider_settings</c> y las llaves del entorno de core-api
 /// (ADR-0091 §4, DELTA P2=b: la <c>ANTHROPIC_API_KEY</c> general). La cola es la de siempre
 /// (<see cref="AiProviderQueue"/>: enabled ∩ capaz ∩ con llave, activo primero); el modelo sale de
-/// <c>Ai:Herramientas:&lt;tool&gt;:Modelos:&lt;proveedor&gt;</c> o del catálogo; el TTL de <c>Ai:Entrega:TtlSegundos</c> acotado a
+/// <c>Ai:Herramientas:&lt;tool&gt;:Modelos:&lt;proveedor&gt;</c> o del catálogo y debe cumplir la regex del cliente (si no, el
+/// proveedor sale de la cola con un Warning); el TTL de <c>Ai:Entrega:TtlSegundos</c> acotado a
 /// [1, 300] (60 si no hay proveedor). Sin caché ni escritura: cada llamada lee la fila y sella con CEK/IV nuevos.
 /// </summary>
-internal sealed class ServicioEntregaConfiguracionIa(
+internal sealed partial class ServicioEntregaConfiguracionIa(
     IAiToolProviderSettingsRepository repository,
     IAiApiKeyEnvironmentProbe probe,
     ILectorLlaveProveedorIa lector,
     RegistroClavesDestinatarioIa claves,
     IConfiguration configuration,
-    TimeProvider? tiempo = null) : IEntregaConfiguracionIa
+    TimeProvider? tiempo = null,
+    ILogger<ServicioEntregaConfiguracionIa>? logger = null) : IEntregaConfiguracionIa
 {
     internal const int TtlMaximoSegundos = 300;
     internal const int TtlNoDisponibleSegundos = 60;
@@ -37,6 +41,7 @@ internal sealed class ServicioEntregaConfiguracionIa(
     };
 
     private readonly TimeProvider _tiempo = tiempo ?? TimeProvider.System;
+    private readonly ILogger _logger = (ILogger?)logger ?? NullLogger.Instance;
 
     public bool ConoceKid(string audiencia, string kid) => claves.Conoce(audiencia, kid);
 
@@ -81,10 +86,23 @@ internal sealed class ServicioEntregaConfiguracionIa(
     private string? Modelo(string tool, string proveedor)
     {
         var configurado = configuration[$"Ai:Herramientas:{tool}:Modelos:{proveedor}"];
-        if (!string.IsNullOrWhiteSpace(configurado))
-            return configurado.Trim();
-        return ModelosPorDefecto.GetValueOrDefault((tool, proveedor));
+        var modelo = string.IsNullOrWhiteSpace(configurado) ? ModelosPorDefecto.GetValueOrDefault((tool, proveedor)) : configurado;
+        if (modelo is null)
+            return null;
+        // Review HU-6 CR-4: la misma regex que el cliente y sin recortar (un salto final no se arregla, se descarta). Inválido ⇒
+        // el proveedor sale de la cola (nunca INTERNAL) y el Warning no lleva el valor.
+        if (!AadLlaveIa.ModeloValido(modelo))
+        {
+            LogModeloDescartado(_logger, tool, proveedor);
+            return null;
+        }
+
+        return modelo;
     }
+
+    [LoggerMessage(EventId = 7302, EventName = "ia.modelo.descartado", Level = LogLevel.Warning,
+        Message = "ia.modelo.descartado tool={Tool} proveedor={Proveedor} motivo=modelo_invalido")]
+    private static partial void LogModeloDescartado(ILogger logger, string tool, string proveedor);
 
     private int Ttl()
     {

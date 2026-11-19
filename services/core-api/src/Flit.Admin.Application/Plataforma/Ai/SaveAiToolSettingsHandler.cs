@@ -94,11 +94,17 @@ public sealed class SaveAiToolSettingsHandler
     internal const string ProveedorNoAplica = "proveedor_no_aplica";
 
     /// <summary>
-    /// ADR-0091: no se puede <b>habilitar</b> un proveedor que no es capaz para la herramienta. Un slot que ya estaba habilitado
-    /// (p. ej. deepseek en la semilla de ocr) se deja como está: la cola lo filtra igual y guardar sin cambiarlo no es habilitar.
+    /// ADR-0091: en <c>diagnostico_dictamen</c> no se puede <b>habilitar</b> un proveedor que no es capaz (DELTA P1=a: solo
+    /// anthropic). Un slot que ya estaba habilitado se deja como está: la cola lo filtra igual y guardar sin cambiarlo no es
+    /// habilitar. Review HU-6 CR-5: ocr y dr_flit siguen como antes (se puede deshabilitar y rehabilitar cualquier proveedor).
     /// </summary>
     private static bool HabilitaUnProveedorNoCapaz(string toolCode, AiToolProviderSettings before, IReadOnlyList<AiProviderSlot> slots)
     {
+        if (!string.Equals(toolCode, AiToolCodes.DiagnosticoDictamen, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
         var yaHabilitados = before.Providers
             .Where(p => p.Enabled)
             .Select(p => AiProviderCodes.Normalize(p.ProviderCode))
