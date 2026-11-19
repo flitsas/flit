@@ -124,7 +124,8 @@ Los valores `<secreto>` se generan por ambiente y van a un sealed secret. Nunca 
 | `Diagnostico__DataProtection__CertificadoClave` (`DIAGNOSTICO_DP_CERT_PASSWORD`) | Sí | Ninguno | Clave del `.pfx` | `<secreto>` | `D/Plataforma/ProteccionDocumentos.cs:32`, `:52` |
 | Archivo `.pfx` (`DIAGNOSTICO_DP_CERT_FILE` en compose) | Sí | Ninguno | Certificado RSA. Se monta como archivo | `<secreto>` | `DC:1325-1326` |
 | `FILE_MANAGER_AUTH_TOKEN` | Opcional | Vacío | Token del file-manager. El mismo de core-api | `<secreto>` | `D/Infraestructura/Archivos/AlmacenArchivos.cs:92` |
-| `Diagnostico__Anthropic__ApiKey` | Opcional | Vacío | Llave del redactor del dictamen. **El compose no la pasa** | `<secreto>` | `D/Modulos/Dictamen/RegistroRedactor.cs:32` |
+| `Diagnostico__Ia__ClavePrivada` (`DIAGNOSTICO_IA_CLAVE_PRIVADA`) | Opcional | Vacío | Privada RSA-3072 (PKCS#8 en base64) que descifra la llave de IA que entrega core-api por gRPC (ADR-0091). Va con `DIAGNOSTICO_IA_KID`; su pública va a core-api en `AI_ENTREGA_DIAGNOSTICO_CLAVE_PUBLICA`. Sin ella el dictamen sale «Sin análisis». Comandos en `.env.prod.example` | `<secreto>` | `D/Modulos/Dictamen/Credencial/SobreLlaveIa.cs` |
+| `Diagnostico__Anthropic__ApiKey` | Solo `Origen=local` | Vacío | Ya no se usa en servidores: la llave sale de «Configuración de IA» de core-api (`ANTHROPIC_API_KEY`). **El compose no la pasa** | `<secreto>` | `D/Modulos/Dictamen/RegistroRedactor.cs` |
 
 ### 3.2 core-diagnostico: configuración
 
@@ -252,7 +253,7 @@ Recomendación para el **primer** despliegue en DEV: todo simulado, para probar 
 | `INTEMPO_API_BASE_URL` | Vacía mientras se simula | Por decidir | Por decidir | Sin ella la fuente queda «no conectada» y el servicio arranca igual |
 | `Diagnostico__Fuentes__ImpuestoDisponible` | `false` | `false` | `false` | Ver §4.3 |
 | `IMPUESTO_API_*`, `IMPUESTO_CONTACTO_*` | Sin valor | Sin valor | Sin valor | El encendido real no entra (§9, punto 5) |
-| `Diagnostico__Anthropic__*` | Ver PC-9 | Por decidir | Por decidir | Sin llave ni simulación, el redactor responde «no configurado» (`RedactorLlm.cs:189-197`) |
+| `Diagnostico__Redaccion__Habilitado` + `Diagnostico__Ia__*` | `true`, par RSA propio | `true`, par RSA propio | `false` hasta que el PO decida | Origen `plataforma` (defecto del compose): proveedor, modelo y llave salen de «Configuración de IA» (herramienta `diagnostico_dictamen`) cifrados por gRPC, ADR-0091. Sin privada o sin llave en core-api, el dictamen sale «Sin análisis» |
 | `FILE_MANAGER_BASE_URL` | El de core-api en DEV | El de core-api en QA | El de core-api en PDN | **No use el defecto del compose: es la URL de PDN** (`DC:560`). Ver PC-5 |
 | Certificado `.pfx` | Propio | Propio | Propio | No copiar entre ambientes |
 | `DIAGNOSTICO_PORT` | 4024 | 5024 | 6024 | `cd.yml:93`, `:107`, `:120` |
