@@ -161,7 +161,7 @@ public static class IdentityVerificationEmailLayout
         var href = Enc(link);
         var greeting = string.IsNullOrWhiteSpace(recipientName)
             ? "Hola."
-            : $"Hola {FlitEmailLayout.Destacado(Enc(recipientName.Trim()))}.";
+            : FlitEmailLayout.Saludo("Hola", Enc(recipientName.Trim()), ".");
 
         string? aviso = null;
         if (!string.IsNullOrWhiteSpace(content.BannerText))

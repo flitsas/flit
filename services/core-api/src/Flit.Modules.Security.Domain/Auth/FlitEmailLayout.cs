@@ -37,15 +37,16 @@ public static class FlitEmailLayout
     public const string SupportEmail = BrandedEmailChrome.FlitSupportEmail;
     public const string PrivacyPolicyUrl = BrandedEmailChrome.FlitPrivacyPolicyUrl;
 
-    // Tokens del UI Kit 2026 (packages/ui). Contraste sobre blanco: Ink 15:1, Muted 5.9:1,
-    // Accent 5.3:1, Title 3.9:1 (solo texto grande y en negrita).
+    // Paleta de Diseño (SVG del material Correos 2.0): azul #557EFF, turquesa #00DBD5, tinta
+    // #162744. Ronda 2 (Samuel + Diseño): el acento FLIT es el azul de marca #557EFF en nombres,
+    // enlaces, divisor y botón (sobre blanco ≈3.9:1; se usa en negrita).
     public const string Ink = "#162744";
     public const string Muted = "#59677D";
-    public const string Accent = "#1D53FF";
-    public const string Title = "#557EFF";
+    public const string Accent = "#557EFF";
+    public const string Title = Accent;
     public const string CardBorder = "#E3E9F5";
     public const string CardRowBorder = "#EEF2F8";
-    public const string ButtonFrom = "#007D79";
+    public const string ButtonFrom = "#00DBD5";
     private const string FontStack = "'Poppins',Arial,Helvetica,sans-serif";
     private const int MaxWidthPx = 600;
 
@@ -108,7 +109,8 @@ public static class FlitEmailLayout
     /// <paramref name="avisoHtml"/> (una caja de aviso ya armada) entre ambos: respeta el orden de
     /// lectura que ya tenía el correo.
     /// </summary>
-    public static string Titulo(string texto, string? antetituloHtml = null, string? avisoHtml = null)
+    /// <param name="color">Color del título; por defecto el azul FLIT. La revocatoria pasa el de su hito.</param>
+    public static string Titulo(string texto, string? antetituloHtml = null, string? avisoHtml = null, string? color = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(texto);
         var sb = new StringBuilder(512);
@@ -121,13 +123,21 @@ public static class FlitEmailLayout
         if (!string.IsNullOrEmpty(avisoHtml))
             sb.Append(avisoHtml);
         sb.Append("<h1 style=\"margin:0;font-size:22px;line-height:1.3;font-weight:700;letter-spacing:0.01em;text-transform:uppercase;color:")
-            .Append(Title).Append(";\">").Append(Enc(texto)).Append("</h1></td></tr>");
+            .Append(color ?? Title).Append(";\">").Append(Enc(texto)).Append("</h1></td></tr>");
         return sb.ToString();
     }
 
     /// <summary>Párrafo del cuerpo (HTML ya escapado), centrado por defecto como en la maqueta.</summary>
     public static string Parrafo(string innerHtml, bool centrado = true, string margen = "0 0 16px") =>
         $"<p style=\"margin:{margen};text-align:{(centrado ? "center" : "left")};\">{innerHtml}</p>";
+
+    /// <summary>
+    /// Saludo en dos líneas (maqueta 2.0): <paramref name="saludo"/> arriba y el nombre destacado
+    /// debajo, seguido de <paramref name="cierre"/> (la puntuación del copy, p. ej. «.» o «,»). El
+    /// texto es el mismo de siempre: solo cambia el salto de línea.
+    /// </summary>
+    public static string Saludo(string saludo, string nombreHtml, string cierre) =>
+        $"{saludo}<br/>{Destacado(nombreHtml)}{cierre}";
 
     /// <summary>Nombre destacado del saludo (azul, negrita).</summary>
     public static string Destacado(string innerHtml) =>
@@ -205,7 +215,7 @@ public static class FlitEmailLayout
 
         sb.Append("<tr><td style=\"padding:8px 24px 28px;\">");
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\"><tr><td style=\"border-top:1px solid ")
-            .Append(Ink).Append(";font-size:0;line-height:0;height:1px;\">&nbsp;</td></tr></table>");
+            .Append(Accent).Append(";font-size:0;line-height:0;height:1px;\">&nbsp;</td></tr></table>");
         if (!string.IsNullOrEmpty(soporteHtml))
         {
             sb.Append("<p style=\"margin:14px 0 10px;font-size:12px;line-height:1.55;color:").Append(Muted)

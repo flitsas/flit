@@ -123,8 +123,8 @@ public class AsignacionPlacaEmailComposerTests
 
         html.Should().Contain("<h1");
         System.Net.WebUtility.HtmlDecode(html).Should().Contain("ASIGNACIÓN DE PLACA");
-        // Correos 2.0 — el estado va en la tarjeta de detalle con el acento FLIT (#1D53FF).
-        html.Should().Contain("<span style=\"color:#1D53FF;font-weight:700;\">Asignado</span>");
+        // Correos 2.0 — el estado va en la tarjeta de detalle con el acento FLIT de Diseño (#557EFF).
+        html.Should().Contain("<span style=\"color:#557EFF;font-weight:700;\">Asignado</span>");
         Flit.Tests.Shared.EmailCopyGolden.VisibleText(html).Should().Contain("Estado Actual: Asignado");
     }
 

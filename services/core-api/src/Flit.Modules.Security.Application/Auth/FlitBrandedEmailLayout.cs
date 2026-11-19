@@ -112,7 +112,7 @@ public static class FlitBrandedEmailLayout
     public static string Greeting(string nameHtml, Flit.Modules.Security.Domain.Auth.EmailTheme? theme) =>
         theme is { IsBrand: true }
             ? ParagraphHtml($"Hola {nameHtml},")
-            : ParagraphHtml($"Hola {FlitEmailLayout.Destacado(nameHtml)},");
+            : ParagraphHtml(FlitEmailLayout.Saludo("Hola", nameHtml, ","));
 
     /// <summary>
     /// Acción principal. Con tema de marca, el enlace subrayado de siempre (golden de marca intacto);

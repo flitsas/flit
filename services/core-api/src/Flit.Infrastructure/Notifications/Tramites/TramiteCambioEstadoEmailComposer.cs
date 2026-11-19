@@ -205,10 +205,10 @@ public static class TramiteCambioEstadoEmailComposer
         var estadoIcon = approved ? "✓" : "❌";
         var estadoEnc = Enc(EstadoLabel(estado));
 
-        var destinatario = FlitEmailLayout.Destacado(Enc(GreetingName(model)));
-        var saludo = model.DestinatarioEsEmpresa
-            ? $"Estimados señores {destinatario}."
-            : $"Estimado/a Señor/a {destinatario}.";
+        var saludo = FlitEmailLayout.Saludo(
+            model.DestinatarioEsEmpresa ? "Estimados señores" : "Estimado/a Señor/a",
+            Enc(GreetingName(model)),
+            ".");
         var introParte = ProcedureNounPhrase(model, placa, forRentingLead: false);
 
         var filas = new List<(string, string)>();

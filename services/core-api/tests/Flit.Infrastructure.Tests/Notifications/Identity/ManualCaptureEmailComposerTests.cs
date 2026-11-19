@@ -58,7 +58,7 @@ public sealed class ManualCaptureEmailComposerTests
         html.Should().Contain($"src=\"{Assets}/flit-logo-firma.png\"").And.Contain("alt=\"FLIT\"");
         // Correos 2.0 — layout FLIT único: banner, 600 px fluido y botón con degradado y respaldo sólido.
         html.Should().Contain($"src=\"{Assets}/flit-banner-correo.png\"").And.Contain("max-width:600px")
-            .And.Contain("linear-gradient").And.Contain("bgcolor=\"#1D53FF\"");
+            .And.Contain("linear-gradient").And.Contain("bgcolor=\"#557EFF\"");
         text.Should().Contain("Verificación de identidad");
         html.Should().Contain("<h1").And.Contain("Verifica tu identidad");
         Flit.Tests.Shared.EmailCopyGolden.VisibleText(html).Should().Contain("Hola Ana Perez.");
@@ -66,7 +66,7 @@ public sealed class ManualCaptureEmailComposerTests
             .BeLessThan(text.IndexOf("Realiza la validación biométrica", StringComparison.Ordinal));
         text.IndexOf("Captura los datos del documento", StringComparison.Ordinal).Should()
             .BeLessThan(text.IndexOf("Firma", text.IndexOf("Captura los datos", StringComparison.Ordinal), StringComparison.Ordinal));
-        html.Should().Contain($"<a href=\"{Link}\"").And.Contain("background-color:#1D53FF");
+        html.Should().Contain($"<a href=\"{Link}\"").And.Contain("background-color:#557EFF");
         html.Split($"href=\"{Link}\"").Length.Should().Be(3, "botón + enlace de respaldo en texto");
     }
 
