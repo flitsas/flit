@@ -12,7 +12,9 @@ import { useEffect } from "react";
  * - Cuenta las capas abiertas: el bloqueo se pone con la primera y se quita con la última, así un Modal sobre un
  *   PanelLateral no libera el scroll al cerrarse.
  * - Ancla el ancho (`left: 0; right: 0`) para que la página no se mueva de lado al fijarla.
- * - Compensa el ancho de la barra de scroll en escritorio para que el contenido no salte (CLS).
+ * - Compensa el ancho de la barra de scroll en escritorio para que el contenido no salte (CLS), tanto la de la ventana
+ *   como la del contenedor del shell (Windows/Linux, donde la barra ocupa espacio).
+ * - Devuelve la posición sin animar (`behavior: "instant"`), aunque la app tenga `scroll-behavior: smooth`.
  * - Si el scroll de la app vive en un contenedor (el `[data-shell-scroll]` de SuiteShell) y no en la ventana, el
  *   contenedor también recibe `overflow: hidden` mientras dura el bloqueo.
  */
@@ -36,6 +38,7 @@ function bloquear(): () => void {
     overflow: body.style.overflow,
     paddingRight: body.style.paddingRight,
     contenedorOverflow: contenedor?.style.overflow ?? "",
+    contenedorPaddingRight: contenedor?.style.paddingRight ?? "",
   };
 
   body.style.position = "fixed";
@@ -45,7 +48,14 @@ function bloquear(): () => void {
   body.style.width = "100%";
   body.style.overflow = "hidden";
   if (anchoBarra > 0) body.style.paddingRight = `${anchoBarra}px`;
-  if (contenedor) contenedor.style.overflow = "hidden";
+  if (contenedor) {
+    const barraContenedor = contenedor.offsetWidth - contenedor.clientWidth;
+    contenedor.style.overflow = "hidden";
+    if (barraContenedor > 0) {
+      const base = parseFloat(getComputedStyle(contenedor).paddingRight) || 0;
+      contenedor.style.paddingRight = `${base + barraContenedor}px`;
+    }
+  }
 
   return () => {
     body.style.position = previo.position;
@@ -55,8 +65,11 @@ function bloquear(): () => void {
     body.style.width = previo.width;
     body.style.overflow = previo.overflow;
     body.style.paddingRight = previo.paddingRight;
-    if (contenedor) contenedor.style.overflow = previo.contenedorOverflow;
-    window.scrollTo(0, scrollY);
+    if (contenedor) {
+      contenedor.style.overflow = previo.contenedorOverflow;
+      contenedor.style.paddingRight = previo.contenedorPaddingRight;
+    }
+    window.scrollTo({ top: scrollY, left: 0, behavior: "instant" });
   };
 }
 
