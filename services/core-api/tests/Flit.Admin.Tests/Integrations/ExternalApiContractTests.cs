@@ -203,7 +203,7 @@ public sealed class ExternalApiContractTests : IClassFixture<ExternalApiContract
         CodigosDocumentados(ruta, "post", 401).Should().Equal("invalid_token");
         CodigosDocumentados(ruta, "post", 403).Should().Equal("insufficient_scope");
         CodigosDocumentados(ruta, "post", 404).Should().Equal("procedure_not_found");
-        CodigosDocumentados(ruta, "post", 409).Should().BeEquivalentTo("not_allowed_in_state", "not_allowed_in_state", "attachment_exists");
+        CodigosDocumentados(ruta, "post", 409).Should().BeEquivalentTo("not_allowed_in_state", "attachment_exists");
         CodigosDocumentados(ruta, "post", 429).Should().Equal("rate_limited");
         CodigosDocumentados(ruta, "post", 503).Should().Equal("storage_unavailable");
 
@@ -211,7 +211,8 @@ public sealed class ExternalApiContractTests : IClassFixture<ExternalApiContract
             .GetProperty("examples").EnumerateObject().Select(e => e.Value.GetProperty("value"))
             .Where(v => v.GetProperty("code").GetString() == "not_allowed_in_state")
             .ToList();
-        deEstado.Select(v => v.GetProperty("terminal").GetBoolean()).Should().BeEquivalentTo([true, false]);
+        // Bug #14625 — solo anulado y revocado responden not_allowed_in_state, siempre con terminal true.
+        deEstado.Select(v => v.GetProperty("terminal").GetBoolean()).Should().Equal(true);
         deEstado.Select(v => v.TryGetProperty("estado", out var estado) && estado.ValueKind == JsonValueKind.String)
             .Should().AllBeEquivalentTo(true);
 
@@ -238,7 +239,7 @@ public sealed class ExternalApiContractTests : IClassFixture<ExternalApiContract
             (Target("asignado"), "liquidacion_impuesto", 201, "AdjuntoRecibido"),
             (Target("asignado", vigente), "liquidacion_impuesto", 200, "AdjuntoRecibido"),
             (Target("asignado", new ExternalAttachmentExisting(Guid.CreateVersion7(), null, "otro", "fm-g")), "liquidacion_impuesto", 409, "Problem"),
-            (Target("aprobado"), "liquidacion_impuesto", 409, "Problem"),
+            (Target("anulado"), "liquidacion_impuesto", 409, "Problem"),
             (Target("asignado"), "otro", 400, "Problem"),
             (null, "liquidacion_impuesto", 404, "Problem"),
         };
