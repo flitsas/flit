@@ -162,6 +162,7 @@ public static class DevelopmentAuthSeeder
         await SeedIctClientsPermissionsAsync(db, cancellationToken);
         await SeedGeneracionDocumentalPermissionsAsync(db, cancellationToken);
         await SeedRuntConfirmationPermissionsAsync(db, cancellationToken);
+        await SeedRuntContingencyPermissionsAsync(db, cancellationToken); // Épica #14644 — HU14648
         await SeedBannersPermissionsAsync(db, cancellationToken);
         await SeedResetPasswordPermissionsAsync(db, cancellationToken);
         await SeedAdminTramiteAdvancedPermissionsAsync(db, cancellationToken);
@@ -1999,6 +2000,75 @@ public static class DevelopmentAuthSeeder
                         CreatedAt = now,
                     });
                 }
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Contingencia de proveedor RUNT (Épica #14644, Feature #14645, HU #14648) — módulo <c>contingencia-runt</c> con el permiso
+    /// <c>runt_contingency.manage</c>, concedido SOLO a SuperAdmin (Super Admin FLIT): ningún rol de compañía lo trae, así la
+    /// pantalla de permisos por usuario lo deja en «Solo SA» y la empresa no puede ver ni tocar la contingencia. Idempotente en los
+    /// tres niveles (módulo por Code, acción por Slug, grant por RoleId+PermissionId), como
+    /// <see cref="SeedRuntConfirmationPermissionsAsync"/>. El DDL <c>204-HU14648-runt-contingency-enforced.sql</c> lo marca exigido.
+    /// </summary>
+    private static async Task SeedRuntContingencyPermissionsAsync(FlitDbContext db, CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        var module = await db.SecurityModules
+            .FirstOrDefaultAsync(m => m.Code == "contingencia-runt" && m.DeletedAt == null, ct);
+        if (module is null)
+        {
+            module = new SecurityModule
+            {
+                Id = Guid.CreateVersion7(),
+                Code = "contingencia-runt",
+                Name = "Plataforma · Contingencia RUNT",
+                SortOrder = 13,
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.SecurityModules.Add(module);
+            await db.SaveChangesAsync(ct);
+        }
+
+        const string slug = "runt_contingency.manage";
+        var action = await db.RbacActions.FirstOrDefaultAsync(a => a.Slug == slug, ct);
+        if (action is null)
+        {
+            action = new RbacAction
+            {
+                Id = Guid.CreateVersion7(),
+                ModuleId = module.Id,
+                Slug = slug,
+                Name = "Administrar la contingencia de proveedor RUNT",
+                HttpMethod = "PUT",
+                RoutePattern = "/api/v1/admin/platform/runt-contingency/{kind}",
+                IsActive = true,
+                CreatedAt = now,
+            };
+            db.RbacActions.Add(action);
+            await db.SaveChangesAsync(ct);
+        }
+
+        var superAdminRoles = await db.Roles
+            .Where(r => r.Code == "SuperAdmin" && r.DeletedAt == null)
+            .ToListAsync(ct);
+        foreach (var role in superAdminRoles)
+        {
+            var alreadyGranted = await db.RoleGrants
+                .AnyAsync(g => g.RoleId == role.Id && g.PermissionId == action.Id, ct);
+            if (!alreadyGranted)
+            {
+                db.RoleGrants.Add(new RoleGrant
+                {
+                    Id = Guid.CreateVersion7(),
+                    RoleId = role.Id,
+                    PermissionId = action.Id,
+                    CreatedAt = now,
+                });
             }
         }
 
