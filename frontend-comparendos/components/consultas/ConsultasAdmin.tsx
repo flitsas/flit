@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
+import { DataTable, InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useToast } from "@/components/Toast";
 import { Interruptor } from "@/components/ui/Interruptor";
@@ -293,50 +293,43 @@ export function ConsultasEmpresa({ empresa }: { empresa?: string | null }) {
   const vista = useCarga(`consultas-empresa:${empresa ?? "propia"}`, (signal) =>
     apiFetch<ConfiguracionConsultasVista>("/configuracion/consultas", { signal, query: { empresa: empresa ?? undefined } }),
   );
-  if (vista.estado === "loading") return <p className="text-sm opacity-60">Cargando consultas…</p>;
-  if (vista.estado === "error" || !vista.datos) return <InlineAlert tone="error">{vista.error ?? "No se pudo cargar."}</InlineAlert>;
   const v = vista.datos;
-  const estado = ESTADO_CONSULTAS[v.estado] ?? ESTADO_CONSULTAS.Borrador;
-  const canales = v.canales.filter((c) => c.configurado);
+  const estado = v ? (ESTADO_CONSULTAS[v.estado] ?? ESTADO_CONSULTAS.Borrador) : null;
+  const canales = v ? v.canales.filter((c) => c.configurado) : [];
 
   return (
     <section className="flex flex-col gap-2">
       <div className="flex flex-wrap items-center gap-2">
-        <h2 className="text-sm font-semibold">Consultas automáticas de comparendos</h2>
-        <StatusBadge label={estado.etiqueta} tone={estado.tono} />
+        <h3 className="text-sm font-semibold">Consultas automáticas de comparendos</h3>
+        {estado && <StatusBadge label={estado.etiqueta} tone={estado.tono} />}
       </div>
-      <p className="text-[11px] text-muted-foreground">
-        Cuándo se consultan tus comparendos. La agenda la define FLIT: si necesitas cambiarla, solicítalo a operaciones.
+      <p className="text-xs text-muted-foreground">
+        Cuándo revisamos si tus vehículos tienen comparendos nuevos. La agenda la define FLIT: si necesitas cambiarla, solicítalo a operaciones.
       </p>
-      {canales.length === 0 ? (
-        <p className="text-sm opacity-70">Todavía no hay consultas automáticas configuradas para tu empresa.</p>
-      ) : (
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr>
-                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Consulta</th>
-                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Agenda</th>
-                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Última consulta</th>
-                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Próxima consulta</th>
-              </tr>
-            </thead>
-            <tbody>
-              {canales.map((c) => (
-                <tr key={c.canal} className="border-b border-border">
-                  <td className="px-3 py-2 font-semibold">{c.etiqueta}</td>
-                  <td className="px-3 py-2">{c.encendido ? (c.descripcion ?? "—") : "Apagada"}</td>
-                  <td className="px-3 py-2">
-                    {c.ultimaConsulta ? formatoFechaHora(c.ultimaConsulta) : "Nunca"}
-                    {c.ultimoResultado && <span className="opacity-70"> · {RESULTADO_CICLO[c.ultimoResultado] ?? c.ultimoResultado}</span>}
-                  </td>
-                  <td className="px-3 py-2">{c.proximaConsulta ? horaColombia(c.proximaConsulta) : "—"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <DataTable
+        ariaLabel="Consultas automáticas de comparendos"
+        rows={canales}
+        getRowKey={(c) => c.canal}
+        status={vista.estado}
+        errorMessage={vista.error ?? undefined}
+        onRetry={vista.recargar}
+        emptyMessage="Todavía no hay consultas automáticas configuradas para tu empresa."
+        columns={[
+          { key: "consulta", header: "Consulta", render: (c) => <span className="font-semibold">{c.etiqueta}</span> },
+          { key: "agenda", header: "Agenda", render: (c) => (c.encendido ? (c.descripcion ?? "—") : "Apagada") },
+          {
+            key: "ultima",
+            header: "Última consulta",
+            render: (c) => (
+              <>
+                {c.ultimaConsulta ? formatoFechaHora(c.ultimaConsulta) : "Nunca"}
+                {c.ultimoResultado && <span className="text-muted-foreground"> · {RESULTADO_CICLO[c.ultimoResultado] ?? c.ultimoResultado}</span>}
+              </>
+            ),
+          },
+          { key: "proxima", header: "Próxima consulta", render: (c) => (c.proximaConsulta ? horaColombia(c.proximaConsulta) : "—") },
+        ]}
+      />
     </section>
   );
 }
