@@ -43,15 +43,6 @@ public sealed class HostPorPruebaArchitectureTests
         "ConsolidadoLoteEndpointTests",
         "ConsultasConsumoEndpointTests",
         "DetailedReportCanalEndpointsTests",
-        "ExternalSyncEndToEndTests",
-        "ExternalSyncLoadTests",
-        "Hu13644PermisosIndividualesFlagEnforcementTests",
-        "Hu13648PermisosIndividualesEnforcementHttpTests",
-        "Hu13655GestorOtPermisosHttpTests",
-        "IctOrchestrationActoresComercialIntegrationTests",
-        "IctOrchestrationAdjuntosIntegrationTests",
-        "IctOrchestrationPrecomputedVehicleIntegrationTests",
-        "IctPlacaCarroceriaIntegrationTests",
         "IctServiceTokenTests",
         "JwtIssuedTokenValidationTests",
         "MandateSignerReassignRollbackTests",
@@ -151,6 +142,18 @@ public sealed class HostPorPruebaArchitectureTests
 
             public sealed class MiFabrica(int x) : WebApplicationFactory<Program>;
 
+            public sealed class Envoltorio
+            {
+                public Envoltorio() => F = new MiFabrica(1).WithWebHostBuilder(_ => { });
+                public WebApplicationFactory<Program> F { get; }
+            }
+
+            public sealed class EnvoltorioTests
+            {
+                [Fact] public void G() { var e = new Envoltorio(); }
+                [Fact] public void G2() { }
+            }
+
             public sealed class FabricaPropiaTests
             {
                 [PostgresFact]
@@ -159,9 +162,12 @@ public sealed class HostPorPruebaArchitectureTests
             }
             """;
 
-        var hallazgos = HostPorPruebaScanner.Scan("Sintetico.cs", fuente, HostPorPruebaScanner.Fabricas(fuente).ToHashSet());
+        var fabricas = HostPorPruebaScanner.Fabricas(fuente).ToHashSet();
+        fabricas.UnionWith(HostPorPruebaScanner.Envoltorios(fuente, fabricas).ToList());
+        var hallazgos = HostPorPruebaScanner.Scan("Sintetico.cs", fuente, fabricas);
 
-        hallazgos.Select(h => h.Clase).Distinct().Should().BeEquivalentTo(["MalTests", "TambienMalTests", "FabricaPropiaTests"]);
+        fabricas.Should().Contain(["MiFabrica", "Envoltorio", "FixtureSuelto"]).And.NotContain("LoggerFactory");
+        hallazgos.Select(h => h.Clase).Distinct().Should().BeEquivalentTo(["MalTests", "TambienMalTests", "FabricaPropiaTests", "EnvoltorioTests"]);
         hallazgos.Single(h => h.Clase == "MalTests").Linea.Should().Be(5);
     }
 
@@ -176,9 +182,12 @@ public sealed class HostPorPruebaArchitectureTests
             .Select(f => (Ruta: Path.GetRelativePath(tests, f), Fuente: File.ReadAllText(f)))
             .ToList();
 
-        // Primera pasada: las subclases propias de WebApplicationFactory (MarcaBlancaApiFactory, Factory, …).
+        // Primera pasada: las subclases propias de WebApplicationFactory (MarcaBlancaApiFactory, Factory, …) y luego los
+        // envoltorios: clases sin pruebas que arman un host al construirse (AlmacenFactory, HostsPorClase…). Hacer `new`
+        // de un envoltorio dentro de una prueba también arranca un host por prueba.
         var fabricas = archivos.SelectMany(a => HostPorPruebaScanner.Fabricas(a.Fuente)).ToHashSet(StringComparer.Ordinal);
         fabricas.Should().Contain("MarcaBlancaApiFactory", "la primera pasada debe encontrar las fábricas propias");
+        fabricas.UnionWith(archivos.SelectMany(a => HostPorPruebaScanner.Envoltorios(a.Fuente, fabricas)).ToList());
 
         return archivos.SelectMany(a => HostPorPruebaScanner.Scan(a.Ruta, a.Fuente, fabricas)).ToList();
     }
@@ -231,7 +240,17 @@ public static partial class HostPorPruebaScanner
         public List<int> Hosts { get; } = [];
     }
 
-    public static List<HostPorPruebaHallazgo> Scan(string archivo, string fuente, IReadOnlySet<string> fabricas)
+    public static List<HostPorPruebaHallazgo> Scan(string archivo, string fuente, IReadOnlySet<string> fabricas) =>
+        Analizar(fuente, fabricas)
+            .Where(t => t.Pruebas >= 2 && t.Hosts.Count > 0) // con una sola prueba, un host por prueba = uno por clase
+            .Select(t => new HostPorPruebaHallazgo(archivo, t.Hosts.Min(), t.Nombre))
+            .ToList();
+
+    /// <summary>Clases sin pruebas que crean un host fuera de un miembro <c>static</c> (fixtures, envoltorios).</summary>
+    public static IEnumerable<string> Envoltorios(string fuente, IReadOnlySet<string> fabricas) =>
+        Analizar(fuente, fabricas).Where(t => t.Pruebas == 0 && t.Hosts.Count > 0).Select(t => t.Nombre);
+
+    private static List<Tipo> Analizar(string fuente, IReadOnlySet<string> fabricas)
     {
         var codigo = SoloCodigo(fuente);
         var lineas = Lineas(codigo);
@@ -286,10 +305,7 @@ public static partial class HostPorPruebaScanner
             }
         }
 
-        return tipos
-            .Where(t => t.Pruebas >= 2 && t.Hosts.Count > 0) // con una sola prueba, un host por prueba = uno por clase
-            .Select(t => new HostPorPruebaHallazgo(archivo, t.Hosts.Min(), t.Nombre))
-            .ToList();
+        return tipos;
     }
 
     private static int[] Lineas(string codigo)

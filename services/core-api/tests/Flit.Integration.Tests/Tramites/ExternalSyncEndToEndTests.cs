@@ -26,7 +26,8 @@ namespace Flit.Integration.Tests.Tramites;
 /// todas las migraciones, pase externo real y el feed recorrido siguiendo <c>nextCursor</c> hasta el final,
 /// como lo hará Flito. La ventana de estabilidad se pone en 0 para no esperar 5 s por página.
 /// </summary>
-public sealed class ExternalSyncEndToEndTests(PostgresDatabaseFixture fixture) : PostgresTestBase(fixture)
+public sealed class ExternalSyncEndToEndTests(PostgresDatabaseFixture fixture, HostsPorClase hosts)
+    : PostgresTestBase(fixture), IClassFixture<HostsPorClase>
 {
     private const string Url = "/api/v1/external/tramites/sync";
     private static readonly Guid CompaniaA = new("5a5a5a5a-0001-4000-8000-000000013081");
@@ -43,7 +44,7 @@ public sealed class ExternalSyncEndToEndTests(PostgresDatabaseFixture fixture) :
             esperados.Add(await RadicadoAsync(n % 2 == 0 ? CompaniaB : CompaniaA, n));
         }
 
-        await using var factory = Host();
+        var factory = Host();
         var cliente = Cliente(factory, ExternalScopes.Todos);
 
         var recibidos = new List<Guid>();
@@ -85,7 +86,7 @@ public sealed class ExternalSyncEndToEndTests(PostgresDatabaseFixture fixture) :
             + "FROM tramites.procedure_instances WHERE id = @id",
             id);
 
-        await using var factory = Host();
+        var factory = Host();
         var comprador = (await GetAsync(Cliente(factory, [ExternalScopes.TramitesRead]), Url))
             .GetProperty("items")[0].GetProperty("compradores")[0];
 
@@ -102,7 +103,7 @@ public sealed class ExternalSyncEndToEndTests(PostgresDatabaseFixture fixture) :
         var desde = await AhoraAsync();
         var nuevo = await RadicadoAsync(CompaniaB, 2);
 
-        await using var factory = Host();
+        var factory = Host();
         var cliente = Cliente(factory, ExternalScopes.Todos);
         var body = await GetAsync(cliente, $"{Url}?since={Uri.EscapeDataString(desde.ToString("O"))}");
 
@@ -127,11 +128,12 @@ public sealed class ExternalSyncEndToEndTests(PostgresDatabaseFixture fixture) :
             tramite);
 
         var almacen = new FirmaFija();
-        await using var factory = Host().WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        // Host propio de esta prueba (clave «almacen»): es la única que lo usa, así que el almacén es el suyo.
+        var factory = hosts.Obtener(Fixture, LagCero, s =>
         {
             s.RemoveAll<IAttachmentStorage>();
             s.AddSingleton<IAttachmentStorage>(almacen);
-        }));
+        }, clave: "almacen");
         var cliente = Cliente(factory, [ExternalScopes.TramitesRead]);
 
         var factura = (await GetAsync(cliente, Url)).GetProperty("items")[0].GetProperty("factura");
@@ -152,7 +154,7 @@ public sealed class ExternalSyncEndToEndTests(PostgresDatabaseFixture fixture) :
         await RadicadoAsync(CompaniaA, 1);
         await RadicadoAsync(CompaniaB, 2);
 
-        await using var factory = Host();
+        var factory = Host();
         var cliente = Cliente(factory, [ExternalScopes.TramitesRead]);
         cliente.DefaultRequestHeaders.Add("X-Forwarded-For", "203.0.113.86");
         await GetAsync(cliente, Url);
@@ -197,9 +199,10 @@ public sealed class ExternalSyncEndToEndTests(PostgresDatabaseFixture fixture) :
         public Task<Stream?> OpenReadAsync(string storagePath, CancellationToken ct = default) => throw new NotSupportedException();
     }
 
-    private WebApplicationFactory<Program> Host() =>
-        new MarcaBlancaApiFactory(Fixture).WithWebHostBuilder(b => b.ConfigureAppConfiguration((_, config) =>
-            config.AddInMemoryCollection(new Dictionary<string, string?> { ["ExternalClients:StabilityLagSeconds"] = "0" })));
+    private static readonly Dictionary<string, string?> LagCero = new() { ["ExternalClients:StabilityLagSeconds"] = "0" };
+
+    /// <summary>Un host por clase (HostsPorClase).</summary>
+    private WebApplicationFactory<Program> Host() => hosts.Obtener(Fixture, LagCero);
 
     private static HttpClient Cliente(WebApplicationFactory<Program> factory, IReadOnlyList<string> scopes)
     {

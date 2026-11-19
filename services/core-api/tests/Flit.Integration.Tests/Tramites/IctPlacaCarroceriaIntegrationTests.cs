@@ -31,8 +31,8 @@ namespace Flit.Integration.Tests.Tramites;
 /// <para>Uso de ejemplo: el servicio se activa del contenedor real con un <see cref="RunPreflightHandler"/> cuya
 /// cadena nunca se llama (la consulta RUNT viaja precalculada).</para>
 /// </summary>
-public sealed class IctPlacaCarroceriaIntegrationTests(PostgresDatabaseFixture fixture)
-    : PostgresTestBase(fixture)
+public sealed class IctPlacaCarroceriaIntegrationTests(PostgresDatabaseFixture fixture, HostsPorClase hosts)
+    : PostgresTestBase(fixture), IClassFixture<HostsPorClase>
 {
     private static readonly Guid UserId = new("b14600a1-0000-4000-8000-0000000000aa");
     private static readonly Guid OfficeId = new("b14600a1-0000-4000-8000-0000000000b1");
@@ -183,7 +183,7 @@ public sealed class IctPlacaCarroceriaIntegrationTests(PostgresDatabaseFixture f
         var reply = await InvokeCreateAsync(Matricula("ict-placa-4-ot-fijo", tipo: "4", plate: PlacaRango, oficina: OfficeId));
         var id = Guid.Parse(reply.ProcedureInstanceId);
 
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
+        var factory = hosts.Obtener(Fixture); // un host por clase (HostsPorClase)
         await using var scope = factory.Services.CreateAsyncScope();
         var patch = scope.ServiceProvider.GetRequiredService<PatchFieldValuesHandler>();
         var ct = TestContext.Current.CancellationToken;
@@ -206,7 +206,7 @@ public sealed class IctPlacaCarroceriaIntegrationTests(PostgresDatabaseFixture f
         var reply = await InvokeCreateAsync(Matricula("ict-placa-4-placa-fija", tipo: "4", plate: PlacaRango, oficina: OfficeId));
         var id = Guid.Parse(reply.ProcedureInstanceId);
 
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
+        var factory = hosts.Obtener(Fixture); // un host por clase (HostsPorClase)
         await using var scope = factory.Services.CreateAsyncScope();
         var patch = scope.ServiceProvider.GetRequiredService<PatchFieldValuesHandler>();
         var ct = TestContext.Current.CancellationToken;
@@ -236,7 +236,7 @@ public sealed class IctPlacaCarroceriaIntegrationTests(PostgresDatabaseFixture f
         var reply = await InvokeCreateAsync(Matricula("ict-placa-3-ot-libre", tipo: "3", plate: "abc123"));
         var id = Guid.Parse(reply.ProcedureInstanceId);
 
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
+        var factory = hosts.Obtener(Fixture); // un host por clase (HostsPorClase)
         await using var scope = factory.Services.CreateAsyncScope();
         var patch = scope.ServiceProvider.GetRequiredService<PatchFieldValuesHandler>();
 
@@ -351,7 +351,7 @@ public sealed class IctPlacaCarroceriaIntegrationTests(PostgresDatabaseFixture f
     private async Task<DraftReply> InvokeCreateAsync(
         CreateDraftFromIctRequest request, IPlateRangeRepository? plateRepo = null)
     {
-        await using var factory = new MarcaBlancaApiFactory(Fixture);
+        var factory = hosts.Obtener(Fixture); // un host por clase (HostsPorClase)
         await using var scope = factory.Services.CreateAsyncScope();
         var preflight = ActivatorUtilities.CreateInstance<RunPreflightHandler>(
             scope.ServiceProvider, (IConsultationProviderChainResolver)new CadenaProhibida());
