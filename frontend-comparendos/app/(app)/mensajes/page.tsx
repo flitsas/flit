@@ -13,9 +13,9 @@ import { Chip } from "@/components/ui/Chip";
 import { Interruptor } from "@/components/ui/Interruptor";
 import { controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
-import { CANAL_CORREO, ESTADO_COMUNICACION, estadoComunicacion, opciones, TIPO_COMUNICACION } from "@/lib/etiquetas";
+import { CANAL_CORREO, estadoComunicacion, opciones, TIPO_COMUNICACION } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
-import { mensajesAParams, mensajesDeParams } from "@/lib/estadoMensajes";
+import { mensajesAParams, mensajesDeParams, opcionesEstadoMensajes } from "@/lib/estadoMensajes";
 import { leerDestinatarios, resumenDestinatarios, sePuedeReintentar } from "@/lib/mensajes";
 import { P } from "@/lib/nav";
 import { tienePermiso } from "@/lib/sesion";
@@ -255,7 +255,7 @@ function Centro() {
           Estado
           <select className={INPUT_CLS} value={estado} onChange={(e) => filtrar(setEstado)(e.target.value)}>
             <option value="">Todos</option>
-            {opciones(ESTADO_COMUNICACION).map((o) => (
+            {opcionesEstadoMensajes(estado).map((o) => (
               <option key={o.valor} value={o.valor}>
                 {o.texto}
               </option>

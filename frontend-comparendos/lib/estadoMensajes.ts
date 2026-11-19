@@ -1,4 +1,5 @@
 // Estado del Centro de mensajes en la URL (rediseño S1): al volver del detalle de un comparendo queda igual.
+import { ESTADO_COMUNICACION, opciones } from "@/lib/etiquetas";
 import type { LectorParams } from "@/lib/filtros";
 
 export interface EstadoMensajes {
@@ -75,4 +76,19 @@ export function mensajesDeParams(p: LectorParams): EstadoMensajes {
     tamano: entero("tamano", 1, 100, TAMANO_MENSAJES),
     mensaje: p.get("mensaje") || null,
   };
+}
+
+/** Combinaciones con nombre propio: la tarjeta «Correos fallidos» del Inicio abre `?estado=Fallido,Rebotado`. */
+const COMBINACIONES: Record<string, string> = { "Fallido,Rebotado": "Fallidos o rebotados" };
+
+/**
+ * Opciones del filtro de Estado. El backend acepta varios estados separados por coma, así que el <select> debe poder
+ * mostrar el que trae la URL: las combinaciones conocidas tienen su nombre y cualquier otra se nombra con sus partes.
+ */
+export function opcionesEstadoMensajes(actual: string): { valor: string; texto: string }[] {
+  const base = [...opciones(ESTADO_COMUNICACION), ...Object.entries(COMBINACIONES).map(([valor, texto]) => ({ valor, texto }))];
+  if (!actual || base.some((o) => o.valor === actual)) return base;
+  const partes = actual.split(",").map((v) => v.trim()).filter(Boolean);
+  const texto = partes.map((v) => ESTADO_COMUNICACION[v]?.texto ?? v).join(" o ");
+  return [...base, { valor: actual, texto }];
 }
