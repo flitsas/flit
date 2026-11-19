@@ -54,6 +54,9 @@ export function ilustracionDelAsistente({
   return 'tramites';
 }
 
+/** Bug #14631 — tope de espera del cliente para el consolidado al radicar (menor al corte de nginx). */
+const CONSOLIDADO_TIMEOUT_MS = 30_000;
+
 /** Rótulo del acordeón cuando el cambio ES el trámite (familia OTROS). */
 const TITULO_CAMBIO_BASE = {
   color: 'Cambio de color',
@@ -1451,36 +1454,27 @@ export function TramiteWizard(props: Props) {
   }, [instanceId]);
 
   // Feature #11066 — genera FUR/impronta/consolidado sin bloquear la UI de negocio.
-  // Reintenta ante fallos transitorios o consolidado incompleto (p.ej. FUR aún en vuelo).
-  // Devuelve mensaje de error o null si el consolidado quedó completo.
-  const ensureExpedienteDocs = useCallback(async (id: string): Promise<string | null> => {
-    const maxAttempts = 3;
-    // En tests, backoff mínimo para no alargar la suite.
-    const retryMs =
-      typeof process !== 'undefined' && process.env.NODE_ENV === 'test' ? 10 : 1_500;
-
-    setPaqueteDocsStatus('loading');
-    let lastError: string | null = null;
-    // Bug #14631 — FUR e impronta se generan UNA vez por radicación: regenerarlos en cada reintento
-    // invalidaba el consolidado que el intento anterior pudo dejar listo en el servidor aunque el
-    // navegador ya hubiera cortado la espera, y obligaba a recomponerlo desde cero.
-    let furListo = false;
-    let improntaIntentada = false;
-
-    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-      try {
-        if (!furListo) {
-          try {
-            await tramitesClient.generarFur(id);
-            furListo = true;
-          } catch {
-            // Puede existir ya; el consolidado lo genera en cascada si realmente falta.
-          }
+  // Bug #14631 — UN solo intento (sin reintentos ni backoff) y consolidado SIN force: la transición
+  // a preparado ya invalida los consolidados en backend, así que igual se reconstruye, y si hay uno
+  // vigente se reutiliza. La llamada tiene tope de espera en el cliente (antes del corte de nginx).
+  // `bloqueo` solo se llena si el consolidado respondió incompleto (regla de negocio); una falla
+  // técnica (timeout, red, 5xx) NO bloquea: el backend regenera el consolidado al radicar.
+  const ensureExpedienteDocs = useCallback(
+    async (id: string): Promise<{ bloqueo: string | null; fallaTecnica: boolean }> => {
+      setPaqueteDocsStatus('loading');
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), CONSOLIDADO_TIMEOUT_MS);
+      // El tope cubre TODO el bloque (FUR + impronta + consolidado): la impronta pasa por Kyverum
+      // y su timeout de servidor es mayor que el de nginx.
+      const generar = async () => {
+        try {
+          await tramitesClient.generarFur(id);
+        } catch {
+          // Puede existir ya; el consolidado fallará si realmente falta.
         }
         // Solo si el checklist la marca obligatoria. Opcional: el gestor la genera con el clic
         // de la casilla; aquí un 409 o un fallo de Kyverum no debe ni intentarse.
-        if (improntaGeneracionRef.current && !improntaIntentada) {
-          improntaIntentada = true;
+        if (improntaGeneracionRef.current) {
           let improntaObligatoria = false;
           try {
             const chk = await tramitesClient.getChecklist(id);
@@ -1496,34 +1490,54 @@ export function TramiteWizard(props: Props) {
             }
           }
         }
-        // Bug #14631 — sin `force`: el backend ya regenera cuando el expediente cambió (marcas de
-        // vigencia, ADR-0032; FUR desactualizado o faltante en cascada) y, si el consolidado sigue
-        // vigente, lo entrega sin recomponerlo. Con `force=true` cada intento volvía a generar FUR,
-        // mandato y el PDF completo, y un reintento tardaba lo mismo que el intento que falló.
-        const result = await tramitesClient.generarConsolidado(id, undefined, false);
+        return tramitesClient.generarConsolidado(id, undefined, false, controller.signal);
+      };
+      try {
+        const result = await Promise.race([
+          generar(),
+          new Promise<never>((_, reject) => {
+            controller.signal.addEventListener(
+              'abort',
+              () => reject(new Error('Tiempo de espera agotado generando el expediente.')),
+              { once: true },
+            );
+          }),
+        ]);
         if (!result.incompleto) {
           setPaqueteDocsStatus('ready');
-          return null;
+          return { bloqueo: null, fallaTecnica: false };
         }
         const faltantes = (result.documentosFaltantes ?? []).filter(Boolean).join(', ');
-        lastError = faltantes
-          ? `Expediente incompleto: faltan ${faltantes}.`
-          : 'Expediente incompleto: faltan documentos obligatorios.';
-      } catch (genErr) {
-        lastError =
-          genErr instanceof Error
-            ? genErr.message
-            : 'No se pudieron generar los documentos del expediente.';
+        setPaqueteDocsStatus('error');
+        return {
+          bloqueo: faltantes
+            ? `Expediente incompleto: faltan ${faltantes}.`
+            : 'Expediente incompleto: faltan documentos obligatorios.',
+          fallaTecnica: false,
+        };
+      } catch (err) {
+        setPaqueteDocsStatus('error');
+        // Un 4xx (salvo 408/429) es una regla de negocio del expediente —adjunto no disponible,
+        // formato no soportado, estado final…—: sigue bloqueando con el detalle del backend. Solo
+        // timeout/abort, red caída y 5xx cuentan como falla técnica. Duck typing por `status`
+        // (misma forma que TramitesApiError), como el resto del wizard.
+        const status = (err as { status?: unknown } | null)?.status;
+        if (typeof status === 'number' && status >= 400 && status < 500 && status !== 408 && status !== 429) {
+          return {
+            bloqueo:
+              err instanceof Error && err.message
+                ? err.message
+                : 'No se pudieron generar los documentos del expediente.',
+            fallaTecnica: false,
+          };
+        }
+        return { bloqueo: null, fallaTecnica: true };
+      } finally {
+        clearTimeout(timer);
       }
-
-      if (attempt < maxAttempts) {
-        await new Promise((resolve) => setTimeout(resolve, retryMs * attempt));
-      }
-    }
-
-    setPaqueteDocsStatus('error');
-    return lastError ?? 'No se pudieron generar los documentos del expediente.';
-  }, []);
+    },
+    [],
+  );
 
   // N 03 — Radicar trámite (un solo click): encadena APIs existentes sin cambiar backend.
   // En borrador: borrador→preparado y luego preparado→entregado.
@@ -1543,9 +1557,9 @@ export function TramiteWizard(props: Props) {
         setInstanceStatus('preparado');
       }
 
-      const docsError = await ensureExpedienteDocs(instanceId);
-      if (docsError) {
-        setSubmitError(`No se puede radicar: ${docsError}`);
+      const docs = await ensureExpedienteDocs(instanceId);
+      if (docs.bloqueo) {
+        setSubmitError(`No se puede radicar: ${docs.bloqueo}`);
         setSubmitting(false);
         return;
       }
@@ -1555,6 +1569,13 @@ export function TramiteWizard(props: Props) {
       // `entregado` a secas dejaba la Ruta Larga en 422 (`transicion_requiere_placa`).
       const radicada = await tramitesClient.submitInstance(instanceId);
       telemetry.trackComplete();
+      if (docs.fallaTecnica) {
+        // Bug #14631 — no bloqueante: el backend encola la regeneración del consolidado al radicar.
+        show(
+          'Trámite enviado al OT. El expediente consolidado se está generando y estará disponible en unos minutos.',
+          'success',
+        );
+      }
       // Flujo del diseño: al radicar se abre el modal de trámite completado en vez de salir de
       // golpe con un toast. El gestor confirma qué quedó radicado y sale desde el CTA. La
       // transición ya ocurrió: el modal es acuse de recibo, no un paso más que haya que aprobar.
@@ -5628,8 +5649,8 @@ function StepBody({
                 </span>
               ) : (
                 <span>
-                  No se pudieron generar los documentos del expediente (tras reintentos). Puedes
-                  Radicar igual y regenerarlos al entregar.
+                  No se pudieron generar los documentos del expediente. Puedes radicar igual: se
+                  regeneran al entregar.
                 </span>
               )}
             </div>
