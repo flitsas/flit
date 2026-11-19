@@ -24,6 +24,13 @@
     }
   },
 
+  // Trabajos del Diagnóstico Vehicular por RabbitMQ (ADR-0075). Simulación de TODAS sus fuentes (RUNT, RUNT persona, SIMIT, RUES,
+  // avalúo e impuesto) con datos inventados: solo con Ambiente LOCAL o DEV (en QA y PDN el servicio no arranca con ella).
+  "Consultas": {
+    "Ambiente": "LOCAL",
+    "Simulacion": { "Habilitada": true }
+  },
+
   // Modo de cada consulta: «real» llama al proveedor, «mock» responde datos de prueba sin red.
   "Consultations": {
     "VerifikVehicleMode": "real",

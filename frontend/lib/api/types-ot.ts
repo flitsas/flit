@@ -1,6 +1,6 @@
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import type { QueryCondition } from '@/lib/api/queries';
-import type { ConsolidadoVigencia } from '@/lib/api/types/procedure-runtime';
+import type { ConsolidadoVigencia, DocumentoActualizado } from '@/lib/api/types/procedure-runtime';
 
 /** Tipos del módulo Administración OT (HU #10215 / #10217 / #10218). */
 
@@ -233,6 +233,8 @@ export interface OtClientProcedureModificacion {
   changedAt: string;
   actorNombre?: string | null;
   actorCompania?: string | null;
+  /** Bug #14604 — adjuntos nuevo y anterior de «documento actualizado por el administrador». */
+  documento?: DocumentoActualizado | null;
 }
 
 export interface OtClientProcedurePagedResult {

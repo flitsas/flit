@@ -89,4 +89,44 @@ public sealed class OtModuleAuthorizationHandlerTests
 
         context.HasSucceeded.Should().BeFalse();
     }
+
+    // HU #14454 (Épica #14210, ADR-0082) — el hueco del tenant OT: quien solo tiene ot_caja no entra a los módulos del organismo.
+    [Fact]
+    public async Task SoloCajaOnTransitOfficeTenant_FailsExplicitly()
+    {
+        var context = BuildContext(BuildPrincipal(
+            new Claim(AdminAuthorization.RoleClaimType, AdminAuthorization.OtCajaRole),
+            new Claim(AdminAuthorization.EntityTypeClaimType, "TRANSIT_OFFICE")));
+
+        await _handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeFalse();
+        context.HasFailed.Should().BeTrue("el rol de caja se niega de forma explícita, no por omisión");
+    }
+
+    [Fact]
+    public async Task CajaPlusAnotherOtRole_KeepsTheAccessOfTheOtherRole()
+    {
+        var context = BuildContext(BuildPrincipal(
+            new Claim(AdminAuthorization.RoleClaimType, AdminAuthorization.OtCajaRole),
+            new Claim(AdminAuthorization.RoleClaimType, "gestor_ot"),
+            new Claim(AdminAuthorization.EntityTypeClaimType, "TRANSIT_OFFICE")));
+
+        await _handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task OtAdminOnTransitOfficeTenant_StillSucceeds()
+    {
+        var context = BuildContext(BuildPrincipal(
+            new Claim(AdminAuthorization.RoleClaimType, AdminAuthorization.OtAdminRole),
+            new Claim(AdminAuthorization.EntityTypeClaimType, "TRANSIT_OFFICE")));
+
+        await _handler.HandleAsync(context);
+
+        context.HasSucceeded.Should().BeTrue();
+        context.HasFailed.Should().BeFalse();
+    }
 }

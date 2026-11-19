@@ -63,6 +63,7 @@ public static class Modulos
         else
             services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosNoConectada>();
         services.AddScoped<Trabajos.IEjecutorTrabajo, Contraventor.ReintentoContraventor>();
+        services.AddScoped<Trabajos.IEjecutorTrabajo, DerechosPeticion.EnvioAutomaticoDp>();
         services.AddScoped<Bandeja.ExportacionBandeja>();
 
         // Reportes (HU #13498).

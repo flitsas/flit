@@ -45,6 +45,7 @@ describe("catálogo de Trámites", () => {
       { isOtUser: true, isOtAdmin: true, otTransitOfficeId: "ot-1" },
       { roles: ["ot_admin"], modules: ["tramites", "reportes", "usuarios"] },
     );
+    // La Caja ya no es un grupo suelto del menú: vive en Portal Persona Natural → Caja.
     expect(groups.map((g) => g.label)).toEqual(["Trámites", "Reportes", "Usuarios", "Administración"]);
     expect(groups.find((g) => g.id === "administracion")?.items.map((i) => i.label)).toEqual([
       "Documentos",
@@ -61,11 +62,63 @@ describe("catálogo de Trámites", () => {
   it("HU14377 — Portal Persona Natural solo lo ve el ot_admin, no otro rol del organismo, y apunta a su organismo", () => {
     const admin = dock({ isOtUser: true, isOtAdmin: true, otTransitOfficeId: "ot-1" }, { roles: ["ot_admin"], modules: ["tramites", "reportes", "usuarios"] });
     const entrada = admin.flatMap((g) => g.items).find((i) => i.key === OT_ADM_DOCK.portalPersonaNatural);
-    expect(entrada?.href).toBe("/admin/transit-offices/ot-1/portal-persona-natural");
+    expect(entrada?.children?.map((c) => c.label)).toEqual(["Reportes", "Cobro", "Caja", "Diseño"]);
     expect(DOCK_ITEM_GROUP[OT_ADM_DOCK.portalPersonaNatural]).toBe("administracion");
 
     const gestor = dock({ isOtUser: true, isOtAdmin: false, otTransitOfficeId: "ot-1" }, { roles: ["gestor_ot"], modules: ["tramites"] });
     expect(gestor.flatMap((g) => g.items).map((i) => i.key)).not.toContain(OT_ADM_DOCK.portalPersonaNatural);
+  });
+
+  // Feature #14453 — la Caja no es ítem del menú: la persona de caja entra por Portal Persona Natural (pestaña Caja).
+  describe("Caja dentro de Portal Persona Natural", () => {
+    const ot = { isOtUser: true, otTransitOfficeId: "ot-1" };
+    const llaves = (groups: ReturnType<typeof dock>) => groups.flatMap((g) => g.items.map((i) => i.key));
+
+    it("no existe el grupo ni el ítem «Caja» en el dock", () => {
+      expect(DOCK_GROUP_ORDER).not.toContain("caja");
+      expect(DOCK_ITEM_GROUP).not.toHaveProperty("caja");
+      expect(DOCK_GROUP_SIDE).not.toHaveProperty("caja");
+      expect(DOCK_GROUP_LABEL).not.toHaveProperty("caja");
+      expect(DOCK_GROUP_ICON).not.toHaveProperty("caja");
+      const admin = dock({ ...ot, isOtAdmin: true }, { roles: ["ot_admin"], modules: ["tramites"] });
+      expect(llaves(admin)).not.toContain("caja");
+    });
+
+    const portal = (groups: ReturnType<typeof dock>) =>
+      groups.flatMap((g) => g.items).find((i) => i.key === OT_ADM_DOCK.portalPersonaNatural);
+
+    it("la persona de caja (solo ot_caja) ve SOLO Administración → Portal Persona Natural ▸ Caja, con acceso directo a su pestaña", () => {
+      const groups = dock({ ...ot, isSoloCaja: true }, { roles: ["ot_caja"], modules: [] });
+      expect(groups.map((g) => g.label)).toEqual(["Administración"]);
+      expect(groups.flatMap((g) => g.items.map((i) => i.label))).toEqual(["Portal Persona Natural"]);
+      expect(portal(groups)?.desplegable).toBe(true);
+      expect(portal(groups)?.children?.map((c) => c.label)).toEqual(["Caja"]);
+      expect(portal(groups)?.children?.[0].href).toBe("/admin/transit-offices/ot-1/portal-persona-natural?tab=caja");
+    });
+
+    it("el Admin OT ve el submenú con Reportes, Cobro, Caja y Diseño, cada uno con su sección en la ruta", () => {
+      const admin = dock({ ...ot, isOtAdmin: true }, { roles: ["ot_admin"], modules: ["tramites"] });
+      expect(portal(admin)?.desplegable).toBe(true);
+      expect(portal(admin)?.children?.map((c) => [c.label, c.href])).toEqual([
+        ["Reportes", "/admin/transit-offices/ot-1/portal-persona-natural?tab=reportes"],
+        ["Cobro", "/admin/transit-offices/ot-1/portal-persona-natural?tab=cobro"],
+        ["Caja", "/admin/transit-offices/ot-1/portal-persona-natural?tab=caja"],
+        ["Diseño", "/admin/transit-offices/ot-1/portal-persona-natural?tab=diseno"],
+      ]);
+    });
+
+    it("estando en una sección (?tab=), esa opción queda activa y su grupo también; sub= no estorba", () => {
+      const ruta = "/admin/transit-offices/ot-1/portal-persona-natural";
+      const admin = dock({ ...ot, isOtAdmin: true }, { roles: ["ot_admin"], modules: ["tramites"] }, ruta, "tab=cobro");
+      expect(portal(admin)?.children?.filter((c) => c.active).map((c) => c.label)).toEqual(["Cobro"]);
+      const cajero = dock({ ...ot, isSoloCaja: true }, { roles: ["ot_caja"], modules: [] }, ruta, "tab=caja&sub=cobrar");
+      expect(portal(cajero)?.children?.filter((c) => c.active).map((c) => c.label)).toEqual(["Caja"]);
+      expect(cajero[0].active).toBe(true);
+    });
+
+    it("otro rol del organismo no ve el submenú", () => {
+      expect(llaves(dock(ot, { roles: ["gestor_ot"], modules: ["tramites"] }))).not.toContain(OT_ADM_DOCK.portalPersonaNatural);
+    });
   });
 
   it("usuario OT sin organismo resuelto todavía: sus pestañas esperan (no hay a dónde llevarlas)", () => {

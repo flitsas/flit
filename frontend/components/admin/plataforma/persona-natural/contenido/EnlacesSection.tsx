@@ -12,6 +12,7 @@ import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { Modal } from "@/components/atom/Modal";
 import { RowActions } from "@/components/atom/RowActions";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { formatFechaHora } from "@/lib/format/date";
 import {
   ENLACES_LEGALES,
@@ -70,7 +71,7 @@ function EnlaceFormModal({ enlace, onClose, onSave }: { enlace: EnlacePn; onClos
           <PnButton variant="secondary" onClick={onClose} disabled={busy}>
             Cancelar
           </PnButton>
-          <PnButton type="submit" form="pn-enlace-form" variant="primary" icon={iconoComo("nube-subir")} loading={busy}>
+          <PnButton type="submit" form="pn-enlace-form" variant="primary" loading={busy}>
             Guardar enlace
           </PnButton>
         </div>
@@ -108,6 +109,8 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
   const [enlaces, setEnlaces] = useState<EnlacePn[]>([]);
   const [status, setStatus] = useState<UiStatus>("loading");
   const [editando, setEditando] = useState<EnlacePn | null>(null);
+  // Paginación estándar de toda tabla (HU #13920). Son cuatro enlaces fijos, pero la tabla la lleva igual.
+  const pg = usePaginacion("pn.contenido.enlaces");
 
   const load = useCallback(async (signal?: AbortSignal) => {
     setStatus("loading");
@@ -182,8 +185,15 @@ export function EnlacesSection({ onCambio }: { onCambio: () => void }) {
           <DataTable<EnlacePn>
             ariaLabel="Enlaces del portal"
             columns={columns}
-            rows={enlaces}
+            rows={pg.paginar(enlaces)}
             getRowKey={(e) => e.codigo}
+            pagination={{
+              page: pg.page,
+              pageSize: pg.pageSize,
+              totalCount: enlaces.length,
+              onPageChange: pg.setPage,
+              onPageSizeChange: pg.setPageSize,
+            }}
           />
         </UiStateBoundary>
       )}

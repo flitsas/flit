@@ -1,12 +1,14 @@
 // Catálogo de navegación de Comparendos para @flit/shell (especificación GDC §7.0). Dice QUÉ existe y QUIÉN lo ve; el
 // dock lo filtra por permiso y lo dibuja. Las capacidades de la empresa (OCR, reportes) no van en el token: las trae
 // /api/v1/comparendos/sesion y se aplican aquí antes de entregarle el catálogo al dock.
-import { MapPinned, ScanText } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import type { NavCatalog, NavItem, NavSection } from "@flit/shell/nav";
 import type { Ilustracion } from "@flit/ui/ilustraciones";
 import { rutaKit } from "@flit/ui/iconos-mapas";
 import type { Capacidades } from "@/lib/sesion";
+
+const ICONO_DOCUMENTO = iconoComo("documento");
+const ICONO_BANCO = iconoComo("banco");
 
 export const P = {
   bandejaVer: "comparendos.bandeja.ver",
@@ -48,11 +50,11 @@ const ILUSTRACION: Record<string, Ilustracion> = {
   operacion: "comparendos",
   reportes: "reportes",
   configuracion: "configuracion",
-  administracion: "empresas",
+  administracion: "seguridad",
   bandeja: "comparendos",
   ocr: "documentos",
   "dp-lotes": "notificaciones",
-  pagos: "fur",
+  pagos: "pagos",
   mensajes: "notificaciones",
   dashboard: "reportes",
   productividad: "colaboradores",
@@ -61,9 +63,10 @@ const ILUSTRACION: Record<string, Ilustracion> = {
   ots: "organismos",
   correo: "empresas",
   plantillas: "generacion-documental",
-  flit: "configuracion",
+  flit: "seguridad",
   "adm-empresas": "empresas",
   "adm-tipologias": "causales",
+  "adm-envio-dp": "causales",
   "adm-plantillas": "generacion-documental",
   "adm-ingesta": "integraciones",
   "adm-log": "auditoria",
@@ -86,8 +89,8 @@ function conIlustracion(item: NavItem): NavItem {
 
 export function comparendosNav(caps: Capacidades): NavCatalog {
   const items: NavItem[] = [
-    { key: "bandeja", label: "Bandeja", href: "/", section: "operacion", icon: iconoComo("radicacion"), permission: P.bandejaVer },
-    ...(caps.ocr ? [{ key: "ocr", label: "Paquetes OCR", href: "/ocr", section: "operacion", icon: ScanText, permission: P.ocrVer }] : []),
+    { key: "bandeja", label: "Bandeja", href: "/bandeja", section: "operacion", icon: iconoComo("radicacion"), permission: P.bandejaVer },
+    ...(caps.ocr ? [{ key: "ocr", label: "Paquetes OCR", href: "/ocr", section: "operacion", icon: ICONO_DOCUMENTO, permission: P.ocrVer }] : []),
     ...(caps.derechosPeticion
       ? [{ key: "dp-lotes", label: "Envíos masivos de DP", href: "/dp/lotes", section: "operacion", icon: iconoComo("radicacion"), permission: P.dpEnviarMasivo }]
       : []),
@@ -109,19 +112,20 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
       label: "Administración FLIT",
       href: "",
       section: "administracion",
-      icon: iconoComo("ajustes"),
+      icon: iconoComo("escudo"),
       superAdminOnly: true,
       children: [
         { key: "adm-empresas", label: "Parametrizador por empresa", href: "/admin/empresas", section: "administracion", icon: iconoComo("rol"), superAdminOnly: true },
         { key: "adm-tipologias", label: "Tipologías de DP", href: "/admin/tipologias", section: "administracion", icon: iconoComo("ayuda"), superAdminOnly: true },
+        { key: "adm-envio-dp", label: "Envío automático de DP", href: "/admin/envio-automatico-dp", section: "administracion", icon: iconoComo("radicacion"), superAdminOnly: true },
         { key: "adm-plantillas", label: "Editor de plantillas", href: "/admin/plantillas", section: "administracion", icon: iconoComo("archivo"), superAdminOnly: true },
         { key: "adm-ingesta", label: "Trabajos e ingesta", href: "/admin/ingesta", section: "administracion", icon: iconoComo("integraciones"), superAdminOnly: true },
         { key: "adm-log", label: "Log de migración", href: "/admin/log-migracion", section: "administracion", icon: iconoComo("lista"), superAdminOnly: true },
-        { key: "adm-organismos", label: "Catálogo de organismos", href: "/admin/organismos", section: "administracion", icon: MapPinned, superAdminOnly: true },
+        { key: "adm-organismos", label: "Catálogo de organismos", href: "/admin/organismos", section: "administracion", icon: ICONO_BANCO, superAdminOnly: true },
         { key: "adm-municipios", label: "Fuentes municipales", href: "/admin/municipios", section: "administracion", icon: iconoComo("portapapeles"), superAdminOnly: true },
         { key: "adm-alertas", label: "Alertas de integración", href: "/admin/alertas", section: "administracion", icon: iconoComo("campana"), superAdminOnly: true },
         { key: "adm-scheduler", label: "Horario de avisos", href: "/admin/scheduler", section: "administracion", icon: iconoComo("cronometro"), superAdminOnly: true },
-        { key: "adm-ocr", label: "Prompt OCR", href: "/admin/ocr/prompts", section: "administracion", icon: iconoComo("pago"), superAdminOnly: true },
+        { key: "adm-ocr", label: "Prompt OCR", href: "/admin/ocr/prompts", section: "administracion", icon: iconoComo("destello"), superAdminOnly: true },
         { key: "adm-calendario", label: "Calendario", href: "/admin/calendario", section: "administracion", icon: iconoComo("calendario"), superAdminOnly: true },
       ],
     },
@@ -133,7 +137,7 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
         { id: "operacion", label: "Operación", icon: iconoComo("radicacion"), side: "left" },
         { id: "reportes", label: "Reportes", icon: iconoComo("medidor"), side: "left" },
         { id: "configuracion", label: "Configuración", icon: iconoComo("ajustes"), side: "right" },
-        { id: "administracion", label: "Administración FLIT", icon: iconoComo("ajustes"), side: "right" },
+        { id: "administracion", label: "Administración FLIT", icon: iconoComo("escudo"), side: "right" },
       ] satisfies NavSection[]
     ).map((sec) => ({ ...sec, ilustracion: iconoDockDe(sec.id) })),
     items: items.map(conIlustracion),

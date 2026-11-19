@@ -2,7 +2,6 @@
 
 import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useCallback, useEffect, useState } from "react";
-import { CalendarPlus } from "lucide-react";
 import { iconoComo } from "@flit/ui/iconoComo";
 import { CreateButton } from "@/components/atom/CreateButton";
 import { Pagination } from "@/components/atom/Pagination";
@@ -52,6 +51,8 @@ import {
   formatDateTime,
 } from "./labels";
 import { ScheduleForm, type SchedulePresetConsulta } from "./ScheduleForm";
+
+const ICONO_CALENDARIO = iconoComo("calendario");
 
 interface SchedulesSectionProps {
   tenantId?: string;
@@ -218,7 +219,7 @@ export function SchedulesSection({
         {/* En alcance SuperAdmin no hay "informe en blanco": todo informe aquí es de tipo
             "consulta" y se crea desde "Programar este informe" en una consulta guardada. */}
         {!formOpen && !superAdminMode && (
-          <CreateButton size="sm" label="Nuevo informe" icon={CalendarPlus} onClick={() => setCreating(true)} />
+          <CreateButton size="sm" label="Nuevo informe" icon={ICONO_CALENDARIO} onClick={() => setCreating(true)} />
         )}
       </div>
 

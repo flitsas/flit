@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Dominio puro de Diagnóstico Vehicular (HU #13721): validador de identificadores, agregados de diagnóstico, estados de
+    celda y reglas del dictamen (olas D1/D2). Sin dependencias de infraestructura: ni EF Core, ni ASP.NET Core, ni gRPC,
+    ni el SDK de plataforma (lo vigila ServicioHostTests.Domain_no_depende_de_infraestructura).
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Diagnostico.Domain</RootNamespace>
+  </PropertyGroup>
+
+</Project>

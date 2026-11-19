@@ -44,6 +44,9 @@ export const ADMIN_COMPANY_ROLE = "AdminCompany";
 /** Rol requerido para la consola OT (HU #10218). */
 export const OT_ADMIN_ROLE = "ot_admin";
 
+/** Rol de la persona de caja del organismo: solo cobra en el módulo Caja. */
+export const OT_CAJA_ROLE = "ot_caja";
+
 /** Valor de `entity_type` que identifica a un tenant organismo de tránsito. */
 export const TRANSIT_OFFICE_ENTITY_TYPE = "TRANSIT_OFFICE";
 
@@ -358,6 +361,35 @@ export function isTransitOfficeTenant(payload: JwtPayload | null): boolean {
  */
 export function isOtUser(payload: JwtPayload | null): boolean {
   return isOtAdmin(payload) || isTransitOfficeTenant(payload);
+}
+
+/** Códigos de rol del token en minúscula: el claim `roles` y, si no vino, `role_code`/`role` (string o arreglo). */
+export function roleCodesOf(payload: JwtPayload | null): string[] {
+  if (!payload) return [];
+  const fromRoles = Array.isArray(payload.roles)
+    ? payload.roles.map((r) => r?.code).filter((c): c is string => typeof c === "string")
+    : [];
+  if (fromRoles.length > 0) return fromRoles.map((c) => c.toLowerCase());
+  return [payload.role_code, payload.role]
+    .flatMap((v) => (Array.isArray(v) ? v : [v]))
+    .filter((c): c is string => typeof c === "string" && c !== "")
+    .map((c) => c.toLowerCase());
+}
+
+/** El usuario es persona de caja del organismo (`ot_caja`). */
+export function isOtCaja(payload: JwtPayload | null): boolean {
+  return roleCodesOf(payload).includes(OT_CAJA_ROLE);
+}
+
+/** Puede entrar al módulo Caja: persona de caja o Admin OT. El SuperAdmin no lo usa (anula desde el organismo). */
+export function canUseCaja(payload: JwtPayload | null): boolean {
+  return isOtCaja(payload) || isOtAdmin(payload);
+}
+
+/** Su único rol es `ot_caja`: solo ve Caja y el inicio lo lleva allí. */
+export function isSoloCaja(payload: JwtPayload | null): boolean {
+  const roles = roleCodesOf(payload);
+  return roles.length > 0 && roles.every((r) => r === OT_CAJA_ROLE);
 }
 
 function base64UrlDecode(value: string): string {

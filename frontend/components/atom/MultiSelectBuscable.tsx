@@ -66,6 +66,8 @@ export function MultiSelectBuscable({
   textoError = "No se pudo cargar la lista.",
   errores = {},
   disabled = false,
+  listaClassName = "max-h-56",
+  esqueletoCls,
 }: {
   /** Prefijo de los `data-testid` y de los ids internos. */
   testId: string;
@@ -90,6 +92,10 @@ export function MultiSelectBuscable({
   /** Motivo del rechazo del servidor por opción (id → mensaje). */
   errores?: Record<string, string>;
   disabled?: boolean;
+  /** Alto máximo de la lista (clase Tailwind). Por defecto `max-h-56`. */
+  listaClassName?: string;
+  /** Si viene, al cargar se pinta un esqueleto con estas clases (alto estable) en vez del texto. */
+  esqueletoCls?: string;
 }) {
   const baseId = useId();
   const [consulta, setConsulta] = useState("");
@@ -142,6 +148,17 @@ export function MultiSelectBuscable({
   }
 
   if (loading) {
+    if (esqueletoCls) {
+      return (
+        <div
+          role="status"
+          data-testid={testId}
+          className={`animate-pulse rounded-xl border bg-secondary ${esqueletoCls}`}
+        >
+          <span className="sr-only">{textoCargando}</span>
+        </div>
+      );
+    }
     return (
       <p role="status" className="text-xs opacity-70" data-testid={testId}>
         {textoCargando}
@@ -279,7 +296,7 @@ export function MultiSelectBuscable({
 
       <div
         id={listaId}
-        className="max-h-56 space-y-1 overflow-y-auto rounded-xl border bg-card p-2 dark:bg-card"
+        className={`${listaClassName} space-y-1 overflow-y-auto rounded-xl border bg-card p-2 dark:bg-card`}
         data-testid={`${testId}-lista`}
         role="group"
         aria-label={grupo}

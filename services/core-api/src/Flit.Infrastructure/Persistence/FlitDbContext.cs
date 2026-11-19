@@ -73,6 +73,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    public DbSet<OtUserClientScopeEntity> OtUserClientScopes => Set<OtUserClientScopeEntity>();
+
+    public DbSet<OtUserClientScopeClientEntity> OtUserClientScopeClients => Set<OtUserClientScopeClientEntity>();
+
+    public DbSet<OtInvitationClientScopeClientEntity> OtInvitationClientScopeClients => Set<OtInvitationClientScopeClientEntity>();
+
     /// <summary>HU #12407 — bloqueos de OT para cabezas Marca Blanca.</summary>
     public DbSet<TenantTransitOfficeBlock> TenantTransitOfficeBlocks => Set<TenantTransitOfficeBlock>();
 
@@ -204,6 +210,9 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<UserPermissionOverrideEntity> UserPermissionOverrides => Set<UserPermissionOverrideEntity>();
 
     public DbSet<UserPermissionAuditEntity> UserPermissionAudits => Set<UserPermissionAuditEntity>();
+
+    // Suspensión de un usuario en UN producto (ADR-0089, HU #14587): la cuenta y los demás productos no cambian.
+    public DbSet<ProductRoleSuspensionEntity> ProductRoleSuspensions => Set<ProductRoleSuspensionEntity>();
 
     // Consultas que cada usuario del organismo arma y guarda sobre los trámites.
     public DbSet<OtSavedQueryEntity> OtSavedQueries => Set<OtSavedQueryEntity>();

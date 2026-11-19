@@ -283,3 +283,54 @@ describe('avisos repetidos del proveedor', () => {
   });
 });
 
+
+describe('flujo manual', () => {
+  it('manual_activo espera las fotos y la firma, sin hablar de reenvío de terceros', () => {
+    const e = estadoDeIdentidad(validacion({ status: 'manual_activo', provider: 'manual' }));
+    expect(e.label).toBe('A la espera de la persona');
+    expect(e.explicacion).toMatch(/fotos y su firma/);
+  });
+
+  it('pendiente_revision_manual dice que falta la decisión de FLIT', () => {
+    const e = estadoDeIdentidad(validacion({ status: 'pendiente_revision_manual', provider: 'manual' }));
+    expect(e.label).toBe('Pendiente de revisión');
+    expect(e.tono).toBe('pendiente');
+    expect(e.explicacion).toMatch(/decisión de FLIT/);
+  });
+
+  it('cuenta el recorrido manual con la persona como sujeto', () => {
+    const v = validacion({ provider: 'manual', status: 'aprobado' });
+    const hitos = hitosDeIdentidad(v, [
+      evento('manual_activado', '2026-08-27T11:42:00Z'),
+      evento('manual_consentimiento', '2026-08-27T11:45:00Z'),
+      evento('manual_captura_recibida', '2026-08-27T11:51:00Z'),
+      evento('manual_imagenes_consultadas', '2026-08-27T11:55:00Z'),
+      evento('manual_aprobado', '2026-08-27T12:00:00Z', { outcome: 'aprobado' }),
+    ]);
+    expect(hitos.map((h) => h.titulo)).toEqual([
+      'Identidad aprobada',
+      'Laura envió sus fotos y su firma',
+      'Se envió el enlace',
+    ]);
+    expect(hitos[0].tono).toBe('ok');
+    expect(hitos[2].detalle).toBe('A l.restrepo@correo.com');
+    expect(hitos[1].detalle).toBe('9 minutos después de recibir el enlace');
+  });
+
+  it('un rechazo manual lleva el motivo y el enlace regenerado se lee como reenvío', () => {
+    const v = validacion({ provider: 'manual', rejectionReason: 'Firma ilegible' });
+    const hitos = hitosDeIdentidad(v, [
+      evento('manual_rechazado', '2026-08-27T12:00:00Z', { outcome: 'rechazado' }),
+      evento('manual_enlace_regenerado', '2026-08-27T12:01:00Z'),
+      evento('manual_enlace_copiado', '2026-08-27T12:02:00Z'),
+      evento('manual_correo_fallido', '2026-08-27T12:03:00Z', { outcome: 'error' }),
+    ]);
+    expect(hitos.map((h) => h.titulo)).toEqual([
+      'No se pudo enviar el enlace',
+      'Se reenvió el enlace',
+      'Identidad rechazada',
+    ]);
+    expect(hitos[2].detalle).toBe('Firma ilegible');
+    expect(hitos[2].tono).toBe('alerta');
+  });
+});

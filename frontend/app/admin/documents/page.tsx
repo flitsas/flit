@@ -203,7 +203,7 @@ function DocumentsCatalog() {
             >
               <Icono nombre="tipos-tramite" className="h-4 w-4" /> Configurar por trámite
             </button>
-            <CreateButton label="Crear documento" icon={iconoComo("archivo-subir")} onClick={openCreate} />
+            <CreateButton label="Crear documento" icon={iconoComo("documento")} onClick={openCreate} />
           </div>
         }
       />
@@ -227,7 +227,7 @@ function DocumentsCatalog() {
               : "No hay tipos de documento en el catálogo."
           }
           emptyCta={
-            <CreateButton label="Crear documento" icon={iconoComo("archivo-subir")} onClick={openCreate} />
+            <CreateButton label="Crear documento" icon={iconoComo("documento")} onClick={openCreate} />
           }
           errorMessage="No se pudo cargar el catálogo de documentos."
         >

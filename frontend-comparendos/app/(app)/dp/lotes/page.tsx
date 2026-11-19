@@ -3,7 +3,7 @@
 import { Suspense, useEffect } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, usePaginacion } from "@flit/ui";
+import { DataTable, InlineAlert, Modal, usePaginacion, VehicleLoader } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { Chip } from "@/components/ui/Chip";
 import { controlCls } from "@/components/ui/estilos";
@@ -52,7 +52,7 @@ function Avance({ l }: { l: Lote }) {
       <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-secondary">
         <div className="h-full rounded-full bg-flit-brand" style={{ width: `${pct}%` }} />
       </div>
-      <span className="tabular-nums opacity-70">{pct}%</span>
+      <span className="tabular-nums text-muted-foreground">{pct}%</span>
     </div>
   );
 }
@@ -159,7 +159,7 @@ function Lotes() {
 export default function LotesDp() {
   return (
     <Requiere permiso={P.dpEnviarMasivo}>
-      <Suspense fallback={<p className="text-sm opacity-60">Cargando…</p>}>
+      <Suspense fallback={<VehicleLoader label="Cargando…" />}>
         <Lotes />
       </Suspense>
     </Requiere>

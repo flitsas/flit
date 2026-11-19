@@ -45,6 +45,8 @@ export interface DataTablePagination {
   totalCount: number;
   onPageChange: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
+  /** Opciones de «Filas por página» (aditiva; ver `Pagination.pageSizeOptions`). */
+  pageSizeOptions?: readonly number[];
 }
 
 export interface DataTableProps<T> {
@@ -189,6 +191,7 @@ export function DataTable<T>({
           totalCount={pagination.totalCount}
           onPageChange={pagination.onPageChange}
           onPageSizeChange={pagination.onPageSizeChange}
+          pageSizeOptions={pagination.pageSizeOptions}
           ariaLabel={ariaLabel ? `Paginación de ${ariaLabel.toLowerCase()}` : undefined}
           className="mt-auto"
         />

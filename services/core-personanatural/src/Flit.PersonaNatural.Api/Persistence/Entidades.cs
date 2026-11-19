@@ -8,13 +8,19 @@ public static class EstadoSolicitud
 {
     public const string Borrador = "borrador";
     public const string PendienteValidacion = "pendiente_validacion";
+
+    /// <summary>Solo canal del punto: identidades y requisitos completos; falta el pago (caja o confirmación en $0).</summary>
+    public const string PendientePago = "pendiente_pago";
+
+    /// <summary>Solo canal del punto: pago confirmado; la radicación hacia FLIT 2 se dispara a continuación.</summary>
+    public const string Pagada = "pagada";
     public const string EnCola = "en_cola";
     public const string Creada = "creada";
     public const string RechazadaCreacion = "rechazada_creacion";
     public const string Cancelada = "cancelada";
 
     public static readonly IReadOnlyList<string> Todos =
-        [Borrador, PendienteValidacion, EnCola, Creada, RechazadaCreacion, Cancelada];
+        [Borrador, PendienteValidacion, PendientePago, Pagada, EnCola, Creada, RechazadaCreacion, Cancelada];
 }
 
 /// <summary>Solicitud de un ciudadano para radicar un trámite en FLIT 2. El tipo y su definición son datos, no código.</summary>

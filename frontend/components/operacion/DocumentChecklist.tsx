@@ -23,6 +23,8 @@ import { DocumentPreviewModal } from '@/components/shared/DocumentPreviewModal';
 import { DocumentCatalogCaption } from '@/components/shared/DocumentCatalogCaption';
 import { catalogDocumentTitle } from '@/lib/tramites/document-labels';
 import { esAdjuntoDeFlito } from '@/lib/tramites/flito';
+import { esTipoDocumentoMultiple } from '@/lib/tramites/documentos-multiples';
+import { formatFechaHora } from '@/lib/format/date';
 import {
   DIALOGO_FRANJA,
   DIALOGO_FRANJA_CIRCULO,
@@ -36,6 +38,7 @@ import type {
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
 import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 export type DocumentUploadMode = 'individual' | 'batch';
 
@@ -604,7 +607,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
         onBlur={() => setTipOpen(false)}
         onClick={() => setDetailOpen(true)}
       >
-        <Icono nombre="exclamacion" className="h-4 w-4" />
+        <IconoAviso tipo="info" className="h-4 w-4" />
       </button>
 
       {tipOpen && !detailOpen && (
@@ -657,7 +660,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
                   className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--kit-hover)] text-[color:var(--kit-azul-relleno)]"
                   aria-hidden
                 >
-                  <Icono nombre="exclamacion" className="h-4 w-4" />
+                  <IconoAviso tipo="info" className="h-4 w-4" />
                 </span>
                 <h3
                   id={`ocr-detail-title-${tipo}`}
@@ -734,6 +737,8 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
 export function DocumentSlot({
   item,
   attachment,
+  bolsa,
+  deletingId,
   uploading,
   analyzing,
   deleting,
@@ -747,6 +752,14 @@ export function DocumentSlot({
 }: {
   item: ChecklistItemView;
   attachment: ProcedureAttachment | undefined;
+  /**
+   * Casillas «bolsa» (tipos múltiples, p. ej. `otro`): TODOS los adjuntos del tipo por orden de carga.
+   * Con valor, la casilla los lista con ver/eliminar individuales y ofrece «Agregar otro documento»
+   * en vez de «Reemplazar archivo» (subir aquí no reemplaza, acumula).
+   */
+  bolsa?: ProcedureAttachment[];
+  /** Id del adjunto que se está borrando (para marcar la fila correcta de la bolsa). */
+  deletingId?: string | null;
   uploading: boolean;
   analyzing: boolean;
   deleting: boolean;
@@ -772,7 +785,8 @@ export function DocumentSlot({
   // HU #13266 (AC1) — gana quien carga primero (HU #13265): el adjunto de FLITO no se reemplaza ni se
   // borra desde aquí (el backend respondería 409); la casilla solo deja previsualizarlo.
   const deFlito = esAdjuntoDeFlito(attachment);
-  const done = item.satisfied || !!attachment;
+  const esBolsa = bolsa !== undefined;
+  const done = item.satisfied || !!attachment || (bolsa?.length ?? 0) > 0;
   const busy = uploading || analyzing || deleting || generating;
   const isAuto = AUTO_DOC_TIPOS.has(tipo);
   const isImpronta = tipo.toLowerCase() === 'impronta';
@@ -879,13 +893,13 @@ export function DocumentSlot({
               de «Ver» y del foco), no en el degradado de marca, y a plena opacidad: el `opacity-70`
               vive en el texto para que el color no salga lavado. `shrink-0` + `mt-px` evitan que se
               deforme o se despegue de la primera línea cuando el texto envuelve. */}
-          <Icono nombre="exclamacion" className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
+          <IconoAviso tipo="info" className="mt-px h-3 w-3 shrink-0" />
           <span className="opacity-70">{instruccion}</span>
         </p>
       )}
       {improntaSoloManual && !readOnly && !attachment && !isAuto && (
         <p className="mt-1 flex items-start gap-1 text-[11px] leading-snug">
-          <Icono nombre="exclamacion" className="mt-px h-3 w-3 shrink-0" style={{ color: 'var(--color-flit-brand)' }} />
+          <IconoAviso tipo="info" className="mt-px h-3 w-3 shrink-0" />
           <span className="opacity-70">
             {IMPRONTA_MANUAL_TEXTO}
             {item.obligatorio ? ' Debe cargarla para radicar.' : ''}
@@ -893,7 +907,53 @@ export function DocumentSlot({
         </p>
       )}
       <p className="mt-1 text-[11px] opacity-70">{limitsCaption}</p>
-      {attachment && !isAuto && (
+      {bolsa && !isAuto && bolsa.length > 0 && (
+        <ul className="mt-2 flex flex-col gap-1.5" aria-label={`Archivos de ${caption}`}>
+          {bolsa.map((att) => {
+            const borrando = deletingId === att.id;
+            return (
+              <li
+                key={att.id}
+                className="flex items-center gap-2 rounded-lg border px-2 py-1.5"
+                style={{ borderColor: 'var(--border)' }}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[11px] font-medium" title={att.filename}>
+                    {att.filename}
+                  </p>
+                  <p className="text-[10px] opacity-60">
+                    {formatFechaHora(att.uploadedAt)} · {formatSize(att.sizeBytes)}
+                  </p>
+                </div>
+                {onPreview && (
+                  <button
+                    type="button"
+                    onClick={() => onPreview(att)}
+                    className="rounded-lg border p-1"
+                    style={{ color: 'var(--color-flit-brand)' }}
+                    aria-label={`Previsualizar ${att.filename}`}
+                  >
+                    <Icono nombre="ojo" className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                {!readOnly && !esAdjuntoDeFlito(att) && (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(att.id)}
+                    disabled={busy}
+                    className="text-xs font-semibold disabled:cursor-not-allowed disabled:opacity-60"
+                    style={{ color: 'var(--destructive)' }}
+                    aria-label={`Eliminar ${att.filename}`}
+                  >
+                    {borrando ? 'Borrando…' : 'Eliminar'}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      {attachment && !isAuto && !esBolsa && (
         <p className="mt-1 truncate text-[11px] opacity-60">
           {attachment.filename} · {formatSize(attachment.sizeBytes)}
         </p>
@@ -929,7 +989,7 @@ export function DocumentSlot({
             Autogenerado por el sistema al radicar.
           </p>
         ) : readOnly ? (
-          attachment && onPreview ? (
+          attachment && onPreview && !esBolsa ? (
             <button
               type="button"
               onClick={() => onPreview(attachment)}
@@ -942,7 +1002,7 @@ export function DocumentSlot({
           ) : null
         ) : (
           <>
-            {attachment && onPreview && (
+            {attachment && onPreview && !esBolsa && (
               <button
                 type="button"
                 onClick={() => onPreview(attachment)}
@@ -974,9 +1034,11 @@ export function DocumentSlot({
                     ? 'Analizando documento...'
                     : uploading
                       ? 'Subiendo…'
-                      : attachment
-                        ? 'Reemplazar archivo'
-                        : 'Adjuntar archivo'}
+                      : esBolsa && bolsa.length > 0
+                        ? 'Agregar otro documento'
+                        : attachment
+                          ? 'Reemplazar archivo'
+                          : 'Adjuntar archivo'}
                 </button>
                 {canGenerate && (
                   <button
@@ -989,7 +1051,7 @@ export function DocumentSlot({
                     {generating ? 'Generando impronta…' : 'Generar impronta'}
                   </button>
                 )}
-                {attachment && (
+                {attachment && !esBolsa && (
                   <button
                     type="button"
                     onClick={() => onRemove(attachment.id)}
@@ -1325,14 +1387,25 @@ export function DocumentChecklist({
             .map((item) => {
             const tipo = item.docTipo ?? item.key;
             const attachment = attachmentByTipo.get(tipo.toLowerCase());
+            const bolsa = esTipoDocumentoMultiple(tipo)
+              ? attachments
+                  .filter((a) => a.tipo.toLowerCase() === tipo.toLowerCase())
+                  .sort((a, b) => a.uploadedAt.localeCompare(b.uploadedAt))
+              : undefined;
             return (
               <DocumentSlot
                 key={item.key}
                 item={item}
                 attachment={attachment}
+                bolsa={bolsa}
+                deletingId={deletingId}
                 uploading={uploadingTipos.has(tipo)}
                 analyzing={analyzingTipos.has(tipo)}
-                deleting={!!attachment && deletingId === attachment.id}
+                deleting={
+                  bolsa
+                    ? bolsa.some((a) => a.id === deletingId)
+                    : !!attachment && deletingId === attachment.id
+                }
                 ocr={ocrResultForTipo(ocrResults, tipo)}
                 onUpload={(file) =>
                   void upload(tipo, file).then((ok) => {

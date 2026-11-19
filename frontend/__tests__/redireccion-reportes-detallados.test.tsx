@@ -51,7 +51,8 @@ vi.mock("@/components/atom/Shell", () => ({
   Shell: ({ children }: { children: React.ReactNode }) => <div data-testid="shell">{children}</div>,
 }));
 vi.mock("@/components/atom/modules/Reportes", () => ({ Reportes: () => <div data-testid="modulo-reportes" /> }));
-vi.mock("@/components/atom/modules/Dashboard", () => ({ Dashboard: () => <div data-testid="modulo-dashboard" /> }));
+vi.mock("@/components/atom/modules/GestorDashboard", () => ({ GestorDashboard: () => <div data-testid="modulo-dashboard" /> }));
+vi.mock("@/components/atom/modules/SuperAdminDashboard", () => ({ SuperAdminDashboard: () => <div data-testid="modulo-dashboard" /> }));
 vi.mock("@/components/atom/modules/OtDashboard", () => ({ OtDashboard: () => null }));
 vi.mock("@/components/atom/modules/Tramites", () => ({ Tramites: () => null }));
 vi.mock("@/components/atom/modules/Validaciones", () => ({ Validaciones: () => null }));

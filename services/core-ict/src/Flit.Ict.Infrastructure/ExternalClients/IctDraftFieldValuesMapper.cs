@@ -89,6 +89,34 @@ internal static class IctDraftFieldValuesMapper
         [8] = "BIODIESEL",
     };
 
+    /// <summary>Trámite principal 9 = cambio de combustible (también declara el cambio sin transformación 9).</summary>
+    internal const int TramiteCombustible = 9;
+
+    /// <summary>Código de la advertencia visible cuando el combustible declarado no tiene equivalencia web.</summary>
+    internal const string AdvertenciaCombustibleSinEquivalencia = "combustible_warning:sin_equivalencia";
+
+    /// <summary>
+    /// HU #14602 (AC4-AC6): el pre-trámite DECLARA un cambio de combustible (transformación 9 o trámite
+    /// principal 9) y trae <c>NewVehicleFuelType</c> sin equivalencia exacta en el catálogo web (incluye valores
+    /// fuera de 1-12). El borrador se crea igual, sin <c>vehicle_fuel</c>; esta advertencia avisa al gestor.
+    /// Sin <c>NewVehicleFuelType</c>, con equivalencia o sin declarar el cambio: false.
+    /// </summary>
+    internal static bool CombustibleSinEquivalencia(ExternalIntegrationMaster master)
+    {
+        ArgumentNullException.ThrowIfNull(master);
+        if (master.NewVehicleFuelType is not { } combustible || CombustibleWeb.ContainsKey(combustible))
+        {
+            return false;
+        }
+
+        return master.TransactionType == TramiteCombustible
+               || master.Transformations.Any(t => t.IdTransformationType == TransformacionCombustible);
+    }
+
+    /// <summary>Advertencias detectadas por core-ict (no por core-api) que se publican junto a las del reply.</summary>
+    internal static IReadOnlyList<string> AdvertenciasLocales(ExternalIntegrationMaster master) =>
+        CombustibleSinEquivalencia(master) ? [AdvertenciaCombustibleSinEquivalencia] : [];
+
     /// <summary>Field values de transformaciones y prenda, en orden estable y sin claves repetidas.</summary>
     internal static IReadOnlyList<FieldValue> Map(ExternalIntegrationMaster master)
     {
@@ -97,8 +125,56 @@ internal static class IctDraftFieldValuesMapper
         var values = new List<FieldValue>();
         AddTransformations(values, master);
         AddServicio(values, master);
+        AddPlaca(values, master);
         AddPrenda(values, master);
         return values;
+    }
+
+    // Contrato v1 plate_assignment_type: 2 dígito de preferencia, 3 placa completa, 4 placa de un rango del OT.
+    internal const int PlacaDigitoPreferencia = 2;
+    internal const int PlacaCompleta = 3;
+    internal const int PlacaDeRango = 4;
+
+    /// <summary>
+    /// ¿La placa de este master viaja según <c>plate_assignment_type</c>? Solo matrícula (1 inicial, 2 leasing)
+    /// con un tipo 2/3/4; en los demás casos <c>plate</c> sigue yendo tal cual (lo agrega el cliente gRPC).
+    /// </summary>
+    internal static bool PlacaPorTipoDeAsignacion(ExternalIntegrationMaster master)
+    {
+        ArgumentNullException.ThrowIfNull(master);
+        return master.TransactionType is TramiteMatriculaInicial or TramiteMatriculaLeasing
+               && master.PlateAssignmentType is PlacaDigitoPreferencia or PlacaCompleta or PlacaDeRango;
+    }
+
+    /// <summary>
+    /// Placa de la matrícula según <c>plate_assignment_type</c>. Siempre se envía el tipo
+    /// (<c>plate_assignment_type</c>, para trazabilidad). Tipo 2: el valor es un dígito de preferencia (0-9), NO
+    /// una placa → nunca va como <c>plate</c>; si viene un dígito, <c>plate_preferred_last_digit</c> (la misma clave
+    /// del wizard). Tipos 3 y 4: <c>plate</c> completa; core-api la trata como placa entregada, y en el 4 valida
+    /// que pertenezca al rango que el OT asignó a la compañía.
+    /// </summary>
+    private static void AddPlaca(List<FieldValue> values, ExternalIntegrationMaster master)
+    {
+        if (!PlacaPorTipoDeAsignacion(master))
+        {
+            return;
+        }
+
+        var tipo = master.PlateAssignmentType!.Value;
+        Add(values, "plate_assignment_type", tipo.ToString(CultureInfo.InvariantCulture));
+
+        var placa = master.Plate?.Trim();
+        if (tipo == PlacaDigitoPreferencia)
+        {
+            if (placa is { Length: 1 } && char.IsAsciiDigit(placa[0]))
+            {
+                Add(values, "plate_preferred_last_digit", placa);
+            }
+
+            return;
+        }
+
+        AddIfPresent(values, "plate", placa?.ToUpperInvariant());
     }
 
     /// <summary>

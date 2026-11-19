@@ -3,7 +3,8 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Shell, type ModuleId } from "@/components/atom/Shell";
-import { Dashboard } from "@/components/atom/modules/Dashboard";
+import { GestorDashboard } from "@/components/atom/modules/GestorDashboard";
+import { SuperAdminDashboard } from "@/components/atom/modules/SuperAdminDashboard";
 import { OtDashboard } from "@/components/atom/modules/OtDashboard";
 import { Tramites } from "@/components/atom/modules/Tramites";
 import { Reportes } from "@/components/atom/modules/Reportes";
@@ -38,8 +39,10 @@ import {
   decodeJwtPayload,
   type JwtPayload,
   isOtUser,
+  isSoloCaja,
   isSuperAdmin,
 } from "@/lib/auth/jwt";
+import { cajaPortalPath } from "@/components/admin/transit-offices/ot-nav";
 
 function HomeContent() {
   const router = useRouter();
@@ -54,6 +57,12 @@ function HomeContent() {
   // Claims JWT: lectura perezosa (no reactiva) — el token no cambia en la sesión SPA.
   const [claims] = useState<JwtPayload | null>(() => decodeJwtPayload(getToken()));
   const isSuperAdminUser = isSuperAdmin(claims);
+  // Feature #14453 — la persona de caja (único rol `ot_caja`) solo ve Portal Persona Natural → Caja: el inicio la lleva allí.
+  const soloCaja = isSoloCaja(claims);
+  useEffect(() => {
+    if (hydrated && authed && soloCaja) router.replace(cajaPortalPath(typeof claims?.tenant_id === "string" ? claims.tenant_id : null));
+    // `params` en las dependencias: otra guarda puede devolver al cajero a «/» (p. ej. al limpiar `?acceso=denegado`) y el efecto debe volver a llevarlo a su Caja; «/» nunca queda en blanco.
+  }, [hydrated, authed, soloCaja, claims, router, params]);
   const isOtAdminUser = isOtUser(claims);
   const canLogQx = canReadLogQx(claims);
   // ICT (Bug #13445): Log solo SuperAdmin; Trazabilidad y Reportes por su permiso propio.
@@ -90,12 +99,12 @@ function HomeContent() {
 
   // La marca del middleware se convierte en el aviso y se limpia de la URL (un solo replace; sin loop).
   useEffect(() => {
-    if (!hydrated || !authed || accessMark !== ACCESS_DENIED_VALUE) return;
+    if (!hydrated || !authed || soloCaja || accessMark !== ACCESS_DENIED_VALUE) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setAccesoDenegado(true);
     setModuloDenegado(params.get(ACCESS_DENIED_MODULE_PARAM));
     router.replace("/", { scroll: false });
-  }, [accessMark, hydrated, authed, router, params]);
+  }, [accessMark, hydrated, authed, soloCaja, router, params]);
 
   // Sync / revalidar ?m= cuando cambian rawModule O navigableIds (post-RBAC).
   // Importante: un solo replace por módulo denegado — sin loop de router.replace.
@@ -157,7 +166,7 @@ function HomeContent() {
     router.replace(`/?m=${m}`, { scroll: false });
   }
 
-  if (!hydrated || !authed) return null;
+  if (!hydrated || !authed || soloCaja) return null;
 
   const moduleReady = !modulesLoading && module !== null;
 
@@ -189,8 +198,12 @@ function HomeContent() {
           empresa y consulta endpoints acotados al tenant de la empresa cliente, donde el organismo
           no tiene ni una fila. Cualquier usuario de un organismo (isOtUser) ve su propia cola. */}
       {moduleReady && module === "dashboard" && isOtAdminUser && <OtDashboard />}
-      {moduleReady && module === "dashboard" && !isOtAdminUser && (
-        <Dashboard onNewTramite={() => handleNav("tramites")} />
+      {/* Rediseño de los 3 dashboards: el resto se parte en SuperAdmin (vista del ecosistema) y Gestor (su compañía). */}
+      {moduleReady && module === "dashboard" && !isOtAdminUser && isSuperAdminUser && (
+        <SuperAdminDashboard onNewTramite={() => handleNav("tramites")} />
+      )}
+      {moduleReady && module === "dashboard" && !isOtAdminUser && !isSuperAdminUser && (
+        <GestorDashboard onNewTramite={() => handleNav("tramites")} />
       )}
       {moduleReady && module === "tramites" && <Tramites />}
       {moduleReady && module === "reportes" && <Reportes />}

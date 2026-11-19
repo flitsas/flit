@@ -17,6 +17,9 @@ vi.mock("@/lib/api/admin-ot-security", () => ({
   updateOtUser: vi.fn(),
   deleteOtUser: vi.fn(),
   resendOtInvitation: vi.fn(),
+  fetchOtClientCompanies: vi.fn().mockResolvedValue({ items: [] }),
+  fetchOtUserClientScope: vi.fn().mockResolvedValue({ mode: "todos", clients: [] }),
+  setOtUserClientScope: vi.fn(),
 }));
 // Quien edita es el Admin OT del organismo (HU #13655: un no administrador no edita a un administrador).
 vi.mock("@/hooks/usePermissions", () => ({

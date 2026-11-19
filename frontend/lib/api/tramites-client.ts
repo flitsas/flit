@@ -10,6 +10,7 @@ import type {
   ActorContactLookupResult,
   ActorsResponse,
   CamaraComercioRequirement,
+  AttachmentOcrVerdict,
   AttachmentsResponse,
   BiometriaPublicView,
   BiometricParte,
@@ -342,6 +343,20 @@ function parseProblem(body: string): Record<string, unknown> | null {
  * funcionando sin cambios; los que necesitan reaccionar a un código de error concreto (p. ej. AC1
  * de HU #10882, 409 `DUPLICATE_ACTIVE_PROCEDURE`) leen `.status` / `.problem`.
  */
+/** Bug #14604 — tipo de documento habilitado para la carga administrativa. */
+export interface AdminTipoDocumento {
+  tipo: string;
+  nombre: string;
+}
+
+/** Bug #14604 — respuesta 201 de la carga administrativa de un documento. */
+export interface AdminCargarDocumentoResult {
+  attachmentId: string;
+  tipo: string;
+  filename: string;
+  previousAttachmentIds: string[];
+}
+
 export class TramitesApiError extends Error {
   constructor(
     public readonly status: number,
@@ -1586,11 +1601,14 @@ export const tramitesClient = {
   //   1) presign  → el API registra el archivo en el file-manager y devuelve url + method + fields.
   //   2) PUT o POST al storage → el navegador sube el binario (PUT crudo en Contabo; POST policy en MinIO/S3).
   //   3) register → el API persiste la metadata del adjunto (incl. el sha256 que calcula el cliente).
+  // Bug #14559 — `ocr` (opcional): veredicto OCR ya calculado en el cliente; viaja en el register como
+  // códigos cerrados para que el adjunto lo conserve al volver al paso. Informativo (ADR-0085).
   uploadAttachment: async (
     instanceId: string,
     tipo: string,
     file: File,
     tenantId?: string,
+    ocr?: AttachmentOcrVerdict,
   ): Promise<ProcedureAttachment> => {
     const mimetype = file.type || 'application/octet-stream';
     const filename = file.name || 'file';
@@ -1622,6 +1640,8 @@ export const tramitesClient = {
           sizeBytes: file.size,
           sha256,
           storagePath: presign.storagePath,
+          ...(ocr ? { ocrStatus: ocr.status } : {}),
+          ...(ocr?.reason ? { ocrReason: ocr.reason } : {}),
         }),
       },
     );
@@ -2510,12 +2530,19 @@ export const tramitesClient = {
   // POST generar expediente consolidado (matrícula inicial). Fusiona FUR + adjuntos.
   // 409 fur_requerido | documentos_incompletos | modalidad_no_soportada.
   // Feature #11066 — `force=true` invalida caché y regenera desde cero (sin duplicar).
-  generarConsolidado: (instanceId: string, tenantId?: string, force = false) =>
+  // Bug #14631 — `signal` opcional: permite al llamador poner un tope de espera (AbortController).
+  generarConsolidado: (
+    instanceId: string,
+    tenantId?: string,
+    force = false,
+    signal?: AbortSignal,
+  ) =>
     request<GenerarConsolidadoResult>(
       `/api/v1/tramites/instances/${instanceId}/consolidado${force ? '?force=true' : ''}`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
+        ...(signal ? { signal } : {}),
       },
     ),
 
@@ -2769,6 +2796,43 @@ export const tramitesClient = {
     return (await res.json()) as ProcedureAttachment;
   },
 
+  /** Bug #14604 — tipos de documento que el admin puede cargar en el trámite. */
+  adminListarTiposDocumento: (
+    instanceId: string,
+    tenantId?: string,
+  ): Promise<AdminTipoDocumento[]> =>
+    request<AdminTipoDocumento[]>(`/api/v1/admin/tramites/${instanceId}/documentos/tipos`, {
+      headers: tenantHeader(tenantId),
+    }),
+
+  /**
+   * Bug #14604 — carga un documento en el trámite en CUALQUIER estado, con observación obligatoria.
+   * Multipart (`file`, `tipo`, `observacion`): NO usa `request()` (fija Content-Type: application/json),
+   * mismo patrón que `adminCargarConsolidado`. Errores: `TramitesApiError` con `.status` y el
+   * ProblemDetails (`detail` ya viaja en `.message`): 400 missing_file | invalid_mime | file_too_large |
+   * observacion_requerida, 422 tipo_no_habilitado, 404, 409 bloqueo FLITO.
+   */
+  adminCargarDocumento: async (
+    instanceId: string,
+    input: { file: File; tipo: string; observacion: string },
+    tenantId?: string,
+  ): Promise<AdminCargarDocumentoResult> => {
+    const form = new FormData();
+    form.append('file', input.file);
+    form.append('tipo', input.tipo);
+    form.append('observacion', input.observacion);
+    const res = await fetch(apiUrl(`/api/v1/admin/tramites/${instanceId}/documentos`), {
+      method: 'POST',
+      headers: tenantHeader(tenantId),
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => '');
+      throw new TramitesApiError(res.status, problemMessage(res, body), parseProblem(body));
+    }
+    return (await res.json()) as AdminCargarDocumentoResult;
+  },
+
   /** HU #12159 — cambia `status` sin restricciones de flujo (rechaza 422 si origen/destino es 'aprobado'). */
   adminCambiarEstado: (
     instanceId: string,
@@ -2937,9 +3001,15 @@ export interface VencerIdentidadResult {
   motivoSinEnlace: string | null;
 }
 
-/** HU #13822 — persona sin firmar que admite reenvío (espejo del contrato HU #13821). */
+/**
+ * HU #13822 — persona sin firmar que admite reenvío (espejo del contrato HU #13821).
+ *
+ * HU #14627 — `validationId` pasa a ser `string | null`: `null` = la persona NUNCA tuvo una
+ * validación de identidad (no hay fila que reenviar, status `'no_iniciada'`), caso que antes el
+ * backend no contemplaba en este listado — solo exponía personas con fila ya existente.
+ */
 export interface AdminValidacionReenviable {
-  validationId: string;
+  validationId: string | null;
   partyRole: string | null;
   ordinal: number | null;
   name: string;
@@ -2954,13 +3024,34 @@ export interface AdminValidacionesReenviablesResult {
   personas: AdminValidacionReenviable[];
 }
 
+/**
+ * HU #14627 — `validationId` nullable (fila sin iniciar) y `partyRole`/`ordinal` NUEVOS, obligatorios
+ * cuando `validationId` es `null` (el backend no tiene otra forma de saber a qué persona crear la
+ * fila); se envían siempre, también con `validationId` presente, para que el backend los pueda
+ * usar igual como echo en el resultado.
+ */
 export interface AdminReenviarLoteItemInput {
-  validationId: string;
+  validationId: string | null;
+  partyRole: string | null;
+  ordinal: number | null;
   email: string | null;
 }
 
+/**
+ * HU #14627 — `validationId` del resultado es `string | null`: id REAL (el existente, o el recién
+ * creado al enviar por primera vez) cuando el ítem tuvo éxito; `null` solo si falló ANTES de crear la
+ * fila (`ok: false`). `partyRole`/`ordinal` son el echo del item enviado — clave de emparejamiento
+ * estable entre request y resultado, tanto para filas existentes como nuevas.
+ *
+ * Nota de implementación — verificado contra el backend ya mergeado en esta rama (commit
+ * `4d4985300`, `AdminReenviarValidacionLoteItemResponse` en `AdminReenviarValidacionEndpoints.cs`):
+ * el contrato que se dio para implementar el frontend decía `validationId: string` SIN cambio de
+ * tipo en el resultado; el backend real lo deja `Guid?` (nullable). Se ajusta aquí al tipo real.
+ */
 export interface AdminReenviarLoteItemResult {
-  validationId: string;
+  validationId: string | null;
+  partyRole: string | null;
+  ordinal: number | null;
   ok: boolean;
   queued: boolean;
   captureUrl: string | null;

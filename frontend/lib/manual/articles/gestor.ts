@@ -187,6 +187,13 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Una matrícula inicial puede tomar la ruta de placa: Preasignación → Asignado → Entregado. Consulta «Matrícula inicial: ruta de placa» para saber qué te corresponde en cada estado.",
           "Haz seguimiento desde el listado (búsqueda por radicado, placa o VIN) o pregúntale a DR. FLIT.",
         ],
+        callouts: [
+          {
+            variant: "info",
+            title: "Si el expediente tarda en generarse",
+            text: "Al enviar, la plataforma genera el expediente consolidado (FUR y documentos). Si tarda o falla por un problema momentáneo, el trámite se envía igual al organismo y verás «Trámite enviado al OT. El expediente consolidado se está generando y estará disponible en unos minutos.». No tienes que volver a enviarlo. Si en cambio falta un documento obligatorio, verás «No se puede radicar: Expediente incompleto» con lo que falta, y el trámite no se envía hasta que lo cargues.",
+          },
+        ],
       },
     ],
   },
@@ -206,6 +213,9 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "necesito para",
       "matricula documentos",
       "traspaso documentos",
+      "otros documentos",
+      "varios archivos",
+      "eliminar documento",
     ],
     summary: "Cómo conocer los documentos exigidos, dónde cargarlos y buenas prácticas.",
     blocks: [
@@ -234,6 +244,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Usa el paso Documentos del asistente para subir cada archivo. Formatos típicos: PDF, JPG, PNG.",
           "Un nombre descriptivo ayuda al revisor del organismo. Evita fotos borrosas o PDFs protegidos con contraseña.",
+          "En casi todas las casillas cabe un solo archivo: «Reemplazar archivo» cambia el que había por el nuevo.",
+          "Las casillas «Otro» y «Anexos generales» admiten varios archivos. Cada archivo aparece en su propia fila, con su fecha, el ojo para verlo y «Eliminar». Para sumar uno, pulsa «Agregar otro documento»: el nuevo se añade y los anteriores se quedan. Si cargaste uno por error, elimínalo en su fila; agregar el correcto no lo quita. Todos los archivos de estas casillas van en el consolidado que recibe el organismo.",
           "Impronta: si tu compañía tiene deshabilitada la generación de improntas, el sistema no la genera ni ofrece «Generar impronta». En la casilla de la impronta verás «Cargue la impronta; no se genera automáticamente» y debes adjuntarla tú. Si es obligatoria, no podrás radicar hasta cargarla.",
         ],
         callouts: [
@@ -251,6 +263,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Documento ilegible → vuelve a escanear o fotografiar con buena luz.",
           "Persona equivocada en el mandato → verifica actores antes de adjuntar.",
           "Falta un obligatorio → el asistente bloquea el avance hasta que lo completes.",
+          "El organismo rechazó un archivo de «Otro» → en la subsanación, elimina el archivo errado en su fila y agrega el corregido; si solo agregas el nuevo, el errado sigue en el expediente.",
         ],
       },
     ],
@@ -284,6 +297,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "Desde el wizard, en el paso de identidad, se invita a cada parte (enlace o QR según configuración).",
+          "Hazle llegar el enlace a la persona con el código QR o con «Copiar enlace». No lo abras en tu equipo: el enlace queda asociado al primer dispositivo que lo abre y luego la persona no podría completar la captura desde el suyo.",
           "La persona completa el flujo biométrico en el dispositivo indicado.",
           "El estado vuelve al trámite: pendiente, aprobado, rechazado o vencido.",
           "Con todas las identidades aprobadas, el wizard puede quitar el bloqueo correspondiente.",
@@ -401,8 +415,11 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Al abrir una fila entras al detalle: el asistente (si sigue en borrador), la línea de tiempo de estados con fecha y hora, los documentos del expediente (también desde «Ver documentos» en la fila, sin entrar al asistente) y las observaciones del organismo cuando las hay.",
           "Dentro del trámite abierto, en cualquier estado, cada cambio queda registrado: fecha y hora de Colombia, quién lo hizo (su nombre y su compañía, o Sistema), el dato, el valor anterior y el nuevo. Una bandera de transformación (color, carrocería, combustible o blindaje) se lee Sí o No. En borrador o en subsanación está en el acordeón «Expediente — Trazabilidad cronológica» del resumen, del más reciente al más antiguo. En los demás estados, la sección Expediente usa esa misma lista. «Línea de Tiempo del Trámite» conserva sus tarjetas: el título es el dato, y dentro van gestor, correo, empresa, rol, fecha y hora, y el detalle con el valor anterior y el nuevo. La tarjeta de más abajo es la vigente. Si no hay cambios dice «Todavía no hay modificaciones»; si está cargando o falla, lo dice y puedes pulsar «Reintentar». «Ver más» trae el resto. El recuadro «Estado del trámite», si lo abres sin entrar al detalle, solo muestra el estado y los actos administrativos.",
+          "Si el equipo FLIT actualizó un documento del trámite, la línea de tiempo muestra «Documento actualizado por el administrador» con el estado en que estaba el trámite, la observación y un bloque con el documento, el archivo nuevo y el archivo anterior, cada uno con «Ver». El archivo reemplazado no se pierde: aparece como «Versión anterior» en «Ver documentos».",
+          "Los documentos se abren en una pestaña nueva del navegador, a pantalla completa. Si el documento trae un aviso (por ejemplo «Documento final» del consolidado), aparece unos segundos en la pantalla donde estabas. Si no se puede abrir o ver, el aviso sale en la pantalla con «Descargar». Si tu navegador bloquea las ventanas emergentes, el documento se muestra en la misma pantalla.",
           "Todas las fechas de la plataforma se muestran en hora de Colombia con el formato DD/MM/YYYY HH:mm; las vigencias (SOAT, RTM, identidad) van sin hora.",
           "El panel del vehículo muestra también el Canal por el que entró el trámite y, si llegó del punto de atención de un organismo, el «OT del punto». En un trámite en borrador los verás en la barra superior del asistente. Son datos de solo lectura: los pone el sistema al crear el trámite.",
+          "Si el trámite llegó del punto de atención ya pagado, el mismo panel muestra «Pagado en caja» con el valor, el medio (efectivo, datáfono, transferencia u otro) y la fecha, o «Sin cobro» si el total era $0. Ese trámite no se vuelve a cobrar.",
         ],
       },
       {
@@ -585,7 +602,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "Preasignación: radicaste sin placa. Puedes enviar el trámite aunque el actor aún no haya firmado; el correo de validación de identidad le llega igual. El organismo tiene el trámite en su cola de «asignar placa». Tú esperas.",
-          "Asignado: el organismo asignó la placa (recibes correo). Desde aquí la firma es obligatoria: si falta, «Enviar al OT» no deja continuar y se le notifica a la persona. Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
+          "Asignado: el organismo asignó la placa (recibes correo). Desde aquí la firma es obligatoria: si falta, «Enviar al OT» no deja continuar y se le notifica a la persona. Gestiona SOAT e impuestos y, desde la fila del listado o el detalle, pulsa «Enviar al OT» confirmando los checks. En ese mismo modal puedes cargar el PDF del SOAT («Cargar PDF del SOAT») y el del impuesto departamental («Cargar PDF del impuesto departamental»); al cargar el del impuesto, el check «Impuesto departamental pagado» queda marcado. Si la compañía permite continuar sin SOAT vigente, verás una advertencia pero el envío procede.",
           "Entregado: ya está en la cola de decisión del organismo, como cualquier otro trámite.",
           "Rechazado con distintivo «Rechazado preasignación»: el organismo rechazó antes de asignar placa; el motivo está en el detalle. Puedes filtrar estos casos con el atajo «Rechazado desde preasignación» de la búsqueda rápida.",
         ],

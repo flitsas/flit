@@ -20,6 +20,7 @@ import {
   isTramiteCambioEstadoTemplate,
   NotificacionProcedureTypeFields,
 } from "./NotificacionProcedureTypeFields";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 type Phase = "mailbox-required" | "select-type" | "sending" | "result" | "failure";
 
@@ -181,7 +182,7 @@ export function NotificacionEnviarPruebaModal({
             data-testid="notificaciones-enviar-prueba-error"
           >
             <p className="inline-flex items-center gap-1.5 font-semibold">
-              <Icono nombre="alerta" className="h-3.5 w-3.5 shrink-0" />
+              <IconoAviso tipo="error" className="h-3.5 w-3.5 shrink-0" />
               El envío no se completó
             </p>
             <p>{failure.productMessage}</p>

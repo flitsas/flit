@@ -64,8 +64,16 @@ public sealed class LegalRepresentativeItem
     public DateTimeOffset CreatedAt { get; init; }
     public DateTimeOffset? UpdatedAt { get; init; }
 
-    /// <summary>¿Tiene firma del baúl o validación de identidad vinculada?</summary>
-    public bool HasSignatureOrIdentity => SignatureVaultId is not null || IdentityValidationRef is not null;
+    /// <summary>
+    /// ¿Puede firmar HOY? <c>true</c> solo con firma del baúl vigente o identidad vigente
+    /// (<see cref="FirmaBaulVigente"/> / <see cref="IdentityStatus"/>, calculadas en lote por el lector).
+    /// Antes se derivaba de las referencias guardadas (<see cref="SignatureVaultId"/> /
+    /// <see cref="IdentityValidationRef"/>), que se fijan al guardar y no se reevalúan: una firma o una
+    /// identidad vencida seguía saliendo «Con firma o identidad» en el listado mientras el detalle decía
+    /// «sin firma vigente / sin validación».
+    /// </summary>
+    public bool HasSignatureOrIdentity =>
+        FirmaBaulVigente || IdentityStatus == Identity.AdminIdentityVigencia.Valid;
 
     /// <summary>
     /// HU #11059 — vigencia de la identidad del representante, con la MISMA semántica y el mismo

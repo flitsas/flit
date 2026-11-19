@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { InlineAlert, Modal } from "@flit/ui";
+import { InlineAlert, Modal, VehicleLoader } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
@@ -80,7 +80,7 @@ function CambiarDia({ dia, onCerrar, onGuardado }: { dia: DiaCalendario; onCerra
                 <input className={INPUT_CLS} maxLength={120} value={descripcion} placeholder="Día cívico decretado" onChange={(e) => setDescripcion(e.target.value)} autoFocus />
               </label>
             )}
-            {impacto.estado === "loading" && <p className="text-xs opacity-60">Calculando cuántos comparendos se afectan…</p>}
+            {impacto.estado === "loading" && <p className="text-xs text-muted-foreground" role="status">Calculando cuántos comparendos se afectan…</p>}
             {impacto.estado === "error" && <InlineAlert tone="error" compact>{impacto.error}</InlineAlert>}
             {impacto.datos && (
               <InlineAlert tone={impacto.datos.comparendos > 0 ? "warning" : "info"} compact>
@@ -89,7 +89,7 @@ function CambiarDia({ dia, onCerrar, onGuardado }: { dia: DiaCalendario; onCerra
                   : "Ningún comparendo activo tiene fechas desde este día: no hay plazos que recalcular."}
               </InlineAlert>
             )}
-            <p className="text-xs opacity-70">El cambio queda en la auditoría de configuración.</p>
+            <p className="text-xs text-muted-foreground">El cambio queda en la auditoría de configuración.</p>
           </>
         ) : (
           <InlineAlert tone="success" title="Calendario actualizado">
@@ -106,7 +106,7 @@ function Mes({ datos, mes, onElegir }: { datos: AnioCalendario; mes: number; onE
   return (
     <div className="flex flex-col gap-1">
       <h3 className="text-xs font-semibold capitalize text-flit-primary">{nombreMes(mes)}</h3>
-      <div className="grid grid-cols-7 gap-0.5 text-center text-[10px] text-muted-foreground">
+      <div className="grid grid-cols-7 gap-0.5 text-center text-xs text-muted-foreground">
         {DIAS_SEMANA.map((d) => (
           <span key={d}>{d}</span>
         ))}
@@ -121,7 +121,7 @@ function Mes({ datos, mes, onElegir }: { datos: AnioCalendario; mes: number; onE
                 disabled={accionDia(d) === null}
                 title={d.esFestivo ? `${d.descripcionFestivo ?? "Festivo"}${d.origen === "MANUAL" ? " · manual" : ""}` : d.esFinDeSemana ? "Fin de semana" : "Hábil · clic para marcarlo festivo"}
                 onClick={() => onElegir(d)}
-                className={`relative h-7 rounded-md border border-transparent text-[11px] transition disabled:cursor-default ${COLOR[tipoDia(d)]}`}
+                className={`relative h-7 rounded-md border border-transparent text-xs tabular-nums transition disabled:cursor-default ${COLOR[tipoDia(d)]}`}
               >
                 {Number(d.fecha.slice(8))}
                 {d.origen === "MANUAL" && <span className="absolute right-0.5 top-0.5 h-1.5 w-1.5 rounded-full bg-flit-brand" aria-label="Cambio manual" />}
@@ -160,7 +160,7 @@ function Calendario() {
           </div>
         }
       />
-      {datos.estado === "loading" && <p className="text-sm opacity-60">Cargando el año…</p>}
+      {datos.estado === "loading" && <VehicleLoader label="Cargando el año…" />}
       {datos.estado === "error" && (
         <InlineAlert tone="error" title={`No hay calendario para ${anio}`}>
           {datos.error} El calendario va de 2015 a 2040.

@@ -1,0 +1,229 @@
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { ApiError } from "@/lib/api";
+import {
+  EmpresaNoElegida,
+  aplicarLlenado,
+  cargadorDetalleBackoffice,
+  esLlenable,
+  listarLotesBackoffice,
+  llenarConsultaManual,
+  mensajeErrorBackoffice,
+  obtenerFormularioManual,
+  obtenerGrillaBackoffice,
+  traducirErrorLlenado,
+} from "@/lib/backoffice/api";
+import { EMPRESA_A, LOTE, celdaBo, grillaBo, listaLotes, lote, respuestaLlenado, simularApi } from "./datos";
+
+// Uso de ejemplo: listarLotesBackoffice(empresa, { conErrores: true }) → GET /backoffice/diagnosticos?empresa=…&con_errores=true;
+// obtenerGrillaBackoffice(id, empresa, 0); obtenerFormularioManual(cid, empresa); llenarConsultaManual(cid, empresa, cuerpo).
+// Sin una compañía válida ninguna sale a la red (rechaza con EmpresaNoElegida).
+
+afterEach(() => vi.unstubAllGlobals());
+
+const urlDe = (fetchMock: { mock: { calls: unknown[][] } }, n = 0) => new URL(String(fetchMock.mock.calls[n][0]), "http://localhost");
+
+describe("lib/backoffice/api — toda llamada lleva ?empresa=", () => {
+  it("lista de lotes con empresa, estado, con_errores, pagina y tamano", async () => {
+    const fetchMock = simularApi({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([lote(1)])) });
+
+    const lista = await listarLotesBackoffice(EMPRESA_A, { estado: "INCOMPLETO", conErrores: true, pagina: 2, tamano: 30 });
+
+    const url = urlDe(fetchMock);
+    expect(url.pathname).toBe("/api/v1/diagnostico/backoffice/diagnosticos");
+    expect(Object.fromEntries(url.searchParams)).toEqual({ empresa: EMPRESA_A, estado: "INCOMPLETO", con_errores: "true", pagina: "2", tamano: "30" });
+    expect(lista.diagnosticos).toHaveLength(1);
+  });
+
+  it("sin filtros solo manda la empresa y la página 1", async () => {
+    const fetchMock = simularApi({ "GET /backoffice/diagnosticos": () => Response.json(listaLotes([])) });
+    await listarLotesBackoffice(EMPRESA_A);
+    expect(Object.fromEntries(urlDe(fetchMock).searchParams)).toEqual({ empresa: EMPRESA_A, pagina: "1" });
+  });
+
+  it("grilla del lote con empresa y desde", async () => {
+    const fetchMock = simularApi({ [`GET /backoffice/diagnosticos/${LOTE}/grilla`]: () => Response.json(grillaBo()) });
+    await obtenerGrillaBackoffice(LOTE, EMPRESA_A, 7);
+    const url = urlDe(fetchMock);
+    expect(url.searchParams.get("empresa")).toBe(EMPRESA_A);
+    expect(url.searchParams.get("desde")).toBe("7");
+  });
+
+  it("formulario GET y llenado PUT con empresa; el PUT manda el cuerpo JSON", async () => {
+    const fetchMock = simularApi({
+      "GET /backoffice/consultas/celda-1/manual": () => Response.json({ id: "celda-1" }),
+      "PUT /backoffice/consultas/celda-1/manual": () => Response.json(respuestaLlenado("SIMIT_VEHICULO")),
+    });
+    await obtenerFormularioManual("celda-1", EMPRESA_A);
+    const cuerpo = { version: 10, resultado: { semaforo: "VERDE", cantidad_comparendos: 0, comparendos: [] } };
+    const r = await llenarConsultaManual("celda-1", EMPRESA_A, cuerpo);
+
+    expect(urlDe(fetchMock, 0).searchParams.get("empresa")).toBe(EMPRESA_A);
+    expect(urlDe(fetchMock, 1).searchParams.get("empresa")).toBe(EMPRESA_A);
+    const init = fetchMock.mock.calls[1][1] as RequestInit;
+    expect(init.method).toBe("PUT");
+    expect(JSON.parse(String(init.body))).toEqual(cuerpo);
+    expect(r.origen).toBe("MANUAL");
+  });
+
+  it.each(["", "   ", "no-es-uuid", "00000000-0000-0000-0000-000000000000"])("sin compañía válida («%s») no se llama a la API", async (empresa) => {
+    const fetchMock = simularApi({});
+    await expect(listarLotesBackoffice(empresa)).rejects.toBeInstanceOf(EmpresaNoElegida);
+    await expect(obtenerGrillaBackoffice(LOTE, empresa, 0)).rejects.toBeInstanceOf(EmpresaNoElegida);
+    await expect(obtenerFormularioManual("celda-1", empresa)).rejects.toBeInstanceOf(EmpresaNoElegida);
+    await expect(llenarConsultaManual("celda-1", empresa, { version: 1, resultado: {} })).rejects.toBeInstanceOf(EmpresaNoElegida);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("esLlenable — «Llenar a mano» solo en celdas en ERROR no bloqueadas de fuentes llenables", () => {
+  it.each([
+    ["SIMIT_VEHICULO", "ERROR", "TIMEOUT", true],
+    ["AVALUO", "ERROR", "HTTP_5XX", true],
+    ["RUNT_PROPIETARIO", "ERROR", "PERSONAS_CON_ERROR", true],
+    ["SIMIT_LOCATARIO", "ERROR", "TIMEOUT", true],
+    ["RUNT", "ERROR", "TIMEOUT", false],
+    ["IMPUESTO_DEPARTAMENTAL", "ERROR", "TIMEOUT", false],
+    ["SIMIT_PROPIETARIO", "ERROR", "BLOQUEADA_POR_RUNT", false],
+    ["SIMIT_VEHICULO", "COMPLETADO", null, false],
+    ["SIMIT_VEHICULO", "NA", null, false],
+  ] as const)("%s en %s (%s) → %s", (fuente, estado, tipo_error, esperado) => {
+    expect(esLlenable(celdaBo(1, fuente, estado, { tipo_error }))).toBe(esperado);
+  });
+});
+
+describe("traducirErrorLlenado — el 422 va junto al campo, el 409 como aviso", () => {
+  // AP-8 (SF-6): reescrito; antes afirmaba que el error de campo llevaba el mensaje de la API. Ahora es texto fijo.
+  it("422 RESULTADO_INVALIDO con campo → error de campo con texto fijo, no el mensaje de la API", () => {
+    const e = traducirErrorLlenado(new ApiError(422, "El valor debe ser mayor que cero.", "RESULTADO_INVALIDO", "resultado.fuentes[0].valor"));
+    expect(e).toEqual({ tipo: "CAMPO", campo: "resultado.fuentes[0].valor", mensaje: "Revisa este dato: no cumple lo que pide esta fuente.", recargarGrilla: false });
+  });
+
+  it("422 PERSONA_NO_EN_ERROR con campo → error de campo de la persona con texto fijo", () => {
+    const e = traducirErrorLlenado(new ApiError(422, "La persona no está en error.", "PERSONA_NO_EN_ERROR", "personas[0].persona_id"));
+    expect(e.tipo).toBe("CAMPO");
+    expect(e.campo).toBe("personas[0].persona_id");
+    expect(e.mensaje).toBe("Esta persona ya no está en error: no se llena a mano.");
+  });
+
+  it("409 CELDA_MODIFICADA → aviso que pide recargar la grilla", () => {
+    const e = traducirErrorLlenado(new ApiError(409, "x", "CELDA_MODIFICADA"));
+    expect(e.tipo).toBe("AVISO");
+    expect(e.recargarGrilla).toBe(true);
+    expect(e.mensaje).toMatch(/cambió/i);
+  });
+
+  it.each(["CELDA_NO_EN_ERROR", "CELDA_BLOQUEADA_POR_RUNT"])("409 %s → aviso claro, sin campo", (code) => {
+    const e = traducirErrorLlenado(new ApiError(409, "x", code));
+    expect(e.tipo).toBe("AVISO");
+    expect(e.campo).toBeUndefined();
+    expect(e.recargarGrilla).toBe(true);
+  });
+
+  it("422 FUENTE_NO_ADMITE_MANUAL y 403 → aviso", () => {
+    expect(traducirErrorLlenado(new ApiError(422, "x", "FUENTE_NO_ADMITE_MANUAL")).tipo).toBe("AVISO");
+    expect(traducirErrorLlenado(new ApiError(403, "x")).mensaje).toMatch(/permiso/i);
+  });
+});
+
+// AP-8 (security-fase3 SF-6): la UI nunca muestra el mensaje de un error del servidor ni de un Error cualquiera.
+const SECRETO = "Npgsql detalle interno 23514 en diagnostico.consultas";
+
+describe("traducirErrorLlenado — AP-8: textos fijos, nunca el mensaje del servidor", () => {
+  it("409 con un code desconocido → aviso fijo que recarga la grilla, sin el mensaje de la API", () => {
+    const e = traducirErrorLlenado(new ApiError(409, SECRETO, "OTRO_CONFLICTO"));
+    expect(e).toEqual({
+      tipo: "AVISO",
+      mensaje: "La celda cambió mientras la llenabas. La grilla se vuelve a leer; ábrela de nuevo si sigue en error.",
+      recargarGrilla: true,
+    });
+  });
+
+  it("409 sin code → el mismo aviso fijo", () => {
+    expect(traducirErrorLlenado(new ApiError(409, SECRETO)).mensaje).not.toContain(SECRETO);
+  });
+
+  it("500 de la API → aviso genérico fijo", () => {
+    const e = traducirErrorLlenado(new ApiError(500, SECRETO, "ERROR_INTERNO"));
+    expect(e).toEqual({ tipo: "AVISO", mensaje: "No se pudo llenar la consulta. Intenta de nuevo en un momento.", recargarGrilla: false });
+  });
+
+  it("422 con campo pero con un code fuera del contrato → aviso genérico, sin el mensaje", () => {
+    const e = traducirErrorLlenado(new ApiError(422, SECRETO, "OTRO", "resultado.x"));
+    expect(e.tipo).toBe("AVISO");
+    expect(e.mensaje).toBe("No se pudo llenar la consulta. Intenta de nuevo en un momento.");
+  });
+
+  it("un Error cualquiera (red, TypeError) → aviso genérico fijo", () => {
+    expect(traducirErrorLlenado(new TypeError(SECRETO)).mensaje).toBe("No se pudo llenar la consulta. Intenta de nuevo en un momento.");
+  });
+
+  it("EmpresaNoElegida (error propio del front, texto fijo) conserva su mensaje", () => {
+    expect(traducirErrorLlenado(new EmpresaNoElegida()).mensaje).toBe("Elige una compañía antes de consultar el backoffice.");
+  });
+});
+
+describe("mensajeErrorBackoffice — AP-8: traductor común del backoffice", () => {
+  const RESPALDO = "Intenta de nuevo en un momento.";
+
+  it("ApiError con un code del catálogo de la pantalla → el texto fijo de ese code", () => {
+    expect(mensajeErrorBackoffice(new ApiError(422, SECRETO, "PISO_NO_DISPENSABLE"), RESPALDO, { PISO_NO_DISPENSABLE: "Texto fijo." })).toBe("Texto fijo.");
+  });
+
+  it("ApiError 403 sin code del catálogo → texto fijo de permiso", () => {
+    expect(mensajeErrorBackoffice(new ApiError(403, SECRETO), RESPALDO)).toBe("No tienes permiso para esta acción.");
+  });
+
+  it.each([
+    ["ApiError 500", new ApiError(500, SECRETO, "ERROR_INTERNO")],
+    ["ApiError 422 con code fuera del catálogo", new ApiError(422, SECRETO, "OTRO", "campo")],
+    ["Error", new Error(SECRETO)],
+    ["TypeError de red", new TypeError(SECRETO)],
+    ["un valor que no es Error", SECRETO],
+    ["undefined", undefined],
+  ] as const)("%s → el respaldo fijo de la pantalla", (_n, error) => {
+    expect(mensajeErrorBackoffice(error, RESPALDO)).toBe(RESPALDO);
+  });
+
+  it("un code heredado de Object.prototype no se toma como del catálogo", () => {
+    expect(mensajeErrorBackoffice(new ApiError(422, SECRETO, "toString"), RESPALDO, {})).toBe(RESPALDO);
+  });
+
+  it("EmpresaNoElegida conserva su texto fijo del front", () => {
+    expect(mensajeErrorBackoffice(new EmpresaNoElegida(), RESPALDO)).toBe("Elige una compañía antes de consultar el backoffice.");
+  });
+});
+
+describe("aplicarLlenado — la celda pasa a verde con origen manual", () => {
+  it("celda COMPLETADO, origen MANUAL con su usuario, sin tipo_error, y el estado del lote de la respuesta", () => {
+    const g = aplicarLlenado(grillaBo(), respuestaLlenado("SIMIT_VEHICULO", { estado_lote: "EN_PROCESO" }));
+    const c = g.vehiculos[0].celdas.find((x) => x.fuente === "SIMIT_VEHICULO")!;
+    expect(c).toMatchObject({ estado: "COMPLETADO", origen: "MANUAL", usuario_manual_id: expect.any(String), tipo_error: null, version: 21 });
+    expect(g.estado).toBe("EN_PROCESO");
+  });
+
+  it("el vehículo queda terminado si ya no le quedan celdas abiertas ni en error", () => {
+    let g = aplicarLlenado(grillaBo(), respuestaLlenado("SIMIT_VEHICULO"));
+    expect(g.vehiculos[0].terminado).toBe(false);
+    g = aplicarLlenado(g, respuestaLlenado("AVALUO", { id: "celda-1-avaluo", estado_lote: "COMPLETADO" }));
+    expect(g.vehiculos[0].terminado).toBe(true);
+    expect(g.avance.terminados).toBe(1);
+  });
+});
+
+describe("cargadorDetalleBackoffice — HU #14562 (seguridad M2, D19)", () => {
+  it("lee la celda de la grilla del backoffice sin dejarla en la caché del navegador (cache: no-store)", async () => {
+    const fetchMock = simularApi({ [`GET /backoffice/diagnosticos/${LOTE}/grilla`]: () => Response.json(grillaBo()) });
+    const g = grillaBo();
+    const v = g.vehiculos[0];
+    await cargadorDetalleBackoffice(EMPRESA_A)(LOTE, v.id, v.celdas[0].fuente);
+    const init = fetchMock.mock.calls[0][1] as RequestInit;
+    expect(urlDe(fetchMock).searchParams.get("empresa")).toBe(EMPRESA_A);
+    expect(init.cache).toBe("no-store");
+  });
+
+  it("la grilla del backoffice, que se sondea, sigue sin forzar no-store", async () => {
+    const fetchMock = simularApi({ [`GET /backoffice/diagnosticos/${LOTE}/grilla`]: () => Response.json(grillaBo()) });
+    await obtenerGrillaBackoffice(LOTE, EMPRESA_A, 0);
+    expect((fetchMock.mock.calls[0][1] as RequestInit).cache).toBeUndefined();
+  });
+});

@@ -954,6 +954,35 @@ public sealed class FurHandlerTests
         capturing.Captured.Observaciones.Should().Be("Carroceria nueva(NUEVA CARROCERIA: PICKUP)");
     }
 
+    [Theory]
+    [InlineData("SUV", "SUV")]
+    [InlineData("SUV", " suv ")]
+    [InlineData("SUV", "")]
+    public async Task Generar_ConBanderaPeroSinValorNuevo_NoEscribeLaLineaDeCarroceria(string runt, string efectivo)
+    {
+        // El gestor marcó el cambio y aún no eligió carrocería nueva: la casilla de trámite sigue marcada,
+        // pero las observaciones NO dicen «Carroceria nueva(NUEVA CARROCERIA: SUV)».
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant, TramiteTipologiaCatalog.CodigoMatriculaInicial);
+        WithOrganismo(instance);
+        AddFieldValue(instance, "vehicle_body_type_runt", runt);
+        AddFieldValue(instance, "vehicle_body_type", efectivo);
+        AddFieldValue(instance, "cambio_carroceria", "true");
+        _repo.GetByIdWithFurGraphAsync(id, tenant, ct).Returns(instance);
+
+        var capturing = new CapturingFurGenerator();
+        var handler = new GenerarFurHandler(
+            _repo, capturing, _certClient, _ruesGenerator, _rnmcGenerator, _prendaRepo, _storage, NullLogger<GenerarFurHandler>.Instance);
+
+        var (_, error) = await handler.HandleAsync(id, tenant, ct);
+
+        error.Should().BeNull();
+        capturing.Captured!.Transformaciones.Carroceria.Should().BeTrue("la casilla de trámite no cambia");
+        capturing.Captured.Observaciones.Should().BeNull();
+    }
+
     [Fact]
     public async Task Generar_SinSnapshotCarroceria_FurCaeAlEfectivo()
     {

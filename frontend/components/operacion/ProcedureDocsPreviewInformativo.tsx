@@ -10,6 +10,7 @@ import type {
   DocumentoInformativoPreviewItem,
   WizardModalidad,
 } from '@/lib/api/types/procedure-runtime';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * Formatos admitidos, DERIVADOS de la misma constante que gobierna el `accept` de la carga.
@@ -233,7 +234,7 @@ export function ProcedureDocsPreviewInformativo({
                 style={{ borderColor: 'var(--border)' }}
               >
                 <p className="flex min-w-0 items-center gap-1.5 text-xs opacity-70">
-                  <Icono nombre="exclamacion" className="h-3.5 w-3.5 shrink-0" />
+                  <IconoAviso tipo="info" className="h-3.5 w-3.5 shrink-0" />
                   Los documentos deben estar legibles y en formato {FORMATOS_ADMITIDOS}.
                 </p>
                 {/* «Entendido», no «Cerrar»: la X del modal ya lleva ese nombre, y el pie no repite la

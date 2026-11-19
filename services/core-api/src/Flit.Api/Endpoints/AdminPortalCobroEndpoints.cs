@@ -23,6 +23,8 @@ public static class AdminPortalCobroEndpoints
 
     public sealed record MedioCobroRequest(string? Method, bool? Enabled);
 
+    public sealed record VentanaCajaRequest(int? Minutos);
+
     public sealed record SwitchCobroRequest(Guid? TipoTramiteId, string? Method, string? Charge, bool? Enabled);
 
     public static IEndpointRouteBuilder MapAdminPortalCobroEndpoints(this IEndpointRouteBuilder app)
@@ -85,6 +87,42 @@ public static class AdminPortalCobroEndpoints
             .Produces(StatusCodes.Status204NoContent)
             .Produces(StatusCodes.Status400BadRequest)
             .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapPut("/caja-anulacion", async (VentanaCajaRequest? body, HttpContext http, [FromServices] GuardarVentanaAnulacionCajaHandler handler,
+                [FromServices] IOtProfileRepository perfiles, CancellationToken ct, [FromQuery] Guid? transitOfficeId = null) =>
+            {
+                var (alcance, error) = await ResolverAlcanceAsync(http.User, transitOfficeId, plataforma, perfiles, ct).ConfigureAwait(false);
+                if (error is not null)
+                    return error;
+                if (alcance!.OrganismoId is not { } organismo)
+                    return Error(StatusCodes.Status400BadRequest, CobroPnErrores.OrganismoRequerido, "Indique el organismo (transitOfficeId).");
+                if (AdminCompaniesDomainEndpoints.ResolveUserId(http.User) is not { } actor)
+                    return Error(StatusCodes.Status401Unauthorized, "usuario_no_identificado", "No se pudo identificar al usuario.");
+                var (falla, vista) = await handler.HandleAsync(organismo, body?.Minutos, actor, ct).ConfigureAwait(false);
+                return falla is null ? Results.Ok(vista) : Falla(falla);
+            })
+            .WithName(nombre + "PutCajaAnulacion")
+            .WithSummary("Cambia la ventana de anulación del cobro en caja del organismo (0 hasta el máximo configurado); solo aplica a cobros nuevos")
+            .Produces<Flit.Admin.Domain.Plataforma.PersonaNatural.VentanaAnulacionCajaView>(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status403Forbidden);
+
+        group.MapGet("/caja-anulacion/historial", async (HttpContext http, [FromServices] HistorialVentanaAnulacionCajaHandler handler,
+                [FromServices] IOtProfileRepository perfiles, CancellationToken ct, [FromQuery] Guid? transitOfficeId = null) =>
+            {
+                var (alcance, error) = await ResolverAlcanceAsync(http.User, transitOfficeId, plataforma, perfiles, ct).ConfigureAwait(false);
+                if (error is not null)
+                    return error;
+                if (alcance!.OrganismoId is not { } organismo)
+                    return Error(StatusCodes.Status400BadRequest, CobroPnErrores.OrganismoRequerido, "Indique el organismo (transitOfficeId).");
+                var items = await handler.HandleAsync(organismo, ct).ConfigureAwait(false);
+                return Results.Ok(new { items });
+            })
+            .WithName(nombre + "GetCajaAnulacionHistorial")
+            .WithSummary("Historial de cambios de la ventana de anulación de la caja del organismo, el más reciente primero (máximo 50)")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status400BadRequest)
+            .Produces(StatusCodes.Status403Forbidden);
     }
 
     /// <summary>
@@ -124,6 +162,8 @@ public static class AdminPortalCobroEndpoints
         CobroPnErrores.SinMonto => Error(
             StatusCodes.Status400BadRequest, codigo, "No se puede encender: ese concepto no tiene un monto mayor que cero para el tipo y el organismo. Fíjelo primero en Precios."),
         CobroPnErrores.MedioInvalido => Error(StatusCodes.Status400BadRequest, codigo, "Medio de pago inválido: use PASARELA o PIN."),
+        CajaAnulacionErrores.VentanaInvalida => Error(
+            StatusCodes.Status400BadRequest, codigo, "La ventana de anulación debe ser un número de minutos entre 0 y el máximo permitido."),
         CobroPnErrores.CobroInvalido => Error(StatusCodes.Status400BadRequest, codigo, "Concepto de cobro inválido: use TRAMITE o GESTION."),
         CobroPnErrores.TipoObligatorio => Error(StatusCodes.Status400BadRequest, codigo, "Indique el tipo de trámite."),
         _ => Error(StatusCodes.Status400BadRequest, codigo, "No se pudo guardar el cobro."),

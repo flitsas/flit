@@ -65,12 +65,12 @@ public static class ExternalAttachmentRules
     }
 
     /// <summary>
-    /// HU #13264 — ¿el envío en este estado marca <c>impuesto_departamental_pagado</c>? Sí en <c>preasignacion</c>, <c>asignado</c>
-    /// y <c>rechazado</c> con subsanación activa (los estados editables); en <c>entregado</c> el adjunto solo se archiva.
+    /// HU #13264 / Bug #14625 — ¿el envío en este estado marca <c>impuesto_departamental_pagado</c>? Siempre que el estado
+    /// admita el envío (<see cref="EvaluateState"/>): todos salvo <c>anulado</c> y <c>revocado</c>, incluidos <c>aprobado</c>
+    /// y <c>entregado</c>. El trigger de inmutabilidad (DDL 203) abre esa sola llave con <c>source = flito</c>.
     /// </summary>
     public static bool MarksPaid(string? status, bool subsanacionActiva) =>
-        Is(status, TramiteEstado.Preasignacion) || Is(status, TramiteEstado.Asignado)
-        || (Is(status, TramiteEstado.Rechazado) && subsanacionActiva);
+        EvaluateState(status, subsanacionActiva).Allowed;
 
     /// <summary>
     /// HU #13264 — la marca de pago puesta por el consumidor (<c>source = flito</c>) no la sobrescribe el gestor: ni «Enviar al
@@ -93,21 +93,17 @@ public static class ExternalAttachmentRules
     }
 
     /// <summary>
-    /// ¿El trámite admite el envío en este estado? Aceptan <c>preasignacion</c>, <c>asignado</c>, <c>entregado</c> y
-    /// <c>rechazado</c> con subsanación activa. <c>Terminal</c> responde «¿el trámite ya no volverá a un estado que
-    /// acepte el envío?»: <c>aprobado</c>, <c>anulado</c> y <c>revocado</c> sí; <c>borrador</c>, <c>preparado</c> y
-    /// <c>rechazado</c> sin subsanación pueden volver.
+    /// Bug #14625 — ¿el trámite admite el envío en este estado? Todos salvo <c>anulado</c> y <c>revocado</c> (aprobado,
+    /// rechazado con o sin subsanación, borrador, preparado, preasignación, asignado y entregado). <c>Terminal</c> responde
+    /// «¿el trámite ya no volverá a un estado que acepte el envío?»: los dos rechazados lo son. El contrato conserva
+    /// <c>terminal:false</c>, aunque hoy ningún estado lo produce. <paramref name="subsanacionActiva"/> ya no cambia la decisión.
     /// </summary>
     public static (bool Allowed, bool Terminal) EvaluateState(string? status, bool subsanacionActiva)
     {
-        if (Is(status, TramiteEstado.Preasignacion) || Is(status, TramiteEstado.Asignado) || Is(status, TramiteEstado.Entregado)
-            || (Is(status, TramiteEstado.Rechazado) && subsanacionActiva))
-        {
-            return (true, false);
-        }
-
-        var terminal = Is(status, TramiteEstado.Aprobado) || Is(status, TramiteEstado.Anulado) || Is(status, TramiteEstado.Revocado);
-        return (false, terminal);
+        _ = subsanacionActiva;
+        return Is(status, TramiteEstado.Anulado) || Is(status, TramiteEstado.Revocado)
+            ? (false, true)
+            : (true, false);
     }
 
     private static bool Is(string? status, string expected) =>

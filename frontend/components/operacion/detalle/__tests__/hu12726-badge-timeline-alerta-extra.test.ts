@@ -34,7 +34,9 @@ describe('HU #12726 — AC4 tono pending de InlineAlert', () => {
     expect(pending.background).toBe('var(--badge-pending-bg)');
     expect(pending.color).toBe('var(--badge-pending-fg)');
     expect(pending.border).toBe('var(--badge-pending-border)');
-    expect(pending.Icon.displayName ?? pending.Icon.name).toMatch(/TriangleAlert|AlertTriangle/i);
+    // PDF definitivo de íconos: pendiente es el disco naranja con «!» (estado-pendiente), distinto del triángulo de alerta.
+    expect(pending.Icon.displayName ?? pending.Icon.name).toMatch(/Clock/i);
+    expect(pending.Icon).not.toBe(INLINE_ALERT_TONES.warning.Icon);
   });
 
   it('contrato: error/warning/info/success no cambian a tokens pending', () => {

@@ -1,0 +1,187 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Net;
+using System.Text;
+using System.Text.Json;
+using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Plataforma;
+using Flit.Diagnostico.Tests.Api;
+using Flit.Platform.Sdk.Grpc;
+using FluentAssertions;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.TestHost;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace Flit.Diagnostico.Tests.Plataforma;
+
+/// <summary>
+/// HU #13724 (F00.1-H3), escenarios 1 y 2 — el servicio de verdad (<c>Program.Build</c>) registra su manifiesto al
+/// arrancar: pide el token de <c>svc-diagnostico</c> con scope <c>platform.manifest</c> a Identidad y hace el PUT al
+/// gateway. Identidad y el gateway son dobles HTTP; no hace falta Postgres.
+/// </summary>
+/// <example>
+/// <code>
+/// dotnet test services/core-diagnostico/tests/Flit.Diagnostico.Tests --no-build --filter FullyQualifiedName~RegistroManifiestoTests
+/// </code>
+/// </example>
+public sealed class RegistroManifiestoTests
+{
+    private const string Gateway = "http://gateway.prueba:4002";
+    private const string TokenDeServicio = "token-svc-diagnostico";
+
+    // Escenario 1 — al arrancar, PUT del manifiesto con el token de svc-diagnostico; todos los slugs empiezan por diagnostico.
+    [Fact]
+    public async Task Envia_PUT_con_token_svc_diagnostico_y_cuerpo_valido()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var identidad = new Grabador(_ => TokenOk());
+        var gateway = new Grabador(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") });
+        await using var app = Construir(identidad, gateway, esperaInicialMs: null);
+
+        await app.StartAsync(ct);
+        var put = await gateway.Llamada(1).WaitAsync(TimeSpan.FromSeconds(15), ct);
+
+        var pedido = identidad.Llamadas.Should().ContainSingle().Subject;
+        pedido.Cuerpo.Should().Contain("grant_type=client_credentials").And.Contain("client_id=svc-diagnostico").And.Contain("scope=platform.manifest");
+        put.Metodo.Should().Be(HttpMethod.Put);
+        put.Url.Should().Be(new Uri($"{Gateway}/api/v1/platform/products/diagnostico/manifest"));
+        put.Autorizacion.Should().Be($"Bearer {TokenDeServicio}");
+
+        using var json = JsonDocument.Parse(put.Cuerpo);
+        var raiz = json.RootElement;
+        raiz.GetProperty("version").GetString().Should().Be("1");
+        var slugs = raiz.GetProperty("modules").EnumerateArray()
+            .SelectMany(m => m.GetProperty("permissions").EnumerateArray().Select(p => p.GetProperty("slug").GetString()!)).ToList();
+        slugs.Should().HaveCount(17, "13 de la tabla §6.2, los 2 del saneamiento (HU #14576 AC31), diagnostico.reportes.ver (BE-0) y diagnostico.usuarios.gestionar (HU #14587)").And.OnlyHaveUniqueItems().And.AllSatisfy(s => s.Should().StartWith("diagnostico."));
+        raiz.GetProperty("modules").EnumerateArray().Should().AllSatisfy(m =>
+        {
+            m.GetProperty("code").GetString().Should().StartWith("diagnostico_");
+            m.GetProperty("name").GetString().Should().NotBeNullOrWhiteSpace();
+        });
+        var roles = raiz.GetProperty("defaultRoles").EnumerateArray().ToList();
+        roles.Select(r => r.GetProperty("code").GetString()).Should().BeEquivalentTo("usuario_diagnostico", "admin_diagnostico");
+        roles.SelectMany(r => r.GetProperty("permissions").EnumerateArray().Select(p => p.GetString())).Should().AllSatisfy(p => slugs.Should().Contain(p));
+        // HU #14587 (H-U5): el permiso viaja en el rol admin_diagnostico; ProductManifestStore agrega al rol existente los permisos que le
+        // faltan, así que los admin_diagnostico ya asignados lo reciben sin resiembra.
+        roles.Single(r => r.GetProperty("code").GetString() == "admin_diagnostico").GetProperty("permissions").EnumerateArray()
+            .Select(p => p.GetString()).Should().Contain("diagnostico.usuarios.gestionar");
+        roles.Single(r => r.GetProperty("code").GetString() == "usuario_diagnostico").GetProperty("permissions").EnumerateArray()
+            .Select(p => p.GetString()).Should().NotContain("diagnostico.usuarios.gestionar");
+    }
+
+    // Escenario 2 — el gateway no responde: reintenta con espera creciente y el servicio sigue sano.
+    [Fact]
+    public async Task Reintenta_si_la_plataforma_no_responde_sin_tumbar_el_servicio()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var identidad = new Grabador(_ => TokenOk());
+        var gateway = new Grabador(n => n <= 3
+            ? throw new HttpRequestException("gateway caído (doble de prueba)")
+            : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{}") });
+        var reloj = new RelojQueAnotaEsperas();
+        await using var app = Construir(identidad, gateway, esperaInicialMs: 100, reloj);
+
+        await app.StartAsync(ct);
+        await gateway.Llamada(2).WaitAsync(TimeSpan.FromSeconds(15), ct);
+        var salud = await app.GetTestClient().GetAsync("/health", ct);
+        await gateway.Llamada(4).WaitAsync(TimeSpan.FromSeconds(15), ct);
+
+        salud.StatusCode.Should().Be(HttpStatusCode.OK, "con la plataforma caída el servicio sigue atendiendo");
+        app.Lifetime.ApplicationStopping.IsCancellationRequested.Should().BeFalse("un fallo del registro no tumba el host");
+        gateway.Llamadas.Should().HaveCount(4, "tres fallos y el cuarto intento registra; no reintenta tras el éxito");
+        // HU #13826: la secuencia creciente se comprueba en las esperas que el servicio pidió al reloj (deterministas),
+        // no comparando entre sí los huecos del reloj real, que bajo carga de CPU se inflan y rompían la comparación.
+        reloj.Esperas.Should().Equal(
+            [TimeSpan.FromMilliseconds(100), TimeSpan.FromMilliseconds(200), TimeSpan.FromMilliseconds(400)],
+            "cada espera es SiguienteEspera de la anterior: el doble, partiendo de la inicial");
+        // Y la espera pedida se cumple de verdad: el hueco real entre intentos nunca es menor (la carga solo lo alarga).
+        var marcas = gateway.Llamadas.Select(l => l.Marca).ToList();
+        var huecos = marcas.Zip(marcas.Skip(1), (a, b) => b - a).ToList();
+        huecos[0].Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(90));
+        huecos[1].Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(190));
+        huecos[2].Should().BeGreaterThanOrEqualTo(TimeSpan.FromMilliseconds(390));
+        RegistroManifiesto.SiguienteEspera(TimeSpan.FromSeconds(5)).Should().Be(TimeSpan.FromSeconds(10));
+        RegistroManifiesto.SiguienteEspera(TimeSpan.FromSeconds(200)).Should().Be(TimeSpan.FromMinutes(5), "la espera tiene techo");
+    }
+
+    private static HttpResponseMessage TokenOk() => new(HttpStatusCode.OK)
+    {
+        Content = new StringContent(JsonSerializer.Serialize(new { access_token = TokenDeServicio, expires_in = 300 }), Encoding.UTF8, "application/json"),
+    };
+
+    private static WebApplication Construir(Grabador identidad, Grabador gateway, int? esperaInicialMs, TimeProvider? reloj = null) => Program.Build([], b =>
+    {
+        b.WebHost.UseTestServer();
+        var configuracion = ApiDePrueba.Configuracion(ApiDePrueba.BaseInalcanzable);
+        configuracion["Diagnostico:Plataforma:GatewayUrl"] = Gateway;
+        if (esperaInicialMs is { } ms)
+            configuracion["Diagnostico:Plataforma:EsperaInicialMs"] = ms.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        b.Configuration.AddInMemoryCollection(configuracion);
+        b.Services.AddHttpClient(ServiceTokenProvider.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => identidad);
+        b.Services.AddHttpClient(RegistroManifiesto.HttpClientName).ConfigurePrimaryHttpMessageHandler(() => gateway);
+        if (reloj is not null)
+            b.Services.AddSingleton(reloj);
+    });
+
+    /// <summary>
+    /// Reloj real que anota cada espera de un solo disparo que <see cref="RegistroManifiesto"/> le pide
+    /// (<c>Task.Delay(espera, reloj, ct)</c>), HU #13826: la prueba compara la secuencia pedida en vez de los huecos del
+    /// reloj de pared.
+    /// </summary>
+    /// <remarks>
+    /// El reloj reemplaza el <see cref="TimeProvider"/> de todo el host y los demás trabajadores también le piden esperas:
+    /// la purga de notificaciones (24 h), las sincronizaciones de catálogos (24 h) y los reconciliadores. Contra la base
+    /// inalcanzable fallan y piden su intervalo; en Linux el puerto 1 rechaza al instante, así que esas esperas caían entre
+    /// los reintentos del manifiesto ({100ms, 1d, 200ms, 400ms} en el CI del PR #892). <c>Task.Delay</c> crea el
+    /// temporizador en la pila de quien espera, así que solo se anota la que pide la máquina de estados de
+    /// <see cref="RegistroManifiesto"/>.
+    /// </remarks>
+    private sealed class RelojQueAnotaEsperas : TimeProvider
+    {
+        private readonly ConcurrentQueue<TimeSpan> _esperas = new();
+
+        public IReadOnlyList<TimeSpan> Esperas => [.. _esperas];
+
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period)
+        {
+            if (period == Timeout.InfiniteTimeSpan && dueTime > TimeSpan.Zero && LaPideElRegistro())
+                _esperas.Enqueue(dueTime);
+            return System.CreateTimer(callback, state, dueTime, period);
+        }
+
+        private static bool LaPideElRegistro() =>
+            new StackTrace().GetFrames().Any(f => f.GetMethod()?.DeclaringType is { } tipo
+                && (tipo == typeof(RegistroManifiesto) || tipo.DeclaringType == typeof(RegistroManifiesto)));
+    }
+
+    private sealed record Llamado(HttpMethod Metodo, Uri? Url, string? Autorizacion, string Cuerpo, TimeSpan Marca);
+
+    /// <summary>Doble HTTP: graba cada petición (con su cuerpo y el momento) y responde según el número de llamada.</summary>
+    private sealed class Grabador(Func<int, HttpResponseMessage> responder) : HttpMessageHandler
+    {
+        private readonly Stopwatch _reloj = Stopwatch.StartNew();
+        private readonly ConcurrentDictionary<int, TaskCompletionSource<Llamado>> _esperas = new();
+        private readonly ConcurrentQueue<Llamado> _llamadas = new();
+        private int _n;
+
+        public IReadOnlyList<Llamado> Llamadas => [.. _llamadas];
+
+        public Task<Llamado> Llamada(int n) => Espera(n).Task;
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var cuerpo = request.Content is null ? string.Empty : await request.Content.ReadAsStringAsync(cancellationToken);
+            var llamado = new Llamado(request.Method, request.RequestUri, request.Headers.Authorization?.ToString(), cuerpo, _reloj.Elapsed);
+            _llamadas.Enqueue(llamado);
+            var n = Interlocked.Increment(ref _n);
+            Espera(n).TrySetResult(llamado);
+            return responder(n);
+        }
+
+        private TaskCompletionSource<Llamado> Espera(int n) =>
+            _esperas.GetOrAdd(n, _ => new TaskCompletionSource<Llamado>(TaskCreationOptions.RunContinuationsAsynchronously));
+    }
+}

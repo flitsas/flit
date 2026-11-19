@@ -87,7 +87,7 @@ public sealed class ConsultationProviderChainResolver(
         new(providerKey, "red",
             [new ConsultationCheck("provider", "Consulta RUNT", ErrorStatus, providerKey,
                 "El proveedor de consulta no respondió a tiempo.")],
-            []);
+            [], Fallo: new FalloProveedor(ClaseFalloProveedor.Timeout));
 
     private static ConsultationResult NoProviderAvailable(ConsultationKind kind) =>
         new("chain", "red",

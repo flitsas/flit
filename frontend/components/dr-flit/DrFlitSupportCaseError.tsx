@@ -1,23 +1,22 @@
 "use client";
 
-import { Icono } from "@flit/ui/Icono";
 import { DrFlitSupportPanel } from "./DrFlitSupportPanel";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
- * HU #12930 AC3 — el caso no se pudo radicar. Se ofrecen los canales de soporte como salida de
- * emergencia y se conserva el formulario: «Reintentar» vuelve a radicar lo mismo y «Editar el caso»
- * vuelve al formulario, sin reescribir nada.
+ * HU #12930 AC3 — el caso no se pudo radicar. Se ofrecen los canales de soporte (correo/teléfono)
+ * como salida de emergencia: «Reintentar» vuelve a radicar lo mismo y «Editar el caso» vuelve al
+ * formulario, sin reescribir nada. Bug #14629 — ya no se ofrece aquí un botón de "generar caso"
+ * alterno: el único formulario de radicación vive en el flujo del chat (ver DrFlitChatPanel).
  */
 export function DrFlitSupportCaseError({
   message,
   onRetry,
   onEdit,
-  onOpen,
 }: {
   message: string;
   onRetry: () => void;
   onEdit: () => void;
-  onOpen: (href: string) => void;
 }) {
   return (
     <div className="space-y-3">
@@ -26,7 +25,7 @@ export function DrFlitSupportCaseError({
         className="flex items-start gap-2 rounded-[var(--dr-flit-radius-card)] border p-3 text-sm"
         style={{ borderColor: "var(--dr-flit-accent)", background: "var(--dr-flit-card-bg)", color: "var(--dr-flit-text)" }}
       >
-        <Icono nombre="alerta" className="mt-0.5 h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-accent)" }} />
+        <IconoAviso tipo="error" className="mt-0.5 h-4 w-4 shrink-0" />
         {message}
       </p>
       <div className="flex flex-col gap-2">
@@ -47,7 +46,7 @@ export function DrFlitSupportCaseError({
           Editar el caso
         </button>
       </div>
-      <DrFlitSupportPanel onOpenCase={onOpen} />
+      <DrFlitSupportPanel />
     </div>
   );
 }

@@ -7,6 +7,7 @@ import { AvisoDigitoPlacaOt } from '@/components/operacion/AvisoDigitoPlacaOt';
 import { PLATE_PREFERRED_LAST_DIGIT_KEY } from '@/lib/tramites/plate-digit-preference';
 import type { InstanceSummary, ProcedureInstanceDetail } from '@/lib/api/types/procedure-runtime';
 import { DETALLE_CARD } from './detalle-visual';
+import { PagoPortalBloque } from './PagoPortalBloque';
 
 /**
  * HU #14482 — bloque de resumen del detalle del trámite, con el esquema `.tramite-resumen` de la
@@ -41,7 +42,7 @@ export function DetalleResumen({
   item: InstanceSummary;
   /** Detalle cargado; `null` mientras carga o con error (sin OT del punto). */
   detalle?:
-    | (Pick<ProcedureInstanceDetail, 'channel' | 'channelTransitOfficeName'> & {
+    | (Pick<ProcedureInstanceDetail, 'channel' | 'channelTransitOfficeName' | 'pagoPortal'> & {
         fieldValues?: ProcedureInstanceDetail['fieldValues'];
       })
     | null;
@@ -100,6 +101,9 @@ export function DetalleResumen({
           ) : null}
         </dl>
       </div>
+
+      {/* HU #14470 — pago en caja del punto (solo trámites del canal pn_punto que llegaron pagados). */}
+      <PagoPortalBloque pago={detalle?.pagoPortal} />
 
       {pasos ? (
         <div className="mt-5 border-t border-[color:var(--di-divider)] pt-4">{pasos}</div>

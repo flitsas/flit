@@ -725,10 +725,15 @@ describe('Validaciones — filtros (HU #10348)', () => {
     await aplicarOpcion(user, 'Estado', 'Aprobado');
 
     await waitFor(() =>
-      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
+      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
         expect.objectContaining({ status: 'aprobado' }),
         undefined,
       ),
+    );
+    // Las cifras de la franja salen del conjunto SIN el filtro de estado (una consulta de una fila).
+    expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+      expect.objectContaining({ status: undefined, pageSize: 1 }),
+      undefined,
     );
   });
 
@@ -943,6 +948,64 @@ describe('Validaciones — filtros (HU #10348)', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe('Validaciones — franja de estados con el embudo del kit (2026-11-19)', () => {
+  it('pinta los discos del kit y las cifras de personas', async () => {
+    mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
+    renderValidaciones();
+    const franja = await screen.findByRole('group', { name: 'Personas por estado de identidad' });
+    const aprobadas = within(franja).getByRole('button', { name: /^Aprobadas: 3 personas/ });
+    expect(aprobadas.querySelector('img')).toHaveAttribute('src', '/assets/estados/aprobado.svg');
+    const enProceso = within(franja).getByRole('button', { name: /^En proceso: 3 personas/ });
+    expect(enProceso.querySelector('img')).toHaveAttribute('src', '/assets/kit/estado-pendiente.svg');
+    expect(within(franja).getByRole('button', { name: /^Rechazadas: 1 persona\./ })).toBeInTheDocument();
+    expect(within(franja).getByRole('button', { name: /^Total personas/ }).querySelector('img')).toHaveAttribute(
+      'src',
+      '/assets/kit/modulo/identidad.svg',
+    );
+  });
+
+  it('pulsar una cifra filtra la lista por ese estado y pulsarla otra vez lo quita', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
+    renderValidaciones();
+    const franja = await screen.findByRole('group', { name: 'Personas por estado de identidad' });
+
+    await user.click(within(franja).getByRole('button', { name: /^Aprobadas/ }));
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'aprobado' }),
+        undefined,
+      ),
+    );
+    expect(within(franja).getByRole('button', { name: /^Aprobadas/ })).toHaveAttribute('aria-pressed', 'true');
+
+    mocks.listTenantBiometricPersons.mockClear();
+    await user.click(within(franja).getByRole('button', { name: /^Aprobadas/ }));
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricPersons).toHaveBeenLastCalledWith(
+        expect.objectContaining({ status: undefined }),
+        undefined,
+      ),
+    );
+    expect(within(franja).getByRole('button', { name: /^Aprobadas/ })).toHaveAttribute('aria-pressed', 'false');
+  });
+
+  it('«En proceso» filtra enviado + en_proceso, que es lo que suma su cifra', async () => {
+    const user = userEvent.setup();
+    mocks.listTenantBiometricPersons.mockResolvedValue(FULL);
+    renderValidaciones();
+    const franja = await screen.findByRole('group', { name: 'Personas por estado de identidad' });
+    await user.click(within(franja).getByRole('button', { name: /^En proceso/ }));
+    await waitFor(() =>
+      expect(mocks.listTenantBiometricPersons).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'enviado,en_proceso' }),
+        undefined,
+      ),
+    );
+    expect(await screen.findByText('Estado: En proceso (enviado o en proceso)')).toBeInTheDocument();
   });
 });
 
@@ -1583,7 +1646,7 @@ describe('HU #12164 — reenvío administrativo de una validación de trámite (
     await waitFor(() =>
       expect(mocks.adminReenviarValidacionesLote).toHaveBeenCalledWith(
         'inst-3',
-        [{ validationId: 'v-4', email: null }],
+        [{ validationId: 'v-4', partyRole: 'vendedor', ordinal: 1, email: null }],
         undefined,
       ),
     );

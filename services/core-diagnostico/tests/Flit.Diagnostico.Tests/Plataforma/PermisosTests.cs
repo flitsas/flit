@@ -1,0 +1,126 @@
+using System.Text.RegularExpressions;
+using Flit.Diagnostico.Api.Plataforma;
+using FluentAssertions;
+using Xunit;
+
+namespace Flit.Diagnostico.Tests.Plataforma;
+
+/// <summary>
+/// HU #13724 (F00.1-H3), escenarios 1 y 3 — permisos y roles por defecto del manifiesto contra la tabla §6.2 del plan
+/// (D-01 = c, R-6). La tabla se copia aquí literal: si el manifiesto cambia sin cambiar el plan, la prueba falla. Desde la
+/// decisión D23 (HU #14563, 2026-11-13) no hay rol <c>backoffice_diagnostico</c>: sus capacidades son del SuperAdmin.
+/// </summary>
+/// <example>
+/// <code>
+/// dotnet test services/core-diagnostico/tests/Flit.Diagnostico.Tests --no-build --filter FullyQualifiedName~PermisosTests
+/// </code>
+/// </example>
+public sealed partial class PermisosTests
+{
+    /// <summary>Tabla §6.2: rol → slugs que tiene (columna «Sí»).</summary>
+    private static readonly Dictionary<string, string[]> Tabla62 = new(StringComparer.Ordinal)
+    {
+        ["usuario_diagnostico"] =
+        [
+            "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.reportes.descargar",
+            "diagnostico.derivacion.crear", "diagnostico.configuracion.ver", "diagnostico.saneamiento.solicitar",
+            "diagnostico.reportes.ver",
+        ],
+        ["admin_diagnostico"] =
+        [
+            "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.reportes.descargar",
+            "diagnostico.derivacion.crear", "diagnostico.configuracion.ver", "diagnostico.configuracion.editar",
+            "diagnostico.consultas.reprocesar", "diagnostico.saneamiento.solicitar", "diagnostico.reportes.ver",
+            // HU #14587 (contrato-api §3.1, SP-17): gestionar usuarios de Diagnóstico, solo el admin.
+            "diagnostico.usuarios.gestionar",
+        ],
+    };
+
+    private static readonly string[] SlugsDelPlan =
+    [
+        "diagnostico.diagnosticos.crear", "diagnostico.diagnosticos.ver", "diagnostico.backoffice.ver",
+        "diagnostico.reportes.descargar", "diagnostico.derivacion.crear", "diagnostico.configuracion.ver",
+        "diagnostico.configuracion.editar", "diagnostico.configuracion.contrato.editar", "diagnostico.consultas.reprocesar",
+        "diagnostico.consultas.llenar", "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver",
+        // HU #14576 AC31 (plan saneamiento §5.1): solicitar va a los dos roles; gestionar a ninguno.
+        "diagnostico.saneamiento.solicitar", "diagnostico.saneamiento.gestionar",
+        // HU #14579, BE-0 (O8 = D-1, SP-1): ver reportes en pantalla va a los dos roles; exportar sigue con reportes.descargar.
+        "diagnostico.reportes.ver",
+        // HU #14587 (contrato-api §3.1, SP-17): módulo Usuarios, solo admin_diagnostico.
+        "diagnostico.usuarios.gestionar",
+    ];
+
+    private static List<string> Slugs => Permisos.Modulos.SelectMany(m => m.Permisos).Select(p => p.Slug).ToList();
+
+    // Escenario 1 — todos los slugs empiezan por diagnostico. y siguen diagnostico.<modulo>.<accion>.
+    [Fact]
+    public void Todo_slug_sigue_el_formato_diagnostico_modulo_accion()
+    {
+        var slugs = Slugs;
+
+        slugs.Should().OnlyHaveUniqueItems().And.BeEquivalentTo(SlugsDelPlan, "son los 13 slugs de la tabla §6.2, los 2 del saneamiento y el de reportes (BE-0)");
+        slugs.Should().AllSatisfy(s => FormatoSlug().IsMatch(s).Should().BeTrue($"«{s}» sigue diagnostico.<modulo>.<accion>"));
+        Permisos.Modulos.Should().AllSatisfy(m =>
+        {
+            m.Codigo.Should().StartWith("diagnostico_", "el código de módulo es global en security.modules");
+            m.Nombre.Should().NotBeNullOrWhiteSpace();
+            m.Permisos.Should().NotBeEmpty().And.AllSatisfy(p => p.Nombre.Should().NotBeNullOrWhiteSpace());
+        });
+    }
+
+    // Escenario 3 — cada rol por defecto tiene exactamente los slugs de la tabla §6.2, todos del manifiesto.
+    [Fact]
+    public void Roles_por_defecto_coinciden_con_la_tabla_6_2()
+    {
+        var roles = Permisos.RolesPorDefecto;
+        var slugs = Slugs.ToHashSet(StringComparer.Ordinal);
+
+        roles.Select(r => r.Codigo).Should().BeEquivalentTo(Tabla62.Keys);
+        roles.Should().AllSatisfy(r =>
+        {
+            r.Nombre.Should().NotBeNullOrWhiteSpace();
+            r.Permisos.Should().OnlyHaveUniqueItems().And.BeEquivalentTo(Tabla62[r.Codigo], $"tabla §6.2, columna {r.Codigo}");
+            r.Permisos.Should().AllSatisfy(p => slugs.Should().Contain(p, "ApplyProductManifestHandler rechaza un rol con slugs ajenos al manifiesto"));
+        });
+    }
+
+    // D23 — ningún rol por defecto trae permisos del backoffice FLIT: esas capacidades son del SuperAdmin.
+    [Fact]
+    public void Ningun_rol_por_defecto_trae_permisos_del_backoffice()
+    {
+        string[] backoffice =
+        [
+            "diagnostico.backoffice.ver", "diagnostico.configuracion.contrato.editar", "diagnostico.consultas.llenar",
+            "diagnostico.dictamen.override", "diagnostico.auditoria.ver", "diagnostico.volumetria.ver", "diagnostico.saneamiento.gestionar",
+        ];
+
+        Permisos.RolesPorDefecto.Select(r => r.Codigo).Should().NotContain("backoffice_diagnostico");
+        Permisos.RolesPorDefecto.Should().AllSatisfy(r => r.Permisos.Should().NotContain(backoffice, r.Codigo));
+    }
+
+    // HU #14579, BE-0 (contrato-api §0 «Manifiesto») — reportes.ver en el módulo de diagnósticos con su nombre; descargar cambia de nombre visible.
+    [Fact]
+    public void BE0_reportes_ver_en_el_modulo_diagnosticos_y_nombre_nuevo_de_descargar()
+    {
+        var diagnosticos = Permisos.Modulos.Single(m => m.Codigo == "diagnostico_diagnosticos").Permisos;
+
+        diagnosticos.Should().Contain(("diagnostico.reportes.ver", "Ver reportes de la compañía (con datos personales)"));
+        diagnosticos.Should().Contain(("diagnostico.reportes.descargar", "Descargar reportes, exportaciones y evidencias"));
+        Permisos.ReportesVer.Should().Be("diagnostico.reportes.ver");
+    }
+
+    // HU #14587 (contrato-api §3.1, SP-17) — permiso nuevo en su módulo diagnostico_usuarios, solo en admin_diagnostico.
+    [Fact]
+    public void HU14587_usuarios_gestionar_en_su_modulo_y_solo_en_admin_diagnostico()
+    {
+        var modulo = Permisos.Modulos.Single(m => m.Codigo == "diagnostico_usuarios");
+
+        modulo.Nombre.Should().Be("Diagnóstico · Usuarios");
+        modulo.Permisos.Should().Equal(("diagnostico.usuarios.gestionar", "Gestionar los usuarios de Diagnóstico de la compañía"));
+        Permisos.RolesPorDefecto.Single(r => r.Codigo == "admin_diagnostico").Permisos.Should().Contain("diagnostico.usuarios.gestionar");
+        Permisos.RolesPorDefecto.Single(r => r.Codigo == "usuario_diagnostico").Permisos.Should().NotContain("diagnostico.usuarios.gestionar");
+    }
+
+    [GeneratedRegex(@"^diagnostico(\.[a-z]+){2,3}$", RegexOptions.CultureInvariant)]
+    private static partial Regex FormatoSlug();
+}

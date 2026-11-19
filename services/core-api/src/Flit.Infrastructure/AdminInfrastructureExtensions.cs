@@ -303,6 +303,9 @@ public static class AdminInfrastructureExtensions
             // HU #14393 (Feature #14392) — banderas de medios y switches de cobro del portal (DDL 182).
             services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalCobroRepository,
                 Flit.Infrastructure.PersonaNatural.PersonaNaturalCobroRepository>();
+            // Ventana de anulación de la caja por organismo y su historial (DDL 200).
+            services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalCajaAnulacionRepository,
+                Flit.Infrastructure.PersonaNatural.PersonaNaturalCajaAnulacionRepository>();
         // HU #14072 — configuración del portal (lista blanca de tipos, parámetros y organismos).
         services.AddScoped<Flit.Admin.Domain.Plataforma.PersonaNatural.IPersonaNaturalConfigRepository,
             Flit.Infrastructure.PersonaNatural.PersonaNaturalConfigRepository>();
@@ -379,6 +382,13 @@ public static class AdminInfrastructureExtensions
         // ProcedureStateChangeNotifierRegistration (HU #11464), invocado desde AddIctStateReflection
         // (con o sin canal inverso), para que un sink nuevo no silencie OT al registrarse aparte.
         services.AddScoped<OtWebhookProcedureStateChangeNotifier>();
+
+        // Alcance de compañías cliente por usuario OT (todos|especificos). Servicio único que intersecan la bandeja,
+        // métricas, consultas, reportes del portal, Quipux y mandatos.
+        services.AddHttpContextAccessor();
+        services.AddScoped<IOtUserClientScopeResolver, HttpOtUserClientScopeResolver>();
+        services.AddScoped<IOtUserClientScopeRepository, OtUserClientScopeRepository>();
+        services.AddScoped<Flit.Modules.Security.Domain.Auth.IUserActivationHook, OtInvitationClientScopeActivationHook>();
 
         // HU #10217 — trámites de clientes OT (cross-tenant vía grants).
         services.AddScoped<IOtClientProcedureRepository, OtClientProcedureRepository>();

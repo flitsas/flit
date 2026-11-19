@@ -36,6 +36,15 @@ export interface NavItem {
   superAdminOnly?: boolean;
   /** Un nivel de submenú (p. ej. Administradores → Plataforma → Mandatos). Un contenedor lleva `href: ""`. */
   children?: NavItem[];
+  /**
+   * Con `children`: el contenedor es un submenú que se despliega DENTRO del mismo panel (botón con ▸/▾ y `aria-expanded`), en
+   * lugar de una sección con título siempre abierta. Sin esto, el comportamiento es el de siempre.
+   */
+  desplegable?: boolean;
+  /** Pendientes de la entrada (p. ej. solicitudes sin tomar). 0 o ausente: no se pinta (`formatoInsignia`). */
+  badge?: number;
+  /** Qué cuenta la insignia, para el nombre accesible: «solicitudes sin tomar». Por defecto «pendientes». */
+  badgeTexto?: string;
 }
 
 /** El orden del dock sale de `sections`, nunca del orden de `items` (guía §2, Contrato A). */
@@ -63,6 +72,11 @@ export interface DockEntry {
   descripcion?: string;
   active: boolean;
   children?: DockEntry[];
+  /** Submenú desplegable dentro del panel (ver `NavItem.desplegable`). */
+  desplegable?: boolean;
+  /** Insignia de la entrada (solo si el catálogo la trae). */
+  badge?: number;
+  badgeTexto?: string;
 }
 
 export interface DockGroup {
@@ -73,6 +87,24 @@ export interface DockGroup {
   side: "left" | "right";
   active: boolean;
   items: DockEntry[];
+  /** Suma de las insignias de las hojas visibles del grupo; ausente si la suma no se pinta. */
+  badge?: number;
+}
+
+/**
+ * Texto de la insignia (saneamiento, spec-ui §1.4): 1…99 tal cual y más de 99 «99+». 0, negativos, no enteros o ausente:
+ * null, no se pinta. El nombre accesible lleva siempre el número real, no este texto.
+ */
+export function formatoInsignia(n: number | null | undefined): string | null {
+  if (typeof n !== "number" || !Number.isInteger(n) || n <= 0) return null;
+  return n > 99 ? "99+" : String(n);
+}
+
+/** Suma de las insignias de unas entradas (las de un contenedor, por sus hijos); solo cuentan las que se pintarían. */
+export function sumaInsignias(entries: DockEntry[]): number {
+  return entries
+    .flatMap((it) => (it.children?.length ? it.children : [it]))
+    .reduce((total, it) => total + (formatoInsignia(it.badge) ? (it.badge as number) : 0), 0);
 }
 
 export function canSee(item: NavItem, viewer: NavViewer): boolean {
@@ -126,13 +158,27 @@ export function buildDock(catalog: NavCatalog, viewer: NavViewer, pathname: stri
     descripcion: it.descripcion,
     active: it.key === activeKey,
     children: it.children?.length ? it.children.map(toEntry) : undefined,
+    ...(it.desplegable ? { desplegable: true } : {}),
+    // Solo con insignia: sin ella la entrada es la de siempre (consumidores sin `badge`).
+    ...(it.badge === undefined ? {} : { badge: it.badge }),
+    ...(it.badgeTexto === undefined ? {} : { badgeTexto: it.badgeTexto }),
   });
 
   return catalog.sections
     .map((section) => {
       const items = visible.filter((it) => it.section === section.id).map(toEntry);
       const active = items.some((e) => e.active || e.children?.some((c) => c.active));
-      return { id: section.id, label: section.label, icon: section.icon, ilustracion: section.ilustracion, side: section.side, active, items };
+      const badge = sumaInsignias(items);
+      return {
+        id: section.id,
+        label: section.label,
+        icon: section.icon,
+        ilustracion: section.ilustracion,
+        side: section.side,
+        active,
+        items,
+        ...(badge > 0 ? { badge } : {}),
+      };
     })
     .filter((g) => g.items.length > 0);
 }

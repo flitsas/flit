@@ -1,4 +1,5 @@
 import type { ProcedureAttachment } from '@/lib/api/types/procedure-runtime';
+import { soloVigentes } from './vigencia';
 
 /**
  * Emparejamiento entre el `docTipo` de un ítem del checklist y el `tipo` de un adjunto.
@@ -20,11 +21,16 @@ export function mismoDocTipo(a: string | null | undefined, b: string | null | un
   return a.toLowerCase() === b.toLowerCase();
 }
 
-/** Primer adjunto que corresponde a ese `docTipo`, o `undefined` si aún no se cargó ninguno. */
-export function findAttachmentByDocTipo<T extends Pick<ProcedureAttachment, 'tipo'>>(
+/**
+ * Primer adjunto VIGENTE que corresponde a ese `docTipo`, o `undefined` si aún no se cargó ninguno.
+ * Una versión anterior (`isHistorico`, Bug #14604) nunca cuenta como el documento de la casilla.
+ */
+export function findAttachmentByDocTipo<
+  T extends Pick<ProcedureAttachment, 'tipo'> & { isHistorico?: boolean },
+>(
   attachments: readonly T[],
   docTipo: string | null | undefined,
 ): T | undefined {
   if (!docTipo) return undefined;
-  return attachments.find((a) => mismoDocTipo(a.tipo, docTipo));
+  return soloVigentes(attachments).find((a) => mismoDocTipo(a.tipo, docTipo));
 }

@@ -718,6 +718,14 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "editar resumen",
       "confirmacion del tramite",
       "tramite llega como borrador",
+      "pago en caja",
+      "generar pago en caja",
+      "id del tramite",
+      "vale hasta hoy",
+      "esperando identidades",
+      "tu tramite quedo",
+      "recoge en este organismo",
+      "en proceso de registro",
       "borrador en flit 2",
       "consolidado",
       "licencia de conduccion",
@@ -775,14 +783,42 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         title: "5. Resumen y confirmación",
         paragraphs: [
           "El Resumen reúne, en este orden: Trámite, Vehículo, Titular y actores, Validación de identidad, Información del trámite, Documentos cargados y Valores. Cada sección trae el botón «Editar» para volver a corregirla.",
-          "La pantalla de confirmación al enviar no muestra datos personales y sí el estado real de la identidad: aprobada o pendiente.",
+          "En el portal web, la pantalla de confirmación al enviar no muestra datos personales y sí el estado real de la identidad: aprobada o pendiente.",
+          "En el punto del organismo no hay paso de Resumen: los pasos son Diagnóstico, Actores, Requisitos, Pago y Envío, y «Continuar» en Requisitos lleva directo a Pago. Allí no se envía el trámite desde el Resumen: el valor se ve en Pago.",
+        ],
+      },
+      {
+        id: "pago-punto",
+        title: "6. Pago en el punto del organismo",
+        paragraphs: [
+          "En el punto, el trámite se paga en la caja del organismo. Antes de pagar, todas las personas del trámite deben haber validado su identidad: si falta alguna, la pantalla muestra quién falta y no deja pagar; cuando la última valida, el pago se habilita solo.",
+          "La pantalla abre con la tarjeta «Resumen del cobro»: placa, tipo de trámite, la tarifa del organismo, el valor de FLIT y el total a pagar. Debajo está la tarjeta «Pago en caja». No hay envío a domicilio: el documento se recoge en el organismo. El botón «Atrás» regresa a Requisitos.",
+        ],
+        bullets: [
+          "Al llegar a Pago, el pago en caja se genera solo: no hay que pulsar nada. Aparece el ID del trámite (por ejemplo PN-2026-000123), con un botón para copiarlo, el total y «Vale hasta hoy a las 11:59 p. m.».",
+          "La persona va a la caja con ese ID. Cuando la caja confirma el cobro, la pantalla del punto pasa sola al cierre.",
+          "Si el día terminó sin pagar, el ID vence: pulsa «Generar pago en caja de nuevo» y el total se calcula de nuevo con los precios vigentes.",
+          "Si recargaste la página o la caja anuló el cobro, entra a «Consultar mi trámite» con la placa y el código, pulsa «Retomar el pago» y escribe la cédula de quien radicó. Si la caja anula el cobro mientras ves el cierre, la pantalla vuelve sola a Pago con el aviso «La caja anuló el cobro. Genera el pago de nuevo.».",
+          "Si no se alcanza a generar el pago, la pantalla dice el motivo y ofrece «Reintentar».",
+          "Si el total es $0, la pantalla muestra «Confirmar» y sigue al cierre sin ir a la caja.",
+          "Si el trámite no tiene precio en el organismo, o el organismo no tiene habilitado el pago en caja, la pantalla lo dice y no deja continuar.",
+        ],
+      },
+      {
+        id: "cierre-punto",
+        title: "7. Envío (cierre) en el punto",
+        paragraphs: [
+          "Con el pago confirmado, la persona ve un círculo verde con el mensaje «¡Tu trámite quedó! Recoge en este organismo.» y una tabla con el ID del trámite, el tipo, el número de radicado (o «En registro» si aún no llega) y el organismo, con el botón «Copiar ID». Más abajo están las tarjetas «Valor pagado» (con el medio) y «Vehículo». Si ya llegó a FLIT 2, la tabla muestra su radicado de FLIT 2.",
+          "Durante los primeros 15 minutos después del cobro en caja, el organismo todavía puede anular un cobro hecho por error; en ese tiempo el cierre dice «Tu trámite está en proceso de registro» (con un reloj en vez del visto bueno) y se consulta después con el ID del trámite. Luego el trámite pasa a FLIT 2.",
+          "Si la persona dio un correo propio, le llega un aviso con su ID y el lugar donde recoge. «Consultar trámite» abre la consulta con el ID ya escrito.",
         ],
       },
       {
         id: "flit2",
-        title: "6. Qué pasa en FLIT 2",
+        title: "8. Qué pasa en FLIT 2",
         paragraphs: [
           "Los trámites que llegan del portal quedan en FLIT 2 como borrador, con todos sus documentos cargados, incluido el consolidado. El equipo del organismo los revisa y los radica como cualquier otro trámite.",
+          "Los del punto del organismo llegan solo después de pagar, y su detalle muestra «Pagado en caja» (o «Sin cobro») con el valor, el medio y la fecha. No se vuelve a cobrar en FLIT 2.",
         ],
         callouts: [
           {
@@ -813,6 +849,8 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "rechazar identidad",
       "esperando captura",
       "pendiente de revision",
+      "quien aprobo",
+      "aprobada por",
     ],
     summary:
       "Cuándo usar la validación manual, cómo activarla, cómo copiar o regenerar el enlace para el cliente y cómo aprobar o rechazar cada caso.",
@@ -867,6 +905,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         bullets: [
           "Aprobar: la identidad queda aprobada por 30 días y el estado cambia a «Aprobada manual».",
           "Rechazar: eliges uno de los motivos de la lista. La persona recibe el motivo por correo junto con un enlace nuevo para repetir la captura.",
+          "Queda registrado quién decidió y cuándo: el detalle del caso muestra, por ejemplo, «Aprobada por Ana Pérez el 18/11/2026 10:30» o «Rechazada por …».",
         ],
       },
       {
@@ -986,6 +1025,107 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
           {
             variant: "info",
             text: "Si ves «Certificado en preparación», la carta aún no está lista. La aprobación sigue vigente: vuelve a intentarlo en unos minutos. Si al descargar aparece un mensaje de que aún no está disponible, también se resuelve intentando de nuevo.",
+          },
+        ],
+      },
+    ],
+  },
+  {
+    slug: "4-superadmin/12-actualizar-documento",
+    title: "Actualizar un documento de un trámite en cualquier estado",
+    audience: "Super Admin",
+    sectionId: "superadmin",
+    keywords: [
+      "actualizar documento",
+      "cargar documento",
+      "reemplazar documento",
+      "subir documento sin cambiar estado",
+      "documento entregado",
+      "documento aprobado",
+      "version anterior",
+      "historico",
+      "observacion",
+      "linea de tiempo",
+      "trazabilidad",
+      "consolidado",
+      "documento final",
+      "pestaña nueva",
+    ],
+    summary:
+      "Cómo el equipo FLIT reemplaza un documento de un trámite sin pasarlo a Borrador: qué queda como versión anterior, cómo se ve en la línea de tiempo y qué pasa con el consolidado.",
+    blocks: [
+      {
+        id: "que-es",
+        title: "1. Qué es y quién lo puede hacer",
+        paragraphs: [
+          "«Actualizar documento» permite cargar o reemplazar un documento de un trámite en cualquier estado: Borrador, Preparado, Asignado, Entregado, Aprobado, Anulado o Revocado. Ya no hace falta pasar el trámite a Borrador, subir el archivo y volver a moverlo.",
+          "Solo lo tiene el Super Admin de FLIT. El gestor sigue subiendo documentos como siempre, solo en Borrador o en Subsanación.",
+        ],
+      },
+      {
+        id: "pasos",
+        title: "2. Paso a paso",
+        paragraphs: [
+          "Paso 1. En Trámites, busca el trámite y abre «Acciones» en su fila.",
+          "Paso 2. Elige «Actualizar documento». La ventana muestra el radicado y el estado actual del trámite.",
+          "Paso 3. En «Tipo de documento» elige uno de los que pide ese tipo de trámite. Si ya hay un archivo de ese tipo, verás «El documento actual quedará como versión anterior».",
+          "Paso 4. Elige el archivo (PDF, JPG, PNG o WEBP, hasta 20 MB).",
+          "Paso 5. Escribe la observación: por qué actualizas el documento. Es obligatoria (hasta 1.000 caracteres) y el botón no se activa sin ella.",
+          "Paso 6. Pulsa «Actualizar documento». Verás «Documento actualizado.» y el trámite sigue en el mismo estado.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "Si otro proceso ya cargó ese mismo documento al mismo tiempo, el sistema te lo avisa y no reemplaza nada: vuelve a abrir el trámite y revisa antes de intentarlo de nuevo.",
+          },
+        ],
+        media: [
+          {
+            kind: "diagram",
+            id: "flujo-actualizar-documento-admin",
+            alt: "Flujo para actualizar un documento: desde Acciones se elige Actualizar documento, el tipo, el archivo y la observación obligatoria; el trámite no cambia de estado, el archivo anterior queda como versión anterior, la línea de tiempo registra la actualización y el consolidado se regenera al abrirlo",
+            caption: "Actualizar un documento sin cambiar el estado del trámite.",
+          },
+        ],
+      },
+      {
+        id: "anterior",
+        title: "3. Qué pasa con el archivo anterior",
+        paragraphs: [
+          "El archivo anterior no se borra: queda como «Versión anterior» y se puede ver y descargar en «Ver documentos», en el detalle del trámite y en la vista del organismo de tránsito.",
+          "El documento que cuenta para el trámite (el que va al consolidado y el que ve el organismo como vigente) es siempre el nuevo.",
+        ],
+      },
+      {
+        id: "trazabilidad",
+        title: "4. Trazabilidad en la línea de tiempo",
+        paragraphs: [
+          "Cada actualización queda en «Línea de Tiempo del Trámite» como «Documento actualizado por el administrador», con fecha y hora, quién lo hizo, el estado en que estaba el trámite y la observación.",
+          "La tarjeta incluye el bloque «Documento» (por ejemplo, Improntas), «Archivo nuevo» y «Archivo anterior», cada uno con «Ver» para abrirlo. Si era la primera vez que se cargaba ese tipo, dice «No había un archivo anterior».",
+          "La misma tarjeta la ven la compañía y el organismo de tránsito en su línea de tiempo.",
+        ],
+      },
+      {
+        id: "consolidado",
+        title: "5. El consolidado",
+        paragraphs: [
+          "No tienes que hacer nada: al abrir «Ver consolidado» después de la actualización, el consolidado se vuelve a generar con el documento nuevo, también en Aprobado, Anulado o Revocado.",
+          "En un trámite en estado final verás el aviso «Documento final»: es su expediente definitivo y solo se vuelve a generar si un administrador actualiza un documento.",
+          "Los trámites migrados de FLIT 1 en estado final conservan su consolidado original.",
+        ],
+      },
+      {
+        id: "ver",
+        title: "6. Cómo se ven los documentos",
+        paragraphs: [
+          "Al pulsar el ojo o «Ver», el documento se abre en una pestaña nueva del navegador, a pantalla completa. Mientras carga verás el carrito de FLIT.",
+          "Si el documento trae un aviso (por ejemplo «Documento final»), aparece unos segundos en la pantalla donde estabas, abajo a la derecha.",
+          "Si el archivo no se puede abrir o no se puede ver en el navegador, el aviso aparece en la pantalla actual con el botón «Descargar».",
+        ],
+        callouts: [
+          {
+            variant: "tip",
+            text: "Si el navegador bloquea las ventanas emergentes de FLIT, el documento se muestra en la misma pantalla, como antes. Para verlo en pestaña nueva, permite las ventanas emergentes de FLIT.",
           },
         ],
       },

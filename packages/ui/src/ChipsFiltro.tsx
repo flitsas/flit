@@ -11,11 +11,14 @@ import { cn } from "./cn";
  * El chip activo lleva `aria-pressed="true"`. {@link ChipFiltro} suelto o {@link ChipsFiltro}, la fila con `role="group"`.
  */
 
+// Foco (H-2, WCAG 2.4.7): sin `focus:outline-none`. En Tailwind 4 deja `--tw-outline-style: none` y el
+// `focus-visible:outline-2` hereda ese estilo, así que el contorno de foco no se pintaba.
+
 /** Chip sin cifra: píldora de 36 px con contorno azul cuando está activo. */
 export const CHIP_FILTRO_CLS =
   "inline-flex min-h-9 items-center gap-2 rounded-full border px-4 cursor-pointer text-sm font-semibold transition-colors " +
   "border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] text-[color:var(--di-text-primary)] " +
-  "hover:bg-[var(--kit-hover)] focus:outline-none focus-visible:outline-2 focus-visible:outline-offset-2 " +
+  "hover:bg-[var(--kit-hover)] focus-visible:outline-2 focus-visible:outline-offset-2 " +
   "focus-visible:outline-[var(--di-action)] " +
   "aria-pressed:border-[color:var(--di-action)] aria-pressed:bg-[var(--kit-hover)] " +
   "aria-pressed:text-[color:var(--di-action)] " +
@@ -25,7 +28,7 @@ export const CHIP_FILTRO_CLS =
 export const CHIP_EMBUDO_CLS =
   "flex min-w-0 flex-col-reverse items-center justify-center gap-0.5 rounded-[9px] border-0 bg-transparent px-1 py-1.5 " +
   "cursor-pointer text-center transition-colors text-[color:var(--di-text-primary)] hover:bg-[var(--kit-hover)] " +
-  "focus:outline-none focus-visible:outline-2 focus-visible:outline-[var(--di-action)] " +
+  "focus-visible:outline-2 focus-visible:outline-[var(--di-action)] " +
   "aria-pressed:bg-[var(--kit-hover)] aria-pressed:shadow-[inset_0_0_0_1px_var(--kit-azul-texto)] " +
   "disabled:cursor-default disabled:opacity-55";
 

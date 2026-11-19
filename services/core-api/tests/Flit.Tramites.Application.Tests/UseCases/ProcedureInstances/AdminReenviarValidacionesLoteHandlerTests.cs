@@ -28,7 +28,8 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
 
     private AdminReenviarValidacionIdentidadHandler BuildSingle() => new(
         _repo, _kyverum, new BiometricsProviderOptions { Provider = BiometricProviders.Mock },
-        new FakeWebhookSecretProtector(), _events, _audit);
+        new FakeWebhookSecretProtector(), _events, _audit,
+        new IniciarKyverumVerifyHandler(_repo, _kyverum, new FakeWebhookSecretProtector(), _events, _audit));
 
     private AdminReenviarValidacionesLoteHandler BuildLote() => new(BuildSingle(), _repo);
 
@@ -45,8 +46,16 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
         };
         _repo.GetByIdAsync(instance.Id, _tenantId, Arg.Any<CancellationToken>()).Returns(instance);
         _repo.GetByIdWithActorsAsync(instance.Id, _tenantId, Arg.Any<CancellationToken>()).Returns(instance);
+        // HU #14627 — "enviar por primera vez" recarga con actores + validaciones.
+        _repo.GetByIdWithBiometricsAndActorsAsync(instance.Id, _tenantId, Arg.Any<CancellationToken>()).Returns(instance);
         return instance;
     }
+
+    private void StubKyverumOk(string verificationId = "kyv_14627", string captureUrl = "https://capture.example.com/14627") =>
+        _kyverum.StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new KyverumVerifyStartResult(
+                verificationId, captureUrl, "whsec_14627", "pending",
+                $"{{\"id\":\"{verificationId}\"}}", DateTimeOffset.UtcNow.AddHours(24)));
 
     private ProcedureInstanceActor ActorNatural(ProcedureInstance instance, string parte, string documento, string email, int ordinal = 1)
     {
@@ -88,6 +97,10 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
             CreatedAt = DateTimeOffset.UtcNow.AddDays(-1),
         };
         _repo.GetBiometricByIdWithPersonAsync(v.Id, _tenantId, Arg.Any<CancellationToken>()).Returns(v);
+        // HU #14627 — el flujo "enviar por primera vez" lee instance.BiometricValidations directamente
+        // (vía GetByIdWithBiometricsAndActorsAsync) para decidir si ya hay una activa; se refleja aquí
+        // también para que esos tests vean la fila sin necesitar un stub nuevo.
+        instance.BiometricValidations.Add(v);
         return v;
     }
 
@@ -101,7 +114,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
         var v = Validacion(instance, "vendedor", "222", "a@x.com");
 
         var (result, error, _, _) = await BuildSingle().HandleAsync(
-            new AdminReenviarValidacionIdentidadCommand(instance.Id, v.Id, _tenantId, "b@x.com", null),
+            new AdminReenviarValidacionIdentidadCommand(instance.Id, v.Id, null, null, _tenantId, "b@x.com", null),
             TestContext.Current.CancellationToken);
 
         error.Should().BeNull();
@@ -132,7 +145,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
         var v = Validacion(instance, "vendedor", "79522832", "rl.viejo@x.com");
 
         var (_, error, _, _) = await BuildSingle().HandleAsync(
-            new AdminReenviarValidacionIdentidadCommand(instance.Id, v.Id, _tenantId, "rl.nuevo@x.com", null),
+            new AdminReenviarValidacionIdentidadCommand(instance.Id, v.Id, null, null, _tenantId, "rl.nuevo@x.com", null),
             TestContext.Current.CancellationToken);
 
         error.Should().BeNull();
@@ -153,7 +166,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
         var v = Validacion(instance, "vendedor", "222", "luis@x.com");
 
         await BuildSingle().HandleAsync(
-            new AdminReenviarValidacionIdentidadCommand(instance.Id, v.Id, _tenantId, "luis.nuevo@x.com", null),
+            new AdminReenviarValidacionIdentidadCommand(instance.Id, v.Id, null, null, _tenantId, "luis.nuevo@x.com", null),
             TestContext.Current.CancellationToken);
 
         luis.Email.Should().Be("luis.nuevo@x.com");
@@ -168,7 +181,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
         var v = Validacion(instance, "comprador", "111", "validacion@x.com");
 
         await BuildSingle().HandleAsync(
-            new AdminReenviarValidacionIdentidadCommand(instance.Id, v.Id, _tenantId, null, null),
+            new AdminReenviarValidacionIdentidadCommand(instance.Id, v.Id, null, null, _tenantId, null, null),
             TestContext.Current.CancellationToken);
 
         actor.Email.Should().Be("actor@x.com");
@@ -187,7 +200,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
         await _repo.AddEventAsync(Arg.Do<ProcedureInstanceEvent>(e => evento = e), Arg.Any<CancellationToken>());
 
         await BuildSingle().HandleAsync(
-            new AdminReenviarValidacionIdentidadCommand(instance.Id, v.Id, _tenantId, "b@x.com", userId),
+            new AdminReenviarValidacionIdentidadCommand(instance.Id, v.Id, null, null, _tenantId, "b@x.com", userId),
             TestContext.Current.CancellationToken);
 
         evento.Should().NotBeNull();
@@ -212,7 +225,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
 
         var (result, error, _) = await BuildLote().HandleAsync(
             new AdminReenviarValidacionesLoteCommand(instance.Id, _tenantId,
-                [new(comprador.Id, null), new(vendedor.Id, "v.nuevo@x.com")], null),
+                [new(comprador.Id, null, null, null), new(vendedor.Id, null, null, "v.nuevo@x.com")], null),
             TestContext.Current.CancellationToken);
 
         error.Should().BeNull();
@@ -231,7 +244,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
 
         var (result, error, _) = await BuildLote().HandleAsync(
             new AdminReenviarValidacionesLoteCommand(instance.Id, _tenantId,
-                [new(aprobada.Id, null), new(pendiente.Id, null)], null),
+                [new(aprobada.Id, null, null, null), new(pendiente.Id, null, null, null)], null),
             TestContext.Current.CancellationToken);
 
         error.Should().BeNull();
@@ -248,7 +261,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
         var b = Validacion(instance, "vendedor", "222", "v@x.com");
 
         await BuildLote().HandleAsync(
-            new AdminReenviarValidacionesLoteCommand(instance.Id, _tenantId, [new(a.Id, null), new(b.Id, null)], null),
+            new AdminReenviarValidacionesLoteCommand(instance.Id, _tenantId, [new(a.Id, null, null, null), new(b.Id, null, null, null)], null),
             TestContext.Current.CancellationToken);
 
         _repo.Received(1).ResetTracking();
@@ -265,7 +278,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
         var b = Validacion(instance, "vendedor", "222", "v@x.com");
 
         var (result, error, _) = await BuildLote().HandleAsync(
-            new AdminReenviarValidacionesLoteCommand(instance.Id, _tenantId, [new(a.Id, null), new(b.Id, null)], null),
+            new AdminReenviarValidacionesLoteCommand(instance.Id, _tenantId, [new(a.Id, null, null, null), new(b.Id, null, null, null)], null),
             TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
@@ -277,7 +290,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
     public async Task TramiteInexistenteODeOtroTenant_RechazaLaSolicitudSinTocarValidaciones()
     {
         var (result, error, _) = await BuildLote().HandleAsync(
-            new AdminReenviarValidacionesLoteCommand(Guid.NewGuid(), _tenantId, [new(Guid.NewGuid(), null)], null),
+            new AdminReenviarValidacionesLoteCommand(Guid.NewGuid(), _tenantId, [new(Guid.NewGuid(), null, null, null)], null),
             TestContext.Current.CancellationToken);
 
         result.Should().BeNull();
@@ -301,7 +314,7 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
     public async Task MasDeOchoPersonas_SeRechaza()
     {
         var items = Enumerable.Range(0, AdminReenviarValidacionesLoteHandler.MaxItems + 1)
-            .Select(_ => new AdminReenviarValidacionLoteItem(Guid.NewGuid(), null))
+            .Select(_ => new AdminReenviarValidacionLoteItem(Guid.NewGuid(), null, null, null))
             .ToList();
 
         var (_, error, _) = await BuildLote().HandleAsync(
@@ -309,5 +322,71 @@ public sealed class AdminReenviarValidacionesLoteHandlerTests
             TestContext.Current.CancellationToken);
 
         error.Should().Be(AdminReenviarValidacionesLoteHandler.DemasiadasPersonas);
+    }
+
+    // ── HU #14627 — enviar por primera vez desde el lote (actor sin fila propia) ───────────────────
+
+    [Fact]
+    public async Task HU14627_EnviarPorPrimeraVez_DesdeElLote_CreaLaFilaYRespondeCaptureUrl()
+    {
+        var instance = Instance();
+        ActorNatural(instance, "comprador", "111", "c@x.com");
+        StubKyverumOk();
+
+        var (result, error, _) = await BuildLote().HandleAsync(
+            new AdminReenviarValidacionesLoteCommand(instance.Id, _tenantId,
+                [new(null, "comprador", 1, null)], null),
+            TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        result!.Items.Should().ContainSingle();
+        var item = result.Items[0];
+        item.Error.Should().BeNull();
+        item.Result.Should().NotBeNull();
+        item.Result!.CaptureUrl.Should().Be("https://capture.example.com/14627");
+        item.Result.Queued.Should().BeFalse();
+        item.ValidationId.Should().NotBeNull("el id real es el de la fila recién creada");
+        item.PartyRole.Should().Be("comprador");
+        item.Ordinal.Should().Be(1);
+        instance.BiometricValidations.Should().ContainSingle(v => v.PartyRole == "comprador" && v.Status == BiometricEstados.EnProceso);
+        await _kyverum.Received(1).StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task HU14627_EnviarPorPrimeraVez_ConUnaActivaYaEnCurso_DevuelveValidacionEnCurso()
+    {
+        var instance = Instance();
+        ActorNatural(instance, "comprador", "111", "c@x.com");
+        // Ya hay una fila "en vuelo" para ese mismo rol — aunque no se listó explícitamente, simula el caso
+        // (otro canal la disparó entre el GET del cuadro y este envío).
+        Validacion(instance, "comprador", "111", "c@x.com", BiometricEstados.EnProceso);
+
+        var (result, error, _) = await BuildLote().HandleAsync(
+            new AdminReenviarValidacionesLoteCommand(instance.Id, _tenantId,
+                [new(null, "comprador", 1, null)], null),
+            TestContext.Current.CancellationToken);
+
+        error.Should().BeNull();
+        result!.Items.Should().ContainSingle().Which.Error.Should().Be("validacion_en_curso");
+        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
+    }
+
+    [Theory]
+    [InlineData(TramiteEstado.Aprobado)]
+    [InlineData(TramiteEstado.Anulado)]
+    [InlineData("revocado")]
+    public async Task HU14627_EnviarPorPrimeraVez_TramiteCerrado_SigueBloqueado(string estado)
+    {
+        var instance = Instance(estado);
+        ActorNatural(instance, "comprador", "111", "c@x.com");
+
+        var (result, error, _) = await BuildLote().HandleAsync(
+            new AdminReenviarValidacionesLoteCommand(instance.Id, _tenantId,
+                [new(null, "comprador", 1, null)], null),
+            TestContext.Current.CancellationToken);
+
+        result.Should().BeNull();
+        error.Should().Be(TramiteEstadoErrores.IdentidadReenvioNoDisponible);
+        await _kyverum.DidNotReceive().StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>());
     }
 }

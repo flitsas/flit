@@ -18,6 +18,7 @@ import {
 import { buttonClass } from '@flit/ui/Button';
 import { OperacionLoadingState } from './states';
 import { TerminosCondicionesCheckbox } from './TerminosCondicionesCheckbox';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 const BLUE = 'var(--color-flit-brand)';
 
@@ -427,7 +428,7 @@ export function NuevoTramiteModalContent({
           role="status"
           aria-live="polite"
         >
-          <Icono nombre="exclamacion" className="mt-0.5 h-5 w-5 shrink-0" style={{ color: BLUE }} />
+          <IconoAviso tipo="info" className="mt-0.5 h-5 w-5 shrink-0" />
           <p className="text-[13.5px] leading-snug text-muted-foreground">{infoText}</p>
         </div>
       ) : null}

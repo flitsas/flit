@@ -8,19 +8,34 @@ using Flit.Tramites.Domain.Tracking;
 using Flit.Tramites.Domain.Tramites.Catalog;
 using Flit.Tramites.Domain.Tramites.Estados;
 using Flit.Tramites.Domain.Tramites.Services;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
+/// <param name="Source">
+/// Origen del valor (<c>field_values.source</c>). <c>null</c> ⇒ <c>"user"</c>. Solo lo fijan llamadores de
+/// SERVIDOR (p. ej. la orquestación ICT con <c>"ict"</c>); nunca se lee del JSON del PATCH HTTP
+/// (<c>[JsonIgnore]</c>), para que un cliente no pueda hacerse pasar por otra fuente.
+/// </param>
 public sealed record FieldValueInput(
     Guid? FormFieldId,
     string FieldKey,
     string? ValueText,
-    string? ValueJson);
+    string? ValueJson,
+    [property: System.Text.Json.Serialization.JsonIgnore] string? Source = null);
 
 public sealed record PatchFieldValuesRequest(IReadOnlyList<FieldValueInput> Items);
 
-public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
+/// <param name="validationPolicy">
+/// Modos block/warn/off por ambiente. <c>null</c> ⇒ <see cref="TramiteValidationPolicy.BlockAll"/> (mismo
+/// default que el resto de handlers). Aquí solo gobierna «cambio de carrocería sobre un vehículo sin carrocería».
+/// </param>
+public sealed class PatchFieldValuesHandler(
+    IProcedureInstanceRepository repo,
+    TramiteValidationPolicy? validationPolicy = null)
 {
+    private readonly TramiteValidationPolicy _validationPolicy = validationPolicy ?? TramiteValidationPolicy.BlockAll;
+
     /// <param name="actorUserId">
     /// Usuario que realiza el cambio (claim <c>sub</c>). <c>null</c> cuando no hay sesión de usuario
     /// (ICT, tests) — el evento queda sin <c>CreatedBy</c> y la consulta de historial lo mostrará como sistema.
@@ -79,6 +94,17 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
             return (null, "ot_traspaso_no_modificable");
         }
 
+        // Matrícula ICT con placa de un rango del OT (plate_assignment_type=4): la placa está reservada en el
+        // inventario de ESTE organismo, así que la secretaría queda FIJA. Este PATCH es el único camino por el
+        // que el asistente cambia el organismo (la columna TransitOfficeId se promueve de estos field_values al
+        // radicar). Re-enviar el mismo organismo no cambia nada y pasa.
+        if (!semillaDeSistema)
+        {
+            var otFijado = OtFijadoPorPlacaDeRango(instance, request.Items);
+            if (otFijado is not null)
+                return (null, otFijado);
+        }
+
         // Bug #13194 (review, SEC) — el estado y el vencimiento del SOAT son claves de SISTEMA: los
         // escriben la consulta al RUNT (ValidateSoatViaRuntHandler) y el OCR del PDF cargado
         // (PersistOcrFieldsHandler). Ningún flujo del front los manda por aquí; aceptarlos dejaba que un
@@ -94,6 +120,12 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
         var complementoRechazado = PrimerComplementoNoAdmitido(instance, request.Items);
         if (complementoRechazado is not null)
             return (null, complementoRechazado);
+
+        // Cambio de carrocería SIMULTÁNEO sobre un vehículo que el RUNT reporta sin carrocería: no hay atributo
+        // que sustituir. (Si el cambio de carrocería es el trámite principal lo cubren el preflight y el gate de
+        // preparación.) Solo en modo block; en warn/off el preflight informa y no se detiene la edición.
+        if (!semillaDeSistema && SinCarroceriaQueCambiar(instance, request.Items))
+            return (null, VehicleBodyTypePolicy.ErrorCode);
 
         // Subsanación (flag sobre rechazado) o borrador: edición completa. Fuera de eso, tras el
         // envío solo se permiten claves de organismo de tránsito (generación diferida del FUR).
@@ -112,8 +144,20 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
             ? null
             : new List<ProcedureFieldChange>(request.Items.Count);
 
+        // Placa de rango ICT: el guard ya garantizó que lo que llega de plate/plate_assignment_type es el MISMO
+        // valor; no se reescribe (evita guardar «  rng101 » sin normalizar y tocar la fila con origen «ict»).
+        var placaFija = !semillaDeSistema && PlacaDeRangoIct(instance) is not null;
+
         foreach (var item in request.Items)
         {
+            if (placaFija
+                && !string.Equals(item.Source, "ict", StringComparison.Ordinal)
+                && (string.Equals(item.FieldKey, "plate", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(item.FieldKey, "plate_assignment_type", StringComparison.OrdinalIgnoreCase)))
+            {
+                continue;
+            }
+
             var existing = instance.FieldValues.FirstOrDefault(f => f.FieldKey == item.FieldKey);
             if (existing is not null)
             {
@@ -126,7 +170,7 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
 
                 existing.ValueText = item.ValueText;
                 existing.ValueJson = item.ValueJson;
-                existing.Source = "user";
+                existing.Source = item.Source ?? "user";
                 existing.UpdatedAt = now;
             }
             else
@@ -155,7 +199,7 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
                     FieldKey = item.FieldKey,
                     ValueText = item.ValueText,
                     ValueJson = item.ValueJson,
-                    Source = "user",
+                    Source = item.Source ?? "user",
                     CreatedAt = now
                 };
                 instance.FieldValues.Add(fieldValue);
@@ -181,6 +225,150 @@ public sealed class PatchFieldValuesHandler(IProcedureInstanceRepository repo)
         await repo.SaveChangesAsync(ct);
 
         return (GetProcedureInstanceHandler.ToDetail(instance), null);
+    }
+
+    /// <summary>
+    /// Código estable del error «el organismo está fijado por la placa de rango». El error viaja como
+    /// <c>ot_fijado_por_placa_de_rango:{PLACA}</c>; ver <see cref="TryParseOtFijado"/>.
+    /// </summary>
+    public const string OtFijadoPorPlacaError = "ot_fijado_por_placa_de_rango";
+
+    /// <summary>Extrae la placa de un error <see cref="OtFijadoPorPlacaError"/>; <c>false</c> si es otro error.</summary>
+    public static bool TryParseOtFijado(string? error, out string placa)
+    {
+        placa = string.Empty;
+        if (error is null || !error.StartsWith(OtFijadoPorPlacaError, StringComparison.Ordinal))
+            return false;
+
+        var separador = error.IndexOf(':', StringComparison.Ordinal);
+        placa = separador >= 0 ? error[(separador + 1)..] : string.Empty;
+        return true;
+    }
+
+    /// <summary>
+    /// Código estable del error «la placa del rango está fijada». Viaja como <c>placa_fijada_por_rango:{PLACA}</c>;
+    /// ver <see cref="TryParsePlacaFijada"/>.
+    /// </summary>
+    public const string PlacaFijadaPorRangoError = "placa_fijada_por_rango";
+
+    /// <summary>Extrae la placa de un error <see cref="PlacaFijadaPorRangoError"/>; <c>false</c> si es otro error.</summary>
+    public static bool TryParsePlacaFijada(string? error, out string placa)
+    {
+        placa = string.Empty;
+        if (error is null || !error.StartsWith(PlacaFijadaPorRangoError, StringComparison.Ordinal))
+            return false;
+
+        var separador = error.IndexOf(':', StringComparison.Ordinal);
+        placa = separador >= 0 ? error[(separador + 1)..] : string.Empty;
+        return true;
+    }
+
+    private static readonly string[] ClavesCanonicasDeOrganismo =
+    [
+        TransitOfficeFieldKeys.Id,
+        TransitOfficeFieldKeys.Code,
+        TransitOfficeFieldKeys.Name,
+        TransitOfficeFieldKeys.City,
+        TransitOfficeFieldKeys.CityName,
+    ];
+
+    /// <summary>
+    /// <c>ot_fijado_por_placa_de_rango:{PLACA}</c> si el trámite lleva <c>plate</c> con origen «ict» y
+    /// <c>plate_assignment_type=4</c> y algún ítem cambia el organismo canónico; <c>null</c> en cualquier otro caso
+    /// (incluido el re-envío del mismo organismo). Las claves <c>transit_office_actual_*</c>/<c>destino_*</c> son
+    /// otros datos y no se tocan.
+    /// </summary>
+    /// <summary>La fila <c>plate</c> si es una placa de rango entregada por ICT (origen «ict» + tipo 4); si no, <c>null</c>.</summary>
+    private static ProcedureInstanceFieldValue? PlacaDeRangoIct(ProcedureInstance instance)
+    {
+        var placa = instance.FieldValues.FirstOrDefault(f =>
+            string.Equals(f.FieldKey, "plate", StringComparison.OrdinalIgnoreCase));
+        return placa is not null
+               && string.Equals(placa.Source, "ict", StringComparison.Ordinal)
+               && !string.IsNullOrWhiteSpace(placa.ValueText)
+               && string.Equals(Persistido(instance, "plate_assignment_type")?.Trim(), "4", StringComparison.Ordinal)
+            ? placa
+            : null;
+    }
+
+    private static string? OtFijadoPorPlacaDeRango(ProcedureInstance instance, IReadOnlyList<FieldValueInput> items)
+    {
+        var placa = PlacaDeRangoIct(instance);
+        if (placa is null)
+            return null;
+
+        foreach (var item in items)
+        {
+            // La placa y su tipo de asignación quedan fijos: con la placa reservada en el rango del OT, cambiarla
+            // o el tipo soltaría el candado del organismo. Los ítems con origen «ict» los fija solo el servidor
+            // (FieldValueInput.Source es [JsonIgnore]: nunca viene del PATCH HTTP), así que la orquestación ICT no
+            // choca con este guard. Re-enviar el mismo valor (placa normalizada trim + mayúsculas; tipo «4») pasa.
+            if (!string.Equals(item.Source, "ict", StringComparison.Ordinal))
+            {
+                var esPlaca = string.Equals(item.FieldKey, "plate", StringComparison.OrdinalIgnoreCase);
+                var esTipo = string.Equals(item.FieldKey, "plate_assignment_type", StringComparison.OrdinalIgnoreCase);
+                if (esPlaca
+                    && !string.Equals(
+                        placa.ValueText!.Trim().ToUpperInvariant(),
+                        item.ValueText?.Trim().ToUpperInvariant(),
+                        StringComparison.Ordinal))
+                {
+                    return $"{PlacaFijadaPorRangoError}:{placa.ValueText!.Trim()}";
+                }
+
+                if (esTipo && !string.Equals(item.ValueText?.Trim(), "4", StringComparison.Ordinal))
+                    return $"{PlacaFijadaPorRangoError}:{placa.ValueText!.Trim()}";
+            }
+
+            var clave = ClavesCanonicasDeOrganismo.FirstOrDefault(c =>
+                string.Equals(c, item.FieldKey, StringComparison.OrdinalIgnoreCase));
+            if (clave is null)
+                continue;
+
+            var actual = string.Equals(clave, TransitOfficeFieldKeys.Id, StringComparison.Ordinal)
+                ? instance.TransitOfficeId?.ToString() ?? Persistido(instance, clave)
+                : Persistido(instance, clave);
+            // Sin valor vigente no hay nada que se esté cambiando (el Id es quien gobierna el OT).
+            if (string.IsNullOrWhiteSpace(actual))
+                continue;
+
+            if (!MismoValorDeOrganismo(actual, item.ValueText))
+                return $"{OtFijadoPorPlacaError}:{placa.ValueText!.Trim()}";
+        }
+
+        return null;
+    }
+
+    private static bool MismoValorDeOrganismo(string actual, string? nuevo)
+    {
+        if (string.IsNullOrWhiteSpace(nuevo))
+            return false;
+        if (Guid.TryParse(actual, out var a) && Guid.TryParse(nuevo, out var n))
+            return a == n;
+        return string.Equals(actual.Trim(), nuevo.Trim(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// ¿El PATCH declara <c>cambio_carroceria=true</c> como trámite simultáneo sobre un vehículo que el RUNT
+    /// reporta sin carrocería? Reutiliza <see cref="VehicleBodyTypePolicy.SinCarroceria"/> (no duplica la regla)
+    /// y su semántica: sin consulta RUNT previa (ni clase ni marca hidratadas) no se sabe, así que no se bloquea.
+    /// Solo en modo <see cref="TramiteValidationMode.Block"/>.
+    /// </summary>
+    private bool SinCarroceriaQueCambiar(ProcedureInstance instance, IReadOnlyList<FieldValueInput> items)
+    {
+        if (_validationPolicy.VehicleBodyTypeRequired != TramiteValidationMode.Block)
+            return false;
+        if (!items.Any(i => string.Equals(i.FieldKey, MandatoObjetoComposer.CambioCarroceria, StringComparison.OrdinalIgnoreCase)
+                            && EsVerdadero(i.ValueText)))
+            return false;
+        // Como trámite principal ya lo cubren el preflight y el gate de preparación: no se toca ese comportamiento.
+        if (VehicleBodyTypePolicy.ExigeCarroceriaPrevia(instance.TypeCode))
+            return false;
+
+        var consultaRespondio = !string.IsNullOrWhiteSpace(Persistido(instance, VehicleFieldKeys.Class))
+                                || !string.IsNullOrWhiteSpace(Persistido(instance, VehicleFieldKeys.Brand));
+        return consultaRespondio
+               && VehicleBodyTypePolicy.SinCarroceria(Persistido(instance, VehicleBodyTypePolicy.BodyTypeRuntFieldKey));
     }
 
     /// <summary>Error: el PATCH intenta escribir una clave que solo escribe el sistema (Bug #13194).</summary>

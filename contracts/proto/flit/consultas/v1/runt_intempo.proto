@@ -1,0 +1,319 @@
+syntax = "proto3";
+
+package flit.consultas.v1;
+
+import "flit/consultas/v1/fuentes_comparendos.proto";
+
+option csharp_namespace = "Flit.Consultas.Grpc.V1";
+
+// RUNT del vehículo por Intempo (HU #13873, Feature #13872). Servicio propio, como FuentesComparendosService (G1=a): no
+// es el chequeo de ConsultasService. Devuelve el objeto normalizado completo de la especificación de migración de
+// Intempo (§5) como mensaje tipado, sin JSON libre ni respuesta cruda.
+//
+// Autenticación (contrato §3): token de servicio con aud=consultas y scope platform.consultas; empresa en la metadata
+// x-flit-tenant-id. Este servicio ejecuta, mide el consumo y no guarda nada. El proveedor es información interna de
+// FLIT: el producto no se lo muestra a sus clientes.
+//
+// Datos personales (Habeas Data, Ley 1581): el mensaje lleva nombres, documentos, direcciones, teléfonos y correos de
+// propietarios, locatarios e históricos. Quien lo emite o lo recibe no lo registra en logs (ni el payload, ni la placa,
+// ni el VIN, ni los documentos) y no lo cachea; solo persiste lo que su regla de datos permita (el diagnóstico: tipo y
+// número de documento, cifrados).
+//
+// Hasta que core-consultas lo implemente (HU F10-H4) el servicio no está mapeado y los dos rpcs responden UNIMPLEMENTED.
+service RuntIntempoService {
+  // Vehículo por placa (§3.1). INVALID_ARGUMENT si falta la placa; FAILED_PRECONDITION si Intempo no está conectado en
+  // el ambiente. Un vehículo que el RUNT no registra vuelve como RESULTADO_RUNT_INTEMPO_NO_ENCONTRADO.
+  // La respuesta es la misma de ConsultarPorVin a propósito (G2=b): una sola forma para los dos identificadores.
+  // buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+  rpc ConsultarPorPlaca(ConsultarPorPlacaRequest) returns (ConsultarVehiculoIntempoResponse);
+
+  // Vehículo por VIN (§3.2). Mismas reglas y misma respuesta que ConsultarPorPlaca.
+  // buf:lint:ignore RPC_RESPONSE_STANDARD_NAME
+  // buf:lint:ignore RPC_REQUEST_RESPONSE_UNIQUE
+  rpc ConsultarPorVin(ConsultarPorVinRequest) returns (ConsultarVehiculoIntempoResponse);
+}
+
+message ConsultarPorPlacaRequest {
+  string placa = 1;
+}
+
+message ConsultarPorVinRequest {
+  string vin = 1;
+}
+
+enum ResultadoRuntIntempo {
+  RESULTADO_RUNT_INTEMPO_UNSPECIFIED = 0;
+  RESULTADO_RUNT_INTEMPO_ENCONTRADO = 1;
+  // Intempo respondió y el RUNT no registra el vehículo: definitivo, no se reintenta.
+  RESULTADO_RUNT_INTEMPO_NO_ENCONTRADO = 2;
+  // Todo lo demás (tipo_error dice por qué). Nunca se lee como «no encontrado».
+  RESULTADO_RUNT_INTEMPO_ERROR = 3;
+}
+
+// Sin respuesta cruda a propósito: trae datos personales.
+message ConsultarVehiculoIntempoResponse {
+  // Siempre "intempo".
+  string proveedor = 1;
+  ResultadoRuntIntempo resultado = 2;
+  // Solo con RESULTADO_RUNT_INTEMPO_ENCONTRADO.
+  VehiculoIntempo vehiculo = 3;
+  TipoErrorFuente tipo_error = 4;
+  optional string mensaje_error = 5;
+  optional int32 http_status = 6;
+  int32 duracion_ms = 7;
+  // Errores con la forma de §5.6 cuando Intempo o la llamada fallan.
+  repeated ErrorIntempo errores = 8;
+}
+
+// §5.6: code es el HTTP status (404 si no hubo status).
+message ErrorIntempo {
+  int32 code = 1;
+  string description = 2;
+}
+
+// Objeto normalizado de §5 con sus 22 claves, en el mismo orden. Su proto-JSON tiene las mismas claves de §5 (los
+// campos con siglas declaran json_name). Fechas como texto dd/MM/yyyy, tal como llegan.
+message VehiculoIntempo {
+  string plate = 1;
+  string vin = 2;
+  // Documento de la raíz: a menudo vacío. El del propietario está en propietarios_actuales y en owner.
+  string document_type = 3;
+  string document_number = 4;
+  InformacionGeneralIntempo informacion_general = 5;
+  DatosTecnicosIntempo datos_tecnicos = 6;
+  repeated SoatIntempo soat = 7;
+  repeated TecnoMecanicaIntempo tecno_mecanica = 8;
+  repeated GarantiaFavorDeIntempo garantias_favor_de = 9;
+  repeated GarantiaMobiliariaIntempo garantias_mobiliarias = 10;
+  InformacionBlindajeIntempo informacion_blindaje = 11;
+  repeated LimitacionPropiedadIntempo limitacion_propiedad = 12;
+  repeated NormalizacionSaneamientoIntempo normalizacion_saneamiento = 13;
+  repeated PolizaResponsabilidadCivilIntempo polizas_responsabilidad_civil = 14;
+  repeated SolicitudIntempo solicitudes = 15;
+  repeated TarjetaOperacionIntempo tarjeta_operacion = 16;
+  repeated PropietarioActualIntempo propietarios_actuales = 17;
+  repeated HistoricoPropietarioIntempo historico_propietarios = 18;
+  repeated PersonaIntempo owner = 19;
+  repeated PersonaIntempo lessee = 20;
+  repeated AccidenteIntempo accident_rate = 21;
+  repeated InfraccionIntempo infracciones = 22;
+}
+
+// §5.2. Todo texto. "cilidraje" conserva la errata de la especificación. Los optional pueden no venir.
+message InformacionGeneralIntempo {
+  string cilidraje = 1;
+  string clase_vehiculo = 2;
+  string clasificacion = 3;
+  string color = 4;
+  string linea = 5;
+  string marca = 6;
+  string modelo = 7;
+  string fecha_matricula = 8;
+  string no_chasis = 9;
+  string no_licencia_transito = 10;
+  optional string no_motor = 11;
+  string no_placa = 12;
+  string no_vin = 13;
+  string organismo_transito = 14;
+  optional string puertas = 15;
+  string tipo_carroceria = 16;
+  string tipo_combustible = 17;
+  // Particular, Público u Oficial.
+  string tipo_servicio = 18;
+  // SI / NO.
+  string es_regrabado_chasis = 19;
+  string es_regrabado_motor = 20;
+  string es_regrabado_serie = 21;
+  string es_regrabado_vin = 22;
+  string prendas = 23;
+  string tiene_gravamenes = 24;
+  string repotenciado = 25;
+  string clasico_antiguo = 26;
+  string estado_del_vehiculo = 27;
+  string mostrar_solicitudes = 28;
+  string seguridad_estado = 29;
+  string tarjeta_servicio = 30;
+  string ver_valida_dian = 31 [json_name = "verValidaDIAN"];
+  string validacion_dian = 32 [json_name = "validacionDIAN"];
+  string tiene_lt_importacion = 33 [json_name = "tieneLTImportacion"];
+  optional string serial_version_uid = 34 [json_name = "serialVersionUID"];
+}
+
+// §5.3. Todo texto.
+message DatosTecnicosIntempo {
+  string capacidad_carga = 1;
+  string no_ejes = 2;
+  string peso_bruto_vehicular = 3;
+  string pasajeros_sentados = 4;
+  string alto = 5;
+  string ancho = 6;
+  string largo = 7;
+  string rodaje = 8;
+  string serial_version_uid = 9 [json_name = "serialVersionUID"];
+}
+
+// §5.4. Estado: VIGENTE, NO VIGENTE, NO REQUIERE.
+message SoatIntempo {
+  string no_poliza = 1;
+  string fecha_expedicion = 2;
+  string fecha_vigencia = 3;
+  string fecha_vencimiento = 4;
+  string entidad_expide_soat = 5;
+  string estado = 6;
+}
+
+// §5.4. vigente: SI / NO.
+message TecnoMecanicaIntempo {
+  string serial_version_uid = 1 [json_name = "serialVersionUID"];
+  string nro_certificado = 2;
+  string tipo_revision = 3;
+  string fecha_expedicion = 4;
+  string fecha_vigente = 5;
+  string cda_expide = 6;
+  string vigente = 7;
+  string numero_placa = 8;
+  string informacion_consistente = 9;
+  string url = 10;
+}
+
+message GarantiaFavorDeIntempo {
+  string tipo_documento_acreedor = 1;
+  string numero_documento_acreedor = 2;
+  string acreedor = 3;
+  string fecha_inscripcion = 4;
+  string confecamaras = 5;
+}
+
+message GarantiaMobiliariaIntempo {
+  string id_prenda = 1;
+  string id_vehiculo_prenda = 2;
+  string fecha_registro = 3;
+  string tipo_documento_entidad = 4;
+  string numero_documento_entidad = 5;
+  string entidad = 6;
+  string estado = 7;
+}
+
+message InformacionBlindajeIntempo {
+  string serial_version_uid = 1 [json_name = "serialVersionUID"];
+  // Se llena con blindado o, si falta, con esBlindado del origen (historial con las dos claves): un solo campo.
+  string blindado = 2;
+  string nivel_blindaje = 3;
+  string nivel_blindaje_numero = 4;
+  string fecha_blindaje = 5;
+  string numero_resolucion = 6;
+  string tipo_blindaje_nombre = 7;
+  string fecha_expedicion_certificado = 8;
+  string fecha_expedicion_certificado_formato_ws = 9 [json_name = "fechaExpedicionCertificadoFormatoWS"];
+  string autorizacion = 10;
+}
+
+message LimitacionPropiedadIntempo {
+  string tipo_limitacion = 1;
+  string no_documento = 2;
+  string entidad_juridica = 3;
+  string tipo_documento_demandante = 4;
+  string no_documento_demandante = 5;
+  string fecha_expedicion = 6;
+  string fecha_radicacion = 7;
+  string departamento = 8;
+  string municipio = 9;
+  optional string serial_version_uid = 10 [json_name = "serialVersionUID"];
+}
+
+// Sin campos: el origen no llega (§5.4, sale como [{}]).
+message NormalizacionSaneamientoIntempo {}
+
+message PolizaResponsabilidadCivilIntempo {
+  string serial_version_uid = 1 [json_name = "serialVersionUID"];
+}
+
+// Sin campos: el origen no llega (§5.4, siempre []).
+message SolicitudIntempo {}
+
+message TarjetaOperacionIntempo {
+  string serial_version_uid = 1 [json_name = "serialVersionUID"];
+  // Por ejemplo ESPECIAL.
+  string modalidad_servicio = 2;
+}
+
+// §4 y §5.5: forma cruda del propietario, con sus direcciones y locatarios.
+message PropietarioActualIntempo {
+  int64 id = 1;
+  // C, N.
+  string id_tipo_documento = 2;
+  // Texto: NIT, Cédula Ciudadanía.
+  string tipo_documento = 3;
+  string no_documento = 4;
+  string nombre_completo = 5;
+  // 1 y 3 vistos.
+  int32 tipo_propiedad = 6;
+  // PROPIO o LEASING.
+  string detalle_propiedad = 7;
+  repeated DireccionIntempo direcciones = 8;
+  repeated LocatarioIntempo locatarios = 9;
+}
+
+// id_departamento e id_ciudad como texto: llegan como número o como cadena vacía. Los locatarios no traen email ni
+// fecha_actualizacion.
+message DireccionIntempo {
+  int64 id = 1;
+  string direccion = 2;
+  string id_departamento = 3;
+  string departamento = 4;
+  string id_ciudad = 5;
+  string ciudad = 6;
+  string telefono = 7;
+  optional string email = 8;
+  optional string fecha_actualizacion = 9;
+}
+
+message LocatarioIntempo {
+  // 0, 1, 2.
+  int32 tipo = 1;
+  string tdoc = 2;
+  string ndoc = 3;
+  string nombre_razon_social = 4;
+  repeated DireccionIntempo direcciones = 5;
+}
+
+message HistoricoPropietarioIntempo {
+  string nombre_completo_propietario = 1;
+  // Texto: NIT, Cédula Ciudadanía.
+  string tipo_documento = 2;
+  string numero_documento = 3;
+  string fecha_inicio_propiedad = 4;
+  DireccionIntempo direccion = 5;
+}
+
+// owner[] y lessee[] (§5.5). lessee_type solo en lessee (el tipo del locatario).
+message PersonaIntempo {
+  string document_type = 1;
+  string document_number = 2;
+  string name = 3;
+  string first_name = 4;
+  string second_name = 5;
+  string first_last_name = 6;
+  string second_last_name = 7;
+  optional int32 lessee_type = 8;
+}
+
+// El origen no tiene forma fija: claves y valores como texto.
+message AccidenteIntempo {
+  map<string, string> campos = 1;
+}
+
+// §5.4, copiado de Intempo. valor_infraccion como texto decimal, igual que ComparendoDeFuente.
+message InfraccionIntempo {
+  string nro_comparendo = 1;
+  string fecha = 2;
+  string infraccion = 3;
+  string descripcion = 4;
+  string estado = 5;
+  string valor_infraccion = 6;
+  string placa = 7;
+  string reporta_fuga = 8;
+  string accidente = 9;
+  optional string secretaria_transito = 10;
+}

@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, StatusBadge, enabledTone, usePaginacion } from "@flit/ui";
+import { DataTable, InlineAlert, Modal, StatusBadge, VehicleLoader, enabledTone, usePaginacion } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { Chip } from "@/components/ui/Chip";
+import { Interruptor } from "@/components/ui/Interruptor";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { CANAL, canal, opciones, RESULTADO_CICLO, resultadoCiclo, TRABAJO } from "@/lib/etiquetas";
@@ -93,10 +94,7 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
           </InlineAlert>
         )}
         {leida === null && (
-          <label className="flex items-center gap-2 text-xs font-semibold">
-            <input type="checkbox" checked={!mantener} onChange={(e) => setMantener(!e.target.checked)} />
-            Reemplazar por días y horas
-          </label>
+          <Interruptor activo={!mantener} onCambio={(v) => setMantener(!v)} etiqueta="Reemplazar por días y horas" />
         )}
         {!mantener && (
           <>
@@ -133,7 +131,7 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
                         key={d.valor}
                         type="button"
                         aria-pressed={marcado}
-                        className={`${CHIP_DIA_CLS} ${marcado ? "border-flit-brand-ink bg-flit-brand-ink text-primary-foreground" : "border-current/20 opacity-70"}`}
+                        className={`${CHIP_DIA_CLS} ${marcado ? "border-flit-brand-ink bg-flit-brand-ink text-primary-foreground" : "border-current/20 text-muted-foreground"}`}
                         onClick={() => alternarDia(d.valor)}
                       >
                         {d.corto}
@@ -163,7 +161,7 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
                         onChange={(e) => cambiar({ horas: prog.horas.map((x, j) => (j === i ? e.target.value : x)) })}
                       />
                       {prog.horas.length > 1 && (
-                        <button type="button" className="text-xs opacity-60 hover:opacity-100" aria-label={`Quitar la hora ${i + 1}`} onClick={() => cambiar({ horas: prog.horas.filter((_, j) => j !== i) })}>
+                        <button type="button" className="text-xs text-muted-foreground hover:text-foreground" aria-label={`Quitar la hora ${i + 1}`} onClick={() => cambiar({ horas: prog.horas.filter((_, j) => j !== i) })}>
                           <Icono nombre="cerrar" className="h-3.5 w-3.5" />
                         </button>
                       )}
@@ -185,14 +183,8 @@ function EditarTrabajo({ trabajo, onCerrar, onGuardado }: { trabajo: Trabajo | n
             )}
           </>
         )}
-        <label className="flex items-center gap-2 text-xs font-semibold">
-          <input type="checkbox" checked={activo} onChange={(e) => setActivo(e.target.checked)} />
-          Activo
-        </label>
-        <label className="flex items-center gap-2 text-xs font-semibold">
-          <input type="checkbox" checked={habiles} onChange={(e) => setHabiles(e.target.checked)} />
-          Solo en días hábiles (no corre sábados, domingos ni festivos)
-        </label>
+        <Interruptor activo={activo} onCambio={setActivo} etiqueta="Activo" />
+        <Interruptor activo={habiles} onCambio={setHabiles} etiqueta="Solo en días hábiles" ayuda="No corre sábados, domingos ni festivos." />
         {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
       </div>
     </Modal>
@@ -248,7 +240,7 @@ function EjecutarTrabajo({ trabajo, onCerrar, onLanzado }: { trabajo: Trabajo | 
         {info.porEmpresa && (
           <div className="flex flex-col gap-1">
             <SelectorEmpresa valor={empresa} onCambio={setEmpresa} />
-            <p className="text-xs opacity-60">Sin empresa elegida, corre para todas.</p>
+            <p className="text-xs text-muted-foreground">Sin empresa elegida, corre para todas.</p>
           </div>
         )}
       </div>
@@ -316,7 +308,7 @@ function DetalleDeCiclo({ id, onCerrar }: { id: string | null; onCerrar: () => v
   const d = carga.datos;
   return (
     <Modal icono="reloj" open={id !== null} onClose={onCerrar} title="Detalle del ciclo" size="2xl">
-      {carga.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
+      {carga.estado === "loading" && <VehicleLoader label="Cargando el detalle del ciclo…" />}
       {carga.estado === "error" && <InlineAlert tone="error">{carga.error}</InlineAlert>}
       {d && (
         <div className="flex flex-col gap-4 text-xs">
@@ -464,9 +456,9 @@ export default function Ingesta() {
           ]}
         />
 
-        <h2 className="mt-2 text-lg font-semibold">Ciclos</h2>
+        <h2 className="mt-2 text-base font-semibold">Ciclos</h2>
         <div className="flex flex-wrap gap-2">
-          <select className={`${INPUT_CLS} w-56`} value={filtroCanal} onChange={(e) => { setFiltroCanal(e.target.value); pg.setPage(1); }} aria-label="Canal">
+          <select className={`${INPUT_CLS} w-full sm:w-56`} value={filtroCanal} onChange={(e) => { setFiltroCanal(e.target.value); pg.setPage(1); }} aria-label="Canal">
             <option value="">Todos los canales</option>
             {opciones(CANAL).map((o) => (
               <option key={o.valor} value={o.valor}>
@@ -474,7 +466,7 @@ export default function Ingesta() {
               </option>
             ))}
           </select>
-          <select className={`${INPUT_CLS} w-56`} value={filtroResultado} onChange={(e) => { setFiltroResultado(e.target.value); pg.setPage(1); }} aria-label="Resultado">
+          <select className={`${INPUT_CLS} w-full sm:w-56`} value={filtroResultado} onChange={(e) => { setFiltroResultado(e.target.value); pg.setPage(1); }} aria-label="Resultado">
             <option value="">Todos los resultados</option>
             {opciones(RESULTADO_CICLO).map((o) => (
               <option key={o.valor} value={o.valor}>

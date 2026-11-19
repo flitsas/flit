@@ -83,6 +83,22 @@ public static class FurTransformationObservations
         return segments.Count == 0 ? null : string.Join(", ", segments);
     }
 
+    /// <summary>
+    /// Valor NUEVO a declarar en las observaciones, o <c>null</c> si no hay (la línea no se escribe).
+    /// Espejo de <c>furAutoObservations</c> del frontend: hay valor nuevo si el efectivo no está vacío y es
+    /// distinto del RUNT (trim + sin mayúsculas); con snapshot RUNT basta eso, y sin snapshot solo se escribe
+    /// si la transformación está declarada (<paramref name="declaradaSinSnapshot"/>: bandera <c>cambio_*</c>
+    /// en <c>true</c> o transformación que ES el tipo del trámite).
+    /// </summary>
+    public static string? ValorNuevo(string? runt, string? efectivo, bool declaradaSinSnapshot)
+    {
+        if (string.IsNullOrWhiteSpace(efectivo))
+            return null;
+        if (!string.IsNullOrWhiteSpace(runt))
+            return string.Equals(runt.Trim(), efectivo.Trim(), StringComparison.OrdinalIgnoreCase) ? null : efectivo;
+        return declaradaSinSnapshot ? efectivo : null;
+    }
+
     public static string ColorNuevo(string? valor) =>
         $"Color nuevo(NUEVO COLOR: {Display(valor)})";
 

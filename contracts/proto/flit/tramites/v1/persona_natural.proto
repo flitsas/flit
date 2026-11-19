@@ -78,7 +78,13 @@ service PersonaNaturalService {
 
   // HU 6 — catálogos de color, combustible y carrocería de FLIT 2 (misma fuente que el asistente del gestor).
   rpc ListarCatalogoVehiculo(ListarCatalogoVehiculoRequest) returns (ListarCatalogoVehiculoResponse);
+
+  // Quién es este usuario de caja y de qué organismo. activo=false (sin error) si no es ot_caja activo de un organismo activo.
+  rpc ResolverUsuarioCaja(ResolverUsuarioCajaRequest) returns (ResolverUsuarioCajaResponse);
 }
+
+message ResolverUsuarioCajaRequest { string tenant_id = 1; string user_id = 2; }
+message ResolverUsuarioCajaResponse { bool activo = 1; string organismo_id = 2; string organismo_codigo = 3; string organismo_nombre = 4; string usuario_nombre = 5; }
 
 message PersonaIdentidad {
   string tipo_documento = 1;     // CC, CE, PAS...

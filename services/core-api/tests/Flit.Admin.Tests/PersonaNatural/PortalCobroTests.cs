@@ -31,7 +31,7 @@ namespace Flit.Admin.Tests.PersonaNatural;
 /// base; los endpoints contra la base con las migraciones aplicadas (DDL 153, 181 y 182), con el perfil OT sustituido para
 /// fijar el organismo del token.
 /// </summary>
-public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : IClassFixture<WebApplicationFactory<Program>>
+public sealed class PortalCobroTests(PortalCobroTests.Anfitrion anfitrion) : IClassFixture<PortalCobroTests.Anfitrion>
 {
     private static readonly SymmetricSecurityKey DummyKey = new(Encoding.UTF8.GetBytes(new string('k', 64)));
     private const string BaseOt = AdminPortalCobroEndpoints.BasePathOt;
@@ -181,12 +181,12 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
     [Fact]
     public void LasRutasDelOtExigenOtAdminOSuperAdmin_YLasDePlataformaSoloSuperAdmin()
     {
-        var todas = factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToList();
+        var todas = anfitrion.Factory.Services.GetRequiredService<EndpointDataSource>().Endpoints.OfType<RouteEndpoint>().ToList();
         var ot = todas.Where(e => e.RoutePattern.RawText!.StartsWith(BaseOt, StringComparison.Ordinal)).ToList();
         var plataforma = todas.Where(e => e.RoutePattern.RawText!.StartsWith(BasePlataforma, StringComparison.Ordinal)).ToList();
 
-        ot.Should().HaveCount(3);
-        plataforma.Should().HaveCount(3);
+        ot.Should().HaveCount(5);
+        plataforma.Should().HaveCount(5);
         foreach (var ruta in ot)
             ruta.Metadata.GetOrderedMetadata<IAuthorizeData>().Should().Contain(a => a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy, ruta.RoutePattern.RawText);
         foreach (var ruta in plataforma)
@@ -198,7 +198,7 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
     [InlineData("Gerente")]
     public async Task UnRolQueNoEsOtNiSuperAdmin_RecibeForbidden(string rol)
     {
-        var client = ClientWith(factory, Token(rol, Guid.NewGuid(), Guid.NewGuid()), new PerfilesFalsos());
+        var client = ClientWith(anfitrion, Token(rol, Guid.NewGuid(), Guid.NewGuid()));
 
         (await client.GetAsync(BaseOt, Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await client.GetAsync(BasePlataforma, Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
@@ -206,14 +206,14 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
 
     [Fact]
     public async Task SinSesion_RecibeUnauthorized() =>
-        (await factory.CreateClient().GetAsync(BaseOt, Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await anfitrion.Factory.CreateClient().GetAsync(BaseOt, Ct)).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
 
     // ── Endpoints contra la base ──────────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
     public async Task AC1_ApagarUnMedioDelPunto_NoTocaOtrosPortales()
     {
-        await using var e = await Escenario.CrearAsync(factory, Ct);
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
         var ot = e.ClienteOt();
         var otro = e.ClienteOtroOt();
 
@@ -231,7 +231,7 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
     [Fact]
     public async Task AC2_EncenderSinMonto_Responde400ConElMotivo_YNoDejaFila()
     {
-        await using var e = await Escenario.CrearAsync(factory, Ct);
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
         var ot = e.ClienteOt();
 
         var r = await ot.PutAsJsonAsync($"{BaseOt}/switches", new { tipoTramiteId = e.Tipo, method = "PASARELA", charge = "TRAMITE", enabled = true }, Ct);
@@ -246,7 +246,7 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
     [Fact]
     public async Task AC3_ApagarYVolverAEncender_ConservaElMonto()
     {
-        await using var e = await Escenario.CrearAsync(factory, Ct);
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
         await e.SembrarAsync("DERECHOS_TRANSITO", e.Tipo, e.Organismo, 185_000, Ct);
         var ot = e.ClienteOt();
         var cuerpo = new { tipoTramiteId = e.Tipo, method = "PASARELA", charge = "TRAMITE" };
@@ -265,7 +265,7 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
     [Fact]
     public async Task AC4_ElAdminDelOrganismoNoMueveLaGestion_Responde403_ElSuperAdminSi()
     {
-        await using var e = await Escenario.CrearAsync(factory, Ct);
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
         await e.SembrarAsync("SERVICIO_FLIT", e.Tipo, null, 90_000, Ct);
 
         var ot = await e.ClienteOt().PutAsJsonAsync($"{BaseOt}/switches", new { tipoTramiteId = e.Tipo, method = "PASARELA", charge = "GESTION", enabled = true }, Ct);
@@ -282,7 +282,7 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
     [Fact]
     public async Task AC5_EnLaWebNoHayPin_NiComoBanderaNiComoSwitch_Responde400()
     {
-        await using var e = await Escenario.CrearAsync(factory, Ct);
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
         var sa = e.ClienteSuperAdmin();
 
         var bandera = await sa.PutAsJsonAsync($"{BasePlataforma}/medios", new { method = "PIN", enabled = true }, Ct);
@@ -298,7 +298,7 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
     [Fact]
     public async Task ElSuperAdminDeLaWebGuardaSuSwitch_SinTocarAlOrganismo()
     {
-        await using var e = await Escenario.CrearAsync(factory, Ct);
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
         await e.SembrarAsync("DERECHOS_TRANSITO", e.Tipo, null, 120_000, Ct);
 
         (await e.ClienteSuperAdmin().PutAsJsonAsync(
@@ -312,12 +312,163 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
     [Fact]
     public async Task UnAdminDeOtroOrganismo_NoLeeNiCambiaElCobroAjeno_Responde403()
     {
-        await using var e = await Escenario.CrearAsync(factory, Ct);
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
         var ot = e.ClienteOt();
 
         (await ot.GetAsync($"{BaseOt}?transitOfficeId={e.OtroOrganismo}", Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await ot.PutAsJsonAsync($"{BaseOt}/medios?transitOfficeId={e.OtroOrganismo}", new { method = "PASARELA", enabled = false }, Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
         (await e.ClienteSuperAdmin().GetAsync(BaseOt, Ct)).StatusCode.Should().Be(HttpStatusCode.BadRequest, "el SuperAdmin debe indicar el organismo en la ruta del OT");
+    }
+
+    // ── Ventana de anulación de la caja por organismo (revisión 2026-11-17 de ADR-0082) ────────────────────────────────
+
+    [Fact]
+    public async Task CajaAnulacion_SinConfigurar_Es15PorDefecto_ConElMaximoVigente()
+    {
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
+
+        var json = await LeerAsync(e.ClienteOt());
+
+        var v = json.GetProperty("cajaAnulacion");
+        (v.GetProperty("minutos").GetInt32(), v.GetProperty("porDefecto").GetBoolean(), v.GetProperty("maxMinutos").GetInt32()).Should().Be((15, true, 60));
+    }
+
+    [Fact]
+    public async Task CajaAnulacion_ElOtAdminCambiaLaDeSuOrganismo_YQuedaEnElHistorial()
+    {
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
+        var ot = e.ClienteOt();
+
+        var r = await ot.PutAsJsonAsync($"{BaseOt}/caja-anulacion", new { minutos = 10 }, Ct);
+
+        r.StatusCode.Should().Be(HttpStatusCode.OK);
+        var cuerpo = await r.Content.ReadFromJsonAsync<JsonElement>(Ct);
+        (cuerpo.GetProperty("minutos").GetInt32(), cuerpo.GetProperty("porDefecto").GetBoolean()).Should().Be((10, false));
+        (await LeerAsync(ot)).GetProperty("cajaAnulacion").GetProperty("minutos").GetInt32().Should().Be(10);
+        (await LeerAsync(e.ClienteOtroOt())).GetProperty("cajaAnulacion").GetProperty("minutos").GetInt32().Should().Be(15, "no toca otros organismos");
+        await ot.PutAsJsonAsync($"{BaseOt}/caja-anulacion", new { minutos = 0 }, Ct);
+        var historial = (await ot.GetFromJsonAsync<JsonElement>($"{BaseOt}/caja-anulacion/historial", Ct)).GetProperty("items").EnumerateArray().ToList();
+        historial.Select(h => (h.GetProperty("minutosAntes").GetInt32(), h.GetProperty("minutosDespues").GetInt32())).Should().Equal((10, 0), (15, 10));
+        historial[0].GetProperty("actorNombre").GetString().Should().Be("Actor de cobro");
+    }
+
+    [Theory]
+    [InlineData(-1)]
+    [InlineData(61)]
+    public async Task CajaAnulacion_FueraDeRango_Responde400_YNoGuarda(int minutos)
+    {
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
+        var ot = e.ClienteOt();
+
+        var r = await ot.PutAsJsonAsync($"{BaseOt}/caja-anulacion", new { minutos }, Ct);
+
+        r.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await r.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().Should().Be("ventana_anulacion_invalida");
+        (await LeerAsync(ot)).GetProperty("cajaAnulacion").GetProperty("porDefecto").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task CajaAnulacion_SinMinutos_Responde400()
+    {
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
+
+        var r = await e.ClienteOt().PutAsJsonAsync($"{BaseOt}/caja-anulacion", new { }, Ct);
+
+        r.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await r.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("code").GetString().Should().Be("ventana_anulacion_invalida");
+    }
+
+    [Fact]
+    public async Task CajaAnulacion_ElSuperAdminCambiaCualquierOrganismo_PeroUnOtAdminAjenoRecibe403_YElCajeroTambien()
+    {
+        await using var e = await Escenario.CrearAsync(anfitrion, Ct);
+
+        (await e.ClienteSuperAdmin().PutAsJsonAsync($"{BasePlataforma}/caja-anulacion?transitOfficeId={e.OtroOrganismo}", new { minutos = 30 }, Ct))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await e.ClienteSuperAdmin().PutAsJsonAsync($"{BaseOt}/caja-anulacion?transitOfficeId={e.Organismo}", new { minutos = 20 }, Ct))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+        (await e.ClienteSuperAdmin().PutAsJsonAsync($"{BasePlataforma}/caja-anulacion", new { minutos = 20 }, Ct))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest, "la web de persona no tiene caja");
+        (await LeerAsync(e.ClienteOtroOt())).GetProperty("cajaAnulacion").GetProperty("minutos").GetInt32().Should().Be(30);
+        (await e.ClienteOt().PutAsJsonAsync($"{BaseOt}/caja-anulacion?transitOfficeId={e.OtroOrganismo}", new { minutos = 1 }, Ct))
+            .StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        var cajero = ClientWith(anfitrion, Token("ot_caja", e.TenantOt, e.Actor));
+        (await cajero.PutAsJsonAsync($"{BaseOt}/caja-anulacion", new { minutos = 1 }, Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await cajero.GetAsync($"{BaseOt}/caja-anulacion/historial", Ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
+
+    // ── Ventana de anulación (reglas, sin base) ─────────────────────────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(0, true)]
+    [InlineData(60, true)]
+    [InlineData(61, false)]
+    [InlineData(-1, false)]
+    public void CajaAnulacion_Rango_0AlMaximoConfigurado(int minutos, bool valido) =>
+        new CajaAnulacionOpciones().Valida(minutos).Should().Be(valido);
+
+    [Fact]
+    public void CajaAnulacion_ElMaximoSaleDeLaConfiguracion()
+    {
+        var o = new CajaAnulacionOpciones(15, 120);
+
+        o.Valida(120).Should().BeTrue();
+        o.Valida(121).Should().BeFalse();
+        o.Valida(null).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task CajaAnulacion_Handlers_DefaultSinConfigurar_GuardaEHistorialSoloSiCambia()
+    {
+        var repo = new CajaAnulacionEnMemoria();
+        var org = Guid.NewGuid();
+        var actor = Guid.NewGuid();
+        var opciones = new CajaAnulacionOpciones();
+        var leer = new LeerVentanaAnulacionCajaHandler(repo, opciones);
+        var guardar = new GuardarVentanaAnulacionCajaHandler(repo, new TarifasFalsas(), new AuditoriaFalsa(), opciones);
+
+        (await leer.HandleAsync(org, Ct)).Should().Be(new VentanaAnulacionCajaView(15, true, 60));
+        (await guardar.HandleAsync(org, 61, actor, Ct)).Falla.Should().Be(CajaAnulacionErrores.VentanaInvalida);
+        (await guardar.HandleAsync(org, null, actor, Ct)).Falla.Should().Be(CajaAnulacionErrores.VentanaInvalida);
+        repo.Valores.Should().BeEmpty();
+        (await guardar.HandleAsync(org, 10, actor, Ct)).Vista.Should().Be(new VentanaAnulacionCajaView(10, false, 60));
+        (await guardar.HandleAsync(org, 10, actor, Ct)).Falla.Should().BeNull();
+        (await guardar.HandleAsync(org, 0, actor, Ct)).Vista!.Minutos.Should().Be(0);
+
+        (await leer.HandleAsync(org, Ct)).Should().Be(new VentanaAnulacionCajaView(0, false, 60));
+        var historial = await new HistorialVentanaAnulacionCajaHandler(repo).HandleAsync(org, Ct);
+        historial.Select(h => (h.MinutosAntes, h.MinutosDespues)).Should().Equal((10, 0), (15, 10));
+    }
+
+    [Fact]
+    public async Task CajaAnulacion_Handler_OrganismoInexistente_NoGuarda()
+    {
+        var repo = new CajaAnulacionEnMemoria();
+        var guardar = new GuardarVentanaAnulacionCajaHandler(repo, new TarifasFalsas { OrganismoExiste = false }, new AuditoriaFalsa(), new CajaAnulacionOpciones());
+
+        (await guardar.HandleAsync(Guid.NewGuid(), 5, Guid.NewGuid(), Ct)).Falla.Should().Be(CobroPnErrores.OrganismoNoExiste);
+        repo.Valores.Should().BeEmpty();
+    }
+
+    private sealed class CajaAnulacionEnMemoria : IPersonaNaturalCajaAnulacionRepository
+    {
+        public Dictionary<Guid, int> Valores { get; } = [];
+        private readonly List<(Guid Org, CambioVentanaAnulacionView Cambio)> _historial = [];
+
+        public Task<int?> LeerAsync(Guid organismoId, CancellationToken ct = default) =>
+            Task.FromResult(Valores.TryGetValue(organismoId, out var v) ? (int?)v : null);
+
+        public Task<int> GuardarAsync(Guid organismoId, int minutos, int minutosPorDefecto, Guid actor, CancellationToken ct = default)
+        {
+            var antes = Valores.TryGetValue(organismoId, out var v) ? v : minutosPorDefecto;
+            Valores[organismoId] = minutos;
+            if (antes != minutos)
+                _historial.Add((organismoId, new CambioVentanaAnulacionView(antes, minutos, "Actor", DateTimeOffset.UtcNow)));
+            return Task.FromResult(antes);
+        }
+
+        public Task<IReadOnlyList<CambioVentanaAnulacionView>> HistorialAsync(Guid organismoId, int max, CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<CambioVentanaAnulacionView>>([.. _historial.Where(h => h.Org == organismoId).Select(h => h.Cambio).Reverse().Take(max)]);
     }
 
     // ── Soporte ───────────────────────────────────────────────────────────────────────────────────────────────────────
@@ -352,25 +503,42 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
         });
     }
 
-    private static HttpClient ClientWith(WebApplicationFactory<Program> host, string token, IOtProfileRepository perfiles)
+    /// <summary>
+    /// Un solo host para la clase (antes cada cliente hacía <c>WithWebHostBuilder</c> y arrancaba un host que nunca se
+    /// liberaba). El perfil OT falso se comparte; cada escenario registra sus tenants y un tenant sin registrar no tiene
+    /// perfil, igual que antes.
+    /// </summary>
+    public sealed class Anfitrion : HostPorClase
     {
-        var client = host.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
-        {
-            s.RemoveAll<IOtProfileRepository>();
-            s.AddScoped(_ => perfiles);
-        })).CreateClient();
+        internal PerfilesFalsos Perfiles { get; } = new();
+
+        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
+            factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+            {
+                s.RemoveAll<IOtProfileRepository>();
+                s.AddSingleton<IOtProfileRepository>(Perfiles);
+            }));
+    }
+
+    private static HttpClient ClientWith(Anfitrion host, string token)
+    {
+        var client = host.Factory.CreateClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         return client;
     }
 
-    private sealed class PerfilesFalsos : IOtProfileRepository
+    /// <summary>Perfil OT falso compartido por la clase: solo los tenants registrados tienen organismo.</summary>
+    internal sealed class PerfilesFalsos : IOtProfileRepository
     {
-        public Guid Tenant { get; init; }
-        public Guid Organismo { get; init; }
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, Guid> _organismos = new();
+
+        public void Registrar(Guid tenant, Guid organismo) => _organismos[tenant] = organismo;
+
+        public void Retirar(Guid tenant) => _organismos.TryRemove(tenant, out _);
 
         public Task<PerfilOt?> GetByTenantAsync(Guid tenantId, CancellationToken cancellationToken = default) =>
-            Task.FromResult(tenantId == Tenant && Tenant != Guid.Empty
-                ? new PerfilOt { Id = Guid.NewGuid(), TenantId = tenantId, TransitOfficeId = Organismo }
+            Task.FromResult(_organismos.TryGetValue(tenantId, out var organismo)
+                ? new PerfilOt { Id = Guid.NewGuid(), TenantId = tenantId, TransitOfficeId = organismo }
                 : (PerfilOt?)null);
 
         public Task<PerfilOt?> GetByTransitOfficeAsync(Guid transitOfficeId, CancellationToken cancellationToken = default) => Task.FromResult<PerfilOt?>(null);
@@ -435,7 +603,7 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
     /// <summary>Dos organismos, un tipo habilitado y un actor reales; todo se retira al terminar.</summary>
     private sealed class Escenario : IAsyncDisposable
     {
-        private readonly WebApplicationFactory<Program> _host;
+        private readonly Anfitrion _host;
         private readonly IServiceScope _scope;
         private readonly string _sufijo = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
 
@@ -447,14 +615,16 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
         public Guid Organismo { get; } = Guid.NewGuid();
         public Guid OtroOrganismo { get; } = Guid.NewGuid();
 
-        private Escenario(WebApplicationFactory<Program> host)
+        private Escenario(Anfitrion host)
         {
             _host = host;
-            _scope = host.Services.CreateScope();
+            _scope = host.Factory.Services.CreateScope();
             Db = _scope.ServiceProvider.GetRequiredService<FlitDbContext>();
+            host.Perfiles.Registrar(TenantOt, Organismo);
+            host.Perfiles.Registrar(TenantOtroOt, OtroOrganismo);
         }
 
-        public static async Task<Escenario> CrearAsync(WebApplicationFactory<Program> host, CancellationToken ct)
+        public static async Task<Escenario> CrearAsync(Anfitrion host, CancellationToken ct)
         {
             var e = new Escenario(host);
             foreach (var (id, n) in new[] { (e.Organismo, "A"), (e.OtroOrganismo, "B") })
@@ -478,11 +648,11 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
             return e;
         }
 
-        public HttpClient ClienteOt() => ClientWith(_host, Token("ot_admin", TenantOt, Actor), new PerfilesFalsos { Tenant = TenantOt, Organismo = Organismo });
+        public HttpClient ClienteOt() => ClientWith(_host, Token("ot_admin", TenantOt, Actor));
 
-        public HttpClient ClienteOtroOt() => ClientWith(_host, Token("ot_admin", TenantOtroOt, Actor), new PerfilesFalsos { Tenant = TenantOtroOt, Organismo = OtroOrganismo });
+        public HttpClient ClienteOtroOt() => ClientWith(_host, Token("ot_admin", TenantOtroOt, Actor));
 
-        public HttpClient ClienteSuperAdmin() => ClientWith(_host, Token("SuperAdmin", Guid.NewGuid(), Actor), new PerfilesFalsos());
+        public HttpClient ClienteSuperAdmin() => ClientWith(_host, Token("SuperAdmin", Guid.NewGuid(), Actor));
 
         /// <summary>Siembra una versión de precio vigente desde hoy (por la misma función de versionado).</summary>
         public Task SembrarAsync(string concepto, Guid? tipo, Guid? organismo, long valor, CancellationToken ct)
@@ -511,6 +681,8 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_payment_methods WHERE transit_office_id = ANY({orgs}) OR created_by = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_tariffs WHERE procedure_type_id = {Tipo} OR transit_office_id = ANY({orgs}) OR created_by = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_enabled_types WHERE procedure_type_id = {Tipo}");
+                await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_caja_window_history WHERE transit_office_id = ANY({orgs})");
+                await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.persona_natural_caja_settings WHERE transit_office_id = ANY({orgs})");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM admin.tenant_config_audit_logs WHERE changed_by = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM identity.users WHERE id = {Actor}");
                 await Db.Database.ExecuteSqlInterpolatedAsync($"DELETE FROM tramites.procedure_types WHERE id = {Tipo}");
@@ -519,6 +691,8 @@ public sealed class PortalCobroTests(WebApplicationFactory<Program> factory) : I
             }
             finally
             {
+                _host.Perfiles.Retirar(TenantOt);
+                _host.Perfiles.Retirar(TenantOtroOt);
                 _scope.Dispose();
             }
         }

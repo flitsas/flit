@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, StatusBadge, activeTone } from "@flit/ui";
+import { DataTable, InlineAlert, Modal, StatusBadge, activeTone, EstadoVacio } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
@@ -92,11 +92,11 @@ function SubirDocumento({ rl, doc, onSubido }: { rl: Representante; doc: (typeof
             Ver
           </button>
         ) : (
-          <span className="text-[11px] opacity-60">Sin cargar</span>
+          <span className="text-xs text-muted-foreground">Sin cargar</span>
         )}
         <input ref={input} type="file" accept={doc.acepta} className="hidden" onChange={(e) => e.target.files?.[0] && subir(e.target.files[0])} />
         <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => input.current?.click()}>
-          <Icono nombre="nube-subir" className="h-3.5 w-3.5" />
+          <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
           {ocupado ? "Cargando…" : archivoId ? "Reemplazar" : "Cargar"}
         </button>
       </div>
@@ -242,7 +242,7 @@ export default function Representantes() {
         />
         {esSuper && <SelectorEmpresa valor={empresa} onCambio={setEmpresa} />}
         {clave === null ? (
-          <p className="text-sm opacity-70">Elige una empresa para ver sus representantes.</p>
+          <EstadoVacio titulo="Elige una empresa" mensaje="Elige una empresa para ver sus representantes." />
         ) : (
           <DataTable
             ariaLabel="Representantes legales"
@@ -317,7 +317,7 @@ export default function Representantes() {
                   </div>
                 ),
               )}
-              <p className="text-[11px] opacity-70">La firma se recomienda en PNG con fondo transparente. PDF, JPG o PNG de hasta 10 MB para los demás.</p>
+              <p className="text-xs text-muted-foreground">La firma se recomienda en PNG con fondo transparente. PDF, JPG o PNG de hasta 10 MB para los demás.</p>
             </div>
           </Modal>
         )}

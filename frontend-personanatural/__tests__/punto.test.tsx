@@ -382,4 +382,39 @@ describe("consultar en el punto", () => {
     expect(claves).not.toContain("POST /sesiones");
     expect(claves).not.toContain("POST /punto/arranque");
   });
+  it("Retomar el pago: enviar la cédula con Enter reanuda la sesión, no cierra el modal y abre el asistente en Pago", async () => {
+    const { llamadas } = montar({
+      "GET /punto/pago/cierre/PN-2026-000050": () => json({ code: "solicitud_no_encontrada" }, 404),
+      "POST /radicados/consulta": () =>
+        json({
+          radicado: "PN-2026-000050",
+          numeroReferencia: null,
+          placa: "XJI21G",
+          tipoTramite: "TRASPASO_STANDARD",
+          organismo: "Movilidad de Bogotá",
+          macroEstado: { codigo: "pendiente_validacion", etiqueta: "Pendiente", indice: 0 },
+          mensaje: "Falta el pago.",
+          pasos: [{ clave: "borrador", titulo: "Borrador del trámite", estado: "current", fecha: null }],
+          subsanacion: null,
+          soloLectura: false,
+        }),
+      "POST /sesiones/reanudar": () => json({ solicitudId: "s-1", codigoPublico: "PN-2026-000050", estado: "pendiente_pago", tipoTramiteCodigo: "TRASPASO_STANDARD", expiraEn: "2026-11-20T20:00:00Z" }),
+      "GET /punto/pago": () => json({ solicitudId: "s-1", codigoPublico: "PN-2026-000050", estado: "pendiente_pago", puedePagar: true, identidadesPendientes: [], desglose: [{ codigo: "TARIFA", nombre: "Tarifa del organismo", subtitulo: "", valorCop: 60000 }], totalCop: 60000 }),
+    });
+
+    const dialogo = await abrirConsultar();
+    // El modal ocupa una caja lejos del origen: el clic sintético de Enter (0,0) cae «fuera» de ella.
+    const elemento = document.querySelector("dialog") as HTMLDialogElement;
+    elemento.getBoundingClientRect = () => ({ left: 100, top: 80, right: 700, bottom: 600, width: 600, height: 520, x: 100, y: 80, toJSON: () => ({}) });
+    fireEvent.change(dialogo.getByLabelText("Placa"), { target: { value: "xji21g" } });
+    fireEvent.change(dialogo.getByLabelText("Número de Radicado o Cédula"), { target: { value: "pn-2026-000050" } });
+    fireEvent.click(dialogo.getByRole("button", { name: "Consultar" }), { clientX: 0, clientY: 0, detail: 0 });
+    fireEvent.click(await dialogo.findByRole("button", { name: "Retomar el pago" }), { clientX: 300, clientY: 300 });
+    fireEvent.change(dialogo.getByLabelText("Cédula de quien radicó"), { target: { value: "1020456789" } });
+    fireEvent.click(dialogo.getByRole("button", { name: "Continuar" }), { clientX: 0, clientY: 0, detail: 0 });
+
+    await waitFor(() => expect(llamadas.map((l) => l.clave)).toContain("POST /sesiones/reanudar"));
+    expect(await screen.findByText("Paso 4 · Pago", { selector: "h2" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Resumen del cobro" })).toBeInTheDocument();
+  }, 20000);
 });

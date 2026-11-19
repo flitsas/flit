@@ -1,0 +1,97 @@
+namespace Flit.Diagnostico.Api.Plataforma;
+
+/// <summary>
+/// Permisos del producto (plan §6.2, D-01 = c, HU #13724), formato <c>diagnostico.&lt;modulo&gt;.&lt;accion&gt;</c>. Viajan
+/// en el manifiesto que <see cref="RegistroManifiesto"/> registra al arrancar; los roles por defecto llevan exactamente
+/// las columnas «Sí» de la tabla §6.2.
+/// </summary>
+public static class Permisos
+{
+    public const string DiagnosticosCrear = "diagnostico.diagnosticos.crear";
+    public const string DiagnosticosVer = "diagnostico.diagnosticos.ver";
+    public const string BackofficeVer = "diagnostico.backoffice.ver";
+    public const string ReportesDescargar = "diagnostico.reportes.descargar";
+
+    /// <summary>Ver en pantalla los reportes de la compañía, con datos personales (HU #14579, BE-0, O8 = D-1, ADR-0088). Los dos roles por defecto.</summary>
+    public const string ReportesVer = "diagnostico.reportes.ver";
+    public const string DerivacionCrear = "diagnostico.derivacion.crear";
+    public const string ConfiguracionVer = "diagnostico.configuracion.ver";
+    public const string ConfiguracionEditar = "diagnostico.configuracion.editar";
+    public const string ConfiguracionContratoEditar = "diagnostico.configuracion.contrato.editar";
+    public const string ConsultasReprocesar = "diagnostico.consultas.reprocesar";
+    public const string ConsultasLlenar = "diagnostico.consultas.llenar";
+    public const string DictamenOverride = "diagnostico.dictamen.override";
+    public const string AuditoriaVer = "diagnostico.auditoria.ver";
+    public const string VolumetriaVer = "diagnostico.volumetria.ver";
+
+    /// <summary>Marcar y desmarcar el saneamiento de un vehículo y el masivo (HU #14576, plan saneamiento §5.1). Los dos roles por defecto.</summary>
+    public const string SaneamientoSolicitar = "diagnostico.saneamiento.solicitar";
+
+    /// <summary>Gestión FLIT del saneamiento (§5.1, S13): ningún rol por defecto; exige además la operación FLIT.</summary>
+    public const string SaneamientoGestionar = "diagnostico.saneamiento.gestionar";
+
+    /// <summary>
+    /// Gestionar los usuarios de Diagnóstico de la compañía (HU #14587, contrato-api §3.1, SP-17, ADR-0089): solo <c>admin_diagnostico</c>.
+    /// Cada ruta de <c>/usuarios*</c> lo exige en el servidor; el backoffice de usuarios es del SuperAdmin.
+    /// </summary>
+    public const string UsuariosGestionar = "diagnostico.usuarios.gestionar";
+
+    /// <summary>
+    /// Módulos del manifiesto con sus permisos y el nombre que ve el administrador de roles. El código de módulo es global
+    /// en la plataforma (<c>security.modules</c>), por eso lleva el prefijo <c>diagnostico_</c>.
+    /// </summary>
+    public static IReadOnlyList<(string Codigo, string Nombre, (string Slug, string Nombre)[] Permisos)> Modulos { get; } =
+    [
+        ("diagnostico_diagnosticos", "Diagnóstico · Diagnósticos",
+        [
+            (DiagnosticosCrear, "Crear diagnósticos y cargar vehículos"), (DiagnosticosVer, "Ver diagnósticos y el detalle de cada celda"),
+            (ReportesDescargar, "Descargar reportes, exportaciones y evidencias"), (DerivacionCrear, "Derivar un vehículo a un trámite"),
+            (ReportesVer, "Ver reportes de la compañía (con datos personales)"),
+        ]),
+        ("diagnostico_consultas", "Diagnóstico · Consultas",
+        [
+            (ConsultasReprocesar, "Reprocesar consultas en error"), (ConsultasLlenar, "Llenar consultas a mano (backoffice FLIT)"),
+            (DictamenOverride, "Corregir el dictamen (backoffice FLIT)"),
+        ]),
+        ("diagnostico_configuracion", "Diagnóstico · Configuración",
+        [
+            (ConfiguracionVer, "Ver la configuración de la compañía"), (ConfiguracionEditar, "Editar la configuración operativa"),
+            (ConfiguracionContratoEditar, "Editar el nivel contractual (backoffice FLIT)"),
+        ]),
+        ("diagnostico_backoffice", "Diagnóstico · Backoffice FLIT",
+        [
+            (BackofficeVer, "Ver diagnósticos de todas las compañías"), (AuditoriaVer, "Ver la auditoría de consultas y dictámenes"),
+            (VolumetriaVer, "Ver la volumetría y la conversión"),
+        ]),
+        ("diagnostico_saneamiento", "Diagnóstico · Saneamiento",
+        [
+            (SaneamientoSolicitar, "Solicitar el saneamiento de un vehículo"), (SaneamientoGestionar, "Gestionar saneamientos (backoffice FLIT)"),
+        ]),
+        ("diagnostico_usuarios", "Diagnóstico · Usuarios",
+        [
+            (UsuariosGestionar, "Gestionar los usuarios de Diagnóstico de la compañía"),
+        ]),
+    ];
+
+    // HU #14579, BE-0 (O8 = D-1, ADR-0088): reportes.ver va a los dos roles por defecto. Un rol ya asignado en Identidad lo recibe solo si la
+    // plataforma propaga el manifiesto a los roles existentes (riesgo S12 de la ola, se verifica en BE-2).
+    private static readonly string[] Usuario = [DiagnosticosCrear, DiagnosticosVer, ReportesDescargar, DerivacionCrear, ConfiguracionVer, SaneamientoSolicitar, ReportesVer];
+
+    /// <summary>
+    /// Roles por defecto (§6.2). <c>admin_diagnostico</c> es el rol de sistema que la plataforma ya asigna a todo
+    /// AdminCompany (DDL 126, R-12): el manifiesto solo le pone permisos. No hay rol de backoffice: el antiguo
+    /// <c>backoffice_diagnostico</c> se retiró (decisión D23 de la HU #14563, 2026-11-13) y sus capacidades son del SuperAdmin,
+    /// que pasa las dos políticas de <c>PoliticaBackoffice</c> desde cualquier compañía. Los permisos de backoffice siguen en el
+    /// manifiesto para un rol que se arme a mano: fuera del SuperAdmin exigen además <c>tenant_type=FLIT</c> (D-16).
+    /// </summary>
+    public static IReadOnlyList<(string Codigo, string Nombre, string[] Permisos)> RolesPorDefecto { get; } =
+    [
+        ("usuario_diagnostico", "Usuario de Diagnóstico", Usuario),
+        // HU #14587 (H-U5): UsuariosGestionar llega a los admin_diagnostico ya asignados porque la plataforma agrega al rol existente los
+        // permisos del manifiesto que le faltan (ProductManifestStore).
+        ("admin_diagnostico", "Administrador de Diagnóstico", [.. Usuario, ConfiguracionEditar, ConsultasReprocesar, UsuariosGestionar]),
+    ];
+
+    /// <summary>Todos los slugs del manifiesto.</summary>
+    public static IEnumerable<string> Todos => Modulos.SelectMany(m => m.Permisos).Select(p => p.Slug);
+}

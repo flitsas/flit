@@ -14,6 +14,7 @@ import {
 import type { CompanyListItem } from "@/lib/api/types";
 import { USER_PROFILE_DESCRIPTION, USER_PROFILE_LABEL, type UserProfileKind } from "@/lib/users/profiles";
 import { BulkInviteModal } from "./BulkInviteModal";
+import { Icono } from "@flit/ui/Icono";
 
 /** El perfil FLIT queda fuera de v1 (ADR-0077): no pertenece a ninguna compañía ni organismo. */
 type BulkProfile = Exclude<UserProfileKind, "FLIT">;
@@ -97,7 +98,7 @@ export function UsuariosBulkInvite({ isSuperAdmin, onClose, onCompleted }: Usuar
           ? ({ disabled }) => (
               <div className="flex flex-col gap-3" data-testid="bulk-invite-context-picker">
                 <fieldset disabled={disabled} className="min-w-0">
-                  <legend className="mb-1 block text-xs font-semibold">Perfil *</legend>
+                  <legend className="mb-1 block text-xs font-semibold">Perfil <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span></legend>
                   <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
                     {BULK_PROFILES.map((p) => {
                       const Icon = PROFILE_ICON[p];

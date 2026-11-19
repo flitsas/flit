@@ -1,4 +1,6 @@
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Admin.Domain.OtProfile;
+using Flit.Modules.Security.Domain.UserManagement;
 using Flit.Infrastructure.OtClientProcedures;
 using Flit.Tramites.Application.UseCases.ConsolidadoLotes;
 using Flit.Tramites.Domain.Entities.ConsolidadoLotes;
@@ -39,7 +41,8 @@ public sealed class OtConsolidadoLoteEntregador(
     IConsolidadoLoteAccessChecker acceso,
     IOtClientProcedureConsolidadoContext bandeja,
     ILoteItemEntregador entregador,
-    IQuipuxReadOnlyGuard quipux) : ILoteItemOrigen
+    IQuipuxReadOnlyGuard quipux,
+    IOtUserClientScopeResolver clientScope) : ILoteItemOrigen
 {
     /// <summary>Acción que se valida contra el modo Quipux de solo lectura, la misma de la generación individual.</summary>
     public const string AccionQuipux = "generar_consolidado_maestro";
@@ -61,6 +64,17 @@ public sealed class OtConsolidadoLoteEntregador(
         // El CHECK del lote OT exige tenant y organismo; sin ellos no hay bandeja contra la cual revalidar.
         if (contexto.CompaniaLoteId is not { } tenantOt || contexto.OrganismoId is not { } organismo)
             return LoteItemEntregaResult.Omitido(ConsolidadoLoteOmisiones.AccesoRevocado);
+
+        // 0. Alcance de compañías del solicitante, leído de la base por su id: este job corre sin HttpContext, así que el
+        // resolver por petición no aplicaría restricción. Si le quitaron el cliente tras crear el lote, se omite.
+        if (!string.Equals(contexto.RolSolicitante, AdminRoleCodes.SuperAdmin, StringComparison.Ordinal))
+        {
+            var restriccion = await clientScope
+                .GetRestrictionForUserAsync(contexto.SolicitanteId, organismo, ct)
+                .ConfigureAwait(false);
+            if (restriccion is not null && !restriccion.Contains(contexto.CompaniaTramiteId))
+                return LoteItemEntregaResult.Omitido(ConsolidadoLoteOmisiones.AccesoRevocado);
+        }
 
         // 1–2. ¿Sigue en la bandeja del organismo congelado, y de la compañía congelada en el ítem?
         var access = await bandeja

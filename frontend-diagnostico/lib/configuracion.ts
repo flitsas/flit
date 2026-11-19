@@ -1,0 +1,221 @@
+// Configuración de Diagnóstico en dos niveles (HU #13744, pantalla 10). Tipos y llamadas del contrato
+// contracts/openapi/diagnostico.v1.yaml (esquemas Configuracion, ContratoBackoffice, EdicionOperativa y EdicionContrato):
+// el JSON viaja en snake_case y las fuentes en mayúsculas. La API vuelve a validar cada permiso y cada valor.
+import { apiFetch } from "@/lib/api";
+import { rotular } from "@/lib/rotulos";
+
+export type Fuente =
+  | "RUNT"
+  | "RUNT_PROPIETARIO"
+  | "RUNT_LOCATARIO"
+  | "SIMIT_VEHICULO"
+  | "SIMIT_PROPIETARIO"
+  | "SIMIT_LOCATARIO"
+  | "AVALUO"
+  | "IMPUESTO_DEPARTAMENTAL";
+export type VisibilidadUsuario = "PROPIOS" | "EMPRESA";
+export type EstimadoConsultas = "NO_MOSTRAR" | "ANTES_DE_LANZAR" | "AL_FINALIZAR";
+
+export interface NivelContrato {
+  solo_lectura: boolean;
+  fuentes_habilitadas: Fuente[];
+  limite_vehiculos_lote: number;
+  actualizado_en: string | null;
+  // HU #14562 AC42, decisión b: la compañía no ve `redaccion_ia_suspendida` (R-2). El interruptor vive solo en el contrato
+  // del backoffice (ContratoBackoffice).
+}
+
+export interface NivelOperacion {
+  visibilidad_usuario: VisibilidadUsuario;
+  fuentes_por_defecto: Fuente[];
+  estimado_consultas: EstimadoConsultas;
+  actualizado_por: string | null;
+  actualizado_en: string | null;
+}
+
+export interface Configuracion {
+  empresa: string;
+  contrato: NivelContrato;
+  operacion: NivelOperacion;
+  /**
+   * Fuentes que hoy se pueden habilitar y pedir (HU #13863, esquema FuentesDisponibles), globales y en el orden del enum.
+   * Única fuente de la disponibilidad en el frontend: sin C3 no trae IMPUESTO_DEPARTAMENTAL.
+   */
+  fuentes_disponibles: Fuente[];
+}
+
+export interface ContratoBackoffice {
+  empresa: string;
+  fuentes_habilitadas: Fuente[];
+  limite_vehiculos_lote: number;
+  redaccion_ia_suspendida: boolean;
+  fuentes_por_defecto: Fuente[];
+  actualizado_por: string | null;
+  actualizado_en: string | null;
+  /** Igual que en Configuracion (HU #13863): disponibilidad global en el orden del enum. */
+  fuentes_disponibles: Fuente[];
+}
+
+export type EdicionOperativa = Partial<Pick<NivelOperacion, "visibilidad_usuario" | "fuentes_por_defecto" | "estimado_consultas">>;
+export type EdicionContrato = Partial<Pick<ContratoBackoffice, "fuentes_habilitadas" | "limite_vehiculos_lote" | "redaccion_ia_suspendida">>;
+
+/** Fuentes en el orden del enum del contrato, con su nombre visible. */
+export const FUENTES: ReadonlyArray<{ codigo: Fuente; nombre: string }> = [
+  { codigo: "RUNT", nombre: "RUNT vehículo" },
+  { codigo: "RUNT_PROPIETARIO", nombre: "RUNT propietario" },
+  { codigo: "RUNT_LOCATARIO", nombre: "RUNT locatario" },
+  { codigo: "SIMIT_VEHICULO", nombre: "SIMIT vehículo" },
+  { codigo: "SIMIT_PROPIETARIO", nombre: "SIMIT propietario" },
+  { codigo: "SIMIT_LOCATARIO", nombre: "SIMIT locatario" },
+  { codigo: "AVALUO", nombre: "Avalúo comercial" },
+  { codigo: "IMPUESTO_DEPARTAMENTAL", nombre: "Impuesto departamental" },
+];
+
+export const VISIBILIDADES: ReadonlyArray<{ valor: VisibilidadUsuario; nombre: string }> = [
+  { valor: "EMPRESA", nombre: "Todos los diagnósticos de la compañía" },
+  { valor: "PROPIOS", nombre: "Solo los propios" },
+];
+
+export const ESTIMADOS: ReadonlyArray<{ valor: EstimadoConsultas; nombre: string }> = [
+  { valor: "NO_MOSTRAR", nombre: "No mostrar" },
+  { valor: "ANTES_DE_LANZAR", nombre: "Antes de lanzar el diagnóstico" },
+  { valor: "AL_FINALIZAR", nombre: "Al finalizar el diagnóstico" },
+];
+
+const NOMBRES_FUENTE = (codigo: string) => FUENTES.find((f) => f.codigo === codigo)?.nombre;
+
+/** Nombre de negocio de una fuente; un código desconocido sale «Novedad sin clasificar», nunca el código (Punto 5). */
+export function nombreFuente(codigo: Fuente): string {
+  return rotular({ contexto: "fuente", codigo, respaldo: NOMBRES_FUENTE });
+}
+
+/** Prefijo de grupo de las fuentes que se agrupan bajo «RUNT» o «SIMIT» en la cabecera de la grilla. */
+const PREFIJO_GRUPO = /^(RUNT|SIMIT) /;
+
+/**
+ * Rótulo corto de una subcolumna bajo su grupo en la cabecera agrupada (ola Diagnóstico UX 2026-11-15 · FE-2, spec-ui §2.6):
+ * «RUNT propietario» → «propietario». Las fuentes sin grupo conservan su nombre. Filtros, detalle, reportes y nombres
+ * accesibles siguen con `nombreFuente()`.
+ */
+export function nombreSubfuente(codigo: Fuente): string {
+  return nombreFuente(codigo).replace(PREFIJO_GRUPO, "");
+}
+
+/** Nombre de una fuente con la etiqueta de la API (`fuente_etiqueta`) primero y el diccionario local de respaldo. */
+export function rotuloFuente(codigo: string | null | undefined, etiqueta?: string | null): string {
+  return rotular({ contexto: "fuente", codigo, etiqueta, respaldo: NOMBRES_FUENTE });
+}
+
+/** Ordena una lista de fuentes según el enum del contrato (la API no garantiza orden). */
+export function ordenarFuentes(fuentes: readonly Fuente[]): Fuente[] {
+  return FUENTES.map((f) => f.codigo).filter((c) => fuentes.includes(c));
+}
+
+/** Ayuda de una fuente que el backend todavía no declara disponible (gate Q7 = a, HU #13865). */
+export const AYUDA_FUENTE_NO_DISPONIBLE = "Disponible cuando la consulta automatizada esté en producción";
+
+/** Aviso de una fuente habilitada en el contrato que dejó de estar disponible: se conserva hasta que alguien la quite. */
+export const AVISO_FUENTE_YA_NO_DISPONIBLE = "Ya no está disponible: la compañía no podrá pedirla hasta que vuelva. Puedes quitarla del contrato.";
+
+/** La fuente está entre las que el backend declara disponibles (`fuentes_disponibles`); sin lista fija en el frontend. */
+export function estaDisponible(fuente: Fuente, disponibles: readonly Fuente[]): boolean {
+  return disponibles.includes(fuente);
+}
+
+/** Las fuentes de la lista que el backend declara disponibles, en el orden del enum. */
+export function soloDisponibles(fuentes: readonly Fuente[], disponibles: readonly Fuente[]): Fuente[] {
+  return ordenarFuentes(fuentes.filter((f) => estaDisponible(f, disponibles)));
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** La ruta del backoffice exige un uuid distinto de cero (si no, la API responde 400 EMPRESA_REQUERIDA). */
+export function esEmpresaValida(valor: string): boolean {
+  return UUID.test(valor) && !/^[0-]+$/.test(valor);
+}
+
+/**
+ * El contrato cambió después del último guardado del nivel operativo: al reducir las habilitadas, el backoffice recorta
+ * las fuentes por defecto en el mismo comando, así que la compañía debe revisarlas.
+ */
+export function contratoCambioDespuesDeOperacion(configuracion: Configuracion): boolean {
+  const contrato = configuracion.contrato.actualizado_en;
+  if (!contrato) return false;
+  const operacion = configuracion.operacion.actualizado_en;
+  return !operacion || Date.parse(contrato) > Date.parse(operacion);
+}
+
+export function obtenerConfiguracion(signal?: AbortSignal): Promise<Configuracion> {
+  return apiFetch<Configuracion>("/configuracion", { signal });
+}
+
+export function guardarOperacion(edicion: EdicionOperativa): Promise<Configuracion> {
+  return apiFetch<Configuracion>("/configuracion", { method: "PUT", body: edicion });
+}
+
+function rutaContrato(empresa: string): string {
+  return `/backoffice/empresas/${encodeURIComponent(empresa)}/configuracion/contrato`;
+}
+
+/** Empresa con Diagnóstico encendido, según Identidad (esquema EmpresaBackoffice, HU #13741). */
+export interface EmpresaBackoffice {
+  id: string;
+  nombre: string;
+  nit: string | null;
+}
+
+/** 503 de GET /backoffice/empresas: el servicio no tiene la dirección de Identidad (sin Retry-After). */
+export const CODIGO_IDENTIDAD_NO_CONFIGURADA = "IDENTIDAD_NO_CONFIGURADA";
+
+/** Texto del NIT en el selector y en el encabezado del editor: «NIT 900000001» o «sin NIT». */
+export function etiquetaNit(nit: string | null): string {
+  const valor = nit?.trim();
+  return valor ? `NIT ${valor}` : "sin NIT";
+}
+
+/**
+ * Empresas para el selector del editor de contrato (GET /backoffice/empresas, operación listarEmpresasBackoffice), ya
+ * ordenadas por nombre. Misma autorización que el contrato: solo se llama con la capacidad editarContrato. Descarta las
+ * filas sin un id de empresa válido, porque su contrato no se podría pedir.
+ */
+export async function listarEmpresasBackoffice(signal?: AbortSignal): Promise<EmpresaBackoffice[]> {
+  const datos = await apiFetch<unknown>("/backoffice/empresas", { signal });
+  // Un cuerpo que no es arreglo es un contrato roto, no una lista vacía: se muestra como error, nunca como «sin empresas».
+  if (!Array.isArray(datos)) throw new Error("El listado de empresas llegó con un formato inesperado.");
+  return datos.flatMap((e: Partial<Record<keyof EmpresaBackoffice, unknown>> | null) =>
+    e && typeof e.id === "string" && esEmpresaValida(e.id) && typeof e.nombre === "string"
+      ? [{ id: e.id, nombre: e.nombre, nit: typeof e.nit === "string" ? e.nit : null }]
+      : [],
+  );
+}
+
+/**
+ * AP-9 (SF-6): texto fijo por `code` de GET/PUT /backoffice/empresas/{empresa}/configuracion/contrato (contrato
+ * diagnostico.v1.yaml). Sin los nombres de fuente del servidor: la UI nunca pinta su `message`.
+ */
+export const ERRORES_CONTRATO: Readonly<Record<string, string>> = {
+  EMPRESA_REQUERIDA: "Elige una compañía válida antes de consultar el contrato.",
+  CUERPO_INVALIDO: "No se pudo leer el contrato enviado. Recarga la página e intenta de nuevo.",
+  CAMPO_NO_EDITABLE: "Uno de los campos enviados no se puede editar desde el contrato.",
+  VALOR_FUERA_DE_CONJUNTO: "Uno de los valores del contrato no es válido.",
+  LIMITE_INVALIDO: "El límite de vehículos por lote debe ser un entero mayor que cero.",
+  FUENTE_NO_DISPONIBLE: "Una de las fuentes elegidas todavía no se puede habilitar.",
+  VALOR_INVALIDO: "Los datos del contrato no cumplen una regla de validación.",
+};
+
+/** AP-9 (SF-6): texto fijo por `code` de PUT /configuracion (contrato diagnostico.v1.yaml). */
+export const ERRORES_OPERACION: Readonly<Record<string, string>> = {
+  CUERPO_INVALIDO: "No se pudo leer la configuración enviada. Recarga la página e intenta de nuevo.",
+  CAMPO_NO_EDITABLE: "Uno de los campos enviados no se puede editar desde la operación.",
+  VALOR_FUERA_DE_CONJUNTO: "Uno de los valores de la configuración no es válido.",
+  POR_DEFECTO_FUERA_DE_HABILITADAS: "Las fuentes por defecto deben estar entre las habilitadas en el contrato.",
+  VALOR_INVALIDO: "Los datos de la configuración no cumplen una regla de validación.",
+};
+
+export function obtenerContratoEmpresa(empresa: string, signal?: AbortSignal): Promise<ContratoBackoffice> {
+  return apiFetch<ContratoBackoffice>(rutaContrato(empresa), { signal });
+}
+
+export function guardarContratoEmpresa(empresa: string, edicion: EdicionContrato): Promise<ContratoBackoffice> {
+  return apiFetch<ContratoBackoffice>(rutaContrato(empresa), { method: "PUT", body: edicion });
+}

@@ -571,7 +571,7 @@ public sealed partial class SolicitudesService(
             .Select(rol => filas.FirstOrDefault(f => string.Equals(f.Parte, rol, StringComparison.OrdinalIgnoreCase)))
             .FirstOrDefault(f => f is not null);
         var captura = new ReglasBorrador.CapturaConsulta(s.Placa, s.Vin, titular?.TipoDocumento, titular?.TieneDocumento == true);
-        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id).OrderBy(a => a.CreatedAt)
+        var adjuntos = await db.Set<Adjunto>().AsNoTracking().Where(a => a.SolicitudId == s.Id && a.Tipo != Flit.PersonaNatural.Api.Adjuntos.AdjuntosService.TipoPrefacturaCaja).OrderBy(a => a.CreatedAt)
             .Select(a => new AdjuntoDto(a.Id, a.Tipo, a.NombreArchivo, a.MimeType, a.TamanoBytes, a.Sha256, a.CreatedAt)).ToListAsync(ct).ConfigureAwait(false);
         var tiposAdjuntos = adjuntos.Select(a => a.Tipo).ToList();
 

@@ -21,7 +21,19 @@ const CIRCUNFERENCIA = 2 * Math.PI * R;
  * Solo presentación: el SVG es decorativo (`aria-hidden`). Los datos los lee el lector de pantalla en la lista, igual
  * que antes de la dona.
  */
-export function GraficoDona({ porciones, total }: { porciones: PorcionDona[]; total: number }) {
+export function GraficoDona({
+  porciones,
+  total,
+  centro,
+  rotuloCentro,
+}: {
+  porciones: PorcionDona[];
+  total: number;
+  /** Lo que va al centro en lugar del total (p. ej. «84 %»). Es decorativo: el dato debe estar también en la leyenda. */
+  centro?: string;
+  /** Segunda línea pequeña bajo el centro (p. ej. «Aprobados»). */
+  rotuloCentro?: string;
+}) {
   const conValor = porciones.filter((p) => p.valor > 0);
   const suma = conValor.reduce((a, p) => a + p.valor, 0);
   let recorrido = 0;
@@ -50,19 +62,25 @@ export function GraficoDona({ porciones, total }: { porciones: PorcionDona[]; to
           })}
         <text
           x="60"
-          y="65"
+          y={rotuloCentro ? 60 : 65}
           textAnchor="middle"
-          className="text-[20px] font-bold tabular-nums"
+          // El hueco del anillo mide ~66 unidades: un centro largo («66,7 %») baja a 16 para no tocar el anillo.
+          className={`${String(centro ?? total).length > 4 ? "text-[16px]" : "text-[20px]"} font-bold tabular-nums`}
           style={{ fill: "var(--di-text-primary)" }}
         >
-          {total}
+          {centro ?? total}
         </text>
+        {rotuloCentro && (
+          <text x="60" y="76" textAnchor="middle" className="text-[9px]" style={{ fill: "var(--di-text-tertiary)" }}>
+            {rotuloCentro}
+          </text>
+        )}
       </svg>
-      <ul className="m-0 flex min-w-[150px] flex-1 list-none flex-col gap-1.5 p-0 text-[0.8125rem]">
+      <ul className="m-0 flex min-w-[190px] flex-1 list-none flex-col gap-1.5 p-0 text-[0.8125rem]">
         {porciones.map((p) => (
           <li key={p.clave} className="flex items-center gap-2">
             <span aria-hidden="true" className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: p.color }} />
-            <span className="min-w-0 flex-1 text-[color:var(--di-text-primary)]">{p.etiqueta}</span>
+            <span className="flex-1 text-[color:var(--di-text-primary)]">{p.etiqueta}</span>
             <strong className="tabular-nums text-[color:var(--di-text-primary)]">{p.valor}</strong>
             {p.detalle != null ? (
               <span className="min-w-[3rem] text-right tabular-nums text-[color:var(--di-text-tertiary)]">{p.detalle}</span>
