@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Flit.Platform.Sdk.IaConsumo;
 using Microsoft.Extensions.Options;
 
 namespace Flit.Diagnostico.Api.Modulos.Dictamen;
@@ -165,6 +166,16 @@ public sealed class ServicioRedactor(IProveedorRedactor proveedor, IOptions<Opci
         }
 
         var prompt = PromptRedactor.Construir(pedido);
+        // ADR-0090: cada intento (también los que se descartan por contradecir el veredicto) queda en el registro de
+        // consumo de IA como diagnostico/redactar_dictamen, con la placa del bien y el mismo correlacion_id.
+        using var ambito = IaCallContext.Instancia.Iniciar(new IaAmbito
+        {
+            Modulo = IaProcesosFlit.ModuloDiagnostico,
+            Proceso = IaProcesosFlit.RedactarDictamen,
+            TipoTarea = IaTiposTarea.Redaccion,
+            Placa = pedido.Bien.Placa,
+            PromptCodigo = IaProcesosFlit.RedactarDictamen,
+        });
         var tope = Math.Max(0, opciones.Value.ReintentosContradiccion);
         var intentos = 0;
         SalidaModelo? ultima = null;
@@ -261,14 +272,18 @@ public sealed class ProveedorRedactorAnthropic : IProveedorRedactor
     private readonly Credencial.IFuenteCredencialRedactor fuente;
     private readonly Credencial.TopeLlamadasRedactor tope;
 
+    /// <summary>Registro de consumo de IA (ADR-0090): una fila por llamada HTTP, con los tokens del <c>usage</c>.</summary>
+    private readonly IIaConsumoRegistrador _consumo;
+
     /// <summary>Llave y modelo de <see cref="OpcionesAnthropic"/>, sin tope (<c>Origen=local</c>).</summary>
-    public ProveedorRedactorAnthropic(HttpClient http, IOptions<OpcionesAnthropic> opciones)
-        : this(http, opciones, new Credencial.FuenteCredencialLocal(opciones), Credencial.TopeLlamadasRedactor.SinTope())
+    public ProveedorRedactorAnthropic(HttpClient http, IOptions<OpcionesAnthropic> opciones, IIaConsumoRegistrador? consumo = null)
+        : this(http, opciones, new Credencial.FuenteCredencialLocal(opciones), Credencial.TopeLlamadasRedactor.SinTope(), consumo)
     {
     }
 
     [ActivatorUtilitiesConstructor]
-    public ProveedorRedactorAnthropic(HttpClient http, IOptions<OpcionesAnthropic> opciones, Credencial.IFuenteCredencialRedactor fuente, Credencial.TopeLlamadasRedactor tope)
+    public ProveedorRedactorAnthropic(HttpClient http, IOptions<OpcionesAnthropic> opciones, Credencial.IFuenteCredencialRedactor fuente, Credencial.TopeLlamadasRedactor tope,
+        IIaConsumoRegistrador? consumo = null)
     {
         ArgumentNullException.ThrowIfNull(http);
         ArgumentNullException.ThrowIfNull(opciones);
@@ -278,6 +293,7 @@ public sealed class ProveedorRedactorAnthropic : IProveedorRedactor
         this.opciones = opciones;
         this.fuente = fuente;
         this.tope = tope;
+        _consumo = consumo ?? NullIaConsumoRegistrador.Instancia;
     }
 
     public bool Configurado => true;
@@ -340,6 +356,39 @@ public sealed class ProveedorRedactorAnthropic : IProveedorRedactor
             },
         };
 
+        var inicio = DateTimeOffset.UtcNow;
+        var status = 0;
+        JsonElement? cuerpoRespuesta = null;
+        string? salidaTexto = null;
+        void Registrar(string resultado, string? codigo, string? mensaje)
+        {
+            if (!_consumo.Activo)
+                return;
+            var u = cuerpoRespuesta is { ValueKind: JsonValueKind.Object } c && c.TryGetProperty("usage", out var uso) && uso.ValueKind == JsonValueKind.Object
+                ? uso : (JsonElement?)null;
+            _consumo.Registrar(new IaLlamada
+            {
+                Proveedor = IaProveedores.Anthropic,
+                TipoTareaPorDefecto = IaTiposTarea.Redaccion,
+                FechaInicio = inicio,
+                Resultado = resultado,
+                HttpStatus = status,
+                ModeloSolicitado = modelo,
+                ModeloRespondido = Cadena(cuerpoRespuesta, "model"),
+                IdRespuestaProveedor = Cadena(cuerpoRespuesta, "id"),
+                MaxTokens = o.MaxTokens,
+                StopReason = Cadena(cuerpoRespuesta, "stop_reason"),
+                ErrorCodigo = codigo,
+                ErrorMensaje = mensaje,
+                TokensEntrada = Entero(u, "input_tokens"),
+                TokensSalida = Entero(u, "output_tokens"),
+                TokensCacheLectura = Entero(u, "cache_read_input_tokens"),
+                TokensCacheEscritura = Entero(u, "cache_creation_input_tokens"),
+                PromptTexto = prompt,
+                RespuestaTexto = _consumo.DetalleActivo ? salidaTexto : null,
+            });
+        }
+
         using var limite = CancellationTokenSource.CreateLinkedTokenSource(ct);
         limite.CancelAfter(TimeSpan.FromSeconds(Math.Max(1, o.TimeoutSegundos)));
         try
@@ -352,6 +401,13 @@ public sealed class ProveedorRedactorAnthropic : IProveedorRedactor
             pedido.Headers.TryAddWithoutValidation("x-api-key", credencial.ApiKey);
             pedido.Headers.TryAddWithoutValidation("anthropic-version", "2023-06-01");
             using var respuesta = await http.SendAsync(pedido, limite.Token).ConfigureAwait(false);
+            status = (int)respuesta.StatusCode;
+            if (!respuesta.IsSuccessStatusCode)
+            {
+                var (codigo, detalle) = await ErrorDeAsync(respuesta, limite.Token).ConfigureAwait(false);
+                Registrar(IaResultados.DesdeHttp(status), codigo, detalle);
+            }
+
             if (respuesta.StatusCode == HttpStatusCode.TooManyRequests)
                 return (Fallo(modelo, TipoFalloRedactor.RateLimit, "El proveedor limitó las peticiones (429).", RetryAfter(respuesta.Headers.RetryAfter)), false);
             if ((int)respuesta.StatusCode >= 500)
@@ -367,33 +423,71 @@ public sealed class ProveedorRedactorAnthropic : IProveedorRedactor
 
             var texto = await respuesta.Content.ReadAsStringAsync(limite.Token).ConfigureAwait(false);
             using var doc = JsonDocument.Parse(texto);
+            cuerpoRespuesta = doc.RootElement.Clone();
             switch (doc.RootElement.TryGetProperty("stop_reason", out var parada) ? parada.GetString() : null)
             {
                 case "max_tokens":
+                    Registrar(IaResultados.RespuestaInvalida, "max_tokens", null);
                     return (Fallo(modelo, TipoFalloRedactor.Ilegible, "La respuesta del modelo quedó cortada (se acabó el límite de tokens)."), false);
                 case "refusal":
+                    Registrar(IaResultados.RespuestaInvalida, "refusal", null);
                     return (Fallo(modelo, TipoFalloRedactor.Ilegible, "El modelo rechazó la redacción."), false);
             }
 
             // SP-6 (HU-2): sin content, content que no es arreglo o un bloque de texto sin text queda ilegible (no se reintenta).
             // Antes lanzaba: la vuelta fallaba con la fila tomada y, al vencer el lease, se volvía a llamar al proveedor sin tope.
             var salida = TextoDe(doc.RootElement);
+            salidaTexto = salida;
+            Registrar(string.IsNullOrWhiteSpace(salida) ? IaResultados.RespuestaInvalida : IaResultados.Exito,
+                string.IsNullOrWhiteSpace(salida) ? "respuesta_vacia" : null, null);
             return (string.IsNullOrWhiteSpace(salida)
                 ? Fallo(modelo, TipoFalloRedactor.Ilegible, "La respuesta del modelo no trae texto.")
                 : new SalidaModelo(salida, modelo), false);
         }
         catch (OperationCanceledException) when (!ct.IsCancellationRequested)
         {
+            Registrar(IaResultados.Timeout, "timeout", null);
             return (Fallo(modelo, TipoFalloRedactor.Timeout, $"El proveedor no respondió en {o.TimeoutSegundos} s."), false);
+        }
+        catch (OperationCanceledException)
+        {
+            Registrar(IaResultados.Cancelado, "cancelado", null);
+            throw;
         }
         catch (HttpRequestException ex)
         {
+            Registrar(IaResultados.Red, ex.GetType().Name, ex.Message);
             return (Fallo(modelo, TipoFalloRedactor.Red, $"Error de red: {ex.Message}"), false);
         }
         catch (JsonException)
         {
+            Registrar(IaResultados.RespuestaInvalida, "json_invalido", null);
             return (Fallo(modelo, TipoFalloRedactor.Http5xx, "Respuesta del proveedor no interpretable."), false);
         }
+    }
+
+    private static int Entero(JsonElement? e, string nombre) =>
+        e is { } v && v.TryGetProperty(nombre, out var n) && n.ValueKind == JsonValueKind.Number && n.TryGetInt32(out var i) ? i : 0;
+
+    private static string? Cadena(JsonElement? cuerpo, string nombre) =>
+        cuerpo is { ValueKind: JsonValueKind.Object } c && c.TryGetProperty(nombre, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+
+    /// <summary>Tipo y mensaje del error del proveedor (<c>{"error":{"type","message"}}</c>), o <c>http_&lt;status&gt;</c>. Nunca lanza.</summary>
+    private static async Task<(string Codigo, string? Mensaje)> ErrorDeAsync(HttpResponseMessage respuesta, CancellationToken ct)
+    {
+        var porDefecto = $"http_{(int)respuesta.StatusCode}";
+#pragma warning disable CA1031 // El detalle del error es una ayuda para el registro; nunca cambia el resultado.
+        try
+        {
+            using var doc = JsonDocument.Parse(await respuesta.Content.ReadAsStringAsync(ct).ConfigureAwait(false));
+            if (doc.RootElement.ValueKind == JsonValueKind.Object && doc.RootElement.TryGetProperty("error", out var e) && e.ValueKind == JsonValueKind.Object)
+                return (Cadena(e, "type") ?? porDefecto, Cadena(e, "message"));
+        }
+        catch (Exception)
+        {
+        }
+#pragma warning restore CA1031
+        return (porDefecto, null);
     }
 
     /// <summary>Los bloques <c>text</c> concatenados; null si <c>content</c> falta, no es arreglo o un bloque de texto no trae texto.</summary>

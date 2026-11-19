@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.Json.Serialization;
 
 namespace Flit.Tramites.Application.UseCases.Consultations;
@@ -57,7 +58,13 @@ public sealed class VerifikConductorData
     [JsonPropertyName("licenses")]
     public List<VerifikConductorLicense>? Licenses { get; set; }
 
+    /// <summary>
+    /// Verifik a veces manda objeto (<c>tieneMultas</c>/<c>nroPazYSalvo</c>) y a veces array vacío
+    /// (<c>[]</c>, p. ej. PPT). Sin conversor tolerante, <c>[]</c> tumba toda la deserialización y el
+    /// provider cae a Kyverum aunque Verifik haya respondido 200 con el nombre.
+    /// </summary>
     [JsonPropertyName("infractions")]
+    [JsonConverter(typeof(VerifikConductorInfractionsConverter))]
     public VerifikConductorInfractions? Infractions { get; set; }
 
     [JsonPropertyName("identityValidationAttempts")]
@@ -95,6 +102,41 @@ public sealed class VerifikConductorInfractions
 
     [JsonPropertyName("tieneMultas")]
     public string? TieneMultas { get; set; }
+}
+
+/// <summary>
+/// Acepta el objeto de infracciones de Verifik o un array (vacío o no): el array se trata como
+/// «sin dato de multas» (<c>null</c>) para no tumbar la consulta de conductor.
+/// </summary>
+public sealed class VerifikConductorInfractionsConverter : JsonConverter<VerifikConductorInfractions?>
+{
+    public override VerifikConductorInfractions? Read(
+        ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        switch (reader.TokenType)
+        {
+            case JsonTokenType.Null:
+                return null;
+            case JsonTokenType.StartObject:
+                return JsonSerializer.Deserialize<VerifikConductorInfractions>(ref reader, options);
+            case JsonTokenType.StartArray:
+                // [] (y cualquier lista) no trae tieneMultas/nroPazYSalvo: equivalente a ausente.
+                reader.Skip();
+                return null;
+            default:
+                reader.Skip();
+                return null;
+        }
+    }
+
+    public override void Write(
+        Utf8JsonWriter writer, VerifikConductorInfractions? value, JsonSerializerOptions options)
+    {
+        if (value is null)
+            writer.WriteNullValue();
+        else
+            JsonSerializer.Serialize(writer, value, options);
+    }
 }
 
 public sealed class VerifikConductorIdentityValidation
