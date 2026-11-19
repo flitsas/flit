@@ -14,15 +14,15 @@ namespace Flit.Infrastructure.Migrations;
 /// <remarks>
 /// Globales de plataforma sin RLS (tenant_id es texto informativo). El modelo EF las mapea con
 /// <c>ExcludeFromMigrations</c> (el SDK las escribe por lotes) y el snapshot solo lleva ese delta.
-/// DDL: <c>Persistence/Sql/Ddl/202-ia-consumo-log.sql</c>. Sin Designer: sin los atributos no se descubre.
+/// DDL: <c>Persistence/Sql/Ddl/203-ia-consumo-log.sql</c>. Sin Designer: sin los atributos no se descubre.
 /// </remarks>
 [DbContext(typeof(FlitDbContext))]
-[Migration("20261118120000_IaConsumoTablas")]
+[Migration("20261119120000_IaConsumoTablas")]
 public partial class IaConsumoTablas : Migration
 {
     /// <inheritdoc />
     protected override void Up(MigrationBuilder migrationBuilder) =>
-        migrationBuilder.Sql(EmbeddedDdl.LoadUp("202-ia-consumo-log.sql"));
+        migrationBuilder.Sql(EmbeddedDdl.LoadUp("203-ia-consumo-log.sql"));
 
     /// <inheritdoc />
     protected override void Down(MigrationBuilder migrationBuilder) =>
