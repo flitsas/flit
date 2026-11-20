@@ -9,11 +9,34 @@ export const TIPOS_AVISO = [
 
 export type TipoAvisoManual = (typeof TIPOS_AVISO)[number]["valor"];
 
-/** El siguiente aviso según el estado de notificación del conductor (SinNotificar → 1, Aviso1 → 2, Aviso2/3 → 3). */
-export function siguienteAviso(estado: string | null | undefined): TipoAvisoManual {
-  if (estado === "Aviso1") return "Aviso2";
-  if (estado === "Aviso2" || estado === "Aviso3") return "Aviso3";
-  return "Aviso1";
+/** Lo que responde GET /comparendos/{id}/avisos/permitidos: la misma regla de secuencia que aplica el envío. */
+export interface AvisosPermitidos {
+  estadoNotificacion: string;
+  ventana: string;
+  permitidos: string[];
+  avisos: { tipo: string; motivo: string | null }[];
+}
+
+/** El aviso que se propone: el más avanzado de los que proceden hoy (null si no procede ninguno). */
+export function avisoPorDefecto(permitidos: readonly string[]): TipoAvisoManual | null {
+  const validos = TIPOS_AVISO.map((t) => t.valor).filter((v) => permitidos.includes(v));
+  return validos.length > 0 ? validos[validos.length - 1]! : null;
+}
+
+/** Solo los avisos que proceden; el que ya recibió el conductor se marca como reenvío. */
+export function opcionesAviso(permitidos: readonly string[], estado: string | null | undefined) {
+  return TIPOS_AVISO.filter((t) => permitidos.includes(t.valor)).map((t) => ({
+    valor: t.valor,
+    etiqueta: t.valor === estado ? `${t.etiqueta}: reenviar` : t.etiqueta,
+  }));
+}
+
+/** Para el envío masivo: los avisos que proceden en al menos un comparendo de la selección, con cuántos. */
+export function opcionesMasivo(cuenta: readonly { tipo: string; aplica: number }[], total: number) {
+  return TIPOS_AVISO.flatMap((t) => {
+    const aplica = cuenta.find((c) => c.tipo === t.valor)?.aplica ?? 0;
+    return aplica > 0 ? [{ valor: t.valor, etiqueta: `${t.etiqueta} (procede en ${aplica} de ${total})`, aplica }] : [];
+  });
 }
 
 /** Por qué no se puede enviar un aviso a este comparendo (null = sí se puede intentar; la API decide el resto). */

@@ -1,6 +1,9 @@
+using System.Globalization;
+using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tracking;
 using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
@@ -35,10 +38,18 @@ public sealed class PutCommercialHandler(IProcedureInstanceRepository repo)
             "ADJUDICACION",
         };
 
+    public Task<(CommercialDto? Result, string? Error)> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        CommercialDto request,
+        CancellationToken ct = default) =>
+        HandleAsync(id, tenantId, request, actorUserId: null, ct);
+
     public async Task<(CommercialDto? Result, string? Error)> HandleAsync(
         Guid id,
         Guid tenantId,
         CommercialDto request,
+        Guid? actorUserId,
         CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -65,6 +76,19 @@ public sealed class PutCommercialHandler(IProcedureInstanceRepository repo)
 
         var now = DateTimeOffset.UtcNow;
         var causal = request.Causal.Trim().ToUpperInvariant();
+        var metodoPago = string.IsNullOrWhiteSpace(request.MetodoPago) ? null : request.MetodoPago.Trim();
+        var anterior = instance.Commercial;
+
+        var changes = new List<ProcedureFieldChange>
+        {
+            new("comercial_valor_venta", Money(anterior?.ValorVenta), Money(request.ValorVenta)),
+            new("comercial_causal", anterior?.Causal, causal),
+            new("comercial_tasa", Money(anterior?.TasaImpuesto), Money(request.TasaImpuesto)),
+            new("comercial_derechos", Money(anterior?.Derechos), Money(request.Derechos)),
+            new("comercial_metodo_pago", anterior?.MetodoPago, metodoPago),
+        };
+        foreach (var evt in ProcedureFieldChangeRecorder.Record(tenantId, instance.Id, changes, actorUserId, now))
+            await repo.AddEventAsync(evt, ct);
 
         if (instance.Commercial is null)
         {
@@ -77,7 +101,7 @@ public sealed class PutCommercialHandler(IProcedureInstanceRepository repo)
                 Causal = causal,
                 TasaImpuesto = request.TasaImpuesto,
                 Derechos = request.Derechos,
-                MetodoPago = string.IsNullOrWhiteSpace(request.MetodoPago) ? null : request.MetodoPago.Trim(),
+                MetodoPago = metodoPago,
                 ValueOrigin = NormalizeOrigin(request.ValueOrigin),
                 SuggestedSource = string.IsNullOrWhiteSpace(request.SuggestedSource) ? null : request.SuggestedSource.Trim(),
                 SuggestedValue = request.SuggestedValue,
@@ -93,7 +117,7 @@ public sealed class PutCommercialHandler(IProcedureInstanceRepository repo)
             instance.Commercial.Causal = causal;
             instance.Commercial.TasaImpuesto = request.TasaImpuesto;
             instance.Commercial.Derechos = request.Derechos;
-            instance.Commercial.MetodoPago = string.IsNullOrWhiteSpace(request.MetodoPago) ? null : request.MetodoPago.Trim();
+            instance.Commercial.MetodoPago = metodoPago;
             instance.Commercial.ValueOrigin = NormalizeOrigin(request.ValueOrigin);
             instance.Commercial.SuggestedSource = string.IsNullOrWhiteSpace(request.SuggestedSource) ? null : request.SuggestedSource.Trim();
             instance.Commercial.SuggestedValue = request.SuggestedValue;
@@ -111,6 +135,9 @@ public sealed class PutCommercialHandler(IProcedureInstanceRepository repo)
     internal static CommercialDto ToDto(ProcedureInstanceCommercial c) =>
         new(c.ValorVenta, c.Causal, c.TasaImpuesto, c.Derechos, c.MetodoPago,
             c.ValueOrigin, c.SuggestedSource, c.SuggestedValue);
+
+    private static string? Money(decimal? value) =>
+        value?.ToString(CultureInfo.InvariantCulture);
 
     // value_origin ∈ {suggestion, manual}; cualquier otro valor se descarta a null.
     private static string? NormalizeOrigin(string? origin)

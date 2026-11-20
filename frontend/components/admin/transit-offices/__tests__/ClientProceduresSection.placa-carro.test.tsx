@@ -138,7 +138,7 @@ describe("ClientProceduresSection — formato de placa de carro (HU 2)", () => {
     await user.type(input, "ABC12");
     const aviso = screen.getByText(AVISO_CARRO);
     expect(aviso).toHaveAttribute("role", "alert");
-    expect(aviso).toHaveStyle({ color: "#B45309" });
+    expect(aviso).toHaveStyle({ color: "var(--di-warning)" });
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input.getAttribute("aria-describedby") ?? "").toContain(aviso.id);
     expect(screen.getByRole("button", { name: /^Asignar$/i })).toBeDisabled();

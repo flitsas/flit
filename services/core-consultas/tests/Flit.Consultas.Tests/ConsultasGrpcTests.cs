@@ -40,6 +40,7 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
     private readonly RsaSecurityKey _key = new(RSA.Create(2048)) { KeyId = "prueba" };
     private readonly Guid _empresaRapida = Guid.NewGuid();
     private readonly Guid _empresaConLento = Guid.NewGuid();
+    private readonly Dictionary<string, int> _llamadasCrudo = [];
     private string _database = string.Empty;
     private string? _skip;
     private WebApplication? _app;
@@ -80,6 +81,9 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
             b.Services.AddTransient<IConsultationProvider>(_ => new Falso("falso_rapido", TimeSpan.Zero));
             b.Services.AddTransient<IConsultationProvider>(_ => new Falso("falso_lento", Timeout.InfiniteTimeSpan));
             b.Services.AddTransient<IConsultationProvider>(_ => new Falso("falso_otro", TimeSpan.Zero));
+            // HU #14153 AC2: proveedores de conductor y RUES que cuentan cada llamada y devuelven un crudo.
+            b.Services.AddTransient<IConsultationProvider>(_ => new ConCrudo("falso_conductor", _llamadasCrudo));
+            b.Services.AddTransient<IConsultationProvider>(_ => new ConCrudo("falso_rues", _llamadasCrudo));
         },
         // HU #13348: RUNT crudo e impronta sin salir a la red (después del registro de Program, para reemplazarlo).
         s =>
@@ -123,6 +127,39 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
         respuesta.Resultado.Semaforo.Should().Be(Semaforo.Verde);
         respuesta.Resultado.Chequeos.Should().ContainSingle(c => c.Clave == "soat" && c.Estado == EstadoChequeo.Ok);
         respuesta.Resultado.Campos.Should().ContainSingle(c => c.Clave == "placa_vista" && c.ValorTexto == "ABC123");
+    }
+
+    /// <summary>
+    /// HU #14153 AC2 — con <c>incluir_respuesta_cruda</c>, ConsultarConductor y ConsultarRues van al proveedor en CADA solicitud (nada
+    /// se sirve desde caché: <c>desde_cache=false</c> y el proveedor se llama dos veces con la misma consulta) y cada resultado trae su
+    /// propio crudo, el de esa llamada (el crudo no queda guardado para la siguiente). Sin la opción, no viaja crudo.
+    /// </summary>
+    [Fact]
+    public async Task HU14153_AC2_ConCrudo_ConductorYRues_NoSalenDeCache_YCadaUnoTraeElCrudoDeSuLlamada()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var cliente = Cliente(Token("platform.consultas"));
+        ConsultarConductorRequest Conductor(bool crudo) => new()
+        {
+            Opciones = new OpcionesConsulta { Proveedor = "falso_conductor", IncluirRespuestaCruda = crudo },
+            Documento = new Flit.Platform.Grpc.V1.DocumentoIdentidad { Tipo = "CC", Numero = "9999900141" },
+        };
+        ConsultarRuesRequest Rues(bool crudo) => new() { Opciones = new OpcionesConsulta { Proveedor = "falso_rues", IncluirRespuestaCruda = crudo }, Nit = "999990141" };
+
+        var c1 = (await cliente.ConsultarConductorAsync(Conductor(true), Empresa(_empresaRapida), cancellationToken: ct)).Resultado;
+        var c2 = (await cliente.ConsultarConductorAsync(Conductor(true), Empresa(_empresaRapida), cancellationToken: ct)).Resultado;
+        var r1 = (await cliente.ConsultarRuesAsync(Rues(true), Empresa(_empresaRapida), cancellationToken: ct)).Resultado;
+        var r2 = (await cliente.ConsultarRuesAsync(Rues(true), Empresa(_empresaRapida), cancellationToken: ct)).Resultado;
+        var sinCrudo = (await cliente.ConsultarConductorAsync(Conductor(false), Empresa(_empresaRapida), cancellationToken: ct)).Resultado;
+
+        _llamadasCrudo.Should().BeEquivalentTo(new Dictionary<string, int> { ["falso_conductor"] = 3, ["falso_rues"] = 2 }, "cada solicitud consulta al proveedor");
+        new[] { c1, c2, r1, r2 }.Should().OnlyContain(r => !r.DesdeCache && r.RespuestaCruda != null);
+        c1.RespuestaCruda.Json.Should().Contain("\"llamada\":1");
+        c2.RespuestaCruda.Json.Should().Contain("\"llamada\":2", "la segunda trae el crudo de su propia llamada, no uno guardado");
+        r2.RespuestaCruda.Json.Should().Contain("\"llamada\":2");
+        (c1.RespuestaCruda.Proveedor, c1.RespuestaCruda.TipoSujeto).Should().Be(("falso_conductor", "person"));
+        sinCrudo.RespuestaCruda.Should().BeNull("sin incluir_respuesta_cruda no viaja el crudo");
     }
 
     [Fact]
@@ -406,6 +443,22 @@ public sealed class ConsultasGrpcTests : IAsyncLifetime
             return new ConsultationResult(key, "green",
                 [new ConsultationCheck("soat", "SOAT", "ok", key, null)],
                 [new HydratedField("placa_vista", ctx.FieldValues.GetValueOrDefault("plate"), null)]);
+        }
+    }
+
+    /// <summary>HU #14153 AC2: proveedor que cuenta cada llamada en <paramref name="llamadas"/> y responde con un crudo distinto cada vez.</summary>
+    private sealed class ConCrudo(string key, Dictionary<string, int> llamadas) : IConsultationProvider
+    {
+        public string Key => key;
+
+        public Task<ConsultationResult> ConsultAsync(ConsultationContext ctx, CancellationToken ct)
+        {
+            int n;
+            lock (llamadas)
+                n = llamadas[key] = llamadas.GetValueOrDefault(key) + 1;
+            var crudo = $$"""{"llamada":{{n}},"licencias":[{"numeroLicencia":"99999001","estadoLicencia":"ACTIVA"}]}""";
+            return Task.FromResult(new ConsultationResult(key, "green", [new ConsultationCheck("conductor", "Persona", "ok", key, null)], [],
+                RawPayload: new Flit.Tramites.Domain.Certifications.RawProviderPayload(key, "person", "9999900141", crudo, DateTimeOffset.UtcNow)));
         }
     }
 

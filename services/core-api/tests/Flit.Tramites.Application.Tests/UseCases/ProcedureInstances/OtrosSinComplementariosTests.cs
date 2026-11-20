@@ -173,6 +173,9 @@ public sealed class OtrosSinComplementariosTests
     {
         var instances = Substitute.For<IProcedureInstanceRepository>();
         instances.GetByIdAsync(instance.Id, Tenant, ct).Returns(instance);
+        instances.AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>())
+            .Returns(Task.CompletedTask);
+        instances.SaveChangesAsync(Arg.Any<CancellationToken>()).Returns(Task.CompletedTask);
         var prendas = Substitute.For<IProcedureInstancePrendaRepository>();
         prendas.GetVigenteAsync(instance.Id, Tenant, ct).Returns((ProcedureInstancePrenda?)null);
         return new RegistrarPrendaHandler(instances, prendas);

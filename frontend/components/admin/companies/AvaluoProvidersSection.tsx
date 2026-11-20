@@ -58,7 +58,7 @@ export function AvaluoProvidersSection({
       </div>
 
       {configError && (
-        <p className="text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
           {configError}
         </p>
       )}
@@ -72,7 +72,7 @@ export function AvaluoProvidersSection({
           value={form.avaluoPrimary}
           onChange={(e) => onChange({ avaluoPrimary: e.target.value })}
           className={FIELD_CLASS}
-          style={{ borderColor: "#DFE5ED" }}
+          style={{ borderColor: "var(--border)" }}
         >
           {primaryOptions.map((option) => (
             <option key={option.value} value={option.value}>

@@ -10,6 +10,7 @@ using Flit.Comparendos.Domain.Modelo;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 using static Flit.Comparendos.Tests.Api.ComparendosDePrueba;
 
@@ -57,7 +58,7 @@ public sealed class OcrDePrueba : IProveedorOcr
         }, "{\"ok\":true}", "modelo-prueba");
 }
 
-public sealed class ApiConOcr : ApiConFuente
+public class ApiConOcr : ApiConFuente
 {
     public OcrDePrueba Ocr { get; } = new();
 
@@ -491,13 +492,289 @@ public sealed class OcrTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         (await r.Content.ReadAsStringAsync(ct)).Should().Contain("roto.tif");
     }
+
+    [Fact]
+    public async Task HU13828_Reprocesar_RespetaLoCorregido_ConTope_YEnLote()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, cliente) = await EmpresaOcrAsync();
+        // Primera lectura sin valor ni nombre; la segunda los trae, pero con otra placa (que el operador ya había corregido).
+        api.Ocr.Responder("rp", () => OcrDePrueba.Campos("OCR-RP", placa: "AAA111", valor: null, nombre: null), () => OcrDePrueba.Campos("OCR-RP", placa: "ZZZ999"));
+        api.Ocr.Responder("rq", () => OcrDePrueba.Campos("OCR-RQ", valor: null));
+        api.Ocr.Responder("rv", () => new ResultadoOcr(new Dictionary<string, CampoExtraido> { [CamposOcr.Numero] = new(null, null) }, "{}", "m"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Reprocesos", ("rp.jpg", "rp"), ("rq.jpg", "rq"), ("rv.jpg", "rv")), ct), ct)).GetProperty("id").GetGuid();
+        await api.ProcesarAsync();
+        var docs = await DocumentosAsync(paquete);
+        var rp = docs["rp.jpg"];
+        rp.Estado.Should().Be(EstadoDocumentoOcr.Incompleto);
+        (await cliente.PutAsJsonAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}/campos",
+            new { campos = new Dictionary<string, string?> { [CamposOcr.Placa] = "BBB222" }, motivo = "Leída del original" }, ct)).EnsureSuccessStatusCode();
+
+        // AC1 + AC3: vuelve a la cola, se lee con la versión publicada y la placa corregida a mano se queda.
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}/reprocesar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        (await api.EnDbAsync(db => db.PaquetesOcr.SingleAsync(p => p.Id == paquete, ct))).Estado.Should().Be(EstadoPaqueteOcr.EnProcesamiento);
+        await api.ProcesarAsync();
+        rp = (await DocumentosAsync(paquete))["rp.jpg"];
+        var publicada = await api.EnDbAsync(db => db.PromptsOcr.SingleAsync(p => p.Publicada, ct));
+        (rp.Estado, rp.Reprocesos, rp.PromptVersionId).Should().Be((EstadoDocumentoOcr.Completo, (short)1, publicada.Id));
+        var campos = await api.EnDbAsync(db => db.DocumentoOcrCampos.AsNoTracking().Where(c => c.DocumentoOcrId == rp.Id).ToDictionaryAsync(c => c.NombreCampo, ct));
+        (campos[CamposOcr.Placa].ValorExtraido, campos[CamposOcr.Placa].ValorFinal).Should().Be(("ZZZ999", "BBB222"), "lo corregido a mano no se pisa");
+        campos[CamposOcr.Valor].ValorFinal.Should().Be("604100", "lo que nadie tocó toma la nueva lectura");
+
+        // AC5: el detalle dice con qué versión se leyó y cuántas veces se reprocesó; el historial registra el pedido.
+        // La versión del prompt solo la ve el SuperAdmin: para la gestora la lectura es transparente.
+        var detalle = await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}", ct), ct);
+        (detalle.GetProperty("versionPrompt").ValueKind, detalle.GetProperty("reprocesos").GetInt32()).Should().Be((JsonValueKind.Null, 1));
+        detalle.GetProperty("historialIntentos").EnumerateArray().Should().Contain(i => i.GetProperty("resultado").GetString() == "REPROCESO"
+            && i.GetProperty("mensajeError").GetString()!.StartsWith("Reproceso 1 de 3", StringComparison.Ordinal));
+        var flit = await Json(await api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true)).GetAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}", ct), ct);
+        flit.GetProperty("versionPrompt").GetInt32().Should().Be(publicada.NumeroVersion);
+
+        // AC4: un completo no se reprocesa, y después del tercer reproceso tampoco.
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{rp.Id}/reprocesar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Conflict);
+        var rv = docs["rv.jpg"];
+        rv.Estado.Should().Be(EstadoDocumentoOcr.Fallido, "ilegible");
+        for (var i = 1; i <= ServicioOcr.MaximoReprocesos; i++)
+        {
+            (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{rv.Id}/reprocesar", null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+            await api.ProcesarAsync();
+        }
+
+        var tope = await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{rv.Id}/reprocesar", null, ct);
+        tope.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await tope.Content.ReadAsStringAsync(ct)).Should().Contain("Ya se reprocesó 3 veces");
+
+        // AC2: en lote se encolan los incompletos que no agotaron sus reprocesos.
+        var lote = await Json(await cliente.PostAsync($"/api/v1/comparendos/ocr/paquetes/{paquete}/reprocesar-incompletos", null, ct), ct);
+        (lote.GetProperty("encolados").GetInt32(), lote.GetProperty("omitidos").GetInt32()).Should().Be((1, 0));
+        (await DocumentosAsync(paquete))["rq.jpg"].Estado.Should().Be(EstadoDocumentoOcr.Pendiente);
+        await api.ProcesarAsync();
+    }
+
+    /// <summary>
+    /// HU #13829 y GDC punto 14: un número de 19 o 21 dígitos se marca y NO se registra (ni uno a uno ni en lote) hasta que
+    /// el operador lo corrija o lo confirme. El caso real: Rionegro imprime 20 dígitos y el OCR leyó un cero de más.
+    /// </summary>
+    [Fact]
+    public async Task Punto14_NumeroDe19o21Digitos_BloqueaElRegistro_HastaCorregirOConfirmar()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, cliente) = await EmpresaOcrAsync();
+        api.Ocr.Responder("n19", () => OcrDePrueba.Campos("7600100000005652501"));
+        api.Ocr.Responder("n20", () => OcrDePrueba.Campos("76001000000056525017", placa: "ABC125"));
+        api.Ocr.Responder("n21", () => OcrDePrueba.Campos("D056150000000055727159", placa: "ABC126"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes",
+            Paquete("Números", ("n19.jpg", "n19"), ("n20.jpg", "n20"), ("n21.jpg", "n21")), ct), ct)).GetProperty("id").GetGuid();
+        await api.ProcesarAsync();
+
+        var tabla = await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/paquetes/{paquete}", ct), ct);
+        var filas = tabla.GetProperty("documentos").EnumerateArray().ToDictionary(d => d.GetProperty("nombreArchivo").GetString()!);
+        filas["n19.jpg"].GetProperty("avisoNumero").GetString().Should().Contain("19 dígitos");
+        filas["n21.jpg"].GetProperty("avisoNumero").GetString().Should().Contain("21 dígitos");
+        filas["n20.jpg"].GetProperty("avisoNumero").ValueKind.Should().Be(JsonValueKind.Null);
+        (filas["n19.jpg"].GetProperty("numeroPorConfirmar").GetBoolean(), filas["n21.jpg"].GetProperty("numeroPorConfirmar").GetBoolean(),
+            filas["n20.jpg"].GetProperty("numeroPorConfirmar").GetBoolean()).Should().Be((true, true, false));
+        tabla.GetProperty("paquete").GetProperty("cantidadCompletos").GetInt32().Should().Be(3);
+        tabla.GetProperty("completosPorConfirmar").GetInt32().Should().Be(2, "el botón del lote solo cuenta 3 - 2 = 1");
+
+        var docs = await DocumentosAsync(paquete);
+        var n19 = docs["n19.jpg"];
+        var detalle = await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/documentos/{n19.Id}", ct), ct);
+        detalle.GetProperty("numeroPorConfirmar").GetBoolean().Should().BeTrue();
+        var bloqueado = await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{n19.Id}/registrar", null, ct);
+        bloqueado.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await bloqueado.Content.ReadAsStringAsync(ct)).Should().Contain("NUMERO_POR_CONFIRMAR");
+
+        // En lote: se registra solo el de 20; los de aviso salen como omitidos con el motivo.
+        var lote = await Json(await cliente.PostAsync($"/api/v1/comparendos/ocr/paquetes/{paquete}/registrar-completos", null, ct), ct);
+        lote.GetProperty("registrados").GetArrayLength().Should().Be(1);
+        lote.GetProperty("omitidos").EnumerateArray().Select(o => o.GetProperty("codigo").GetString()).Should().AllBe("NUMERO_POR_CONFIRMAR").And.HaveCount(2);
+
+        // Corregir: el operador quita el cero de más y guarda.
+        (await Json(await cliente.PutAsJsonAsync($"/api/v1/comparendos/ocr/documentos/{docs["n21.jpg"].Id}/campos",
+            new { campos = new Dictionary<string, string?> { [CamposOcr.Numero] = "D05615000000055727159" } }, ct), ct)).GetProperty("estado").GetString().Should().Be("Completo");
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{docs["n21.jpg"].Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+
+        // Confirmar: guarda el mismo valor; queda en el historial con el motivo de confirmación y ya se registra.
+        await Json(await cliente.PutAsJsonAsync($"/api/v1/comparendos/ocr/documentos/{n19.Id}/campos",
+            new { campos = new Dictionary<string, string?> { [CamposOcr.Numero] = "7600100000005652501" } }, ct), ct);
+        var edicion = await api.EnDbAsync(db => db.DocumentoOcrEdiciones.AsNoTracking().SingleAsync(e => e.DocumentoOcrId == n19.Id, ct));
+        (edicion.Campo, edicion.ValorAnterior, edicion.ValorNuevo, edicion.Motivo).Should().Be((CamposOcr.Numero, "7600100000005652501", "7600100000005652501", ServicioOcr.MotivoConfirmacionNumero));
+        (await Json(await cliente.GetAsync($"/api/v1/comparendos/ocr/documentos/{n19.Id}", ct), ct)).GetProperty("numeroPorConfirmar").GetBoolean().Should().BeFalse();
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{n19.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+    }
+
+    /// <summary>GDC punto 6: un NIT con el dígito de verificación equivocado se guarda como borrador pero no se registra.</summary>
+    [Fact]
+    public async Task Punto6_NitConDigitoEquivocado_QuedaIncompleto_YNoSeRegistra_HastaCorregirlo()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, cliente) = await EmpresaOcrAsync();
+        api.Ocr.Responder("nit", () => OcrDePrueba.Campos("OCR-NIT-DV", placa: "NIT123"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("NIT", ("nit.jpg", "nit")), ct), ct)).GetProperty("id").GetGuid();
+        await api.ProcesarAsync();
+        var doc = (await DocumentosAsync(paquete))["nit.jpg"];
+        doc.Estado.Should().Be(EstadoDocumentoOcr.Completo);
+
+        // 890903938-1: el DV correcto es 8. Se guarda tal cual (borrador) y el documento pasa a incompleto.
+        var mal = await Json(await cliente.PutAsJsonAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/campos",
+            new { campos = new Dictionary<string, string?> { [CamposOcr.NumeroDocumento] = "890903938-1" } }, ct), ct);
+        mal.GetProperty("estado").GetString().Should().Be("Incompleto");
+        mal.GetProperty("camposFaltantes").EnumerateArray().Select(c => c.GetString()).Should().Equal(CamposOcr.NumeroDocumento);
+        var rechazo = await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/registrar", null, ct);
+        rechazo.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        var cuerpo = await rechazo.Content.ReadAsStringAsync(ct);
+        cuerpo.Should().Contain("NIT_DV_INVALIDO").And.Contain("debería ser 8");
+        (await Json(await cliente.PostAsync($"/api/v1/comparendos/ocr/paquetes/{paquete}/registrar-completos", null, ct), ct))
+            .GetProperty("registrados").GetArrayLength().Should().Be(0);
+
+        // Con el DV correcto y la máscara de la pantalla se normaliza a la base y se registra.
+        var bien = await Json(await cliente.PutAsJsonAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/campos",
+            new { campos = new Dictionary<string, string?> { [CamposOcr.NumeroDocumento] = "890.903.938-8" } }, ct), ct);
+        bien.GetProperty("estado").GetString().Should().Be("Completo");
+        (await api.EnDbAsync(db => db.DocumentoOcrCampos.AsNoTracking().SingleAsync(c => c.DocumentoOcrId == doc.Id && c.NombreCampo == CamposOcr.NumeroDocumento, ct)))
+            .ValorFinal.Should().Be("890903938");
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+        (await api.EnDbAsync(db => db.Comparendos.AsNoTracking().SingleAsync(c => c.TenantId == empresa && c.NumeroNormalizado == "OCRNITDV", ct)))
+            .NumeroDocumentoInfractor.Should().Be("890903938");
+    }
+
+    /// <summary>HU #14364 / GDC ID5: al registrar OCR con ApiRenting, la consulta de conductor corre de inmediato.</summary>
+    [Fact]
+    public async Task Registrar_ConApiRenting_ConsultaConductorDeInmediato()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api, ocr: true, consulta: true, integracion: "ApiRenting");
+        // El OCR trae NIT 900123456: hay que monitorearlo y marcar consulta API (igual que IngresarAsync en ContraventorTests).
+        (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoGestionar]))
+            .PostAsJsonAsync("/api/v1/comparendos/monitoreo/nits", new { numero = "900123456", nombreTitular = "TITULAR DE PRUEBA S.A.S." }, ct))
+            .EnsureSuccessStatusCode();
+        await ConsultaPorApiDeLosNitsAsync(api, empresa);
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+
+        api.Ocr.Responder("renting", () => OcrDePrueba.Campos("OCR-RENTING-1", placa: "XYZ124"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Renting inmediato", ("renting.jpg", "renting")), ct), ct))
+            .GetProperty("id").GetGuid();
+        (await api.ProcesarAsync()).Should().Be(1);
+
+        var doc = (await DocumentosAsync(paquete))["renting.jpg"];
+        doc.Estado.Should().Be(EstadoDocumentoOcr.Completo);
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+
+        var c = await api.EnDbAsync(db => db.Comparendos.Include(x => x.Contraventor)
+            .SingleAsync(x => x.TenantId == empresa && x.NumeroNormalizado == "OCRRENTING1", ct));
+        c.EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.Encontrado);
+        c.Contraventor.Should().NotBeNull();
+        c.Contraventor!.Origen.Should().Be(OrigenContraventor.Api);
+    }
+
+    /// <summary>HU #14364: sin NIT marcado para API, el registro OCR no consulta y queda NoAplica.</summary>
+    [Fact]
+    public async Task Registrar_SinNitMarcado_NoConsultaYQuedaNoAplica()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api, ocr: true, consulta: true, integracion: "ApiRenting");
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+
+        api.Ocr.Responder("manual", () => OcrDePrueba.Campos("OCR-RENTING-2", placa: "XYZ124"));
+        var paquete = (await Json(await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", Paquete("Sin casilla NIT", ("manual.jpg", "manual")), ct), ct))
+            .GetProperty("id").GetGuid();
+        (await api.ProcesarAsync()).Should().Be(1);
+
+        var doc = (await DocumentosAsync(paquete))["manual.jpg"];
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+
+        var c = await api.EnDbAsync(db => db.Comparendos.AsNoTracking()
+            .SingleAsync(x => x.TenantId == empresa && x.NumeroNormalizado == "OCRRENTING2", ct));
+        c.EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.NoAplica);
+        c.IntentosConsultaContraventor.Should().Be(0);
+    }
+}
+
+/// <summary>La API de contratos se cae con una excepción que no es de regla (red, timeout del cliente, etc.).</summary>
+public sealed class ApiConOcrYContratosCaidos : ApiConOcr
+{
+    public ConcurrentQueue<(LogLevel Nivel, string Mensaje)> Logs { get; } = new();
+
+    protected override void Reemplazar(IServiceCollection services)
+    {
+        base.Reemplazar(services);
+        services.AddScoped<Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos, ContratosCaidos>();
+        services.AddSingleton<ILoggerProvider>(new Captura(Logs));
+    }
+
+    private sealed class ContratosCaidos : Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos
+    {
+        public Task<Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, TimeOnly? hora, CancellationToken ct) =>
+            throw new HttpRequestException($"conexión rechazada consultando {placa}");
+
+        public Task<Flit.Comparendos.Api.Modulos.Contraventor.PruebaContratos> ProbarAsync(CancellationToken ct) => throw new HttpRequestException("caída");
+    }
+
+    private sealed class Captura(ConcurrentQueue<(LogLevel, string)> destino) : ILoggerProvider, ILogger
+    {
+        public ILogger CreateLogger(string categoryName) => categoryName == typeof(ServicioOcr).FullName ? this : Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(LogLevel logLevel) => true;
+
+        public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter) =>
+            destino.Enqueue((logLevel, formatter(state, exception) + (exception is null ? string.Empty : $" | {exception.Message}")));
+
+        public void Dispose()
+        {
+        }
+    }
+}
+
+/// <summary>GDC punto 5: si la consulta inmediata se cae, el registro sigue en pie y queda un aviso en el log, sin datos personales.</summary>
+public sealed class OcrConsultaInmediataCaidaTests(ApiConOcrYContratosCaidos api) : IClassFixture<ApiConOcrYContratosCaidos>
+{
+    [Fact]
+    public async Task Registrar_ConLaApiCaida_RegistraIgual_YDejaUnAvisoSinDatosPersonales()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api, ocr: true, consulta: true, integracion: "ApiRenting");
+        (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoGestionar]))
+            .PostAsJsonAsync("/api/v1/comparendos/monitoreo/nits", new { numero = "900123456", nombreTitular = "TITULAR DE PRUEBA S.A.S." }, ct))
+            .EnsureSuccessStatusCode();
+        await ConsultaPorApiDeLosNitsAsync(api, empresa);
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, [Permisos.OcrVer, Permisos.OcrGestionar, Permisos.BandejaVer]));
+
+        api.Ocr.Responder("caida", () => OcrDePrueba.Campos("OCR-CAIDA-1", placa: "CAI124"));
+        var form = new MultipartFormDataContent { { new StringContent("API caída"), "nombre" }, { new StringContent("true"), "iniciar" } };
+        form.Add(new ByteArrayContent(Encoding.UTF8.GetBytes("caida")), "archivos", "caida.jpg");
+        var creado = await cliente.PostAsync("/api/v1/comparendos/ocr/paquetes", form, ct);
+        creado.EnsureSuccessStatusCode();
+        var paquete = (await creado.Content.ReadFromJsonAsync<JsonElement>(ct)).GetProperty("id").GetGuid();
+        (await api.ProcesarAsync()).Should().Be(1);
+        var doc = await api.EnDbAsync(db => db.DocumentosOcr.AsNoTracking().SingleAsync(d => d.PaqueteId == paquete, ct));
+
+        (await cliente.PostAsync($"/api/v1/comparendos/ocr/documentos/{doc.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+
+        var c = await api.EnDbAsync(db => db.Comparendos.AsNoTracking().SingleAsync(x => x.TenantId == empresa && x.NumeroNormalizado == "OCRCAIDA1", ct));
+        c.EstadoConsultaContraventor.Should().Be(EstadoConsultaContraventor.Pendiente, "el job diario la reintenta");
+        var aviso = api.Logs.Should().ContainSingle(l => l.Nivel == LogLevel.Warning).Which.Mensaje;
+        aviso.Should().Contain("HttpRequestException").And.Contain(c.Id.ToString());
+        aviso.Should().NotContain("CAI124").And.NotContain("900123456");
+    }
 }
 
 /// <summary>La evaluación del prompt no castiga diferencias de formato que el registro ignora.</summary>
 public sealed class CalificacionOcrTests
 {
     [Theory]
-    [InlineData(CamposOcr.Numero, "D05001000000054280231", "D 0500-1000.000054280231", true)]
+    [InlineData(CamposOcr.Numero, "05001000000054280231", "D 0500-1000.000054280231", true)] // prefijo D- se descarta
     [InlineData(CamposOcr.Placa, "ABC123", "abc-123", true)]
     [InlineData(CamposOcr.NumeroDocumento, "900123456", "900.123.456", true)]
     [InlineData(CamposOcr.Valor, "604100", "$604.100", true)]

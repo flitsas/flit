@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, type ReactNode } from 'react';
-import { FileText, ListChecks } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { WizardModal } from './WizardModal';
 import { ActiveDeedsList, useActiveDeeds } from './ActiveDeedsCollapse';
 import { ProcedureDocsPreviewInformativo } from './ProcedureDocsPreviewInformativo';
@@ -17,7 +17,7 @@ import { ProcedureDocsPreviewInformativo } from './ProcedureDocsPreviewInformati
  * para llegar a lo suyo. En el carril siguen a un clic sin costar altura.
  *
  * Los paneles se renderizan FUERA del carril, como en el diseño: siguen como hermanos del `<div>`
- * del carril y no dentro de él, para que un panel `fixed inset-0` se posicione respecto al
+ * del carril y no dentro de él, para que un panel fijo a pantalla completa se posicione respecto al
  * viewport y no quede anidado en un contenedor que no es la raíz del documento.
  */
 export function WizardHelpRail({
@@ -44,18 +44,18 @@ export function WizardHelpRail({
         // espacio con `pr-16` para que nunca tape contenido.
         // B6 (guardián de diseño) — el único blur autorizado es el del overlay de modal (y el del
         // dock); este carril lo llevaba sin ser un overlay.
-        className="fixed right-4 top-1/3 z-30 flex flex-col gap-2 rounded-2xl border bg-white/90 p-1.5 shadow-[0_8px_24px_rgba(15,23,20,0.12)] dark:bg-[#162744]/90"
+        className="fixed right-4 top-1/3 z-30 flex flex-col gap-2 rounded-2xl border bg-card/90 p-1.5 shadow-[var(--shadow-card-hover)]"
         role="group"
         aria-label="Consultas del trámite"
       >
         <RailButton
           label="Escrituras vigentes"
-          icon={<FileText className="h-4 w-4" aria-hidden="true" />}
+          icon={<Icono nombre="documento" className="h-4 w-4" />}
           onClick={() => setEscrituras(true)}
         />
         <RailButton
           label="Documentos a tener listos"
-          icon={<ListChecks className="h-4 w-4" aria-hidden="true" />}
+          icon={<Icono nombre="lista" className="h-4 w-4" />}
           onClick={() => setDocumentos(true)}
         />
       </div>
@@ -107,8 +107,7 @@ function RailButton({
       </button>
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100"
-        style={{ background: '#162744' }}
+        className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-flit-primary px-2 py-1 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-secondary"
       >
         {label}
       </span>

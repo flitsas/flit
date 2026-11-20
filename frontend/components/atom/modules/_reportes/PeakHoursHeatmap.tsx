@@ -70,7 +70,7 @@ function Row({
           <div
             key={hour}
             className="aspect-square rounded-[3px] min-w-[10px]"
-            style={{ background: `rgba(85, 126, 255, ${alpha.toFixed(2)})` }}
+            style={{ background: `color-mix(in srgb, var(--color-flit-brand) ${(alpha * 100).toFixed(0)}%, transparent)` }}
             title={`${label} ${hour}:00 — ${formatInt(events)} eventos`}
           />
         );

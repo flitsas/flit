@@ -1,0 +1,3265 @@
+{
+  "source": "carroceria.xlsx",
+  "generatedAt": "2026-08-03",
+  "vehicleClasses": [
+    "AUTOMOVIL",
+    "BUS",
+    "BUSETA",
+    "CAMION",
+    "CAMIONETA",
+    "CAMPERO",
+    "CICLOMOTOR",
+    "CUADRICICLO",
+    "CUATRIMOTO",
+    "MICROBUS",
+    "MOTOCARRO",
+    "MOTOCICLETA",
+    "MOTOTRICICLO",
+    "REMOLQUE",
+    "SEMIREMOLQUE",
+    "TRACTOCAMION",
+    "TRICIMOTO",
+    "VOLQUETA"
+  ],
+  "byVehicleClass": {
+    "MOTOCICLETA": [
+      {
+        "code": "0",
+        "name": "SIN CARROCERIA"
+      }
+    ],
+    "CAMION": [
+      {
+        "code": "93",
+        "name": "AMBULANCIA"
+      },
+      {
+        "code": "399",
+        "name": "BARREDORA"
+      },
+      {
+        "code": "477",
+        "name": "BLINDADO PARA TRANSPORTE DE VALORES"
+      },
+      {
+        "code": "29",
+        "name": "BOMBA"
+      },
+      {
+        "code": "474",
+        "name": "BOMBA DE CEMENTACION"
+      },
+      {
+        "code": "32",
+        "name": "BOMBA DE CONCRETO"
+      },
+      {
+        "code": "475",
+        "name": "BOMBA DE NITROGENO"
+      },
+      {
+        "code": "26",
+        "name": "BOMBERO"
+      },
+      {
+        "code": "970",
+        "name": "BOTELLERO"
+      },
+      {
+        "code": "837",
+        "name": "CABINA EXTENDIDA"
+      },
+      {
+        "code": "288",
+        "name": "CAÑERO"
+      },
+      {
+        "code": "484",
+        "name": "CARROTALLER"
+      },
+      {
+        "code": "92",
+        "name": "CASA RODANTE"
+      },
+      {
+        "code": "968",
+        "name": "CESTA AEREA AISLADA CON GABINETES"
+      },
+      {
+        "code": "936",
+        "name": "COMPACTADOR DE BASURAS"
+      },
+      {
+        "code": "25",
+        "name": "DOBLE CABINA"
+      },
+      {
+        "code": "838",
+        "name": "DOBLE CABINA"
+      },
+      {
+        "code": "234",
+        "name": "DOBLE CABINA ESTACAS"
+      },
+      {
+        "code": "235",
+        "name": "DOBLE CABINA FURGON"
+      },
+      {
+        "code": "405",
+        "name": "DOBLE CABINA PANEL"
+      },
+      {
+        "code": "953",
+        "name": "EQUIPO DE LAVADO"
+      },
+      {
+        "code": "482",
+        "name": "EQUIPO DE LAVADO Y SUCCION"
+      },
+      {
+        "code": "486",
+        "name": "EQUIPO DE MINERIA"
+      },
+      {
+        "code": "955",
+        "name": "EQUIPO DE PERFORACION"
+      },
+      {
+        "code": "485",
+        "name": "EQUIPO DE RIEGO"
+      },
+      {
+        "code": "483",
+        "name": "EQUIPO DE SANEAMIENTO AMBIENTAL"
+      },
+      {
+        "code": "874",
+        "name": "EQUIPO ESPECIAL DEL SECTOR PETROLERO"
+      },
+      {
+        "code": "480",
+        "name": "EQUIPO IRRIGADOR DE AGUA"
+      },
+      {
+        "code": "481",
+        "name": "EQUIPO IRRIGADOR DE ASFALTO"
+      },
+      {
+        "code": "1",
+        "name": "ESTACAS"
+      },
+      {
+        "code": "10",
+        "name": "ESTIBAS"
+      },
+      {
+        "code": "2",
+        "name": "FURGON"
+      },
+      {
+        "code": "473",
+        "name": "FURGON CON EQUIPO ESPECIAL"
+      },
+      {
+        "code": "965",
+        "name": "FURGON DE CORTINAS PARA PALETIZADO"
+      },
+      {
+        "code": "931",
+        "name": "FURGÓN UNIDAD MÓVIL"
+      },
+      {
+        "code": "97",
+        "name": "GENERADOR DE NITROGENO"
+      },
+      {
+        "code": "16",
+        "name": "GRUA"
+      },
+      {
+        "code": "478",
+        "name": "GRUA AEREA"
+      },
+      {
+        "code": "479",
+        "name": "GRUA DE SOSTENIMIENTO DE REDES"
+      },
+      {
+        "code": "942",
+        "name": "GRUA PLANCHON"
+      },
+      {
+        "code": "14",
+        "name": "HORMIGONERO"
+      },
+      {
+        "code": "839",
+        "name": "LABORATORIO"
+      },
+      {
+        "code": "31",
+        "name": "LIMPIA ALCANTARILLAS"
+      },
+      {
+        "code": "119",
+        "name": "MEZCLADOR"
+      },
+      {
+        "code": "18",
+        "name": "NIÑERA"
+      },
+      {
+        "code": "33",
+        "name": "PANEL"
+      },
+      {
+        "code": "406",
+        "name": "PICO (PICK UP)"
+      },
+      {
+        "code": "227",
+        "name": "PLANCHON"
+      },
+      {
+        "code": "400",
+        "name": "PLANCHON - PLATAFORMA"
+      },
+      {
+        "code": "930",
+        "name": "PLANCHÓN CON GRÚA"
+      },
+      {
+        "code": "38",
+        "name": "PLATAFORMA"
+      },
+      {
+        "code": "945",
+        "name": "PLATAFORMA BARANDAS DESARMABLES"
+      },
+      {
+        "code": "935",
+        "name": "PLATAFORMA BARANDAS DESMONTABLES"
+      },
+      {
+        "code": "96",
+        "name": "PLATAFORMA CON EQUIPO ESPECIAL"
+      },
+      {
+        "code": "946",
+        "name": "PLATAFORMA CON ESTACAS METALICAS"
+      },
+      {
+        "code": "926",
+        "name": "PLATAFORMA GRUA CON KING PING"
+      },
+      {
+        "code": "260",
+        "name": "PORTA CONTENEDOR"
+      },
+      {
+        "code": "947",
+        "name": "PORTA EQUIPO ESPECIAL"
+      },
+      {
+        "code": "948",
+        "name": "PORTA PLATAFORMA"
+      },
+      {
+        "code": "949",
+        "name": "PORTA TANQUE"
+      },
+      {
+        "code": "937",
+        "name": "PORTAFURGON"
+      },
+      {
+        "code": "56",
+        "name": "RECOLECTOR"
+      },
+      {
+        "code": "6",
+        "name": "RECOLECTOR COMPACTADOR"
+      },
+      {
+        "code": "228",
+        "name": "REPARTO Ó PALET"
+      },
+      {
+        "code": "958",
+        "name": "SILO GRANELERO"
+      },
+      {
+        "code": "84",
+        "name": "TALADRO"
+      },
+      {
+        "code": "3",
+        "name": "TANQUE"
+      },
+      {
+        "code": "969",
+        "name": "TANQUE AL VACIO"
+      },
+      {
+        "code": "517",
+        "name": "TANQUETA"
+      },
+      {
+        "code": "5",
+        "name": "TOLVA"
+      },
+      {
+        "code": "875",
+        "name": "UNIDAD DE CEMENTACION"
+      },
+      {
+        "code": "233",
+        "name": "UNIDAD MOVIL"
+      }
+    ],
+    "TRACTOCAMION": [
+      {
+        "code": "394",
+        "name": "GRUA"
+      },
+      {
+        "code": "401",
+        "name": "SIN CARROCERIA"
+      },
+      {
+        "code": "7",
+        "name": "SRS"
+      }
+    ],
+    "BUS": [
+      {
+        "code": "64",
+        "name": "ABIERTO (ESCALERA)"
+      },
+      {
+        "code": "201",
+        "name": "ARTICULADO"
+      },
+      {
+        "code": "333",
+        "name": "BIARTICULADO"
+      },
+      {
+        "code": "8",
+        "name": "CERRADA"
+      },
+      {
+        "code": "925",
+        "name": "UNIDAD MOVIL"
+      }
+    ],
+    "AUTOMOVIL": [
+      {
+        "code": "951",
+        "name": "BREAK"
+      },
+      {
+        "code": "213",
+        "name": "BUGGY"
+      },
+      {
+        "code": "20",
+        "name": "CONVERTIBLE"
+      },
+      {
+        "code": "19",
+        "name": "COUPE"
+      },
+      {
+        "code": "99",
+        "name": "COUPE CONVERTIBLE"
+      },
+      {
+        "code": "77",
+        "name": "HATCH BACK"
+      },
+      {
+        "code": "215",
+        "name": "LIMOSINA"
+      },
+      {
+        "code": "9",
+        "name": "SEDAN"
+      },
+      {
+        "code": "23",
+        "name": "STATION WAGON"
+      }
+    ],
+    "CAMIONETA": [
+      {
+        "code": "87",
+        "name": "AMBULANCIA"
+      },
+      {
+        "code": "519",
+        "name": "BOMBERO"
+      },
+      {
+        "code": "836",
+        "name": "CABINA EXTENDIDA"
+      },
+      {
+        "code": "22",
+        "name": "CARPADO"
+      },
+      {
+        "code": "241",
+        "name": "DOBLE CABINA"
+      },
+      {
+        "code": "391",
+        "name": "DOBLE CABINA CERRADA"
+      },
+      {
+        "code": "472",
+        "name": "DOBLE CABINA CON PLATAFORMA"
+      },
+      {
+        "code": "961",
+        "name": "DOBLE CABINA CON PLATON"
+      },
+      {
+        "code": "243",
+        "name": "DOBLE CABINA ESTACAS"
+      },
+      {
+        "code": "402",
+        "name": "DOBLE CABINA FURGON"
+      },
+      {
+        "code": "476",
+        "name": "DOBLE CABINA TRACCION SENCILLA"
+      },
+      {
+        "code": "238",
+        "name": "ESTACAS"
+      },
+      {
+        "code": "245",
+        "name": "ESTIBAS"
+      },
+      {
+        "code": "239",
+        "name": "FURGON"
+      },
+      {
+        "code": "240",
+        "name": "GRUA"
+      },
+      {
+        "code": "940",
+        "name": "GRUA AEREA"
+      },
+      {
+        "code": "941",
+        "name": "GRUA DE SOSTENIMIENTO DE REDES"
+      },
+      {
+        "code": "927",
+        "name": "HATCH BACK"
+      },
+      {
+        "code": "242",
+        "name": "PANEL"
+      },
+      {
+        "code": "938",
+        "name": "PICK UP (PICÓ) SENCILLA"
+      },
+      {
+        "code": "12",
+        "name": "PICO (PICK UP)"
+      },
+      {
+        "code": "427",
+        "name": "PICÓ CERRADA"
+      },
+      {
+        "code": "398",
+        "name": "PLANCHON - PLATAFORMA"
+      },
+      {
+        "code": "299",
+        "name": "PLATAFORMA"
+      },
+      {
+        "code": "393",
+        "name": "PLATAFORMA CON EQUIPO ESPECIAL"
+      },
+      {
+        "code": "934",
+        "name": "PORTA CONTENEDOR"
+      },
+      {
+        "code": "939",
+        "name": "PORTAFURGON"
+      },
+      {
+        "code": "899",
+        "name": "RECOLECTOR COMPACTADOR"
+      },
+      {
+        "code": "331",
+        "name": "REPARTO ó PALET"
+      },
+      {
+        "code": "237",
+        "name": "STATION WAGON"
+      },
+      {
+        "code": "101",
+        "name": "TALLER"
+      },
+      {
+        "code": "98",
+        "name": "TANQUE"
+      },
+      {
+        "code": "327",
+        "name": "UNIDAD MOVIL"
+      },
+      {
+        "code": "79",
+        "name": "VAN"
+      },
+      {
+        "code": "274",
+        "name": "WAGON"
+      }
+    ],
+    "REMOLQUE": [
+      {
+        "code": "446",
+        "name": "ABIERTO (ESCALERA)"
+      },
+      {
+        "code": "307",
+        "name": "BOMBA"
+      },
+      {
+        "code": "522",
+        "name": "BOMBA ACIDOS"
+      },
+      {
+        "code": "444",
+        "name": "BOMBERO"
+      },
+      {
+        "code": "510",
+        "name": "BOTELLERO"
+      },
+      {
+        "code": "441",
+        "name": "CABINADO"
+      },
+      {
+        "code": "69",
+        "name": "CAMABAJA"
+      },
+      {
+        "code": "507",
+        "name": "CAMABAJA CON EQUIPO ESPECIAL"
+      },
+      {
+        "code": "513",
+        "name": "CAMPAMENTO"
+      },
+      {
+        "code": "292",
+        "name": "CAÑERO"
+      },
+      {
+        "code": "868",
+        "name": "CARBONERA"
+      },
+      {
+        "code": "442",
+        "name": "CARPADO"
+      },
+      {
+        "code": "316",
+        "name": "CASA RODANTE"
+      },
+      {
+        "code": "505",
+        "name": "CISTERNA"
+      },
+      {
+        "code": "360",
+        "name": "CISTERNA SILO CILINDRICO"
+      },
+      {
+        "code": "443",
+        "name": "DOBLE CABINA"
+      },
+      {
+        "code": "864",
+        "name": "EQUIPO CARBONERO"
+      },
+      {
+        "code": "318",
+        "name": "EQUIPO DE CEMENTACION Ó BOMBA DE HORMIGON"
+      },
+      {
+        "code": "851",
+        "name": "EQUIPO NITROGENO"
+      },
+      {
+        "code": "285",
+        "name": "EQUIPO PETROLERO"
+      },
+      {
+        "code": "817",
+        "name": "ESTACAS"
+      },
+      {
+        "code": "257",
+        "name": "ESTIBAS"
+      },
+      {
+        "code": "501",
+        "name": "FRAC TANK"
+      },
+      {
+        "code": "254",
+        "name": "FURGON"
+      },
+      {
+        "code": "526",
+        "name": "FURGON (TRITURADOR DE PAPEL)"
+      },
+      {
+        "code": "348",
+        "name": "FURGON CORTINERO"
+      },
+      {
+        "code": "345",
+        "name": "FURGON FRIGORIFICO"
+      },
+      {
+        "code": "524",
+        "name": "FURGON REFRIGERADO"
+      },
+      {
+        "code": "908",
+        "name": "FURGON-SIDER"
+      },
+      {
+        "code": "853",
+        "name": "GASODUCTO MOVIL"
+      },
+      {
+        "code": "259",
+        "name": "GRANELERAS"
+      },
+      {
+        "code": "305",
+        "name": "GRUA"
+      },
+      {
+        "code": "293",
+        "name": "GRUA ELEVADORA"
+      },
+      {
+        "code": "303",
+        "name": "HORMIGONERO"
+      },
+      {
+        "code": "843",
+        "name": "MESA ROTATORIA"
+      },
+      {
+        "code": "320",
+        "name": "MEZCLADOR"
+      },
+      {
+        "code": "849",
+        "name": "MODULAR"
+      },
+      {
+        "code": "855",
+        "name": "MULTIPROPOSITO"
+      },
+      {
+        "code": "255",
+        "name": "NIÑERA"
+      },
+      {
+        "code": "865",
+        "name": "NIÑERA MULTIPROPOSITO"
+      },
+      {
+        "code": "445",
+        "name": "PANEL"
+      },
+      {
+        "code": "815",
+        "name": "PLANCHON"
+      },
+      {
+        "code": "454",
+        "name": "PLAT-ESTA"
+      },
+      {
+        "code": "813",
+        "name": "PLATAFORMA"
+      },
+      {
+        "code": "493",
+        "name": "PLATAFORMA BARANDAS DESARMABLES"
+      },
+      {
+        "code": "495",
+        "name": "PLATAFORMA BRAZO AUTOPORTANTE"
+      },
+      {
+        "code": "449",
+        "name": "PLATAFORMA CON EQUIPO ESPECIAL"
+      },
+      {
+        "code": "455",
+        "name": "PLATAFORMA CON ESTACAS DESMONTABLES"
+      },
+      {
+        "code": "876",
+        "name": "PLATAFORMA DE TIRO"
+      },
+      {
+        "code": "503",
+        "name": "PLATAFORMA MODULAR CARBONERA"
+      },
+      {
+        "code": "440",
+        "name": "PLATON"
+      },
+      {
+        "code": "841",
+        "name": "PORTA CONTENEDOR"
+      },
+      {
+        "code": "847",
+        "name": "PORTAMODULOS PARA GAS"
+      },
+      {
+        "code": "313",
+        "name": "RECOLECTOR"
+      },
+      {
+        "code": "256",
+        "name": "REPARTO Ó PALET"
+      },
+      {
+        "code": "450",
+        "name": "SPOOLER"
+      },
+      {
+        "code": "439",
+        "name": "SRS"
+      },
+      {
+        "code": "258",
+        "name": "TANQUE"
+      },
+      {
+        "code": "515",
+        "name": "TANQUE (GRANELERO)"
+      },
+      {
+        "code": "867",
+        "name": "TANQUE CILINDRICO"
+      },
+      {
+        "code": "491",
+        "name": "TANQUE DE LODOS"
+      },
+      {
+        "code": "866",
+        "name": "TANQUE ESFERICO"
+      },
+      {
+        "code": "520",
+        "name": "TANQUE FRAC TANK"
+      },
+      {
+        "code": "300",
+        "name": "TOLVA"
+      },
+      {
+        "code": "489",
+        "name": "TOLVA PIPA CEMENTERA"
+      },
+      {
+        "code": "845",
+        "name": "UNIDAD DE ALMACENAMIENTO"
+      },
+      {
+        "code": "499",
+        "name": "UNIDAD DE CEMENTACION"
+      },
+      {
+        "code": "448",
+        "name": "UNIDAD MOVIL"
+      },
+      {
+        "code": "447",
+        "name": "VAN"
+      },
+      {
+        "code": "261",
+        "name": "VOLCO"
+      },
+      {
+        "code": "460",
+        "name": "VOLCO - PLATON"
+      },
+      {
+        "code": "497",
+        "name": "VOLQUETE"
+      }
+    ],
+    "MICROBUS": [
+      {
+        "code": "409",
+        "name": "ABIERTO (ESCALERA)"
+      },
+      {
+        "code": "91",
+        "name": "CERRADA"
+      },
+      {
+        "code": "220",
+        "name": "VAN"
+      }
+    ],
+    "BUSETA": [
+      {
+        "code": "226",
+        "name": "ABIERTO (ESCALERA)"
+      },
+      {
+        "code": "410",
+        "name": "AMBULANCIA"
+      },
+      {
+        "code": "216",
+        "name": "CERRADA"
+      },
+      {
+        "code": "901",
+        "name": "UNIDAD MOVIL"
+      }
+    ],
+    "CAMPERO": [
+      {
+        "code": "217",
+        "name": "CABINADO"
+      },
+      {
+        "code": "334",
+        "name": "CAPOTA DUAL"
+      },
+      {
+        "code": "218",
+        "name": "CARPADO"
+      },
+      {
+        "code": "921",
+        "name": "CONVERTIBLE"
+      },
+      {
+        "code": "281",
+        "name": "ESTACAS"
+      },
+      {
+        "code": "516",
+        "name": "FURGON"
+      },
+      {
+        "code": "275",
+        "name": "WAGON"
+      }
+    ],
+    "MOTOTRICICLO": [
+      {
+        "code": "223",
+        "name": "SIN CARROCERIA"
+      }
+    ],
+    "CUATRIMOTO": [
+      {
+        "code": "224",
+        "name": "SIN CARROCERIA"
+      }
+    ],
+    "SEMIREMOLQUE": [
+      {
+        "code": "904",
+        "name": "BAGACERO"
+      },
+      {
+        "code": "308",
+        "name": "BOMBA"
+      },
+      {
+        "code": "523",
+        "name": "BOMBA ACIDOS"
+      },
+      {
+        "code": "533",
+        "name": "BOMBA DE CEMENTACION"
+      },
+      {
+        "code": "511",
+        "name": "BOTELLERO"
+      },
+      {
+        "code": "537",
+        "name": "CAMA ALTA"
+      },
+      {
+        "code": "534",
+        "name": "CAMA CUNA"
+      },
+      {
+        "code": "262",
+        "name": "CAMABAJA"
+      },
+      {
+        "code": "536",
+        "name": "CAMABAJA BAGACERO"
+      },
+      {
+        "code": "508",
+        "name": "CAMABAJA CON EQUIPO ESPECIAL"
+      },
+      {
+        "code": "512",
+        "name": "CAMPAMENTO"
+      },
+      {
+        "code": "296",
+        "name": "CAÑERO"
+      },
+      {
+        "code": "873",
+        "name": "CARBONERA"
+      },
+      {
+        "code": "506",
+        "name": "CISTERNA"
+      },
+      {
+        "code": "361",
+        "name": "CISTERNA SILO CILINDRICO"
+      },
+      {
+        "code": "342",
+        "name": "DOLLY"
+      },
+      {
+        "code": "869",
+        "name": "EQUIPO CARBONERO"
+      },
+      {
+        "code": "530",
+        "name": "EQUIPO DE PAVIMENTACION"
+      },
+      {
+        "code": "284",
+        "name": "EQUIPO PETROLERO"
+      },
+      {
+        "code": "818",
+        "name": "ESTACAS"
+      },
+      {
+        "code": "268",
+        "name": "ESTIBAS"
+      },
+      {
+        "code": "962",
+        "name": "ESTRUCTURA AJUSTABLE"
+      },
+      {
+        "code": "909",
+        "name": "EYECTOR"
+      },
+      {
+        "code": "502",
+        "name": "FRAC TANK"
+      },
+      {
+        "code": "527",
+        "name": "FRACTURADOR"
+      },
+      {
+        "code": "265",
+        "name": "FURGON"
+      },
+      {
+        "code": "529",
+        "name": "FURGON CAMABAJA"
+      },
+      {
+        "code": "525",
+        "name": "FURGON REFRIGERADO"
+      },
+      {
+        "code": "304",
+        "name": "HORMIGONERO"
+      },
+      {
+        "code": "903",
+        "name": "MULTIPLE"
+      },
+      {
+        "code": "854",
+        "name": "MULTIPROPOSITO"
+      },
+      {
+        "code": "266",
+        "name": "NIÑERA"
+      },
+      {
+        "code": "870",
+        "name": "NIÑERA MULTIPROPOSITO"
+      },
+      {
+        "code": "816",
+        "name": "PLANCHON"
+      },
+      {
+        "code": "465",
+        "name": "PLAT-ESTA"
+      },
+      {
+        "code": "814",
+        "name": "PLATAFORMA"
+      },
+      {
+        "code": "494",
+        "name": "PLATAFORMA BARANDAS DESARMABLES"
+      },
+      {
+        "code": "496",
+        "name": "PLATAFORMA BRAZO AUTOPORTANTE"
+      },
+      {
+        "code": "438",
+        "name": "PLATAFORMA CON EQUIPO ESPECIAL"
+      },
+      {
+        "code": "466",
+        "name": "PLATAFORMA CON ESTACAS DESMONTABLES"
+      },
+      {
+        "code": "467",
+        "name": "PLATAFORMA CON ESTACAS METALICAS"
+      },
+      {
+        "code": "877",
+        "name": "PLATAFORMA DE TIRO"
+      },
+      {
+        "code": "528",
+        "name": "PLATAFORMA MODULAR"
+      },
+      {
+        "code": "504",
+        "name": "PLATAFORMA MODULAR CARBONERA"
+      },
+      {
+        "code": "840",
+        "name": "PLATON"
+      },
+      {
+        "code": "272",
+        "name": "PORTA CONTENEDOR"
+      },
+      {
+        "code": "846",
+        "name": "PORTAMODULOS PARA GAS"
+      },
+      {
+        "code": "269",
+        "name": "TANQUE"
+      },
+      {
+        "code": "514",
+        "name": "TANQUE (GRANELERO)"
+      },
+      {
+        "code": "872",
+        "name": "TANQUE CILINDRICO"
+      },
+      {
+        "code": "492",
+        "name": "TANQUE DE LODOS"
+      },
+      {
+        "code": "871",
+        "name": "TANQUE ESFERICO"
+      },
+      {
+        "code": "521",
+        "name": "TANQUE FRAC TANK"
+      },
+      {
+        "code": "301",
+        "name": "TOLVA"
+      },
+      {
+        "code": "490",
+        "name": "TOLVA PIPA CEMENTERA"
+      },
+      {
+        "code": "954",
+        "name": "TRANSPORTADOR DE CEMENTO"
+      },
+      {
+        "code": "531",
+        "name": "TRANSPORTADOR DE TUBOS"
+      },
+      {
+        "code": "500",
+        "name": "UNIDAD DE CEMENTACION"
+      },
+      {
+        "code": "900",
+        "name": "UNIDAD MOVIL"
+      },
+      {
+        "code": "436",
+        "name": "VAN"
+      },
+      {
+        "code": "271",
+        "name": "VOLCO"
+      },
+      {
+        "code": "471",
+        "name": "VOLCO - PLATON"
+      },
+      {
+        "code": "498",
+        "name": "VOLQUETE"
+      }
+    ],
+    "MOTOCARRO": [
+      {
+        "code": "389",
+        "name": "CABINADO"
+      },
+      {
+        "code": "390",
+        "name": "CARPADO"
+      },
+      {
+        "code": "276",
+        "name": "ESTACAS"
+      },
+      {
+        "code": "278",
+        "name": "ESTIBAS"
+      },
+      {
+        "code": "277",
+        "name": "FURGON"
+      },
+      {
+        "code": "387",
+        "name": "PANEL"
+      },
+      {
+        "code": "388",
+        "name": "PICO"
+      },
+      {
+        "code": "404",
+        "name": "PLATON"
+      },
+      {
+        "code": "386",
+        "name": "REPARTO"
+      },
+      {
+        "code": "964",
+        "name": "SEMICERRADA"
+      }
+    ],
+    "VOLQUETA": [
+      {
+        "code": "280",
+        "name": "PLATON"
+      },
+      {
+        "code": "943",
+        "name": "VOLCO DESMONTABLE"
+      }
+    ],
+    "CICLOMOTOR": [
+      {
+        "code": "922",
+        "name": "SIN CARROCERIA"
+      }
+    ],
+    "TRICIMOTO": [
+      {
+        "code": "923",
+        "name": "SIN CARROCERIA"
+      }
+    ],
+    "CUADRICICLO": [
+      {
+        "code": "928",
+        "name": "SIN CARROCERIA"
+      }
+    ]
+  },
+  "allBodyworks": [
+    {
+      "code": "64",
+      "name": "ABIERTO (ESCALERA)",
+      "classes": [
+        "BUS"
+      ]
+    },
+    {
+      "code": "226",
+      "name": "ABIERTO (ESCALERA)",
+      "classes": [
+        "BUSETA"
+      ]
+    },
+    {
+      "code": "409",
+      "name": "ABIERTO (ESCALERA)",
+      "classes": [
+        "MICROBUS"
+      ]
+    },
+    {
+      "code": "446",
+      "name": "ABIERTO (ESCALERA)",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "87",
+      "name": "AMBULANCIA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "93",
+      "name": "AMBULANCIA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "410",
+      "name": "AMBULANCIA",
+      "classes": [
+        "BUSETA"
+      ]
+    },
+    {
+      "code": "201",
+      "name": "ARTICULADO",
+      "classes": [
+        "BUS"
+      ]
+    },
+    {
+      "code": "904",
+      "name": "BAGACERO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "399",
+      "name": "BARREDORA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "333",
+      "name": "BIARTICULADO",
+      "classes": [
+        "BUS"
+      ]
+    },
+    {
+      "code": "477",
+      "name": "BLINDADO PARA TRANSPORTE DE VALORES",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "29",
+      "name": "BOMBA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "307",
+      "name": "BOMBA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "308",
+      "name": "BOMBA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "522",
+      "name": "BOMBA ACIDOS",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "523",
+      "name": "BOMBA ACIDOS",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "474",
+      "name": "BOMBA DE CEMENTACION",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "533",
+      "name": "BOMBA DE CEMENTACION",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "32",
+      "name": "BOMBA DE CONCRETO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "475",
+      "name": "BOMBA DE NITROGENO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "26",
+      "name": "BOMBERO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "444",
+      "name": "BOMBERO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "519",
+      "name": "BOMBERO",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "510",
+      "name": "BOTELLERO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "511",
+      "name": "BOTELLERO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "970",
+      "name": "BOTELLERO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "951",
+      "name": "BREAK",
+      "classes": [
+        "AUTOMOVIL"
+      ]
+    },
+    {
+      "code": "213",
+      "name": "BUGGY",
+      "classes": [
+        "AUTOMOVIL"
+      ]
+    },
+    {
+      "code": "836",
+      "name": "CABINA EXTENDIDA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "837",
+      "name": "CABINA EXTENDIDA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "217",
+      "name": "CABINADO",
+      "classes": [
+        "CAMPERO"
+      ]
+    },
+    {
+      "code": "389",
+      "name": "CABINADO",
+      "classes": [
+        "MOTOCARRO"
+      ]
+    },
+    {
+      "code": "441",
+      "name": "CABINADO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "537",
+      "name": "CAMA ALTA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "534",
+      "name": "CAMA CUNA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "69",
+      "name": "CAMABAJA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "262",
+      "name": "CAMABAJA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "536",
+      "name": "CAMABAJA BAGACERO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "507",
+      "name": "CAMABAJA CON EQUIPO ESPECIAL",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "508",
+      "name": "CAMABAJA CON EQUIPO ESPECIAL",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "512",
+      "name": "CAMPAMENTO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "513",
+      "name": "CAMPAMENTO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "288",
+      "name": "CAÑERO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "292",
+      "name": "CAÑERO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "296",
+      "name": "CAÑERO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "334",
+      "name": "CAPOTA DUAL",
+      "classes": [
+        "CAMPERO"
+      ]
+    },
+    {
+      "code": "868",
+      "name": "CARBONERA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "873",
+      "name": "CARBONERA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "22",
+      "name": "CARPADO",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "218",
+      "name": "CARPADO",
+      "classes": [
+        "CAMPERO"
+      ]
+    },
+    {
+      "code": "390",
+      "name": "CARPADO",
+      "classes": [
+        "MOTOCARRO"
+      ]
+    },
+    {
+      "code": "442",
+      "name": "CARPADO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "484",
+      "name": "CARROTALLER",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "92",
+      "name": "CASA RODANTE",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "316",
+      "name": "CASA RODANTE",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "8",
+      "name": "CERRADA",
+      "classes": [
+        "BUS"
+      ]
+    },
+    {
+      "code": "91",
+      "name": "CERRADA",
+      "classes": [
+        "MICROBUS"
+      ]
+    },
+    {
+      "code": "216",
+      "name": "CERRADA",
+      "classes": [
+        "BUSETA"
+      ]
+    },
+    {
+      "code": "968",
+      "name": "CESTA AEREA AISLADA CON GABINETES",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "505",
+      "name": "CISTERNA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "506",
+      "name": "CISTERNA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "360",
+      "name": "CISTERNA SILO CILINDRICO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "361",
+      "name": "CISTERNA SILO CILINDRICO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "936",
+      "name": "COMPACTADOR DE BASURAS",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "20",
+      "name": "CONVERTIBLE",
+      "classes": [
+        "AUTOMOVIL"
+      ]
+    },
+    {
+      "code": "921",
+      "name": "CONVERTIBLE",
+      "classes": [
+        "CAMPERO"
+      ]
+    },
+    {
+      "code": "19",
+      "name": "COUPE",
+      "classes": [
+        "AUTOMOVIL"
+      ]
+    },
+    {
+      "code": "99",
+      "name": "COUPE CONVERTIBLE",
+      "classes": [
+        "AUTOMOVIL"
+      ]
+    },
+    {
+      "code": "25",
+      "name": "DOBLE CABINA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "241",
+      "name": "DOBLE CABINA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "443",
+      "name": "DOBLE CABINA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "838",
+      "name": "DOBLE CABINA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "391",
+      "name": "DOBLE CABINA CERRADA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "472",
+      "name": "DOBLE CABINA CON PLATAFORMA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "961",
+      "name": "DOBLE CABINA CON PLATON",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "234",
+      "name": "DOBLE CABINA ESTACAS",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "243",
+      "name": "DOBLE CABINA ESTACAS",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "235",
+      "name": "DOBLE CABINA FURGON",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "402",
+      "name": "DOBLE CABINA FURGON",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "405",
+      "name": "DOBLE CABINA PANEL",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "476",
+      "name": "DOBLE CABINA TRACCION SENCILLA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "342",
+      "name": "DOLLY",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "864",
+      "name": "EQUIPO CARBONERO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "869",
+      "name": "EQUIPO CARBONERO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "318",
+      "name": "EQUIPO DE CEMENTACION Ó BOMBA DE HORMIGON",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "953",
+      "name": "EQUIPO DE LAVADO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "482",
+      "name": "EQUIPO DE LAVADO Y SUCCION",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "486",
+      "name": "EQUIPO DE MINERIA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "530",
+      "name": "EQUIPO DE PAVIMENTACION",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "955",
+      "name": "EQUIPO DE PERFORACION",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "485",
+      "name": "EQUIPO DE RIEGO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "483",
+      "name": "EQUIPO DE SANEAMIENTO AMBIENTAL",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "874",
+      "name": "EQUIPO ESPECIAL DEL SECTOR PETROLERO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "480",
+      "name": "EQUIPO IRRIGADOR DE AGUA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "481",
+      "name": "EQUIPO IRRIGADOR DE ASFALTO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "851",
+      "name": "EQUIPO NITROGENO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "284",
+      "name": "EQUIPO PETROLERO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "285",
+      "name": "EQUIPO PETROLERO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "1",
+      "name": "ESTACAS",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "238",
+      "name": "ESTACAS",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "276",
+      "name": "ESTACAS",
+      "classes": [
+        "MOTOCARRO"
+      ]
+    },
+    {
+      "code": "281",
+      "name": "ESTACAS",
+      "classes": [
+        "CAMPERO"
+      ]
+    },
+    {
+      "code": "817",
+      "name": "ESTACAS",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "818",
+      "name": "ESTACAS",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "10",
+      "name": "ESTIBAS",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "245",
+      "name": "ESTIBAS",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "257",
+      "name": "ESTIBAS",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "268",
+      "name": "ESTIBAS",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "278",
+      "name": "ESTIBAS",
+      "classes": [
+        "MOTOCARRO"
+      ]
+    },
+    {
+      "code": "962",
+      "name": "ESTRUCTURA AJUSTABLE",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "909",
+      "name": "EYECTOR",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "501",
+      "name": "FRAC TANK",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "502",
+      "name": "FRAC TANK",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "527",
+      "name": "FRACTURADOR",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "2",
+      "name": "FURGON",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "239",
+      "name": "FURGON",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "254",
+      "name": "FURGON",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "265",
+      "name": "FURGON",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "277",
+      "name": "FURGON",
+      "classes": [
+        "MOTOCARRO"
+      ]
+    },
+    {
+      "code": "516",
+      "name": "FURGON",
+      "classes": [
+        "CAMPERO"
+      ]
+    },
+    {
+      "code": "526",
+      "name": "FURGON (TRITURADOR DE PAPEL)",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "529",
+      "name": "FURGON CAMABAJA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "473",
+      "name": "FURGON CON EQUIPO ESPECIAL",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "348",
+      "name": "FURGON CORTINERO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "965",
+      "name": "FURGON DE CORTINAS PARA PALETIZADO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "345",
+      "name": "FURGON FRIGORIFICO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "524",
+      "name": "FURGON REFRIGERADO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "525",
+      "name": "FURGON REFRIGERADO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "931",
+      "name": "FURGÓN UNIDAD MÓVIL",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "908",
+      "name": "FURGON-SIDER",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "853",
+      "name": "GASODUCTO MOVIL",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "97",
+      "name": "GENERADOR DE NITROGENO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "259",
+      "name": "GRANELERAS",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "16",
+      "name": "GRUA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "240",
+      "name": "GRUA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "305",
+      "name": "GRUA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "394",
+      "name": "GRUA",
+      "classes": [
+        "TRACTOCAMION"
+      ]
+    },
+    {
+      "code": "478",
+      "name": "GRUA AEREA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "940",
+      "name": "GRUA AEREA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "479",
+      "name": "GRUA DE SOSTENIMIENTO DE REDES",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "941",
+      "name": "GRUA DE SOSTENIMIENTO DE REDES",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "293",
+      "name": "GRUA ELEVADORA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "942",
+      "name": "GRUA PLANCHON",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "77",
+      "name": "HATCH BACK",
+      "classes": [
+        "AUTOMOVIL"
+      ]
+    },
+    {
+      "code": "927",
+      "name": "HATCH BACK",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "14",
+      "name": "HORMIGONERO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "303",
+      "name": "HORMIGONERO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "304",
+      "name": "HORMIGONERO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "839",
+      "name": "LABORATORIO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "215",
+      "name": "LIMOSINA",
+      "classes": [
+        "AUTOMOVIL"
+      ]
+    },
+    {
+      "code": "31",
+      "name": "LIMPIA ALCANTARILLAS",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "843",
+      "name": "MESA ROTATORIA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "119",
+      "name": "MEZCLADOR",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "320",
+      "name": "MEZCLADOR",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "849",
+      "name": "MODULAR",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "903",
+      "name": "MULTIPLE",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "854",
+      "name": "MULTIPROPOSITO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "855",
+      "name": "MULTIPROPOSITO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "18",
+      "name": "NIÑERA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "255",
+      "name": "NIÑERA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "266",
+      "name": "NIÑERA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "865",
+      "name": "NIÑERA MULTIPROPOSITO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "870",
+      "name": "NIÑERA MULTIPROPOSITO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "33",
+      "name": "PANEL",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "242",
+      "name": "PANEL",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "387",
+      "name": "PANEL",
+      "classes": [
+        "MOTOCARRO"
+      ]
+    },
+    {
+      "code": "445",
+      "name": "PANEL",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "938",
+      "name": "PICK UP (PICÓ) SENCILLA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "388",
+      "name": "PICO",
+      "classes": [
+        "MOTOCARRO"
+      ]
+    },
+    {
+      "code": "12",
+      "name": "PICO (PICK UP)",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "406",
+      "name": "PICO (PICK UP)",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "427",
+      "name": "PICÓ CERRADA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "227",
+      "name": "PLANCHON",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "815",
+      "name": "PLANCHON",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "816",
+      "name": "PLANCHON",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "398",
+      "name": "PLANCHON - PLATAFORMA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "400",
+      "name": "PLANCHON - PLATAFORMA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "930",
+      "name": "PLANCHÓN CON GRÚA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "454",
+      "name": "PLAT-ESTA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "465",
+      "name": "PLAT-ESTA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "38",
+      "name": "PLATAFORMA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "299",
+      "name": "PLATAFORMA",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "813",
+      "name": "PLATAFORMA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "814",
+      "name": "PLATAFORMA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "493",
+      "name": "PLATAFORMA BARANDAS DESARMABLES",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "494",
+      "name": "PLATAFORMA BARANDAS DESARMABLES",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "945",
+      "name": "PLATAFORMA BARANDAS DESARMABLES",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "935",
+      "name": "PLATAFORMA BARANDAS DESMONTABLES",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "495",
+      "name": "PLATAFORMA BRAZO AUTOPORTANTE",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "496",
+      "name": "PLATAFORMA BRAZO AUTOPORTANTE",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "96",
+      "name": "PLATAFORMA CON EQUIPO ESPECIAL",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "393",
+      "name": "PLATAFORMA CON EQUIPO ESPECIAL",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "438",
+      "name": "PLATAFORMA CON EQUIPO ESPECIAL",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "449",
+      "name": "PLATAFORMA CON EQUIPO ESPECIAL",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "455",
+      "name": "PLATAFORMA CON ESTACAS DESMONTABLES",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "466",
+      "name": "PLATAFORMA CON ESTACAS DESMONTABLES",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "467",
+      "name": "PLATAFORMA CON ESTACAS METALICAS",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "946",
+      "name": "PLATAFORMA CON ESTACAS METALICAS",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "876",
+      "name": "PLATAFORMA DE TIRO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "877",
+      "name": "PLATAFORMA DE TIRO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "926",
+      "name": "PLATAFORMA GRUA CON KING PING",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "528",
+      "name": "PLATAFORMA MODULAR",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "503",
+      "name": "PLATAFORMA MODULAR CARBONERA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "504",
+      "name": "PLATAFORMA MODULAR CARBONERA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "280",
+      "name": "PLATON",
+      "classes": [
+        "VOLQUETA"
+      ]
+    },
+    {
+      "code": "404",
+      "name": "PLATON",
+      "classes": [
+        "MOTOCARRO"
+      ]
+    },
+    {
+      "code": "440",
+      "name": "PLATON",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "840",
+      "name": "PLATON",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "260",
+      "name": "PORTA CONTENEDOR",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "272",
+      "name": "PORTA CONTENEDOR",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "841",
+      "name": "PORTA CONTENEDOR",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "934",
+      "name": "PORTA CONTENEDOR",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "947",
+      "name": "PORTA EQUIPO ESPECIAL",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "948",
+      "name": "PORTA PLATAFORMA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "949",
+      "name": "PORTA TANQUE",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "937",
+      "name": "PORTAFURGON",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "939",
+      "name": "PORTAFURGON",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "846",
+      "name": "PORTAMODULOS PARA GAS",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "847",
+      "name": "PORTAMODULOS PARA GAS",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "56",
+      "name": "RECOLECTOR",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "313",
+      "name": "RECOLECTOR",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "6",
+      "name": "RECOLECTOR COMPACTADOR",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "899",
+      "name": "RECOLECTOR COMPACTADOR",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "386",
+      "name": "REPARTO",
+      "classes": [
+        "MOTOCARRO"
+      ]
+    },
+    {
+      "code": "331",
+      "name": "REPARTO ó PALET",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "228",
+      "name": "REPARTO Ó PALET",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "256",
+      "name": "REPARTO Ó PALET",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "9",
+      "name": "SEDAN",
+      "classes": [
+        "AUTOMOVIL"
+      ]
+    },
+    {
+      "code": "964",
+      "name": "SEMICERRADA",
+      "classes": [
+        "MOTOCARRO"
+      ]
+    },
+    {
+      "code": "958",
+      "name": "SILO GRANELERO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "0",
+      "name": "SIN CARROCERIA",
+      "classes": [
+        "MOTOCICLETA"
+      ]
+    },
+    {
+      "code": "223",
+      "name": "SIN CARROCERIA",
+      "classes": [
+        "MOTOTRICICLO"
+      ]
+    },
+    {
+      "code": "224",
+      "name": "SIN CARROCERIA",
+      "classes": [
+        "CUATRIMOTO"
+      ]
+    },
+    {
+      "code": "401",
+      "name": "SIN CARROCERIA",
+      "classes": [
+        "TRACTOCAMION"
+      ]
+    },
+    {
+      "code": "922",
+      "name": "SIN CARROCERIA",
+      "classes": [
+        "CICLOMOTOR"
+      ]
+    },
+    {
+      "code": "923",
+      "name": "SIN CARROCERIA",
+      "classes": [
+        "TRICIMOTO"
+      ]
+    },
+    {
+      "code": "928",
+      "name": "SIN CARROCERIA",
+      "classes": [
+        "CUADRICICLO"
+      ]
+    },
+    {
+      "code": "450",
+      "name": "SPOOLER",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "7",
+      "name": "SRS",
+      "classes": [
+        "TRACTOCAMION"
+      ]
+    },
+    {
+      "code": "439",
+      "name": "SRS",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "23",
+      "name": "STATION WAGON",
+      "classes": [
+        "AUTOMOVIL"
+      ]
+    },
+    {
+      "code": "237",
+      "name": "STATION WAGON",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "84",
+      "name": "TALADRO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "101",
+      "name": "TALLER",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "3",
+      "name": "TANQUE",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "98",
+      "name": "TANQUE",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "258",
+      "name": "TANQUE",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "269",
+      "name": "TANQUE",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "514",
+      "name": "TANQUE (GRANELERO)",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "515",
+      "name": "TANQUE (GRANELERO)",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "969",
+      "name": "TANQUE AL VACIO",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "867",
+      "name": "TANQUE CILINDRICO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "872",
+      "name": "TANQUE CILINDRICO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "491",
+      "name": "TANQUE DE LODOS",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "492",
+      "name": "TANQUE DE LODOS",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "866",
+      "name": "TANQUE ESFERICO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "871",
+      "name": "TANQUE ESFERICO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "520",
+      "name": "TANQUE FRAC TANK",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "521",
+      "name": "TANQUE FRAC TANK",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "517",
+      "name": "TANQUETA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "5",
+      "name": "TOLVA",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "300",
+      "name": "TOLVA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "301",
+      "name": "TOLVA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "489",
+      "name": "TOLVA PIPA CEMENTERA",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "490",
+      "name": "TOLVA PIPA CEMENTERA",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "954",
+      "name": "TRANSPORTADOR DE CEMENTO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "531",
+      "name": "TRANSPORTADOR DE TUBOS",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "845",
+      "name": "UNIDAD DE ALMACENAMIENTO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "499",
+      "name": "UNIDAD DE CEMENTACION",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "500",
+      "name": "UNIDAD DE CEMENTACION",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "875",
+      "name": "UNIDAD DE CEMENTACION",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "233",
+      "name": "UNIDAD MOVIL",
+      "classes": [
+        "CAMION"
+      ]
+    },
+    {
+      "code": "327",
+      "name": "UNIDAD MOVIL",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "448",
+      "name": "UNIDAD MOVIL",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "900",
+      "name": "UNIDAD MOVIL",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "901",
+      "name": "UNIDAD MOVIL",
+      "classes": [
+        "BUSETA"
+      ]
+    },
+    {
+      "code": "925",
+      "name": "UNIDAD MOVIL",
+      "classes": [
+        "BUS"
+      ]
+    },
+    {
+      "code": "79",
+      "name": "VAN",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "220",
+      "name": "VAN",
+      "classes": [
+        "MICROBUS"
+      ]
+    },
+    {
+      "code": "436",
+      "name": "VAN",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "447",
+      "name": "VAN",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "261",
+      "name": "VOLCO",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "271",
+      "name": "VOLCO",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "460",
+      "name": "VOLCO - PLATON",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "471",
+      "name": "VOLCO - PLATON",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "943",
+      "name": "VOLCO DESMONTABLE",
+      "classes": [
+        "VOLQUETA"
+      ]
+    },
+    {
+      "code": "497",
+      "name": "VOLQUETE",
+      "classes": [
+        "REMOLQUE"
+      ]
+    },
+    {
+      "code": "498",
+      "name": "VOLQUETE",
+      "classes": [
+        "SEMIREMOLQUE"
+      ]
+    },
+    {
+      "code": "274",
+      "name": "WAGON",
+      "classes": [
+        "CAMIONETA"
+      ]
+    },
+    {
+      "code": "275",
+      "name": "WAGON",
+      "classes": [
+        "CAMPERO"
+      ]
+    }
+  ]
+}

@@ -5,6 +5,7 @@ using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Repositories;
 using Flit.Tramites.Domain.Tramites.Estados;
+using Flit.Tramites.Domain.Tramites.ValueObjects;
 
 namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 
@@ -15,10 +16,21 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// <see cref="Email"/> es OPCIONAL: si viene vacío/omitido, reenvía al correo actual (AC1); si trae un
 /// valor distinto (case-insensitive/trim), se persiste ANTES de reenviar y el envío va al nuevo
 /// destinatario (AC2).
+/// <para>
+/// HU #14627 (Bug #14627, FLIT - SOPORTE) — <see cref="ValidationId"/> es OPCIONAL: con valor, es el
+/// REENVÍO de siempre (fila existente). <c>null</c> ⇒ "enviar por primera vez": el actor nunca tuvo una
+/// fila propia (<see cref="ListValidacionesReenviablesHandler"/> lo lista con
+/// <see cref="ValidacionReenviableEstados.SinIniciar"/>) y se identifica por <see cref="PartyRole"/> +
+/// <see cref="Ordinal"/> en su lugar (mismo par que distingue copropietarios, ADR-0053). Mismo permiso,
+/// mismo gate de estado del trámite (AC3) — no es una acción nueva, es el mismo mecanismo cubriendo el
+/// caso que antes se descartaba.
+/// </para>
 /// </summary>
 public sealed record AdminReenviarValidacionIdentidadCommand(
     Guid InstanceId,
-    Guid ValidationId,
+    Guid? ValidationId,
+    string? PartyRole,
+    int? Ordinal,
     Guid TenantId,
     string? Email,
     Guid? ChangedByUserId);
@@ -91,7 +103,8 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
-    IIdentityValidationAuditLog audit)
+    IIdentityValidationAuditLog audit,
+    IniciarKyverumVerifyHandler kyverumVerify)
 {
     /// <summary>Tipo del evento PROPIO de bitácora del trámite (historial visible en el dashboard admin).</summary>
     public const string EventoTipo = "reenvio_validacion_admin";
@@ -132,9 +145,13 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
                 $"El trámite está en estado '{instance.Status}': la validación de identidad ya no es " +
                 "accionable (decisión del organismo de tránsito, o trámite descartado).", null);
 
+        // HU #14627 — sin ValidationId, el actor nunca tuvo una fila propia: "enviar por primera vez".
+        if (command.ValidationId is not { } validationId)
+            return await HandleEnviarPrimeraVezAsync(command, ct).ConfigureAwait(false);
+
         // Tenant-scoped y tracked (mismo método que el mecanismo standalone); sirve tanto a validaciones
         // standalone como a las ligadas a trámite (ver XML doc del repositorio).
-        var validation = await repo.GetBiometricByIdWithPersonAsync(command.ValidationId, command.TenantId, ct)
+        var validation = await repo.GetBiometricByIdWithPersonAsync(validationId, command.TenantId, ct)
             .ConfigureAwait(false);
         if (validation is null || validation.ProcedureInstanceId != instance.Id)
             return (null, TramiteEstadoErrores.NoEncontrado, null, null);
@@ -166,6 +183,11 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
         validation.Name = subject.Nombre;
         validation.Email = emailDestino;
 
+        // HU #13821 (Épica #13817) — el correo corregido también queda en el ACTOR del trámite: si solo se
+        // guardaba en la validación, el siguiente disparo de identidad (o el FUR) volvía a leer el correo viejo.
+        var actorActualizado = emailActualizado
+            && await SincronizarCorreoDelActorAsync(command, validation, emailDestino, ct).ConfigureAwait(false);
+
         // Habeas Data — bitácora TÉCNICA del ciclo de identidad. Correo SIEMPRE enmascarado.
         await audit.LogAsync(new IdentityValidationAuditEntry(
             IdentityValidationAuditStages.Resend,
@@ -196,7 +218,9 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
                 validation_id = validation.Id,
                 party_role = validation.PartyRole,
                 email_actualizado = emailActualizado,
+                correo_anterior = emailActualizado ? emailActual : null,
                 correo_destino = emailDestino,
+                actor_actualizado = actorActualizado,
                 encolado = queued,
             }),
             CreatedAt = now,
@@ -217,5 +241,157 @@ public sealed class AdminReenviarValidacionIdentidadHandler(
 
         var dto = IniciarBiometriaHandler.ToDto(validation, now);
         return (new AdminReenviarValidacionIdentidadResult(dto, captureUrl, emailActualizado, queued), null, null, null);
+    }
+
+    /// <summary>
+    /// Escribe <paramref name="email"/> donde el trámite guarda el correo del SUJETO de identidad
+    /// (<see cref="IdentitySubjectResolver"/>): persona natural → <c>actor.Email</c>; persona jurídica → el
+    /// correo del representante legal en <c>actor.metadata</c> (nunca el de la empresa). El actor se empareja
+    /// por rol + documento del sujeto, sin caer al principal: con copropietarios, un emparejamiento flojo le
+    /// cambiaría el correo a otra persona. Sin coincidencia exacta no toca nada.
+    /// </summary>
+    private async Task<bool> SincronizarCorreoDelActorAsync(
+        AdminReenviarValidacionIdentidadCommand command,
+        ProcedureInstanceBiometricValidation validation,
+        string email,
+        CancellationToken ct)
+    {
+        var conActores = await repo.GetByIdWithActorsAsync(command.InstanceId, command.TenantId, ct).ConfigureAwait(false);
+        if (conActores is null || string.IsNullOrWhiteSpace(validation.DocumentNumber))
+            return false;
+
+        // Filas sin rol: legado de matrícula, donde la única parte que valida es el comprador.
+        var parte = validation.PartyRole ?? BiometricRules.ParteComprador;
+        var documento = validation.DocumentNumber.Trim();
+        var actor = conActores.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(IdentitySubjectResolver.For(a).NumeroDocumento?.Trim(), documento, StringComparison.OrdinalIgnoreCase));
+        return actor is not null && AplicarEmailAlActor(actor, email);
+    }
+
+    /// <summary>Núcleo (sin I/O) de <see cref="SincronizarCorreoDelActorAsync"/>: persona natural → <c>actor.Email</c>;
+    /// persona jurídica → el correo del representante legal embebido. Factor COMÚN con
+    /// <see cref="HandleEnviarPrimeraVezAsync"/>, que ya tiene el actor en memoria y no necesita recargarlo.</summary>
+    private static bool AplicarEmailAlActor(ProcedureInstanceActor actor, string email)
+    {
+        if (ActorPersonTypes.IsJuridical(actor.PersonType))
+        {
+            var (ciudad, direccion, rl, mandante) = ActorMetadataReader.Parse(actor.Metadata);
+            if (rl is null)
+                return false;
+            actor.Metadata = ActorMetadataReader.Serialize(
+                ciudad, direccion, rl with { Email = email }, mandante, ActorMetadataReader.GetOrigen(actor.Metadata));
+            return true;
+        }
+
+        actor.Email = email;
+        return true;
+    }
+
+    /// <summary>
+    /// HU #14627 (Bug #14627, FLIT - SOPORTE) — "enviar la validación por primera vez" desde el mismo cuadro
+    /// administrativo: el actor identificado por <see cref="AdminReenviarValidacionIdentidadCommand.PartyRole"/>
+    /// + <see cref="AdminReenviarValidacionIdentidadCommand.Ordinal"/> nunca tuvo una fila
+    /// <see cref="ProcedureInstanceBiometricValidation"/> propia (<see cref="ListValidacionesReenviablesHandler"/>
+    /// lo lista con <see cref="ValidacionReenviableEstados.SinIniciar"/>). El gate AC3 (aprobado/anulado/
+    /// revocado) ya se evaluó en <see cref="HandleAsync"/> antes de llegar aquí — se aplica SIEMPRE primero,
+    /// sin importar el caso.
+    /// </summary>
+    private async Task<(AdminReenviarValidacionIdentidadResult? Result, string? Error, string? ErrorDetail, int? CooldownMinutos)> HandleEnviarPrimeraVezAsync(
+        AdminReenviarValidacionIdentidadCommand command,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(command.PartyRole) || command.Ordinal is null)
+            return (null, TramiteEstadoErrores.NoEncontrado, null, null);
+
+        // Se recarga con actores + validaciones (la carga ligera de arriba solo trajo el trámite): el mismo
+        // repo que usa ListValidacionesReenviablesHandler/IniciarKyverumVerifyHandler para esta operación.
+        var instance = await repo.GetByIdWithBiometricsAndActorsAsync(command.InstanceId, command.TenantId, ct)
+            .ConfigureAwait(false);
+        if (instance is null)
+            return (null, TramiteEstadoErrores.NoEncontrado, null, null);
+
+        var parte = command.PartyRole.Trim();
+        var actor = instance.Actors.FirstOrDefault(a =>
+            string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase) && a.Ordinal == command.Ordinal.Value);
+        if (actor is null)
+            return (null, TramiteEstadoErrores.NoEncontrado, null, null);
+
+        var now = DateTimeOffset.UtcNow;
+        var subject = IdentitySubjectResolver.For(actor);
+
+        // Mismo criterio que el guard "ya existe una activa" de IniciarKyverumVerifyHandler (ADR-0053: con
+        // 2+ actores del mismo rol, además del rol se exige que el documento del sujeto coincida; sin la
+        // parte de "vencida reinicia" — aquí no hay enlace previo que reutilizar/expirar, solo se decide si
+        // bloquea). Devuelve el mismo código que usa el reenvío cuando colisiona con otra fila en vuelo.
+        var actoresDelRol = instance.Actors.Count(a => string.Equals(a.ActorType, parte, StringComparison.OrdinalIgnoreCase));
+        var activa = instance.BiometricValidations.FirstOrDefault(v =>
+            string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
+            && (actoresDelRol <= 1 || BiometricRules.DocumentoCoincide(v, subject.TipoDocumento, subject.NumeroDocumento))
+            && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso
+                or BiometricEstados.Aprobado or BiometricEstados.PendienteEnvio
+            && !(v.ExpiredManuallyAt != null && !BiometricRules.EsAprobadaVigente(v, now)));
+        if (activa is not null)
+            return (null, "validacion_en_curso", null, null);
+
+        var emailSolicitado = string.IsNullOrWhiteSpace(command.Email) ? null : command.Email.Trim();
+        var emailActual = (subject.Email ?? string.Empty).Trim();
+        var emailActualizado = emailSolicitado is not null
+            && !string.Equals(emailActual, emailSolicitado, StringComparison.OrdinalIgnoreCase);
+        var emailDestino = emailActualizado ? emailSolicitado! : emailActual;
+
+        if (string.IsNullOrWhiteSpace(subject.Nombre) || string.IsNullOrWhiteSpace(subject.TipoDocumento)
+            || string.IsNullOrWhiteSpace(subject.NumeroDocumento) || string.IsNullOrWhiteSpace(emailDestino))
+            return (null, "datos_incompletos", null, null);
+
+        // Núcleo COMPARTIDO con el wizard (llamada a Kyverum + creación/encolado de la fila): HU #14627 no
+        // duplica esa integración, solo decide a quién y cuándo se le dispara.
+        var (coreResult, coreError, _) = await kyverumVerify.EnviarYCrearValidacionAsync(
+            instance, command.TenantId, parte, subject.Nombre!, subject.TipoDocumento!, subject.NumeroDocumento!,
+            emailDestino, ct).ConfigureAwait(false);
+        if (coreError is not null)
+            return (null, coreError, null, null);
+
+        // HU #13821 (Épica #13817) — mismo criterio que el reenvío: el correo corregido también queda en el
+        // actor (o su representante legal). El actor ya está en memoria, no hace falta recargarlo.
+        var actorActualizado = emailActualizado && AplicarEmailAlActor(actor, emailDestino);
+
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.Resend,
+            IdentityValidationAuditOutcomes.Ok,
+            TenantId: command.TenantId,
+            ProcedureInstanceId: instance.Id,
+            ValidationId: coreResult!.Validation.Id,
+            PartyRole: parte,
+            Message: "Envío administrativo por primera vez (sin fila previa).",
+            Detail: $"correo_destino={EditarPrevalidacionHandler.MaskEmail(emailDestino)}; encolado={coreResult.Queued}"),
+            ct).ConfigureAwait(false);
+
+        await repo.AddEventAsync(new ProcedureInstanceEvent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = command.TenantId,
+            ProcedureInstanceId = instance.Id,
+            Tipo = EventoTipo,
+            Payload = JsonSerializer.Serialize(new
+            {
+                validation_id = coreResult.Validation.Id,
+                party_role = parte,
+                ordinal = command.Ordinal,
+                primera_vez = true,
+                email_actualizado = emailActualizado,
+                correo_anterior = emailActualizado ? emailActual : null,
+                correo_destino = emailDestino,
+                actor_actualizado = actorActualizado,
+                encolado = coreResult.Queued,
+            }),
+            CreatedAt = now,
+            CreatedBy = command.ChangedByUserId,
+        }, ct).ConfigureAwait(false);
+
+        await repo.SaveChangesAsync(ct).ConfigureAwait(false);
+
+        return (new AdminReenviarValidacionIdentidadResult(
+            coreResult.Validation, coreResult.CaptureUrl, emailActualizado, coreResult.Queued), null, null, null);
     }
 }

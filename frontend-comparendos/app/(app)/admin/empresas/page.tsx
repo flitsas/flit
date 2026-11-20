@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { History, Plus } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Modal, StatusBadge } from "@flit/ui";
 import { ConsultasAdmin } from "@/components/consultas/ConsultasAdmin";
 import { Encabezado, Requiere } from "@/components/Pantalla";
@@ -22,9 +22,12 @@ import type {
   ConfiguracionEmpresa,
   EmpresaAdmin,
   EmpresaPlataforma,
+  Nit,
   Tipologia,
 } from "@/lib/tipos";
+import { type PruebaContratos, resumenPrueba } from "@/lib/conductor";
 import { useCarga } from "@/lib/useCarga";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 
 function NuevaEmpresa({
   onCerrar,
@@ -57,7 +60,7 @@ function NuevaEmpresa({
   };
 
   return (
-    <Modal
+    <Modal icono="empresas"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -135,7 +138,7 @@ function Historial({ empresaId, onCerrar }: { empresaId: string; onCerrar: () =>
     apiFetch<AuditoriaConfiguracion[]>(`/admin/empresas/${empresaId}/auditoria`, { signal }),
   );
   return (
-    <Modal open onClose={onCerrar} title="Historial de cambios" size="lg">
+    <Modal icono="reloj" open onClose={onCerrar} title="Historial de cambios" size="lg">
       {lista.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
       {lista.estado === "error" && <InlineAlert tone="error">{lista.error}</InlineAlert>}
       {lista.datos?.length === 0 && <p className="text-sm opacity-70">Sin cambios registrados.</p>}
@@ -159,6 +162,124 @@ function Historial({ empresaId, onCerrar }: { empresaId: string; onCerrar: () =>
         ))}
       </ol>
     </Modal>
+  );
+}
+
+/**
+ * NIT que consultan el conductor en la API de contratos (HU #13712). La API de Renting solo conoce su propia flota: se
+ * marca NIT por NIT. El interruptor general sigue siendo la integración de la empresa; apagarla no borra estas casillas.
+ */
+/**
+ * «Probar conexión» (HU #13843): solo el inicio de sesión con la API de contratos, sin consultar placas. La conexión es
+ * del ambiente, no de la empresa.
+ */
+function ProbarConexion() {
+  const [probando, setProbando] = useState(false);
+  const [resultado, setResultado] = useState<PruebaContratos | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const probar = async () => {
+    setProbando(true);
+    setError(null);
+    try {
+      setResultado(await apiFetch<PruebaContratos>("/admin/contratos/probar", { method: "POST" }));
+    } catch (e) {
+      setResultado(null);
+      setError(e instanceof Error ? e.message : "No se pudo probar la conexión.");
+    } finally {
+      setProbando(false);
+    }
+  };
+  const r = resultado && resumenPrueba(resultado);
+  return (
+    <div className="flex flex-col gap-2">
+      <div>
+        <button type="button" className={controlCls(false)} disabled={probando} onClick={probar}>
+          <Icono nombre="integraciones" className="h-3.5 w-3.5" />
+          {probando ? "Probando…" : "Probar conexión"}
+        </button>
+      </div>
+      {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
+      {r && (
+        <InlineAlert tone={r.tono} title={r.titulo} compact>
+          {r.detalle.map((d) => (
+            <p key={d}>{d}</p>
+          ))}
+        </InlineAlert>
+      )}
+    </div>
+  );
+}
+
+function NitsConsultaContrato({ empresaId, integracionApi }: { empresaId: string; integracionApi: boolean }) {
+  const toast = useToast();
+  const nits = useCarga(`nits-contrato:${empresaId}`, (signal) =>
+    apiFetch<Nit[]>("/monitoreo/nits", { signal, query: { empresa: empresaId } }),
+  );
+
+  const cambiar = async (n: Nit, activo: boolean) => {
+    try {
+      await apiFetch(`/admin/empresas/${empresaId}/nits/${n.id}/consulta-contrato`, { method: "PUT", body: { activo } });
+      nits.recargar();
+      toast.show(`${n.numero}: ${activo ? "consulta por API" : "asignación manual"}.`, "success");
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "No se pudo cambiar el NIT.", "error");
+    }
+  };
+
+  return (
+    <section className="flex flex-col gap-2">
+      <h2 className="text-sm font-semibold">NIT que consultan el conductor en la API de contratos</h2>
+      <p className="text-xs opacity-70">
+        La API de Renting solo sabe quién tenía un vehículo de su propia flota. Marca únicamente esos NIT: los demás se
+        asignan a mano.
+      </p>
+      <ProbarConexion />
+      {!integracionApi && (
+        <InlineAlert tone="info" compact>
+          La integración del contraventor está en Manual o la consulta de contraventor está apagada: no sale ninguna
+          consulta. Las casillas se conservan para cuando se vuelva a encender.
+        </InlineAlert>
+      )}
+      <DataTable
+        tarjeta={false}
+        ariaLabel="NIT que consultan la API de contratos"
+        rows={nits.datos ?? []}
+        getRowKey={(n) => n.id}
+        status={nits.estado}
+        errorMessage={nits.error ?? undefined}
+        onRetry={nits.recargar}
+        emptyMessage="La empresa no tiene NIT monitoreados."
+        columns={[
+          {
+            key: "numero",
+            header: "NIT",
+            render: (n) => (
+              <span className="font-mono">
+                {n.tipoDocumento} {n.numero}
+              </span>
+            ),
+          },
+          { key: "titular", header: "Titular", render: (n) => n.nombreTitular ?? "—" },
+          {
+            key: "estado",
+            header: "Monitoreo",
+            render: (n) => <StatusBadge label={n.activo ? "Activo" : "Inactivo"} tone={n.activo ? "info" : "neutral"} />,
+          },
+          {
+            key: "api",
+            header: "Consulta por API",
+            align: "right",
+            render: (n) => (
+              <Interruptor
+                activo={n.consultaContratoApi}
+                onCambio={(v) => cambiar(n, v)}
+                etiqueta="Consultar por API"
+              />
+            ),
+          },
+        ]}
+      />
+    </section>
   );
 }
 
@@ -224,7 +345,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
       <div className="flex flex-wrap items-start justify-between gap-2">
         <DatosEmpresa nombre={config.datos.empresaNombre} nit={config.datos.empresaNit} />
         <button type="button" className={controlCls(false)} onClick={() => setHistorial(true)}>
-          <History className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="reloj" className="h-3.5 w-3.5" />
           Historial de cambios
         </button>
       </div>
@@ -295,17 +416,14 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
             <option value="ApiRenting">API de contratos de Renting</option>
           </select>
         </label>
-        <label className={ETIQUETA_CLS}>
+        {/* HU #13882: el conjunto sigue al canal de correo que la empresa tiene en Trámites. */}
+        <div className={ETIQUETA_CLS}>
           Conjunto de plantillas
-          <select
-            className={INPUT_CLS}
-            value={valores.conjuntoPlantillas}
-            onChange={(e) => cambiar({ conjuntoPlantillas: e.target.value })}
-          >
-            <option value="Flit">FLIT</option>
-            <option value="Renting">Renting</option>
-          </select>
-        </label>
+          <p className={`${INPUT_CLS} flex items-center bg-secondary`}>{valores.conjuntoPlantillas === "Renting" ? "Renting" : "FLIT"}</p>
+          <span className="font-normal opacity-70">
+            Sigue el «Enrutamiento de notificaciones» de la empresa en Trámites: Renting con «API Renting cliente», FLIT con «Colas FLIT».
+          </span>
+        </div>
       </section>
 
       <div className="flex justify-end gap-2">
@@ -327,9 +445,15 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
         </button>
       </div>
 
+      <NitsConsultaContrato
+        empresaId={empresaId}
+        integracionApi={base.tipoIntegracionConductor === "ApiRenting" && base.allowsContravenerConsultation}
+      />
+
       <section className="flex flex-col gap-2">
         <h2 className="text-sm font-semibold">Tipologías de derecho de petición habilitadas</h2>
         <DataTable
+          tarjeta={false}
           ariaLabel="Tipologías por empresa"
           rows={(tipologias.datos ?? []).filter((t) => t.activo || t.habilitada)}
           getRowKey={(t) => t.id}
@@ -367,7 +491,7 @@ function Configuracion({ empresaId, onGuardado }: { empresaId: string; onGuardad
       </section>
 
       {confirmar && (
-        <Modal
+        <Modal icono="alerta"
           open
           onClose={() => {
             setConfirmar(false);
@@ -424,7 +548,7 @@ function Pestanas({ empresaId, onGuardado }: { empresaId: string; onGuardado: ()
       <div
         role="tablist"
         aria-label="Configuración de la empresa"
-        className="flex gap-1 border-b border-[#E2E8F0] dark:border-white/10"
+        className={PESTANAS_LISTA_CLS}
       >
         {(
           [
@@ -438,7 +562,7 @@ function Pestanas({ empresaId, onGuardado }: { empresaId: string; onGuardado: ()
             role="tab"
             aria-selected={pestana === valor}
             onClick={() => setPestana(valor)}
-            className={`-mb-px border-b-2 px-3 py-2 text-xs font-semibold ${pestana === valor ? "border-[#3B4FD6] text-[#3B4FD6] dark:text-white" : "border-transparent opacity-70 hover:opacity-100"}`}
+            className={pestanaClass(pestana === valor)}
           >
             {etiqueta}
           </button>
@@ -470,7 +594,7 @@ export default function Empresas() {
           descripcion="Qué capacidades de Comparendos tiene cada empresa y qué tipologías de DP puede usar."
           acciones={
             <button type="button" className={BOTON_PRIMARIO_CLS} onClick={() => setNueva(true)}>
-              <Plus className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="mas" className="h-3.5 w-3.5" />
               Registrar empresa
             </button>
           }
@@ -538,7 +662,7 @@ export default function Empresas() {
           ]}
         />
         {elegida && (
-          <Modal
+          <Modal icono="empresas"
             open
             onClose={() => setElegida(null)}
             title={lista.datos?.find((e) => e.id === elegida)?.nombre ?? "Empresa"}

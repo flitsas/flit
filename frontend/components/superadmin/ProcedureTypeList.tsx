@@ -79,7 +79,7 @@ export function ProcedureTypeList({
       {publishError && (
         <div
           className="rounded-xl p-3 text-xs border"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: 'var(--destructive)', background: 'var(--badge-danger-bg)', color: 'var(--destructive)' }}
           role="alert"
           aria-live="polite"
         >
@@ -89,7 +89,7 @@ export function ProcedureTypeList({
 
       <div
         className="grid grid-cols-12 px-4 py-2.5 text-[10px] font-semibold uppercase rounded-xl shrink-0"
-        style={{ background: '#DFE5ED', color: 'var(--color-flit-primary)' }}
+        style={{ background: 'var(--border)', color: 'var(--color-flit-primary)' }}
         role="row"
         aria-label="Encabezado de tabla de parametrizaciones"
       >
@@ -126,9 +126,9 @@ export function ProcedureTypeList({
                   ? `${item.code}, borrador${isSelected ? ', seleccionado' : ''}`
                   : `${item.code}, publicado`
               }
-              className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-white dark:bg-[#0B0F14] border text-xs transition"
+              className="grid grid-cols-12 items-center px-4 py-3 rounded-xl bg-card border text-xs transition"
               style={{
-                borderColor: isSelected ? 'var(--color-flit-tech)' : '#DFE5ED',
+                borderColor: isSelected ? 'var(--color-flit-tech)' : 'var(--border)',
                 boxShadow: isSelected ? '0 0 0 1px var(--color-flit-tech)' : undefined,
                 cursor: isDraft ? 'pointer' : 'default',
               }}

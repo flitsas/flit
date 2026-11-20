@@ -1,0 +1,156 @@
+import { describe, expect, it } from "vitest";
+import { fusionarCeldas, hayPendientes } from "@/lib/tablero/fusionarCeldas";
+import { V1, V2, V3, celda, grilla, vehiculo } from "@/lib/tablero/__tests__/datos";
+
+// Uso de ejemplo: const vigente = fusionarCeldas(anterior, await obtenerGrilla(id, anterior.version)) → la grilla con las
+// celdas recibidas encima de las que ya tenía, por (vehículo, fuente); lo no recibido se conserva tal cual.
+
+describe("fusionarCeldas — HU #13748 AC2", () => {
+  it("sin grilla previa devuelve los cambios con los vehículos en su orden", () => {
+    const cambios = grilla({ vehiculos: [V3, V1, V2] });
+    expect(fusionarCeldas(null, cambios).vehiculos.map((v) => v.identificador)).toEqual(["TST001", "TST002", "TST003"]);
+  });
+
+  it("fusiona por (vehículo, fuente) y conserva las celdas y los vehículos no recibidos", () => {
+    const anterior = grilla();
+    const runt = celda(3, "RUNT", "COMPLETADO", { version: 13 });
+    const cambios = grilla({ version: 13, desde: 12, vehiculos: [vehiculo(3, [runt], { terminado: false })], avance: { vehiculos: 3, terminados: 1 } });
+
+    const vigente = fusionarCeldas(anterior, cambios);
+
+    const v3 = vigente.vehiculos.find((v) => v.identificador === "TST003")!;
+    expect(v3.celdas).toHaveLength(4);
+    expect(v3.celdas.find((c) => c.fuente === "RUNT")).toEqual(runt);
+    expect(v3.celdas.filter((c) => c.fuente !== "RUNT").every((c) => c.estado === "PENDIENTE")).toBe(true);
+    expect(vigente.vehiculos.find((v) => v.identificador === "TST001")).toEqual(V1);
+    expect(vigente.vehiculos.find((v) => v.identificador === "TST002")).toEqual(V2);
+  });
+
+  it("conserva el orden de las columnas del vehículo aunque la celda recibida venga sola", () => {
+    const cambios = grilla({ version: 13, vehiculos: [vehiculo(3, [celda(3, "SIMIT_PROPIETARIO", "EN_CURSO", { version: 13 })])] });
+    expect(fusionarCeldas(grilla(), cambios).vehiculos[2].celdas.map((c) => c.fuente)).toEqual([
+      "RUNT",
+      "IMPUESTO_DEPARTAMENTAL",
+      "SIMIT_PROPIETARIO",
+      "RUNT_LOCATARIO",
+    ]);
+  });
+
+  it("agrega un vehículo nuevo en su orden y actualiza «terminado» del recibido", () => {
+    const v4 = vehiculo(4, [celda(4, "RUNT", "PENDIENTE", { version: 14 })]);
+    const v3Terminado = vehiculo(3, [celda(3, "RUNT", "COMPLETADO", { version: 14 })], { terminado: true });
+    const vigente = fusionarCeldas(grilla(), grilla({ version: 14, vehiculos: [v4, v3Terminado] }));
+    expect(vigente.vehiculos.map((v) => v.identificador)).toEqual(["TST001", "TST002", "TST003", "TST004"]);
+    expect(vigente.vehiculos[2].terminado).toBe(true);
+  });
+
+  it("toma de la respuesta el estado, la versión, las columnas, el avance y el estimado", () => {
+    const anterior = grilla({ estimado_consultas: [{ fuente: "RUNT", estimadas: 3, consumidas: 3 }] });
+    const cambios = grilla({ estado: "INCOMPLETO", version: 30, desde: 12, vehiculos: [], avance: { vehiculos: 3, terminados: 2 } });
+    delete cambios.estimado_consultas;
+
+    const vigente = fusionarCeldas(anterior, cambios);
+
+    expect(vigente).toMatchObject({ estado: "INCOMPLETO", version: 30, desde: 12, avance: { vehiculos: 3, terminados: 2 }, columnas: cambios.columnas });
+    expect(vigente.estimado_consultas).toBeUndefined();
+    expect(vigente.vehiculos).toHaveLength(3);
+  });
+
+  it("una celda recibida con versión menor que la que ya tiene no la pisa", () => {
+    const anterior = grilla({ vehiculos: [vehiculo(1, [celda(1, "RUNT", "COMPLETADO", { version: 20 })])] });
+    const vieja = grilla({ vehiculos: [vehiculo(1, [celda(1, "RUNT", "PENDIENTE", { version: 5 })])] });
+    expect(fusionarCeldas(anterior, vieja).vehiculos[0].celdas[0]).toMatchObject({ estado: "COMPLETADO", version: 20 });
+  });
+
+  it("no muta la grilla anterior", () => {
+    const anterior = grilla();
+    const copia = structuredClone(anterior);
+    fusionarCeldas(anterior, grilla({ version: 13, vehiculos: [vehiculo(3, [celda(3, "RUNT", "ERROR", { version: 13 })])] }));
+    expect(anterior).toEqual(copia);
+  });
+});
+
+describe("hayPendientes — HU #13748 AC2 (cuándo detener el sondeo)", () => {
+  it("hay pendientes con alguna celda PENDIENTE o EN_CURSO", () => {
+    expect(hayPendientes(grilla({ vehiculos: [V1, V3] }))).toBe(true);
+    expect(hayPendientes(grilla({ vehiculos: [vehiculo(2, [celda(2, "RUNT", "EN_CURSO")])] }))).toBe(true);
+  });
+
+  it("sin pendientes cuando todo está en COMPLETADO, ERROR o NA", () => {
+    expect(hayPendientes(grilla({ vehiculos: [V1, vehiculo(2, [celda(2, "RUNT", "ERROR")])] }))).toBe(false);
+  });
+
+  it("sin grilla no hay nada que sondear", () => {
+    expect(hayPendientes(null)).toBe(false);
+  });
+});
+
+// HU #14087: la fila solo viaja en el sondeo cuando cambia una celda; los documentos son los de la última versión recibida.
+describe("fusionarCeldas — HU #14087: documentos de la fila", () => {
+  it("toma el documento declarado y los propietarios de la última versión recibida de la fila", () => {
+    const anterior = grilla({
+      vehiculos: [vehiculo(1, [celda(1, "RUNT", "PENDIENTE")], { documento_declarado: null, propietarios: [] })],
+    });
+    const recibido = vehiculo(1, [celda(1, "RUNT", "COMPLETADO", { version: 13 })], {
+      documento_declarado: { rol: "LOCATARIO", tipo_documento: "C", documento_enmascarado: "****5678" },
+      propietarios: [
+        { tipo_documento: "C", documento_enmascarado: "****1222" },
+        { tipo_documento: "NIT", documento_enmascarado: "****4567" },
+      ],
+    });
+    const vigente = fusionarCeldas(anterior, grilla({ version: 13, vehiculos: [recibido] }));
+    expect(vigente.vehiculos[0].documento_declarado).toEqual({ rol: "LOCATARIO", tipo_documento: "C", documento_enmascarado: "****5678" });
+    expect(vigente.vehiculos[0].propietarios).toEqual(recibido.propietarios);
+  });
+
+  it("un sondeo que no trae la fila conserva sus documentos", () => {
+    const conDocs = vehiculo(1, [celda(1, "RUNT", "COMPLETADO")], { propietarios: [{ tipo_documento: "C", documento_enmascarado: "****1222" }] });
+    const vigente = fusionarCeldas(grilla({ vehiculos: [conDocs, V2] }), grilla({ version: 13, vehiculos: [vehiculo(2, [celda(2, "RUNT", "ERROR", { version: 13 })])] }));
+    expect(vigente.vehiculos[0].propietarios).toEqual([{ tipo_documento: "C", documento_enmascarado: "****1222" }]);
+  });
+});
+
+describe("fusionarCeldas — Punto 3: placas pegadas por tiempo (vehiculos_pegados)", () => {
+  it("marca pegada una fila que no vino en el sondeo si su id está en vehiculos_pegados", () => {
+    const actual = grilla();
+    const cambios = grilla({ vehiculos: [], total_pegadas: 1, vehiculos_pegados: [V2.id] });
+    const r = fusionarCeldas(actual, cambios);
+    expect(r.vehiculos.find((v) => v.id === V2.id)?.pegada).toBe(true);
+    expect(r.vehiculos.find((v) => v.id === V1.id)?.pegada).toBe(false);
+  });
+
+  it("sin la clave vehiculos_pegados conserva el pegada de cada fila", () => {
+    const actual = grilla({ vehiculos: [{ ...V1, pegada: true }, V2, V3] });
+    const r = fusionarCeldas(actual, grilla({ vehiculos: [] }));
+    expect(r.vehiculos.find((v) => v.id === V1.id)?.pegada).toBe(true);
+  });
+});
+
+// HU #14562 AC29/AC30 (H1): la fila se fusiona por su versión de fila y la cabecera (conteos, lote) viaja en cada delta.
+describe("fusionarCeldas — HU #14562 campos de fila y cabecera", () => {
+  const lote = { modo: "CON_ANALISIS" as const, tipo_tramite: { codigo: "TRASPASO_STANDARD", nombre: "Traspaso" }, creado_en: "2026-11-12T14:42:00Z", es_express: false, usuario_creador: { id: "u1", nombre: "Usuaria Prueba" } };
+  const conteos = { vehiculos: 1, terminados: 1, con_error: 0, con_deuda: 0, bloqueados: 0, listos_tramite: 1 };
+
+  it("AC29: el veredicto y la marca de ajuste de la fila recibida reemplazan los anteriores, y los conteos son los del delta", () => {
+    const anterior = grilla({ vehiculos: [{ ...V1, veredicto: "VIABLE", version: 5 }], conteos, lote });
+    const delta = grilla({ version: 13, vehiculos: [{ ...V1, veredicto: "BLOQUEADO", dictamen_ajustado: true, version: 6 }], conteos: { ...conteos, bloqueados: 1, listos_tramite: 0 }, lote });
+    const vigente = fusionarCeldas(anterior, delta);
+    expect(vigente.vehiculos[0].veredicto).toBe("BLOQUEADO");
+    expect(vigente.vehiculos[0].dictamen_ajustado).toBe(true);
+    expect(vigente.conteos).toEqual({ ...conteos, bloqueados: 1, listos_tramite: 0 });
+  });
+
+  it("AC30: una fila con versión de fila menor que la vigente no pisa sus datos de fila", () => {
+    const anterior = grilla({ vehiculos: [{ ...V1, veredicto: "BLOQUEADO", version: 9 }] });
+    const atrasada = grilla({ vehiculos: [{ ...V1, veredicto: "VIABLE", version: 8 }] });
+    expect(fusionarCeldas(anterior, atrasada).vehiculos[0].veredicto).toBe("BLOQUEADO");
+  });
+
+  it("AC31: un delta sin `lote` ni `conteos` conserva los que ya se tenían", () => {
+    const anterior = grilla({ vehiculos: [V1], conteos, lote });
+    const delta = grilla({ vehiculos: [] });
+    const vigente = fusionarCeldas(anterior, delta);
+    expect(vigente.lote).toEqual(lote);
+    expect(vigente.conteos).toEqual(conteos);
+  });
+});

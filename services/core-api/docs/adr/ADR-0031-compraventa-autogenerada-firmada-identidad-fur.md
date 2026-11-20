@@ -23,7 +23,7 @@ Generar la compraventa automáticamente **solo cuando no exista** un adjunto `co
 **Pros:**
 - Los sellos de identidad ya se resuelven y viajan en la data (costura mínima).
 - Corrige el bug de clobber de la compraventa del usuario.
-- Respeta la parametrización obligatorio/opcional por compañía (`CompanyDocumentParam`).
+- Respeta la obligatoriedad que define la regla base de la plataforma y del organismo. (La parametrización por compañía `CompanyDocumentParam` que citaba esta opción se retiró en la HU #14411.)
 - Sin dependencia externa; no bloqueante.
 
 **Cons:**

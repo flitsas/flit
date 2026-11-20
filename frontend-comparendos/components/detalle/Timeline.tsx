@@ -2,25 +2,27 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { MessageSquarePlus } from "lucide-react";
 import { InlineAlert } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { useToast } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
-import { EVENTO_TIMELINE } from "@/lib/etiquetas";
+import { EVENTO_TIMELINE, nombreActor, textoParaGestora } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
 import { tienePermiso } from "@/lib/sesion";
 import type { EventoTimeline } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_MAS = iconoComo("mas");
 
 const COLOR_ACTOR: Record<string, string> = {
   Usuario: "var(--color-flit-brand)",
-  Sistema: "#5B6B82",
-  Scheduler: "#8B5CF6",
-  ApiExterna: "#00A3A3",
-  Conductor: "#D9A400",
+  Sistema: "var(--muted-foreground)",
+  Scheduler: "var(--badge-purple-fg)",
+  ApiExterna: "var(--color-flit-tech)",
+  Conductor: "var(--badge-warning-fg)",
 };
 
 /**
@@ -110,17 +112,17 @@ export function Timeline({
       {eventos.estado === "error" && <InlineAlert tone="error" action={<button type="button" onClick={eventos.recargar}>Reintentar</button>}>{eventos.error}</InlineAlert>}
       {eventos.estado === "ready" && (eventos.datos ?? []).length === 0 && <p className="text-xs opacity-60">Sin eventos para mostrar.</p>}
 
-      <ol className="relative ml-2 border-l-2 border-[#DFE5ED] dark:border-white/10">
+      <ol className="relative ml-2 border-l-2 border-border">
         {(eventos.datos ?? []).map((e) => (
           <li key={e.id} className="relative mb-4 ml-5">
-            <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full ring-4 ring-white dark:ring-[#0B0F14]" style={{ background: COLOR_ACTOR[e.actorTipo] ?? "#5B6B82" }} aria-hidden />
+            <span className="absolute -left-[27px] top-1 h-3 w-3 rounded-full ring-4 ring-card" style={{ background: COLOR_ACTOR[e.actorTipo] ?? "var(--muted-foreground)" }} aria-hidden />
             <div className="flex flex-wrap items-baseline gap-x-2">
               <span className="text-xs font-semibold">{EVENTO_TIMELINE[e.tipo] ?? e.tipo}</span>
               <span className="text-[11px] opacity-60">
-                {formatoFechaHora(e.ocurridoEn)} · {e.actorNombre}
+                {formatoFechaHora(e.ocurridoEn)} · {nombreActor(e.actorNombre)}
               </span>
             </div>
-            <p className="whitespace-pre-wrap text-xs text-[#334155] dark:text-slate-300">{e.descripcion}</p>
+            <p className="whitespace-pre-wrap text-xs text-foreground">{textoParaGestora(e.descripcion)}</p>
             {/* §7.2: el evento lleva a lo que lo originó: el correo al Centro de mensajes; el DP, el pago y los documentos a su sección del detalle. */}
             {e.relacionadoTipo === "comunicacion_saliente" && e.relacionadoId && verMensajes && (
               <Link href={`/mensajes?mensaje=${e.relacionadoId}`} className="text-[11px] font-semibold text-flit-brand hover:underline">
@@ -141,10 +143,10 @@ export function Timeline({
         <div className="pointer-events-none sticky bottom-3 flex justify-end">
           <button
             type="button"
-            className={`${BOTON_PRIMARIO_CLS} pointer-events-auto rounded-full shadow-lg`}
+            className={`${BOTON_PRIMARIO_CLS} pointer-events-auto rounded-full`}
             onClick={() => setEscribiendo(true)}
           >
-            <MessageSquarePlus className="h-3.5 w-3.5" aria-hidden />
+            <ICONO_MAS className="h-3.5 w-3.5" aria-hidden />
             Agregar observación
           </button>
         </div>

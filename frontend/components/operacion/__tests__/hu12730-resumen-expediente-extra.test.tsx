@@ -1,6 +1,7 @@
 // Uso de ejemplo:
 //   read('MatriculaResumen.tsx') → lg:grid-cols-2 + lg:col-span-2 si total % 2 === 1
-//   ExpedienteCronologicoAccordion({ statusHistory }) → WizardAccordion defaultOpen={false}
+//   ExpedienteCronologicoAccordion({ statusHistory, instanceId? }) → WizardAccordion defaultOpen={false}
+//   instanceId es opcional: sin él el acordeón sigue siendo el del expediente y nace plegado.
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';

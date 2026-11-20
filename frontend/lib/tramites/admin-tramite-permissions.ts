@@ -9,6 +9,8 @@ export const ADMIN_TRAMITE_PERMISSIONS = {
   limpiarConsolidado: 'AdminTramiteLimpiarConsolidado',
   cargarConsolidado: 'AdminTramiteCargarConsolidado',
   cambiarEstado: 'AdminTramiteCambiarEstado',
+  // Bug #14604 — cargar un documento en cualquier estado del trámite, con observación obligatoria.
+  cargarDocumento: 'AdminTramiteCargarDocumento',
   anular: 'AdminTramiteAnular',
   reenviarValidacion: 'AdminTramiteReenviarValidacion',
   reasignarGestor: 'AdminTramiteReasignarGestor',

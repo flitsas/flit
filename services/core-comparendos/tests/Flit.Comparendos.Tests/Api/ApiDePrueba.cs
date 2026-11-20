@@ -33,6 +33,9 @@ public sealed class RelojDePrueba : TimeProvider
     public override DateTimeOffset GetUtcNow() => Ahora;
 
     public void Hoy(DateOnly dia) => Ahora = new DateTimeOffset(dia.ToDateTime(new TimeOnly(9, 0)), TimeSpan.FromHours(-5)).ToUniversalTime();
+
+    /// <summary>Fija un instante exacto (p. ej. cerca de la medianoche de Colombia, UTC-5).</summary>
+    public void En(DateTimeOffset momento) => Ahora = momento.ToUniversalTime();
 }
 
 /// <summary>
@@ -72,6 +75,10 @@ public class ApiDePrueba : IAsyncLifetime
 
     protected virtual IDictionary<string, string?> Configuracion() => new Dictionary<string, string?>();
 
+    /// <summary>Kestrel real en un puerto libre en vez del TestServer: solo para lo que el TestServer no aplica (límites
+    /// de tamaño del cuerpo).</summary>
+    protected virtual bool ConKestrel => false;
+
     public async ValueTask InitializeAsync()
     {
         var server = Environment.GetEnvironmentVariable("ConnectionStrings__Core") ?? $"Host=127.0.0.1;Port=5432;Username={Environment.UserName}";
@@ -108,7 +115,13 @@ public class ApiDePrueba : IAsyncLifetime
 
         App = Program.Build([], b =>
         {
-            b.WebHost.UseTestServer();
+            if (ConKestrel)
+            {
+                settings[WebHostDefaults.ServerUrlsKey] = "http://127.0.0.1:0";
+                settings[ServicioSettings.GrpcPortKey] = PuertoLibre().ToString(System.Globalization.CultureInfo.InvariantCulture);
+            }
+            else
+                b.WebHost.UseTestServer();
             b.Configuration.AddInMemoryCollection(settings);
             b.Services.AddHttpClient(PlatformAuthenticationExtensions.JwksHttpClientName).ConfigurePrimaryHttpMessageHandler(() => new Jwks(_llave));
         }, s =>
@@ -140,12 +153,27 @@ public class ApiDePrueba : IAsyncLifetime
     public HttpClient Cliente(UsuarioDePrueba usuario)
     {
         ArgumentNullException.ThrowIfNull(usuario);
-        var client = App.GetTestClient();
+        var client = ConKestrel ? ClienteKestrel() : App.GetTestClient();
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", Token(usuario));
         return client;
     }
 
-    public HttpClient Anonimo() => App.GetTestClient();
+    public HttpClient Anonimo() => ConKestrel ? ClienteKestrel() : App.GetTestClient();
+
+    private static int PuertoLibre()
+    {
+        using var l = new System.Net.Sockets.TcpListener(IPAddress.Loopback, 0);
+        l.Start();
+        return ((IPEndPoint)l.LocalEndpoint).Port;
+    }
+
+    private HttpClient ClienteKestrel() => new()
+    {
+        // Program.Build escucha en todas las interfaces ([::]:puerto): se llama por 127.0.0.1 al puerto asignado.
+        BaseAddress = new Uri($"http://127.0.0.1:{new Uri(App.Services.GetRequiredService<Microsoft.AspNetCore.Hosting.Server.IServer>()
+            .Features.Get<Microsoft.AspNetCore.Hosting.Server.Features.IServerAddressesFeature>()!.Addresses.First().Replace("[::]", "localhost", StringComparison.Ordinal)).Port}"),
+        Timeout = TimeSpan.FromMinutes(2),
+    };
 
     public async Task EnDbAsync(Func<ComparendosDb, Task> accion)
     {
@@ -210,7 +238,7 @@ public sealed class EmpresasDePrueba : Flit.Comparendos.Api.Plataforma.IEmpresas
 
     public bool Caida { get; set; }
 
-    public void Agregar(Guid id, string nombre, string? nit = null) => _empresas[id] = new(id, nombre, nit);
+    public void Agregar(Guid id, string nombre, string? nit = null, Flit.Comparendos.Domain.Modelo.CanalCorreo? canal = null) => _empresas[id] = new(id, nombre, nit, canal);
 
     public Task<IReadOnlyList<Flit.Comparendos.Api.Plataforma.EmpresaPlataforma>?> ListarAsync(CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<Flit.Comparendos.Api.Plataforma.EmpresaPlataforma>?>(Caida ? null : [.. _empresas.Values]);

@@ -1,7 +1,7 @@
 'use client';
 
 import { forwardRef, useEffect, useId, useImperativeHandle, useRef, useState } from 'react';
-import { ChevronDown } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { digitsOnly } from '@/lib/format/currency';
 import { usePendingChanges } from './pending-changes';
@@ -23,6 +23,7 @@ import type {
 import { WIZARD_INPUT, WIZARD_SELECT, WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { WizardCardHeader, WizardFieldToggle, WizardSegmented } from './wizard-atoms';
 import { PRENDA_DECISION_LABELS, PRENDA_OMITIR_AYUDA } from './prenda-decision-labels';
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * Reexportada desde la fuente única (`prenda-decision-labels.ts`, HU #13112): `FirmaFurStep` y
@@ -729,9 +730,9 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
   ) : null;
   /** Gris de campo deshabilitado (patrón `text-[#59677D] dark:text-white/70`, 5,7:1 sobre blanco). */
   const acreedorInputClass = omitiendo
-    ? `${INPUT_BASE} text-[#59677D] dark:text-white/70`
+    ? `${INPUT_BASE} text-muted-foreground`
     : `${INPUT_BASE}${acreedorReadOnly ? ' opacity-70' : ''}`;
-  const acreedorInputStyle = acreedorDeshabilitado ? { background: 'rgba(223,229,237,0.35)' } : undefined;
+  const acreedorInputStyle = acreedorDeshabilitado ? { background: 'var(--surface-sunken)' } : undefined;
   const requiereDocumento = decision !== '' && REQUIERE_DOCUMENTO.has(decision);
   const baseDocumentGateReady = !requiereDocumento || !documentRequired || docSatisfied;
   // AC1/AC3 — mientras la complementaria esté activa, su certificado también gatea Continuar: dos
@@ -816,7 +817,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
 
   /** Ayuda permanente bajo la opción «Omitir prenda» (AC4): informativa, no una alerta. */
   const ayudaOmitir = ofreceOmitir ? (
-    <p id="prenda-omitir-ayuda" className="mt-1.5 text-xs leading-snug text-[#59677D] dark:text-white/70">
+    <p id="prenda-omitir-ayuda" className="mt-1.5 text-xs leading-snug text-muted-foreground">
       <span className="font-semibold">{PRENDA_DECISION_LABELS.omitir}:</span> {PRENDA_OMITIR_AYUDA}
     </p>
   ) : null;
@@ -1038,10 +1039,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
               aria-controls={runtDetailId}
             >
               <span>Ver información de prenda / gravamen del RUNT</span>
-              <ChevronDown
-                className={`h-4 w-4 shrink-0 transition-transform ${runtOpen ? 'rotate-180' : ''}`}
-                aria-hidden
-              />
+              <Icono nombre="abajo" className={`h-4 w-4 shrink-0 transition-transform ${runtOpen ? 'rotate-180' : ''}`} />
             </button>
             {runtOpen && (
               <div
@@ -1263,7 +1261,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                     >
                       Acreedor (beneficiario)
                       {capturaAcreedor && (
-                        <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                        <span style={{ color: 'var(--destructive)' }} aria-hidden="true">
                           *
                         </span>
                       )}
@@ -1300,7 +1298,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                     >
                       NIT / documento del acreedor
                       {capturaAcreedor && (
-                        <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                        <span style={{ color: 'var(--destructive)' }} aria-hidden="true">
                           *
                         </span>
                       )}
@@ -1340,7 +1338,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                 <div>
                   <label htmlFor="prenda-levantamiento-entidad" className={REQUIRED_LABEL}>
                     Entidad ante la que se levantó
-                    <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                    <span style={{ color: 'var(--destructive)' }} aria-hidden="true">
                       *
                     </span>
                   </label>
@@ -1389,7 +1387,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                   (VehicleTransformationsCard) — único cambio pedido en el control; el cargue de la
                   complementaria (más abajo) conserva su diseño actual. */}
               {complementariaDecision && (
-                <div className="mt-2 rounded-2xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+                <div className="mt-2 rounded-2xl border p-4" style={{ borderColor: 'var(--border)' }}>
                   <WizardCardHeader title="Acción complementaria de prenda" level="h4" />
                   <WizardFieldToggle
                     id="prenda-complementaria-toggle"
@@ -1434,7 +1432,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                             >
                               Acreedor (beneficiario)
                               {complementariaCapturaAcreedor && (
-                                <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                                <span style={{ color: 'var(--destructive)' }} aria-hidden="true">
                                   *
                                 </span>
                               )}
@@ -1465,7 +1463,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                               <p
                                 id="prenda-complementaria-acreedor-nombre-err"
                                 className="mt-1 text-xs"
-                                style={{ color: '#FF4E00' }}
+                                style={{ color: 'var(--destructive)' }}
                               >
                                 {complementariaFieldErrors.nombre}
                               </p>
@@ -1482,7 +1480,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                             >
                               NIT / documento del acreedor
                               {complementariaCapturaAcreedor && (
-                                <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                                <span style={{ color: 'var(--destructive)' }} aria-hidden="true">
                                   *
                                 </span>
                               )}
@@ -1515,7 +1513,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                               <p
                                 id="prenda-complementaria-acreedor-doc-err"
                                 className="mt-1 text-xs"
-                                style={{ color: '#FF4E00' }}
+                                style={{ color: 'var(--destructive)' }}
                               >
                                 {complementariaFieldErrors.documento}
                               </p>
@@ -1528,7 +1526,7 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
                         <div>
                           <label htmlFor="prenda-complementaria-levantamiento-entidad" className={REQUIRED_LABEL}>
                             Entidad ante la que se levantó
-                            <span style={{ color: '#FF4E00' }} aria-hidden="true">
+                            <span style={{ color: 'var(--destructive)' }} aria-hidden="true">
                               *
                             </span>
                           </label>
@@ -1576,7 +1574,8 @@ export const PrendaForm = forwardRef<PrendaFormHandle, Props>(function PrendaFor
         <div className="flex items-center justify-between gap-3 mt-4">
           {saved ? (
             <span className="text-xs font-semibold" style={{ color: 'var(--flit-success-ink)' }} role="status" aria-live="polite">
-              Decisión de prenda guardada ✓
+              <IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />
+              Decisión de prenda guardada
             </span>
           ) : (
             <span className="text-xs opacity-70">{loading ? 'Cargando…' : ''}</span>

@@ -90,6 +90,11 @@ public sealed class IdentityValidationCompletedConsumer(
             || string.IsNullOrWhiteSpace(validation.DocumentNumber))
             return new IdentityValidationConsumeResult(evt.ValidationId, evt.Estado, 0, 0, []);
 
+        // HU #14044 — la validación del portal Persona Natural (ancla PortalSolicitudRef) no se reutiliza entre
+        // trámites: su aprobación NO dispara la firma de trámites pendientes de la misma cédula en el tenant.
+        if (!string.IsNullOrEmpty(validation.PortalSolicitudRef))
+            return new IdentityValidationConsumeResult(evt.ValidationId, evt.Estado, 0, 0, []);
+
         var tipoDoc = validation.DocumentType.Trim();
         var documento = validation.DocumentNumber.Trim();
         var aprobadaEn = validation.ValidatedAt ?? validation.CreatedAt;
@@ -241,7 +246,7 @@ public sealed class IdentityValidationCompletedConsumer(
                 && s.Estado == SignatureEstados.Firmada));
         }
 
-        var fur = instance.Attachments
+        var fur = instance.AdjuntosEfectivos()
             .Where(a => string.Equals(a.Tipo, FurVigenciaExpediente.TipoFur, StringComparison.OrdinalIgnoreCase))
             .OrderByDescending(a => a.UploadedAt)
             .FirstOrDefault();

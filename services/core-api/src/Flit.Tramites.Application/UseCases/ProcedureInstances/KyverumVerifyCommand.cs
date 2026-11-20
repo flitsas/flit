@@ -133,7 +133,9 @@ public sealed class IniciarKyverumVerifyHandler(
             string.Equals(v.PartyRole, parte, StringComparison.OrdinalIgnoreCase)
             && (actoresDelRol <= 1 || BiometricRules.DocumentoCoincide(v, tipoDoc, documento))
             && v.Status is BiometricEstados.Enviado or BiometricEstados.EnProceso
-                or BiometricEstados.Aprobado or BiometricEstados.PendienteEnvio);
+                or BiometricEstados.Aprobado or BiometricEstados.PendienteEnvio
+            // HU #13824 — una aprobada que un Super Admin venció a mano ya no bloquea: es justo lo que se revalida.
+            && !(v.ExpiredManuallyAt != null && !BiometricRules.EsAprobadaVigente(v, nowDecision)));
         if (existing is not null)
         {
             // Un enlace VENCIDO no debe bloquear el reenvío. Si la validación activa es en_proceso/enviado y
@@ -163,6 +165,31 @@ public sealed class IniciarKyverumVerifyHandler(
             repo, audit, tenantId, tipoDoc, documento, DateTimeOffset.UtcNow, ct);
         if (bloqueo is not null)
             return (null, "biometria_activa", IdentityInFlightRelease.Conflicto(bloqueo));
+
+        return await EnviarYCrearValidacionAsync(instance, tenantId, parte!, nombre, tipoDoc, documento, email, ct);
+    }
+
+    /// <summary>
+    /// HU #14627 (Bug #14627, FLIT - SOPORTE) — núcleo de "llamar a Kyverum y crear/encolar la fila",
+    /// extraído de <see cref="HandleCoreAsync"/> para que <see cref="AdminReenviarValidacionIdentidadHandler"/>
+    /// lo reutilice en el caso "enviar la validación por primera vez" desde el cuadro administrativo (un
+    /// actor que nunca tuvo una fila propia). Deliberadamente NO incluye el gate de estado del trámite
+    /// (<c>not_draft</c>) ni el guard de "ya existe una activa para esta parte": esos dos los decide cada
+    /// llamador (el wizard los tiene arriba en <see cref="HandleCoreAsync"/>; el admin aplica el suyo,
+    /// propio, antes de invocar este método). Requiere <paramref name="instance"/> con
+    /// <c>BiometricValidations</c> cargada (se le agrega la fila nueva/encolada directamente).
+    /// </summary>
+    internal async Task<(IniciarKyverumVerifyResult? Result, string? Error, IdentitySendDecision? Conflict)> EnviarYCrearValidacionAsync(
+        ProcedureInstance instance,
+        Guid tenantId,
+        string parte,
+        string nombre,
+        string tipoDoc,
+        string documento,
+        string email,
+        CancellationToken ct)
+    {
+        var id = instance.Id;
 
         // Id de NUESTRA validación: se genera ANTES de llamar al proveedor para incrustarlo en la
         // webhookUrl (el webhook de Kyverum no repite el id en el cuerpo → correlación por URL).

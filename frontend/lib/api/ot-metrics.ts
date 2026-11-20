@@ -38,6 +38,12 @@ export interface OtQueueBreakdown {
    * más adelante si se excluyen del conteo.
    */
   enEsperaDelCliente: number;
+  /**
+   * Todos los pendientes marcados como prioritarios, sin importar su antigüedad (Inicio del
+   * organismo). `antiguedad.prioritariosEstancados` es el subconjunto que ya pasó de 3 días.
+   * Opcional en el tipo solo para no romper los dobles de prueba anteriores: el backend siempre lo envía.
+   */
+  prioritarios?: number;
 }
 
 export interface OtAging {
@@ -127,6 +133,7 @@ export const OT_DRILLDOWN_BUCKETS = {
   entre4y7Dias: "antiguedad_4_7",
   masDe7Dias: "antiguedad_mas_7",
   prioritariosEstancados: "prioritarios_estancados",
+  prioritarios: "prioritarios",
 } as const;
 
 export type OtDrilldownBucket = (typeof OT_DRILLDOWN_BUCKETS)[keyof typeof OT_DRILLDOWN_BUCKETS];
@@ -152,6 +159,22 @@ export interface OtDrilldown {
   total: number;
   omitidos: number;
   items: OtDrilldownItem[];
+}
+
+/** Una empresa cliente y lo que le radicó al organismo en el periodo, por familia. */
+export interface OtClientFamilyRow {
+  clientTenantId: string;
+  nombre: string;
+  matriculas: number;
+  traspasos: number;
+  otros: number;
+  total: number;
+}
+
+/** Trámites por cliente corporativo, de mayor a menor volumen. Mismo universo que el informe. */
+export interface OtClientsByFamily {
+  clientes: OtClientFamilyRow[];
+  total: number;
 }
 
 /** Empresa cliente del organismo, para el filtro del reporte. */
@@ -199,6 +222,12 @@ export interface OtReportSeriesPoint {
   radicados: number;
   aprobados: number;
   rechazados: number;
+  /**
+   * Promedio, en DÍAS, del turno del organismo (última radicación → decisión) de las decisiones que
+   * cayeron en el periodo. `null` sin decisiones: un cero se leería como «se decidió al instante».
+   * Opcional en el tipo solo para no romper los dobles de prueba anteriores: el backend siempre lo envía.
+   */
+  tiempoPromedioDecisionDias?: number | null;
 }
 
 export interface OtReportSummary {
@@ -298,8 +327,25 @@ export function fetchOtPerformance(params: OtMetricsParams): Promise<OtPerforman
   return apiFetch<OtPerformance>(`${base}/performance`, { query: toQuery(params) });
 }
 
-export function fetchOtRejectionReasons(params: OtMetricsParams): Promise<OtRejectionReasons> {
-  return apiFetch<OtRejectionReasons>(`${base}/rejection-reasons`, { query: toQuery(params) });
+export function fetchOtRejectionReasons(
+  params: OtMetricsParams,
+  signal?: AbortSignal,
+): Promise<OtRejectionReasons> {
+  return apiFetch<OtRejectionReasons>(`${base}/rejection-reasons`, { query: toQuery(params), signal });
+}
+
+/**
+ * Trámites que cada empresa cliente le radicó al organismo en el rango, por familia (Inicio del
+ * organismo). Solo viajan el rango y el override de organismo: la tabla ES el cruce empresa ×
+ * familia, así que filtrar por cualquiera de los dos la vaciaría.
+ */
+export function fetchOtClientsByFamily(
+  params: Pick<OtMetricsParams, "from" | "to" | "transitOfficeId">,
+  signal?: AbortSignal,
+): Promise<OtClientsByFamily> {
+  const query: Record<string, string> = { from: params.from, to: params.to };
+  if (params.transitOfficeId) query.transitOfficeId = params.transitOfficeId;
+  return apiFetch<OtClientsByFamily>(`${base}/clientes-por-familia`, { query, signal });
 }
 
 /**
@@ -309,8 +355,9 @@ export function fetchOtRejectionReasons(params: OtMetricsParams): Promise<OtReje
 export function fetchOtDrilldown(
   params: OtMetricsParams,
   bucket: OtDrilldownBucket,
+  signal?: AbortSignal,
 ): Promise<OtDrilldown> {
-  return apiFetch<OtDrilldown>(`${base}/drilldown`, { query: { ...toQuery(params), bucket } });
+  return apiFetch<OtDrilldown>(`${base}/drilldown`, { query: { ...toQuery(params), bucket }, signal });
 }
 
 /**

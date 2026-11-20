@@ -37,6 +37,6 @@ public sealed class ElegibilidadConsultas(ComparendosDb db, IProductosHabilitado
             return "La empresa no tiene Comparendos habilitado en la plataforma.";
         var proveedor = await db.ConfiguracionConsultaCanales.AsNoTracking().Where(c => c.TenantId == tenant && c.Canal == canal)
             .Select(c => c.Proveedor).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        return string.IsNullOrEmpty(proveedor) ? "Configura el canal (proveedor y agenda) antes de consultar." : null;
+        return string.IsNullOrEmpty(proveedor) ? "Configura el canal antes de consultar." : null;
     }
 }

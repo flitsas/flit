@@ -49,12 +49,17 @@ internal static class CommercialEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             CommercialDto request,
             PutCommercialHandler handler,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, ct);
+            var rawUserId = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+            var actorUserId = Guid.TryParse(rawUserId, out var uid) ? uid : (Guid?)null;
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, actorUserId, ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),

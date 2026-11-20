@@ -1,0 +1,12 @@
+flowchart TD
+    A["Super Admin: Trámites → «Acciones»\nen la fila del trámite"] --> B["«Actualizar documento»\n(cualquier estado)"]
+    B --> C["Elige el tipo de documento\nque pide el trámite"]
+    C --> D{"¿Ya hay un archivo\nde ese tipo?"}
+    D -- "Sí" --> E["Aviso: el actual quedará\ncomo versión anterior"]
+    D -- "No" --> F["Elige el archivo\n(PDF, JPG, PNG o WEBP)"]
+    E --> F
+    F --> G["Escribe la observación\n(obligatoria)"]
+    G --> H["«Actualizar documento»\nel trámite no cambia de estado"]
+    H --> I["El anterior queda como\n«Versión anterior», visible"]
+    H --> J["Línea de tiempo: «Documento actualizado\npor el administrador» con Ver nuevo / Ver anterior"]
+    H --> K["Al abrir «Ver consolidado»\nse regenera con el documento nuevo"]

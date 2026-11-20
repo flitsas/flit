@@ -1,14 +1,21 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
 import { fetchTransitBlocks, fetchTransitOffices } from "@/lib/api/admin-companies";
 import type { TransitOffice } from "@/lib/api/types";
+import {
+  COLUMNAS_FILTRO_BLOQUEOS_LECTURA,
+  filtrarBloqueosLectura,
+} from "@/lib/companies/ot-config-filtros";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 
 /**
  * Lista de OT bloqueados en solo lectura para cabeza o hijo de Marca Blanca (HU #12408 AC3/AC4).
@@ -22,8 +29,17 @@ export function TransitBlocksReadOnlySection({
 }) {
   const [status, setStatus] = useState<UiStatus>("loading");
   // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
-  const pg = usePaginacion();
+  const pg = usePaginacion("panels.TransitBlocksReadOnlySection");
   const [blockedOffices, setBlockedOffices] = useState<TransitOffice[]>([]);
+  // HU #14003 — filtros por columna (Organismo bloqueado, Código, Estado).
+  const filtros = useTablaFiltros({
+    columnas: COLUMNAS_FILTRO_BLOQUEOS_LECTURA,
+    onCambio: () => pg.setPage(1),
+  });
+  const filtered = useMemo(
+    () => filtrarBloqueosLectura(blockedOffices, filtros.condicionesTotales, filtros.busqueda),
+    [blockedOffices, filtros.condicionesTotales, filtros.busqueda],
+  );
 
   const load = useCallback(
     async (signal?: AbortSignal) => {
@@ -58,29 +74,39 @@ export function TransitBlocksReadOnlySection({
     () => [
       {
         key: "name",
-        header: "Organismo bloqueado",
+        header: (
+          <EncabezadoFiltrable filtros={filtros} columnaId="name">
+            Organismo bloqueado
+          </EncabezadoFiltrable>
+        ),
         render: (office) => <span className="font-semibold">{office.name}</span>,
       },
       {
         key: "code",
-        header: "Código",
+        header: (
+          <EncabezadoFiltrable filtros={filtros} columnaId="code">
+            Código
+          </EncabezadoFiltrable>
+        ),
         render: (office) => <span className="font-mono opacity-60">{office.code}</span>,
       },
       {
         key: "estado",
-        header: "Estado",
-        render: () => (
-          <StatusBadge label="Bloqueado" tone="warning" />
+        header: (
+          <EncabezadoFiltrable filtros={filtros} columnaId="estado">
+            Estado
+          </EncabezadoFiltrable>
         ),
+        render: () => <StatusBadge label="Bloqueado" tone="warning" />,
       },
     ],
-    [],
+    [filtros],
   );
 
   return (
     <section aria-label="Organismos bloqueados" className="space-y-2">
       <div className="flex items-center gap-2">
-        <Ban className="h-4 w-4 opacity-70" aria-hidden />
+        <Icono nombre="distinto" className="h-4 w-4 opacity-70" />
         <h5 className="text-xs font-semibold">Organismos bloqueados</h5>
       </div>
       <p className="text-xs opacity-60" role="note">
@@ -89,28 +115,34 @@ export function TransitBlocksReadOnlySection({
       {status === "loading" ? (
         <CarLoaderModal label="Cargando organismos bloqueados…" />
       ) : (
-      <UiStateBoundary
-        status={status}
-        onRetry={() => void load()}
-        emptyMessage="No hay organismos bloqueados para esta compañía."
-        errorMessage="No se pudieron cargar los organismos bloqueados."
-        skeletonRows={2}
-      >
-        <DataTable
-          columns={columns}
-          rows={pg.paginar(blockedOffices)}
-          getRowKey={(office) => office.id}
-          ariaLabel="Organismos bloqueados"
-          minWidth={480}
-          pagination={{
-            page: Math.min(pg.page, Math.max(1, Math.ceil(blockedOffices.length / pg.pageSize))),
-            pageSize: pg.pageSize,
-            totalCount: blockedOffices.length,
-            onPageChange: pg.setPage,
-            onPageSizeChange: pg.setPageSize,
-          }}
-        />
-      </UiStateBoundary>
+        <UiStateBoundary
+          status={status}
+          onRetry={() => void load()}
+          emptyMessage="No hay organismos bloqueados para esta compañía."
+          errorMessage="No se pudieron cargar los organismos bloqueados."
+          skeletonRows={2}
+        >
+          {(
+            <DataTable
+              tarjeta={false}
+              emptyContent={
+                filtros.hayFiltros ? <TablaFiltrosVacio onLimpiar={filtros.limpiar} /> : undefined
+              }
+              columns={columns}
+              rows={pg.paginar(filtered)}
+              getRowKey={(office) => office.id}
+              ariaLabel="Organismos bloqueados"
+              minWidth={480}
+              pagination={{
+                page: Math.min(pg.page, Math.max(1, Math.ceil(filtered.length / pg.pageSize))),
+                pageSize: pg.pageSize,
+                totalCount: filtered.length,
+                onPageChange: pg.setPage,
+                onPageSizeChange: pg.setPageSize,
+              }}
+            />
+          )}
+        </UiStateBoundary>
       )}
     </section>
   );

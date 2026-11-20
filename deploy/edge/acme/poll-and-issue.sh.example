@@ -108,6 +108,12 @@ for host in "${hosts[@]}"; do
   log info "host=${host}: emitiendo certificado (HTTP-01, webroot ${ACME_WEBROOT})"
   if ! "${ACME_SH_BIN}" --issue --webroot "${ACME_WEBROOT}" -d "${host}"; then
     log warning "host=${host}: acme.sh --issue fallo -- se reintentara tras el cooldown de ${FLIT_ACME_COOLDOWN_SECS}s"
+    # HU #14384: avisa a core-api para que un dominio de portal quede con el motivo y una alerta, sin activarse.
+    # Para hosts de marca blanca responde 404 y se ignora (su flujo no cambia). Nunca se envia salida de acme.sh con secretos.
+    curl -sS -o /dev/null -X PUT \
+      -H "X-Internal-Key: ${FLIT_INTERNAL_API_KEY}" -H "Content-Type: application/json" \
+      -d '{"reason":"acme.sh --issue fallo"}' \
+      "${CORE_API_INTERNAL_URL%/}/api/v1/internal/domains/${host}/certificate-failure" || true
     exit_code=1
     continue
   fi

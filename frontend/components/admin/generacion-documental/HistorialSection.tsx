@@ -47,7 +47,7 @@ export function HistorialSection() {
   const [rows, setRows] = useState<StandaloneDocumentListItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   // Bug #13055: paginación estándar con «Filas por página» (10/25/50/100), de servidor.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion();
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("generacion-documental.HistorialSection");
   const [filters, setFilters] = useState<HistorialFiltersValue>(HISTORIAL_FILTERS_EMPTY);
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadError, setDownloadError] = useState<string | null>(null);
@@ -229,14 +229,14 @@ export function HistorialSection() {
           type="button"
           onClick={() => router.push(`${GENERACION_DOCUMENTAL_BASE_PATH}/lotes/${filters.batchId}`)}
           className="w-fit rounded-xl border px-3 py-1.5 text-[11px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
-          style={{ borderColor: "#DFE5ED", color: "var(--color-flit-brand)" }}
+          style={{ borderColor: "var(--border)", color: "var(--color-flit-brand)" }}
         >
           Ver seguimiento de este lote
         </button>
       )}
 
       {downloadError && (
-        <p role="alert" className="rounded-xl border px-4 py-2 text-xs" style={{ borderColor: "#FF4E00" }}>
+        <p role="alert" className="rounded-xl border px-4 py-2 text-xs" style={{ borderColor: "var(--destructive)" }}>
           {downloadError}
         </p>
       )}

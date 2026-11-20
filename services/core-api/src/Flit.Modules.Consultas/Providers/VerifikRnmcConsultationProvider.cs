@@ -55,6 +55,7 @@ internal sealed class VerifikRnmcConsultationProvider(
 
     private async Task<ConsultationResult> SendAsync(string url, CancellationToken ct)
     {
+        HttpStatusCode? estado = null;
         try
         {
             using var request = new HttpRequestMessage(HttpMethod.Get, url);
@@ -63,16 +64,17 @@ internal sealed class VerifikRnmcConsultationProvider(
             request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 
             using var response = await http.SendAsync(request, ct);
+            estado = response.StatusCode;
 
             if (response.StatusCode == HttpStatusCode.NotFound)
                 return NotFound();
 
             if (!response.IsSuccessStatusCode)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.PorEstado(response.StatusCode));
 
             var payload = await response.Content.ReadFromJsonAsync<VerifikRnmcResponse>(JsonOptions, ct);
             if (payload is null)
-                return ProviderUnavailable();
+                return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(response.StatusCode));
 
             return VerifikRnmcResultMapper.Map(payload);
         }
@@ -82,15 +84,15 @@ internal sealed class VerifikRnmcConsultationProvider(
         }
         catch (TaskCanceledException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Timeout());
         }
         catch (HttpRequestException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.Red());
         }
         catch (JsonException)
         {
-            return ProviderUnavailable();
+            return ProviderUnavailable(ClasificadorFalloHttp.CuerpoIlegible(estado));
         }
     }
 
@@ -118,6 +120,9 @@ internal sealed class VerifikRnmcConsultationProvider(
         new(Key_, "green",
             [new ConsultationCheck("medidas_correctivas", "Medidas correctivas (Policía)", "ok", Key_, "Sin registros RNMC")],
             []);
+
+    /// <summary>El <c>ProviderUnavailable</c> de siempre, con la clase del fallo (resolvedor del Diagnóstico).</summary>
+    private static ConsultationResult ProviderUnavailable(FalloProveedor fallo) => ProviderUnavailable() with { Fallo = fallo };
 
     // No se pudo verificar RNMC (no-200/timeout/red/respuesta ilegible). Dato crítico:
     // check "error" (bloqueo DURO, no subsanable) con mensaje amigable sin exponer el proveedor.

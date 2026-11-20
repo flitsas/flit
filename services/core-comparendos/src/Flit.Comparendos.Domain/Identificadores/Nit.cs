@@ -50,6 +50,21 @@ public static class Nit
         return residuo is 0 or 1 ? residuo : 11 - residuo;
     }
 
+    /// <summary>
+    /// GDC punto 6: qué tiene de malo un NIT digitado, o null si está bien (con o sin dígito de verificación; si lo trae,
+    /// debe ser el de la DIAN).
+    /// </summary>
+    public static string? ErrorDigito(string? texto)
+    {
+        if (Separar(texto) is not { } s)
+            return "El NIT debe tener solo números, con o sin dígito de verificación (por ejemplo 900.123.456-7).";
+        var dv = DigitoVerificacion(s.Base);
+        return s.Dv is { } escrito && escrito != dv ? $"El dígito de verificación del NIT {s.Base} debería ser {dv}, no {escrito}." : null;
+    }
+
+    /// <summary>Formato único con que se guarda el NIT del infractor: la base sin puntos ni dígito; null si no es válido.</summary>
+    public static string? Normalizar(string? texto) => ErrorDigito(texto) is null ? Separar(texto)!.Value.Base : null;
+
     /// <summary>Las dos formas en que se consulta a las fuentes: sin y con dígito de verificación.</summary>
     public static IReadOnlyList<string> Variantes(string baseNit) =>
         [baseNit, string.Concat(baseNit, DigitoVerificacion(baseNit).ToString(System.Globalization.CultureInfo.InvariantCulture))];

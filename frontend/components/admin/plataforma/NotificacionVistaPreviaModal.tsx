@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Eye } from "lucide-react";
 import { Modal } from "@/components/atom/Modal";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import {
@@ -121,7 +120,7 @@ export function NotificacionVistaPreviaModal({
       open={open}
       onClose={onClose}
       title={`Ver en vivo — ${templateName}${titleSuffix}${typeSuffix}`}
-      icon={Eye}
+      icono="ojo"
       size="xl"
     >
       <div className="flex flex-col gap-4">
@@ -139,7 +138,7 @@ export function NotificacionVistaPreviaModal({
         ) : null}
 
         {requiresType && !typeId ? (
-          <p className="text-xs text-[#59677D] dark:text-white/55" role="status">
+          <p className="text-xs text-muted-foreground" role="status">
             Elige un tipo de trámite activo para generar la muestra.
           </p>
         ) : (
@@ -152,23 +151,23 @@ export function NotificacionVistaPreviaModal({
           >
             {sample ? (
               <div className="flex flex-col gap-2">
-                <p className="text-xs text-[#59677D] dark:text-white/55">
-                  <span className="font-semibold text-[#162244] dark:text-white">Asunto: </span>
+                <p className="text-xs text-muted-foreground">
+                  <span className="font-semibold text-foreground">Asunto: </span>
                   {sample.subject}
                 </p>
                 {sample.theme && (
                   <p
-                    className="text-[11px] text-[#59677D] dark:text-white/55"
+                    className="text-[11px] text-muted-foreground"
                     data-testid="notificaciones-vista-previa-theme"
                   >
-                    <span className="font-semibold text-[#162244] dark:text-white">Tema: </span>
+                    <span className="font-semibold text-foreground">Tema: </span>
                     {sample.theme.platformName}
                     {sample.theme.senderName ? ` · Remitente: ${sample.theme.senderName}` : ""}
                   </p>
                 )}
                 <p
                   role="note"
-                  className="text-[11px] text-[#59677D] dark:text-white/45"
+                  className="text-[11px] text-muted-foreground"
                   data-testid="notificaciones-vista-previa-aviso"
                 >
                   Este render es una muestra aislada. No se envía ningún correo al mostrarla.
@@ -177,7 +176,7 @@ export function NotificacionVistaPreviaModal({
                   title={`Vista previa aislada de ${templateName}${titleSuffix}`}
                   srcDoc={sample.html}
                   sandbox=""
-                  className="h-[520px] w-full rounded-xl border border-[#DFE5ED] bg-white dark:border-white/10"
+                  className="h-[520px] w-full rounded-xl border border-border bg-white"
                   data-testid="notificaciones-vista-previa-iframe"
                 />
               </div>

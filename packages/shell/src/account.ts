@@ -1,6 +1,6 @@
 // Lo que la barra de la suite muestra igual en todos los productos: las opciones del menú de usuario y el nombre del
 // rol. Vive aquí para que un producto nuevo no lo copie (antes estaba repetido en Trámites y en el hub).
-import { HelpCircle, KeyRound } from "lucide-react";
+import { iconoComo } from "@flit/ui/iconoComo";
 import type { NavIcon } from "./nav";
 
 /** Enlace del menú de usuario (antes de «Salir de la plataforma»). */
@@ -17,8 +17,8 @@ export interface AccountLink {
 export function suiteAccountLinks(accountUrl = ""): AccountLink[] {
   const base = accountUrl.replace(/\/+$/, "");
   return [
-    { label: "Ayuda", href: `${base}/manual`, icon: HelpCircle },
-    { label: "Cambio de contraseña", href: `${base}/profile/change-password`, icon: KeyRound },
+    { label: "Ayuda", href: `${base}/manual`, icon: iconoComo("ayuda") },
+    { label: "Cambio de contraseña", href: `${base}/profile/change-password`, icon: iconoComo("candado") },
   ];
 }
 
@@ -27,6 +27,8 @@ const ROLE_LABELS: Record<string, string> = {
   AdminCompany: "Admin de Compañía",
   ot_admin: "Admin OT",
   gestor_tramites_ot: "Gestor OT",
+  // Feature #14453 — persona de caja del organismo (solo usa el módulo Caja de FLIT 2.0).
+  ot_caja: "Caja",
 };
 
 /** Nombre del rol en la barra: los de plataforma con su rótulo; cualquier otro, tal cual; sin roles, «Usuario». */

@@ -1,13 +1,21 @@
 asyncapi: '2.6.0'
 info:
   title: FLIT — eventos de Trámites
-  version: 1.0.0
+  version: 1.3.0
   description: |
     Eventos que publica Trámites (core-api) en el exchange `flit.tramites` (ADR-0064).
     Hoy existen como outbox en core-api (`tramites.procedure_state_change_outbox`,
     `tramites.identity_validation_outbox`) y se entregan en proceso; HU #13350 los publica al broker sin
     cambiar su forma. Mensajes en JSON con el sobre común (comun/sobre.v1.yaml).
     El webhook saliente al OT se documenta aparte en domain-events.v1.yaml.
+    Desde 1.1.0 también documenta el trabajo que RECIBE Trámites del portal de persona natural
+    (`tramites.persona_natural.radicacion_solicitada`, HU #14049): a diferencia de un evento, lo deja otro servicio
+    (core-personanatural) vía su outbox en este exchange, y el `producer` del sobre es ese servicio. No lleva datos
+    personales: core-api los lee por pull con el RPC `RadicacionService/ObtenerSolicitudParaRadicar`.
+    Desde 1.3.0 documenta el camino de vuelta al portal (HU #14050 y #14051), ADITIVO: `solicitud_resuelta` (core-api
+    creó el trámite o lo rechazó) y `estado_cambiado` (estado y subsanación de un trámite creado por el portal). Solo
+    se publican con `PersonaNatural:Consumidor:Habilitado=true` (apagado por defecto), solo de trámites con
+    `origin = persona_natural` y sin datos personales: identificadores, estado, radicado y motivo en lenguaje claro.
 defaultContentType: application/json
 
 channels:
@@ -44,6 +52,56 @@ channels:
       operationId: identityValidationCompleted
       message:
         $ref: '#/components/messages/IdentityValidationCompleted'
+  tramites.persona_natural.radicacion_solicitada:
+    description: |
+      TRABAJO que recibe Trámites: el ciudadano radicó un trámite en el portal de persona natural (HU #14049). Lo deja
+      core-personanatural en su outbox, en la misma transacción que pasa la solicitud a `en_cola` (sin datos personales: se leen
+      por pull por gRPC); core-api lo consume con
+      bandeja idempotente por `eventId` (HU #14050) y crea el trámite con `origin = persona_natural` y
+      `external_ref = solicitudId`. El broker caído no afecta la respuesta al ciudadano: el publicador entrega después.
+      Aditivo: no cambia ningún mensaje existente. El usuario del broker de core-personanatural necesita permiso de
+      escritura en `flit.tramites` (deploy/rabbitmq/usuario-de-servicio.sh personanatural <clave> tramites).
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: flit }
+    publish:
+      operationId: personaNaturalRadicacionSolicitada
+      message:
+        $ref: '#/components/messages/PersonaNaturalRadicacionSolicitada'
+  tramites.persona_natural.solicitud_resuelta:
+    description: |
+      core-api resolvió una solicitud radicada en el portal de persona natural (HU #14050): creó el trámite
+      (`resultado = creada`, con `procedureInstanceId` y el radicado) o lo rechazó por una regla de negocio
+      (`resultado = rechazada`, con `codigo` estable y `motivo` en lenguaje claro, sin datos técnicos ni personales). Se
+      publica por la outbox de core-api en la misma transacción que la bandeja del consumidor; una falla técnica NO
+      publica nada: el mensaje se reintenta y, agotados los reintentos, queda en `tramites.personanatural-radicacion.dlq`.
+      Lo consume core-personanatural (cola `personanatural.resolucion`) y actualiza `procedure_request.status`
+      (`creada` | `rechazada_creacion`), `reference_number` y `procedure_instance_id`.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: personaNaturalSolicitudResuelta
+      message:
+        $ref: '#/components/messages/PersonaNaturalSolicitudResuelta'
+  tramites.persona_natural.estado_cambiado:
+    description: |
+      Un trámite creado por el portal de persona natural (`origin = persona_natural`) cambió de estado o abrió una
+      subsanación (HU #14051). core-api lo deriva del evento `tramites.procedure.state_changed` (cola propia
+      `tramites.personanatural-estado`, sin cambiar lo que ya se publica) y del caso de uso que abre la subsanación (que no
+      es una transición y por eso no tiene `state_changed`). Lo consume core-personanatural (cola `personanatural.estado`)
+      y actualiza `procedure_status`, `rectification_active`, `rectification_reason` con historial en `status_history`.
+      `ocurrioEn` ordena eventos repetidos o desordenados: el espejo conserva el más reciente.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.tramites, type: topic, durable: true, autoDelete: false, vhost: flit }
+    subscribe:
+      operationId: personaNaturalEstadoCambiado
+      message:
+        $ref: '#/components/messages/PersonaNaturalEstadoCambiado'
 
 components:
   schemas:
@@ -120,3 +178,92 @@ components:
                       estado: { type: string, enum: [aprobado, rechazado] }
                       providerStatus: { type: [string, 'null'] }
                       score: { type: [integer, 'null'] }
+    PersonaNaturalRadicacionSolicitada:
+      name: tramites.persona_natural.radicacion_solicitada
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [solicitudId, codigoPublico, tipoTramiteCodigo, definicionVersion, definicionHuella, organismoId, adjuntos, idempotencyKey, correlationId]
+                description: |
+                  AVISO de que hay una solicitud en cola: solo identificadores y referencias. NO lleva ningún dato
+                  personal, ni en claro ni cifrado (documento, nombre, correo, celular, dirección), ni nombres originales de
+                  archivo, ni placa, VIN o valores del trámite: la outbox guarda el mensaje tal cual y lo que quede ahí queda
+                  para siempre en la base del servicio (Ley 1581). core-api obtiene los datos POR PULL con el RPC gRPC
+                  `flit.personanatural.v1.RadicacionService/ObtenerSolicitudParaRadicar` (contracts/proto/flit/personanatural/v1),
+                  con token de servicio `svc-tramites`, `aud=personanatural`, scope `platform.personanatural.leer`, solo
+                  para solicitudes `en_cola` y con cada lectura auditada. La empresa (`tenantId`) y la correlación de la
+                  petición viajan en el sobre.
+                properties:
+                  solicitudId: { type: string, format: uuid, description: "Llave de idempotencia del trámite: va como `external_ref` y es el argumento del RPC." }
+                  codigoPublico: { type: string, description: "Radicado visible del portal (PN-AAAA-NNNNNN)." }
+                  tipoTramiteCodigo: { type: string, description: "tramites.procedure_types.code; el consumidor crea el trámite de ESE tipo." }
+                  definicionVersion: { type: integer, description: "Versión del tipo con la que el ciudadano llenó el trámite." }
+                  definicionHuella: { type: string, description: "SHA-256 de la definición congelada; el consumidor puede responder `definicion_obsoleta` si ya cambió." }
+                  organismoId: { type: string, format: uuid }
+                  adjuntos:
+                    type: array
+                    description: Archivos del trámite solo por identificador, tipo y huella; la referencia opaca al file-manager, el nombre y el tamaño salen por el RPC.
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [id, tipo, sha256]
+                      properties:
+                        id: { type: string, format: uuid }
+                        tipo: { type: string, description: "`doc_code` del documento del tipo o `comprobante_pago`." }
+                        sha256: { type: string }
+                  comprobantePagoId: { type: [string, 'null'], format: uuid, description: "Adjunto vigente del pago (supuesto S1: lo valida un operador FLIT)." }
+                  idempotencyKey: { type: string, description: "Idempotency-Key con la que el ciudadano radicó." }
+                  correlationId: { type: string, format: uuid, description: "Correlación propia de la solicitud (estable); distinta del `correlationId` del sobre, que es el de la petición." }
+    PersonaNaturalSolicitudResuelta:
+      name: tramites.persona_natural.solicitud_resuelta
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [solicitudId, resultado, ocurrioEn]
+                description: |
+                  Resultado de crear el trámite de una solicitud del portal. Sin datos personales. `codigo` es un código
+                  estable (p. ej. `tipo_no_disponible`, `organismo_no_habilitado`, `identidad_no_validada`,
+                  `documentos_incompletos`, `requisito_faltante`); `motivo` es texto para el ciudadano.
+                properties:
+                  solicitudId: { type: string, format: uuid, description: "Mismo `solicitudId` del evento de radicación; es el `external_ref` del trámite." }
+                  resultado: { type: string, enum: [creada, rechazada] }
+                  procedureInstanceId: { type: [string, 'null'], format: uuid, description: "Solo con `creada`." }
+                  numeroRadicado: { type: [string, 'null'], description: "Radicado de FLIT 2 (`reference_number`). Solo con `creada`." }
+                  estado: { type: [string, 'null'], description: "Estado del trámite al terminar (`TramiteEstado`; `borrador` si FLIT 2 aún debe generar el FUR o la firma de la compraventa). Solo con `creada`." }
+                  codigo: { type: [string, 'null'], maxLength: 80, description: "Solo con `rechazada`." }
+                  motivo: { type: [string, 'null'], maxLength: 500, description: "Solo con `rechazada`. Lenguaje claro, sin datos técnicos." }
+                  ocurrioEn: { type: string, format: date-time }
+    PersonaNaturalEstadoCambiado:
+      name: tramites.persona_natural.estado_cambiado
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              data:
+                type: object
+                additionalProperties: false
+                required: [solicitudId, procedureInstanceId, estado, subsanacionActiva, ocurrioEn]
+                description: |
+                  Estado actual de un trámite creado por el portal. Sin datos personales. La subsanación no es un estado
+                  de FLIT 2 sino un indicador sobre `rechazado` (ver `subsanacion_activa` del trámite): `estado = rechazado`
+                  con `subsanacionActiva = true`. `motivo` es el texto del organismo (rechazado, anulado o revocado); solo
+                  se muestra a la sesión de ese trámite.
+                properties:
+                  solicitudId: { type: string, format: uuid }
+                  procedureInstanceId: { type: string, format: uuid }
+                  numeroRadicado: { type: [string, 'null'] }
+                  estado: { $ref: '#/components/schemas/TramiteEstado' }
+                  subsanacionActiva: { type: boolean }
+                  motivo: { type: [string, 'null'], maxLength: 500 }
+                  ocurrioEn: { type: string, format: date-time, description: "Marca de tiempo del cambio en FLIT 2: ordena eventos repetidos o desordenados." }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Link2, Loader2, Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { fetchAllCompanies, linkCompanyToParent } from "@/lib/api/admin-companies";
 import { ApiValidationError, isHeadTenantType, tenantTypeLabel } from "@/lib/api/types";
@@ -115,7 +115,7 @@ export function LinkCompanyDialog({
       open
       onClose={onClose}
       busy={submitting}
-      icon={Link2}
+      icono="externo"
       title="Vincular cliente existente"
       titleClassName="text-base font-bold text-flit-brand"
     >
@@ -126,12 +126,12 @@ export function LinkCompanyDialog({
 
       {loading ? (
         <div className="flex items-center gap-2 py-6 text-xs opacity-70" role="status">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+          <Icono nombre="girador" className="h-4 w-4 animate-spin" />
           Cargando compañías…
         </div>
       ) : loadError ? (
         <div className="space-y-2 py-4">
-          <p className="text-xs" style={{ color: "#FF4E00" }} role="alert">
+          <p className="text-xs" style={{ color: "var(--destructive)" }} role="alert">
             {loadError}
           </p>
           <button type="button" onClick={() => void load()} className="rounded-lg border px-3 py-1.5 text-xs font-semibold">
@@ -144,7 +144,7 @@ export function LinkCompanyDialog({
             Buscar compañía
           </label>
           <div className="relative mb-2">
-            <Search className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 opacity-40" aria-hidden />
+            <Icono nombre="buscar" className="pointer-events-none absolute left-2.5 top-2 h-3.5 w-3.5 opacity-40" />
             <input
               id="link-search"
               type="search"
@@ -190,7 +190,7 @@ export function LinkCompanyDialog({
       )}
 
       {error && (
-        <p className="mt-2 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+        <p className="mt-2 text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
           {error}
         </p>
       )}
@@ -204,9 +204,9 @@ export function LinkCompanyDialog({
           onClick={() => void submit()}
           disabled={submitting || loading || Boolean(loadError)}
           className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+          style={{ background: "var(--gradient-action)" }}
         >
-          {submitting && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
+          {submitting && <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />}
           Vincular
         </button>
       </div>

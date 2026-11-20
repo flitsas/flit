@@ -1,0 +1,31 @@
+{
+  "data": {
+    "acuerdosPago": [],
+    "cancelada": false,
+    "cantAcuerdosPagar": "0",
+    "cantMultasPagar": "0",
+    "comparendos": [],
+    "cursos": [],
+    "fechaDesdeCancelSuspen": null,
+    "fechaHastaSuspencion": null,
+    "mensajeValidacionPagoPlaca": "¿Está seguro que desea pagar?",
+    "multas": [],
+    "organismoTransitoCancelSuspen": null,
+    "paramEntradaPlaca": true,
+    "pazSalvo": false,
+    "personasMismoDocumento": [],
+    "plate": "TST202",
+    "resoluciones": [],
+    "suspendida": false,
+    "totalAcuerdosPagar": "0",
+    "totalAp": "0",
+    "totalGeneral": "0",
+    "totalMultas": "0",
+    "totalMultasPagar": "0"
+  },
+  "signature": {
+    "dateTime": "October 29, 2026 2:08 PM",
+    "message": "Certified by Verifik.co"
+  },
+  "id": "EJEMPLO-VEHICULO"
+}

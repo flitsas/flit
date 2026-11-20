@@ -80,7 +80,7 @@ public sealed class AdjuntarLicenciaTransitoHandler(
 
         // Reemplazo de la LT previa (misma semántica que el consolidado re-generado).
         foreach (var prev in instance.Attachments
-                     .Where(a => string.Equals(a.Tipo, Tipo, StringComparison.OrdinalIgnoreCase))
+                     .Where(a => !a.IsHistorico && string.Equals(a.Tipo, Tipo, StringComparison.OrdinalIgnoreCase))
                      .ToList())
         {
             storage.Delete(prev.StoragePath);

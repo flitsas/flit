@@ -7,7 +7,7 @@
 // Feature #13261: permiso opcional de envío de adjuntos (comprobante de impuesto). El PATCH reemplaza la lista
 // completa, así que al editar se conservan los permisos que este formulario no administra.
 import { useState } from "react";
-import { Loader2, PlugZap } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import {
   EXTERNAL_CLIENT_ID_PATTERN,
@@ -21,14 +21,14 @@ import {
 import { externalClientErrorMessage } from "./externalClientErrors";
 
 const INPUT_CLS =
-  "h-11 w-full rounded-[10px] border border-[#DFE5ED] bg-white px-3 text-sm text-flit-primary " +
+  "h-11 w-full rounded-[10px] border border-border bg-background px-3 text-sm text-flit-primary " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 " +
-  "disabled:bg-[#EEF5FF] dark:border-white/15 dark:bg-[#162744] dark:text-white";
-const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary dark:text-white";
-const HINT_CLS = "text-xs font-normal text-[#59677D] dark:text-white/70";
+  "disabled:bg-secondary";
+const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary";
+const HINT_CLS = "text-xs font-normal text-muted-foreground";
 const OPTIONAL_SCOPE_CLS =
-  "flex cursor-pointer items-start gap-3 rounded-[10px] border border-[#DFE5ED] bg-white p-3 text-sm text-flit-primary " +
-  "focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2 dark:border-white/15 dark:bg-[#162744] dark:text-white";
+  "flex cursor-pointer items-start gap-3 rounded-[10px] border border-border bg-card p-3 text-sm text-flit-primary " +
+  "focus-within:ring-2 focus-within:ring-flit-brand focus-within:ring-offset-2";
 const MANAGED_SCOPES = [EXTERNAL_SCOPE_READ, EXTERNAL_SCOPE_PII, EXTERNAL_SCOPE_ATTACHMENTS];
 
 export interface ExternalClientFormModalProps {
@@ -93,7 +93,7 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
           ? "El identificador no se puede cambiar."
           : "Sistema externo que lee el feed de trámites de todas las compañías (p. ej. Flito). El secreto se genera al crear y se muestra una sola vez."
       }
-      icon={PlugZap}
+      icono="integraciones"
       size="md"
       footer={
         <div className="flex justify-end gap-2">
@@ -101,7 +101,7 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="rounded-full border border-[#DFE5ED] px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-[#F4F8FF] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70 dark:border-white/15 dark:text-white dark:hover:bg-white/5"
+            className="rounded-full border border-border px-5 py-2.5 text-sm font-semibold text-flit-primary hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
           >
             Cancelar
           </button>
@@ -109,10 +109,10 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
             type="submit"
             form="external-client-form"
             disabled={busy}
-            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[0_10px_22px_rgba(79,116,201,0.22)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
-            style={{ background: "linear-gradient(135deg, var(--color-flit-brand) 0%, var(--color-flit-tech) 100%)" }}
+            className="inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-white shadow-[var(--shadow-button)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-70"
+            style={{ background: "var(--gradient-action)" }}
           >
-            {busy && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+            {busy && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
             {editing ? "Guardar cambios" : "Crear cliente"}
           </button>
         </div>
@@ -160,8 +160,8 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
         </label>
 
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-semibold text-flit-primary dark:text-white">Permisos</legend>
-          <label className="flex items-start gap-3 rounded-[10px] border border-[#DFE5ED] bg-[#EEF5FF] p-3 text-sm text-flit-primary dark:border-white/15 dark:bg-white/5 dark:text-white">
+          <legend className="mb-1 text-sm font-semibold text-flit-primary">Permisos</legend>
+          <label className="flex items-start gap-3 rounded-[10px] border border-border bg-secondary p-3 text-sm text-flit-primary">
             <input type="checkbox" checked disabled className="mt-0.5 h-4 w-4 accent-flit-brand" />
             <span>
               <span className="font-semibold">Lectura de trámites</span>
@@ -199,7 +199,7 @@ export function ExternalClientFormModal({ client, onClose, onCreate, onUpdate }:
         </fieldset>
 
         {error && (
-          <p role="alert" className="text-sm font-semibold text-[#C2410C]">
+          <p role="alert" className="text-sm font-semibold text-destructive">
             {error}
           </p>
         )}

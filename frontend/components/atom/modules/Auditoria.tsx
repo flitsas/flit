@@ -12,6 +12,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from '@/components/atom/table-styles';
 import {
   AuditoriaFilterToolbar,
@@ -84,9 +85,6 @@ function buildApiFilters(f: AuditoriaUiFilters): Omit<AdminAuditLogQuery, 'page'
   };
 }
 
-/** Bug #13055 — tamaño inicial dentro del estándar de filas por página (10/25/50/100). */
-const DEFAULT_PAGE_SIZE = 10;
-
 export function Auditoria() {
   const [entries, setEntries] = useState<AdminAuditLogEntry[] | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -94,7 +92,7 @@ export function Auditoria() {
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   // Paginación server-side.
-  const { page, pageSize, setPage, setPageSize } = usePaginacion(DEFAULT_PAGE_SIZE);
+  const { page, pageSize, setPage, setPageSize } = usePaginacion("modulos.Auditoria");
   const [total, setTotal] = useState(0);
   // Refs "latest value": se sincronizan en un efecto (nunca escribiendo `.current` en
   // render, para no violar las reglas de refs de React) y se leen dentro de `load` para
@@ -210,7 +208,7 @@ export function Auditoria() {
         : 'ready';
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary dark:text-white">
+    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Auditoría"
         subtitle="Rastro global de operaciones administrativas y de seguridad: usuarios, roles, permisos y autenticación."
@@ -230,7 +228,7 @@ export function Auditoria() {
       {staleDataError && (
         <div
           className="rounded-2xl p-4 border text-xs flex items-start gap-3 shrink-0"
-          style={{ borderColor: '#FF4E00', background: 'rgba(255,78,0,0.06)', color: '#FF4E00' }}
+          style={{ borderColor: 'var(--destructive)', background: 'var(--badge-danger-bg)', color: 'var(--destructive)' }}
           role="alert"
           aria-live="polite"
         >
@@ -241,7 +239,7 @@ export function Auditoria() {
               type="button"
               onClick={handleRefresh}
               className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-              style={{ background: '#FF4E00' }}
+              style={{ background: 'var(--destructive)' }}
             >
               Reintentar
             </button>
@@ -262,7 +260,7 @@ export function Auditoria() {
         }
       >
         {entries && entries.length > 0 && (
-          <>
+          <div className={`shrink-0 ${TABLA_TARJETA_CLS}`}>
             <AuditoriaTable rows={entries} />
             <Pagination
               page={page}
@@ -272,7 +270,7 @@ export function Auditoria() {
               onPageSizeChange={setPageSize}
               noun="registros de auditoría"
             />
-          </>
+          </div>
         )}
       </UiStateBoundary>
     </div>
@@ -286,7 +284,7 @@ export function Auditoria() {
  */
 const COLUMNAS = ['Fecha y hora', 'Módulo', 'Operación', 'Resultado', 'Actor', 'Afectado', 'Tipo tenant', 'IP'];
 const CELDA = 'border-y px-4 py-3';
-const CELDA_STYLE = { borderColor: '#DFE5ED' };
+const CELDA_STYLE = { borderColor: 'var(--border)' };
 
 function AuditoriaTable({ rows }: { rows: AdminAuditLogEntry[] }) {
   return (
@@ -361,7 +359,7 @@ function AuditoriaRow({ row: r }: { row: AdminAuditLogEntry }) {
   return (
     <tr
       aria-label={ariaLabel}
-      className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}
+      className={`bg-card ${TABLA_ROW_HOVER_CLS}`}
     >
       <td className={`${CELDA} rounded-l-xl border-l text-[10px] leading-tight`} style={CELDA_STYLE}>
         <span className="opacity-80">{formatFecha(r.changedAt)}</span>

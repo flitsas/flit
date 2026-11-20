@@ -304,6 +304,16 @@ public sealed class ListProcedureInstancesFilteredHandler(
         IReadOnlySet<string> identidadKeys = await repo.ListVigenteApprovedIdentityKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? new HashSet<string>();
 
+        // HU #13824 — identidades vencidas a mano por un Super Admin que los trámites fuera de borrador siguen honrando
+        // (una consulta en lote sobre el índice parcial de las filas vencidas a mano).
+        IReadOnlyDictionary<string, IReadOnlyList<IdentidadVencidaManual>> protegidasKeys = await repo.ListProtegidasPorVencimientoManualKeysAsync(
+            instances.Select(i => i.TenantId).Distinct().ToList(), now, ct) ?? ListProcedureInstancesHandler.EmptyProtegidas;
+
+        // Salida de borrador (en lote, sin N+1) de los tramites a los que importa: una identidad vencida a mano solo
+        // vale para quien salio de borrador ANTES del vencimiento (BiometricRules.ConservaFirmaTrasVencimientoManual).
+        var salidas = await ListProcedureInstancesHandler
+            .ResolverSalidasDeBorradorAsync(repo, instances, protegidasKeys, ct).ConfigureAwait(false);
+
         var hoy = DateOnly.FromDateTime(now.ToOffset(ColombiaTime.Offset).DateTime);
         IReadOnlyDictionary<string, bool> firmaBaul = await repo.ListFirmaBaulVigenciaKeysAsync(
             instances.Select(i => i.TenantId).Distinct().ToList(), hoy, ct) ?? EmptyFirmaBaul;
@@ -333,7 +343,7 @@ public sealed class ListProcedureInstancesFilteredHandler(
                 return ListProcedureInstancesHandler.ToSummary(
                     e,
                     IdentityApprovalResolver.ApprovedPartiesFromKeys(
-                        e, identidadKeys, now, baulDeE),
+                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salida) ? salida : null),
                     nombres.GetValueOrDefault(e.TenantId),
                     gestores.GetValueOrDefault(e.GestorEfectivoUserId),
                     baulDeE,
@@ -343,7 +353,7 @@ public sealed class ListProcedureInstancesFilteredHandler(
                     // ADR-0053 — igual que el listado sin filtros: sin este set el desplegable de copropietarios
                     // pintaba «Sin firma» aunque la identidad estuviera aprobada (Bug #14603).
                     IdentityApprovalResolver.ApprovedActorsFromKeys(
-                        e, identidadKeys, now, baulDeE));
+                        e, identidadKeys, now, baulDeE, protegidasKeys, salidas.TryGetValue(e.Id, out var salidaActores) ? salidaActores : null));
             })
             .ToList();
 

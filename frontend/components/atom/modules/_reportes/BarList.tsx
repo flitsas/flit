@@ -50,7 +50,7 @@ export function BarList({ items, color = "var(--color-flit-brand)", max, onSelec
               <span className="truncate font-medium">{item.label}</span>
               <span className="font-semibold shrink-0">{item.valueLabel ?? formatNumber(item.value)}</span>
             </div>
-            <div className="h-2 rounded-full bg-[#DFE5ED] dark:bg-[#1E2A3C] overflow-hidden mt-0.5">
+            <div className="h-2 rounded-full bg-flit-gray overflow-hidden mt-0.5">
               <div className="h-full rounded-full" style={{ width, background: color }} />
             </div>
             {item.hint && <p className="text-[10px] opacity-60 mt-0.5">{item.hint}</p>}

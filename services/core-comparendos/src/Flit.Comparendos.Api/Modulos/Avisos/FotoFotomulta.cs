@@ -26,7 +26,8 @@ public sealed partial class FotoFotomulta(ComparendosDb db, IDescargaFoto descar
         if (c.EsFotomulta != true)
             return null;
         if (c.ArchivoEvidenciaId is { } id && await db.Archivos.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, ct).ConfigureAwait(false) is { } archivo)
-            return new AdjuntoCorreo(archivo.NombreOriginal, archivo.ContentType, [], archivo.Id);
+            // HU #13884: es el documento del comparendo cargado por OCR; se nombra por su número, no por el archivo subido.
+            return new AdjuntoCorreo($"comparendo-{c.Numero}{Path.GetExtension(archivo.NombreOriginal)}", archivo.ContentType, [], archivo.Id);
         if (string.IsNullOrWhiteSpace(c.FotoEvidenciaUrl))
             return null;
 

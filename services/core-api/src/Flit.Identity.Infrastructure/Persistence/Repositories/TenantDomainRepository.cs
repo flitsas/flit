@@ -110,7 +110,8 @@ internal sealed class TenantDomainRepository : ITenantDomainRepository
             _context.ChangeTracker.Clear();
             throw new DomainTenantNotMarcaBlancaException(tenantId);
         }
-        catch (DbUpdateException ex) when (IsConstraint(ex, "uq_tenant_domains_host"))
+        // HU #14381: el mismo error cuando el host ya lo tiene el portal de un organismo (disparador de unicidad entre tablas).
+        catch (DbUpdateException ex) when (IsConstraint(ex, "uq_tenant_domains_host") || IsConstraint(ex, "uq_domain_host_entre_tablas"))
         {
             _context.ChangeTracker.Clear();
             throw new DomainHostAlreadyRegisteredException(host);

@@ -1,7 +1,8 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import type { CreateOtDocumentTagRequest, OtDocumentTag } from "@/lib/api/types-ot";
 import { OtSidePanel } from "./OtSidePanel";
 import { OT_INPUT_CLS } from "./ot-form-styles";
@@ -70,11 +71,10 @@ export function TagFormPanel({ open, onClose, onCreate, onSaved }: TagFormPanelP
         <button
           type="button"
           disabled={submitting || !code.trim() || !name.trim()}
-          className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
-          style={{ background: "var(--color-flit-brand)" }}
+          className={buttonClass({ className: "w-full" })}
           onClick={() => void submit()}
         >
-          {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+          {submitting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
           Guardar
         </button>
       }
@@ -110,7 +110,7 @@ export function TagFormPanel({ open, onClose, onCreate, onSaved }: TagFormPanelP
                 />
                 <span
                   aria-hidden="true"
-                  className="h-7 w-7 rounded-full border-2 border-white shadow-sm ring-offset-2 peer-checked:ring-2 peer-checked:ring-flit-brand peer-focus-visible:ring-2 peer-focus-visible:ring-flit-brand dark:border-[#162744]"
+                  className="h-7 w-7 rounded-full border-2 border-white ring-offset-2 peer-checked:ring-2 peer-checked:ring-flit-brand peer-focus-visible:ring-2 peer-focus-visible:ring-flit-brand dark:border-card"
                   style={{ background: opt.hex }}
                 />
                 {opt.name}

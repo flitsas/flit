@@ -639,6 +639,17 @@ export interface ProcedureInstanceDetail {
   consolidadoWizard?: ConsolidadoVigencia | null;
   /** HU #12791 (Épica #12760) — vigencia del consolidado maestro. Ver {@link ConsolidadoVigencia}. */
   consolidadoMaestro?: ConsolidadoVigencia | null;
+  /** HU #14470 — pago en caja del punto. Ausente si el trámite no tiene pago del portal. */
+  pagoPortal?: PagoPortal | null;
+}
+
+/** HU #14470 — pago registrado en caja (o «sin cobro») de un trámite del punto. */
+export interface PagoPortal {
+  valorCop: number;
+  medio: 'caja' | 'sin_cobro';
+  medioCaja?: 'efectivo' | 'datafono' | 'transferencia' | 'otro' | null;
+  medioDetalle?: string | null;
+  pagadoEn: string;
 }
 
 /** Ver `ProcedureInstanceDetail.events`. */
@@ -648,7 +659,8 @@ export interface ProcedureInstanceEvent {
     | 'reenvio_validacion_admin'
     | 'revocatoria_solicitada'
     | 'revocatoria_aprobada'
-    | 'revocatoria_rechazada';
+    | 'revocatoria_rechazada'
+    | 'documento_cargado_admin';
   createdAt: string;
   createdByName: string | null;
   // reasignar_gestor_admin
@@ -658,10 +670,12 @@ export interface ProcedureInstanceEvent {
   newAssignedToEmail?: string | null;
   newAssignedToCompania?: string | null;
   // reenvio_validacion_admin
-  partyRole?: BiometricParte | null;
+  partyRole?: BiometricParte | 'locatario' | null;
   emailActualizado?: boolean | null;
   /** Correo en claro (a pedido del producto): el admin necesita ver la dirección exacta reenviada. */
   correoDestino?: string | null;
+  /** HU #13822 — correo previo cuando el reenvío lo cambió (null/ausente si no cambió). */
+  correoAnterior?: string | null;
   /** Compañía de quien ejecutó el evento (ya nombrado en `createdByName`). */
   createdByCompania?: string | null;
   // revocatoria_solicitada (HU #12575, Feature #12565) — payload de RequestRevocationHandler
@@ -678,6 +692,16 @@ export interface ProcedureInstanceEvent {
   // distinto de `revocationReason` (motivo original del gestor al pedirla). Reutilizan
   // `revocationAttemptNumber` de arriba.
   revocationDecisionReason?: string | null;
+  // documento_cargado_admin (Bug #14604) — el payload del evento es { tipo, filename, attachmentId,
+  // previousAttachmentIds, estado, observacion }; como `tipo` ya es el discriminador del evento, el
+  // DTO lo expone con prefijo para no colisionar.
+  /** Tipo de documento cargado (código; se muestra con `documentLabel`). */
+  documentoTipo?: string | null;
+  documentoFilename?: string | null;
+  /** Estado del trámite en el momento de la carga. */
+  estadoAlMomento?: string | null;
+  /** Observación obligatoria escrita por el administrador. */
+  observacion?: string | null;
 }
 
 /** Item del body de PATCH /instances/{id}/field-values. */
@@ -1139,6 +1163,12 @@ export interface ProcedureAttachment {
   ocrStatus?: AttachmentOcrStatus | null;
   /** Código cerrado del motivo (solo rejected/skipped). Nunca texto libre del documento (Ley 1581). */
   ocrReason?: string | null;
+  /**
+   * Bug #14604 — true si el documento quedó como «versión anterior» porque un administrador cargó
+   * otro del mismo tipo. Opcional para tolerar backends que aún no lo envían (ausente = vigente).
+   * Un histórico NUNCA cuenta como el documento vigente de la casilla, pero sí se puede abrir.
+   */
+  isHistorico?: boolean;
 }
 
 /** Bug #14559 — valores persistidos del veredicto OCR del adjunto. */
@@ -2123,7 +2153,8 @@ export interface TenantBiometricPersonFilters {
   documentNumber?: string;
   /** Ajuste 2026-11-10 (D1=a) — radicado (FT…), coincidencia parcial en servidor. */
   referenceNumber?: string;
-  status?: BiometricEstado;
+  /** Uno o varios estados separados por coma: la franja de Identidad pide «enviado,en_proceso» para «En proceso». */
+  status?: BiometricEstado | 'enviado,en_proceso';
   createdFrom?: string;
   createdTo?: string;
   vigenciaEstado?: BiometricVigenciaEstado;
@@ -2677,6 +2708,37 @@ export interface StatusHistoryPage {
   total: number;
   page: number;
   pageSize: number;
+  /**
+   * HU #14181 — modificaciones de datos del expediente, en el orden del API
+   * (más reciente primero). `null` cuando esta página no trae ninguna.
+   */
+  modificaciones?: StatusHistoryModification[] | null;
+  /** Total de modificaciones del trámite, no solo las de esta página. */
+  modificacionesTotal?: number;
+}
+
+/** HU #14181 — un cambio de dato dentro del expediente abierto. */
+export interface StatusHistoryModification {
+  id: string;
+  etiqueta: string;
+  campo: string;
+  anterior: string;
+  nuevo: string;
+  changedAt: string;
+  changedByUserId: string | null;
+  changedByName: string | null;
+  changedByCompania: string | null;
+  /** Bug #14604 — solo en «documento actualizado por el administrador»: adjuntos nuevo y anterior. */
+  documento?: DocumentoActualizado | null;
+}
+
+/** Bug #14604 — documento que el administrador actualizó; los ids son adjuntos del mismo trámite. */
+export interface DocumentoActualizado {
+  tipo: string;
+  attachmentId: string;
+  filename: string;
+  anteriorAttachmentId?: string | null;
+  anteriorFilename?: string | null;
 }
 
 /** HU #11470 — fila de despacho de correo (dirección enmascarada). */

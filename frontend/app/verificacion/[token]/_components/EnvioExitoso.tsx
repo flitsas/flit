@@ -1,4 +1,4 @@
-import { CheckCircle2 } from "lucide-react";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
  * AlertCard verde de éxito (patrón de feedback FLIT; no existe un componente compartido con ese nombre,
@@ -11,7 +11,8 @@ export function EnvioExitoso() {
       data-testid="alert-card-exito"
       className="mt-6 flex flex-col items-center gap-2 rounded-2xl border border-[var(--badge-success-border)] bg-[var(--badge-success-bg)] p-6 text-center"
     >
-      <CheckCircle2 aria-hidden="true" className="size-10 text-[var(--badge-success-fg)]" />
+      {/* Disco «aviso-ok» del juego de íconos FLIT (PDF), no un ✓ suelto. */}
+      <IconoAviso tipo="ok" className="size-10" />
       <h1 className="text-xl font-bold text-[var(--badge-success-fg)]">Recibimos tu información</h1>
     </div>
   );

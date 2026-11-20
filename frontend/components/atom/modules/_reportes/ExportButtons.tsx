@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileSpreadsheet, FileText, Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { exportAnalyticsExcel, exportExecutivePdf } from "@/lib/api/analytics";
 import { ApiError } from "@/lib/api/types";
 import type { AnalyticsCategory } from "@/lib/api/types";
@@ -65,9 +65,9 @@ export function ExportButtons({ range, tenantId, category, status, disabled }: E
           style={{ color: "var(--color-flit-primary)" }}
         >
           {busy === "excel" ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="reporte-detallado" className="h-3.5 w-3.5" />
           )}
           {busy === "excel" ? "Exportando…" : "Exportar Excel"}
         </button>
@@ -81,16 +81,16 @@ export function ExportButtons({ range, tenantId, category, status, disabled }: E
           style={{ background: "var(--color-flit-brand)" }}
         >
           {busy === "pdf" ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+            <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
           ) : (
-            <FileText className="h-3.5 w-3.5" aria-hidden="true" />
+            <Icono nombre="documento" className="h-3.5 w-3.5" />
           )}
           {busy === "pdf" ? "Generando…" : "Resumen Ejecutivo PDF"}
         </button>
       </div>
 
       {error && (
-        <p role="alert" aria-live="assertive" className="text-[11px]" style={{ color: "#FF4E00" }}>
+        <p role="alert" aria-live="assertive" className="text-[11px]" style={{ color: "var(--destructive)" }}>
           {error}
         </p>
       )}

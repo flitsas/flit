@@ -2,7 +2,7 @@
 
 import { type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { ShieldX } from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { Shell } from '@/components/atom/Shell';
 import { canSeeGeneracionDocumental } from '@/components/admin/generacion-documental/generacion-documental-nav';
 import { useAccessibleModules } from '@/hooks/useAccessibleModules';
@@ -54,7 +54,7 @@ export default function AdminGeneracionDocumentalLayout({ children }: { children
             role="alert"
             className="mx-auto flex min-h-[40vh] max-w-md flex-col items-center justify-center gap-3 px-6 text-center"
           >
-            <ShieldX className="h-10 w-10" style={{ color: '#FF4E00' }} aria-hidden="true" />
+            <Icono nombre="distinto" className="h-10 w-10" style={{ color: 'var(--destructive)' }} />
             <h1 className="text-lg font-bold" style={{ color: 'var(--color-flit-primary)' }}>
               Acceso restringido
             </h1>

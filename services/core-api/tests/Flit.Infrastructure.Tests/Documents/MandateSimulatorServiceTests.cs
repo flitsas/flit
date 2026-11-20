@@ -23,7 +23,7 @@ namespace Flit.Infrastructure.Tests.Documents;
 /// Simulador de mandatos (HU #11706). Cubre que el escenario elegido llegue al PDF y que el envío
 /// por correo adjunte ese PDF y reporte el desenlace sin filtrar datos técnicos.
 /// </summary>
-public sealed class MandateSimulatorServiceTests
+public sealed partial class MandateSimulatorServiceTests
 {
     private static readonly Guid Funza = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid Compania = Guid.Parse("22222222-2222-2222-2222-222222222222");
@@ -214,7 +214,8 @@ public sealed class MandateSimulatorServiceTests
     private static (MandateSimulatorService Service, FakeEmailSender Sender) Build(
         bool conMandatario,
         IMandateFormatTemplateProvider? formatTemplates = null,
-        IMandatoGenerator? generator = null)
+        IMandatoGenerator? generator = null,
+        IMandateSignerDirectory? directory = null)
     {
         var db = new FlitDbContext(new DbContextOptionsBuilder<FlitDbContext>()
             .UseInMemoryDatabase($"flit-mandate-sim-{Guid.NewGuid()}")
@@ -288,7 +289,7 @@ public sealed class MandateSimulatorServiceTests
             db,
             new FakeCatalog(),
             new MandateRequirementPolicy(db),
-            new MandateSignerDirectory(db, otStatusReader, identityResolver),
+            directory ?? new MandateSignerDirectory(db, otStatusReader, identityResolver),
             generator ?? new MandatoPdfGenerator(),
             new FakeConfigService(),
             NullSignatureVaultPolicy.Instance,
