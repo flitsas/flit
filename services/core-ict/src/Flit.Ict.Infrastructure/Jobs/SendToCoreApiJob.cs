@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using Flit.Ict.Domain.Abstractions;
 using Flit.Ict.Domain.Entities;
+using Flit.Ict.Infrastructure.ExternalClients;
 using Flit.Ict.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -343,7 +344,8 @@ public sealed class SendToCoreApiJob(
 
             // Bug #13304 (capa 3): el borrador existe, pero core-api no pudo guardar actores o datos
             // comerciales. Se deja visible en los comentarios que muestran la bandeja y el GET de estado.
-            var novedad = MaterializacionNovedades.Mensaje(result.ErrorCode);
+            var novedad = MaterializacionNovedades.Mensaje(MaterializacionNovedades.Combinar(
+                result.ErrorCode, IctDraftFieldValuesMapper.AdvertenciasLocales(master)));
             if (novedad is not null)
             {
                 MaterializacionNovedades.Aplicar(master, novedad);
