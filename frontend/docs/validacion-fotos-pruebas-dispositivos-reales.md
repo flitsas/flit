@@ -24,10 +24,9 @@ Para cada uno, probar anverso y reverso, con buena luz y con reflejo leve:
 | Prueba | Esperado |
 |---|---|
 | Anverso | pasa; si se muestra el reverso, «Muestra el lado de tu documento con tu foto» |
-| Reverso | pasa; si se muestra el anverso, «Muestra el lado con el código de barras» |
+| Reverso | pasa si se ve un documento (anverso o reverso). No se lee código de barras ni QR |
 | Sin documento (mesa, pared) | pide encuadrar el documento |
 Registrar por tipo de documento: `intentos hasta pasar / lado que falló / mensaje`.
-Si el código de barras del reverso casi nunca se lee, anotar distancia, inclinación y luz: se ajustan umbrales con esos datos.
 Pasaporte (opcional): debe pedir las tres fotos y validar solo que sea un documento.
 
 ## Qué mirar además

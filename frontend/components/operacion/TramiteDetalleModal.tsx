@@ -874,9 +874,15 @@ export function TramiteDetalleModal({
                         ),
                         // Bug #12376, defecto 3 — el reenvío administrativo queda como evento
                         // ADICIONAL, sin reemplazar el correo del registro que ya pinta el nodo de
-                        // identidad de arriba.
+                        // identidad de arriba. Bug #14634 — el rechazo de una revisión también: el nodo
+                        // de arriba solo muestra el estado VIGENTE, y al aprobar un intento posterior
+                        // el motivo de ese rechazo desaparecería si no se pinta este evento.
                         ...mapEventsToTimelineNodes(
-                          (detail?.events ?? []).filter((e) => e.tipo === 'reenvio_validacion_admin'),
+                          (detail?.events ?? []).filter(
+                            (e) =>
+                              e.tipo === 'reenvio_validacion_admin' ||
+                              e.tipo === 'identidad_manual_rechazada',
+                          ),
                         ),
                       ]}
                       emptyMessage="Este trámite todavía no tiene validación de identidad iniciada."

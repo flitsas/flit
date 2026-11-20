@@ -71,6 +71,46 @@ public sealed class IdentityAuditHandlerTests
     }
 
     [Fact]
+    public async Task Bug14634_ManualRechazado_HomologaElMotivoDesdeElDetalleDeLaBitacora()
+    {
+        // El Detail que escribe RechazarValidacionManualHandler es "usuario=...; motivo=<codigo>; expira_at=...".
+        // Sin esta extracción, el hito histórico de un rechazo manual ya aprobado/reintentado se queda sin
+        // motivo (BiometricValidationDto.RejectionReason ya se limpió con la nueva captura).
+        var ct = TestContext.Current.CancellationToken;
+        SeedValidation();
+        _repo.ListIdentityAuditByValidationAsync(_validation, Arg.Any<CancellationToken>()).Returns(new List<IdentityValidationAuditEvent>
+        {
+            new()
+            {
+                Stage = IdentityValidationAuditStages.ManualRechazado,
+                Outcome = IdentityValidationAuditOutcomes.Rejected,
+                Detail = $"usuario={Guid.NewGuid()}; motivo=documento_ilegible_o_incompleto; expira_at=2026-11-20T15:40:58Z",
+            },
+        });
+
+        var (result, error) = await _handler.HandleAsync(_instance, _tenant, _validation, ct);
+
+        error.Should().BeNull();
+        result!.Events.Should().ContainSingle().Which.RejectionReasonLabel.Should().Be("Documento ilegible o incompleto");
+    }
+
+    [Fact]
+    public async Task Bug14634_OtrasEtapas_NuncaLlevanMotivoHomologado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        SeedValidation();
+        _repo.ListIdentityAuditByValidationAsync(_validation, Arg.Any<CancellationToken>()).Returns(new List<IdentityValidationAuditEvent>
+        {
+            new() { Stage = IdentityValidationAuditStages.WebhookApplied, Outcome = "aprobado", Detail = "motivo=no_deberia_leerse" },
+        });
+
+        var (result, error) = await _handler.HandleAsync(_instance, _tenant, _validation, ct);
+
+        error.Should().BeNull();
+        result!.Events.Should().ContainSingle().Which.RejectionReasonLabel.Should().BeNull();
+    }
+
+    [Fact]
     public async Task Audit_Referenced_WhenSameTenantOtherInstance_ReturnsEventsWithFlag()
     {
         // HU #10350 — identidad "apalancada"/reutilizada: mismo tenant, OTRO trámite. No es error:
