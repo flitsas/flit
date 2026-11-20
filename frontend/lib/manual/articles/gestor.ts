@@ -297,6 +297,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [],
         bullets: [
           "Desde el wizard, en el paso de identidad, se invita a cada parte (enlace o QR según configuración).",
+          "Hazle llegar el enlace a la persona con el código QR o con «Copiar enlace». No lo abras en tu equipo: el enlace queda asociado al primer dispositivo que lo abre y luego la persona no podría completar la captura desde el suyo.",
           "La persona completa el flujo biométrico en el dispositivo indicado.",
           "El estado vuelve al trámite: pendiente, aprobado, rechazado o vencido.",
           "Con todas las identidades aprobadas, el wizard puede quitar el bloqueo correspondiente.",
