@@ -1805,7 +1805,8 @@ describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
     await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
 
     expect(await screen.findByTestId('identity-capture-qr')).toBeInTheDocument();
-    expect(screen.getByLabelText(/código qr del enlace de captura/i)).toBeInTheDocument();
+    const qr = screen.getByLabelText(/código qr del enlace de captura/i);
+    expect(qr.parentElement?.parentElement).toHaveClass('items-center');
     expect(screen.getByRole('link', { name: /abrir captura kyverum/i })).toHaveAttribute(
       'href',
       'https://capture.kyverum.co/kyv_123',
@@ -1865,6 +1866,9 @@ describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
     await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
 
     expect(await screen.findByTestId('identity-capture-qr')).toBeInTheDocument();
+    expect(screen.getByLabelText(/código qr del enlace de captura/i).parentElement?.parentElement).toHaveClass(
+      'items-center',
+    );
     expect(screen.getByRole('link', { name: /abrir captura kyverum/i })).toBeInTheDocument();
   });
 
