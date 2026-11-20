@@ -12,9 +12,9 @@ namespace Flit.Modules.Security.Application.Tests.Products;
 public sealed class ProductCodesTests
 {
     [Fact]
-    public void All_son_los_cinco_codigos_del_contrato_v1()
+    public void All_son_los_cuatro_codigos_del_contrato_v1_mas_caja()
     {
-        ProductCodes.All.Should().Equal("plataforma", "tramites", "comparendos", "diagnostico");
+        ProductCodes.All.Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "caja");
     }
 
     [Fact]

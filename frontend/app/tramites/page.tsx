@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Modal } from '@/components/atom/Modal';
 import { OperacionView } from '@/components/operacion/OperacionView';
 import { NuevoTramiteSelector } from '@/components/operacion/NuevoTramiteSelector';
@@ -17,7 +17,21 @@ import { CargaMasivaModal } from '@/components/operacion/CargaMasivaModal';
  * selector para enlaces directos.
  */
 export default function TramitesPage() {
+  // useSearchParams pide un límite de Suspense en una página que se prerenderiza (mismo patrón que app/page.tsx).
+  return (
+    <Suspense fallback={null}>
+      <TramitesPageContent />
+    </Suspense>
+  );
+}
+
+function TramitesPageContent() {
   const router = useRouter();
+  // HU #14481/#14480 — las cifras de Inicio y el buscador Ctrl K entran con ?placa=, ?estado= o ?atajo=. El listado
+  // los siembra al montar; si cambian estando ya en /tramites (p. ej. Ctrl K desde aquí mismo) se vuelve a montar con
+  // la entrada nueva. El filtrado a mano no toca la URL, así que nunca lo reinicia.
+  const params = useSearchParams();
+  const entrada = ['placa', 'estado', 'atajo'].map((k) => params?.get(k) ?? '').join('|');
   // HU #13665 (AC2) — sin Ver en ninguna familia no hay nada que listar: al inicio con «No tienes acceso a este módulo.».
   const { readable } = useFamilyAccess();
   const sinAcceso = readable.length === 0;
@@ -34,6 +48,7 @@ export default function TramitesPage() {
   return (
     <>
       <OperacionView
+        key={entrada}
         onNewTramite={() => setEligiendo(true)}
         onBulkUpload={() => setCargaMasiva(true)}
         refreshKey={refreshKey}

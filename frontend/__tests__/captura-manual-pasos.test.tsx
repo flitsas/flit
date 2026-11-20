@@ -93,14 +93,18 @@ describe("CapturaManualFlow", () => {
   it("con sesión válida muestra la barra y avanza de paso", async () => {
     render(<CapturaManualFlow token="ok" client={fakeClient()} />);
     expect(await screen.findByRole("navigation", { name: /progreso/i })).toBeInTheDocument();
-    expect(screen.getByAltText("FLIT")).toBeInTheDocument();
-    expect(screen.getAllByRole("img", { name: "FLIT" })).toHaveLength(1);
+    // Un logo por tema (HU #14485): el de tinta se oculta en oscuro y el blanco solo se ve en oscuro; jsdom no
+    // aplica `hidden`, así que aquí se ven los dos.
+    const logos = screen.getAllByAltText("FLIT");
+    expect(logos).toHaveLength(2);
+    expect(logos[0]).toHaveClass("dark:hidden");
+    expect(logos[1]).toHaveClass("hidden", "dark:block");
     expect(screen.queryByText("Verify")).not.toBeInTheDocument();
     // Cabecera: solo el logo, sin el texto «FLIT 2.0» al lado.
     const header = screen.getByRole("banner");
     expect(header).toHaveTextContent("");
-    expect(within(header).getAllByRole("img")).toHaveLength(1);
-    expect(screen.getByAltText("FLIT")).toHaveClass("h-10");
+    expect(within(header).getAllByRole("img")).toHaveLength(2);
+    for (const logo of logos) expect(logo).toHaveClass("h-10");
     fireEvent.click(screen.getByRole("checkbox"));
     fireEvent.click(screen.getByRole("button", { name: "Iniciar verificación" }));
     await screen.findByRole("heading", { name: "Verificación facial" });

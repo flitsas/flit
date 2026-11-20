@@ -4,6 +4,7 @@ import type {
   BiometricValidation,
   ProcedureInstanceEvent,
   StatusHistory,
+  StatusHistoryModification,
 } from '@/lib/api/types/procedure-runtime';
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
@@ -12,10 +13,10 @@ import { formatFechaHora } from '@/lib/format/date';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import type { TimelineTrackNode } from './TimelineTrackPanel';
 
-const GREEN = '#8CC63F';
-const WARN = '#F9AC00';
-const RED = '#FF4E00';
-const GREY = '#94A3B8';
+const GREEN = 'var(--flit-success-ink)';
+const WARN = 'var(--badge-warning-fg)';
+const RED = 'var(--destructive)';
+const GREY = 'var(--muted-foreground)';
 const BLUE = 'var(--color-flit-brand)';
 
 const PARTE_LABEL: Record<BiometricParte, string> = {
@@ -52,6 +53,83 @@ function hitoLabel(e: StatusHistory): string {
   const from = e.fromStatus ? estadoLabel(e.fromStatus) : null;
   const reason = e.reason?.trim();
   return `${to}${from ? ` desde ${from}` : ''}${reason ? ` (${reason})` : ''}`;
+}
+
+/** Banderas de transformación: en la ficha son sí/no; en la bitácora se guardan true/false. */
+const CAMPOS_SI_NO = new Set([
+  'cambio_color',
+  'cambio_carroceria',
+  'cambio_combustible',
+  'blindaje',
+]);
+
+function textoValor(campo: string, valor: string, anterior: boolean): string {
+  const limpio = valor.trim();
+  if (anterior && limpio === '') return '—';
+  if (campo === 'estado' && limpio !== '') return estadoLabel(limpio);
+  if (CAMPOS_SI_NO.has(campo)) {
+    if (limpio.toLowerCase() === 'true') return 'Sí';
+    if (limpio.toLowerCase() === 'false') return 'No';
+  }
+  return limpio === '' ? '—' : valor;
+}
+
+/**
+ * Cada modificación es una tarjeta del mismo carril: el título es el dato (en un estado, el
+ * nombre del estado), y el detalle dice de qué valor a cuál. El orden sigue el del carril:
+ * el más antiguo arriba y el vigente abajo.
+ */
+export function mapModificacionesToTimelineNodes(
+  rows: StatusHistoryModification[],
+): TimelineTrackNode[] {
+  const sorted = [...rows].sort(
+    (a, b) => new Date(a.changedAt).getTime() - new Date(b.changedAt).getTime(),
+  );
+  return sorted.map((m, i) => {
+    const esEstado = m.campo === 'estado';
+    const anterior = textoValor(m.campo, m.anterior, true);
+    const nuevo = textoValor(m.campo, m.nuevo, false);
+    const nombre = m.changedByName?.trim() ?? '';
+    const sistema = nombre === '' || nombre.startsWith('Sistema');
+    const titulo = esEstado ? estadoLabel(m.nuevo) : m.etiqueta;
+    return {
+      label: titulo,
+      color: esEstado ? estadoChipStyle(m.nuevo).accent : BLUE,
+      info: {
+        gestor: nombre || 'Sistema',
+        correo: '—',
+        empresa: m.changedByCompania?.trim() || '—',
+        rol: sistema ? 'Sistema' : 'Gestor',
+        fecha: formatFechaHora(m.changedAt),
+        extra: esEstado
+          ? anterior === '—'
+            ? titulo
+            : `${titulo} desde ${anterior}`
+          : anterior === '—'
+            ? nuevo
+            : `${anterior} → ${nuevo}`,
+      },
+      isActive: i === sorted.length - 1,
+      timestamp: new Date(m.changedAt).getTime(),
+      ...(m.documento
+        ? {
+            documento: {
+              tipoLabel: documentLabel(m.documento.tipo),
+              nuevo: { id: m.documento.attachmentId, filename: m.documento.filename, tipo: m.documento.tipo },
+              ...(m.documento.anteriorAttachmentId
+                ? {
+                    anterior: {
+                      id: m.documento.anteriorAttachmentId,
+                      filename: m.documento.anteriorFilename || "Archivo anterior",
+                      tipo: m.documento.tipo,
+                    },
+                  }
+                : {}),
+            },
+          }
+        : {}),
+    };
+  });
 }
 
 /** Mapea `statusHistory` al patrón visual TimelineTrack del mockup. */
@@ -177,6 +255,7 @@ export function mapIdentidadToTimelineNodes(
 const PARTY_LABEL: Record<string, string> = {
   vendedor: 'Vendedor',
   comprador: 'Comprador',
+  locatario: 'Locatario',
 };
 
 /**
@@ -294,9 +373,11 @@ function mapSingleEventToTimelineNode(e: ProcedureInstanceEvent): TimelineTrackN
       empresa: e.createdByCompania || '—',
       rol: e.createdByName ? `Ejecutado por ${e.createdByName}` : 'Ejecutado por admin',
       fecha: formatFechaHora(e.createdAt),
-      extra: e.emailActualizado
-        ? 'Reenviado a un correo distinto del registrado'
-        : 'Reenviado al correo actual',
+      extra: e.correoAnterior?.trim()
+        ? `Correo actualizado: ${e.correoAnterior.trim()} → ${e.correoDestino?.trim() || '—'}`
+        : e.emailActualizado
+          ? 'Reenviado a un correo distinto del registrado'
+          : 'Reenviado al correo actual',
     },
   };
 }

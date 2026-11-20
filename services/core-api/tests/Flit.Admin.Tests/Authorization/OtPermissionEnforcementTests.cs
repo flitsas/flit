@@ -78,14 +78,15 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
     // ── Cobertura: el mapa es el inventario del Anexo y apunta a rutas reales ──────────────────
 
     [Fact]
-    public void Mapa_Tiene92RutasConElConteoDelAnexoPorSlug()
+    public void Mapa_Tiene93RutasConElConteoDelAnexoPorSlug()
     {
         // 90 del Anexo A + 2 de la invitación masiva OT (Feature #14420, HU #14425): plantilla y carga, ambas ot.usuarios.manage.
-        OtPermissionMap.BySignature.Should().HaveCount(92);
+        // + 1 de Reportes: trámites por cliente corporativo del Inicio del organismo (rediseño 2026-11-17).
+        OtPermissionMap.BySignature.Should().HaveCount(93);
         OtPermissionMap.BySignature.GroupBy(kv => kv.Value).ToDictionary(g => g.Key, g => g.Count()).Should().BeEquivalentTo(
             new Dictionary<string, int>
             {
-                [OtPermissionMap.Tramites] = 29, [OtPermissionMap.Reportes] = 23, [OtPermissionMap.Mandatos] = 11,
+                [OtPermissionMap.Tramites] = 29, [OtPermissionMap.Reportes] = 24, [OtPermissionMap.Mandatos] = 11,
                 [OtPermissionMap.Mandatarios] = 11, [OtPermissionMap.Usuarios] = 8, [OtPermissionMap.Improntas] = 4,
                 [OtPermissionMap.Integracion] = 4, [OtPermissionMap.Documentos] = 2,
             });
@@ -101,15 +102,25 @@ public sealed class OtPermissionEnforcementTests : IClassFixture<OtPermissionEnf
 
         OtPermissionMap.BySignature.Keys.Except(registradas.Select(r => r.Firma)).Should().BeEmpty("cada ruta del mapa debe existir");
 
+        // Épica #14297: marca y precios del portal se autorizan por rol, sin slug. No cuentan en el Anexo A, pero no pueden
+        // quedar abiertos a otros roles OT ni entrar al mapa de permisos.
+        static bool EsDelPortal(string firma) => firma.Contains(" /api/v1/admin/ot/portal-", StringComparison.Ordinal);
+        var delPortal = registradas.Where(r => EsDelPortal(r.Firma)).ToList();
+        delPortal.Should().NotBeEmpty();
+        delPortal.Should().OnlyContain(r => r.Endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Any(a => a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy));
+        OtPermissionMap.BySignature.Keys.Where(EsDelPortal).Should().BeEmpty();
+
         var conPolicyOt = registradas
+            .Where(r => !EsDelPortal(r.Firma))
             .Where(r => r.Endpoint.Metadata.GetOrderedMetadata<IAuthorizeData>().Any(a =>
                 a.Policy == AdminAuthorization.OtModulePolicy || a.Policy == AdminAuthorization.OtAdminOrSuperAdminPolicy))
             .Select(r => r.Firma).Distinct().ToList();
         // 123 + las 2 de la invitación masiva OT (HU #14425) + las 3 del alcance de clientes por usuario
-        // (client-companies y GET/PUT client-scope).
-        conPolicyOt.Should().HaveCount(128);
+        // (client-companies y GET/PUT client-scope) + clientes-por-familia del Inicio OT.
+        conPolicyOt.Should().HaveCount(129);
         // Las 33 del Anexo A + las 3 del alcance de clientes: son solo del Admin OT y del Super Admin aunque el Gestor
-        // tenga «Usuarios» delegado, así que no llevan slug (un slug las abriría a quien lo tenga).
+        // tenga «Usuarios» delegado, así que no llevan slug (un slug las abriría a quien lo tenga). clientes-por-familia
+        // sí lleva slug (Reportes), así que no suma aquí.
         conPolicyOt.Except(OtPermissionMap.BySignature.Keys).Should().HaveCount(36);
     }
 

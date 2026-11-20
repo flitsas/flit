@@ -68,8 +68,13 @@ public sealed class DomainContextMiddleware(RequestDelegate next)
         }
 
         var resolution = await resolver.ResolveAsync(host, cancellationToken).ConfigureAwait(false);
-        return resolution.IsNetwork && resolution.HeadTenantId is { } headTenantId
-            ? DomainContext.Network(host, headTenantId, resolution.ProductCode)
+        if (resolution.IsNetwork && resolution.HeadTenantId is { } headTenantId)
+        {
+            return DomainContext.Network(host, headTenantId, resolution.ProductCode);
+        }
+
+        return resolution.TransitOfficeId is { } transitOfficeId
+            ? DomainContext.Portal(host, transitOfficeId)
             : DomainContext.Flit(host, flitProduct);
     }
 }

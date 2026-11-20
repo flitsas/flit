@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { RefreshCw, Upload, UserRoundPen } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
 import { useToast } from "@/components/Toast";
@@ -12,6 +12,9 @@ import { armarAsignacion, DECLARACION_LEY_1581, erroresAsignacion, type FormCond
 import { P } from "@/lib/nav";
 import { capacidades, tienePermiso } from "@/lib/sesion";
 import type { Contraventor } from "@/lib/tipos";
+import { iconoComo } from "@flit/ui/iconoComo";
+
+const ICONO_PERSONA = iconoComo("persona");
 
 const TIPOS_DOCUMENTO = ["CC", "CE", "PA", "TI", "NIT"];
 
@@ -61,13 +64,13 @@ function ModalConductor({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () 
   };
 
   return (
-    <Modal
+    <Modal icono="persona"
       open
       onClose={onCerrar}
       busy={ocupado}
       size="lg"
       title={actual ? "Cambiar conductor" : "Asignar conductor"}
-      description={actual ? `Conductor actual: ${actual.nombres} (${actual.origen === "Api" ? "API" : "manual"}).` : "Quién tenía el vehículo en la fecha de la infracción."}
+      description={actual ? `Conductor actual: ${actual.nombres} (${actual.origen === "Api" ? "automático" : "manual"}).` : "Quién tenía el vehículo en la fecha de la infracción."}
       footer={
         <div className="flex justify-end gap-2">
           <button type="button" className={controlCls(false)} onClick={onCerrar}>
@@ -146,10 +149,62 @@ function CargarDocumento({ ctx }: { ctx: ContextoDetalle }) {
       </select>
       <input ref={input} type="file" accept="application/pdf,image/jpeg,image/png" className="hidden" onChange={(e) => e.target.files?.[0] && subir(e.target.files[0])} />
       <button type="button" className={controlCls(false)} disabled={ocupado} onClick={() => input.current?.click()}>
-        <Upload className="h-3.5 w-3.5" aria-hidden />
+        <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
         {ocupado ? "Cargando…" : "Cargar documento"}
       </button>
     </div>
+  );
+}
+
+/**
+ * El conductor que trajo la API de contratos llega sin documento (HU #13712): se completa aquí sin reemplazarlo, así no se
+ * revocan sus enlaces del portal ni se reinician sus avisos. Sin documento no se solicita el cambio de contraventor.
+ */
+function CompletarDocumento({ ctx }: { ctx: ContextoDetalle }) {
+  const toast = useToast();
+  const [tipo, setTipo] = useState("CC");
+  const [numero, setNumero] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const valido = numero.trim().length > 0 && numero.trim().length <= 20;
+
+  const guardar = async () => {
+    setOcupado(true);
+    try {
+      await apiFetch(`/comparendos/${ctx.detalle.id}/contraventor/documento`, {
+        method: "PUT",
+        body: { tipoDocumento: tipo, numeroDocumento: numero.trim() },
+      });
+      toast.show("Documento del conductor completado.", "success");
+      ctx.recargar();
+    } catch (e) {
+      toast.show(e instanceof Error ? e.message : "No se pudo guardar el documento.", "error");
+    } finally {
+      setOcupado(false);
+    }
+  };
+
+  return (
+    <InlineAlert tone="warning" title="Falta el documento del conductor">
+      <p className="mb-2 text-xs">
+        La consulta automática trae el nombre y el correo, pero no el documento. Complétalo para poder solicitar el cambio de
+        contraventor.
+      </p>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className={ETIQUETA_CLS}>
+          Tipo
+          <select className={`${INPUT_CLS} w-24`} value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            {TIPOS_DOCUMENTO.map((t) => <option key={t}>{t}</option>)}
+          </select>
+        </label>
+        <label className={ETIQUETA_CLS}>
+          Número
+          <input className={INPUT_CLS} value={numero} onChange={(e) => setNumero(e.target.value)} />
+        </label>
+        <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!valido || ocupado} onClick={guardar}>
+          {ocupado ? "Guardando…" : "Guardar documento"}
+        </button>
+      </div>
+    </InlineAlert>
   );
 }
 
@@ -161,17 +216,19 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
   const toast = useToast();
   const [modal, setModal] = useState(false);
   const [consultando, setConsultando] = useState(false);
-  const [confirmar, setConfirmar] = useState<{ nombres: string; numeroDocumento: string } | null>(null);
+  const [confirmar, setConfirmar] = useState<{ nombres: string; numeroDocumento: string | null } | null>(null);
   const d = ctx.detalle;
   const puedeAsignar = tienePermiso(ctx.sesion, P.contraventorAsignar);
   const puedeConsultar = tienePermiso(ctx.sesion, P.contraventorConsultar) && capacidades(ctx.sesion).consultaContraventor;
   const puedeDocumentos = tienePermiso(ctx.sesion, P.contraventorDocumentos);
+  // GDC punto 20: tras 3 intentos fallidos la consulta queda agotada y el servidor la rechaza: solo se asigna a mano.
+  const agotada = d.estadoConsultaContraventor === "Agotada";
   if (!d.activo) return null;
 
   const consultar = async (confirmarReemplazo = false) => {
     setConsultando(true);
     try {
-      const r = await apiFetch<{ resultado: string; mensaje: string | null; conductor: { nombres: string; numeroDocumento: string } | null; requiereConfirmarReemplazo: boolean }>(
+      const r = await apiFetch<{ resultado: string; mensaje: string | null; conductor: { nombres: string; numeroDocumento: string | null } | null; requiereConfirmarReemplazo: boolean }>(
         `/comparendos/${d.id}/contraventor/consultar`,
         { method: "POST", query: { confirmarReemplazo: confirmarReemplazo || undefined } },
       );
@@ -181,8 +238,14 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
       }
       setConfirmar(null);
       toast.show(
-        r.resultado === "Encontrado" ? "La API de contratos encontró el conductor." : r.resultado === "NoEncontrado" ? "La API no encontró conductor: asígnalo a mano." : r.mensaje ?? "La consulta falló.",
-        r.resultado === "Error" ? "error" : r.resultado === "NoEncontrado" ? "warning" : "success",
+        r.resultado === "Encontrado"
+          ? "Se encontró el conductor."
+          : r.resultado === "NoEncontrado"
+            ? "No se encontró el conductor: asígnalo a mano."
+            : r.resultado === "SinHora"
+              ? "El comparendo no trae hora y ese día cambió el conductor: revisa quién conducía y asígnalo a mano."
+              : "No se pudo consultar el conductor: inténtalo más tarde o asígnalo a mano.",
+        r.resultado === "Error" ? "error" : r.resultado === "Encontrado" ? "success" : "warning",
       );
       ctx.recargar();
     } catch (e) {
@@ -202,29 +265,36 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
   };
 
   return (
-    <div className="flex flex-col gap-3 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="flex flex-col gap-3 border-t border-border pt-3">
       <div className="flex flex-wrap items-center gap-2">
         {puedeAsignar && (
           <button type="button" className={controlCls(false)} onClick={() => setModal(true)}>
-            <UserRoundPen className="h-3.5 w-3.5" aria-hidden />
+            <ICONO_PERSONA className="h-3.5 w-3.5" aria-hidden />
             {d.contraventor ? "Cambiar conductor" : "Asignar conductor"}
           </button>
         )}
         {puedeConsultar && (
-          <button type="button" className={controlCls(false)} disabled={consultando} onClick={() => consultar()}>
-            <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-            {consultando ? "Consultando…" : "Consultar API"}
+          <button
+            type="button"
+            className={controlCls(false)}
+            disabled={consultando || agotada}
+            title={agotada ? "Ya se intentó 3 veces sin respuesta: asigna el conductor a mano." : undefined}
+            onClick={() => consultar()}
+          >
+            <Icono nombre="reintento" className="h-3.5 w-3.5" />
+            {consultando ? "Consultando…" : "Consultar conductor"}
           </button>
         )}
         {puedeDocumentos && <CargarDocumento ctx={ctx} />}
       </div>
+      {puedeAsignar && d.contraventor?.documentoPendiente && <CompletarDocumento ctx={ctx} />}
       {puedeAsignar && (
         <Interruptor activo={d.notificadoFisicamente} onCambio={notificado} etiqueta="Notificado en persona" ayuda="El conductor ya conoce el comparendo: no recibe avisos automáticos." />
       )}
       {confirmar && (
         <InlineAlert
           tone="warning"
-          title="La API encontró otro conductor"
+          title="La consulta encontró otro conductor"
           action={
             <div className="flex gap-2">
               <button type="button" className={controlCls(false)} onClick={() => setConfirmar(null)}>
@@ -236,7 +306,8 @@ export function AccionesConductor({ ctx }: { ctx: ContextoDetalle }) {
             </div>
           }
         >
-          {confirmar.nombres} ({confirmar.numeroDocumento}). ¿Reemplazar al conductor actual?
+          {confirmar.nombres}
+          {confirmar.numeroDocumento ? ` (${confirmar.numeroDocumento})` : ""}. ¿Reemplazar al conductor actual?
         </InlineAlert>
       )}
       {modal && <ModalConductor ctx={ctx} onCerrar={() => setModal(false)} />}

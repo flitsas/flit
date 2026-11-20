@@ -24,15 +24,6 @@ public sealed class AdminCargarDocumentoBug14604Tests
     private readonly IResolvedChecklistMatrixProvider _matrix = Substitute.For<IResolvedChecklistMatrixProvider>();
     private readonly FakeStorage _storage = new();
     private readonly IDocumentTypeCatalog _catalog = Substitute.For<IDocumentTypeCatalog>();
-
-    // Release: el checklist también lee los parámetros documentales de la compañía (aquí, ninguno).
-    private static IChecklistCompanyParamsProvider CompanyParamsVacios()
-    {
-        var p = Substitute.For<IChecklistCompanyParamsProvider>();
-        p.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<Flit.Tramites.Domain.Tramites.ValueObjects.CompanyDocumentParam>>([]));
-        return p;
-    }
     private readonly Guid _id = Guid.NewGuid();
     private readonly Guid _tenant = Guid.NewGuid();
     private readonly Guid _userId = Guid.NewGuid();
@@ -113,7 +104,7 @@ public sealed class AdminCargarDocumentoBug14604Tests
         };
 
     private AdminCargarDocumentoHandler Handler() =>
-        new(_repo, _storage, new AdminDocumentoTiposHandler(new GetChecklistHandler(_repo, CompanyParamsVacios(), _matrix, _catalog)), new AttachmentValidator(_catalog));
+        new(_repo, _storage, new AdminDocumentoTiposHandler(new GetChecklistHandler(_repo, _matrix, _catalog)), new AttachmentValidator(_catalog));
 
     private static AdminCargarDocumentoInput Input(
         string tipo = "soat", string? observacion = "El usuario aportó el SOAT correcto", string mime = "application/pdf") =>
@@ -209,7 +200,7 @@ public sealed class AdminCargarDocumentoBug14604Tests
                 new("rtm", "Revisión técnico-mecánica", false, 2),
             });
 
-        var (tipos, error) = await new AdminDocumentoTiposHandler(new GetChecklistHandler(_repo, CompanyParamsVacios(), _matrix, _catalog))
+        var (tipos, error) = await new AdminDocumentoTiposHandler(new GetChecklistHandler(_repo, _matrix, _catalog))
             .HandleAsync(_id, _tenant, _ct);
 
         error.Should().BeNull();
@@ -219,7 +210,7 @@ public sealed class AdminCargarDocumentoBug14604Tests
     [Fact]
     public async Task Tipos_TramiteInexistente_NotFound()
     {
-        var (tipos, error) = await new AdminDocumentoTiposHandler(new GetChecklistHandler(_repo, CompanyParamsVacios(), _matrix, _catalog))
+        var (tipos, error) = await new AdminDocumentoTiposHandler(new GetChecklistHandler(_repo, _matrix, _catalog))
             .HandleAsync(_id, _tenant, _ct);
 
         tipos.Should().BeNull();
@@ -249,17 +240,43 @@ public sealed class AdminCargarDocumentoBug14604Tests
     }
 
     [Fact]
-    public async Task TipoMultiple_Otro_AnadeSinRetirarNada()
+    public async Task TipoMultiple_Otro_TambienReemplaza_NoAcumulaEnElConsolidado()
     {
+        // Novedad QA 2026-11-19: "Otros documentos" es tipo «bolsa» para la subida del gestor (añade sin
+        // retirar, Bug #14570), pero «Actualizar documento» del admin siempre reemplaza, sin importar el
+        // tipo — el modal le promete al admin «El documento actual quedará como versión anterior» para
+        // cualquier tipo. No choca con #14570: esa bolsa visible solo gobierna UploadAttachmentHandler.
         var existente = Adjunto("otro");
         var instance = Instance(TramiteEstado.Aprobado, existente);
 
         var (result, error) = await Handler().HandleAsync(_id, _tenant, Input(tipo: "otro"), _userId, _ct);
 
         error.Should().BeNull();
-        result!.PreviousAttachmentIds.Should().BeEmpty();
+        result!.PreviousAttachmentIds.Should().ContainSingle().Which.Should().Be(existente.Id);
+        existente.IsHistorico.Should().BeTrue();
+        instance.Attachments.Count(a => a.Tipo == "otro" && !a.IsHistorico).Should().Be(1);
+        // El histórico queda excluido del consolidado (Efectivos() lo filtra porque ya hay un vigente de ese tipo).
+        instance.AdjuntosEfectivos().Count(a => a.Tipo == "otro").Should().Be(1);
+    }
+
+    [Fact]
+    public async Task TipoMultiple_SubidaDelGestor_SigueAcumulandoSinRetirarNada()
+    {
+        // La regla «bolsa» (AttachmentRules.TiposMultiples, Bug #14570) NO cambia para el flujo del
+        // gestor: solo el admin reemplaza. UploadAttachmentHandler nunca marca histórico a nada, y los
+        // varios "otro" vigentes siguen siendo efectivos (van todos al consolidado, como siempre).
+        var existente = Adjunto("otro");
+        var instance = Instance(TramiteEstado.Borrador, existente);
+        var upload = new UploadAttachmentHandler(_repo, _storage);
+
+        var (dto, error) = await upload.HandleAsync(
+            _id, _tenant, new UploadAttachmentInput("otro", "nuevo.pdf", "application/pdf", 10, new MemoryStream([1, 2, 3])), _userId, _ct);
+
+        error.Should().BeNull();
+        dto!.IsHistorico.Should().BeFalse();
         existente.IsHistorico.Should().BeFalse();
         instance.Attachments.Count(a => a.Tipo == "otro" && !a.IsHistorico).Should().Be(2);
+        instance.AdjuntosEfectivos().Count(a => a.Tipo == "otro").Should().Be(2);
     }
 
     [Fact]
@@ -455,5 +472,58 @@ public sealed class AdminCargarDocumentoBug14604Tests
         dto.DocumentoFilename.Should().Be("soat.pdf");
         dto.EstadoAlMomento.Should().Be("aprobado");
         dto.Observacion.Should().Be("Corrección");
+    }
+
+    [Fact]
+    public void Modificaciones_DiceQueArchivoSeCargoYEnQueEstado_ademasDeLaObservacion()
+    {
+        const string payload = """{"tipo":"soat","filename":"soat.pdf","attachmentId":"00000000-0000-0000-0000-000000000001","previousAttachmentIds":[],"estado":"entregado","observacion":"El OT pidió el SOAT vigente"}""";
+
+        var ok = Flit.Tramites.Application.UseCases.ProcedureInstances.Estados.StatusHistoryModificacionLectura.TryProject(
+            "documento_cargado_admin", Guid.NewGuid(), DateTimeOffset.UtcNow, _userId, payload, out var fila);
+
+        ok.Should().BeTrue();
+        fila.Etiqueta.Should().Be("Documento actualizado por el administrador");
+        fila.Nuevo.Should().Be("soat.pdf · Estado del trámite: Entregado · Observación: El OT pidió el SOAT vigente");
+        fila.EsActoAdministrativo.Should().BeTrue();
+    }
+
+    [Fact]
+    public void Modificaciones_DiceQueArchivoReemplazo()
+    {
+        const string payload = """{"tipo":"soat","filename":"soat.pdf","attachmentId":"00000000-0000-0000-0000-000000000001","previousAttachmentIds":["00000000-0000-0000-0000-000000000002"],"previousFilenames":["soat_viejo.pdf"],"estado":"aprobado","observacion":"SOAT renovado"}""";
+
+        var ok = Flit.Tramites.Application.UseCases.ProcedureInstances.Estados.StatusHistoryModificacionLectura.TryProject(
+            "documento_cargado_admin", Guid.NewGuid(), DateTimeOffset.UtcNow, _userId, payload, out var fila);
+
+        ok.Should().BeTrue();
+        fila.Nuevo.Should().Be("soat.pdf · Reemplaza a: soat_viejo.pdf · Estado del trámite: Aprobado · Observación: SOAT renovado");
+        fila.Documento.Should().BeEquivalentTo(new Flit.Tramites.Domain.Repositories.DocumentoActualizadoLectura(
+            "soat", Guid.Parse("00000000-0000-0000-0000-000000000001"), "soat.pdf",
+            Guid.Parse("00000000-0000-0000-0000-000000000002"), "soat_viejo.pdf"));
+    }
+
+    [Fact]
+    public void Modificaciones_EnRevocado_ElAnteriorSaleDeLoQueSeVeiaEnLaCasilla()
+    {
+        const string payload = """{"tipo":"impronta","filename":"nueva.pdf","attachmentId":"00000000-0000-0000-0000-000000000001","previousAttachmentIds":[],"replacedAttachmentIds":["00000000-0000-0000-0000-000000000003"],"previousFilenames":["vieja.pdf"],"estado":"revocado","observacion":"Corrección"}""";
+
+        Flit.Tramites.Application.UseCases.ProcedureInstances.Estados.StatusHistoryModificacionLectura.TryProject(
+            "documento_cargado_admin", Guid.NewGuid(), DateTimeOffset.UtcNow, _userId, payload, out var fila);
+
+        fila.Documento!.AnteriorAttachmentId.Should().Be(Guid.Parse("00000000-0000-0000-0000-000000000003"));
+        fila.Documento.AnteriorFilename.Should().Be("vieja.pdf");
+    }
+
+    [Fact]
+    public void Modificaciones_SinArchivoAnterior_NoInventaUno()
+    {
+        const string payload = """{"tipo":"aduana","filename":"aduana.pdf","attachmentId":"00000000-0000-0000-0000-000000000001","previousAttachmentIds":[],"estado":"entregado","observacion":"Primera carga"}""";
+
+        Flit.Tramites.Application.UseCases.ProcedureInstances.Estados.StatusHistoryModificacionLectura.TryProject(
+            "documento_cargado_admin", Guid.NewGuid(), DateTimeOffset.UtcNow, _userId, payload, out var fila);
+
+        fila.Documento!.AnteriorAttachmentId.Should().BeNull();
+        fila.Documento.AnteriorFilename.Should().BeNull();
     }
 }

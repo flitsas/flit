@@ -125,3 +125,25 @@ algún trámite, ese cambio sale avisado (no se pierde).
 
 `FLITO_SIGNALS_ENABLED=false` y reiniciar `core-api`. Los cambios siguen quedando registrados como pendientes y salen
 al volver a encender. FLITO no pierde datos mientras tanto: su lectura de respaldo cada hora lee el feed.
+
+## Integración «Persona Natural» ligada a una compañía (HU #14067, Épica #14021)
+
+El superadministrador registra la integración del portal de Persona Natural en la ficha de la compañía; no se toca
+configuración a mano. Rutas (solo SuperAdmin, 403 al resto) bajo
+`/api/v1/admin/companies/{companyId}/external-integrations` (contrato en `contracts/openapi/core-api.v1.yaml`):
+
+| Acción | Ruta | Notas |
+|--------|------|-------|
+| Listar | `GET /` | No devuelve secreto ni hashes. |
+| Alta | `POST /` `{ "tipo": "persona_natural" }` | `201` con `clientSecret` (se muestra UNA vez, `Cache-Control: no-store`). `409 integracion_ya_activa` si ya hay una activa del tipo en la compañía. |
+| Rotar secreto | `POST /{id}/rotate-secret` `{ "revocarAnterior": false }` | El anterior vale 24 h; con `true` se anula al instante (filtración). |
+| Bloquear / desbloquear | `POST /{id}/block`, `POST /{id}/unblock` | Bloqueo indefinido; sigue ocupando el cupo. |
+| Desactivar | `POST /{id}/deactivate` | Libera el cupo; no se reactiva, se crea otra. |
+
+Alcance: el tipo fija el único permiso, `platform.tramites.persona_natural` (la fachada del portal). No incluye los
+permisos `external.tramites.*` ni sirve en `/api/v1/external/*`. Los cambios quedan en `audit.audit_logs` (trigger de la
+tabla) con `updated_by`; el secreto nunca se guarda ni se registra.
+
+**Límite conocido:** hoy la fachada gRPC del portal sigue autorizando al cliente de servicio `svc-personanatural` de
+Identidad (`Suite:Oidc:ServiceClients`, ADR-0075). Esta integración es el registro administrable de la conexión (alta,
+secreto, rotación, bloqueo); que Identidad emita el token de servicio a partir de ella es una decisión de diseño pendiente.

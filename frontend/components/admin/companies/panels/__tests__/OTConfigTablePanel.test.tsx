@@ -25,10 +25,8 @@ vi.mock("@/lib/api/admin-companies", () => ({
   setOtBlockingPolicy: vi.fn(),
   fetchOtConsultationRestrictions: vi.fn(),
   setOtConsultationRestriction: vi.fn(),
-  // Cargas que el panel sumó después (convenios, prenda opcional, bloqueos de marca): sin ellas en
+  // Cargas que el panel sumó después (prenda opcional, bloqueos de marca): sin ellas en
   // el mock, la carga lanzaba TypeError y el panel quedaba en error en TODOS los casos.
-  fetchTransitAgreements: vi.fn(() => Promise.resolve({ transitOfficeIds: [] })),
-  setTransitAgreement: vi.fn(),
   fetchOtPrendaDocumentPolicies: vi.fn(() => Promise.resolve([])),
   setOtPrendaDocumentPolicy: vi.fn(),
   fetchTransitBlocks: vi.fn(() => Promise.resolve({ transitOfficeIds: [] })),

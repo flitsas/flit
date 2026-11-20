@@ -28,10 +28,14 @@ ARG NEXT_PUBLIC_DEV_USER_ID
 # Marca Blanca (HU #12419) — hosts que se consideran FLIT (lib/brand/hosts.ts). Sin pasar,
 # next build usa el respaldo por defecto (localhost, *.flitsas.online, *.flitsas.com).
 ARG NEXT_PUBLIC_FLIT_HOSTS
+# HU #14217 — origen público del portal Persona Natural para Enlace y QR del canal OT.
+# Vacío hasta que el vhost del portal quede definido (handoff personanatural); el diálogo avisa.
+ARG NEXT_PUBLIC_CANAL_OT_ORIGEN
 ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL
 ENV NEXT_PUBLIC_TRASPASOS_API_BASE_URL=$NEXT_PUBLIC_TRASPASOS_API_BASE_URL
 ENV NEXT_PUBLIC_DEV_USER_ID=$NEXT_PUBLIC_DEV_USER_ID
 ENV NEXT_PUBLIC_FLIT_HOSTS=$NEXT_PUBLIC_FLIT_HOSTS
+ENV NEXT_PUBLIC_CANAL_OT_ORIGEN=$NEXT_PUBLIC_CANAL_OT_ORIGEN
 
 # Codigo y build de produccion (.next compilado, baked en la imagen).
 COPY . .

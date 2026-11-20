@@ -29,6 +29,7 @@ public static class Modulos
         services.AddScoped<Comun.Auditoria>();
         services.AddScoped<Comun.RegistroArchivos>();
         services.AddScoped<Catalogos.MapeadorOt>();
+        services.AddScoped<Catalogos.RemapeoOrganismos>();
         services.AddScoped<Comparendos.Timeline>();
         services.AddScoped<Comparendos.AccesoComparendo>();
         services.AddScoped<Bandeja.ConsultaBandeja>();
@@ -40,6 +41,7 @@ public static class Modulos
         services.AddScoped<Portal.ServicioPortal>();
         services.AddScoped<Avisos.ServicioAvisos>();
         services.AddScoped<Avisos.FotoFotomulta>();
+        services.AddScoped<Avisos.AdjuntosAviso>();
         services.AddSingleton<Avisos.IDescargaFoto, Avisos.DescargaFotoHttp>();
         services.AddHttpClient(Avisos.DescargaFotoHttp.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(15))
             .ConfigurePrimaryHttpMessageHandler(Avisos.DescargaFotoHttp.Manejador);
@@ -51,11 +53,17 @@ public static class Modulos
         services.AddScoped<Trabajos.IEjecutorTrabajo, Avisos.SchedulerAvisos>();
         services.AddScoped<Correo.IReaccionCorreo, Avisos.ReaccionAvisos>();
         services.AddLimitePortal();
-        if (simulacion)
+        // API de contratos (HU #13712): por core-consultas si hay dirección; si no, simulada en DEV y nada fuera.
+        if (configuration["Comparendos:Consultas:Address"] is { Length: > 0 })
+            services.AddScoped<Contraventor.IApiContratos>(sp => new Contraventor.ApiContratosCoreConsultas(
+                sp.GetRequiredService<Flit.Consultas.Grpc.V1.FuentesComparendosService.FuentesComparendosServiceClient>(),
+                simulacion ? new Contraventor.ApiContratosSimulada() : null));
+        else if (simulacion)
             services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosSimulada>();
         else
             services.AddScoped<Contraventor.IApiContratos, Contraventor.ApiContratosNoConectada>();
         services.AddScoped<Trabajos.IEjecutorTrabajo, Contraventor.ReintentoContraventor>();
+        services.AddScoped<Trabajos.IEjecutorTrabajo, DerechosPeticion.EnvioAutomaticoDp>();
         services.AddScoped<Bandeja.ExportacionBandeja>();
 
         // Reportes (HU #13498).
@@ -156,7 +164,6 @@ public static class Modulos
             services.AddHostedService<Trabajos.ProgramadorTrabajos>();
             services.AddHostedService<Trabajos.ProcesadorTrabajos>();
             services.AddHostedService(sp => sp.GetRequiredService<Correo.DespachadorCorreos>());
-            services.AddHostedService<Bandeja.ExportadorEnSegundoPlano>();
             services.AddHostedService(sp => sp.GetRequiredService<DerechosPeticion.ProcesadorLotesDp>());
             services.AddHostedService(sp => sp.GetRequiredService<Ocr.ProcesadorOcr>());
             services.AddHostedService(sp => sp.GetRequiredService<Ocr.EvaluadorPromptOcr>());

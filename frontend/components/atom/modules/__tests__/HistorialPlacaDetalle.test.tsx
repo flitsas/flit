@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => ({
   listPlateHistory: vi.fn(),
   getInstance: vi.fn(),
   getAttachments: vi.fn(),
+  getStatusHistory: vi.fn(),
   listBiometricExpediente: vi.fn(),
   startSubsanacion: vi.fn(),
   fetchAttachmentPreviewUrl: vi.fn(),
@@ -32,6 +33,7 @@ vi.mock("@/lib/api/tramites-client", () => ({
     listPlateHistory: mocks.listPlateHistory,
     getInstance: mocks.getInstance,
     getAttachments: mocks.getAttachments,
+    getStatusHistory: mocks.getStatusHistory,
     listBiometricExpediente: mocks.listBiometricExpediente,
     startSubsanacion: mocks.startSubsanacion,
     fetchAttachmentPreviewUrl: mocks.fetchAttachmentPreviewUrl,
@@ -96,6 +98,14 @@ beforeEach(() => {
     actors: [],
   } as never);
   mocks.getAttachments.mockResolvedValue([]);
+  mocks.getStatusHistory.mockResolvedValue({
+    items: [],
+    total: 0,
+    page: 1,
+    pageSize: 20,
+    modificaciones: [],
+    modificacionesTotal: 0,
+  });
   mocks.listBiometricExpediente.mockResolvedValue({
     validations: [],
     firmaBaulPartes: [],

@@ -1,7 +1,10 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
+import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Clock, FileSpreadsheet, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -63,6 +66,8 @@ import {
   SuspendOrDeactivateModal,
   type SuspendMode,
 } from "@/components/atom/modules/users/SuspendOrDeactivateModal";
+
+const ICONO_CANDADO_ABIERTO = iconoComo("candado-abierto");
 
 export interface OtUsersSectionProps {
   transitOfficeId: string;
@@ -215,7 +220,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
 
     if (!isInvitationRow(u) && isSuperAdmin) {
       actions.push({
-        icon: History,
+        icon: iconoComo("reloj"),
         label: `Ver historial de ${u.fullName}`,
         tone: "primary",
         onClick: () => setAuditTarget(u),
@@ -226,7 +231,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // aviso deshabilitado; las canceladas no tienen cuenta ni invitación vigente.
     if (canConfigurePermissions && u.status !== "cancelled") {
       actions.push({
-        icon: ShieldCheck,
+        icon: iconoComo("escudo"),
         label: `Permisos por módulo de ${u.fullName}`,
         tone: "primary",
         onClick: () => setPermissionsTarget(u),
@@ -237,7 +242,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // hay cuenta real que editar. HU #13655: quien no es administrador no edita a un administrador.
     if (!isInvitationRow(u) && (isUserAdmin || !isAdministratorRoleCode(u.roleCode))) {
       actions.push({
-        icon: Pencil,
+        icon: iconoComo("lapiz"),
         label: `Editar usuario ${u.fullName}`,
         tone: "primary",
         onClick: () => setEditTarget(u),
@@ -248,19 +253,19 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     if (!isInvitationRow(u) && isSuperAdmin) {
       if (u.isSuspended) {
         actions.push({
-          icon: ShieldOff,
+          icon: ICONO_CANDADO_ABIERTO,
           label: `Reactivar usuario ${u.fullName}`,
           onClick: () => void handleUnsuspend(u.id),
         });
       } else {
         actions.push({
-          icon: Clock,
+          icon: iconoComo("reloj"),
           label: `Suspender temporalmente a ${u.fullName}`,
           tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "temporary" }),
         });
         actions.push({
-          icon: Ban,
+          icon: iconoComo("distinto"),
           label: `Desactivar indefinidamente a ${u.fullName}`,
           tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
@@ -271,7 +276,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // AC2 (HU #10623): eliminar es exclusivo de SuperAdmin y nunca sobre la propia fila.
     if (!isInvitationRow(u) && isSuperAdmin && u.id !== currentUserId) {
       actions.push({
-        icon: Trash2,
+        icon: iconoComo("papelera"),
         label: `Eliminar usuario ${u.fullName}`,
         tone: "danger",
         onClick: () => setDeleteTarget(u),
@@ -281,7 +286,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // AC2 (HU #10628): "Cancelar invitación" SOLO en filas pendientes.
     if (u.status === "pending") {
       actions.push({
-        icon: MailX,
+        icon: iconoComo("correo"),
         label: `Cancelar invitación a ${u.fullName}`,
         tone: "danger",
         onClick: () => setCancelTarget(u),
@@ -462,10 +467,10 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               type="button"
               onClick={() => setShowDeleted((v) => !v)}
               aria-pressed={showDeleted}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-secondary"
               style={{ color: "var(--color-flit-brand)" }}
             >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="papelera" className="h-3.5 w-3.5" />
               {showDeleted ? "Ver usuarios activos" : "Ver eliminados"}
             </button>
           )}
@@ -478,7 +483,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
               style={{ color: "var(--color-flit-brand)" }}
             >
-              <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="reporte-detallado" className="h-3.5 w-3.5" />
               Importar Excel
             </button>
           )}
@@ -486,8 +491,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             <button
               type="button"
               onClick={() => setInviteOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              className={buttonClass({ size: "sm" })}
             >
               Invitar usuario
             </button>
@@ -778,20 +782,25 @@ function OtInviteUserDialog({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-start justify-center p-4"
-      style={{ background: "rgba(22,39,68,0.45)" }}
+      className={`fixed inset-0 z-50 flex items-start justify-center p-4 ${DIALOGO_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ot-invite-user-title"
     >
-      <div className="flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden rounded-2xl p-6 shadow-2xl bg-card">
-        <h2 id="ot-invite-user-title" className="text-base font-bold mb-1 text-foreground">
-          Invitar usuario
-        </h2>
-        <p className="text-xs mb-4 text-muted-foreground">
-          Perfil <strong>Organismo de Tránsito</strong>. Elige los roles con los que entra el
-          usuario.
-        </p>
+      <div
+        className={`flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden p-6 ${DIALOGO_PANEL_CLS}`}
+      >
+        <FranjaDialogo icono="persona" className="-mx-6 -mt-6 mb-5">
+          <div>
+            <h2 id="ot-invite-user-title" className={`text-base font-bold mb-1 ${DIALOGO_TITULO_CLS}`}>
+              Invitar usuario
+            </h2>
+            <p className="text-xs opacity-85">
+              Perfil <strong>Organismo de Tránsito</strong>. Elige los roles con los que entra el
+              usuario.
+            </p>
+          </div>
+        </FranjaDialogo>
         <form
           id="ot-invite-form"
           onSubmit={handleSubmit}
@@ -804,7 +813,7 @@ function OtInviteUserDialog({
               onChange={(e) => setFullName(e.target.value)}
               required
               placeholder="Ej. Laura García"
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-ring"
             />
           </OtField>
           <OtField label="Correo electrónico" htmlFor="ot-invite-email">
@@ -815,7 +824,7 @@ function OtInviteUserDialog({
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="laura@transito.gov.co"
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-ring"
             />
           </OtField>
           {rolesLoading ? (
@@ -873,7 +882,7 @@ function OtInviteUserDialog({
             type="button"
             onClick={onClose}
             disabled={busy}
-            className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50 disabled:opacity-60 text-foreground"
+            className={buttonClass({ variant: "secondary", className: "flex-1" })}
           >
             Cancelar
           </button>
@@ -881,8 +890,7 @@ function OtInviteUserDialog({
             type="submit"
             form="ot-invite-form"
             disabled={busy || missingRole || invalidScope}
-            className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-            style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+            className={buttonClass({ className: "flex-1" })}
           >
             {busy ? "Enviando…" : "Enviar invitación"}
           </button>
@@ -924,7 +932,7 @@ function DeletedUsersTable({
   onRestore: (user: OtUserItem) => void;
 }) {
   // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
-  const pg = usePaginacion();
+  const pg = usePaginacion("transit-offices.OtUsersSection");
   const columns: DataTableColumn<OtUserItem>[] = useMemo(
     () => [
       {
@@ -952,7 +960,7 @@ function DeletedUsersTable({
           <RowActions
             actions={[
               {
-                icon: RotateCcw,
+                icon: iconoComo("reintento"),
                 label: `Restaurar usuario ${u.fullName}`,
                 tone: "primary",
                 onClick: () => onRestore(u),

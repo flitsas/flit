@@ -1,6 +1,6 @@
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import type { QueryCondition } from '@/lib/api/queries';
-import type { ConsolidadoVigencia } from '@/lib/api/types/procedure-runtime';
+import type { ConsolidadoVigencia, DocumentoActualizado } from '@/lib/api/types/procedure-runtime';
 
 /** Tipos del módulo Administración OT (HU #10215 / #10217 / #10218). */
 
@@ -103,6 +103,12 @@ export interface OtClientProcedure {
    * filas de listado; el GET by id siempre lo envía (arreglo vacío si no hay transiciones).
    */
   statusHistory?: OtClientProcedureStatusHistory[];
+  /**
+   * HU #14182 — modificaciones de datos del detalle (incluye el periodo de borrador y las
+   * transiciones de estado). Ausente en filas de listado; el GET by id lo envía ya ordenado
+   * de la más reciente a la más antigua. El modal no vuelve a pedirlo.
+   */
+  modificaciones?: OtClientProcedureModificacion[];
   placa?: string | null;
   vin?: string | null;
   marca?: string | null;
@@ -216,6 +222,19 @@ export interface OtClientProcedureStatusHistory {
   changedByName?: string | null;
   changedByEmail?: string | null;
   changedByCompania?: string | null;
+}
+
+/** HU #14182 — una modificación ya incluida en el detalle del trámite. */
+export interface OtClientProcedureModificacion {
+  etiqueta: string;
+  campo: string;
+  anterior: string;
+  nuevo: string;
+  changedAt: string;
+  actorNombre?: string | null;
+  actorCompania?: string | null;
+  /** Bug #14604 — adjuntos nuevo y anterior de «documento actualizado por el administrador». */
+  documento?: DocumentoActualizado | null;
 }
 
 export interface OtClientProcedurePagedResult {

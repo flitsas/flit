@@ -1,19 +1,29 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { FileText, Pencil, RotateCcw, Send, Trash2, UserX } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { Pagination } from "@/components/atom/Pagination";
 import { RowActions } from "@/components/atom/RowActions";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
 import { SearchInput } from "@/components/atom/SearchInput";
+import { FilaVaciaFiltros } from "@/components/atom/FilaVaciaFiltros";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
+  TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
 import {
   createCompanyMandateSigner,
@@ -33,11 +43,11 @@ import {
 import { getToken } from "@/lib/api/client";
 import { decodeJwtPayload, isSuperAdmin } from "@/lib/auth/jwt";
 import { formatDocumentWithType } from "@/lib/display/document-number";
-import {
-  motivoSinFirma,
-  organismosSinMedioDeFirma,
-} from "@/lib/plataforma/mandatario-firma";
-import { etiquetaModelo, modeloDe } from "@/lib/plataforma/mandatario-vigencia";
+import { motivoSinFirma, organismosSinMedioDeFirma } from "@/lib/plataforma/mandatario-firma";
+import { etiquetaModelo, modeloDe, presentarVigencia } from "@/lib/plataforma/mandatario-vigencia";
+import { MODELOS_MANDATARIO } from "@/lib/plataforma/mandatario-modelo";
+import { filtrarFilas, type ColumnaFiltro } from "@/lib/tablas/filtrar-filas";
+import { useTablaFiltros } from "@/lib/tablas/useTablaFiltros";
 import {
   puedeCrearMandatarios,
   puedeEditarMandatario,
@@ -75,6 +85,31 @@ import { MandatarioOrganismos } from "./MandatarioOrganismos";
 import type { FuenteAsociadas } from "./MandatarioCompaniasAsociadas";
 import { MandatarioVigenciaBadge } from "./MandatarioVigenciaBadge";
 
+/** Vigencia tal como la pinta `MandatarioVigenciaBadge` (sin vigencia y desconocido se ven igual: «—»). */
+const claveVigencia = (s: MandateSigner) => {
+  const e = presentarVigencia(s).estado;
+  return e === "desconocido" ? "sin_vigencia" : e;
+};
+/** Validación tal como la pinta la celda: solo aplica con validación de identidad propia. */
+const claveValidacion = (s: MandateSigner) =>
+  requiereValidacionPropia(s) ? presentarValidacion(s.identityStatus).estado : "no_aplica";
+
+const OPCIONES_VIGENCIA = [
+  { value: "vigente", label: "Vigente" },
+  { value: "por_vencer", label: "Por vencer" },
+  { value: "vencido", label: "Vencido" },
+  { value: "inactivo", label: "Inactivo" },
+  { value: "no_vigente", label: "Aún no vigente" },
+  { value: "sin_vigencia", label: "Sin vigencia" },
+];
+const OPCIONES_VALIDACION = [
+  { value: "valid", label: presentarValidacion("valid").texto },
+  { value: "pending", label: presentarValidacion("pending").texto },
+  { value: "expired", label: presentarValidacion("expired").texto },
+  { value: "none", label: presentarValidacion("none").texto },
+  { value: "no_aplica", label: "No aplica" },
+];
+
 /**
  * HU #11202 — mandatarios gestionados desde el configurador de la COMPAÑÍA.
  *
@@ -92,7 +127,7 @@ export function CompanyMandatariosPanel({
   const { show } = useToast();
   const [status, setStatus] = useState<UiStatus>("loading");
   // Bug #13055 — paginación en cliente con filas por página, como el listado de trámites.
-  const pg = usePaginacion();
+  const pg = usePaginacion("mandate-signers.CompanyMandatariosPanel");
   const [signers, setSigners] = useState<MandateSigner[]>([]);
   const [offices, setOffices] = useState<CompanyTransitOfficeOption[]>([]);
   const [formOpen, setFormOpen] = useState(false);
@@ -147,7 +182,11 @@ export function CompanyMandatariosPanel({
     signers,
     (s) => reconcileCompanyMandateSignerIdentity(tenantId, s.id, networkHeadId),
     // Solo la lista, sin el cargador: el cambio llega mientras el gestor está mirando.
-    () => void fetchCompanyMandateSigners(tenantId, undefined, networkHeadId).then(setSigners, () => undefined),
+    () =>
+      void fetchCompanyMandateSigners(tenantId, undefined, networkHeadId).then(
+        setSigners,
+        () => undefined,
+      ),
   );
 
   const officeNameById = useMemo(
@@ -163,13 +202,20 @@ export function CompanyMandatariosPanel({
     setEditing(null);
     const base = editing ? "Mandatario actualizado." : "Mandatario registrado.";
     const validacion = mensajeValidacionTrasGuardar(saved, input.email);
-    show(validacion ? `${base} ${validacion}` : base, saved.identity === "failed" ? "error" : "success");
+    show(
+      validacion ? `${base} ${validacion}` : base,
+      saved.identity === "failed" ? "error" : "success",
+    );
     await load();
     return saved;
   };
 
   // HU #13140 — la baja (desactivar o eliminar) la confirma el diálogo, que ya consultó el impacto.
-  const ejecutarBaja = async (signer: MandateSigner, accion: AccionBaja, confirmarImpacto: boolean) => {
+  const ejecutarBaja = async (
+    signer: MandateSigner,
+    accion: AccionBaja,
+    confirmarImpacto: boolean,
+  ) => {
     const outcome =
       accion === "eliminar"
         ? await deleteCompanyMandateSigner(tenantId, signer.id, confirmarImpacto, networkHeadId)
@@ -223,16 +269,54 @@ export function CompanyMandatariosPanel({
       ? organismosSinMedioDeFirma(signer.transitOfficeIds ?? [], signer)
       : [];
 
-  // Búsqueda en cliente por nombre o documento (sin puntos ni espacios); la paginación va DESPUÉS.
+  // HU #14002 — filtros por columna (estándar #13997) en cliente; la paginación va DESPUÉS.
+  // Cada valor sale de la MISMA función que pinta la celda, para que el filtro coincida con lo que se ve.
+  const columnasFiltro = useMemo<ColumnaFiltro[]>(
+    () => [
+      { id: "mandatario", label: "Mandatario", tipo: "texto" },
+      { id: "documento", label: "Documento", tipo: "texto" },
+      {
+        id: "modelo",
+        label: "Modelo",
+        tipo: "seleccion",
+        opciones: MODELOS_MANDATARIO.map((m) => ({ value: m.value, label: m.label })),
+      },
+      { id: "vigencia", label: "Vigencia", tipo: "seleccion", opciones: OPCIONES_VIGENCIA },
+      { id: "validacion", label: "Validación", tipo: "seleccion", opciones: OPCIONES_VALIDACION },
+      {
+        id: "organismos",
+        label: "Organismos",
+        tipo: "seleccion",
+        opciones: offices.map((o) => ({ value: o.transitOfficeId, label: o.name })),
+      },
+    ],
+    [offices],
+  );
+  const { setPage } = pg;
+  const volverAPrimeraPagina = useCallback(() => setPage(1), [setPage]);
+  const filtros = useTablaFiltros({ columnas: columnasFiltro, onCambio: volverAPrimeraPagina });
+  // Buscador de arriba (tal cual estaba antes de la épica): nombre o documento, sin puntos ni espacios.
   const [search, setSearch] = useState("");
   const normaliza = (v: string) => v.toLowerCase().replace(/[\s.\-]/g, "");
   const filtrados = useMemo(() => {
     const q = normaliza(search.trim());
-    if (!q) return signers;
-    return signers.filter(
+    // Embudos del encabezado (AND entre columnas); el buscador de arriba se combina con ellos.
+    const porColumna = filtrarFilas(signers, filtros.condicionesTotales, "", {
+      columnas: {
+        mandatario: (x) => x.fullName,
+        documento: (x) => x.documentNumber,
+        modelo: (x) => modeloDe(x),
+        vigencia: (x) => claveVigencia(x),
+        validacion: (x) => claveValidacion(x),
+        organismos: (x) => x.transitOfficeIds ?? [],
+      },
+    });
+    if (!q) return porColumna;
+    return porColumna.filter(
       (x) => normaliza(x.fullName).includes(q) || normaliza(x.documentNumber ?? "").includes(q),
     );
-  }, [signers, search]);
+  }, [signers, filtros.condicionesTotales, search]);
+  // AC3 — el aviso cuenta sobre TODOS los mandatarios, no sobre los filtrados.
   const sinValidar = signers.filter(
     (x) => x.isActive && requiereValidacionPropia(x) && x.identityStatus !== "valid",
   ).length;
@@ -253,11 +337,12 @@ export function CompanyMandatariosPanel({
       {sinOrganismos && (
         <p
           className="rounded-xl border px-3 py-2 text-xs"
-          style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}
+          style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}
           role="status"
         >
-          Esta compañía todavía no tiene organismos de tránsito habilitados. Habilítalos en la matriz
-          de organismos antes de registrar mandatarios: sin organismo no hay dónde aplicarlos.
+          Esta compañía todavía no tiene organismos de tránsito habilitados. Habilítalos en la
+          matriz de organismos antes de registrar mandatarios: sin organismo no hay dónde
+          aplicarlos.
         </p>
       )}
 
@@ -270,7 +355,7 @@ export function CompanyMandatariosPanel({
               style={rlOutlinedActionStyle}
               onClick={() => setFormatosOpen(true)}
             >
-              <FileText className="h-4 w-4" aria-hidden />
+              <Icono nombre="documento" className="h-4 w-4" />
               Formatos de contrato
             </button>
           ) : (
@@ -290,214 +375,270 @@ export function CompanyMandatariosPanel({
         </div>
       )}
 
-      {formatosOpen && <FormatosContratoModal offices={offices} onClose={() => setFormatosOpen(false)} />}
+      {formatosOpen && (
+        <FormatosContratoModal offices={offices} onClose={() => setFormatosOpen(false)} />
+      )}
 
       {/* Bug #13055 — tabla homologada con la de Trámites: loader del carrito, cabecera y filas de
           table-styles y acciones con RowActions (antes: gris genérico y botones de texto). */}
       {status === "loading" ? (
         <CarLoaderModal label="Cargando mandatarios…" />
       ) : (
-      <UiStateBoundary
-        status={status}
-        emptyMessage="Esta compañía no tiene mandatarios registrados."
-        errorMessage="No se pudieron cargar los mandatarios."
-        onRetry={() => void load()}
-        skeletonRows={4}
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <SearchInput
-            value={search}
-            onChange={(v) => {
-              setSearch(v);
-              pg.setPage(1);
-            }}
-            label="Buscar mandatarios"
-            placeholder="Buscar por nombre o documento…"
-            className="max-w-md flex-1"
-          />
-          <p className="text-xs text-[#59677D] dark:text-white/70" data-testid="mandatarios-resumen">
-            {signers.length} {signers.length === 1 ? "mandatario" : "mandatarios"}
-            {sinValidar > 0 ? ` · ${sinValidar} sin validación aprobada` : ""}
-          </p>
-        </div>
+        <UiStateBoundary
+          status={status}
+          emptyMessage="Esta compañía no tiene mandatarios registrados."
+          errorMessage="No se pudieron cargar los mandatarios."
+          onRetry={() => void load()}
+          skeletonRows={4}
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <SearchInput
+              value={search}
+              onChange={(v) => {
+                setSearch(v);
+                pg.setPage(1);
+              }}
+              label="Buscar mandatarios"
+              placeholder="Buscar por nombre o documento…"
+              className="max-w-md flex-1"
+            />
+            <p
+              className="text-xs text-muted-foreground"
+              data-testid="mandatarios-resumen"
+            >
+              {signers.length} {signers.length === 1 ? "mandatario" : "mandatarios"}
+              {sinValidar > 0 ? ` · ${sinValidar} sin validación aprobada` : ""}
+            </p>
+          </div>
 
-        {filtrados.length === 0 ? (
-          <p className="py-10 text-center text-sm opacity-60" role="status">
-            Ningún mandatario coincide con la búsqueda.
-          </p>
-        ) : (
-        <>
-        <div className="overflow-x-auto">
-          <table
-            className="text-xs"
-            style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
-          >
-            <caption className="sr-only">Mandatarios de la compañía</caption>
-            <thead>
-              <tr>
-                <th
-                  scope="col"
-                  className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
-                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+          {
+            <div className={TABLA_TARJETA_CLS}>
+              <div className="overflow-x-auto">
+                <table
+                  className={`text-xs ${TABLA_MOVIL_TABLE_CLS}`}
+                  style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
                 >
-                  Mandatario
-                </th>
-                <th
-                  scope="col"
-                  className={`${TABLA_HEADER_CELL_CLS}`}
-                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                >
-                  Documento
-                </th>
-                <th
-                  scope="col"
-                  className={`${TABLA_HEADER_CELL_CLS}`}
-                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                >
-                  Modelo
-                </th>
-                <th
-                  scope="col"
-                  className={`${TABLA_HEADER_CELL_CLS}`}
-                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                >
-                  Vigencia
-                </th>
-                <th
-                  scope="col"
-                  className={`${TABLA_HEADER_CELL_CLS}`}
-                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                >
-                  Validación
-                </th>
-                <th
-                  scope="col"
-                  className={`${TABLA_HEADER_CELL_CLS}`}
-                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                >
-                  Organismos
-                </th>
-                <th
-                  scope="col"
-                  className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
-                  style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
-                >
-                  Acciones
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {pg.paginar(filtrados).map((signer) => {
-                // HU #13139 — candado: lo configuró el organismo y este actor no lo puede tocar.
-                const candado = tieneCandadoDelOrganismo(signer);
-                const puedeEditar = canCreate && puedeEditarMandatario(signer);
-                return (
-                <tr
-                  key={signer.id}
-                  className={`${candado ? "bg-[#EEF1F5] dark:bg-white/5" : "bg-white dark:bg-[#0B0F14]"} ${TABLA_ROW_HOVER_CLS}`}
-                  data-candado={candado ? "true" : undefined}
-                >
-                  <td className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
-                    <span className="font-semibold">{signer.fullName}</span>
-                    {candado && <MandatarioCandado />}
-                  </td>
-                  <td className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
-                    {formatDocumentWithType(signer.documentType, signer.documentNumber)}
-                  </td>
-                  <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
-                    {etiquetaModelo(signer)}
-                  </td>
-                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }}>
-                    <MandatarioVigenciaBadge signer={signer} />
-                  </td>
-                  <td className="border-y px-4 py-3" style={{ borderColor: "#DFE5ED" }} data-testid="mandatario-validacion-celda">
-                    {requiereValidacionPropia(signer) ? (
-                      <StatusBadge
-                        tone={presentarValidacion(signer.identityStatus).tone}
-                        label={presentarValidacion(signer.identityStatus).texto}
-                        ariaLabel={`Validación: ${presentarValidacion(signer.identityStatus).texto}`}
+                  <caption className="sr-only">Mandatarios de la compañía</caption>
+                  <thead className={TABLA_MOVIL_THEAD_CLS}>
+                    <tr>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        <EncabezadoFiltrable filtros={filtros} columnaId="mandatario">
+                          Mandatario
+                        </EncabezadoFiltrable>
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        <EncabezadoFiltrable filtros={filtros} columnaId="documento">
+                          Documento
+                        </EncabezadoFiltrable>
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        <EncabezadoFiltrable filtros={filtros} columnaId="modelo">
+                          Modelo
+                        </EncabezadoFiltrable>
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        <EncabezadoFiltrable filtros={filtros} columnaId="vigencia">
+                          Vigencia
+                        </EncabezadoFiltrable>
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        <EncabezadoFiltrable filtros={filtros} columnaId="validacion">
+                          Validación
+                        </EncabezadoFiltrable>
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS}`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        <EncabezadoFiltrable filtros={filtros} columnaId="organismos">
+                          Organismos
+                        </EncabezadoFiltrable>
+                      </th>
+                      <th
+                        scope="col"
+                        className={`${TABLA_HEADER_CELL_CLS} rounded-r-xl text-right`}
+                        style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}
+                      >
+                        Acciones
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody className={TABLA_MOVIL_TBODY_CLS}>
+                    {filtrados.length === 0 ? (
+                      <FilaVaciaFiltros
+                        columnas={7}
+                        mensaje="Ningún mandatario coincide con los filtros"
+                        onLimpiar={() => {
+                          filtros.limpiar();
+                          setSearch("");
+                        }}
                       />
-                    ) : (
-                      <span aria-label="No aplica">—</span>
-                    )}
-                  </td>
-                  <td className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"}`} style={{ borderColor: "#DFE5ED" }}>
-                    <MandatarioOrganismos
-                      signerName={signer.fullName}
-                      ids={signer.transitOfficeIds ?? []}
-                      nombrePorId={officeNameById}
-                      sinFirmaIds={sinFirmaPorSigner(signer)}
-                      motivo={motivoSinFirma(signer)}
-                    />
-                  </td>
-                  <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={{ borderColor: "#DFE5ED" }}>
-                    <RowActions
-                      actions={!puedeEditar ? [] : [
-                        {
-                          icon: Pencil,
-                          label: `Editar mandatario ${signer.fullName}`,
-                          onClick: () => {
-                            setEditing(signer);
-                            setFormOpen(true);
-                          },
-                          tone: "primary",
-                        },
-                        ...(puedeReenviarValidacion(signer)
-                          ? [
-                              {
-                                icon: Send,
-                                label: `Reenviar validación a ${signer.fullName}`,
-                                onClick: () => void handleReenviarFila(signer),
-                                disabled: busyId === signer.id,
-                              },
-                            ]
-                          : []),
-                        signer.isActive
-                          ? {
-                              icon: UserX,
-                              label: `Desactivar mandatario ${signer.fullName}`,
-                              onClick: () => setBaja({ signer, accion: "desactivar" }),
-                              tone: "danger",
-                              disabled: busyId === signer.id,
-                            }
-                          : {
-                              icon: RotateCcw,
-                              label: `Reactivar mandatario ${signer.fullName}`,
-                              onClick: () => void handleReactivar(signer),
-                              disabled: busyId === signer.id,
-                            },
-                        ...(puedeEliminarMandatario(signer)
-                          ? [
-                              {
-                                icon: Trash2,
-                                label: `Eliminar mandatario ${signer.fullName}`,
-                                onClick: () => setBaja({ signer, accion: "eliminar" }),
-                                tone: "danger" as const,
-                                disabled: busyId === signer.id,
-                              },
-                            ]
-                          : []),
-                      ]}
-                    />
-                  </td>
-                </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                    ) : null}
+                    {pg.paginar(filtrados).map((signer) => {
+                      // HU #13139 — candado: lo configuró el organismo y este actor no lo puede tocar.
+                      const candado = tieneCandadoDelOrganismo(signer);
+                      const puedeEditar = canCreate && puedeEditarMandatario(signer);
+                      return (
+                        <tr
+                          key={signer.id}
+                          className={`${candado ? "bg-secondary" : "bg-card"} ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}
+                          data-candado={candado ? "true" : undefined}
+                        >
+                          <td
+                            data-label="Mandatario"
+                            className={`rounded-l-xl border-y border-l px-4 py-3 ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            <span className="font-semibold">{signer.fullName}</span>
+                            {candado && <MandatarioCandado />}
+                          </td>
+                          <td
+                            data-label="Documento"
+                            className={`border-y px-4 py-3 font-mono ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            {formatDocumentWithType(signer.documentType, signer.documentNumber)}
+                          </td>
+                          <td
+                            data-label="Modelo"
+                            className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            {etiquetaModelo(signer)}
+                          </td>
+                          <td data-label="Vigencia" className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: "var(--border)" }}>
+                            <MandatarioVigenciaBadge signer={signer} />
+                          </td>
+                          <td
+                            data-label="Validación"
+                            className={`border-y px-4 py-3 ${TABLA_MOVIL_CELL_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
+                            data-testid="mandatario-validacion-celda"
+                          >
+                            {requiereValidacionPropia(signer) ? (
+                              <StatusBadge
+                                tone={presentarValidacion(signer.identityStatus).tone}
+                                label={presentarValidacion(signer.identityStatus).texto}
+                                ariaLabel={`Validación: ${presentarValidacion(signer.identityStatus).texto}`}
+                              />
+                            ) : (
+                              <span aria-label="No aplica">—</span>
+                            )}
+                          </td>
+                          <td
+                            data-label="Organismos"
+                            className={`border-y px-4 py-3 ${signer.isActive ? "" : "opacity-60"} ${TABLA_MOVIL_CELL_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            <MandatarioOrganismos
+                              signerName={signer.fullName}
+                              ids={signer.transitOfficeIds ?? []}
+                              nombrePorId={officeNameById}
+                              sinFirmaIds={sinFirmaPorSigner(signer)}
+                              motivo={motivoSinFirma(signer)}
+                            />
+                          </td>
+                          <td
+                            data-label="Acciones"
+                            className={`rounded-r-xl border-y border-r px-4 py-3 text-right ${TABLA_MOVIL_CELL_CLS}`}
+                            style={{ borderColor: "var(--border)" }}
+                          >
+                            <RowActions
+                              actions={
+                                !puedeEditar
+                                  ? []
+                                  : [
+                                      {
+                                        icon: iconoComo("lapiz"),
+                                        label: `Editar mandatario ${signer.fullName}`,
+                                        onClick: () => {
+                                          setEditing(signer);
+                                          setFormOpen(true);
+                                        },
+                                        tone: "primary",
+                                      },
+                                      ...(puedeReenviarValidacion(signer)
+                                        ? [
+                                            {
+                                              icon: iconoComo("radicacion"),
+                                              label: `Reenviar validación a ${signer.fullName}`,
+                                              onClick: () => void handleReenviarFila(signer),
+                                              disabled: busyId === signer.id,
+                                            },
+                                          ]
+                                        : []),
+                                      signer.isActive
+                                        ? {
+                                            icon: iconoComo("persona"),
+                                            label: `Desactivar mandatario ${signer.fullName}`,
+                                            onClick: () =>
+                                              setBaja({ signer, accion: "desactivar" }),
+                                            tone: "danger",
+                                            disabled: busyId === signer.id,
+                                          }
+                                        : {
+                                            icon: iconoComo("reintento"),
+                                            label: `Reactivar mandatario ${signer.fullName}`,
+                                            onClick: () => void handleReactivar(signer),
+                                            disabled: busyId === signer.id,
+                                          },
+                                      ...(puedeEliminarMandatario(signer)
+                                        ? [
+                                            {
+                                              icon: iconoComo("papelera"),
+                                              label: `Eliminar mandatario ${signer.fullName}`,
+                                              onClick: () =>
+                                                setBaja({ signer, accion: "eliminar" }),
+                                              tone: "danger" as const,
+                                              disabled: busyId === signer.id,
+                                            },
+                                          ]
+                                        : []),
+                                    ]
+                              }
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
 
-        <Pagination
-          page={pg.page}
-          pageSize={pg.pageSize}
-          totalCount={filtrados.length}
-          onPageChange={pg.setPage}
-          onPageSizeChange={pg.setPageSize}
-          noun="mandatarios"
-        />
-        </>
-        )}
-      </UiStateBoundary>
+              {filtrados.length > 0 ? (
+                <Pagination
+                  page={pg.page}
+                  pageSize={pg.pageSize}
+                  totalCount={filtrados.length}
+                  onPageChange={pg.setPage}
+                  onPageSizeChange={pg.setPageSize}
+                  noun="mandatarios"
+                />
+              ) : null}
+            </div>
+          }
+        </UiStateBoundary>
       )}
 
       {baja && (

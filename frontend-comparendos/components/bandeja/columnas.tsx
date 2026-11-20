@@ -11,11 +11,15 @@ import {
   textoSemaforo,
   tonoSemaforo,
   ultimoHito,
+  ventanaDescuento,
 } from "@/lib/etiquetas";
 import { formatoFecha, formatoFechaHora, formatoPesos } from "@/lib/format/date";
 import type { FilaBandeja } from "@/lib/tipos";
 
-/** Columnas de la bandeja (§7.1). */
+/**
+ * Columnas de la bandeja (§7.1). Las claves son las mismas del Excel (ExportacionBandeja.cs): lo visible es lo que se
+ * exporta. Ventana de descuento, Fin del descuento, Activo y Cobro coactivo vienen ocultas (HU #13871).
+ */
 export const COLUMNAS_BANDEJA: DataTableColumn<FilaBandeja>[] = [
   {
     key: "numero",
@@ -54,6 +58,8 @@ export const COLUMNAS_BANDEJA: DataTableColumn<FilaBandeja>[] = [
     header: "Estado legal",
     render: (f) => <StatusBadge label={textoSemaforo(f.estadoLegal, f.diasHabilesRestantes)} tone={tonoSemaforo(f.estadoLegal, f.proximoAVencer)} />,
   },
+  { key: "ventana", header: "Ventana de descuento", render: (f) => <Chip e={ventanaDescuento(f.ventanaDescuento)} /> },
+  { key: "finDescuento", header: "Fin del descuento", render: (f) => formatoFecha(f.finDescuentoVigente) },
   { key: "proceso", header: "Proceso", render: (f) => <Chip e={estadoProceso(f.estadoProceso)} /> },
   {
     key: "contraventor",
@@ -61,7 +67,7 @@ export const COLUMNAS_BANDEJA: DataTableColumn<FilaBandeja>[] = [
     render: (f) =>
       f.contraventorNombre ? (
         <span className="inline-flex items-center gap-1.5">
-          <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-[#16A34A]" />
+          <span aria-hidden className="h-2 w-2 shrink-0 rounded-full bg-[var(--flit-success-ink)]" />
           <span>{f.contraventorNombre}</span>
           <span className="sr-only">(asignado)</span>
         </span>
@@ -85,5 +91,7 @@ export const COLUMNAS_BANDEJA: DataTableColumn<FilaBandeja>[] = [
       ),
   },
   { key: "pagado", header: "Pago", render: (f) => (f.pagado ? <StatusBadge label="Pagado" tone="success" /> : "—") },
+  { key: "activo", header: "Activo", render: (f) => (f.activo ? "Sí" : "No") },
+  { key: "cobroCoactivo", header: "Cobro coactivo", render: (f) => (f.enCobroCoactivo ? "Sí" : "No") },
   { key: "actividad", header: "Última actividad", render: (f) => <span className="whitespace-nowrap">{formatoFechaHora(f.ultimoEventoEn)}</span> },
 ];

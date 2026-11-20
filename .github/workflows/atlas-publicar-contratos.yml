@@ -19,9 +19,9 @@ name: Contratos → Flit Atlas
 # Sin publicar: contracts/proto/flit/personanatural/v1/personanatural.proto, porque core-personanatural aún no es un
 # aplicativo del catálogo de Atlas (la publicación fallaría). Se agrega cuando exista.
 #
-# Esta rama publica lo que corre en su ambiente: los contratos son los de release y la matriz solo tiene lo que existe aquí
+# Esta rama publica lo que corre en su ambiente: los contratos son los de staging y la matriz solo tiene lo que existe aquí
 # y se despliega desde su cd.yml. No trae consultas-runt-intempo, diagnostico-grpc ni tramites-persona-natural (sus .proto
-# no están en release), ni diagnostico ni diagnostico-events (core-diagnostico no está en su cd.yml). Llegan con la
+# no están en staging), ni diagnostico ni diagnostico-events (core-diagnostico no está en su cd.yml). Llegan con la
 # promoción del producto, junto con sus contratos.
 
 on:
@@ -53,9 +53,17 @@ jobs:
       matrix: &contratos
         include:
           # OpenAPI. Compartibles (los usan clientes de integración): external-api y core-ict.
-          - { contrato: core-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/core-api.v1.yaml, ruleset: interno, lint: advertencia }
-          # core-ict de release aún no cumple lo compartible (45 errores de vacuum): lint: advertencia hasta que llegue la 1.1.0 de develop.
+          # core-api: breaking como advertencia temporalmente por el Bug #14627. `validationId` de
+          # /api/v1/admin/tramites/{id}/validaciones-identidad/{reenviables,reenviar} pasa a nullable
+          # (antes siempre traía valor); oasdiff lo ve como incompatible. El único consumidor es el
+          # panel admin, que se actualiza en el mismo PR. Quitarlo cuando este cambio esté en release.
+          - { contrato: core-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/core-api.v1.yaml, ruleset: interno, lint: advertencia, breaking: advertencia }
+          # core-ict de staging aún no cumple lo compartible (45 errores de vacuum): lint: advertencia hasta que llegue la 1.1.0 de develop.
           - { contrato: core-ict, aplicativo: flit2-core-ict, tipo: openapi, ruta: contracts/openapi/core-ict.v1.yaml, ruleset: compartible, lint: advertencia }
+          # diagnostico: breaking como advertencia solo para la 1.1.0. Agrega PLACA_MOTOCARRO al enum tipo_identificador de
+          # las respuestas (placa 123ABC, ajustes de Diagnóstico 2026-11-11, P7), que oasdiff ve como incompatible. El único
+          # consumidor es frontend-diagnostico, que se actualiza en el mismo PR. Quitarlo cuando la 1.1.0 esté en release.
+          - { contrato: diagnostico, aplicativo: flit2-core-diagnostico, tipo: openapi, ruta: contracts/openapi/diagnostico.v1.yaml, ruleset: interno, lint: advertencia, breaking: advertencia }
           - { contrato: external-api, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/external-api.v1.json, ruleset: compartible, lint: advertencia }
           - { contrato: platform, aplicativo: flit2-core-api, tipo: openapi, ruta: contracts/openapi/platform.v1.yaml, ruleset: interno, lint: advertencia }
           - { contrato: python-ml, aplicativo: flit2-python-ml, tipo: openapi, ruta: contracts/openapi/python-ml.v1.yaml, ruleset: interno, lint: advertencia }
@@ -71,7 +79,7 @@ jobs:
           - { contrato: consultas-administracion, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/administracion.proto, version: 1.0.0 }
           - { contrato: consultas-certificaciones, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/certificaciones.proto, version: 1.0.0 }
           - { contrato: consultas, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/consultas.proto, version: 1.0.0 }
-          - { contrato: consultas-fuentes-comparendos, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/fuentes_comparendos.proto, version: 1.0.0 }
+          - { contrato: consultas-fuentes-comparendos, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/fuentes_comparendos.proto, version: 1.1.0 }
           - { contrato: consultas-resultado, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/resultado.proto, version: 1.0.0 }
           - { contrato: consultas-validacion-identidad, aplicativo: flit2-core-consultas, tipo: proto, ruta: contracts/proto/flit/consultas/v1/validacion_identidad.proto, version: 1.0.0 }
           - { contrato: identidad, aplicativo: flit2-core-identity, tipo: proto, ruta: contracts/proto/flit/identidad/v1/identidad.proto, version: 1.0.0 }

@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.Tracking;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Enums;
@@ -142,7 +143,12 @@ public static class AttachmentRules
         "otro", "anexos_generales",
     };
 
-    /// <summary>¿Subir este tipo debe RETIRAR el adjunto anterior del mismo tipo?</summary>
+    /// <summary>
+    /// ¿Subir este tipo debe RETIRAR el adjunto anterior del mismo tipo? Gobierna la subida del GESTOR
+    /// (<see cref="UploadAttachmentHandler"/>) y el choque con FLITO (<see cref="BloqueadoPorFlito"/>). No
+    /// aplica a <c>AdminCargarDocumentoHandler</c> (Bug #14604): «Actualizar documento» del admin siempre
+    /// reemplaza, incluidos los tipos «bolsa» — el modal le promete lo mismo al admin sin distinguir tipo.
+    /// </summary>
     public static bool ReemplazaAlSubir(string? tipo) =>
         !string.IsNullOrWhiteSpace(tipo) && !TiposMultiples.Contains(tipo.Trim());
 
@@ -281,6 +287,9 @@ public sealed class UploadAttachmentHandler(
                 .ToList()
             : [];
 
+        // HU #14174 — captura el adjunto anterior ANTES de retirarlo para construir la bitácora.
+        var previoParaEvento = previos.Count > 0 ? previos[0] : null;
+
         var stored = await storage.SaveAsync(id, tipo, input.Filename ?? "file", input.Content, ct);
 
         // Se retiran DESPUÉS de guardar el nuevo: si el almacenamiento falla, el gestor conserva el que tenía.
@@ -297,6 +306,7 @@ public sealed class UploadAttachmentHandler(
             repo.RemoveAttachment(prev);
         }
 
+        var now = DateTimeOffset.UtcNow;
         var attachment = new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(),
@@ -310,7 +320,7 @@ public sealed class UploadAttachmentHandler(
             StoragePath = stored.StoragePath,
             Source = "user",
             Provider = string.IsNullOrWhiteSpace(input.Provider) ? null : input.Provider.Trim().ToLowerInvariant(),
-            UploadedAt = DateTimeOffset.UtcNow,
+            UploadedAt = now,
             UploadedBy = uploadedBy,
         };
         instance.Attachments.Add(attachment);
@@ -320,6 +330,13 @@ public sealed class UploadAttachmentHandler(
 
         // Auto-marca: si la tipología tiene un ítem cuyo docTipo == tipo subido, lo marca en checklist_estado.
         ChecklistEstadoJson.AutoMark(instance, tipo);
+
+        // HU #14174 — bitácora de documento: una fila dato_modificado por carga o reemplazo.
+        // Se añade ANTES del SaveChanges para que quede en la misma transacción.
+        var docEvt = AttachmentDocumentEventBuilder.BuildUploadEvent(
+            tenantId, id, attachment.Tipo, attachment.Filename, previoParaEvento, uploadedBy, now);
+        if (docEvt is not null)
+            await repo.AddEventAsync(docEvt, ct);
 
         // Instancia trackeada (GetByIdWithAttachmentsAsync sin AsNoTracking): el change tracker
         // detecta el attachment nuevo (INSERT) y el cambio de checklist_estado. NO se llama
@@ -475,6 +492,9 @@ public sealed class RegisterAttachmentHandler(
                 .ToList()
             : [];
 
+        // HU #14174 — captura el adjunto anterior ANTES de retirarlo para construir la bitácora.
+        var previoParaEvento = previos.Count > 0 ? previos[0] : null;
+
         // HU #13265 — binarios retirados: después de confirmar (ver UploadAttachmentHandler).
         var preservePaths = UploadAttachmentHandler.SoftDeleteImprintAudits(previos, imprintAudit);
         var borrarTrasGuardar = new List<string>();
@@ -486,6 +506,7 @@ public sealed class RegisterAttachmentHandler(
             repo.RemoveAttachment(prev);
         }
 
+        var now = DateTimeOffset.UtcNow;
         var attachment = new ProcedureInstanceAttachment
         {
             Id = Guid.NewGuid(),
@@ -498,7 +519,7 @@ public sealed class RegisterAttachmentHandler(
             Sha256 = input.Sha256.Trim().ToLowerInvariant(),
             StoragePath = input.StoragePath.Trim(),
             Source = "user",
-            UploadedAt = DateTimeOffset.UtcNow,
+            UploadedAt = now,
             UploadedBy = uploadedBy,
         };
         // Bug #14559 (ADR-0085) — veredicto OCR declarado por el cliente, normalizado ANTES de asignar (CHECK en minúsculas).
@@ -508,6 +529,12 @@ public sealed class RegisterAttachmentHandler(
         repo.Add(attachment);
 
         ChecklistEstadoJson.AutoMark(instance, tipo);
+
+        // HU #14174 — bitácora de documento: una fila dato_modificado por carga o reemplazo (presign→register).
+        var docEvt = AttachmentDocumentEventBuilder.BuildUploadEvent(
+            tenantId, id, attachment.Tipo, attachment.Filename, previoParaEvento, uploadedBy, now);
+        if (docEvt is not null)
+            await repo.AddEventAsync(docEvt, ct);
 
         // HU #13265 — carrera con FLITO. El binario ya está en S3 (lo subió el cliente con la URL firmada) y su
         // `storagePath` lo da el cliente: NO se borra (podría apuntar a un archivo ajeno); queda huérfano como cualquier
@@ -575,11 +602,29 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
     /// instancia (mismo patrón de lista que PutActorsHandler/PatchFieldValuesHandler). Devuelve los DTOs
     /// registrados y la lista de warnings por adjunto (no fatales: el borrador ya existe).
     /// </summary>
-    public async Task<(IReadOnlyList<AttachmentDto> Registered, IReadOnlyList<string> Warnings)> HandleBatchAsync(
+    public Task<(IReadOnlyList<AttachmentDto> Registered, IReadOnlyList<string> Warnings)> HandleBatchAsync(
         Guid id,
         Guid tenantId,
         IReadOnlyList<RegisterAttachmentInput> inputs,
         Guid? uploadedBy = null,
+        CancellationToken ct = default) =>
+        HandleBatchAsync(id, tenantId, inputs, "ict", uploadedBy, ct: ct);
+
+    /// <summary>
+    /// Igual que el lote de ICT, con el origen (<c>source</c>) del adjunto elegido por quien llama. HU #14050: el portal de
+    /// persona natural registra «portal»; ICT sigue con «ict» (el otro método).
+    /// <para><paramref name="dedupPorTipo"/> (apagado por defecto = comportamiento histórico, dedup solo por sha256): con
+    /// <c>true</c> la clave de idempotencia es (tipo + sha256), así el MISMO archivo se registra una vez por cada tipo
+    /// documental (p. ej. el portal sube el mismo PDF como <c>tarjeta_propiedad</c> y <c>soporte_cambio_color</c>) y un
+    /// reintento del mismo (tipo + sha256) sigue sin duplicar.</para>
+    /// </summary>
+    public async Task<(IReadOnlyList<AttachmentDto> Registered, IReadOnlyList<string> Warnings)> HandleBatchAsync(
+        Guid id,
+        Guid tenantId,
+        IReadOnlyList<RegisterAttachmentInput> inputs,
+        string source,
+        Guid? uploadedBy = null,
+        bool dedupPorTipo = false,
         CancellationToken ct = default)
     {
         var registered = new List<AttachmentDto>();
@@ -595,9 +640,11 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
 
         // Dedup por sha256 (idempotencia): arranca con lo ya presente en la instancia y va agregando los
         // de este lote; un objeto repetido (mismo hash) no se duplica.
+        static string Clave(string? tipo, string sha, bool porTipo) =>
+            porTipo ? $"{(tipo ?? string.Empty).Trim().ToLowerInvariant()}|{sha}" : sha;
         var seenSha = instance.Attachments
             .Where(a => !string.IsNullOrEmpty(a.Sha256))
-            .Select(a => a.Sha256!)
+            .Select(a => Clave(a.Tipo, a.Sha256!, dedupPorTipo))
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
         var now = DateTimeOffset.UtcNow;
@@ -622,7 +669,7 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
             }
 
             var sha = input.Sha256.Trim().ToLowerInvariant();
-            if (!seenSha.Add(sha))
+            if (!seenSha.Add(Clave(input.Tipo, sha, dedupPorTipo)))
                 continue; // ya registrado (dentro del lote o en un intento previo) — idempotente.
 
             var tipo = input.Tipo.Trim().ToLowerInvariant();
@@ -639,7 +686,8 @@ public sealed class RegisterIntegrationAttachmentHandler(IProcedureInstanceRepos
                 SizeBytes = input.SizeBytes,
                 Sha256 = sha,
                 StoragePath = input.StoragePath.Trim(),
-                Source = "ict",
+                // Por defecto «ict» (único llamador hasta HU #14050); el portal de persona natural registra «portal».
+                Source = string.IsNullOrWhiteSpace(source) ? "ict" : source.Trim().ToLowerInvariant(),
                 UploadedAt = now,
                 UploadedBy = uploadedBy,
             };
@@ -743,11 +791,13 @@ public sealed class DeleteAttachmentHandler(
 
     private readonly IMaestroRadicadoLookup _maestroRadicado = maestroRadicado ?? NullMaestroRadicadoLookup.Instance;
 
+    /// <summary>Elimina el adjunto; <paramref name="actorUserId"/> se registra en la bitácora (HU #14174).</summary>
     public async Task<string?> HandleAsync(
         Guid id,
         Guid tenantId,
         Guid attachmentId,
-        CancellationToken ct = default)
+        Guid? actorUserId,
+        CancellationToken ct)
     {
         var instance = await repo.GetByIdWithAttachmentsAsync(id, tenantId, ct);
         if (instance is null)
@@ -768,6 +818,10 @@ public sealed class DeleteAttachmentHandler(
         if (protegidos.Contains(attachment.Id))
             return AdjuntoProtegido;
 
+        // HU #14174 — captura tipo/nombre ANTES de que Retirar los quite de instance.Attachments.
+        var tipoRetiro = attachment.Tipo;
+        var filenameRetiro = attachment.Filename;
+
         var tipo = attachment.Tipo;
         AttachmentRetiro.Retirar(instance, [attachment], repo, storage, imprintAudit);
 
@@ -781,10 +835,27 @@ public sealed class DeleteAttachmentHandler(
             await repo.RemoveOcrFieldValueAsync(id, tenantId, CamaraComercioFieldKeys.Expedicion(rol), ct);
         }
 
+        // HU #14174 — bitácora de retiro: una fila dato_modificado por baja del documento.
+        var retiroEvt = AttachmentDocumentEventBuilder.BuildRetiroEvent(
+            tenantId, id, tipoRetiro, filenameRetiro, actorUserId, DateTimeOffset.UtcNow);
+        if (retiroEvt is not null)
+            await repo.AddEventAsync(retiroEvt, ct);
+
         await repo.SaveChangesAsync(ct);
 
         return null;
     }
+
+    /// <summary>
+    /// Overload sin <c>actorUserId</c> para compatibilidad con llamadores existentes
+    /// (registra la baja sin usuario en la bitácora).
+    /// </summary>
+    public Task<string?> HandleAsync(
+        Guid id,
+        Guid tenantId,
+        Guid attachmentId,
+        CancellationToken ct = default)
+        => HandleAsync(id, tenantId, attachmentId, null, ct);
 }
 
 /// <summary>
@@ -929,4 +1000,89 @@ internal static class ChecklistEstadoJson
         if (changed)
             instance.ChecklistEstado = JsonSerializer.Serialize(estado);
     }
+}
+
+/// <summary>
+/// HU #14174 — Construye eventos <see cref="ProcedureInstanceEvent"/> de tipo
+/// <see cref="ProcedureFieldChangeRecorder.EventType"/> para cambios en documentos adjuntos.
+///
+/// <para>Shape del payload: <c>{"etiqueta":"Documento","campo":"documento","anterior":"...","nuevo":"..."}</c>.</para>
+/// <para>Si anterior normalizado y nuevo normalizado son iguales (Ordinal), no genera evento.</para>
+/// <para>No guarda bytes, ruta de storage, hash ni base64: solo tipo, nombre y acción.</para>
+/// </summary>
+internal static class AttachmentDocumentEventBuilder
+{
+    private static readonly JsonSerializerOptions _jsonOpts = new(JsonSerializerDefaults.Web);
+
+    /// <summary>
+    /// Evento para una subida (multipart) o registro (presign→register): Cargado si no había
+    /// adjunto anterior del mismo tipo, Reemplazado si lo había.
+    /// </summary>
+    internal static ProcedureInstanceEvent? BuildUploadEvent(
+        Guid tenantId,
+        Guid instanceId,
+        string tipo,
+        string filename,
+        ProcedureInstanceAttachment? previo,
+        Guid? actorUserId,
+        DateTimeOffset atUtc)
+    {
+        var accion = previo is null ? "Cargado" : "Reemplazado";
+        var anteriorText = previo is null
+            ? string.Empty
+            : $"Cargado · {previo.Tipo} · {previo.Filename}";
+        var nuevoText = $"{accion} · {tipo} · {filename}";
+        return Build(tenantId, instanceId, anteriorText, nuevoText, actorUserId, atUtc);
+    }
+
+    /// <summary>
+    /// Evento para un retiro explícito (DELETE): anterior = texto del archivo que se borra,
+    /// nuevo = "Retirado · tipo · filename".
+    /// </summary>
+    internal static ProcedureInstanceEvent? BuildRetiroEvent(
+        Guid tenantId,
+        Guid instanceId,
+        string tipo,
+        string filename,
+        Guid? actorUserId,
+        DateTimeOffset atUtc)
+    {
+        var anteriorText = $"Cargado · {tipo} · {filename}";
+        var nuevoText = $"Retirado · {tipo} · {filename}";
+        return Build(tenantId, instanceId, anteriorText, nuevoText, actorUserId, atUtc);
+    }
+
+    private static ProcedureInstanceEvent? Build(
+        Guid tenantId,
+        Guid instanceId,
+        string anterior,
+        string nuevo,
+        Guid? actorUserId,
+        DateTimeOffset atUtc)
+    {
+        var ant = Normalize(anterior);
+        var nvo = Normalize(nuevo);
+
+        // Omitir si nada cambió (misma regla que ProcedureFieldChangeRecorder).
+        if (string.Equals(ant, nvo, StringComparison.Ordinal))
+            return null;
+
+        var payload = JsonSerializer.Serialize(
+            new { etiqueta = "Documento", campo = "documento", anterior = ant, nuevo = nvo },
+            _jsonOpts);
+
+        return new ProcedureInstanceEvent
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            ProcedureInstanceId = instanceId,
+            Tipo = ProcedureFieldChangeRecorder.EventType,
+            Payload = payload,
+            CreatedAt = atUtc,
+            CreatedBy = actorUserId,
+        };
+    }
+
+    private static string Normalize(string? v) =>
+        string.IsNullOrWhiteSpace(v) ? string.Empty : v.Trim();
 }

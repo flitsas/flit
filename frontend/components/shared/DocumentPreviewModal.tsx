@@ -8,7 +8,7 @@
 
 import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
-import { Download, FileText, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { openLoadingDocumentTab, openObjectUrlInWindow } from "@/lib/documents/open-document-tab";
 
@@ -188,7 +188,7 @@ function AvisoDelDocumento({ children, onCerrar }: { children: ReactNode; onCerr
           className="shrink-0 rounded-lg p-1 opacity-70 hover:opacity-100"
           aria-label="Cerrar aviso"
         >
-          <X className="h-4 w-4" aria-hidden="true" />
+          <Icono nombre="cerrar" className="h-4 w-4" />
         </button>
       </div>
     </div>
@@ -212,7 +212,7 @@ function VisorEnModal({
       open={open}
       onClose={onClose}
       title={title}
-      icon={FileText}
+      icono="documento"
       size="lg"
       // La previsualización SIEMPRE va encima de lo que la abrió, y hoy la abren superficies que
       // ya están muy arriba en la pila: el shell del detalle de trámite (z-1100) y el modal del
@@ -238,7 +238,7 @@ function VisorEnModal({
               {[...Array(4)].map((_, i) => (
                 <div
                   key={i}
-                  className="h-10 rounded-xl animate-pulse bg-[#F4F7FC] dark:bg-white/5"
+                  className="h-10 rounded-xl animate-pulse bg-secondary dark:bg-secondary"
                 />
               ))}
             </div>
@@ -261,7 +261,7 @@ function VisorEnModal({
                 aria-label="Descargar documento"
                 onClick={onDownload}
               >
-                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                 Descargar
               </button>
             )}
@@ -274,10 +274,7 @@ function VisorEnModal({
             className="flex-1 flex flex-col items-center justify-center gap-4 py-12"
             data-testid="preview-idle"
           >
-            <FileText
-              className="h-12 w-12 opacity-30"
-              aria-hidden="true"
-            />
+            <Icono nombre="documento" className="h-12 w-12 opacity-30" />
             <p className="text-sm opacity-60 text-center">
               No hay previsualización disponible.
             </p>
@@ -289,7 +286,7 @@ function VisorEnModal({
                 aria-label="Descargar documento"
                 onClick={onDownload}
               >
-                <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                 Descargar
               </button>
             )}
@@ -304,7 +301,7 @@ function VisorEnModal({
               <iframe
                 src={url}
                 title={title}
-                className="w-full flex-1 min-h-[60vh] rounded-xl border border-[#DFE5ED] dark:border-white/10"
+                className="w-full flex-1 min-h-[60vh] rounded-xl border border-border dark:border-border"
                 data-testid="preview-iframe"
               />
             )}
@@ -316,7 +313,7 @@ function VisorEnModal({
                 <img
                   src={url}
                   alt={title}
-                  className="max-w-full max-h-[70vh] rounded-xl border border-[#DFE5ED] dark:border-white/10 object-contain"
+                  className="max-w-full max-h-[70vh] rounded-xl border border-border dark:border-border object-contain"
                   data-testid="preview-image"
                 />
               </div>
@@ -328,10 +325,7 @@ function VisorEnModal({
                 className="flex-1 flex flex-col items-center justify-center gap-4 py-12"
                 data-testid="preview-fallback"
               >
-                <FileText
-                  className="h-12 w-12 opacity-30"
-                  aria-hidden="true"
-                />
+                <Icono nombre="documento" className="h-12 w-12 opacity-30" />
                 <p className="text-sm opacity-60 text-center">
                   Este tipo de archivo no se puede previsualizar.
                 </p>
@@ -343,7 +337,7 @@ function VisorEnModal({
                     aria-label="Descargar documento"
                     onClick={onDownload}
                   >
-                    <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                     Descargar
                   </button>
                 )}
@@ -355,11 +349,11 @@ function VisorEnModal({
               <div className="mt-3 flex justify-end">
                 <button
                   type="button"
-                  className="flex items-center gap-1.5 rounded-xl border border-[#DFE5ED] dark:border-white/15 px-3 py-1.5 text-[11px] font-semibold text-flit-primary dark:text-slate-100"
+                  className="flex items-center gap-1.5 rounded-xl border border-border dark:border-border px-3 py-1.5 text-[11px] font-semibold text-flit-primary dark:text-foreground"
                   aria-label="Descargar documento"
                   onClick={onDownload}
                 >
-                  <Download className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="nube-bajar" className="h-3.5 w-3.5" />
                   Descargar
                 </button>
               </div>

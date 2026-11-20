@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowLeft } from "lucide-react";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
+import { Icono } from "@flit/ui/Icono";
 import { useRouter } from "next/navigation";
 import { ModuleTitle } from "@/components/atom/modules/ModuleTitle";
 import { CargueMasivo } from "@/components/admin/migracion/CargueMasivo";
@@ -33,7 +34,7 @@ export default function AdminMigracionPage() {
         className="flex w-fit items-center gap-1.5 text-xs font-semibold"
         style={{ color: "var(--color-flit-brand)" }}
       >
-        <ArrowLeft className="h-3.5 w-3.5" aria-hidden="true" />
+        <Icono nombre="izquierda" className="h-3.5 w-3.5" />
         Volver al inicio
       </button>
 
@@ -44,11 +45,11 @@ export default function AdminMigracionPage() {
 
       <ComoSeUsa />
 
-      <div className="flex flex-1 flex-col rounded-2xl border border-[#DFE5ED] bg-white/60 p-4 dark:border-white/10 dark:bg-[#0B0F14]/60">
+      <div className="flex flex-1 flex-col rounded-2xl border border-border bg-card/60 p-4">
         <div
           role="tablist"
           aria-label="Modo de migración"
-          className="flex gap-1 border-b border-[#DFE5ED] dark:border-white/10"
+          className={PESTANAS_LISTA_CLS}
         >
           <Pestana
             activa={pestana === "uno"}
@@ -83,9 +84,7 @@ function Pestana({
       role="tab"
       aria-selected={activa}
       onClick={onClick}
-      className={`-mb-px border-b-2 px-4 py-2 text-sm font-semibold transition-colors ${
-        activa ? "border-flit-brand text-flit-brand" : "border-transparent opacity-60"
-      }`}
+      className={pestanaClass(activa)}
     >
       {etiqueta}
     </button>

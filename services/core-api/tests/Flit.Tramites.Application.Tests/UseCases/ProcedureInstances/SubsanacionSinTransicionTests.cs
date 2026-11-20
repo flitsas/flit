@@ -73,6 +73,42 @@ public sealed class SubsanacionSinTransicionTests
         instance.SubsanacionCount.Should().Be(1);
     }
 
+    /// <summary>HU #14051: el aviso de apertura de subsanación se encola ANTES de guardar (misma unidad de trabajo) y sin él nada cambia.</summary>
+    [Fact]
+    public async Task Activar_conPublicador_loAvisaAntesDeGuardar_ConElTramiteYaEnSubsanacion()
+    {
+        var instance = Rechazado(Guid.NewGuid(), Guid.NewGuid());
+        ArrangeCommit(instance);
+        var publicador = Substitute.For<Flit.Tramites.Domain.Integration.ITramiteSubsanacionPublisher>();
+        var subsanacionAlAvisar = false;
+        var guardadoAntes = false;
+        publicador.EnqueueAsync(instance, Arg.Any<CancellationToken>()).Returns(_ =>
+        {
+            subsanacionAlAvisar = instance.SubsanacionActiva;
+            guardadoAntes = _repo.ReceivedCalls().Any(c => c.GetMethodInfo().Name == nameof(IProcedureInstanceRepository.SaveChangesWithConcurrencyGuardAsync));
+            return Task.CompletedTask;
+        });
+
+        await new StartSubsanacionHandler(_repo, publicador).HandleAsync(instance.Id, instance.TenantId, Guid.NewGuid(), ct: Ct);
+
+        await publicador.Received(1).EnqueueAsync(instance, Arg.Any<CancellationToken>());
+        subsanacionAlAvisar.Should().BeTrue();
+        guardadoAntes.Should().BeFalse("el aviso viaja en la misma unidad de trabajo que el guardado");
+        await _repo.Received(1).SaveChangesWithConcurrencyGuardAsync(Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
+    public async Task Activar_siYaEstabaActiva_noVuelveAAvisar()
+    {
+        var instance = Rechazado(Guid.NewGuid(), Guid.NewGuid(), subsanacionActiva: true);
+        ArrangeCommit(instance);
+        var publicador = Substitute.For<Flit.Tramites.Domain.Integration.ITramiteSubsanacionPublisher>();
+
+        await new StartSubsanacionHandler(_repo, publicador).HandleAsync(instance.Id, instance.TenantId, Guid.NewGuid(), ct: Ct);
+
+        await publicador.DidNotReceiveWithAnyArgs().EnqueueAsync(default!, Ct);
+    }
+
     [Fact] // ADR-0059 (HU #12597 AC6) — tomar el trámite en subsanación limpia el distintivo «Rechazado preasignación».
     public async Task Activar_limpiaElOrigenDelRechazo()
     {

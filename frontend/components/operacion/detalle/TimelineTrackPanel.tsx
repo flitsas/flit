@@ -1,7 +1,8 @@
 'use client';
 
 import { CampoValorInline } from './primitivos';
-import { DETALLE_BLUE, DETALLE_CARD, DETALLE_NAVY } from './detalle-visual';
+import { DETALLE_CARD, DETALLE_NAVY } from './detalle-visual';
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 const CARD = `${DETALLE_CARD} flex h-full flex-col p-5`;
 
@@ -16,6 +17,11 @@ export interface TimelineTrackNode {
     fecha: string;
     extra?: string;
   };
+  /**
+   * Bug #14604 — «documento actualizado por el administrador»: qué documento cambió y los archivos nuevo
+   * y anterior, cada uno con «Ver» cuando el panel recibe {@link TimelineTrackPanelProps.onVerDocumento}.
+   */
+  documento?: TimelineDocumento;
   /** El hito vigente (p. ej. el último estado del trámite) se marca con la etiqueta "Vigente". */
   isActive?: boolean;
   /**
@@ -26,10 +32,26 @@ export interface TimelineTrackNode {
   timestamp?: number;
 }
 
+/** Bug #14604 — archivo abrible desde la línea de tiempo (adjunto del mismo trámite). */
+export interface TimelineArchivo {
+  id: string;
+  filename: string;
+  tipo: string;
+}
+
+export interface TimelineDocumento {
+  /** Nombre legible del tipo, p. ej. «Improntas». */
+  tipoLabel: string;
+  nuevo: TimelineArchivo;
+  anterior?: TimelineArchivo;
+}
+
 export interface TimelineTrackPanelProps {
   title: string;
   nodes: TimelineTrackNode[];
   emptyMessage?: string;
+  /** Bug #14604 — abre un archivo de la línea de tiempo en el visor. Sin él, los archivos se listan sin «Ver». */
+  onVerDocumento?: (archivo: TimelineArchivo) => void;
 }
 
 /**
@@ -57,11 +79,11 @@ export interface TimelineTrackPanelProps {
  * en pantalla, pero es exactamente la que el panel promete, y evita depender de hover/click para
  * revelarla.</p>
  */
-export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrackPanelProps) {
+export function TimelineTrackPanel({ title, nodes, emptyMessage, onVerDocumento }: TimelineTrackPanelProps) {
   if (nodes.length === 0) {
     return (
       <div className={CARD}>
-        <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: DETALLE_BLUE }}>
+        <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: 'var(--di-heading)' }}>
           {title}
         </h4>
         <p className="text-xs opacity-70">{emptyMessage ?? 'Sin eventos registrados todavía.'}</p>
@@ -71,7 +93,7 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
 
   return (
     <div className={CARD}>
-      <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: DETALLE_BLUE }}>
+      <h4 className="mb-4 shrink-0 text-sm font-bold" style={{ color: 'var(--di-heading)' }}>
         {title}
       </h4>
       <ol aria-label={title} className="relative space-y-4 py-1 pl-5">
@@ -82,23 +104,33 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
                 se dice con texto, no solo con el punto, para no depender solo de color. */}
             <span
               className="absolute -left-5 top-1.5 h-3 w-3 rounded-full"
-              style={{ background: n.color, boxShadow: `0 0 0 4px ${n.color}1F` }}
+              // Propuesta: el carril de actividad lleva un solo color (azul de acción con halo) y el
+              // hito vigente en turquesa; el estado ya lo dice el texto de cada tarjeta.
+              style={
+                n.isActive
+                  ? {
+                      background: 'var(--color-flit-tech)',
+                      boxShadow: '0 0 0 4px color-mix(in srgb, var(--color-flit-tech) 25%, transparent)',
+                    }
+                  : { background: 'var(--di-action)', boxShadow: '0 0 0 4px var(--di-accent-soft)' }
+              }
               aria-hidden="true"
             />
             {i < nodes.length - 1 ? (
               <span
-                className="absolute -left-[13px] top-6 bottom-[-16px] w-px bg-[#DFE5ED] dark:bg-white/10"
+                className="absolute -left-[13px] top-6 bottom-[-16px] w-px bg-[var(--di-divider)]"
                 aria-hidden="true"
               />
             ) : null}
 
-            <div className="rounded-lg border border-[#DFE5ED] p-3 dark:border-white/10">
+            <div className="rounded-xl border border-[var(--di-border)] bg-[var(--di-surface-elevated)] p-3">
               <div className="mb-2 flex flex-wrap items-center gap-2">
                 <p className="text-xs font-bold" style={{ color: DETALLE_NAVY }}>
                   {n.label}
                 </p>
                 {n.isActive ? (
-                  <span className="rounded-full bg-[color-mix(in_srgb,var(--color-flit-tech)_15%,transparent)] px-2 py-0.5 text-xs font-semibold text-[#0F766E] dark:bg-[color-mix(in_srgb,var(--color-flit-tech)_18%,transparent)] dark:text-[#5EEAD4]">
+                  <span {...etiquetaKit('success')}>
+                    <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                     Vigente
                   </span>
                 ) : null}
@@ -113,10 +145,62 @@ export function TimelineTrackPanel({ title, nodes, emptyMessage }: TimelineTrack
                   <CampoValorInline campo="Detalle" valor={n.info.extra} className="sm:col-span-2" />
                 ) : null}
               </dl>
+              {n.documento ? (
+                <DocumentoActualizadoBloque documento={n.documento} onVer={onVerDocumento} />
+              ) : null}
             </div>
           </li>
         ))}
       </ol>
+    </div>
+  );
+}
+
+/**
+ * Bug #14604 — qué documento se actualizó y con qué archivo: el nuevo y el que estaba antes, ambos
+ * abribles en el visor. Sin archivo anterior (primera carga de ese tipo) se dice explícitamente.
+ */
+function DocumentoActualizadoBloque({
+  documento,
+  onVer,
+}: {
+  documento: TimelineDocumento;
+  onVer?: (archivo: TimelineArchivo) => void;
+}) {
+  const fila = (rotulo: string, archivo: TimelineArchivo | undefined, vacio: string) => (
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
+      <span className="min-w-[7.5rem] opacity-70">{rotulo}</span>
+      {archivo ? (
+        <>
+          <span className="min-w-0 break-all font-medium" style={{ color: DETALLE_NAVY }}>
+            {archivo.filename}
+          </span>
+          {onVer ? (
+            <button
+              type="button"
+              onClick={() => onVer(archivo)}
+              className="rounded-lg border border-[var(--di-border)] px-2 py-0.5 text-[11px] font-semibold text-[var(--di-action)] hover:bg-[var(--di-accent-soft)]"
+              aria-label={`Ver ${rotulo.toLowerCase()} ${archivo.filename}`}
+            >
+              Ver
+            </button>
+          ) : null}
+        </>
+      ) : (
+        <span className="italic opacity-70">{vacio}</span>
+      )}
+    </div>
+  );
+  return (
+    <div className="mt-2 space-y-1.5 rounded-lg border border-[var(--di-border)] bg-[var(--di-surface)] p-2.5">
+      <div className="flex flex-wrap items-center gap-x-2 text-xs">
+        <span className="min-w-[7.5rem] opacity-70">Documento</span>
+        <span className="font-bold" style={{ color: DETALLE_NAVY }}>
+          {documento.tipoLabel}
+        </span>
+      </div>
+      {fila('Archivo nuevo', documento.nuevo, '—')}
+      {fila('Archivo anterior', documento.anterior, 'No había un archivo anterior')}
     </div>
   );
 }

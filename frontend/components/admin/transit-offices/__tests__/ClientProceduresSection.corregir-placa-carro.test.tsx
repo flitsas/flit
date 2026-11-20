@@ -126,7 +126,7 @@ describe("ClientProceduresSection — «Corregir placa» con máscara de carro",
     await user.type(input, "ABC12D");
     const aviso = screen.getByText(AVISO_CARRO);
     expect(aviso).toHaveAttribute("role", "alert");
-    expect(aviso).toHaveStyle({ color: "#B45309" });
+    expect(aviso).toHaveStyle({ color: "var(--di-warning)" });
     expect(input).toHaveAttribute("aria-invalid", "true");
     expect(input.getAttribute("aria-describedby") ?? "").toContain(aviso.id);
     expect(screen.getByRole("button", { name: /^Corregir$/i })).toBeDisabled();

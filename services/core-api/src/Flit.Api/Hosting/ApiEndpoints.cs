@@ -23,6 +23,17 @@ internal static class ApiEndpoints
         // HU #13459: catálogo de organismos de tránsito para la réplica de Comparendos (token de servicio, aud=tramites).
         app.MapGrpcService<Flit.Api.Grpc.CatalogosGrpcService>()
             .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.CatalogosServicioPolicy);
+        // HU #14034 (Épica #14021): fachada del portal de persona natural. APAGADA por defecto: solo se mapea con
+        // PersonaNatural:Fachada:Habilitada=true, y aun así solo la atiende el cliente svc-personanatural para su empresa.
+        if (app.ServiceProvider.GetRequiredService<IConfiguration>().GetValue("PersonaNatural:Fachada:Habilitada", false))
+        {
+            app.MapGrpcService<Flit.Api.Grpc.PersonaNaturalGrpcService>()
+                .RequireAuthorization(Flit.Api.Authorization.ApiSecurityExtensions.PersonaNaturalServicioPolicy);
+        }
+
+        // ADR-0084 (Punto 4): creación de borradores desde Diagnóstico. APAGADA por defecto (Tramites:Derivacion:Habilitada);
+        // solo la atiende svc-diagnostico con el scope platform.tramites.derivacion.
+        Flit.Api.Derivacion.DerivacionExtensions.MapDerivacionDiagnostico(app);
 
         // ── Endpoints de seguridad + Admin/parametrización (develop) ──────────────────
         app.MapInternalJwksEndpoints(); // JWKS público del token de usuario (core-ict valida con él)
@@ -44,6 +55,8 @@ internal static class ApiEndpoints
         app.MapAdminCompanyChildrenInvitationsEndpoints();
         app.MapAdminOtEndpoints();
         app.MapAdminOtMetricsEndpoints();
+        app.MapAdminOtPortalMarcaEndpoints();
+        app.MapAdminOtPortalDominioEndpoints();
         app.MapAdminOtQueriesEndpoints();
         app.MapAdminPlateRangesEndpoints();
         app.MapOtIntegrationEndpoints();
@@ -76,13 +89,20 @@ internal static class ApiEndpoints
         app.MapAdminDocumentTypesEndpoints();
         app.MapAdminBannersEndpoints();
         app.MapAdminExternalClientsEndpoints(); // HU #13088 (Épica #12737) — clientes de integración externos (SuperAdmin)
+        app.MapAdminExternalIntegrationsEndpoints(); // HU #14067 (Épica #14021) — integraciones externas por compañía (SuperAdmin)
+        app.MapAdminPlataformaPersonaNaturalEndpoints(); // Feature J (Épica #14021) — tarifas, configuración y contenido del portal (SuperAdmin)
+        app.MapAdminOtPortalTarifasEndpoints(); // Épica #14297 (Feature #14387) — precios del portal Persona Natural desde el dashboard del OT
+        app.MapAdminPortalCobroEndpoints(); // HU#14393 (Feature #14392, Épica #14297) — medios de pago y switches de cobro del portal
+        app.MapAdminPortalCajaUsuariosEndpoints(); // HU#14454/#14455 (Épica #14210) — usuarios de caja del organismo (rol ot_caja)
+        app.MapAdminPortalCajaCobrosEndpoints(); // HU#14461 (Épica #14210) — cobros en caja y anulación desde el hub (fachada gRPC)
+        app.MapOtCajaEndpoints(); // Épica #14210 — la caja del organismo como módulo de FLIT 2.0 (ot_caja y Admin OT; fachada gRPC)
+        app.MapAdminOtPortalReportesEndpoints(); // Épica #14297 (Feature #14396) — reporte de los trámites del portal por organismo
         app.MapAdminRejectionReasonsEndpoints();
         app.MapAdminProcedureDocumentRequirementsEndpoints();
         app.MapAdminDocumentOrderOverridesEndpoints();
         app.MapAdminDocumentRequirementOverridesEndpoints();
         app.MapAdminOtPrendaDocumentPolicyEndpoints();
         app.MapAdminResolvedDocumentMatrixEndpoints();
-        app.MapAdminCompanyDocumentParamsEndpoints();
         app.MapAdminImprontasEndpoints();
         // Feature #12201 (ADR-0056-generacion-documental-standalone) — generación documental SIN trámite.
         // Autorización por permiso (generacion-documental.*), no por policy de grupo.
@@ -143,6 +163,7 @@ internal static class ApiEndpoints
 
         // ── Dashboard analítico (Feature #10139) ──────────────────────────────────────
         app.MapAnalyticsEndpoints();
+        app.MapGestorDashboardEndpoints(); // Inicio del Gestor (rediseño de los 3 dashboards)
         app.MapDashboardActiveModulesEndpoints(); // HU #12251 (Feature #12249) — flags de módulos activos, sin AdminCompanyPolicy
         app.MapDetailedReportEndpoints(); // Feature #10813
         app.MapReportSchedulesEndpoints(); // Reportes2 HU-D
@@ -153,6 +174,7 @@ internal static class ApiEndpoints
         app.MapAnalyticsMetricsEndpoints(); // Reportes2 HU-B
         app.MapCompanyQueriesEndpoints(); // Consultas propias de la empresa
         app.MapSuperAdminQueriesEndpoints(); // Consultas de SuperAdmin sobre todas las compañías
+        app.MapSuperAdminDashboardEndpoints(); // Inicio del SuperAdmin: compañías y organismos (rediseño de los 3 dashboards)
         app.MapIctQueriesEndpoints(); // Consultas propias de la empresa sobre sus pre-trámites de ICT
         app.MapIctReportsEndpoints(); // Reportes de ICT en vivo (HU #11617)
         app.MapUsageEventsEndpoints(); // Reportes2 HU-A

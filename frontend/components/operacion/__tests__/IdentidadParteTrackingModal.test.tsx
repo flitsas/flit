@@ -87,6 +87,71 @@ describe('IdentidadParteTrackingModal', () => {
     ).toBeInTheDocument();
   });
 
+  const VALIDACION_MANUAL = {
+    ...VALIDACION_APROBADA,
+    id: 'val-manual',
+    provider: 'manual',
+    approvalOrigin: 'manual',
+  };
+
+  it('una validación aprobada por el flujo manual se muestra, sin actor', async () => {
+    getBiometricAuditByValidation.mockResolvedValue({
+      events: [
+        { occurredAt: '2026-08-27T11:42:00Z', stage: 'manual_activado', outcome: 'ok' },
+        { occurredAt: '2026-08-27T11:51:00Z', stage: 'manual_captura_recibida', outcome: 'ok' },
+        { occurredAt: '2026-08-27T12:00:00Z', stage: 'manual_aprobado', outcome: 'aprobado' },
+      ],
+      referencedFromOtherProcedure: false,
+    });
+    listBiometricExpediente.mockResolvedValue({
+      validations: [VALIDACION_MANUAL],
+      firmaBaulPartes: [],
+      provider: 'kyverum',
+    });
+    abrir();
+
+    const historial = await screen.findByRole('list', { name: 'Historial de la validación' });
+    expect(within(historial).getByText('Laura envió sus fotos y su firma')).toBeInTheDocument();
+    expect(within(historial).getByText('Identidad aprobada')).toBeInTheDocument();
+    expect(screen.queryByText(/Todavía no se ha iniciado/i)).toBeNull();
+  });
+
+  it('una validación aprobada por el flujo manual se muestra, con actor', async () => {
+    listBiometricExpediente.mockResolvedValue({
+      validations: [{ ...VALIDACION_MANUAL, ordinal: 1 }],
+      firmaBaulPartes: [],
+      provider: 'kyverum',
+    });
+    render(
+      <IdentidadParteTrackingModal
+        open
+        instanceId="inst-1"
+        parte="comprador"
+        rotulo="Comprador"
+        actor={{ ordinal: 1, numeroDocumento: '1020998455', nombre: 'Laura Restrepo Ossa' }}
+        onClose={() => undefined}
+      />,
+    );
+
+    expect(
+      await screen.findByRole('region', { name: 'Validación de identidad de Laura Restrepo Ossa' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Todavía no se ha iniciado/i)).toBeNull();
+  });
+
+  it('una validación mock sigue excluida', async () => {
+    listBiometricExpediente.mockResolvedValue({
+      validations: [{ ...VALIDACION_APROBADA, provider: 'mock' }],
+      firmaBaulPartes: [],
+      provider: 'mock',
+    });
+    abrir();
+
+    expect(
+      await screen.findByText(/Todavía no se ha iniciado la validación de identidad/i),
+    ).toBeInTheDocument();
+  });
+
   it('sin validación iniciada lo dice sin hablar de bitácoras', async () => {
     listBiometricExpediente.mockResolvedValue({
       validations: [],

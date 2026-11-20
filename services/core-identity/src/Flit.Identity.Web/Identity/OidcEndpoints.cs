@@ -72,6 +72,9 @@ public static class OidcEndpoints
         identity.AddClaim(new Claim(Claims.Email, verified.User.Email));
         identity.AddClaim(new Claim(OidcDefaults.TenantIdClaim, verified.User.TenantId.ToString()));
         identity.AddClaim(new Claim(OidcDefaults.DomainClaim, verified.DomainClaim));
+        // Inicio real de la sesión: lo conservan los tokens y sus refresh (OIDC auth_time).
+        var inicio = (http.RequestServices.GetService<TimeProvider>() ?? TimeProvider.System).GetUtcNow().ToUnixTimeSeconds();
+        identity.AddClaim(new Claim(OidcPrincipalFactory.AuthTimeClaim, inicio.ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer64));
         if (verified.IsSuperAdmin)
             identity.AddClaim(new Claim(OidcDefaults.SuperAdminClaim, "true"));
 

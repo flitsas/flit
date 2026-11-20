@@ -80,6 +80,9 @@ public sealed record ProcedureInstanceEventDto(
     // DECISIÓN del OT, distinto de RevocationReason (que es el motivo original del gestor al pedirla).
     // Ambos tipos reutilizan RevocationAttemptNumber de arriba.
     string? RevocationDecisionReason = null,
+    // reenvio_validacion_admin (HU #13821) — correo que tenía la persona antes de corregirlo en el reenvío
+    // (null si no cambió), para que el tracking muestre «anterior → nuevo». En claro, igual que CorreoDestino.
+    string? CorreoAnterior = null,
     // documento_cargado_admin (Bug #14604) — campos APLANADOS (el `tipo` del payload chocaría con el discriminador `Tipo`).
     string? DocumentoTipo = null,
     string? DocumentoFilename = null,
@@ -216,7 +219,11 @@ public sealed record ProcedureInstanceDetailDto(
     // Organismo del punto de atención (solo canal pn_punto) y su nombre, para mostrarlo sin otra consulta.
     // Distinto del organismo del trámite, que puede cambiar al enviarlo al OT.
     Guid? ChannelTransitOfficeId = null,
-    string? ChannelTransitOfficeName = null);
+    string? ChannelTransitOfficeName = null,
+    // HU #14469 — pago del portal (canal pn_punto) ligado al trámite. Solo existe cuando el punto radicó ya pagado; en los
+    // demás trámites la propiedad no se escribe en el JSON. Aditivo.
+    [property: System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    ProcedureInstancePagoPortalDto? PagoPortal = null);
 
 public sealed class GetProcedureInstanceHandler(
     IProcedureInstanceRepository repo,
@@ -387,8 +394,16 @@ public sealed class GetProcedureInstanceHandler(
             channelOfficeName = officeNames?.GetValueOrDefault(channelOfficeId);
         }
 
+        // HU #14469 — pago del portal: solo los trámites del punto de atención pueden tenerlo; el resto no consulta.
+        ProcedureInstancePagoPortalDto? pagoPortal = null;
+        if (string.Equals(instance.Channel, TramiteCanal.PersonaNaturalOt, StringComparison.Ordinal)
+            && await repo.GetPagoPortalAsync(instance.Id, instance.TenantId, ct).ConfigureAwait(false) is { } pago)
+        {
+            pagoPortal = ProcedureInstancePagoPortalDto.Desde(pago);
+        }
+
         return ToDetail(instance, events, actorInfo, revocationEligibility, activeRevocationRequest, lastRevocationDecision)
-            with { ConsolidadoWizard = wizard, ConsolidadoMaestro = maestro, ChannelTransitOfficeName = channelOfficeName };
+            with { ConsolidadoWizard = wizard, ConsolidadoMaestro = maestro, ChannelTransitOfficeName = channelOfficeName, PagoPortal = pagoPortal };
     }
 
     /// <summary>
@@ -559,12 +574,16 @@ public sealed class GetProcedureInstanceHandler(
             var correo = payload.TryGetProperty("correo_destino", out var cd) && cd.ValueKind == JsonValueKind.String
                 ? cd.GetString()
                 : null;
+            var correoAnterior = payload.TryGetProperty("correo_anterior", out var cp) && cp.ValueKind == JsonValueKind.String
+                ? cp.GetString()
+                : null;
             return new ProcedureInstanceEventDto(
                 e.Tipo, e.CreatedAt, createdByName,
                 PartyRole: partyRole,
                 EmailActualizado: emailActualizado,
                 CorreoDestino: correo,
-                CreatedByCompania: createdByCompania);
+                CreatedByCompania: createdByCompania,
+                CorreoAnterior: correoAnterior);
         }).ToList();
     }
 

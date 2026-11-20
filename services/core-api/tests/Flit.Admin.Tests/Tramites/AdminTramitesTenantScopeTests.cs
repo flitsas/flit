@@ -73,6 +73,8 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/anular", RepoMethod.GetByIdAsync },
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/reasignar-gestor", RepoMethod.GetByIdAsync },
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/validaciones-identidad/{ValidationId}/reenviar", RepoMethod.GetByIdAsync },
+        // HU #13821 — reenvío a una o varias personas.
+        { "POST", $"/api/v1/admin/tramites/{ProcedureId}/validaciones-identidad/reenviar", RepoMethod.GetByIdAsync },
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/consolidado/limpiar", RepoMethod.GetByIdWithChecklistGraphAsync },
         { "POST", $"/api/v1/admin/tramites/{ProcedureId}/consolidado/cargar", RepoMethod.GetByIdWithAttachmentsAsync },
         // Bug #14604 — carga administrativa de documentos: lee el trámite con adjuntos antes de nada más.
@@ -157,7 +159,7 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
             .ToList();
 
         registered.Should().NotBeEmpty("deben existir rutas de escritura bajo /api/v1/admin/tramites/{id:guid}");
-        registered.Should().HaveCount(8,
+        registered.Should().HaveCount(9,
             "el inventario de esta prueba (Routes()) debe tener una entrada por cada ruta registrada; "
             + "si esto cambia, agrega/retira la ruta en Routes() (Bug #12554)");
     }
@@ -203,6 +205,8 @@ public sealed class AdminTramitesTenantScopeTests : IClassFixture<AdminTramitesT
         {
             var r when r.EndsWith("/estado", StringComparison.Ordinal) => new { toStatus = "entregado" },
             var r when r.EndsWith("/reasignar-gestor", StringComparison.Ordinal) => new { newAssignedToUserId = NewAssignedToUserId },
+            var r when r.EndsWith("/validaciones-identidad/reenviar", StringComparison.Ordinal)
+                => new { items = new[] { new { validationId = ValidationId, email = (string?)null } } },
             _ => new { },
         };
         request.Content = JsonContent.Create(body);

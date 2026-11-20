@@ -1,8 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { Pause, Play, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
+import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useToast } from "@/components/Toast";
 import { Interruptor } from "@/components/ui/Interruptor";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
@@ -42,10 +43,10 @@ function Horas({ horas, onCambio }: { horas: string[]; onCambio: (h: string[]) =
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-1.5">
         {horas.map((h) => (
-          <span key={h} className="inline-flex items-center gap-1 rounded-full bg-[#E7EEFF] px-2 py-0.5 text-xs font-semibold text-[#3B4FD6] dark:bg-white/10 dark:text-white">
+          <span key={h} {...etiquetaKit({ c: "var(--color-flit-brand)", ct: "var(--flit-brand-ink)" })}>
             {h}
             <button type="button" aria-label={`Quitar ${h}`} onClick={() => onCambio(horas.filter((x) => x !== h))}>
-              <X className="h-3 w-3" />
+              <Icono nombre="cerrar" className="h-3 w-3" />
             </button>
           </span>
         ))}
@@ -66,7 +67,7 @@ function Horas({ horas, onCambio }: { horas: string[]; onCambio: (h: string[]) =
           Agregar
         </button>
       </div>
-      {error && <span className="text-[11px] text-[#B42318]">{error}</span>}
+      {error && <span className="text-[11px] text-destructive">{error}</span>}
     </div>
   );
 }
@@ -100,7 +101,7 @@ function Canal({ empresaId, canal, proveedores, onGuardado }: { empresaId: strin
   };
 
   return (
-    <fieldset className="flex flex-col gap-3 border-t border-[#E2E8F0] pt-4 first:border-t-0 first:pt-0 dark:border-white/10">
+    <fieldset className="flex flex-col gap-3 border-t border-border pt-4 first:border-t-0 first:pt-0">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="flex flex-col gap-0.5">
           <legend className="text-sm font-semibold">{canal.etiqueta}</legend>
@@ -228,12 +229,12 @@ export function ConsultasAdmin({ empresaId }: { empresaId: string }) {
         <div className="flex gap-2">
           {v.estado === "Activa" ? (
             <button type="button" className={controlCls(false)} onClick={() => setConfirmar("pausar")}>
-              <Pause className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="pausa" className="h-3.5 w-3.5" />
               Pausar
             </button>
           ) : (
             <button type="button" className={BOTON_PRIMARIO_CLS} disabled={v.productoHabilitado === false || encendidos === 0} onClick={() => setConfirmar("activar")}>
-              <Play className="h-3.5 w-3.5" aria-hidden />
+              <Icono nombre="avance" className="h-3.5 w-3.5" />
               Activar
             </button>
           )}
@@ -258,7 +259,7 @@ export function ConsultasAdmin({ empresaId }: { empresaId: string }) {
       </div>
 
       {confirmar && (
-        <Modal
+        <Modal icono="consulta"
           open
           onClose={() => setConfirmar(null)}
           busy={ocupado}
@@ -304,7 +305,7 @@ export function ConsultasEmpresa({ empresa }: { empresa?: string | null }) {
         <h2 className="text-sm font-semibold">Consultas automáticas de comparendos</h2>
         <StatusBadge label={estado.etiqueta} tone={estado.tono} />
       </div>
-      <p className="text-[11px] text-[#5B6B82] dark:text-slate-300">
+      <p className="text-[11px] text-muted-foreground">
         Cuándo se consultan tus comparendos. La agenda la define FLIT: si necesitas cambiarla, solicítalo a operaciones.
       </p>
       {canales.length === 0 ? (
@@ -313,16 +314,16 @@ export function ConsultasEmpresa({ empresa }: { empresa?: string | null }) {
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="bg-[#DFE5ED] dark:bg-white/10">
-                <th className="px-3 py-2 font-semibold">Consulta</th>
-                <th className="px-3 py-2 font-semibold">Agenda</th>
-                <th className="px-3 py-2 font-semibold">Última consulta</th>
-                <th className="px-3 py-2 font-semibold">Próxima consulta</th>
+              <tr>
+                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Consulta</th>
+                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Agenda</th>
+                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Última consulta</th>
+                <th className="bg-[color:var(--table-header-bg)] px-3 py-2 font-semibold text-[color:var(--table-header-fg)]">Próxima consulta</th>
               </tr>
             </thead>
             <tbody>
               {canales.map((c) => (
-                <tr key={c.canal} className="border-b border-[#E2E8F0] dark:border-white/10">
+                <tr key={c.canal} className="border-b border-border">
                   <td className="px-3 py-2 font-semibold">{c.etiqueta}</td>
                   <td className="px-3 py-2">{c.encendido ? (c.descripcion ?? "—") : "Apagada"}</td>
                   <td className="px-3 py-2">

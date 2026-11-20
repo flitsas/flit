@@ -59,6 +59,17 @@ public interface IOtMetricsReadRepository
         CancellationToken cancellationToken = default);
 
     /// <summary>
+    /// Trámites que cada empresa cliente le radicó al organismo en el rango, partidos por familia
+    /// (Inicio del organismo, «Trámites por Cliente Corporativo»). Mismo universo que el informe del
+    /// periodo: los que LLEGARON al organismo dentro del rango.
+    /// </summary>
+    Task<OtClientsByFamilyDto?> GetClientsByFamilyAsync(
+        Guid otTenantId,
+        OtMetricsFilter filter,
+        Guid? transitOfficeIdOverride = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
     /// Empresas con grant vigente con el organismo. Alimenta el filtro por empresa; se listan todas
     /// las habilitadas y no solo las que tuvieron movimiento, para que el filtro no cambie de
     /// contenido cada vez que se mueve el rango de fechas.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { FileSearch, Loader2, Play } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { ErrorMigracion, migrarTramite } from "@/lib/migracion/client";
 import {
   ETIQUETA_TRAMITE,
@@ -63,7 +63,7 @@ export function MigrarUno() {
     <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[minmax(0,340px)_minmax(0,1fr)]">
       <form
         onSubmit={lanzar}
-        className="flex flex-col gap-4 rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10"
+        className="flex flex-col gap-4 rounded-2xl border border-border p-4"
       >
         <div className="flex flex-col gap-1.5">
           <label htmlFor="tipo-tramite" className="text-xs font-semibold uppercase tracking-wide opacity-60">
@@ -74,7 +74,7 @@ export function MigrarUno() {
             value={tramite}
             onChange={(e) => setTramite(e.target.value as TipoTramite)}
             disabled={corriendo}
-            className="rounded-lg border border-[#DFE5ED] bg-transparent px-3 py-2 text-sm dark:border-white/10"
+            className="rounded-lg border border-input bg-transparent px-3 py-2 text-sm"
           >
             {TIPOS_TRAMITE.map((t) => (
               <option key={t} value={t}>
@@ -97,10 +97,10 @@ export function MigrarUno() {
             onChange={(e) => setId(e.target.value)}
             disabled={corriendo}
             placeholder="26350"
-            className="rounded-lg border border-[#DFE5ED] bg-transparent px-3 py-2 text-sm tabular-nums dark:border-white/10"
+            className="rounded-lg border border-border bg-transparent px-3 py-2 text-sm tabular-nums"
           />
           {id.trim() !== "" && !idValido && (
-            <p className="text-xs text-red-500">El id debe ser un número entero positivo.</p>
+            <p className="text-xs text-destructive">El id debe ser un número entero positivo.</p>
           )}
         </div>
 
@@ -118,17 +118,17 @@ export function MigrarUno() {
           // El color sigue al modo, no al revés: ámbar cuando va a escribir en V2. El gris de
           // antes se leía como un botón deshabilitado justo cuando sí se podía pulsar.
           className={`flex items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold text-white transition-colors disabled:opacity-50 ${
-            dryRun ? "bg-flit-brand" : "bg-amber-600 hover:bg-amber-700"
+            dryRun ? "bg-flit-brand" : "bg-[var(--badge-warning-fg)] hover:opacity-90 dark:text-[var(--destructive-foreground)]"
           }`}
         >
           {corriendo ? (
             <>
-              <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+              <Icono nombre="girador" className="h-4 w-4 animate-spin" />
               Migrando…
             </>
           ) : (
             <>
-              <Play className="h-4 w-4" aria-hidden="true" />
+              <Icono nombre="avance" className="h-4 w-4" />
               {dryRun ? "Simular" : "Migrar de verdad"}
             </>
           )}
@@ -147,23 +147,19 @@ export function MigrarUno() {
         vez de un rectángulo de 400 px de alto esperando: la versión anterior dejaba media pantalla
         en blanco y la página parecía a medio cargar.
       */}
-      <div className="rounded-2xl border border-[#DFE5ED] p-4 dark:border-white/10">
+      <div className="rounded-2xl border border-border p-4">
         {error && <AvisoError error={error} />}
         {!error && respuesta && <ReporteMigracion respuesta={respuesta} />}
         {!error && !respuesta && (
           <div className="flex min-h-[8rem] flex-col items-center justify-center gap-2 text-center">
             {corriendo ? (
               <>
-                <Loader2
-                  className="h-5 w-5 animate-spin"
-                  aria-hidden="true"
-                  style={{ color: "var(--color-flit-brand)" }}
-                />
+                <Icono nombre="girador" className="h-5 w-5 animate-spin" style={{ color: "var(--color-flit-brand)" }} />
                 <p className="text-sm opacity-70">Esperando al migrador…</p>
               </>
             ) : (
               <>
-                <FileSearch className="h-6 w-6 opacity-30" aria-hidden="true" />
+                <Icono nombre="consulta" className="h-6 w-6 opacity-30" />
                 <p className="max-w-xs text-sm opacity-60">
                   Elige un trámite y lanza la migración: el reporte aparecerá aquí.
                 </p>

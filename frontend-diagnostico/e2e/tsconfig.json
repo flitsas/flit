@@ -1,0 +1,18 @@
+{
+  "//": "Solo para Playwright local (no lo usa next ni vitest). Los specs importan @playwright/test, que no está instalado en el workspace; el runner viene del paquete `playwright` de frontend/ (mismo binario 1.63), así que se mapea el import a su entrada de test.",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "noEmit": true,
+    "types": ["node"],
+    "baseUrl": ".",
+    "paths": {
+      "@playwright/test": ["../../frontend/node_modules/playwright/test"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

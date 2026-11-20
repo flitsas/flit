@@ -363,14 +363,15 @@ public sealed class GenerarConsolidadoHandler(
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 
+        // Bug #14631 — las descargas van en paralelo (antes, una por una dentro de la misma petición).
+        var descargados = await ConsolidadoDescargaAdjuntos.DescargarAsync(storage, ordered, ct).ConfigureAwait(false);
         var pdfParts = new List<byte[]>(ordered.Count);
-        foreach (var attachment in ordered)
+        for (var i = 0; i < ordered.Count; i++)
         {
-            await using var stream = await storage.OpenReadAsync(attachment.StoragePath, ct);
-            if (stream is null)
+            var attachment = ordered[i];
+            if (descargados[i] is not { } bytes)
                 return (null, "adjunto_no_disponible");
 
-            var bytes = await ReadAllBytesAsync(stream, ct);
             try
             {
                 var pdf = merger.NormalizeToPdf(bytes, attachment.Mimetype);
@@ -554,12 +555,19 @@ public sealed class GenerarConsolidadoHandler(
     /// <c>tramite_virtual</c> por la precedencia declarada de <see cref="AttachmentSourcePrecedence"/>
     /// (DT-4); para CUALQUIER OTRO tipo —incluida la <c>compraventa</c>— por el criterio de siempre,
     /// la más reciente por <c>UploadedAt</c>, SIN cambios de comportamiento.
+    /// <para>
+    /// Excepción (Bug #14570): los tipos «bolsa» de <see cref="AttachmentRules.TiposMultiples"/>
+    /// (<c>otro</c>, <c>anexos_generales</c>) acumulan archivos al subir (HU #12046) y «Ver documentos»
+    /// los lista todos; el consolidado también los incluye TODOS, en orden de carga
+    /// (<c>UploadedAt</c> ascendente), en la posición que ocupa el tipo.
+    /// </para>
     /// </summary>
     internal static IReadOnlyList<ProcedureInstanceAttachment> SanitizeConsolidadoParts(
         IReadOnlyList<ProcedureInstanceAttachment> ordered)
     {
         var latestByTipo = ordered
             .Where(a => a.Tipo.Contains("consolidado", StringComparison.OrdinalIgnoreCase) is false)
+            .Where(a => !AttachmentRules.TiposMultiples.Contains(a.Tipo.Trim()))
             .GroupBy(a => a.Tipo, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(
                 g => g.Key,
@@ -576,6 +584,15 @@ public sealed class GenerarConsolidadoHandler(
                 continue;
             if (!seen.Add(a.Tipo))
                 continue;
+            if (AttachmentRules.TiposMultiples.Contains(a.Tipo.Trim()))
+            {
+                // Bolsa: todos los de este tipo, en orden de carga (estable ante empates).
+                result.AddRange(ordered
+                    .Where(x => string.Equals(x.Tipo, a.Tipo, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(x => x.UploadedAt));
+                continue;
+            }
+
             result.Add(latestByTipo[a.Tipo]);
         }
 
@@ -610,13 +627,6 @@ public sealed class GenerarConsolidadoHandler(
         var codigo = instance.TypeCode;
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.FaltanObligatorios ?? [];
-    }
-
-    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)
-    {
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, ct);
-        return ms.ToArray();
     }
 
     private static string SafeRef(string reference) =>

@@ -7,8 +7,12 @@ public sealed class Contraventor : Auditada
 {
     public Guid ComparendoId { get; set; }
     public Guid TenantId { get; set; }
-    public TipoDocumento TipoDocumento { get; set; } = TipoDocumento.CC;
-    public string NumeroDocumento { get; set; } = string.Empty;
+    /// <summary>
+    /// Sin documento solo cuando lo trae la API de contratos, que no lo devuelve (HU #13712, hallazgo con Renting real):
+    /// queda «documento pendiente» hasta que el operador lo complete, y sin él no se solicita el cambio de contraventor.
+    /// </summary>
+    public TipoDocumento? TipoDocumento { get; set; }
+    public string? NumeroDocumento { get; set; }
     public string Nombres { get; set; } = string.Empty;
     public string? Correo { get; set; }
     public string? Telefono { get; set; }
@@ -192,6 +196,9 @@ public sealed class DerechoPeticion : Auditada
     public Guid? RespuestaRegistradaPor { get; set; }
     public DateTimeOffset? RespuestaRegistradaEn { get; set; }
     public Guid EnviadoPor { get; set; }
+
+    /// <summary>Epic #14606: lo envió el trabajo automático, no una persona (<see cref="EnviadoPor"/> queda vacío); los reportes de productividad no lo cuentan como de nadie.</summary>
+    public bool EnvioAutomatico { get; set; }
     public string? LegacyV1Id { get; set; }
 }
 
@@ -329,6 +336,12 @@ public sealed class DocumentoOcr
     public DateTimeOffset? RevisadoEn { get; set; }
     public Guid? DescartadoPor { get; set; }
     public string? MotivoDescarte { get; set; }
+
+    /// <summary>Versión del prompt con que se leyó por última vez (HU #13828); null en los leídos antes, que usan la del paquete.</summary>
+    public Guid? PromptVersionId { get; set; }
+
+    /// <summary>Cuántas veces lo pidió reprocesar el operador (HU #13828, tope <see cref="Modulos.Ocr.ServicioOcr.MaximoReprocesos"/>).</summary>
+    public short Reprocesos { get; set; }
 }
 
 public sealed class DocumentoOcrCampo

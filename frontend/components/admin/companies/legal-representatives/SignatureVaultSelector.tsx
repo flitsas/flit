@@ -5,7 +5,7 @@
 // AC3 se cubre con un estado especial "lleno pero sin firmas vigentes" dentro del estado lleno.
 
 import { useCallback, useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { RL_COLOR, RL_INPUT_CLS, RL_GRADIENT } from "./rl-flit-styles";
 import { SignatureCapture } from "@/components/admin/companies/signature-vault/SignatureCapture";
 import type { SignatureVaultItem } from "@/lib/api/admin-signature-vault";
@@ -180,7 +180,7 @@ export function SignatureVaultSelector({
   const bloqueCaptura = (
     <div
       className="mt-2 space-y-2 rounded-xl border px-3 py-3"
-      style={{ borderColor: "var(--flit-border, #DDE5F0)" }}
+      style={{ borderColor: "var(--border)" }}
       data-testid="sig-capture-block"
     >
       <p className="text-xs opacity-70">
@@ -280,7 +280,7 @@ export function SignatureVaultSelector({
         aria-live="polite"
         data-testid="sig-selector-loading"
       >
-        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+        <Icono nombre="girador" className="h-3.5 w-3.5 animate-spin" />
         Buscando firmas vigentes…
       </div>
     );
@@ -305,7 +305,7 @@ export function SignatureVaultSelector({
   if (fetched && items.length === 0) {
     return (
       <div data-testid="sig-selector-empty" aria-live="polite">
-        <p className="rounded-xl border border-[#DDE5F0] px-3 py-2 text-xs opacity-80">
+        <p className="rounded-xl border border-border px-3 py-2 text-xs opacity-80">
           Esta persona no tiene firmas vigentes en el baúl.
         </p>
         {!readOnly && fullName && !capturing && (

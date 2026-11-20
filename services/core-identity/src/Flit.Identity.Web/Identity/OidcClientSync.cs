@@ -24,8 +24,12 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
         var hosts = services.GetRequiredService<IProductHosts>();
         var options = services.GetRequiredService<IOptions<OidcOptions>>().Value;
 
-        foreach (var product in ProductCodes.All)
+        foreach (var product in ProductCodes.All.Where(p => p != ProductCodes.Caja))
             await UpsertAsync(ProductClient(product, hosts, options), cancellationToken).ConfigureAwait(false);
+
+        // La caja del organismo es un módulo de FLIT 2.0 (ADR-0082), no un producto con sesión propia: el cliente OIDC «caja» que registró
+        // la versión anterior se retira (la fila del producto y del rol en la base de seguridad se conservan).
+        await RetireAsync(ProductCodes.Caja, cancellationToken).ConfigureAwait(false);
 
         foreach (var (clientId, service) in options.ServiceClients)
         {
@@ -149,6 +153,26 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
         }
     }
 
+    /// <summary>Elimina el cliente si existe. Un fallo de base de datos no impide arrancar: se registra y se reintenta en el próximo arranque.</summary>
+    private async Task RetireAsync(string clientId, CancellationToken ct)
+    {
+        try
+        {
+            await using var scope = services.CreateAsyncScope();
+            var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+            if (await manager.FindByClientIdAsync(clientId, ct).ConfigureAwait(false) is { } existing)
+                await manager.DeleteAsync(existing, ct).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception ex) when (ex is OpenIddictExceptions.ConcurrencyException or Microsoft.EntityFrameworkCore.DbUpdateException or System.Data.Common.DbException)
+        {
+            LogRetireFailed(logger, clientId);
+        }
+    }
+
     /// <summary>Consulta con un scope propio: el DbContext del intento fallido puede tener la entidad rechazada rastreada.</summary>
     private async Task<bool> ClientExistsAsync(string clientId, CancellationToken ct)
     {
@@ -159,6 +183,9 @@ internal sealed partial class OidcClientSync(IServiceProvider services, ILogger<
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Cliente OIDC {ClientId} sincronizado por otra instancia al mismo tiempo; se deja su versión.")]
     private static partial void LogConcurrentSync(ILogger logger, string clientId);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo retirar el cliente OIDC {ClientId}; se reintenta en el próximo arranque.")]
+    private static partial void LogRetireFailed(ILogger logger, string clientId);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Cliente OIDC de servicio {ClientId} sin secreto: no se registra.")]
     private static partial void LogServiceClientSkipped(ILogger logger, string clientId);

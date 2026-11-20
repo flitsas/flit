@@ -65,6 +65,27 @@ internal static class ConsolidadoVigenciaTracker
     };
 
     /// <summary>
+    /// Bug #14631 — columnas de control que se escriben sin que cambie ningún dato del expediente.
+    /// El caso que lo destapó: <c>IdentityValidationReconcileProcessor</c> sella <c>updated_at</c> y
+    /// suma <c>reconcile_poll_count</c> en CADA sondeo de una validación Kyverum que sigue «en proceso»
+    /// (cada 10 min). Como la validación biométrica es un dato del FUR, cada sondeo sellaba
+    /// <c>expediente_actualizado_en</c> y encolaba la regeneración completa (FUR, compraventa, mandato,
+    /// certificados y consolidado) de los trámites con consolidado: en PDN, ~1.190 regeneraciones por
+    /// trámite en 9 días y ~70 % de las subidas al almacenamiento.
+    /// </summary>
+    private static readonly HashSet<string> CamposDeControl = new(StringComparer.Ordinal)
+    {
+        "UpdatedAt",
+        "UpdatedBy",
+        "RowVersion",
+        "ReconcilePollCount",
+    };
+
+    /// <summary>¿La fila modificada solo tocó <see cref="CamposDeControl"/>?</summary>
+    private static bool SoloCamposDeControl(EntityEntry entry) =>
+        entry.Properties.Where(p => p.IsModified).All(p => CamposDeControl.Contains(p.Metadata.Name));
+
+    /// <summary>
     /// Cambios del expediente de un <c>SaveChanges</c>. <see cref="Invalidar"/>: instancias con un
     /// consolidado vigente que bajar. <see cref="Datos"/>: instancias a las que les cambió un dato
     /// que imprime el FUR. <see cref="Expediente"/>: todas las instancias cuyo expediente cambió
@@ -102,6 +123,10 @@ internal static class ConsolidadoVigenciaTracker
                     recienGeneradas.Add(instancia.Id);
                 continue;
             }
+
+            // Bug #14631 — una fila que solo cambió campos de control no cambió el expediente.
+            if (entry.State == EntityState.Modified && SoloCamposDeControl(entry))
+                continue;
 
             if (IdDelExpediente(entry.Entity) is { } id)
             {

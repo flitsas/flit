@@ -4,14 +4,18 @@ package flit.tramites.v1;
 
 option csharp_namespace = "Flit.Tramites.Grpc.V1";
 
-// Catálogos de la plataforma que atiende core-api (ADR-0064, ADR-0070). Hoy solo los organismos de tránsito
-// (catalogs.transit_offices, el catálogo RUNT): Comparendos guarda su réplica y la sincroniza a diario (S-66, HU #13459).
+// Catálogos de la plataforma que atiende core-api (ADR-0064, ADR-0070): los organismos de tránsito
+// (catalogs.transit_offices, el catálogo RUNT), que Comparendos replica y sincroniza a diario (S-66, HU #13459), y los
+// tipos de trámite publicados (tramites.procedure_types), que Diagnóstico ofrece en su parametrización (HU #13731).
 //
-// Autenticación: token de servicio con `aud=tramites` y scope `platform.tramites.catalogos` (contrato v1.3 §3). Es un
-// catálogo global: la metadata `x-flit-tenant-id` no se usa.
+// Autenticación: token de servicio con `aud=tramites` y scope `platform.tramites.catalogos` (contrato v1.3 §3). Son
+// catálogos globales: la metadata `x-flit-tenant-id` no se usa.
 service CatalogosService {
   // Todos los organismos, activos e inactivos, ordenados por código.
   rpc ListarOrganismosTransito(ListarOrganismosTransitoRequest) returns (ListarOrganismosTransitoResponse);
+  // Solo los tipos publicados y activos, ordenados por código. Además del scope exige que el cliente de servicio esté en
+  // `Catalogos:TiposTramite:ClientesPermitidos` (hoy solo svc-diagnostico); otro cliente recibe PERMISSION_DENIED.
+  rpc ListarTiposTramite(ListarTiposTramiteRequest) returns (ListarTiposTramiteResponse);
 }
 
 message ListarOrganismosTransitoRequest {}
@@ -34,4 +38,22 @@ message OrganismoTransito {
   string municipio = 6;
   string departamento = 7;
   bool activo = 8;
+}
+
+message ListarTiposTramiteRequest {}
+
+message ListarTiposTramiteResponse {
+  repeated TipoTramite tipos = 1;
+}
+
+message TipoTramite {
+  // Código estable del tipo (por ejemplo TRASPASO_STANDARD). Los consumidores filtran por código, no por nombre.
+  string codigo = 1;
+  string nombre = 2;
+  // MATRICULAS, TRASPASO u OTROS.
+  string familia = 3;
+  // Siempre true en esta respuesta: los inactivos no se devuelven.
+  bool activo = 4;
+  // Barrera de operación (ADR-0050): el tipo puede elegirse al crear un trámite.
+  bool wizard_enabled = 5;
 }

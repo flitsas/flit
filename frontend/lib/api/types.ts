@@ -54,6 +54,10 @@ export interface CompanyPagedResult {
 }
 
 export interface CompaniesIndexParams {
+  /** HU #13998 — código contiene (COMP-XXXX). */
+  codigo?: string;
+  /** HU #13998 — uno o varios tipos separados por coma (OR entre ellos). */
+  tenantType?: string;
   nit?: string;
   razonSocial?: string;
   estadoActivo?: boolean;
@@ -674,6 +678,12 @@ export interface TenantDomainVerificationInstructions {
   txtValue: string;
   cnameName: string;
   cnameTarget: string;
+  /**
+   * Épica #14297 — solo los dominios del portal del OT: registro A hacia la IP del borde (`Domains:EdgeIp`).
+   * Si viene, el panel pinta la fila A en lugar del CNAME de marca blanca. `aValue` vacío = el ambiente no la tiene.
+   */
+  aName?: string;
+  aValue?: string;
 }
 
 export interface TenantDomainCertificate {

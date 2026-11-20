@@ -40,8 +40,8 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         id: "entrar",
         title: "1. Qué ves al entrar",
         paragraphs: [
-          "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Documentos, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
-          "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios.",
+          "Píldora «Administración» del dock (solo Administrador de compañía). Hoy se abre directo en dos pestañas: Representantes legales y Mandatarios. Es un cambio a propósito: antes veías la ficha completa de tu compañía (Trámites, Configuración Empresa, Usuarios, Historial de Cambios); esas secciones ahora las gestiona el equipo FLIT para proteger cambios sensibles.",
+          "Si administras una compañía hija desde el panel «Red de clientes» (solo cabezas de Concesión o Marca Blanca) y abres su ficha, ves una tercera pestaña, Usuarios, propia de esa hija: ahí resetas contraseñas y suspendes o desactivas sus usuarios. La tabla tiene buscador, selectores de perfil, rol y estado, y un embudo en cada columna (Nombre, Correo, Perfil, Rol, Estado, Fecha).",
         ],
         callouts: [
           {
@@ -70,7 +70,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         bullets: [
           "Trámites: qué familias puede radicar tu compañía (matrículas, traspasos, otros) y sus restricciones («Solo vehículos propios», validar SOAT ante el RUNT, etc.).",
           "Configuración Empresa: proveedores de consulta y de avalúo, a quién avisar al aprobar o rechazar un trámite, la lista blanca de correos para invitaciones, y los organismos de tránsito habilitados para tu compañía.",
-          "Documentos: plantillas y documentos personalizados que se generan dentro de los trámites.",
+          "Plantillas y documentos personalizados: los que se generan dentro de los trámites.",
           "Placas preasignadas: consulta de las placas que los organismos te han asignado.",
           "Historial de Cambios: quién cambió qué configuración de tu compañía y cuándo.",
         ],
@@ -109,6 +109,8 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
       "acordeon por compania",
       "nit",
       "bloque de identidad",
+      "filtrar mandatarios",
+      "filtros por columna",
       "modulo identidad",
       "estado de identidad",
     ],
@@ -126,6 +128,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
           "Registra la persona (tipo y número de documento, nombre; correo, dirección y ciudad opcionales).",
           "Dentro de su ficha, asocia las empresas que representa: por cada NIT, adjunta la escritura de constitución o poder (PDF) que respalda esa representación en los documentos del trámite.",
           "Asocia la firma del baúl para que los documentos la estampen automáticamente.",
+          "Encontrar a alguien: encima del directorio hay un buscador por nombre o documento y, en el encabezado de cada columna (Representante, Documento, Trámites, Firma / Identidad), un embudo para filtrarla; los dos se combinan. La firma de cada representante se gestiona en su ficha. Cómo funcionan los embudos: ver «Tablas: cómo leerlas y moverte entre páginas».",
         ],
       },
       {
@@ -139,6 +142,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
           "Validación de identidad del mandatario: al guardar un mandatario nuevo con Validación de identidad, le enviamos un enlace al correo para que valide su identidad; antes de guardar el formulario te lo avisa. Solo cuenta la validación hecha para ese mandatario (no la que la misma persona haya hecho como comprador o vendedor). Al editar, la ficha muestra el estado: «Pendiente de validación» (aún sin firma válida), «En curso», «Aprobada» o «Enlace vencido», y el botón «Reenviar validación» para volver a enviar el enlace (te confirma el correo de destino y se deshabilita mientras envía). Si cambias el tipo o el número de documento, o pasas de Baúl de firmas a Validación de identidad, el formulario te avisa antes de guardar que se enviará una nueva validación y que la anterior deja de contar. Con Baúl de firmas, Persona jurídica o Formato en blanco no aparece este bloque. Reactivar un mandatario no envía ninguna validación. Los mandatarios anteriores con Validación de identidad aparecen como «Pendiente de validación» hasta que completen el nuevo flujo; los de Baúl de firmas siguen igual.",
           "Organismos donde aplica: solo se ofrecen los habilitados para tu compañía. La firma de forma física ya no se ofrece.",
           "Sobre la lista se indica el formato de contrato de cada organismo habilitado, con el nombre vigente del catálogo. Lista de mandatarios: cada fila muestra el modelo, una columna «Validación» (solo con Validación de identidad) y una etiqueta de vigencia con texto e ícono: verde «Vigente», naranja «Por vencer» (faltan 7 días o menos para el fin), rojo «Vencido», rojo «Inactivo» y azul «Aún no vigente» si el rango todavía no empieza. En rango de fechas se indica hasta cuándo. Si el organismo de tránsito configuró un mandatario para tu compañía, su fila se ve en gris con un candado y la leyenda «Configurado por el organismo de tránsito»: puedes consultarlo, pero no editarlo ni eliminarlo (solo el organismo). Los mandatarios que registraste tú conservan sus acciones.",
+          "Encontrar un mandatario: encima de la lista hay un buscador por nombre o documento y un embudo en el encabezado de columnas como Mandatario, Documento, Modelo, Vigencia, Validación y Organismos. Si ningún mandatario cumple, verás «Ningún registro coincide con los filtros» y «Limpiar filtros».",
           "Desactivar, reactivar y eliminar: en cada fila tienes los iconos de editar, desactivar (o reactivar si está inactivo) y eliminar. Antes de desactivar o eliminar, el sistema revisa qué afecta. Si es el único mandatario activo de una compañía en un organismo, o es un default, el diálogo lista las compañías y organismos que quedarían sin mandatario y pide que confirmes; los trámites radicados sin aprobar se reasignan con la prelación (mandatario propio, asociado de otra compañía o default del organismo) y, si no queda nadie, el organismo decide al aprobar. Sin impacto basta una confirmación corta. Eliminar conserva el historial. Al terminar te dice cuántos trámites se reasignaron y cuántos quedan para el organismo. Reactivar no desplaza al mandatario que ya esté vigente: si hubo otro activo, el vínculo queda inactivo y se te avisa. Si el servidor responde «No tienes permiso», la fila no cambia. Persona jurídica y Formato en blanco no tienen vigencia y muestran un guion. Un mandatario eliminado no aparece.",
           "Compañías asociadas: el formulario se abre como una ventana (modal) por pasos (¿Quién firma?, Datos, ¿Cómo firma?, Vigencia y Dónde aplica) con un resumen que se actualiza mientras lo llenas. En «Dónde aplica», si tu compañía tiene compañías hijas, las ves completas, sin páginas: escribe en el buscador parte del nombre o del NIT para filtrar, marca las que quieras (quedan como chips con una «x» para quitarlas y un contador), y usa «Seleccionar las filtradas» o «Limpiar» para marcar o quitar varias de una vez. Es opcional: sin marcar ninguna, el mandatario aplica solo a tu compañía. Los organismos funcionan igual: con ocho o menos se muestran como chips que activas con un clic, y con más aparece el buscador. Si no tienes compañías hijas no hay lista y el formulario dice «Este mandatario aplica solo a su compañía». Ya no aparecen las empresas de los Representantes Legales.",
         ],
@@ -150,11 +154,14 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         ],
       },
       {
-        id: "convenio",
-        title: "3. Convenio con el organismo",
+        id: "firma-mandatario",
+        title: "3. Cómo firma el mandatario el contrato de mandato",
         paragraphs: [
-          "Cuando existe un convenio comercial registrado entre tu compañía y el organismo, el contrato de mandato no lleva recuadro de firma del mandatario: firma solo el mandante. Los datos del mandatario siguen en el cuerpo del contrato.",
-          "Sin convenio, el recuadro del mandatario lleva su firma así: con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash; con Validación de identidad, el trazo de la firma que hizo al validar su identidad con el mismo sello que el mandante: documento, UUID, firma y fecha de aprobación (y, si su vigencia es por rango, la fecha en que vence). Si su validación no está aprobada o está fuera de vigencia, el recuadro queda «Sin firmar».",
+          "Cómo sale el recuadro del mandatario en el contrato depende de dos cosas: el modelo, que eliges al registrar al mandatario, y el tipo de mandato, que fija Plataforma para cada compañía y organismo; por defecto es «Mandatario de la compañía». Con ese tipo, los datos del mandatario van en el cuerpo del contrato de mandato y el recuadro sale según el modelo, salvo que la configuración de mandato del organismo disponga otra cosa.",
+          "Persona natural: el recuadro lleva la firma así: con Baúl de firmas, la imagen de la firma del baúl con su vigencia y código hash; con Validación de identidad, el trazo de la firma que hizo al validar su identidad con el mismo sello que el mandante: documento, UUID, firma y fecha de aprobación (y, si su vigencia es por rango, la fecha en que vence). Si su validación no está aprobada o está fuera de vigencia, el recuadro queda «Sin firmar».",
+          "Persona jurídica: no tiene firma personal, así que el recuadro sale «Sin firmar», con la línea para firmar a mano y los datos de la entidad. Si en el baúl de firmas hay una firma vigente registrada con el NIT de la entidad, esa firma se estampa.",
+          "Formato en blanco: el recuadro sale «Sin firmar», con la línea para firmar a mano y el documento en blanco.",
+          "Si Plataforma fijó otro tipo de mandato para tu compañía en ese organismo, el modelo no cambia el resultado. Con «Institucional (organismo)», el contrato no lleva recuadro del mandatario y firma solo el mandante; el cuerpo nombra al organismo o a su unión temporal con su nombre y NIT si el formato de contrato los incluye; si no, esos datos quedan en blanco. Con «Abierto (sin mandatario)», nombre, documento y firma quedan en líneas en blanco, en el cuerpo y en el recuadro, para llenarse a mano; si el organismo tiene datos institucionales, pueden aparecer en el contrato. El recuadro también lleva la marca «Sin firmar».",
         ],
       },
     ],
@@ -205,6 +212,7 @@ export const ADMIN_COMPANY_ARTICLES: ManualArticle[] = [
         bullets: [
           "Agregar cliente a la red: razón social, NIT y tipo de compañía. El código lo asigna el sistema (COMP-XXXX). Nace vinculado a tu red.",
           "Activar / Desactivar cliente, con confirmación.",
+          "Encontrar un cliente: la tabla del Panel de red no tiene filtros arriba: usa el embudo del encabezado de cada columna (Cliente, NIT, Tipo, Estado y la fecha de vinculación).",
           "Invitar usuario a un cliente: eliges el cliente como destino y el rol (Administrador de compañía, Radicador, Gestor, Documentador, Validador u Operario full).",
           "Cada correo corresponde a un solo usuario en toda la plataforma, sin importar la compañía ni las mayúsculas (Juan@empresa.com y juan@empresa.com son el mismo). El correo se guarda siempre en minúsculas. Si ya existe un usuario con ese correo, o ya hay una invitación pendiente para él en cualquier compañía, la invitación no se crea, ves «El usuario ya se encuentra previamente creado» y el campo de correo queda marcado en rojo; corrige el correo para continuar.",
           "Administrar un cliente: abre su ficha para gestionar sus Representantes legales y Mandatarios (y sus Usuarios), con un aviso de que estás en un cliente de tu red.",

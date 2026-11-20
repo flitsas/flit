@@ -8,7 +8,6 @@ import type { TransitOffice } from "@/lib/api/types";
 vi.mock("@/lib/api/admin-companies", () => ({
   fetchTransitOffices: vi.fn(),
   fetchTransitGrants: vi.fn(),
-  fetchTransitAgreements: vi.fn(),
   fetchOtBlockingPolicies: vi.fn(),
   fetchOtConsultationRestrictions: vi.fn(),
   fetchOtPrendaDocumentPolicies: vi.fn(),
@@ -17,7 +16,6 @@ vi.mock("@/lib/api/admin-companies", () => ({
   addTransitBlock: vi.fn(),
   removeTransitBlock: vi.fn(),
   removeTransitGrant: vi.fn(),
-  setTransitAgreement: vi.fn(),
   setOtBlockingPolicy: vi.fn(),
   setOtConsultationRestriction: vi.fn(),
   setOtPrendaDocumentPolicy: vi.fn(),
@@ -39,7 +37,6 @@ import {
   fetchOtBlockingPolicies,
   fetchOtConsultationRestrictions,
   fetchOtPrendaDocumentPolicies,
-  fetchTransitAgreements,
   fetchTransitBlocks,
   fetchTransitGrants,
   fetchTransitOffices,
@@ -56,7 +53,6 @@ const offices: TransitOffice[] = [
 function arrange(grantedIds: string[]) {
   vi.mocked(fetchTransitOffices).mockResolvedValue(offices);
   vi.mocked(fetchTransitGrants).mockResolvedValue({ transitOfficeIds: grantedIds });
-  vi.mocked(fetchTransitAgreements).mockResolvedValue({ transitOfficeIds: [] });
   vi.mocked(fetchOtBlockingPolicies).mockResolvedValue([]);
   vi.mocked(fetchOtConsultationRestrictions).mockResolvedValue([]);
   vi.mocked(fetchOtPrendaDocumentPolicies).mockResolvedValue([]);

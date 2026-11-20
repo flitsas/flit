@@ -12,6 +12,7 @@ export type OtHubTabId =
   | "mandatos"
   | "imprint-validation"
   | "revocation-requests"
+  | "portal-persona-natural"
   | "configuracion";
 
 export interface OtHubTab {
@@ -45,6 +46,9 @@ export const OT_HUB_TABS: OtHubTab[] = [
   // HU #12578 (Feature #12565) — vista dedicada "Revocatorias": todos los intentos de solicitud de
   // revocatoria de los trámites del organismo, en cualquier sub-estado.
   { id: "revocation-requests", label: "Revocatorias", segment: "revocation-requests" },
+  // Épica #14297 / HU #14377 — marca (y, con otras HUs, precios y dominio) del portal Persona Natural del organismo.
+  // SuperAdmin y ot_admin, por rol (sin permiso delegable): por eso no está en OT_HUB_TAB_PERMISSION.
+  { id: "portal-persona-natural", label: "Portal Persona Natural", segment: "portal-persona-natural" },
   // Pedido del usuario (2026-09-16) — modo Dashboard/QX, ventana de revocatoria (HU #12569) y
   // feature flags operativos: antes SOLO vivían en la ruta legacy `tramites`, que dejó de estar
   // enlazada desde cualquier menú cuando este hub se reorganizó (quedó huérfana, solo por URL).
@@ -62,6 +66,7 @@ export const OT_ADM_DOCK = {
   mandatos: "ot-adm-mandatos",
   imprintValidation: "ot-adm-imprint-validation",
   webhooks: "ot-adm-webhooks",
+  portalPersonaNatural: "ot-adm-portal-persona-natural",
   configuracion: "ot-adm-configuracion",
 } as const;
 
@@ -166,4 +171,16 @@ export function matchesOtOfficeSearch(
   return (
     foldOtSearch(office.name).includes(folded) || foldOtSearch(office.code).includes(folded)
   );
+}
+
+/**
+ * Segmento `[id]` de la ruta del organismo cuando el token de la persona de caja no trae `tenant_id`. La caja nunca manda
+ * ese id a la API (el organismo sale de su token), solo sirve para armar la URL de Portal Persona Natural.
+ */
+export const SEGMENTO_ORGANISMO_PROPIO = "mi-organismo";
+
+/** Ruta de Portal Persona Natural → Caja de la persona de caja: su organismo es el de su token (`tenant_id`). */
+export function cajaPortalPath(tenantId: string | null | undefined, sub?: "cobrar" | "cobros" | "usuarios"): string {
+  const base = otHubModulePath(tenantId || SEGMENTO_ORGANISMO_PROPIO, "portal-persona-natural");
+  return `${base}?tab=caja${sub ? `&sub=${sub}` : ""}`;
 }

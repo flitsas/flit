@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { Paperclip } from 'lucide-react';
+import { Icono } from '@flit/ui/Icono';
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { SeccionCargando, SeccionError, SeccionVacia } from '@/components/operacion/detalle/primitivos';
@@ -159,7 +159,7 @@ export function AdminCargarDocumentoModal({ open, onClose, item, tenantId, onSuc
       onClose={onClose}
       title="Actualizar documento"
       titleClassName="text-base font-bold text-flit-brand"
-      icon={Paperclip}
+      icono="archivo"
       description={`Trámite ${item.referenceNumber} · Estado actual: ${estadoLabel(item.estado)}`}
       size="sm"
       busy={busy}
@@ -231,7 +231,7 @@ export function AdminCargarDocumentoModal({ open, onClose, item, tenantId, onSuc
                 className="inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-semibold transition hover:bg-flit-brand/[0.06] disabled:cursor-not-allowed disabled:opacity-60"
                 style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
               >
-                <Paperclip className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="archivo" className="h-3.5 w-3.5" />
                 {file ? 'Cambiar archivo' : 'Elegir archivo'}
               </button>
               {file ? (

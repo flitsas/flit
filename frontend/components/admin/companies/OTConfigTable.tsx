@@ -1,13 +1,23 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Check, Search, Settings2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { ActionsMenu } from "@/components/atom/ActionsMenu";
 import { StatusBadge } from "@/components/atom/StatusBadge";
+import { EncabezadoFiltrable } from "@/components/atom/FiltroColumna";
+import { TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
+import { usePaginacion } from "@/components/atom/usePaginacion";
 import { SwitchToggle } from "@/components/ui/SwitchToggle";
 import type { TransitOffice } from "@/lib/api/types";
 import { ApiValidationError } from "@/lib/api/types";
+import {
+  COLUMNAS_FILTRO_OT_CONFIG,
+  filtrarOrganismosOtConfig,
+} from "@/lib/companies/ot-config-filtros";
+import { useTablaFiltros, type TablaFiltrosEstado } from "@/lib/tablas/useTablaFiltros";
+import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 
 /** Estado operativo de un OT en FLIT (HU #10518) para bloquear habilitación. */
 export interface OtOperationalInfo {
@@ -31,13 +41,6 @@ export interface OTConfigTableProps {
   operationalById?: Record<string, OtOperationalInfo>;
   /** Persiste el cambio de grant (POST si enabled, DELETE si !enabled). */
   onToggleGrant: (officeId: string, enabled: boolean) => Promise<void>;
-  /**
-   * Ids de OT con los que la compañía tiene CONVENIO comercial. Distinto de `grantedIds`: aquel
-   * habilita la radicación, este decide si el contrato de mandato lleva bloque de firma del mandatario.
-   */
-  agreementIds?: string[];
-  /** Persiste el cambio de convenio. Sin este callback la columna no se pinta. */
-  onToggleAgreement?: (officeId: string, active: boolean) => Promise<void>;
   /** Abre el modal unificado de configuración (bloqueos + restricciones) scoped a ese OT. */
   onOpenConfig: (office: TransitOffice) => void;
   /** Notificación opcional de error de persistencia (toast). */
@@ -45,12 +48,18 @@ export interface OTConfigTableProps {
   /** HU #12357 AC7 — deshabilita switches y menú de configuración. */
   readOnly?: boolean;
   /**
-   * Bug #13055 — búsqueda controlada por el contenedor. Cuando el contenedor pagina, tiene que
-   * filtrar ANTES de cortar la página (si no, solo se busca en las filas visibles): la tabla pinta
-   * el campo y ya no filtra por término. Sin estas props la tabla busca sobre `offices` como antes.
+   * Búsqueda controlada por el contenedor (Bug #13055). Cuando el contenedor pagina, tiene que filtrar
+   * ANTES de cortar la página: la tabla solo pinta el campo y ya no filtra por término. Sin estas props
+   * la tabla busca sobre `offices` como antes.
    */
   search?: string;
   onSearchChange?: (value: string) => void;
+  /**
+   * Filtros por columna controlados por el contenedor (HU #14003): embudo en el encabezado de cada
+   * columna. Mismo criterio: el contenedor filtra ANTES de paginar. Sin esta prop la tabla filtra
+   * sobre `offices` con su propio estado. Columnas: `COLUMNAS_FILTRO_OT_CONFIG`.
+   */
+  filtros?: TablaFiltrosEstado;
 }
 
 /** ¿El organismo coincide con el término? Nombre o código, sin mayúsculas ni tildes. */
@@ -59,10 +68,24 @@ export function officeMatchesSearch(office: TransitOffice, term: string): boolea
   return !folded || fold(office.name).includes(folded) || fold(office.code).includes(folded);
 }
 
+/** Normaliza para comparación: minúsculas + sin tildes españolas. */
+function fold(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[áàäâã]/g, "a")
+    .replace(/[éèëê]/g, "e")
+    .replace(/[íìïî]/g, "i")
+    .replace(/[óòöôõ]/g, "o")
+    .replace(/[úùüû]/g, "u")
+    .replace(/ñ/g, "n");
+}
+
 /** Deriva si un OT es operable y, si no, la razón para el badge. */
-function operability(
-  info: OtOperationalInfo | undefined,
-): { operable: boolean; reason: string | null } {
+function operability(info: OtOperationalInfo | undefined): {
+  operable: boolean;
+  reason: string | null;
+} {
   if (!info) {
     return { operable: true, reason: null };
   }
@@ -78,8 +101,6 @@ function operability(
 export function OTConfigTable({
   offices,
   grantedIds,
-  agreementIds = [],
-  onToggleAgreement,
   operationalById,
   onToggleGrant,
   onOpenConfig,
@@ -87,56 +108,51 @@ export function OTConfigTable({
   readOnly = false,
   search: searchProp,
   onSearchChange,
+  filtros: filtrosProp,
 }: OTConfigTableProps) {
+  // HU #13918 — paginación estándar en cliente SOLO cuando la tabla filtra por su cuenta. Con filtros
+  // controlados el contenedor (OTConfigTablePanel) ya filtra y corta la página, con su propia clave.
+  const pg = usePaginacion("companies.OTConfigTable");
+  const filtrosControlados = filtrosProp !== undefined;
+  const filtrosPropios = useTablaFiltros({
+    columnas: COLUMNAS_FILTRO_OT_CONFIG,
+    onCambio: () => pg.setPage(1),
+  });
+  const filtros = filtrosProp ?? filtrosPropios;
   const [searchState, setSearchState] = useState("");
   const searchControlled = searchProp !== undefined;
   const search = searchControlled ? searchProp : searchState;
-  const setSearch = searchControlled ? (value: string) => onSearchChange?.(value) : setSearchState;
+  const setSearch = searchControlled
+    ? (value: string) => onSearchChange?.(value)
+    : (value: string) => {
+        setSearchState(value);
+        pg.setPage(1);
+      };
+  // La página la corta el contenedor cuando controla el buscador o los embudos.
+  const paginaControlada = filtrosControlados || searchControlled;
+  // «Limpiar filtros» quita también el buscador de arriba.
+  const limpiarTodo = () => {
+    filtros.limpiar();
+    setSearch("");
+  };
   const [granted, setGranted] = useState<Set<string>>(() => new Set(grantedIds));
   const [pending, setPending] = useState<Set<string>>(() => new Set());
   // IDs con confirmación "Guardado" visible unos segundos tras persistir con éxito.
   const [justSaved, setJustSaved] = useState<Set<string>>(() => new Set());
-  const [agreements, setAgreements] = useState<Set<string>>(() => new Set(agreementIds));
-  const [pendingAgreement, setPendingAgreement] = useState<Set<string>>(() => new Set());
-
-  /** Conmuta el convenio con UI optimista y rollback, igual que el grant. */
-  const handleToggleAgreement = async (office: TransitOffice) => {
-    const activar = !agreements.has(office.id);
-    setAgreements((current) => {
-      const next = new Set(current);
-      if (activar) next.add(office.id);
-      else next.delete(office.id);
-      return next;
-    });
-    setPendingAgreement((current) => new Set(current).add(office.id));
-
-    try {
-      await onToggleAgreement!(office.id, activar);
-    } catch {
-      setAgreements((current) => {
-        const next = new Set(current);
-        if (activar) next.delete(office.id);
-        else next.add(office.id);
-        return next;
-      });
-      onError?.(`No se pudo ${activar ? "marcar" : "quitar"} el convenio con ${office.name}.`);
-    } finally {
-      setPendingAgreement((current) => {
-        const next = new Set(current);
-        next.delete(office.id);
-        return next;
-      });
-    }
-  };
 
   const filtered = useMemo(() => {
     const base = readOnly ? offices.filter((o) => granted.has(o.id)) : offices;
-    // Controlada: el contenedor ya filtró sobre la lista completa.
-    if (searchControlled) {
+    // Controlados: el contenedor ya filtró sobre la lista completa.
+    if (paginaControlada) {
       return base;
     }
-    return base.filter((o) => officeMatchesSearch(o, search));
-  }, [offices, search, searchControlled, readOnly, granted]);
+    return filtrarOrganismosOtConfig(
+      base.filter((o) => officeMatchesSearch(o, search)),
+      filtros.condicionesTotales,
+      "",
+      granted,
+    );
+  }, [offices, search, filtros.condicionesTotales, paginaControlada, readOnly, granted]);
 
   const handleToggleGrant = async (office: TransitOffice) => {
     const enable = !granted.has(office.id);
@@ -176,8 +192,7 @@ export function OTConfigTable({
       });
       // HU #10518: si el backend rechaza el grant (422), mostrar su mensaje (OT sin
       // alta / inactivo); si no, el fallback genérico.
-      const serverMessage =
-        err instanceof ApiValidationError ? err.errors[0]?.message : undefined;
+      const serverMessage = err instanceof ApiValidationError ? err.errors[0]?.message : undefined;
       onError?.(
         serverMessage ?? `No se pudo ${enable ? "habilitar" : "deshabilitar"} ${office.name}.`,
       );
@@ -193,17 +208,29 @@ export function OTConfigTable({
   const columns: DataTableColumn<TransitOffice>[] = [
     {
       key: "name",
-      header: "Organismo",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="name">
+          Organismo
+        </EncabezadoFiltrable>
+      ),
       render: (office) => <span className="font-semibold">{office.name}</span>,
     },
     {
       key: "code",
-      header: "Código",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="code">
+          Código
+        </EncabezadoFiltrable>
+      ),
       render: (office) => <span className="font-mono opacity-60">{office.code}</span>,
     },
     {
       key: "estado",
-      header: "Estado",
+      header: (
+        <EncabezadoFiltrable filtros={filtros} columnaId="estado">
+          Estado
+        </EncabezadoFiltrable>
+      ),
       render: (office) => {
         const checked = granted.has(office.id);
         if (readOnly) {
@@ -235,17 +262,17 @@ export function OTConfigTable({
               <span
                 role="status"
                 className="flex items-center gap-1 text-xs font-semibold"
-                style={{ color: "#0a8f8b" }}
+                style={{ color: "var(--flit-success-ink)" }}
               >
-                <Check className="h-3 w-3" /> Guardado
+                <Icono nombre="check" className="h-3 w-3" /> Guardado
               </span>
             ) : null}
             {reason && (
               <span
                 id={reasonId}
-                className="inline-block rounded-full border px-2 py-0.5 text-xs font-semibold"
-                style={{ color: "#b25a00", borderColor: "#f0c38e", background: "#fff7ed" }}
+                {...etiquetaKit("warning")}
               >
+                <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
                 {reason} en FLIT
               </span>
             )}
@@ -253,31 +280,6 @@ export function OTConfigTable({
         );
       },
     },
-    // El convenio solo se ofrece si el contenedor sabe persistirlo. No depende del grant: son cosas
-    // distintas y una compañía puede tener acuerdo comercial sin estar habilitada para radicar todavía.
-    ...(onToggleAgreement
-      ? [
-          {
-            key: "convenio",
-            header: "Convenio",
-            render: (office: TransitOffice) => {
-              const checked = agreements.has(office.id);
-              const isPending = pendingAgreement.has(office.id);
-              return (
-                <div className="flex flex-wrap items-center gap-2">
-                  <SwitchToggle
-                    checked={checked}
-                    disabled={isPending}
-                    onChange={() => void handleToggleAgreement(office)}
-                    label={`${checked ? "Quitar" : "Marcar"} convenio con ${office.name}`}
-                  />
-                  {isPending && <span className="text-xs opacity-60">Guardando…</span>}
-                </div>
-              );
-            },
-          } satisfies DataTableColumn<TransitOffice>,
-        ]
-      : []),
     ...(readOnly
       ? []
       : [
@@ -294,10 +296,11 @@ export function OTConfigTable({
                     {
                       key: "config",
                       label: "Configurar",
-                      icon: Settings2,
+                      icon: iconoComo("ajustes"),
                       onSelect: () => onOpenConfig(office),
                       disabled: !enabledForConfig,
-                      disabledReason: "Habilita este organismo para configurar bloqueos y restricciones.",
+                      disabledReason:
+                        "Habilita este organismo para configurar bloqueos y restricciones.",
                     },
                   ]}
                 />
@@ -318,8 +321,8 @@ export function OTConfigTable({
         </p>
       </div>
 
-      <div className="flex max-w-md items-center gap-2 rounded-xl border bg-white p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand dark:bg-[#0B0F14]">
-        <Search className="h-4 w-4 opacity-60" />
+      <div className="flex max-w-md items-center gap-2 rounded-xl border bg-card p-2.5 focus-within:outline focus-within:outline-2 focus-within:outline-flit-brand">
+        <Icono nombre="buscar" className="h-4 w-4 opacity-60" />
         <label htmlFor="ot-config-search" className="sr-only">
           Buscar organismo de tránsito
         </label>
@@ -332,27 +335,31 @@ export function OTConfigTable({
         />
       </div>
 
-      <DataTable
-        columns={columns}
-        rows={filtered}
-        getRowKey={(office) => office.id}
-        emptyMessage="Ningún organismo coincide con la búsqueda."
-        ariaLabel="Organismos de tránsito"
-        minWidth={640}
-      />
+      {(
+        <DataTable
+          tarjeta={false}
+          emptyContent={
+            filtros.hayFiltros ? <TablaFiltrosVacio onLimpiar={limpiarTodo} /> : undefined
+          }
+          columns={columns}
+          rows={paginaControlada ? filtered : pg.paginar(filtered)}
+          getRowKey={(office) => office.id}
+          emptyMessage="Ningún organismo coincide con la búsqueda."
+          ariaLabel="Organismos de tránsito"
+          minWidth={640}
+          pagination={
+            paginaControlada
+              ? undefined
+              : {
+                  page: pg.page,
+                  pageSize: pg.pageSize,
+                  totalCount: filtered.length,
+                  onPageChange: pg.setPage,
+                  onPageSizeChange: pg.setPageSize,
+                }
+          }
+        />
+      )}
     </section>
   );
-}
-
-/** Normaliza para comparación: minúsculas + sin tildes españolas. */
-function fold(value: string): string {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[áàäâã]/g, "a")
-    .replace(/[éèëê]/g, "e")
-    .replace(/[íìïî]/g, "i")
-    .replace(/[óòöôõ]/g, "o")
-    .replace(/[úùüû]/g, "u")
-    .replace(/ñ/g, "n");
 }

@@ -2530,12 +2530,19 @@ export const tramitesClient = {
   // POST generar expediente consolidado (matrícula inicial). Fusiona FUR + adjuntos.
   // 409 fur_requerido | documentos_incompletos | modalidad_no_soportada.
   // Feature #11066 — `force=true` invalida caché y regenera desde cero (sin duplicar).
-  generarConsolidado: (instanceId: string, tenantId?: string, force = false) =>
+  // Bug #14631 — `signal` opcional: permite al llamador poner un tope de espera (AbortController).
+  generarConsolidado: (
+    instanceId: string,
+    tenantId?: string,
+    force = false,
+    signal?: AbortSignal,
+  ) =>
     request<GenerarConsolidadoResult>(
       `/api/v1/tramites/instances/${instanceId}/consolidado${force ? '?force=true' : ''}`,
       {
         method: 'POST',
         headers: tenantHeader(tenantId),
+        ...(signal ? { signal } : {}),
       },
     ),
 
@@ -2869,6 +2876,35 @@ export const tramitesClient = {
       },
     ),
 
+  /** HU #13825 (backend #13824) — vence una identidad aprobada y vigente (solo Super Admin; sin body). */
+  vencerIdentidad: (validationId: string) =>
+    request<VencerIdentidadResult>(
+      `/api/v1/tramites/biometric-validations/${validationId}/vencer`,
+      { method: 'POST' },
+    ),
+
+  /** HU #13822 (Feature #13819) — personas SIN firmar a las que se puede reenviar la validación. */
+  adminListValidacionesReenviables: (instanceId: string, tenantId?: string) =>
+    request<AdminValidacionesReenviablesResult>(
+      `/api/v1/admin/tramites/${instanceId}/validaciones-identidad/reenviables`,
+      { headers: tenantHeader(tenantId) },
+    ),
+
+  /** HU #13822 — reenvía la validación a varias personas a la vez (1..8), resultado por persona. */
+  adminReenviarValidacionesLote: (
+    instanceId: string,
+    items: AdminReenviarLoteItemInput[],
+    tenantId?: string,
+  ) =>
+    request<AdminReenviarLoteResult>(
+      `/api/v1/admin/tramites/${instanceId}/validaciones-identidad/reenviar`,
+      {
+        method: 'POST',
+        headers: tenantHeader(tenantId),
+        body: JSON.stringify({ items }),
+      },
+    ),
+
   /** HU #12162 — reasigna `AssignedToUserId` a otro gestor DISPONIBLE del mismo tenant. */
   adminReasignarGestor: (instanceId: string, newAssignedToUserId: string, tenantId?: string) =>
     request<AdminReasignarGestorResult>(
@@ -2945,6 +2981,88 @@ export interface AdminReenviarValidacionResult {
   emailActualizado: boolean;
   /** `true` = 202 Accepted (falla transitoria del proveedor; el worker reintenta). */
   queued: boolean;
+}
+
+/** HU #13825 — resultado de vencer una identidad (espejo de `VencerIdentidadResult`). */
+export interface VencerIdentidadResult {
+  validationId: string;
+  tenantId: string;
+  procedureInstanceId: string | null;
+  vencidaAt: string;
+  borradoresAfectados: number;
+  enlaceEnviado: boolean;
+  nuevaValidacionId: string | null;
+  tramiteBorradorId: string | null;
+  tramiteBorradorReferencia: string | null;
+  /** Absoluta con Kyverum; relativa (`/biometric/{token}`) con el proveedor mock. */
+  enlaceCaptura: string | null;
+  enCola: boolean;
+  /** sin_borradores | validacion_en_curso | proveedor_error | proveedor_no_disponible | datos_incompletos | actor_requerido */
+  motivoSinEnlace: string | null;
+}
+
+/**
+ * HU #13822 — persona sin firmar que admite reenvío (espejo del contrato HU #13821).
+ *
+ * HU #14627 — `validationId` pasa a ser `string | null`: `null` = la persona NUNCA tuvo una
+ * validación de identidad (no hay fila que reenviar, status `'no_iniciada'`), caso que antes el
+ * backend no contemplaba en este listado — solo exponía personas con fila ya existente.
+ */
+export interface AdminValidacionReenviable {
+  validationId: string | null;
+  partyRole: string | null;
+  ordinal: number | null;
+  name: string;
+  email: string | null;
+  status: string;
+  captureUrl: string | null;
+  captureExpiresAt: string | null;
+  esFlujoManual: boolean;
+}
+
+export interface AdminValidacionesReenviablesResult {
+  personas: AdminValidacionReenviable[];
+}
+
+/**
+ * HU #14627 — `validationId` nullable (fila sin iniciar) y `partyRole`/`ordinal` NUEVOS, obligatorios
+ * cuando `validationId` es `null` (el backend no tiene otra forma de saber a qué persona crear la
+ * fila); se envían siempre, también con `validationId` presente, para que el backend los pueda
+ * usar igual como echo en el resultado.
+ */
+export interface AdminReenviarLoteItemInput {
+  validationId: string | null;
+  partyRole: string | null;
+  ordinal: number | null;
+  email: string | null;
+}
+
+/**
+ * HU #14627 — `validationId` del resultado es `string | null`: id REAL (el existente, o el recién
+ * creado al enviar por primera vez) cuando el ítem tuvo éxito; `null` solo si falló ANTES de crear la
+ * fila (`ok: false`). `partyRole`/`ordinal` son el echo del item enviado — clave de emparejamiento
+ * estable entre request y resultado, tanto para filas existentes como nuevas.
+ *
+ * Nota de implementación — verificado contra el backend ya mergeado en esta rama (commit
+ * `4d4985300`, `AdminReenviarValidacionLoteItemResponse` en `AdminReenviarValidacionEndpoints.cs`):
+ * el contrato que se dio para implementar el frontend decía `validationId: string` SIN cambio de
+ * tipo en el resultado; el backend real lo deja `Guid?` (nullable). Se ajusta aquí al tipo real.
+ */
+export interface AdminReenviarLoteItemResult {
+  validationId: string | null;
+  partyRole: string | null;
+  ordinal: number | null;
+  ok: boolean;
+  queued: boolean;
+  captureUrl: string | null;
+  emailActualizado: boolean;
+  email: string | null;
+  error: string | null;
+  mensaje: string | null;
+}
+
+export interface AdminReenviarLoteResult {
+  items: AdminReenviarLoteItemResult[];
 }
 
 /** HU #12162 — resultado de la reasignación administrativa de gestor. */

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, FileText, Paperclip, X } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { useId, useRef, useState, type ReactNode } from "react";
 import { DR_FLIT_SUPPORT_MAX_ATTACHMENTS } from "@/lib/api/dr-flit-client";
 import type {
@@ -16,6 +16,7 @@ import {
   type DrFlitSupportErrors,
   type DrFlitSupportField,
 } from "./dr-flit-support-case";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 
 const FREQUENCIES: DrFlitSupportFrequency[] = ["una_vez", "a_veces", "siempre"];
 const PRIORITIES: DrFlitSupportPriority[] = ["Alta", "Media", "Baja"];
@@ -109,7 +110,7 @@ export function DrFlitSupportCaseForm({
   const errorText = (field: DrFlitSupportField) =>
     errors[field] ? (
       <span id={errorId(field)} className="mt-1 flex items-center gap-1 text-xs" style={{ color: "var(--dr-flit-text)" }}>
-        <AlertCircle className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--dr-flit-accent)" }} aria-hidden="true" />
+        <IconoAviso tipo="error" className="h-3.5 w-3.5 shrink-0" />
         {errors[field]}
       </span>
     ) : null;
@@ -125,7 +126,7 @@ export function DrFlitSupportCaseForm({
     <div>
       <label htmlFor={fieldId(field)} className="block text-xs font-semibold" style={{ color: "var(--dr-flit-text)" }}>
         {label}
-        {options.required !== false ? <span aria-hidden="true"> *</span> : <span className="font-normal"> (opcional)</span>}
+        {options.required !== false ? <span aria-hidden="true"> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span> : <span className="font-normal"> (opcional)</span>}
       </label>
       <input
         id={fieldId(field)}
@@ -149,7 +150,7 @@ export function DrFlitSupportCaseForm({
     <div>
       <label htmlFor={fieldId(field)} className="block text-xs font-semibold" style={{ color: "var(--dr-flit-text)" }}>
         {label}
-        <span aria-hidden="true"> *</span>
+        <span aria-hidden="true"> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
       </label>
       <textarea
         id={fieldId(field)}
@@ -177,7 +178,7 @@ export function DrFlitSupportCaseForm({
     <fieldset aria-describedby={errors[field] ? errorId(field) : undefined}>
       <legend className="text-xs font-semibold" style={{ color: "var(--dr-flit-text)" }}>
         {legend}
-        <span aria-hidden="true"> *</span>
+        <span aria-hidden="true"> <Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
       </legend>
       <div className="mt-1.5 flex flex-wrap gap-2">
         {values.map((value, index) => {
@@ -234,7 +235,7 @@ export function DrFlitSupportCaseForm({
 
       {hasErrors ? (
         <p role="alert" className="flex items-center gap-2 rounded-lg border px-3 py-2 text-xs" style={{ borderColor: "var(--dr-flit-accent)", color: "var(--dr-flit-text)" }}>
-          <AlertCircle className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-accent)" }} aria-hidden="true" />
+          <IconoAviso tipo="error" className="h-4 w-4 shrink-0" />
           Revisa los campos marcados antes de continuar.
         </p>
       ) : null}
@@ -286,7 +287,7 @@ export function DrFlitSupportCaseForm({
             className="flex flex-col items-center gap-1.5 rounded-[var(--dr-flit-radius-card)] border-2 border-dashed px-3 py-4 text-center"
             style={{ borderColor: "var(--dr-flit-brand-blue)", background: "var(--dr-flit-card-bg)" }}
           >
-            <Paperclip className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} aria-hidden="true" />
+            <Icono nombre="archivo" className="h-5 w-5" style={{ color: "var(--dr-flit-brand-blue)" }} />
             <label htmlFor={fieldId("archivos")} className="cursor-pointer text-sm font-semibold" style={{ color: "var(--dr-flit-brand-blue)" }}>
               {uploading ? "Subiendo…" : "Elegir archivos"}
             </label>
@@ -306,7 +307,7 @@ export function DrFlitSupportCaseForm({
           </div>
           {attachError ? (
             <p role="alert" className="flex items-center gap-1 text-xs" style={{ color: "var(--dr-flit-text)" }}>
-              <AlertCircle className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--dr-flit-accent)" }} aria-hidden="true" />
+              <IconoAviso tipo="error" className="h-3.5 w-3.5 shrink-0" />
               {attachError}
             </p>
           ) : null}
@@ -318,7 +319,7 @@ export function DrFlitSupportCaseForm({
                   className="flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs"
                   style={{ borderColor: "var(--dr-flit-border)", color: "var(--dr-flit-text)" }}
                 >
-                  <FileText className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-brand-blue)" }} aria-hidden="true" />
+                  <Icono nombre="documento" className="h-4 w-4 shrink-0" style={{ color: "var(--dr-flit-brand-blue)" }} />
                   <span className="min-w-0 flex-1 truncate">{a.filename}</span>
                   <span style={{ color: "var(--dr-flit-text-secondary)" }}>{formatSize(a.sizeBytes)}</span>
                   <button
@@ -327,7 +328,7 @@ export function DrFlitSupportCaseForm({
                     aria-label={`Quitar ${a.filename}`}
                     className="rounded-full p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)]"
                   >
-                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                    <Icono nombre="cerrar" className="h-3.5 w-3.5" />
                   </button>
                 </li>
               ))}
@@ -340,7 +341,7 @@ export function DrFlitSupportCaseForm({
         <button
           type="submit"
           disabled={uploading}
-          className="w-full rounded-full px-4 py-3 text-sm font-semibold text-white transition-opacity hover:opacity-95 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
+          className="w-full rounded-full px-4 py-3 text-sm font-semibold text-(--dr-flit-text-inverse) transition-opacity hover:opacity-95 disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--dr-flit-focus)] focus-visible:ring-offset-2"
           style={{ background: "var(--dr-flit-gradient-primary)" }}
         >
           Continuar

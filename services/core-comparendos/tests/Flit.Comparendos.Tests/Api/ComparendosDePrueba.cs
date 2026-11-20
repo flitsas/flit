@@ -64,6 +64,14 @@ public static class ComparendosDePrueba
         return await api.EnDbAsync(db => db.Comparendos.Where(c => c.TenantId == empresa).ToDictionaryAsync(c => c.NumeroNormalizado, c => c.Id));
     }
 
+    /// <summary>HU #13712: el SuperAdmin marca (o desmarca) todos los NIT de la empresa para consultar la API de contratos.</summary>
+    public static async Task ConsultaPorApiDeLosNitsAsync(ApiConFuente api, Guid empresa, bool activo = true)
+    {
+        var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
+        foreach (var nit in await api.EnDbAsync(db => db.IdentificacionesMonitoreadas.Where(n => n.TenantId == empresa).Select(n => n.Id).ToListAsync()))
+            (await super.PutAsJsonAsync($"/api/v1/comparendos/admin/empresas/{empresa}/nits/{nit}/consulta-contrato", new { activo })).EnsureSuccessStatusCode();
+    }
+
     public static ItemFuente Item(string numero, string placa = "ABC124", DateOnly? notificacion = null, bool fotomulta = true, decimal valor = 604100m) => new()
     {
         Numero = numero, Placa = placa, FechaImposicion = new DateOnly(2026, 9, 28), FechaNotificacion = notificacion ?? new DateOnly(2026, 10, 1), EsFotomulta = fotomulta,

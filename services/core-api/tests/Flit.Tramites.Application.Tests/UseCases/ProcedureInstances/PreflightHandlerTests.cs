@@ -1470,11 +1470,10 @@ public sealed class PreflightHandlerTests
     }
 
     [Fact]
-    public async Task Post_Traspaso_ProveedorDeComparendosNoRegistrado_AgregaCheckError()
+    public async Task Post_Traspaso_ProveedorDeComparendosNoRegistrado_AgregaCheckWarnSinBloquear()
     {
-        // Si el resolver apunta a un proveedor ausente del registro, degrada a check "error" con la
-        // key del actor, sin lanzar. Es la ventana que evita registrar los proveedores antes de
-        // cablear el resolver (HU10756/10757 van antes que esta).
+        // Si el resolver apunta a un proveedor ausente del registro, degrada a check "warn" (no
+        // bloquea el trámite) con la key del actor, sin lanzar.
         var ct = TestContext.Current.CancellationToken;
         var instance = Instance("traspaso", actors: [Actor("comprador", "111"), Actor("vendedor", "222")]);
         _repo.GetByIdWithWizardGraphAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), ct).Returns(instance);
@@ -1485,8 +1484,9 @@ public sealed class PreflightHandlerTests
         var (result, error, _, _) = await handler.HandleAsync(instance.Id, instance.TenantId, ct);
 
         error.Should().BeNull();
-        result!.Checks.Should().Contain(c => c.Key == "simit_comprador" && c.Status == "error");
+        result!.Checks.Should().Contain(c => c.Key == "simit_comprador" && c.Status == "warn");
         result.Checks.Single(c => c.Key == "simit_comprador").Source.Should().Be("flit_fines");
+        result.Overall.Should().NotBe("red");
     }
 
     [Fact]

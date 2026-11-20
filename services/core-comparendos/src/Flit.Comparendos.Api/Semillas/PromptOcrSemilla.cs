@@ -9,6 +9,9 @@ namespace Flit.Comparendos.Api.Semillas;
 /// de la muestra real de comparendos (947 documentos, 44 con referencia escrita a mano, HU #13469): qué no es del
 /// comparendo (sellos de la empresa), dónde está cada campo en los formatos que se repiten y las burbujas de la orden
 /// nacional. Se mide con tools/evaluar-ocr antes de cambiarlo.
+/// La semilla solo entra en una base vacía: en los ambientes que ya tienen versiones, un cambio de este texto llega como
+/// versión nueva creada por el SuperAdmin en §7.24 (crear → evaluar contra la publicada → publicar). Así entró la regla
+/// del número literal del GDC punto 14 (sin la pista de «casi siempre 20 dígitos»).
 /// </summary>
 public static class PromptOcrSemilla
 {
@@ -50,14 +53,18 @@ public static class PromptOcrSemilla
           «Fecha: 2026/02/24 10:55 AM», «Tpo: ORDEN DE COMPARENDO», «RECIBIDO 09 ENE 2026». El radicado de la empresa NO es el
           número del comparendo. Solo sirven para la fecha de notificación (ver abajo).
         - La «Contraseña» o el código de consulta web, la placa o el número del agente, el certificado de calibración, el
-          código de barras, la velocidad medida o permitida, el modelo del vehículo y las coordenadas.
+          código de barras (salvo para comprobar el número del comparendo, ver abajo), la velocidad medida o permitida, el modelo del vehículo y las coordenadas.
         - «Matriculado en», «Org. de tránsito» de la licencia o el municipio que aparece bajo la placa: es donde está matriculado
           el vehículo, no quien impone el comparendo.
 
         CAMPO POR CAMPO
         - numero_comparendo: el número de la orden de comparendo («Orden de comparendo único nacional N°», «Comparendo N°»,
-          «Informe de tránsito comparendo No.»). Cópialo completo y sin espacios, con la letra inicial si la tiene
-          (D05001000000054280231) y sin quitar ceros a la izquierda (08078001…). Casi siempre tiene 20 dígitos (más la letra).
+          «Informe de tránsito comparendo No.»). Cópialo carácter por carácter, tal como está impreso en la cabecera, sin
+          espacios, con la letra inicial si la tiene (D05001000000054280231) y sin quitar ceros a la izquierda (08078001…).
+          La cantidad de dígitos cambia según el organismo: no completes ni quites ceros ni dígitos para llegar a una longitud.
+          Si el número también viene impreso bajo el código de barras, compáralos y cuenta los dígitos de los dos, sobre todo
+          en las cadenas largas de ceros: deben ser idénticos. Si no coinciden, usa el que se lea con más claridad, baja la
+          confianza a 0.5 o menos y dilo en "_lectura".
         - codigo_organismo: los primeros 8 dígitos del número del comparendo, sin la letra (D05001000… → 05001000).
         - secretaria: el organismo que impone (encabezado, logo, «Entidad» del agente). Si el lugar de la infracción es otro
           municipio (una vía departamental), el organismo sigue siendo el del encabezado.

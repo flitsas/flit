@@ -11,6 +11,8 @@ export interface NavSection {
   icon: NavIcon;
   /** Lado del botón de inicio en el dock. Declarado, no por mitades (HU #12723). */
   side: "left" | "right";
+  /** Ruta de la ilustración de la píldora (HU #14479); sin ella, el ícono de línea. */
+  ilustracion?: string;
 }
 
 export interface NavItem {
@@ -20,6 +22,10 @@ export interface NavItem {
   href: string;
   section: string;
   icon: NavIcon;
+  /** Ruta de la ilustración (HU #14479); sin ella, el ícono de línea. */
+  ilustracion?: string;
+  /** Para qué sirve, en pocas palabras, bajo el nombre en el submenú (HU #14479). Opcional. */
+  descripcion?: string;
   /** Permiso del token que lo muestra (con una lista, basta uno). Sin permiso, lo ve todo el que entra al producto. */
   permission?: string | string[];
   /** Módulo RBAC del producto (`security.modules`, contrato §4) que tiene que estar entre los del usuario. */
@@ -30,6 +36,11 @@ export interface NavItem {
   superAdminOnly?: boolean;
   /** Un nivel de submenú (p. ej. Administradores → Plataforma → Mandatos). Un contenedor lleva `href: ""`. */
   children?: NavItem[];
+  /**
+   * Con `children`: el contenedor es un submenú que se despliega DENTRO del mismo panel (botón con ▸/▾ y `aria-expanded`), en
+   * lugar de una sección con título siempre abierta. Sin esto, el comportamiento es el de siempre.
+   */
+  desplegable?: boolean;
 }
 
 /** El orden del dock sale de `sections`, nunca del orden de `items` (guía §2, Contrato A). */
@@ -53,14 +64,19 @@ export interface DockEntry {
   label: string;
   href: string;
   icon: NavIcon;
+  ilustracion?: string;
+  descripcion?: string;
   active: boolean;
   children?: DockEntry[];
+  /** Submenú desplegable dentro del panel (ver `NavItem.desplegable`). */
+  desplegable?: boolean;
 }
 
 export interface DockGroup {
   id: string;
   label: string;
   icon: NavIcon;
+  ilustracion?: string;
   side: "left" | "right";
   active: boolean;
   items: DockEntry[];
@@ -113,15 +129,18 @@ export function buildDock(catalog: NavCatalog, viewer: NavViewer, pathname: stri
     label: it.label,
     href: it.href,
     icon: it.icon,
+    ilustracion: it.ilustracion,
+    descripcion: it.descripcion,
     active: it.key === activeKey,
     children: it.children?.length ? it.children.map(toEntry) : undefined,
+    ...(it.desplegable ? { desplegable: true } : {}),
   });
 
   return catalog.sections
     .map((section) => {
       const items = visible.filter((it) => it.section === section.id).map(toEntry);
       const active = items.some((e) => e.active || e.children?.some((c) => c.active));
-      return { id: section.id, label: section.label, icon: section.icon, side: section.side, active, items };
+      return { id: section.id, label: section.label, icon: section.icon, ilustracion: section.ilustracion, side: section.side, active, items };
     })
     .filter((g) => g.items.length > 0);
 }

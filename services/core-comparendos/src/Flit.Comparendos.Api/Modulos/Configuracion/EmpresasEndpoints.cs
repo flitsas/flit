@@ -41,7 +41,14 @@ public static partial class EmpresasEndpoints
         bool RequiereRepresentanteLegal,
         IReadOnlyList<string> DestinatariosReportes,
         IReadOnlyList<string> CorreosAlertaOperativa,
-        string? EmpresaNit);
+        string? EmpresaNit,
+        bool DpAutomaticoActivo,
+        int DpAutomaticoTopeDiario);
+
+    /// <summary>HU #14614: enciende el envío automático de derechos de petición y fija cuántos se envían por día.</summary>
+    public sealed record CambioEnvioAutomaticoDp(bool Activo, int TopeDiario);
+
+    public const int TopeDiarioMaximo = 500;
 
     /// <summary>La empresa elegida de la lista de la plataforma (<c>GET /admin/empresas/plataforma</c>).</summary>
     public sealed record NuevaEmpresa(Guid Id);
@@ -53,11 +60,13 @@ public static partial class EmpresasEndpoints
         bool HasOcrAccess,
         bool HasReportesModule,
         string TipoIntegracionConductor,
-        string ConjuntoPlantillas,
-        bool RequiereRepresentanteLegal);
+        bool RequiereRepresentanteLegal,
+        // HU #13882: el juego de plantillas sigue al canal de Trámites; se acepta y se ignora (pantallas viejas).
+        string? ConjuntoPlantillas = null);
 
+    /// <summary>El canal de correo ya no se elige aquí (HU #13882): sale del «Enrutamiento de notificaciones» de Trámites.</summary>
     public sealed record CambioCorreo(
-        string CanalCorreo,
+        string? CanalCorreo,
         string? RemitenteNombre,
         string? CorreoRespuesta,
         IReadOnlyList<CopiaDto>? Cc,
@@ -76,9 +85,17 @@ public static partial class EmpresasEndpoints
         admin.MapPost("", Registrar);
         admin.MapGet("/{id:guid}/configuracion", DeEmpresa);
         admin.MapPut("/{id:guid}/capacidades", GuardarCapacidades);
+        // HU #14614: enviar documentos legales sin que nadie los dispare es del SuperAdmin, igual que las capacidades.
+        admin.MapPut("/{id:guid}/envio-automatico-dp", GuardarEnvioAutomaticoDp);
         admin.MapPut("/{id:guid}/correo", GuardarCorreoDeEmpresa);
         admin.MapGet("/{id:guid}/auditoria", Historial);
+        admin.MapPut("/{id:guid}/nits/{nitId:guid}/consulta-contrato", GuardarConsultaContratoNit);
+        // HU #13843: la conexión con la API de contratos es del ambiente, no de una empresa.
+        api.MapPost("/admin/contratos/probar", ProbarContratos).RequireAuthorization(AutorizacionExtensions.PoliticaSuperAdmin);
     }
+
+    private static async Task<IResult> ProbarContratos(Contraventor.IApiContratos contratos, CancellationToken ct) =>
+        Results.Ok(await contratos.ProbarAsync(ct).ConfigureAwait(false));
 
     public static ConfiguracionDto Dto(ConfiguracionEmpresa c)
     {
@@ -86,7 +103,7 @@ public static partial class EmpresasEndpoints
         return new(c.TenantId, c.EmpresaNombre, c.HasRightPetitionModule, c.AllowsContravenerConsultation, c.AllowsContravenerChange, c.HasOcrAccess,
             c.HasReportesModule, c.NotificationChannel.ToString(), c.CanalCorreo.ToString(), c.RemitenteNombre, c.CorreoRespuesta, Copias(c.Cc), Copias(c.Bcc),
             c.TipoIntegracionConductor.ToString(), c.ConjuntoPlantillas.ToString(), c.RequiereRepresentanteLegal, c.DestinatariosReportes, c.CorreosAlertaOperativa,
-            ConDv(c.EmpresaNit));
+            ConDv(c.EmpresaNit), c.DpAutomaticoActivo, c.DpAutomaticoTopeDiario);
     }
 
     public static IReadOnlyList<CopiaDto> Copias(string json) =>
@@ -189,10 +206,13 @@ public static partial class EmpresasEndpoints
     /// Al abrir una empresa, su nombre y su NIT se ponen al día con la plataforma (la dueña de esos datos). Si la
     /// plataforma no responde, se muestra lo último guardado.
     /// </summary>
-    private static async Task<IResult> DeEmpresa(Guid id, IEmpresasPlataforma plataforma, Auditoria auditoria, ComparendosDb db, ILoggerFactory logs, CancellationToken ct)
+    private static async Task<IResult> DeEmpresa(Guid id, IEmpresasPlataforma plataforma, Capacidades capacidades, Auditoria auditoria, ComparendosDb db, ILoggerFactory logs,
+        CancellationToken ct)
     {
-        var config = await db.ConfiguracionesEmpresa.FirstOrDefaultAsync(c => c.TenantId == id, ct).ConfigureAwait(false)
-            ?? throw ReglaException.NoEncontrado("La empresa");
+        if (!await db.ConfiguracionesEmpresa.AnyAsync(c => c.TenantId == id, ct).ConfigureAwait(false))
+            throw ReglaException.NoEncontrado("La empresa");
+        // Por Capacidades, para que el canal de correo ya venga actualizado desde Trámites (HU #13882).
+        var config = await capacidades.DeAsync(id, ct).ConfigureAwait(false);
         IReadOnlyList<EmpresaPlataforma>? empresas = null;
         try
         {
@@ -236,13 +256,37 @@ public static partial class EmpresasEndpoints
 
     private static string? ConDv(string? nitBase) => nitBase is { } nit ? $"{nit}-{Nit.DigitoVerificacion(nit)}" : null;
 
+    /// <summary>
+    /// HU #14614: enciende o apaga el envío automático y fija el tope diario. Exige el módulo de derechos de petición. Encender no
+    /// envía nada por sí solo: además cada tipología debe estar marcada como automatizable (con revisión jurídica).
+    /// </summary>
+    private static async Task<IResult> GuardarEnvioAutomaticoDp(Guid id, CambioEnvioAutomaticoDp pedido, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, Reloj reloj, CancellationToken ct)
+    {
+        var c = await db.ConfiguracionesEmpresa.FirstOrDefaultAsync(x => x.TenantId == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La empresa");
+        if (pedido.TopeDiario is < 1 or > TopeDiarioMaximo)
+            throw new ReglaException("TOPE_INVALIDO", $"El tope diario va de 1 a {TopeDiarioMaximo} derechos de petición.");
+        if (pedido.Activo && !c.HasRightPetitionModule)
+            throw ReglaException.Conflicto("CAPACIDAD_DP_INACTIVA", "La empresa no tiene habilitados los derechos de petición: habilítalos antes de encender el envío automático.");
+
+        var cambios = Auditoria.Diferencias(
+            ("dp_automatico_activo", c.DpAutomaticoActivo, pedido.Activo),
+            ("dp_automatico_tope_diario", (int)c.DpAutomaticoTopeDiario, pedido.TopeDiario));
+        if (cambios.Length == 0)
+            return Results.Ok(Dto(c));
+
+        var accion = c.DpAutomaticoActivo == pedido.Activo ? "ACTUALIZAR" : pedido.Activo ? "ACTIVAR" : "DESACTIVAR";
+        (c.DpAutomaticoActivo, c.DpAutomaticoTopeDiario) = (pedido.Activo, (short)pedido.TopeDiario);
+        (c.ActualizadoEn, c.ActualizadoPor) = (reloj.Ahora, usuario.Id);
+        auditoria.Registrar(id, "configuracion_empresa", id, accion, cambios);
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Results.Ok(Dto(c));
+    }
+
     private static async Task<IResult> GuardarCapacidades(Guid id, CambioCapacidades pedido, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, Reloj reloj, CancellationToken ct)
     {
         var c = await db.ConfiguracionesEmpresa.FirstOrDefaultAsync(x => x.TenantId == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La empresa");
         if (!Enum.TryParse<TipoIntegracionConductor>(pedido.TipoIntegracionConductor, true, out var integracion))
             throw new ReglaException("INTEGRACION_INVALIDA", "La integración del contraventor debe ser Manual o ApiRenting.");
-        if (!Enum.TryParse<ConjuntoPlantillas>(pedido.ConjuntoPlantillas, true, out var conjunto))
-            throw new ReglaException("CONJUNTO_INVALIDO", "El conjunto de plantillas debe ser Flit o Renting.");
 
         var cambios = Auditoria.Diferencias(
             ("has_right_petition_module", c.HasRightPetitionModule, pedido.HasRightPetitionModule),
@@ -251,36 +295,58 @@ public static partial class EmpresasEndpoints
             ("has_ocr_access", c.HasOcrAccess, pedido.HasOcrAccess),
             ("has_reportes_module", c.HasReportesModule, pedido.HasReportesModule),
             ("tipo_integracion_conductor", c.TipoIntegracionConductor, integracion),
-            ("conjunto_plantillas", c.ConjuntoPlantillas, conjunto),
             ("requiere_representante_legal", c.RequiereRepresentanteLegal, pedido.RequiereRepresentanteLegal));
         if (cambios.Length == 0)
             return Results.Ok(Dto(c));
 
         var activaCambio = !c.AllowsContravenerChange && pedido.AllowsContravenerChange;
-        var activaConsulta = (!c.AllowsContravenerConsultation || c.TipoIntegracionConductor != TipoIntegracionConductor.ApiRenting)
-            && pedido.AllowsContravenerConsultation && integracion == TipoIntegracionConductor.ApiRenting;
+        var cambiaConsulta = c.AllowsContravenerConsultation != pedido.AllowsContravenerConsultation || c.TipoIntegracionConductor != integracion;
         (c.HasRightPetitionModule, c.AllowsContravenerConsultation, c.AllowsContravenerChange, c.HasOcrAccess, c.HasReportesModule) =
             (pedido.HasRightPetitionModule, pedido.AllowsContravenerConsultation, pedido.AllowsContravenerChange, pedido.HasOcrAccess, pedido.HasReportesModule);
-        (c.TipoIntegracionConductor, c.ConjuntoPlantillas, c.RequiereRepresentanteLegal) = (integracion, conjunto, pedido.RequiereRepresentanteLegal);
+        (c.TipoIntegracionConductor, c.RequiereRepresentanteLegal) = (integracion, pedido.RequiereRepresentanteLegal);
+        // HU #14614: sin el módulo de derechos de petición no puede haber envío automático.
+        var apagaAutomatico = !c.HasRightPetitionModule && c.DpAutomaticoActivo;
+        if (apagaAutomatico)
+            c.DpAutomaticoActivo = false;
         (c.ActualizadoEn, c.ActualizadoPor) = (reloj.Ahora, usuario.Id);
         auditoria.Registrar(id, "configuracion_empresa", id, "ACTUALIZAR", cambios);
+        if (apagaAutomatico)
+            auditoria.Registrar(id, "configuracion_empresa", id, "ACTUALIZAR", new CambioCampo("dp_automatico_activo", true, false));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
 
         // Al activar el cambio de contraventor, los comparendos activos sin solicitud pasan a «sin solicitar» (S-34);
-        // al activar la consulta por API, los que no tienen conductor quedan pendientes de consulta.
+        // al encender o apagar la consulta por API, los que no tienen conductor se recalculan con las casillas de cada NIT
+        // (HU #13712): pendientes de consulta si su NIT la usa, asignación manual si no.
         if (activaCambio)
         {
             await db.Comparendos.Where(x => x.TenantId == id && x.Activo && x.EstadoCambioContraventor == EstadoCambioContraventor.NoAplica)
                 .ExecuteUpdateAsync(u => u.SetProperty(x => x.EstadoCambioContraventor, EstadoCambioContraventor.SinSolicitar), ct).ConfigureAwait(false);
         }
 
-        if (activaConsulta)
-        {
-            await db.Comparendos.Where(x => x.TenantId == id && x.Activo && x.Contraventor == null && x.EstadoConsultaContraventor == EstadoConsultaContraventor.NoAplica)
-                .ExecuteUpdateAsync(u => u.SetProperty(x => x.EstadoConsultaContraventor, EstadoConsultaContraventor.Pendiente), ct).ConfigureAwait(false);
-        }
+        if (cambiaConsulta)
+            await Contraventor.ConsultaPorApi.RecalcularAsync(db, id, ct).ConfigureAwait(false);
 
         return Results.Ok(Dto(c));
+    }
+
+    /// <summary>Casilla de un NIT para consultar el conductor en la API de contratos (HU #13712). Solo el SuperAdmin.</summary>
+    public sealed record CambioConsultaContrato(bool Activo);
+
+    private static async Task<IResult> GuardarConsultaContratoNit(Guid id, Guid nitId, CambioConsultaContrato pedido, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario,
+        Reloj reloj, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(pedido);
+        var nit = await db.IdentificacionesMonitoreadas.FirstOrDefaultAsync(n => n.Id == nitId && n.TenantId == id, ct).ConfigureAwait(false)
+            ?? throw ReglaException.NoEncontrado("El NIT");
+        if (nit.ConsultaContratoApi != pedido.Activo)
+        {
+            auditoria.Registrar(id, "identificacion_monitoreada", nit.Id, "ACTUALIZAR", new CambioCampo("consulta_contrato_api", nit.ConsultaContratoApi, pedido.Activo));
+            (nit.ConsultaContratoApi, nit.ActualizadoEn, nit.ActualizadoPor) = (pedido.Activo, reloj.Ahora, usuario.Id);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            await Contraventor.ConsultaPorApi.RecalcularAsync(db, id, ct).ConfigureAwait(false);
+        }
+
+        return Results.Ok(Monitoreo.MonitoreoEndpoints.ANit(nit));
     }
 
     private static async Task<IResult> GuardarCorreoDeEmpresa(Guid id, CambioCorreo pedido, ComparendosDb db, Auditoria auditoria, UsuarioActual usuario, Reloj reloj, CancellationToken ct)
@@ -293,8 +359,6 @@ public static partial class EmpresasEndpoints
 
     private static void AplicarCorreo(ConfiguracionEmpresa c, CambioCorreo pedido, Auditoria auditoria, UsuarioActual usuario, Reloj reloj)
     {
-        if (!Enum.TryParse<CanalCorreo>(pedido.CanalCorreo, true, out var canal))
-            throw new ReglaException("CANAL_INVALIDO", "El canal de correo debe ser FlitSmtp o EmpresaApi.");
         var respuesta = string.IsNullOrWhiteSpace(pedido.CorreoRespuesta) ? null : CatalogosEndpoints.NormalizarCorreos([pedido.CorreoRespuesta]).Single();
         var cc = JsonSerializer.Serialize(NormalizarCopias(pedido.Cc), Json);
         var bcc = JsonSerializer.Serialize(NormalizarCopias(pedido.Bcc), Json);
@@ -305,13 +369,13 @@ public static partial class EmpresasEndpoints
             throw new ReglaException("REMITENTE_INVALIDO", "El nombre del remitente admite hasta 120 caracteres.");
 
         var cambios = Auditoria.Diferencias(
-            ("canal_correo", c.CanalCorreo, canal), ("remitente_nombre", c.RemitenteNombre, remitente), ("correo_respuesta", c.CorreoRespuesta, respuesta),
+            ("remitente_nombre", c.RemitenteNombre, remitente), ("correo_respuesta", c.CorreoRespuesta, respuesta),
             ("cc", c.Cc, cc), ("bcc", c.Bcc, bcc), ("destinatarios_reportes", string.Join(", ", c.DestinatariosReportes), string.Join(", ", reportes)),
             ("correos_alerta_operativa", string.Join(", ", c.CorreosAlertaOperativa), string.Join(", ", alertas)));
         if (cambios.Length == 0)
             return;
 
-        (c.CanalCorreo, c.RemitenteNombre, c.CorreoRespuesta, c.Cc, c.Bcc) = (canal, remitente, respuesta, cc, bcc);
+        (c.RemitenteNombre, c.CorreoRespuesta, c.Cc, c.Bcc) = (remitente, respuesta, cc, bcc);
         (c.DestinatariosReportes, c.CorreosAlertaOperativa, c.ActualizadoEn, c.ActualizadoPor) = (reportes, alertas, reloj.Ahora, usuario.Id);
         auditoria.Registrar(c.TenantId, "configuracion_empresa", c.TenantId, "ACTUALIZAR", cambios);
     }

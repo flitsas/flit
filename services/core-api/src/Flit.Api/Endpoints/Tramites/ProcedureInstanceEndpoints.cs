@@ -489,12 +489,14 @@ internal static class ProcedureInstanceEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             PatchFieldValuesRequest request,
             PatchFieldValuesHandler handler,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, ct);
+            // HU #14172 — el usuario autenticado queda como CreatedBy del evento de bitácora.
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, ResolveUserId(http.User), ct);
 
             // Matrícula ICT con placa de rango (tipo 4): la secretaría queda fija. 409 con código estable.
             if (PatchFieldValuesHandler.TryParseOtFijado(error, out var placaFija))

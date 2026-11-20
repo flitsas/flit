@@ -21,7 +21,7 @@ function Visor({ plantilla, onCerrar }: { plantilla: PlantillaResumen; onCerrar:
   const version = useCarga(versionId ? `version:${versionId}` : null, (signal) => apiFetch<VersionPlantilla>(`/plantillas/versiones/${versionId}`, { signal }));
 
   return (
-    <Modal open onClose={onCerrar} size="2xl" title={TIPO_PLANTILLA[plantilla.tipo] ?? plantilla.tipo} description={`${plantilla.conjunto === "Renting" ? "Renting" : "FLIT"}${plantilla.tipologia ? ` · ${plantilla.tipologia}` : ""}`}>
+    <Modal icono="documento" open onClose={onCerrar} size="2xl" title={TIPO_PLANTILLA[plantilla.tipo] ?? plantilla.tipo} description={`${plantilla.conjunto === "Renting" ? "Renting" : "FLIT"}${plantilla.tipologia ? ` · ${plantilla.tipologia}` : ""}`}>
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
         <aside className="flex flex-col gap-2">
           <h3 className="text-xs font-semibold">Versiones</h3>

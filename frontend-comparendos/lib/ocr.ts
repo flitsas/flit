@@ -1,6 +1,7 @@
 // Lógica pura de la carga por OCR (HU #13471 sobre la API de las HUs #13469/#13470; especificación GDC §6.18, §7.6).
 // La API vuelve a validar todo; aquí solo se adelanta el rechazo y se arman etiquetas y cuerpos.
 import type { Etiqueta } from "@/lib/etiquetas";
+import { bogotaClock, type XlsxSheet } from "@/lib/xlsx";
 
 export const MAXIMO_DOCUMENTOS = 200;
 export const MAXIMO_BYTES = 20 * 1024 * 1024;
@@ -78,26 +79,35 @@ export const ESTADOS_PAQUETE = Object.keys(ESTADO_PAQUETE);
 
 /** Estados de documento con su color de §7.6 (el morado de DUPLICADO no existe en los tonos de @flit/ui). */
 export const ESTADO_DOCUMENTO: Record<string, { texto: string; clase: string }> = {
-  Pendiente: { texto: "Pendiente", clase: "bg-[#EEF1F6] text-[#475569] dark:bg-white/10 dark:text-slate-300" },
-  EnProcesamiento: { texto: "En procesamiento", clase: "bg-[#E8EEFF] text-[#3B4FD6] dark:bg-flit-brand/20 dark:text-[#8FA8FF]" },
-  Completo: { texto: "Completo", clase: "bg-[#E7F6EC] text-[#1E7B3C] dark:bg-emerald-500/15 dark:text-emerald-300" },
-  Incompleto: { texto: "Incompleto", clase: "bg-[#FFF1E5] text-[#B45309] dark:bg-orange-500/15 dark:text-orange-300" },
-  Fallido: { texto: "Fallido", clase: "bg-[#FDECEC] text-[#B42318] dark:bg-red-500/15 dark:text-red-300" },
-  Duplicado: { texto: "Duplicado", clase: "bg-[#F1EAFE] text-[#6D28D9] dark:bg-violet-500/15 dark:text-violet-300" },
-  Registrado: { texto: "Registrado", clase: "bg-[#E7F6EC] text-[#14532D] dark:bg-emerald-500/25 dark:text-emerald-200" },
-  Descartado: { texto: "Descartado", clase: "bg-[#F4F5F7] text-[#94A3B8] dark:bg-white/5 dark:text-slate-500" },
+  Pendiente: { texto: "Pendiente", clase: "bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)]" },
+  EnProcesamiento: { texto: "En procesamiento", clase: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]" },
+  Completo: { texto: "Completo", clase: "bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)]" },
+  Incompleto: { texto: "Incompleto", clase: "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-fg)]" },
+  Fallido: { texto: "Fallido", clase: "bg-[var(--badge-danger-bg)] text-[var(--badge-danger-fg)]" },
+  Duplicado: { texto: "Duplicado", clase: "bg-[var(--badge-purple-bg)] text-[var(--badge-purple-fg)]" },
+  Registrado: { texto: "Registrado", clase: "bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)] font-semibold" },
+  Descartado: { texto: "Descartado", clase: "bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)] opacity-70" },
 };
 
 export const ESTADOS_DOCUMENTO = Object.keys(ESTADO_DOCUMENTO);
 
 export const TIPO_FALLO: Record<string, string> = {
-  Timeout: "El proveedor no respondió a tiempo",
-  Http5xx: "El proveedor falló (5xx)",
-  RateLimit: "El proveedor limitó las peticiones (429)",
-  Red: "Error de red",
-  Ilegible: "Ilegible: el modelo no extrajo datos",
-  ArchivoInvalido: "Archivo inválido",
+  Timeout: "La lectura tardó demasiado",
+  Http5xx: "La lectura falló por un problema temporal",
+  RateLimit: "La lectura está ocupada en este momento",
+  Red: "La lectura falló por un problema de conexión",
+  Ilegible: "Ilegible: no se pudieron leer los datos",
+  ArchivoInvalido: "El archivo no se pudo leer",
 };
+
+/**
+ * Motivo de un documento fallido (HU #13787, B12-7): primero el mensaje que guardó el servidor (por ejemplo «respuesta
+ * cortada»), que es el real; la etiqueta del tipo solo cuando no hay mensaje.
+ */
+export function motivoFallo(tipo: string | null | undefined, mensaje: string | null | undefined): string {
+  if (mensaje && mensaje.trim()) return mensaje.trim();
+  return (tipo && TIPO_FALLO[tipo]) || "Falló";
+}
 
 export const FUENTE_DUPLICADO: Record<string, string> = {
   SIMIT: "SIMIT",
@@ -145,7 +155,19 @@ export const ETIQUETA_CAMPO: Record<string, string> = {
   tipo_vehiculo: "Tipo de vehículo",
 };
 
-export const TIPOS_DOCUMENTO = ["CC", "CE", "NIT", "TI", "PA", "CD", "RC", "CV"];
+export const TIPOS_DOCUMENTO = ["CC", "CE", "NIT", "TI", "PA", "CD", "RC", "CV"] as const;
+
+/** Etiquetas amigables del selector de tipo de documento (OCR infractor). */
+export const ETIQUETA_TIPO_DOCUMENTO: Record<(typeof TIPOS_DOCUMENTO)[number], string> = {
+  CC: "CC",
+  CE: "CE",
+  NIT: "NIT (Persona jurídica)",
+  TI: "TI",
+  PA: "PA",
+  CD: "CD",
+  RC: "RC",
+  CV: "CV",
+};
 
 /** Cómo se edita cada campo en el formulario de revisión. */
 export function tipoEntrada(campo: string): "fecha" | "hora" | "documento" | "booleano" | "texto" {
@@ -187,13 +209,6 @@ export function cambiosCampos(iniciales: Record<string, string>, editados: Recor
   return cambios;
 }
 
-/** Confianza 0–1 → «93 %» y un tono: baja (< 0,6), media (< 0,85) o alta. */
-export function confianza(c: number | null | undefined): { texto: string; tono: "alta" | "media" | "baja" } | null {
-  if (c === null || c === undefined) return null;
-  const tono = c < 0.6 ? "baja" : c < 0.85 ? "media" : "alta";
-  return { texto: `${Math.round(c * 100)} %`, tono };
-}
-
 /** El original se muestra como imagen salvo los PDF y los TIFF (los navegadores no pintan TIFF en <img>). */
 export function vistaOriginal(tipoArchivo: string, nombre: string): "imagen" | "pdf" | "descarga" {
   if (tipoArchivo === "PDF") return "pdf";
@@ -201,13 +216,119 @@ export function vistaOriginal(tipoArchivo: string, nombre: string): "imagen" | "
 }
 
 /** Acciones que admite un documento según su estado (la API manda; esto solo decide qué botones se muestran). */
-export function accionesDocumento(d: { estado: string; reintentable: boolean; fuenteDuplicado: string | null }) {
+export function accionesDocumento(d: { estado: string; reintentable: boolean; fuenteDuplicado: string | null; tipoFallo?: string | null }) {
   return {
     editar: ["Completo", "Incompleto", "Duplicado"].includes(d.estado) && d.fuenteDuplicado !== "ARCHIVO",
     registrar: d.estado === "Completo",
     descartar: ["Completo", "Incompleto", "Duplicado", "Fallido"].includes(d.estado),
     reintentar: d.estado === "Fallido" && d.reintentable,
+    // HU #13828: un incompleto o un ilegible se vuelve a leer; el tope de reprocesos lo dice la API (motivoNoReprocesable).
+    reprocesar: d.estado === "Incompleto" || (d.estado === "Fallido" && d.tipoFallo === "Ilegible"),
   };
+}
+
+/** Por debajo de esto el modelo dijo dudar: es la única lectura útil de su confianza, que casi siempre sale en 95 % (B12-5). */
+export const CONFIANZA_DUDOSA = 0.8;
+
+/**
+ * Qué campos hay que mirar y por qué (HU #13830, hallazgo B12-5). Reglas comprobables en vez del porcentaje del modelo:
+ * obligatorio que falta o no sirve, número con 19 o 21 dígitos (HU #13829), la fecha de notificación (de ella cuentan
+ * los plazos) y los pocos campos en los que el modelo dijo dudar.
+ */
+export function marcasRevision(d: {
+  campos: { nombreCampo: string; confianza: number | null; valorFinal: string | null; valorCorregido: string | null }[];
+  camposFaltantes: string[];
+  avisoNumero?: string | null;
+  numeroPorConfirmar?: boolean;
+}): Record<string, string> {
+  const marcas: Record<string, string> = {};
+  for (const c of d.campos) {
+    // El aviso del número vale también si lo escribió el operador: se calcula sobre el valor que quedó.
+    if (d.camposFaltantes.includes(c.nombreCampo)) marcas[c.nombreCampo] = "Falta o no es válido.";
+    // GDC punto 14: una vez corregido o confirmado por el operador, el número deja de marcarse.
+    else if (c.nombreCampo === "numero_comparendo" && d.avisoNumero && d.numeroPorConfirmar !== false) marcas[c.nombreCampo] = d.avisoNumero;
+    else if (c.valorCorregido !== null) continue;
+    else if (c.nombreCampo === "fecha_notificacion" && c.valorFinal) marcas[c.nombreCampo] = "Confírmala: de ella cuentan los plazos.";
+    else if (c.valorFinal && c.confianza !== null && c.confianza < CONFIANZA_DUDOSA) marcas[c.nombreCampo] = "La lectura de este campo es dudosa.";
+  }
+  return marcas;
+}
+
+/** Un documento tal como lo lista el detalle del paquete. */
+export interface DocumentoPaquete {
+  nombreArchivo: string;
+  estado: string;
+  numeroComparendoExtraido: string | null;
+  camposFaltantes: string[];
+  tipoFallo: string | null;
+  mensajeError: string | null;
+  fuenteDuplicado: string | null;
+  motivoDescarte?: string | null;
+  comparendoId: string | null;
+  avisoNumero?: string | null;
+  /** GDC punto 14: el número tiene aviso y nadie lo ha corregido ni confirmado; no se registra. */
+  numeroPorConfirmar?: boolean;
+  reprocesos?: number;
+}
+
+/**
+ * GDC punto 14: «Registrar los N completos» no cuenta los completos con el número por confirmar (el servidor los omite).
+ * Devuelve cuántos sí se registran y, si hay retenidos, qué tiene que hacer el operador.
+ */
+export function registroEnLote(completos: number, porConfirmar: number): { registrables: number; aviso: string | null } {
+  const retenidos = Math.min(Math.max(porConfirmar, 0), completos);
+  const aviso =
+    retenidos === 0
+      ? null
+      : `${retenidos === 1 ? "1 documento completo tiene" : `${retenidos} documentos completos tienen`} el número por verificar y no se ${retenidos === 1 ? "registra" : "registran"} en lote. Ábrelo desde la tabla («Verificar número»), compara el número con el documento y corrígelo o confirma que está bien.`;
+  return { registrables: completos - retenidos, aviso };
+}
+
+/** Fallo, duplicado, descarte o faltantes: lo que explica el estado de un documento, en una frase. */
+export function motivoDocumento(d: DocumentoPaquete): string {
+  if (d.estado === "Fallido") return motivoFallo(d.tipoFallo, d.mensajeError);
+  if (d.estado === "Duplicado") return (d.fuenteDuplicado && FUENTE_DUPLICADO[d.fuenteDuplicado]) ?? "Ya existe";
+  if (d.estado === "Descartado") return d.motivoDescarte ?? "Descartado";
+  return d.camposFaltantes.map((c) => ETIQUETA_CAMPO[c] ?? c).join(", ");
+}
+
+/** Resumen del paquete en Excel (HU #13831): un renglón por documento y los totales en la nota. */
+export function hojaPaquete(p: { nombre: string; creadoEn: string }, docs: DocumentoPaquete[]): XlsxSheet {
+  const totales = ESTADOS_DOCUMENTO.map((e) => [ESTADO_DOCUMENTO[e].texto, docs.filter((d) => d.estado === e).length] as const)
+    .filter(([, n]) => n > 0)
+    .map(([t, n]) => `${t}: ${n}`);
+  return {
+    name: "Paquete OCR",
+    columns: [
+      { header: "Archivo", width: 34 },
+      { header: "Estado", width: 16 },
+      { header: "Número leído", width: 26 },
+      { header: "Verificar número", width: 40 },
+      { header: "Campos faltantes / motivo", width: 60 },
+      { header: "Reprocesos", width: 12 },
+      { header: "Registrado", width: 12 },
+    ],
+    rows: docs.map((d) => [
+      d.nombreArchivo,
+      ESTADO_DOCUMENTO[d.estado]?.texto ?? d.estado,
+      d.numeroComparendoExtraido,
+      d.avisoNumero ? (d.numeroPorConfirmar === false ? "Revisado por el operador" : d.avisoNumero) : null,
+      motivoDocumento(d) || null,
+      d.reprocesos ?? 0,
+      d.comparendoId ? "Sí" : "No",
+    ]),
+    notes: [
+      `Paquete «${p.nombre}», creado ${fechaHora(p.creadoEn)} (hora de Colombia).`,
+      `${docs.length} documentos. ${totales.join(", ")}.`,
+    ],
+  };
+}
+
+function fechaHora(iso: string): string {
+  const d = bogotaClock(iso);
+  if (!d) return iso;
+  const dos = (n: number | undefined) => String(n ?? 0).padStart(2, "0");
+  return `${dos(d.day)}/${dos(d.month)}/${d.year} ${dos(d.hour)}:${dos(d.minute)}`;
 }
 
 /** Última evaluación de una versión del prompt contra la publicada (solo SuperAdmin). */
