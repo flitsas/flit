@@ -12437,12 +12437,19 @@ paths:
                     items:
                       type: object
                       properties:
-                        validationId: { type: string, format: uuid }
+                        validationId:
+                          type: string
+                          format: uuid
+                          nullable: true
+                          description: >-
+                            HU #14627 — null cuando la persona NUNCA tuvo una validación en este trámite
+                            (status "no_iniciada"): se puede enviar por primera vez identificándola por
+                            partyRole + ordinal en el POST de reenvío.
                         partyRole: { type: string, example: vendedor }
                         ordinal: { type: integer, minimum: 1, maximum: 4 }
                         name: { type: string, nullable: true }
                         email: { type: string, nullable: true }
-                        status: { type: string }
+                        status: { type: string, description: "Incluye \"no_iniciada\" (HU #14627)." }
                         captureUrl: { type: string, nullable: true }
                         captureExpiresAt: { type: string, format: date-time, nullable: true }
                         esFlujoManual: { type: boolean }
@@ -12472,6 +12479,10 @@ paths:
         el historial del trámite registra el correo anterior y el nuevo. Un trámite `aprobado`,
         `anulado` o `revocado` rechaza toda la solicitud (422). Requiere el permiso
         `AdminTramiteReenviarValidacion`.
+
+        HU #14627 — cada item acepta `validationId` (reenvío de una fila existente, comportamiento de
+        siempre) O `partyRole` + `ordinal` (persona sin fila propia, listada con status "no_iniciada":
+        se le envía la validación por primera vez). Un item debe traer uno de los dos pares.
       requestBody:
         required: true
         content:
@@ -12486,9 +12497,11 @@ paths:
                   maxItems: 8
                   items:
                     type: object
-                    required: [validationId]
+                    description: "Trae validationId, o partyRole + ordinal (HU #14627)."
                     properties:
-                      validationId: { type: string, format: uuid }
+                      validationId: { type: string, format: uuid, nullable: true }
+                      partyRole: { type: string, example: vendedor, nullable: true }
+                      ordinal: { type: integer, minimum: 1, maximum: 4, nullable: true }
                       email: { type: string, format: email, nullable: true }
       responses:
         "200":
@@ -12503,7 +12516,15 @@ paths:
                     items:
                       type: object
                       properties:
-                        validationId: { type: string, format: uuid }
+                        validationId:
+                          type: string
+                          format: uuid
+                          nullable: true
+                          description: >-
+                            Id REAL: el existente, o el de la fila recién creada si el item llegó solo
+                            con partyRole/ordinal (HU #14627). Null si falló antes de crear la fila.
+                        partyRole: { type: string, nullable: true, description: "Eco del item original (HU #14627)." }
+                        ordinal: { type: integer, nullable: true, description: "Eco del item original (HU #14627)." }
                         ok: { type: boolean }
                         queued: { type: boolean }
                         captureUrl: { type: string, nullable: true, description: "Solo si el enlace ya existe (no en cola)." }

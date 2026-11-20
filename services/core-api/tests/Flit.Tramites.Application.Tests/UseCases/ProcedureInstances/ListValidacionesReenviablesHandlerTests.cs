@@ -199,8 +199,11 @@ public sealed class ListValidacionesReenviablesHandlerTests
     }
 
     [Fact]
-    public async Task AC2_SinFilaPropia_NoSeInventaLaPersona()
+    public async Task AC2_SinFilaPropia_SeListaConEstadoSinIniciar_HU14627()
     {
+        // HU #14627 — antes de esta HU, el actor sin fila propia se descartaba (caso borde que el cuadro no
+        // cubría). Ahora se lista igual, con ValidationId null y status "no_iniciada", para que el admin
+        // pueda enviarle la validación por primera vez desde el mismo cuadro.
         var instance = Instance(ProcedureTypeFixture.Traspaso);
         Actor(instance, "comprador", "111");
         Actor(instance, "vendedor", "222");
@@ -208,7 +211,34 @@ public sealed class ListValidacionesReenviablesHandlerTests
 
         var personas = await Listar(instance);
 
-        personas.Should().ContainSingle().Which.PartyRole.Should().Be("vendedor");
+        personas.Should().HaveCount(2);
+        personas.Single(p => p.PartyRole == "vendedor").ValidationId.Should().NotBeNull();
+        var comprador = personas.Single(p => p.PartyRole == "comprador");
+        comprador.ValidationId.Should().BeNull();
+        comprador.Status.Should().Be(ValidacionReenviableEstados.SinIniciar);
+    }
+
+    // ── HU #14627 — actor sin fila propia: se lista igual, para enviar por primera vez ─────────────
+
+    [Fact]
+    public async Task HU14627_ActorSinFilaPropia_SeListaConValidationIdNuloYEstadoSinIniciar()
+    {
+        var instance = Instance(ProcedureTypeFixture.Traspaso);
+        Actor(instance, "comprador", "111", nombre: "COMPRADOR SIN VALIDAR");
+        Actor(instance, "vendedor", "222");
+        Validacion(instance, "vendedor", "222", BiometricEstados.Enviado);
+
+        var personas = await Listar(instance);
+
+        personas.Should().HaveCount(2);
+        var comprador = personas.Single(p => p.PartyRole == "comprador");
+        comprador.ValidationId.Should().BeNull();
+        comprador.Status.Should().Be(ValidacionReenviableEstados.SinIniciar);
+        comprador.Name.Should().Be("COMPRADOR SIN VALIDAR");
+        comprador.Email.Should().Be("111@actor.com");
+        comprador.CaptureUrl.Should().BeNull();
+        comprador.CaptureExpiresAt.Should().BeNull();
+        comprador.EsFlujoManual.Should().BeFalse();
     }
 
     [Fact]
