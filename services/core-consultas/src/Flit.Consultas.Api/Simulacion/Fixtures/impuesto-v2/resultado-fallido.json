@@ -1,0 +1,9 @@
+{
+  "id": "consulta-sintetica-0001",
+  "source_id": "impuesto-05",
+  "status": "failed",
+  "created_at": "2026-11-19T15:00:00Z",
+  "error_code": "portal_unavailable",
+  "file_errors": [],
+  "result": null
+}

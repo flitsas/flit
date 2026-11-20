@@ -11,8 +11,7 @@ namespace Flit.Consultas.Tests.Impuesto;
 
 /// <summary>
 /// La lista efectiva sale de <c>consultas.vehicle_tax_departments</c> (ADR-0080). Tras la migración
-/// <c>ImpuestoDepartamentosActivos</c> (decisión del usuario 2026-11-16) quedan activos solo 05 Antioquia, 08 Atlántico
-/// y 11 Bogotá; el resto de la semilla legada (17, 50, 52, 63 y 94) queda apagado con borrado lógico.
+/// <c>ImpuestoDepartamentosFuenteReal</c> (D2) quedan activos 05/13/17/63/68/76; el resto queda apagado con borrado lógico.
 /// </summary>
 public sealed class CatalogoDepartamentosImpuestoTests : IAsyncLifetime
 {
@@ -48,16 +47,16 @@ public sealed class CatalogoDepartamentosImpuestoTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Tras_las_migraciones_solo_quedan_activos_antioquia_atlantico_y_bogota()
+    public async Task Tras_las_migraciones_quedan_activos_los_seis_departamentos_de_la_fuente_real()
     {
         var catalogo = Catalogo();
         var activos = await catalogo.ActivosAsync(CancellationToken.None);
-        activos.Select(d => (d.Codigo, d.Nombre)).Should().Equal(("05", "ANTIOQUIA"), ("08", "ATLANTICO"), ("11", "BOGOTA D.C."));
-        foreach (var apagado in new[] { "17", "50", "52", "63", "94" })
+        activos.Select(d => (d.Codigo, d.Nombre)).Should().Equal(
+            ("05", "ANTIOQUIA"), ("13", "BOLIVAR"), ("17", "CALDAS"),
+            ("63", "QUINDIO"), ("68", "SANTANDER"), ("76", "VALLE DEL CAUCA"));
+        foreach (var apagado in new[] { "08", "11", "50", "52", "94" })
             (await catalogo.ActivoAsync(apagado, CancellationToken.None)).Should().BeFalse($"el {apagado} quedó fuera de la lista");
         (await _db.DepartamentosImpuesto.Where(d => !d.IsActive).AllAsync(d => d.DeletedAt != null, CancellationToken.None)).Should().BeTrue();
-        (await _db.DepartamentosImpuesto.Where(d => d.DepartmentCode == "17" || d.DepartmentCode == "63").Select(d => d.UpdatedAt).ToListAsync(CancellationToken.None))
-            .Should().AllBeEquivalentTo(DateTimeOffset.Parse("2025-12-15T16:49:19.862895+00:00"), "ya estaban apagadas: la migración no las toca");
         (await _db.DepartamentosImpuesto.SingleAsync(d => d.DepartmentCode == "05", CancellationToken.None)).Id
             .Should().Be(Guid.Parse("01941215-0000-7000-8000-000000000005"));
     }
@@ -66,44 +65,36 @@ public sealed class CatalogoDepartamentosImpuestoTests : IAsyncLifetime
     public async Task Guardar_enciende_un_departamento_conocido_y_apaga_otro_sin_borrarlo()
     {
         var catalogo = Catalogo();
-        var creado = await catalogo.GuardarAsync("13", "BOLIVAR", true, CancellationToken.None);
+        var creado = await catalogo.GuardarAsync("08", "ATLANTICO", true, CancellationToken.None);
         creado.Activo.Should().BeTrue();
 
         var apagado = await catalogo.GuardarAsync("05", "ANTIOQUIA", false, CancellationToken.None);
         apagado.Activo.Should().BeFalse();
 
         var activos = await catalogo.ActivosAsync(CancellationToken.None);
-        activos.Select(d => d.Codigo).Should().Equal("08", "11", "13");
+        activos.Select(d => d.Codigo).Should().Equal("08", "13", "17", "63", "68", "76");
 
         var todos = await catalogo.ListarTodosAsync(CancellationToken.None);
         todos.Should().Contain(d => d.Codigo == "05" && !d.Activo);
-        todos.Should().Contain(d => d.Codigo == "17" && !d.Activo);
+        todos.Should().Contain(d => d.Codigo == "11" && !d.Activo);
     }
 
     [Fact]
-    public async Task Revertir_la_migracion_vuelve_a_la_semilla_legada_y_solo_borra_las_filas_que_ella_creo()
+    public async Task Revertir_fuente_real_vuelve_a_05_08_11_activos()
     {
         var migrador = _db.GetService<IMigrator>();
-        await migrador.MigrateAsync(SemillaLegada, cancellationToken: CancellationToken.None);
+        await migrador.MigrateAsync("20261117044000_ImpuestoDepartamentosActivos", cancellationToken: CancellationToken.None);
         var catalogo = Catalogo();
-        (await catalogo.ActivosAsync(CancellationToken.None)).Select(d => d.Codigo).Should().Equal("50", "52", "94");
-        (await catalogo.ListarTodosAsync(CancellationToken.None)).Select(d => d.Codigo).Should().Equal("17", "50", "52", "63", "94");
-        (await _db.DepartamentosImpuesto.SingleAsync(d => d.DepartmentCode == "17", CancellationToken.None)).DeletedAt
-            .Should().Be(DateTimeOffset.Parse("2026-01-15T18:15:19.862895+00:00"));
+        (await catalogo.ActivosAsync(CancellationToken.None)).Select(d => d.Codigo).Should().Equal("05", "08", "11");
 
-        // Un operador enciende 05 por API antes de la migración: la fila es suya (id v7) y el Down no la borra, la apaga.
-        var operador = await catalogo.GuardarAsync("05", "ANTIOQUIA", true, CancellationToken.None);
-        operador.Activo.Should().BeTrue();
-        var idOperador = (await _db.DepartamentosImpuesto.AsNoTracking().SingleAsync(d => d.DepartmentCode == "05", CancellationToken.None)).Id;
         await migrador.MigrateAsync(cancellationToken: CancellationToken.None);
-        await migrador.MigrateAsync(SemillaLegada, cancellationToken: CancellationToken.None);
+        (await catalogo.ActivosAsync(CancellationToken.None)).Select(d => d.Codigo)
+            .Should().Equal("05", "13", "17", "63", "68", "76");
 
-        var fila05 = await _db.DepartamentosImpuesto.AsNoTracking().SingleAsync(d => d.DepartmentCode == "05", CancellationToken.None);
-        fila05.Id.Should().Be(idOperador);
-        fila05.IsActive.Should().BeFalse();
-        fila05.DeletedAt.Should().NotBeNull();
-        (await _db.DepartamentosImpuesto.AnyAsync(d => d.DepartmentCode == "08" || d.DepartmentCode == "11", CancellationToken.None)).Should().BeFalse();
-        (await catalogo.ActivosAsync(CancellationToken.None)).Select(d => d.Codigo).Should().Equal("50", "52", "94");
+        await migrador.MigrateAsync("20261117044000_ImpuestoDepartamentosActivos", cancellationToken: CancellationToken.None);
+        (await catalogo.ActivosAsync(CancellationToken.None)).Select(d => d.Codigo).Should().Equal("05", "08", "11");
+        (await _db.DepartamentosImpuesto.AnyAsync(d => d.DepartmentCode == "68" || d.DepartmentCode == "76", CancellationToken.None))
+            .Should().BeFalse();
     }
 
     [Fact]
@@ -125,8 +116,6 @@ public sealed class CatalogoDepartamentosImpuestoTests : IAsyncLifetime
         await accion.Should().ThrowAsync<InvalidOperationException>();
         (await _db.DepartamentosImpuesto.AnyAsync(d => d.DepartmentCode == "99", CancellationToken.None)).Should().BeFalse();
     }
-
-    private const string SemillaLegada = "20261104150611_ImpuestoDepartamentosHabilitados";
 
     private CatalogoDepartamentosImpuesto Catalogo() => new(_db, TimeProvider.System);
 }

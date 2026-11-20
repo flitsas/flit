@@ -1,33 +1,24 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
 
 namespace Flit.Consultas.Api.Impuesto;
 
-/// <summary>Lo que devolvió el transporte. <see cref="Fallo"/> lleno significa que no hay cuerpo que interpretar.</summary>
-internal sealed record ResultadoTransporteImpuesto(string? Cuerpo, FalloProveedor? Fallo);
-
-internal interface ITransporteImpuesto
-{
-    bool Listo { get; }
-
-    string NombreProveedor { get; }
-
-    Task<ResultadoTransporteImpuesto> EnviarAsync(string cuerpo, CancellationToken ct);
-}
-
 /// <summary>
-/// POST real. No escribe en el log la URL, la placa, el documento, el nombre ni <c>ex.Message</c>.
+/// Transporte HTTP asíncrono. Cabecera <c>X-API-Key</c> por petición. No escribe URL, cuerpo ni mensajes del proveedor.
 /// </summary>
-internal sealed class TransporteImpuestoHttp(IHttpClientFactory http, OpcionesImpuesto opciones, ILogger<TransporteImpuestoHttp> logger) : ITransporteImpuesto
+internal sealed class TransporteImpuestoHttp(IHttpClientFactory http, OpcionesImpuesto opciones, ILogger<TransporteImpuestoHttp> logger)
+    : ITransporteImpuesto
 {
     public const string HttpClientName = "impuesto";
+    private const string CabeceraApiKey = "X-API-Key";
 
-    public bool Listo => opciones.TieneRuta;
+    public bool Listo => opciones.TieneRuta && opciones.TieneIdentidad;
 
     public string NombreProveedor => ProveedorImpuesto.ClaveProveedor;
 
-    public async Task<ResultadoTransporteImpuesto> EnviarAsync(string cuerpo, CancellationToken ct)
+    public async Task<EnvioImpuesto> EnviarAsync(string cuerpo, string apiKey, CancellationToken ct)
     {
         if (!Listo)
             throw new InvalidOperationException("El transporte de impuesto no está configurado.");
@@ -37,11 +28,22 @@ internal sealed class TransporteImpuestoHttp(IHttpClientFactory http, OpcionesIm
             {
                 Content = new StringContent(cuerpo, Encoding.UTF8, "application/json"),
             };
+            pedido.Headers.TryAddWithoutValidation(CabeceraApiKey, apiKey);
             using var respuesta = await http.CreateClient(HttpClientName).SendAsync(pedido, ct).ConfigureAwait(false);
             var codigo = (int)respuesta.StatusCode;
             if (!respuesta.IsSuccessStatusCode)
-                return new ResultadoTransporteImpuesto(null, Fallo(respuesta.StatusCode, codigo));
-            return new ResultadoTransporteImpuesto(await respuesta.Content.ReadAsStringAsync(ct).ConfigureAwait(false), null);
+            {
+                var codigoError = await CodigoErrorAsync(respuesta, ct).ConfigureAwait(false);
+                if (codigo == 422)
+                    TransporteImpuestoLog.DepartamentoRechazado(logger);
+                return new EnvioImpuesto(null, Fallo(respuesta.StatusCode, codigo), codigoError);
+            }
+
+            var texto = await respuesta.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            var id = LeerId(texto);
+            return id is null
+                ? new EnvioImpuesto(null, new FalloProveedor(ClaseFalloProveedor.Caida, codigo), null)
+                : new EnvioImpuesto(id, null, null);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -50,13 +52,148 @@ internal sealed class TransporteImpuestoHttp(IHttpClientFactory http, OpcionesIm
         catch (OperationCanceledException)
         {
             TransporteImpuestoLog.Tiempo(logger);
-            return new ResultadoTransporteImpuesto(null, new FalloProveedor(ClaseFalloProveedor.Timeout));
+            return new EnvioImpuesto(null, new FalloProveedor(ClaseFalloProveedor.Timeout), null);
         }
         catch (HttpRequestException)
         {
             TransporteImpuestoLog.Red(logger);
-            return new ResultadoTransporteImpuesto(null, new FalloProveedor(ClaseFalloProveedor.Red));
+            return new EnvioImpuesto(null, new FalloProveedor(ClaseFalloProveedor.Red), null);
         }
+    }
+
+    public async Task<EstadoImpuesto> ConsultarAsync(string idExterno, string apiKey, CancellationToken ct)
+    {
+        if (!Listo)
+            throw new InvalidOperationException("El transporte de impuesto no está configurado.");
+        try
+        {
+            var url = OpcionesImpuesto.Unir(opciones.BaseUrl!.AbsoluteUri, opciones.Ruta)
+                + "/" + Uri.EscapeDataString(idExterno);
+            using var pedido = new HttpRequestMessage(HttpMethod.Get, url);
+            pedido.Headers.TryAddWithoutValidation(CabeceraApiKey, apiKey);
+            using var respuesta = await http.CreateClient(HttpClientName).SendAsync(pedido, ct).ConfigureAwait(false);
+            var codigo = (int)respuesta.StatusCode;
+            if (respuesta.StatusCode == HttpStatusCode.NotFound)
+                return new EstadoImpuesto(EstadoTrabajoExterno.NoEncontrado, null, new FalloProveedor(ClaseFalloProveedor.Caida, 404), "not_found");
+            if (!respuesta.IsSuccessStatusCode)
+            {
+                TransporteImpuestoLog.Sondeo(logger);
+                return new EstadoImpuesto(EstadoTrabajoExterno.Desconocido, null, Fallo(respuesta.StatusCode, codigo), await CodigoErrorAsync(respuesta, ct).ConfigureAwait(false));
+            }
+
+            var texto = await respuesta.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            return InterpretarEstado(texto);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            TransporteImpuestoLog.Tiempo(logger);
+            return new EstadoImpuesto(EstadoTrabajoExterno.Desconocido, null, new FalloProveedor(ClaseFalloProveedor.Timeout), null);
+        }
+        catch (HttpRequestException)
+        {
+            TransporteImpuestoLog.Red(logger);
+            return new EstadoImpuesto(EstadoTrabajoExterno.Desconocido, null, new FalloProveedor(ClaseFalloProveedor.Red), null);
+        }
+    }
+
+    public async Task<ArchivoImpuesto> DescargarAsync(string archivoId, string apiKey, CancellationToken ct)
+    {
+        if (!Listo)
+            throw new InvalidOperationException("El transporte de impuesto no está configurado.");
+        try
+        {
+            var url = OpcionesImpuesto.Unir(opciones.BaseUrl!.AbsoluteUri, $"files/{Uri.EscapeDataString(archivoId)}/download");
+            using var pedido = new HttpRequestMessage(HttpMethod.Get, url);
+            pedido.Headers.TryAddWithoutValidation(CabeceraApiKey, apiKey);
+            using var respuesta = await http.CreateClient(HttpClientName).SendAsync(pedido, ct).ConfigureAwait(false);
+            var codigo = (int)respuesta.StatusCode;
+            if (respuesta.StatusCode == HttpStatusCode.NotFound)
+                return new ArchivoImpuesto(null, null, new FalloProveedor(ClaseFalloProveedor.Caida, 404), true);
+            if (!respuesta.IsSuccessStatusCode)
+            {
+                TransporteImpuestoLog.Descarga(logger);
+                return new ArchivoImpuesto(null, null, Fallo(respuesta.StatusCode, codigo), false);
+            }
+
+            var bytes = await respuesta.Content.ReadAsByteArrayAsync(ct).ConfigureAwait(false);
+            var tipo = respuesta.Content.Headers.ContentType?.MediaType;
+            return new ArchivoImpuesto(bytes, tipo, null, false);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            TransporteImpuestoLog.Tiempo(logger);
+            return new ArchivoImpuesto(null, null, new FalloProveedor(ClaseFalloProveedor.Timeout), false);
+        }
+        catch (HttpRequestException)
+        {
+            TransporteImpuestoLog.Red(logger);
+            return new ArchivoImpuesto(null, null, new FalloProveedor(ClaseFalloProveedor.Red), false);
+        }
+    }
+
+    private static EstadoImpuesto InterpretarEstado(string texto)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(texto);
+            var status = doc.RootElement.TryGetProperty("status", out var s) ? s.GetString() ?? "" : "";
+            return status.ToLowerInvariant() switch
+            {
+                "queued" => new EstadoImpuesto(EstadoTrabajoExterno.EnCola, null, null, null),
+                "running" => new EstadoImpuesto(EstadoTrabajoExterno.Ejecutando, null, null, null),
+                "succeeded" => new EstadoImpuesto(EstadoTrabajoExterno.Exitoso, texto, null, null),
+                "partial" => new EstadoImpuesto(EstadoTrabajoExterno.Parcial, texto, null, null),
+                "failed" => new EstadoImpuesto(EstadoTrabajoExterno.Fallido, texto, null, null),
+                _ => new EstadoImpuesto(EstadoTrabajoExterno.Desconocido, texto, null, null),
+            };
+        }
+        catch (JsonException)
+        {
+            return new EstadoImpuesto(EstadoTrabajoExterno.Desconocido, null, new FalloProveedor(ClaseFalloProveedor.Caida, 200), null);
+        }
+    }
+
+    private static string? LeerId(string texto)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(texto);
+            return doc.RootElement.TryGetProperty("id", out var id) ? id.GetString() : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<string?> CodigoErrorAsync(HttpResponseMessage respuesta, CancellationToken ct)
+    {
+        try
+        {
+            var texto = await respuesta.Content.ReadAsStringAsync(ct).ConfigureAwait(false);
+            using var doc = JsonDocument.Parse(texto);
+            if (doc.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object
+                && error.TryGetProperty("code", out var code))
+                return code.GetString();
+            if (doc.RootElement.TryGetProperty("code", out var codeRaiz))
+                return codeRaiz.GetString();
+        }
+        catch (JsonException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+
+        return null;
     }
 
     private static FalloProveedor Fallo(HttpStatusCode estado, int codigo) => estado switch
@@ -75,4 +212,13 @@ internal static partial class TransporteImpuestoLog
 
     [LoggerMessage(EventId = 7432, Level = LogLevel.Warning, Message = "Transporte de impuesto no alcanzó la red.")]
     public static partial void Red(ILogger logger);
+
+    [LoggerMessage(EventId = 7433, Level = LogLevel.Warning, Message = "Sondeo de impuesto falló.")]
+    public static partial void Sondeo(ILogger logger);
+
+    [LoggerMessage(EventId = 7434, Level = LogLevel.Warning, Message = "Departamento rechazado por la fuente de impuesto.")]
+    public static partial void DepartamentoRechazado(ILogger logger);
+
+    [LoggerMessage(EventId = 7435, Level = LogLevel.Warning, Message = "Descarga de liquidación de impuesto falló.")]
+    public static partial void Descarga(ILogger logger);
 }

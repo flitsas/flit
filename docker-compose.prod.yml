@@ -745,6 +745,8 @@ services:
       IMPUESTO_CONTACTO_PLACA: ${IMPUESTO_CONTACTO_PLACA:-}
       IMPUESTO_CONTACTO_CARDINALIDAD_2: ${IMPUESTO_CONTACTO_CARDINALIDAD_2:-}
       IMPUESTO_CONTACTO_DIRECCION_COMPLETA: ${IMPUESTO_CONTACTO_DIRECCION_COMPLETA:-}
+      # Credencial de impuesto por compañía (gRPC Identidad). Vacío = transporte real no listo (N/A en Diagnóstico).
+      Consultas__Identidad__Address: ${CONSULTAS_IDENTIDAD_ADDRESS:-}
     volumes:
       # El mismo .pfx que core-notificaciones, solo lectura y en la misma ruta a ambos lados. Si no existe, la API de
       # contratos queda «no conectada» con la ruta en el motivo (no impide arrancar).

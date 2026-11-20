@@ -1,11 +1,22 @@
 namespace Flit.Consultas.Api.Impuesto;
 
-/// <summary>Una vigencia leída. <paramref name="Pagada"/> queda en falso: el detalle del servicio es lo no pagado.</summary>
-internal sealed record VigenciaLeida(int Anio, long Valor, bool Pagada, string? LiquidacionId, long? Avaluo);
+internal enum TipoAdvertenciaLeida { Validacion, Aviso }
+
+internal sealed record AdvertenciaLeida(TipoAdvertenciaLeida Tipo, string Campo, string Codigo, int? Anio);
+
+/// <summary>Una vigencia leída. <paramref name="Pagada"/> queda en falso: el detalle de la fuente es lo no pagado.</summary>
+internal sealed record VigenciaLeida(
+    int Anio,
+    long Valor,
+    bool Pagada,
+    string? LiquidacionId,
+    long? Avaluo,
+    string? ReferenciaPago,
+    string? FechaVencimiento);
 
 /// <summary>
 /// Lo que el intérprete puede afirmar. No lleva textos del proveedor.
-/// <see cref="MontoTotal"/> es null cuando el servicio no informó un valor, también si escribió «0» habiendo deuda.
+/// <see cref="MontoTotal"/> es null cuando la fuente no informó un valor, también si escribió «0» habiendo deuda.
 /// </summary>
 internal sealed record VeredictoImpuesto(
     bool Confirmado,
@@ -23,4 +34,9 @@ internal sealed record VeredictoImpuesto(
     string? FechaConsulta,
     int? UltimoPagoAnio,
     long? UltimoPagoValor,
-    string? UltimoPagoFecha);
+    string? UltimoPagoFecha,
+    IReadOnlyList<AdvertenciaLeida> Advertencias)
+{
+    public override string ToString() =>
+        $"VeredictoImpuesto {{ Confirmado = {Confirmado}, Codigo = {Codigo}, TieneDeuda = {TieneDeuda}, MontoTotal = {MontoTotal}, DatoParcial = {DatoParcial}, Vigencias = {Vigencias.Count}, Advertencias = {Advertencias.Count} }}";
+}

@@ -1,14 +1,29 @@
+using System.Globalization;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 
 namespace Flit.Consultas.Api.Impuesto;
 
 /// <summary>
-/// Lee el JSON crudo del servicio de impuesto. Lo primero que aplica gana, y <c>pendingDebtTaxes</c> va al final.
-/// Un <c>typeError</c> en la raíz no cuenta: solo el de <c>observationError</c>, y solo si es un número.
+/// Lee el cuerpo del GET /consultas/{id} en estado terminal (diseño §2.5). Lo primero que aplica gana.
+/// Nunca copia <c>sent</c>, <c>portal</c> ni <c>message</c>.
 /// </summary>
 internal static class InterpreteImpuesto
 {
-    private static readonly VeredictoImpuesto SinConfirmar = Error("NO_CONFIRMADO");
+    private static readonly HashSet<string> CamposDetail = new(StringComparer.Ordinal)
+    {
+        "secretaryDepartmentCode", "secretaryDepartmentDescription", "secretaryName", "secretaryCity",
+        "vehicleModel", "vehicleServiceType", "vehicleFuelType", "vehicleType", "vehicleBrand",
+        "OwnerName", "OwnerCellPhone", "OwnerPhone", "OwnerEmail",
+        "OwnerAddressDepartment", "OwnerAddressCity", "OwnerAddressComplete",
+        "OwnerAddressTypeRoad", "OwnerAddressNumber1", "OwnerAddressLetter1", "OwnerAddressBis1",
+        "OwnerAddressSuffixletter1", "OwnerAddressCardinality1", "OwnerAddressNumber2", "OwnerAddressLetter2",
+        "OwnerAddressBis2", "OwnerAddressSuffixletter2", "OwnerAddressPlate", "OwnerAddressCardinality2",
+    };
+
+    private static readonly Regex CodigoAviso = new("^[a-z0-9_]{1,64}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex IdArchivo = new("^[A-Za-z0-9_-]{1,64}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
+    private static readonly Regex ReferenciaPago = new("^[A-Za-z0-9-]{1,64}$", RegexOptions.CultureInvariant | RegexOptions.Compiled);
 
     public static VeredictoImpuesto Interpretar(string json)
     {
@@ -27,230 +42,243 @@ internal static class InterpreteImpuesto
             var raiz = documento.RootElement;
             if (raiz.ValueKind != JsonValueKind.Object)
                 return Error("RESPUESTA_INVALIDA");
-            if (!raiz.EnumerateObject().MoveNext())
-                return SinConfirmar;
 
-            var typeError = TypeErrorExplicito(raiz);
-            if (typeError is null)
-                return SinConfirmar;
+            var advertencias = LeerAdvertencias(raiz);
+            var status = Texto(raiz, "status");
+            var result = Objeto(raiz, "result");
+            var resultStatus = result.ValueKind == JsonValueKind.Object ? Texto(result, "status") : "";
+            var errorCode = Texto(raiz, "error_code");
 
-            var observacion = Objeto(raiz, "observationError");
-            var frase = ClasificadorRespuestaImpuesto.Clasificar(
-                typeError.Value,
-                Texto(observacion, "descriptionError"),
-                Texto(observacion, "descriptionErrorDevelopment"),
-                Texto(raiz, "pendingValidity"));
-            if (typeError != 0 || frase != "NO_CONFIRMADO")
-                return ErrorConDatos(raiz, frase);
-
-            if (Deuda(raiz) is not { } deuda)
-                return SinConfirmar;
-            if (!deuda)
+            if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(resultStatus, "error", StringComparison.OrdinalIgnoreCase))
             {
-                if (HayMontoDeDeuda(raiz) || IndicaVigencias(Texto(raiz, "pendingValidity")))
-                    return SinConfirmar;
-                return Confirmado(raiz, false, null, []);
+                if (string.Equals(errorCode, "invalid_params", StringComparison.OrdinalIgnoreCase))
+                    return Error("SOLICITUD_INVALIDA", advertencias);
+                return Error("NO_CONFIRMADO", advertencias);
             }
 
-            var (vigencias, ilegible) = Vigencias(raiz);
-            var total = MontoDeuda(LectorMontoImpuesto.Leer(Texto(raiz, "pendingTotalToPay")));
-            if (ilegible)
-                return Confirmado(raiz, true, total, []);
+            if (HayMismatchBloqueante(advertencias))
+                return Error("NO_CONFIRMADO", advertencias);
 
-            if (vigencias.Count == 0)
-                return Confirmado(raiz, true, total, vigencias);
+            var (vigencias, parcialPeriodos) = Vigencias(result);
+            var deudaLeida = string.Equals(resultStatus, "con_deuda", StringComparison.OrdinalIgnoreCase)
+                || vigencias.Any(v => v.Valor > 0);
 
-            long suma = 0;
-            foreach (var vigencia in vigencias)
-                suma += vigencia.Valor;
-            var sumaDeuda = MontoDeuda(suma);
-            long? monto = total is null || sumaDeuda is null || total == sumaDeuda ? sumaDeuda ?? total : null;
-            if (total is not null && sumaDeuda is not null && total != sumaDeuda)
-                monto = null;
-            return Confirmado(raiz, true, monto, vigencias);
+            if (string.Equals(status, "partial", StringComparison.OrdinalIgnoreCase))
+            {
+                if (deudaLeida)
+                    return Confirmado(result, true, MontoTotal(result), vigencias, datoParcial: true, advertencias);
+                return new VeredictoImpuesto(false, "NO_CONFIRMADO", false, null, false, true, vigencias,
+                    null, null, null, null, null, null, null, null, null, advertencias);
+            }
+
+            if (string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase))
+            {
+                if (string.Equals(resultStatus, "con_deuda", StringComparison.OrdinalIgnoreCase))
+                    return Confirmado(result, true, MontoTotal(result), vigencias, parcialPeriodos, advertencias);
+
+                if (string.Equals(resultStatus, "paz_y_salvo", StringComparison.OrdinalIgnoreCase))
+                {
+                    if (vigencias.Any(v => v.Valor > 0))
+                        return Error("NO_CONFIRMADO", advertencias);
+                    return Confirmado(result, false, null, vigencias, parcialPeriodos, advertencias);
+                }
+            }
+
+            return Error("NO_CONFIRMADO", advertencias);
         }
     }
 
-    private static VeredictoImpuesto ErrorConDatos(JsonElement raiz, string codigo)
+    private static VeredictoImpuesto Confirmado(
+        JsonElement result, bool deuda, long? monto, List<VigenciaLeida> vigencias, bool datoParcial,
+        IReadOnlyList<AdvertenciaLeida> advertencias)
     {
-        var deuda = Deuda(raiz) == true;
-        var monto = MontoDeuda(LectorMontoImpuesto.Leer(Texto(raiz, "pendingTotalToPay")));
-        if (monto is null)
-        {
-            var (vigencias, ilegible) = Vigencias(raiz);
-            if (!ilegible)
-            {
-                long suma = 0;
-                foreach (var vigencia in vigencias)
-                    suma += vigencia.Valor;
-                monto = MontoDeuda(suma);
-            }
-        }
-
-        var parcial = deuda && monto is not null;
-        return new VeredictoImpuesto(false, codigo, deuda && parcial, monto, false, parcial, [], null, null, null, null, null, null, null, null, null);
-    }
-
-    private static VeredictoImpuesto Confirmado(JsonElement raiz, bool deuda, long? monto, IReadOnlyList<VigenciaLeida> vigencias)
-    {
-        var ultimoAnio = LectorFechaImpuesto.Anio(Texto(raiz, "lastPaymentMadeYear"));
-        var ultimoValor = LectorMontoImpuesto.Leer(Texto(raiz, "lastPaymentMadeAmountPaid"));
-        var ultimoFecha = LectorFechaImpuesto.Leer(Texto(raiz, "lastPaymentMadeDate"));
+        var totals = Objeto(result, "totals");
+        var ultimo = Objeto(result, "lastPayment");
+        var avaluoComercial = vigencias.Count == 0
+            ? null
+            : vigencias.OrderByDescending(v => v.Anio).First().Avaluo;
         return new VeredictoImpuesto(
             true,
             null,
             deuda,
             monto,
             deuda && monto is not null,
-            false,
+            datoParcial,
             vigencias,
-            LectorMontoImpuesto.Leer(Texto(raiz, "pendingInterestLate")),
-            LectorMontoImpuesto.Leer(Texto(raiz, "pendingPenalties")),
-            LectorMontoImpuesto.Leer(Texto(raiz, "currentVehicleCommercialAppraisal")),
-            Presente(Texto(raiz, "idAttachedTaxSettlementConsolidated")),
-            Presente(Texto(raiz, "currentCertificationPeriod")),
-            LectorFechaImpuesto.Leer(Texto(raiz, "currentConsultationDate")),
-            ultimoAnio,
-            ultimoValor,
-            ultimoFecha);
+            Monto(totals, "interest"),
+            Monto(totals, "penalty"),
+            avaluoComercial,
+            IdSeguro(Texto(result, "consolidatedFileId")),
+            null,
+            null,
+            Anio(ultimo, "period"),
+            Monto(ultimo, "amount"),
+            LectorFechaImpuesto.Leer(Texto(ultimo, "date")),
+            advertencias);
     }
 
-    private static VeredictoImpuesto Error(string codigo) =>
-        new(false, codigo, false, null, false, false, [], null, null, null, null, null, null, null, null, null);
+    private static VeredictoImpuesto Error(string codigo, IReadOnlyList<AdvertenciaLeida>? advertencias = null) =>
+        new(false, codigo, false, null, false, false, [], null, null, null, null, null, null, null, null, null,
+            advertencias ?? []);
 
-    private static int? TypeErrorExplicito(JsonElement raiz)
-    {
-        var observacion = Objeto(raiz, "observationError");
-        if (observacion.ValueKind != JsonValueKind.Object || !observacion.TryGetProperty("typeError", out var valor))
-            return null;
-        return valor.ValueKind == JsonValueKind.Number && valor.TryGetInt32(out var numero) ? numero : null;
-    }
+    private static bool HayMismatchBloqueante(IReadOnlyList<AdvertenciaLeida> advertencias) =>
+        advertencias.Any(a => a.Tipo == TipoAdvertenciaLeida.Validacion
+            && (a.Campo is "OwnerName" or "vehicleModel"));
 
-    private static bool? Deuda(JsonElement raiz)
+    private static List<AdvertenciaLeida> LeerAdvertencias(JsonElement raiz)
     {
-        if (!raiz.TryGetProperty("pendingDebtTaxes", out var valor))
-            return null;
-        return valor.ValueKind switch
+        var lista = new List<AdvertenciaLeida>();
+        var result = Objeto(raiz, "result");
+        if (result.ValueKind != JsonValueKind.Object)
+            return lista;
+
+        if (result.TryGetProperty("validations", out var validations) && validations.ValueKind == JsonValueKind.Array)
         {
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
+            foreach (var item in validations.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                    continue;
+                if (!string.Equals(Texto(item, "result"), "mismatch", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                var campo = Texto(item, "field");
+                lista.Add(new AdvertenciaLeida(
+                    TipoAdvertenciaLeida.Validacion,
+                    CamposDetail.Contains(campo) ? campo : "otro",
+                    "",
+                    null));
+            }
+        }
+
+        if (result.TryGetProperty("warnings", out var warnings) && warnings.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in warnings.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                    continue;
+                var codigo = Texto(item, "code");
+                lista.Add(new AdvertenciaLeida(
+                    TipoAdvertenciaLeida.Aviso,
+                    "",
+                    CodigoAviso.IsMatch(codigo) ? codigo : "otro",
+                    Anio(item, "period")));
+            }
+        }
+
+        return lista;
+    }
+
+    private static (List<VigenciaLeida> Lista, bool Parcial) Vigencias(JsonElement result)
+    {
+        var lista = new List<VigenciaLeida>();
+        var parcial = false;
+        if (result.ValueKind != JsonValueKind.Object || !result.TryGetProperty("pendingPeriods", out var arreglo)
+            || arreglo.ValueKind != JsonValueKind.Array)
+            return (lista, false);
+
+        foreach (var item in arreglo.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+            {
+                parcial = true;
+                continue;
+            }
+
+            var anio = Anio(item, "period");
+            var valor = Monto(item, "totalToPay") ?? 0;
+            if (anio is null)
+            {
+                if (valor > 0)
+                    parcial = true;
+                continue;
+            }
+
+            lista.Add(new VigenciaLeida(
+                anio.Value,
+                valor,
+                false,
+                IdSeguro(Texto(item, "fileId")),
+                Monto(item, "appraisal"),
+                RefSegura(Texto(item, "paymentReference")),
+                LectorFechaImpuesto.Leer(Texto(item, "dueDate"))));
+        }
+
+        return (lista, parcial);
+    }
+
+    private static long? MontoTotal(JsonElement result)
+    {
+        var totals = Objeto(result, "totals");
+        var total = Monto(totals, "totalToPay");
+        return total is > 0 ? total : null;
+    }
+
+    private static long? Monto(JsonElement elemento, string campo)
+    {
+        if (elemento.ValueKind != JsonValueKind.Object || !elemento.TryGetProperty(campo, out var nodo)
+            || nodo.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            return null;
+        return nodo.ValueKind switch
+        {
+            JsonValueKind.Number => Redondear(nodo.GetDecimal()),
+            JsonValueKind.String => LectorMontoImpuesto.Leer(nodo.GetString()) ?? RedondearTexto(nodo.GetString()),
             _ => null,
         };
     }
 
-    private static bool HayMontoDeDeuda(JsonElement raiz)
+    private static long? Redondear(decimal valor) =>
+        valor < 0 ? null : (long)Math.Round(valor, MidpointRounding.AwayFromZero);
+
+    private static long? RedondearTexto(string? texto)
     {
-        foreach (var campo in new[] { "pendingTotalToPay", "pendingVehicleTaxValue", "pendingPenalties", "pendingInterestLate" })
+        if (string.IsNullOrWhiteSpace(texto))
+            return null;
+        return decimal.TryParse(texto.Trim(), NumberStyles.Number, CultureInfo.InvariantCulture, out var d)
+            ? Redondear(d)
+            : null;
+    }
+
+    private static int? Anio(JsonElement elemento, string campo)
+    {
+        if (elemento.ValueKind != JsonValueKind.Object || !elemento.TryGetProperty(campo, out var nodo))
+            return null;
+        return nodo.ValueKind switch
         {
-            if (MontoDeuda(LectorMontoImpuesto.Leer(Texto(raiz, campo))) is not null)
-                return true;
-        }
-
-        var (vigencias, ilegible) = Vigencias(raiz);
-        if (ilegible)
-            return false;
-        foreach (var vigencia in vigencias)
-        {
-            if (vigencia.Valor > 0)
-                return true;
-        }
-
-        return false;
+            JsonValueKind.Number when nodo.TryGetInt32(out var n) => n is >= 1900 and <= 2100 ? n : null,
+            JsonValueKind.String => LectorFechaImpuesto.Anio(nodo.GetString()),
+            _ => null,
+        };
     }
 
-    private static bool IndicaVigencias(string validez)
+    private static string? IdSeguro(string texto)
     {
-        var texto = TextoImpuesto.Normalizar(validez);
-        if (texto.Length == 0)
-            return false;
-        if (texto.Contains("vigencia", StringComparison.Ordinal) || texto.Contains("recibo", StringComparison.Ordinal))
-            return true;
-        for (var i = 0; i <= texto.Length - 4; i++)
-        {
-            if (i > 0 && char.IsDigit(texto[i - 1]))
-                continue;
-            if (i + 4 < texto.Length && char.IsDigit(texto[i + 4]))
-                continue;
-            if (texto[i] is '1' or '2' && char.IsDigit(texto[i + 1]) && char.IsDigit(texto[i + 2]) && char.IsDigit(texto[i + 3]))
-                return true;
-        }
-
-        return false;
+        var limpio = texto.Trim();
+        return limpio.Length > 0 && IdArchivo.IsMatch(limpio) ? limpio : null;
     }
 
-    private static (List<VigenciaLeida> Lista, bool Ilegible) Vigencias(JsonElement raiz)
+    private static string? RefSegura(string texto)
     {
-        if (!raiz.TryGetProperty("pendingDetailTax", out var arreglo))
-            return ([], false);
-        if (arreglo.ValueKind != JsonValueKind.Array)
-            return ([], true);
-        var lista = new List<VigenciaLeida>();
-        foreach (var item in arreglo.EnumerateArray())
-        {
-            if (item.ValueKind != JsonValueKind.Object)
-                return ([], true);
-            var anio = LectorFechaImpuesto.Anio(Primero(item, "validaty", "validity"));
-            if (anio is null)
-                return ([], true);
-            if (!TryValor(item, "total", out var valor))
-                return ([], true);
-            if (!TryOpcional(item, "vehicleAppraisal", out var avaluo))
-                return ([], true);
-            lista.Add(new VigenciaLeida(anio.Value, valor, false, Presente(Texto(item, "idAttachedTaxSettlement")), avaluo));
-        }
-
-        return (lista, false);
+        var limpio = texto.Trim();
+        return limpio.Length > 0 && ReferenciaPago.IsMatch(limpio) ? limpio : null;
     }
-
-    private static bool TryValor(JsonElement item, string campo, out long valor)
-    {
-        valor = 0;
-        if (!item.TryGetProperty(campo, out var nodo) || nodo.ValueKind == JsonValueKind.Null)
-            return true;
-        if (nodo.ValueKind != JsonValueKind.String)
-            return false;
-        var leido = LectorMontoImpuesto.Leer(nodo.GetString());
-        if (leido is null && !string.IsNullOrWhiteSpace(nodo.GetString()))
-            return false;
-        valor = leido ?? 0;
-        return true;
-    }
-
-    private static bool TryOpcional(JsonElement item, string campo, out long? valor)
-    {
-        valor = null;
-        if (!item.TryGetProperty(campo, out var nodo) || nodo.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
-            return true;
-        if (nodo.ValueKind != JsonValueKind.String)
-            return false;
-        var crudo = nodo.GetString();
-        if (string.IsNullOrWhiteSpace(crudo))
-            return true;
-        valor = LectorMontoImpuesto.Leer(crudo);
-        return valor is not null;
-    }
-
-    private static long? MontoDeuda(long? valor) => valor is > 0 ? valor : null;
 
     private static JsonElement Objeto(JsonElement raiz, string campo) =>
-        raiz.TryGetProperty(campo, out var valor) && valor.ValueKind == JsonValueKind.Object ? valor : default;
+        raiz.ValueKind == JsonValueKind.Object && raiz.TryGetProperty(campo, out var valor)
+        && valor.ValueKind == JsonValueKind.Object
+            ? valor
+            : default;
 
     private static string Texto(JsonElement elemento, string campo)
     {
-        if (elemento.ValueKind != JsonValueKind.Object || !elemento.TryGetProperty(campo, out var valor) || valor.ValueKind != JsonValueKind.String)
+        if (elemento.ValueKind != JsonValueKind.Object || !elemento.TryGetProperty(campo, out var valor))
             return "";
-        return valor.GetString() ?? "";
-    }
-
-    private static string Primero(JsonElement elemento, string preferido, string alterno)
-    {
-        var uno = Texto(elemento, preferido);
-        return uno.Length > 0 ? uno : Texto(elemento, alterno);
-    }
-
-    private static string? Presente(string texto)
-    {
-        var limpio = texto.Trim();
-        return limpio.Length == 0 ? null : limpio;
+        return valor.ValueKind switch
+        {
+            JsonValueKind.String => valor.GetString() ?? "",
+            JsonValueKind.Number => valor.GetRawText(),
+            JsonValueKind.True => "true",
+            JsonValueKind.False => "false",
+            _ => "",
+        };
     }
 }

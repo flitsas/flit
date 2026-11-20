@@ -108,7 +108,7 @@ internal sealed class EjecutorTrabajo(
             ConsultarMultasRequest r => await consultas.ConsultarMultas(r, caller, ct).ConfigureAwait(false),
             ConsultarRuesRequest r => await consultas.ConsultarRues(r, caller, ct).ConfigureAwait(false),
             ConsultarAvaluosRequest r => await consultas.ConsultarAvaluos(r, caller, ct).ConfigureAwait(false),
-            ConsultarImpuestoVehicularRequest r => await consultas.ConsultarImpuestoVehicular(r, caller, ct).ConfigureAwait(false),
+            ConsultarImpuestoVehicularRequest r => await consultas.ConsultarImpuestoVehicular(r, caller, trabajo.TrabajoId, ct).ConfigureAwait(false),
             _ => throw new RpcException(new Status(StatusCode.Unimplemented, "Rpc sin implementación en core-consultas.")),
         };
     }

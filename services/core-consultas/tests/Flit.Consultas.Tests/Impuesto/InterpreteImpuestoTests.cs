@@ -1,185 +1,154 @@
 using System.Text.RegularExpressions;
-using FluentAssertions;
 using Flit.Consultas.Api.Impuesto;
+using Flit.Consultas.Api.Simulacion;
+using FluentAssertions;
 using Xunit;
 
 namespace Flit.Consultas.Tests.Impuesto;
 
 /// <summary>
-/// C3-2 — un caso por fixture. Nada no confirmado sale como paz y salvo, y la traza del servicio no viaja en el veredicto.
+/// Diseño §2.5 y D6 — intérprete del cuerpo del <c>GET /consultas/{id}</c> en estado terminal. Un caso por fixture sintético
+/// (<c>Simulacion/Fixtures/impuesto-v2</c>). Nada sin confirmar sale como paz y salvo, <c>error</c>/<c>failed</c> nunca es «sin
+/// deuda», y ni <c>sent</c>, ni <c>portal</c>, ni <c>message</c> viajan en el veredicto.
+/// <para>Uso de ejemplo: <c>InterpreteImpuesto.Interpretar(FixturesImpuesto.Texto("resultado-con-deuda.json"))</c>.</para>
 /// </summary>
 public sealed class InterpreteImpuestoTests
 {
-    private const string Traza = "TRAZA-INTERNA-NO-COPIAR";
-
-    public static IEnumerable<object[]> Casos() =>
-    [
-        F("deuda-completa", confirmado: true, codigo: "", deuda: true, monto: 615_000, parcial: false, vigencias: 1),
-        F("deuda-sin-monto", true, "", true, -1, false, 0),
-        F("sin-deuda-con-datos", true, "", false, -1, false, 0),
-        F("sin-deuda-en-blanco", true, "", false, -1, false, 0),
-        F("bandera-falsa-con-timeout", false, "TIMEOUT", false, -1, false, 0),
-        F("error-con-monto", false, "NO_CONFIRMADO", true, 1_000_000, true, 0),
-        F("documento-no-coincide", false, "DOCUMENTO_NO_COINCIDE", false, -1, false, 0),
-        F("vehiculo-no-encontrado", false, "VEHICULO_NO_ENCONTRADO", false, -1, false, 0),
-        F("vacia", false, "NO_CONFIRMADO", false, -1, false, 0),
-        F("corta-sin-typeerror", false, "NO_CONFIRMADO", false, -1, false, 0),
-        F("deuda-solo-total", true, "", true, 1_234_567, false, 0),
-        F("corta-con-error", false, "HTTP_5XX", false, -1, false, 0),
-        F("extendida-19-llaves", true, "", false, -1, false, 0),
-        F("sin-detalle-15-llaves", false, "VEHICULO_NO_CONSULTABLE", false, -1, false, 0),
-        F("requiere-actualizacion", false, "REQUIERE_ACTUALIZACION", false, -1, false, 0),
-        F("vehiculo-cancelado", false, "VEHICULO_NO_CONSULTABLE", false, -1, false, 0),
-        F("credenciales-faltantes", false, "AUTENTICACION", false, -1, false, 0),
-        F("error-seleccionando-modelo", false, "MODELO_NO_ACEPTADO", false, -1, false, 0),
-        F("documento-no-coincide-en-validity", false, "DOCUMENTO_NO_COINCIDE", false, -1, false, 0),
-        F("cuerpo-ilegible", false, "RESPUESTA_INVALIDA", false, -1, false, 0),
-    ];
+    public static TheoryData<string, bool, string, bool, long, bool, int> Casos => new()
+    {
+        // archivo, confirmado, código, deuda, monto (-1 = sin monto), dato parcial, vigencias
+        { "resultado-con-deuda.json", true, "", true, 615_000, false, 2 },
+        { "resultado-con-deuda-sin-total.json", true, "", true, -1, false, 1 },
+        { "resultado-paz-y-salvo.json", true, "", false, -1, false, 0 },
+        { "resultado-parcial-con-deuda.json", true, "", true, 219_501, true, 1 },
+        { "resultado-parcial-sin-deuda.json", false, "NO_CONFIRMADO", false, -1, true, 0 },
+        { "resultado-mismatch-ownername.json", false, "NO_CONFIRMADO", false, -1, false, 0 },
+        { "resultado-mismatch-vehiclemodel.json", false, "NO_CONFIRMADO", false, -1, false, 0 },
+        { "resultado-fallido.json", false, "NO_CONFIRMADO", false, -1, false, 0 },
+        { "resultado-error.json", false, "NO_CONFIRMADO", false, -1, false, 0 },
+        { "resultado-mismatch-servicio-con-avisos.json", true, "", true, 155_000, false, 1 },
+    };
 
     [Theory]
     [MemberData(nameof(Casos))]
-    public void El_fixture_da_el_veredicto_esperado(string archivo, bool confirmado, string codigo, bool deuda, long monto, bool parcial, int vigencias)
+    public void Cada_fixture_tiene_su_veredicto(string archivo, bool confirmado, string codigo, bool deuda, long monto, bool parcial, int vigencias)
     {
-        string? codigoEsperado = codigo.Length == 0 ? null : codigo;
-        long? montoEsperado = monto < 0 ? null : monto;
-        var texto = File.ReadAllText(Ruta(archivo));
-        var veredicto = InterpreteImpuesto.Interpretar(texto);
-        veredicto.Confirmado.Should().Be(confirmado);
-        veredicto.Codigo.Should().Be(codigoEsperado);
-        veredicto.TieneDeuda.Should().Be(deuda);
-        veredicto.MontoTotal.Should().Be(montoEsperado);
-        veredicto.DatoParcial.Should().Be(parcial);
-        veredicto.Vigencias.Should().HaveCount(vigencias);
-        veredicto.ToString().Should().NotContain(Traza);
-        if (confirmado && !deuda)
-            veredicto.MontoInformado.Should().BeFalse();
-        if (deuda && confirmado)
-            veredicto.MontoInformado.Should().Be(montoEsperado is not null);
+        var veredicto = InterpreteImpuesto.Interpretar(FixturesImpuesto.Texto(archivo));
+        veredicto.Confirmado.Should().Be(confirmado, archivo);
+        (veredicto.Codigo ?? "").Should().Be(codigo, archivo);
+        veredicto.TieneDeuda.Should().Be(deuda, archivo);
+        veredicto.MontoTotal.Should().Be(monto < 0 ? null : monto, archivo);
+        veredicto.MontoInformado.Should().Be(confirmado && monto >= 0, archivo);
+        veredicto.DatoParcial.Should().Be(parcial, archivo);
+        veredicto.Vigencias.Should().HaveCount(vigencias, archivo);
     }
 
     [Fact]
-    public void La_deuda_completa_conserva_vigencia_pago_y_liquidacion()
+    public void Con_deuda_lee_vigencias_totales_ultimo_pago_y_la_consolidada()
     {
-        var veredicto = InterpreteImpuesto.Interpretar(File.ReadAllText(Ruta("deuda-completa")));
-        veredicto.Vigencias.Should().ContainSingle();
-        veredicto.Vigencias[0].Anio.Should().Be(2025);
-        veredicto.Vigencias[0].Valor.Should().Be(615_000);
-        veredicto.Vigencias[0].LiquidacionId.Should().Be("liq-vigencia-tst");
-        veredicto.InteresesMora.Should().Be(5_000);
-        veredicto.Sanciones.Should().Be(10_000);
-        veredicto.AvaluoComercial.Should().Be(20_000_000);
-        veredicto.LiquidacionConsolidadaId.Should().Be("liq-consolidada-tst");
-        veredicto.PeriodoCertificacion.Should().Be("2026");
-        veredicto.FechaConsulta.Should().Be("2026-02-04");
-        veredicto.UltimoPagoAnio.Should().Be(2024);
-        veredicto.UltimoPagoValor.Should().Be(100_000);
-        veredicto.UltimoPagoFecha.Should().Be("2025-02-09");
+        var v = InterpreteImpuesto.Interpretar(FixturesImpuesto.Texto("resultado-con-deuda.json"));
+        v.Vigencias.Select(x => (x.Anio, x.Valor, x.Pagada, x.LiquidacionId, x.Avaluo, x.ReferenciaPago, x.FechaVencimiento)).Should().Equal(
+            (2025, 375_000L, false, "archivo-sintetico-2025", (long?)30_000_000, "REF-SINTETICA-2025", "2025-07-31"),
+            (2026, 240_000L, false, "archivo-sintetico-2026", (long?)28_000_000, "REF-SINTETICA-2026", "2026-07-31"));
+        (v.InteresesMora, v.Sanciones, v.AvaluoComercial).Should().Be((55_000L, 60_000L, 28_000_000L));
+        (v.UltimoPagoAnio, v.UltimoPagoValor, v.UltimoPagoFecha).Should().Be((2024, 280_000L, "2024-06-30"));
+        v.LiquidacionConsolidadaId.Should().Be("archivo-sintetico-consolidado");
+        (v.PeriodoCertificacion, v.FechaConsulta).Should().Be((null, null));
+        v.Advertencias.Should().BeEmpty("match y not_available se ignoran");
     }
 
     [Fact]
-    public void Sin_deuda_no_inventa_ceros()
+    public void Un_mismatch_de_otro_campo_y_los_avisos_son_advertencias_sin_el_texto_del_proveedor()
     {
-        var veredicto = InterpreteImpuesto.Interpretar(File.ReadAllText(Ruta("sin-deuda-en-blanco")));
-        veredicto.Confirmado.Should().BeTrue();
-        veredicto.TieneDeuda.Should().BeFalse();
-        veredicto.MontoTotal.Should().BeNull();
-        veredicto.InteresesMora.Should().BeNull();
-        veredicto.Sanciones.Should().BeNull();
-        veredicto.AvaluoComercial.Should().BeNull();
-        veredicto.FechaConsulta.Should().BeNull();
-        veredicto.UltimoPagoAnio.Should().BeNull();
+        var v = InterpreteImpuesto.Interpretar(FixturesImpuesto.Texto("resultado-mismatch-servicio-con-avisos.json"));
+        v.Advertencias.Should().Equal(
+            new AdvertenciaLeida(TipoAdvertenciaLeida.Validacion, "vehicleServiceType", "", null),
+            new AdvertenciaLeida(TipoAdvertenciaLeida.Validacion, "otro", "", null),
+            new AdvertenciaLeida(TipoAdvertenciaLeida.Aviso, "", "periodo_en_cobro_coactivo", 2026),
+            new AdvertenciaLeida(TipoAdvertenciaLeida.Aviso, "", "otro", null));
+        v.ToString().Should().NotContain("PUBLICO").And.NotContain("PARTICULAR").And.NotContain("texto sintetico");
     }
 
     [Fact]
-    public void Validity_se_lee_igual_que_validaty()
+    public void El_mismatch_bloqueante_tambien_queda_como_advertencia()
+    {
+        var v = InterpreteImpuesto.Interpretar(FixturesImpuesto.Texto("resultado-mismatch-ownername.json"));
+        v.Advertencias.Should().ContainSingle().Which.Should().Be(new AdvertenciaLeida(TipoAdvertenciaLeida.Validacion, "OwnerName", "", null));
+        v.ToString().Should().NotContain("PERSONA PRUEBA");
+    }
+
+    [Fact]
+    public void Un_error_de_la_fuente_conserva_sus_avisos()
+    {
+        var v = InterpreteImpuesto.Interpretar(FixturesImpuesto.Texto("resultado-error.json"));
+        v.Advertencias.Should().ContainSingle().Which.Codigo.Should().Be("vehiculo_no_encontrado");
+    }
+
+    [Theory]
+    [InlineData("no es json")]
+    [InlineData("[]")]
+    [InlineData("\"texto\"")]
+    public void Un_cuerpo_ilegible_es_respuesta_invalida(string cuerpo) =>
+        InterpreteImpuesto.Interpretar(cuerpo).Codigo.Should().Be("RESPUESTA_INVALIDA");
+
+    [Fact]
+    public void Paz_y_salvo_con_una_vigencia_pendiente_es_contradiccion_y_no_confirma()
     {
         const string json = """
-            {
-              "pendingDebtTaxes": true,
-              "pendingTotalToPay": "1000",
-              "pendingDetailTax": [ { "validity": "2023", "total": "1000" } ],
-              "observationError": { "typeError": 0, "descriptionError": "", "descriptionErrorDevelopment": "" }
-            }
+            {"status":"succeeded","result":{"status":"paz_y_salvo","totals":{"totalToPay":0},
+             "pendingPeriods":[{"period":2025,"totalToPay":1000}]}}
             """;
-        var veredicto = InterpreteImpuesto.Interpretar(json);
-        veredicto.Confirmado.Should().BeTrue();
-        veredicto.Vigencias.Should().ContainSingle().Which.Anio.Should().Be(2023);
+        var v = InterpreteImpuesto.Interpretar(json);
+        (v.Confirmado, v.Codigo).Should().Be((false, "NO_CONFIRMADO"));
     }
 
     [Fact]
-    public void Total_distinto_de_la_suma_no_informa_monto_y_conserva_vigencias()
+    public void Un_periodo_ilegible_con_deuda_se_omite_y_marca_dato_parcial()
     {
         const string json = """
-            {
-              "pendingDebtTaxes": true,
-              "pendingTotalToPay": "$ 2.000",
-              "pendingDetailTax": [ { "validaty": "2022", "total": "$ 1.000" } ],
-              "observationError": { "typeError": 0, "descriptionError": "", "descriptionErrorDevelopment": "" }
-            }
+            {"status":"succeeded","result":{"status":"con_deuda","totals":{"totalToPay":3000},
+             "pendingPeriods":[{"period":"vigencia rara","totalToPay":1000},{"period":2026,"totalToPay":2000}]}}
             """;
-        var veredicto = InterpreteImpuesto.Interpretar(json);
-        veredicto.Confirmado.Should().BeTrue();
-        veredicto.TieneDeuda.Should().BeTrue();
-        veredicto.MontoTotal.Should().BeNull();
-        veredicto.MontoInformado.Should().BeFalse();
-        veredicto.Vigencias.Should().ContainSingle().Which.Anio.Should().Be(2022);
+        var v = InterpreteImpuesto.Interpretar(json);
+        v.Confirmado.Should().BeTrue();
+        v.DatoParcial.Should().BeTrue();
+        v.Vigencias.Select(x => x.Anio).Should().Equal(2026);
     }
 
     [Fact]
-    public void Una_vigencia_ilegible_se_descarta_y_queda_el_total()
+    public void Una_referencia_o_un_archivo_con_caracteres_raros_no_se_copia()
     {
         const string json = """
-            {
-              "pendingDebtTaxes": true,
-              "pendingTotalToPay": "$ 5.000",
-              "pendingDetailTax": [ { "validaty": "no-es-anio", "total": "$ 5.000" } ],
-              "observationError": { "typeError": 0, "descriptionError": "", "descriptionErrorDevelopment": "" }
-            }
+            {"status":"succeeded","result":{"status":"con_deuda","totals":{"totalToPay":1000},
+             "pendingPeriods":[{"period":2026,"totalToPay":1000,"paymentReference":"REF <script>","fileId":"../otro"}]}}
             """;
-        var veredicto = InterpreteImpuesto.Interpretar(json);
-        veredicto.Vigencias.Should().BeEmpty();
-        veredicto.MontoTotal.Should().Be(5_000);
+        var vigencia = InterpreteImpuesto.Interpretar(json).Vigencias.Single();
+        (vigencia.ReferenciaPago, vigencia.LiquidacionId).Should().Be((null, null));
     }
 
-    [Fact]
-    public void La_raiz_vacia_no_cuenta_como_typeError()
-    {
-        const string json = """
-            { "pendingDebtTaxes": false, "typeError": 0, "descriptionError": "", "descriptionErrorDevelopment": "" }
-            """;
-        var veredicto = InterpreteImpuesto.Interpretar(json);
-        veredicto.Confirmado.Should().BeFalse();
-        veredicto.Codigo.Should().Be("NO_CONFIRMADO");
-    }
+    [Theory]
+    [InlineData("queued")]
+    [InlineData("desconocido")]
+    public void Un_estado_que_no_es_terminal_no_confirma(string estado) =>
+        InterpreteImpuesto.Interpretar("{\"status\":\"" + estado + "\",\"result\":{\"status\":\"paz_y_salvo\"}}").Codigo.Should().Be("NO_CONFIRMADO");
 
     [Fact]
-    public void Los_fixtures_solo_usan_placas_de_prueba()
+    public void Los_fixtures_v2_son_sinteticos()
     {
-        var dir = Path.GetDirectoryName(Ruta("vacia"))!;
-        foreach (var archivo in Directory.GetFiles(dir, "proveedor-impuesto-*"))
+        FixturesImpuesto.Nombres().Should().HaveCount(18);
+        foreach (var nombre in FixturesImpuesto.Nombres().Where(n => n.EndsWith(".json", StringComparison.Ordinal)))
         {
-            var texto = File.ReadAllText(archivo);
-            foreach (Match placa in Regex.Matches(texto, @"\b[A-Z]{3}\d{2,3}\b"))
-                placa.Value.Should().StartWith("TST", archivo);
-        }
-    }
-
-    private static object[] F(string nombre, bool confirmado, string codigo, bool deuda, long monto, bool parcial, int vigencias) =>
-        [$"proveedor-impuesto-{nombre}.json", confirmado, codigo, deuda, monto, parcial, vigencias];
-
-    private static string Ruta(string archivo)
-    {
-        if (!archivo.EndsWith(".json", StringComparison.Ordinal))
-            archivo = $"proveedor-impuesto-{archivo}.json";
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir is not null)
-        {
-            var candidato = Path.Combine(dir.FullName, "src", "Flit.Consultas.Api", "Simulacion", "Fixtures", archivo);
-            if (File.Exists(candidato))
-                return candidato;
-            dir = dir.Parent;
+            var json = FixturesImpuesto.Texto(nombre);
+            foreach (var placa in Regex.Matches(json, "[A-Z]{3}[0-9]{3}").Select(m => m.Value))
+                placa.Should().StartWith("TST", $"{nombre}: placa sintética");
+            foreach (var valor in Regex.Matches(json, "\"(?:sent|portal)\"\\s*:\\s*\"([^\"]+)\"").Select(m => m.Groups[1].Value)
+                .Where(v => v.Contains(' ', StringComparison.Ordinal)))
+                valor.Should().Contain("PRUEBA", $"{nombre}: sent/portal sintético");
+            foreach (var dominio in Regex.Matches(json, "@[a-z0-9.-]+").Select(m => m.Value))
+                dominio.Should().Be("@example.invalid", nombre);
+            Regex.Matches(json, "\\b3\\d{9}\\b").Should().BeEmpty($"{nombre} no trae celulares");
         }
 
-        throw new FileNotFoundException(archivo);
+        FixturesImpuesto.Bytes("liquidacion-sintetica.pdf").AsSpan(0, 5).ToArray().Should().Equal("%PDF-"u8.ToArray());
     }
 }

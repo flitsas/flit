@@ -65,7 +65,16 @@ public sealed class ContratoImpuestoTests
         Campo(request, "departamento_nombre", 7, FieldType.String, opcional: true);
         Campo(request, "modelo", 8, FieldType.Int32, opcional: true);
         Campo(request, "propietario_nombre", 9, FieldType.String, opcional: true);
-        request.Fields.InFieldNumberOrder().Should().HaveCount(9);
+        Campo(request, "propietario_telefono", 10, FieldType.String, opcional: true);
+        Campo(request, "propietario_correo", 11, FieldType.String, opcional: true);
+        Campo(request, "propietario_departamento", 12, FieldType.String, opcional: true);
+        Campo(request, "propietario_ciudad", 13, FieldType.String, opcional: true);
+        Campo(request, "propietario_direccion", 14, FieldType.String, opcional: true);
+        Campo(request, "vehiculo_clase", 15, FieldType.String, opcional: true);
+        Campo(request, "vehiculo_marca", 16, FieldType.String, opcional: true);
+        Campo(request, "vehiculo_servicio", 17, FieldType.String, opcional: true);
+        Campo(request, "vehiculo_combustible", 18, FieldType.String, opcional: true);
+        request.Fields.InFieldNumberOrder().Should().HaveCount(18);
     }
 
     [Fact]
@@ -98,6 +107,7 @@ public sealed class ContratoImpuestoTests
         Campo(respuesta, "periodo_certificacion", 11, FieldType.String, opcional: true);
         Campo(respuesta, "fecha_consulta_proveedor", 12, FieldType.String, opcional: true);
         Campo(respuesta, "dato_parcial", 13, FieldType.Bool);
+        Campo(respuesta, "advertencias", 14, FieldType.Message, repetido: true, tipoMensaje: $"{Paquete}.AdvertenciaImpuesto");
         respuesta.FindFieldByName("monto_total")!.HasPresence.Should().BeFalse("el campo 2 sigue sin optional");
 
         var nombres = respuesta.Fields.InFieldNumberOrder()
@@ -111,6 +121,14 @@ public sealed class ContratoImpuestoTests
         Campo(vigencia, "pagada", 3, FieldType.Bool);
         Campo(vigencia, "liquidacion_id", 4, FieldType.String, opcional: true);
         Campo(vigencia, "avaluo", 5, FieldType.Int64, opcional: true);
+        Campo(vigencia, "referencia_pago", 6, FieldType.String, opcional: true);
+        Campo(vigencia, "fecha_vencimiento", 7, FieldType.String, opcional: true);
+
+        var advertencia = Mensaje("AdvertenciaImpuesto");
+        Campo(advertencia, "tipo", 1, FieldType.Enum);
+        Campo(advertencia, "campo", 2, FieldType.String);
+        Campo(advertencia, "codigo", 3, FieldType.String);
+        Campo(advertencia, "anio", 4, FieldType.Int32, opcional: true);
 
         var pago = Mensaje("UltimoPagoImpuesto");
         Campo(pago, "anio", 1, FieldType.Int32, opcional: true);

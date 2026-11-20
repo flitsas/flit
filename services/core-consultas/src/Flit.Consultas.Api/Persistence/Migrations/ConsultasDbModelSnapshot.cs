@@ -302,6 +302,81 @@ namespace Flit.Consultas.Api.Persistence.Migrations
                     b.ToTable("inbox", "consultas");
                 });
 
+            modelBuilder.Entity("Flit.Consultas.Api.Persistence.TrabajoImpuestoExterno", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("completed_at");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("DepartmentCode")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)")
+                        .HasColumnName("department_code");
+
+                    b.Property<string>("ExternalId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("external_id");
+
+                    b.Property<DateTimeOffset?>("LastPolledAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_polled_at");
+
+                    b.Property<int>("PollCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("poll_count");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTimeOffset?>("SubmittedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TrabajoId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("trabajo_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("Id")
+                        .HasName("pk_vehicle_tax_jobs");
+
+                    b.HasIndex("CreatedAt")
+                        .HasDatabaseName("ix_vehicle_tax_jobs_created_at");
+
+                    b.HasIndex("TrabajoId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_vehicle_tax_jobs_trabajo_id");
+
+                    b.HasIndex("TenantId", "CreatedAt")
+                        .HasDatabaseName("ix_vehicle_tax_jobs_tenant_id_created_at");
+
+                    b.ToTable("vehicle_tax_jobs", "consultas", t =>
+                        {
+                            t.HasCheckConstraint("ck_vehicle_tax_jobs_status", "status IN ('reserved','queued','running','succeeded','partial','failed','timeout','error')");
+                            t.HasComment("Seguimiento TrabajoId del bus -> id de la consulta asíncrona de impuesto (D4). Sin placa, documento ni respuesta. Retención 24 h.");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Platform.Sdk.Messaging.OutboxMessage", b =>
                 {
                     b.Property<Guid>("Id")
