@@ -59,18 +59,21 @@ describe("CameraViewer · vista en espejo (Bug #13449)", () => {
     expect(video).not.toHaveClass("-scale-x-100");
   });
 
-  it("documento en computador (webcam frontal que no reporta la cámara): la vista sigue el gesto en espejo", async () => {
+  // Bug #14634 (hallazgo QA manual) — el documento NUNCA se invierte: la guía (líneas de datos, recuadro
+  // «tu foto») se dibuja sin espejo sobre el video, así que invertirlo obliga a sostener el documento al revés
+  // en la realidad para que calce en pantalla, y la foto capturada (sin espejo) sale invertida.
+  it("documento en computador (webcam frontal que no reporta la cámara): no se invierte", async () => {
     mockMedia(streamReporting());
     render(<CameraViewer shape="rect" facing="environment" captureLabel="Capturar documento" onContinue={vi.fn()} />);
     const video = await videoWhenReady("Capturar documento");
-    expect(video).toHaveAttribute("data-mirrored", "true");
-    expect(video).toHaveClass("-scale-x-100");
+    expect(video).toHaveAttribute("data-mirrored", "false");
+    expect(video).not.toHaveClass("-scale-x-100");
   });
 
-  it("documento con la cámara frontal del celular: también en espejo", async () => {
+  it("documento con la cámara frontal del celular: tampoco se invierte", async () => {
     mockMedia(streamReporting("user"));
     render(<CameraViewer shape="rect" facing="environment" captureLabel="Capturar documento" onContinue={vi.fn()} />);
-    expect(await videoWhenReady("Capturar documento")).toHaveAttribute("data-mirrored", "true");
+    expect(await videoWhenReady("Capturar documento")).toHaveAttribute("data-mirrored", "false");
   });
 
   it("documento con la cámara trasera del celular: no se invierte", async () => {
