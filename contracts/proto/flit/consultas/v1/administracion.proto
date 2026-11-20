@@ -34,7 +34,7 @@ service ConsultasAdminService {
 
   // Activa, cambia o apaga (proveedor vacío) la contingencia de un tipo. Valida tipo y proveedor; el motivo es obligatorio.
   // La siguiente consulta de Trámites, Persona Natural o ICT ya la aplica (otras réplicas, con caché de hasta 20 s).
-  rpc GuardarContingenciaRunt(GuardarContingenciaRuntRequest) returns (ContingenciaRunt);
+  rpc GuardarContingenciaRunt(GuardarContingenciaRuntRequest) returns (GuardarContingenciaRuntResponse);
 }
 
 message ConfiguracionEmpresa {
@@ -126,6 +126,10 @@ message GuardarContingenciaRuntRequest {
   string actualizado_por = 4;
   // Id del usuario, para la auditoría.
   string actualizado_por_id = 5;
+}
+
+message GuardarContingenciaRuntResponse {
+  ContingenciaRunt contingencia = 1;
 }
 
 message ConsumoAgregado {

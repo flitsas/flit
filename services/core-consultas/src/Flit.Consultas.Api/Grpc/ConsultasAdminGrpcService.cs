@@ -43,7 +43,7 @@ internal sealed class ConsultasAdminGrpcService(
     /// Activa, cambia o apaga (proveedor vacío) la contingencia de un tipo. El tipo, el proveedor de ese tipo y el motivo se
     /// validan aquí (<c>InvalidArgument</c>) y, si algo falla, nada cambia. No toca la configuración de ninguna empresa.
     /// </summary>
-    public override async Task<ContingenciaRunt> GuardarContingenciaRunt(GuardarContingenciaRuntRequest request, ServerCallContext context)
+    public override async Task<GuardarContingenciaRuntResponse> GuardarContingenciaRunt(GuardarContingenciaRuntRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(context);
@@ -83,7 +83,7 @@ internal sealed class ConsultasAdminGrpcService(
 
         contingencia.Invalidar();
         var fila = await db.ContingenciasRunt.AsNoTracking().SingleAsync(c => c.Kind == tipo, ct).ConfigureAwait(false);
-        return AProto(tipo, fila);
+        return new GuardarContingenciaRuntResponse { Contingencia = AProto(tipo, fila) };
     }
 
     private static ContingenciaRunt AProto(string tipo, Persistence.ContingenciaProveedorRunt? fila) => new()
