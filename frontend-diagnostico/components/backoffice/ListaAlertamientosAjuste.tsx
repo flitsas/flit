@@ -15,7 +15,7 @@ export interface ListaAlertamientosAjusteProps {
 }
 
 const CONTROL =
-  "min-h-9 w-full rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface)] px-2 text-sm text-[color:var(--di-text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)] aria-[invalid=true]:border-[color:var(--di-danger)]";
+  "min-h-9 w-full rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface)] px-2 text-base sm:text-sm text-[color:var(--di-text-primary)] focus-visible:outline-2 focus-visible:outline-[var(--di-action)] aria-[invalid=true]:border-[color:var(--di-danger)]";
 const ETIQUETA = "text-xs font-semibold text-[color:var(--di-text-secondary)]";
 const ERROR = "text-xs text-[color:var(--di-danger)]";
 const BOTON_TEXTO =

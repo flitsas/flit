@@ -555,7 +555,7 @@ describe("ListadoVehiculos — UA-5: vehículos sin placa", () => {
 describe("ListadoVehiculos — AC23/AC42: 360 px y tokens", () => {
   const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
 
-  it("por debajo de 900 px la tabla pasa a tarjetas: recetas TABLA_MOVIL_*, data-label por celda y la placa de título", async () => {
+  it("por debajo de 1024 px la tabla pasa a tarjetas: recetas TABLA_MOVIL_*, data-label por celda y la placa de título", async () => {
     simularApi({ "GET /vehiculos": () => Response.json(lista(filasBase())) });
     pintar();
     const t = await tabla();

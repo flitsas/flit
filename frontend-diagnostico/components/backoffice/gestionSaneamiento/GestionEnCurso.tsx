@@ -49,7 +49,7 @@ function CampoObservacion({ id, observacion }: { id: string; observacion: Gestio
         aria-describedby={`${id}-observacion-ayuda`}
         onChange={(e) => editar(e.target.value)}
         onBlur={() => void guardar()}
-        className={`${CAMPO_CLS.replace("h-11 ", "")} min-h-20 py-2 text-sm`}
+        className={`${CAMPO_CLS.replace("h-11 ", "")} min-h-20 py-2 sm:text-sm`}
       />
       <p id={`${id}-observacion-ayuda`} className={AYUDA_CLS}>
         La compañía la ve en el panel del vehículo.

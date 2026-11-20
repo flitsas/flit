@@ -58,19 +58,19 @@ export function CabeceraModulo({
     <Raiz
       aria-labelledby={ariaLabelledby}
       className={cn(
-        "kit-cabecera relative flex shrink-0 flex-wrap items-center gap-4 rounded-[9px] border border-[var(--di-border)] bg-[var(--di-surface-elevated)] py-4 pr-6 shadow-none max-[640px]:p-4",
+        "kit-cabecera relative flex shrink-0 flex-wrap items-center gap-4 rounded-[9px] border border-[var(--di-border)] bg-[var(--di-surface-elevated)] py-4 pr-6 shadow-none max-sm:p-4",
         conIcono ? "pl-[92px]" : "pl-6",
         className,
       )}
     >
       {icono ? (
-        <IconoModulo clave={icono} disco size={56} className="absolute left-5 top-1/2 -translate-y-1/2 max-[640px]:hidden" />
+        <IconoModulo clave={icono} disco size={56} className="absolute left-5 top-1/2 -translate-y-1/2 max-sm:hidden" />
       ) : ilustracion ? (
         <img
           src={ilustracion}
           alt=""
           aria-hidden="true"
-          className="absolute left-5 top-1/2 h-14 w-14 -translate-y-1/2 object-contain max-[640px]:hidden"
+          className="absolute left-5 top-1/2 h-14 w-14 -translate-y-1/2 object-contain max-sm:hidden"
         />
       ) : null}
       <div className="min-w-0 flex-[1_1_280px]">
@@ -83,7 +83,7 @@ export function CabeceraModulo({
         )}
         <h1
           id={tituloId}
-          className={cn("text-[2rem] font-bold leading-[1.2] max-[640px]:text-[1.625rem]", tituloClassName)}
+          className={cn("text-[2rem] font-bold leading-[1.2] max-sm:text-[1.625rem]", tituloClassName)}
           style={{ color: "var(--di-heading)" }}
         >
           {titulo}
@@ -95,7 +95,7 @@ export function CabeceraModulo({
         )}
         {debajo}
       </div>
-      {acciones && <div className="flex flex-wrap items-center gap-3 max-[640px]:w-full max-[640px]:[&>*]:flex-[1_1_140px]">{acciones}</div>}
+      {acciones && <div className="flex flex-wrap items-center gap-3 max-sm:w-full max-sm:[&>*]:flex-[1_1_140px]">{acciones}</div>}
     </Raiz>
   );
 }

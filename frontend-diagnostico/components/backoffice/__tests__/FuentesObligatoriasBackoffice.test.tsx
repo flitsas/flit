@@ -257,9 +257,9 @@ describe("FuentesObligatoriasBackoffice — estado por fila (AC48)", () => {
   });
 });
 
-// HU #14562 · M6 (AC56): F-10 es la TablaEditable del kit, así que por debajo de 900 px cada definición es una tarjeta y
+// HU #14562 · M6 (AC56): F-10 es la TablaEditable del kit, así que por debajo de 1024 px cada definición es una tarjeta y
 // cada celda dice su columna (definición, RUNT fijo y cada fuente configurable).
-describe("FuentesObligatoriasBackoffice — HU #14562 M6: tarjetas por debajo de 900 px", () => {
+describe("FuentesObligatoriasBackoffice — HU #14562 M6: tarjetas por debajo de 1024 px", () => {
   it("cada celda de la fila lleva el nombre de su columna en data-label", async () => {
     simularApi({ [`GET ${RUTA}`]: () => Response.json(SEMILLA) });
     montar();

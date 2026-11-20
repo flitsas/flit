@@ -112,13 +112,13 @@ export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReproc
  * HU #14562 AC28: placa y trámite fijos al desplazar en horizontal, solo desde 900 px (auditoría B2). Por debajo, la fila es
  * una tarjeta (AC56) y nada queda fijo: a 360 px las columnas fijas tapaban todas las fuentes.
  */
-const FIJA_IZQ_CLS = "min-[900px]:sticky z-10";
-const FIJA_DER_CLS = "min-[900px]:sticky min-[900px]:right-0 z-10";
+const FIJA_IZQ_CLS = "lg:sticky z-10";
+const FIJA_DER_CLS = "lg:sticky lg:right-0 z-10";
 /**
  * M-2 (A6.2): la th de una columna fija es sticky arriba y al costado. Va en z-20, por encima de las th sticky normales (z-10 del
  * kit), que si no la tapan al desplazar en horizontal porque van después en el DOM. Las celdas fijas del cuerpo siguen en z-10.
  */
-const CABECERA_FIJA_CLS = `${CABECERA_CLS.replace(/\bz-10\b/, "z-20")} min-[900px]:sticky`;
+const CABECERA_FIJA_CLS = `${CABECERA_CLS.replace(/\bz-10\b/, "z-20")} lg:sticky`;
 /** FE-2 (spec-ui §2.3): la columna de acciones (chip + disparador «Acciones» + mensaje) mide 10rem en th y td. */
 const ANCHO_ACCIONES_CLS = "w-[10rem] min-w-[10rem]";
 /** CR-6: las celdas fijas tienen fondo propio (tapan lo que desplaza debajo); con la fila en hover toman su mismo color. */
@@ -168,7 +168,7 @@ function EncabezadoVehiculo({
  * (dos badges por sujeto, RUNT y SIMIT), Avalúo comercial e Impuesto departamental: la no pedida dice «Sin solicitar»; la pedida sin celda todavía, «Sin ejecutar». El
  * usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada semáforo con consulta abre su detalle (HU #13801)
  * en una pestaña nueva (HU #14087), ya sin modal.
- * El desborde horizontal queda dentro del contenedor de la tabla, nunca en la página. Por debajo de 900 px cada vehículo es
+ * El desborde horizontal queda dentro del contenedor de la tabla, nunca en la página. Por debajo de 1024 px cada vehículo es
  * una tarjeta con las recetas TABLA_MOVIL_* (HU #14562 AC56): la placa de título y un renglón por columna con su rótulo.
  */
 export function GrillaSemaforos({
@@ -188,7 +188,7 @@ export function GrillaSemaforos({
 }: GrillaSemaforosProps) {
   const pedidas = fuentesPedidas(grilla.columnas);
   // Con casilla de selección, la placa queda fija a su derecha (la casilla mide w-10). Solo desde 900 px, como el sticky.
-  const izquierdaPlaca = casillaVehiculo ? "min-[900px]:left-10" : "min-[900px]:left-0";
+  const izquierdaPlaca = casillaVehiculo ? "lg:left-10" : "lg:left-0";
 
   return (
     // Ronda 2 de E2E: mismo patrón que el resto de contenedores desplazables de la ola (región enfocable solo con desborde).
@@ -197,7 +197,7 @@ export function GrillaSemaforos({
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
             {casillaVehiculo && (
-              <th scope="col" className={`${CABECERA_FIJA_CLS} min-[900px]:left-0 w-10`} style={CABECERA_ESTILO}>
+              <th scope="col" className={`${CABECERA_FIJA_CLS} lg:left-0 w-10`} style={CABECERA_ESTILO}>
                 <span className="sr-only">Seleccionar</span>
               </th>
             )}
@@ -220,7 +220,7 @@ export function GrillaSemaforos({
               </th>
             ))}
             {accionVehiculo && (
-              <th scope="col" className={`${CABECERA_FIJA_CLS} min-[900px]:right-0 ${SEPARADOR_CLS} ${ANCHO_ACCIONES_CLS}`} style={CABECERA_ESTILO}>
+              <th scope="col" className={`${CABECERA_FIJA_CLS} lg:right-0 ${SEPARADOR_CLS} ${ANCHO_ACCIONES_CLS}`} style={CABECERA_ESTILO}>
                 {tituloAccionVehiculo}
               </th>
             )}
@@ -232,7 +232,7 @@ export function GrillaSemaforos({
             return (
               <tr key={v.id} data-vehiculo={v.id} className={`group border-t border-[var(--table-row-border)] ${FILA_TABLA_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
                 {casillaVehiculo && (
-                  <td data-columna="seleccion" data-label="Seleccionar" className={`${TD_CLS} ${FIJA_IZQ_CLS} min-[900px]:left-0 ${FONDO_FIJA_CLS}`}>
+                  <td data-columna="seleccion" data-label="Seleccionar" className={`${TD_CLS} ${FIJA_IZQ_CLS} lg:left-0 ${FONDO_FIJA_CLS}`}>
                     {casillaVehiculo(v)}
                   </td>
                 )}
@@ -267,7 +267,7 @@ export function GrillaSemaforos({
                   // Sujeto (dos consultas): una td con los dos badges apilados; fuente única: la td es la de CeldaSemaforo.
                   return col.fuentes.length > 1 ? (
                     <td key={col.rotulo} data-columna={col.rotulo} data-label={col.rotulo} className={TD_CLS}>
-                      <div className="flex flex-col items-start gap-1.5 max-[900px]:items-end">{celdas}</div>
+                      <div className="flex flex-col items-start gap-1.5 max-lg:items-end">{celdas}</div>
                     </td>
                   ) : (
                     <Fragment key={col.rotulo}>{celdas}</Fragment>

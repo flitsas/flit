@@ -25,6 +25,7 @@ import {
 } from "@/lib/users/bulkInviteErrors";
 import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_DESCRIPCION_CLS, MODAL_PANEL_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { IconoAviso } from "@flit/ui/IconoAviso";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
 const PRIMARY_FILL = "var(--kit-azul-relleno)";
 const MAX_MB = BULK_INVITE_MAX_FILE_BYTES / (1024 * 1024);
@@ -88,6 +89,7 @@ export function BulkInviteModal({
   const panelRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const inFlightRef = useRef(false);
+  useBloqueoScroll(true);
 
   const [phase, setPhase] = useState<Phase>("idle");
   const [file, setFile] = useState<File | null>(null);
@@ -251,7 +253,7 @@ export function BulkInviteModal({
           {announcement}
         </p>
 
-        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overflow-x-hidden pr-1">
+        <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto overscroll-contain overflow-x-hidden pr-1">
           {(contextSlot || contextSummary) && (
             <section aria-label="Contexto de la invitación" className="flex flex-col gap-2">
               {contextSlot?.({ disabled: busy })}

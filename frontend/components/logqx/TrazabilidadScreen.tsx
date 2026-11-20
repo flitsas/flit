@@ -90,7 +90,7 @@ export function TrazabilidadScreen({
   const espera = formatEspera(r?.horasEsperando);
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 text-flit-primary">
+    <div className="app-bg min-h-dvh px-6 pt-6 pb-10 text-flit-primary">
       <Link
         href={volverHref}
         className="mb-3 inline-flex items-center gap-1.5 text-[12.5px] font-medium opacity-70 hover:text-flit-brand hover:opacity-100"

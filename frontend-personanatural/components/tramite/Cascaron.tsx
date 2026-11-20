@@ -236,7 +236,7 @@ export function Cascaron({ cliente, definicion, solicitud, pasos, registro, cont
 
   return (
     <ProveedorWizard value={api}>
-      <div className="min-h-screen bg-background font-sans text-foreground">
+      <div className="min-h-dvh bg-background font-sans text-foreground">
         <header className="wizard-header flex items-center justify-between border-b border-border bg-background py-3">
           <LogoInicio alt="FLIT 2.0" etiqueta="FLIT 2.0 — Ir al Dashboard" />
           <div className="hidden items-center gap-6 text-sm md:flex">

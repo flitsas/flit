@@ -110,7 +110,7 @@ export function ResumenCierre({
           </div>
 
           <div className="mt-6 w-full overflow-x-auto rounded-[9px] border border-border">
-            <table className="w-full min-w-[600px] text-center text-sm">
+            <table className="tabla-ficha w-full text-center text-sm lg:min-w-[600px]">
               <thead className="bg-primary text-primary-foreground">
                 <tr>
                   {["ID del trámite", "Tipo", "Nº radicado", "Organismo"].map((t) => (

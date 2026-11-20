@@ -91,7 +91,7 @@ function AdminTransitOfficesPageInner() {
 
   if (role === "checking" || role === "ot_admin") {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center gap-3 px-6 pt-6 pb-10" role="status" aria-busy="true" aria-live="polite">
+      <div className="flex min-h-[50dvh] flex-col items-center justify-center gap-3 px-6 pt-6 pb-10" role="status" aria-busy="true" aria-live="polite">
         <span className="sr-only">Cargando…</span>
         <div
           className="h-10 w-10 animate-spin rounded-full border-2 border-t-transparent"
@@ -103,7 +103,7 @@ function AdminTransitOfficesPageInner() {
   }
 
   return (
-    <div className="flex min-h-screen flex-col gap-4 px-6 pt-6 pb-10">
+    <div className="flex flex-col gap-4 px-6 pt-6 pb-10">
       <button
         type="button"
         onClick={() => router.push("/")}

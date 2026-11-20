@@ -3,6 +3,7 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { MODAL_VELO_CLS } from '@flit/ui/Modal';
+import { useBloqueoScroll } from '@flit/ui/useBloqueoScroll';
 import { DETALLE_SHEET_CLASS } from './detalle-visual';
 
 /**
@@ -41,6 +42,7 @@ export function DetalleTramiteShell({
 }) {
   const titleId = useId();
   const sheetRef = useRef<HTMLDivElement | null>(null);
+  useBloqueoScroll(open);
 
   useEffect(() => {
     if (!open) return;

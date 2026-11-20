@@ -43,13 +43,13 @@ describe("IconoCambioPropietario — HU #14585 A6.7", () => {
     expect(container.ownerDocument.body.innerHTML).not.toContain("no coincide con el propietario actual");
   });
 
-  it("< 900 px: texto visible «Cambio de propietario» aria-hidden (el botón ya lo nombra)", () => {
+  it("< 1024 px: texto visible «Cambio de propietario» aria-hidden (el botón ya lo nombra)", () => {
     const { container } = render(<IconoCambioPropietario cambio />);
     const texto = container.querySelector("[data-cambio-propietario-movil]")!;
     expect(texto).toHaveTextContent("Cambio de propietario");
     expect(texto).toHaveAttribute("aria-hidden", "true");
     expect(texto.className).toContain("hidden");
-    expect(texto.className).toContain("max-[900px]:inline");
+    expect(texto.className).toContain("max-lg:inline");
   });
 
   it("el ícono es decorativo y usa el token de advertencia, sin hex", () => {

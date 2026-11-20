@@ -3,6 +3,7 @@
 import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useEffect, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import { cn } from "@/lib/utils";
 import type { ReportType } from "@/lib/api/analytics-scheduling";
 import { SchedulesSection } from "./SchedulesSection";
@@ -48,6 +49,7 @@ export function SchedulingPanel({
   allowedReportTypes,
 }: SchedulingPanelProps) {
   const [tab, setTab] = useState<Tab>("schedules");
+  useBloqueoScroll(open);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reacciona a un preset que llega de fuera, no a estado propio
@@ -66,7 +68,7 @@ export function SchedulingPanel({
 
   return (
     <div
-      className={`fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-4 sm:p-8 ${DIALOGO_VELO_CLS}`}
+      className={`fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain p-4 sm:p-8 ${DIALOGO_VELO_CLS}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

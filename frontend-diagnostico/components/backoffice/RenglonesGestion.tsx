@@ -196,7 +196,7 @@ export function RenglonesEditables({ renglones, acciones, errores, descargas }: 
                 marcar(fila.id);
                 onCambio(e.target.value as Fila["nota"]);
               }}
-              className={`${CAMPO_CLS.replace("h-11 ", "")} min-h-16 py-2 text-sm`}
+              className={`${CAMPO_CLS.replace("h-11 ", "")} min-h-16 py-2 sm:text-sm`}
             />
             <Contador id={contador} largo={texto.length} />
           </span>

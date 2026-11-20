@@ -26,7 +26,7 @@ export const AYUDA_FAQ = [
 
 export function Ayuda() {
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
+    <div className="app-bg px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Centro de Ayuda"
         subtitle="Documentación operativa, chat DR. FLIT y canales de soporte."
