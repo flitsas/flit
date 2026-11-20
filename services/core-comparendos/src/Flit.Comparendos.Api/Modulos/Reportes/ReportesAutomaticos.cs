@@ -67,6 +67,7 @@ public sealed class ReportesAutomaticos(ComparendosDb db, ServicioReportes repor
         var radar = await reportes.Radar(a, reloj.Hoy, k.RadarHasta).OrderBy(c => c.FechaLimiteGestion).Take(20)
             .Select(c => new { c.Numero, c.Placa, c.ValorTotal, c.FechaLimiteGestion }).ToListAsync(ct).ConfigureAwait(false);
 
+        var flit = conjunto != ConjuntoPlantillas.Renting;
         var resumen = HtmlCorreo.Tabla(
         [
             ("Deuda activa total", $"{Formato.Pesos(k.DeudaActivaTotal)} en {k.ComparendosConDeuda} comparendos"),
@@ -77,16 +78,16 @@ public sealed class ReportesAutomaticos(ComparendosDb db, ServicioReportes repor
             ("Ahorro del periodo", Formato.Pesos(k.AhorroAcumulado)),
             ("Pagos registrados", $"{await pagos.CountAsync(ct).ConfigureAwait(false)} por {Formato.Pesos(await pagos.SumAsync(p => p.ValorPagado, ct).ConfigureAwait(false))}"),
             ("Radar de vencimientos", $"{k.RadarCantidad} comparendos por {Formato.Pesos(k.RadarValor)} vencen su gestión antes del {Formato.Fecha(k.RadarHasta)}"),
-        ]);
+        ], flit);
         var lista = radar.Count == 0
             ? "<p>No hay comparendos próximos a vencer.</p>"
-            : HtmlCorreo.Tabla(radar.Select(r => ($"{r.Numero} · {r.Placa}", (string?)$"{Formato.Pesos(r.ValorTotal)} — vence {Formato.Fecha(r.FechaLimiteGestion)}")));
+            : HtmlCorreo.Tabla(radar.Select(r => ($"{r.Numero} · {r.Placa}", (string?)$"{Formato.Pesos(r.ValorTotal)} — vence {Formato.Fecha(r.FechaLimiteGestion)}")), flit);
         var cuerpo = $"""
             <p>Resumen {(semanal ? "semanal" : "mensual")} de <b>{WebUtility.HtmlEncode(empresa)}</b> del {Formato.Fecha(a.Desde)} al {Formato.Fecha(a.Hasta)}.</p>
             {resumen}
             <h3 style="font-size:15px;margin:20px 0 8px">Próximos a vencer</h3>
             {lista}
-            <p><a href="{correo.AppUrl}/reportes">Ver el dashboard</a></p>
+            {(flit ? HtmlCorreo.Boton("Ver el dashboard", $"{correo.AppUrl}/reportes") : $"<p><a href=\"{correo.AppUrl}/reportes\">Ver el dashboard</a></p>")}
             """;
         // Va a los destinatarios de la empresa: lleva el marco de su conjunto (FLIT o Renting, sin rastro de FLIT).
         return HtmlCorreo.DeEmpresa(conjunto, semanal ? "Cierre semanal de comparendos" : "Cierre mensual de comparendos", cuerpo, empresa, $"{correo.AppUrl}/assets/correo");

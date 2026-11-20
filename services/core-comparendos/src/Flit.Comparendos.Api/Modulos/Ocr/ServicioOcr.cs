@@ -637,7 +637,7 @@ public sealed partial class ServicioOcr(
             <p>El proveedor de OCR no respondió tras {MaximoIntentos} intentos.</p>
             {HtmlCorreo.Tabla([("Empresa", empresa), ("Paquete", paquete.Nombre), ("Archivo", doc.NombreArchivo), ("Error", $"{doc.TipoFallo}: {doc.MensajeError}"), ("Motor", doc.ProveedorModelo)])}
             <p>El documento quedó FALLIDO y se puede reintentar desde el paquete.</p>
-            <p><a href="{correo.AppUrl}/ocr/paquetes/{paquete.Id}">Ver el paquete</a></p>
+            {HtmlCorreo.Boton("Ver el paquete", $"{correo.AppUrl}/ocr/paquetes/{paquete.Id}")}
             """;
         await correo.RegistrarAsync(new CorreoNuevo
         {
@@ -645,7 +645,7 @@ public sealed partial class ServicioOcr(
             Plantilla = "comparendos.alerta_fallo_ocr",
             Para = para,
             Asunto = config.PlantillaAsunto.Replace("{FUENTE}", "OCR", StringComparison.Ordinal).Replace("{TIMESTAMP}", momento, StringComparison.Ordinal),
-            Html = HtmlCorreo.Envolver("Fallo del proveedor de OCR", cuerpo),
+            Html = HtmlCorreo.Envolver("Fallo del proveedor de OCR", cuerpo, recursos: $"{correo.AppUrl}/assets/correo"),
             RemitenteNombre = config.RemitenteNombre,
         }, ct).ConfigureAwait(false);
     }

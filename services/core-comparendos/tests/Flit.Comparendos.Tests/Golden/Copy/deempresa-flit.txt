@@ -1,0 +1,14 @@
+Cierre semanal de comparendos
+Falló la lectura del documento.
+Empresa
+Gestora de Ejemplo S.A.S.
+Paquete
+Lote octubre
+Archivo
+comparendo-001.pdf
+Error
+Timeout: sin respuesta en 30 s
+Motor
+—
+Este correo lo envía Gestora de Ejemplo S.A.S. con FLIT. Si necesitas ayuda escribe a soporte@flitsas.com .
+POLÍTICA DE PRIVACIDAD

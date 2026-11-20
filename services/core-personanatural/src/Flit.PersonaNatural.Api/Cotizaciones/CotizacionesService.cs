@@ -1,7 +1,7 @@
-using System.Net;
 using System.Net.Mail;
 using System.Security.Cryptography;
 using System.Text;
+using Flit.PersonaNatural.Api.CorreoFlit;
 using Microsoft.Extensions.Options;
 
 namespace Flit.PersonaNatural.Api.Cotizaciones;
@@ -38,6 +38,7 @@ public sealed class CotizacionesService(
     TimeProvider reloj)
 {
     private readonly CotizacionesOptions _o = options.Value;
+    private readonly string _baseAssets = LayoutCorreoFlit.BaseDesde(configuration);
     private readonly byte[] _clave = Encoding.UTF8.GetBytes(configuration["Pii:ClaveHmac"] ?? string.Empty);
     private readonly Lock _candado = new();
     private readonly Dictionary<string, Queue<DateTimeOffset>> _envios = [];
@@ -80,7 +81,7 @@ public sealed class CotizacionesService(
         {
             // El valor sale de la fachada en este momento: lo que el ciudadano recibe es lo que hoy se cobraría.
             var cotizacion = await fachada.CotizarAsync(tipoCodigo, organismoId, adicionales, ct).ConfigureAwait(false);
-            var enviado = await enviador.EnviarAsync(correo, "Tu cotización de trámite FLIT", ArmarHtml(cotizacion), ct).ConfigureAwait(false);
+            var enviado = await enviador.EnviarAsync(correo, "Tu cotización de trámite FLIT", ArmarHtml(cotizacion, _baseAssets), ct).ConfigureAwait(false);
             if (enviado)
                 return ResultadoEnvioCotizacion.Enviado;
         }
@@ -94,20 +95,19 @@ public sealed class CotizacionesService(
         return ResultadoEnvioCotizacion.Fallido;
     }
 
-    /// <summary>Cuerpo del correo: solo la cotización, sin ningún dato personal. Todo texto se codifica.</summary>
-    internal static string ArmarHtml(CotizacionDto c)
+    /// <summary>
+    /// Cuerpo del correo: solo la cotización, sin ningún dato personal, en el marco FLIT (Correos 2.0) con las líneas en la
+    /// tarjeta de detalle. Todo texto se codifica. <paramref name="baseAssets"/>: base de las imágenes (sin valor, la local).
+    /// </summary>
+    internal static string ArmarHtml(CotizacionDto c, string? baseAssets = null)
     {
-        var filas = new StringBuilder();
-        foreach (var l in c.Lineas)
-        {
-            var subtitulo = string.IsNullOrWhiteSpace(l.Subtitulo) ? string.Empty : $"<br><small style=\"color:#555\">{WebUtility.HtmlEncode(l.Subtitulo)}</small>";
-            filas.Append($"<tr><td style=\"padding:6px 0\">{WebUtility.HtmlEncode(l.Nombre)}{subtitulo}</td><td style=\"padding:6px 0;text-align:right\">{Pesos(l.ValorCop)}</td></tr>");
-        }
-
-        return "<div style=\"font-family:Arial,sans-serif;max-width:560px\"><h2>Tu cotización</h2>"
-            + $"<table style=\"width:100%;border-collapse:collapse\">{filas}"
-            + $"<tr><td style=\"padding:8px 0;border-top:1px solid #ccc\"><b>Total</b></td><td style=\"padding:8px 0;border-top:1px solid #ccc;text-align:right\"><b>{Pesos(c.TotalCop)}</b></td></tr></table>"
-            + "<p style=\"color:#555\">Valores vigentes al momento de enviar este correo; pueden cambiar. No guardamos tu correo.</p></div>";
+        var tarjeta = LayoutCorreoFlit.Tarjeta(
+            c.Lineas.Select(l => (l.Nombre, (string?)l.Subtitulo, Pesos(l.ValorCop))),
+            ("Total", Pesos(c.TotalCop)));
+        return LayoutCorreoFlit.Envolver(
+            "Tu cotización",
+            tarjeta + LayoutCorreoFlit.Nota("Valores vigentes al momento de enviar este correo; pueden cambiar. No guardamos tu correo."),
+            baseAssets);
     }
 
     /// <summary>Pesos con punto de miles. A mano: la imagen alpine corre sin ICU (invariant globalization) y no tiene la cultura es-CO.</summary>

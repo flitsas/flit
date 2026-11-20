@@ -1,0 +1,14 @@
+Fallo del proveedor de OCR
+Falló la lectura del documento.
+Empresa
+Gestora de Ejemplo S.A.S.
+Paquete
+Lote octubre
+Archivo
+comparendo-001.pdf
+Error
+Timeout: sin respuesta en 30 s
+Motor
+—
+Ver el paquete
+FLIT · Gestión de Comparendos. Correo automático, no lo respondas.

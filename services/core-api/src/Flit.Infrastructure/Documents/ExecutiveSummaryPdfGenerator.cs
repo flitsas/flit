@@ -1,6 +1,8 @@
 using System.Globalization;
 using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.Dtos;
+using Flit.Infrastructure.Documents.Branding;
+using Flit.Infrastructure.Documents.Reports;
 using QuestPDF;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -44,19 +46,14 @@ internal sealed class ExecutiveSummaryPdfGenerator : IExecutiveSummaryPdfGenerat
         {
             doc.Page(page =>
             {
-                page.Size(PageSizes.A4);
-                page.Margin(1.4f, Unit.Centimetre);
-                page.DefaultTextStyle(t => t.FontSize(9).FontFamily(Fonts.Arial).FontColor(Hex(Ink)));
-
-                page.Header().Column(col =>
+                TabularReportPdfGenerator.ConfigurePage(page, landscape: false, header =>
                 {
-                    col.Item().Text(txt => txt.Span("Resumen Ejecutivo — Dashboard de Trámites").Bold().FontSize(15));
-                    col.Item().Text($"Periodo consultado: {data.From:yyyy-MM-dd} a {data.To:yyyy-MM-dd}")
+                    header.Item().Text(txt => txt.Span("Resumen Ejecutivo — Dashboard de Trámites").Bold().FontSize(15));
+                    header.Item().Text($"Periodo consultado: {data.From:yyyy-MM-dd} a {data.To:yyyy-MM-dd}")
                         .FontSize(9).FontColor(Hex(Muted));
-                    col.Item().PaddingTop(4).LineHorizontal(0.75f).LineColor(Hex(Hairline));
-                });
+                }, footer => footer.Span($"{data.From:yyyy-MM-dd}/{data.To:yyyy-MM-dd}"));
 
-                page.Content().PaddingVertical(8).Column(col =>
+                page.Content().PaddingHorizontal(FlitDocumentTheme.MarginCm, Unit.Centimetre).PaddingVertical(8).Column(col =>
                 {
                     col.Spacing(12);
 
@@ -200,12 +197,6 @@ internal sealed class ExecutiveSummaryPdfGenerator : IExecutiveSummaryPdfGenerat
                             }
                         }
                     });
-                });
-
-                page.Footer().AlignRight().Text(txt =>
-                {
-                    txt.Span("Generado por FLIT · ").FontSize(7).FontColor(Hex(Muted));
-                    txt.Span($"{data.From:yyyy-MM-dd}/{data.To:yyyy-MM-dd}").FontSize(7).FontColor(Hex(Muted));
                 });
             });
         }).GeneratePdf();

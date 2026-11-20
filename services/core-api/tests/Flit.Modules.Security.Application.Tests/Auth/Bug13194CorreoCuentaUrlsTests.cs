@@ -116,8 +116,8 @@ public sealed class Bug13194CorreoCuentaUrlsTests
         await BuildHandler().HandleAsync(new ActivateAccountCommand(RawToken, ValidPassword), CancellationToken.None);
 
         _sent.Should().NotBeNull();
-        _sent!.HtmlBody.Should().Contain($"{QaAssetsBaseUrl}/flit-logo.png");
-        _sent.HtmlBody.Should().Contain($"{QaAssetsBaseUrl}/tramite-cambio-estado-header.png");
+        _sent!.HtmlBody.Should().Contain($"{QaAssetsBaseUrl}/flit-logo-firma.png");
+        _sent.HtmlBody.Should().Contain($"{QaAssetsBaseUrl}/flit-banner-correo.png");
     }
 
     [Fact]
@@ -126,7 +126,7 @@ public sealed class Bug13194CorreoCuentaUrlsTests
         FlitBrandedEmailLayout.DefaultAssetsBaseUrl.Should().NotContain("dev.flitsas.online");
 
         var html = FlitBrandedEmailLayout.Wrap("TITULO", "<p>x</p>", assetsBaseUrl: QaAssetsBaseUrl);
-        html.Should().Contain($"{QaAssetsBaseUrl}/flit-logo.png");
+        html.Should().Contain($"{QaAssetsBaseUrl}/flit-logo-firma.png");
         html.Should().NotContain("dev.flitsas.online");
     }
 

@@ -37,8 +37,6 @@ public static class TramiteCambioEstadoEmailComposer
         string.Equals(templateId, TemplateIdAprobado, StringComparison.Ordinal)
         || string.Equals(templateId, TemplateIdRechazado, StringComparison.Ordinal);
 
-    private const string PrimaryBlue = "#2F6FED";
-    private const string Ink = "#162244";
     private const string ApprovedGreen = "#2E7D32";
     private const string RejectedRed = "#C62828";
     private const string RentingInk = "#1A1A1A";
@@ -46,21 +44,19 @@ public static class TramiteCambioEstadoEmailComposer
     private const string RentingLink = "#2F5BEA";
     private const string PqrsUrl = "https://usadosrentingcolombia.com";
     private const string RentingSupportEmail = "servicio@rentingcolombia.com";
-    private const string PrivacyPolicyUrl = "https://flitsas.com.co/privacy-policy/";
-    private const string SupportEmail = "soporte@flitsas.com";
 
-    public const string DefaultHeaderFileName = "tramite-cambio-estado-header.png";
-    public const string DefaultLogoFileName = "flit-logo.png";
+    public const string DefaultHeaderFileName = FlitEmailLayout.BannerFileName;
+    public const string DefaultLogoFileName = FlitEmailLayout.LogoFileName;
     public const string DefaultRentingHeaderFileName = "tramite-cambio-estado-renting-header.png";
     public const string DefaultRentingFooterFileName = "tramite-cambio-estado-renting-footer.png";
 
     /// <summary>URL absoluta del banner FLIT (correo: debe ser HTTPS público).</summary>
     public static string ResolveHeaderUrl(string assetsBaseUrl) =>
-        CombineAssetUrl(assetsBaseUrl, DefaultHeaderFileName);
+        FlitEmailLayout.BannerUrl(FallbackBase(assetsBaseUrl));
 
     /// <summary>URL absoluta del logo FLIT (firma).</summary>
     public static string ResolveLogoUrl(string assetsBaseUrl) =>
-        CombineAssetUrl(assetsBaseUrl, DefaultLogoFileName);
+        FlitEmailLayout.LogoUrl(FallbackBase(assetsBaseUrl));
 
     /// <summary>URL absoluta del encabezado Renting (progreso + marca).</summary>
     public static string ResolveRentingHeaderUrl(string assetsBaseUrl) =>
@@ -196,82 +192,53 @@ public static class TramiteCambioEstadoEmailComposer
     private static bool IsApproved(string estado) =>
         string.Equals(estado, "APROBADO", StringComparison.Ordinal);
 
+    /// <summary>
+    /// Correos 2.0 — variante FLIT sobre <see cref="FlitEmailLayout"/>: saludo e intro centrados,
+    /// los MISMOS campos de siempre en la tarjeta de detalle (etiqueta encima del valor) y cierre.
+    /// </summary>
     private static string BuildFlitHtml(
         TramiteCambioEstadoEmailModel model, string estado, string assetsBaseUrl)
     {
-        var comprador = Enc(model.CompradorNombre);
         var placa = Enc(model.Placa);
-        var ciudad = Enc(model.CiudadOt);
-        var ot = Enc(model.NombreOt);
         var approved = IsApproved(estado);
         var estadoColor = approved ? ApprovedGreen : RejectedRed;
         var estadoIcon = approved ? "✓" : "❌";
-        var headerUrl = EncAttr(ResolveHeaderUrl(assetsBaseUrl));
-        var logoUrl = EncAttr(ResolveLogoUrl(assetsBaseUrl));
         var estadoEnc = Enc(EstadoLabel(estado));
 
-        var destinatario = Enc(GreetingName(model));
-        var saludo = model.DestinatarioEsEmpresa
-            ? $"Estimados señores <strong style=\"color:{PrimaryBlue}\">{destinatario}</strong>."
-            : $"Estimado/a Señor/a <strong style=\"color:{PrimaryBlue}\">{destinatario}</strong>.";
-
+        var saludo = FlitEmailLayout.Saludo(
+            model.DestinatarioEsEmpresa ? "Estimados señores" : "Estimado/a Señor/a",
+            Enc(GreetingName(model)),
+            ".");
         var introParte = ProcedureNounPhrase(model, placa, forRentingLead: false);
 
-        var sb = new StringBuilder();
-        sb.Append("<!DOCTYPE html><html lang=\"es\"><head><meta charset=\"utf-8\"/></head>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<body style=\"margin:0;padding:0;background:#ffffff;font-family:Arial,Helvetica,sans-serif;color:{Ink};\">");
-        sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" style=\"max-width:640px;margin:0 auto;background:#ffffff;\">");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<tr><td style=\"padding:0;\"><img src=\"{headerUrl}\" alt=\"FLIT Version 2.0\" width=\"640\" style=\"display:block;width:100%;max-width:640px;height:auto;border:0;\"/></td></tr>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<tr><td style=\"padding:28px 28px 8px;text-align:center;\"><h1 style=\"margin:0;font-size:20px;letter-spacing:0.02em;color:{PrimaryBlue};\">¡NOTIFICACIÓN RADICACIÓN DEL TRÁMITE!</h1></td></tr>");
-        sb.Append("<tr><td style=\"padding:16px 28px 8px;font-size:14px;line-height:1.55;\">");
-        sb.Append(CultureInfo.InvariantCulture, $"<p style=\"margin:0 0 12px;\">{saludo}</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 16px;\">Nos ponemos en contacto para informarle que {introParte} ha sido <strong style=\"color:{estadoColor};\">{estadoEnc}</strong>.</p>");
+        var filas = new List<(string, string)>();
         if (model.EsTraspaso)
-        {
-            sb.Append(CultureInfo.InvariantCulture,
-                $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Vendedor:</strong> {Enc(model.VendedorNombre)}</p>");
-        }
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Comprador:</strong> {comprador}</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Placa del Vehículo:</strong> {placa}</p>");
+            filas.Add(("Vendedor:", Enc(model.VendedorNombre)));
+        filas.Add(("Comprador:", Enc(model.CompradorNombre)));
+        filas.Add(("Placa del Vehículo:", placa));
         if (!string.IsNullOrWhiteSpace(model.CiudadOt))
-        {
-            sb.Append(CultureInfo.InvariantCulture,
-                $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">Ciudad:</strong> {ciudad}</p>");
-        }
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 6px;\"><strong style=\"color:{PrimaryBlue};\">{HomologacionCopy.OrganismoDeTransito}:</strong> {ot}</p>");
-        var rejectionLines = BuildRejectionLines(model, estado);
-        var estadoMargin = rejectionLines.Count > 0 ? "6px" : "16px";
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0 0 {estadoMargin};\"><strong style=\"color:{PrimaryBlue};\">Estado Actual:</strong> <span style=\"color:{estadoColor};font-weight:700;\">{estadoIcon} {estadoEnc}</span></p>");
-        AppendRejectionLines(
-            sb,
-            rejectionLines,
-            lastMargin: "16px",
-            (label, value, margin) =>
-                $"<p style=\"margin:0 0 {margin};\"><strong style=\"color:{PrimaryBlue};\">{label}:</strong> {value}</p>");
-        sb.Append("<p style=\"margin:0 0 20px;\">En FLIT, nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.</p>");
-        sb.Append("<p style=\"margin:0 0 8px;\">Cordialmente,</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<img src=\"{logoUrl}\" alt=\"flit\" width=\"96\" style=\"display:block;border:0;margin:0 0 24px;\"/>");
-        sb.Append("</td></tr>");
-        sb.Append("<tr><td style=\"padding:0 28px 28px;\">");
-        sb.Append("<hr style=\"border:none;border-top:1px solid #E5EAF2;margin:0 0 16px;\"/>");
-        sb.Append("<p style=\"margin:0 0 12px;font-size:12px;line-height:1.5;color:#6B778C;text-align:center;\">");
-        sb.Append("Si tienes alguna pregunta o necesitas ayuda, no dudes en ponerte en contacto con nosotros. ");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"Puedes hacerlo a través de <strong>{Enc(SupportEmail)}</strong> o nuestro <strong>chat online</strong>.");
-        sb.Append("</p>");
-        sb.Append(CultureInfo.InvariantCulture,
-            $"<p style=\"margin:0;text-align:center;\"><a href=\"{EncAttr(PrivacyPolicyUrl)}\" style=\"color:{PrimaryBlue};font-size:12px;text-decoration:underline;\">POLÍTICA DE PRIVACIDAD</a></p>");
-        sb.Append("</td></tr></table></body></html>");
-        return sb.ToString();
+            filas.Add(("Ciudad:", Enc(model.CiudadOt)));
+        filas.Add(($"{HomologacionCopy.OrganismoDeTransito}:", Enc(model.NombreOt)));
+        filas.Add(("Estado Actual:", $"<span style=\"color:{estadoColor};font-weight:700;\">{estadoIcon} {estadoEnc}</span>"));
+        foreach (var (label, value) in BuildRejectionLines(model, estado))
+            filas.Add(($"{label}:", value));
+
+        var cuerpo = new StringBuilder();
+        cuerpo.Append(FlitEmailLayout.Parrafo(saludo));
+        cuerpo.Append(FlitEmailLayout.Parrafo(
+            $"Nos ponemos en contacto para informarle que {introParte} ha sido <strong style=\"color:{estadoColor};\">{estadoEnc}</strong>.",
+            margen: "0 0 20px"));
+        cuerpo.Append(FlitEmailLayout.TarjetaDetalle(null, filas));
+        cuerpo.Append(FlitEmailLayout.Parrafo(
+            "En FLIT, nos aseguramos de que los trámites de tránsito sean más ágiles, eficientes y sin contratiempos.",
+            centrado: false));
+        cuerpo.Append(FlitEmailLayout.Parrafo("Cordialmente,", centrado: false, margen: "0"));
+
+        return FlitEmailLayout.Documento(
+            assetsBaseUrl,
+            FlitEmailLayout.Titulo("¡NOTIFICACIÓN RADICACIÓN DEL TRÁMITE!"),
+            cuerpo.ToString(),
+            FlitEmailLayout.PieFlit(assetsBaseUrl, FlitEmailLayout.SoporteEstandarHtml, politicaPrivacidad: true));
     }
 
     private static string BuildRentingHtml(
@@ -393,13 +360,12 @@ public static class TramiteCambioEstadoEmailComposer
             : $"el trámite del vehículo con placa <strong>{placaEncoded}</strong>";
     }
 
-    private static string CombineAssetUrl(string assetsBaseUrl, string fileName)
-    {
-        var baseUrl = string.IsNullOrWhiteSpace(assetsBaseUrl)
-            ? NotificationEmailAssetsOptions.LocalFallbackBaseUrl
-            : assetsBaseUrl.TrimEnd('/');
-        return $"{baseUrl}/{fileName}";
-    }
+    /// <summary>Renting conserva sus assets propios; la base vacía cae al respaldo local (Bug #13194).</summary>
+    private static string CombineAssetUrl(string assetsBaseUrl, string fileName) =>
+        FlitEmailLayout.AssetUrl(FallbackBase(assetsBaseUrl), fileName);
+
+    private static string FallbackBase(string? assetsBaseUrl) =>
+        string.IsNullOrWhiteSpace(assetsBaseUrl) ? NotificationEmailAssetsOptions.LocalFallbackBaseUrl : assetsBaseUrl;
 
     private static List<(string Label, string ValueHtml)> BuildRejectionLines(
         TramiteCambioEstadoEmailModel model, string estado)

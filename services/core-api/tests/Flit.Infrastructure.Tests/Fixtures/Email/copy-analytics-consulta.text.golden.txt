@@ -1,0 +1,8 @@
+Asunto: [FLIT] [ACÁ VA EL NOMBRE DEL INFORME PROGRAMADO]
+Informe programado FLIT · Consulta personalizada
+[ACÁ VA EL NOMBRE DEL INFORME PROGRAMADO]
+Consulta: [ACÁ VA EL NOMBRE DE LA CONSULTA]
+Resultados: 1200
+El detalle va en el Excel adjunto. El rango de fechas de la consulta es relativo (p. ej. "últimos 7 días"), así que cada envío trae el periodo actual, no el que tenía cuando se guardó.
+Aviso: el adjunto trae las primeras 1000 de 1200 filas. Entra a Consultas en la app para ver o exportar el resto.
+Mensaje automático de FLIT — no responda a este correo.

@@ -536,7 +536,7 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         }
 
         await CorrerAsync(empresa);
-        (await ResumenAsync()).Should().Contain("flit-cabecera.png");
+        (await ResumenAsync()).Should().Contain("flit-banner-correo.png");
 
         // El conjunto sigue al canal que Trámites tiene para la empresa (HU #13882): «API Renting cliente» ⇒ conjunto Renting.
         api.Empresas.Agregar(empresa, "Renting Colombia S.A.S", NitGestora, CanalCorreo.EmpresaApi);
@@ -544,7 +544,7 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         api.Reloj.Hoy(Hoy.AddDays(1));
         await CorrerAsync(empresa);
         var renting = await ResumenAsync();
-        renting.Should().Contain("renting-cabecera-dp.jpg").And.NotContain("renting-cabecera.jpg").And.NotContain("flit-cabecera.png").And.Contain("Derechos de petici");
+        renting.Should().Contain("renting-cabecera-dp.jpg").And.NotContain("renting-cabecera.jpg").And.NotContain("flit-banner-correo.png").And.Contain("Derechos de petici");
         renting.ToLowerInvariant().Should().NotContain("flit");
     }
 

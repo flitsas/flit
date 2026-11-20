@@ -1,0 +1,14 @@
+Derechos de petición automáticos
+Falló la lectura del documento.
+Empresa
+Gestora de Ejemplo S.A.S.
+Paquete
+Lote octubre
+Archivo
+comparendo-001.pdf
+Error
+Timeout: sin respuesta en 30 s
+Motor
+—
+Si necesitas ayuda escribe a soporte@flitsas.com .
+POLÍTICA DE PRIVACIDAD

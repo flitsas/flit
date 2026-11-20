@@ -51,8 +51,8 @@ public sealed class RevocationRequestEmailComposerThemeTests
         html.Should().Contain(BrandTheme.PlatformName, "AC2 — nombre de la marca en encabezado/pie");
         html.Should().Contain(BrandTheme.LogoUrl!, "AC3 — logotipo por URL absoluta");
         html.Should().Contain(BrandTheme.Primary, "AC2 — color primario en título/enlaces");
-        html.Should().NotContain("tramite-cambio-estado-header.png", "el chrome FLIT no se mezcla con el de marca");
-        html.Should().NotContain("alt=\"FLIT Version 2.0\"");
+        html.Should().NotContain("flit-banner-correo.png", "el chrome FLIT no se mezcla con el de marca");
+        html.Should().NotContain("alt=\"FLIT Versión 2.0\"");
         html.Should().NotContain("En FLIT,", "el cierre de marca no menciona a FLIT como remitente");
 
         html.Should().Contain("Ana Radicadora");
@@ -79,8 +79,8 @@ public sealed class RevocationRequestEmailComposerThemeTests
         var (_, htmlFlit) = RevocationRequestEmailComposer.ComposeFlit(milestone, Model("x"), AssetsBaseUrl, EmailTheme.Flit);
 
         htmlFlit.Should().Be(htmlNull, "AC9 — theme=null y theme=EmailTheme.Flit deben ser byte a byte iguales");
-        htmlNull.Should().Contain("tramite-cambio-estado-header.png", "chrome FLIT de respaldo");
-        htmlNull.Should().Contain("alt=\"FLIT Version 2.0\"");
+        htmlNull.Should().Contain("flit-banner-correo.png", "chrome FLIT de respaldo");
+        htmlNull.Should().Contain("alt=\"FLIT Versión 2.0\"");
         htmlNull.Should().NotContain(BrandTheme.PlatformName);
         htmlNull.Should().NotContain(BrandTheme.LogoUrl!);
     }
