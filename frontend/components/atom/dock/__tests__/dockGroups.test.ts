@@ -165,12 +165,14 @@ describe("catálogo de Trámites", () => {
     expect(plataforma?.children?.map((c) => c.label)).toEqual([
       "Tipos de trámites",
       "Confirmación RUNT",
+      "Contingencia RUNT",
       "Mandatos",
       "FUR",
       "Notificaciones",
       "Configuración de IA",
       "Mensajes muertos",
       "Descarga masiva",
+      "Overrides persona RUNT",
       "Banners",
       "Persona Natural",
     ]);
