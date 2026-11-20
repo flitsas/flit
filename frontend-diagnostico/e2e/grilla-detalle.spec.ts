@@ -43,7 +43,8 @@ import {
  * E2E_EMPRESA (SuperAdmin FLIT y el uuid de la compañía de E2E_USUARIO).
  *
  * Lista congelada (componentes de la Fase 2; ajustar en la Fase 3 si el nombre final cambia):
- *   - table «/semáforo de consultas/i» · rowheader «<placa>» · td[data-fuente=<FUENTE>] · td[data-columna=dictamen]
+ *   - table «/semáforo de consultas/i» · rowheader «<placa>» · [data-fuente=<FUENTE>] (td en avalúo/impuesto; badge div
+ *     dentro de la td del sujeto Vehículo/Propietario/Locatario para RUNT/SIMIT) · td[data-columna=dictamen]
  *   - disparador del tooltip: el enlace «Ver detalle de <fuente> de <placa>: …» o `span[tabindex=0]` «<fuente> de <placa>:
  *     Sin solicitar»; burbuja role=tooltip referida por aria-describedby (contenido montado al abrir o con opacidad 0)
  *   - [aria-label="Filtros del lote"] (embudo) · button «<Métrica>: <n>» (aria-pressed)
@@ -61,7 +62,7 @@ const SPEC = "grilla";
 
 const grilla = (page: Page) => page.getByRole("table", { name: /semáforo de consultas/i });
 const fila = (page: Page, placa: string) => grilla(page).getByRole("row").filter({ has: page.getByRole("rowheader", { name: new RegExp(placa) }) });
-const celda = (page: Page, placa: string, fuente: string) => fila(page, placa).locator(`td[data-fuente="${fuente}"]`);
+const celda = (page: Page, placa: string, fuente: string) => fila(page, placa).locator(`[data-fuente="${fuente}"]`);
 /** Disparador del tooltip de la celda: el enlace del chip o el span enfocable que lo envuelve. */
 const disparadorCelda = (page: Page, placa: string, fuente: string) => celda(page, placa, fuente).locator('a[href], [tabindex="0"]').first();
 const contadorFilas = (page: Page) => page.getByText(/^Mostrando \d+ de \d+ vehículos$/);
@@ -97,7 +98,7 @@ async function filasVisibles(page: Page): Promise<string[]> {
 const visibles = async (page: Page) => (await filasVisibles(page)).map((t) => [V1, V2, V7].find((p) => t.includes(p))).filter(Boolean);
 
 test.describe("HU #14584 grilla del detalle", () => {
-  test("siembra: Masivo de 3 placas; sin columnas de documento, cabecera RUNT/SIMIT intacta y texto al pie", async ({ page }) => {
+  test("siembra: Masivo de 3 placas; sin columnas de documento, una columna por sujeto y texto al pie", async ({ page }) => {
     exigirCliente();
     test.setTimeout(420_000);
     const prefijo = prefijoFicticio();
@@ -110,8 +111,12 @@ test.describe("HU #14584 grilla del detalle", () => {
     // A6.1 / SP-4: sin columnas de documento.
     for (const nombre of ["Documento declarado", "Documento del propietario"]) await expect(grilla(page).getByRole("columnheader", { name: nombre })).toHaveCount(0);
     await expect(grilla(page).locator('td[data-columna^="documento-"]')).toHaveCount(0);
-    // A6.2: cabecera de dos niveles intacta.
-    await expect(grilla(page).locator('th[scope="colgroup"]')).toHaveCount(2);
+    // A6.2: una columna por sujeto; cada td del sujeto apila los badges RUNT y SIMIT de su fuente.
+    for (const sujeto of ["Vehículo", "Propietario", "Locatario"]) {
+      await expect(grilla(page).getByRole("columnheader", { name: sujeto, exact: true })).toHaveCount(1);
+    }
+    for (const f of ["RUNT", "SIMIT_VEHICULO"]) await expect(celda(page, V1, f)).toHaveCount(1);
+    await expect(fila(page, V1).locator('td[data-label="Vehículo"] [data-fuente]')).toHaveCount(2);
     // A6.9: texto al pie.
     await expect(page.getByText(/Dictamen y auditoría: en «Acciones»/)).toBeVisible();
     await expect(page.getByText(/Pasa el puntero o enfoca un estado para ver la fecha del dato/)).toBeVisible();

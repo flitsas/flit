@@ -89,8 +89,9 @@ describe("GrillaBackoffice — HU #14087 AC6: la misma tabla por pilares que la 
   it("cabecera por pilar, Placa o VIN sin columnas de documento (HU #14585), «Acciones» al final y las 8 fuentes en cada fila", async () => {
     const { container } = montar();
     const t = await tabla();
-    expect(within(t).getByRole("columnheader", { name: "RUNT" })).toHaveAttribute("colspan", "3");
-    expect(within(t).getByRole("columnheader", { name: "SIMIT" })).toHaveAttribute("colspan", "3");
+    // Una columna por sujeto (dos badges RUNT/SIMIT), sin las cabeceras de grupo «RUNT» y «SIMIT».
+    for (const sujeto of ["Vehículo", "Propietario", "Locatario"]) expect(within(t).getByRole("columnheader", { name: sujeto })).toBeInTheDocument();
+    expect(within(t).queryByRole("columnheader", { name: /^(RUNT|SIMIT)$/ })).toBeNull();
     expect(within(t).getByRole("columnheader", { name: "Placa o VIN" })).toBeInTheDocument();
     expect(within(t).getByRole("columnheader", { name: "Acciones" })).toBeInTheDocument();
     expect(within(t).queryByRole("columnheader", { name: /documento/i })).toBeNull();
@@ -172,7 +173,7 @@ describe("GrillaBackoffice — AC2: llenar SIMIT vehículo y ver la celda en ver
 
     await waitFor(() => expect(td(container, "celda-1-simit_vehiculo")).toHaveAttribute("data-estado", "COMPLETADO"));
     const celda = td(container, "celda-1-simit_vehiculo");
-    expect(within(celda).getByText("Ejecutado")).toBeInTheDocument();
+    expect(within(celda).getByText("SIMIT · Ejecutado")).toBeInTheDocument();
     expect(within(celda).getByText("Manual")).toBeInTheDocument();
     expect(screen.queryByRole("dialog", { name: /llenar a mano/i })).toBeNull();
     expect(screen.getByText(/se llenó a mano SIMIT vehículo de TST001/i)).toBeInTheDocument();
