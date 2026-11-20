@@ -4,6 +4,7 @@ import { X, type LucideIcon } from "lucide-react";
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import { boton } from "@/components/landing/estilos";
 import { clicFueraDelDialogo } from "@/lib/ui/clic-dialogo";
+import { useBloqueoScroll } from "@/lib/ui/useBloqueoScroll";
 
 interface Props {
   abierto: boolean;
@@ -29,6 +30,8 @@ export function ModalFlit({ abierto, onCerrar, titulo, descripcion, icono: Icono
   const ref = useRef<HTMLDialogElement>(null);
   const idTitulo = useId();
   const idDescripcion = useId();
+  // iOS: el <dialog> modal no impide que la página de atrás se desplace al arrastrar; se fija `body` mientras está abierto.
+  useBloqueoScroll(abierto);
 
   useEffect(() => {
     const dialogo = ref.current;
@@ -64,7 +67,7 @@ export function ModalFlit({ abierto, onCerrar, titulo, descripcion, icono: Icono
       onClick={(e) => {
         if (clicFueraDelDialogo(e)) cerrar();
       }}
-      className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] ${ancho === "4xl" ? "max-w-4xl" : "max-w-2xl"} overflow-y-auto ${desborde ? "sm:overflow-visible" : ""} rounded-[9px] border border-border bg-card p-6 text-foreground backdrop:bg-primary/50 backdrop:backdrop-blur-sm`}
+      className={`m-auto max-h-[90dvh] w-[calc(100%-2rem)] ${ancho === "4xl" ? "max-w-4xl" : "max-w-2xl"} overflow-y-auto overscroll-contain ${desborde ? "sm:overflow-visible" : ""} rounded-[9px] border border-border bg-card p-6 text-foreground backdrop:bg-primary/50 backdrop:backdrop-blur-sm`}
     >
       {abierto && (
         <>

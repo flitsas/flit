@@ -5,6 +5,7 @@ import Link from "next/link";
 import { createPortal } from "react-dom";
 import { CornerDownLeft, Hash } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import type { DockGroup } from "./nav";
 import { buildSearchResults, SEARCH_GROUP_LABEL, type PlateSearch, type SearchAction, type SearchResult } from "./search";
 
@@ -68,6 +69,9 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
   useEffect(() => {
     if (open) inputRef.current?.focus();
   }, [open]);
+
+  // iOS: la página de atrás no se mueve al arrastrar dentro de la paleta.
+  useBloqueoScroll(open);
 
   useEffect(() => {
     if (!open) return;
@@ -137,12 +141,12 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
       {/* Portal al <body>: la barra tiene backdrop-filter, que vuelve «fixed» relativo a ella; sin portal el velo
           solo cubría la franja de la barra (la «sombra negra» de arriba) en vez de toda la pantalla. */}
       {open && typeof document !== "undefined" && createPortal(
-        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-[var(--overlay)] px-4 pt-[12vh] backdrop-blur-[5px]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+        <div className="fixed inset-0 z-[60] flex items-start justify-center bg-[var(--overlay)] px-4 pt-[12dvh] backdrop-blur-[5px]" onMouseDown={(e) => e.target === e.currentTarget && close()}>
           <div
             role="dialog"
             aria-modal="true"
             aria-label="Buscador"
-            className="flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--popover)] text-[var(--foreground)] shadow-[var(--shadow-modal)]"
+            className="flex max-h-[70dvh] w-full max-w-xl flex-col overflow-hidden rounded-[var(--radius-xl)] border border-[var(--border)] bg-[var(--popover)] text-[var(--foreground)] shadow-[var(--shadow-modal)]"
           >
             {/* Cabecera del `dialog.modal#buscador` del Manual UI Kit 2026: blanca, con el ícono del buscador en su disco y el
                 título en azul. Sin X: el diálogo conserva su teclado (el foco no sale del campo y Esc cierra). */}
@@ -177,7 +181,7 @@ export function CommandPalette({ groups, home, actions, plate }: CommandPaletteP
               </kbd>
             </div>
 
-            <div id={listId} role="listbox" aria-label="Resultados" className="min-h-0 flex-1 overflow-y-auto p-2">
+            <div id={listId} role="listbox" aria-label="Resultados" className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
               {sections.map((s) => {
                 const labelId = `${baseId}-grupo-${s.group}`;
                 return (

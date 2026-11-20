@@ -347,10 +347,10 @@ describe("GrillaBackoffice — HU #14584 §6.4 (A6.6): Dictamen y Auditoría en 
   });
 });
 
-// HU #14562 AC56 (auditoría B2/M6): la grilla del backoffice es la misma GrillaSemaforos, así que pasa a tarjetas bajo 900 px
+// HU #14562 AC56 (auditoría B2/M6): la grilla del backoffice es la misma GrillaSemaforos, así que pasa a tarjetas bajo 1024 px
 // y no deja columnas fijas allí.
-describe("GrillaBackoffice — HU #14562 AC56: tarjetas por debajo de 900 px", () => {
-  it("la tabla lleva las recetas TABLA_MOVIL_* y la placa no queda fija bajo 900 px", async () => {
+describe("GrillaBackoffice — HU #14562 AC56: tarjetas por debajo de 1024 px", () => {
+  it("la tabla lleva las recetas TABLA_MOVIL_* y la placa no queda fija bajo 1024 px", async () => {
     montar();
     const t = await tabla();
     const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);

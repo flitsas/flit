@@ -249,7 +249,7 @@ function ManualImageViewer({
           <div className="flex min-h-[320px] flex-1 items-center justify-center overflow-hidden rounded-xl border border-border bg-secondary">
             {estado.status === 'ready' && (
               // eslint-disable-next-line @next/next/no-img-element -- URL de blob de una imagen protegida
-              <img src={estado.url} alt={alt} className="max-h-[60vh] w-full object-contain" />
+              <img src={estado.url} alt={alt} className="max-h-[60dvh] w-full object-contain" />
             )}
           </div>
           <button type="button" onClick={() => ir(1)} disabled={navegables.length < 2} aria-label="Imagen siguiente" className={botonNav}>

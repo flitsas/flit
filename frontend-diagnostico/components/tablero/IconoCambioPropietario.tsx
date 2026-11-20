@@ -21,7 +21,7 @@ const BOTON_CLS =
  * Ícono de cambio de propietario (HU #14585, spec-ui §6.5, A6.7). Solo con `cambio === true` (el backend comparó el documento
  * declarado contra los propietarios del RUNT); `false` y `null` no pintan nada. Va a la derecha de la placa en la grilla del
  * lote (compañía y backoffice), en la tabla de Vehículos y en el panel del dictamen. El clic no hace nada más que alternar el
- * tooltip en táctil. Por debajo de 900 px suma el texto «Cambio de propietario» (aria-hidden: el botón ya lo nombra) para no
+ * tooltip en táctil. Por debajo de 1024 px suma el texto «Cambio de propietario» (aria-hidden: el botón ya lo nombra) para no
  * depender del tooltip.
  */
 export function IconoCambioPropietario({ cambio }: { cambio?: boolean | null }) {
@@ -36,7 +36,7 @@ export function IconoCambioPropietario({ cambio }: { cambio?: boolean | null }) 
       <span
         data-cambio-propietario-movil
         aria-hidden="true"
-        className="hidden text-xs font-semibold text-[color:var(--di-warning)] max-[900px]:inline"
+        className="hidden text-xs font-semibold text-[color:var(--di-warning)] max-lg:inline"
       >
         Cambio de propietario
       </span>

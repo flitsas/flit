@@ -199,7 +199,7 @@ export function RbacAdmin() {
 
   return (
     <div
-      className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary"
+      className="app-bg px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary"
       style={{ fontFamily: "Poppins, sans-serif" }}
     >
       {/* Header — unificado con ModuleTitle (HU #10493): botón fuera de la caja del título. */}

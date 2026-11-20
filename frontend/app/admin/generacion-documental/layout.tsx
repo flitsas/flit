@@ -37,10 +37,10 @@ export default function AdminGeneracionDocumentalLayout({ children }: { children
       onLogout={logout}
       visibleModuleCodes={modulesLoading ? [] : accessibleCodes}
     >
-      <div className="app-bg min-h-screen w-full">
+      <div className="app-bg w-full">
         {!ready ? (
           <div
-            className="flex min-h-[40vh] items-center justify-center px-6 text-xs"
+            className="flex min-h-[40dvh] items-center justify-center px-6 text-xs"
             role="status"
             aria-busy="true"
             aria-live="polite"
@@ -52,7 +52,7 @@ export default function AdminGeneracionDocumentalLayout({ children }: { children
         ) : (
           <section
             role="alert"
-            className="mx-auto flex min-h-[40vh] max-w-md flex-col items-center justify-center gap-3 px-6 text-center"
+            className="mx-auto flex min-h-[40dvh] max-w-md flex-col items-center justify-center gap-3 px-6 text-center"
           >
             <Icono nombre="distinto" className="h-10 w-10" style={{ color: 'var(--destructive)' }} />
             <h1 className="text-lg font-bold" style={{ color: 'var(--color-flit-primary)' }}>

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { MODAL_VELO_CLS } from "@flit/ui/Modal";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import { cn } from "@flit/ui/cn";
 import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { Icono } from "@flit/ui/Icono";
@@ -1010,6 +1011,7 @@ function FullScreenShell({
   footer?: ReactNode;
   children: ReactNode;
 }) {
+  useBloqueoScroll(open);
   if (!open) return null;
 
   return (
@@ -1023,7 +1025,7 @@ function FullScreenShell({
       <div
         className={cn(
           DIALOGO_PANEL_CLS,
-          "relative m-0 flex h-full w-full flex-col rounded-none border-0 sm:m-4 sm:h-[calc(100%-2rem)] sm:w-[calc(100%-2rem)] sm:rounded-[9px] sm:border",
+          "relative m-0 flex h-full w-full flex-col rounded-none border-0 max-sm:pt-[env(safe-area-inset-top)] max-sm:pb-[env(safe-area-inset-bottom)] sm:m-4 sm:h-[calc(100%-2rem)] sm:w-[calc(100%-2rem)] sm:rounded-[9px] sm:border",
         )}
         role="dialog"
         aria-modal="true"
@@ -1037,7 +1039,7 @@ function FullScreenShell({
             <Icono nombre="cerrar" className="h-4 w-4" />
           </button>
         </FranjaDialogo>
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6">{children}</div>
+        <div className="flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">{children}</div>
         {footer && (
           <div className="border-t p-4 sm:px-6" style={{ borderColor: RL_COLOR.border }}>
             {footer}

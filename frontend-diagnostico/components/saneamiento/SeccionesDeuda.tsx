@@ -80,7 +80,7 @@ function Consultado({ en }: { en?: string | null }) {
   return en ? <p className={AYUDA_CLS}>{`Consultado el ${fechaCorta(en)}`}</p> : null;
 }
 
-/** Tabla simple que pasa a tarjetas por debajo de 900 px (recetas TABLA_MOVIL_*), dentro de la región desplazable. */
+/** Tabla simple que pasa a tarjetas por debajo de 1024 px (recetas TABLA_MOVIL_*), dentro de la región desplazable. */
 function TablaSimple({ nombre, columnas, filas }: { nombre: string; columnas: { titulo: string; derecha?: boolean }[]; filas: ReactNode[][] }) {
   return (
     <RegionDesplazable nombre={nombre} className={CONTENEDOR_TABLA_CLS}>

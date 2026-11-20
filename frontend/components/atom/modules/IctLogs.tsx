@@ -17,6 +17,13 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
   TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
@@ -61,7 +68,7 @@ export function IctLogs() {
   const [tab, setTab] = useState<Tab>("logs");
 
   return (
-    <div className="app-bg flex min-h-screen flex-col gap-4 px-6 pt-6 pb-24 text-flit-primary">
+    <div className="app-bg flex flex-col gap-4 px-6 pt-6 pb-24 text-flit-primary">
       <ModuleTitle
         title="Log ICT"
         subtitle="Peticiones HTTP de la integración con terceros, ya enmascaradas. El recorrido por trámite está en Trazabilidad ICT."
@@ -228,10 +235,10 @@ function LogsTab() {
             <div className="overflow-x-auto">
               <table
                 aria-label="Logs de integración ICT"
-                className="w-full min-w-[960px] border-separate text-xs"
+                className={`w-full min-w-[960px] border-separate text-xs ${TABLA_MOVIL_TABLE_CLS}`}
                 style={{ borderSpacing: "0 8px" }}
               >
-                <thead>
+                <thead className={TABLA_MOVIL_THEAD_CLS}>
                   <tr
                     className="text-left text-[10px] font-semibold uppercase tracking-wider"
                     style={{ color: TABLA_HEADER_FG }}
@@ -265,56 +272,56 @@ function LogsTab() {
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={TABLA_MOVIL_TBODY_CLS}>
                   {data.map((row) => {
                     const open = expandedId === row.id;
                     return (
                       <Fragment key={row.id}>
                         <tr
-                          className={`cursor-pointer bg-card text-xs ${TABLA_ROW_HOVER_CLS}`}
+                          className={`cursor-pointer bg-card text-xs ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}
                           onClick={() => setExpandedId(open ? null : row.id)}
                         >
                           <td
-                            className="rounded-l-xl border-y border-l px-3 py-3 align-middle"
+                            className={`rounded-l-xl border-y border-l px-3 py-3 align-middle ${TABLA_MOVIL_CELL_CLS}`}
                             style={{ borderColor: BORDER }}
                           >
                             <Icono nombre="derecha" className={`h-4 w-4 text-flit-brand transition ${open ? "rotate-90" : ""}`} />
                             <span className="sr-only">{open ? "Ocultar detalle" : "Ver detalle"}</span>
                           </td>
-                          <td className="border-y px-4 py-3 align-middle whitespace-nowrap" style={{ borderColor: BORDER }}>
+                          <td data-label="Fecha" className={`border-y px-4 py-3 align-middle whitespace-nowrap ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} style={{ borderColor: BORDER }}>
                             {formatFechaHora(new Date(row.createdAt))}
                           </td>
-                          <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
+                          <td data-label="Tipo" className={`border-y px-4 py-3 align-middle ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: BORDER }}>
                             <StatusBadge label={etiquetaTipo(row.logType)} tone="info" />
                           </td>
-                          <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
+                          <td data-label="Dirección" className={`border-y px-4 py-3 align-middle ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: BORDER }}>
                             {row.direction}
                           </td>
-                          <td className="border-y px-4 py-3 align-middle font-medium" style={{ borderColor: BORDER }}>
+                          <td data-label="Método" className={`border-y px-4 py-3 align-middle font-medium ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: BORDER }}>
                             {row.method}
                           </td>
                           <td
-                            className="border-y px-4 py-3 align-middle font-mono text-xs"
+                            data-label="Ruta" className={`border-y px-4 py-3 align-middle font-mono text-xs ${TABLA_MOVIL_CELL_CLS}`}
                             style={{ borderColor: BORDER }}
                           >
                             {row.path}
                           </td>
-                          <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
+                          <td data-label="Estado" className={`border-y px-4 py-3 align-middle ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: BORDER }}>
                             <StatusBadge label={String(row.statusCode)} tone={tonoHttp(row.statusCode)} />
                           </td>
-                          <td className="border-y px-4 py-3 align-middle tabular-nums" style={{ borderColor: BORDER }}>
+                          <td data-label="Duración" className={`border-y px-4 py-3 align-middle tabular-nums ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: BORDER }}>
                             {row.durationMs} ms
                           </td>
                           <td
-                            className="rounded-r-xl border-y border-r px-4 py-3 align-middle font-mono text-xs"
+                            data-label="Correlación" className={`rounded-r-xl border-y border-r px-4 py-3 align-middle font-mono text-xs ${TABLA_MOVIL_CELL_CLS}`}
                             style={{ borderColor: BORDER }}
                           >
                             {row.correlationId?.slice(0, 8) ?? "—"}
                           </td>
                         </tr>
                         {open ? (
-                          <tr>
-                            <td colSpan={9} className="pb-2">
+                          <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
+                            <td colSpan={9} className={`pb-2 ${TABLA_MOVIL_FILA_ANCHA_CLS}`}>
                               <div className="rounded-2xl border border-border bg-card p-4">
                                 <LogDetail row={row} />
                               </div>
@@ -586,10 +593,10 @@ function IctAlertEventsList() {
           <div className="overflow-x-auto">
           <table
             aria-label="Eventos de alerta ICT"
-            className="w-full border-separate text-xs"
+            className={`w-full border-separate text-xs ${TABLA_MOVIL_TABLE_CLS}`}
             style={{ borderSpacing: "0 8px" }}
           >
-            <thead>
+            <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr
                 className="text-left text-[10px] font-semibold uppercase tracking-wider"
                 style={{ color: TABLA_HEADER_FG }}
@@ -614,36 +621,36 @@ function IctAlertEventsList() {
                 </th>
               </tr>
             </thead>
-            <tbody>
+            <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {pg.paginar(events).map((e) => (
-                <tr key={e.id} className={`bg-card text-xs ${TABLA_ROW_HOVER_CLS}`}>
+                <tr key={e.id} className={`bg-card text-xs ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
                   <td
-                    className="rounded-l-xl border-y border-l px-4 py-3 align-middle whitespace-nowrap"
+                    data-label="Fecha" className={`rounded-l-xl border-y border-l px-4 py-3 align-middle whitespace-nowrap ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}
                     style={{ borderColor: BORDER }}
                   >
                     {formatFechaHora(new Date(e.triggeredAt))}
                   </td>
-                  <td className="border-y px-4 py-3 align-middle" style={{ borderColor: BORDER }}>
+                  <td data-label="Alerta" className={`border-y px-4 py-3 align-middle ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: BORDER }}>
                     {e.ruleName}
                   </td>
                   <td
-                    className="border-y px-4 py-3 text-right align-middle font-semibold text-flit-brand"
+                    data-label="Valor" className={`border-y px-4 py-3 text-right align-middle font-semibold text-flit-brand ${TABLA_MOVIL_CELL_CLS}`}
                     style={{ borderColor: BORDER }}
                   >
                     {e.metricValue}
                   </td>
-                  <td className="border-y px-4 py-3 text-right align-middle" style={{ borderColor: BORDER }}>
+                  <td data-label="Umbral" className={`border-y px-4 py-3 text-right align-middle ${TABLA_MOVIL_CELL_CLS}`} style={{ borderColor: BORDER }}>
                     {e.threshold}
                   </td>
                   <td
-                    className="max-w-[280px] truncate border-y px-4 py-3 align-middle"
+                    data-label="Detalle" className={`max-w-[280px] truncate border-y px-4 py-3 align-middle max-lg:max-w-none ${TABLA_MOVIL_CELL_CLS}`}
                     style={{ borderColor: BORDER }}
                     title={e.message ?? undefined}
                   >
                     {e.message ?? "—"}
                   </td>
                   <td
-                    className="rounded-r-xl border-y border-r px-4 py-3 align-middle whitespace-nowrap"
+                    data-label="Acción" className={`rounded-r-xl border-y border-r px-4 py-3 align-middle whitespace-nowrap ${TABLA_MOVIL_CELL_CLS}`}
                     style={{ borderColor: BORDER }}
                   >
                     {e.acknowledgedAt ? (

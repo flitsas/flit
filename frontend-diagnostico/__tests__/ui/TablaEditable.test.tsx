@@ -278,7 +278,7 @@ describe("TablaEditable: estado controlado (HU #14562 · M12)", () => {
 });
 
 // HU #14562 · M6 (AC56): por debajo de 900 px la tabla pasa a tarjetas con las recetas TABLA_MOVIL_* y cada celda dice su
-// columna con data-label. En escritorio el marcado es el mismo de antes (solo se suman clases max-[900px]).
+// columna con data-label. En escritorio el marcado es el mismo de antes (solo se suman clases max-lg).
 describe("TablaEditable: tarjetas por debajo de 900 px (HU #14562 · M6 · AC56)", () => {
   const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
   const tiene = (el: Element, receta: string) => {
@@ -428,7 +428,7 @@ describe("TablaEditable: cabecera de la tabla por defecto (HU #14585 · spec-ui 
       const tabla = screen.getByRole("table", { name: "Fuentes" });
       const thead = tabla.querySelector("thead")!;
       expect(thead.className).not.toContain("surface-sunken");
-      expect(thead.className).toContain(apilado === "pantalla" ? "max-[900px]:sr-only" : "@max-[80rem]:sr-only");
+      expect(thead.className).toContain(apilado === "pantalla" ? "max-lg:sr-only" : "@max-[80rem]:sr-only");
       const ths = screen.getAllByRole("columnheader");
       expect(ths).toHaveLength(5);
       for (const th of ths) {

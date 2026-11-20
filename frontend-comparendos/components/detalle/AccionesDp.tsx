@@ -8,7 +8,7 @@ import { PanelAlegar } from "@/components/detalle/PanelAlegar";
 import { VistaPreviaDpModal } from "@/components/detalle/VistaPreviaDpModal";
 import { useToast } from "@/components/Toast";
 import { Datos } from "@/components/ui/Acordeon";
-import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, FECHA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
 import { SelectorArchivo } from "@/components/ui/SelectorArchivo";
 import { apiFetch } from "@/lib/api";
 import { armarRespuestaDp, erroresRespuestaDp, ordenarTipologias, type FormRespuestaDp, type TipologiaComparendo, type VistaPreviaDp } from "@/lib/dp";
@@ -213,7 +213,7 @@ function ResponderDp({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => 
         </label>
         <label className={ETIQUETA_CLS}>
           Fecha de la respuesta
-          <input className={INPUT_CLS} type="date" max={hoy} min={dp.fechaRadicacion?.slice(0, 10)} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
+          <input className={FECHA_CLS} type="date" max={hoy} min={dp.fechaRadicacion?.slice(0, 10)} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
         </label>
         <fieldset className="flex flex-col gap-1 md:col-span-2">
           <legend className="text-[11px] font-semibold text-muted-foreground">Sentido</legend>

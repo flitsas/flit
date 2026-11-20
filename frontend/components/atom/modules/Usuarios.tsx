@@ -374,7 +374,7 @@ export function Usuarios() {
   }
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
+    <div className="app-bg px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title={COPY.A23}
         subtitle="Gestiona el acceso de tu equipo a la plataforma."

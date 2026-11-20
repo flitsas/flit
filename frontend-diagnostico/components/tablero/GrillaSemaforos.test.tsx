@@ -234,7 +234,7 @@ describe("GrillaSemaforos — HU #14584 §6.2: la celda pinta solo el chip; el d
     const td = fuenteDe(filaDe(container, "vehiculo-1"), "RUNT_PROPIETARIO");
     const linea = within(td).getByText("No se pidió en este lote");
     expect(linea).toHaveAttribute("aria-hidden", "true");
-    expect(linea.className).toContain("min-[900px]:hidden");
+    expect(linea.className).toContain("lg:hidden");
   });
 });
 
@@ -492,10 +492,10 @@ describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuent
     });
   const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
 
-  it("B2: ninguna columna queda fija por debajo de 900 px (sticky y desplazamiento solo con min-[900px])", () => {
+  it("B2: ninguna columna queda fija por debajo de 1024 px (sticky y desplazamiento solo con lg)", () => {
     const { container } = completa();
     const celdas = Array.from(container.querySelectorAll("tbody th, tbody td"));
-    const fijas = celdas.filter((el) => clases(el).includes("min-[900px]:sticky"));
+    const fijas = celdas.filter((el) => clases(el).includes("lg:sticky"));
     // Casilla, placa y acciones: las tres fijas en escritorio.
     expect(fijas).toHaveLength(3 * container.querySelectorAll("tbody tr").length);
     for (const el of celdas) expect(clases(el), el.textContent ?? "").not.toContain("sticky");
@@ -503,7 +503,7 @@ describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuent
       expect(clases(el).filter((c) => /^(left|right)-/.test(c)), el.textContent ?? "").toEqual([]);
     }
     const acciones = screen.getByRole("columnheader", { name: "Acciones" });
-    expect(clases(acciones)).toContain("min-[900px]:right-0");
+    expect(clases(acciones)).toContain("lg:right-0");
   });
 
   it("AC56: bajo 900 px la tabla pasa a tarjetas con las recetas TABLA_MOVIL_* del repo", () => {
@@ -628,7 +628,7 @@ describe("GrillaSemaforos — FE-2 encabezados RUNT/SIMIT agrupados", () => {
     expect(th.className).toContain("min-w-[10rem]");
     const td = container.querySelector('td[data-label="Acciones"]') as HTMLElement;
     expect(td.className).toContain("w-[10rem]");
-    expect(td.className).toContain("min-[900px]:right-0");
+    expect(td.className).toContain("lg:right-0");
   });
 });
 
@@ -675,7 +675,7 @@ describe("GrillaSemaforos — HU #14584 M-2 (A6.2): la cabecera de las columnas 
     for (const th of fijas) {
       expect(clases(th)).toContain("z-20");
       expect(clases(th)).not.toContain("z-10");
-      expect(clases(th)).toContain("min-[900px]:sticky");
+      expect(clases(th)).toContain("lg:sticky");
     }
     const normales = Array.from(container.querySelectorAll("thead tr:last-child th"));
     expect(normales.length).toBeGreaterThan(0);
@@ -696,12 +696,12 @@ describe("GrillaSemaforos — HU #14584 M-2 (A6.2): la cabecera de las columnas 
       expect(clases(celdaFija)).not.toContain("z-20");
     }
     const ths = container.querySelectorAll<HTMLElement>("thead tr:first-child th");
-    expect(clases(ths[0])).toContain("min-[900px]:left-0");
-    expect(clases(casilla)).toContain("min-[900px]:left-0");
-    expect(clases(ths[1])).toContain("min-[900px]:left-10");
-    expect(clases(placa)).toContain("min-[900px]:left-10");
+    expect(clases(ths[0])).toContain("lg:left-0");
+    expect(clases(casilla)).toContain("lg:left-0");
+    expect(clases(ths[1])).toContain("lg:left-10");
+    expect(clases(placa)).toContain("lg:left-10");
     const thAcciones = ths[ths.length - 1];
-    for (const c of ["min-[900px]:right-0", "w-[10rem]", "min-w-[10rem]"]) {
+    for (const c of ["lg:right-0", "w-[10rem]", "min-w-[10rem]"]) {
       expect(clases(thAcciones)).toContain(c);
       expect(clases(acciones)).toContain(c);
     }

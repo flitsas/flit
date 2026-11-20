@@ -8,7 +8,7 @@ import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { Interruptor } from "@/components/ui/Interruptor";
-import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, FECHA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { formatoFecha } from "@/lib/format/date";
 import { P } from "@/lib/nav";
@@ -200,7 +200,7 @@ function Formulario({ rl, nits, onCerrar, onGuardado }: { rl: Representante | nu
         </label>
         <label className={ETIQUETA_CLS}>
           Expedición del certificado
-          <input className={INPUT_CLS} type="date" value={f.fechaExpedicionCertificado} onChange={(e) => setF({ ...f, fechaExpedicionCertificado: e.target.value })} />
+          <input className={FECHA_CLS} type="date" value={f.fechaExpedicionCertificado} onChange={(e) => setF({ ...f, fechaExpedicionCertificado: e.target.value })} />
         </label>
         <Interruptor activo={f.permisoEnvioDp} onCambio={(v) => setF({ ...f, permisoEnvioDp: v })} etiqueta="Firma derechos de petición" />
         <Interruptor activo={f.permisoCambioContraventor} onCambio={(v) => setF({ ...f, permisoCambioContraventor: v })} etiqueta="Firma cambios de contraventor" />

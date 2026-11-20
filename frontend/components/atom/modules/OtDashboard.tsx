@@ -216,7 +216,7 @@ export function OtDashboard() {
   );
 
   return (
-    <div className="app-bg flex min-h-screen flex-col gap-4 px-6 pb-10 pt-6 text-foreground max-sm:px-4" data-testid="ot-inicio">
+    <div className="app-bg flex flex-col gap-4 px-6 pb-10 pt-6 text-foreground max-sm:px-4" data-testid="ot-inicio">
       {/* Franja 1: carrusel a la izquierda; filtros y cifras de la cola a la derecha. */}
       <div className="grid grid-cols-1 items-stretch gap-3 lg:grid-cols-2">
         <CarruselInicio

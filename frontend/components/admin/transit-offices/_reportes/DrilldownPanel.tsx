@@ -7,6 +7,7 @@
 // predicados de la tarjeta, así que la lista nunca contradice al número que la abrió.
 
 import { buttonClass } from "@flit/ui/Button";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import { DIALOGO_CERRAR_CLS, DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import Link from "next/link";
 import type { OtDrilldown } from "@/lib/api/ot-metrics";
@@ -40,6 +41,7 @@ export function DrilldownPanel({
   transitOfficeId: string;
   onClose: () => void;
 }) {
+  useBloqueoScroll(state !== null);
   if (!state) return null;
   const { label, loading, error, data } = state;
 
@@ -67,7 +69,7 @@ export function DrilldownPanel({
           </button>
         </FranjaDialogo>
 
-        <div className="min-h-0 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
           {loading && <p className="text-xs text-muted-foreground">Cargando…</p>}
           {error && (
             <p className="rounded-xl bg-[var(--di-danger-soft)] px-4 py-3 text-xs text-[color:var(--di-danger)]">

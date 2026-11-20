@@ -26,7 +26,7 @@ import {
 // Bug #13055 — homologada con la tabla de trámites: cabecera y filas salen de `table-styles`
 // (cabecera fija al hacer scroll y fila-tarjeta que se realza al pasar el puntero; colores por token)
 // y la paginación es la estándar, con «Filas por página» cuando se pasa `onPageSizeChange`.
-// HU #14477 — aspecto del prototipo «Diseño Inteligente» (cabecera, realce por borde, tarjetas bajo 900px).
+// HU #14477 — aspecto del prototipo «Diseño Inteligente» (cabecera, realce por borde, tarjetas bajo 1024px).
 
 export type CellAlign = "left" | "center" | "right";
 
@@ -130,9 +130,11 @@ export function DataTable<T>({
         onRetry={onRetry}
         skeletonRows={6}
       >
-        <div className={allowHorizontalScroll ? "overflow-x-auto" : "overflow-x-hidden"}>
+        {/* Con scroll siempre: en una tabla `table-fixed` no cambia nada si cabe, y si un contenido no cabe se puede
+            desplazar en vez de quedar recortado. */}
+        <div className="overflow-x-auto overscroll-x-contain">
           {/* HU #14477 — la tabla del prototipo «Diseño Inteligente»: cabecera hundida, filas separadas 6px y, por
-              debajo de 900px (tableta y celular, como la media query del prototipo), cada fila se lee como una tarjeta
+              debajo de 1024px (tableta y celular, como la media query del prototipo), cada fila se lee como una tarjeta
               en una rejilla de 300px: la cabecera queda para lectores de pantalla, la primera celda hace de título y
               las demás muestran su columna (data-label). Solo con CSS; se anula el ancho mínimo. */}
           <table
@@ -161,7 +163,7 @@ export function DataTable<T>({
             <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {showEmptyContent && (
                 <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
-                  <td colSpan={columns.length} className="px-4 py-6 text-center max-[900px]:block">
+                  <td colSpan={columns.length} className="px-4 py-6 text-center max-lg:block">
                     {emptyContent}
                   </td>
                 </tr>
@@ -233,7 +235,7 @@ function FragmentRow<T>({
       </tr>
       {expanded != null && expanded !== false && (
         <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
-          <td colSpan={columns.length} className="px-4 pb-3 max-[900px]:block">
+          <td colSpan={columns.length} className="px-4 pb-3 max-lg:block">
             {expanded}
           </td>
         </tr>

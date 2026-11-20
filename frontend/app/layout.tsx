@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { isOidcSessionMode } from "@flit/auth/request";
 import { THEME_INIT_SCRIPT } from "@flit/shell/theme-script";
@@ -33,6 +33,16 @@ const jetbrainsMono = localFont({
   weight: "100 800",
   style: "normal",
 });
+
+// Responsive iOS (S2): `viewportFit: "cover"` deja que el contenido llegue bajo el notch y la barra de
+// inicio, y cada elemento fijo suma `env(safe-area-inset-*)`. Sin `maximumScale` ni `userScalable`:
+// el zoom es accesibilidad. `themeColor` es el fondo claro de la app (`--color-flit-bg`).
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  themeColor: "#e6f0ff",
+};
 
 // HU #12419 (AC2/AC7) — en host FLIT `resolveBrand()` devuelve `FLIT_BRAND` SIN fetch, así que
 // esta metadata sale IDÉNTICA a la de siempre (title "FLIT 2.0", sin `icons`: `brand.logoUrl` es

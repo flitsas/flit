@@ -582,7 +582,7 @@ export function ClientProceduresTable({
   };
 
   return (
-    <div className={`flex flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
+    <div className={`flex min-w-0 flex-1 flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
       <table className="di-tabla-tarjetas w-full min-w-[1100px] border-separate border-spacing-y-2 text-xs">
         <thead>

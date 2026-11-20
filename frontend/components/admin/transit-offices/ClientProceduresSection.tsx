@@ -117,6 +117,7 @@ import { estadoPlacaOt, grupoPlacaPideDigito, resolverGrupoPlaca } from "@/lib/t
 import { PlacaOtField } from "./PlacaOtField";
 import { usePaginacion } from "@/components/atom/usePaginacion";
 import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
 // Bug #13055 — tamaño inicial; el usuario lo cambia con «Filas por página».
 
@@ -582,6 +583,18 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
     }
   }, []);
   const [ltTarget, setLtTarget] = useState<OtClientProcedure | null>(null);
+  useBloqueoScroll(
+    Boolean(
+      approveTarget ||
+        mandatarioTarget ||
+        assignTarget ||
+        revokeTarget ||
+        decideRevocationTarget ||
+        updatePlateTarget ||
+        rejectTarget ||
+        ltTarget,
+    ),
+  );
   const [consolidadoActingId, setConsolidadoActingId] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
   const [profile, setProfile] = useState<OtProfile | null>(null);
@@ -1869,7 +1882,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Confirmar aprobación"
         >
-          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain p-6 ${DIALOGO_PANEL_CLS}`}>
             <FranjaDialogo icono="check" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>¿Aprobar este trámite?</h2>
             </FranjaDialogo>
@@ -1928,7 +1941,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Elegir mandatario del mandato"
         >
-          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain p-6 ${DIALOGO_PANEL_CLS}`}>
             <FranjaDialogo icono="firma" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Elige el mandatario que firma</h2>
             </FranjaDialogo>
@@ -2005,7 +2018,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Asignar placa"
         >
-          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain p-6 ${DIALOGO_PANEL_CLS}`}>
             <FranjaDialogo icono="placa" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Asignar placa al trámite</h2>
             </FranjaDialogo>
@@ -2068,7 +2081,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Liberar placa"
         >
-          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain p-6 ${DIALOGO_PANEL_CLS}`}>
             <FranjaDialogo icono="devolucion" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Liberar placa</h2>
             </FranjaDialogo>
@@ -2101,7 +2114,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Decidir revocatoria"
         >
-          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain p-6 ${DIALOGO_PANEL_CLS}`}>
             <FranjaDialogo icono="mazo" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Decidir revocatoria</h2>
             </FranjaDialogo>
@@ -2255,7 +2268,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Actualizar placa"
         >
-          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain p-6 ${DIALOGO_PANEL_CLS}`}>
             <FranjaDialogo icono="lapiz" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Corregir placa</h2>
             </FranjaDialogo>
@@ -2299,7 +2312,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Rechazar trámite"
         >
-          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain p-6 ${DIALOGO_PANEL_CLS}`}>
             <FranjaDialogo icono="alerta" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Motivo del rechazo</h2>
             </FranjaDialogo>
@@ -2377,7 +2390,7 @@ export function ClientProceduresSection({ transitOfficeId }: { transitOfficeId?:
           aria-modal="true"
           aria-label="Adjuntar Licencia de Tránsito"
         >
-          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}>
+          <div className={`w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain p-6 ${DIALOGO_PANEL_CLS}`}>
             <FranjaDialogo icono="archivo-subir" className="-mx-6 -mt-6 mb-4">
               <h2 className={`text-lg font-semibold ${DIALOGO_TITULO_CLS}`}>Adjuntar Licencia de Tránsito (LT)</h2>
             </FranjaDialogo>

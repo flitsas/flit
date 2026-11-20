@@ -44,7 +44,8 @@ export function LandingNav({ loginUrl }: { loginUrl: string }) {
 
   return (
     <header className="sticky top-0 z-50 border-b border-[color:var(--di-divider)] bg-[color:color-mix(in_srgb,var(--di-surface-elevated)_88%,transparent)] backdrop-blur-md">
-      <nav aria-label="Principal" className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4 md:px-6">
+      {/* Barra pegada arriba de borde a borde: con viewport-fit=cover, en iPhone horizontal el padding respeta el notch. */}
+      <nav aria-label="Principal" className="mx-auto flex h-16 max-w-7xl items-center gap-4 pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] md:pl-[max(1.5rem,env(safe-area-inset-left))] md:pr-[max(1.5rem,env(safe-area-inset-right))]">
         <a href="#inicio" aria-label="FLIT, inicio" className="shrink-0">
           <BrandLogo variant="dark" className="h-9 w-auto dark:hidden" />
           <BrandLogo variant="white" className="hidden h-9 w-auto dark:block" />

@@ -11,7 +11,7 @@ import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { Chip } from "@/components/ui/Chip";
 import { Interruptor } from "@/components/ui/Interruptor";
-import { controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { ETIQUETA_CLS, FECHA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { CANAL_CORREO, estadoComunicacion, opciones, TIPO_COMUNICACION } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
@@ -275,11 +275,11 @@ function Centro() {
         </label>
         <label className={ETIQUETA_CLS}>
           Desde
-          <input type="date" className={INPUT_CLS} value={desde} onChange={(e) => filtrar(setDesde)(e.target.value)} />
+          <input type="date" className={FECHA_CLS} value={desde} onChange={(e) => filtrar(setDesde)(e.target.value)} />
         </label>
         <label className={ETIQUETA_CLS}>
           Hasta
-          <input type="date" className={INPUT_CLS} value={hasta} onChange={(e) => filtrar(setHasta)(e.target.value)} />
+          <input type="date" className={FECHA_CLS} value={hasta} onChange={(e) => filtrar(setHasta)(e.target.value)} />
         </label>
         <label className={ETIQUETA_CLS}>
           Comparendo
