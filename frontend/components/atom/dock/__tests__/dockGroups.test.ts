@@ -172,6 +172,7 @@ describe("catálogo de Trámites", () => {
       "Configuración de IA",
       "Mensajes muertos",
       "Descarga masiva",
+      "Overrides persona RUNT",
       "Banners",
       "Persona Natural",
     ]);

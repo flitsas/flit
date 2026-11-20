@@ -526,7 +526,7 @@ function PersonalizedDocumentSection({
             <iframe
               src={preview.url}
               title={`Vista previa de ${preview.label}`}
-              className="h-[70vh] w-full rounded-xl border"
+              className="h-[70dvh] w-full rounded-xl border"
               style={{ borderColor: "var(--border)" }}
             />
           )}

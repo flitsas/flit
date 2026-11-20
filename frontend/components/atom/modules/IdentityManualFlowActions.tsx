@@ -27,6 +27,7 @@ import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/M
 import { StatusBadge } from '@/components/atom/StatusBadge';
 import type { BiometricValidation } from '@/lib/api/types/procedure-runtime';
 import { IconoAviso } from "@flit/ui/IconoAviso";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
 /**
  * HU #13288 (Feature #13280, Épica #13202) — acciones del flujo manual de identidad en el detalle de una
@@ -214,6 +215,7 @@ function ManualFlowConfirmDialog({
   const panelRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(busy);
   const onCloseRef = useRef(onClose);
+  useBloqueoScroll(true);
   useEffect(() => {
     busyRef.current = busy;
     onCloseRef.current = onClose;

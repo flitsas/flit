@@ -1,6 +1,7 @@
 using Flit.Admin.Application.Companies.Settings;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Consultas.Grpc.V1;
+using Flit.Infrastructure.Consultations;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Improntas.Domain;
 using Flit.Platform.Sdk.Grpc;
@@ -46,7 +47,22 @@ internal static class ConsultasRemoto
         services.Configure<ConsultationChainOptions>(o => configuration.GetSection(ConsultationChainOptions.SectionName).Bind(o));
         services.AddScoped<ConsultasRemotasCliente>();
         services.AddScoped<IConsultationProviderRegistry, ConsultasRemotasRegistry>();
-        services.AddScoped<IConsultationProviderChainResolver, ConsultasRemotasChainResolver>();
+        // HU #14642: resolver remoto concreto + decorador de override si el reader está registrado
+        // (AdminInfrastructure). Sin reader (tests aislados de AddConsultasRemoto) se expone el
+        // remoto directo — mismo contrato que antes del override.
+        services.AddScoped<ConsultasRemotasChainResolver>();
+        services.AddScoped<IConsultationProviderChainResolver>(sp =>
+        {
+            var inner = sp.GetRequiredService<ConsultasRemotasChainResolver>();
+            var reader = sp.GetService<ITenantRuntPersonOverrideReader>();
+            if (reader is null)
+                return inner;
+
+            return new TenantRuntPersonOverrideChainResolverDecorator(
+                inner,
+                reader,
+                sp.GetService<Microsoft.Extensions.Logging.ILogger<TenantRuntPersonOverrideChainResolverDecorator>>());
+        });
 
         // HU #13348: avalúos, Confirmación RUNT, impronta y certificado RUES.
         services.AddScoped<IAvaluoSugeridor, AvaluoSugeridorRemoto>();

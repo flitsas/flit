@@ -215,7 +215,7 @@ export function SearchableSelect({
           // esto un segundo clic no reabría la lista (el `focus` ya no vuelve a dispararse).
           onClick={abrir}
           onKeyDown={alTeclear}
-          className="h-10 w-full rounded-xl border border-input bg-[var(--surface-sunken)] pl-9 pr-14 text-xs font-medium text-flit-primary focus:border-flit-brand focus:bg-card focus-visible:outline-2 focus-visible:outline-[var(--di-action)] disabled:opacity-60 dark:text-foreground"
+          className="h-10 w-full rounded-xl border border-input bg-[var(--surface-sunken)] pl-9 pr-14 text-base font-medium sm:text-xs text-flit-primary focus:border-flit-brand focus:bg-card focus-visible:outline-2 focus-visible:outline-[var(--di-action)] disabled:opacity-60 dark:text-foreground"
         />
 
         <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">

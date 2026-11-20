@@ -24,7 +24,10 @@ public sealed class ConsultationChainOptions
         {
             [ConsultationKindKeys.VehicleVin] = ["kyverum_runt", "verifik"],
             [ConsultationKindKeys.VehiclePlate] = ["kyverum_runt", "verifik"],
-            [ConsultationKindKeys.Conductor] = ["kyverum_runt_conductor", "verifik_conductor"],
+            // HU #14642: tenant_manual_conductor encabeza la cadena de conductor; el decorador de
+            // cortocircuito lo intercepta en core-api ANTES de llamar a core-consultas, por lo que
+            // este proveedor nunca llega al registro remoto (CategoriaDe → Desconocida).
+            [ConsultationKindKeys.Conductor] = ["tenant_manual_conductor", "kyverum_runt_conductor", "verifik_conductor"],
         };
 
     /// <summary>Cadena efectiva para una clave de kind: config si existe y no vacía; si no, el default embebido.</summary>

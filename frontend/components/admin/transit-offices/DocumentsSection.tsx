@@ -1,6 +1,7 @@
 "use client";
 
 import { buttonClass } from "@flit/ui/Button";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -76,6 +77,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
       if (!deleting) setDeleteTarget(null);
     },
   });
+  useBloqueoScroll(superAdmin && deleteTarget !== null);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- lee el rol una sola vez al montar
@@ -372,7 +374,7 @@ export function DocumentsSection({ transitOfficeId }: DocumentsSectionProps) {
             aria-modal="true"
             aria-labelledby="delete-tag-title"
             aria-describedby="delete-tag-desc"
-            className={`relative w-full max-w-md max-h-[90dvh] overflow-y-auto p-6 ${DIALOGO_PANEL_CLS}`}
+            className={`relative w-full max-w-md max-h-[90dvh] overflow-y-auto overscroll-contain p-6 ${DIALOGO_PANEL_CLS}`}
           >
             <FranjaDialogo icono="papelera" className="-mx-6 -mt-6 mb-4">
               <h3 id="delete-tag-title" className={`text-sm font-bold ${DIALOGO_TITULO_CLS}`}>

@@ -4,6 +4,7 @@ import { useEffect, useId, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { OT_SHEET_CLASS } from "./ot-detalle-visual";
 import { DIALOGO_VELO_CLS } from "@/components/admin/dialogo-propio";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
 /**
  * Armazón del modal de detalle del trámite del ORGANISMO DE TRÁNSITO (HU #12060).
@@ -37,6 +38,7 @@ export function OtDetalleShell({
   busy?: boolean;
 }) {
   const titleId = useId();
+  useBloqueoScroll(open);
 
   useEffect(() => {
     if (!open) return;
@@ -76,7 +78,7 @@ export function OtDetalleShell({
           )}
         </div>
 
-        <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto scroll-smooth pr-2">
+        <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain scroll-smooth pr-2">
           {children}
         </div>
 

@@ -177,7 +177,7 @@ const DURACION_AVISO_MS = 12_000;
 function AvisoDelDocumento({ children, onCerrar }: { children: ReactNode; onCerrar: () => void }) {
   return (
     <div
-      className="fixed bottom-4 right-4 z-[1300] w-[min(26rem,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-3 shadow-lg"
+      className="fixed bottom-[calc(1rem+env(safe-area-inset-bottom))] right-[calc(1rem+env(safe-area-inset-right))] z-[1300] w-[min(26rem,calc(100vw-2rem))] rounded-2xl border border-border bg-card p-3 shadow-lg"
       data-testid="aviso-documento-en-pantalla"
     >
       <div className="flex items-start gap-2">
@@ -221,14 +221,14 @@ function VisorEnModal({
       zClassName="z-[1200]"
     >
       <div
-        className="min-h-[50vh] flex flex-col"
+        className="min-h-[50dvh] flex flex-col"
         data-testid="preview-modal-body"
       >
         {notice ? <div className="mb-3">{notice}</div> : null}
         {/* Estado: cargando */}
         {loading && (
           <div
-            className="flex-1 flex items-center justify-center min-h-[50vh]"
+            className="flex-1 flex items-center justify-center min-h-[50dvh]"
             role="status"
             aria-busy="true"
             aria-label="Cargando previsualización"
@@ -301,7 +301,7 @@ function VisorEnModal({
               <iframe
                 src={url}
                 title={title}
-                className="w-full flex-1 min-h-[60vh] rounded-xl border border-border dark:border-border"
+                className="w-full flex-1 min-h-[60dvh] rounded-xl border border-border dark:border-border"
                 data-testid="preview-iframe"
               />
             )}
@@ -313,7 +313,7 @@ function VisorEnModal({
                 <img
                   src={url}
                   alt={title}
-                  className="max-w-full max-h-[70vh] rounded-xl border border-border dark:border-border object-contain"
+                  className="max-w-full max-h-[70dvh] rounded-xl border border-border dark:border-border object-contain"
                   data-testid="preview-image"
                 />
               </div>

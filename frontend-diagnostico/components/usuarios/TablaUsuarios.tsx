@@ -17,8 +17,8 @@ import { EtiquetaEstadoUsuario } from "./EtiquetaEstadoUsuario";
 
 const COLUMNAS = ["Nombre", "Correo", "Rol", "Estado", "Acciones"] as const;
 const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
-/** Columna «Acciones» fija a la derecha cuando hay tabla (≥ 900 px), como en la tabla por defecto (spec-ui §1). */
-const FIJA_CLS = "min-[900px]:sticky min-[900px]:right-0 min-[900px]:bg-card";
+/** Columna «Acciones» fija a la derecha cuando hay tabla (≥ 1024 px), como en la tabla por defecto (spec-ui §1). */
+const FIJA_CLS = "lg:sticky lg:right-0 lg:bg-card";
 
 const IconoRol = iconoComo("rol");
 const IconoPausa = iconoComo("pausa");
@@ -43,7 +43,7 @@ export interface TablaUsuariosProps {
  * Tabla de usuarios de Diagnóstico (HU #14588, spec-ui §10.1 con los ajustes H-UI del contrato): la tabla por defecto del
  * kit (las mismas recetas que el listado del inicio) con Nombre · Correo · Rol · Estado · Acciones; sin «Último ingreso»
  * (SP-18). El menú de cada fila sale solo de `acciones` del servidor: la fila propia, la invitación o el administrador de
- * la compañía no tienen menú y muestran el motivo (SP-20, H-U2). El correo va solo en su celda. Por debajo de 900 px
+ * la compañía no tienen menú y muestran el motivo (SP-20, H-U2). El correo va solo en su celda. Por debajo de 1024 px
  * cada usuario es una tarjeta con su nombre de título.
  */
 export function TablaUsuarios({ usuarios, onAccion, ocupado = null }: TablaUsuariosProps) {

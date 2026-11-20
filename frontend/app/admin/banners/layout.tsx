@@ -23,7 +23,7 @@ export default function AdminBannersLayout({ children }: { children: ReactNode }
       onLogout={logout}
       visibleModuleCodes={modulesLoading ? [] : accessibleCodes}
     >
-      <div className="app-bg min-h-screen w-full">{children}</div>
+      <div className="app-bg w-full">{children}</div>
     </Shell>
   );
 }

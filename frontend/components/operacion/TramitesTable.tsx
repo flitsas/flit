@@ -109,7 +109,7 @@ import {
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
   TABLA_ROW_HOVER_CLS,
-  TABLA_TARJETA_640_CLS,
+  TABLA_TARJETA_CLS,
 } from '@/components/atom/table-styles';
 import { PageNav } from '@/components/atom/PageNav';
 import { TAMANOS_DE_PAGINA, useTamanoDePagina } from '@/components/atom/usePaginacion';
@@ -150,6 +150,7 @@ import type {
 import type { ProcedureFamily } from '@/lib/api/types/procedure-parametrization';
 import { IdentidadParteTrackingModal, type ActorTracking } from './IdentidadParteTrackingModal';
 import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
 /** Íconos del kit que se pasan como componente; fuera del render para que sean estables. */
 const ICONO_ARCHIVO = iconoComo("archivo");
@@ -297,6 +298,11 @@ function IdentidadChip({ chip, ayuda, tipId }: { chip: Chip; ayuda: string; tipI
         onMouseLeave={() => setTipOpen(false)}
         onFocus={() => setTipOpen(true)}
         onBlur={() => setTipOpen(false)}
+        // Táctil (iOS no emite mouseenter): el toque abre y un segundo toque cierra. Va en pointerdown,
+        // antes del focus, para que el focus del mismo toque no lo vuelva a cerrar.
+        onPointerDown={(e) => {
+          if (e.pointerType !== 'mouse') setTipOpen((abierto) => !abierto);
+        }}
       >
         <StatusBadge label={chip.label} bg={chip.bg} color={chip.color} border={chip.border} />
       </span>
@@ -675,6 +681,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
 
   /** Modal «Enviar al OT» (ADR-0059: asignado → entregado) desde la tabla. */
   const [processTarget, setProcessTarget] = useState<InstanceSummary | null>(null);
+  useBloqueoScroll(Boolean(processTarget));
   const [soatPagado, setSoatPagado] = useState(false);
   const [impuestoPagado, setImpuestoPagado] = useState(false);
   const [processActing, setProcessActing] = useState(false);
@@ -1796,7 +1803,7 @@ export function TramitesTable({ refreshKey = 0, onNewTramite, onBulkUpload }: Tr
                 Enviar al organismo de tránsito
               </h2>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-6">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6">
             <p className="text-sm opacity-80">
               {processTarget.referenceNumber}
               {processTarget.placa ? ` · ${processTarget.placa}` : ''}
@@ -2252,7 +2259,7 @@ function TableBody({
     // Scroll normal de página: la tabla crece con su contenido y solo scrollea en horizontal
     // cuando las columnas visibles no caben a lo ancho. La píldora de conteo que iba aquí se
     // fundió con "Mostrando X de Y" de `PageNav` — un solo lugar para el recuento.
-    <div className={`flex flex-col ${TABLA_TARJETA_640_CLS}`}>
+    <div className={`flex flex-col ${TABLA_TARJETA_CLS}`}>
       <div className="overflow-x-auto">
         <table
           aria-label="Trámites en curso"

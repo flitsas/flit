@@ -9,7 +9,7 @@ import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { Chip } from "@/components/ui/Chip";
 import { Interruptor } from "@/components/ui/Interruptor";
-import { controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { ETIQUETA_CLS, FECHA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
 import { CANAL, canal, opciones, RESULTADO_CICLO, resultadoCiclo } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
@@ -83,8 +83,8 @@ function Log() {
         <fieldset className={ETIQUETA_CLS}>
           <legend className="mb-1">Fechas</legend>
           <div className="flex gap-2">
-            <input type="date" className={INPUT_CLS} value={desde} onChange={(e) => cambiar(setDesde)(e.target.value)} aria-label="Desde" />
-            <input type="date" className={INPUT_CLS} value={hasta} onChange={(e) => cambiar(setHasta)(e.target.value)} aria-label="Hasta" />
+            <input type="date" className={FECHA_CLS} value={desde} onChange={(e) => cambiar(setDesde)(e.target.value)} aria-label="Desde" />
+            <input type="date" className={FECHA_CLS} value={hasta} onChange={(e) => cambiar(setHasta)(e.target.value)} aria-label="Hasta" />
           </div>
         </fieldset>
       </div>

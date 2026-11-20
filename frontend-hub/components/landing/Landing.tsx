@@ -300,7 +300,7 @@ function HowToStart() {
           text="Cada empresa es distinta: armamos contigo la propuesta según tus productos, usuarios y volumen."
           center
         />
-        <ol className="mt-12 grid gap-5 md:grid-cols-5">
+        <ol className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-5">
           {STEPS.map((step, i) => (
             <li key={step.title} className={`${card} relative p-6`}>
               <span className="grid h-9 w-9 place-items-center rounded-full text-sm font-semibold text-[color:var(--di-on-action)]" style={{ background: "var(--di-gradient-action)" }}>

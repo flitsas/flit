@@ -203,17 +203,15 @@ export function isIdentityConsultationReady(
  * Documentos que puede declarar un actor. Es el ÚNICO control de la naturaleza de la persona:
  * NIT ⇒ jurídica (se consulta el RUES), cualquier otro ⇒ natural (se consulta el RUNT).
  *
- * <p>La tarjeta de identidad NO está: ninguno de los dos proveedores de conductor la consulta.
- * Verifik solo admite <c>CC · CE · PA · PPT</c> en <c>/v2/co/runt/conductor</c> (no existe un valor
- * para TI), y aunque Kyverum sí tiene el código <c>T</c>, nunca lo recibe porque el orquestador le
- * entrega el documento ya traducido al dialecto de Verifik — donde TI viaja como <c>PPT</c> y su
- * normalizador lo vuelve <c>P</c>, pasaporte. Ofrecerla solo servía para trabar el paso: la consulta
- * no encuentra a nadie y el gate de avance exige consulta exitosa. Si el negocio la pide, primero
- * hay que decidir qué se le manda a cada proveedor.</p>
+ * <p>HU #14642 — La tarjeta de identidad (TI) ahora está soportada: el backend mapea TI → TI y
+ * Kyverum la normaliza al código <c>T</c>. El orquestador ya no necesita traducirla al dialecto de
+ * Verifik como PPT; Kyverum es el proveedor que la resuelve correctamente.</p>
  */
 const DOC_OPTIONS: { value: ActorDocumentType; label: string }[] = [
   { value: 'CC', label: 'Cédula de ciudadanía (CC)' },
   { value: 'CE', label: 'Cédula de extranjería (CE)' },
+  // HU #14642 — Tarjeta de identidad: backend mapea TI→TI; Kyverum normaliza a T.
+  { value: 'TI', label: 'Tarjeta de identidad (TI)' },
   { value: 'NIT', label: 'NIT' },
   { value: 'PAS', label: 'Pasaporte (PAS)' },
   // HU #14499 / ADR-0082 — Permiso por Protección Temporal.

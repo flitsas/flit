@@ -52,7 +52,7 @@ describe("CAMPO_FECHA_CLS — foco visible en el botón del calendario (H-7)", (
     for (const nombre of ["Desde", "Hasta"]) {
       const campo = screen.getByLabelText(nombre);
       for (const c of FOCO_DENTRO) expect(campo, nombre).toHaveClass(c);
-      expect(campo, nombre).toHaveClass("min-[480px]:w-44");
+      expect(campo, nombre).toHaveClass("sm:w-44");
     }
     expect(screen.getByRole("textbox", { name: "Placa" })).not.toHaveClass("focus-within:outline-2");
   });

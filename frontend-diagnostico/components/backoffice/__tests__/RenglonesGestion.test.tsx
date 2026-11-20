@@ -6,7 +6,7 @@ import { esperarCabecera12px, esperarTablaPorDefecto } from "@/components/comun/
 
 // Uso de ejemplo: <RenglonesLectura renglones={saneamiento.renglones} verEvidencia={abrir} descargas={{}} /> en la gestión de un
 // saneamiento cerrado. HU #14585 (spec-ui §7, A7.1): «Conceptos a sanear» con la tabla por defecto (contenedor, cabecera de
-// 12 px y hover de fila), sin perder sus tarjetas por debajo de 900 px.
+// 12 px y hover de fila), sin perder sus tarjetas por debajo de 1024 px.
 
 describe("RenglonesGestion — HU #14585: tabla por defecto", () => {
   it("conceptos de solo lectura con contenedor, cabecera y hover de la tabla por defecto", () => {

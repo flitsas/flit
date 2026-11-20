@@ -57,7 +57,7 @@ interface AccionesFilaProps {
 /** Celda «Acciones» de la fila: la bandera (BotonSanear), «Abrir diagnóstico» (tablero del lote) y «Ver deuda» (PS-2, solo terminados). */
 function AccionesFila({ f, placa, puedeSanear, onActualizarFila, onAbrirPanel, onRefrescar, onAnunciar }: AccionesFilaProps) {
   return (
-    <div className="flex flex-col items-start gap-2 max-[900px]:items-end">
+    <div className="flex flex-col items-start gap-2 max-lg:items-end">
       <BotonSanear
         diagnosticoId={f.diagnostico_id}
         vehiculo={{ id: f.vehiculo_id, placa: f.placa, vin: f.vin, identificador: f.identificador }}
@@ -93,7 +93,7 @@ function AccionesFila({ f, placa, puedeSanear, onActualizarFila, onAbrirPanel, o
  * dictamen, saneamiento y trámite; por fila, la bandera (BotonSanear), «Abrir diagnóstico» (tablero del lote) y «Ver deuda»
  * (PS-2, solo terminados). La fila no es clicable entera: tiene varias acciones. Selección por página con «Sanear (N)»
  * (POST /saneamientos/solicitudes, como el tablero) y «Descargar deuda (N)» (Excel de 1 a 200 placas). Al cambiar de página
- * el foco va a la tabla y se anuncia «Página p de n». Por debajo de 900 px cada fila es una tarjeta (TABLA_MOVIL_*).
+ * el foco va a la tabla y se anuncia «Página p de n». Por debajo de 1024 px cada fila es una tarjeta (TABLA_MOVIL_*).
  */
 export function ListadoVehiculos({ puedeCrear, puedeSanear, puedeDescargar }: ListadoVehiculosProps) {
   const [panel, setPanel] = useState<{ fila: FilaVehiculoListado; disparador: HTMLElement | null } | null>(null);

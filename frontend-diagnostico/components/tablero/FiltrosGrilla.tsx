@@ -20,15 +20,15 @@ import {
 } from "@/lib/tablero/filtrosTablero";
 import { BuscadorGrilla } from "./BuscadorGrilla";
 
-/** Select de la barra densa: 36 px de alto (T6), el resto del campo del kit. */
-const SELECT_CLS = CAMPO_CLS.replace(/\bh-11\b/, "h-9").replace(/\btext-base\b/, "text-sm");
+/** Select de la barra densa: 36 px de alto (T6), el resto del campo del kit. 16 px bajo 640 para que iOS no haga zoom. */
+const SELECT_CLS = CAMPO_CLS.replace(/\bh-11\b/, "h-9").replace(/\btext-base\b/, "text-base sm:text-sm");
 /** Control de la barra: ancho propio en escritorio y fila completa en celular (spec-ui §6.6). */
-const CONTROL_CLS = "flex min-w-[11rem] flex-col gap-1 max-[640px]:w-full";
+const CONTROL_CLS = "flex min-w-[11rem] flex-col gap-1 max-sm:w-full";
 /** «Limpiar filtros»: botón fantasma pequeño (Button ghost sm del kit) con el foco de la app. */
 const LIMPIAR_CLS =
   "inline-flex min-h-9 items-center rounded-full px-3 text-sm font-semibold text-[color:var(--di-action)] hover:bg-[var(--kit-hover)] " +
   "disabled:cursor-default disabled:opacity-55 disabled:hover:bg-transparent focus-visible:outline-2 focus-visible:outline-offset-2 " +
-  "focus-visible:outline-[var(--di-action)] max-[640px]:w-full max-[640px]:justify-center";
+  "focus-visible:outline-[var(--di-action)] max-sm:w-full max-sm:justify-center";
 
 export interface FiltrosGrillaProps {
   /** Campo del buscador: quien pinta la barra le devuelve el foco tras «Limpiar filtros» del vacío (CR-3, spec-ui §6.6). */

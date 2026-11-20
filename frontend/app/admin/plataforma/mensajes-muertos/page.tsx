@@ -15,7 +15,7 @@ export default function AdminMensajesMuertosPage() {
 
   return (
     <ToastProvider>
-      <div className="flex min-h-screen flex-col gap-4 px-4 pt-6 pb-10 md:px-6">
+      <div className="flex flex-col gap-4 px-4 pt-6 pb-10 md:px-6">
         <button
           type="button"
           onClick={() => router.push("/")}

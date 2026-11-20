@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { Icono } from "@flit/ui/Icono";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import { formatoInsignia, type DockEntry, type DockGroup } from "../nav";
 import { DockEntryLink, Insignia } from "./Dock";
 import { DockGlyph } from "./DockGlyph";
@@ -48,6 +49,9 @@ export function DockMobile({ groups, homeIconSrc, scrollRef }: Props) {
     return () => document.removeEventListener("keydown", onKey);
   }, [open]);
 
+  // iOS: la página de atrás no se mueve al arrastrar dentro de la hoja.
+  useBloqueoScroll(open);
+
   if (groups.length === 0) return null;
 
   return (
@@ -56,7 +60,7 @@ export function DockMobile({ groups, homeIconSrc, scrollRef }: Props) {
         ref={launcherRef}
         type="button"
         onClick={() => setOpen(true)}
-        className={`dock-fab dock-fab--lanzador pointer-events-auto ${position} bottom-5 left-1/2 z-40 -translate-x-1/2 ${home.shape === "pill" ? "dock-fab--pastilla" : ""}`}
+        className={`dock-fab dock-fab--lanzador pointer-events-auto ${position} bottom-[calc(1.25rem+env(safe-area-inset-bottom))] left-1/2 z-40 -translate-x-1/2 ${home.shape === "pill" ? "dock-fab--pastilla" : ""}`}
         aria-label={insignia ? `Abrir menú de navegación, ${pendientes} pendientes` : "Abrir menú de navegación"}
         aria-expanded={open}
         aria-controls="dock-mobile-sheet"
@@ -67,8 +71,12 @@ export function DockMobile({ groups, homeIconSrc, scrollRef }: Props) {
 
       {open && (
         <div
-          className={`${position} inset-0 z-50 flex items-end justify-center p-2`}
-          style={{ background: "var(--overlay, rgba(22, 39, 68, 0.45))", backdropFilter: "blur(4px)" }}
+          className={`${position} inset-0 z-50 flex items-end justify-center p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))]`}
+          style={{
+            background: "var(--overlay, rgba(22, 39, 68, 0.45))",
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+          }}
           onPointerDown={(e) => {
             if (e.target === e.currentTarget) close();
           }}

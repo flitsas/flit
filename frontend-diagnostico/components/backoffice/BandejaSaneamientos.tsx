@@ -62,7 +62,7 @@ import { ESTADOS_SANEAMIENTO, etiquetaSaneamiento, laPlaca } from "@/lib/saneami
 
 // PS-4, bandeja «Saneamientos» del backoffice (spec-ui §5; plan §7.5; HU #14577 AC26–AC28). Filtros en la URL (estado
 // multiselección, compañía, placa y fechas de solicitud), tabla paginada en el servidor que pasa a tarjetas por debajo de
-// 900 px, «Tomar (N)» sin confirmación (D-07) para las solicitudes sin tomar y «Descargar Excel» con los mismos filtros.
+// 1024 px, «Tomar (N)» sin confirmación (D-07) para las solicitudes sin tomar y «Descargar Excel» con los mismos filtros.
 // Cuatro estados del patrón de Diagnóstico (D-01). Todo valor visual sale de tokens del kit; sin hex.
 
 export interface BandejaSaneamientosProps {
