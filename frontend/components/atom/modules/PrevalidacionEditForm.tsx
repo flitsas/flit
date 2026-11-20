@@ -16,6 +16,7 @@ import {
 } from '@/components/operacion/dialogo-propio';
 import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { IconoAviso } from "@flit/ui/IconoAviso";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
 /**
  * Formulario de edición de una prevalidación STANDALONE (HU #10944 — Feature #10864, CF-03;
@@ -71,6 +72,7 @@ export function PrevalidacionEditForm({
   const [submitting, setSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const [offerNueva, setOfferNueva] = useState(false);
+  useBloqueoScroll(true);
 
   const emailTrim = email.trim();
   const emailInvalid = emailTrim !== '' && !EMAIL_RE.test(emailTrim);
@@ -138,7 +140,7 @@ export function PrevalidacionEditForm({
         </div>
 
         <form onSubmit={(e) => void handleSubmit(e)} noValidate>
-          <div className="space-y-4 overflow-y-auto max-h-[70vh] px-6 py-5">
+          <div className="space-y-4 overflow-y-auto overscroll-contain max-h-[70dvh] px-6 py-5">
             {/* Documento — NO editable (D7) */}
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -309,6 +311,7 @@ export function PrevalidacionResendResultPanel({
   notice,
 }: PrevalidacionResendResultPanelProps) {
   const [copied, setCopied] = useState(false);
+  useBloqueoScroll(true);
 
   const copiar = async () => {
     if (!captureUrl) return;

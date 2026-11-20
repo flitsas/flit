@@ -250,8 +250,8 @@ describe("HU14562 AC43 — rediseño de F-08 con el kit", () => {
 });
 
 
-// HU #14562 AC56 (auditoría M6): por debajo de 900 px los lotes pasan a tarjetas con las recetas TABLA_MOVIL_* del repo.
-describe("ListaLotesBackoffice — HU #14562 AC56: tarjetas por debajo de 900 px", () => {
+// HU #14562 AC56 (auditoría M6): por debajo de 1024 px los lotes pasan a tarjetas con las recetas TABLA_MOVIL_* del repo.
+describe("ListaLotesBackoffice — HU #14562 AC56: tarjetas por debajo de 1024 px", () => {
   const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
 
   it("tabla, cabecera, cuerpo y filas llevan las recetas de tarjeta y cada celda su data-label", async () => {

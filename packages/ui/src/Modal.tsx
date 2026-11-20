@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "./cn";
 import { Icono, type NombreIcono } from "./Icono";
+import { useBloqueoScroll } from "./useBloqueoScroll";
 import { enfocablesDe, ProfundidadCapa, useTrampaFoco } from "./useTrampaFoco";
 
 // HU #10496 — Componente Modal unificado (ancho estándar, blur consistente y
@@ -141,6 +142,9 @@ export function Modal({
     },
   });
 
+  // iOS (Safari y Chrome): sin esto la página de atrás se mueve al arrastrar dentro del modal.
+  useBloqueoScroll(open);
+
   // Se renderiza vía portal a <body> (guardado para SSR): un modal anidado dentro de otro cuyo
   // overlay usa `backdrop-blur` heredaría ese containing block y su `fixed inset-0` quedaría
   // recortado al recuadro del modal padre (fondo oscuro confinado a una caja). Portalizar a body
@@ -212,7 +216,7 @@ export function Modal({
         {/* Márgenes y no padding: el cuerpo conserva su barra de scroll y el `px-*` que algunos llamadores le pasan. */}
         <div
           ref={cuerpoRef}
-          className={`mx-4 mt-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto sm:mx-6 ${footer ? "" : "mb-4 sm:mb-6"} ${bodyClassName}`}
+          className={`mx-4 mt-4 min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain sm:mx-6 ${footer ? "" : "mb-4 sm:mb-6"} ${bodyClassName}`}
         >
           {children}
         </div>

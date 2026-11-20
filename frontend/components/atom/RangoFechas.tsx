@@ -16,7 +16,7 @@ const TODO = "todo";
 type Modo = QueryRangePreset | typeof TODO;
 
 const FIELD_CLS =
-  "rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand disabled:opacity-60";
+  "rounded-xl border bg-transparent px-3 py-2 text-base sm:text-xs outline-none focus:border-flit-brand disabled:opacity-60";
 
 /**
  * Resuelve un periodo relativo contra el día LOCAL (Bogotá) de `hoy`. Se arma con `toIsoDate`, que

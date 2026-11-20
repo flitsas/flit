@@ -161,7 +161,7 @@ export function DiagnosticoPunto({
   const cargando = estado.fase === "cargando";
 
   return (
-    <div className="min-h-screen bg-background font-sans text-foreground" aria-label="Wizard del punto">
+    <div className="min-h-dvh bg-background font-sans text-foreground" aria-label="Wizard del punto">
       <header className="wizard-header flex flex-wrap items-center justify-between gap-3 border-b border-border bg-background py-3">
         <LogoPortal alt="FLIT 2.0" />
         <div className="flex flex-wrap items-center justify-end gap-4 text-sm md:gap-6">

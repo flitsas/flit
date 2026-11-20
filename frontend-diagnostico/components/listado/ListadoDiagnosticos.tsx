@@ -49,7 +49,7 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; error: ErrorListado } | { t
 
 const COLUMNAS = ["ID", "Nombre", "Creado", "Modalidad", "Tipo", "Trámite", "Estado", "Creador"] as const;
 
-/** Celda del listado; por debajo de 900 px, renglón de la tarjeta con su columna en `data-label` (HU #14562 AC56). */
+/** Celda del listado; por debajo de 1024 px, renglón de la tarjeta con su columna en `data-label` (HU #14562 AC56). */
 const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
 
 /** HU #14087: modalidad del lote según `es_express`; «Tipo» (Simple / Con análisis IA) sigue aparte. */
@@ -65,7 +65,7 @@ const IconoPortapapeles = iconoComo("portapapeles");
  * tal como llega («No disponible» incluido). Clic en la fila o Enter en su enlace abre el tablero, o la carga de vehículos
  * si el lote está sin lanzar. Cuatro estados: cargando, error (400 con campo junto a su filtro, 403 a la página de acceso
  * negado, el resto con Reintentar), vacío (compañía sin diagnósticos, distinto de filtros sin resultados) y lleno. Por debajo
- * de 900 px cada diagnóstico es una tarjeta (recetas TABLA_MOVIL_*, HU #14562 AC56), con el nombre de título.
+ * de 1024 px cada diagnóstico es una tarjeta (recetas TABLA_MOVIL_*, HU #14562 AC56), con el nombre de título.
  */
 export function ListadoDiagnosticos({ puedeCrear = false }: { puedeCrear?: boolean }) {
   const router = useRouter();

@@ -8,7 +8,7 @@ import { IconoModulo } from "@flit/ui/Icono";
  */
 export default function NotFoundPage() {
   return (
-    <main className="app-bg flex min-h-screen flex-col items-center justify-center gap-4 px-6 text-center">
+    <main className="app-bg flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
       <div
         className="flex w-full max-w-lg flex-col items-center gap-3 rounded-2xl border border-border bg-card px-6 py-10 shadow-[var(--shadow-card)] sm:px-10"
         role="status"

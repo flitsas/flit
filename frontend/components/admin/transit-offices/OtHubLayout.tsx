@@ -148,7 +148,7 @@ export function OtHubLayout({
   const subtitle = officeLabel;
 
   return (
-    <main className="app-bg min-h-screen px-4 py-6 md:px-8">
+    <main className="app-bg px-4 py-6 md:px-8">
       {showBackToList && (
         <button
           type="button"

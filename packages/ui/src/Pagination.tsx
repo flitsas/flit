@@ -34,7 +34,7 @@ export interface PaginationProps {
  */
 export const PAGINACION_SELECT_CLS =
   "inline-flex h-9 shrink-0 items-center rounded-[9px] border border-[color:var(--di-border-control)] " +
-  "bg-[var(--di-surface-elevated)] px-3 text-sm font-semibold text-[color:var(--di-text-primary)] transition " +
+  "bg-[var(--di-surface-elevated)] px-3 text-base font-semibold sm:text-sm text-[color:var(--di-text-primary)] transition " +
   "hover:border-[color:var(--di-action)] focus:outline-none focus:border-[color:var(--di-action)] " +
   "focus:shadow-[var(--kit-sombra)] focus-visible:ring-2 focus-visible:ring-[var(--di-action)]";
 const SELECT_CLS = PAGINACION_SELECT_CLS;

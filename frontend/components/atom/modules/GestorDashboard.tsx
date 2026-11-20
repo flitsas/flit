@@ -370,7 +370,7 @@ export function GestorDashboard({ onNewTramite }: { onNewTramite: () => void }) 
     .join(" · ");
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 max-sm:px-4 flex flex-col gap-4 text-foreground">
+    <div className="app-bg px-6 pt-6 pb-10 max-sm:px-4 flex flex-col gap-4 text-foreground">
       {/* Franja 1 — carrusel a la izquierda; filtros y KPIs a la derecha. */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 items-stretch">
         <CarruselInicio bienvenida={bienvenida} banners={activeBanners} aria-label="Novedades de tu operación" />

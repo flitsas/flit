@@ -485,8 +485,8 @@ describe("/diagnosticos/{id} — HU #14562 AC28: columna Dictamen, búsqueda y c
     expect(dictamenDe(f3)).toHaveTextContent("Pendiente");
     // HU #14584 §6.4: el veredicto es dato; ningún botón en la columna.
     for (const tr of [f1, f2, f3]) expect(within(dictamenDe(tr)).queryByRole("button")).toBeNull();
-    // Fija desde 900 px; por debajo, la fila es tarjeta (auditoría B2, AC56).
-    expect(within(tablaLote()).getByRole("rowheader", { name: /TST001/ })).toHaveClass("min-[900px]:sticky");
+    // Fija desde 1024 px; por debajo, la fila es tarjeta (auditoría B2, AC56).
+    expect(within(tablaLote()).getByRole("rowheader", { name: /TST001/ })).toHaveClass("lg:sticky");
   });
 
   it("la búsqueda por placa o VIN filtra las filas en el cliente", async () => {

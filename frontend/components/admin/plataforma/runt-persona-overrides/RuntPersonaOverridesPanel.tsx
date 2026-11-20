@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { EncabezadoFiltrable, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
@@ -195,6 +196,7 @@ function OverrideDialog({ override, onClose, onSaved, tenantId }: DialogProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstRef = useRef<HTMLInputElement>(null);
+  useBloqueoScroll(true);
 
   useEffect(() => {
     firstRef.current?.focus();
@@ -234,7 +236,7 @@ function OverrideDialog({ override, onClose, onSaved, tenantId }: DialogProps) {
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--surface-default)] shadow-xl">
+      <div className="relative w-full max-w-2xl max-h-[90dvh] overflow-y-auto overscroll-contain rounded-2xl bg-[var(--surface-default)] shadow-xl">
         {/* Encabezado */}
         <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--surface-default)] px-6 py-4">
           <h2 className="text-base font-semibold text-[var(--content-primary)]">

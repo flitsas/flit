@@ -41,7 +41,7 @@ export const TRAMITES_CONTROL_ACTIVO_CLS =
  * 12px, superficie elevada) con el alto de 36px de la fila.
  */
 export const TRAMITES_INPUT_CLS =
-  'h-10 rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3 text-sm ' +
+  'h-10 rounded-[9px] border border-[color:var(--di-border-control)] bg-[var(--di-surface-elevated)] px-3 text-base sm:text-sm ' +
   'text-[color:var(--di-text-primary)] placeholder:text-[color:var(--kit-gris)] outline-none transition ' +
   'focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] focus:outline-none ' +
   'focus-visible:ring-2 focus-visible:ring-[var(--di-action)]';

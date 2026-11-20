@@ -41,6 +41,7 @@ import { actorsOrderedByOrdinal, identityStatusForActor } from '@/lib/tramites/o
 import { esPlacaAsignadaPorOt, PLATE_SOURCE_ICT } from '@/lib/tramites/plate-digit-preference';
 import { grupoPlacaDesdeFormatoFur, grupoPlacaPideDigito, type GrupoPlaca } from '@/lib/tramites/plate-format';
 import { AvisoDigitoPlacaOt } from './AvisoDigitoPlacaOt';
+import { useBloqueoScroll } from '@flit/ui/useBloqueoScroll';
 
 /** Estado de la pre-generación del paquete al entrar al paso FUR (Feature #11066). */
 export type PaqueteDocsStatus = 'idle' | 'loading' | 'ready' | 'error';
@@ -1134,6 +1135,7 @@ function OrganismoModal({
   const dialogRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   useWizardFocusTrap(dialogRef, { active: true, onEscape: onClose, initialFocusRef: searchInputRef });
+  useBloqueoScroll(true);
 
   useEffect(() => {
     let active = true;
@@ -1205,7 +1207,7 @@ function OrganismoModal({
       <div
         ref={dialogRef}
         tabIndex={-1}
-        className={`${DIALOGO_PANEL} p-6 w-full max-w-lg flex flex-col max-h-[85vh] outline-none focus:ring-0`}
+        className={`${DIALOGO_PANEL} p-6 w-full max-w-lg flex flex-col max-h-[85dvh] outline-none focus:ring-0`}
       >
         <div className={`${DIALOGO_FRANJA} -mx-6 -mt-6 mb-4 justify-between`}>
           <span aria-hidden="true" className={DIALOGO_FRANJA_CIRCULO} />
@@ -1255,7 +1257,7 @@ function OrganismoModal({
           </p>
         )}
 
-        <ul className="space-y-1.5 overflow-y-auto" aria-label="Catálogo de organismos">
+        <ul className="space-y-1.5 overflow-y-auto overscroll-contain" aria-label="Catálogo de organismos">
           {results.map((o) => (
             <li key={o.id}>
               <button

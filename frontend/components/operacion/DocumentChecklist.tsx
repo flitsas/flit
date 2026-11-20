@@ -39,6 +39,7 @@ import type {
 } from '@/lib/api/types/procedure-runtime';
 import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 import { IconoAviso } from "@flit/ui/IconoAviso";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
 export type DocumentUploadMode = 'individual' | 'batch';
 
@@ -552,6 +553,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
     active: detailOpen,
     onEscape: () => setDetailOpen(false),
   });
+  useBloqueoScroll(detailOpen);
   // B4 (guardián de diseño) — antes traía hex propios fuera de la paleta autorizada (`#3B8A00`
   // 3.8:1, `#B77900` 3.2:1, `#F9AC00` fuera de token). El tono sale de `--badge-*`
   // (`globals.css`), la misma fuente que usa `StatusBadge`, y queda theme-aware de paso.
@@ -650,7 +652,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
           <div
             ref={ocrDialogRef}
             tabIndex={-1}
-            className={`${DIALOGO_PANEL} flex max-h-[80vh] w-full max-w-lg flex-col outline-none focus:ring-0`}
+            className={`${DIALOGO_PANEL} flex max-h-[80dvh] w-full max-w-lg flex-col outline-none focus:ring-0`}
             onClick={(e) => e.stopPropagation()}
           >
             <div className={DIALOGO_FRANJA}>
@@ -680,7 +682,7 @@ export function OcrStatusPanel({ tipo, ocr }: { tipo: string; ocr: OcrUiResult }
                 Cerrar
               </button>
             </div>
-            <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4">
             {ocr.motivo && (
               <p className="mb-2 text-xs font-medium" style={{ color: palette.color }}>
                 {ocr.motivo}

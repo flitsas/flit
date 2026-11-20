@@ -10,7 +10,7 @@ import { CAMPO_CLS, ETIQUETA_CLS } from "@/components/configuracion/estilos";
 export function BuscadorGrilla({ valor, onCambiar, ref }: { valor: string; onCambiar: (valor: string) => void; ref?: Ref<HTMLInputElement> }) {
   const id = useId();
   return (
-    <div className="flex max-w-xs flex-col gap-1 max-[640px]:w-full max-[640px]:max-w-none">
+    <div className="flex max-w-xs flex-col gap-1 max-sm:w-full max-sm:max-w-none">
       <label htmlFor={id} className={ETIQUETA_CLS}>
         Buscar por placa o VIN
       </label>

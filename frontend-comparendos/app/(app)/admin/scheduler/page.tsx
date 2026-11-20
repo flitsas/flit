@@ -7,7 +7,7 @@ import { HistorialAuditoria } from "@/components/HistorialAuditoria";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
 import { Interruptor } from "@/components/ui/Interruptor";
-import { BOTON_PRIMARIO_CLS, controlCls, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, controlCls, FECHA_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { TIPO_COMUNICACION } from "@/lib/etiquetas";
 import { useCarga } from "@/lib/useCarga";
@@ -41,7 +41,7 @@ function FilaHorario({ h, onGuardado }: { h: Horario; onGuardado: () => void }) 
 
   return (
     <div className="flex flex-wrap items-center gap-4">
-      <input type="time" className={`${INPUT_CLS} w-32`} value={hora} onChange={(e) => setHora(e.target.value)} aria-label={`Hora de envío del ${h.tipo}`} />
+      <input type="time" className={`${FECHA_CLS} w-32`} value={hora} onChange={(e) => setHora(e.target.value)} aria-label={`Hora de envío del ${h.tipo}`} />
       <Interruptor activo={activo} onCambio={setActivo} etiqueta={activo ? "Activo" : "Pausado"} />
       <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!cambiado || ocupado || !hora} onClick={guardar}>
         {ocupado ? "Guardando…" : "Guardar"}

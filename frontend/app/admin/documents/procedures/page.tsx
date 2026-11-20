@@ -32,7 +32,7 @@ export default function DocumentProceduresPage() {
   };
 
   return (
-    <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
+    <main className="app-bg flex flex-col gap-4 px-6 py-6">
       <button type="button" onClick={() => router.push("/admin/documents")} className={ADMIN_BACK_LINK_CLS}>
         <Icono nombre="izquierda" className="h-3.5 w-3.5" /> Volver al catálogo
       </button>

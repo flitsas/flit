@@ -31,7 +31,7 @@ describe("MetricasLote — HU #14584 A6.5: una sola fila con ícono y tono por e
     expect(clases).toContain("grid-flow-col");
     expect(clases).toContain("auto-cols-fr");
     expect(clases.some((c) => c.startsWith("grid-cols-"))).toBe(false);
-    expect(clases).toContain("max-[640px]:overflow-x-auto");
+    expect(clases).toContain("max-sm:overflow-x-auto");
   });
 
   it("cada casilla lleva su ícono decorativo del disco del kit", () => {

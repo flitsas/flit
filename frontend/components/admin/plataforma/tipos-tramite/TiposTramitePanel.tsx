@@ -5,6 +5,7 @@ import { buttonClass } from '@flit/ui/Button';
 import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from '@/components/admin/dialogo-propio';
 import { useMemo, useState } from 'react';
 import { Icono } from "@flit/ui/Icono";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import { superadminClient } from '@/lib/api/superadmin-client';
 import { familiaLabel } from '@/lib/api/types/familia-labels';
 import type { ProcedureTypeSummary } from '@/lib/api/types/procedure-parametrization';
@@ -318,6 +319,7 @@ function ConfirmarRetiro({
   onCancelar: () => void;
   onConfirmar: () => void;
 }) {
+  useBloqueoScroll(true);
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${DIALOGO_VELO_CLS}`}

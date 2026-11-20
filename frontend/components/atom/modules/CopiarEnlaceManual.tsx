@@ -13,6 +13,7 @@ import {
 import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { mensajeErrorFlujoManual, motivoFalloCopiaEnlace } from '@/lib/identity/manual-flow';
 import { IconoAviso } from "@flit/ui/IconoAviso";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
 /**
  * HU #14306 (Feature #14304, Épica #14271) — «Copiar enlace» en la fila de validaciones manuales (solo Super Admin).
@@ -105,6 +106,7 @@ function RegenerarDialog({
   const panelRef = useRef<HTMLDivElement>(null);
   const busyRef = useRef(busy);
   const closeRef = useRef(onClose);
+  useBloqueoScroll(true);
   useEffect(() => {
     busyRef.current = busy;
     closeRef.current = onClose;

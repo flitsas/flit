@@ -207,9 +207,9 @@ describe("TablaFilasCorregibles sobre TablaEditable (HU #14562 · M12)", () => {
   });
 });
 
-// HU #14562 · M6 (AC56): la tabla de Carga es la TablaEditable del kit, así que por debajo de 900 px pasa a tarjetas y cada
+// HU #14562 · M6 (AC56): la tabla de Carga es la TablaEditable del kit, así que por debajo de 1024 px pasa a tarjetas y cada
 // celda lleva el nombre de su columna en data-label.
-describe("TablaFilasCorregibles: tarjetas por debajo de 900 px (HU #14562 · M6)", () => {
+describe("TablaFilasCorregibles: tarjetas por debajo de 1024 px (HU #14562 · M6)", () => {
   it("cada celda de la fila lleva su data-label y la tabla no impone un ancho mínimo", () => {
     simularApi({});
     montar();

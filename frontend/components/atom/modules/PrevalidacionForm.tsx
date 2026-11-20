@@ -18,6 +18,7 @@ import {
 } from '@/components/operacion/dialogo-propio';
 import { MODAL_CABECERA_CLS, MODAL_CERRAR_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { IconoAviso } from "@flit/ui/IconoAviso";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 /**
 
  * Resultado de REUTILIZAR una validación existente en vez de crear una nueva (módulo unificado de
@@ -109,6 +110,7 @@ export function PrevalidacionForm({
   // HU #11267 — confirmación con destinatario (AC3) y aviso de identidad existente (AC1).
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [existingConflict, setExistingConflict] = useState<ReturnType<typeof getIdentitySendConflict>>(null);
+  useBloqueoScroll(true);
 
   const errors: Partial<Record<keyof FormValues, string>> = {};
   if (!required(values.documentType)) errors.documentType = 'Requerido';
@@ -275,7 +277,7 @@ export function PrevalidacionForm({
 
         {/* Body */}
         <form onSubmit={(e) => void handleSubmit(e)} noValidate>
-          <div className="space-y-4 overflow-y-auto max-h-[70vh] px-6 py-5">
+          <div className="space-y-4 overflow-y-auto overscroll-contain max-h-[70dvh] px-6 py-5">
             <div>
               <label htmlFor="pv-docType" className="mb-1 block text-xs font-medium text-foreground">
                 Tipo de documento <span aria-hidden="true" className="text-destructive"><Icono nombre="asterisco" className="inline-block h-[0.6em] w-[0.6em] align-[0.3em]" /></span>
@@ -518,6 +520,7 @@ export function PrevalidacionSuccessPanel({
   onNew: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  useBloqueoScroll(true);
 
   const copiar = async () => {
     if (!result.captureUrl) return;

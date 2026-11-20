@@ -20,7 +20,7 @@ import {
 } from "@/lib/filtros";
 import type { Nit, Organismo, Pagina } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
-import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, INPUT_CLS, TEXTAREA_CLS } from "@/components/ui/estilos";
+import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, FECHA_CLS, INPUT_CLS, TEXTAREA_CLS, controlCls } from "@/components/ui/estilos";
 
 /** El menú agrupado por tema que aprobó Samuel (tanda 4 de la Epic #13779). */
 const GRUPOS: { titulo: string; campos: ClaveEtiqueta[] }[] = [
@@ -301,11 +301,11 @@ function Editor({
         <div className="grid grid-cols-2 gap-2">
           <label className="flex flex-col gap-1 text-[11px] font-semibold text-muted-foreground">
             Desde
-            <input type="date" className={INPUT_CLS} value={borrador[desde]} onChange={(e) => onCambio({ ...borrador, [desde]: e.target.value })} />
+            <input type="date" className={FECHA_CLS} value={borrador[desde]} onChange={(e) => onCambio({ ...borrador, [desde]: e.target.value })} />
           </label>
           <label className="flex flex-col gap-1 text-[11px] font-semibold text-muted-foreground">
             Hasta
-            <input type="date" className={INPUT_CLS} value={borrador[hasta]} onChange={(e) => onCambio({ ...borrador, [hasta]: e.target.value })} />
+            <input type="date" className={FECHA_CLS} value={borrador[hasta]} onChange={(e) => onCambio({ ...borrador, [hasta]: e.target.value })} />
           </label>
         </div>
       );

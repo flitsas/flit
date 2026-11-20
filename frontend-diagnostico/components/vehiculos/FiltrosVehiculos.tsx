@@ -65,7 +65,7 @@ function cambiosSaneamiento(v: ValorSaneamiento): Partial<Filtros> {
   return { saneamiento: "CON", saneamientoEstado: v };
 }
 
-const SELECT_CLS = "w-full min-[480px]:w-48";
+const SELECT_CLS = "w-full sm:w-48";
 
 /**
  * Filtros de la pestaña «Vehículos» (spec-ui §4.2, HU #14577 AC21) en una tarjeta. «Placa» se pinta en mayúsculas y aplica
@@ -117,7 +117,7 @@ export function FiltrosVehiculos({ valor, error, onCambiar, onLimpiar, onActuali
       </p>
     ) : null;
 
-  const campo = (c: Control, etiqueta: string, entrada: React.ReactNode, ancho = "w-full min-[480px]:w-auto") => (
+  const campo = (c: Control, etiqueta: string, entrada: React.ReactNode, ancho = "w-full sm:w-auto") => (
     <div className={`flex flex-col gap-1 ${ancho}`}>
       <label htmlFor={`${id}-${c}`} className={ETIQUETA_CLS}>
         {etiqueta}
@@ -145,7 +145,7 @@ export function FiltrosVehiculos({ valor, error, onCambiar, onLimpiar, onActuali
           className={clase("placa", "uppercase tracking-wider")}
           {...invalido("placa")}
         />,
-        "w-full min-[480px]:w-40",
+        "w-full sm:w-40",
       )}
       {campo(
         "estado",
@@ -245,7 +245,7 @@ export function FiltrosVehiculos({ valor, error, onCambiar, onLimpiar, onActuali
           value={valor.desde}
           max={valor.hasta || undefined}
           onChange={(e) => onCambiar({ desde: e.target.value })}
-          className={clase("desde", "w-full min-[480px]:w-44", CAMPO_FECHA_CLS)}
+          className={clase("desde", "w-full sm:w-44", CAMPO_FECHA_CLS)}
           {...invalido("desde")}
         />,
       )}
@@ -258,7 +258,7 @@ export function FiltrosVehiculos({ valor, error, onCambiar, onLimpiar, onActuali
           value={valor.hasta}
           min={valor.desde || undefined}
           onChange={(e) => onCambiar({ hasta: e.target.value })}
-          className={clase("hasta", "w-full min-[480px]:w-44", CAMPO_FECHA_CLS)}
+          className={clase("hasta", "w-full sm:w-44", CAMPO_FECHA_CLS)}
           {...invalido("hasta")}
         />,
       )}

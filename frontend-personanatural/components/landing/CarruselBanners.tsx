@@ -30,7 +30,7 @@ export function CarruselBanners({ banners }: { banners?: readonly BannerVista[] 
         <div className="flex h-full transition-transform duration-500 motion-reduce:transition-none" style={{ transform: `translateX(-${activa * 100}%)` }}>
           {diapositivas.map((b, i) => (
             <div key={b.clave} aria-hidden={i !== activa} className="relative h-full w-full shrink-0">
-              <Image src={b.src} alt={b.alt} fill priority={i === 0} unoptimized={b.publicada} sizes="(max-width: 900px) 100vw, 75vw" className="object-contain" />
+              <Image src={b.src} alt={b.alt} fill priority={i === 0} unoptimized={b.publicada} sizes="(max-width: 1023.98px) 100vw, 75vw" className="object-contain" />
               {b.enlace && (
                 <a
                   href={b.enlace}

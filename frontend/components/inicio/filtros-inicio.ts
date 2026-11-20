@@ -30,6 +30,8 @@ export const FILTROS_REJILLA_CLS =
   "[&>[data-testid=rango-fechas]_:is(select,input)]:min-w-0 [&>[data-testid=rango-fechas]_:is(select,input)]:rounded-[9px] " +
   "[&>[data-testid=rango-fechas]_:is(select,input)]:border-[color:var(--di-border-control)] " +
   "[&>[data-testid=rango-fechas]_:is(select,input)]:bg-[var(--di-surface-elevated)] " +
-  "[&>[data-testid=rango-fechas]_:is(select,input)]:px-3 [&>[data-testid=rango-fechas]_:is(select,input)]:text-sm " +
+  "[&>[data-testid=rango-fechas]_:is(select,input)]:px-3 [&>[data-testid=rango-fechas]_:is(select,input)]:text-base " +
+  // Responsive iOS: 16px en móvil (iOS hace zoom al enfocar un campo de menos de 16px); desde sm vuelve a 14px.
+  "sm:[&>[data-testid=rango-fechas]_:is(select,input)]:text-sm " +
   "[&>[data-testid=rango-fechas]_:is(select,input)]:text-[color:var(--di-text-primary)] " +
   "[&>[data-testid=rango-fechas]_:is(select,input)]:focus:border-[color:var(--di-action)]";

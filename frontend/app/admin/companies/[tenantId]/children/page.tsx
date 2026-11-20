@@ -57,7 +57,7 @@ export default function NetworkChildrenPage() {
   const [seccion, setSeccion] = useState<"hijos" | "marca">("hijos");
 
   return (
-    <main className="app-bg flex min-h-screen flex-col gap-4 px-6 py-6">
+    <main className="app-bg flex flex-col gap-4 px-6 py-6">
       <button
         type="button"
         onClick={() => router.push(`/admin/companies/${headTenantId}`)}
