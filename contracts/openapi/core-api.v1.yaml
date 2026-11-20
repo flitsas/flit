@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Core API
-  version: "1.0.9"
+  version: "1.0.10"
   description: >
     Contrato público de FLIT Core API (services/core-api). Cubre el carril de
     Seguridad/Autenticación (HU #10168 — login email/contraseña y emisión JWT 12h)
@@ -13184,6 +13184,85 @@ paths:
                 properties:
                   code: { type: string, example: HIERARCHY_SWITCH_NOT_FOUND }
 
+  # ── Admin · Plataforma · Contingencia RUNT (Épica #14644, Feature #14645, HU #14648) ──
+  /api/v1/admin/platform/runt-contingency:
+    get:
+      operationId: adminRuntContingencyList
+      tags: ["Admin · Plataforma · Contingencia RUNT"]
+      security:
+        - bearerAuth: []
+      summary: "Estado de la contingencia de proveedor RUNT por tipo de consulta"
+      description: >
+        Devuelve siempre los tres tipos (`vehicle_vin`, `vehicle_plate`, `conductor`), en ese orden.
+        `provider = null` significa «Sin contingencia». `reason`, `updatedByName` y `updatedAt` son del
+        último cambio (`null` si nunca hubo uno). Requiere el permiso `runt_contingency.manage`, sembrado
+        solo para el Super Admin FLIT. La empresa no ve la contingencia en ningún sitio.
+      responses:
+        "200":
+          description: "Los tres tipos con su estado."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntContingencyListResponse"
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso `runt_contingency.manage`." }
+        "503": { $ref: "#/components/responses/RuntContingencyUnavailable" }
+
+  /api/v1/admin/platform/runt-contingency/{kind}:
+    parameters:
+      - name: kind
+        in: path
+        required: true
+        schema:
+          type: string
+          enum: [vehicle_vin, vehicle_plate, conductor]
+        description: "Tipo de consulta. Cualquier otro valor responde 404."
+    put:
+      operationId: adminRuntContingencySave
+      tags: ["Admin · Plataforma · Contingencia RUNT"]
+      security:
+        - bearerAuth: []
+      summary: "Activa, cambia o apaga la contingencia de proveedor RUNT de un tipo"
+      description: >
+        Con `provider` informado fuerza ese proveedor primero para Trámites, Persona Natural e ICT (la cadena
+        de la empresa queda de respaldo, sin repetirlo); con `provider = null` la apaga. Vehículo
+        (`vehicle_vin`, `vehicle_plate`): `kyverum_runt` o `verifik`. Conductor: `kyverum_runt_conductor` o
+        `verifik_conductor`. El motivo es obligatorio en cada cambio. No modifica la configuración de ninguna
+        empresa. Queda en la auditoría de Plataforma (usuario, fecha, motivo, valor anterior y nuevo).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SaveRuntContingencyRequest"
+      responses:
+        "200":
+          description: "El tipo actualizado."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/RuntContingencyItem"
+        "400":
+          description: >
+            Validación: `errors.reason` («Escribe el motivo del cambio.») o `errors.provider`
+            («Ese proveedor no atiende este tipo de consulta.»).
+          content:
+            application/problem+json:
+              schema:
+                type: object
+                properties:
+                  title: { type: string }
+                  status: { type: integer }
+                  errors:
+                    type: object
+                    additionalProperties:
+                      type: array
+                      items: { type: string }
+        "401": { description: "No autenticado." }
+        "403": { description: "Sin el permiso `runt_contingency.manage`." }
+        "404": { description: "Tipo de consulta desconocido." }
+        "503": { $ref: "#/components/responses/RuntContingencyUnavailable" }
+
   # ── Admin · Plataforma · Notificaciones (Feature #11349; ampliado por #12428/#12430/#12431) ──
   /api/v1/admin/plataforma/notificaciones/buzon-pruebas:
     get:
@@ -13721,6 +13800,16 @@ components:
       bearerFormat: JWT
 
   responses:
+    RuntContingencyUnavailable:
+      description: "core-consultas no respondió (`detail`: «El servicio de consultas no responde. Intenta de nuevo en unos minutos.»)."
+      content:
+        application/problem+json:
+          schema:
+            type: object
+            properties:
+              title: { type: string }
+              status: { type: integer, example: 503 }
+              detail: { type: string }
     SessionDomainMismatch:
       description: >-
         No autenticado (sin cuerpo), o — HU #12422 AC5 (ADR-0060 D3), error COMÚN de toda ruta
@@ -20694,6 +20783,41 @@ components:
       required: [items, totalCount]
 
     # ── Admin · Plataforma · Jerarquía de clientes (HU #12323) ──────────────────
+    RuntContingencyItem:
+      type: object
+      required: [kind, provider, reason, updatedByName, updatedAt]
+      properties:
+        kind: { type: string, enum: [vehicle_vin, vehicle_plate, conductor] }
+        provider:
+          type: string
+          nullable: true
+          enum: [kyverum_runt, verifik, kyverum_runt_conductor, verifik_conductor]
+          description: "Proveedor forzado; `null` = Sin contingencia."
+        reason: { type: string, nullable: true, description: "Motivo del último cambio." }
+        updatedByName: { type: string, nullable: true }
+        updatedAt: { type: string, format: date-time, nullable: true }
+    RuntContingencyListResponse:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          description: "Siempre tres elementos, en el orden vehicle_vin, vehicle_plate, conductor."
+          items:
+            $ref: "#/components/schemas/RuntContingencyItem"
+    SaveRuntContingencyRequest:
+      type: object
+      required: [reason]
+      properties:
+        provider:
+          type: string
+          nullable: true
+          description: "Proveedor a forzar; `null` apaga la contingencia de ese tipo."
+        reason:
+          type: string
+          minLength: 1
+          maxLength: 500
+          description: "Motivo del cambio, obligatorio; se recorta antes de validar."
     HierarchySwitchResponse:
       type: object
       description: Estado de un interruptor global de la jerarquía de clientes (`identity.hierarchy_switches`).

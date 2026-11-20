@@ -1,4 +1,5 @@
 using Flit.Admin.Application.Companies.Settings;
+using Flit.Admin.Application.Plataforma.RuntContingency;
 using Flit.Admin.Domain.Companies.Settings;
 using Flit.Consultas.Grpc.V1;
 using Flit.Infrastructure.Persistence;
@@ -35,6 +36,8 @@ internal static class ConsultasRemoto
         services.AddScoped<IConsultasConfigSync, GrpcConsultasConfigSync>();
         // HU #13345: consumo por empresa para el SuperAdmin.
         services.AddScoped<IConsultasConsumo, GrpcConsultasConsumo>();
+        // Épica #14644 (HU #14648): contingencia de proveedor RUNT (global, sin empresa).
+        services.AddScoped<IRuntContingencyGateway, GrpcRuntContingencyGateway>();
 
         // HU #13346/#13348: las consultas de Trámites van a core-consultas. Deadline amplio: una consulta al RUNT con su
         // respaldo puede tardar decenas de segundos. Las cadenas globales (Consultations:DefaultChains) solo sirven
@@ -160,3 +163,67 @@ internal sealed class GrpcConsultasConsumo(ConsultasAdminService.ConsultasAdminS
     }
 }
 
+
+/// <summary>
+/// Contingencia de proveedor RUNT (Épica #14644, HU #14648) sobre <c>ConsultasAdminService</c>. Es global: no lleva empresa en la
+/// metadata (core-consultas no la exige para estos métodos). Cualquier fallo del servicio sale como
+/// <see cref="RuntContingencyUnavailableException"/>.
+/// </summary>
+internal sealed class GrpcRuntContingencyGateway(ConsultasAdminService.ConsultasAdminServiceClient client) : IRuntContingencyGateway
+{
+    public async Task<IReadOnlyList<RuntContingencyItem>> ListAsync(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var respuesta = await client.ObtenerContingenciaRuntAsync(new ObtenerContingenciaRuntRequest(), cancellationToken: cancellationToken).ConfigureAwait(false);
+            return [.. RuntContingencyCatalog.Kinds.Select(kind => ToItem(respuesta.Tipos.FirstOrDefault(t => t.Tipo == kind), kind))];
+        }
+        catch (RpcException ex)
+        {
+            throw new RuntContingencyUnavailableException($"Consultas respondió {ex.StatusCode}: {ex.Status.Detail}", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // El token de servicio no se pudo obtener (Identidad caída o cliente mal configurado).
+            throw new RuntContingencyUnavailableException(ex.Message, ex);
+        }
+    }
+
+    public async Task<RuntContingencyItem> SaveAsync(string kind, string? provider, string reason, string actorName, Guid? actorUserId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var guardada = await client.GuardarContingenciaRuntAsync(
+                new GuardarContingenciaRuntRequest
+                {
+                    Tipo = kind,
+                    Proveedor = provider ?? string.Empty,
+                    Motivo = reason,
+                    ActualizadoPor = actorName,
+                    ActualizadoPorId = actorUserId?.ToString() ?? string.Empty,
+                },
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            return ToItem(guardada.Contingencia, kind);
+        }
+        catch (RpcException ex)
+        {
+            throw new RuntContingencyUnavailableException($"Consultas respondió {ex.StatusCode}: {ex.Status.Detail}", ex);
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new RuntContingencyUnavailableException(ex.Message, ex);
+        }
+    }
+
+    private static RuntContingencyItem ToItem(ContingenciaRunt? proto, string kind) =>
+        proto is null
+            ? new RuntContingencyItem(kind, null, null, null, null)
+            : new RuntContingencyItem(
+                kind,
+                NullIfEmpty(proto.Proveedor),
+                NullIfEmpty(proto.Motivo),
+                NullIfEmpty(proto.ActualizadoPor),
+                proto.ActualizadoEn?.ToDateTimeOffset());
+
+    private static string? NullIfEmpty(string value) => string.IsNullOrWhiteSpace(value) ? null : value;
+}

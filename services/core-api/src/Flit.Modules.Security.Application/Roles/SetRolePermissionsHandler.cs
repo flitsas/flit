@@ -15,6 +15,15 @@ public sealed class SetRolePermissionsHandler(IRoleRepository repository)
         var permissionIds = await FamilyPermissionGuard.ApplyAsync(
             repository, role.Permissions.Select(p => p.Slug), command.PermissionIds, ct);
 
+        // Épica #14644: un permiso que afecta a todas las empresas (runt_contingency.manage) solo lo lleva el rol SuperAdmin.
+        if (!string.Equals(role.Code, "SuperAdmin", StringComparison.OrdinalIgnoreCase) && permissionIds.Count > 0)
+        {
+            var superAdminOnly = (await repository.GetPermissionInfosAsync(permissionIds, ct))
+                .Where(i => PrivilegeCeiling.IsSuperAdminOnly(i.Slug)).Select(i => i.Slug).ToList();
+            if (superAdminOnly.Count > 0)
+                throw new SuperAdminOnlyPermissionException(superAdminOnly);
+        }
+
         // HU #13644: un rol de compañía no lleva permisos OT; no tendrían efecto (la política OtModule rechaza la ruta).
         if (string.Equals(role.TargetEntityType, "COMPANY", StringComparison.Ordinal)
             && !string.Equals(role.Code, "SuperAdmin", StringComparison.OrdinalIgnoreCase) && permissionIds.Count > 0)
