@@ -74,7 +74,9 @@ export function mensajeRechazo(kind: FotoKind, motivo: MotivoFoto): string {
     case "varios_rostros":
       return "Debe aparecer solo una persona";
     case "lado_incorrecto":
-      return kind === "reverso" ? "Muestra el lado con el código de barras" : "Muestra el lado de tu documento con tu foto";
+      // Solo el anverso distingue el lado (retrato). El reverso ya no rechaza por código de barras o QR
+      // (Bug #14634): una cédula bien mostrada no trae un código que el lector siempre pueda leer.
+      return kind === "anverso" ? "Muestra el lado de tu documento con tu foto" : "Encuadra el documento completo dentro del marco";
     default:
       return "Encuadra el documento completo dentro del marco";
   }
@@ -120,10 +122,12 @@ export function juzgarAnverso(r: RostrosDetectados, hayDocumento: boolean): Vere
   return { tipo: "rechazada", motivo: hayDocumento ? "lado_incorrecto" : "sin_documento" };
 }
 
-/** Reverso: un código de barras o QR (que ya implica un documento) o, si no, un documento del otro lado. */
-export function juzgarReverso(hayCodigo: boolean, hayDocumento: boolean): VeredictoFoto {
-  if (hayCodigo) return { tipo: "ok" };
-  return { tipo: "rechazada", motivo: hayDocumento ? "lado_incorrecto" : "sin_documento" };
+/**
+ * Reverso: solo que haya un documento. Bug #14634 — no se lee código de barras ni QR; esa lectura
+ * rechazaba cédulas amarillas y digitales aunque el lado fuera el correcto.
+ */
+export function juzgarReverso(hayDocumento: boolean): VeredictoFoto {
+  return hayDocumento ? { tipo: "ok" } : { tipo: "rechazada", motivo: "sin_documento" };
 }
 
 function conTiempo<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -166,8 +170,7 @@ export async function validarFoto(args: {
       const documento = rostros.cajas.length ? true : await motor.hayDocumento(foto);
       return juzgarAnverso(rostros, documento);
     }
-    if (await motor.hayCodigo(foto)) return { tipo: "ok" };
-    return juzgarReverso(false, await motor.hayDocumento(foto));
+    return juzgarReverso(await motor.hayDocumento(foto));
   };
   try {
     return await conTiempo(analizar(), timeoutMs);

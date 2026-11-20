@@ -43,6 +43,9 @@ public static class IdentityAuditParaCliente
         if (stage is null || outcome is null) return null;
         return new IdentityAuditEventDto(
             e.OccurredAt, stage, outcome, HttpStatus: null, SignaturePresent: null, SecretPresent: null,
-            DecryptOk: null, ProviderStatus: null, ErrorType: null, Message: null);
+            DecryptOk: null, ProviderStatus: null, ErrorType: null, Message: null,
+            // Bug #14634 — el motivo SÍ viaja (ya es texto seguro, lista cerrada): lo único que se
+            // disfraza aquí es que la revisión fue manual, nunca el motivo del rechazo.
+            RejectionReasonLabel: e.RejectionReasonLabel);
     }
 }
