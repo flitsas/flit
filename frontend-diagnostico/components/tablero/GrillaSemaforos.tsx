@@ -1,6 +1,6 @@
 "use client";
 
-import type { ComponentType, ReactNode } from "react";
+import { Fragment, type ComponentType, type ReactNode } from "react";
 import { Icono } from "@flit/ui/Icono";
 import { etiquetaKit } from "@flit/ui/StatusBadge";
 import {
@@ -17,25 +17,17 @@ import { IconoDxImpuesto } from "@/components/dx/iconos/IconoDxImpuesto";
 import { IconoDxLocatario } from "@/components/dx/iconos/IconoDxLocatario";
 import { IconoDxRunt } from "@/components/dx/iconos/IconoDxRunt";
 import { IconoDxRuntPersona } from "@/components/dx/iconos/IconoDxRuntPersona";
-import { IconoDxSimit } from "@/components/dx/iconos/IconoDxSimit";
-import { IconoDxSimitPersona } from "@/components/dx/iconos/IconoDxSimitPersona";
 import { RegionDesplazable } from "@/components/comun/RegionDesplazable";
-import { nombreFuente, nombreSubfuente, type Fuente } from "@/lib/configuracion";
+import { nombreFuente, type Fuente } from "@/lib/configuracion";
 import type { CeldaGrilla, FilaVehiculo, Grilla } from "@/lib/tablero/api";
 import { rutaPaginaDetalle } from "@/lib/tablero/detalle";
-import { FUENTES_TABLA, PILARES, fuentesPedidas } from "@/lib/tablero/pilares";
+import { fuentesPedidas } from "@/lib/tablero/pilares";
 import { CeldaSemaforo, type CeldaSemaforoProps } from "./CeldaSemaforo";
 import { IconoCambioPropietario } from "./IconoCambioPropietario";
 import { CONTENEDOR_TABLA_CLS, FILA_TABLA_HOVER_CLS } from "./vistasDetalle/comun";
 
 /** Cabecera de tabla del UI Kit 2026 (auditoría m-4): 13 px en negrita sobre la barra --table-header-*. */
 const CABECERA_CLS = TABLA_HEADER_CELL_CLS;
-/**
- * Cabecera agrupada (RUNT, SIMIT) centrada: se **sustituye** el text-left del kit. Añadir text-center detrás no basta,
- * porque con las dos utilidades en la misma celda gana la que Tailwind emite después en el CSS (text-left), no la del
- * final del string (E2E acciones-detalle:68, spec-ui §2.6).
- */
-const CABECERA_GRUPO_CLS = TABLA_HEADER_CELL_CLS.replace(/\btext-left\b/, "text-center");
 const CABECERA_ESTILO = { background: "var(--table-header-bg)", color: "var(--table-header-fg)" } as const;
 /** Separador vertical entre columnas de la cabecera. */
 const SEPARADOR_CLS = "border-l border-card/60";
@@ -45,28 +37,29 @@ const TD_CLS = `px-3 py-2.5 align-top ${TABLA_MOVIL_CELL_CLS}`;
 
 type IconoFuente = ComponentType<{ className?: string; tamano?: 16 | 20 | 24 }>;
 
-/** HU #14562 AC28 (auditoría M7): ícono de la familia IconoDx de cada pilar y de cada fuente en la cabecera. */
-const ICONO_PILAR: Readonly<Record<string, IconoFuente>> = {
-  RUNT: IconoDxRunt,
-  SIMIT: IconoDxSimit,
-  "Avalúo comercial": IconoDxAvaluo,
-  "Impuesto departamental": IconoDxImpuesto,
-};
-const ICONO_FUENTE: Readonly<Record<Fuente, IconoFuente>> = {
-  RUNT: IconoDxRunt,
-  RUNT_PROPIETARIO: IconoDxRuntPersona,
-  RUNT_LOCATARIO: IconoDxLocatario,
-  SIMIT_VEHICULO: IconoDxSimit,
-  SIMIT_PROPIETARIO: IconoDxSimitPersona,
-  SIMIT_LOCATARIO: IconoDxLocatario,
-  AVALUO: IconoDxAvaluo,
-  IMPUESTO_DEPARTAMENTAL: IconoDxImpuesto,
-};
+/**
+ * Columnas de fuentes de la tabla. Vehículo, Propietario y Locatario son una columna por sujeto con dos badges apilados, uno
+ * por consulta («RUNT · <estado>» y «SIMIT · <estado>»), cada uno con su tooltip y su enlace al detalle de su fuente; sin las
+ * cabeceras de grupo «RUNT» y «SIMIT». Avalúo comercial e Impuesto departamental siguen con una fuente por columna. El ícono
+ * del sujeto va a la izquierda del rótulo (HU #14562 AC28: familia IconoDx).
+ */
+interface ColumnaFuentes {
+  rotulo: string;
+  Icono: IconoFuente;
+  fuentes: readonly { fuente: Fuente; prefijo?: string }[];
+}
+const COLUMNAS: readonly ColumnaFuentes[] = [
+  { rotulo: "Vehículo", Icono: IconoDxRunt, fuentes: [{ fuente: "RUNT", prefijo: "RUNT" }, { fuente: "SIMIT_VEHICULO", prefijo: "SIMIT" }] },
+  { rotulo: "Propietario", Icono: IconoDxRuntPersona, fuentes: [{ fuente: "RUNT_PROPIETARIO", prefijo: "RUNT" }, { fuente: "SIMIT_PROPIETARIO", prefijo: "SIMIT" }] },
+  { rotulo: "Locatario", Icono: IconoDxLocatario, fuentes: [{ fuente: "RUNT_LOCATARIO", prefijo: "RUNT" }, { fuente: "SIMIT_LOCATARIO", prefijo: "SIMIT" }] },
+  { rotulo: "Avalúo comercial", Icono: IconoDxAvaluo, fuentes: [{ fuente: "AVALUO" }] },
+  { rotulo: "Impuesto departamental", Icono: IconoDxImpuesto, fuentes: [{ fuente: "IMPUESTO_DEPARTAMENTAL" }] },
+];
 
 /** Rótulo de cabecera con su ícono decorativo de 16 px: el nombre accesible sigue siendo el texto. */
-function RotuloConIcono({ Icono: IconoCabecera, centrado = false, children }: { Icono?: IconoFuente; centrado?: boolean; children: ReactNode }) {
+function RotuloConIcono({ Icono: IconoCabecera, children }: { Icono?: IconoFuente; children: ReactNode }) {
   return (
-    <span className={`inline-flex items-center gap-1.5${centrado ? " justify-center" : ""}`}>
+    <span className="inline-flex items-center gap-1.5">
       {IconoCabecera ? <IconoCabecera tamano={16} className="shrink-0" /> : null}
       {children}
     </span>
@@ -75,9 +68,6 @@ function RotuloConIcono({ Icono: IconoCabecera, centrado = false, children }: { 
 
 const RESUELTAS: ReadonlySet<CeldaGrilla["estado"]> = new Set(["COMPLETADO", "NA", "ERROR"]);
 
-
-/** Pilares con más de una fuente: su cabecera agrupa (colgroup) y sus fuentes van en el segundo nivel. */
-const PILARES_AGRUPADOS = PILARES.filter((p) => p.fuentes.length > 1);
 
 export interface GrillaSemaforosProps extends Pick<CeldaSemaforoProps, "onReprocesada" | "onErrorReproceso"> {
   grilla: Grilla;
@@ -174,8 +164,8 @@ function EncabezadoVehiculo({
 /**
  * Tabla de resultados del lote (HU #13748; rediseño HU #14087), la misma para Express (1 vehículo), Masivo y backoffice. Por
  * fila: placa (o VIN) con el ícono de cambio de propietario (HU #14585), su avance «n de m consultas» (m = fuentes pedidas) y
- * el badge «Terminado»; sin columnas de documento (contrato 1.6.0 C5, SP-4/SP-19). Luego SIEMPRE las 8 fuentes agrupadas por pilar (RUNT, SIMIT, Avalúo comercial, Impuesto
- * departamental) en el orden de FUENTES: la no pedida dice «Sin solicitar»; la pedida sin celda todavía, «Sin ejecutar». El
+ * el badge «Terminado»; sin columnas de documento (contrato 1.6.0 C5, SP-4/SP-19). Luego SIEMPRE las 8 fuentes: Vehículo, Propietario y Locatario
+ * (dos badges por sujeto, RUNT y SIMIT), Avalúo comercial e Impuesto departamental: la no pedida dice «Sin solicitar»; la pedida sin celda todavía, «Sin ejecutar». El
  * usuario no ve acciones; el admin, «Reprocesar» solo en las rojas. Cada semáforo con consulta abre su detalle (HU #13801)
  * en una pestaña nueva (HU #14087), ya sin modal.
  * El desborde horizontal queda dentro del contenedor de la tabla, nunca en la página. Por debajo de 1024 px cada vehículo es
@@ -207,57 +197,33 @@ export function GrillaSemaforos({
         <thead className={TABLA_MOVIL_THEAD_CLS}>
           <tr>
             {casillaVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_FIJA_CLS} lg:left-0 w-10 align-bottom`} style={CABECERA_ESTILO}>
+              <th scope="col" className={`${CABECERA_FIJA_CLS} lg:left-0 w-10`} style={CABECERA_ESTILO}>
                 <span className="sr-only">Seleccionar</span>
               </th>
             )}
             <th
               scope="col"
-              rowSpan={2}
-              className={`${CABECERA_FIJA_CLS} ${izquierdaPlaca} ${casillaVehiculo ? SEPARADOR_CLS : ""} align-bottom`}
+             
+              className={`${CABECERA_FIJA_CLS} ${izquierdaPlaca} ${casillaVehiculo ? SEPARADOR_CLS : ""}`}
               style={CABECERA_ESTILO}
             >
               Placa o VIN
             </th>
             {dictamenVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
+              <th scope="col" className={`${CABECERA_CLS} ${SEPARADOR_CLS}`} style={CABECERA_ESTILO}>
                 Dictamen
               </th>
             )}
-            {PILARES.map((p) =>
-              p.fuentes.length > 1 ? (
-                // FE-2 (spec-ui §2.6): «RUNT» y «SIMIT» centrados sobre sus subcolumnas (sin el text-left del kit).
-                <th key={p.nombre} scope="colgroup" colSpan={p.fuentes.length} className={`${CABECERA_GRUPO_CLS} ${SEPARADOR_CLS}`} style={CABECERA_ESTILO}>
-                  <RotuloConIcono Icono={ICONO_PILAR[p.nombre]} centrado>
-                    {p.nombre}
-                  </RotuloConIcono>
-                </th>
-              ) : (
-                // Pilar de una sola fuente con su mismo nombre: una cabecera que ocupa los dos niveles, sin repetir el rótulo.
-                <th key={p.nombre} scope="col" rowSpan={2} className={`${CABECERA_CLS} ${SEPARADOR_CLS} align-bottom`} style={CABECERA_ESTILO}>
-                  <RotuloConIcono Icono={ICONO_PILAR[p.nombre]}>{p.nombre}</RotuloConIcono>
-                </th>
-              ),
-            )}
+            {COLUMNAS.map((col) => (
+              <th key={col.rotulo} scope="col" className={`${CABECERA_CLS} ${SEPARADOR_CLS}`} style={CABECERA_ESTILO}>
+                <RotuloConIcono Icono={col.Icono}>{col.rotulo}</RotuloConIcono>
+              </th>
+            ))}
             {accionVehiculo && (
-              <th scope="col" rowSpan={2} className={`${CABECERA_FIJA_CLS} lg:right-0 ${SEPARADOR_CLS} ${ANCHO_ACCIONES_CLS} align-bottom`} style={CABECERA_ESTILO}>
+              <th scope="col" className={`${CABECERA_FIJA_CLS} lg:right-0 ${SEPARADOR_CLS} ${ANCHO_ACCIONES_CLS}`} style={CABECERA_ESTILO}>
                 {tituloAccionVehiculo}
               </th>
             )}
-          </tr>
-          <tr>
-            {PILARES_AGRUPADOS.flatMap((p) => p.fuentes).map((f) => (
-              // aria-label: el nombre completo («RUNT propietario»); el cálculo del nombre recorta el espacio del sr-only.
-              <th key={f} scope="col" aria-label={nombreFuente(f)} className={`${CABECERA_CLS} ${SEPARADOR_CLS} normal-case tracking-normal`} style={CABECERA_ESTILO}>
-                {/* Texto visible sin el prefijo del grupo; el nombre completo para lectores (scope=colgroup se anuncia desigual). */}
-                <RotuloConIcono Icono={ICONO_FUENTE[f]}>
-                  <span>
-                    <span className="sr-only">{nombreFuente(f).slice(0, -nombreSubfuente(f).length)}</span>
-                    {nombreSubfuente(f)}
-                  </span>
-                </RotuloConIcono>
-              </th>
-            ))}
           </tr>
         </thead>
         <tbody className={TABLA_MOVIL_TBODY_CLS}>
@@ -276,24 +242,35 @@ export function GrillaSemaforos({
                     {dictamenVehiculo(v)}
                   </td>
                 )}
-                {FUENTES_TABLA.map((f) => {
-                  const solicitada = pedidas.has(f);
-                  const celda = solicitada ? porFuente.get(f) : undefined;
-                  return (
-                    <CeldaSemaforo
-                      key={f}
-                      fuente={f}
-                      celda={celda}
-                      solicitada={solicitada}
-                      nombreFuente={nombreFuente(f)}
-                      identificador={v.identificador}
-                      puedeReprocesar={puedeReprocesar}
-                      onReprocesada={onReprocesada}
-                      onErrorReproceso={onErrorReproceso}
-                      hrefDetalle={celda ? (hrefDetalle?.(celda, v) ?? rutaPaginaDetalle(grilla.id, v.id, celda.fuente)) : undefined}
-                      marca={celda && marcaCelda ? marcaCelda(celda) : undefined}
-                      accion={celda && accionCelda ? accionCelda(celda, v) : undefined}
-                    />
+                {COLUMNAS.map((col) => {
+                  const celdas = col.fuentes.map(({ fuente: f, prefijo }) => {
+                    const solicitada = pedidas.has(f);
+                    const celda = solicitada ? porFuente.get(f) : undefined;
+                    return (
+                      <CeldaSemaforo
+                        key={f}
+                        fuente={f}
+                        celda={celda}
+                        solicitada={solicitada}
+                        nombreFuente={nombreFuente(f)}
+                        identificador={v.identificador}
+                        puedeReprocesar={puedeReprocesar}
+                        onReprocesada={onReprocesada}
+                        onErrorReproceso={onErrorReproceso}
+                        hrefDetalle={celda ? (hrefDetalle?.(celda, v) ?? rutaPaginaDetalle(grilla.id, v.id, celda.fuente)) : undefined}
+                        marca={celda && marcaCelda ? marcaCelda(celda) : undefined}
+                        accion={celda && accionCelda ? accionCelda(celda, v) : undefined}
+                        prefijo={prefijo}
+                      />
+                    );
+                  });
+                  // Sujeto (dos consultas): una td con los dos badges apilados; fuente única: la td es la de CeldaSemaforo.
+                  return col.fuentes.length > 1 ? (
+                    <td key={col.rotulo} data-columna={col.rotulo} data-label={col.rotulo} className={TD_CLS}>
+                      <div className="flex flex-col items-start gap-1.5 max-[900px]:items-end">{celdas}</div>
+                    </td>
+                  ) : (
+                    <Fragment key={col.rotulo}>{celdas}</Fragment>
                   );
                 })}
                 {accionVehiculo && (
