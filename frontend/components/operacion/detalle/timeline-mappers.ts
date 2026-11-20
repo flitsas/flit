@@ -11,6 +11,7 @@ import { estadoChipStyle, estadoLabel } from '@/lib/tramites/estados';
 import { documentLabel } from '@/lib/tramites/document-labels';
 import { formatFechaHora } from '@/lib/format/date';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
+import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
 import type { TimelineTrackNode } from './TimelineTrackPanel';
 
 const GREEN = 'var(--flit-success-ink)';
@@ -195,7 +196,11 @@ export function mapIdentidadToTimelineNodes(
     const label = PARTE_LABEL[parte];
 
     if (ultima) {
+      // Bug #14634 — el motivo de una revisión manual rechazada viaja en `rejectionReasonCode` (lista
+      // cerrada, HU #13299), no en `rejectionReason` (ese es el de Kyverum/mock): sin esto, el tracking
+      // caía al nombre genérico del estado y el motivo real que escribió quien rechazó no se veía.
       const detalle =
+        etiquetaMotivoRechazoManual(ultima.rejectionReasonCode) ||
         ultima.rejectionReason?.trim() ||
         ultima.ultimoIntentoMotivo?.trim() ||
         ESTADO_LABEL[ultima.status] ||
@@ -356,6 +361,26 @@ function mapSingleEventToTimelineNode(e: ProcedureInstanceEvent): TimelineTrackN
         rol: e.createdByName ? `Cargado por ${e.createdByName}` : 'Cargado por administrador',
         fecha: formatFechaHora(e.createdAt),
         extra: textoDocumentoCargadoAdmin(e),
+      },
+    };
+  }
+
+  if (e.tipo === 'identidad_manual_rechazada') {
+    // Bug #14634 — deja ver el motivo de ESTE rechazo puntual aunque la validación ya se haya repetido o
+    // aprobado después (a diferencia del nodo de `mapIdentidadToTimelineNodes`, que solo muestra el
+    // estado VIGENTE). El motivo ya es texto seguro (lista cerrada); lo que sigue sin decirse es que la
+    // revisión fue del flujo manual — por eso el título es genérico, igual que cualquier otra validación.
+    const parteRechazo = e.partyRole ? PARTY_LABEL[e.partyRole] ?? e.partyRole : null;
+    return {
+      label: `Validación de identidad rechazada${parteRechazo ? ` · ${parteRechazo}` : ''}`,
+      color: RED,
+      info: {
+        gestor: e.createdByName || '—',
+        correo: '—',
+        empresa: e.createdByCompania || '—',
+        rol: e.createdByName ? `Revisado por ${e.createdByName}` : 'Revisado por un administrador',
+        fecha: formatFechaHora(e.createdAt),
+        extra: e.rejectionReasonLabel?.trim() || 'Sin motivo adicional registrado',
       },
     };
   }

@@ -3466,7 +3466,7 @@
           "bullets": [
             "Selfie: debe aparecer un solo rostro dentro del óvalo.",
             "Anverso: debe verse un documento con un rostro.",
-            "Reverso: debe verse un documento con código de barras o QR.",
+            "Reverso: debe verse un documento. No se exige leer un código de barras ni un QR.",
             "Pasaporte: se revisa que sea un documento, pero no el lado. La persona toma igual las tres fotos."
           ],
           "callouts": []

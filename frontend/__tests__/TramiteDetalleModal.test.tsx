@@ -318,6 +318,34 @@ describe('TramiteDetalleModal', () => {
     expect(screen.getByText('nueva@dominio.com')).toBeInTheDocument();
   });
 
+  // Bug #14634 — al aprobar un intento posterior el nodo vigente ya no trae el motivo. El evento
+  // del rechazo tiene que seguir en este mismo carril, no solo en el mapper.
+  it('trazabilidad de identidad conserva el motivo de un rechazo ya superado', async () => {
+    const user = userEvent.setup();
+    vi.mocked(tramitesClient.getInstance).mockResolvedValue({
+      statusHistory: [],
+      fieldValues: [],
+      actors: [],
+      events: [
+        {
+          tipo: 'identidad_manual_rechazada',
+          createdAt: '2026-11-19T10:00:00Z',
+          createdByName: 'Willyn Londoño',
+          partyRole: 'vendedor',
+          rejectionReasonLabel: 'El rostro no coincide con el documento',
+        },
+      ],
+    } as never);
+    render(
+      <TramiteDetalleModal open instanceId="inst-1" item={ITEM} onClose={() => undefined} />,
+    );
+    await user.click(screen.getByRole('button', { name: /Trazabilidad de Identidad/i }));
+    const lista = await screen.findByRole('list', { name: 'Trazabilidad de identidad' });
+    expect(within(lista).getByText('Validación de identidad rechazada · Vendedor')).toBeInTheDocument();
+    expect(within(lista).getByText('El rostro no coincide con el documento')).toBeInTheDocument();
+    expect(lista).not.toHaveTextContent(/manual/i);
+  });
+
   it('click en step cierra panel de tracking', async () => {
     const user = userEvent.setup();
     render(

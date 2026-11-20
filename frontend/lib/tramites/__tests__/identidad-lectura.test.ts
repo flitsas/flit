@@ -333,4 +333,21 @@ describe('flujo manual', () => {
     expect(hitos[2].detalle).toBe('Firma ilegible');
     expect(hitos[2].tono).toBe('alerta');
   });
+
+  it('Bug #14634 — un rechazo manual YA reintentado conserva su motivo en el hito histórico', () => {
+    // La validación VIGENTE ya se volvió a capturar y se aprobó: rejectionReason quedó en null (lo
+    // borra RegistrarCapturaManual). El motivo de ESE rechazo puntual debe salir del propio evento
+    // (rejectionReasonLabel), fijo en la bitácora, no de v.rejectionReason.
+    const v = validacion({ provider: 'manual', status: 'aprobado', rejectionReason: null });
+    const hitos = hitosDeIdentidad(v, [
+      evento('manual_rechazado', '2026-08-27T12:00:00Z', {
+        outcome: 'rechazado',
+        rejectionReasonLabel: 'Documento ilegible o incompleto',
+      }),
+      evento('manual_aprobado', '2026-08-27T12:10:00Z', { outcome: 'aprobado' }),
+    ]);
+
+    const rechazo = hitos.find((h) => h.titulo === 'Identidad rechazada');
+    expect(rechazo?.detalle).toBe('Documento ilegible o incompleto');
+  });
 });
