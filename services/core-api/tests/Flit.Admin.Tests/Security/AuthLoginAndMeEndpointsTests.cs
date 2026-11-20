@@ -28,10 +28,10 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
 {
     private const string Password = "DemoPass1!";
 
-    // NIT único por ejecución: identity.tenants tiene índice único parcial sobre tax_id y la base
-    // de pruebas es compartida. El valor se afirma contra estos mismos campos, no contra literales.
-    private static readonly string CompanyNit = TestNit.Unique();
-    private static readonly string TransitOfficeNit = TestNit.Unique();
+    // NIT único por prueba: los cinco casos corren a la vez contra la misma base y
+    // uq_tenants_tax_id rechaza un NIT compartido entre ellos.
+    private readonly string _companyNit = TestNit.Unique();
+    private readonly string _transitOfficeNit = TestNit.Unique();
 
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
@@ -68,13 +68,13 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
 
         var jwt = new JsonWebTokenHandler().ReadJsonWebToken(accessToken);
         jwt.GetClaim("company_name").Value.Should().Be("Acme Renting HU10616");
-        jwt.GetClaim("company_nit").Value.Should().Be(CompanyNit);
+        jwt.GetClaim("company_nit").Value.Should().Be(_companyNit);
         jwt.GetClaim("entity_type").Value.Should().Be("COMPANY");
 
         var me = await GetMeAsync(accessToken);
         me.Should().NotBeNull();
         me!.CompanyName.Should().Be("Acme Renting HU10616");
-        me.CompanyNit.Should().Be(CompanyNit);
+        me.CompanyNit.Should().Be(_companyNit);
         me.EntityType.Should().Be("COMPANY");
         me.Roles.Should().ContainSingle(r => r.RoleId == _companyRoleId);
     }
@@ -88,11 +88,11 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
         var jwt = new JsonWebTokenHandler().ReadJsonWebToken(accessToken);
         jwt.GetClaim("entity_type").Value.Should().Be("TRANSIT_OFFICE");
         jwt.GetClaim("company_name").Value.Should().Be("Organismo de Tránsito HU10616");
-        jwt.GetClaim("company_nit").Value.Should().Be(TransitOfficeNit);
+        jwt.GetClaim("company_nit").Value.Should().Be(_transitOfficeNit);
 
         var me = await GetMeAsync(accessToken);
         me!.EntityType.Should().Be("TRANSIT_OFFICE");
-        me.CompanyNit.Should().Be(TransitOfficeNit);
+        me.CompanyNit.Should().Be(_transitOfficeNit);
     }
 
     // AC3 — /me devuelve los roles ACTIVOS del usuario. Con el rol único es exactamente uno; la
@@ -178,7 +178,7 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
             Id = _companyTenantId,
             Code = $"CO-HU10616-{Guid.NewGuid():N}"[..20],
             LegalName = "Acme Renting HU10616",
-            TaxId = CompanyNit,
+            TaxId = _companyNit,
             TenantType = "RENTING",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
@@ -189,7 +189,7 @@ public sealed class AuthLoginAndMeEndpointsTests : IClassFixture<WebApplicationF
             Id = _otTenantId,
             Code = $"OT-HU10616-{Guid.NewGuid():N}"[..20],
             LegalName = "Organismo de Tránsito HU10616",
-            TaxId = TransitOfficeNit,
+            TaxId = _transitOfficeNit,
             TenantType = "RENTING",
             IsActive = true,
             CreatedAt = DateTimeOffset.UtcNow,
