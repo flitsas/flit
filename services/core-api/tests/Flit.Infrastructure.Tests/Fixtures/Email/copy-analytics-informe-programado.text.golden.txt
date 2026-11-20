@@ -1,0 +1,30 @@
+Asunto: [FLIT] [ACÁ VA EL NOMBRE DEL INFORME PROGRAMADO] — [ACÁ VA EL PERIODO DEL INFORME]
+Informe programado FLIT
+[ACÁ VA EL NOMBRE DEL INFORME PROGRAMADO]
+Tipo de informe: Resumen general
+Periodo: [ACÁ VA EL PERIODO DEL INFORME]
+Trámites por categoría
+Categoría
+Total
+Por estado
+matriculas
+7
+aprobado: 5 · rechazado: 2
+traspasos
+3
+radicado: 3
+Top radicadores del periodo
+Usuario
+Entregados
+Aprobados
+Rechazados
+[ACÁ VA EL NOMBRE DEL RADICADOR 1]
+6
+5
+1
+[ACÁ VA EL NOMBRE DEL RADICADOR 2]
+4
+2
+2
+Revisa el archivo adjunto para el detalle completo del periodo.
+Mensaje automático de FLIT — no responda a este correo.

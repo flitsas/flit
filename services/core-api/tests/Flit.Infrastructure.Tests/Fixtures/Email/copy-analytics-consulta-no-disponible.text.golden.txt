@@ -1,0 +1,5 @@
+Asunto: [FLIT] [ACÁ VA EL NOMBRE DEL INFORME PROGRAMADO] — consulta no disponible
+Informe programado FLIT · Consulta personalizada
+[ACÁ VA EL NOMBRE DEL INFORME PROGRAMADO]
+La consulta guardada que alimentaba este informe ya no existe (se borró después de programarlo). Este informe no traerá adjunto hasta que se vuelva a programar sobre una consulta guardada vigente.
+Mensaje automático de FLIT — no responda a este correo.

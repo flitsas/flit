@@ -67,8 +67,8 @@ public sealed class ProcedureStateChangeEmailDispatchProcessorTests
         var vendedor = sender.Messages.Single(m => m.ToEmail == "beto@flit.test");
 
         // El reporte de QA: el vendedor recibía el correo dirigido al comprador.
-        comprador.HtmlBody.Should().Contain("Estimado/a Señor/a <strong style=\"color:#2F6FED\">Ana Compradora</strong>");
-        vendedor.HtmlBody.Should().Contain("Estimado/a Señor/a <strong style=\"color:#2F6FED\">Beto Vendedor</strong>");
+        Flit.Tests.Shared.EmailCopyGolden.VisibleText(comprador.HtmlBody).Should().Contain("Estimado/a Señor/a Ana Compradora.");
+        Flit.Tests.Shared.EmailCopyGolden.VisibleText(vendedor.HtmlBody).Should().Contain("Estimado/a Señor/a Beto Vendedor.");
 
         // Nadie va en copia oculta de nadie: son envíos independientes.
         comprador.BccEmails.Should().BeEmpty();

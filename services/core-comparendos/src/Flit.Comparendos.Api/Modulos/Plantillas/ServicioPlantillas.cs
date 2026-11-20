@@ -73,26 +73,35 @@ public class ServicioPlantillas(ComparendosDb db, IConfiguration configuration)
         if (ConCabeceraSistema(tipo))
             return new Armado(version.Id, asunto, flit ? HtmlCorreo.Flit(cuerpo, empresa, recursos, cierre: false) : HtmlCorreo.RentingSistema(cuerpo, empresa, recursos));
         var pie = empresa is null ? null : flit ? $"{empresa} · Comunicación enviada con FLIT." : $"{empresa} · Correo automático, no lo respondas.";
-        return new Armado(version.Id, asunto, HtmlCorreo.Envolver(asunto ?? (flit ? "Comparendos" : empresa ?? "Comparendos"), cuerpo, pie, flit));
+        return new Armado(version.Id, asunto, HtmlCorreo.Envolver(asunto ?? (flit ? "Comparendos" : empresa ?? "Comparendos"), cuerpo, pie, flit, flit ? recursos : null));
     }
 
     public static bool EsCorreo(TipoPlantilla tipo) => tipo.ToString().StartsWith("Correo", StringComparison.Ordinal);
 
-    public static byte[] Pdf(Armado armado, string? marcaDeAgua = null, string? titulo = null, byte[]? fondo = null)
+    public static byte[] Pdf(Armado armado, string? marcaDeAgua = null, string? titulo = null, MembretePdf? membrete = null)
     {
         ArgumentNullException.ThrowIfNull(armado);
-        return HtmlAPdf.Generar(armado.Html, marcaDeAgua, titulo, fondo);
+        return HtmlAPdf.Generar(armado.Html, marcaDeAgua, titulo, membrete);
     }
 
-    /// <summary>HU #13884: el membrete de Renting de V1 para sus documentos en PDF; null para FLIT.</summary>
-    public static byte[]? Membrete(ConjuntoPlantillas conjunto)
+    /// <summary>
+    /// El membrete de los documentos del conjunto: HU #13884, el de Renting de V1 (página completa) para la autorización; Correos 2.0,
+    /// las bandas del membrete FLIT para el conjunto FLIT.
+    /// </summary>
+    public static MembretePdf Membrete(ConjuntoPlantillas conjunto)
     {
         if (conjunto != ConjuntoPlantillas.Renting)
-            return null;
+            return MembretePdf.Flit;
         var asm = typeof(ServicioPlantillas).Assembly;
         using var stream = asm.GetManifestResourceStream(asm.GetManifestResourceNames().Single(n => n.EndsWith(".Membretes.renting.jpg", StringComparison.Ordinal)))!;
         using var memoria = new MemoryStream();
         stream.CopyTo(memoria);
-        return memoria.ToArray();
+        return MembretePdf.DeFondo(memoria.ToArray());
     }
+
+    /// <summary>
+    /// Correos 2.0: el membrete del DP, el formato y la carta de cambio de contraventor (y su vista previa). FLIT lleva sus bandas;
+    /// Renting sigue como en V1, sin membrete en estos documentos (el suyo solo va en la autorización).
+    /// </summary>
+    public static MembretePdf? MembreteDeDocumento(ConjuntoPlantillas conjunto) => conjunto == ConjuntoPlantillas.Flit ? MembretePdf.Flit : null;
 }

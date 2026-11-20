@@ -1,0 +1,8 @@
+Asunto: Tu contraseña fue restablecida — FLIT
+¡CONTRASEÑA RESTABLECIDA!
+Hola [ACÁ VA EL NOMBRE DEL DESTINATARIO],
+Un administrador restableció tu contraseña en FLIT. Tu contraseña temporal es:
+[ACÁ VA LA CONTRASEÑA TEMPORAL]
+Por seguridad, deberás definir una nueva contraseña la próxima vez que inicies sesión.
+Si tienes alguna pregunta o necesitas ayuda, no dudes en ponerte en contacto con nosotros. Puedes hacerlo a través de soporte@flitsas.com o nuestro chat online.
+POLÍTICA DE PRIVACIDAD

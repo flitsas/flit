@@ -32,13 +32,12 @@ public static class InvitationEmailTemplate
     {
         var name = System.Net.WebUtility.HtmlEncode(fullName);
         var inviter = FlitBrandedEmailLayout.PlatformName(theme);
-        var linkColor = FlitBrandedEmailLayout.BrandLinkColor(theme);
         var body =
-            FlitBrandedEmailLayout.ParagraphHtml($"Hola {name},")
+            FlitBrandedEmailLayout.Greeting(name, theme)
             + FlitBrandedEmailLayout.Paragraph($"Has sido invitado a unirte a {inviter}.")
             + FlitBrandedEmailLayout.Paragraph(
                 "Haz clic en el siguiente enlace para crear tu contraseña y activar tu cuenta:")
-            + FlitBrandedEmailLayout.ActionLink(link, "Activar mi cuenta", linkColor)
+            + FlitBrandedEmailLayout.Action(link, "Activar mi cuenta", theme)
             + FlitBrandedEmailLayout.Paragraph(
                 "Si no esperabas esta invitación, puedes ignorar este mensaje.");
 

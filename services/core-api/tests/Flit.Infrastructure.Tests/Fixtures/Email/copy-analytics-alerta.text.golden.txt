@@ -1,0 +1,9 @@
+Asunto: [FLIT] Alerta: [ACÁ VA EL NOMBRE DE LA REGLA DE ALERTA]
+Alerta FLIT
+[ACÁ VA EL NOMBRE DE LA REGLA DE ALERTA]
+Métrica: Tasa de rechazo (%)
+Condición: mayor que 25
+Valor observado: 31.2
+Ventana de evaluación: últimos 1440 minutos
+Fecha del disparo: 15/01/2026 07:30 (hora de Bogotá)
+Mensaje automático de FLIT — no responda a este correo.

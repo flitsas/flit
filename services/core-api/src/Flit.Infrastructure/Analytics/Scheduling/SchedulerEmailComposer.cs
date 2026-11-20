@@ -75,10 +75,13 @@ internal static class SchedulerEmailComposer
         string periodLabel,
         IReadOnlyList<CategoryMetricsDto> overview,
         IReadOnlyList<TopProducerDto> topProducers,
-        EmailTheme? theme = null)
+        EmailTheme? theme = null,
+        string? assetsBaseUrl = null)
     {
         var subject = $"[FLIT] {scheduleName} — {periodLabel}";
-        var html = BuildScheduledReportHtml(scheduleName, reportType, periodLabel, overview, topProducers, theme);
+        var html = theme is { IsBrand: true }
+            ? BuildScheduledReportHtml(scheduleName, reportType, periodLabel, overview, topProducers, theme)
+            : BuildScheduledReportFlit(scheduleName, reportType, periodLabel, overview, topProducers, assetsBaseUrl);
         return (subject, html);
     }
 
@@ -165,11 +168,20 @@ internal static class SchedulerEmailComposer
         int windowMinutes,
         DateTimeOffset triggeredAtUtc,
         TimeZoneInfo timeZone,
-        EmailTheme? theme = null)
+        EmailTheme? theme = null,
+        string? assetsBaseUrl = null)
     {
         var subject = $"[FLIT] Alerta: {ruleName}";
-        var html = BuildAlertHtml(
-            ruleName, metric, @operator, threshold, value, windowMinutes, triggeredAtUtc, timeZone, theme);
+        var html = theme is { IsBrand: true }
+            ? BuildAlertHtml(ruleName, metric, @operator, threshold, value, windowMinutes, triggeredAtUtc, timeZone, theme)
+            : FlitDocumento(assetsBaseUrl, "Alerta FLIT", ruleName, FlitEmailLayout.TarjetaDetalle(null, new (string, string)[]
+            {
+                ("Métrica:", WebUtility.HtmlEncode(MetricLabel(metric))),
+                ("Condición:", $"{WebUtility.HtmlEncode(OperatorLabel(@operator))} {threshold.ToString("0.##", Es)}"),
+                ("Valor observado:", $"<span style=\"color:{FlitEmailLayout.Accent};font-weight:700\">{value.ToString("0.##", Es)}</span>"),
+                ("Ventana de evaluación:", $"últimos {windowMinutes.ToString(Es)} minutos"),
+                ("Fecha del disparo:", $"{FormatoFecha.Instante(triggeredAtUtc)} (hora de Bogotá)"),
+            }));
         return (subject, html);
     }
 
@@ -208,9 +220,13 @@ internal static class SchedulerEmailComposer
     /// qué consulta es y si se truncó por el tope de filas.
     /// </summary>
     public static (string Subject, string Html) BuildConsultaReport(
-        string scheduleName, string queryName, int total, bool truncated, int rowCap, EmailTheme? theme = null)
+        string scheduleName, string queryName, int total, bool truncated, int rowCap, EmailTheme? theme = null,
+        string? assetsBaseUrl = null)
     {
         var subject = $"[FLIT] {scheduleName}";
+        if (theme is not { IsBrand: true })
+            return (subject, BuildConsultaReportFlit(scheduleName, queryName, total, truncated, rowCap, assetsBaseUrl));
+
         var sb = new StringBuilder();
         OpenLayout(sb, "Informe programado FLIT · Consulta personalizada", scheduleName, theme);
         sb.Append(CultureInfo.InvariantCulture,
@@ -237,17 +253,167 @@ internal static class SchedulerEmailComposer
     /// Cuerpo del correo cuando la SavedQuery de un informe tipo "consulta" ya no existe (se borró
     /// después de programar el informe) — se avisa en vez de enviar un correo vacío sin explicación.
     /// </summary>
-    public static (string Subject, string Html) BuildConsultaReportMissing(string scheduleName, EmailTheme? theme = null)
+    public static (string Subject, string Html) BuildConsultaReportMissing(
+        string scheduleName, EmailTheme? theme = null, string? assetsBaseUrl = null)
     {
         var subject = $"[FLIT] {scheduleName} — consulta no disponible";
+        if (theme is not { IsBrand: true })
+        {
+            return (subject, FlitDocumento(
+                assetsBaseUrl,
+                "Informe programado FLIT · Consulta personalizada",
+                scheduleName,
+                FlitEmailLayout.Parrafo(ConsultaNoDisponibleTexto, centrado: false, margen: "0")));
+        }
+
         var sb = new StringBuilder();
         OpenLayout(sb, "Informe programado FLIT · Consulta personalizada", scheduleName, theme);
-        sb.Append(
-            "<p style=\"margin:0\">La consulta guardada que alimentaba este informe ya no existe "
-            + "(se borró después de programarlo). Este informe no traerá adjunto hasta que se vuelva a "
-            + "programar sobre una consulta guardada vigente.</p>");
+        sb.Append("<p style=\"margin:0\">" + ConsultaNoDisponibleTexto + "</p>");
         CloseLayout(sb, theme);
         return (subject, sb.ToString());
+    }
+
+    private const string ConsultaNoDisponibleTexto =
+        "La consulta guardada que alimentaba este informe ya no existe "
+        + "(se borró después de programarlo). Este informe no traerá adjunto hasta que se vuelva a "
+        + "programar sobre una consulta guardada vigente.";
+
+    // ── Correos 2.0: tema FLIT sobre FlitEmailLayout. La marca sigue en Open/CloseLayout. ──────
+
+    /// <summary>
+    /// Banner + antetítulo (<paramref name="kicker"/>) + título + cuerpo + pie de aviso automático.
+    /// <paramref name="assetsBaseUrl"/> es <c>Notifications:EmailAssets:BaseUrl</c>; sin ella, el
+    /// respaldo local de <see cref="FlitEmailLayout"/> (Bug #13194).
+    /// </summary>
+    private static string FlitDocumento(string? assetsBaseUrl, string kicker, string title, string cuerpoHtml) =>
+        FlitEmailLayout.Documento(
+            assetsBaseUrl,
+            FlitEmailLayout.Titulo(title, WebUtility.HtmlEncode(kicker)),
+            cuerpoHtml,
+            FlitEmailLayout.PieFlit(
+                assetsBaseUrl,
+                $"Mensaje automático de {WebUtility.HtmlEncode("FLIT")} — no responda a este correo.",
+                politicaPrivacidad: false));
+
+    private static string BuildScheduledReportFlit(
+        string scheduleName,
+        string reportType,
+        string periodLabel,
+        IReadOnlyList<CategoryMetricsDto> overview,
+        IReadOnlyList<TopProducerDto> topProducers,
+        string? assetsBaseUrl)
+    {
+        var sb = new StringBuilder();
+        sb.Append(FlitEmailLayout.TarjetaDetalle(null, new (string, string)[]
+        {
+            ("Tipo de informe:", WebUtility.HtmlEncode(ReportTypeLabel(reportType))),
+            ("Periodo:", WebUtility.HtmlEncode(periodLabel)),
+        }));
+
+        if (reportType is "uso" or "ot")
+        {
+            sb.Append(FlitEmailLayout.Parrafo(
+                "El detalle de este informe (\""
+                + WebUtility.HtmlEncode(ReportTypeLabel(reportType))
+                + "\") va en el archivo adjunto. Este correo agrega, además, el resumen general de "
+                + "trámites del periodo:",
+                centrado: false));
+        }
+
+        sb.Append(FlitSubtitulo("Trámites por categoría"));
+        if (overview.Count == 0)
+        {
+            sb.Append(FlitEmailLayout.Parrafo("Sin actividad registrada en el periodo.", centrado: false));
+        }
+        else
+        {
+            sb.Append(FlitTablaInicio(("Categoría", "left"), ("Total", "right"), ("Por estado", "left")));
+            foreach (var cat in overview)
+            {
+                var byStatus = string.Join(" · ",
+                    cat.ByStatus.Select(s => $"{WebUtility.HtmlEncode(s.Status)}: {s.Count.ToString(Es)}"));
+                sb.Append(FlitFila(
+                    (WebUtility.HtmlEncode(cat.Category), "left"), (cat.Total.ToString(Es), "right"), (byStatus, "left")));
+            }
+
+            sb.Append("</table>");
+        }
+
+        sb.Append(FlitSubtitulo("Top radicadores del periodo"));
+        if (topProducers.Count == 0)
+        {
+            sb.Append(FlitEmailLayout.Parrafo("Sin radicaciones en el periodo.", centrado: false));
+        }
+        else
+        {
+            sb.Append(FlitTablaInicio(("Usuario", "left"), ("Entregados", "right"), ("Aprobados", "right"), ("Rechazados", "right")));
+            foreach (var p in topProducers)
+            {
+                sb.Append(FlitFila(
+                    (WebUtility.HtmlEncode(p.DisplayName), "left"),
+                    (p.SubmittedCount.ToString(Es), "right"),
+                    (p.ApprovedCount.ToString(Es), "right"),
+                    (p.RejectedCount.ToString(Es), "right")));
+            }
+
+            sb.Append("</table>");
+        }
+
+        sb.Append(CultureInfo.InvariantCulture,
+            $"<p style=\"margin:16px 0 0;font-size:12px;color:{FlitEmailLayout.Muted};text-align:left;\">Revisa el archivo adjunto para el detalle completo del periodo.</p>");
+        return FlitDocumento(assetsBaseUrl, "Informe programado FLIT", scheduleName, sb.ToString());
+    }
+
+    private static string BuildConsultaReportFlit(string scheduleName, string queryName, int total, bool truncated, int rowCap, string? assetsBaseUrl)
+    {
+        var sb = new StringBuilder();
+        sb.Append(FlitEmailLayout.TarjetaDetalle(null, new (string, string)[]
+        {
+            ("Consulta:", WebUtility.HtmlEncode(queryName)),
+            ("Resultados:", total.ToString(Es)),
+        }));
+        sb.Append(FlitEmailLayout.Parrafo(
+            "El detalle va en el Excel adjunto. El rango de fechas de la "
+            + "consulta es relativo (p. ej. \"últimos 7 días\"), así que cada envío trae el periodo "
+            + "actual, no el que tenía cuando se guardó.",
+            centrado: false));
+        if (truncated)
+        {
+            sb.Append(FlitEmailLayout.Parrafo(
+                "<span style=\"color:#B45309\"><strong>Aviso:</strong> el adjunto trae las "
+                + $"primeras {rowCap.ToString(Es)} de {total.ToString(Es)} filas. Entra a Consultas en la "
+                + "app para ver o exportar el resto.</span>",
+                centrado: false));
+        }
+
+        return FlitDocumento(assetsBaseUrl, "Informe programado FLIT · Consulta personalizada", scheduleName, sb.ToString());
+    }
+
+    /// <summary>Subtítulo de sección; <paramref name="textoHtml"/> es un literal del composer (igual que antes, sin codificar).</summary>
+    private static string FlitSubtitulo(string textoHtml) =>
+        $"<h3 style=\"margin:20px 0 8px;font-size:16px;color:{FlitEmailLayout.Ink};text-align:left;\">{textoHtml}</h3>";
+
+    /// <summary>Tabla de datos con encabezado en la tinta del kit; contenedor con scroll propio si no cabe.</summary>
+    private static string FlitTablaInicio(params (string Texto, string Align)[] columnas)
+    {
+        var sb = new StringBuilder();
+        sb.Append(CultureInfo.InvariantCulture,
+            $"<table role=\"presentation\" cellpadding=\"6\" cellspacing=\"0\" border=\"0\" style=\"border-collapse:collapse;width:100%;font-size:13px;margin:0 0 8px;border:1px solid {FlitEmailLayout.CardBorder};\">");
+        sb.Append(CultureInfo.InvariantCulture, $"<tr style=\"background:{FlitEmailLayout.Ink};color:#ffffff\">");
+        foreach (var (texto, align) in columnas)
+            sb.Append(CultureInfo.InvariantCulture, $"<th align=\"{align}\" style=\"font-size:11px;font-weight:600;\">{texto}</th>");
+        sb.Append("</tr>");
+        return sb.ToString();
+    }
+
+    private static string FlitFila(params (string Html, string Align)[] celdas)
+    {
+        var sb = new StringBuilder();
+        sb.Append(CultureInfo.InvariantCulture, $"<tr style=\"border-bottom:1px solid {FlitEmailLayout.CardRowBorder}\">");
+        foreach (var (html, align) in celdas)
+            sb.Append(CultureInfo.InvariantCulture, $"<td align=\"{align}\" style=\"color:{FlitEmailLayout.Ink};word-break:break-word;\">{html}</td>");
+        sb.Append("</tr>");
+        return sb.ToString();
     }
 
     /// <summary>Mensaje plano en español que se persiste en <c>alert_events.message</c>.</summary>

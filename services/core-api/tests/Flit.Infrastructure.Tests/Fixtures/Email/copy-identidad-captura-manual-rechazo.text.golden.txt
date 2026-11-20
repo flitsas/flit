@@ -1,0 +1,22 @@
+Asunto: [FLIT 2.0] Repite tu verificación de identidad
+Verificación de identidad
+No pudimos aprobar tu verificación. Motivo: Imagen borrosa.
+Repite tu verificación
+Hola Ana María Pérez Gómez.
+FLIT 2.0 revisó tu captura y necesitamos que la repitas con el enlace nuevo. El enlace anterior ya no funciona.
+Solicitado por
+FLIT 2.0
+PASOS DE LA VERIFICACIÓN
+1
+Valida tus datos
+2
+Realiza la validación biométrica
+3
+Captura los datos del documento
+4
+Firma
+Repetir mi verificación
+Si el botón no funciona, copia este enlace:
+https://app.flit.example/verificacion/TOKEN-NUEVO-DE-EJEMPLO
+El enlace es personal, de un solo uso y caduca en 24 horas. Ábrelo en tu celular.
+¿Necesitas ayuda? Escríbenos a soporte@flitsas.com.
