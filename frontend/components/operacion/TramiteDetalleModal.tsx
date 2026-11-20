@@ -823,7 +823,9 @@ export function TramiteDetalleModal({
                                     e.tipo === 'reasignar_gestor_admin' ||
                                     e.tipo === 'revocatoria_solicitada' ||
                                     e.tipo === 'revocatoria_aprobada' ||
-                                    e.tipo === 'revocatoria_rechazada',
+                                    e.tipo === 'revocatoria_rechazada' ||
+                                    // Bug #14604 — actualización de un documento por el admin FLIT.
+                                    e.tipo === 'documento_cargado_admin',
                                 ),
                               ),
                             )

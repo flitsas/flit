@@ -234,7 +234,7 @@ describe('BiometricStep — inventario: estado y acción de una parte sin valida
 });
 
 describe('BiometricStep — inventario: validación en curso (enlace y QR de captura)', () => {
-  it('conserva el enlace copiable, el QR, el CTA de apertura y el correo destinatario', async () => {
+  it('conserva el enlace copiable, el QR, el CTA de apertura y el correo destinatario (sin URL en texto, Bug #14626)', async () => {
     mocks.getBiometricState.mockResolvedValue({
       validations: [EN_PROCESO],
       provider: 'kyverum',
@@ -248,13 +248,14 @@ describe('BiometricStep — inventario: validación en curso (enlace y QR de cap
     expect(within(comprador).getByText(/Esperando validación de Ana Compradora/)).toBeInTheDocument();
     expect(within(comprador).getByText(/ana@example\.com/)).toBeInTheDocument();
 
-    // Las tres formas de hacerle llegar la captura al cliente: QR, botón de copiar y el enlace literal.
+    // Formas de hacerle llegar la captura al cliente: QR y botón de copiar. Bug #14626: la URL ya no se
+    // muestra en texto (los clientes la abrían en el equipo del asesor y quedaba atada a ese dispositivo).
     expect(within(comprador).getByLabelText('Código QR del enlace de captura')).toBeInTheDocument();
     expect(within(comprador).getByLabelText('Copiar enlace de captura')).toBeInTheDocument();
-    expect(within(comprador).getByRole('link', { name: EN_PROCESO.captureUrl! })).toHaveAttribute(
-      'href',
-      EN_PROCESO.captureUrl,
-    );
+    expect(within(comprador).queryByText(EN_PROCESO.captureUrl!)).not.toBeInTheDocument();
+    expect(
+      within(comprador).queryByRole('link', { name: EN_PROCESO.captureUrl! }),
+    ).not.toBeInTheDocument();
     const abrir = within(comprador).getByRole('link', { name: 'Abrir captura Kyverum' });
     expect(abrir).toHaveAttribute('href', EN_PROCESO.captureUrl);
     expect(abrir).toHaveAttribute('target', '_blank');
