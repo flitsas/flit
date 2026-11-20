@@ -527,6 +527,10 @@ public static class DependencyInjection
         services.AddScoped<Plataforma.Ai.ListAiFailoverAlertsHandler>();
         services.AddScoped<Plataforma.Ai.AcknowledgeAiFailoverAlertHandler>();
 
+        // Épica #14644 (HU #14648) — contingencia de proveedor RUNT (Super Admin FLIT, permiso runt_contingency.manage).
+        services.AddScoped<Plataforma.RuntContingency.GetRuntContingencyHandler>();
+        services.AddScoped<Plataforma.RuntContingency.SaveRuntContingencyHandler>();
+
         return services;
     }
 }
