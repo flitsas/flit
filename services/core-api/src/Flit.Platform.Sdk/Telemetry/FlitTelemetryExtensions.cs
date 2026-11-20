@@ -40,6 +40,7 @@ public static class FlitTelemetryExtensions
             // HU #13339: solo las métricas del bus (mensajes muertos para alertar); no se suman las de ASP.NET.
             .WithMetrics(m => m
                 .AddMeter(PlatformMessagingMetrics.MeterName)
+                .AddMeter("Flit.Consultas") // Épica #14644: contingencia de proveedor RUNT (desvíos y lecturas fallidas)
                 .AddOtlpExporter());
 
         builder.Logging.AddOpenTelemetry(o =>

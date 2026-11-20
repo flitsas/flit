@@ -168,6 +168,8 @@ internal static class PermissionOverridesEndpoints
             StatusCodes.Status400BadRequest, ex.ReasonCode, "Para habilitar «Crear» primero debe estar habilitado «Ver» en esa familia.", ex.Slug),
         PermissionOverrideReasons.NotEnforced => Error(
             StatusCodes.Status403Forbidden, ex.ReasonCode, "Ese permiso aún no se exige en el sistema; configurarlo no tendría efecto.", ex.Slug),
+        PermissionOverrideReasons.SuperAdminOnly => Error(
+            StatusCodes.Status403Forbidden, ex.ReasonCode, "Ese permiso solo lo tiene el Super Admin FLIT.", ex.Slug),
         PermissionOverrideReasons.Excluded => Error(
             StatusCodes.Status403Forbidden, ex.ReasonCode, "Ese permiso no se configura individualmente.", ex.Slug),
         _ => Error(StatusCodes.Status403Forbidden, ex.ReasonCode, "El permiso queda fuera de lo que puedes otorgar.", ex.Slug),
