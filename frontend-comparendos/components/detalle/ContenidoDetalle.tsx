@@ -531,7 +531,7 @@ function TarjetasContexto({ d, soloLectura, onIr, onPestana }: { d: Detalle; sol
     <section
       aria-label="Resumen del comparendo"
       data-testid="detalle-tarjetas"
-      className="grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 min-[480px]:max-lg:[&>*:last-child]:col-span-2 lg:grid-cols-3 xl:grid-cols-5"
+      className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:max-lg:[&>*:last-child]:col-span-2 lg:grid-cols-3 xl:grid-cols-5"
     >
       <TarjetaContexto titulo="Vehículo" accion="Ver los datos completos" onIr={() => onPestana("datos")}>
         {d.placa ? <Placa placa={d.placa} className="self-start" /> : <span className="text-muted-foreground">Sin placa</span>}

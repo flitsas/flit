@@ -107,7 +107,7 @@ function RailButton({
       </button>
       <span
         aria-hidden="true"
-        className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-flit-primary px-2 py-1 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 dark:bg-secondary"
+        className="pointer-events-none absolute right-full top-1/2 mr-2 -translate-y-1/2 whitespace-nowrap rounded-lg bg-flit-primary px-2 py-1 text-xs font-semibold text-white opacity-0 transition group-hover:opacity-100 group-focus-within:opacity-100 group-active:opacity-100 dark:bg-secondary"
       >
         {label}
       </span>

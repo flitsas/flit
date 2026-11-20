@@ -6,7 +6,7 @@ import { DataTable, InlineAlert, Modal, StatusBadge, VehicleLoader } from "@flit
 import { etiquetaKit } from "@flit/ui/StatusBadge";
 import { useToast } from "@/components/Toast";
 import { Interruptor } from "@/components/ui/Interruptor";
-import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, FECHA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import {
   agregarHora,
@@ -160,11 +160,11 @@ function Canal({ empresaId, canal, proveedores, onGuardado }: { empresaId: strin
           </label>
           <label className={ETIQUETA_CLS}>
             Desde
-            <input className={INPUT_CLS} type="time" value={f.desde} onChange={(e) => cambiar({ desde: e.target.value })} />
+            <input className={FECHA_CLS} type="time" value={f.desde} onChange={(e) => cambiar({ desde: e.target.value })} />
           </label>
           <label className={ETIQUETA_CLS}>
             Hasta
-            <input className={INPUT_CLS} type="time" value={f.hasta} onChange={(e) => cambiar({ hasta: e.target.value })} />
+            <input className={FECHA_CLS} type="time" value={f.hasta} onChange={(e) => cambiar({ hasta: e.target.value })} />
           </label>
         </div>
       )}

@@ -463,13 +463,13 @@ function Item({
 
         {/* La flecha solo aparece al apuntar: basta para decir «esto se abre» sin competir con el
             nombre, que es lo que la persona viene a leer. */}
-        <Icono nombre="derecha" className="pointer-events-none absolute right-1.5 top-2.5 h-3.5 w-3.5 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
+        <Icono nombre="derecha" className="pointer-events-none absolute right-1.5 top-2.5 h-3.5 w-3.5 text-muted-foreground opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition-opacity" />
       </button>
 
       {/* Programar y borrar comparten la esquina inferior derecha, en un grupo — así ninguno tapa
           la flecha ni al otro, y los dos aparecen juntos al apuntar. */}
       {(onSchedule ?? !query.deFabrica) && (
-        <span className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 opacity-0 transition focus-within:opacity-100 group-hover:opacity-100">
+        <span className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition focus-within:opacity-100">
           {onSchedule && (
             <button
               type="button"

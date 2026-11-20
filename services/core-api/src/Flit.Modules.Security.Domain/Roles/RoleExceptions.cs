@@ -121,3 +121,18 @@ public sealed class OtPermissionNotApplicableToRoleException : Exception
     {
     }
 }
+
+/// <summary>
+/// Épica #14644: un permiso que afecta a todas las empresas (p. ej. <c>runt_contingency.manage</c>) solo lo lleva el rol
+/// SuperAdmin; ningún otro rol puede incluirlo.
+/// </summary>
+public sealed class SuperAdminOnlyPermissionException : Exception
+{
+    public SuperAdminOnlyPermissionException(IReadOnlyList<string> slugs)
+        : base("Only the SuperAdmin role can include this permission.")
+    {
+        Slugs = slugs;
+    }
+
+    public IReadOnlyList<string> Slugs { get; }
+}

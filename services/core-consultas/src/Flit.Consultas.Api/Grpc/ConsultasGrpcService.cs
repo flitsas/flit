@@ -30,7 +30,8 @@ internal sealed partial class ConsultasGrpcService(
     IRuntVehicleRawClient runtCrudo,
     IImprontaExternalClient improntas,
     IEnumerable<IRuesExternalClient> rues,
-    Impuesto.ProveedorImpuesto impuesto) : ConsultasService.ConsultasServiceBase
+    Impuesto.ProveedorImpuesto impuesto,
+    Configuracion.ContingenciaRuntVigente contingencia) : ConsultasService.ConsultasServiceBase
 {
     public const string Scope = "platform.consultas";
 
@@ -206,22 +207,62 @@ internal sealed partial class ConsultasGrpcService(
     /// Cadena de respaldo de la empresa (AC1). El primero de la cadena puede gastar a lo sumo
     /// <see cref="PresupuestoPrimario"/> del tiempo que le queda a la llamada: si no responde, el siguiente alcanza a
     /// contestar dentro del deadline (AC3). Un proveedor pedido explícitamente salta la cadena.
+    /// <para>
+    /// Contingencia de proveedor RUNT (Épica #14644, HU #14647): si llama Trámites, Persona Natural o ICT y el tipo tiene un
+    /// proveedor forzado, ese va primero y la cadena de la empresa queda de respaldo sin repetirlo. También cuando se pide
+    /// explícitamente un proveedor RUNT de la misma categoría. La configuración de la empresa no se toca: la cadena forzada
+    /// solo vive en esta llamada.
+    /// </para>
     /// </summary>
     private async Task<ResultadoConsulta> ConsultarCadenaAsync(
         ConsultationKind kind, string plantilla, IReadOnlyDictionary<string, string?> campos, OpcionesConsulta? opciones, PlatformServiceCaller caller,
         DateTime deadline, CancellationToken ct)
     {
-        if (!string.IsNullOrWhiteSpace(opciones?.Proveedor))
-            return await ConsultarProveedorAsync(opciones.Proveedor, campos, opciones, caller, ct).ConfigureAwait(false);
+        var explicito = !string.IsNullOrWhiteSpace(opciones?.Proveedor);
+        var tipo = kind.ToConfigKey();
+        var forzado = await ProveedorForzadoAsync(tipo, explicito ? opciones!.Proveedor : null, caller, ct).ConfigureAwait(false);
+
+        if (explicito && forzado is null)
+            return await ConsultarProveedorAsync(opciones!.Proveedor, campos, opciones, caller, ct).ConfigureAwait(false);
 
         var tenantOverride = await overrides.GetAsync(caller.TenantId, ct).ConfigureAwait(false);
         var configurado = tenantOverride?.FailoverTimeoutMs ?? chainOptions.Value.FailoverTimeoutMs;
         var ajustado = (tenantOverride ?? new ConsultationTenantOverride(null, null)) with { FailoverTimeoutMs = Presupuesto(configurado, deadline) };
+        if (forzado is not null)
+            ajustado = ConContingencia(ajustado, kind, tipo, forzado);
 
         var result = await chain.ConsultAsync(kind, new ConsultationContext(Guid.Empty, caller.TenantId, plantilla, campos), ajustado, ct)
             .ConfigureAwait(false);
         Bus.RegistroFallosProveedor.Anotar(result);
         return ResultadoConsultaMapper.ToProto(result, opciones?.IncluirRespuestaCruda == true);
+    }
+
+    /// <summary>
+    /// El proveedor que la contingencia fuerza para <paramref name="tipo"/>, o nulo si no aplica: llama otro producto, no hay
+    /// contingencia activa o el <paramref name="proveedorPedido"/> explícito no es un proveedor RUNT de ese tipo (p. ej. Intempo).
+    /// </summary>
+    private async Task<string?> ProveedorForzadoAsync(string tipo, string? proveedorPedido, PlatformServiceCaller caller, CancellationToken ct)
+    {
+        if (!Configuracion.ContingenciaRuntReglas.AplicaAlLlamador(caller.ClientId))
+            return null;
+        if (proveedorPedido is not null && !Configuracion.ContingenciaRuntReglas.ProveedoresDe(tipo).Contains(proveedorPedido.Trim(), StringComparer.OrdinalIgnoreCase))
+            return null;
+
+        var forzado = await contingencia.ForzadoAsync(tipo, ct).ConfigureAwait(false);
+        if (forzado is not null)
+            contingencia.RegistrarDesvio(tipo, forzado, caller.ClientId);
+        return forzado;
+    }
+
+    /// <summary>Cadena de esta llamada: el forzado primero y la de la empresa (o la global) de respaldo, sin repetirlo.</summary>
+    private ConsultationTenantOverride ConContingencia(ConsultationTenantOverride baseOverride, ConsultationKind kind, string tipo, string forzado)
+    {
+        var respaldo = chain.ResolveChain(kind, baseOverride).Where(p => !string.Equals(p, forzado, StringComparison.Ordinal)).ToList();
+        var cadenas = new Dictionary<string, ConsultationChainSelection>(baseOverride.Chains ?? new Dictionary<string, ConsultationChainSelection>(), StringComparer.OrdinalIgnoreCase)
+        {
+            [tipo] = new ConsultationChainSelection(forzado, respaldo),
+        };
+        return baseOverride with { Chains = cadenas };
     }
 
     private async Task<ResultadoConsulta> ConsultarProveedorAsync(

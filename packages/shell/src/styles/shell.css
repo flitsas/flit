@@ -10,6 +10,7 @@
     gap: 16px;
     padding: 12px clamp(16px, 4vw, 40px);
     background: color-mix(in srgb, var(--di-surface) 88%, transparent);
+    -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
     border-bottom: 1px solid var(--di-border);
     color: var(--di-text-primary);
@@ -442,14 +443,14 @@
     background: var(--di-accent-soft);
   }
 
-  @media (max-width: 960px) {
+  @media (max-width: 1023.98px) {
     .suite-usuario__texto,
     .suite-barra__producto {
       display: none;
     }
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 639.98px) {
     .suite-barra {
       gap: 8px;
     }
@@ -479,6 +480,7 @@
     background: color-mix(in srgb, var(--di-surface-elevated) 94%, transparent);
     border: 1px solid var(--di-border);
     box-shadow: var(--shadow-modal);
+    -webkit-backdrop-filter: blur(8px);
     backdrop-filter: blur(8px);
   }
 
@@ -650,8 +652,9 @@
     translate: none;
     width: 100%;
     max-width: 28rem;
-    max-height: min(78vh, 40rem);
+    max-height: min(78dvh, 40rem);
     overflow-y: auto;
+    overscroll-behavior: contain;
   }
 
   .dock-menu__cabeza {
@@ -705,7 +708,7 @@
     display: grid;
     gap: 6px;
     padding: 0 8px;
-    max-height: min(62vh, 560px);
+    max-height: min(62dvh, 560px);
     overflow-y: auto;
   }
 
@@ -719,7 +722,7 @@
     grid-template-columns: 1fr 1fr;
     gap: 10px 12px;
     padding: 0 10px;
-    max-height: min(62vh, 560px);
+    max-height: min(62dvh, 560px);
     overflow-y: auto;
   }
 
@@ -869,7 +872,7 @@
  * solo en el menú principal y sus menús. */
 @layer components {
   .suite-barra {
-    gap: 16px; padding: 8px var(--kit-margen); background: var(--di-surface); backdrop-filter: none;
+    gap: 16px; padding: 8px var(--kit-margen); background: var(--di-surface); -webkit-backdrop-filter: none; backdrop-filter: none;
     border-bottom: 1px solid var(--di-border);
   }
   .suite-barra__logo { height: 30px; }
@@ -926,14 +929,14 @@
   .suite-menu-productos__ilus { width: 36px; height: 36px; }
   .suite-menu-productos__pie { border-radius: 9px; }
 
-  @media (max-width: 640px) {
+  @media (max-width: 639.98px) {
     .suite-barra__logo { height: 26px; }
   }
 
   /* Dock: píldora blanca, ítems de 44 px con ícono de 24 px; el activo en azul con su disco --kit-hover y un punto. */
   .dock-capsula {
     gap: 2px; padding: 8px 14px; border-radius: 9999px; background: var(--di-surface-elevated); border: 0;
-    box-shadow: var(--kit-sombra), 0 0 0 1px color-mix(in srgb, var(--kit-linea) 60%, transparent); backdrop-filter: none;
+    box-shadow: var(--kit-sombra), 0 0 0 1px color-mix(in srgb, var(--kit-linea) 60%, transparent); -webkit-backdrop-filter: none; backdrop-filter: none;
   }
   /* Como la propuesta: los íconos del menú en tinta (el texto del ítem); el activo pasa a azul con su disco. */
   .dock-glifo--icono { background: transparent; color: var(--di-text-primary); }
@@ -1019,11 +1022,11 @@
   .suite-menu-usuario__entrada:focus-visible,
   .suite-menu-usuario__salir:focus-visible { outline: 2px solid var(--kit-azul-texto); outline-offset: 2px; }
 
-  @media (max-width: 960px) {
+  @media (max-width: 1023.98px) {
     .suite-usuario { padding: 2px; }
   }
 
-  @media (max-width: 640px) {
+  @media (max-width: 639.98px) {
     .suite-barra { gap: 8px; }
     .suite-buscar { min-width: 0; width: 44px; padding: 0; }
     /* Productos sale de la barra: sus entradas pasan al menú de usuario (`.menu-ancla--productos` de la propuesta). */

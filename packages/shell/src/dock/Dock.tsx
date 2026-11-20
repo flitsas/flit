@@ -69,7 +69,7 @@ export function Dock({ groups, homeHref, homeLabel, homeIconSrc, homeActive, scr
   );
 
   return (
-    <div className={`pointer-events-none ${scrollRef ? "absolute" : "fixed"} inset-x-0 bottom-0 z-40 hidden justify-center px-2 pb-[18px] lg:flex`}>
+    <div className={`pointer-events-none ${scrollRef ? "absolute" : "fixed"} inset-x-0 bottom-0 z-40 hidden justify-center px-2 pb-[calc(18px+env(safe-area-inset-bottom))] lg:flex`}>
       <nav ref={navRef} aria-label="Navegación principal" className="dock-capsula pointer-events-auto relative inline-flex max-w-full items-center">
         {Array.from({ length: Math.max(0, sideLen - left.length) }).map((_, i) => (
           <DockSpacer key={`lp-${i}`} showLabels={showLabels} />

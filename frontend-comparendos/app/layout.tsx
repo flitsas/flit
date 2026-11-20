@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import localFont from "next/font/local";
 import { BrandProvider } from "@flit/brand/BrandProvider";
 import { BrandStyle } from "@flit/brand/BrandStyle";
@@ -24,6 +24,10 @@ const barlowCondensed = localFont({
   weight: "700",
   style: "normal",
 });
+
+// iPhone/iPad (Safari y Chrome iOS son WebKit): ancho del dispositivo y `viewport-fit=cover` para que la safe-area
+// (`env(safe-area-inset-*)`) tenga valor. Sin maximumScale ni userScalable: el zoom es accesibilidad.
+export const viewport: Viewport = { width: "device-width", initialScale: 1, viewportFit: "cover", themeColor: "#ffffff" };
 
 // La marca sale del host de la petición (Marca Blanca, ADR-0060 §D5): en un host FLIT no se llama a nadie; en el
 // dominio de una red, título, favicon y colores son los de la red. Se resuelve en el servidor, sin destello.

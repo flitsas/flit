@@ -205,7 +205,7 @@ export function Reportes() {
   // Sin ninguna pestaña visible → estado vacío amable (§3).
   if (visibleTabs.length === 0) {
     return (
-      <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
+      <div className="app-bg px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
         <ModuleTitle title="Reportes y Analíticas" subtitle="Monitorea el desempeño operativo por pestañas temáticas." />
         <div
           className="flex flex-col items-center justify-center gap-3 rounded-2xl border p-10 text-center bg-card"
@@ -223,7 +223,7 @@ export function Reportes() {
   }
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
+    <div className="app-bg px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="Reportes y Analíticas"
         subtitle="Monitorea el desempeño operativo por pestañas temáticas."

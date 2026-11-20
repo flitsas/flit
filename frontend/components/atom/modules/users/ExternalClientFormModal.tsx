@@ -21,7 +21,7 @@ import {
 import { externalClientErrorMessage } from "./externalClientErrors";
 
 const INPUT_CLS =
-  "h-11 w-full rounded-[10px] border border-border bg-background px-3 text-sm text-flit-primary " +
+  "h-11 w-full rounded-[10px] border border-border bg-background px-3 text-base sm:text-sm text-flit-primary " +
   "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 " +
   "disabled:bg-secondary";
 const LABEL_CLS = "flex flex-col gap-1.5 text-sm font-semibold text-flit-primary";

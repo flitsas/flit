@@ -37,8 +37,8 @@ export const CHIPS_FILTRO_FILA_CLS = "flex flex-wrap gap-2";
 /** Embudo: casillas iguales en un contenedor con borde (radio 9 px y deslizamiento en celular). */
 export const EMBUDO_CLS =
   "grid grid-cols-[repeat(auto-fit,minmax(92px,1fr))] gap-1 rounded-[26px] border border-[color:var(--di-border)] " +
-  "bg-[var(--di-surface-elevated)] p-2 max-[640px]:flex max-[640px]:snap-x max-[640px]:overflow-x-auto " +
-  "max-[640px]:rounded-[9px] max-[640px]:[&>*]:w-[86px] max-[640px]:[&>*]:shrink-0 max-[640px]:[&>*]:snap-start";
+  "bg-[var(--di-surface-elevated)] p-2 max-sm:flex max-sm:snap-x max-sm:overflow-x-auto " +
+  "max-sm:rounded-[9px] max-sm:[&>*]:w-[86px] max-sm:[&>*]:shrink-0 max-sm:[&>*]:snap-start";
 
 export interface ChipFiltroProps {
   /** Conteo en negrita delante de la etiqueta. Se omite si no se pasa. */

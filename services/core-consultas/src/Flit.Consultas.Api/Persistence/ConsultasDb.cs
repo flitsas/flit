@@ -116,6 +116,29 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
                 "status IN ('reserved','queued','running','succeeded','partial','failed','timeout','error')"));
         });
 
+        // Épica #14644 (HU #14647): contingencia de proveedor RUNT, global de plataforma (sin tenant_id: la empresa no la ve).
+        modelBuilder.Entity<ContingenciaProveedorRunt>(e =>
+        {
+            e.ToTable("runt_contingencies", t =>
+            {
+                t.HasComment("Contingencia de proveedor RUNT por tipo de consulta. Global de plataforma, sin tenant_id: la empresa no la ve. provider nulo = sin contingencia. Épica #14644.");
+                t.HasCheckConstraint("ck_runt_contingencies_kind_provider",
+                    "provider IS NULL OR (kind IN ('vehicle_vin', 'vehicle_plate') AND provider IN ('kyverum_runt', 'verifik')) "
+                    + "OR (kind = 'conductor' AND provider IN ('kyverum_runt_conductor', 'verifik_conductor'))");
+                t.HasCheckConstraint("ck_runt_contingencies_kind", "kind IN ('vehicle_vin', 'vehicle_plate', 'conductor')");
+            });
+            e.HasKey(c => c.Id).HasName("pk_runt_contingencies");
+            e.Property(c => c.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(c => c.Kind).HasColumnName("kind").HasMaxLength(20).IsRequired();
+            e.Property(c => c.Provider).HasColumnName("provider").HasMaxLength(40);
+            e.Property(c => c.Reason).HasColumnName("reason").HasMaxLength(500).IsRequired();
+            e.Property(c => c.UpdatedByName).HasColumnName("updated_by_name").HasMaxLength(200).IsRequired();
+            e.Property(c => c.UpdatedById).HasColumnName("updated_by_id");
+            e.Property(c => c.CreatedAt).HasColumnName("created_at");
+            e.Property(c => c.UpdatedAt).HasColumnName("updated_at");
+            e.HasIndex(c => c.Kind).IsUnique().HasDatabaseName("uq_runt_contingencies_kind");
+        });
+
         modelBuilder.Entity<ValorMockAvaluo>(e =>
         {
             e.ToTable("valores_mock_avaluo");
@@ -146,6 +169,8 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
     public DbSet<DepartamentoConsultaImpuesto> DepartamentosImpuesto => Set<DepartamentoConsultaImpuesto>();
 
     public DbSet<TrabajoImpuestoExterno> TrabajosImpuesto => Set<TrabajoImpuestoExterno>();
+
+    public DbSet<ContingenciaProveedorRunt> ContingenciasRunt => Set<ContingenciaProveedorRunt>();
 
     /// <summary>Opciones comunes: Npgsql con la tabla de migraciones dentro del propio esquema.</summary>
     public static void Configure(DbContextOptionsBuilder options, string connectionString) =>

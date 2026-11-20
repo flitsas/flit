@@ -18,6 +18,13 @@ import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_FILA_ANCHA_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
   TABLA_TARJETA_CLS,
 } from "@/components/atom/table-styles";
@@ -313,7 +320,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
   }, [aplicar, filtros]);
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
+    <div className="app-bg px-6 pt-6 pb-10 flex flex-col gap-4 text-flit-primary">
       <ModuleTitle
         title="LOG QX"
         subtitle="Trámites con integración Quipux. Filtra por fecha, placa, documento o estado, y abre la trazabilidad completa del que necesites."
@@ -493,8 +500,8 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
                 pastilla #DFE5ED y cada fila como tarjeta blanca separada, no una rejilla de
                 bordes. */}
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1040px] text-xs" style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
-                <thead>
+              <table className={`w-full min-w-[1040px] text-xs ${TABLA_MOVIL_TABLE_CLS}`} style={{ borderCollapse: "separate", borderSpacing: "0 8px" }}>
+                <thead className={TABLA_MOVIL_THEAD_CLS}>
                   <tr>
                     <th
                       scope="col"
@@ -522,7 +529,7 @@ export function LogQx({ initialInstanceId }: { initialInstanceId?: string } = {}
                     </th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className={TABLA_MOVIL_TBODY_CLS}>
                   {entries.map((entry) => (
                     <FilaTramite
                       key={entry.procedureInstanceId}
@@ -630,7 +637,7 @@ function FilaTramite({
   return (
     <>
       <tr
-        className={`cursor-pointer bg-card ${TABLA_ROW_HOVER_CLS} ${
+        className={`cursor-pointer bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS} ${
           abierta ? "shadow-none" : ""
         }`}
         onClick={onToggle}
@@ -644,10 +651,10 @@ function FilaTramite({
           }
         }}
       >
-        <td className={`${tdCls} rounded-l-xl border-l px-3`}>
+        <td className={`${tdCls} rounded-l-xl border-l px-3 max-lg:hidden`}>
           <Icono nombre="derecha" className={`h-3.5 w-3.5 opacity-50 transition-transform ${abierta ? "rotate-90" : ""}`} />
         </td>
-        <td className={tdCls}>
+        <td data-label="Trámite" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`}>
           <span className="font-mono font-semibold text-flit-brand">{entry.referenceNumber}</span>
           {entry.intentos > 1 && (
             <span {...etiquetaKit("danger", { className: "ml-1.5 font-mono" })}>
@@ -655,7 +662,7 @@ function FilaTramite({
             </span>
           )}
         </td>
-        <td className={tdCls}>
+        <td data-label="Placa" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>
           {entry.plate ? (
             <span className="rounded border border-border bg-secondary px-1.5 py-0.5 font-mono font-bold tracking-wide dark:bg-secondary">
               {entry.plate}
@@ -664,8 +671,8 @@ function FilaTramite({
             <span className="opacity-40">sin placa</span>
           )}
         </td>
-        <td className={tdCls}>{entry.procedureTypeName}</td>
-        <td className={tdCls}>
+        <td data-label="Tipo" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>{entry.procedureTypeName}</td>
+        <td data-label="Estado" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>
           {/* Mismo chip que el listado de trámites: la paleta por estado, no los cinco tonos
               semánticos, que dejaban tres de estos siete estados con el mismo color. */}
           <StatusBadge
@@ -675,9 +682,9 @@ function FilaTramite({
             border={meta.style.border}
           />
         </td>
-        <td className={`${tdCls} opacity-75`}>{entry.clientTenantName}</td>
-        <td className={`${tdCls} opacity-75`}>{entry.transitOfficeName}</td>
-        <td className={tdCls}>
+        <td data-label="Empresa" className={`${tdCls} opacity-75 ${TABLA_MOVIL_CELL_CLS}`}>{entry.clientTenantName}</td>
+        <td data-label="Secretaría" className={`${tdCls} opacity-75 ${TABLA_MOVIL_CELL_CLS}`}>{entry.transitOfficeName}</td>
+        <td data-label="Documento QX" className={`${tdCls} ${TABLA_MOVIL_CELL_CLS}`}>
           {entry.documentoQx ? (
             <span className="font-mono opacity-80" title={entry.documentoQx}>
               {entry.documentoQx.length > 26
@@ -688,10 +695,10 @@ function FilaTramite({
             <span className="opacity-40">—</span>
           )}
         </td>
-        <td className={`${tdCls} whitespace-nowrap opacity-75`}>
+        <td data-label="Última actividad" className={`${tdCls} whitespace-nowrap opacity-75 ${TABLA_MOVIL_CELL_CLS}`}>
           {entry.ultimaActividad ? formatFecha(entry.ultimaActividad) : "—"}
         </td>
-        <td className={`${tdCls} rounded-r-xl border-r`}>
+        <td data-label="Antigüedad" className={`${tdCls} rounded-r-xl border-r ${TABLA_MOVIL_CELL_CLS}`}>
           {espera ? (
             <span
               className={`whitespace-nowrap font-mono tabular-nums ${alta ? "font-bold text-destructive" : ""}`}
@@ -705,9 +712,9 @@ function FilaTramite({
         </td>
       </tr>
       {abierta && (
-        <tr>
+        <tr className={TABLA_MOVIL_FILA_ANCHA_CLS}>
           {/* El detalle es su propia tarjeta, coherente con las filas-tarjeta de la tabla. */}
-          <td colSpan={10} className="rounded-xl border bg-secondary p-0">
+          <td colSpan={10} className={`rounded-xl border bg-secondary p-0 ${TABLA_MOVIL_FILA_ANCHA_CLS}`}>
             <Vistazo entry={entry} onAbrir={onAbrir} esAdmin={esAdmin} />
           </td>
         </tr>
@@ -731,7 +738,7 @@ function Vistazo({
 }) {
   return (
     <div className="flex flex-wrap items-start gap-5 px-8 py-4">
-      <div className="min-w-[380px] flex-1">
+      <div className="min-w-[min(380px,100%)] flex-1">
         <p className="max-w-[70ch] text-[13px] leading-relaxed">{resumen(entry)}</p>
         <div className="mt-3 flex flex-wrap gap-1.5">
           {pasos(entry).map((p) => (

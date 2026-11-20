@@ -105,7 +105,7 @@ export function PrimaryButton({
 }
 
 export const FIELD_CLS =
-  "rounded-xl border bg-transparent px-3 py-2 text-xs outline-none focus:border-flit-brand disabled:opacity-60";
+  "rounded-xl border bg-transparent px-3 py-2 text-base sm:text-xs outline-none focus:border-flit-brand disabled:opacity-60";
 
 // El formateo vive en `./format`, que no es un módulo de cliente: lo importan las definiciones de
 // columnas, que son ficheros de datos y no componentes.

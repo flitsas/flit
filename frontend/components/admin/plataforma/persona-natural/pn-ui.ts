@@ -2,7 +2,7 @@
 // Mismos tokens y estados de foco que los formularios de las demás consolas admin (línea base de globals.css).
 
 export const PN_INPUT_CLS =
-  "h-11 w-full min-w-0 rounded-[10px] border border-border bg-background px-3 text-sm text-flit-primary " +
+  "h-11 w-full min-w-0 rounded-[10px] border border-border bg-background px-3 text-base sm:text-sm text-flit-primary " +
   "focus:border-flit-brand focus:outline-none focus:ring-2 focus:ring-inset focus:ring-flit-brand " +
   "disabled:bg-secondary disabled:opacity-80";
 export const PN_INPUT_ERROR_CLS = "border-destructive ring-1 ring-inset ring-destructive";

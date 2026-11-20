@@ -221,7 +221,7 @@ export function BannerListTable({
           <img
             src={bannerImageUrl(preview.id)}
             alt={`Imagen completa del banner ${preview.name}`}
-            className="max-h-[75vh] w-full rounded-xl object-contain"
+            className="max-h-[75dvh] w-full rounded-xl object-contain"
           />
         )}
       </Modal>

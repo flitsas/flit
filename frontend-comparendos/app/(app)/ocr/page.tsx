@@ -10,7 +10,7 @@ import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
 import { Chip } from "@/components/ui/Chip";
-import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PRIMARIO_CLS, ETIQUETA_CLS, FECHA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { errorTamanoPaquete, mensajeErrorCarga, textoTotal, totalPaquete } from "@/lib/limites";
@@ -223,11 +223,11 @@ function Estadisticas({ empresa }: { empresa: string | null }) {
         <div className="flex flex-wrap items-end gap-2">
           <label className={ETIQUETA_CLS}>
             Desde
-            <input type="date" className={INPUT_CLS} value={desde} onChange={(e) => setDesde(e.target.value)} />
+            <input type="date" className={FECHA_CLS} value={desde} onChange={(e) => setDesde(e.target.value)} />
           </label>
           <label className={ETIQUETA_CLS}>
             Hasta
-            <input type="date" className={INPUT_CLS} value={hasta} onChange={(e) => setHasta(e.target.value)} />
+            <input type="date" className={FECHA_CLS} value={hasta} onChange={(e) => setHasta(e.target.value)} />
           </label>
         </div>
       </div>
@@ -339,11 +339,11 @@ function Paquetes() {
           </label>
           <label className={ETIQUETA_CLS}>
             Creado desde
-            <input type="date" className={INPUT_CLS} value={desde} onChange={(e) => filtrar(() => setDesde(e.target.value))} />
+            <input type="date" className={FECHA_CLS} value={desde} onChange={(e) => filtrar(() => setDesde(e.target.value))} />
           </label>
           <label className={ETIQUETA_CLS}>
             Hasta
-            <input type="date" className={INPUT_CLS} value={hasta} onChange={(e) => filtrar(() => setHasta(e.target.value))} />
+            <input type="date" className={FECHA_CLS} value={hasta} onChange={(e) => filtrar(() => setHasta(e.target.value))} />
           </label>
         </div>
         <DataTable

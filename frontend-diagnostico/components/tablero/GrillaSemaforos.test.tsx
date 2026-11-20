@@ -46,32 +46,34 @@ const NUEVA = " (se abre en una pestaña nueva)";
 const DIR_ICONOS = resolve(__dirname, "../dx/iconos");
 
 describe("GrillaSemaforos — HU #14087 AC3: columnas agrupadas por pilar, las 8 fuentes siempre", () => {
-  it("cabecera de dos niveles: RUNT y SIMIT agrupan sus 3 fuentes; Avalúo comercial e Impuesto departamental, la suya", () => {
-    pintar();
+  it("cabecera de un nivel: Vehículo, Propietario, Locatario, Avalúo comercial e Impuesto departamental, sin grupos RUNT/SIMIT", () => {
+    const { container } = pintar();
     const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
-    const runt = within(tabla).getByRole("columnheader", { name: "RUNT" });
-    expect(runt).toHaveAttribute("colspan", "3");
-    expect(runt).toHaveAttribute("scope", "colgroup");
-    const simit = within(tabla).getByRole("columnheader", { name: "SIMIT" });
-    expect(simit).toHaveAttribute("colspan", "3");
-    expect(simit).toHaveAttribute("scope", "colgroup");
-    for (const nombre of FUENTES.map((f) => f.nombre)) expect(within(tabla).getByRole("columnheader", { name: nombre })).toBeInTheDocument();
+    expect(container.querySelectorAll("thead tr")).toHaveLength(1);
+    const nombres = within(tabla).getAllByRole("columnheader").map((th) => th.textContent?.trim());
+    expect(nombres).toEqual(["Placa o VIN", "Vehículo", "Propietario", "Locatario", "Avalúo comercial", "Impuesto departamental"]);
+    for (const th of within(tabla).getAllByRole("columnheader")) {
+      expect(th).toHaveAttribute("scope", "col");
+      expect(th).not.toHaveAttribute("colspan");
+    }
+    for (const grupo of ["RUNT", "SIMIT"]) expect(within(tabla).queryByRole("columnheader", { name: grupo })).not.toBeInTheDocument();
     expect(within(tabla).queryByRole("columnheader", { name: "Por vehículo" })).not.toBeInTheDocument();
   });
 
   it("las 8 fuentes aparecen en cada fila en el orden de FUENTES aunque el lote pidiera solo una", () => {
     const { container } = pintar(grilla({ columnas: { por_vehiculo: ["RUNT"], por_propietario: [], por_locatario: [] }, vehiculos: [vehiculo(1, [celda(1, "RUNT", "COMPLETADO")])] }));
     const fila = filaDe(container, "vehiculo-1");
-    expect(Array.from(fila.querySelectorAll("[data-fuente]")).map((td) => td.getAttribute("data-fuente"))).toEqual(FUENTES.map((f) => f.codigo));
-    // FE-2 (spec-ui §2.6): el texto visible de la subcolumna va sin el prefijo del grupo; el prefijo queda en sr-only.
-    const visible = (th: Element) => {
-      const copia = th.cloneNode(true) as HTMLElement;
-      copia.querySelectorAll(".sr-only").forEach((n) => n.remove());
-      return copia.textContent?.trim();
-    };
-    const cabeceras = Array.from(container.querySelectorAll("thead tr:last-child th"));
-    expect(cabeceras.map(visible)).toEqual(["vehículo", "propietario", "locatario", "vehículo", "propietario", "locatario"]);
-    expect(cabeceras.map((th) => th.textContent)).toEqual(["RUNT vehículo", "RUNT propietario", "RUNT locatario", "SIMIT vehículo", "SIMIT propietario", "SIMIT locatario"]);
+    // Por sujeto: RUNT y luego SIMIT; después Avalúo e Impuesto.
+    expect(Array.from(fila.querySelectorAll("[data-fuente]")).map((td) => td.getAttribute("data-fuente"))).toEqual([
+      "RUNT",
+      "SIMIT_VEHICULO",
+      "RUNT_PROPIETARIO",
+      "SIMIT_PROPIETARIO",
+      "RUNT_LOCATARIO",
+      "SIMIT_LOCATARIO",
+      "AVALUO",
+      "IMPUESTO_DEPARTAMENTAL",
+    ]);
   });
 
   it("la fuente no pedida en el lote dice «Sin solicitar» en cada fila y no es un botón", () => {
@@ -97,7 +99,8 @@ describe("GrillaSemaforos — HU #14087 AC3: columnas agrupadas por pilar, las 8
       expect(td).toHaveTextContent("Sin ejecutar");
       expect(within(td).queryByRole("button")).not.toBeInTheDocument();
     }
-    expect(within(fila).getAllByRole("cell")).toHaveLength(8);
+    // 3 columnas de sujeto (dos badges cada una) + Avalúo + Impuesto.
+    expect(within(fila).getAllByRole("cell")).toHaveLength(5);
   });
 });
 
@@ -229,22 +232,23 @@ describe("GrillaSemaforos — HU #14584 §6.2: la celda pinta solo el chip; el d
     expect(screen.getByRole("tooltip")).toHaveTextContent("No se pidió en este lote");
   });
 
-  it("la línea secundaria en la celda solo se ve por debajo de 900 px y es aria-hidden (ya va en el tooltip)", () => {
+  it("la línea secundaria en la celda solo se ve por debajo de 1024 px y es aria-hidden (ya va en el tooltip)", () => {
     const { container } = pintar(grilla({ vehiculos: [V1] }));
     const td = fuenteDe(filaDe(container, "vehiculo-1"), "RUNT_PROPIETARIO");
     const linea = within(td).getByText("No se pidió en este lote");
     expect(linea).toHaveAttribute("aria-hidden", "true");
-    expect(linea.className).toContain("min-[900px]:hidden");
+    expect(linea.className).toContain("lg:hidden");
   });
 });
 
 describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
   it.each([
     // HU #14562 AC11: rótulos y tonos --dx-estado-* del kit 2026.
-    ["celda-3-runt", "PENDIENTE", "pendiente", "Sin ejecutar", "var(--dx-estado-pendiente-borde)"],
-    ["celda-2-runt_locatario", "EN_CURSO", "en-curso", "Sin ejecutar (en curso)", "var(--dx-estado-en-curso-borde)"],
-    ["celda-2-runt", "COMPLETADO", "ejecutado", "Ejecutado", "var(--dx-estado-ejecutado-borde)"],
-    ["celda-2-simit_propietario", "ERROR", "error", "Error", "var(--dx-estado-error-borde)"],
+    // Columnas de sujeto: el badge lleva el prefijo de su consulta («RUNT · …», «SIMIT · …»).
+    ["celda-3-runt", "PENDIENTE", "pendiente", "RUNT · Sin ejecutar", "var(--dx-estado-pendiente-borde)"],
+    ["celda-2-runt_locatario", "EN_CURSO", "en-curso", "RUNT · Sin ejecutar (en curso)", "var(--dx-estado-en-curso-borde)"],
+    ["celda-2-runt", "COMPLETADO", "ejecutado", "RUNT · Ejecutado", "var(--dx-estado-ejecutado-borde)"],
+    ["celda-2-simit_propietario", "ERROR", "error", "SIMIT · Error", "var(--dx-estado-error-borde)"],
     ["celda-1-impuesto_departamental", "NA", "novedad", "Novedad", "var(--dx-estado-novedad-borde)"],
   ])("%s en %s se pinta con el tono %s, su texto «%s», un icono y el token de color de la etiqueta del kit", (id, estado, tono, texto, fondo) => {
     const { container } = pintar();
@@ -290,15 +294,15 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
 
   it("el nombre accesible del enlace de la celda lleva fuente, identificador, estado y que abre una pestaña nueva", () => {
     pintar();
-    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado${NUEVA}` })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: RUNT · Ejecutado${NUEVA}` })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: `Ver detalle de Impuesto departamental de TST001: Novedad${NUEVA}` })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST003: Sin ejecutar${NUEVA}` })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: `Ver detalle de SIMIT propietario de TST002: Error${NUEVA}` })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST003: RUNT · Sin ejecutar${NUEVA}` })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: `Ver detalle de SIMIT propietario de TST002: SIMIT · Error${NUEVA}` })).toBeInTheDocument();
   });
 
   it("HU #14087: el semáforo es un enlace a la página del detalle en pestaña nueva (target _blank, noopener noreferrer, texto sr-only)", () => {
     const { container } = pintar();
-    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado${NUEVA}` });
+    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: RUNT · Ejecutado${NUEVA}` });
     const td = enlace.closest("td")!;
     const vehiculoId = td.closest("tr")!.getAttribute("data-vehiculo")!;
     expect(enlace).toHaveAttribute("href", `/diagnosticos/${grilla().id}/vehiculos/${vehiculoId}/consultas/RUNT`);
@@ -313,7 +317,7 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
 
   it("con hrefDetalle propio (backoffice) el enlace va a esa ruta", () => {
     pintar(grilla(), false, { hrefDetalle: (c, v) => `/backoffice/x/${v.id}/${c.fuente}?empresa=e` });
-    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: Ejecutado${NUEVA}` });
+    const enlace = screen.getByRole("link", { name: `Ver detalle de RUNT vehículo de TST002: RUNT · Ejecutado${NUEVA}` });
     expect(enlace.getAttribute("href")).toMatch(/^\/backoffice\/x\/.+\/RUNT\?empresa=e$/);
   });
 });
@@ -480,7 +484,7 @@ describe("GrillaSemaforos — HU #13866: columna del impuesto departamental", ()
   });
 });
 
-// HU #14562, auditoría de UI (B2, M6/AC56, M7/AC28, m-4, m-5): la grilla se usa a 360 px, pasa a tarjetas bajo 900 px,
+// HU #14562, auditoría de UI (B2, M6/AC56, M7/AC28, m-4, m-5): la grilla se usa a 360 px, pasa a tarjetas bajo 1024 px,
 // lleva el ícono de cada fuente en la cabecera y la cabecera es la del kit (13 px en negrita).
 describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuente y cabecera del kit", () => {
   const completa = () =>
@@ -492,10 +496,10 @@ describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuent
     });
   const clases = (el: Element) => (el.getAttribute("class") ?? "").split(/\s+/);
 
-  it("B2: ninguna columna queda fija por debajo de 900 px (sticky y desplazamiento solo con min-[900px])", () => {
+  it("B2: ninguna columna queda fija por debajo de 1024 px (sticky y desplazamiento solo con lg:)", () => {
     const { container } = completa();
     const celdas = Array.from(container.querySelectorAll("tbody th, tbody td"));
-    const fijas = celdas.filter((el) => clases(el).includes("min-[900px]:sticky"));
+    const fijas = celdas.filter((el) => clases(el).includes("lg:sticky"));
     // Casilla, placa y acciones: las tres fijas en escritorio.
     expect(fijas).toHaveLength(3 * container.querySelectorAll("tbody tr").length);
     for (const el of celdas) expect(clases(el), el.textContent ?? "").not.toContain("sticky");
@@ -503,10 +507,10 @@ describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuent
       expect(clases(el).filter((c) => /^(left|right)-/.test(c)), el.textContent ?? "").toEqual([]);
     }
     const acciones = screen.getByRole("columnheader", { name: "Acciones" });
-    expect(clases(acciones)).toContain("min-[900px]:right-0");
+    expect(clases(acciones)).toContain("lg:right-0");
   });
 
-  it("AC56: bajo 900 px la tabla pasa a tarjetas con las recetas TABLA_MOVIL_* del repo", () => {
+  it("AC56: bajo 1024 px la tabla pasa a tarjetas con las recetas TABLA_MOVIL_* del repo", () => {
     const { container } = completa();
     const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
     for (const c of TABLA_MOVIL_TABLE_CLS.split(" ")) expect(clases(tabla)).toContain(c);
@@ -525,14 +529,14 @@ describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuent
       "Seleccionar",
       "Placa o VIN",
       "Dictamen",
-      ...FUENTES.map((f) => f.nombre),
+      "Vehículo", "Propietario", "Locatario", "Avalúo comercial", "Impuesto departamental",
       "Acciones",
     ]);
     for (const td of fila.children) for (const c of TABLA_MOVIL_CELL_CLS.split(" ")) expect(clases(td)).toContain(c);
     for (const c of TABLA_MOVIL_CELL_TITULO_CLS.split(" ")) expect(clases(within(fila).getByRole("rowheader"))).toContain(c);
   });
 
-  it("M7/AC28: la cabecera lleva el ícono IconoDx de cada pilar y de cada fuente, decorativo", async () => {
+  it("M7/AC28: la cabecera lleva el ícono IconoDx de cada sujeto y fuente única, decorativo y a la izquierda del rótulo", async () => {
     pintar();
     const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
     const svgDe = (nombre: string) => within(tabla).getByRole("columnheader", { name: nombre }).querySelector("svg");
@@ -545,20 +549,17 @@ describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuent
       return createElement(modulo![nombre], { tamano: 16 });
     };
     const esperado: Record<string, string> = {
-      RUNT: "IconoDxRunt",
-      SIMIT: "IconoDxSimit",
+      Vehículo: "IconoDxRunt",
+      Propietario: "IconoDxRuntPersona",
+      Locatario: "IconoDxLocatario",
       "Avalúo comercial": "IconoDxAvaluo",
       "Impuesto departamental": "IconoDxImpuesto",
-      "RUNT vehículo": "IconoDxRunt",
-      "RUNT propietario": "IconoDxRuntPersona",
-      "RUNT locatario": "IconoDxLocatario",
-      "SIMIT vehículo": "IconoDxSimit",
-      "SIMIT propietario": "IconoDxSimitPersona",
-      "SIMIT locatario": "IconoDxLocatario",
     };
     for (const [nombre, componente] of Object.entries(esperado)) {
       const svg = svgDe(nombre);
       expect(svg, nombre).not.toBeNull();
+      // Ícono a la izquierda: es el primer hijo del rótulo, antes del texto.
+      expect(svg!.parentElement!.firstChild, nombre).toBe(svg);
       expect(svg).toHaveAttribute("aria-hidden", "true");
       expect(svg!.innerHTML, nombre).toBe(render(await icono(componente)).container.querySelector("svg")!.innerHTML);
     }
@@ -582,25 +583,66 @@ describe("GrillaSemaforos — HU #14562 auditoría: responsive, íconos de fuent
 
 // Ola Diagnóstico UX 2026-11-15 · FE-2 (spec-ui §2.6): «RUNT» y «SIMIT» centrados sobre sus subcolumnas; las subcolumnas
 // dicen «vehículo», «propietario» y «locatario», con el nombre completo para lectores; nombreFuente() no cambia.
-describe("GrillaSemaforos — FE-2 encabezados RUNT/SIMIT agrupados", () => {
-  it("la fila 1 muestra «RUNT» y «SIMIT» centrados (text-center y rótulo justify-center)", () => {
-    pintar();
+describe("GrillaSemaforos — columnas por sujeto: dos badges RUNT/SIMIT por celda", () => {
+  const todas: Grilla["columnas"] = {
+    por_vehiculo: ["RUNT", "SIMIT_VEHICULO", "AVALUO", "IMPUESTO_DEPARTAMENTAL"],
+    por_propietario: ["RUNT_PROPIETARIO", "SIMIT_PROPIETARIO"],
+    por_locatario: ["RUNT_LOCATARIO", "SIMIT_LOCATARIO"],
+  };
+  const PARES = [
+    ["Vehículo", "RUNT", "SIMIT_VEHICULO"],
+    ["Propietario", "RUNT_PROPIETARIO", "SIMIT_PROPIETARIO"],
+    ["Locatario", "RUNT_LOCATARIO", "SIMIT_LOCATARIO"],
+  ] as const;
+
+  it("sin encabezados «RUNT» ni «SIMIT»: ningún th los dice ni agrupa (colgroup)", () => {
+    const { container } = pintar();
     const tabla = screen.getByRole("table", { name: /semáforo de consultas/i });
-    for (const grupo of ["RUNT", "SIMIT"]) {
-      const th = within(tabla).getByRole("columnheader", { name: grupo });
-      const clases = th.className.split(/\s+/);
-      expect(clases).toContain("text-center");
-      // Con text-left y text-center en la misma celda gana la que Tailwind emite después (text-left), no la del final
-      // del string: la cabecera agrupada no debe arrastrar el text-left de TABLA_HEADER_CELL_CLS (E2E acciones-detalle:68).
-      expect(clases, `${grupo}: sin text-left`).not.toContain("text-left");
-      expect((th.firstElementChild as HTMLElement).className).toContain("justify-center");
-    }
+    expect(within(tabla).queryByRole("columnheader", { name: /^(RUNT|SIMIT)/ })).not.toBeInTheDocument();
+    expect(container.querySelector('th[scope="colgroup"]')).toBeNull();
   });
 
-  it("cada subcolumna conserva su nombre accesible completo («RUNT propietario») con el prefijo en sr-only", () => {
+  it.each(PARES)("la columna %s apila dos badges con prefijo, cada uno con su enlace y su aria-label con fuente y estado", (sujeto, runt, simit) => {
+    const v = vehiculo(9, [celda(9, runt, "COMPLETADO"), celda(9, simit, "ERROR")]);
+    const { container } = pintar(grilla({ columnas: todas, vehiculos: [v] }));
+    const td = filaDe(container, "vehiculo-9").querySelector<HTMLElement>(`td[data-label="${sujeto}"]`)!;
+    expect(td).not.toBeNull();
+    const badges = Array.from(td.querySelectorAll<HTMLElement>("[data-fuente]"));
+    expect(badges.map((b) => b.getAttribute("data-fuente"))).toEqual([runt, simit]);
+    expect(chipDe(badges[0])).toHaveTextContent(/^RUNT · Ejecutado$/);
+    expect(chipDe(badges[1])).toHaveTextContent(/^SIMIT · Error$/);
+    for (const b of badges) expect(chipDe(b).querySelector("svg")).not.toBeNull();
+    const enlaces = within(td).getAllByRole("link");
+    expect(enlaces).toHaveLength(2);
+    expect(enlaces[0]).toHaveAttribute("href", `/diagnosticos/${grilla().id}/vehiculos/vehiculo-9/consultas/${runt}`);
+    expect(enlaces[1]).toHaveAttribute("href", `/diagnosticos/${grilla().id}/vehiculos/vehiculo-9/consultas/${simit}`);
+    expect(enlaces[0]).toHaveAccessibleName(`Ver detalle de ${nombreFuente(runt)} de ${v.identificador}: RUNT · Ejecutado${NUEVA}`);
+    expect(enlaces[1]).toHaveAccessibleName(`Ver detalle de ${nombreFuente(simit)} de ${v.identificador}: SIMIT · Error${NUEVA}`);
+  });
+
+  it("hrefDetalle propio (backoffice) se aplica a cada badge con su propia fuente", () => {
+    const v = vehiculo(9, [celda(9, "RUNT_PROPIETARIO", "COMPLETADO"), celda(9, "SIMIT_PROPIETARIO", "COMPLETADO")]);
+    const { container } = pintar(grilla({ columnas: todas, vehiculos: [v] }), false, { hrefDetalle: (c) => `/bo/${c.fuente}` });
+    const td = filaDe(container, "vehiculo-9").querySelector<HTMLElement>('td[data-label="Propietario"]')!;
+    expect(within(td).getAllByRole("link").map((a) => a.getAttribute("href"))).toEqual(["/bo/RUNT_PROPIETARIO", "/bo/SIMIT_PROPIETARIO"]);
+  });
+
+  it("el tooltip de cada badge nombra su fuente; el no pedido dice «Sin solicitar» con su prefijo", () => {
+    const v = vehiculo(9, [celda(9, "RUNT", "COMPLETADO")]);
+    const { container } = pintar(grilla({ columnas: { por_vehiculo: ["RUNT"], por_propietario: [], por_locatario: [] }, vehiculos: [v] }));
+    const fila = filaDe(container, "vehiculo-9");
+    act(() => within(fuenteDe(fila, "RUNT")).getByRole("link").focus());
+    expect(screen.getByRole("tooltip")).toHaveTextContent("RUNT vehículo · Ejecutado");
+    const simit = fuenteDe(fila, "SIMIT_VEHICULO");
+    expect(chipDe(simit)).toHaveTextContent(/^SIMIT · Sin solicitar$/);
+    expect(simit.querySelector(".sr-only")).toHaveTextContent(`SIMIT vehículo de ${v.identificador}: Sin solicitar`);
+  });
+
+  it("Avalúo e Impuesto no cambian: una td por fuente y badge sin prefijo", () => {
     const { container } = pintar();
-    const th = within(screen.getByRole("table", { name: /semáforo de consultas/i })).getByRole("columnheader", { name: "RUNT propietario" });
-    expect(th.querySelector(".sr-only")).toHaveTextContent("RUNT");
+    const avaluo = fuenteDe(filaDe(container, "vehiculo-1"), "AVALUO");
+    expect(avaluo.tagName).toBe("TD");
+    expect(chipDe(avaluo)).toHaveTextContent(/^Sin solicitar$/);
     expect(container.querySelector('[data-fuente="RUNT_PROPIETARIO"]')).toHaveAttribute("data-label", "RUNT propietario");
   });
 
@@ -628,7 +670,7 @@ describe("GrillaSemaforos — FE-2 encabezados RUNT/SIMIT agrupados", () => {
     expect(th.className).toContain("min-w-[10rem]");
     const td = container.querySelector('td[data-label="Acciones"]') as HTMLElement;
     expect(td.className).toContain("w-[10rem]");
-    expect(td.className).toContain("min-[900px]:right-0");
+    expect(td.className).toContain("lg:right-0");
   });
 });
 
@@ -675,9 +717,9 @@ describe("GrillaSemaforos — HU #14584 M-2 (A6.2): la cabecera de las columnas 
     for (const th of fijas) {
       expect(clases(th)).toContain("z-20");
       expect(clases(th)).not.toContain("z-10");
-      expect(clases(th)).toContain("min-[900px]:sticky");
+      expect(clases(th)).toContain("lg:sticky");
     }
-    const normales = Array.from(container.querySelectorAll("thead tr:last-child th"));
+    const normales = Array.from(container.querySelectorAll<HTMLElement>("thead th")).filter((th) => !clases(th).includes("lg:sticky"));
     expect(normales.length).toBeGreaterThan(0);
     for (const th of normales) expect(clases(th)).toContain("z-10");
   });
@@ -696,12 +738,12 @@ describe("GrillaSemaforos — HU #14584 M-2 (A6.2): la cabecera de las columnas 
       expect(clases(celdaFija)).not.toContain("z-20");
     }
     const ths = container.querySelectorAll<HTMLElement>("thead tr:first-child th");
-    expect(clases(ths[0])).toContain("min-[900px]:left-0");
-    expect(clases(casilla)).toContain("min-[900px]:left-0");
-    expect(clases(ths[1])).toContain("min-[900px]:left-10");
-    expect(clases(placa)).toContain("min-[900px]:left-10");
+    expect(clases(ths[0])).toContain("lg:left-0");
+    expect(clases(casilla)).toContain("lg:left-0");
+    expect(clases(ths[1])).toContain("lg:left-10");
+    expect(clases(placa)).toContain("lg:left-10");
     const thAcciones = ths[ths.length - 1];
-    for (const c of ["min-[900px]:right-0", "w-[10rem]", "min-w-[10rem]"]) {
+    for (const c of ["lg:right-0", "w-[10rem]", "min-w-[10rem]"]) {
       expect(clases(thAcciones)).toContain(c);
       expect(clases(acciones)).toContain(c);
     }

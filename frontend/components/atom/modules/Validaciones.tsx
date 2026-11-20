@@ -105,6 +105,7 @@ import {
 } from '@/components/operacion/dialogo-propio';
 import { MODAL_CABECERA_CLS, MODAL_TITULO_CLS, MODAL_VELO_CLS } from "@flit/ui/Modal";
 import { IconoAviso } from "@flit/ui/IconoAviso";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
 const ICONO_VENCIDO = iconoComo("vencido");
 const ICONO_RUTA = iconoComo("ruta");
@@ -514,6 +515,7 @@ function ValidacionesLista({
     row: TenantBiometricValidation;
     mode: 'resend' | 'retry';
   } | null>(null);
+  useBloqueoScroll(Boolean(confirmAction));
   const [resendSubmitting, setResendSubmitting] = useState(false);
   const [resendConfirmError, setResendConfirmError] = useState<string | null>(null);
   const [resendResult, setResendResult] = useState<ResendResultState | null>(null);
@@ -1110,7 +1112,7 @@ function ValidacionesLista({
     ) : null;
 
   return (
-    <div className="app-bg min-h-screen px-6 pt-6 pb-10 flex flex-col gap-4 text-foreground">
+    <div className="app-bg px-6 pt-6 pb-10 flex flex-col gap-4 text-foreground">
       {/* Anuncios para lector de pantalla del resultado de crear/editar/reenviar (WCAG 2.1 AA) */}
       <div className="sr-only" role="status" aria-live="polite">
         {liveMessage}
@@ -1560,6 +1562,7 @@ function CompanyPickerDialog({
   onPick: (tenantId: string) => void;
 }) {
   const [elegida, setElegida] = useState('');
+  useBloqueoScroll(true);
   return (
     <div
       className={`fixed inset-0 z-50 flex items-center justify-center px-4 ${MODAL_VELO_CLS}`}
@@ -1718,6 +1721,7 @@ function StuckIncidenciasDialog({
   onClose: () => void;
 }) {
   const total = stuck?.total ?? 0;
+  useBloqueoScroll(true);
   return (
     <div
       className={`fixed inset-0 z-50 grid place-items-center p-6 ${MODAL_VELO_CLS}`}
@@ -1728,7 +1732,7 @@ function StuckIncidenciasDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="incidencias-title"
-        className={`${DIALOGO_PANEL} flex max-h-[88vh] w-full max-w-5xl flex-col`}
+        className={`${DIALOGO_PANEL} flex max-h-[88dvh] w-full max-w-5xl flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* La X sigue primera en el orden de foco; se pinta sobre la franja, arriba a la derecha. */}
@@ -1747,7 +1751,7 @@ function StuckIncidenciasDialog({
             Gestión de incidencias en validaciones
           </h2>
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto p-6">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-[13px] leading-snug opacity-70">
@@ -1868,7 +1872,7 @@ function StuckEventsBanner({
             el encadenamiento de firma/FUR. Reencólalas para que el sistema las procese de nuevo.
           </p>
           ) : null}
-          <ul className="mt-2 max-h-[40vh] space-y-3 overflow-y-auto pr-1" aria-label="Eventos atascados agrupados por persona">
+          <ul className="mt-2 max-h-[40dvh] space-y-3 overflow-y-auto overscroll-contain pr-1" aria-label="Eventos atascados agrupados por persona">
             {groups.map((group) => {
               const open = openKeys.has(group.key);
               const panelId = `stuck-group-${group.key}`;

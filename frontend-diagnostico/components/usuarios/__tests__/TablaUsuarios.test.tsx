@@ -85,7 +85,7 @@ describe("HU14588 TablaUsuarios", () => {
     expect(within(container).getByText("usuario.uno@ejemplo.com")).toBeInTheDocument();
   });
 
-  it("cada celda lleva data-label para la vista en tarjetas (< 900 px)", () => {
+  it("cada celda lleva data-label para la vista en tarjetas (< 1024 px)", () => {
     render(<TablaUsuarios usuarios={USUARIOS} onAccion={vi.fn()} />);
     const etiquetas = within(fila("Usuario Uno"))
       .getAllByRole("cell")

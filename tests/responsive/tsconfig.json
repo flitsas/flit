@@ -1,0 +1,19 @@
+{
+  "//": "Solo para Playwright local. @playwright/test no está instalado en el workspace: se mapea al runner del paquete `playwright` de frontend/ (mismo patrón que frontend-diagnostico/e2e).",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "noEmit": true,
+    "types": ["node"],
+    "typeRoots": ["../../frontend/node_modules/@types"],
+    "baseUrl": ".",
+    "paths": {
+      "@playwright/test": ["../../frontend/node_modules/playwright/test"]
+    }
+  },
+  "include": ["**/*.ts"]
+}

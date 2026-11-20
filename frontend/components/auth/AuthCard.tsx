@@ -59,8 +59,8 @@ export function AuthCard({
 }) {
   if (variant === "overlay") {
     return (
-      <main className="app-bg min-h-screen">
-        <div className="flex min-h-screen items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-md">
+      <main className="app-bg min-h-dvh">
+        <div className="flex min-h-dvh items-center justify-center bg-[var(--overlay)] px-4 backdrop-blur-md">
           <div className="w-full max-w-md overflow-clip rounded-[var(--di-radius-modal)] bg-card text-flit-primary shadow-[var(--shadow-modal)] dark:text-foreground">
             {/* Franja tinta del Modal (`.modal__franja` de la propuesta). */}
             <div className="relative overflow-clip bg-[color:var(--di-accent)] px-5 py-4 text-[color:var(--di-on-accent)] sm:px-6 sm:py-5">
