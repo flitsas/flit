@@ -51,27 +51,15 @@ public sealed class PdfVehiculoAjustesPdfTests
     private static readonly string[] ColumnasDatosTecnicos =
         ["N.º ejes", "Capacidad de carga", "Pasajeros sentados", "Peso bruto vehicular", "Alto", "Ancho", "Largo", "Rodaje"];
 
-    // 1a — la cabecera deja solo Diagnóstico ID, Placa y Fecha de generación; lo demás sale del PDF.
+    // 1a — la cabecera deja solo Placa y Fecha y hora de generación (membrete 2026-11-19: el ID pasa al pie); lo demás sale del PDF.
     [Fact]
-    public void Cabecera_solo_trae_diagnostico_id_placa_y_fecha_de_generacion()
+    public void Cabecera_solo_trae_placa_y_fecha_de_generacion()
     {
         var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(Contenido(), GeneradoEn));
 
-        PdfDePrueba.Tiene(texto, $"Diagnóstico ID {Id} Placa TST319 Fecha de generación 12/11/2026 12:09:49 DATOS DEL VEHÍCULO")
+        PdfDePrueba.Tiene(texto, "Placa: TST319 Fecha y hora de generación: 12/11/2026 12:09:49 DATOS DEL VEHÍCULO")
             .Should().BeTrue($"la cabecera termina en la fecha de generación: {texto}");
         texto.Should().NotContainAny([.. FilasQuitadas.Select(PdfDePrueba.Plano)]);
-    }
-
-    // 1a — el GUID de 36 caracteres cabe en una línea y la tabla, junto al logo, cabe en el ancho del contenido.
-    [Fact]
-    public void Cabecera_el_id_y_las_etiquetas_caben_en_una_linea()
-    {
-        var encabezado = Contenido().Encabezado;
-        var (etiqueta, valor) = PdfVehiculo.AnchosCabecera(encabezado, GeneradoEn);
-
-        valor.Should().BeGreaterThanOrEqualTo(TablaFlit.AnchoTexto(Id.ToString(), TablaFlit.TamanoTexto) + 10, "el ID no se parte");
-        etiqueta.Should().BeGreaterThanOrEqualTo(TablaFlit.AnchoTexto("Fecha de generación", TablaFlit.TamanoTexto, medium: true) + 10);
-        (PdfVehiculo.AnchoLogo + etiqueta + valor).Should().BeLessThanOrEqualTo(PdfVehiculo.AnchoContenido, "logo y tabla caben en el ancho");
     }
 
     // 1b — la nota es un pie compacto «NOTA: …» en cada página (sin el recuadro de antes, donde «NOTA» iba en su propia línea).
@@ -199,7 +187,7 @@ public sealed class PdfVehiculoAjustesPdfTests
     }
 
     [Fact]
-    public void Version_de_plantilla_sube_por_los_ajustes() => PdfVehiculo.VersionPlantilla.Should().Be(8);
+    public void Version_de_plantilla_sube_por_los_ajustes() => PdfVehiculo.VersionPlantilla.Should().Be(9);
 
     // Ampliación del usuario — la Fecha de la grilla de fuentes del avalúo sale dd/MM/yyyy.
     [Fact]
@@ -217,19 +205,10 @@ public sealed class PdfVehiculoAjustesPdfTests
         var contenido = Contenido();
         var sinPlaca = contenido with { Encabezado = contenido.Encabezado with { Placa = null } };
         var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(sinPlaca, GeneradoEn));
-        PdfDePrueba.Tiene(texto, $"Diagnóstico ID {Id} VIN MBHZF63S0PG000001 Fecha de generación").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "VIN: MBHZF63S0PG000001 Fecha y hora de generación").Should().BeTrue(texto);
 
         var sinVin = contenido with { Encabezado = contenido.Encabezado with { Placa = null, Vin = null, Identificador = "IDENT-0001" } };
-        PdfDePrueba.Tiene(PdfDePrueba.Texto(PdfVehiculo.Generar(sinVin, GeneradoEn)), $"Diagnóstico ID {Id} VIN IDENT-0001 Fecha de generación").Should().BeTrue();
-    }
-
-    // CR-3 — un identificador larguísimo no saca la tabla de la cabecera del ancho del contenido.
-    [Fact]
-    public void Cabecera_nunca_pasa_del_ancho_del_contenido()
-    {
-        var e = Contenido().Encabezado with { Placa = null, Vin = null, Identificador = new string('W', 120) };
-        var (etiqueta, valor) = PdfVehiculo.AnchosCabecera(e, GeneradoEn);
-        (etiqueta + valor).Should().BeLessThanOrEqualTo(PdfVehiculo.AnchoContenido - PdfVehiculo.AnchoLogo);
+        PdfDePrueba.Tiene(PdfDePrueba.Texto(PdfVehiculo.Generar(sinVin, GeneradoEn)), "VIN: IDENT-0001 Fecha y hora de generación").Should().BeTrue();
     }
 
     // CR-6 — un extremo de la suspensión en blanco sale «—»; el otro, dd/MM/yyyy.

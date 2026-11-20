@@ -157,12 +157,12 @@ function vistaDe(estado: EstadoVisible, conDeuda: boolean): { tono: Tono; texto:
  * Chip del semáforo (icono + texto + tono por token). Lo reutilizan la grilla, el detalle de la celda (HU #13801, su
  * auditoría desde HU #14087) y la grilla de backoffice (F06-H5); nunca depende solo del color.
  */
-export function ChipEstadoCelda({ estado, conDeuda = false }: { estado: EstadoVisible; conDeuda?: boolean }) {
+export function ChipEstadoCelda({ estado, conDeuda = false, prefijo }: { estado: EstadoVisible; conDeuda?: boolean; prefijo?: string }) {
   const { tono, texto, Icono } = vistaDe(estado, conDeuda);
   return (
     <span data-tono={tono} {...etiquetaKit(estiloDe(tono))}>
       <Icono className="h-3.5 w-3.5 shrink-0" tamano={16} />
-      {texto}
+      {prefijo ? `${prefijo} · ${texto}` : texto}
     </span>
   );
 }
@@ -186,12 +186,29 @@ export interface CeldaSemaforoProps extends Pick<BotonReprocesarProps, "onReproc
   marca?: ReactNode;
   /** Acción extra bajo el semáforo. Solo la pasa el backoffice («Llenar a mano», HU #13802). */
   accion?: ReactNode;
+  /**
+   * Badge compacto dentro de la columna de un sujeto (Vehículo / Propietario / Locatario): el chip dice «<prefijo> · <estado>»
+   * («RUNT · Ejecutado»), el tooltip nombra la fuente y la celda se pinta como bloque (div), no como td: la td es del sujeto.
+   */
+  prefijo?: string;
 }
 
 /** Celda de la grilla; por debajo de 900 px, renglón de la tarjeta del vehículo con el nombre de la fuente (HU #14562 AC56). */
 const TD_CLS = `px-3 py-2.5 align-top ${TABLA_MOVIL_CELL_CLS}`;
 /** Contenido de la celda: arriba a la izquierda en la tabla, a la derecha en la tarjeta. */
 const CONTENIDO_CLS = "flex flex-col items-start gap-1 max-[900px]:items-end";
+
+type PropsContenedor = { compacto: boolean; children: ReactNode } & { [dato: `data-${string}`]: string | undefined };
+/** td en una columna de fuente propia; div cuando el badge comparte la td del sujeto con el de la otra fuente. */
+function Contenedor({ compacto, children, ...datos }: PropsContenedor) {
+  return compacto ? (
+    <div {...datos}>{children}</div>
+  ) : (
+    <td {...datos} className={TD_CLS}>
+      {children}
+    </td>
+  );
+}
 
 /** Aviso para lectores de pantalla del enlace al detalle (HU #14087): va en el nombre accesible y como texto sr-only. */
 const NUEVA_PESTANA = "(se abre en una pestaña nueva)";
@@ -213,31 +230,35 @@ export function CeldaSemaforo({
   hrefDetalle,
   marca,
   accion,
+  prefijo,
 }: CeldaSemaforoProps) {
+  const compacto = prefijo !== undefined;
+  /** Con prefijo, el tooltip nombra la fuente: la cabecera de la columna ya no la dice (es la del sujeto). */
+  const enTooltip = (texto: string) => (compacto ? `${nombreFuente} · ${texto}` : texto);
   if (!solicitada) {
     const texto = textoEstadoCelda(SIN_SOLICITAR);
     return (
-      <td data-fuente={fuente} data-label={nombreFuente} data-estado="NA" data-motivo={SIN_SOLICITAR} className={TD_CLS}>
+      <Contenedor compacto={compacto} data-fuente={fuente} data-label={nombreFuente} data-estado="NA" data-motivo={SIN_SOLICITAR}>
         <div className={CONTENIDO_CLS}>
-          <ChipEnfocable etiqueta={`${nombreFuente} de ${identificador}: ${texto}`} contenido={<ContenidoTooltip texto={texto} nota={MOTIVO_SIN_SOLICITAR} />}>
-            <ChipEstadoCelda estado={SIN_SOLICITAR} />
+          <ChipEnfocable etiqueta={`${nombreFuente} de ${identificador}: ${texto}`} contenido={<ContenidoTooltip texto={enTooltip(texto)} nota={MOTIVO_SIN_SOLICITAR} />}>
+            <ChipEstadoCelda estado={SIN_SOLICITAR} prefijo={prefijo} />
           </ChipEnfocable>
           <LineaMovil>{MOTIVO_SIN_SOLICITAR}</LineaMovil>
         </div>
-      </td>
+      </Contenedor>
     );
   }
   if (!celda) {
     const texto = textoEstadoCelda("PENDIENTE");
     return (
-      <td data-fuente={fuente} data-label={nombreFuente} data-estado="SIN_CELDA" className={TD_CLS}>
+      <Contenedor compacto={compacto} data-fuente={fuente} data-label={nombreFuente} data-estado="SIN_CELDA">
         <div className={CONTENIDO_CLS}>
-          <ChipEnfocable etiqueta={`${nombreFuente} de ${identificador}: ${texto}`} contenido={<ContenidoTooltip texto={texto} nota={LA_CONSULTA_NO_TERMINA} />}>
-            <ChipEstadoCelda estado="PENDIENTE" />
+          <ChipEnfocable etiqueta={`${nombreFuente} de ${identificador}: ${texto}`} contenido={<ContenidoTooltip texto={enTooltip(texto)} nota={LA_CONSULTA_NO_TERMINA} />}>
+            <ChipEstadoCelda estado="PENDIENTE" prefijo={prefijo} />
           </ChipEnfocable>
           <LineaMovil>{LA_CONSULTA_NO_TERMINA}</LineaMovil>
         </div>
-      </td>
+      </Contenedor>
     );
   }
 
@@ -245,25 +266,25 @@ export function CeldaSemaforo({
   const conDeuda = fuente === "IMPUESTO_DEPARTAMENTAL" && celda.estado === "COMPLETADO" && celda.tiene_deuda === true;
   const texto = vistaDe(celda.estado, conDeuda).texto;
   return (
-    <td data-fuente={fuente} data-label={nombreFuente} data-celda={celda.id} data-estado={celda.estado} className={TD_CLS}>
+    <Contenedor compacto={compacto} data-fuente={fuente} data-label={nombreFuente} data-celda={celda.id} data-estado={celda.estado}>
       <div className={CONTENIDO_CLS}>
         {hrefDetalle ? (
           // HU #14584 §6.2: el enlace del chip es el disparador del tooltip (ya es enfocable).
-          <Tooltip contenido={<ContenidoTooltip texto={texto} nota={nota} />}>
+          <Tooltip contenido={<ContenidoTooltip texto={enTooltip(texto)} nota={nota} />}>
             <a
               href={hrefDetalle}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${texto} ${NUEVA_PESTANA}`}
+              aria-label={`Ver detalle de ${nombreFuente} de ${identificador}: ${prefijo ? `${prefijo} · ${texto}` : texto} ${NUEVA_PESTANA}`}
               className={`inline-flex cursor-pointer items-center gap-1 rounded-full transition duration-[var(--dx-motion-rapido)] hover:opacity-90 motion-reduce:transition-none ${FOCO_CLS}`}
             >
-              <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
+              <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} prefijo={prefijo} />
               <span className="sr-only">{NUEVA_PESTANA}</span>
             </a>
           </Tooltip>
         ) : (
-          <ChipEnfocable etiqueta={`${nombreFuente} de ${identificador}: ${texto}`} contenido={<ContenidoTooltip texto={texto} nota={nota} />}>
-            <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} />
+          <ChipEnfocable etiqueta={`${nombreFuente} de ${identificador}: ${texto}`} contenido={<ContenidoTooltip texto={enTooltip(texto)} nota={nota} />}>
+            <ChipEstadoCelda estado={celda.estado} conDeuda={conDeuda} prefijo={prefijo} />
           </ChipEnfocable>
         )}
         {marca}
@@ -278,6 +299,6 @@ export function CeldaSemaforo({
           />
         )}
       </div>
-    </td>
+    </Contenedor>
   );
 }
