@@ -33,6 +33,7 @@ public static class ClasificadorErrores
         "NO_CONFIRMADO", "MODELO_NO_ACEPTADO", "DOCUMENTO_NO_COINCIDE", "DOCUMENTO_NO_HOMOLOGADO",
         "VEHICULO_NO_ENCONTRADO", "VEHICULO_NO_CONSULTABLE", "REQUIERE_ACTUALIZACION",
         "SIN_PLACA", "SIN_DOCUMENTO", "SIN_MODELO", "ORGANISMO_INCOMPLETO", "SIN_NOMBRE_PROPIETARIO",
+        "CREDENCIAL_NO_CONFIGURADA", "NO_CONFIRMADO_TIEMPO",
     };
 
     /// <summary>Todos los códigos de la tabla (transitorios y definitivos), para que cada uno tenga su rótulo de negocio.</summary>

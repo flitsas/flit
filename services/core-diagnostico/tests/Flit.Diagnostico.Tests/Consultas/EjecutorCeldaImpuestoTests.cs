@@ -92,7 +92,7 @@ public sealed class EjecutorCeldaImpuestoTests
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
         celda.Estado.Should().Be(EstadoCelda.Completado);
         using (var payload = JsonDocument.Parse(celda.Payload!))
-            payload.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias", "departamento_codigo", "tiene_deuda"]);
+            payload.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias", "departamento_codigo", "tiene_deuda", "dato_parcial"]);
         celda.Payload.Should().NotContainAny(["proveedor", "transaccion", "origen", FuenteImpuestoSimulada.Transaccion, "servicio"]);
         var intento = (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Should().ContainSingle().Subject;
         // ADR-0075: el *Response del impuesto no trae transacción; el servicio sale del proveedor de la respuesta.

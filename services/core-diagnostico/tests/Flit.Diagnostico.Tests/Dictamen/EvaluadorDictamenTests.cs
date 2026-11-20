@@ -38,6 +38,7 @@ public sealed class EvaluadorDictamenTests
         "LICENCIA_CONDUCTOR",
         "IMPUESTO",
         "FUENTE_PENDIENTE",
+        "IMPUESTO_VALIDACION",
     ];
 
     [Fact]
@@ -331,6 +332,29 @@ public sealed class EvaluadorDictamenTests
             x.Codigo == "IMPUESTO" && x.Efecto == "ADVIERTE" && x.Fuente == "IMPUESTO_DEPARTAMENTAL" && x.MontoPesos == 1500);
     }
 
+    [Fact]
+    public void Impuesto_validacion_advierte_y_no_cambia_el_veredicto()
+    {
+        var resultado = EvaluadorDictamen.Evaluar(Base() with { ImpuestoConValidacionNoCoincidente = true });
+
+        resultado.Veredicto.Should().Be("VIABLE");
+        resultado.Reglas.Should().ContainSingle(x =>
+            x.Codigo == "IMPUESTO_VALIDACION" && x.Efecto == "ADVIERTE" && x.Fuente == "IMPUESTO_DEPARTAMENTAL");
+    }
+
+    [Fact]
+    public void Impuesto_en_error_no_dispara_impuesto_validacion()
+    {
+        var resultado = EvaluadorDictamen.Evaluar(Base() with
+        {
+            EstadoImpuesto = EstadoFuenteDictamen.Error,
+            ImpuestoConValidacionNoCoincidente = false,
+        });
+
+        resultado.Reglas.Should().NotContain(x => x.Codigo == "IMPUESTO_VALIDACION");
+        resultado.Reglas.Should().Contain(x => x.Codigo == "FUENTE_PENDIENTE" && x.Fuente == "IMPUESTO_DEPARTAMENTAL");
+    }
+
     [Theory]
     [InlineData(EstadoFuenteDictamen.Error)]
     [InlineData(EstadoFuenteDictamen.NoAplica)]
@@ -405,14 +429,14 @@ public sealed class EvaluadorDictamenTests
     }
 
     [Fact]
-    public void El_catalogo_repite_las_dieciocho_reglas_en_los_tres_tipos()
+    public void El_catalogo_repite_las_diecinueve_reglas_en_los_tres_tipos()
     {
-        // v2 (punto 2): 14 reglas de v1 + SIMIT_SIN_VERIFICAR, SIMIT_LICENCIA y SIMIT_ACUERDO_PAGO; Bug RTM/SOAT (V4/V5):
+        // v3 (impuesto): v2 + IMPUESTO_VALIDACION (advierte). Bug RTM/SOAT (V4/V5):
         // + SOAT_MAQUINARIA (advierte) y la RTM advierte en el unilateral (art. 5.3.2.2).
-        CatalogoReglasDictamen.Version.Should().Be(2);
+        CatalogoReglasDictamen.Version.Should().Be(3);
         CatalogoReglasDictamen.TiposTramite.Should().Equal(
             "TRASPASO_STANDARD", "TRASPASO_UNILATERAL", "TRASPASO_TRANSFERENCIA_DE_DOMINIO");
-        CatalogoReglasDictamen.Filas.Should().HaveCount(54);
+        CatalogoReglasDictamen.Filas.Should().HaveCount(57);
         CatalogoReglasDictamen.Filas
             .Select(f => (f.CatalogoVersion, f.TipoTramiteCodigo, f.Codigo))
             .Should().OnlyHaveUniqueItems();
@@ -422,7 +446,7 @@ public sealed class EvaluadorDictamenTests
         {
             var filas = CatalogoReglasDictamen.Filas.Where(f => f.TipoTramiteCodigo == tipo).ToList();
             filas.Select(f => f.Codigo).Should().Equal(Codigos);
-            filas.Should().OnlyContain(f => f.CatalogoVersion == 2 && f.PlantillaTexto.Length > 0);
+            filas.Should().OnlyContain(f => f.CatalogoVersion == 3 && f.PlantillaTexto.Length > 0);
             filas.Single(f => f.Codigo == "SOAT_NO_VIGENTE").Efecto.Should().Be("BLOQUEA");
             var efectoMultas = tipo == "TRASPASO_UNILATERAL" ? "ADVIERTE" : "BLOQUEA";
             filas.Single(f => f.Codigo == "RTM_NO_VIGENTE").Efecto.Should().Be(efectoMultas);

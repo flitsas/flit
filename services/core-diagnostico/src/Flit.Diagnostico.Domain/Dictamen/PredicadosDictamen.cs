@@ -49,6 +49,13 @@ public static class PredicadosDictamen
         return hechos.ImpuestoTieneDeuda || hechos.ImpuestoMontoPesos is > 0;
     }
 
+    /// <summary>Advertencia de validación no coincidente en impuesto COMPLETADO (regla <c>IMPUESTO_VALIDACION</c>).</summary>
+    public static bool ImpuestoValidacionNoCoincide(HechosDictamen hechos)
+    {
+        ArgumentNullException.ThrowIfNull(hechos);
+        return hechos.ImpuestoConValidacionNoCoincidente;
+    }
+
     /// <summary>Leasing sin documento del locatario: su SIMIT no se pudo consultar (<c>SIMIT_SIN_VERIFICAR</c> del locatario).</summary>
     public static bool SimitLocatarioSinVerificar(HechosRuntVehiculo? runt) => runt is { EsLeasing: true, HayDocumentoLocatario: false };
 

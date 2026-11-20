@@ -109,6 +109,7 @@ internal static partial class RotulosDiagnostico
         ["PRENDA"] = "Prenda registrada",
         ["INFRACCION_RUNT"] = "Infracciones registradas en el RUNT",
         ["IMPUESTO"] = "Impuesto vehicular pendiente",
+        ["IMPUESTO_VALIDACION"] = "Datos del impuesto no coinciden con el portal",
         ["FUENTE_PENDIENTE"] = PrefijoFuentePendiente,
         // Alertamiento redactado por soporte en un ajuste FLIT (HU #14563 B7); no es una regla del catálogo.
         ["AJUSTE_FLIT"] = "Ajuste FLIT",
@@ -208,7 +209,40 @@ internal static partial class RotulosDiagnostico
         ["SIN_MODELO"] = "Falta el modelo del vehículo para consultar el impuesto.",
         ["ORGANISMO_INCOMPLETO"] = "El organismo de tránsito no tiene municipio para consultar el impuesto.",
         ["SIN_NOMBRE_PROPIETARIO"] = "Falta el nombre del propietario para consultar el impuesto.",
+        ["CREDENCIAL_NO_CONFIGURADA"] = "Credencial de impuesto no configurada para la compañía.",
+        ["NO_CONFIRMADO_TIEMPO"] = "No confirmado (tiempo): la fuente no terminó la consulta a tiempo.",
     };
+
+    /// <summary>
+    /// Frases de advertencias del impuesto (D6): validaciones que no coincidieron y avisos genéricos por vigencia.
+    /// Nunca pinta el valor enviado ni el del portal.
+    /// </summary>
+    public static IReadOnlyDictionary<string, string> AdvertenciasImpuesto { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        ["vehicleServiceType"] = "El tipo de servicio del vehículo no coincide con el del portal del impuesto.",
+        ["vehicleType"] = "La clase del vehículo no coincide con la del portal del impuesto.",
+        ["vehicleFuelType"] = "El combustible del vehículo no coincide con el del portal del impuesto.",
+        ["vehicleBrand"] = "La marca del vehículo no coincide con la del portal del impuesto.",
+        ["OwnerName"] = "El nombre del propietario no coincide con el del portal del impuesto.",
+        ["vehicleModel"] = "El modelo del vehículo no coincide con el del portal del impuesto.",
+        ["otro"] = "Un dato enviado no coincide con el del portal del impuesto.",
+    };
+
+    /// <summary>Texto de una advertencia del impuesto para el detalle. Aviso genérico si el tipo no es VALIDACION.</summary>
+    public static string DeAdvertenciaImpuesto(string? tipo, string? campo, int? anio)
+    {
+        if (string.Equals(tipo, "VALIDACION", StringComparison.Ordinal))
+        {
+            var clave = string.IsNullOrWhiteSpace(campo) ? "otro" : campo.Trim();
+            return AdvertenciasImpuesto.TryGetValue(clave, out var frase)
+                ? frase
+                : AdvertenciasImpuesto["otro"];
+        }
+
+        return anio is > 0
+            ? $"La fuente del impuesto dejó un aviso sobre la vigencia {anio}."
+            : "La fuente del impuesto dejó un aviso.";
+    }
 
     /// <summary>
     /// Respaldo del nombre de los tipos de trámite del catálogo del dictamen. Manda el nombre que publica Trámites

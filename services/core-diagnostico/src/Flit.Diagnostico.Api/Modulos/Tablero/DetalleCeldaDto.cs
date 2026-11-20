@@ -54,7 +54,23 @@ public sealed record DetalleCeldaDto(
     /// HU #14563 B5: auditoría saneada de la consulta (<see cref="AuditoriaConsultaCliente"/>), sin intentos manuales ni datos
     /// internos. Null si la celda no tiene intentos no manuales.
     /// </summary>
-    [property: JsonPropertyName("auditoria")] AuditoriaConsulta? Auditoria = null);
+    [property: JsonPropertyName("auditoria")] AuditoriaConsulta? Auditoria = null,
+    /// <summary>
+    /// Solo IMPUESTO_DEPARTAMENTAL en COMPLETADO o ERROR: avisos de la fuente con texto de <c>RotulosDiagnostico</c>.
+    /// Null en las demás fuentes.
+    /// </summary>
+    [property: JsonPropertyName("advertencias")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    IReadOnlyList<AdvertenciaImpuestoDetalleDto>? Advertencias = null);
+
+/// <summary>Advertencia del impuesto en el detalle: tipo, campo, año y texto ya rotulado por el servidor.</summary>
+public sealed record AdvertenciaImpuestoDetalleDto(
+    [property: JsonPropertyName("tipo")] string Tipo,
+    [property: JsonPropertyName("campo")] string Campo,
+    [property: JsonPropertyName("anio")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    int? Anio,
+    [property: JsonPropertyName("texto")] string Texto);
 
 /// <summary>
 /// Una persona de una celda de persona: su posición y rol, el tipo de documento, el documento enmascarado (<c>****</c> más
@@ -326,7 +342,12 @@ public sealed record ResultadoImpuestoDetalle(
     string? PeriodoCertificacion = null,
     [property: JsonPropertyName("fecha_consulta")]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    string? FechaConsulta = null) : ResultadoDetalleDto
+    string? FechaConsulta = null,
+    [property: JsonPropertyName("dato_parcial")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    bool DatoParcial = false,
+    [property: JsonPropertyName("tiene_liquidacion_consolidada")]
+    bool TieneLiquidacionConsolidada = false) : ResultadoDetalleDto
 {
     private static readonly JsonSerializerOptions Json = new();
 
@@ -350,17 +371,21 @@ public sealed record ResultadoImpuestoDetalle(
             var deuda = explicita ?? monto is > 0;
             if (deuda && monto is 0)
                 monto = null;
+            var consolidada = Texto(leido.LiquidacionConsolidadaId);
+            var datoParcial = e.TryGetProperty("dato_parcial", out var parcial) && parcial.ValueKind == JsonValueKind.True;
             return new ResultadoImpuestoDetalle(
                 monto,
-                [.. (leido.Vigencias ?? []).OrderBy(v => v.Anio)],
+                [.. (leido.Vigencias ?? []).Select(Vigencia).OrderBy(v => v.Anio)],
                 deuda,
                 NoNegativo(leido.InteresesMora),
                 NoNegativo(leido.Sanciones),
                 NoNegativo(leido.AvaluoComercial),
                 Pago(leido.UltimoPago),
-                Texto(leido.LiquidacionConsolidadaId),
+                consolidada,
                 Texto(leido.PeriodoCertificacion),
-                Texto(Fecha(e)));
+                Texto(Fecha(e)),
+                datoParcial,
+                consolidada is not null);
         }
         catch (JsonException)
         {
@@ -371,8 +396,57 @@ public sealed record ResultadoImpuestoDetalle(
     /// <summary>La respuesta cifrada del impuesto trajo <c>dato_parcial</c>. No arma un monto.</summary>
     public static bool EsDatoParcial(JsonElement? respuesta) =>
         respuesta is { ValueKind: JsonValueKind.Object } e
-        && e.TryGetProperty("dato_parcial", out var valor)
-        && valor.ValueKind == JsonValueKind.True;
+        && (e.TryGetProperty("dato_parcial", out var snake) && snake.ValueKind == JsonValueKind.True
+            || e.TryGetProperty("datoParcial", out var camel) && camel.ValueKind == JsonValueKind.True);
+
+    /// <summary>Advertencias del payload (COMPLETADO) o de la respuesta cifrada (ERROR), ya tipadas.</summary>
+    public static IReadOnlyList<AdvertenciaImpuestoLeida>? LeerAdvertencias(JsonElement? origen)
+    {
+        if (origen is not { ValueKind: JsonValueKind.Object } e)
+            return null;
+        if (!e.TryGetProperty("advertencias", out var lista) || lista.ValueKind != JsonValueKind.Array)
+            return null;
+        var salida = new List<AdvertenciaImpuestoLeida>();
+        foreach (var item in lista.EnumerateArray())
+        {
+            if (item.ValueKind != JsonValueKind.Object)
+                continue;
+            var tipo = NormalizarTipoAdvertencia(item);
+            if (tipo is null)
+                continue;
+            var campo = LeerTexto(item, "campo") ?? string.Empty;
+            var codigo = LeerTexto(item, "codigo") ?? string.Empty;
+            int? anio = item.TryGetProperty("anio", out var a) && a.TryGetInt32(out var n) ? n : null;
+            salida.Add(new AdvertenciaImpuestoLeida(tipo, campo, codigo, anio));
+        }
+
+        return salida.Count == 0 ? null : salida;
+    }
+
+    private static string? NormalizarTipoAdvertencia(JsonElement item)
+    {
+        if (item.TryGetProperty("tipo", out var t))
+        {
+            if (t.ValueKind == JsonValueKind.String)
+            {
+                var texto = t.GetString();
+                if (string.Equals(texto, "VALIDACION", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(texto, "TIPO_ADVERTENCIA_IMPUESTO_VALIDACION", StringComparison.OrdinalIgnoreCase))
+                    return "VALIDACION";
+                if (string.Equals(texto, "AVISO", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(texto, "TIPO_ADVERTENCIA_IMPUESTO_AVISO", StringComparison.OrdinalIgnoreCase))
+                    return "AVISO";
+            }
+
+            if (t.ValueKind == JsonValueKind.Number && t.TryGetInt32(out var n))
+                return n switch { 1 => "VALIDACION", 2 => "AVISO", _ => null };
+        }
+
+        return null;
+    }
+
+    private static VigenciaImpuestoDetalle Vigencia(VigenciaImpuestoLeida v) =>
+        new(v.Anio, v.Valor, v.Pagada, Texto(v.ReferenciaPago), Texto(v.FechaVencimiento), !string.IsNullOrWhiteSpace(v.LiquidacionId));
 
     private static long? NoNegativo(long? valor) => valor is < 0 ? null : valor;
 
@@ -399,14 +473,25 @@ public sealed record ResultadoImpuestoDetalle(
         e.TryGetProperty(nombre, out var valor) && valor.ValueKind == JsonValueKind.String ? valor.GetString() : null;
 
     private sealed record ImpuestoLeido(
-        [property: JsonPropertyName("vigencias")] List<VigenciaImpuestoDetalle>? Vigencias,
+        [property: JsonPropertyName("vigencias")] List<VigenciaImpuestoLeida>? Vigencias,
         [property: JsonPropertyName("intereses_mora")] long? InteresesMora,
         [property: JsonPropertyName("sanciones")] long? Sanciones,
         [property: JsonPropertyName("avaluo_comercial")] long? AvaluoComercial,
         [property: JsonPropertyName("ultimo_pago")] UltimoPagoImpuestoDetalle? UltimoPago,
         [property: JsonPropertyName("liquidacion_consolidada_id")] string? LiquidacionConsolidadaId,
         [property: JsonPropertyName("periodo_certificacion")] string? PeriodoCertificacion);
+
+    private sealed record VigenciaImpuestoLeida(
+        [property: JsonPropertyName("anio")] int Anio,
+        [property: JsonPropertyName("valor")] long Valor,
+        [property: JsonPropertyName("pagada")] bool Pagada,
+        [property: JsonPropertyName("liquidacion_id")] string? LiquidacionId = null,
+        [property: JsonPropertyName("referencia_pago")] string? ReferenciaPago = null,
+        [property: JsonPropertyName("fecha_vencimiento")] string? FechaVencimiento = null);
 }
+
+/// <summary>Advertencia leída del payload o de la respuesta cifrada, sin texto de pantalla.</summary>
+public sealed record AdvertenciaImpuestoLeida(string Tipo, string Campo, string Codigo, int? Anio);
 
 /// <summary>Último pago informado. Un campo vacío no se serializa.</summary>
 public sealed record UltimoPagoImpuestoDetalle(
@@ -420,8 +505,16 @@ public sealed record UltimoPagoImpuestoDetalle(
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     string? Fecha);
 
-/// <summary>Una vigencia del impuesto: año, valor en pesos enteros y si está pagada.</summary>
+/// <summary>Una vigencia del impuesto: año, valor en pesos enteros, si está pagada y si hay liquidación descargable.</summary>
 public sealed record VigenciaImpuestoDetalle(
     [property: JsonPropertyName("anio")] int Anio,
     [property: JsonPropertyName("valor")] long Valor,
-    [property: JsonPropertyName("pagada")] bool Pagada);
+    [property: JsonPropertyName("pagada")] bool Pagada,
+    [property: JsonPropertyName("referencia_pago")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? ReferenciaPago = null,
+    [property: JsonPropertyName("fecha_vencimiento")]
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    string? FechaVencimiento = null,
+    [property: JsonPropertyName("tiene_liquidacion")]
+    bool TieneLiquidacion = false);

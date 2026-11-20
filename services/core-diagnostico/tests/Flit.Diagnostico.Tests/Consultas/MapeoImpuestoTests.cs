@@ -33,6 +33,8 @@ public sealed class MapeoImpuestoTests
     [InlineData("impuesto_rechazo", "ESTADO_NO_OK", ClaseError.Definitivo)]
     [InlineData("impuesto_caida", "HTTP_5XX", ClaseError.Transitorio)]
     [InlineData("impuesto_estado_no_ok", "ESTADO_NO_OK", ClaseError.Definitivo)]
+    [InlineData("impuesto_credencial_no_configurada", "CREDENCIAL_NO_CONFIGURADA", ClaseError.Definitivo)]
+    [InlineData("impuesto_no_confirmado_tiempo", "NO_CONFIRMADO_TIEMPO", ClaseError.Definitivo)]
     public void Cada_clave_de_chequeo_produce_su_tipo_error_y_su_clase(string clave, string tipo, ClaseError clase)
     {
         var respuesta = ConChequeo(clave);

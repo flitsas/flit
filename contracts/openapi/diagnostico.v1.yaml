@@ -1367,6 +1367,67 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/impuesto/liquidaciones/{vigencia}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: vid
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: vigencia
+        in: path
+        required: true
+        description: Año AAAA o `consolidada`.
+        schema:
+          type: string
+          pattern: '^(\d{4}|consolidada)$'
+    get:
+      tags: [Reportes]
+      operationId: descargarLiquidacionImpuesto
+      summary: PDF de liquidación de impuesto por vigencia
+      description: >
+        Permiso diagnostico.reportes.descargar y visibilidad AccesoLote. El fileId sale del payload de la celda
+        IMPUESTO_DEPARTAMENTAL en COMPLETADO; el cliente no lo envía. Nombre impuesto-{8 del id}-{placa}-{vigencia}.pdf.
+      responses:
+        "200":
+          description: application/pdf con Cache-Control no-store.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.reportes.descargar.
+        "404":
+          description: >
+            Lote/vehículo no visible (`NO_ENCONTRADO`) o liquidación no encontrada en la fuente (`LIQUIDACION_NO_ENCONTRADA`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            `LIQUIDACION_NO_DISPONIBLE` (celda no COMPLETADA o vigencia sin archivo) o `CREDENCIAL_NO_CONFIGURADA`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "502":
+          description: `CREDENCIAL_RECHAZADA` o `ARCHIVO_INVALIDO`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "503":
+          description: `FUENTE_NO_DISPONIBLE`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
   /api/v1/diagnostico/diagnosticos/{id}/excel:
     parameters:
       - name: id
@@ -6679,14 +6740,28 @@ components:
           nullable: true
           description: >
             Solo con estado ERROR; mismos códigos que CeldaGrilla.tipo_error. El impuesto añade NO_CONFIRMADO,
-            MODELO_NO_ACEPTADO, DOCUMENTO_NO_COINCIDE, DOCUMENTO_NO_HOMOLOGADO, VEHICULO_NO_ENCONTRADO,
-            VEHICULO_NO_CONSULTABLE, REQUIERE_ACTUALIZACION, SIN_DOCUMENTO, SIN_MODELO, ORGANISMO_INCOMPLETO
-            y SIN_NOMBRE_PROPIETARIO.
+            NO_CONFIRMADO_TIEMPO, CREDENCIAL_NO_CONFIGURADA, MODELO_NO_ACEPTADO, DOCUMENTO_NO_COINCIDE,
+            DOCUMENTO_NO_HOMOLOGADO, VEHICULO_NO_ENCONTRADO, VEHICULO_NO_CONSULTABLE, REQUIERE_ACTUALIZACION,
+            SIN_DOCUMENTO, SIN_MODELO, ORGANISMO_INCOMPLETO y SIN_NOMBRE_PROPIETARIO.
         dato_parcial:
           type: boolean
           description: >
             Solo impuesto en ERROR cuando la fuente marcó dato parcial. El detalle lo rotula y no muestra el monto.
             Ausente cuando es false. No sale en PDF, Excel ni dictamen.
+        advertencias:
+          type: array
+          nullable: true
+          description: >
+            Solo IMPUESTO_DEPARTAMENTAL en COMPLETADO o ERROR. Texto rotulado por el servidor; nunca valores enviados
+            ni del portal. Null en las demás fuentes.
+          items:
+            type: object
+            required: [tipo, campo, texto]
+            properties:
+              tipo: { type: string, enum: [VALIDACION, AVISO] }
+              campo: { type: string }
+              anio: { type: integer, nullable: true }
+              texto: { type: string }
         auditoria:
           nullable: true
           description: >
@@ -6966,7 +7041,7 @@ components:
         Impuesto vehicular departamental. `tiene_deuda` confirma la deuda. `monto_total` es null y se omite cuando el
         servicio no informó valor: la pantalla, el PDF y el Excel dicen «Deuda sin valor informado», nunca `$ 0`.
         Sin deuda no trae fechas ni valores que no vinieron. Sin proveedor, transacción, origen ni departamento (R-20).
-      required: [tiene_deuda, vigencias]
+      required: [tiene_deuda, vigencias, tiene_liquidacion_consolidada]
       properties:
         tiene_deuda: { type: boolean, description: "true si la fuente confirmó deuda, también sin monto." }
         monto_total:
@@ -6979,7 +7054,15 @@ components:
         sanciones: { type: integer, format: int64, nullable: true }
         avaluo_comercial: { type: integer, format: int64, nullable: true }
         ultimo_pago: { $ref: "#/components/schemas/UltimoPagoImpuestoDetalle" }
-        liquidacion_consolidada_id: { type: string, nullable: true }
+        liquidacion_consolidada_id:
+          type: string
+          nullable: true
+          deprecated: true
+          description: "Deprecated: el front usa tiene_liquidacion_consolidada y descarga por vigencia."
+        tiene_liquidacion_consolidada: { type: boolean }
+        dato_parcial:
+          type: boolean
+          description: "Ausente cuando es false. true si la fuente respondió partial con deuda confirmada."
         periodo_certificacion: { type: string, nullable: true }
         fecha_consulta: { type: string, nullable: true }
         vigencias:
@@ -6990,9 +7073,10 @@ components:
       example:
         tiene_deuda: true
         monto_total: 350000
+        tiene_liquidacion_consolidada: false
         vigencias:
-          - { anio: 2025, valor: 180000, pagada: true }
-          - { anio: 2026, valor: 350000, pagada: false }
+          - { anio: 2025, valor: 180000, pagada: true, tiene_liquidacion: false }
+          - { anio: 2026, valor: 350000, pagada: false, tiene_liquidacion: true }
 
     UltimoPagoImpuestoDetalle:
       type: object
@@ -7003,11 +7087,14 @@ components:
 
     VigenciaImpuestoDetalle:
       type: object
-      required: [anio, valor, pagada]
+      required: [anio, valor, pagada, tiene_liquidacion]
       properties:
         anio: { type: integer, example: 2026 }
         valor: { type: integer, format: int64, description: "Pesos colombianos.", example: 350000 }
         pagada: { type: boolean }
+        referencia_pago: { type: string, nullable: true }
+        fecha_vencimiento: { type: string, nullable: true, description: "AAAA-MM-DD" }
+        tiene_liquidacion: { type: boolean }
 
     ResultadoRuntPersonaDetalle:
       type: object

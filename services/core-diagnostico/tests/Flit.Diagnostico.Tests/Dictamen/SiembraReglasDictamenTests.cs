@@ -13,14 +13,15 @@ namespace Flit.Diagnostico.Tests.Dictamen;
 public sealed class SiembraReglasDictamenTests
 {
     [Fact]
-    public void Proyecta_42_filas_de_la_version_1_y_54_de_la_version_2()
+    public void Proyecta_42_filas_v1_54_v2_y_57_de_la_version_vigente()
     {
-        // Punto 2 (2026-11-11): la siembra suma v2 sin tocar v1; los dictámenes ya emitidos conservan su versión.
+        // V3 (impuesto): la siembra suma v3 sin tocar v1/v2; los dictámenes ya emitidos conservan su versión.
         var filas = ProyectorReglasDictamen.Proyectar();
 
-        filas.Should().HaveCount(96);
+        filas.Should().HaveCount(153);
         filas.Count(f => f.CatalogoVersion == 1).Should().Be(42);
-        filas.Count(f => f.CatalogoVersion == CatalogoReglasDictamen.Version).Should().Be(54);
+        filas.Count(f => f.CatalogoVersion == 2).Should().Be(54);
+        filas.Count(f => f.CatalogoVersion == CatalogoReglasDictamen.Version).Should().Be(57);
         filas.Should().OnlyContain(f => f.Vigente);
     }
 
@@ -92,8 +93,8 @@ public sealed class SiembraReglasDictamenTests
         var primera = ProyectorReglasDictamen.Proyectar();
         var segunda = ProyectorReglasDictamen.Proyectar();
 
-        primera.Should().HaveCount(96);
-        segunda.Should().HaveCount(96);
+        primera.Should().HaveCount(153);
+        segunda.Should().HaveCount(153);
         foreach (var fila in primera)
         {
             var otra = segunda.Should().ContainSingle(f =>
