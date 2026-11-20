@@ -23,6 +23,13 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         builder.HasIndex(x => new { x.MandateSignerId, x.CreatedAt })
             .HasDatabaseName("ix_biometric_validations_mandate_signer")
             .HasFilter("mandate_signer_id IS NOT NULL");
+        // HU #14044 — ancla de las validaciones del portal de Persona Natural (DDL 160): la solicitud y el rol del actor.
+        // Los CHECKs (van juntas) y los índices únicos en vuelo viven en el DDL; aquí el mapeo y el índice de lectura.
+        builder.Property(x => x.PortalSolicitudRef).HasColumnName("portal_solicitud_ref").HasMaxLength(100);
+        builder.Property(x => x.PortalParte).HasColumnName("portal_parte").HasMaxLength(40);
+        builder.HasIndex(x => new { x.PortalSolicitudRef, x.PortalParte, x.CreatedAt })
+            .HasDatabaseName("ix_biometric_validations_portal_solicitud")
+            .HasFilter("portal_solicitud_ref IS NOT NULL");
         builder.Property(x => x.Name).HasColumnName("name").HasMaxLength(320).IsRequired(); // Bug #13304: = actors.full_name (DDL 132)
         builder.Property(x => x.DocumentType).HasColumnName("document_type").HasMaxLength(20).IsRequired();
         builder.Property(x => x.DocumentNumber).HasColumnName("document_number").HasMaxLength(40).IsRequired();
@@ -102,6 +109,14 @@ internal sealed class ProcedureInstanceBiometricValidationConfiguration
         // (validado_at + 30 días, medianoche Colombia). Los "días restantes" NO se persisten: se calculan
         // al leer. (Antes era mantenida por un trigger; se quitó para no meter lógica en la BD.)
         builder.Property(x => x.ValidUntil).HasColumnName("valid_until");
+
+        // HU #13824 — vencimiento manual por Super Admin: instante y fin de vigencia previo (DDL 151). Los trámites ya fuera de
+        // borrador conservan su firma hasta ese fin previo (BiometricRules.EsAprobadaVigenteParaTramite).
+        builder.Property(x => x.ExpiredManuallyAt).HasColumnName("expired_manually_at");
+        builder.Property(x => x.ValidUntilPrevious).HasColumnName("valid_until_previous");
+        builder.HasIndex(x => x.TenantId)
+            .HasDatabaseName("ix_biometric_validations_expired_manually")
+            .HasFilter("expired_manually_at IS NOT NULL");
 
         builder.HasIndex(x => x.KyverumVerificationId)
             .IsUnique()

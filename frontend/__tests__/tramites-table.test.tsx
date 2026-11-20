@@ -320,19 +320,19 @@ describe('TramitesTable — paginación', () => {
     const { unmount } = render(<ToastProvider><TramitesTable /></ToastProvider>);
     await screen.findByText('P0001');
 
-    await userEvent.selectOptions(screen.getByLabelText('Filas por página'), '25');
+    await userEvent.selectOptions(screen.getByLabelText('Filas por página'), '30');
 
     expect(await screen.findByText('P0023')).toBeInTheDocument();
     await waitFor(() =>
       expect(mocks.searchInstances).toHaveBeenLastCalledWith(
-        expect.objectContaining({ skip: 0, take: 25 }),
+        expect.objectContaining({ skip: 0, take: 30 }),
       ),
     );
 
-    // Se recuerda «durante la sesión»: al volver a la pantalla sigue en 25.
+    // Se recuerda «durante la sesión»: al volver a la pantalla sigue en 30.
     unmount();
     render(<ToastProvider><TramitesTable /></ToastProvider>);
-    expect(await screen.findByLabelText('Filas por página')).toHaveValue('25');
+    expect(await screen.findByLabelText('Filas por página')).toHaveValue('30');
   });
 });
 
@@ -1615,7 +1615,7 @@ describe('TramitesTable — «Enviar al OT» desde asignado (ADR-0059, HU #12601
       }),
     );
     const enviar = await screen.findByRole('menuitem', { name: 'Enviar al OT' });
-    expect(enviar).toHaveClass('bg-amber-50');
+    expect(enviar).toHaveClass('bg-[var(--badge-warning-bg)]');
     await userEvent.keyboard('{Escape}');
 
     await userEvent.click(await screen.findByRole('button', { name: /Acciones del trámite TR-PRE/ }));
@@ -2269,7 +2269,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const icono = await screen.findByAltText('Con prenda');
-    expect(icono).toHaveAttribute('src', '/assets/marcas/prenda.svg');
+    expect(icono).toHaveAttribute('src', '/assets/kit/tramite-prenda.svg');
     expect(screen.queryByAltText('Con transformación')).not.toBeInTheDocument();
   });
 
@@ -2278,7 +2278,7 @@ describe('TramitesTable — marcas de prenda y transformación', () => {
     render(<ToastProvider><TramitesTable /></ToastProvider>);
 
     const icono = await screen.findByAltText('Con transformación');
-    expect(icono).toHaveAttribute('src', '/assets/marcas/transformacion.svg');
+    expect(icono).toHaveAttribute('src', '/assets/kit/tramite-transformacion.svg');
     expect(screen.queryByAltText('Con prenda')).not.toBeInTheDocument();
   });
 

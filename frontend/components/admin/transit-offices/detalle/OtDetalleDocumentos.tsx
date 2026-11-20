@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import { Check, Download, Eye } from "lucide-react";
+import { useCallback, useEffect, useState, type ComponentType } from "react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import { DocumentPreviewModal } from "@/components/shared/DocumentPreviewModal";
@@ -36,6 +37,7 @@ import { OT_BLUE, OT_GREEN } from "./ot-detalle-visual";
 
 import { formatFechaHora } from "@/lib/format/date";
 import { COPY } from "@/lib/copy/copy-catalog";
+import { soloHistoricos, soloVigentes } from "@/lib/documents/vigencia";
 export interface OtDetalleDocumentosProps {
 
   /** ID del trámite de cliente OT. */
@@ -80,7 +82,7 @@ function AccionDoc({
   title,
   blanco,
 }: {
-  icon: typeof Eye;
+  icon: ComponentType<{ className?: string }>;
   label: string;
   onClick: () => void;
   disabled?: boolean;
@@ -96,7 +98,7 @@ function AccionDoc({
       title={title ?? label}
       aria-label={label}
       className={`grid h-7 w-7 place-items-center rounded-lg border transition disabled:opacity-50 ${
-        blanco ? "border-white/40 text-white" : "border-[#DFE5ED] hover:bg-flit-brand/10 dark:border-white/10"
+        blanco ? "border-white/40 text-white" : "border-border hover:bg-flit-brand/10"
       }`}
       style={blanco ? undefined : { color: OT_BLUE }}
     >
@@ -438,10 +440,13 @@ export function OtDetalleDocumentos({
               <OtVacio mensaje="Este trámite no tiene documentos adjuntos." />
             ) : null}
             <ul className="grid list-none grid-cols-1 gap-3 p-0 sm:grid-cols-2 lg:grid-cols-3">
-            {attachments.map((att) => (
+            {[
+              ...soloVigentes(attachments).map((att) => ({ att, anterior: false })),
+              ...soloHistoricos(attachments).map((att) => ({ att, anterior: true })),
+            ].map(({ att, anterior }) => (
               <li
                 key={att.id}
-                className="flex items-center gap-2 rounded-xl border border-[#DFE5ED] px-3 py-2 dark:border-white/5"
+                className="flex items-center gap-2 rounded-xl border border-border px-3 py-2"
               >
                 {revisados.has(att.id) ? (
                   <span
@@ -449,7 +454,7 @@ export function OtDetalleDocumentos({
                     style={{ background: OT_GREEN }}
                     title="Revisado en esta consulta"
                   >
-                    <Check className="h-3 w-3 text-white" aria-hidden="true" />
+                    <Icono nombre="check" className="h-3 w-3 text-white" />
                     <span className="sr-only">Revisado</span>
                   </span>
                 ) : (
@@ -464,19 +469,19 @@ export function OtDetalleDocumentos({
                     {att.filename}
                   </span>
                   <span className="block truncate text-[10px] opacity-60">
-                    {[att.tipo, formatSize(att.sizeBytes), att.uploadedAt && formatDate(att.uploadedAt)]
+                    {[anterior ? "Versión anterior" : null, att.tipo, formatSize(att.sizeBytes), att.uploadedAt && formatDate(att.uploadedAt)]
                       .filter(Boolean)
                       .join(" · ")}
                   </span>
                 </span>
                 <span className="flex shrink-0 items-center gap-1.5">
                   <AccionDoc
-                    icon={Eye}
+                    icon={iconoComo("ojo")}
                     label={`Previsualizar ${att.filename}`}
                     onClick={() => void previsualizarFila(att)}
                   />
                   <AccionDoc
-                    icon={Download}
+                    icon={iconoComo("nube-bajar")}
                     label={`Descargar ${att.filename}`}
                     onClick={() => void handleDownload(att)}
                   />
@@ -498,7 +503,7 @@ export function OtDetalleDocumentos({
                 {/* HU #14207 — un solo CTA; force solo vía Reintentar del aviso de fallo. */}
                 <AccionDoc
                   blanco
-                  icon={Eye}
+                  icon={iconoComo("ojo")}
                   label={COPY.A12}
                   title="Muestra el consolidado del expediente; lo genera si aún no está o si cambió el trámite"
                   disabled={consolidadoActing}

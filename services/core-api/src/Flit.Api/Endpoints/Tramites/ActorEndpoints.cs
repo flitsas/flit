@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
@@ -71,12 +72,18 @@ internal static class ActorEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             PutActorsRequest request,
             PutActorsHandler handler,
+            HttpContext http,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, ct);
+            // HU #14172 — el usuario autenticado queda como CreatedBy del evento de bitácora.
+            var rawUserId = http.User.FindFirst("sub")?.Value
+                ?? http.User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+            var actorUserId = Guid.TryParse(rawUserId, out var uid) ? uid : (Guid?)null;
+
+            var (result, error) = await handler.HandleAsync(id, tenantId.Value, request, actorUserId, ct);
             return error switch
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),

@@ -2,8 +2,10 @@ using Flit.Analytics.Application.Abstractions;
 using Flit.Analytics.Application.CompanyQueries;
 using Flit.Analytics.Application.IctQueries;
 using Flit.Analytics.Application.Queries;
+using Flit.Analytics.Application.Queries.GestorDashboard;
 using Flit.Analytics.Application.Queries.Metrics;
 using Flit.Analytics.Application.Queries.Network;
+using Flit.Analytics.Application.Queries.SuperAdminDashboard;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
@@ -21,6 +23,9 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<GetMonthlyTrendHandler>();
         services.AddScoped<GetDetailedProceduresHandler>(); // Feature #10813 HU #10815
 
+        // Inicio del Gestor (rediseño de los 3 dashboards) — cola de gestión.
+        services.AddScoped<GestorDashboardColaInactividadHandler>();
+
         // HU #12359 (Feature #12257) — estadísticas de la red de una cabeza de grupo (rutas /tramites/network/stats/*).
         services.AddScoped<GetNetworkAnalyticsOverviewHandler>();
         services.AddScoped<GetNetworkTopProducersHandler>();
@@ -35,6 +40,10 @@ public static class AnalyticsApplicationServiceCollectionExtensions
         services.AddScoped<GetFunnelHandler>();
         services.AddScoped<GetUsageHandler>();
         services.AddScoped<GetLiveOverviewHandler>();
+
+        // Inicio del SuperAdmin (rediseño de los 3 dashboards): compañías y organismos entre tenants.
+        services.AddScoped<SuperAdminDashboardCompaniesHandler>();
+        services.AddScoped<SuperAdminDashboardOfficesHandler>();
 
         // Consultas propias de la empresa: el usuario arma su búsqueda, la guarda y la exporta.
         services.AddScoped<ExecuteCompanyQueryHandler>();

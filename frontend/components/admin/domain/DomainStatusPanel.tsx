@@ -1,13 +1,20 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Check, CheckCircle2, Clock, Copy, RefreshCw, ShieldAlert, ShieldCheck } from "lucide-react";
+import { useCallback, useEffect, useRef, useState, type ComponentType, type CSSProperties } from "react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { CarLoaderModal } from "@/components/atom/CarLoader";
 import { RowActions } from "@/components/atom/RowActions";
 import {
   TABLA_HEADER_BG,
   TABLA_HEADER_CELL_CLS,
   TABLA_HEADER_FG,
+  TABLA_MOVIL_CELL_CLS,
+  TABLA_MOVIL_CELL_TITULO_CLS,
+  TABLA_MOVIL_ROW_CLS,
+  TABLA_MOVIL_TABLE_CLS,
+  TABLA_MOVIL_TBODY_CLS,
+  TABLA_MOVIL_THEAD_CLS,
   TABLA_ROW_HOVER_CLS,
 } from "@/components/atom/table-styles";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
@@ -21,8 +28,21 @@ import {
   verifyCompanyDomain,
 } from "@/lib/api/domain-client";
 import { ApiError, type TenantDomainResponse, type TenantDomainStatus } from "@/lib/api/types";
+import { avisoComo } from "@flit/ui/IconoAviso";
 
 export type DomainPanelMode = "admin" | "company";
+
+/**
+ * Cliente inyectable del dominio. Sin él, los paneles usan el de marca blanca (`domain-client`). Lo usa el portal del
+ * organismo (Épica #14297), cuyo dominio tiene otras rutas pero la misma pantalla. Los errores traen el motivo exacto
+ * del servidor en `message`.
+ */
+export interface DomainClient {
+  get: () => Promise<TenantDomainResponse | null>;
+  register: (body: { host: string; rowVersion: number | null }) => Promise<TenantDomainResponse>;
+  remove: () => Promise<void>;
+  verify: () => Promise<TenantDomainResponse>;
+}
 
 export interface DomainStatusPanelProps {
   mode: DomainPanelMode;
@@ -36,13 +56,19 @@ export interface DomainStatusPanelProps {
   onLoaded?: (domain: TenantDomainResponse | null) => void;
   /** Incrementar para forzar una recarga externa (p. ej. tras registrar/retirar el dominio). */
   reloadToken?: number;
+  /** Cliente propio del dominio (portal del organismo). Sin él, el de marca blanca. */
+  client?: DomainClient;
+  /** Muestra `statusReason` tal cual lo manda el servidor, sin traducir códigos. */
+  reasonVerbatim?: boolean;
+  /** Texto cuando aún no hay dominio. Por defecto el de la red. */
+  emptyMessage?: string;
 }
 
-const STATUS_META: Record<TenantDomainStatus, { label: string; Icon: typeof Clock; color: string }> = {
-  pending: { label: "Pendiente de comprobación", Icon: Clock, color: "#F9AC00" },
-  verified: { label: "Comprobado", Icon: ShieldCheck, color: "var(--color-flit-brand)" },
-  active: { label: "Activo", Icon: CheckCircle2, color: "#8CC63F" },
-  failed: { label: "Comprobación fallida", Icon: ShieldAlert, color: "#FF4E00" },
+const STATUS_META: Record<TenantDomainStatus, { label: string; Icon: ComponentType<{ className?: string; style?: CSSProperties }>; color: string }> = {
+  pending: { label: "Pendiente de comprobación", Icon: iconoComo("reloj"), color: "var(--badge-warning-fg)" },
+  verified: { label: "Comprobado", Icon: iconoComo("escudo"), color: "var(--color-flit-brand)" },
+  active: { label: "Activo", Icon: iconoComo("check"), color: "var(--flit-success-ink)" },
+  failed: { label: "Comprobación fallida", Icon: avisoComo("error"), color: "var(--destructive)" },
 };
 
 const REASON_MESSAGES: Record<string, string> = {
@@ -51,8 +77,9 @@ const REASON_MESSAGES: Record<string, string> = {
   DNS_ERROR: "Ocurrió un error al consultar el DNS. Vuelve a intentarlo más tarde.",
 };
 
-function reasonMessage(reason: string | null): string | null {
+function reasonMessage(reason: string | null, verbatim = false): string | null {
   if (!reason) return null;
+  if (verbatim) return reason;
   return REASON_MESSAGES[reason] ?? `Motivo: ${reason}.`;
 }
 
@@ -74,7 +101,15 @@ function formatDateTime(iso: string | null): string | null {
  * `mode="admin"` (SuperAdmin sobre `tenantId`) y `mode="company"` (autogestión de la cabeza)
  * comparten exactamente esta UI — solo cambia qué endpoint de `/verify` se llama (AC3).
  */
-export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: DomainStatusPanelProps) {
+export function DomainStatusPanel({
+  mode,
+  tenantId,
+  onLoaded,
+  reloadToken,
+  client,
+  reasonVerbatim = false,
+  emptyMessage = "Esta red aún no tiene un dominio registrado.",
+}: DomainStatusPanelProps) {
   const [status, setStatus] = useState<UiStatus>("loading");
   const [domain, setDomain] = useState<TenantDomainResponse | null>(null);
   const [verifying, setVerifying] = useState(false);
@@ -89,7 +124,11 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
       setVerifyError(null);
       setVerifyMessage(null);
       try {
-        const data = mode === "admin" && tenantId ? await getAdminDomain(tenantId) : await getCompanyDomain();
+        const data = client
+          ? await client.get()
+          : mode === "admin" && tenantId
+            ? await getAdminDomain(tenantId)
+            : await getCompanyDomain();
         if (signal?.aborted) return;
         setDomain(data);
         setStatus(data ? "ready" : "empty");
@@ -98,7 +137,7 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
         if (!signal?.aborted) setStatus("error");
       }
     },
-    [mode, tenantId, onLoaded],
+    [mode, tenantId, onLoaded, client],
   );
 
   useEffect(() => {
@@ -133,7 +172,11 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
     setVerifyError(null);
     setVerifyMessage(null);
     try {
-      const result = mode === "admin" && tenantId ? await verifyAdminDomain(tenantId) : await verifyCompanyDomain();
+      const result = client
+        ? await client.verify()
+        : mode === "admin" && tenantId
+          ? await verifyAdminDomain(tenantId)
+          : await verifyCompanyDomain();
       setDomain(result);
       onLoaded?.(result);
       setVerifyMessage(
@@ -144,6 +187,8 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
     } catch (err) {
       if (err instanceof ApiError && err.status === 429) {
         startCooldown(cooldownSecondsFromError(err) ?? 30);
+        setVerifyError(err.message);
+      } else if (client && err instanceof ApiError && err.message.trim()) {
         setVerifyError(err.message);
       } else {
         setVerifyError(domainErrorMessage(domainErrorCode(err)) || "No se pudo comprobar el dominio.");
@@ -162,9 +207,9 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
         status={status}
         onRetry={() => void load()}
         errorMessage="No se pudo cargar el estado del dominio."
-        emptyMessage="Esta red aún no tiene un dominio registrado."
+        emptyMessage={emptyMessage}
       >
-        {domain && <DomainStatusBody domain={domain} />}
+        {domain && <DomainStatusBody domain={domain} reasonVerbatim={reasonVerbatim} />}
 
         {domain && (domain.status === "pending" || domain.status === "failed") && (
           <DnsInstructions verification={domain.verification} />
@@ -177,9 +222,9 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
               onClick={() => void handleVerify()}
               disabled={verifying || (cooldownSeconds !== null && cooldownSeconds > 0)}
               className="inline-flex items-center gap-1.5 rounded-xl px-4 py-2 text-xs font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              style={{ background: "var(--gradient-action)" }}
             >
-              <RefreshCw className={verifying ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} aria-hidden />
+              <Icono nombre="reintento" className={verifying ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
               {verifying
                 ? "Comprobando…"
                 : cooldownSeconds !== null && cooldownSeconds > 0
@@ -187,12 +232,12 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
                   : "Comprobar ahora"}
             </button>
             {verifyMessage && (
-              <p role="status" className="text-xs font-medium" style={{ color: "#8CC63F" }}>
+              <p role="status" className="text-xs font-medium" style={{ color: "var(--flit-success-ink)" }}>
                 {verifyMessage}
               </p>
             )}
             {verifyError && (
-              <p role="alert" className="text-xs font-medium" style={{ color: "#FF4E00" }}>
+              <p role="alert" className="text-xs font-medium" style={{ color: "var(--destructive)" }}>
                 {verifyError}
               </p>
             )}
@@ -204,17 +249,17 @@ export function DomainStatusPanel({ mode, tenantId, onLoaded, reloadToken }: Dom
   );
 }
 
-function DomainStatusBody({ domain }: { domain: TenantDomainResponse }) {
+function DomainStatusBody({ domain, reasonVerbatim }: { domain: TenantDomainResponse; reasonVerbatim: boolean }) {
   const meta = STATUS_META[domain.status];
   const Icon = meta.Icon;
-  const reason = reasonMessage(domain.statusReason);
+  const reason = reasonMessage(domain.statusReason, reasonVerbatim);
   const changedAt = formatDateTime(domain.statusChangedAt);
   const graceUntil = formatDateTime(domain.graceUntil);
   const issuedAt = formatDateTime(domain.certificate.issuedAt);
   const expiresAt = formatDateTime(domain.certificate.expiresAt);
 
   return (
-    <div className="rounded-xl border p-4" style={{ borderColor: "#DFE5ED" }}>
+    <div className="rounded-xl border p-4" style={{ borderColor: "var(--border)" }}>
       <p className="text-xs font-semibold opacity-70">Dominio</p>
       <p data-testid="domain-host" className="mb-2 font-mono text-sm font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         {domain.host}
@@ -232,7 +277,7 @@ function DomainStatusBody({ domain }: { domain: TenantDomainResponse }) {
       {changedAt && <p className="mt-1 text-[11px] opacity-60">Último cambio: {changedAt}</p>}
 
       {graceUntil && (
-        <p className="mt-2 rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "#F9AC00", background: "rgba(249,172,0,0.08)", color: "#8a6000" }}>
+        <p className="mt-2 rounded-lg border px-2.5 py-1.5 text-xs" style={{ borderColor: "var(--badge-warning-border)", background: "var(--badge-warning-bg)", color: "var(--badge-warning-fg)" }}>
           Registro TXT no encontrado; el dominio sigue operando hasta {graceUntil}.
         </p>
       )}
@@ -257,14 +302,14 @@ function DnsInstructions({
       <h3 className="mb-2 text-xs font-semibold" style={{ color: "var(--color-flit-primary)" }}>
         Registros DNS que debes crear
       </h3>
-      {/* Bug #13055 — tabla homologada con el modelo de trámites (fija: registros DNS, sin paginar) */}
+      {/* HU #13918 — mismo diseño que la tabla de trámites. Son dos registros FIJOS (TXT y CNAME, o TXT y A en el portal del OT), no una
+          colección: solo recibe el diseño, sin paginación. */}
       <div className="overflow-x-auto">
         <table
           aria-label="Registros DNS que debes crear"
-          className="text-left text-xs"
-          style={{ width: "100%", borderCollapse: "separate", borderSpacing: "0 8px" }}
+          className={`w-full border-separate border-spacing-y-2 text-left text-xs ${TABLA_MOVIL_TABLE_CLS}`}
         >
-          <thead>
+          <thead className={TABLA_MOVIL_THEAD_CLS}>
             <tr>
               <th scope="col" className={`${TABLA_HEADER_CELL_CLS} rounded-l-xl`} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Tipo</th>
               <th scope="col" className={TABLA_HEADER_CELL_CLS} style={{ background: TABLA_HEADER_BG, color: TABLA_HEADER_FG }}>Nombre</th>
@@ -274,9 +319,13 @@ function DnsInstructions({
               </th>
             </tr>
           </thead>
-          <tbody>
+          <tbody className={TABLA_MOVIL_TBODY_CLS}>
             <DnsRow type="TXT" name={verification.txtName} value={verification.txtValue} />
-            <DnsRow type="CNAME" name={verification.cnameName} value={verification.cnameTarget} />
+            {verification.aName !== undefined ? (
+              verification.aValue ? <DnsRow type="A" name={verification.aName} value={verification.aValue} /> : null
+            ) : (
+              <DnsRow type="CNAME" name={verification.cnameName} value={verification.cnameTarget} />
+            )}
           </tbody>
         </table>
       </div>
@@ -285,13 +334,13 @@ function DnsInstructions({
 }
 
 function DnsRow({ type, name, value }: { type: string; name: string; value: string }) {
-  const border = { borderColor: "#DFE5ED" };
+  const border = { borderColor: "var(--table-row-border)" };
   return (
-    <tr className={`bg-white dark:bg-[#0B0F14] ${TABLA_ROW_HOVER_CLS}`}>
-      <td className="rounded-l-xl border-y border-l px-4 py-3 font-semibold" style={border}>{type}</td>
-      <td className="max-w-[220px] truncate border-y px-4 py-3 font-mono" style={border}>{name}</td>
-      <td className="max-w-[260px] truncate border-y px-4 py-3 font-mono" style={border}>{value}</td>
-      <td className="rounded-r-xl border-y border-r px-4 py-3 text-right" style={border}>
+    <tr className={`bg-card ${TABLA_ROW_HOVER_CLS} ${TABLA_MOVIL_ROW_CLS}`}>
+      <td data-label="Tipo" className={`rounded-l-xl border-y border-l px-4 py-3 font-semibold ${TABLA_MOVIL_CELL_CLS} ${TABLA_MOVIL_CELL_TITULO_CLS}`} style={border}>{type}</td>
+      <td data-label="Nombre" className={`max-w-[220px] truncate border-y px-4 py-3 font-mono ${TABLA_MOVIL_CELL_CLS}`} style={border}>{name}</td>
+      <td data-label="Valor" className={`max-w-[260px] truncate border-y px-4 py-3 font-mono ${TABLA_MOVIL_CELL_CLS}`} style={border}>{value}</td>
+      <td data-label="Acciones" className={`rounded-r-xl border-y border-r px-4 py-3 text-right ${TABLA_MOVIL_CELL_CLS}`} style={border}>
         <CopyButton value={value} label={`Copiar valor del registro ${type}`} />
       </td>
     </tr>
@@ -320,7 +369,7 @@ function CopyButton({ value, label }: { value: string; label: string }) {
       <RowActions
         actions={[
           {
-            icon: copied ? Check : Copy,
+            icon: copied ? iconoComo("check") : iconoComo("copiar"),
             label,
             onClick: () => void copy(),
             tone: "primary",

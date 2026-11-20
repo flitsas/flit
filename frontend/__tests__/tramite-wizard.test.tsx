@@ -571,10 +571,10 @@ describe('TramiteWizard — aviso acorde al estado real (HU #11053)', () => {
     expect(screen.getByText(/aún puedes generar o descargar el expediente consolidado/i)).toBeInTheDocument();
   });
 
-  it('aprobado: anuncia la aprobación y que la documentación ya no se regenera', async () => {
+  it('aprobado: anuncia la aprobación y que la documentación solo cambia si un administrador actualiza un documento', async () => {
     renderEnEstado('aprobado');
     expect(await screen.findByText(/Trámite aprobado — solo visualización/i)).toBeInTheDocument();
-    expect(screen.getByText(/ya no se regenera/i)).toBeInTheDocument();
+    expect(screen.getByText(/Solo cambia si un administrador actualiza un documento/i)).toBeInTheDocument();
     // Lo que el estado NO permite no debe anunciarse.
     expect(screen.queryByText(/Enviado a tránsito/i)).not.toBeInTheDocument();
   });
@@ -735,55 +735,110 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await waitFor(() => expect(onExit).toHaveBeenCalled());
   });
 
-  it('N 03 — fallo de generación de docs tras preparado bloquea la entrega', async () => {
-    const BORRADOR_COMPLETO: WizardState = {
+  // Bug #14631 — radicar desde `preparado` (misma ruta que "N 03 dos pasos"): el consolidado ya no
+  // reintenta ni usa force, y una falla TÉCNICA no bloquea el /submit.
+  async function radicarDesdePreparado() {
+    const PREPARADO: WizardState = {
       ...TRASPASO_WIZARD,
       canSubmit: true,
       blockers: [],
+      status: 'preparado',
+      allowedTransitions: ['entregado'],
       steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
     };
-    mocks.getWizardState.mockResolvedValue(BORRADOR_COMPLETO);
-    mocks.getInstance.mockResolvedValue({
-      id: 'inst-1',
-      status: 'borrador',
-      fieldValues: [
-        {
-          formFieldId: null,
-          fieldKey: 'transit_office_code',
-          valueText: '11001',
-          valueJson: null,
-          source: 'runt',
-        },
-      ],
-      actors: [],
-      statusHistory: [],
-    });
-    // Pre-gen falla; al radicar: preparado sí, pero sin consolidado no se entrega.
-    mocks.generarFur.mockRejectedValue(new Error('fur_unavailable'));
-    mocks.generarConsolidado.mockRejectedValue(new Error('fur_unavailable'));
-
-    const onExit = vi.fn();
+    mocks.getWizardState.mockResolvedValue(PREPARADO);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'preparado', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'entregado' });
     const user = userEvent.setup();
-    render(
-      <TramiteWizard configuration={CONFIG} procedureTypeId="type-1" onExit={onExit} />,
-    );
-    await screen.findByRole('button', { name: /^Paso 1: Consulta Vehículo/ });
-    await user.click(screen.getByRole('button', { name: /^Paso 6: Resumen/ }));
-
-    const radicar = await screen.findByRole('button', { name: /^Finalizar y enviar trámite$/ });
-    expect(radicar).toBeEnabled();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={vi.fn()} />);
+    const radicar = await screen.findByRole('button', { name: /Finalizar y enviar trámite/ });
+    await waitFor(() => expect(radicar).toBeEnabled());
     await user.click(radicar);
     await screen.findByText('Confirmar radicación');
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
+  }
 
-    await waitFor(() =>
-      expect(mocks.transitionInstance).toHaveBeenCalledWith('inst-1', 'preparado'),
+  const AVISO_CONSOLIDADO = /Trámite enviado al OT\. El expediente consolidado se está generando/;
+
+  it('Bug #14631 — fallo TÉCNICO del consolidado NO bloquea: 1 solo intento, se llama /submit y avisa', async () => {
+    mocks.generarConsolidado.mockRejectedValue(new FakeTramitesApiError(502, 'Bad Gateway', null));
+    await radicarDesdePreparado();
+
+    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(toastShow).toHaveBeenCalledWith(expect.stringMatching(AVISO_CONSOLIDADO), 'success');
+    expect(screen.queryByText(/No se puede radicar/i)).not.toBeInTheDocument();
+    await screen.findByText('¡Trámite completado!');
+  });
+
+  it('Bug #14631 — consolidado OK: se radica sin force y sin aviso de generación pendiente', async () => {
+    await radicarDesdePreparado();
+
+    await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.generarConsolidado).toHaveBeenCalledWith(
+      'inst-1',
+      undefined,
+      false,
+      expect.any(AbortSignal),
     );
+    expect(toastShow).not.toHaveBeenCalledWith(expect.stringMatching(AVISO_CONSOLIDADO), 'success');
+    await screen.findByText('¡Trámite completado!');
+  });
+
+  it('Bug #14631 — consolidado incompleto (regla de negocio) SÍ bloquea y no llama /submit', async () => {
+    mocks.generarConsolidado.mockResolvedValue({
+      incompleto: true,
+      documentosFaltantes: ['Cédula'],
+    });
+    await radicarDesdePreparado();
+
+    expect(await screen.findByText(/No se puede radicar: Expediente incompleto: faltan Cédula/)).toBeInTheDocument();
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
     expect(mocks.submitInstance).not.toHaveBeenCalled();
+  });
+
+  it('Bug #14631 — un 4xx de negocio del consolidado (adjunto no disponible) SÍ bloquea con el detalle', async () => {
+    mocks.generarConsolidado.mockRejectedValue(
+      new FakeTramitesApiError(409, 'Un adjunto del expediente no está disponible.', {
+        code: 'adjunto_no_disponible',
+      }),
+    );
+    await radicarDesdePreparado();
+
     expect(
-      await screen.findByText(/No se puede radicar/i),
+      await screen.findByText(/No se puede radicar: Un adjunto del expediente no está disponible\./),
     ).toBeInTheDocument();
-    expect(onExit).not.toHaveBeenCalled();
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(mocks.submitInstance).not.toHaveBeenCalled();
+    expect(toastShow).not.toHaveBeenCalledWith(expect.stringMatching(AVISO_CONSOLIDADO), 'success');
+  });
+
+  it('Bug #14631 — timeout del cliente en el consolidado aborta la espera y se radica igual', async () => {
+    // El consolidado nunca responde (simula el corte de nginx): solo el tope del cliente lo libera.
+    let senal: AbortSignal | undefined;
+    mocks.generarConsolidado.mockImplementation(
+      (_id: string, _t?: string, _f?: boolean, signal?: AbortSignal) => {
+        senal = signal;
+        return new Promise(() => {});
+      },
+    );
+    // El tope de 30 s se dispara de inmediato; el resto de timers corre normal.
+    const realSetTimeout = globalThis.setTimeout;
+    const spy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(((fn: TimerHandler, ms?: number, ...args: unknown[]) =>
+        realSetTimeout(fn as () => void, ms === 30_000 ? 0 : ms, ...args)) as typeof setTimeout);
+    try {
+      await radicarDesdePreparado();
+      await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(senal?.aborted).toBe(true);
+    expect(mocks.generarConsolidado).toHaveBeenCalledTimes(1);
+    expect(toastShow).toHaveBeenCalledWith(expect.stringMatching(AVISO_CONSOLIDADO), 'success');
+    await screen.findByText('¡Trámite completado!');
   });
 
   it('N 03 dos pasos — en `preparado` el botón "Finalizar y enviar trámite" radica por /submit, avisa y sale', async () => {
@@ -811,7 +866,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
 
     await waitFor(() => {
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, false, expect.any(AbortSignal));
     });
     await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
     expect(mocks.transitionInstance).not.toHaveBeenCalledWith('inst-1', 'entregado');
@@ -928,7 +983,7 @@ describe('TramiteWizard — Finalizar y blockers', () => {
       await radicar();
       await waitFor(() => expect(mocks.submitInstance).toHaveBeenCalledWith('inst-1'));
       expect(mocks.generarFur).toHaveBeenCalled();
-      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, true);
+      expect(mocks.generarConsolidado).toHaveBeenCalledWith('inst-1', undefined, false, expect.any(AbortSignal));
       expect(mocks.generarImpronta).not.toHaveBeenCalled();
     });
 

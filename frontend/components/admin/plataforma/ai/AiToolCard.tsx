@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertTriangle, ArrowDown, ArrowUp, CheckCircle2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert } from "@/components/atom/InlineAlert";
 import { Modal } from "@/components/atom/Modal";
 import { StatusBadge } from "@/components/atom/StatusBadge";
@@ -160,19 +160,19 @@ export function AiToolCard({
   return (
     <section
       aria-labelledby={`ai-tool-${tool.toolCode}`}
-      className="space-y-4 rounded-2xl border border-[#DFE5ED] bg-white/70 p-4 dark:border-white/10 dark:bg-[#0B0F14]/50"
+      className="space-y-4 rounded-2xl border border-border bg-card/70 p-4"
       data-testid={`ai-tool-${tool.toolCode}`}
     >
       <header className="space-y-1">
         <div className="flex flex-wrap items-center gap-2">
-          <h2 id={`ai-tool-${tool.toolCode}`} className="text-sm font-bold text-flit-primary dark:text-white">
+          <h2 id={`ai-tool-${tool.toolCode}`} className="text-sm font-bold text-flit-primary">
             {label}
           </h2>
           <StatusBadge tone="info" label={`Activo: ${etiquetaProveedor(tool.activeProvider)}`} />
         </div>
-        <p className="text-xs text-[#5A6A85]">{descripcionHerramienta(tool.toolCode)}</p>
+        <p className="text-xs text-muted-foreground">{descripcionHerramienta(tool.toolCode)}</p>
         {tool.updatedAt ? (
-          <p className="text-[11px] text-[#5A6A85]">Última actualización: {formatFechaHora(tool.updatedAt)}</p>
+          <p className="text-[11px] text-muted-foreground">Última actualización: {formatFechaHora(tool.updatedAt)}</p>
         ) : null}
       </header>
 
@@ -198,7 +198,7 @@ export function AiToolCard({
           return (
             <li
               key={slot.providerCode}
-              className="flex flex-wrap items-center gap-3 rounded-xl border border-[#DFE5ED] px-3 py-2.5 dark:border-white/10"
+              className="flex flex-wrap items-center gap-3 rounded-xl border border-border px-3 py-2.5"
             >
               <span
                 className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-[11px] font-bold text-white"
@@ -210,7 +210,7 @@ export function AiToolCard({
 
               <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-xs font-semibold text-flit-primary dark:text-white">
+                  <span className="text-xs font-semibold text-flit-primary">
                     {etiquetaProveedor(slot.providerCode)}
                   </span>
                   <StatusBadge
@@ -220,7 +220,7 @@ export function AiToolCard({
                   {!capable ? <StatusBadge tone="warning" label="No aplica" /> : null}
                   {isActive ? <StatusBadge tone="info" label="Activo" /> : null}
                 </div>
-                <p className="font-mono text-[11px] text-[#5A6A85]">
+                <p className="font-mono text-[11px] text-muted-foreground">
                   {configured && mask ? mask : "Sin API key en el entorno"}
                 </p>
               </div>
@@ -238,18 +238,18 @@ export function AiToolCard({
                   onClick={() => move(index, -1)}
                   disabled={saving || activating || index === 0}
                   aria-label={`Subir prioridad de ${etiquetaProveedor(slot.providerCode)}`}
-                  className="rounded-lg border border-[#DFE5ED] p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-30 dark:border-white/10"
+                  className="rounded-lg border border-border p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-30"
                 >
-                  <ArrowUp className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="arriba" className="h-3.5 w-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => move(index, 1)}
                   disabled={saving || activating || index === draft.providers.length - 1}
                   aria-label={`Bajar prioridad de ${etiquetaProveedor(slot.providerCode)}`}
-                  className="rounded-lg border border-[#DFE5ED] p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-30 dark:border-white/10"
+                  className="rounded-lg border border-border p-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-30"
                 >
-                  <ArrowDown className="h-3.5 w-3.5" aria-hidden="true" />
+                  <Icono nombre="abajo" className="h-3.5 w-3.5" />
                 </button>
               </div>
 
@@ -270,7 +270,7 @@ export function AiToolCard({
                 aria-label={`Activar ${etiquetaProveedor(slot.providerCode)} en ${label}`}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-flit-brand px-3 py-1.5 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 disabled:opacity-50"
               >
-                <CheckCircle2 className="h-3.5 w-3.5" aria-hidden="true" />
+                <Icono nombre="check" className="h-3.5 w-3.5" />
                 Activar
               </button>
             </li>
@@ -278,7 +278,7 @@ export function AiToolCard({
         })}
       </ul>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
         <SwitchToggle
           id={`ai-auto-return-${tool.toolCode}`}
           label={`Retorno automático al primario en ${label}`}
@@ -289,14 +289,14 @@ export function AiToolCard({
           }}
           disabled={saving || activating}
         />
-        <span className="text-[11px] text-[#5A6A85]">
+        <span className="text-[11px] text-muted-foreground">
           Auto-retorno al proveedor primario cuando esté disponible
         </span>
         <button
           type="button"
           onClick={() => void guardar()}
           disabled={!dirty || saving || activating}
-          className="ml-auto rounded-xl bg-[#162744] px-4 py-2 text-xs font-semibold text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
+          className="ml-auto rounded-xl bg-primary px-4 py-2 text-xs font-semibold text-primary-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-50"
         >
           {saving ? "Guardando…" : "Guardar prioridad y opciones"}
         </button>
@@ -315,8 +315,8 @@ export function AiToolCard({
             if (!activating) setConfirmProvider(null);
           }}
           busy={activating}
-          icon={AlertTriangle}
-          iconBg="#F9AC00"
+          icono="alerta"
+          iconBg="var(--color-flit-alert)"
           title="Cambiar proveedor activo"
           titleClassName="text-base font-bold text-flit-primary"
           size="md"
@@ -332,7 +332,7 @@ export function AiToolCard({
                 type="button"
                 onClick={() => setConfirmProvider(null)}
                 disabled={activating}
-                className="rounded-xl border border-[#DFE5ED] px-4 py-2 text-xs font-semibold disabled:opacity-50 dark:border-white/10"
+                className="rounded-xl border border-border px-4 py-2 text-xs font-semibold disabled:opacity-50"
               >
                 Cancelar
               </button>

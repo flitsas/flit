@@ -11,6 +11,16 @@ public sealed class ListCompaniesQuery
 
     public string? RazonSocial { get; init; }
 
+    /// <summary>Coincidencia parcial e insensible a mayúsculas sobre el código de compañía (COMP-XXXX). HU #13998.</summary>
+    public string? Codigo { get; init; }
+
+    /// <summary>
+    /// Tipos de compañía a incluir (selección múltiple, OR). Cada elemento puede traer varios valores
+    /// separados por coma (<c>RENTING,FLIT</c>) y el parámetro puede repetirse. Debe pertenecer al
+    /// catálogo <c>CompanyTenantTypes</c>; si no, el handler devuelve errores de validación (422). HU #13998.
+    /// </summary>
+    public IReadOnlyList<string>? TenantType { get; init; }
+
     public bool? EstadoActivo { get; init; }
 
     public DateOnly? FechaDesde { get; init; }

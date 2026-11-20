@@ -1,6 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 import {
   GENERACION_DOCUMENTAL_TABS,
   generacionDocumentalTabPath,
@@ -18,7 +19,7 @@ export function GeneracionDocumentalTabs({ activeId }: { activeId: GeneracionDoc
 
   return (
     <div
-      className="flex items-center gap-1 overflow-x-auto border-b"
+      className={PESTANAS_LISTA_CLS}
       role="tablist"
       aria-label="Secciones del módulo de generación documental"
     >
@@ -31,17 +32,9 @@ export function GeneracionDocumentalTabs({ activeId }: { activeId: GeneracionDoc
             role="tab"
             aria-selected={active}
             onClick={() => router.push(generacionDocumentalTabPath(tab.id))}
-            className="relative shrink-0 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand"
-            style={{ color: active ? "var(--color-flit-brand)" : "#162744", opacity: active ? 1 : 0.65 }}
+            className={pestanaClass(active, "relative shrink-0")}
           >
             {tab.label}
-            {active && (
-              <span
-                className="absolute inset-x-0 bottom-0 h-0.5 rounded-full"
-                style={{ background: "var(--color-flit-brand)" }}
-                aria-hidden="true"
-              />
-            )}
           </button>
         );
       })}

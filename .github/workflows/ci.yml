@@ -5,41 +5,180 @@ on:
     branches: [main, develop, staging,release]
   push:
     branches: [develop, staging, release]
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: 'Etiqueta de runner para validar (p. ej. flit-ci); vacío = vars.RUNNER o ubuntu-latest'
+        required: false
+        default: ''
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
+# runs-on: la variable de repo RUNNER (p. ej. flit-ci = runners propios de la 177) mueve estos jobs fuera de GitHub;
+# sin ella siguen en ubuntu-latest. El input `runner` del workflow_dispatch sirve para validar sin tocar la variable.
+#
+# Antes era un solo job en serie (lint 111 s + typecheck 64 s + build 161 s ≈ 5,5 min). Ahora:
+#   alcance       ¿el PR toca el mundo JS (frontends, packages, manifiestos de pnpm)? Si no, el resto se omite.
+#   lint · typecheck · build   en paralelo, cada uno con su caché (ESLint, tsbuildinfo, .next/cache).
+#   «Lint, type-check, build»  compuerta con el nombre del check OBLIGATORIO del ruleset: verde si los tres pasan,
+#                              o si `alcance` dijo que el PR no toca frontends.
 jobs:
-  lint-and-build:
-    name: Lint, type-check, build
+  alcance:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
+    timeout-minutes: 5
+    outputs:
+      frontend: ${{ steps.rutas.outputs.frontend }}
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      # Falla seguro: en push, en workflow_dispatch o si el diff no se puede calcular, se corre todo.
+      # Lo que lee el CI de frontends vive en frontend*/ y packages/ (los tests que miran fuera, p. ej. contracts/, no
+      # corren aquí) más los manifiestos de la raíz. Sin grep -q: con pipefail daría falsos «no toca» (ver core-api.yml).
+      - id: rutas
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          set -uo pipefail
+          if [ "$EVENTO" != pull_request ]; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"; echo "Evento $EVENTO: se corre todo."; exit 0
+          fi
+          if ! archivos=$(git diff --name-only "origin/$BASE...HEAD") || [ -z "$archivos" ]; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"; echo "No se pudo calcular el diff: se corre todo."; exit 0
+          fi
+          if echo "$archivos" | grep -E \
+               '^(frontend[^/]*/|packages/|package\.json$|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.npmrc$|\.nvmrc$|\.github/workflows/ci\.yml$)' > /dev/null; then
+            echo "frontend=true" >> "$GITHUB_OUTPUT"; echo "Toca frontends: corren lint, typecheck y build."
+          else
+            echo "frontend=false" >> "$GITHUB_OUTPUT"; echo "No toca frontends: se omiten lint, typecheck y build."
+          fi
 
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
+  lint:
+    name: lint
+    needs: alcance
+    if: needs.alcance.outputs.frontend == 'true'
+    runs-on: ${{ inputs.runner || vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
         with:
           node-version-file: .nvmrc
           cache: 'pnpm'
-
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      # La clave cambia en cada commit; restore-keys trae la más reciente y ESLint solo reanaliza los archivos cuyo
+      # CONTENIDO cambió (--cache-strategy content: el checkout reescribe los mtimes). Una caché vieja no da falsos
+      # verdes: ESLint invalida la entrada si cambia el archivo, la config o un plugin.
+      - name: Caché de ESLint
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend*/.eslintcache
+            packages/*/.eslintcache
+          key: eslint-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', '**/eslint.config.mjs') }}-${{ github.sha }}
+          restore-keys: |
+            eslint-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml', '**/eslint.config.mjs') }}-
 
       - name: Format check
         run: pnpm -r --if-present format:check
 
       - name: Lint
-        run: pnpm -r --if-present lint
+        run: pnpm -r --if-present run lint --cache --cache-strategy content --cache-location .eslintcache
+
+      # Google Fonts en el build hizo fallar este job por lo que respondía el servicio externo.
+      - name: Fuentes locales
+        run: |
+          if grep -rl --include='*.ts' --include='*.tsx' 'next/font/google' frontend*/app frontend*/components; then
+            echo "::error::Usa next/font/local con los archivos de app/fonts, no next/font/google."
+            exit 1
+          fi
+
+  typecheck:
+    name: typecheck
+    needs: alcance
+    if: needs.alcance.outputs.frontend == 'true'
+    runs-on: ${{ inputs.runner || vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Los tsconfig tienen "incremental": tsc compara por contenido (no por mtime) y solo revisa lo que cambió.
+      - name: Caché de tsc (tsbuildinfo)
+        uses: actions/cache@v4
+        with:
+          path: |
+            frontend*/tsconfig.tsbuildinfo
+            packages/*/tsconfig.tsbuildinfo
+          key: tsc-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            tsc-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
 
       - name: Type check
         run: pnpm -r --if-present typecheck
 
+  build:
+    name: build
+    needs: alcance
+    if: needs.alcance.outputs.frontend == 'true'
+    runs-on: ${{ inputs.runner || vars.RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: 'pnpm'
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # Caché de compilación de Next (la que recomienda Next para CI): webpack reutiliza los módulos sin cambios.
+      - name: Caché de Next (.next/cache)
+        uses: actions/cache@v4
+        with:
+          path: frontend*/.next/cache
+          key: next-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-${{ github.sha }}
+          restore-keys: |
+            next-v1-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}-
+
       - name: Build
         run: pnpm -r --if-present build
+
+  # Nombre del check OBLIGATORIO (ruleset). Corre siempre: si un job se omite porque `alcance` falló, eso es rojo;
+  # si se omite porque el PR no toca frontends, es verde.
+  lint-and-build:
+    name: Lint, type-check, build
+    needs: [alcance, lint, typecheck, build]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Veredicto
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          FRONTEND: ${{ needs.alcance.outputs.frontend }}
+        run: |
+          echo "$NEEDS" | jq -r 'to_entries[] | "  \(.key): \(.value.result)"'
+          if [ "$(echo "$NEEDS" | jq -r '.alcance.result')" != success ]; then
+            echo "::error::el job alcance no terminó en verde."; exit 1
+          fi
+          if [ "$FRONTEND" = false ]; then
+            echo "OK por omisión: el PR no toca frontends (ver job alcance)."; exit 0
+          fi
+          ROTO=$(echo "$NEEDS" | jq -r 'to_entries[] | select(.value.result != "success") | "\(.key)=\(.value.result)"' | paste -sd' ' -)
+          if [ -n "$ROTO" ]; then echo "::error::en rojo por: $ROTO"; exit 1; fi
+          echo "lint, typecheck y build en verde."

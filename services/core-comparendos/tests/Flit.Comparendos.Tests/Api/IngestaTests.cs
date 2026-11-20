@@ -45,7 +45,39 @@ public class ApiConFuente : ApiDePrueba
 {
     public FuenteDePrueba Fuente { get; } = new();
 
-    protected override void Reemplazar(IServiceCollection services) => services.AddSingleton<IFuenteComparendos>(Fuente);
+    /// <summary>La API de contratos simulada, salvo las placas con respuesta propia (HU #13712: Renting sin documento).</summary>
+    public ConcurrentDictionary<string, Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> Contratos { get; } = new();
+
+    /// <summary>
+    /// GDC puntos 19 y «sin hora»: respuesta por placa y hora («PLACA HH:mm»), que gana sobre <see cref="Contratos"/>, y
+    /// cada consulta recibida (placa, fecha, hora) para verificar lo que se envía.
+    /// </summary>
+    public ConcurrentDictionary<string, Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> ContratosPorHora { get; } = new();
+
+    public ConcurrentQueue<(string Placa, DateOnly Fecha, TimeOnly? Hora)> ConsultasContratos { get; } = new();
+
+    /// <summary>Lo que responde «Probar conexión» (HU #13843).</summary>
+    public Flit.Comparendos.Api.Modulos.Contraventor.PruebaContratos Prueba { get; set; } = new(true, null, null, 120, true, "buzon.pruebas@flitsas.com", false);
+
+    protected override void Reemplazar(IServiceCollection services)
+    {
+        services.AddSingleton<IFuenteComparendos>(Fuente);
+        services.AddScoped<Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos>(_ => new ContratosDePrueba(this));
+    }
+
+    private sealed class ContratosDePrueba(ApiConFuente api) : Flit.Comparendos.Api.Modulos.Contraventor.IApiContratos
+    {
+        public Task<Flit.Comparendos.Api.Modulos.Contraventor.PruebaContratos> ProbarAsync(CancellationToken ct) => Task.FromResult(api.Prueba);
+
+        public Task<Flit.Comparendos.Api.Modulos.Contraventor.RespuestaContrato> ConsultarAsync(Guid tenantId, string placa, DateOnly fecha, TimeOnly? hora, CancellationToken ct)
+        {
+            api.ConsultasContratos.Enqueue((placa, fecha, hora));
+            if (hora is { } h && api.ContratosPorHora.TryGetValue($"{placa} {h:HH:mm}", out var porHora))
+                return Task.FromResult(porHora);
+            return api.Contratos.TryGetValue(placa, out var r) ? Task.FromResult(r)
+                : new Flit.Comparendos.Api.Modulos.Contraventor.ApiContratosSimulada().ConsultarAsync(tenantId, placa, fecha, hora, ct);
+        }
+    }
 
     public async Task<Guid> CicloAsync(CanalIngesta canal, Guid? empresa = null)
     {
@@ -360,6 +392,39 @@ public sealed class IngestaTests(ApiConFuente api) : IClassFixture<ApiConFuente>
         await ComparendosDePrueba.ConsultasActivasAsync(api, empresa);
         (await super.PostAsJsonAsync("/api/v1/comparendos/admin/ingesta/ejecutar", new { canal = "MunicipalPlaca", empresaId = empresa }, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
         (await api.EnDbAsync(db => db.AuditoriasConfiguracion.AnyAsync(a => a.Accion == "EJECUTAR_MANUAL" && a.TenantId == empresa, ct))).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task HU13815_EjecutarAMano_SoloSuperAdmin_YQuedaComoUltimaEjecucion()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = Guid.NewGuid(); // sin configuración: el reintento corre y no encuentra nada que hacer
+        await api.EnDbAsync(db => db.TrabajosProgramados.Where(t => t.Tipo == TipoTrabajo.ReintentoContraventor)
+            .ExecuteUpdateAsync(u => u.SetProperty(t => t.UltimaEjecucionEn, (DateTimeOffset?)null), ct));
+        var ruta = $"/api/v1/comparendos/admin/ingesta/trabajos/ReintentoContraventor/ejecutar?empresaId={empresa}";
+
+        (await api.Cliente(new UsuarioDePrueba(empresa, [Permisos.MonitoreoGestionar])).PostAsync(ruta, null, ct)).StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        (await api.EnDbAsync(db => db.AuditoriasConfiguracion.AnyAsync(a => a.Accion == "EJECUTAR_MANUAL" && a.TenantId == empresa, ct))).Should().BeFalse();
+
+        (await api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true)).PostAsync(ruta, null, ct)).StatusCode.Should().Be(HttpStatusCode.Accepted);
+        // En las pruebas los trabajos en segundo plano están apagados: se toma la solicitud de la cola y se procesa aquí.
+        var cola = api.App.Services.GetRequiredService<Flit.Comparendos.Api.Modulos.Trabajos.ColaTrabajos>();
+        Flit.Comparendos.Api.Modulos.Trabajos.SolicitudTrabajo? solicitud = null;
+        await foreach (var s in cola.LeerAsync(ct))
+        {
+            if (s.Tipo == TipoTrabajo.ReintentoContraventor && s.TenantId == empresa)
+            {
+                solicitud = s;
+                break;
+            }
+        }
+
+        solicitud!.Disparo.Should().Be(Disparo.Manual);
+        var procesador = ActivatorUtilities.CreateInstance<Flit.Comparendos.Api.Modulos.Trabajos.ProcesadorTrabajos>(api.App.Services);
+        await procesador.ProcesarAsync(solicitud, ct);
+        var ultima = await api.EnDbAsync(db => db.TrabajosProgramados.Where(t => t.Tipo == TipoTrabajo.ReintentoContraventor).Select(t => t.UltimaEjecucionEn).SingleAsync(ct));
+        ultima.Should().NotBeNull("al terminar, la ejecución manual se ve en la tabla como la última");
     }
 }
 

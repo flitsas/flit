@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Loader2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { Modal } from "@/components/atom/Modal";
 import { OT_INPUT_CLS } from "@/components/admin/transit-offices/ot-form-styles";
 import { ApiValidationError } from "@/lib/api/types";
@@ -148,16 +148,17 @@ export function SignatureVaultFormPanel({
       className="flex w-full items-center justify-center gap-2 rounded-xl py-2.5 text-xs font-semibold text-white disabled:opacity-50"
       style={{ background: "var(--color-flit-brand)" }}
     >
-      {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+      {submitting && <Icono nombre="girador" className="h-4 w-4 animate-spin" />}
       Registrar firma
     </button>
   );
 
   const errStyle = (field: string) =>
-    fieldErrors[field] ? { borderColor: "#FF4E00" } : undefined;
+    fieldErrors[field] ? { borderColor: "var(--destructive)" } : undefined;
 
   return (
     <Modal
+      icono="firma"
       open={open}
       title="Registrar firma del apoderado"
       onClose={onClose}
@@ -170,7 +171,7 @@ export function SignatureVaultFormPanel({
           <p
             role="alert"
             className="rounded-xl border px-3 py-2 text-xs font-medium"
-            style={{ borderColor: "#FF4E00", color: "#FF4E00" }}
+            style={{ borderColor: "var(--destructive)", color: "var(--destructive)" }}
           >
             {banner}
           </p>
@@ -280,7 +281,7 @@ export function SignatureVaultFormPanel({
               min={form.vigenciaDesde || undefined}
               onChange={(e) => patch({ vigenciaHasta: e.target.value })}
               className={OT_INPUT_CLS}
-              style={vigenciaInvalida || fieldErrors.vigenciaHasta ? { borderColor: "#FF4E00" } : undefined}
+              style={vigenciaInvalida || fieldErrors.vigenciaHasta ? { borderColor: "var(--destructive)" } : undefined}
               aria-invalid={vigenciaInvalida || Boolean(fieldErrors.vigenciaHasta)}
             />
             <FieldError
@@ -310,7 +311,7 @@ export function SignatureVaultFormPanel({
 function FieldError({ message }: { message?: string }) {
   if (!message) return null;
   return (
-    <p className="mt-1 text-xs font-medium" style={{ color: "#FF4E00" }} role="alert">
+    <p className="mt-1 text-xs font-medium" style={{ color: "var(--destructive)" }} role="alert">
       {message}
     </p>
   );

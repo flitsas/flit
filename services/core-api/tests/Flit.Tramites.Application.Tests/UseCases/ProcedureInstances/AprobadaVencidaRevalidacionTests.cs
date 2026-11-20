@@ -17,6 +17,7 @@ namespace Flit.Tramites.Application.Tests.UseCases.ProcedureInstances;
 /// <list type="number">
 ///   <item>Asistente, paso de firmas (<see cref="IniciarKyverumVerifyHandler.HandleAsync"/>).</item>
 ///   <item>Renovación automática (<see cref="EnsureIdentityAndNotifyHandler"/>).</item>
+///   <item>Módulo de trámites, cuadro «Reenviar validación» (<see cref="ListValidacionesReenviablesHandler"/>).</item>
 ///   <item>Módulo de trámites, reenvío administrativo (<see cref="AdminReenviarValidacionIdentidadHandler"/>).</item>
 /// </list>
 /// Ninguna deja revalidar: la fila <c>aprobado</c> vencida no cuenta como vigente, pero sigue bloqueando el inicio de una
@@ -156,17 +157,33 @@ public sealed class AprobadaVencidaRevalidacionTests
     }
 
     [Fact]
+    public async Task ModuloTramites_CuadroReenviar_NoListaALaPersona()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (instance, _) = TramiteConAprobadaVencida();
+
+        var (result, error) = await new ListValidacionesReenviablesHandler(_repo, _vault)
+            .HandleAsync(instance.Id, _tenantId, ct);
+
+        error.Should().BeNull();
+        result!.Personas.Should().BeEmpty("la única fila propia está aprobada y el reenvío no pisa aprobaciones");
+    }
+
+    [Fact]
     public async Task ModuloTramites_ReenvioAdministrativo_RechazaPorIdentidadAprobada()
     {
         var ct = TestContext.Current.CancellationToken;
         var (instance, vencida) = TramiteConAprobadaVencida(TramiteEstado.Entregado);
+        var events = Substitute.For<IIdentityValidationEventPublisher>();
+        var audit = Substitute.For<IIdentityValidationAuditLog>();
+        var protector = new FakeWebhookSecretProtector();
+        var kyverumVerify = new IniciarKyverumVerifyHandler(_repo, _kyverum, protector, events, audit);
         var handler = new AdminReenviarValidacionIdentidadHandler(
             _repo, _kyverum, new BiometricsProviderOptions { Provider = BiometricProviders.Kyverum },
-            new FakeWebhookSecretProtector(), Substitute.For<IIdentityValidationEventPublisher>(),
-            Substitute.For<IIdentityValidationAuditLog>());
+            protector, events, audit, kyverumVerify);
 
         var (result, error, _, _) = await handler.HandleAsync(
-            new AdminReenviarValidacionIdentidadCommand(instance.Id, vencida.Id, _tenantId, null, Guid.NewGuid()), ct);
+            new AdminReenviarValidacionIdentidadCommand(instance.Id, vencida.Id, null, null, _tenantId, null, Guid.NewGuid()), ct);
 
         error.Should().Be(AdminReenviarValidacionIdentidadHandler.IdentidadAprobada);
         result.Should().BeNull();

@@ -20,6 +20,7 @@ export interface ActorTracking {
 }
 
 const KYVERUM = 'kyverum';
+const MANUAL = 'manual';
 
 /**
  * Modal de tracking de identidad por UNA parte (click en línea de la columna Firmas).
@@ -109,7 +110,7 @@ export function IdentidadParteTrackingModal({
   // Solo las validaciones con bitácora. El filtro mira el proveedor, pero eso NO llega a pantalla:
   // lo que se pinta es la lectura humana, que no lo nombra en ningún sitio.
   const conBitacora = useMemo(
-    () => validations.filter((v) => v.provider === KYVERUM),
+    () => validations.filter((v) => v.provider === KYVERUM || v.provider === MANUAL),
     [validations],
   );
 

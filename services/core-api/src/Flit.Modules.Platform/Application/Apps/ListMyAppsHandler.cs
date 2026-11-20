@@ -40,7 +40,9 @@ public sealed class ListMyAppsHandler
         var result = new List<MyAppView>();
         foreach (var product in await _catalog.ListAsync(ct).ConfigureAwait(false))
         {
-            if (!product.IsActive)
+            // La caja del organismo es un módulo de FLIT 2.0 (ADR-0082), ya no una app de la barra de la suite: no se lista
+            // ni al SuperAdmin ni a quien tenga el rol ot_caja.
+            if (!product.IsActive || product.Code == ProductCodes.Caja)
                 continue;
 
             if (!isSuperAdmin && product.Code != ProductCodes.Plataforma)

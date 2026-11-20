@@ -1,10 +1,11 @@
 "use client";
 
 import { useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { PESTANAS_LISTA_CLS, pestanaClass } from "@flit/ui/Pestanas";
 
 /**
- * Pestañas de una pantalla (estado local, sin cambiar de ruta). Mismo aspecto que las barras de los demás
- * módulos (Improntas, ficha de compañía): subrayado azul en la activa. Cada panel se monta siempre y se
+ * Pestañas de una pantalla (estado local, sin cambiar de ruta), con el aspecto de las del Manual UI Kit 2026
+ * (`@flit/ui/Pestanas`): línea inferior gris y la activa en azul. Cada panel se monta siempre y se
  * oculta con `hidden`, así una tabla conserva su búsqueda y su página al volver a ella.
  */
 export interface SectionTab<Id extends string = string> {
@@ -49,7 +50,7 @@ export function SectionTabs<Id extends string>({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-1 overflow-x-auto border-b" role="tablist" aria-label={ariaLabel}>
+      <div className={PESTANAS_LISTA_CLS} role="tablist" aria-label={ariaLabel}>
         {tabs.map((tab, i) => {
           const selected = tab.id === active;
           return (
@@ -67,15 +68,10 @@ export function SectionTabs<Id extends string>({
               title={tab.title}
               onClick={() => onChange(tab.id)}
               onKeyDown={(e) => onKeyDown(e, i)}
-              className={`relative shrink-0 px-4 py-2.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-flit-brand ${
-                selected ? "text-flit-brand" : "text-flit-primary opacity-70 dark:text-white/[0.78] dark:opacity-100"
-              }`}
+              className={pestanaClass(selected, "relative shrink-0")}
             >
               {tab.label}
-              {tab.count !== undefined && <span className="ml-1.5 font-normal opacity-80">· {tab.count}{tab.countLabel ? ` ${tab.countLabel}` : ""}</span>}
-              {selected && (
-                <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-flit-brand" />
-              )}
+              {tab.count !== undefined && <span className="ml-1.5 font-normal normal-case tracking-normal opacity-80">· {tab.count}{tab.countLabel ? ` ${tab.countLabel}` : ""}</span>}
             </button>
           );
         })}

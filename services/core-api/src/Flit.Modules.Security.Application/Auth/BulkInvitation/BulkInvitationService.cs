@@ -1,4 +1,6 @@
 using System.Net.Mail;
+using Flit.Admin.Application.OtClientScopes;
+using Flit.Admin.Domain.Companies.TransitOffices;
 using Flit.Modules.Security.Application.Auth.CreateInvitation;
 using Flit.Modules.Security.Domain.Auth;
 using Microsoft.Extensions.DependencyInjection;
@@ -108,6 +110,14 @@ public sealed partial class BulkInvitationService(
             throw new InvitationScopeDeniedException(decision.DenyReason ?? InvitationScopeReasons.InviterNotAuthorized);
         }
 
+        // 1b) Canal OT: un invitador con alcance de compañías 'especificos' no puede dejar a los invitados en 'todos'; cada
+        // invitado hereda SU alcance. Con alcance huérfano (sin compañías) no hay qué heredar: se rechaza todo (fail-closed).
+        var inheritedScope = await ResolveInheritedClientScopeAsync(scope, cancellationToken).ConfigureAwait(false);
+        if (inheritedScope is { Count: 0 })
+        {
+            throw new InvitationScopeDeniedException(InvitationScopeReasons.ClientScopeExceedsActor);
+        }
+
         // 2) Archivo completo: cualquier problema lo rechaza sin procesar nada.
         var parsed = parser.Parse(file);
         if (parsed.FileError is not null)
@@ -126,8 +136,29 @@ public sealed partial class BulkInvitationService(
 
         // 4) Commit: solo las filas válidas llegan al handler. La decisión (y con ella el id de cada rol) sale de la
         // política evaluada en ESTA petición; nada se arrastra de un dryRun anterior.
-        var committed = await CommitAsync(scope, decision, rows).ConfigureAwait(false);
+        var committed = await CommitAsync(scope, decision, rows, inheritedScope).ConfigureAwait(false);
         return new BulkInvitationResult(null, BuildReport(dryRun: false, validCount, committed));
+    }
+
+    /// <returns><c>null</c> si el invitador no está restringido (o el canal no es OT); si no, sus compañías.</returns>
+    private async Task<IReadOnlyList<Guid>?> ResolveInheritedClientScopeAsync(
+        InvitationScopeContext scope, CancellationToken cancellationToken)
+    {
+        if (scope.Channel != InvitationChannel.Ot)
+        {
+            return null;
+        }
+
+        await using var scopeHolder = scopeFactory.CreateAsyncScope();
+        var validator = scopeHolder.ServiceProvider.GetService<ValidateOtInvitationClientScopeHandler>();
+        if (validator is null)
+        {
+            return null;
+        }
+
+        var (restricted, ids) = await validator
+            .InheritFromActorAsync(scope.TargetTenantId, scope.InviterUserId, cancellationToken).ConfigureAwait(false);
+        return restricted ? ids : null;
     }
 
     private async Task<BulkInvitationRowResult[]> ValidateAsync(
@@ -230,7 +261,8 @@ public sealed partial class BulkInvitationService(
     private async Task<BulkInvitationRowResult[]> CommitAsync(
         InvitationScopeContext scope,
         InvitationScopeDecision decision,
-        BulkInvitationRowResult[] validated)
+        BulkInvitationRowResult[] validated,
+        IReadOnlyList<Guid>? inheritedScope)
     {
         var pending = new List<(int Index, Guid RoleId)>();
         for (var i = 0; i < validated.Length; i++)
@@ -273,7 +305,7 @@ public sealed partial class BulkInvitationService(
                 {
                     // Cada fila escribe SOLO su posición del arreglo: sin contención. Una fila ya iniciada termina
                     // siempre (token None): si no, quedaría la invitación creada y el correo sin enviar.
-                    validated[item.Index] = await CreateOneAsync(scope, validated[item.Index], item.RoleId).ConfigureAwait(false);
+                    validated[item.Index] = await CreateOneAsync(scope, validated[item.Index], item.RoleId, inheritedScope).ConfigureAwait(false);
                 }).ConfigureAwait(false);
         }
         catch (OperationCanceledException) when (deadline.IsCancellationRequested)
@@ -300,7 +332,8 @@ public sealed partial class BulkInvitationService(
     private async Task<BulkInvitationRowResult> CreateOneAsync(
         InvitationScopeContext scope,
         BulkInvitationRowResult row,
-        Guid roleId)
+        Guid roleId,
+        IReadOnlyList<Guid>? inheritedScope)
     {
         try
         {
@@ -310,6 +343,15 @@ public sealed partial class BulkInvitationService(
             var created = await handler.HandleAsync(
                 new CreateInvitationCommand(scope.TargetTenantId, row.Email, row.FullName, [roleId], scope.InviterUserId),
                 CancellationToken.None).ConfigureAwait(false);
+
+            // Invitador restringido: el invitado hereda su alcance (ligado a la invitación, se materializa al activarse).
+            // Si esto fallara, el gancho de activación vuelve a aplicar el alcance del invitador (nunca queda en 'todos').
+            if (inheritedScope is { Count: > 0 })
+            {
+                var scopes = rowScope.ServiceProvider.GetRequiredService<IOtUserClientScopeRepository>();
+                await scopes.SetInvitationScopeAsync(
+                    created.InvitationId, inheritedScope, scope.InviterUserId, CancellationToken.None).ConfigureAwait(false);
+            }
 
             return row with { Status = BulkInvitationRowStatus.Created, EmailSent = created.EmailSent };
         }

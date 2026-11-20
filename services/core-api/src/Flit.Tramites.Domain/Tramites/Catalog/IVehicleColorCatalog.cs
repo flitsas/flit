@@ -14,4 +14,14 @@ public interface IVehicleColorCatalog
         string? term,
         int limit = 50,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Candidatos activos cuyo nombre tiene las MISMAS palabras que <paramref name="name"/> en el mismo orden,
+    /// sin importar mayúsculas ni la cantidad de espacios entre ellas (sin límite de resultados). El llamador
+    /// hace la comparación exacta final. HU #14602: <see cref="SearchAsync"/> (contiene + máximo 100 por nombre)
+    /// no sirve para buscar uno exacto en un catálogo de ~20 000 colores: «GRIS» queda fuera del top 100.
+    /// </summary>
+    Task<IReadOnlyList<VehicleColorEntry>> FindByWordsAsync(
+        string name,
+        CancellationToken cancellationToken = default);
 }

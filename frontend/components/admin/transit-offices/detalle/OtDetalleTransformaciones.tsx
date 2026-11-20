@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowRight } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { OT_BLUE } from "./ot-detalle-visual";
 import type { OtClientProcedure } from "@/lib/api/types-ot";
 import {
@@ -40,9 +40,9 @@ export function transformacionesDelTramite(
 /** Un valor ausente se nombra; nunca se deja el hueco mudo ni se rellena con el de la otra cara. */
 function Valor({ texto, ausente }: { texto: string | null; ausente: string }) {
   if (!texto) {
-    return <span className="text-xs italic text-flit-primary/60 dark:text-white/60">{ausente}</span>;
+    return <span className="text-xs italic text-flit-primary/60 dark:text-muted-foreground">{ausente}</span>;
   }
-  return <span className="text-xs font-semibold text-flit-primary dark:text-white">{texto}</span>;
+  return <span className="text-xs font-semibold text-flit-primary">{texto}</span>;
 }
 
 /**
@@ -60,7 +60,7 @@ export function OtDetalleTransformaciones({ procedure }: { procedure: OtClientPr
   }
 
   return (
-    <section className="mt-4 border-t pt-3 border-[#DFE5ED] dark:border-white/10">
+    <section className="mt-4 border-t pt-3 border-border">
       <h5 className="text-xs font-semibold" style={{ color: OT_BLUE }}>
         Transformaciones declaradas frente al RUNT
       </h5>
@@ -68,25 +68,21 @@ export function OtDetalleTransformaciones({ procedure }: { procedure: OtClientPr
         {transformaciones.map((t) => (
           <li
             key={t.tipo}
-            className="rounded-xl border px-3 py-2 border-[#DFE5ED] dark:border-white/10"
+            className="rounded-xl border px-3 py-2 border-border"
           >
-            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-flit-primary/70 dark:text-white/70">
+            <p className="m-0 text-[10px] font-semibold uppercase tracking-wide text-flit-primary/70 dark:text-muted-foreground">
               {t.label}
             </p>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <span className="flex flex-col">
-                <span className="text-[10px] uppercase tracking-wide text-flit-primary/60 dark:text-white/60">
+                <span className="text-[10px] uppercase tracking-wide text-flit-primary/60 dark:text-muted-foreground">
                   En el RUNT
                 </span>
                 <Valor texto={t.valorRunt} ausente="Sin dato del RUNT" />
               </span>
-              <ArrowRight
-                className="h-3.5 w-3.5 shrink-0"
-                style={{ color: OT_BLUE }}
-                aria-label="cambia a"
-              />
+              <Icono nombre="derecha" className="h-3.5 w-3.5 shrink-0" style={{ color: OT_BLUE }} etiqueta="cambia a" />
               <span className="flex flex-col">
-                <span className="text-[10px] uppercase tracking-wide text-flit-primary/60 dark:text-white/60">
+                <span className="text-[10px] uppercase tracking-wide text-flit-primary/60 dark:text-muted-foreground">
                   Nuevo en el trámite
                 </span>
                 <Valor texto={t.valorNuevo} ausente="Sin valor nuevo capturado" />

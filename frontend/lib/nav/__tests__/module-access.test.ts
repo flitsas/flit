@@ -181,6 +181,12 @@ describe("HU #13639 (Anexo A §1.4) — Documentos del organismo se delega con o
     expect(resolveRouteAccess(otUser(["ot.tramites.manage"]), "/admin/transit-offices/x/documents").allowed).toBe(false);
   });
 
+  it("Portal Persona Natural solo abre para ot_admin, y el rechazo identifica el módulo para dar el motivo exacto", () => {
+    const ruta = "/admin/transit-offices/x/portal-persona-natural";
+    expect(resolveRouteAccess(otUser([], [{ code: "ot_admin" }]), ruta).allowed).toBe(true);
+    expect(resolveRouteAccess(otUser(["ot.tramites.manage"]), ruta)).toMatchObject({ allowed: false, moduleId: "admin-transit-offices-portal-persona-natural" });
+  });
+
   it("el dock muestra Documentos con el permiso delegado; Usuarios no viene con él", () => {
     expect(otDockLabels(false, ["ot.documentos.manage"])).toContain("Documentos");
     expect(otDockLabels(false, ["ot.documentos.manage"])).not.toContain(COPY.B21Usuarios);

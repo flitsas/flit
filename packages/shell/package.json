@@ -10,6 +10,8 @@
   "exports": {
     "./SuiteShell": "./src/SuiteShell.tsx",
     "./nav": "./src/nav.ts",
+    "./nav-context": "./src/ShellNavContext.tsx",
+    "./search": "./src/search.ts",
     "./account": "./src/account.ts",
     "./theme": "./src/theme.tsx",
     "./theme-script": "./src/theme-script.ts",
@@ -21,7 +23,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@flit/brand": "workspace:*"
+    "@flit/brand": "workspace:*",
+    "@flit/ui": "workspace:*"
   },
   "peerDependencies": {
     "lucide-react": "^1.20.0",

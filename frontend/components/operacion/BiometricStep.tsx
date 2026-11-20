@@ -1,14 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import {
-  ChevronDown,
-  Copy,
-  ExternalLink,
-  FileSignature,
-  RefreshCw,
-  RotateCcw,
-} from 'lucide-react';
+import { Icono } from "@flit/ui/Icono";
 import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient, getIdentitySendConflict } from '@/lib/api/tramites-client';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
@@ -16,6 +9,8 @@ import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { useWizardReadOnly } from './WizardReadOnlyContext';
 import { useReconcileIdentity } from '@/hooks/useReconcileIdentity';
+import { usePermissions } from '@/hooks/usePermissions';
+import { ADMIN_TRAMITE_PERMISSIONS } from '@/lib/tramites/admin-tramite-permissions';
 import { WizardCardHeader } from './wizard-atoms';
 import { WizardAccordion } from './WizardAccordion';
 import {
@@ -577,8 +572,8 @@ function BiometricSkeleton({
     >
       {partes.map((parte) => (
         <div key={parte} className={WIZARD_CARD} aria-hidden="true">
-          <div className="mb-3 h-3 w-24 animate-pulse rounded bg-black/10 dark:bg-white/10" />
-          <div className="h-12 w-full animate-pulse rounded-xl bg-black/5 dark:bg-white/5" />
+          <div className="mb-3 h-3 w-24 animate-pulse rounded bg-muted" />
+          <div className="h-12 w-full animate-pulse rounded-xl bg-muted" />
         </div>
       ))}
     </div>
@@ -641,8 +636,8 @@ function ParteBlock({
     return (
       <div className="space-y-3">
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-          <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-            <p className="mb-3 text-xs font-bold" style={{ color: '#1A2B4C' }}>
+          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
+            <p className="mb-3 text-xs font-bold" style={{ color: 'var(--foreground)' }}>
               Método de Firma
             </p>
             <VaultCoveredView />
@@ -650,18 +645,18 @@ function ParteBlock({
           </div>
           <div
             className="flex items-center justify-center rounded-xl border p-5 text-center"
-            style={{ borderColor: '#DFE5ED', background: '#EEF5FF' }}
+            style={{ borderColor: 'var(--border)', background: 'var(--surface-sunken)' }}
           >
             <div>
               <p
                 className="text-[11px] font-medium uppercase tracking-wide"
-                style={{ color: '#59677D' }}
+                style={{ color: 'var(--muted-foreground)' }}
               >
                 Firma electrónica
               </p>
               <p
                 className="mt-2 select-none text-2xl font-semibold italic"
-                style={{ color: '#1A2B4C' }}
+                style={{ color: 'var(--foreground)' }}
               >
                 {sigNombre}
               </p>
@@ -725,13 +720,13 @@ function ParteBlock({
   return (
     <div className="space-y-3">
       <div className={`grid grid-cols-1 gap-4 ${showCaptureSide ? 'md:grid-cols-2' : ''}`}>
-        <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
-          <p className="text-xs font-bold" style={{ color: '#1A2B4C' }}>
+        <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
+          <p className="text-xs font-bold" style={{ color: 'var(--foreground)' }}>
             Datos de Identificación
           </p>
           {info && (
             <>
-              <p className="mt-2 text-xs font-semibold" style={{ color: '#1A2B4C' }}>
+              <p className="mt-2 text-xs font-semibold" style={{ color: 'var(--foreground)' }}>
                 {info.nombre} — {PARTE_LABEL[parte]}
                 {multipleOwners ? ` ${ordinal}` : ''}
               </p>
@@ -741,7 +736,7 @@ function ParteBlock({
           <div className="mt-4">
             <p
               className="text-[11px] font-medium uppercase tracking-wide"
-              style={{ color: '#59677D' }}
+              style={{ color: 'var(--muted-foreground)' }}
             >
               Estado Biométrico
             </p>
@@ -752,7 +747,7 @@ function ParteBlock({
           <div className="mt-3">{actionView}</div>
         </div>
         {showCaptureSide && validation ? (
-          <div className="rounded-xl border p-4" style={{ borderColor: '#DFE5ED' }}>
+          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
             <KyverumCapturePanel validation={validation} />
           </div>
         ) : null}
@@ -957,10 +952,7 @@ function TrazabilidadDisclosure({ children }: { children: ReactNode }) {
         style={{ color: 'var(--color-flit-brand)' }}
       >
         Ver trazabilidad de validación
-        <ChevronDown
-          className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`}
-          aria-hidden="true"
-        />
+        <Icono nombre="abajo" className={`h-4 w-4 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div id={panelId} className="mt-2">
@@ -989,7 +981,7 @@ function VaultCoveredView() {
         style={{ background: 'var(--color-flit-brand)', color: 'white' }}
         aria-hidden
       >
-        <FileSignature className="h-5 w-5" />
+        <Icono nombre="firma" className="h-5 w-5" />
       </span>
       <div className="space-y-0.5">
         <p className="text-xs font-bold" style={{ color: 'var(--color-flit-brand)' }}>
@@ -1037,7 +1029,7 @@ function KyverumPendingIntro({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <RefreshCw className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+        <Icono nombre="reintento" className="h-3.5 w-3.5 animate-spin" style={{ color: 'var(--color-flit-brand)' }} />
         <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
           Esperando validación de {v.name}
         </p>
@@ -1057,6 +1049,7 @@ function KyverumPendingIntro({
         desde el panel de captura.
       </p>
 
+      <RegenerarEnlaceAction instanceId={instanceId} validationId={v.id} onRegenerated={onChanged} />
       <ReconcileAction instanceId={instanceId} validationId={v.id} onReconciled={onChanged} />
     </div>
   );
@@ -1079,7 +1072,7 @@ function KyverumCapturePanel({ validation: v }: { validation: BiometricValidatio
 
   return (
     <div className="flex flex-col items-center gap-3">
-      <div className="rounded-xl border bg-white p-2 dark:bg-[#162744]">
+      <div className="rounded-xl border bg-card p-2">
         <QRCodeSVG value={captureUrl} size={120} aria-label="Código QR del enlace de captura" />
       </div>
       <a
@@ -1089,7 +1082,7 @@ function KyverumCapturePanel({ validation: v }: { validation: BiometricValidatio
         className={`${WIZARD_BTN_BRAND} inline-flex items-center gap-1.5 px-3 py-1.5`}
         style={{ background: WIZARD_BTN_SOLID }}
       >
-        <ExternalLink className="h-3 w-3" aria-hidden />
+        <Icono nombre="externo" className="h-3 w-3" />
         Abrir captura Kyverum
       </a>
       <button
@@ -1099,19 +1092,77 @@ function KyverumCapturePanel({ validation: v }: { validation: BiometricValidatio
         style={{ borderColor: WIZARD_BTN_SOLID, color: WIZARD_BTN_SOLID }}
         aria-label="Copiar enlace de captura"
       >
-        <Copy className="h-3 w-3" aria-hidden />
+        <Icono nombre="copiar" className="h-3 w-3" />
         {copied ? 'Copiado' : 'Copiar enlace'}
       </button>
-      <a
-        href={captureUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="block max-w-full truncate text-xs underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
-        style={{ color: WIZARD_BTN_SOLID }}
-        title={captureUrl}
+      {/* Bug #14626: la URL ya no se muestra en texto; los clientes la abrían en el equipo del asesor y el
+          enlace de Kyverum quedaba atado a ese dispositivo. Se comparte por el QR o «Copiar enlace». */}
+    </div>
+  );
+}
+
+/**
+ * HU #14627 — "Regenerar enlace": el enlace de captura Kyverum queda atado al primer dispositivo que lo
+ * abre (p. ej. el cliente lo abrió por error en el equipo del asesor). Reenvía la validación por la
+ * ruta administrativa (mismo endpoint que "Reenviar validación" del Dashboard/Validaciones, un solo
+ * ítem con fila ya existente) para obtener un token nuevo, sin cambiar el correo del destinatario.
+ *
+ * Solo visible con el permiso `AdminTramiteReenviarValidacion` (mismo slug que gatea esa acción en
+ * `AdminTramiteAcciones.tsx`) y fuera de solo lectura. Tras un reenvío exitoso NO se muta estado local:
+ * se notifica al wizard (`onRegenerated` → `onChanged`/`handleRefresh`) para que vuelva a pedir el
+ * estado de la validación, que traerá el nuevo `captureUrl` — mismo patrón que `ReconcileAction` y
+ * `StartAction` en este archivo.
+ */
+function RegenerarEnlaceAction({
+  instanceId,
+  validationId,
+  onRegenerated,
+}: {
+  instanceId: string | null;
+  validationId: string;
+  onRegenerated: () => void;
+}) {
+  const readOnly = useWizardReadOnly();
+  const { permissions, isSuperAdmin } = usePermissions();
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const puedeRegenerar =
+    isSuperAdmin || permissions.includes(ADMIN_TRAMITE_PERMISSIONS.reenviarValidacion);
+
+  if (readOnly || !puedeRegenerar) return null;
+
+  const handleRegenerar = async () => {
+    if (!instanceId) return;
+    setError(null);
+    setSubmitting(true);
+    try {
+      await tramitesClient.adminReenviarValidacionIdentidad(instanceId, validationId, null);
+      onRegenerated();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo regenerar el enlace.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-1.5 border-t pt-3">
+      <p className="text-xs opacity-70">
+        ¿El cliente abrió el enlace desde otro dispositivo? Genera uno nuevo.
+      </p>
+      <button
+        type="button"
+        onClick={() => void handleRegenerar()}
+        disabled={submitting || !instanceId}
+        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold border disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2"
+        style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
+        aria-label="Regenerar enlace de captura"
       >
-        {captureUrl}
-      </a>
+        <Icono nombre="reintento" className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} />
+        {submitting ? 'Regenerando…' : 'Regenerar enlace'}
+      </button>
+      {error && <InlineAlert tone="error">{error}</InlineAlert>}
     </div>
   );
 }
@@ -1161,7 +1212,7 @@ function ReconcileAction({
         style={{ borderColor: 'var(--color-flit-brand)', color: 'var(--color-flit-brand)' }}
         aria-label="Actualizar estado de la validación consultando al proveedor"
       >
-        <RotateCcw className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} aria-hidden />
+        <Icono nombre="reintento" className={`h-3 w-3 ${submitting ? 'animate-spin' : ''}`} />
         {submitting ? 'Consultando…' : 'Actualizar estado'}
       </button>
       {message?.tone === 'info' && (
@@ -1257,7 +1308,7 @@ function SentPendingView({
   return (
     <div className="space-y-3">
       <div className="flex items-center gap-2">
-        <RefreshCw className="h-3.5 w-3.5" style={{ color: 'var(--color-flit-brand)' }} aria-hidden />
+        <Icono nombre="reintento" className="h-3.5 w-3.5" style={{ color: 'var(--color-flit-brand)' }} />
         <p className="text-xs font-semibold" style={{ color: 'var(--color-flit-brand)' }}>
           {headline} de {v.name}
         </p>

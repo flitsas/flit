@@ -363,14 +363,15 @@ public sealed class GenerarConsolidadoHandler(
         if (ordered.Count == 0)
             return (null, "sin_adjuntos");
 
+        // Bug #14631 — las descargas van en paralelo (antes, una por una dentro de la misma petición).
+        var descargados = await ConsolidadoDescargaAdjuntos.DescargarAsync(storage, ordered, ct).ConfigureAwait(false);
         var pdfParts = new List<byte[]>(ordered.Count);
-        foreach (var attachment in ordered)
+        for (var i = 0; i < ordered.Count; i++)
         {
-            await using var stream = await storage.OpenReadAsync(attachment.StoragePath, ct);
-            if (stream is null)
+            var attachment = ordered[i];
+            if (descargados[i] is not { } bytes)
                 return (null, "adjunto_no_disponible");
 
-            var bytes = await ReadAllBytesAsync(stream, ct);
             try
             {
                 var pdf = merger.NormalizeToPdf(bytes, attachment.Mimetype);
@@ -526,11 +527,11 @@ public sealed class GenerarConsolidadoHandler(
 
         if (configurado.Count == 0)
             return SanitizeConsolidadoParts(
-                ConsolidadoOrderingResolver.Select(instance.Attachments, instance.FamilyCode));
+                ConsolidadoOrderingResolver.Select(instance.AdjuntosEfectivos().ToList(), instance.FamilyCode));
 
         return SanitizeConsolidadoParts(
             GenericConsolidadoOrdering.SelectByPrecedence(
-                instance.Attachments,
+                instance.AdjuntosEfectivos().ToList(),
                 ConsolidadoDocumentCodeMap.ToPrecedence(configurado)));
     }
 
@@ -626,13 +627,6 @@ public sealed class GenerarConsolidadoHandler(
         var codigo = instance.TypeCode;
         var computed = ChecklistEngine.Compute(codigo, manual, docTipos);
         return computed?.FaltanObligatorios ?? [];
-    }
-
-    private static async Task<byte[]> ReadAllBytesAsync(Stream stream, CancellationToken ct)
-    {
-        using var ms = new MemoryStream();
-        await stream.CopyToAsync(ms, ct);
-        return ms.ToArray();
     }
 
     private static string SafeRef(string reference) =>

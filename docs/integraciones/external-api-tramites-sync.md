@@ -18,6 +18,10 @@
 > Estado: **implementada** (HU #13263). Lo demás, sin cambios.
 > **Aclaración** (2026-10-05, HU #13264): el `200` idempotente no escribe el adjunto, pero si el trámite está en un
 > estado que marca el pago y la marca falta, la pone (`pagadoMarcado: true`).
+> **Cambio v3.2.1** (2026-11-19, Bug [#14625](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/14625)):
+> el comprobante se acepta en **cualquier estado salvo `anulado` y `revocado`**, y en todos ellos marca el impuesto
+> como pagado (también en `aprobado` y `entregado`). `409 not_allowed_in_state` queda solo para anulado y revocado,
+> siempre con `terminal: true`, y la respuesta tiene la misma forma.
 >
 > **Aclaración (2026-09-30, HU #13077):** el endpoint de URL de adjunto entrega **solo facturas** (cualquier
 > otro adjunto responde 404) y suma `503 storage_unavailable` si el almacenamiento no responde (§3).
@@ -380,24 +384,23 @@ Respuesta `201` (adjunto nuevo) o `200` (reenvío idempotente), **mismo cuerpo**
 | `sha256` | SHA-256 hexadecimal en minúsculas de los bytes recibidos. |
 | `reemplazoDe` | id del adjunto anterior **del consumidor** que este envío retiró; `null` si no había o si es el 200 idempotente. |
 | `enMatriz` | `true` si el tipo está en la matriz documental del gestor para ese trámite (completa una casilla de su checklist). `false`: queda archivado sin casilla. |
-| `pagadoMarcado` | `true` si el trámite tiene marcada por el consumidor el impuesto departamental como pagado (marca vigente). Un envío en `entregado` no marca, pero si la marca ya existía devuelve `true`. |
+| `pagadoMarcado` | `true` si el trámite tiene marcada por el consumidor el impuesto departamental como pagado (marca vigente). |
 
 Reglas:
 
-- **Estados que aceptan el envío:** `preasignacion`, `asignado`, `entregado` y `rechazado` con subsanación
-  activa. Los demás responden `409 not_allowed_in_state` sin archivar (ver la tabla de abajo).
+- **Estados que aceptan el envío:** todos salvo `anulado` y `revocado`: `borrador`, `preparado`, `preasignacion`,
+  `asignado`, `entregado`, `aprobado` y `rechazado` (con o sin subsanación). Anulado y revocado responden
+  `409 not_allowed_in_state` sin archivar (ver la tabla de abajo).
 - **Gana quien carga primero.** Si en FLIT ya se cargó ese tipo (el gestor o el portal de participantes), responde `409 attachment_exists` y su archivo
   se conserva: es definitivo, no reintentar. Si el consumidor cargó primero, el gestor **no** puede
   reemplazarlo ni borrarlo; en FLIT lo ve como un comprobante cargado, sin indicar el origen.
 - **Corrección:** un nuevo envío del consumidor con otro archivo reemplaza el suyo anterior (`reemplazoDe`).
   Es la única vía de corrección; FLIT no la ofrece al gestor.
 - **Idempotencia por contenido:** si el archivo es idéntico (mismo SHA-256) al adjunto vigente del
-  consumidor, responde `200` con el mismo cuerpo y no escribe el adjunto; si el trámite está en un estado que
-  marca (`preasignacion`, `asignado`, `rechazado` con subsanación) y la marca falta, la pone. Un reintento de red no duplica.
-- **Impuesto pagado:** al aceptar el archivo se marca el impuesto departamental como pagado en
-  `preasignacion`, `asignado` y `rechazado` con subsanación. En `entregado` **no** se marca (el trámite está
-  en el organismo); `pagadoMarcado` refleja la marca vigente del consumidor, así que vale `true` si ya existía y
-  `false` si no. El gestor no puede desmarcar lo que marcó el consumidor.
+  consumidor, responde `200` con el mismo cuerpo y no escribe el adjunto; si la marca falta, la pone. Un reintento de red no duplica.
+- **Impuesto pagado:** al aceptar el archivo se marca el impuesto departamental como pagado en todo estado
+  admitido, incluidos `entregado` y `aprobado`. `pagadoMarcado` refleja la marca vigente del consumidor. El gestor
+  no puede desmarcar lo que marcó el consumidor.
 - **Reversa en el consumidor:** si el consumidor reversa el pago, no avisa a FLIT; el adjunto y la marca
   quedan. Un nuevo comprobante posterior se reenvía y reemplaza el anterior.
 - **Solo archiva:** no corre OCR ni regenera el consolidado del trámite.
@@ -412,7 +415,7 @@ Errores (problem+json, decidir siempre por `code`):
 | 401 | `invalid_token` | Renovar el pase una vez y reintentar. |
 | 403 | `insufficient_scope` | Falta `external.tramites.attachments.write` en el cliente; avisar a FLIT. |
 | 404 | `procedure_not_found` | Trámite inexistente o fuera de alcance. Definitivo. |
-| 409 | `not_allowed_in_state` | Lleva `estado` (estado actual) y `terminal`. `terminal: true` (`aprobado`, `anulado`, `revocado`): definitivo. `terminal: false`: reintentar con espera creciente. |
+| 409 | `not_allowed_in_state` | Lleva `estado` (estado actual) y `terminal`. Solo en `anulado` y `revocado`, con `terminal: true`: definitivo. `terminal: false` queda reservado (hoy ningún estado lo produce); si llega, reintentar con espera creciente. |
 | 409 | `attachment_exists` | El comprobante ya se cargó en FLIT (gestor o portal). Definitivo. |
 | 429 | `rate_limited` | Esperar `Retry-After`. |
 | 503 | `storage_unavailable` | Transitorio: reintentar con la misma petición. |
@@ -420,12 +423,11 @@ Errores (problem+json, decidir siempre por `code`):
 ```json
 { "type": "about:blank", "title": "not_allowed_in_state", "status": 409,
   "detail": "El trámite está en un estado que no admite este envío.",
-  "code": "not_allowed_in_state", "estado": "aprobado", "terminal": true }
+  "code": "not_allowed_in_state", "estado": "anulado", "terminal": true }
 ```
 
-`terminal` aquí significa «el trámite ya no volverá a un estado que acepte el envío». No es lo mismo que
-la columna «¿Terminal?» de §4: `aprobado` no es terminal en el feed (puede revocarse), pero nunca vuelve a
-aceptar el comprobante.
+`terminal` aquí significa «el trámite ya no volverá a un estado que acepte el envío». Coincide con la columna
+«¿Terminal?» de §4: solo `anulado` y `revocado`.
 
 **Cuota:** los envíos comparten con el feed y la URL de factura las **120 solicitudes por minuto** del
 cliente. Enviar por cola con concurrencia baja (2–4, o ~60 por minuto) para no frenar la sincronización,

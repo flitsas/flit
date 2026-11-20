@@ -123,3 +123,18 @@ export function formatFechaHora(
 
   return `${diaEnColombia(date)} ${HORA.format(date)}`;
 }
+
+const HORA_12 = new Intl.DateTimeFormat("es-CO", {
+  timeZone: ZONA_COLOMBIA,
+  hour: "numeric",
+  minute: "2-digit",
+  hour12: true,
+});
+
+/** Instante → hora de Colombia en 12 horas, p. ej. `9:41 p. m.` (los espacios especiales de ICU pasan a espacio normal). */
+export function formatHoraColombia(value: string | Date | null | undefined, fallback = ""): string {
+  if (value === null || value === undefined || value === "") return fallback;
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return fallback;
+  return HORA_12.format(date).replace(/\s/g, " ");
+}

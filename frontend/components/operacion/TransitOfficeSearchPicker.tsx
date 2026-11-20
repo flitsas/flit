@@ -125,8 +125,8 @@ export function TransitOfficeSearchPicker({
 
       {open && !disabled && (
         <div
-          className="absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border bg-white p-1 dark:bg-[#162744]"
-          style={{ boxShadow: '0 8px 24px rgba(15,23,42,0.12)' }}
+          className="absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-xl border bg-card p-1"
+          style={{ boxShadow: 'var(--shadow-card-hover)' }}
         >
           <ul id={listId} role="listbox" aria-label="Organismos de tránsito">
             {loading && (
@@ -152,8 +152,8 @@ export function TransitOfficeSearchPicker({
                     // del contenedor—, así que el clic llega entero.
                     onClick={() => pick(o)}
                     onMouseEnter={() => setActivo(i)}
-                    className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium hover:bg-[#EFF6FF] dark:hover:bg-white/5 ${
-                      i === activo ? 'bg-[#EFF6FF] dark:bg-white/5' : ''
+                    className={`w-full rounded-lg px-3 py-2 text-left text-xs font-medium hover:bg-secondary ${
+                      i === activo ? 'bg-secondary' : ''
                     }`}
                     style={{ color: 'var(--color-flit-primary)' }}
                   >

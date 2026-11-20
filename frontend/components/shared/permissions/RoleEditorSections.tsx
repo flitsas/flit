@@ -19,7 +19,7 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
     <section aria-labelledby={id} className="flex flex-col gap-3">
       <h3
         id={id}
-        className="border-b border-[#DFE5ED] pb-1.5 text-xs font-bold uppercase tracking-wide text-[#59677D] dark:border-white/15 dark:text-white/70"
+        className="border-b border-border pb-1.5 text-xs font-bold uppercase tracking-wide text-muted-foreground"
       >
         {title}
       </h3>

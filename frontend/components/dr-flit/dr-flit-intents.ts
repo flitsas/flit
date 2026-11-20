@@ -74,7 +74,11 @@ export const DR_FLIT_INTENTS = DR_FLIT_GESTION_INTENTS;
 /**
  * HU-F — canales de soporte configurables por ambiente (`NEXT_PUBLIC_DR_FLIT_SUPPORT_*`, se hornean
  * en build). El teléfono NO tiene respaldo: sin configurar no se muestra, antes que mostrar un número
- * inventado. Correo y URL conservan el respaldo institucional.
+ * inventado. El correo conserva el respaldo institucional.
+ *
+ * Bug #14629 — se retiró `DR_FLIT_SUPPORT_CASE_URL` (formulario web legado de FLIT 1.0,
+ * `https://flitsas.com.co/SOPORTE/`): los casos ahí radicados no llegaban a Azure DevOps. El único
+ * canal de radicación vigente es «Generar un caso de soporte» dentro del chat.
  */
 function envOrNull(value: string | undefined): string | null {
   const v = value?.trim();
@@ -86,8 +90,6 @@ export const DR_FLIT_SUPPORT_EMAIL =
 export const DR_FLIT_SUPPORT_PHONE: string | null = envOrNull(
   process.env.NEXT_PUBLIC_DR_FLIT_SUPPORT_PHONE,
 );
-export const DR_FLIT_SUPPORT_CASE_URL =
-  envOrNull(process.env.NEXT_PUBLIC_DR_FLIT_SUPPORT_CASE_URL) ?? "https://flitsas.com.co/SOPORTE/";
 
 /**
  * Épica #12718 — interruptor de apagado rápido del chat con LLM (`NEXT_PUBLIC_DR_FLIT_CHAT_ENABLED`,

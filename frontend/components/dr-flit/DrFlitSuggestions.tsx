@@ -1,6 +1,6 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { DR_FLIT_GESTION_INTENTS, gestionChipLabel, type DrFlitIntentId } from "./dr-flit-intents";
 
 export function DrFlitSuggestions({
@@ -42,11 +42,7 @@ export function DrFlitSuggestions({
                 e.currentTarget.style.background = "var(--dr-flit-card-bg)";
               }}
             >
-              <Search
-                className="h-3.5 w-3.5 shrink-0"
-                style={{ color: "var(--dr-flit-brand-blue)" }}
-                aria-hidden="true"
-              />
+              <Icono nombre="buscar" className="h-3.5 w-3.5 shrink-0" style={{ color: "var(--dr-flit-brand-blue)" }} />
               {gestionChipLabel(intent)}
             </button>
           </li>

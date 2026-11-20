@@ -73,6 +73,12 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
 
     public DbSet<TenantTransitOfficeGrant> TenantTransitOfficeGrants => Set<TenantTransitOfficeGrant>();
 
+    public DbSet<OtUserClientScopeEntity> OtUserClientScopes => Set<OtUserClientScopeEntity>();
+
+    public DbSet<OtUserClientScopeClientEntity> OtUserClientScopeClients => Set<OtUserClientScopeClientEntity>();
+
+    public DbSet<OtInvitationClientScopeClientEntity> OtInvitationClientScopeClients => Set<OtInvitationClientScopeClientEntity>();
+
     /// <summary>HU #12407 — bloqueos de OT para cabezas Marca Blanca.</summary>
     public DbSet<TenantTransitOfficeBlock> TenantTransitOfficeBlocks => Set<TenantTransitOfficeBlock>();
 
@@ -85,13 +91,6 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     /// hijos (<c>tramites.network_access_audit</c>). Se escribe solo vía <c>NetworkAccessAuditWriter</c>.
     /// </summary>
     public DbSet<NetworkAccessAuditEntry> NetworkAccessAuditEntries => Set<NetworkAccessAuditEntry>();
-
-    /// <summary>
-    /// Convenio comercial compañía ↔ organismo. Distinto del grant de arriba, que es el permiso para
-    /// radicar: este solo decide si el mandato lleva bloque de firma del mandatario.
-    /// </summary>
-    public DbSet<CompanyTransitOfficeAgreement> CompanyTransitOfficeAgreements =>
-        Set<CompanyTransitOfficeAgreement>();
 
     // HU #10759 — restricciones de consulta (RNMC, comparendos) por OT de la compañía.
     public DbSet<TenantTransitOfficeConsultationRestriction> TenantTransitOfficeConsultationRestrictions =>
@@ -257,9 +256,6 @@ public sealed class FlitDbContext(DbContextOptions<FlitDbContext> options)
     public DbSet<DocumentOrderOverride> DocumentOrderOverrides => Set<DocumentOrderOverride>();
 
     public DbSet<DocumentRequirementOverride> DocumentRequirementOverrides => Set<DocumentRequirementOverride>();
-
-    // HU #10521 (RF31) — parámetros documentales por compañía gestora.
-    public DbSet<Entities.Admin.CompanyDocumentParamEntity> CompanyDocumentParams => Set<Entities.Admin.CompanyDocumentParamEntity>();
 
     // Snapshot documental inmutable (HU #10197). Ancla a la instancia canónica del runtime.
     public DbSet<ProcedureDocumentSnapshot> ProcedureDocumentSnapshots => Set<ProcedureDocumentSnapshot>();

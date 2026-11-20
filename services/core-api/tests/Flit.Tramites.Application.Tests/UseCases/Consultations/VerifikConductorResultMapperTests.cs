@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Tramites.Application.UseCases.Consultations;
 using FluentAssertions;
 using Xunit;
@@ -6,6 +7,8 @@ namespace Flit.Tramites.Application.Tests.UseCases.Consultations;
 
 public sealed class VerifikConductorResultMapperTests
 {
+    private static readonly JsonSerializerOptions WebJson = new(JsonSerializerDefaults.Web);
+
     private static VerifikConductorResponse Response(
         string? fullName = null,
         string? firstName = null,
@@ -261,5 +264,44 @@ public sealed class VerifikConductorResultMapperTests
 
         Check(result, "conductor_licencia").Status.Should().Be("warn");
         result.HydratedFields.Should().Contain(f => f.FieldKey == "person_has_active_license" && f.ValueText == "false");
+    }
+
+    // Verifik PPT (y otros docs) a veces mandan "infractions": [] en vez del objeto
+    // {tieneMultas,nroPazYSalvo}. Sin conversor, STJ tumba toda la respuesta y el provider
+    // reporta error → failover a Kyverum aunque el 200 traiga el nombre.
+    [Fact]
+    public void Deserializa_InfractionsArrayVacio_SinPerderNombre()
+    {
+        const string json = """
+            {"data":{"documentType":"PPT","documentNumber":"5693341","firstName":"ANTHONY JESUS","lastName":"BASTIDAS CABELLO","fullName":"ANTHONY JESUS BASTIDAS CABELLO","citizenStatus":"ACTIVA","driverStatus":"ACTIVO","licenses":[{"category":"C1","status":"ACTIVA"}],"infractions":[],"identityValidationAttempts":{"estadoUsuario":"ACTIVO"}},"id":"ppt-ficticio"}
+            """;
+
+        var payload = JsonSerializer.Deserialize<VerifikConductorResponse>(json, WebJson);
+
+        payload.Should().NotBeNull();
+        payload!.Data.Should().NotBeNull();
+        payload.Data!.Infractions.Should().BeNull("[] se trata como sin dato de multas");
+        payload.Data.FullName.Should().Be("ANTHONY JESUS BASTIDAS CABELLO");
+
+        var result = VerifikConductorResultMapper.Map(payload);
+        result.Overall.Should().Be("green");
+        Field(result, "person_full_name").Should().Be("ANTHONY JESUS BASTIDAS CABELLO");
+        result.Checks.Should().NotContain(c => c.Status == "error");
+        result.Checks.Should().NotContain(c => c.Key == "conductor_multas", "sin bloque de multas no se emite el check");
+    }
+
+    [Fact]
+    public void Deserializa_InfractionsObjeto_SigueFuncionando()
+    {
+        const string json = """
+            {"data":{"documentType":"CC","documentNumber":"123","fullName":"PERSONA OBJETO","infractions":{"tieneMultas":"NO","nroPazYSalvo":"PZ-1"},"licenses":[{"category":"B1","status":"ACTIVA"}],"driverStatus":"ACTIVO","citizenStatus":"ACTIVA"}}
+            """;
+
+        var payload = JsonSerializer.Deserialize<VerifikConductorResponse>(json, WebJson);
+
+        payload!.Data!.Infractions.Should().NotBeNull();
+        payload.Data.Infractions!.TieneMultas.Should().Be("NO");
+        payload.Data.Infractions.NroPazYSalvo.Should().Be("PZ-1");
+        VerifikConductorResultMapper.Map(payload).Overall.Should().Be("green");
     }
 }

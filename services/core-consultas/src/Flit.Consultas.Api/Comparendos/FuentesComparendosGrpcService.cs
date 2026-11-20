@@ -9,7 +9,7 @@ namespace Flit.Consultas.Api.Comparendos;
 /// elige canal y proveedor; aquí se valida, se ejecuta y se mide el consumo (fuente «comparendos»). Separado de
 /// <c>ConsultarMultas</c> a propósito (decisión del 2026-10-13).
 /// </summary>
-internal sealed class FuentesComparendosGrpcService(IEnumerable<IProveedorComparendos> proveedores, ConsumoRecorder consumo)
+internal sealed class FuentesComparendosGrpcService(IEnumerable<IProveedorComparendos> proveedores, ProveedorContratosRenting contratos, ConsumoRecorder consumo)
     : FuentesComparendosService.FuentesComparendosServiceBase
 {
     public override Task<ListarProveedoresComparendosResponse> ListarProveedoresComparendos(ListarProveedoresComparendosRequest request, ServerCallContext context)
@@ -44,6 +44,46 @@ internal sealed class FuentesComparendosGrpcService(IEnumerable<IProveedorCompar
         return consumo.MedirAsync(context, "comparendos", () => proveedor.ConsultarAsync(request, context.CancellationToken), r =>
             (r.Proveedor, r.Parciales.Any(p => p.Resultado == ResultadoFuente.Error) ? "error"
                 : r.Parciales.All(p => p.Resultado == ResultadoFuente.ExitosaVacia) ? "vacia" : "con_datos", false));
+    }
+
+    public override Task<ConsultarContratoConductorResponse> ConsultarContratoConductor(ConsultarContratoConductorRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        if (request.Proveedor != ProveedorContratosRenting.ClaveProveedor)
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, $"Proveedor de contratos desconocido: «{request.Proveedor}»."));
+        if (string.IsNullOrWhiteSpace(request.Placa))
+            throw Invalido("Se necesita la placa.");
+        if (!DateOnly.TryParseExact(request.Fecha, "yyyy-MM-dd", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var fecha))
+            throw Invalido("Se necesita la fecha (AAAA-MM-DD).");
+        // GDC punto 19: la hora (HH:mm) es opcional; sin ella se consulta al mediodía, como antes.
+        TimeOnly? hora = null;
+        if (request.HasHora)
+        {
+            if (!TimeOnly.TryParseExact(request.Hora, "HH:mm", System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var h))
+                throw Invalido("La hora va como HH:mm (24 horas).");
+            hora = h;
+        }
+
+        if (contratos.NoConectado is { } motivo)
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, motivo));
+
+        return consumo.MedirAsync(context, "contratos", () => contratos.ConsultarAsync(request.Placa, fecha, context.CancellationToken, hora), r =>
+            (r.Proveedor, r.Resultado switch
+            {
+                ResultadoContratoConductor.Encontrado => "con_datos",
+                ResultadoContratoConductor.NoEncontrado => "vacia",
+                _ => "error",
+            }, false));
+    }
+
+    /// <summary>HU #13843: solo el inicio de sesión con la API de contratos; nunca consulta una placa.</summary>
+    public override Task<ProbarContratoConductorResponse> ProbarContratoConductor(ProbarContratoConductorRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+        if (request.Proveedor != ProveedorContratosRenting.ClaveProveedor)
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, $"Proveedor de contratos desconocido: «{request.Proveedor}»."));
+        return contratos.ProbarAsync(context.CancellationToken);
     }
 
     private static RpcException Invalido(string mensaje) => new(new Status(StatusCode.InvalidArgument, mensaje));

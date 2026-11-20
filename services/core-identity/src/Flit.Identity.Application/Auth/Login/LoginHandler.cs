@@ -28,6 +28,8 @@ public sealed class LoginHandler(
             .ConfigureAwait(false);
         var snapshot = verified.User;
 
+        // La caja es un módulo de FLIT 2.0 (ADR-0082): quien solo tiene ot_caja inicia sesión como cualquiera y recibe su JWT heredado
+        // con el rol ot_caja. Lo que puede usar lo limita core-api (SoloCajaGuard y la autorización de cada ruta), no el login.
         var issued = jwtTokenIssuer.IssueToken(
             snapshot.UserId,
             snapshot.Email,

@@ -27,7 +27,7 @@ public static class DetalleEndpoints
         api.MapPost("/comparendos/{id:guid}/inactivar", Inactivar).RequirePermiso(Permisos.ComparendoInactivar);
     }
 
-    private static async Task<IResult> Detalle(Guid id, AccesoComparendo acceso, ComparendosDb db, CalendarioService calendario, Reloj reloj, CancellationToken ct)
+    private static async Task<IResult> Detalle(Guid id, AccesoComparendo acceso, ComparendosDb db, CalendarioService calendario, Reloj reloj, UsuarioActual usuario, CancellationToken ct)
     {
         var c = await acceso.ParaLeerAsync(id, ct).ConfigureAwait(false);
         var motor = await calendario.MotorAsync(ct).ConfigureAwait(false);
@@ -103,14 +103,15 @@ public static class DetalleEndpoints
             estadoNotificacionConductor = c.EstadoNotificacionConductor.ToString(),
             estadoCambioContraventor = c.EstadoCambioContraventor.ToString(),
             estadoConsultaContraventor = c.EstadoConsultaContraventor.ToString(),
-                errorConsultaContraventor = c.ErrorConsultaContraventor,
+            // La respuesta cruda de la consulta del conductor es para soporte de FLIT: la gestora no la recibe.
+            errorConsultaContraventor = usuario.EsSuperAdmin ? c.ErrorConsultaContraventor : null,
             c.NotificadoFisicamente,
             c.Pagado,
             c.TieneDp,
             c.Gestionado,
             contraventor = c.Contraventor is { } k ? new
             {
-                tipoDocumento = k.TipoDocumento.ToString(), k.NumeroDocumento, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato,
+                tipoDocumento = k.TipoDocumento?.ToString(), k.NumeroDocumento, documentoPendiente = k.NumeroDocumento is null, k.Nombres, k.Correo, k.Telefono, k.Direccion, k.Ciudad, k.Sucursal, k.TipoContrato,
                 origen = k.Origen.ToString(), k.CreadoEn,
             } : null,
             historialContraventor = historial,

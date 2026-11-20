@@ -50,7 +50,6 @@ public sealed class GenerarFurHandler(
     ISolicitudVirtualGenerator? solicitudVirtualGenerator = null,
     IMandatoGenerator? mandatoGenerator = null,
     IMandateRequirementPolicy? mandatePolicy = null,
-    IMandatoFirmaPolicy? mandatoFirmaPolicy = null,
     IMandateSignerDirectory? mandateDirectory = null,
     ISoatRtmCertificateGenerator? soatRtmGenerator = null,
     GetSuggestedCommercialValueHandler? avaluoHandler = null,
@@ -106,10 +105,6 @@ public sealed class GenerarFurHandler(
     // lo ejercitan) el mandato se emite con la redacción del generador, como antes.
     private readonly IMandateFormatTemplateProvider? _mandateFormatTemplates = mandateFormatTemplates;
 
-    // Convenio compañía↔organismo y firma física del mandatario: deciden si el mandato lleva bloque de
-    // firma del mandatario. Default seguro ⇒ lo lleva (es un actor obligatorio).
-    private readonly IMandatoFirmaPolicy _mandatoFirmaPolicy = mandatoFirmaPolicy ?? NullMandatoFirmaPolicy.Instance;
-
     // ADR-0036 §D9 (HU #10916) — directorio de mandatarios: rellena el firmante del PDF del mandato desde
     // instance.MandateSignerId (resuelto al aprobar). Default seguro (NUNCA resuelve) si no se inyecta.
     private readonly IMandateSignerDirectory _mandateDirectory = mandateDirectory ?? NullMandateSignerDirectory.Instance;
@@ -137,7 +132,7 @@ public sealed class GenerarFurHandler(
 
     private MandatoEmisor MandatoEmisor => _mandatoEmisor ??= new MandatoEmisor(
         repo, certClient, storage, logger, _vaultPolicy, _mandatoGenerator, _mandatePolicy, _mandateDirectory,
-        _mandateTemplateBlob, _mandateFormatTemplates, identitySignatureCapture, _mandatoFirmaPolicy);
+        _mandateTemplateBlob, _mandateFormatTemplates, identitySignatureCapture);
 
     /// <summary>
     /// HU #10860 (cascada β) — regenera el FUR y sus documentos en caliente (con fecha vigente) para
@@ -1262,9 +1257,16 @@ public sealed class GenerarFurHandler(
                 FurPrendaObservation.Join(
                     FurTransformationObservations.ComposeDeclaradas(
                         transformaciones,
-                        Get(fv, "vehicle_color"),
-                        Get(fv, "vehicle_fuel"),
-                        Get(fv, "vehicle_body_type")),
+                        // Solo el valor NUEVO: vacío o igual al del RUNT no se declara (ver ValorNuevo).
+                        FurTransformationObservations.ValorNuevo(
+                            Get(fv, "vehicle_color_runt"), Get(fv, "vehicle_color"),
+                            transformaciones.Color),
+                        FurTransformationObservations.ValorNuevo(
+                            Get(fv, "vehicle_fuel_runt"), Get(fv, "vehicle_fuel"),
+                            transformaciones.Combustible),
+                        FurTransformationObservations.ValorNuevo(
+                            Get(fv, "vehicle_body_type_runt"), Get(fv, "vehicle_body_type"),
+                            transformaciones.Carroceria)),
                     FurPrendaObservation.Join(
                         FurBlindajeObservation.Compose(blindajeOpcion),
                         FurServicioVinculadoraObservation.Compose(
@@ -1410,21 +1412,38 @@ public sealed class GenerarFurHandler(
     {
         var subject = actor is null ? null : IdentitySubjectResolver.For(actor);
 
+        // HU #13824 - salida de borrador: una identidad vencida a mano solo vale si el tramite salio ANTES del vencimiento.
+        var salidaDeBorrador = IdentityApprovalResolver.TieneVencidaManualLocal(instance)
+            ? await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct)
+            : null;
+
         // Fila propia aprobada+vigente del rol Y del documento del sujeto actual. El filtro por documento es
         // PARIDAD EXACTA con el gate (IdentityApprovalResolver.HasLocalVigente): sin él, una fila propia con
         // documento desfasado (documento editado tras validar) haría que el gate aprobara por la identidad
         // referenciada mientras el sello estamparía otro documento/certificado — inconsistencia en el FUR.
         var own = instance.BiometricValidations.FirstOrDefault(v =>
             string.Equals(v.PartyRole, role, StringComparison.OrdinalIgnoreCase)
-            && BiometricRules.EsAprobadaVigente(v, now)
+            && BiometricRules.EsAprobadaVigenteParaTramite(v, instance.Status, now, salidaDeBorrador)
             && BiometricRules.DocumentoCoincide(v, subject?.TipoDocumento, subject?.NumeroDocumento));
         if (own is not null)
             return own;
 
         // Identidad vigente REFERENCIADA por documento del sujeto (HU #10350, sin clonar).
         if (subject is not null && !string.IsNullOrWhiteSpace(subject.TipoDocumento) && !string.IsNullOrWhiteSpace(subject.NumeroDocumento))
-            return await repo.FindVigenteApprovedByDocumentAsync(
+        {
+            var referenciada = await repo.FindVigenteApprovedByDocumentAsync(
                 instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now, ct);
+            // HU #13824 — fuera de borrador el FUR conserva el sello de una identidad que un Super Admin venció a mano.
+            if (referenciada is null
+                && !string.Equals(instance.Status, TramiteEstado.Borrador, StringComparison.OrdinalIgnoreCase))
+            {
+                salidaDeBorrador ??= await repo.GetSalidaDeBorradorAtAsync(instance.Id, instance.TenantId, ct);
+                referenciada = await repo.FindProtegidaPorVencimientoManualAsync(
+                    instance.TenantId, subject.TipoDocumento.Trim(), subject.NumeroDocumento.Trim(), now,
+                    salidaDeBorrador, ct);
+            }
+            return referenciada;
+        }
 
         return null;
     }

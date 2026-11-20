@@ -35,7 +35,8 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         {
             Provider = isKyverum ? BiometricProviders.Kyverum : BiometricProviders.Mock,
         };
-        return new AdminReenviarValidacionIdentidadHandler(_repo, _kyverum, opts, _protector, _events, _audit);
+        var kyverumVerify = new IniciarKyverumVerifyHandler(_repo, _kyverum, _protector, _events, _audit);
+        return new AdminReenviarValidacionIdentidadHandler(_repo, _kyverum, opts, _protector, _events, _audit, kyverumVerify);
     }
 
     private static ProcedureInstance Instance(Guid id, Guid tenantId, string status) => new()
@@ -109,7 +110,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var validation = SeedTramiteValidation(instanceId);
         var handler = BuildHandler();
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, userId);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, userId);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().BeNull();
@@ -130,7 +131,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var handler = BuildHandler();
         var antes = DateTimeOffset.UtcNow;
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, userId);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, userId);
         var (_, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().BeNull();
@@ -160,7 +161,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var handler = BuildHandler();
 
         var command = new AdminReenviarValidacionIdentidadCommand(
-            instanceId, validation.Id, _tenantId, "comprador.nuevo@correcto.com", null);
+            instanceId, validation.Id, null, null, _tenantId, "comprador.nuevo@correcto.com", null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().BeNull();
@@ -182,7 +183,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var handler = BuildHandler();
 
         var command = new AdminReenviarValidacionIdentidadCommand(
-            instanceId, validation.Id, _tenantId, "comprador.nuevo@correcto.com", null);
+            instanceId, validation.Id, null, null, _tenantId, "comprador.nuevo@correcto.com", null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().BeNull();
@@ -203,7 +204,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
 
         // Mismo correo, con distinto casing/espacios — no debe contar como cambio (AC1, no AC2).
         var command = new AdminReenviarValidacionIdentidadCommand(
-            instanceId, validation.Id, _tenantId, "  COMPRADOR@OLD.com  ", null);
+            instanceId, validation.Id, null, null, _tenantId, "  COMPRADOR@OLD.com  ", null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().BeNull();
@@ -227,7 +228,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var validation = SeedTramiteValidation(instanceId);
         var handler = BuildHandler();
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().Be(TramiteEstadoErrores.IdentidadReenvioNoDisponible);
@@ -247,7 +248,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var validation = SeedTramiteValidation(instanceId);
         var handler = BuildHandler();
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().BeNull();
@@ -269,7 +270,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var validation = SeedTramiteValidation(instanceId);
         var handler = BuildHandler();
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().BeNull();
@@ -289,7 +290,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
             .Returns((ProcedureInstance?)null);
         var handler = BuildHandler();
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, Guid.NewGuid(), _tenantId, null, null);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, Guid.NewGuid(), null, null, _tenantId, null, null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().Be(TramiteEstadoErrores.NoEncontrado);
@@ -307,7 +308,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var validation = SeedTramiteValidation(otraInstanceId); // ligada a OTRO trámite
         var handler = BuildHandler();
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().Be(TramiteEstadoErrores.NoEncontrado);
@@ -324,7 +325,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var validation = SeedTramiteValidation(instanceId, status: BiometricEstados.Aprobado);
         var handler = BuildHandler();
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().Be(AdminReenviarValidacionIdentidadHandler.IdentidadAprobada);
@@ -341,7 +342,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var validation = SeedTramiteValidation(instanceId, lastResentAt: DateTimeOffset.UtcNow.AddMinutes(-2));
         var handler = BuildHandler();
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().BeNull();
@@ -360,7 +361,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         StubKyverumOk();
         var handler = BuildHandler(isKyverum: true);
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().BeNull();
@@ -380,7 +381,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         StubKyverumOk();
         var handler = BuildHandler(isKyverum: true);
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, null);
         var (result, error, _, _) = await handler.HandleAsync(command, ct);
 
         error.Should().BeNull();
@@ -400,7 +401,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var validation = SeedTramiteValidation(instanceId);
         var handler = BuildHandler();
 
-        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null);
+        var command = new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, null);
         await handler.HandleAsync(command, ct);
 
         await _audit.Received(1).LogAsync(
@@ -429,7 +430,7 @@ public sealed class AdminReenviarValidacionIdentidadHandlerTests
         var handler = BuildHandler(isKyverum: true);
 
         var (result, error, _, _) = await handler.HandleAsync(
-            new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, _tenantId, null, null), ct);
+            new AdminReenviarValidacionIdentidadCommand(instanceId, validation.Id, null, null, _tenantId, null, null), ct);
 
         result.Should().BeNull();
         error.Should().Be("identidad_manual"); // el endpoint responde 409 Conflict

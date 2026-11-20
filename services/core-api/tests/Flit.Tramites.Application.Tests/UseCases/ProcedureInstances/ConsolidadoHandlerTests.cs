@@ -941,14 +941,11 @@ public sealed class ConsolidadoHandlerTests
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
 
         _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
-        var company = Substitute.For<IChecklistCompanyParamsProvider>();
-        company.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<CompanyDocumentParam>>([]));
         var matrix = Substitute.For<IResolvedChecklistMatrixProvider>();
         matrix.GetForAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ResolvedChecklistDoc>>(
                 [new ResolvedChecklistDoc("impronta", "Impronta", true, 10)]));
-        var completeness = new ChecklistMatrixCompleteness(company, matrix);
+        var completeness = new ChecklistMatrixCompleteness(matrix);
         var impronta = new FakeImprontaGenerator();
         var handler = new GenerarConsolidadoHandler(_repo, _merger, _storage, completeness, null, impronta);
 
@@ -1108,16 +1105,13 @@ public sealed class ConsolidadoHandlerTests
             _storage.Files[att.StoragePath] = System.Text.Encoding.UTF8.GetBytes(att.Filename);
         _repo.GetByIdWithChecklistGraphAsync(id, tenantId, Arg.Any<CancellationToken>()).Returns(instance);
 
-        var company = Substitute.For<IChecklistCompanyParamsProvider>();
-        company.GetForTenantAsync(Arg.Any<Guid>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromResult<IReadOnlyList<CompanyDocumentParam>>([]));
         var matrix = Substitute.For<IResolvedChecklistMatrixProvider>();
         matrix.GetForAsync(Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
             .Returns(Task.FromResult<IReadOnlyList<ResolvedChecklistDoc>>(
                 [new ResolvedChecklistDoc("impronta", "Impronta", true, 10)]));
         var impronta = new FailingImprontaGenerator("provider_unavailable");
         var handler = new GenerarConsolidadoHandler(
-            _repo, _merger, _storage, new ChecklistMatrixCompleteness(company, matrix), null, impronta);
+            _repo, _merger, _storage, new ChecklistMatrixCompleteness(matrix), null, impronta);
 
         var (result, error) = await handler.HandleAsync(
             id, tenantId, Guid.NewGuid(), TestContext.Current.CancellationToken);

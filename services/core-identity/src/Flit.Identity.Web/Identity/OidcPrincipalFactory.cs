@@ -27,8 +27,11 @@ public sealed record OidcGrant(ClaimsPrincipal? Principal, string? DeniedCode)
 /// Se conservan los nombres y formatos de claims del JWT de siempre (<c>RsaJwtTokenIssuer</c>).
 /// </para>
 /// </summary>
-public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAccessResolver access)
+public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAccessResolver access, TimeProvider? clock = null)
 {
+    /// <summary>Claim estándar (OIDC Core §2): instante, en segundos Unix, en que el usuario se autenticó con sus credenciales.</summary>
+    public const string AuthTimeClaim = "auth_time";
+
     private const string SuperAdmin = "SuperAdmin";
 
     public const string ProductNotEnabled = "PRODUCT_NOT_ENABLED";
@@ -41,6 +44,10 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
     /// </summary>
     public async Task<OidcGrant> ForUserAsync(ClaimsPrincipal source, string product, IEnumerable<string> scopes, CancellationToken ct)
     {
+        // La caja del organismo es un módulo de FLIT 2.0 (ADR-0082), no un producto con sesión propia: ya no se emiten tokens del producto caja.
+        if (string.Equals(product, ProductCodes.Caja, StringComparison.Ordinal))
+            return OidcGrant.Denied(ProductNotEnabled);
+
         var email = source.FindFirstValue(Claims.Email);
         var userId = source.FindFirstValue(Claims.Subject);
         var user = string.IsNullOrWhiteSpace(email) ? null : await users.FindByEmailAsync(email, ct).ConfigureAwait(false);
@@ -66,6 +73,12 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
         }
         else
         {
+            // La caja ya no es un portal con sesión propia (ADR-0082): quien solo tiene ot_caja usa FLIT 2.0 con el JWT heredado (login normal),
+            // donde conserva su rol ot_caja y core-api lo limita a la caja. Un token OIDC de producto NO lleva ese rol (los roles son los del
+            // producto), así que no se le emite: el tenant del OT pasaría OtModulePolicy por su tipo de entidad sin que nada lo reconociera solo-caja.
+            if (CajaOnly.IsCajaOnly(user.ActiveRoles.Select(r => r.Code)))
+                return OidcGrant.Denied(CajaOnly.DeniedCode);
+
             var grant = await access.ResolveAsync(user.UserId, user.TenantId, product, ct).ConfigureAwait(false);
             // Bug #14010 H-13: «Usuarios y roles» vive en las pantallas de Trámites, pero no exige el producto.
             // Si Trámites está apagado y la persona administra la plataforma, el token lleva solo esos permisos.
@@ -124,6 +137,14 @@ public sealed class OidcPrincipalFactory(IAuthUserRepository users, IProductAcce
         identity.AddClaim(new Claim("is_group_parent", user.IsGroupParent ? "true" : "false", JsonClaimValueTypes.Json));
         identity.SetClaim("dom", source.FindFirstValue(OidcDefaults.DomainClaim) ?? "flit");
         identity.SetClaim("product", product);
+
+        // Cuándo inició sesión de verdad el usuario. Se conserva el valor de la sesión del hub (authorize) o del refresh token
+        // (canje): un refresh NO lo renueva, así quien lo use como tope absoluto de sesión no se estira con cada refresh.
+        // Si la sesión es anterior a este claim, arranca ahora.
+        var authTime = long.TryParse(source.FindFirstValue(AuthTimeClaim), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var previo) && previo > 0
+            ? previo
+            : (clock ?? TimeProvider.System).GetUtcNow().ToUnixTimeSeconds();
+        identity.AddClaim(new Claim(AuthTimeClaim, authTime.ToString(System.Globalization.CultureInfo.InvariantCulture), ClaimValueTypes.Integer64));
 
         foreach (var role in roles)
         {

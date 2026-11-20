@@ -1,7 +1,10 @@
 "use client";
 
+import { buttonClass } from "@flit/ui/Button";
+import { DIALOGO_PANEL_CLS, DIALOGO_TITULO_CLS, DIALOGO_VELO_CLS, FranjaDialogo } from "@/components/admin/dialogo-propio";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Clock, FileSpreadsheet, History, MailX, Pencil, RotateCcw, ShieldCheck, ShieldOff, Trash2 } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
+import { iconoComo } from "@flit/ui/iconoComo";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
 import {
@@ -14,8 +17,19 @@ import {
   resendOtInvitation,
   cancelOtInvitation,
   reactivateOtInvitation,
+  type OtClientScopeInput,
   type OtUserItem,
 } from "@/lib/api/admin-ot-security";
+import {
+  CLIENT_SCOPE_DEFAULT,
+  ClientScopeFields,
+  OtEditUserModal,
+  clientScopeErrorMessage,
+  clientScopeLabel,
+  isClientScopeValid,
+  toClientScopeInput,
+  type ClientScopeValue,
+} from "./OtClientScope";
 // HU #10624 — restaurar (POST /api/v1/superadmin/users/{userId}/restore) es un endpoint
 // genérico SOLO SuperAdmin, sin scope OT: se reutiliza el mismo cliente que Usuarios.tsx.
 import { restoreUser } from "@/lib/api/security";
@@ -29,7 +43,6 @@ import {
 import { usePermissions } from "@/hooks/usePermissions";
 import { createOtBulkInvitationsClient } from "@/lib/api/bulk-invitations-client";
 import { BulkInviteModal } from "@/components/atom/modules/users/BulkInviteModal";
-import { EditUserModal } from "@/components/atom/modules/users/EditUserModal";
 import { DeleteUserDialog } from "@/components/atom/modules/users/DeleteUserDialog";
 import { RestoreUserDialog } from "@/components/atom/modules/users/RestoreUserDialog";
 import { ResendInvitationButton } from "@/components/atom/modules/users/ResendInvitationButton";
@@ -53,6 +66,8 @@ import {
   SuspendOrDeactivateModal,
   type SuspendMode,
 } from "@/components/atom/modules/users/SuspendOrDeactivateModal";
+
+const ICONO_CANDADO_ABIERTO = iconoComo("candado-abierto");
 
 export interface OtUsersSectionProps {
   transitOfficeId: string;
@@ -205,7 +220,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
 
     if (!isInvitationRow(u) && isSuperAdmin) {
       actions.push({
-        icon: History,
+        icon: iconoComo("reloj"),
         label: `Ver historial de ${u.fullName}`,
         tone: "primary",
         onClick: () => setAuditTarget(u),
@@ -216,7 +231,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // aviso deshabilitado; las canceladas no tienen cuenta ni invitación vigente.
     if (canConfigurePermissions && u.status !== "cancelled") {
       actions.push({
-        icon: ShieldCheck,
+        icon: iconoComo("escudo"),
         label: `Permisos por módulo de ${u.fullName}`,
         tone: "primary",
         onClick: () => setPermissionsTarget(u),
@@ -227,7 +242,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // hay cuenta real que editar. HU #13655: quien no es administrador no edita a un administrador.
     if (!isInvitationRow(u) && (isUserAdmin || !isAdministratorRoleCode(u.roleCode))) {
       actions.push({
-        icon: Pencil,
+        icon: iconoComo("lapiz"),
         label: `Editar usuario ${u.fullName}`,
         tone: "primary",
         onClick: () => setEditTarget(u),
@@ -238,19 +253,19 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     if (!isInvitationRow(u) && isSuperAdmin) {
       if (u.isSuspended) {
         actions.push({
-          icon: ShieldOff,
+          icon: ICONO_CANDADO_ABIERTO,
           label: `Reactivar usuario ${u.fullName}`,
           onClick: () => void handleUnsuspend(u.id),
         });
       } else {
         actions.push({
-          icon: Clock,
+          icon: iconoComo("reloj"),
           label: `Suspender temporalmente a ${u.fullName}`,
           tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "temporary" }),
         });
         actions.push({
-          icon: Ban,
+          icon: iconoComo("distinto"),
           label: `Desactivar indefinidamente a ${u.fullName}`,
           tone: "danger",
           onClick: () => setSuspendTarget({ user: u, mode: "indefinite" }),
@@ -261,7 +276,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // AC2 (HU #10623): eliminar es exclusivo de SuperAdmin y nunca sobre la propia fila.
     if (!isInvitationRow(u) && isSuperAdmin && u.id !== currentUserId) {
       actions.push({
-        icon: Trash2,
+        icon: iconoComo("papelera"),
         label: `Eliminar usuario ${u.fullName}`,
         tone: "danger",
         onClick: () => setDeleteTarget(u),
@@ -271,7 +286,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     // AC2 (HU #10628): "Cancelar invitación" SOLO en filas pendientes.
     if (u.status === "pending") {
       actions.push({
-        icon: MailX,
+        icon: iconoComo("correo"),
         label: `Cancelar invitación a ${u.fullName}`,
         tone: "danger",
         onClick: () => setCancelTarget(u),
@@ -281,10 +296,15 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     return actions;
   }
 
-  async function handleInvite(email: string, fullName: string, roleIds: string[]) {
+  async function handleInvite(
+    email: string,
+    fullName: string,
+    roleIds: string[],
+    clientScope?: OtClientScopeInput,
+  ) {
     try {
       await inviteOtUser(
-        { email, fullName: fullName || undefined, roleIds },
+        { email, fullName: fullName || undefined, roleIds, ...(clientScope ? { clientScope } : {}) },
         { transitOfficeId },
       );
       show(`Invitación enviada a ${email}.`, "success");
@@ -293,6 +313,8 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
     } catch (err) {
       if (err instanceof ApiError && err.status === 400 && errorCodeOf(err.body) === "ROLE_REQUIRED") {
         show(ROLE_REQUIRED_MESSAGE, "error");
+      } else if (err instanceof ApiError && errorCodeOf(err.body)?.startsWith("CLIENT_SCOPE_")) {
+        show(clientScopeErrorMessage(err), "error");
       } else if (err instanceof ApiError && isEmailConflictCode(emailConflictErrorCode(err.body))) {
         // Mensaje unificado (HU #11550) — mismo texto que la ruta Security/AdminCompany
         // (InviteUserModal) para el único código EMAIL_ALREADY_IN_USE (HU #11580).
@@ -373,9 +395,10 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
   // estado distintos, y por eso "no se parecía a las otras".
   const usersTable = (
       <UsersTable
-        rows={users.map((u) =>
-          toUserRow(u, { profile: "OT", tenantType: "TRANSIT_OFFICE" }),
-        )}
+        rows={users.map((u) => ({
+          ...toUserRow(u, { profile: "OT", tenantType: "TRANSIT_OFFICE" }),
+          clientScopeLabel: clientScopeLabel(u.clientScope),
+        }))}
         loading={status === "loading"}
         error={status === "error" ? "No se pudo cargar el listado de usuarios." : null}
         onRetry={() => void load()}
@@ -444,10 +467,10 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               type="button"
               onClick={() => setShowDeleted((v) => !v)}
               aria-pressed={showDeleted}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-secondary"
               style={{ color: "var(--color-flit-brand)" }}
             >
-              <Trash2 className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="papelera" className="h-3.5 w-3.5" />
               {showDeleted ? "Ver usuarios activos" : "Ver eliminados"}
             </button>
           )}
@@ -460,7 +483,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
               className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold border transition hover:bg-blue-50"
               style={{ color: "var(--color-flit-brand)" }}
             >
-              <FileSpreadsheet className="h-3.5 w-3.5" aria-hidden="true" />
+              <Icono nombre="reporte-detallado" className="h-3.5 w-3.5" />
               Importar Excel
             </button>
           )}
@@ -468,8 +491,7 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
             <button
               type="button"
               onClick={() => setInviteOpen(true)}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-semibold text-white transition hover:opacity-90"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
+              className={buttonClass({ size: "sm" })}
             >
               Invitar usuario
             </button>
@@ -518,6 +540,13 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
           onClose={() => setInviteOpen(false)}
           isSuperAdmin={isSuperAdmin}
           canInviteAdmins={isUserAdmin}
+          transitOfficeId={transitOfficeId}
+          canSetClientScope={isUserAdmin}
+          // Sin llamar endpoints: la fila propia del listado trae el alcance del Gestor.
+          inheritsRestrictedScope={
+            !isUserAdmin &&
+            users.find((u) => u.id === currentUserId)?.clientScope?.mode === "especificos"
+          }
         />
       )}
       {suspendTarget && (
@@ -529,7 +558,11 @@ export function OtUsersSection({ transitOfficeId }: OtUsersSectionProps) {
         />
       )}
       {editTarget && (
-        <EditUserModal
+        <OtEditUserModal
+          transitOfficeId={transitOfficeId}
+          // Solo Admin OT y Super Admin; nadie edita su propio alcance.
+          canEditClientScope={isUserAdmin}
+          isSelf={editTarget.id === currentUserId}
           user={{
             id: editTarget.id,
             fullName: editTarget.fullName,
@@ -666,13 +699,26 @@ function OtInviteUserDialog({
   onConfirm,
   onClose,
   isSuperAdmin,
+  transitOfficeId,
+  canSetClientScope = false,
   canInviteAdmins = true,
+  inheritsRestrictedScope = false,
 }: {
-  onConfirm: (email: string, fullName: string, roleIds: string[]) => Promise<void>;
+  onConfirm: (
+    email: string,
+    fullName: string,
+    roleIds: string[],
+    clientScope?: OtClientScopeInput,
+  ) => Promise<void>;
   onClose: () => void;
   isSuperAdmin: boolean;
+  transitOfficeId: string;
+  /** Solo Admin OT y Super Admin definen el alcance de clientes del invitado. */
+  canSetClientScope?: boolean;
   /** HU #13655: quien no es administrador no ofrece roles de administrador. */
   canInviteAdmins?: boolean;
+  /** Gestor OT restringido: el invitado hereda su alcance de clientes (solo nota informativa). */
+  inheritsRestrictedScope?: boolean;
 }) {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
@@ -680,6 +726,7 @@ function OtInviteUserDialog({
   const [roles, setRoles] = useState<TenantRole[]>([]);
   const [rolesLoading, setRolesLoading] = useState(true);
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
+  const [clientScope, setClientScope] = useState<ClientScopeValue>(CLIENT_SCOPE_DEFAULT);
 
   // El SuperAdmin lee el catálogo global; el ot_admin usa /security/roles, que ya resuelve
   // TRANSIT_OFFICE por su propio tenant.
@@ -718,32 +765,47 @@ function OtInviteUserDialog({
   }, [isSuperAdmin, canInviteAdmins]);
 
   const missingRole = selectedRoleIds.length === 0;
+  const invalidScope = canSetClientScope && !isClientScopeValid(clientScope);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (missingRole) return;
+    if (missingRole || invalidScope) return;
     setBusy(true);
-    await onConfirm(normalizeEmail(email), fullName.trim(), selectedRoleIds);
+    await onConfirm(
+      normalizeEmail(email),
+      fullName.trim(),
+      selectedRoleIds,
+      canSetClientScope ? toClientScopeInput(clientScope) : undefined,
+    );
     setBusy(false);
   }
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={{ background: "rgba(22,39,68,0.45)" }}
+      className={`fixed inset-0 z-50 flex items-start justify-center p-4 ${DIALOGO_VELO_CLS}`}
       role="dialog"
       aria-modal="true"
       aria-labelledby="ot-invite-user-title"
     >
-      <div className="w-full max-w-md rounded-2xl p-6 shadow-2xl bg-card">
-        <h2 id="ot-invite-user-title" className="text-base font-bold mb-1 text-foreground">
-          Invitar usuario
-        </h2>
-        <p className="text-xs mb-4 text-muted-foreground">
-          Perfil <strong>Organismo de Tránsito</strong>. Elige los roles con los que entra el
-          usuario.
-        </p>
-        <form onSubmit={handleSubmit} className="space-y-4">
+      <div
+        className={`flex max-h-[calc(100dvh-2rem)] w-full max-w-md flex-col overflow-hidden p-6 ${DIALOGO_PANEL_CLS}`}
+      >
+        <FranjaDialogo icono="persona" className="-mx-6 -mt-6 mb-5">
+          <div>
+            <h2 id="ot-invite-user-title" className={`text-base font-bold mb-1 ${DIALOGO_TITULO_CLS}`}>
+              Invitar usuario
+            </h2>
+            <p className="text-xs opacity-85">
+              Perfil <strong>Organismo de Tránsito</strong>. Elige los roles con los que entra el
+              usuario.
+            </p>
+          </div>
+        </FranjaDialogo>
+        <form
+          id="ot-invite-form"
+          onSubmit={handleSubmit}
+          className="min-h-0 flex-1 space-y-4 overflow-y-auto pb-1"
+        >
           <OtField label="Nombre completo" htmlFor="ot-invite-name">
             <input
               id="ot-invite-name"
@@ -751,7 +813,7 @@ function OtInviteUserDialog({
               onChange={(e) => setFullName(e.target.value)}
               required
               placeholder="Ej. Laura García"
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-ring"
             />
           </OtField>
           <OtField label="Correo electrónico" htmlFor="ot-invite-email">
@@ -762,7 +824,7 @@ function OtInviteUserDialog({
               onChange={(e) => setEmail(e.target.value)}
               required
               placeholder="laura@transito.gov.co"
-              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-blue-400"
+              className="w-full px-3 py-2 text-sm rounded-lg border outline-none focus:ring-2 focus:ring-ring"
             />
           </OtField>
           {rolesLoading ? (
@@ -795,25 +857,44 @@ function OtInviteUserDialog({
           ) : (
             <p className="text-xs opacity-60">No hay roles disponibles para invitar.</p>
           )}
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={busy}
-              className="flex-1 py-2 rounded-lg text-sm font-medium border transition hover:bg-gray-50 disabled:opacity-60 text-foreground"
+          {canSetClientScope && (
+            <div
+              className="rounded-xl border px-3 py-2.5"
+              style={{ borderColor: "var(--border)", background: "var(--secondary)" }}
             >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={busy || missingRole}
-              className="flex-1 py-2 rounded-lg text-sm font-medium text-white transition hover:opacity-90 disabled:opacity-60"
-              style={{ background: "linear-gradient(135deg,var(--color-flit-brand),var(--color-flit-tech))" }}
-            >
-              {busy ? "Enviando…" : "Enviar invitación"}
-            </button>
-          </div>
+              <ClientScopeFields
+                transitOfficeId={transitOfficeId}
+                value={clientScope}
+                onChange={setClientScope}
+                idPrefix="ot-invite-scope"
+                preferSpecificWhenRestricted
+              />
+            </div>
+          )}
+          {!canSetClientScope && inheritsRestrictedScope && (
+            <p className="text-[10px] opacity-70" data-testid="invite-inherits-scope-note">
+              El usuario invitado tendrá los mismos clientes que tú gestionas.
+            </p>
+          )}
         </form>
+        <div className="mt-4 flex shrink-0 gap-3 border-t border-[color:var(--di-divider)] pt-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={busy}
+            className={buttonClass({ variant: "secondary", className: "flex-1" })}
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="ot-invite-form"
+            disabled={busy || missingRole || invalidScope}
+            className={buttonClass({ className: "flex-1" })}
+          >
+            {busy ? "Enviando…" : "Enviar invitación"}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -851,7 +932,7 @@ function DeletedUsersTable({
   onRestore: (user: OtUserItem) => void;
 }) {
   // Bug #13055 — tabla homologada con el modelo de trámites: paginación en cliente con filas por página.
-  const pg = usePaginacion();
+  const pg = usePaginacion("transit-offices.OtUsersSection");
   const columns: DataTableColumn<OtUserItem>[] = useMemo(
     () => [
       {
@@ -879,7 +960,7 @@ function DeletedUsersTable({
           <RowActions
             actions={[
               {
-                icon: RotateCcw,
+                icon: iconoComo("reintento"),
                 label: `Restaurar usuario ${u.fullName}`,
                 tone: "primary",
                 onClick: () => onRestore(u),

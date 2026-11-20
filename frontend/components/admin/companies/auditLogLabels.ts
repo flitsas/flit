@@ -120,6 +120,79 @@ export function eventLabel(entityName: string | undefined, fieldName: string): s
   return field;
 }
 
+/** Minúsculas y sin tildes, para comparar lo que el usuario ve con lo que escribe. */
+function normalizar(s: string): string {
+  return s
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .trim();
+}
+
+/** Tope de claves que acepta la API (`campoClaves`). */
+export const MAX_CLAVES_CAMPO = 50;
+
+const GENERIC_FIELDS = [
+  "transit_office_id",
+  "transit_office_ids",
+  "email",
+  "is_active",
+  "created",
+  "updated",
+  "document_optional",
+];
+
+/**
+ * Claves técnicas (campo o entidad) cuya etiqueta VISIBLE contiene el texto. La API filtra por el
+ * valor técnico, pero la columna muestra la etiqueta traducida: esto cierra esa brecha. Incluye
+ * las combinaciones «Entidad: campo» de `eventLabel` y, primero, la forma técnica del propio texto
+ * (para los campos no catalogados que caen a `humanizeKey`).
+ */
+export function clavesParaCampo(texto: string): string[] {
+  const needle = normalizar(texto);
+  if (!needle) return [];
+  const claves = new Set<string>();
+  const tecnica = needle.replace(/\s+/g, "_");
+  if (tecnica) claves.add(tecnica);
+
+  for (const [key, label] of Object.entries(FIELD_LABELS)) {
+    if (normalizar(label).includes(needle)) claves.add(key);
+  }
+  for (const entity of Object.keys(ENTITY_LABELS)) {
+    for (const field of GENERIC_FIELDS) {
+      if (normalizar(eventLabel(entity, field)).includes(needle)) {
+        claves.add(entity);
+        claves.add(field);
+      }
+    }
+  }
+  return Array.from(claves).slice(0, MAX_CLAVES_CAMPO);
+}
+
+const ETIQUETAS_BOOLEANAS: ReadonlyArray<{ label: string; value: "true" | "false" }> = [
+  { label: "Habilitada", value: "true" },
+  { label: "Deshabilitada", value: "false" },
+  { label: "Activa", value: "true" },
+  { label: "Inactiva", value: "false" },
+  { label: "Sí", value: "true" },
+  { label: "No", value: "false" },
+];
+
+/**
+ * `true`/`false` cuando el texto coincide con una etiqueta booleana visible (Habilitada, Activa,
+ * Sí…). Exige 2+ caracteres y coincidencia de prefijo de palabra; «No» solo con «no» exacto.
+ */
+export function alternativasParaValor(texto: string): string[] {
+  const needle = normalizar(texto);
+  if (needle.length < 2) return [];
+  const out = new Set<string>();
+  for (const { label, value } of ETIQUETAS_BOOLEANAS) {
+    const palabras = normalizar(label).split(/\s+/);
+    if (palabras.some((p) => p.startsWith(needle))) out.add(value);
+  }
+  return Array.from(out);
+}
+
 export type ParsedAuditValue =
   | { kind: "empty" }
   | { kind: "boolean"; value: boolean; positive: string; negative: string; tone: "success" | "warning" | "neutral" }

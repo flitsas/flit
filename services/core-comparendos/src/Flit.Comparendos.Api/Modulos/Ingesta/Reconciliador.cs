@@ -106,14 +106,13 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
             IdentificacionMonitoreadaId = clave.IdentificacionId,
             PlacaMonitoreadaId = clave.PlacaId,
             EstadoCambioContraventor = config.AllowsContravenerChange ? EstadoCambioContraventor.SinSolicitar : EstadoCambioContraventor.NoAplica,
-            EstadoConsultaContraventor = config.TipoIntegracionConductor == TipoIntegracionConductor.ApiRenting && config.AllowsContravenerConsultation
-                ? EstadoConsultaContraventor.Pendiente
-                : EstadoConsultaContraventor.NoAplica,
             CreadoEn = ahora,
             UltimoEventoEn = ahora,
         };
         AplicarCampos(c, item);
         c.NitConsultado = clave.Documento;
+        // HU #13712: la API de contratos solo para los NIT que el SuperAdmin marcó (y la empresa con la integración encendida).
+        c.EstadoConsultaContraventor = await Contraventor.ConsultaPorApi.EstadoInicialAsync(db, config, c, ct).ConfigureAwait(false);
         c.EnCobroCoactivo = EsCobroCoactivo(c.EstadoFuente);
         if (c.NombreInfractor is null && clave.IdentificacionId is { } idNit)
         {
@@ -249,7 +248,7 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
         }
 
         if (campos.Contains("secretaria_texto"))
-            c.OrganismoTransitoId = await mapeador.MapearAsync(c.SecretariaTexto, ct).ConfigureAwait(false) ?? c.OrganismoTransitoId;
+            c.OrganismoTransitoId = await mapeador.MapearAsync(c.SecretariaTexto, ct, c.NumeroNormalizado).ConfigureAwait(false) ?? c.OrganismoTransitoId;
 
         if (campos.Contains("estado_fuente"))
         {
@@ -387,7 +386,7 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
         c.DireccionInfraccion = Texto(i.DireccionInfraccion, c.DireccionInfraccion);
         c.FechaImposicion = i.FechaImposicion ?? c.FechaImposicion;
         c.HoraImposicion = i.HoraImposicion ?? c.HoraImposicion;
-        c.FechaNotificacion = i.FechaNotificacion ?? c.FechaNotificacion;
+        c.FechaNotificacion = (i.FechaNotificacion == Plazos.FechaVaciaDeLasFuentes ? null : i.FechaNotificacion) ?? c.FechaNotificacion;
         c.EsFotomulta = i.EsFotomulta ?? c.EsFotomulta;
         c.SecretariaTexto = Texto(i.Secretaria, c.SecretariaTexto);
         c.TipoVehiculo = Texto(i.TipoVehiculo, c.TipoVehiculo);

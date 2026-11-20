@@ -21,7 +21,8 @@ public static class PlantillasEndpoints
 
     public sealed record PlantillaDto(Guid Id, string Conjunto, string Tipo, Guid? TipologiaId, string? Tipologia, string Nombre, bool Activo, VersionResumen? Publicada);
 
-    public sealed record VersionDto(Guid Id, Guid PlantillaId, int NumeroVersion, string Estado, string? Asunto, string CuerpoHtml, IReadOnlyList<string> VariablesUsadas, string? NotaCambio, DateTimeOffset? PublicadaEn);
+    public sealed record VersionDto(Guid Id, Guid PlantillaId, int NumeroVersion, string Estado, string? Asunto, string CuerpoHtml, IReadOnlyList<string> VariablesUsadas, string? NotaCambio, DateTimeOffset? PublicadaEn, DateTimeOffset? RevisadaJuridicamenteEn = null,
+        string? RevisadaPor = null, string? NotaRevisionJuridica = null);
 
     public sealed record VistaPrevia(string Tipo, string? Asunto, string CuerpoHtml, Guid? ComparendoId, string? Formato, string? Conjunto = null);
 
@@ -30,6 +31,9 @@ public static class PlantillasEndpoints
     public sealed record DatosVersion(string? Asunto, string CuerpoHtml, string? NotaCambio);
 
     public sealed record Publicacion(string Nota);
+
+    /// <summary>HU #14614 / #14612: la nota del abogado al aprobar el texto de una versión publicada.</summary>
+    public sealed record RevisionJuridica(string Nota);
 
     public static void Map(RouteGroupBuilder api)
     {
@@ -44,10 +48,11 @@ public static class PlantillasEndpoints
         admin.MapPost("/{id:guid}/versiones", NuevaVersion);
         admin.MapPut("/versiones/{id:guid}", EditarBorrador);
         admin.MapPost("/versiones/{id:guid}/publicar", Publicar);
+        admin.MapPost("/versiones/{id:guid}/revision-juridica", RevisarJuridicamente);
     }
 
     private static VersionDto Dto(PlantillaVersion v) =>
-        new(v.Id, v.PlantillaId, v.NumeroVersion, v.Estado.ToString(), v.Asunto, v.CuerpoHtml, v.VariablesUsadas, v.NotaCambio, v.PublicadaEn);
+        new(v.Id, v.PlantillaId, v.NumeroVersion, v.Estado.ToString(), v.Asunto, v.CuerpoHtml, v.VariablesUsadas, v.NotaCambio, v.PublicadaEn, v.RevisadaJuridicamenteEn, v.RevisadaJuridicamentePorNombre, v.NotaRevisionJuridica);
 
     /// <summary>§7.16: la gestora ve FLIT y su propio conjunto; el SuperAdmin, todos.</summary>
     private static async Task<List<ConjuntoPlantillas>> PermitidosAsync(UsuarioActual usuario, Capacidades capacidades, CancellationToken ct)
@@ -98,11 +103,13 @@ public static class PlantillasEndpoints
                        join p in db.Plantillas.AsNoTracking() on x.PlantillaId equals p.Id
                        where x.Id == id && permitidos.Contains(p.Conjunto)
                        select x).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        return Results.Ok(Dto(v ?? throw ReglaException.NoEncontrado("La versión")));
+        var dto = Dto(v ?? throw ReglaException.NoEncontrado("La versión"));
+        // Quién aprobó (su correo) y la nota interna de la revisión jurídica son del SuperAdmin: una gestora que mira una plantilla de FLIT no los ve.
+        return Results.Ok(usuario.EsSuperAdmin ? dto : dto with { RevisadaPor = null, NotaRevisionJuridica = null });
     }
 
     /// <summary>Vista previa con datos de ejemplo o de un comparendo real de la empresa del usuario; HTML o PDF.</summary>
-    private static async Task<IResult> Previsualizar(VistaPrevia pedido, UsuarioActual usuario, AccesoComparendo acceso, ContextoPlantilla contexto, CancellationToken ct)
+    private static async Task<IResult> Previsualizar(VistaPrevia pedido, ServicioPlantillas plantillas, UsuarioActual usuario, AccesoComparendo acceso, ContextoPlantilla contexto, CancellationToken ct)
     {
         if (!Enum.TryParse<TipoPlantilla>(pedido.Tipo, true, out var tipo))
             throw new ReglaException("TIPO_INVALIDO", "Tipo de plantilla desconocido.");
@@ -111,10 +118,20 @@ public static class PlantillasEndpoints
             ? await contexto.DeAsync(await acceso.ParaLeerAsync(id, ct).ConfigureAwait(false), null, ct).ConfigureAwait(false)
             : ContextoPlantilla.Ejemplo();
         var conjunto = Enum.TryParse<ConjuntoPlantillas>(pedido.Conjunto, true, out var c) ? c : ConjuntoPlantillas.Flit;
-        var armado = ServicioPlantillas.Armar(new PlantillaVersion { Asunto = pedido.Asunto, CuerpoHtml = pedido.CuerpoHtml ?? string.Empty }, tipo, valores, conjunto);
+        var armado = ServicioPlantillas.Armar(new PlantillaVersion { Asunto = pedido.Asunto, CuerpoHtml = pedido.CuerpoHtml ?? string.Empty }, tipo, valores, conjunto, plantillas.Recursos);
+        // HU #14616: sin comparendo el documento sale con datos de EJEMPLO y así se dice (marca de agua en el PDF, banda en el correo).
+        var ejemplo = pedido.ComparendoId is null;
         if (string.Equals(pedido.Formato, "pdf", StringComparison.OrdinalIgnoreCase) && !ServicioPlantillas.EsCorreo(tipo))
-            return Results.File(ServicioPlantillas.Pdf(armado, "VISTA PREVIA"), "application/pdf");
-        return Results.Ok(new { armado.Asunto, armado.Html, desconocidas = validacion.Desconocidas });
+            return Results.File(ServicioPlantillas.Pdf(armado, ejemplo ? "VISTA PREVIA · DATOS DE EJEMPLO" : "VISTA PREVIA"), "application/pdf");
+        var html = ejemplo ? ConBandaDeEjemplo(armado.Html) : armado.Html;
+        return Results.Ok(new { armado.Asunto, Html = html, desconocidas = validacion.Desconocidas, ejemplo });
+    }
+
+    private static string ConBandaDeEjemplo(string html)
+    {
+        const string banda = "<div style=\"background:#FFF4CE;color:#7A5A00;padding:8px 12px;font:bold 12px Arial,sans-serif;text-align:center\">VISTA PREVIA CON DATOS DE EJEMPLO</div>";
+        var cuerpo = System.Text.RegularExpressions.Regex.Match(html, "<body[^>]*>", System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.CultureInvariant, TimeSpan.FromSeconds(1));
+        return cuerpo.Success ? html.Insert(cuerpo.Index + cuerpo.Length, banda) : banda + html;
     }
 
     private static async Task<IResult> Crear(NuevaPlantilla pedido, ComparendosDb db, Auditoria auditoria, Reloj reloj, UsuarioActual usuario, ServicioPlantillas servicio, CancellationToken ct)
@@ -190,6 +207,40 @@ public static class PlantillasEndpoints
         (v.Estado, v.PublicadaEn, v.PublicadaPor, v.NotaCambio, v.VariablesUsadas) = (EstadoPlantillaVersion.Publicada, reloj.Ahora, usuario.Id, pedido.Nota.Trim(), [.. validacion.Usadas]);
         p.VersionPublicadaId = v.Id;
         auditoria.Registrar(null, "plantilla", p.Id, "PUBLICAR", new CambioCampo("version_publicada", numeroAnterior, v.NumeroVersion));
+
+        // HU #14614: un texto nuevo nace sin revisión jurídica, así que ninguna empresa sigue enviando en automático con él.
+        // Se apaga para todas las que tienen la tipología (conservador: apagar de más es seguro; encender, lo decide el SuperAdmin).
+        if (p.Tipo == TipoPlantilla.DpDocumento && p.TipologiaId is { } tipologiaId)
+        {
+            var automatizadas = await db.TipologiasEmpresa.Where(h => h.TipologiaId == tipologiaId && h.Automatizable).ToListAsync(ct).ConfigureAwait(false);
+            foreach (var h in automatizadas)
+            {
+                (h.Automatizable, h.ActualizadoEn, h.ActualizadoPor) = (false, reloj.Ahora, usuario.Id);
+                auditoria.Registrar(h.TenantId, "tipologia_empresa", tipologiaId, "DESAUTOMATIZAR", new CambioCampo("automatizable", true, false));
+            }
+        }
+
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return Results.Ok(Dto(v));
+    }
+
+    /// <summary>
+    /// HU #14614 / #14612: un abogado aprueba el texto de una versión publicada. Solo las versiones publicadas se aprueban
+    /// (el cuerpo no cambia: una versión nueva nace sin aprobación) y la nota es obligatoria. Sin esta aprobación la
+    /// tipología no puede enviarse en automático.
+    /// </summary>
+    private static async Task<IResult> RevisarJuridicamente(Guid id, RevisionJuridica pedido, ComparendosDb db, Auditoria auditoria, Reloj reloj, UsuarioActual usuario, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(pedido.Nota) || pedido.Nota.Trim().Length > 1000)
+            throw new ReglaException("NOTA_REQUERIDA", "Escribe la nota de la revisión jurídica (hasta 1.000 caracteres).");
+        var v = await db.PlantillaVersiones.FirstOrDefaultAsync(x => x.Id == id, ct).ConfigureAwait(false) ?? throw ReglaException.NoEncontrado("La versión");
+        if (v.Estado != EstadoPlantillaVersion.Publicada)
+            throw ReglaException.Conflicto("VERSION_NO_PUBLICADA", "Solo se aprueba una versión publicada: publícala primero.");
+        // Aprobar de nuevo una versión ya aprobada conserva la primera aprobación (fecha, quién y nota): no se reescribe la historia.
+        if (v.RevisadaJuridicamenteEn is not null)
+            return Results.Ok(Dto(v));
+        (v.RevisadaJuridicamenteEn, v.RevisadaJuridicamentePor, v.RevisadaJuridicamentePorNombre, v.NotaRevisionJuridica, v.ActualizadoEn, v.ActualizadoPor) = (reloj.Ahora, usuario.Id, usuario.Nombre.Length > 200 ? usuario.Nombre[..200] : usuario.Nombre, pedido.Nota.Trim(), reloj.Ahora, usuario.Id);
+        auditoria.Registrar(null, "plantilla", v.PlantillaId, "REVISION_JURIDICA", new CambioCampo("revisada_juridicamente_en", null, reloj.Ahora), new CambioCampo("version_revisada", null, v.NumeroVersion));
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Results.Ok(Dto(v));
     }

@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "FLIT — API externa de sincronización de trámites",
-    "version": "3.2.0",
+    "version": "3.2.1",
     "description": "Contrato para clientes de integración externos (primer consumidor: Flito), Épicas #12737 y #12741. Lectura por pull: el consumidor recorre el feed por cursor al recibir un aviso de FLIT 2 (webhook firmado, §8 de la guía y AsyncAPI flito-webhook/tramite.cambio), periódicamente como respaldo y a demanda. Escritura: el consumidor adjunta al trámite el comprobante de pago del impuesto departamental (v3.2). Todos los ejemplos usan datos ficticios. La guía de consumo (orden de llamadas, arranque sin histórico, reintentos, envío de adjuntos) está en docs/integraciones/external-api-tramites-sync.md §5 y §7.",
     "contact": {
       "name": "Equipo FLIT"
@@ -755,7 +755,7 @@
         ],
         "operationId": "enviarAdjunto",
         "summary": "Adjuntar un documento al trámite",
-        "description": "Adjunta al trámite el comprobante de pago del impuesto departamental. Exige external.tramites.attachments.write. Reglas: (1) solo trámites del feed en preasignacion, asignado, entregado o rechazado con subsanación activa; (2) gana quien carga primero: si en FLIT ya se cargó ese tipo (gestor o portal) responde 409 attachment_exists y su archivo se conserva; un envío del consumidor reemplaza el suyo anterior (reemplazoDe) y el gestor no puede reemplazarlo ni borrarlo; para corregirlo, reenviar; (3) idempotente por contenido: el mismo archivo (mismo SHA-256) que el adjunto vigente del consumidor responde 200 con el mismo cuerpo y no escribe el adjunto (si el estado marca y la marca falta, la pone); (4) en preasignacion, asignado y rechazado con subsanación marca el impuesto departamental como pagado (pagadoMarcado); (5) solo archiva: no corre OCR ni regenera el consolidado del trámite. Cada llamada queda en la bitácora de acceso; el archivo no se registra.",
+        "description": "Adjunta al trámite el comprobante de pago del impuesto departamental. Exige external.tramites.attachments.write. Reglas: (1) solo trámites del feed en cualquier estado salvo anulado y revocado; (2) gana quien carga primero: si en FLIT ya se cargó ese tipo (gestor o portal) responde 409 attachment_exists y su archivo se conserva; un envío del consumidor reemplaza el suyo anterior (reemplazoDe) y el gestor no puede reemplazarlo ni borrarlo; para corregirlo, reenviar; (3) idempotente por contenido: el mismo archivo (mismo SHA-256) que el adjunto vigente del consumidor responde 200 con el mismo cuerpo y no escribe el adjunto (si la marca falta, la pone); (4) en todo estado admitido marca el impuesto departamental como pagado (pagadoMarcado); (5) solo archiva: no corre OCR ni regenera el consolidado del trámite. Cada llamada queda en la bitácora de acceso; el archivo no se registra.",
         "parameters": [
           {
             "name": "id",
@@ -803,7 +803,7 @@
             }
           },
           "200": {
-            "description": "Reenvío idempotente: el adjunto vigente del consumidor ya tiene ese mismo contenido. No se escribe el adjunto; si el trámite está en un estado que marca el pago y la marca faltaba, se pone (pagadoMarcado true). Mismo cuerpo que el 201 con reemplazoDe null.",
+            "description": "Reenvío idempotente: el adjunto vigente del consumidor ya tiene ese mismo contenido. No se escribe el adjunto; si la marca faltaba, se pone (pagadoMarcado true). Mismo cuerpo que el 201 con reemplazoDe null.",
             "content": {
               "application/json": {
                 "schema": {
@@ -932,7 +932,7 @@
             }
           },
           "409": {
-            "description": "El trámite no admite el envío. not_allowed_in_state: decidir por terminal (true: definitivo; false: reintentar con espera). attachment_exists: ese tipo ya lo cargó alguien en FLIT (gestor o portal); definitivo, no reintentar.",
+            "description": "El trámite no admite el envío. not_allowed_in_state: solo en anulado y revocado, con terminal true (definitivo, no reintentar); terminal false queda reservado (reintentar con espera). attachment_exists: ese tipo ya lo cargó alguien en FLIT (gestor o portal); definitivo, no reintentar.",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -946,19 +946,8 @@
                       "status": 409,
                       "detail": "El trámite está en un estado que no admite este envío.",
                       "code": "not_allowed_in_state",
-                      "estado": "aprobado",
+                      "estado": "anulado",
                       "terminal": true
-                    }
-                  },
-                  "not_allowed_in_state_transitorio": {
-                    "value": {
-                      "type": "about:blank",
-                      "title": "not_allowed_in_state",
-                      "status": 409,
-                      "detail": "El trámite está en un estado que no admite este envío.",
-                      "code": "not_allowed_in_state",
-                      "estado": "rechazado",
-                      "terminal": false
                     }
                   },
                   "attachment_exists": {
@@ -1105,7 +1094,7 @@
           },
           "terminal": {
             "type": "boolean",
-            "description": "Solo en 409 not_allowed_in_state. true: el trámite ya no volverá a un estado que acepte el envío (aprobado, anulado, revocado); no reintentar. false: puede volver (p. ej. rechazado sin subsanación); reintentar con espera."
+            "description": "Solo en 409 not_allowed_in_state. true: el trámite ya no volverá a un estado que acepte el envío (anulado, revocado); no reintentar. false: reservado, hoy ningún estado lo produce; si llega, reintentar con espera."
           }
         }
       },
@@ -1695,7 +1684,7 @@
           },
           "pagadoMarcado": {
             "type": "boolean",
-            "description": "true si el trámite tiene marcada por el consumidor el impuesto departamental como pagado (marca vigente). Un envío en entregado no marca, pero si la marca ya existía devuelve true."
+            "description": "true si el trámite tiene marcada por el consumidor el impuesto departamental como pagado (marca vigente)."
           }
         }
       }

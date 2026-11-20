@@ -1,14 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import { FileText, MessageSquareReply, RotateCcw, Send } from "lucide-react";
+import { Icono } from "@flit/ui/Icono";
 import { InlineAlert, Modal } from "@flit/ui";
 import type { ContextoDetalle } from "@/components/detalle/extensiones";
+import { PanelAlegar } from "@/components/detalle/PanelAlegar";
+import { VistaPreviaDpModal } from "@/components/detalle/VistaPreviaDpModal";
 import { useToast } from "@/components/Toast";
 import { Datos } from "@/components/ui/Acordeon";
 import { BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { SelectorArchivo } from "@/components/ui/SelectorArchivo";
-import { apiAbrirPdf, apiFetch } from "@/lib/api";
+import { apiFetch } from "@/lib/api";
 import { armarRespuestaDp, erroresRespuestaDp, ordenarTipologias, type FormRespuestaDp, type TipologiaComparendo, type VistaPreviaDp } from "@/lib/dp";
 import { estadoLegal } from "@/lib/etiquetas";
 import { diaColombia } from "@/lib/format/date";
@@ -29,15 +31,11 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
     apiFetch<VistaPreviaDp>(`/comparendos/${d.id}/dp/vista-previa`, { method: "POST", body: { tipologiaId: elegida }, signal }),
   );
   const [confirmar, setConfirmar] = useState(false);
+  const [verComoLlegaria, setVerComoLlegaria] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const lista = ordenarTipologias(tipologias.datos ?? []);
   const tipologia = lista.find((t) => t.id === elegida);
   const v = previa.datos;
-
-  const verPdf = () =>
-    apiAbrirPdf(`/comparendos/${d.id}/dp/vista-previa.pdf`, { tipologiaId: elegida }).catch((e: unknown) =>
-      toast.show(e instanceof Error ? e.message : "No se pudo abrir la vista previa.", "error"),
-    );
 
   const enviar = async () => {
     setEnviando(true);
@@ -57,7 +55,7 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
   };
 
   return (
-    <div className="flex flex-col gap-3 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="flex flex-col gap-3 border-t border-border pt-3">
       <h4 className="text-xs font-semibold">Generar derecho de petición</h4>
       {tipologias.estado === "loading" && <p className="text-xs opacity-60">Cargando tipologías…</p>}
       {tipologias.estado === "error" && <InlineAlert tone="error">{tipologias.error}</InlineAlert>}
@@ -110,16 +108,15 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
               ["Anexos", v.anexos.join(", ")],
             ]}
           />
+          <p className="text-xs opacity-70">Antes de enviar, mira cómo llegaría el derecho de petición y su correo. Es solo una vista previa: no se envía nada.</p>
           <div className="flex flex-wrap gap-2">
-            {!v.bloqueos.some((b) => b.codigo === "SIN_PLANTILLA") && (
-              <button type="button" className={controlCls(false)} onClick={verPdf}>
-                <FileText className="h-3.5 w-3.5" aria-hidden />
-                Ver documento
-              </button>
-            )}
+            <button type="button" className={controlCls(true)} onClick={() => setVerComoLlegaria(true)}>
+              <Icono nombre="documento" className="h-3.5 w-3.5" />
+              Ver cómo llegaría
+            </button>
             {puedeEnviar && (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!v.puedeEnviar} onClick={() => setConfirmar(true)}>
-                <Send className="h-3.5 w-3.5" aria-hidden />
+                <Icono nombre="radicacion" className="h-3.5 w-3.5" />
                 Generar y enviar
               </button>
             )}
@@ -127,7 +124,18 @@ function GenerarDp({ ctx }: { ctx: ContextoDetalle }) {
         </div>
       )}
 
-      <Modal
+      {verComoLlegaria && v && (
+        <VistaPreviaDpModal
+          comparendoId={d.id}
+          tipologiaId={elegida}
+          vista={v}
+          sinPdf={v.bloqueos.some((b) => b.codigo === "SIN_PLANTILLA")}
+          onCerrar={() => setVerComoLlegaria(false)}
+          zClassName={Z}
+        />
+      )}
+
+      <Modal icono="radicacion"
         open={confirmar}
         onClose={() => setConfirmar(false)}
         busy={enviando}
@@ -179,7 +187,7 @@ function ResponderDp({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => 
   };
 
   return (
-    <Modal
+    <Modal icono="log-mensajes"
       open
       onClose={onCerrar}
       busy={ocupado}
@@ -208,7 +216,7 @@ function ResponderDp({ ctx, onCerrar }: { ctx: ContextoDetalle; onCerrar: () => 
           <input className={INPUT_CLS} type="date" max={hoy} min={dp.fechaRadicacion?.slice(0, 10)} value={f.fecha} onChange={(e) => setF({ ...f, fecha: e.target.value })} />
         </label>
         <fieldset className="flex flex-col gap-1 md:col-span-2">
-          <legend className="text-[11px] font-semibold text-[#5B6B82] dark:text-slate-300">Sentido</legend>
+          <legend className="text-[11px] font-semibold text-muted-foreground">Sentido</legend>
           <div className="flex gap-4 text-xs">
             {(["Favorable", "Desfavorable"] as const).map((s) => (
               <label key={s} className="flex items-center gap-1.5">
@@ -249,8 +257,14 @@ export function AccionesDp({ ctx }: { ctx: ContextoDetalle }) {
   if (!capacidades(ctx.sesion).derechosPeticion) return null;
 
   if (!d.dp) {
-    if (!d.activo || d.pagado || !tienePermiso(ctx.sesion, P.dpGenerar)) return null;
-    return <GenerarDp ctx={ctx} />;
+    if (!tienePermiso(ctx.sesion, P.dpGenerar)) return null;
+    // Inactivo o pagado: no se puede generar, pero el panel explica por qué en vez de dejar el bloque vacío.
+    return (
+      <div className="flex flex-col gap-4">
+        <PanelAlegar ctx={ctx} />
+        {d.activo && !d.pagado && <GenerarDp ctx={ctx} />}
+      </div>
+    );
   }
 
   const reintentar = async () => {
@@ -271,16 +285,16 @@ export function AccionesDp({ ctx }: { ctx: ContextoDetalle }) {
   if (!puedeReintentar && !puedeResponder) return null;
 
   return (
-    <div className="flex flex-wrap gap-2 border-t border-[#DFE5ED] pt-3 dark:border-white/10">
+    <div className="flex flex-wrap gap-2 border-t border-border pt-3">
       {puedeReintentar && (
         <button type="button" className={controlCls(false)} disabled={reintentando} onClick={reintentar}>
-          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="reintento" className="h-3.5 w-3.5" />
           {reintentando ? "Reintentando…" : "Reintentar envío"}
         </button>
       )}
       {puedeResponder && (
         <button type="button" className={controlCls(false)} onClick={() => setResponder(true)}>
-          <MessageSquareReply className="h-3.5 w-3.5" aria-hidden />
+          <Icono nombre="log-mensajes" className="h-3.5 w-3.5" />
           Registrar respuesta del organismo
         </button>
       )}

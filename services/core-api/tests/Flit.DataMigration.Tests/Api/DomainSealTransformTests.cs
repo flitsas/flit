@@ -99,6 +99,19 @@ public sealed class DomainSealTransformTests
         result.Should().NotBe("red-b.com");
     }
 
+    [Theory]
+    // HU #14383 AC2 — con un encabezado falso rige el host real: nadie se hace pasar por un dominio de portal ni sale de uno.
+    [InlineData("flit.example.com", "tramites.miorganismo.gov.co")]
+    [InlineData("tramites.miorganismo.gov.co", "flit.example.com")]
+    public void DominioDePortal_ElEncabezadoFalsoSeIgnora_YRigeElHostReal(string hostReal, string selloFalso)
+    {
+        var context = BuildContext(hostReal, incomingSeal: selloFalso);
+
+        var result = DomainSealTransform.ResolveSealedHost(context, new DomainSealOptions(), new InternalApiOptions());
+
+        result.Should().Be(hostReal);
+    }
+
     [Fact]
     public void NormalizaMayusculasYEspacios()
     {

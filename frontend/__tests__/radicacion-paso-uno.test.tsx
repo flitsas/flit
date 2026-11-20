@@ -587,6 +587,98 @@ describe('Tarjeta de radicación sobre un trámite ya creado', () => {
     expect(screen.queryByLabelText('Dígito de preferencia')).not.toBeInTheDocument();
   });
 
+  /**
+   * Hallazgo QA de ICT — la placa entregada por la integración (`source: 'ict'`) no pide dígito ni
+   * aplica el gate HU #11628, pero NO es Ruta Corta: el organismo viene de la transacción, no del RUNT.
+   */
+  it('un borrador con placa de la integración (ict): sin dígito, sin gate y sin atar el organismo al RUNT', async () => {
+    mocks.getWizardState.mockResolvedValue(wizard());
+    mocks.getInstance.mockResolvedValue({
+      ...INSTANCIA,
+      fieldValues: [
+        { formFieldId: '', fieldKey: 'vin', valueText: VIN_VALIDO, valueJson: null, source: 'consultation' },
+        { formFieldId: '', fieldKey: 'vehicle_brand', valueText: 'RENAULT', valueJson: null, source: 'consultation' },
+        { formFieldId: '', fieldKey: 'plate', valueText: 'ABC123', valueJson: null, source: 'ict' },
+        { formFieldId: '', fieldKey: 'transit_office_id', valueText: 'ot-envigado', valueJson: null, source: 'manual' },
+        { formFieldId: '', fieldKey: 'transit_office_name', valueText: 'Tránsito de Envigado', valueJson: null, source: 'manual' },
+      ],
+    });
+    mocks.getPreflight.mockResolvedValue(PREVIEW_RESULT.preflight);
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
+
+    const chip = await screen.findByTestId('ruta-matricula');
+    expect(chip).toHaveTextContent(
+      'El vehículo llega con la placa ABC123 enviada por la integración. Llegará al organismo listo para su decisión.',
+    );
+    expect(chip).toHaveAttribute('data-ruta', 'larga');
+    expect(screen.queryByTestId('ruta-corta-placa')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Dígito de preferencia')).not.toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: /secretaría de tránsito/i })).toBeInTheDocument();
+  });
+
+  function borradorIct(tipo: string | null) {
+    mocks.getWizardState.mockResolvedValue(wizard());
+    mocks.getInstance.mockResolvedValue({
+      ...INSTANCIA,
+      fieldValues: [
+        { formFieldId: '', fieldKey: 'vin', valueText: VIN_VALIDO, valueJson: null, source: 'consultation' },
+        { formFieldId: '', fieldKey: 'vehicle_brand', valueText: 'RENAULT', valueJson: null, source: 'consultation' },
+        { formFieldId: '', fieldKey: 'plate', valueText: 'ABC123', valueJson: null, source: 'ict' },
+        ...(tipo
+          ? [{ formFieldId: '', fieldKey: 'plate_assignment_type', valueText: tipo, valueJson: null, source: 'ict' }]
+          : []),
+        { formFieldId: '', fieldKey: 'transit_office_id', valueText: 'ot-envigado', valueJson: null, source: 'manual' },
+        { formFieldId: '', fieldKey: 'transit_office_name', valueText: 'Tránsito de Envigado', valueJson: null, source: 'manual' },
+      ],
+    });
+    mocks.getPreflight.mockResolvedValue(PREVIEW_RESULT.preflight);
+  }
+
+  it('placa ict de tipo 4 (rango del organismo): la secretaría queda bloqueada con su aviso', async () => {
+    borradorIct('4');
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
+
+    const aviso = await screen.findByTestId('secretaria-fijada-por-placa');
+    expect(aviso).toHaveTextContent(
+      'La placa ABC123 es del rango de este organismo; no se puede cambiar la secretaría.',
+    );
+    expect(screen.getByRole('combobox', { name: /secretaría de tránsito/i })).toBeDisabled();
+  });
+
+  it.each([['3'], ['2'], [null]])(
+    'placa ict con tipo %s: la secretaría NO se bloquea',
+    async (tipo) => {
+      borradorIct(tipo);
+      render(<TramiteWizard existingInstanceId="inst-1" onExit={() => {}} />);
+
+      await screen.findByTestId('ruta-matricula');
+      expect(screen.queryByTestId('secretaria-fijada-por-placa')).not.toBeInTheDocument();
+      expect(screen.getByRole('combobox', { name: /secretaría de tránsito/i })).toBeEnabled();
+    },
+  );
+
+  it('con placa de la integración (ict) en la consulta: sin selector de dígito y Continuar avanza con solo elegir secretaría', async () => {
+    mocks.runPreflightPreview.mockResolvedValue({
+      ...PREVIEW_RESULT,
+      vehicleFields: [
+        ...PREVIEW_RESULT.vehicleFields,
+        { formFieldId: '', fieldKey: 'plate', valueText: 'ABC123', valueJson: null, source: 'ict' },
+      ],
+    });
+    const user = userEvent.setup();
+    renderNuevo();
+
+    await consultarVehiculo(user);
+    const chip = await screen.findByTestId('ruta-matricula');
+    expect(chip).toHaveTextContent('enviada por la integración');
+    expect(chip).toHaveAttribute('data-ruta', 'larga');
+    await elegirSecretaria(user);
+    expect(screen.queryByLabelText('Dígito de preferencia')).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /Continuar/ }));
+    await waitFor(() => expect(mocks.createInstanceFromConsulta).toHaveBeenCalled());
+  });
+
   it('no ofrece cambiar la prioridad desde el paso 1', async () => {
     renderExistente();
 

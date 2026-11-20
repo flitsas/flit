@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# deploy/edge/nginx/sync-portal-hosts.sh.example  (HU #14383, Feature #14380)
+#
+# Genera /etc/nginx/flit/portal-hosts.map desde el aprovisionamiento de core-api: una linea por dominio de portal ACTIVO
+# (purpose = "portal-pn", status = "active"). Solo recarga nginx si el archivo cambio y `nginx -t` pasa. Plantilla: se instala
+# a mano en el VPS con confirmacion humana (ver deploy/edge/acme/RUNBOOK.md, seccion dominios de portal).
+#
+# Variables: FLIT_INTERNAL_API_KEY, CORE_API_INTERNAL_URL, PORTAL_PN_PORT; opcional PORTAL_HOSTS_MAP (ruta del mapa).
+set -euo pipefail
+
+: "${FLIT_INTERNAL_API_KEY:?}"
+: "${CORE_API_INTERNAL_URL:?}"
+: "${PORTAL_PN_PORT:?}"
+MAP_FILE="${PORTAL_HOSTS_MAP:-/etc/nginx/flit/portal-hosts.map}"
+
+command -v curl >/dev/null 2>&1 || { echo "curl no disponible" >&2; exit 1; }
+command -v jq >/dev/null 2>&1 || { echo "jq no disponible" >&2; exit 1; }
+
+body="$(curl -fsS -H "X-Internal-Key: ${FLIT_INTERNAL_API_KEY}" "${CORE_API_INTERNAL_URL%/}/api/v1/internal/domains/provisioning")"
+
+tmp="$(mktemp)"
+trap 'rm -f "${tmp}"' EXIT
+# El host ya viene normalizado y validado (RFC 1123) por core-api; aun asi se filtra por forma antes de escribirlo en nginx.
+printf '%s' "${body}" \
+  | jq -r '.domains[]? | select(.purpose == "portal-pn" and .status == "active") | .host' \
+  | grep -E '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9-]{2,63}$' \
+  | sort -u \
+  | while read -r host; do printf '%s http://127.0.0.1:%s;\n' "${host}" "${PORTAL_PN_PORT}"; done > "${tmp}" || true
+
+if [[ -f "${MAP_FILE}" ]] && cmp -s "${tmp}" "${MAP_FILE}"; then
+  exit 0
+fi
+
+install -m 0644 "${tmp}" "${MAP_FILE}"
+nginx -t && nginx -s reload

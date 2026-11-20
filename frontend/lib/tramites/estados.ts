@@ -106,72 +106,70 @@ export interface EstadoChipStyle {
  * la luminosidad, que es lo que corresponde cuando un color del prototipo no cumple contraste en
  * un uso concreto. `borrador` y `anulado` ya cumplen y se usan tal cual.
  *
- * ADR-0059: `preasignacion` es ámbar (#E08A00, el del artefacto de la epic: «falta algo del
- * organismo», a medio camino entre el azul de lo que avanza y el rojo de lo que se devolvió);
- * `asignado` es índigo (#6366F1), heredado del badge de placa asignada para que el usuario no
- * reaprenda; `revocado` (violeta) se separa de `anulado` (vino) porque son dos finales distintos:
- * uno lo decide el gestor, el otro lo deshace el organismo. Los mismos tonos valen para el
- * organismo: sus tarjetas y chips leen de aquí.
+ * UI Kit 2026 (propuesta-2): los discos son los `estado-*.svg` del kit. `preasignacion` es el
+ * naranja de «sin placa» (#F77A00), `asignado` el azul de la placa (#557EFF), `entregado` el
+ * turquesa del kit (#14C4A6) y `revocado` el amarillo (#F9B130), que lo sigue separando de
+ * `anulado` (vino). Los mismos tonos valen para el organismo: sus tarjetas y chips leen de aquí.
  */
 export const ESTADO_CHIP_STYLES: Record<EstadoTramite, EstadoChipStyle> = {
   borrador: {
-    bg: 'rgba(94,106,123,0.14)',
-    color: '#5E6A7B',
-    border: 'rgba(94,106,123,0.35)',
+    bg: 'var(--estado-borrador-bg)',
+    color: 'var(--estado-borrador-fg)',
+    border: 'var(--estado-borrador-border)',
     accent: '#5E6A7B',
   },
   preparado: {
-    bg: 'rgba(85,126,255,0.14)',
-    color: '#4465CC',
-    border: 'rgba(85,126,255,0.35)',
+    bg: 'var(--estado-preparado-bg)',
+    color: 'var(--estado-preparado-fg)',
+    border: 'var(--estado-preparado-border)',
     accent: '#557EFF',
   },
   preasignacion: {
-    bg: 'rgba(224,138,0,0.14)',
-    color: '#8A5400',
-    border: 'rgba(224,138,0,0.35)',
-    accent: '#E08A00',
+    bg: 'var(--estado-preasignacion-bg)',
+    color: 'var(--estado-preasignacion-fg)',
+    border: 'var(--estado-preasignacion-border)',
+    accent: '#F77A00',
   },
   asignado: {
-    bg: 'rgba(99,102,241,0.14)',
-    color: '#4F46E5',
-    border: 'rgba(99,102,241,0.35)',
-    accent: '#6366F1',
+    bg: 'var(--estado-asignado-bg)',
+    color: 'var(--estado-asignado-fg)',
+    border: 'var(--estado-asignado-border)',
+    accent: '#557EFF',
   },
   entregado: {
-    bg: 'rgba(0,169,157,0.14)',
-    color: '#007A71',
-    border: 'rgba(0,169,157,0.35)',
-    accent: '#00A99D',
+    bg: 'var(--estado-entregado-bg)',
+    color: 'var(--estado-entregado-fg)',
+    border: 'var(--estado-entregado-border)',
+    accent: '#14C4A6',
   },
   aprobado: {
-    bg: 'rgba(140,198,63,0.14)',
-    color: '#557926',
-    border: 'rgba(140,198,63,0.35)',
+    bg: 'var(--estado-aprobado-bg)',
+    color: 'var(--estado-aprobado-fg)',
+    border: 'var(--estado-aprobado-border)',
     accent: '#8CC63F',
   },
   rechazado: {
-    bg: 'rgba(255,0,0,0.14)',
-    color: '#CC0000',
-    border: 'rgba(255,0,0,0.35)',
+    bg: 'var(--estado-rechazado-bg)',
+    color: 'var(--estado-rechazado-fg)',
+    border: 'var(--estado-rechazado-border)',
     accent: '#FF0000',
   },
   anulado: {
-    bg: 'rgba(193,39,45,0.14)',
-    color: '#C1272D',
-    border: 'rgba(193,39,45,0.35)',
+    bg: 'var(--estado-anulado-bg)',
+    color: 'var(--estado-anulado-fg)',
+    border: 'var(--estado-anulado-border)',
     accent: '#C1272D',
   },
   revocado: {
-    bg: 'rgba(139,92,246,0.14)',
-    color: '#6D28D9',
-    border: 'rgba(139,92,246,0.35)',
-    accent: '#8B5CF6',
+    bg: 'var(--estado-revocado-bg)',
+    color: 'var(--estado-revocado-fg)',
+    border: 'var(--estado-revocado-border)',
+    accent: '#F9B130',
   },
   subsanacion: {
-    bg: 'rgba(255,78,0,0.14)',
-    color: '#BF3B00',
-    border: 'rgba(255,78,0,0.35)',
+    bg: 'var(--estado-subsanacion-bg)',
+    color: 'var(--estado-subsanacion-fg)',
+    border: 'var(--estado-subsanacion-border)',
     accent: '#FF4E00',
   },
 };
@@ -234,11 +232,31 @@ export function estadoLabelConOrigen(
 export function estadoChipStyle(value: string | null | undefined): EstadoChipStyle {
   if (value && esEstadoTramite(value)) return ESTADO_CHIP_STYLES[value];
   return {
-    bg: 'rgba(100,116,139,0.12)',
-    color: '#475569',
-    border: 'rgba(100,116,139,0.3)',
+    bg: 'var(--badge-neutral-bg)',
+    color: 'var(--badge-neutral-fg)',
+    border: 'var(--badge-neutral-border)',
     accent: '#64748B',
   };
+}
+
+/**
+ * Clase del chip de estado del trámite (HU #14482): `di-estado`, solo texto y sin marca; el color lo
+ * ponen `bg`/`color`/`border` de {@link estadoChipStyle} (tokens `--estado-<x>-*`). Sobre un
+ * `StatusBadge` con color crudo además oculta su punto genérico.
+ */
+export function estadoChipClass(value?: string | null): string {
+  void value; // Firma conservada: todos los estados comparten la misma clase.
+  return 'di-estado';
+}
+
+/**
+ * HU #14482 — color propio del estado para la barra de la tira de contadores (`--estado-<x>-acento`,
+ * los `accent` de develop llevados a token con su valor en oscuro). Solo elemento gráfico: el texto
+ * de la tarjeta queda en tinta. Estados desconocidos van en gris borrador.
+ */
+export function estadoAcentoVar(value: string | null | undefined): string {
+  const estado = value && esEstadoTramite(value) ? value : 'borrador';
+  return `var(--estado-${estado}-acento)`;
 }
 
 /**

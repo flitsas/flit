@@ -144,7 +144,7 @@ export function CarLoaderModal({ mode = 'runt', label }: { mode?: CarLoaderMode;
       style={{ background: 'rgba(22, 39, 68, 0.45)' }}
     >
       <div
-        className="rounded-2xl border border-[#DFE5ED] bg-white p-8 dark:border-white/10 dark:bg-[#162744]"
+        className="rounded-2xl border border-border bg-card p-8 dark:border-border dark:bg-secondary"
         style={{ boxShadow: '0 24px 60px rgba(22, 39, 68, 0.18)' }}
       >
         <CarLoader mode={mode} label={label} />

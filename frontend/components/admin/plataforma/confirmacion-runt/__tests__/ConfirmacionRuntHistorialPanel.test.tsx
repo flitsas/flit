@@ -134,7 +134,7 @@ describe("ConfirmacionRuntHistorialPanel", () => {
     expect(listRuntConfirmationAttempts).toHaveBeenCalledWith(expect.objectContaining({}), 1, 10, expect.anything());
   });
 
-  it("AC1b — «Filas por página» ofrece 10/25/50/100, pide esa cantidad al servidor y la recuerda en la sesión", async () => {
+  it("AC1b — «Filas por página» ofrece 10/20/30/50 (HU #13916), pide esa cantidad al servidor y la recuerda en la sesión", async () => {
     listRuntConfirmationAttempts.mockResolvedValue({ items: [fila, pendiente], total: 120, page: 1, pageSize: 10 });
     const user = userEvent.setup();
     renderPanel();
@@ -142,11 +142,11 @@ describe("ConfirmacionRuntHistorialPanel", () => {
     await waitFor(() => expect(listRuntConfirmationAttempts).toHaveBeenLastCalledWith(expect.anything(), 1, 10, expect.anything()));
 
     const selector = screen.getByRole("combobox", { name: "Filas por página" });
-    expect(within(selector).getAllByRole("option").map((o) => o.textContent)).toEqual(["10", "25", "50", "100"]);
+    expect(within(selector).getAllByRole("option").map((o) => o.textContent)).toEqual(["10", "20", "30", "50"]);
 
     await user.selectOptions(selector, "50");
     await waitFor(() => expect(listRuntConfirmationAttempts).toHaveBeenLastCalledWith(expect.anything(), 1, 50, expect.anything()));
-    expect(sessionStorage.getItem("confirmacion-runt.historial.pageSize")).toBe("50");
+    expect(sessionStorage.getItem("flit.filasPorPagina.plataforma.confirmacionRunt.historial")).toBe("50");
   });
 
   it("AC2 — cambiar un filtro lo lleva a la URL; filtrar por corrida muestra su resumen", async () => {
