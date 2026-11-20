@@ -481,13 +481,16 @@ public sealed class ContingenciaRuntTests : IAsyncLifetime
 
     private Task<ContingenciaRunt> Apagar(string tipo, string motivo = "Restablecido") => Guardar(tipo, string.Empty, motivo);
 
-    private Task<ContingenciaRunt> Guardar(string tipo, string proveedor, string motivo, string actor = "Super Admin") =>
-        AdminCliente().GuardarContingenciaRuntAsync(
+    private async Task<ContingenciaRunt> Guardar(string tipo, string proveedor, string motivo, string actor = "Super Admin")
+    {
+        var respuesta = await AdminCliente().GuardarContingenciaRuntAsync(
             new GuardarContingenciaRuntRequest
             {
                 Tipo = tipo, Proveedor = proveedor, Motivo = motivo, ActualizadoPor = actor, ActualizadoPorId = Guid.NewGuid().ToString(),
             },
             cancellationToken: TestContext.Current.CancellationToken).ResponseAsync;
+        return respuesta.Contingencia;
+    }
 
     private async Task<(string? Cadenas, int? Failover, string Fuente, DateTimeOffset Actualizado)> ConfiguracionDe(Guid empresa)
     {
