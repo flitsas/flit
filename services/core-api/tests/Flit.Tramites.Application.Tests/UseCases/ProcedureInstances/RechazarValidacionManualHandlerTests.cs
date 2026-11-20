@@ -222,6 +222,38 @@ public sealed class RechazarValidacionManualHandlerTests
     }
 
     [Fact]
+    public async Task Bug14634_Con_tramite_deja_evento_identidad_manual_rechazada_con_motivo_homologado()
+    {
+        var v = Fila();
+        v.ProcedureInstanceId = Guid.NewGuid();
+        ProcedureInstanceEvent? evento = null;
+        await _repo.AddEventAsync(Arg.Do<ProcedureInstanceEvent>(e => evento = e), Arg.Any<CancellationToken>());
+
+        await Handler().HandleAsync(Cmd(v.Id, "rostro_no_coincide"), Ct);
+
+        evento.Should().NotBeNull();
+        evento!.TenantId.Should().Be(v.TenantId);
+        evento.ProcedureInstanceId.Should().Be(v.ProcedureInstanceId!.Value);
+        evento.Tipo.Should().Be(RechazarValidacionManualHandler.EventoTipo).And.Be("identidad_manual_rechazada");
+        evento.CreatedBy.Should().Be(User);
+        evento.Payload.Should()
+            .Contain("\"party_role\":\"vendedor\"")
+            .And.Contain("\"rejection_reason_code\":\"rostro_no_coincide\"")
+            .And.Contain("\"rejection_reason_label\":\"El rostro no coincide con el documento\"");
+    }
+
+    [Fact]
+    public async Task Bug14634_Sin_tramite_prevalidacion_standalone_no_deja_evento_de_bitacora()
+    {
+        var v = Fila();
+        v.ProcedureInstanceId = null;
+
+        await Handler().HandleAsync(Cmd(v.Id, "imagen_borrosa"), Ct);
+
+        await _repo.DidNotReceive().AddEventAsync(Arg.Any<ProcedureInstanceEvent>(), Arg.Any<CancellationToken>());
+    }
+
+    [Fact]
     public async Task AC5_Rechazos_consecutivos_emiten_siempre_un_enlace_nuevo_sin_tope()
     {
         var v = Fila();
