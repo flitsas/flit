@@ -219,7 +219,7 @@ internal sealed class GrpcRuntContingencyGateway(ConsultasAdminService.Consultas
                     ActualizadoPorId = actorUserId?.ToString() ?? string.Empty,
                 },
                 cancellationToken: cancellationToken).ConfigureAwait(false);
-            return ToItem(guardada, kind);
+            return ToItem(guardada.Contingencia, kind);
         }
         catch (RpcException ex)
         {
