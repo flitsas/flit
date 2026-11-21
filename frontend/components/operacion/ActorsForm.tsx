@@ -3332,7 +3332,11 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
     const actor = actors[activeIndex];
     const errors = showErrors ? validation.byActor[activeIndex] : {};
     const runtState: LookupState = runt[activeIndex] ?? { status: 'idle' };
-    const docLocked = autoConsultRunt && !!actor.numeroDocumento.trim();
+    // HU #14655 — el candado del documento solo aplica al propietario ordinal 1 (inscrito /
+    // precargado RUNT). Un copropietario agregado (ordinal ≥ 2) debe poder digitar el documento
+    // completo; si se bloquea por "tiene dígitos", el primer carácter deja el input en solo lectura.
+    const docLocked =
+      autoConsultRunt && splitActiveOrdinal === 1 && !!actor.numeroDocumento.trim();
     const razonLocked = isRazonSocialLocked(actor, activeIndex);
     const ciudades = filterCiudades(actor.ciudad ?? '');
     const showCiudades = !!ciudadOpen[activeIndex] && ciudades.length > 0;
@@ -3872,17 +3876,23 @@ export const ActorsForm = forwardRef<ActorsFormHandle, Props>(function ActorsFor
             if (idxs.length === 0) return null;
             const activeOrdinal = Math.min(Math.max(activeTabByRol[rol] ?? 1, 1), idxs.length);
             const index = idxs[activeOrdinal - 1] ?? idxs[0];
-            return { actor: actors[index], index };
+            return { actor: actors[index], index, activeOrdinal };
           })
-          .filter((d): d is { actor: ProcedureActor; index: number } => d !== null)
-          .map(({ actor, index }) => {
+          .filter(
+            (d): d is { actor: ProcedureActor; index: number; activeOrdinal: number } => d !== null,
+          )
+          .map(({ actor, index, activeOrdinal }) => {
           const errors = showErrors ? validation.byActor[index] : {};
           const prefix = `actor-${actor.rol}`;
           const runtState: LookupState = runt[index] ?? { status: 'idle' };
           const razonLocked = isRazonSocialLocked(actor, index);
+          // HU #14655 — candado solo en el vendedor/propietario ordinal 1. Los copropietarios
+          // (ADR-0053, ordinal ≥ 2) comparten `rol === rolDelPropietario` pero deben poder digitar
+          // y consultar RUNT/RUES; bloquear por `numeroDocumento` no vacío congelaba el input.
           const docLocked =
             autoConsultRunt &&
             actor.rol === rolDelPropietario &&
+            activeOrdinal === 1 &&
             !!actor.numeroDocumento.trim();
           // Novedad nov.41 — este actor es el que recibe la precarga silenciosa del documento del
           // propietario (paso 1): el vendedor del traspaso, o el propietario inscrito allí donde no
