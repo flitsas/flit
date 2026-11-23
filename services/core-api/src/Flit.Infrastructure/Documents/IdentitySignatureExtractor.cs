@@ -79,6 +79,10 @@ internal sealed class IdentitySignatureExtractor : IIdentitySignatureExtractor
     public bool IsUsableInk(byte[] imageBytes) =>
         PdfXObjectPngDecoder.LooksLikeSignatureArtifact(imageBytes);
 
+    // Bug #14661 — firma manual opaca de fondo blanco: sin filtro de transparencia/paleta de Kyverum.
+    public byte[]? PrepareManualSignature(byte[] imageBytes) =>
+        PdfXObjectPngDecoder.PrepareManualSignature(imageBytes);
+
     private static IEnumerable<PdfDictionary> EnumerateImageDicts(PdfPage page)
     {
         var resources = ResolveDict(page.Elements["/Resources"]);
