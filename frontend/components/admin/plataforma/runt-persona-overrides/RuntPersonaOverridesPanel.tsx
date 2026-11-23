@@ -10,6 +10,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBoundary";
 import { useToast } from "@/components/admin/Toast";
+import { buttonClass } from "@flit/ui/Button";
+import { Icono } from "@flit/ui/Icono";
+import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
+import {
+  DIALOGO_CERRAR_CLS,
+  DIALOGO_PANEL_CLS,
+  DIALOGO_TITULO_CLS,
+  DIALOGO_VELO_CLS,
+  FranjaDialogo,
+} from "@/components/admin/dialogo-propio";
 import { DataTable, type DataTableColumn } from "@/components/atom/DataTable";
 import { StatusBadge } from "@/components/atom/StatusBadge";
 import { EncabezadoFiltrable, TablaFiltrosVacio } from "@/components/atom/TablaFiltrosBar";
@@ -164,19 +174,14 @@ function validateForm(f: FormState, isEdit: boolean): string | null {
 
 // ── Estilos comunes ───────────────────────────────────────────────────────────
 
+/** Campo de formulario del admin FLIT (mismo patrón que `NuevoTipoTramiteModal`). */
 const INPUT_CLS =
-  "block w-full rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-default)] px-3 py-2 text-sm text-[var(--content-primary)] placeholder:text-[var(--content-disabled)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-default)] disabled:opacity-60";
+  "w-full rounded-xl border px-3 py-2 text-xs border-border bg-card text-flit-primary placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand disabled:opacity-60";
 
-const LABEL_CLS = "block text-xs font-medium text-[var(--content-secondary)] mb-1";
+const LABEL_CLS = "mb-1 block text-xs font-semibold text-flit-primary";
 
-const BTN_PRIMARY =
-  "inline-flex items-center gap-1.5 rounded-lg bg-[var(--brand-default)] px-4 py-2 text-sm font-semibold text-white hover:bg-[var(--brand-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-default)] disabled:opacity-60";
-
-const BTN_SECONDARY =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[var(--border-default)] bg-[var(--surface-default)] px-4 py-2 text-sm font-medium text-[var(--content-primary)] hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-default)] disabled:opacity-60";
-
-const BTN_DANGER =
-  "inline-flex items-center gap-1.5 rounded-lg border border-[var(--status-error)] bg-transparent px-3 py-1.5 text-xs font-medium text-[var(--status-error)] hover:bg-[var(--status-error-subtle)] focus:outline-none focus:ring-2 focus:ring-[var(--status-error)] disabled:opacity-60";
+/** Leyenda de cada grupo de campos del diálogo. */
+const LEGEND_CLS = "text-xs font-semibold uppercase tracking-wide text-flit-primary";
 
 // ── Diálogo de creación/edición ───────────────────────────────────────────────
 
@@ -195,6 +200,7 @@ function OverrideDialog({ override, onClose, onSaved, tenantId }: DialogProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstRef = useRef<HTMLInputElement>(null);
+  useBloqueoScroll(true);
 
   useEffect(() => {
     firstRef.current?.focus();
@@ -231,37 +237,35 @@ function OverrideDialog({ override, onClose, onSaved, tenantId }: DialogProps) {
       role="dialog"
       aria-modal="true"
       aria-label={isEdit ? "Editar override de persona RUNT" : "Crear override de persona RUNT"}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className={`fixed inset-0 z-50 flex items-center justify-center p-4 ${DIALOGO_VELO_CLS}`}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="relative w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-[var(--surface-default)] shadow-xl">
+      <div className={`relative max-h-[90dvh] w-full max-w-2xl overflow-y-auto overscroll-contain p-5 ${DIALOGO_PANEL_CLS}`}>
         {/* Encabezado */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-[var(--border-subtle)] bg-[var(--surface-default)] px-6 py-4">
-          <h2 className="text-base font-semibold text-[var(--content-primary)]">
+        <FranjaDialogo className="-mx-5 -mt-5 mb-1">
+          <h2 className={`text-base font-semibold ${DIALOGO_TITULO_CLS}`}>
             {isEdit ? "Editar override" : "Nuevo override de persona RUNT"}
           </h2>
           <button
             type="button"
             aria-label="Cerrar"
             onClick={onClose}
-            className="rounded-lg p-1.5 hover:bg-[var(--surface-hover)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-default)]"
+            className={DIALOGO_CERRAR_CLS}
           >
-            <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+            <Icono nombre="cerrar" className="h-4 w-4" />
           </button>
-        </div>
+        </FranjaDialogo>
 
-        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-5" noValidate>
+        <form onSubmit={handleSubmit} className="mt-4 space-y-5" noValidate>
           {error && (
-            <p role="alert" className="rounded-lg bg-[var(--status-error-subtle)] px-3 py-2 text-sm text-[var(--status-error)]">
+            <p role="alert" className="rounded-xl border border-destructive px-3 py-2 text-xs text-destructive">
               {error}
             </p>
           )}
 
           {/* Identificación */}
           <fieldset className="space-y-3">
-            <legend className="text-xs font-semibold uppercase tracking-wide text-[var(--content-secondary)]">
+            <legend className={LEGEND_CLS}>
               Identificación
             </legend>
             <div className="grid grid-cols-2 gap-3">
@@ -304,7 +308,7 @@ function OverrideDialog({ override, onClose, onSaved, tenantId }: DialogProps) {
 
           {/* Nombre */}
           <fieldset className="space-y-3">
-            <legend className="text-xs font-semibold uppercase tracking-wide text-[var(--content-secondary)]">
+            <legend className={LEGEND_CLS}>
               Nombre
             </legend>
             <div className="grid grid-cols-2 gap-3">
@@ -363,7 +367,7 @@ function OverrideDialog({ override, onClose, onSaved, tenantId }: DialogProps) {
 
           {/* Estado RUNT */}
           <fieldset className="space-y-3">
-            <legend className="text-xs font-semibold uppercase tracking-wide text-[var(--content-secondary)]">
+            <legend className={LEGEND_CLS}>
               Estado RUNT (opcional)
             </legend>
             <div className="grid grid-cols-2 gap-3">
@@ -445,7 +449,7 @@ function OverrideDialog({ override, onClose, onSaved, tenantId }: DialogProps) {
 
           {/* Meta del override */}
           <fieldset className="space-y-3">
-            <legend className="text-xs font-semibold uppercase tracking-wide text-[var(--content-secondary)]">
+            <legend className={LEGEND_CLS}>
               Vigencia y motivo
             </legend>
             <div className="grid grid-cols-2 gap-3">
@@ -493,10 +497,15 @@ function OverrideDialog({ override, onClose, onSaved, tenantId }: DialogProps) {
 
           {/* Acciones */}
           <div className="flex justify-end gap-3 pt-2">
-            <button type="button" onClick={onClose} className={BTN_SECONDARY} disabled={saving}>
+            <button
+              type="button"
+              onClick={onClose}
+              className={buttonClass({ variant: "secondary", size: "sm" })}
+              disabled={saving}
+            >
               Cancelar
             </button>
-            <button type="submit" className={BTN_PRIMARY} disabled={saving}>
+            <button type="submit" className={buttonClass({ size: "sm" })} disabled={saving}>
               {saving ? "Guardando…" : isEdit ? "Guardar cambios" : "Crear override"}
             </button>
           </div>
@@ -645,18 +654,18 @@ export function RuntPersonaOverridesPanel() {
       header: "Vence",
       render: (o) =>
         o.expiresAt ? (
-          <span className="text-xs text-[var(--content-secondary)]">
+          <span className="text-xs text-flit-primary">
             {formatFechaHora(o.expiresAt)}
           </span>
         ) : (
-          <span className="text-xs text-[var(--content-disabled)]">Sin vencimiento</span>
+          <span className="text-xs text-muted-foreground">Sin vencimiento</span>
         ),
     },
     {
       key: "reason",
       header: "Motivo",
       render: (o) => (
-        <span className="max-w-xs truncate text-xs text-[var(--content-secondary)]" title={o.reason}>
+        <span className="max-w-xs truncate text-xs text-muted-foreground" title={o.reason}>
           {o.reason}
         </span>
       ),
@@ -669,7 +678,7 @@ export function RuntPersonaOverridesPanel() {
           <button
             type="button"
             onClick={() => setDialog(o)}
-            className={BTN_SECONDARY.replace("px-4 py-2", "px-3 py-1.5").replace("text-sm", "text-xs")}
+            className={buttonClass({ variant: "secondary", size: "sm" })}
             aria-label={`Editar override de ${o.documentType} ${o.documentNumber}`}
           >
             Editar
@@ -678,7 +687,7 @@ export function RuntPersonaOverridesPanel() {
             <button
               type="button"
               onClick={() => void handleDeactivate(o)}
-              className={BTN_DANGER}
+              className={buttonClass({ variant: "alerta", size: "sm" })}
               aria-label={`Desactivar override de ${o.documentType} ${o.documentNumber}`}
             >
               Desactivar
@@ -709,7 +718,7 @@ export function RuntPersonaOverridesPanel() {
           type="button"
           onClick={() => setDialog("create")}
           disabled={hasNoTenant}
-          className={BTN_PRIMARY}
+          className={buttonClass({ size: "sm" })}
           aria-label="Crear nuevo override de persona RUNT"
         >
           <svg aria-hidden="true" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -721,7 +730,7 @@ export function RuntPersonaOverridesPanel() {
 
       {/* Tabla */}
       {hasNoTenant ? (
-        <p className="text-sm text-[var(--content-secondary)]">
+        <p className="text-sm text-muted-foreground">
           Selecciona una compañía para ver y gestionar sus overrides de persona RUNT.
         </p>
       ) : (
