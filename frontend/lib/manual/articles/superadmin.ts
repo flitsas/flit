@@ -886,7 +886,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       "aprobada por",
     ],
     summary:
-      "Cuándo usar la validación manual, cómo activarla, cómo copiar o regenerar el enlace para el cliente y cómo aprobar o rechazar cada caso.",
+      "Cuándo usar la validación manual, cómo activarla, cómo regenerar el enlace para el cliente y cómo aprobar o rechazar cada caso.",
     blocks: [
       {
         id: "que-es",
@@ -908,25 +908,13 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
       },
       {
         id: "enlace",
-        title: "3. Copiar o regenerar el enlace",
+        title: "3. Regenerar el enlace",
         paragraphs: [
-          "En la fila, abre «Acciones» y usa «Copiar enlace» cuando el correo no llegó o el cliente prefiere recibirlo por otro canal.",
+          "El enlace de captura llega a la persona por correo y no se muestra ni se copia en pantalla. Si no llegó o venció, regéneralo desde el detalle.",
         ],
         bullets: [
-          "Paso 1: en la pestaña «Validaciones manuales», busca la fila de la persona.",
-          "Paso 2: en la columna Acciones, pulsa el ícono de copiar enlace. Verás el mensaje «Enlace copiado».",
-          "Paso 3: pégalo en el canal que uses con el cliente.",
-          "Copiar no cambia el enlace ni envía otro correo: el enlace que ya salió sigue funcionando.",
-          "La acción aparece mientras el caso espera una captura, también si fue rechazado y la persona debe repetirla.",
-          "Si el enlace venció o no se puede recuperar, verás el motivo y la opción «Regenerar enlace». Regenerar crea un enlace nuevo, envía el correo y deja sin servicio el anterior.",
-          "Los enlaces emitidos antes de que existiera esta opción no se pueden copiar: toca regenerarlos una vez.",
-          "Cada copia queda registrada con quién la hizo y cuándo.",
-        ],
-        callouts: [
-          {
-            variant: "warning",
-            text: "El enlace le da acceso a la captura de esa persona. Compártelo solo con ella.",
-          },
+          "Paso 1: en la pestaña «Validaciones manuales», abre «Acciones» → «Ver detalle» de la persona.",
+          "Paso 2: pulsa «Regenerar enlace». Se crea un enlace nuevo, se envía por correo y el anterior queda sin servicio.",
         ],
       },
       {

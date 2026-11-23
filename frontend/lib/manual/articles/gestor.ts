@@ -296,8 +296,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "2. Flujo general",
         paragraphs: [],
         bullets: [
-          "Desde el wizard, en el paso de identidad, se invita a cada parte (enlace o QR según configuración).",
-          "Hazle llegar el enlace a la persona con el código QR o con «Copiar enlace». No lo abras en tu equipo: el enlace queda asociado al primer dispositivo que lo abre y luego la persona no podría completar la captura desde el suyo.",
+          "Desde el wizard, en el paso de identidad, se invita a cada parte: el enlace de validación le llega por correo.",
+          "El enlace de captura le llega a la persona por correo; la pantalla no lo muestra ni se puede copiar. Si no le llegó, usa «Reenviar validación».",
           "La persona completa el flujo biométrico en el dispositivo indicado.",
           "El estado vuelve al trámite: pendiente, aprobado, rechazado o vencido.",
           "Con todas las identidades aprobadas, el wizard puede quitar el bloqueo correspondiente.",
@@ -440,8 +440,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "Paso 1: abre las tres rayas del trámite y elige «Reenviar validación».",
           "Paso 2: marca a quién reenviar. Hay una casilla por persona («Vendedor · nombre», «Comprador · nombre»); si hay varios propietarios, cada uno aparece por separado. Puedes marcar una o varias.",
           "Paso 3 (opcional): si el correo registrado está mal, escribe el correcto en «Nuevo correo» de esa persona. Se guarda en el trámite y en Validaciones de Identidad, y el enlace sale a ese correo. Si lo dejas vacío, se envía al correo de siempre.",
-          "Paso 4: pulsa «Reenviar». El cuadro no se cierra: te muestra el resultado de cada persona y el enlace nuevo con «Copiar enlace», por si prefieres enviárselo tú.",
-          "Si la persona ya tiene un enlace vigente, puedes copiarlo con «Copiar enlace» sin reenviar.",
+          "Paso 4: pulsa «Reenviar». El cuadro no se cierra: te muestra el resultado de cada persona (enviado o el motivo por el que no salió). El enlace llega a la persona por correo; no se muestra en pantalla.",
           "Matrícula: solo aparece el comprador. Otros trámites: aparecen las personas que ese trámite pide validar.",
           "Cada reenvío queda en el seguimiento del trámite: quién lo hizo, a qué persona y, si se corrigió, el correo anterior y el nuevo.",
         ],
@@ -671,7 +670,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "«Nueva» crea una prevalidación de persona natural: se envía un enlace de captura al correo indicado y el resultado queda disponible para trámites posteriores.",
           "Abre una fila para ver el detalle en un panel lateral (drawer): proceso ante el proveedor, reintentos y línea de tiempo del registro.",
           "«Ver alertas de validación» abre el panel de validaciones atascadas (sin respuesta del proveedor), agrupadas por persona, con opción de reintentar todas de una vez o una por una.",
-          "«Vencer» (solo Super Admin de FLIT, en el menú «Acciones» de una validación aprobada y vigente): termina la vigencia en ese momento para que la persona repita la validación. En el mismo paso se le envía un enlace nuevo, que queda en pantalla con «Copiar enlace». El certificado anterior se conserva en el historial.",
+          "«Vencer» (solo Super Admin de FLIT, en el menú «Acciones» de una validación aprobada y vigente): termina la vigencia en ese momento para que la persona repita la validación. En el mismo paso se le envía un enlace nuevo por correo. El certificado anterior se conserva en el historial.",
         ],
         callouts: [
           {
@@ -979,7 +978,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
           "2. Activa o desactiva una acción con su interruptor, o usa «Habilitar módulo» y «Denegar módulo» para todo el módulo a la vez.",
           "3. «Volver al rol» deja el permiso como lo dicta el rol. Cada permiso individual dice quién lo otorgó y cuándo.",
           "4. En «Tipos de servicio», «Trámites: Matrículas», «Traspasos» y «Otros trámites» tienen cada uno «Ver» y «Crear»: «Crear» solo se habilita si «Ver» está habilitado y, al apagar «Ver», también se apaga «Crear».",
-          "«Reenviar validación de identidad» (módulo de gestión avanzada de trámites) lo puedes dar a cualquier persona o rol de tu compañía: con él ve la opción «Reenviar validación» en las tres rayas del trámite, corrige el correo y copia el enlace. Las demás acciones avanzadas (cambiar estado, anular, consolidado, reasignar gestor) siguen siendo del Super Admin. La persona ve el permiso al volver a ingresar.",
+          "«Reenviar validación de identidad» (módulo de gestión avanzada de trámites) lo puedes dar a cualquier persona o rol de tu compañía: con él ve la opción «Reenviar validación» en las tres rayas del trámite, corrige el correo y vuelve a enviar el enlace por correo. Las demás acciones avanzadas (cambiar estado, anular, consolidado, reasignar gestor) siguen siendo del Super Admin. La persona ve el permiso al volver a ingresar.",
         ],
         callouts: [
           {

@@ -1,5 +1,5 @@
 // Uso de ejemplo:
-//   read('BiometricStep.tsx') → md:grid-cols-2 con captura, QR size={120}, WIZARD_BTN_BRAND
+//   read('BiometricStep.tsx') → una sola columna (sin panel QR, Bug #14674), WIZARD_BTN_BRAND
 //   WIZARD_BTN_BRAND / WIZARD_BTN_BRAND_OUTLINE exportados desde wizard-field-styles
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
@@ -14,10 +14,11 @@ import {
 const FE_ROOT = path.resolve(__dirname, '../..');
 const read = (rel: string) => readFileSync(path.join(FE_ROOT, rel), 'utf8');
 
-describe('HU #12729 — AC1/AC2 rejilla dos columnas (firma/QR y partes)', () => {
-  it('happy: ParteBlock usa md:grid-cols-2 cuando hay captura lateral', () => {
+describe('HU #12729 — AC1/AC2 rejilla (una columna sin panel de captura, Bug #14674; partes en dos columnas)', () => {
+  it('happy: ParteBlock ya no reserva segunda columna para captura lateral (Bug #14674)', () => {
     const src = read('operacion/BiometricStep.tsx');
-    expect(src).toMatch(/showCaptureSide \? 'md:grid-cols-2'/);
+    expect(src).not.toMatch(/showCaptureSide/);
+    expect(src).toMatch(/<div className="grid grid-cols-1 gap-4">/);
     expect(src).toMatch(/grid grid-cols-1 gap-4 md:grid-cols-2/);
   });
 
@@ -26,16 +27,15 @@ describe('HU #12729 — AC1/AC2 rejilla dos columnas (firma/QR y partes)', () =>
     expect(src).toMatch(/partes\.length > 1 \? 'md:grid-cols-2'/);
   });
 
-  it('contrato: QR de captura conserva size={120}', () => {
+  it('contrato: el wizard no importa ni pinta QR de captura (Bug #14674)', () => {
     const src = read('operacion/BiometricStep.tsx');
-    expect(src).toMatch(/<QRCodeSVG value=\{captureUrl\} size=\{120\}/);
+    expect(src).not.toMatch(/QRCodeSVG|qrcode\.react/);
+    expect(src).not.toMatch(/KyverumCapturePanel/);
   });
 
-  it('edge: sin captura lateral no fuerza segunda columna en ParteBlock', () => {
+  it('edge: ParteBlock no fuerza segunda columna', () => {
     const src = read('operacion/BiometricStep.tsx');
-    expect(src).toMatch(
-      /grid grid-cols-1 gap-4 \$\{showCaptureSide \? 'md:grid-cols-2' : ''\}/,
-    );
+    expect(src).toMatch(/<div className="grid grid-cols-1 gap-4">/);
   });
 });
 
@@ -52,7 +52,7 @@ describe('HU #12729 — AC3 trazabilidad a ancho completo', () => {
     expect(src).toMatch(/function TrazabilidadDisclosure/);
     // Hermano del grid (después de `</div>` del grid), no anidado en la tarjeta.
     expect(src).toMatch(
-      /\$\{showCaptureSide \? 'md:grid-cols-2' : ''\}`\}>[\s\S]*?<\/div>\s*<ParteTrazabilidadSection/,
+      /<div className="grid grid-cols-1 gap-4">[\s\S]*?<\/div>\s*<ParteTrazabilidadSection/,
     );
   });
 });

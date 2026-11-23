@@ -1,7 +1,6 @@
 'use client';
 
 import { type ReactNode, useEffect, useState } from 'react';
-import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import {
@@ -29,7 +28,8 @@ import type {
  *
  * HU #13822 (Feature #13819) — el modal lista PERSONAS sin firmar (no filas del expediente): se
  * marcan una o varias, cada una con su «Nuevo correo (opcional)», y se reenvía en un solo clic.
- * Tras reenviar NO se cierra: muestra el resultado por persona y el enlace nuevo con «Copiar enlace».
+ * Tras reenviar NO se cierra: muestra el resultado por persona.
+ * Bug #14674: el enlace de captura no se muestra ni se copia desde este modal; la validación llega por correo.
  */
 
 const FIELD_LABEL_CLS = 'block text-xs font-semibold text-foreground';
@@ -37,9 +37,6 @@ const FIELD_LABEL_CLS = 'block text-xs font-semibold text-foreground';
 const FIELD_CLS =
   'w-full rounded-xl border px-3 py-2 text-sm text-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand dark:bg-transparent';
 const FIELD_BORDER = { borderColor: 'var(--border)' };
-const LINK_BTN_CLS =
-  'inline-flex items-center gap-1 rounded-lg text-xs font-semibold text-flit-brand underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2';
-
 export const PARTE_LABEL: Record<string, string> = {
   vendedor: 'Vendedor',
   comprador: 'Comprador',
@@ -67,7 +64,6 @@ const MSG_REENVIADA = 'Validación de identidad reenviada.';
 const MSG_MANUAL = 'En validación manual: el enlace se regenera desde la revisión manual.';
 const MSG_INICIAL_AUSENTE =
   'La validación que elegiste ya no está pendiente de firma. Marca a quién reenviar de la lista.';
-const GREEN = 'var(--flit-success-ink)';
 const RED = 'var(--destructive)';
 
 /**
@@ -103,16 +99,6 @@ function claveFila(p: Pick<AdminValidacionReenviable, 'validationId' | 'partyRol
  */
 function claveParOrdinal(p: { partyRole: string | null; ordinal: number | null }): string {
   return `${p.partyRole ?? ''}:${p.ordinal ?? ''}`;
-}
-
-/** AC4 — hay enlace que copiar solo si existe y no venció. */
-function enlaceVigente(
-  p: Pick<AdminValidacionReenviable, 'captureUrl' | 'captureExpiresAt'>,
-): boolean {
-  if (!p.captureUrl) return false;
-  if (!p.captureExpiresAt) return true;
-  const t = new Date(p.captureExpiresAt).getTime();
-  return Number.isNaN(t) || t > Date.now();
 }
 
 function PrimaryButton({
@@ -163,52 +149,6 @@ function SecondaryButton({
   );
 }
 
-/**
- * Kyverum devuelve una URL absoluta, pero el proveedor simulado (y el enlace propio de FLIT) devuelve una
- * ruta relativa (`/api/v1/public/biometric/{token}`): copiada así no le sirve a quien la recibe por chat o
- * correo. Se completa con el origen de la app, que es el que sirve esa ruta.
- */
-export function enlaceAbsoluto(url: string): string {
-  if (/^https?:\/\//i.test(url) || typeof window === 'undefined') return url;
-  return new URL(url, window.location.origin).toString();
-}
-
-function CopiarEnlace({
-  url: urlOriginal,
-  copiado,
-  onCopiar,
-}: {
-  url: string;
-  copiado: boolean | null;
-  onCopiar: (url: string) => void;
-}) {
-  const url = enlaceAbsoluto(urlOriginal);
-  return (
-    <div className="space-y-1">
-      {/* Mismo patrón que el panel de éxito de la prevalidación: el enlace se ve completo y se puede abrir. */}
-      <a
-        href={url}
-        target="_blank"
-        rel="noopener noreferrer"
-        aria-label="Abrir enlace de captura"
-        className="block break-all text-xs text-flit-brand underline-offset-2 hover:underline"
-      >
-        {url}
-      </a>
-      <div className="flex items-center gap-3">
-      <button type="button" onClick={() => onCopiar(url)} className={LINK_BTN_CLS}>
-        <Icono nombre="copiar" className="h-3.5 w-3.5" />
-        Copiar enlace
-      </button>
-      <span role="status" aria-live="polite" className="text-xs font-medium">
-        {copiado === true ? <span style={{ color: GREEN }}>Enlace copiado.</span> : null}
-        {copiado === false ? <span style={{ color: RED }}>No se pudo copiar el enlace.</span> : null}
-      </span>
-      </div>
-    </div>
-  );
-}
-
 export interface ReenviarValidacionIdentidadModalProps {
   open: boolean;
   onClose: () => void;
@@ -250,11 +190,10 @@ export function ReenviarValidacionIdentidadModal({
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [resultados, setResultados] = useState<AdminReenviarLoteItemResult[] | null>(null);
-  const [copia, setCopia] = useState<{ id: string; ok: boolean } | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   // AC4 — el aviso de éxito se entrega al CERRAR, no al reenviar: el padre (AdminTramiteAcciones)
   // responde a onSuccess recargando el listado, y esa recarga desmonta la fila con este modal
-  // adentro, que se cerraba antes de que el usuario viera el resultado y copiara el enlace.
+  // adentro, que se cerraba antes de que el usuario viera el resultado por persona.
   const [avisoPendiente, setAvisoPendiente] = useState<string | null>(null);
 
   const cerrar = () => {
@@ -274,7 +213,6 @@ export function ReenviarValidacionIdentidadModal({
     setLoadError(null);
     setSubmitError(null);
     setResultados(null);
-    setCopia(null);
     setCorreos({});
     tramitesClient
       .adminListValidacionesReenviables(instanceId, tenantId)
@@ -330,15 +268,6 @@ export function ReenviarValidacionIdentidadModal({
       ? 'Reenviando…'
       : 'Enviando/Reenviando…';
 
-  const copiar = async (id: string, url: string) => {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopia({ id, ok: true });
-    } catch {
-      setCopia({ id, ok: false });
-    }
-  };
-
   const confirmar = async () => {
     if (seleccionadas.length === 0 || hayInvalido) return;
     setBusy(true);
@@ -358,7 +287,6 @@ export function ReenviarValidacionIdentidadModal({
       );
       const items = res.items ?? [];
       setResultados(items);
-      setCopia(null);
       const oks = items.filter((i) => i.ok);
       if (oks.length > 0) {
         const mensajeExito = todasNuevas
@@ -393,7 +321,6 @@ export function ReenviarValidacionIdentidadModal({
   const seleccionPorParOrdinal = new Map(seleccionadas.map((p) => [claveParOrdinal(p), p]));
   const eraEnvioNuevo = (r: Pick<AdminReenviarLoteItemResult, 'partyRole' | 'ordinal'>): boolean =>
     seleccionPorParOrdinal.get(claveParOrdinal(r))?.validationId === null;
-  const copiadoDe = (id: string): boolean | null => (copia?.id === id ? copia.ok : null);
 
   const mostrarVacio = !loading && !loadError && personas.length === 0;
   const mostrarLista = !loading && !loadError && personas.length > 0 && resultados === null;
@@ -503,13 +430,6 @@ export function ReenviarValidacionIdentidadModal({
                         ) : null}
                       </div>
                     ) : null}
-                    {!p.esFlujoManual && enlaceVigente(p) ? (
-                      <CopiarEnlace
-                        url={p.captureUrl!}
-                        copiado={copiadoDe(id)}
-                        onCopiar={(u) => void copiar(id, u)}
-                      />
-                    ) : null}
                   </li>
                 );
               })}
@@ -573,13 +493,6 @@ export function ReenviarValidacionIdentidadModal({
                           <p className="text-xs text-muted-foreground">
                             Enviado a: <span className="font-medium">{r.email}</span>
                           </p>
-                        ) : null}
-                        {r.captureUrl ? (
-                          <CopiarEnlace
-                            url={r.captureUrl}
-                            copiado={copiadoDe(claveResultado)}
-                            onCopiar={(u) => void copiar(claveResultado, u)}
-                          />
                         ) : null}
                       </>
                     )}

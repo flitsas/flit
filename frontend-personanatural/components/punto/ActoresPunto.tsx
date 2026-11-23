@@ -3,7 +3,7 @@
 // HU #14238 — Paso Actores del canal OT: mismas fichas por rol que el portal PN (roles de la definición del tipo) + identidad in-situ e invitaciones.
 // El primer rol es quien radica en el punto (documento fijo, identidad in-situ); los demás roles son partes invitables.
 import { useCallback, useEffect, useRef, useState } from "react";
-import { AlertTriangle, Copy } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
 import { AlertaIdentidadValidada, nombrePropio } from "@/components/tramite/AlertaIdentidadValidada";
 import { MobilityLoader } from "@/components/MobilityLoader";
 import type { TonoAviso } from "@/components/landing/AvisoModal";
@@ -142,7 +142,6 @@ export function ActoresPunto({
   const [filas, setFilas] = useState<FilaActor[]>([]);
   const [roles, setRoles] = useState<ActorRol[]>([]);
   const [intentoAvance, setIntentoAvance] = useState(0);
-  const [copiado, setCopiado] = useState<string | null>(null);
   const [versionEstado, setVersionEstado] = useState(0);
   const [lanzando, setLanzando] = useState(false);
   const [falloIdentidad, setFalloIdentidad] = useState<string | null>(null);
@@ -441,24 +440,14 @@ export function ActoresPunto({
       direccion: fila.direccion,
       ciudad: fila.ciudad,
     });
-    setCopiado(null);
     setFase((prev) =>
       prev.tipo === "listo" ? { ...prev, invitaciones: { ...prev.invitaciones, [rol.rol]: resultado } } : prev,
     );
     await recargarVersion(fase.solicitudId);
     await refrescarEstado(fase.solicitudId);
-    onAviso("Correo enviado", "Se envió el enlace de validación al correo indicado. También puedes copiarlo.", "exito");
+    onAviso("Correo enviado", "Se envió el enlace de validación al correo indicado.", "exito");
     return resultado;
   };
-
-  async function copiarEnlace(rol: string, url: string) {
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopiado(rol);
-    } catch {
-      onAviso("No se pudo copiar", "Copia el enlace manualmente desde la barra de direcciones del validador.", "alerta");
-    }
-  }
 
   const estadoDe = (f: FilaActor): EstadoValidacion =>
     fase.tipo === "listo" ? estadoDeFila(f, fase.estado, []) : "sin_solicitar";
@@ -597,7 +586,6 @@ export function ActoresPunto({
           )}
 
           {identidadCumplida && invitables.map((rolInv) => {
-            const invitacion = fase.invitaciones[rolInv.rol];
             return (
               <Card key={rolInv.rol} title={rolInv.etiqueta} id={`punto-actores-${rolInv.rol}`}>
                 {filas
@@ -622,18 +610,6 @@ export function ActoresPunto({
                       puedeValidarIdentidad={identidadCumplida}
                     />
                   ))}
-                {invitacion?.capturaUrl && (
-                  <div className="mt-4">
-                    <button
-                      type="button"
-                      className={boton("flit", "min-h-11 px-6", "none")}
-                      onClick={() => void copiarEnlace(rolInv.rol, invitacion.capturaUrl!)}
-                    >
-                      <Copy aria-hidden className="mr-2 inline h-4 w-4" />
-                      {copiado === rolInv.rol ? "Copiado" : "Copiar enlace"}
-                    </button>
-                  </div>
-                )}
               </Card>
             );
           })}
