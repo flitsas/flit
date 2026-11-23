@@ -78,7 +78,12 @@ public sealed record MandateSignerCandidate(
     /// Sello de su validación propia con la misma leyenda que el de las partes (documento, UUID, firma y aprobación).
     /// Nulo sin validación aprobada: el mandato cae al sello corto.
     /// </summary>
-    string? SelloIdentidad = null)
+    string? SelloIdentidad = null,
+    /// <summary>
+    /// Bug #14661 — la rúbrica de <see cref="RubricaIdentidadPath"/> viene de una validación MANUAL: un PNG de fondo blanco
+    /// opaco que se prepara (fondo transparente) antes de estamparlo en el mandato, igual que la firma manual de las partes.
+    /// </summary>
+    bool RubricaIdentidadManual = false)
 {
     /// <summary>
     /// Tenants donde buscar su firma del baúl, en orden: primero el de la compañía del trámite (comportamiento

@@ -433,6 +433,46 @@ internal static class PdfXObjectPngDecoder
         return IdentitySignatureImageFormat.IsPng(outPng) ? outPng : null;
     }
 
+    /// <summary>
+    /// Bug #14661 — firma MANUAL lista para estampar: la captura del enlace público entrega un PNG de fondo
+    /// blanco OPACO (lienzo con fillRect), que no cumple el criterio de transparencia de
+    /// <see cref="LooksLikeSignatureArtifact"/> (pensado para el recorte de Kyverum). Aquí solo se exige tinta
+    /// visible y se vuelve transparente el fondo blanco/casi blanco, re-codificando siempre a PNG con alfa para
+    /// que no tape líneas ni casillas del formulario. Decodificación acotada (<see cref="MaxDecodePixels"/>,
+    /// solo PNG/JPEG). Devuelve null si no hay tinta o el formato no es soportado.
+    /// </summary>
+    internal static byte[]? PrepareManualSignature(byte[]? bytes)
+    {
+        if (!HasVisibleInk(bytes))
+            return null;
+
+        try
+        {
+            using var image = LoadBounded(bytes);
+            if (image is null)
+                return null;
+
+            for (var y = 0; y < image.Height; y++)
+            {
+                for (var x = 0; x < image.Width; x++)
+                {
+                    var p = image[x, y];
+                    if (p.A > 0 && (p.R + p.G + p.B) / 3 >= LightBackgroundMinLuma)
+                        image[x, y] = new Rgba32(255, 255, 255, 0);
+                }
+            }
+
+            using var ms = new MemoryStream();
+            image.Save(ms, Png);
+            var outPng = ms.ToArray();
+            return IdentitySignatureImageFormat.IsPng(outPng) ? outPng : null;
+        }
+        catch (Exception ex) when (ex is not (OutOfMemoryException or InsufficientExecutionStackException))
+        {
+            return null;
+        }
+    }
+
     private const int LightBackgroundMinLuma = 235;
 
     /// <summary>Máximo de colores distintos de la tinta visible de una rúbrica (trazo + antialias).</summary>
