@@ -113,6 +113,8 @@ tags:
   description: Secretarías de tránsito activas (compatibilidad v1).
 - name: ICT · Ciclo de vida
   description: Pausa, reanudación y anulación de trámites en borrador (compatibilidad v1).
+- name: ICT · Documentos
+  description: Entrega de documentos del trámite (consolidado PDF prefirmado) al gestor ICT.
 - name: Webhooks
   description: Notificaciones que FLIT envía a la URL que registró el gestor.
 paths:
@@ -1230,6 +1232,7 @@ paths:
                     type: string
                     format: uri
                     description: URL prefirmada de descarga del consolidado PDF (TTL 600 s).
+                    example: 'https://files.example.com/presigned/abc123?X-Amz-Expires=600'
               example:
                 url: 'https://files.example.com/presigned/abc123?X-Amz-Expires=600'
         '401':
@@ -1238,6 +1241,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorIct'
+              example:
+                error: 'unauthorized'
         '404':
           description: Pre-trámite no encontrado (`not_found`) o no materializado en FLIT (`not_materialized`).
           content:

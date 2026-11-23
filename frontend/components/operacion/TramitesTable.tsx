@@ -1978,20 +1978,8 @@ function PausaMasivaModal({
   });
   const [busy, setBusy] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
-  // Resetear si la lista de pausables cambia (nueva apertura).
-  useEffect(() => {
-    setMode('keep');
-    setGlobalObs('');
-    setPerItemObs(() => {
-      const m = new Map<string, string>();
-      for (const it of pausables) m.set(it.id, it.pausedObservation ?? '');
-      return m;
-    });
-    setBusy(false);
-    setErrorMsg(null);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  // Estado inicial al montar: el padre desmonta el modal al cerrar (`bulkPauseModalState === null`),
+  // así que no hace falta resetear con useEffect (evita react-hooks/set-state-in-effect).
 
   const handleConfirm = async () => {
     setBusy(true);
@@ -2016,7 +2004,7 @@ function PausaMasivaModal({
       open={open}
       onClose={onClose}
       title={title}
-      icon={paused ? Pause : Play}
+      icono={paused ? 'pausa' : 'avance'}
       iconBg={paused ? 'var(--color-flit-primary)' : 'var(--color-flit-brand)'}
       description={`${count} trámite${count !== 1 ? 's' : ''} seleccionado${count !== 1 ? 's' : ''}`}
       size="lg"
@@ -3769,7 +3757,7 @@ function TramiteRow({
         open={pauseActionModal !== null}
         onClose={() => { if (!pauseSubmitting) setPauseActionModal(null); }}
         title={pauseActionModal?.next ? 'Pausar trámite' : 'Reanudar trámite'}
-        icon={pauseActionModal?.next ? Pause : Play}
+        icono={pauseActionModal?.next ? 'pausa' : 'avance'}
         iconBg={pauseActionModal?.next ? 'var(--color-flit-primary)' : 'var(--color-flit-brand)'}
         description={`Trámite ${item.referenceNumber}`}
         size="sm"
