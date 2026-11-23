@@ -1538,7 +1538,8 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     expect(within(row).queryByText('Placa asignada por el OT')).not.toBeInTheDocument();
   });
 
-  it('en un borrador ICT el menú de acciones ofrece "Pausar" y al elegirlo llama a pauseInstance (optimista → "Reanudar")', async () => {
+  // HU #14668 (AC1) — el menú NO toglea al instante; abre un modal con textarea de observación.
+  it('en un borrador ICT el menú de acciones ofrece "Pausar" y al elegirlo abre el modal de observación; confirmar llama a pauseInstance (optimista → "Reanudar")', async () => {
     const [item] = makeInstances(1);
     mocks.listInstances.mockResolvedValue([
       { ...item, id: 'ict1', referenceNumber: 'TR-ICT', placa: 'ICT001', origin: 'ict', estado: 'borrador', isPaused: false },
@@ -1548,6 +1549,13 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
 
     await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-ICT' }));
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Pausar' }));
+
+    // HU #14668 (AC1) — modal abierto; no debe llamar pauseInstance todavía.
+    const dialog = await screen.findByRole('dialog', { name: /Pausar trámite/i });
+    expect(mocks.pauseInstance).not.toHaveBeenCalled();
+
+    // Confirmar sin observación → observation = null.
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirmar' }));
 
     expect(mocks.pauseInstance).toHaveBeenCalledWith('ict1', true, null, undefined);
     // Optimista: reabrir el menú ahora ofrece "Reanudar".
@@ -1590,6 +1598,184 @@ describe('TramitesTable — pausa ICT (pauseDraftProcess / starts_procedure_in_p
     const dialog2 = await screen.findByRole('dialog', { name: /Trámite pausado/i });
     await userEvent.click(within(dialog2).getByRole('button', { name: /Continuar de todos modos/ }));
     expect(routerPush).toHaveBeenCalled();
+  });
+});
+
+// ── HU #14668 — Pausa con observación (AC1 individual, AC2 masivo) ────────────────────────────
+
+describe('HU #14668 — AC1: modal Pausar trámite con observación', () => {
+  it('Cancelar en el modal de pausa NO llama a pauseInstance', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, id: 'ac1a', referenceNumber: 'TR-AC1A', placa: 'AC1001', origin: 'ict', estado: 'borrador', isPaused: false },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-AC1A' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Pausar' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Pausar trámite/i });
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+
+    expect(mocks.pauseInstance).not.toHaveBeenCalled();
+    expect(screen.queryByRole('dialog', { name: /Pausar trámite/i })).toBeNull();
+  });
+
+  it('confirmar con observación llama a pauseInstance con la observación escrita', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, id: 'ac1b', referenceNumber: 'TR-AC1B', placa: 'AC1002', origin: 'ict', estado: 'borrador', isPaused: false },
+    ]);
+    mocks.pauseInstance.mockResolvedValue({ id: 'ac1b', isPaused: true, pausedObservation: 'En espera de doc.' });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-AC1B' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Pausar' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Pausar trámite/i });
+    const textarea = within(dialog).getByRole('textbox');
+    await userEvent.clear(textarea);
+    await userEvent.type(textarea, 'En espera de doc.');
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirmar' }));
+
+    expect(mocks.pauseInstance).toHaveBeenCalledWith('ac1b', true, 'En espera de doc.', undefined);
+  });
+
+  it('el modal de Reanudar muestra la observación existente como contexto y no muestra textarea editable', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, id: 'ac1c', referenceNumber: 'TR-AC1C', placa: 'AC1003', origin: 'ict', estado: 'borrador', isPaused: true, pausedObservation: 'Esperando pago' },
+    ]);
+    mocks.pauseInstance.mockResolvedValue({ id: 'ac1c', isPaused: false, pausedObservation: null });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-AC1C' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Reanudar' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Reanudar trámite/i });
+    // Observación actual visible como contexto.
+    expect(within(dialog).getByText('Esperando pago')).toBeInTheDocument();
+    // No hay textarea editable en el modal de Reanudar.
+    expect(within(dialog).queryByRole('textbox')).toBeNull();
+
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Confirmar' }));
+    expect(mocks.pauseInstance).toHaveBeenCalledWith('ac1c', false, null, undefined);
+  });
+
+  it('el modal de Pausar está prellenado con la observación existente cuando ya había una', async () => {
+    const [item] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...item, id: 'ac1d', referenceNumber: 'TR-AC1D', placa: 'AC1004', origin: 'ict', estado: 'borrador', isPaused: false, pausedObservation: 'Observación previa' },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Acciones del trámite TR-AC1D' }));
+    await userEvent.click(await screen.findByRole('menuitem', { name: 'Pausar' }));
+
+    const dialog = await screen.findByRole('dialog', { name: /Pausar trámite/i });
+    const textarea = within(dialog).getByRole('textbox');
+    expect(textarea).toHaveValue('Observación previa');
+  });
+});
+
+describe('HU #14668 — AC2: modal de pausa masiva con modo de observación', () => {
+  it('Cancelar en el modal de pausa masiva NO llama a pauseInstancesMassive', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'ac2a', placa: 'AC2001', origin: 'ict', estado: 'borrador' },
+    ]);
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('AC2001');
+    await userEvent.click(screen.getAllByRole('checkbox')[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
+
+    const bulkDialog = await screen.findByRole('dialog', { name: /Pausar trámites/i });
+    await userEvent.click(within(bulkDialog).getByRole('button', { name: 'Cancelar' }));
+
+    expect(mocks.pauseInstancesMassive).not.toHaveBeenCalled();
+  });
+
+  it('modo "Una observación para todos" muestra textarea global y la envía', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'ac2b1', placa: 'AC2B01', origin: 'ict', estado: 'borrador' },
+      { ...b, id: 'ac2b2', placa: 'AC2B02', origin: 'ict', estado: 'borrador' },
+    ]);
+    mocks.pauseInstancesMassive.mockResolvedValue({ total: 2, processed: 2, detail: [] });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('AC2B01');
+    for (const chk of screen.getAllByRole('checkbox')) await userEvent.click(chk);
+    await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
+
+    const bulkDialog = await screen.findByRole('dialog', { name: /Pausar trámites/i });
+    // Elegir modo "Una observación para todos"
+    await userEvent.click(within(bulkDialog).getByRole('radio', { name: 'Una observación para todos' }));
+
+    const globalTextarea = within(bulkDialog).getByPlaceholderText(/Escribe la observación/i);
+    await userEvent.type(globalTextarea, 'Pausa temporal');
+
+    await userEvent.click(within(bulkDialog).getByRole('button', { name: 'Confirmar' }));
+    expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(
+      expect.arrayContaining(['ac2b1', 'ac2b2']),
+      true,
+      'Pausa temporal',
+      undefined,
+    );
+  });
+
+  it('modo "Editar por trámite" muestra textareas por ítem y llama pauseInstance individualmente', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'ac2d1', referenceNumber: 'TR-PI-1', placa: 'AC2D01', origin: 'ict', estado: 'borrador' },
+      { ...b, id: 'ac2d2', referenceNumber: 'TR-PI-2', placa: 'AC2D02', origin: 'ict', estado: 'borrador' },
+    ]);
+    mocks.pauseInstance.mockResolvedValue({ isPaused: true, pausedObservation: null });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('AC2D01');
+    for (const chk of screen.getAllByRole('checkbox')) await userEvent.click(chk);
+    await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
+
+    const bulkDialog = await screen.findByRole('dialog', { name: /Pausar trámites/i });
+    await userEvent.click(within(bulkDialog).getByRole('radio', { name: 'Editar por trámite' }));
+
+    // Debe haber un textarea por cada trámite de la lista.
+    const textareas = within(bulkDialog).getAllByRole('textbox');
+    expect(textareas).toHaveLength(2);
+
+    // Escribir observaciones individuales.
+    await userEvent.type(textareas[0], 'Obs TR-PI-1');
+    await userEvent.type(textareas[1], 'Obs TR-PI-2');
+
+    await userEvent.click(within(bulkDialog).getByRole('button', { name: 'Confirmar' }));
+
+    // Fallback por ítem (backend no soporta items[] aún).
+    expect(mocks.pauseInstance).toHaveBeenCalledTimes(2);
+    expect(mocks.pauseInstance).toHaveBeenCalledWith('ac2d1', true, 'Obs TR-PI-1', undefined);
+    expect(mocks.pauseInstance).toHaveBeenCalledWith('ac2d2', true, 'Obs TR-PI-2', undefined);
+  });
+
+  it('modo "Dejar observaciones tal cual" (default) envía observation null a pauseInstancesMassive', async () => {
+    const [b] = makeInstances(1);
+    mocks.listInstances.mockResolvedValue([
+      { ...b, id: 'ac2c', placa: 'AC2C01', origin: 'ict', estado: 'borrador', isPaused: false },
+    ]);
+    mocks.pauseInstancesMassive.mockResolvedValue({ total: 1, processed: 1, detail: [] });
+    render(<ToastProvider><TramitesTable /></ToastProvider>);
+
+    await screen.findByText('AC2C01');
+    await userEvent.click(screen.getAllByRole('checkbox')[0]);
+    await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
+
+    const bulkDialog = await screen.findByRole('dialog', { name: /Pausar trámites/i });
+    // El radio "Dejar observaciones tal cual" debe ser el seleccionado por defecto.
+    expect(within(bulkDialog).getByRole('radio', { name: 'Dejar observaciones tal cual' })).toBeChecked();
+
+    await userEvent.click(within(bulkDialog).getByRole('button', { name: 'Confirmar' }));
+    expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['ac2c'], true, null, undefined);
   });
 });
 
@@ -1806,6 +1992,9 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
     expect(screen.getByText('2 trámites seleccionados')).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole('button', { name: 'Pausar' }));
+    // HU #14668 (AC2) — modal de pausa masiva; confirmar con modo 'keep' (default) → observation null.
+    const bulkDialog = await screen.findByRole('dialog', { name: /Pausar trámites/i });
+    await userEvent.click(within(bulkDialog).getByRole('button', { name: 'Confirmar' }));
     expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['m1', 'm2'], true, null, undefined);
   });
 
@@ -1842,6 +2031,9 @@ describe('TramitesTable — pausa masiva ICT (pause-unpause-massive)', () => {
     const barra = await seleccionarTodas('PAU001');
     expect(within(barra).queryByRole('button', { name: 'Pausar' })).not.toBeInTheDocument();
     await userEvent.click(within(barra).getByRole('button', { name: 'Reanudar' }));
+    // HU #14668 (AC2) — modal de reanuda masiva; confirmar.
+    const bulkDialog = await screen.findByRole('dialog', { name: /Reanudar trámites/i });
+    await userEvent.click(within(bulkDialog).getByRole('button', { name: 'Confirmar' }));
     expect(mocks.pauseInstancesMassive).toHaveBeenCalledWith(['p1', 'p2'], false, null, undefined);
   });
 

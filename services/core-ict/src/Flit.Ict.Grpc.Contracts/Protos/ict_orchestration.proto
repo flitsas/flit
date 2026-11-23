@@ -28,6 +28,11 @@ service IctOrchestration {
   // Bug #13304 — edición del precio de venta (datos comerciales) desde ICT, SOLO mientras el
   // trámite esté en borrador. Valida tenant + external_ref; error_code "not_draft" si ya avanzó.
   rpc UpdateDraftCommercial (UpdateDraftCommercialRequest) returns (DraftReply);
+
+  // HU #14668 — entrega del consolidado para documents-transaction: regenera on-demand
+  // (EntregarConsolidadoHandler) si falta o está stale; solo trámites en estado aprobado.
+  // Devuelve storage_path del File Manager para que ICT emita la URL prefirmada (TTL 600s).
+  rpc DeliverConsolidado (DeliverConsolidadoRequest) returns (DeliverConsolidadoReply);
 }
 
 message CreateDraftFromIctRequest {
@@ -156,4 +161,15 @@ message StatusReply {
   string status = 1;
   google.protobuf.Timestamp submitted_at = 2;
   string error_code = 3;
+}
+
+message DeliverConsolidadoRequest {
+  string tenant_id             = 1;
+  string procedure_instance_id = 2;
+}
+
+message DeliverConsolidadoReply {
+  string storage_path  = 1;  // referencia opaca del File Manager
+  string attachment_id = 2;
+  string error_code    = 3;  // vacío si OK; not_found|not_approved|consolidado_no_disponible|…
 }
