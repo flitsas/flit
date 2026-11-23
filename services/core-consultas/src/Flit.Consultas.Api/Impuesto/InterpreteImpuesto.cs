@@ -8,6 +8,8 @@ namespace Flit.Consultas.Api.Impuesto;
 /// Lee el cuerpo del GET /consultas/{id} en estado terminal (diseño §2.5). Lo primero que aplica gana.
 /// Nunca copia <c>sent</c>, <c>portal</c> ni <c>message</c>. <c>status</c>, <c>result.status</c> y <c>error_code</c> viajan en el
 /// veredicto solo si pasan <c>^[a-z0-9_]{1,64}$</c> (si no, <c>no_reconocido</c>), para el log de quien tiene el logger.
+/// Una validación <c>mismatch</c> (de cualquier campo, incluidos <c>OwnerName</c> y <c>vehicleModel</c>) nunca bloquea el
+/// resultado: viaja aparte como advertencia y el veredicto sale de <c>status</c>/<c>result.status</c> y las vigencias.
 /// </summary>
 internal static class InterpreteImpuesto
 {
@@ -78,9 +80,6 @@ internal static class InterpreteImpuesto
             return Error("NO_CONFIRMADO", advertencias);
         }
 
-        if (HayMismatchBloqueante(advertencias))
-            return Error("NO_CONFIRMADO", advertencias);
-
         var (vigencias, parcialPeriodos) = Vigencias(result);
         var deudaLeida = string.Equals(resultStatus, "con_deuda", StringComparison.OrdinalIgnoreCase)
             || vigencias.Any(v => v.Valor > 0);
@@ -141,10 +140,6 @@ internal static class InterpreteImpuesto
     private static VeredictoImpuesto Error(string codigo, IReadOnlyList<AdvertenciaLeida>? advertencias = null) =>
         new(false, codigo, false, null, false, false, [], null, null, null, null, null, null, null, null, null,
             advertencias ?? []);
-
-    private static bool HayMismatchBloqueante(IReadOnlyList<AdvertenciaLeida> advertencias) =>
-        advertencias.Any(a => a.Tipo == TipoAdvertenciaLeida.Validacion
-            && (a.Campo is "OwnerName" or "vehicleModel"));
 
     private static List<AdvertenciaLeida> LeerAdvertencias(JsonElement raiz)
     {

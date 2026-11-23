@@ -22,8 +22,8 @@ public sealed class InterpreteImpuestoTests
         { "resultado-paz-y-salvo.json", true, "", false, -1, false, 0 },
         { "resultado-parcial-con-deuda.json", true, "", true, 219_501, true, 1 },
         { "resultado-parcial-sin-deuda.json", false, "NO_CONFIRMADO", false, -1, true, 0 },
-        { "resultado-mismatch-ownername.json", false, "NO_CONFIRMADO", false, -1, false, 0 },
-        { "resultado-mismatch-vehiclemodel.json", false, "NO_CONFIRMADO", false, -1, false, 0 },
+        { "resultado-mismatch-ownername.json", true, "", false, -1, false, 0 },
+        { "resultado-mismatch-vehiclemodel.json", true, "", true, 100_000, false, 1 },
         { "resultado-fallido.json", false, "NO_CONFIRMADO", false, -1, false, 0 },
         { "resultado-error.json", false, "NO_CONFIRMADO", false, -1, false, 0 },
         { "resultado-mismatch-servicio-con-avisos.json", true, "", true, 155_000, false, 1 },
@@ -70,11 +70,35 @@ public sealed class InterpreteImpuestoTests
     }
 
     [Fact]
-    public void El_mismatch_bloqueante_tambien_queda_como_advertencia()
+    public void El_mismatch_de_ownername_no_bloquea_y_queda_como_advertencia()
     {
         var v = InterpreteImpuesto.Interpretar(FixturesImpuesto.Texto("resultado-mismatch-ownername.json"));
+        v.Confirmado.Should().BeTrue();
         v.Advertencias.Should().ContainSingle().Which.Should().Be(new AdvertenciaLeida(TipoAdvertenciaLeida.Validacion, "OwnerName", "", null));
         v.ToString().Should().NotContain("PERSONA PRUEBA");
+    }
+
+    [Fact]
+    public void Paz_y_salvo_con_mismatch_de_ownername_confirma_sin_deuda_y_conserva_la_advertencia()
+    {
+        const string json = """
+            {"status":"succeeded","result":{"status":"paz_y_salvo","totals":{"totalToPay":0},"pendingPeriods":[],
+             "validations":[{"field":"OwnerName","sent":"PERSONA PRUEBA UNO","portal":"PERSONA PRUEBA DOS","result":"mismatch"}],
+             "warnings":[]}}
+            """;
+        var v = InterpreteImpuesto.Interpretar(json);
+        (v.Confirmado, v.Codigo, v.TieneDeuda, v.MontoTotal, v.MontoInformado).Should().Be((true, (string?)null, false, (long?)null, false));
+        v.Vigencias.Should().BeEmpty();
+        v.Advertencias.Should().Equal(new AdvertenciaLeida(TipoAdvertenciaLeida.Validacion, "OwnerName", "", null));
+        v.ToString().Should().NotContain("PERSONA PRUEBA");
+    }
+
+    [Fact]
+    public void Con_deuda_con_mismatch_de_vehiclemodel_confirma_la_deuda_y_conserva_la_advertencia()
+    {
+        var v = InterpreteImpuesto.Interpretar(FixturesImpuesto.Texto("resultado-mismatch-vehiclemodel.json"));
+        (v.Confirmado, v.TieneDeuda, v.MontoTotal).Should().Be((true, true, (long?)100_000));
+        v.Advertencias.Should().Equal(new AdvertenciaLeida(TipoAdvertenciaLeida.Validacion, "vehicleModel", "", null));
     }
 
     [Fact]
