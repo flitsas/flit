@@ -233,8 +233,8 @@ describe('BiometricStep — inventario: estado y acción de una parte sin valida
   });
 });
 
-describe('BiometricStep — inventario: validación en curso (enlace y QR de captura)', () => {
-  it('conserva el enlace copiable, el QR, el CTA de apertura y el correo destinatario (sin URL en texto, Bug #14626)', async () => {
+describe('BiometricStep — inventario: validación en curso (sin enlace de captura, Bug #14674)', () => {
+  it('conserva el correo destinatario y NO muestra el enlace (ni texto, ni link, ni QR, ni copiar; Bug #14674)', async () => {
     mocks.getBiometricState.mockResolvedValue({
       validations: [EN_PROCESO],
       provider: 'kyverum',
@@ -248,17 +248,13 @@ describe('BiometricStep — inventario: validación en curso (enlace y QR de cap
     expect(within(comprador).getByText(/Esperando validación de Ana Compradora/)).toBeInTheDocument();
     expect(within(comprador).getByText(/ana@example\.com/)).toBeInTheDocument();
 
-    // Formas de hacerle llegar la captura al cliente: QR y botón de copiar. Bug #14626: la URL ya no se
-    // muestra en texto (los clientes la abrían en el equipo del asesor y quedaba atada a ese dispositivo).
-    expect(within(comprador).getByLabelText('Código QR del enlace de captura')).toBeInTheDocument();
-    expect(within(comprador).getByLabelText('Copiar enlace de captura')).toBeInTheDocument();
+    // Bug #14674: el enlace de captura no se pinta en ningún formato; llega solo por correo.
+    expect(within(comprador).queryByLabelText(/código qr/i)).not.toBeInTheDocument();
+    expect(within(comprador).queryByLabelText(/copiar enlace/i)).not.toBeInTheDocument();
+    expect(within(comprador).queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
     expect(within(comprador).queryByText(EN_PROCESO.captureUrl!)).not.toBeInTheDocument();
-    expect(
-      within(comprador).queryByRole('link', { name: EN_PROCESO.captureUrl! }),
-    ).not.toBeInTheDocument();
-    const abrir = within(comprador).getByRole('link', { name: 'Abrir captura Kyverum' });
-    expect(abrir).toHaveAttribute('href', EN_PROCESO.captureUrl);
-    expect(abrir).toHaveAttribute('target', '_blank');
+    expect(within(comprador).queryByRole('link', { name: /abrir captura/i })).not.toBeInTheDocument();
+    expect(within(comprador).queryByRole('link', { name: EN_PROCESO.captureUrl! })).not.toBeInTheDocument();
   });
 
   it('un intento fallido que no cierra la validación se explica sin marcarla rechazada', async () => {
@@ -278,8 +274,8 @@ describe('BiometricStep — inventario: validación en curso (enlace y QR de cap
 
     expect(await screen.findByText(/Intento 1 de 3 no pasó\./)).toBeInTheDocument();
     expect(screen.getByText(/La foto del documento salió movida\./)).toBeInTheDocument();
-    // Sigue en curso: el enlace de captura no se retira.
-    expect(screen.getByLabelText('Código QR del enlace de captura')).toBeInTheDocument();
+    // Sigue en curso, pero el enlace de captura nunca se pinta (Bug #14674).
+    expect(screen.queryByLabelText(/código qr/i)).not.toBeInTheDocument();
   });
 
   // Self-heal cuando el webhook del proveedor no llega: la consulta directa al proveedor aparece

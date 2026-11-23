@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 
 /**
  * HU #13822 (Feature #13819) — Modal de reenvío de validación por persona, con selección múltiple
- * y «Copiar enlace». AC6 (menú deshabilitado) vive en hu12163-admin-tramite-acciones.test.tsx.
+ * (Bug #14674: sin enlace de captura visible ni copiable). AC6 (menú deshabilitado) vive en hu12163-admin-tramite-acciones.test.tsx.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -45,7 +45,7 @@ function item(over: Record<string, unknown> = {}) {
     ordinal: 1,
     ok: true,
     queued: false,
-    captureUrl: 'https://kyverum.local/nuevo',
+    captureUrl: 'https://kyverum\.local/nuevo',
     emailActualizado: false,
     email: 'ana@correo.co',
     error: null,
@@ -72,13 +72,8 @@ function renderModal(initialValidationId?: string) {
   );
 }
 
-let writeText: ReturnType<typeof vi.spyOn>;
-
-/** user-event instala su propio portapapeles en setup(): se espía después de crearlo. */
 function setupUser() {
-  const user = userEvent.setup();
-  writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue(undefined);
-  return user;
+  return userEvent.setup();
 }
 
 beforeEach(() => {
@@ -176,43 +171,25 @@ describe('HU #13822 — reenvío por persona', () => {
     );
   });
 
-  it('AC4: «Copiar enlace» solo con enlace vigente; copia y avisa «Enlace copiado.»', async () => {
-    const user = setupUser();
+  it('Bug #14674 AC3: antes de reenviar, ninguna persona muestra enlace de captura (vigente, vencido o ausente)', async () => {
+    setupUser();
     const futuro = new Date(Date.now() + 3_600_000).toISOString();
-    const pasado = new Date(Date.now() - 3_600_000).toISOString();
     mocks.adminListValidacionesReenviables.mockResolvedValue({
       personas: [
-        persona({ captureUrl: 'https://kyverum.local/vigente', captureExpiresAt: futuro }),
-        persona({
-          validationId: 'v-2',
-          name: 'Luis',
-          captureUrl: 'https://kyverum.local/vencido',
-          captureExpiresAt: pasado,
-        }),
+        persona({ captureUrl: 'https://kyverum\.local/vigente', captureExpiresAt: futuro }),
+        persona({ validationId: 'v-2', name: 'Luis', captureUrl: 'https://kyverum\.local/vencido' }),
         persona({ validationId: 'v-3', name: 'Sin', captureUrl: null }),
       ],
     });
     renderModal();
 
-    const grupoAna = await screen.findByRole('group', { name: 'Vendedor · Ana' });
-    expect(
-      within(screen.getByRole('group', { name: 'Vendedor · Luis' })).queryByRole('button', {
-        name: 'Copiar enlace',
-      }),
-    ).not.toBeInTheDocument();
-    expect(
-      within(screen.getByRole('group', { name: 'Vendedor · Sin' })).queryByRole('button', {
-        name: 'Copiar enlace',
-      }),
-    ).not.toBeInTheDocument();
-
-    await user.click(within(grupoAna).getByRole('button', { name: 'Copiar enlace' }));
-    expect(writeText).toHaveBeenCalledWith('https://kyverum.local/vigente');
-    const ok = await within(grupoAna).findByText('Enlace copiado.');
-    expect(ok.getAttribute('style')).toContain('var(--flit-success-ink)');
+    await screen.findByRole('group', { name: 'Vendedor · Ana' });
+    expect(screen.queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /enlace de captura/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/kyverum\.local/)).not.toBeInTheDocument();
   });
 
-  it('AC4: tras reenviar el modal NO se cierra y muestra el enlace nuevo con «Copiar enlace»', async () => {
+  it('AC4: tras reenviar el modal NO se cierra y muestra el resultado SIN enlace (Bug #14674)', async () => {
     const user = setupUser();
     mocks.adminListValidacionesReenviables.mockResolvedValue({ personas: [persona()] });
     mocks.adminReenviarValidacionesLote.mockResolvedValue({ items: [item()] });
@@ -226,9 +203,10 @@ describe('HU #13822 — reenvío por persona', () => {
     // el aviso solo puede salir al cerrar (validación en navegador, épica #13817).
     expect(onSuccess).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole('button', { name: 'Copiar enlace' }));
-    expect(writeText).toHaveBeenCalledWith('https://kyverum.local/nuevo');
-    expect(await screen.findByText('Enlace copiado.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /enlace de captura/i })).not.toBeInTheDocument();
+    expect(screen.queryByText(/kyverum\.local/)).not.toBeInTheDocument();
+    expect(mocks.adminReenviarValidacionesLote).toHaveBeenCalledTimes(1);
 
     const botonesCerrar = screen.getAllByRole('button', { name: 'Cerrar' });
     await user.click(botonesCerrar[botonesCerrar.length - 1]!);
@@ -236,7 +214,7 @@ describe('HU #13822 — reenvío por persona', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it('AC4: el enlace se ve completo y se copia con dominio aunque el proveedor lo devuelva relativo', async () => {
+  it('AC4: aunque el proveedor devuelva un enlace relativo, no se muestra ni se copia', async () => {
     const user = setupUser();
     mocks.adminListValidacionesReenviables.mockResolvedValue({ personas: [persona()] });
     mocks.adminReenviarValidacionesLote.mockResolvedValue({
@@ -246,13 +224,10 @@ describe('HU #13822 — reenvío por persona', () => {
 
     await user.click(await screen.findByRole('button', { name: 'Reenviar' }));
 
-    const esperado = `${window.location.origin}/api/v1/public/biometric/tok-123`;
-    const enlace = await screen.findByRole('link', { name: 'Abrir enlace de captura' });
-    expect(enlace).toHaveAttribute('href', esperado);
-    expect(enlace).toHaveTextContent(esperado);
-
-    await user.click(screen.getByRole('button', { name: 'Copiar enlace' }));
-    expect(writeText).toHaveBeenCalledWith(esperado);
+    expect(await screen.findByText('Validación de identidad reenviada.')).toBeInTheDocument();
+    expect(screen.queryByText(/tok-123/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /enlace de captura/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
   });
 
   it('AC4: cerrar sin haber reenviado no avisa éxito ni recarga el listado', async () => {
@@ -294,8 +269,8 @@ describe('HU #13822 — reenvío por persona', () => {
       await screen.findByText('Salió para: Vendedor · Ana. No salió para: Vendedor · Luis.'),
     ).toBeInTheDocument();
     expect(screen.getByText('Luis ya firmó: no hay nada que reenviar.')).toBeInTheDocument();
-    // Solo Ana tiene enlace que copiar.
-    expect(screen.getAllByRole('button', { name: 'Copiar enlace' })).toHaveLength(1);
+    // Ninguna persona muestra enlace que copiar.
+    expect(screen.queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
   });
 
   it('AC5: reenvío en cola muestra el aviso y no ofrece enlace para copiar', async () => {

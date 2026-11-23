@@ -507,8 +507,9 @@ export function PrevalidacionForm({
 }
 
 /**
- * Panel de éxito mostrado tras crear la prevalidación. Muestra el enlace de captura
- * o el estado "encolada" si el proveedor tuvo un fallo transitorio.
+ * Panel de éxito mostrado tras crear la prevalidación. Informa que el enlace de captura se envió
+ * por correo (Bug #14674: el enlace nunca se muestra ni se copia) o el estado "encolada" si el
+ * proveedor tuvo un fallo transitorio.
  */
 export function PrevalidacionSuccessPanel({
   result,
@@ -519,19 +520,7 @@ export function PrevalidacionSuccessPanel({
   onClose: () => void;
   onNew: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
   useBloqueoScroll(true);
-
-  const copiar = async () => {
-    if (!result.captureUrl) return;
-    try {
-      await navigator.clipboard.writeText(result.captureUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2500);
-    } catch {
-      /* sin permiso de clipboard — el enlace sigue visible */
-    }
-  };
 
   return (
     <div
@@ -555,31 +544,9 @@ export function PrevalidacionSuccessPanel({
             reintentará automáticamente. Revisa el listado en unos minutos.
           </p>
         ) : result.captureUrl ? (
-          <>
-            <p className="mt-2 text-sm opacity-70">
-              Comparte el enlace de captura con la persona para que complete la validación biométrica.
-            </p>
-            <div className="mt-4 flex items-center gap-2 rounded-xl border p-3 text-left text-xs font-mono break-all">
-              <a
-                href={result.captureUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex-1 text-flit-brand underline underline-offset-2"
-                aria-label="Abrir enlace de captura"
-              >
-                {result.captureUrl}
-              </a>
-              <Icono nombre="externo" className="h-3.5 w-3.5 shrink-0 text-flit-brand" />
-            </div>
-            <button
-              type="button"
-              onClick={() => void copiar()}
-              className={buttonClass({ variant: 'secondary', size: 'sm', className: 'mt-3' })}
-              aria-live="polite"
-            >
-              {copied ? <><IconoAviso tipo="ok" className="mr-1 inline-block h-3.5 w-3.5 align-text-bottom" />Copiado</> : 'Copiar enlace'}
-            </button>
-          </>
+          <p className="mt-2 text-sm opacity-70">
+            Enviamos el enlace de captura al correo de la persona para que complete la validación biométrica.
+          </p>
         ) : (
           <p className="mt-2 text-sm opacity-70">
             La validación fue creada. El enlace de captura será generado en breve por el proveedor.

@@ -270,9 +270,9 @@ describe('BiometricStep — kyverum (validación real)', () => {
     expect(input).toEqual({ parte: 'comprador' });
   });
 
-  // Bug #14626: la URL de captura NO se muestra en texto en el paso 4 (los clientes la abrían en el equipo
-  // del asesor y el enlace de Kyverum quedaba atado a ese dispositivo). Se mantienen QR, CTA y copiar.
-  it('en proceso muestra el QR y las acciones de captura, pero NO la URL en texto (Bug #14626)', async () => {
+  // Bug #14674 (AC1): el enlace de captura no se pinta en ningún formato (texto, link, QR, copiar); el aviso
+  // de que se envió al correo del cliente sí se conserva.
+  it('en proceso NO muestra el enlace de captura (ni texto, ni link, ni QR, ni copiar) pero sí el aviso de correo (Bug #14674)', async () => {
     mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO], provider: 'kyverum' });
     render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
@@ -281,12 +281,12 @@ describe('BiometricStep — kyverum (validación real)', () => {
     ).toBeInTheDocument();
     expect(screen.queryByText(EN_PROCESO.captureUrl!)).not.toBeInTheDocument();
     expect(screen.queryByRole('link', { name: EN_PROCESO.captureUrl! })).not.toBeInTheDocument();
-    expect(screen.getByLabelText('Código QR del enlace de captura')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Abrir captura Kyverum' })).toHaveAttribute(
-      'href',
-      EN_PROCESO.captureUrl,
-    );
-    expect(screen.getByRole('button', { name: 'Copiar enlace de captura' })).toBeInTheDocument();
+    expect(screen.queryByLabelText(/código qr/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /abrir captura/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
+    expect(document.querySelector(`a[href="${EN_PROCESO.captureUrl}"]`)).toBeNull();
+    expect(screen.getByText(/Enviamos el enlace de captura al correo del cliente/)).toBeInTheDocument();
+    expect(screen.queryByText(/compartirlo desde el panel de captura/i)).not.toBeInTheDocument();
   });
 
   // Regresión (VERONICA): el resultado de Kyverum llega async por webhook. El polling debe avisar al
@@ -369,15 +369,14 @@ describe('BiometricStep — resultado verificado', () => {
   });
 });
 
-describe('BiometricStep — AC2 (abrir captura Kyverum)', () => {
-  it('en proceso ofrece el CTA "Abrir captura Kyverum" con target=_blank y rel=noopener', async () => {
+describe('BiometricStep — AC1 (sin CTA de captura, Bug #14674)', () => {
+  it('en proceso NO ofrece el CTA "Abrir captura Kyverum" y no hay links hacia la URL de captura', async () => {
     mocks.getBiometricState.mockResolvedValue({ validations: [EN_PROCESO], provider: 'kyverum' });
     render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
-    const cta = await screen.findByRole('link', { name: 'Abrir captura Kyverum' });
-    expect(cta).toHaveAttribute('href', EN_PROCESO.captureUrl);
-    expect(cta).toHaveAttribute('target', '_blank');
-    expect(cta).toHaveAttribute('rel', expect.stringContaining('noopener'));
+    await screen.findByText(/Esperando validación de Ana Comprador/);
+    expect(screen.queryByRole('link', { name: /abrir captura/i })).not.toBeInTheDocument();
+    expect(document.querySelector('a[href*="verify.kyverum.com"]')).toBeNull();
   });
 });
 
@@ -741,7 +740,7 @@ describe('BiometricStep — HU #14627 "Regenerar enlace" (wizard)', () => {
     );
   });
 
-  it('tras regenerar, vuelve a pedir el estado y el QR/enlace mostrados pasan al nuevo captureUrl', async () => {
+  it('tras regenerar, vuelve a pedir el estado y sigue sin mostrarse el enlace (nuevo ni anterior)', async () => {
     setToken(['AdminTramiteReenviarValidacion']);
     mocks.getBiometricState
       .mockResolvedValueOnce({ validations: [EN_PROCESO], provider: 'kyverum' })
@@ -756,22 +755,15 @@ describe('BiometricStep — HU #14627 "Regenerar enlace" (wizard)', () => {
     render(<BiometricStep instanceId={INSTANCE} modalidad="matricula_inicial" />);
 
     await screen.findByText(/Esperando validación de Ana Comprador/);
-    expect(screen.getByRole('link', { name: 'Abrir captura Kyverum' })).toHaveAttribute(
-      'href',
-      EN_PROCESO.captureUrl,
-    );
+    expect(screen.queryByRole('link', { name: /abrir captura/i })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: NOMBRE_BOTON }));
 
     // No se muta estado local a mano: se vuelve a pedir el estado del wizard (mismo mecanismo que
     // `ReconcileAction`/`StartAction`), que trae el nuevo `captureUrl`.
     await waitFor(() => expect(mocks.getBiometricState).toHaveBeenCalledTimes(2));
-    await waitFor(() =>
-      expect(screen.getByRole('link', { name: 'Abrir captura Kyverum' })).toHaveAttribute(
-        'href',
-        EN_PROCESO_NUEVO_ENLACE.captureUrl,
-      ),
-    );
+    expect(screen.queryByRole('link', { name: /abrir captura/i })).not.toBeInTheDocument();
+    expect(document.querySelector(`a[href="${EN_PROCESO_NUEVO_ENLACE.captureUrl}"]`)).toBeNull();
   });
 
   it('en solo lectura no se ofrece aunque tenga el permiso', async () => {

@@ -13,10 +13,6 @@ import {
   AssociatedProceduresList,
   buildAssociatedProcedures,
 } from '@/components/atom/modules/AssociatedProceduresList';
-import {
-  hasKyverumCaptureQr,
-  IdentityCaptureLinkBlock,
-} from '@/components/atom/modules/IdentityCaptureLinkBlock';
 import { ApprovalOriginChip, puedeVerOrigenAprobacion } from '@/components/atom/modules/ApprovalOriginChip';
 import { CertificadoIdentidadAccion } from '@/components/atom/modules/CertificadoIdentidadAccion';
 import { IdentityInfoTile } from '@/components/atom/modules/IdentityInfoTile';
@@ -124,7 +120,6 @@ export function PrevalidacionDetailDrawer({
   }, [detail, load]);
 
   const meta = detail ? (ESTADO_META[detail.status] ?? ESTADO_META.enviado) : null;
-  const showCaptura = hasKyverumCaptureQr(detail?.captureUrl);
   const awaiting =
     detail != null &&
     !isTerminal(detail) &&
@@ -278,8 +273,6 @@ export function PrevalidacionDetailDrawer({
                     : 'No quedan intentos: el estado pasará a Rechazado al confirmarse.'}
                 </div>
               )}
-
-          {showCaptura && <IdentityCaptureLinkBlock captureUrl={detail.captureUrl!} />}
 
               <div className="rounded-xl border p-3">
                 <p className="mb-1 text-[11px] font-semibold text-foreground">

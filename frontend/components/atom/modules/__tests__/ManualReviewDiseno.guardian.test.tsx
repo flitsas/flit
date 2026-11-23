@@ -17,7 +17,6 @@ const ARCHIVOS = [
   'components/atom/modules/ManualImageGallery.tsx',
   'components/atom/modules/manual-field-styles.ts',
   'components/atom/modules/ApprovalOriginChip.tsx',
-  'components/atom/modules/IdentityCaptureLinkBlock.tsx',
   'components/atom/SectionTabs.tsx',
   'lib/identidad/manual-review-meta.ts',
   'lib/identidad/motivos-rechazo-manual.ts',

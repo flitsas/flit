@@ -21,7 +21,7 @@ import { tramitesClient } from '@/lib/api/tramites-client';
 import { estadoCertificado, TEXTO_CERTIFICADO_EN_PREPARACION } from '@/lib/identity/certificado-validacion';
 import { WizardAccordion } from './WizardAccordion';
 import { WizardCardHeader, WizardPair } from './wizard-atoms';
-import { WIZARD_CARD, WIZARD_INPUT, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
+import { WIZARD_CARD, WIZARD_CTA_GRADIENT } from './wizard-field-styles';
 import { BiometricStep } from './BiometricStep';
 import { openAttachmentInNewTab } from './ExpedienteVisor';
 import { WizardReadOnlyProvider } from './WizardReadOnlyContext';
@@ -592,7 +592,7 @@ function ActorBlock({
        * hay bitácora de proveedor que mostrar (la electrónica no usa este historial).
        */}
       {bio && !firmaBaul ? (
-        <IdentityTrackingBlock bio={bio} actorNombre={actor.nombre} showBadge={hideValidacion} />
+        <IdentityTrackingBlock bio={bio} showBadge={hideValidacion} />
       ) : null}
     </div>
   );
@@ -608,47 +608,7 @@ function identidadPendiente(
 }
 
 /**
- * Enlace de captura, copiable, en monoespaciada — mismo patrón que `CopyLink` (participantes,
- * `FirmaFurStep`), embebido aquí en el bloque de identidad de cada actor pendiente para no crear una
- * dependencia circular entre los dos módulos del paso.
- */
-function CapturaLinkCopy({ link, label }: { link: string; label: string }) {
-  const [copied, setCopied] = useState(false);
-  const handleCopy = async () => {
-    try {
-      await navigator.clipboard.writeText(link);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Sin portapapeles: el enlace ya está visible para copiar a mano.
-    }
-  };
-  return (
-    <div className="flex items-center gap-2">
-      <input
-        type="text"
-        readOnly
-        value={link}
-        aria-label={label}
-        className={`${WIZARD_INPUT} font-mono`}
-        style={{ borderColor: BORDER }}
-      />
-      <button
-        type="button"
-        onClick={() => void handleCopy()}
-        className="flex shrink-0 items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold text-white"
-        style={{ background: WIZARD_CTA_GRADIENT }}
-        aria-label="Copiar enlace"
-      >
-        {copied ? <Icono nombre="check" className="h-3 w-3" /> : <Icono nombre="copiar" className="h-3 w-3" />}
-        {copied ? 'Copiado' : 'Copiar'}
-      </button>
-    </div>
-  );
-}
-
-/**
- * Trazabilidad técnica + enlace de captura de UN actor (antes vivían en la tarjeta compartida
+ * Trazabilidad técnica de UN actor (antes vivían en la tarjeta compartida
  * «Estado de validación de identidad», retirada por duplicar la validación que ya vive dentro de la
  * sección de cada actor — la propuesta solo contempla un actor y no la embebe aparte). Se monta
  * DENTRO de `ActorBlock`, así que nada de esto desaparece: solo cambia de contenedor.
@@ -658,36 +618,24 @@ function CapturaLinkCopy({ link, label }: { link: string; label: string }) {
  * embebida (`hideValidacion`): esa vista no repite el badge de `BiometricStep`. Cuando el banner de
  * arriba ya lo dice (`!hideValidacion`), el badge se omite para no duplicarlo.
  *
- * El enlace de captura (monoespaciado, con «Copiar enlace») solo se pinta si la validación sigue
- * pendiente y el proveedor mandó `captureUrl` — aunque la biométrica embebida ya ofrezca su propio
- * QR, este enlace copiable es el mismo patrón de la captura Step5 y no se sustituye por el QR.
+ * Bug #14674: el enlace de captura de la validación de identidad ya no se pinta en ningún punto de
+ * la UI (ni texto, ni «Copiar», ni QR); la validación se comunica por correo.
  *
  * La bitácora técnica por evento (antes su propia tarjeta con la tabla siempre abierta) se conserva
  * plegada: un desplegable cerrado por defecto, no una fila propia.
  */
 function IdentityTrackingBlock({
   bio,
-  actorNombre,
   showBadge,
 }: {
   bio: BiometricValidation;
-  actorNombre?: string;
   showBadge: boolean;
 }) {
   const pendiente = bio.status !== 'aprobado';
-  const nombre = actorNombre || bio.name;
   return (
     <div className="space-y-3 border-t pt-3" style={{ borderColor: BORDER }}>
       {showBadge ? (
         <StatusBadge label={pendiente ? 'Pendiente' : 'Verificada'} tone={pendiente ? 'warning' : 'success'} />
-      ) : null}
-      {pendiente && bio.captureUrl ? (
-        <div>
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.2em] opacity-70">
-            Enlace de captura
-          </p>
-          <CapturaLinkCopy link={bio.captureUrl} label={`Enlace de captura de ${nombre}`} />
-        </div>
       ) : null}
       <WizardAccordion title="Ver trazabilidad de validación" level="h4" defaultOpen={false}>
         <IdentityValidationTrackingPanel validationId={bio.id} embebido />
