@@ -20,12 +20,7 @@ public sealed class GetIdentityAuditByValidationHandler(IProcedureInstanceReposi
             return (null, "not_found");
 
         var events = await repo.ListIdentityAuditByValidationAsync(validationId, ct);
-        var dtos = events
-            .Select(e => new IdentityAuditEventDto(
-                e.OccurredAt, e.Stage, e.Outcome, e.HttpStatus,
-                e.SignaturePresent, e.SecretPresent, e.DecryptOk,
-                e.ProviderStatus, e.ErrorType, e.Message))
-            .ToList();
+        var dtos = events.Select(IdentityAuditEventMapper.ToDto).ToList();
 
         // Sin instanceId no aplica el concepto de "referenciada desde OTRO trámite" (eso solo tiene
         // sentido cuando se consulta relativo a una instancia concreta): siempre false aquí.

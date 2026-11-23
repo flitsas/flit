@@ -68,14 +68,11 @@ describe("anverso y reverso (HU #14309)", () => {
     const selfie: CajaRostro = { x: 250, y: 100, w: 500, h: 430 };
     expect(juzgarAnverso({ ...doc, cajas: [selfie] }, true)).toEqual({ tipo: "rechazada", motivo: "sin_documento" });
   });
-  it("AC3: reverso con código pasa", () => {
-    expect(juzgarReverso(true, true)).toEqual({ tipo: "ok" });
+  it("reverso con documento pasa, aunque no haya código de barras ni QR", () => {
+    expect(juzgarReverso(true)).toEqual({ tipo: "ok" });
   });
-  it("AC4: reverso sin código pero con documento → lado_incorrecto", () => {
-    expect(juzgarReverso(false, true)).toEqual({ tipo: "rechazada", motivo: "lado_incorrecto" });
-  });
-  it("AC5: reverso sin código ni documento → sin_documento", () => {
-    expect(juzgarReverso(false, false)).toEqual({ tipo: "rechazada", motivo: "sin_documento" });
+  it("reverso sin documento → sin_documento", () => {
+    expect(juzgarReverso(false)).toEqual({ tipo: "rechazada", motivo: "sin_documento" });
   });
 });
 
@@ -84,7 +81,6 @@ describe("mensajes exactos", () => {
     expect(mensajeRechazo("rostro", "sin_rostro")).toBe("No vemos tu rostro");
     expect(mensajeRechazo("rostro", "varios_rostros")).toBe("Debe aparecer solo una persona");
     expect(mensajeRechazo("anverso", "lado_incorrecto")).toBe("Muestra el lado de tu documento con tu foto");
-    expect(mensajeRechazo("reverso", "lado_incorrecto")).toBe("Muestra el lado con el código de barras");
     expect(mensajeRechazo("anverso", "sin_documento")).toMatch(/Encuadra el documento/);
   });
 });
@@ -105,11 +101,14 @@ describe("validarFoto", () => {
     expect(conRostro.hayDocumento).not.toHaveBeenCalled();
   });
 
-  it("reverso: con código pasa sin medir textura; sin código usa el motor de documento", async () => {
-    const conCodigo = motor({ hayCodigo: vi.fn().mockResolvedValue(true) });
-    expect(await validarFoto({ kind: "reverso", foto, motor: conCodigo })).toEqual({ tipo: "ok" });
-    expect(conCodigo.hayDocumento).not.toHaveBeenCalled();
-    expect(await validarFoto({ kind: "reverso", foto, motor: motor() })).toEqual({ tipo: "rechazada", motivo: "lado_incorrecto" });
+  it("reverso: con documento pasa sin leer códigos; sin documento pide encuadrar", async () => {
+    const conDocumento = motor();
+    expect(await validarFoto({ kind: "reverso", foto, motor: conDocumento })).toEqual({ tipo: "ok" });
+    expect(conDocumento.hayCodigo).not.toHaveBeenCalled();
+    expect(conDocumento.hayDocumento).toHaveBeenCalledTimes(1);
+    const sinDocumento = motor({ hayDocumento: vi.fn().mockResolvedValue(false) });
+    expect(await validarFoto({ kind: "reverso", foto, motor: sinDocumento })).toEqual({ tipo: "rechazada", motivo: "sin_documento" });
+    expect(sinDocumento.hayCodigo).not.toHaveBeenCalled();
   });
 
   it("AC7 (#14309): documento sin reverso solo valida que sea un documento, sin rostro ni código", async () => {
