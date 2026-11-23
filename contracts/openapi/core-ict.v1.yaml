@@ -1194,6 +1194,82 @@ paths:
       x-flit-origen: código de core-ict (IctLifecycleEndpoints.cs (AbortAsync)); el contrato de flit no la declara
       x-flit-hoja-excel: 11 - AbortProcess
       x-public: true
+  /api/v1/documents-transaction/{id}:
+    get:
+      operationId: getDocumentsTransaction
+      summary: URL prefirmada del consolidado PDF de un trámite aprobado
+      description: |-
+        HU #14668 Bloque 2 — Devuelve la URL prefirmada (TTL 600 s) del documento consolidado PDF
+        de un trámite de OT en estado **aprobado**. El parámetro `id` puede ser el `transaction_number`
+        o el `manager_id_transaction` registrado por el gestor.
+
+        Solo responde con 200 si el trámite existe, está materializado y en estado `aprobado`.
+        En cualquier otro caso devuelve el código de error correspondiente (404 / 409 / 503).
+      tags:
+      - ICT · Documentos
+      security:
+      - ictClientToken: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Referencia del pre-trámite (transaction_number o manager_id_transaction).
+        schema:
+          type: string
+          example: 'TRX-0001'
+      responses:
+        '200':
+          description: URL prefirmada generada correctamente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                    description: URL prefirmada de descarga del consolidado PDF (TTL 600 s).
+              example:
+                url: 'https://files.example.com/presigned/abc123?X-Amz-Expires=600'
+        '401':
+          description: Token ICT ausente o inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorIct'
+        '404':
+          description: Pre-trámite no encontrado (`not_found`) o no materializado en FLIT (`not_materialized`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorIct'
+              examples:
+                not_found:
+                  value: { error: 'not_found' }
+                not_materialized:
+                  value: { error: 'not_materialized' }
+        '409':
+          description: El trámite no está en estado aprobado (`not_approved`) o el consolidado no fue generado (`consolidado_no_disponible`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorIct'
+              examples:
+                not_approved:
+                  value: { error: 'not_approved' }
+                consolidado_no_disponible:
+                  value: { error: 'consolidado_no_disponible' }
+        '503':
+          description: El File Manager no está disponible para firmar la URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorIct'
+              example:
+                error: 'storage_unavailable'
+      x-flit-origen: código de core-ict (IctDocumentsTransactionEndpoints.cs); HU #14668 Bloque 2
+      x-public: true
 webhooks:
   estadoTramite:
     post:

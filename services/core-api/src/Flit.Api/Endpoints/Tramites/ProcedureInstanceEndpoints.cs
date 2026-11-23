@@ -769,11 +769,12 @@ internal static class ProcedureInstanceEndpoints
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
-            var (ok, error) = await handler.HandleAsync(
+            var (ok, error, pausedObservation) = await handler.HandleAsync(
                 id, tenantId.Value, body.Paused, body.Observation, ResolveUserId(http.User), ct);
             return error switch
             {
-                null => Results.Ok(new { id, isPaused = body.Paused, pausedObservation = ok && body.Paused ? body.Observation : null }),
+                // HU #14668: devolver la observación efectiva (keep / clear / set), también al reanudar.
+                null => Results.Ok(new { id, isPaused = body.Paused, pausedObservation }),
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "not_ict" => Results.Problem(statusCode: 409, title: "not_ict", detail: "Solo se pueden pausar/reanudar trámites originados por ICT."),
                 "not_borrador" => Results.Problem(statusCode: 409, title: "not_borrador", detail: "Solo se puede pausar/reanudar un trámite en borrador."),
@@ -803,8 +804,15 @@ internal static class ProcedureInstanceEndpoints
             if (await Flit.Api.Middleware.FamilyReadEnforcementMiddleware.RejectIfAnyUnreadableAsync(http, body.Ids, ct) is { } familyDenied)
                 return familyDenied;
 
-            var results = await handler.HandleBulkAsync(
-                body.Ids, tenantId.Value, body.Paused, body.Observation, ResolveUserId(http.User), ct);
+            // HU #14668 — mapear el body al nuevo comando con soporte per-item.
+            var command = new PauseProcedureInstancesBulkCommand(
+                Ids: body.Ids,
+                Paused: body.Paused,
+                ObservationMode: body.ObservationMode,
+                Observation: body.Observation,
+                Items: body.Items?.Select(i => new BulkPauseItemCommand(i.Id, i.Observation)).ToList());
+
+            var results = await handler.HandleBulkAsync(command, tenantId.Value, ResolveUserId(http.User), ct);
             return Results.Ok(new
             {
                 total = results.Count,
@@ -1382,9 +1390,22 @@ internal sealed record SetPriorityRequest(bool Prioritario);
 /// </summary>
 internal sealed record PauseProcedureInstanceRequest(bool Paused, string? Observation = null);
 
-/// <summary>Body de POST /instances/pause-massive (paridad v1 pause-unpause-massive).</summary>
+/// <summary>
+/// Body de POST /instances/pause-massive (paridad v1 pause-unpause-massive, HU #14668).
+/// <para><see cref="ObservationMode"/>: <c>keep</c> (default) no toca la observación existente;
+/// <c>single</c> aplica <see cref="Observation"/> a todos; <c>perItem</c> usa <see cref="Items"/> por id.</para>
+/// Backward-compat: si solo llegan Ids+Paused+Observation (sin modo) se comporta como <c>single</c>;
+/// si no hay Observation, como <c>keep</c>.
+/// </summary>
 internal sealed record PauseProcedureInstancesBulkRequest(
-    IReadOnlyList<Guid> Ids, bool Paused, string? Observation = null);
+    IReadOnlyList<Guid> Ids,
+    bool Paused,
+    string? ObservationMode = null,
+    string? Observation = null,
+    IReadOnlyList<BulkPauseItemDto>? Items = null);
+
+/// <summary>Elemento de <see cref="PauseProcedureInstancesBulkRequest.Items"/> (modo perItem, HU #14668).</summary>
+internal sealed record BulkPauseItemDto(Guid Id, string? Observation);
 
 /// <summary>Body de PATCH /instances/{id}/current-step (HU #10879). Step = Key del paso del wizard.</summary>
 internal sealed record SetCurrentStepRequest(string? Step);

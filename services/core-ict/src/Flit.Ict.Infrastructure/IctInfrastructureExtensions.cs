@@ -66,6 +66,21 @@ public static class IctInfrastructureExtensions
             .AddHttpMessageHandler(sp => new Logging.IctOutboundLoggingHandler(
                 sp.GetRequiredService<IServiceScopeFactory>(), "external"));
 
+        // HU #14668 Bloque 2 — cliente de consolidado: consulta cross-schema (tramites) + File Manager.
+        // Sin BaseUrl configurada (p. ej. en test sin FM), se omite el BaseAddress y el cliente devuelve
+        // "storage_unavailable" para cualquier consulta al FM (safe fail).
+        services.AddHttpClient<Domain.Abstractions.IIctConsolidadoClient, ExternalClients.IctFileManagerConsolidadoClient>(
+            "ict-consolidado", (sp, c) =>
+            {
+                var o = sp.GetRequiredService<IOptions<Storage.FileManagerOptions>>().Value;
+                if (!string.IsNullOrWhiteSpace(o.BaseUrl))
+                {
+                    var baseUrl = o.BaseUrl.EndsWith('/') ? o.BaseUrl : o.BaseUrl + "/";
+                    c.BaseAddress = new Uri(baseUrl);
+                }
+                c.Timeout = TimeSpan.FromSeconds(o.TimeoutSeconds > 0 ? o.TimeoutSeconds : 30);
+            });
+
         // Observabilidad (HU5): logs en Postgres (escritura + consulta enmascarada) y métricas de alerta.
         services.AddScoped<IntegrationLogRepository>();
         services.AddScoped<IIntegrationLogWriter>(sp => sp.GetRequiredService<IntegrationLogRepository>());

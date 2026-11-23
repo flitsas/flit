@@ -25,13 +25,14 @@ public sealed class IctRequestLoggingMiddleware(RequestDelegate next, IServiceSc
     /// </summary>
     private static readonly string[] LoggedPrefixes =
     [
-        "/api/v1/auth",                 // login ICT (v1)
-        "/api/v1/external-transaction", // register, abortProcess, pauseDraftProcess (v1)
-        "/api/v1/status-process",       // estado (v1)
-        "/api/v1/transactions",         // reproceso (v1)
-        "/api/v1/secretaries",          // secretarías (v1)
-        "/api/v1/transact-attachments", // adjuntos (v1)
-        "/api/v1/pretramites",          // edición + adjuntos de pre-trámite (mejoras v2)
+        "/api/v1/auth",                  // login ICT (v1)
+        "/api/v1/external-transaction",  // register, abortProcess, pauseDraftProcess (v1)
+        "/api/v1/status-process",        // estado (v1)
+        "/api/v1/transactions",          // reproceso (v1)
+        "/api/v1/secretaries",           // secretarías (v1)
+        "/api/v1/transact-attachments",  // adjuntos (v1)
+        "/api/v1/pretramites",           // edición + adjuntos de pre-trámite (mejoras v2)
+        "/api/v1/documents-transaction", // HU #14668 Bloque 2: descarga del consolidado (v1)
     ];
 
     public async Task InvokeAsync(HttpContext context)
