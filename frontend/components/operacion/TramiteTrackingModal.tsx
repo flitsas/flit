@@ -359,6 +359,20 @@ function eventoALinea(e: ProcedureInstanceEvent, index: number): ItemLinea {
     };
   }
 
+  if (e.tipo === 'identidad_manual_rechazada') {
+    // Bug #14634 — mismo lenguaje que el carril de identidad. Sin esta rama caía en el reenvío
+    // (el default de abajo) y el historial mentía el tipo de acción. El título no dice «manual».
+    const parteRechazo = e.partyRole ? PARTE_LABEL[e.partyRole] ?? e.partyRole : null;
+    return {
+      key,
+      kind: 'evento',
+      fecha: e.createdAt,
+      titulo: `Validación de identidad rechazada${parteRechazo ? ` · ${parteRechazo}` : ''}`,
+      quien: e.createdByName ? `Revisado por ${e.createdByName}` : 'Revisado por un administrador',
+      motivo: e.rejectionReasonLabel?.trim() || 'Sin motivo adicional registrado',
+    };
+  }
+
   // reenvio_validacion_admin
   const parte = e.partyRole ? PARTE_LABEL[e.partyRole] ?? e.partyRole : null;
   // Correo en claro (a pedido del producto): el admin necesita ver la dirección exacta reenviada.
