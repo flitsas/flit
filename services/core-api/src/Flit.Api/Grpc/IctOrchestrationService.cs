@@ -44,6 +44,7 @@ public sealed class IctOrchestrationService(
     IPlateRangeRepository plateRangeRepository,
     IVehicleBodyworkCatalog bodyworkCatalog,
     IVehicleColorCatalog colorCatalog,
+    EntregarConsolidadoHandler entregarConsolidadoHandler,
     FlitDbContext db,
     IConfiguration configuration,
     ILogger<IctOrchestrationService> logger) : IctOrchestration.IctOrchestrationBase
@@ -1696,7 +1697,8 @@ public sealed class IctOrchestrationService(
     /// <summary>
     /// Pausa o reanuda un borrador (servicio v1 pauseDraftProcess). FLIT 2.0 no tenía pausa: se persiste
     /// en las columnas aditivas <c>is_paused</c>/<c>paused_observation</c> de procedure_instances. Solo
-    /// aplica en estado <c>borrador</c> (como v1). TODO(ICT-PAUSE-UI): reflejar la pausa en el dashboard.
+    /// aplica en estado <c>borrador</c> (como v1). HU #14668: registra evento de tracking
+    /// <c>tramite_pausado</c>/<c>tramite_reanudado</c> en bitácora (paridad con el handler UI).
     /// </summary>
     public override async Task<DraftReply> PauseDraft(PauseDraftRequest request, ServerCallContext context)
     {
@@ -1730,17 +1732,122 @@ public sealed class IctOrchestrationService(
         }
 
         var changedBy = await ResolveIctCreatorAsync(string.Empty, tenantId, context.CancellationToken);
-        var observation = request.Paused ? request.Observation : null;
+
+        // HU #14668 §3 — semántica: observation vacía → null (keep paused_observation si se reanuda sin
+        // observación). La observación llega siempre como string en proto3; vacío se trata como "no enviado".
+        var effectiveObservation = string.IsNullOrWhiteSpace(request.Observation) ? null : request.Observation.Trim();
+        // Al reanudar sin observation → null = keep. Al reanudar con observation → actualiza.
+        // Para hacer el UPDATE SQL condicional en ambos casos sin lógica compleja, siempre escribimos la
+        // observación efectiva: si no viene, dejamos paused_observation sin cambios en el CASE.
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             UPDATE tramites.procedure_instances
-            SET is_paused = {request.Paused},
-                paused_observation = {observation},
-                updated_at = now(),
-                updated_by = {changedBy}
+            SET is_paused          = {request.Paused},
+                paused_observation = CASE
+                                       WHEN {effectiveObservation} IS NOT NULL THEN {effectiveObservation}
+                                       ELSE paused_observation
+                                     END,
+                updated_at         = now(),
+                updated_by         = {changedBy}
             WHERE id = {instanceId} AND tenant_id = {tenantId}
             """, context.CancellationToken);
 
+        // HU #14668 §3 — evento de tracking (tramite_pausado/tramite_reanudado) en bitácora,
+        // con la misma observación efectiva que el handler UI. Patrón SQL directo = consistente con el
+        // resto del servicio gRPC que ya usa ExecuteSqlInterpolatedAsync.
+        var eventId = Guid.NewGuid();
+        var eventTipo = request.Paused ? "tramite_pausado" : "tramite_reanudado";
+        var eventPayload = System.Text.Json.JsonSerializer.Serialize(
+            new { observation = effectiveObservation, changedBy });
+        await db.Database.ExecuteSqlInterpolatedAsync($"""
+            INSERT INTO tramites.procedure_instance_events
+                (id, tenant_id, procedure_instance_id, tipo, payload, created_at, created_by)
+            VALUES
+                ({eventId}, {tenantId}, {instanceId}, {eventTipo}, {eventPayload}::jsonb, now(), {changedBy})
+            """, context.CancellationToken);
+
         return new DraftReply { ProcedureInstanceId = instanceId.ToString(), Status = status };
+    }
+
+    /// <summary>
+    /// HU #14668 — entrega el consolidado para <c>GET /api/v1/documents-transaction/{id}</c>.
+    /// Solo trámites <c>aprobado</c>. Delega en <see cref="EntregarConsolidadoHandler"/> (regenera
+    /// on-demand si falta o está stale) y devuelve el <c>storage_path</c> del File Manager.
+    /// </summary>
+    public override async Task<DeliverConsolidadoReply> DeliverConsolidado(
+        DeliverConsolidadoRequest request,
+        ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+
+        if (!Guid.TryParse(request.TenantId, out var tenantId))
+        {
+            return new DeliverConsolidadoReply { ErrorCode = "invalid_tenant" };
+        }
+
+        if (!Guid.TryParse(request.ProcedureInstanceId, out var instanceId))
+        {
+            return new DeliverConsolidadoReply { ErrorCode = "invalid_instance" };
+        }
+
+        var status = await db.Database
+            .SqlQuery<string>($"""
+                SELECT status AS "Value" FROM tramites.procedure_instances
+                WHERE id = {instanceId} AND tenant_id = {tenantId} AND deleted_at IS NULL
+                """)
+            .FirstOrDefaultAsync(context.CancellationToken);
+        if (status is null)
+        {
+            return new DeliverConsolidadoReply { ErrorCode = "not_found" };
+        }
+
+        if (!string.Equals(status, TramiteEstado.Aprobado, StringComparison.Ordinal))
+        {
+            return new DeliverConsolidadoReply { ErrorCode = "not_approved" };
+        }
+
+        var (result, error) = await entregarConsolidadoHandler.HandleAsync(
+            new EntregarConsolidadoRequest(
+                instanceId,
+                tenantId,
+                ConsolidadoEntregaTipo.Wizard,
+                UserId: null,
+                Force: false,
+                SoloLectura: false),
+            context.CancellationToken);
+
+        if (error is not null || result is null)
+        {
+            return new DeliverConsolidadoReply
+            {
+                ErrorCode = error switch
+                {
+                    EntregarConsolidadoHandler.ConsolidadoNoGenerado => "consolidado_no_disponible",
+                    "not_found" => "not_found",
+                    _ => error ?? "consolidado_no_disponible",
+                },
+            };
+        }
+
+        var attachmentId = result.Document.AttachmentId;
+        var storagePath = await db.Database
+            .SqlQuery<string>($"""
+                SELECT storage_path AS "Value"
+                FROM tramites.procedure_instance_attachments
+                WHERE id = {attachmentId} AND tenant_id = {tenantId}
+                LIMIT 1
+                """)
+            .FirstOrDefaultAsync(context.CancellationToken);
+
+        if (string.IsNullOrWhiteSpace(storagePath))
+        {
+            return new DeliverConsolidadoReply { ErrorCode = "consolidado_no_disponible" };
+        }
+
+        return new DeliverConsolidadoReply
+        {
+            StoragePath = storagePath,
+            AttachmentId = attachmentId.ToString(),
+        };
     }
 
     /// <summary>
