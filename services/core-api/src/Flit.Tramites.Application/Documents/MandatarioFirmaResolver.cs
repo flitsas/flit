@@ -1,4 +1,6 @@
+using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.UseCases.ProcedureInstances.ManualCapture;
 using Flit.Tramites.Domain.Integration;
 
 namespace Flit.Tramites.Application.Documents;
@@ -31,11 +33,25 @@ public static class MandatarioFirmaResolver
         byte[]? Firma, string? Sello, FirmaBaulMetadata? Metadatos, string? MotivoSinFirma = null,
         byte[]? FirmaIdentidad = null);
 
+    public static Task<Resultado> ResolveAsync(
+        ISignatureVaultPolicy vaultPolicy,
+        IAttachmentStorage storage,
+        Guid tenantId,
+        MandateSignerCandidate signer,
+        Action<Exception>? onVaultError = null,
+        CancellationToken cancellationToken = default) =>
+        ResolveAsync(vaultPolicy, storage, tenantId, signer, signatureExtractor: null, onVaultError, cancellationToken);
+
+    /// <param name="signatureExtractor">
+    /// Bug #14661 — prepara la firma de una validación MANUAL (fondo blanco → transparente) antes de estamparla. Nulo
+    /// conserva el comportamiento previo (los bytes guardados tal cual).
+    /// </param>
     public static async Task<Resultado> ResolveAsync(
         ISignatureVaultPolicy vaultPolicy,
         IAttachmentStorage storage,
         Guid tenantId,
         MandateSignerCandidate signer,
+        IIdentitySignatureExtractor? signatureExtractor,
         Action<Exception>? onVaultError = null,
         CancellationToken cancellationToken = default)
     {
@@ -106,6 +122,15 @@ public static class MandatarioFirmaResolver
             : signer.CertificadoIdentidad.Trim();
         var rubrica = await LeerRubricaAsync(storage, signer.RubricaIdentidadPath, onVaultError, cancellationToken)
             .ConfigureAwait(false);
+        // Bug #14661 — la firma de una validación MANUAL es un PNG de fondo blanco opaco: se le quita el fondo para que no
+        // tape las líneas del contrato (mismo trato que la firma manual de las partes en FurCommand). Sin tinta visible o
+        // por encima del tope de la captura manual no se estampa y queda el sello. Kyverum sigue igual.
+        if (rubrica is not null && signer.RubricaIdentidadManual && signatureExtractor is not null)
+        {
+            rubrica = rubrica.Length <= ManualCaptureImages.MaxSignatureBytes
+                ? signatureExtractor.PrepareManualSignature(rubrica)
+                : null;
+        }
         // Misma leyenda que el sello de las partes cuando se conoce la validación; si no, el sello corto de siempre.
         var sello = string.IsNullOrWhiteSpace(signer.SelloIdentidad)
             ? $"Validación de identidad\nFirma {certificado}"

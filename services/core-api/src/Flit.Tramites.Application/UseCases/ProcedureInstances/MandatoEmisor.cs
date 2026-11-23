@@ -95,7 +95,8 @@ internal sealed class MandatoEmisor(
     IMandateSignerDirectory mandateDirectory,
     IMandateCustomTemplateBlobReader mandateTemplateBlob,
     IMandateFormatTemplateProvider? mandateFormatTemplates,
-    IIdentitySignatureCapture? identitySignatureCapture)
+    IIdentitySignatureCapture? identitySignatureCapture,
+    IIdentitySignatureExtractor? identitySignatureExtractor = null)
 {
     /// <summary>¿Hay generador de mandato? Sin él (tests/DI que no lo ejercitan) no se emite nada.</summary>
     public bool Disponible => mandatoGenerator is not null;
@@ -116,6 +117,7 @@ internal sealed class MandatoEmisor(
                 storage,
                 data.TenantIdParaFirmas,
                 signer,
+                identitySignatureExtractor,
                 ex => GenerarFurLog.FirmaBaulNoDisponible(logger, ex, data.ProcedureInstanceId),
                 ct)
             .ConfigureAwait(false);
