@@ -178,7 +178,7 @@ internal static partial class RotulosDiagnostico
     public static IReadOnlyDictionary<string, string> MotivosNa { get; } = new Dictionary<string, string>(StringComparer.Ordinal)
     {
         ["SERVICIO_PUBLICO"] = "El vehículo es de servicio público: esta consulta no aplica.",
-        ["DEPARTAMENTO_NO_SOPORTADO"] = "El departamento del vehículo todavía no está soportado.",
+        ["DEPARTAMENTO_NO_SOPORTADO"] = "La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo.",
         ["SIN_DOCUMENTO_LOCATARIO"] = "El RUNT no reporta locatario",
     };
 
@@ -211,6 +211,7 @@ internal static partial class RotulosDiagnostico
         ["SIN_NOMBRE_PROPIETARIO"] = "Falta el nombre del propietario para consultar el impuesto.",
         ["CREDENCIAL_NO_CONFIGURADA"] = "Credencial de impuesto no configurada para la compañía.",
         ["NO_CONFIRMADO_TIEMPO"] = "No confirmado (tiempo): la fuente no terminó la consulta a tiempo.",
+        ["FUENTE_INACTIVA"] = "La consulta del impuesto de este departamento no está disponible en este momento. Intenta de nuevo más tarde.",
     };
 
     /// <summary>

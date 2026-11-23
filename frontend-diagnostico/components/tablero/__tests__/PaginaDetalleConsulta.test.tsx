@@ -509,9 +509,9 @@ describe("PaginaDetalleConsulta — HU #13866: impuesto departamental", () => {
     expect(valorDe(within(pagina).getByRole("group", { name: "Respuesta de la fuente" }), "Monto total")).toBe("350000");
   });
 
-  it("la «Novedad» por departamento no soportado muestra el motivo, sin error ni reintento", async () => {
+  it("la «Novedad» por departamento sin cobertura muestra el motivo, sin error ni reintento", async () => {
     const { pagina } = await abrir("IMPUESTO_DEPARTAMENTAL", impuestoNa("DEPARTAMENTO_NO_SOPORTADO"));
-    expect((await within(pagina).findAllByText(/El departamento del vehículo todavía no está soportado\./)).length).toBeGreaterThan(0);
+    expect((await within(pagina).findAllByText(/La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo\./)).length).toBeGreaterThan(0);
     expect(within(pagina).queryByRole("alert")).not.toBeInTheDocument();
     expect(within(pagina).queryByRole("button", { name: /reprocesar|reintentar/i })).not.toBeInTheDocument();
   });

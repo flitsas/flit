@@ -6742,7 +6742,8 @@ components:
             Solo con estado ERROR; mismos códigos que CeldaGrilla.tipo_error. El impuesto añade NO_CONFIRMADO,
             NO_CONFIRMADO_TIEMPO, CREDENCIAL_NO_CONFIGURADA, MODELO_NO_ACEPTADO, DOCUMENTO_NO_COINCIDE,
             DOCUMENTO_NO_HOMOLOGADO, VEHICULO_NO_ENCONTRADO, VEHICULO_NO_CONSULTABLE, REQUIERE_ACTUALIZACION,
-            SIN_DOCUMENTO, SIN_MODELO, ORGANISMO_INCOMPLETO y SIN_NOMBRE_PROPIETARIO.
+            SIN_DOCUMENTO, SIN_MODELO, ORGANISMO_INCOMPLETO, SIN_NOMBRE_PROPIETARIO y FUENTE_INACTIVA (la fuente del
+            departamento está inactiva; definitivo y reprocesable).
         dato_parcial:
           type: boolean
           description: >

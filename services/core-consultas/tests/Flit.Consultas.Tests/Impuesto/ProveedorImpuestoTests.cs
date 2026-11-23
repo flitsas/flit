@@ -213,7 +213,9 @@ public sealed class ProveedorImpuestoTests
 
     [Theory]
     [InlineData(ClaseFalloProveedor.Rechazo, 400, "bad_request", "impuesto_rechazo", "RECHAZO")]
-    [InlineData(ClaseFalloProveedor.Rechazo, 422, "department_unsupported", "impuesto_rechazo", "RECHAZO")]
+    [InlineData(ClaseFalloProveedor.Rechazo, 422, "department_code_missing", "impuesto_rechazo", "RECHAZO")]
+    [InlineData(ClaseFalloProveedor.Rechazo, 422, "otro_rechazo", "impuesto_rechazo", "RECHAZO")]
+    [InlineData(ClaseFalloProveedor.Rechazo, 409, "otro_conflicto", "impuesto_rechazo", "RECHAZO")]
     [InlineData(ClaseFalloProveedor.Limite, 429, "", "impuesto_limite", "LIMITE")]
     [InlineData(ClaseFalloProveedor.Caida, 503, "", "impuesto_caida", "CAIDA")]
     public async Task Un_POST_rechazado_cierra_en_error_con_su_clave_y_su_motivo(ClaseFalloProveedor clase, int http, string codigo, string clave, string motivo)
@@ -227,6 +229,130 @@ public sealed class ProveedorImpuestoTests
         RegistroFallosProveedor.Motivo().Should().Be(motivo);
         transporte.Gets.Should().Be(0);
         _seguimiento.Fila(trabajo)!.Estado.Should().Be("error");
+    }
+
+    [Theory]
+    [InlineData(422, "department_unsupported", ClaveDepartamentoNoSoportado, MensajeDepartamentoNoSoportado)]
+    [InlineData(409, "source_inactive", ClaveFuenteInactiva, MensajeFuenteInactiva)]
+    public async Task Un_POST_rechazado_por_cobertura_o_fuente_inactiva_cierra_con_su_clave_mensaje_fijo_y_Warning(
+        int http, string codigo, string clave, string mensaje)
+    {
+        using var _ = RegistroFallosProveedor.Abrir();
+        var trabajo = Guid.NewGuid();
+        var transporte = new TransporteGuionado();
+        transporte.Envios.Enqueue(Guion.Rechazo(ClaseFalloProveedor.Rechazo, http, codigo));
+
+        var respuesta = await Proveedor(transporte).ConsultarAsync(Pedido(), Llamador, trabajo, CancellationToken.None);
+
+        Clave(respuesta).Should().Be(clave);
+        respuesta.Resultado.Chequeos[0].Estado.Should().Be(EstadoChequeo.Error);
+        respuesta.Resultado.Chequeos[0].Mensaje.Should().Be(mensaje);
+        RegistroFallosProveedor.Motivo().Should().Be("RECHAZO", "un rechazo de negocio no cuenta como caída del proveedor");
+        transporte.Gets.Should().Be(0);
+        _seguimiento.Fila(trabajo)!.Estado.Should().Be("error");
+        UnicoAvisoSinVeredicto().Should().Contain(trabajo.ToString()).And.Contain("departamento 05")
+            .And.Contain("estado http_" + http).And.Contain("error_code " + codigo).And.Contain("clave " + clave);
+    }
+
+    [Fact]
+    public async Task Un_reenvio_tras_404_rechazado_por_cobertura_cierra_en_departamento_no_soportado()
+    {
+        var trabajo = Guid.NewGuid();
+        _seguimiento.Sembrar(new SeguimientoImpuesto(trabajo, "ext-perdido", _reloj.GetUtcNow() - TimeSpan.FromSeconds(30), "running"));
+        var transporte = new TransporteGuionado();
+        transporte.Estados.Enqueue(Guion.NoEncontrado());
+        transporte.Envios.Enqueue(Guion.Rechazo(ClaseFalloProveedor.Rechazo, 422, "department_unsupported"));
+
+        var respuesta = await Proveedor(transporte).ConsultarAsync(Pedido(), Llamador, trabajo, CancellationToken.None);
+
+        Clave(respuesta).Should().Be(ClaveDepartamentoNoSoportado);
+        respuesta.Resultado.Chequeos[0].Mensaje.Should().Be(MensajeDepartamentoNoSoportado);
+        transporte.Posts.Should().Be(1);
+        _seguimiento.Fila(trabajo)!.Estado.Should().Be("error");
+        UnicoAvisoSinVeredicto().Should().Contain("clave " + ClaveDepartamentoNoSoportado);
+    }
+
+    [Fact]
+    public async Task Un_reenvio_tras_404_con_fuente_inactiva_cierra_en_fuente_inactiva()
+    {
+        var trabajo = Guid.NewGuid();
+        _seguimiento.Sembrar(new SeguimientoImpuesto(trabajo, "ext-perdido", _reloj.GetUtcNow() - TimeSpan.FromSeconds(30), "running"));
+        var transporte = new TransporteGuionado();
+        transporte.Estados.Enqueue(Guion.NoEncontrado());
+        transporte.Envios.Enqueue(Guion.Rechazo(ClaseFalloProveedor.Rechazo, 409, "source_inactive"));
+
+        var respuesta = await Proveedor(transporte).ConsultarAsync(Pedido(), Llamador, trabajo, CancellationToken.None);
+
+        Clave(respuesta).Should().Be(ClaveFuenteInactiva);
+        respuesta.Resultado.Chequeos[0].Mensaje.Should().Be(MensajeFuenteInactiva);
+    }
+
+    [Theory]
+    [InlineData("source_inactive", ClaveFuenteInactiva, MensajeFuenteInactiva)]
+    [InlineData("department_unsupported", ClaveDepartamentoNoSoportado, MensajeDepartamentoNoSoportado)]
+    public async Task Un_failed_asincrono_por_fuente_inactiva_o_sin_cobertura_cierra_con_su_clave_y_mensaje(
+        string codigo, string clave, string mensaje)
+    {
+        var trabajo = Guid.NewGuid();
+        var transporte = new TransporteGuionado();
+        transporte.Estados.Enqueue(Guion.Terminal(EstadoTrabajoExterno.Fallido,
+            "{\"id\":\"ext-1\",\"status\":\"failed\",\"error_code\":\"" + codigo + "\",\"result\":null}"));
+
+        var respuesta = await Proveedor(transporte).ConsultarAsync(Pedido(), Llamador, trabajo, CancellationToken.None);
+
+        Clave(respuesta).Should().Be(clave);
+        respuesta.Resultado.Chequeos[0].Estado.Should().Be(EstadoChequeo.Error);
+        respuesta.Resultado.Chequeos[0].Mensaje.Should().Be(mensaje);
+        _seguimiento.Fila(trabajo)!.Estado.Should().Be("failed");
+        UnicoAvisoSinVeredicto().Should().Contain("error_code " + codigo).And.Contain("clave " + clave);
+    }
+
+    [Theory]
+    [InlineData(422, """{"error":{"code":"department_unsupported","message":"no hay una fuente para el departamento 08"}}""", "department_unsupported", ClaveDepartamentoNoSoportado)]
+    [InlineData(422, """{"error":{"code":"department_unsupported","message":"falta detail.secretaryDepartmentCode"}}""", "department_code_missing", "impuesto_rechazo")]
+    [InlineData(422, """{"error":{"code":"department_unsupported","message":"FALTA el codigo"}}""", "department_code_missing", "impuesto_rechazo")]
+    [InlineData(409, """{"error":{"code":"source_inactive","message":"fuente apagada por mantenimiento"}}""", "source_inactive", ClaveFuenteInactiva)]
+    [InlineData(409, """{"error":{"code":"otro_conflicto","message":"texto libre del conflicto"}}""", "otro_conflicto", "impuesto_rechazo")]
+    public async Task El_transporte_HTTP_clasifica_422_y_409_por_code_y_message_sin_registrar_el_message(
+        int http, string cuerpo, string codigoEsperado, string clave)
+    {
+        using var _ = RegistroFallosProveedor.Abrir();
+        var logTransporte = new ListaLogger<TransporteImpuestoHttp>();
+        var transporte = new TransporteImpuestoHttp(new FabricaHttpFija(http, cuerpo), Opciones(), logTransporte);
+
+        var envio = await transporte.EnviarAsync("{}", FuenteCredencialFalsa.Llave, CancellationToken.None);
+        envio.IdExterno.Should().BeNull();
+        envio.CodigoError.Should().Be(codigoEsperado);
+        envio.Fallo.Should().Be(new FalloProveedor(ClaseFalloProveedor.Rechazo, http));
+
+        var proveedorHttp = new ProveedorImpuesto(new TransporteImpuestoHttp(new FabricaHttpFija(http, cuerpo), Opciones(), logTransporte),
+            Opciones(), new CatalogoImpuestoFijo(["05"]), _credenciales, _seguimiento, PlanSondeoImpuesto.Real(280), _reloj, _log);
+        var respuesta = await proveedorHttp.ConsultarAsync(Pedido(), Llamador, Guid.NewGuid(), CancellationToken.None);
+        Clave(respuesta).Should().Be(clave);
+        RegistroFallosProveedor.Motivo().Should().Be("RECHAZO");
+
+        using var documento = JsonDocument.Parse(cuerpo);
+        var mensajeFuente = documento.RootElement.GetProperty("error").GetProperty("message").GetString()!;
+        string.Join(" | ", logTransporte.Textos.Concat(_log.Textos)).Should().NotContain(mensajeFuente);
+        respuesta.ToString().Should().NotContain(mensajeFuente);
+    }
+
+    [Theory]
+    [InlineData("TST2DZ", ClaveDepartamentoNoSoportado, MensajeDepartamentoNoSoportado, 0)]
+    [InlineData("TST2FZ", ClaveFuenteInactiva, MensajeFuenteInactiva, 0)]
+    [InlineData("TST2GZ", ClaveFuenteInactiva, MensajeFuenteInactiva, 1)]
+    public async Task El_simulado_reproduce_cobertura_y_fuente_inactiva_por_marca_de_placa(string placa, string clave, string mensaje, int guardados)
+    {
+        var proveedor = new ProveedorImpuesto(new TransporteImpuestoSimulado(), Opciones(), new CatalogoImpuestoFijo(["05"]), _credenciales,
+            _seguimiento, PlanSondeoImpuesto.Simulado(3), _reloj, _log);
+        var pedido = Pedido();
+        pedido.Placa = new Placa { Valor = placa };
+
+        var respuesta = await proveedor.ConsultarAsync(pedido, Llamador, Guid.NewGuid(), CancellationToken.None);
+
+        Clave(respuesta).Should().Be(clave);
+        respuesta.Resultado.Chequeos[0].Mensaje.Should().Be(mensaje);
+        _seguimiento.Operaciones.Count(o => o == "guardar").Should().Be(guardados, "solo el failed asíncrono llega a guardar el id externo");
     }
 
     [Fact]
@@ -394,16 +520,42 @@ public sealed class ProveedorImpuestoTests
     private ProveedorImpuesto Proveedor(ITransporteImpuesto transporte, params string[] departamentos) =>
         Proveedor(transporte, 280, departamentos);
 
-    private ProveedorImpuesto Proveedor(ITransporteImpuesto transporte, int presupuesto, params string[] departamentos)
-    {
-        var opciones = OpcionesImpuesto.Desde(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+    private const string ClaveDepartamentoNoSoportado = "impuesto_departamento_no_soportado";
+    private const string ClaveFuenteInactiva = "impuesto_fuente_inactiva";
+    private const string MensajeDepartamentoNoSoportado =
+        "La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo.";
+    private const string MensajeFuenteInactiva =
+        "La consulta del impuesto de este departamento no está disponible en este momento. Intenta de nuevo más tarde.";
+
+    private static OpcionesImpuesto Opciones() =>
+        OpcionesImpuesto.Desde(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["IMPUESTO_API_BASE_URL"] = "http://fuente.invalid/api/v1",
             ["IMPUESTO_API_PATH"] = "consultas",
             ["IMPUESTO_CONTACTO_CORREO"] = "contacto@example.invalid",
+            [OpcionesImpuesto.ClaveIdentidadAddress] = "http://identidad.invalid",
         }).Build());
+
+    private ProveedorImpuesto Proveedor(ITransporteImpuesto transporte, int presupuesto, params string[] departamentos)
+    {
+        var opciones = Opciones();
         return new ProveedorImpuesto(transporte, opciones, new CatalogoImpuestoFijo(departamentos.Length == 0 ? ["05"] : departamentos), _credenciales,
             _seguimiento, PlanSondeoImpuesto.Real(presupuesto), _reloj, _log);
+    }
+
+    /// <summary>Fábrica HTTP sin red: toda petición recibe el mismo código y cuerpo sintético.</summary>
+    private sealed class FabricaHttpFija(int codigo, string cuerpo) : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(new Manejador(codigo, cuerpo));
+
+        private sealed class Manejador(int codigo, string cuerpo) : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+                Task.FromResult(new HttpResponseMessage((System.Net.HttpStatusCode)codigo)
+                {
+                    Content = new StringContent(cuerpo, System.Text.Encoding.UTF8, "application/json"),
+                });
+        }
     }
 
     private sealed class TransporteCancelador(CancellationTokenSource cts) : ITransporteImpuesto

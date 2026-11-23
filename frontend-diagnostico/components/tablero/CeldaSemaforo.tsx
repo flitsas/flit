@@ -56,7 +56,7 @@ const estiloDe = (tono: Tono) => ({ c: `var(--dx-estado-${tono}-borde)`, ct: `va
 
 const MOTIVOS_NA: Record<MotivoNa, string> = {
   SERVICIO_PUBLICO: "Servicio público",
-  DEPARTAMENTO_NO_SOPORTADO: "Departamento no soportado",
+  DEPARTAMENTO_NO_SOPORTADO: "Departamento sin cobertura",
   // Contrato 1.6.0 §1.1 (decisión del orquestador): el código se conserva; el locatario sale solo del RUNT.
   SIN_DOCUMENTO_LOCATARIO: "El RUNT no reporta locatario",
 };
@@ -82,6 +82,7 @@ const NOTAS_ERROR: Record<string, string> = {
   [BLOQUEADA_POR_RUNT]: "Espera al RUNT del vehículo",
   AUTENTICACION: "Credenciales del proveedor rechazadas",
   LIMITE_PROVEEDOR: "Límite del proveedor",
+  FUENTE_INACTIVA: "Fuente inactiva",
 };
 
 /**

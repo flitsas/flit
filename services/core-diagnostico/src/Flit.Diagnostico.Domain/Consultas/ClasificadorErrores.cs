@@ -14,7 +14,8 @@ public enum ClaseError
 /// Clasificación de los errores de una fuente por su código (<c>tipo_error</c>, HU #13737, F03-H6, D-12). Manda lo que devuelve
 /// core-consultas: <c>TIMEOUT</c>, <c>RED</c>, <c>HTTP_5XX</c> y <c>LIMITE_PROVEEDOR</c> (429 del proveedor, resolvedor de errores) son
 /// transitorios; <c>RESPUESTA_INVALIDA</c>,
-/// <c>AUTENTICACION</c>, <c>ESTADO_NO_OK</c> y <c>NO_CONECTADO</c> son definitivos. Todo lo demás (un código que no está en la
+/// <c>AUTENTICACION</c>, <c>ESTADO_NO_OK</c> y <c>NO_CONECTADO</c> son definitivos, igual que <c>FUENTE_INACTIVA</c> (la fuente del
+/// impuesto de ese departamento está inactiva: el usuario la reprocesa más tarde, sin reintento automático). Todo lo demás (un código que no está en la
 /// tabla, <c>BLOQUEADA_POR_RUNT</c>, un fallo sin código) es definitivo: no se gasta consumo en lo que no se sabe si se resuelve
 /// solo. Regla pura, sin estado.
 /// </summary>
@@ -33,7 +34,7 @@ public static class ClasificadorErrores
         "NO_CONFIRMADO", "MODELO_NO_ACEPTADO", "DOCUMENTO_NO_COINCIDE", "DOCUMENTO_NO_HOMOLOGADO",
         "VEHICULO_NO_ENCONTRADO", "VEHICULO_NO_CONSULTABLE", "REQUIERE_ACTUALIZACION",
         "SIN_PLACA", "SIN_DOCUMENTO", "SIN_MODELO", "ORGANISMO_INCOMPLETO", "SIN_NOMBRE_PROPIETARIO",
-        "CREDENCIAL_NO_CONFIGURADA", "NO_CONFIRMADO_TIEMPO",
+        "CREDENCIAL_NO_CONFIGURADA", "NO_CONFIRMADO_TIEMPO", "FUENTE_INACTIVA",
     };
 
     /// <summary>Todos los códigos de la tabla (transitorios y definitivos), para que cada uno tenga su rótulo de negocio.</summary>

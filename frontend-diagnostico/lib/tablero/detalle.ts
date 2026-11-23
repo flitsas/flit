@@ -392,6 +392,7 @@ const TIPOS_ERROR: Record<string, string> = {
   SIN_DOCUMENTO: "Falta el documento del propietario para consultar el impuesto.",
   SIN_MODELO: "Falta el modelo del vehículo para consultar el impuesto.",
   ORGANISMO_INCOMPLETO: "El organismo de tránsito no tiene municipio para consultar el impuesto.",
+  FUENTE_INACTIVA: "La consulta del impuesto de este departamento no está disponible en este momento. Intenta de nuevo más tarde.",
   SIN_NOMBRE_PROPIETARIO: "Falta el nombre del propietario para consultar el impuesto.",
   CREDENCIAL_NO_CONFIGURADA: "Credencial de impuesto no configurada para la compañía.",
   NO_CONFIRMADO_TIEMPO: "No confirmado (tiempo): la fuente no terminó la consulta a tiempo.",
@@ -404,7 +405,7 @@ export function textoTipoError(codigo: string | null): string {
 
 const MOTIVOS_NA: Record<MotivoNa, string> = {
   SERVICIO_PUBLICO: "El vehículo es de servicio público: esta consulta no aplica.",
-  DEPARTAMENTO_NO_SOPORTADO: "El departamento del vehículo todavía no está soportado.",
+  DEPARTAMENTO_NO_SOPORTADO: "La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo.",
   SIN_DOCUMENTO_LOCATARIO: "El RUNT no reporta locatario: no hay a quién consultar.",
 };
 

@@ -10,6 +10,9 @@ namespace Flit.Consultas.Api.Impuesto;
 /// veredicto solo si pasan <c>^[a-z0-9_]{1,64}$</c> (si no, <c>no_reconocido</c>), para el log de quien tiene el logger.
 /// Una validación <c>mismatch</c> (de cualquier campo, incluidos <c>OwnerName</c> y <c>vehicleModel</c>) nunca bloquea el
 /// resultado: viaja aparte como advertencia y el veredicto sale de <c>status</c>/<c>result.status</c> y las vigencias.
+/// En <c>failed</c>/<c>error</c>, el <c>error_code</c> decide el código: <c>invalid_params</c> → <c>SOLICITUD_INVALIDA</c>,
+/// <c>source_inactive</c> (la fuente se desactivó entre el POST y el worker) → <c>FUENTE_INACTIVA</c>,
+/// <c>department_unsupported</c> → <c>DEPARTAMENTO_NO_SOPORTADO</c>; cualquier otro → <c>NO_CONFIRMADO</c>.
 /// </summary>
 internal static class InterpreteImpuesto
 {
@@ -77,6 +80,10 @@ internal static class InterpreteImpuesto
         {
             if (string.Equals(errorCode, "invalid_params", StringComparison.OrdinalIgnoreCase))
                 return Error("SOLICITUD_INVALIDA", advertencias);
+            if (string.Equals(errorCode, "source_inactive", StringComparison.OrdinalIgnoreCase))
+                return Error("FUENTE_INACTIVA", advertencias);
+            if (string.Equals(errorCode, "department_unsupported", StringComparison.OrdinalIgnoreCase))
+                return Error("DEPARTAMENTO_NO_SOPORTADO", advertencias);
             return Error("NO_CONFIRMADO", advertencias);
         }
 

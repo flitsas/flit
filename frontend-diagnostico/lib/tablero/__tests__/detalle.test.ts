@@ -100,6 +100,7 @@ describe("detalle — textos de error, N/A y pesos", () => {
   it.each([
     ["AUTENTICACION", "El proveedor rechazó las credenciales de FLIT. Avísale al administrador para que las renueve; luego puedes reprocesar la consulta."],
     ["LIMITE_PROVEEDOR", "El proveedor limitó las consultas por ahora. Se reintentará automáticamente."],
+    ["FUENTE_INACTIVA", "La consulta del impuesto de este departamento no está disponible en este momento. Intenta de nuevo más tarde."],
   ])("%s (fallo del proveedor) tiene su texto exacto", (codigo, texto) => {
     expect(textoTipoError(codigo)).toBe(texto);
   });
@@ -111,7 +112,9 @@ describe("detalle — textos de error, N/A y pesos", () => {
 
   it("motivos de N/A", () => {
     expect(textoMotivoNa("SERVICIO_PUBLICO")).toMatch(/servicio público/i);
-    expect(textoMotivoNa("DEPARTAMENTO_NO_SOPORTADO")).toMatch(/departamento/i);
+    expect(textoMotivoNa("DEPARTAMENTO_NO_SOPORTADO")).toBe(
+      "La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo.",
+    );
     expect(textoMotivoNa("SIN_DOCUMENTO_LOCATARIO")).toMatch(/locatario/i);
     expect(textoMotivoNa(null)).toBe("Esta consulta no aplica a este vehículo.");
   });

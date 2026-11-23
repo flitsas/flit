@@ -6,9 +6,14 @@ namespace Flit.Consultas.Api.Impuesto;
 /// </summary>
 internal static class HomologacionDocumentoImpuesto
 {
+    /// <summary>
+    /// Los 33 códigos DANE (32 departamentos y Bogotá D.C.). Protege solo la escritura del catálogo: es validación de forma, no de
+    /// cobertura; la cobertura la decide la API de impuesto.
+    /// </summary>
     private static readonly HashSet<string> DepartamentosConocidos =
     [
-        "05", "08", "11", "13", "17", "18", "25", "41", "44", "50", "52", "63", "68", "76", "81", "94",
+        "05", "08", "11", "13", "15", "17", "18", "19", "20", "23", "25", "27", "41", "44", "47", "50", "52",
+        "54", "63", "66", "68", "70", "73", "76", "81", "85", "86", "88", "91", "94", "95", "97", "99",
     ];
 
     public static bool Conocido(string codigo) => DepartamentosConocidos.Contains(codigo);

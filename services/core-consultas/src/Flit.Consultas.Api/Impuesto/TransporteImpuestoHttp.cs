@@ -12,6 +12,15 @@ internal sealed class TransporteImpuestoHttp(IHttpClientFactory http, OpcionesIm
     : ITransporteImpuesto
 {
     public const string HttpClientName = "impuesto";
+
+    /// <summary>
+    /// Código sintético para el 422 <c>department_unsupported</c> cuyo <c>message</c> empieza por «falta» (falta
+    /// <c>detail.secretaryDepartmentCode</c>): es un fallo de datos, no de cobertura. El <c>message</c> solo se usa para distinguir
+    /// los dos casos; nunca sale del método ni se registra (Ley 1581).
+    /// </summary>
+    public const string CodigoDepartamentoAusente = "department_code_missing";
+
+    private const string CodigoDepartamentoNoSoportado = "department_unsupported";
     private const string CabeceraApiKey = "X-API-Key";
 
     public bool Listo => opciones.TieneRuta && opciones.TieneIdentidad;
@@ -182,7 +191,14 @@ internal sealed class TransporteImpuestoHttp(IHttpClientFactory http, OpcionesIm
             using var doc = JsonDocument.Parse(texto);
             if (doc.RootElement.TryGetProperty("error", out var error) && error.ValueKind == JsonValueKind.Object
                 && error.TryGetProperty("code", out var code))
-                return code.GetString();
+            {
+                var codigo = code.GetString();
+                if (string.Equals(codigo, CodigoDepartamentoNoSoportado, StringComparison.Ordinal)
+                    && error.TryGetProperty("message", out var mensaje) && mensaje.ValueKind == JsonValueKind.String
+                    && (mensaje.GetString() ?? "").StartsWith("falta", StringComparison.OrdinalIgnoreCase))
+                    return CodigoDepartamentoAusente;
+                return codigo;
+            }
             if (doc.RootElement.TryGetProperty("code", out var codeRaiz))
                 return codeRaiz.GetString();
         }
@@ -200,7 +216,8 @@ internal sealed class TransporteImpuestoHttp(IHttpClientFactory http, OpcionesIm
     {
         HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden => new FalloProveedor(ClaseFalloProveedor.Credenciales, codigo),
         HttpStatusCode.TooManyRequests => new FalloProveedor(ClaseFalloProveedor.Limite, codigo),
-        HttpStatusCode.BadRequest or HttpStatusCode.UnprocessableEntity => new FalloProveedor(ClaseFalloProveedor.Rechazo, codigo),
+        // 409 (p. ej. source_inactive) es una respuesta de negocio de la fuente, no una caída del proveedor.
+        HttpStatusCode.BadRequest or HttpStatusCode.Conflict or HttpStatusCode.UnprocessableEntity => new FalloProveedor(ClaseFalloProveedor.Rechazo, codigo),
         _ => new FalloProveedor(ClaseFalloProveedor.Caida, codigo),
     };
 }

@@ -32,16 +32,26 @@ public sealed class HomologacionDocumentoImpuestoTests
     public void Lo_que_no_esta_en_la_tabla_no_se_consulta(string? tipo) =>
         HomologacionDocumentoImpuesto.Homologar(tipo).Should().BeNull();
 
+    /// <summary>Los 33 códigos DANE (32 departamentos y Bogotá D.C.), decisión P5' del 2026-11-23.</summary>
+    public static readonly string[] CodigosDane =
+    [
+        "05", "08", "11", "13", "15", "17", "18", "19", "20", "23", "25", "27", "41", "44", "47", "50", "52",
+        "54", "63", "66", "68", "70", "73", "76", "81", "85", "86", "88", "91", "94", "95", "97", "99",
+    ];
+
+    public static TheoryData<string> Dane => new(CodigosDane);
+
     [Theory]
-    [InlineData("05", true)]
-    [InlineData("13", true)]
-    [InlineData("17", true)]
-    [InlineData("63", true)]
-    [InlineData("68", true)]
-    [InlineData("76", true)]
-    [InlineData("08", true)]
-    [InlineData("11", true)]
-    [InlineData("99", false)]
-    public void El_conjunto_conocido_se_conserva_para_el_catalogo(string codigo, bool conocido) =>
-        HomologacionDocumentoImpuesto.Conocido(codigo).Should().Be(conocido);
+    [MemberData(nameof(Dane))]
+    public void Todo_codigo_DANE_es_conocido_para_el_catalogo(string codigo) =>
+        HomologacionDocumentoImpuesto.Conocido(codigo).Should().BeTrue();
+
+    [Theory]
+    [InlineData("00")]
+    [InlineData("12")]
+    [InlineData("98")]
+    [InlineData("5")]
+    [InlineData("")]
+    public void Un_codigo_que_no_es_DANE_no_es_conocido(string codigo) =>
+        HomologacionDocumentoImpuesto.Conocido(codigo).Should().BeFalse();
 }

@@ -104,10 +104,12 @@ public sealed class SimulacionTests
         var municipios = File.ReadAllText(Path.Combine(ddl, "34-transit-offices-city-department-names.sql"));
         // La última migración que fija la lista de activos; solo su Up (el Down restaura la semilla anterior).
         // Actualizar al crear una migración posterior que cambie los departamentos activos.
-        var vigente = File.ReadAllText(Path.Combine(raiz, "services", "core-consultas", "src", "Flit.Consultas.Api", "Persistence", "Migrations", "20261120002000_ImpuestoDepartamentosFuenteReal.cs"));
+        var vigente = File.ReadAllText(Path.Combine(raiz, "services", "core-consultas", "src", "Flit.Consultas.Api", "Persistence", "Migrations", "20261123180000_ImpuestoDepartamentosTodosActivos.cs"));
         var up = vigente[..vigente.IndexOf("void Down(", StringComparison.Ordinal)];
         var activos = Regex.Matches(up, @"'(?<codigo>\d{2})',\s*'[^']+',\s*true,").Select(m => m.Groups["codigo"].Value).ToList();
-        activos.Should().BeEquivalentTo("05", "13", "17", "63", "68", "76");
+        activos.Should().BeEquivalentTo(
+            "05", "08", "11", "13", "15", "17", "18", "19", "20", "23", "25", "27", "41", "44", "47", "50", "52",
+            "54", "63", "66", "68", "70", "73", "76", "81", "85", "86", "88", "91", "94", "95", "97", "99");
         var fixture = new JsonParser(JsonParser.Settings.Default.WithIgnoreUnknownFields(false)).Parse<ConsultarVehiculoIntempoResponse>(FixturesIntempo.Todos()["intempo-impuesto.json"]);
         var organismo = fixture.Vehiculo.InformacionGeneral.OrganismoTransito;
 

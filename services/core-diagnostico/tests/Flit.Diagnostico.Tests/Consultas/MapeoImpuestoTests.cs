@@ -36,6 +36,7 @@ public sealed class MapeoImpuestoTests
     [InlineData("impuesto_credencial_no_configurada", "CREDENCIAL_NO_CONFIGURADA", ClaseError.Definitivo)]
     [InlineData("impuesto_no_confirmado_tiempo", "NO_CONFIRMADO_TIEMPO", ClaseError.Definitivo)]
     [InlineData("impuesto_solicitud_invalida", "ESTADO_NO_OK", ClaseError.Definitivo)]
+    [InlineData("impuesto_fuente_inactiva", "FUENTE_INACTIVA", ClaseError.Definitivo)]
     public void Cada_clave_de_chequeo_produce_su_tipo_error_y_su_clase(string clave, string tipo, ClaseError clase)
     {
         var respuesta = ConChequeo(clave);

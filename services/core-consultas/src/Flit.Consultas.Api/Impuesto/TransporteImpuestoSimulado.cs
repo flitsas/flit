@@ -1,10 +1,15 @@
 using System.Collections.Concurrent;
 using System.Text.Json;
+using Flit.Tramites.Application.UseCases.Consultations;
 
 namespace Flit.Consultas.Api.Impuesto;
 
 /// <summary>
 /// Simulación asíncrona con fixtures <c>impuesto-v2</c>. La marca es el penúltimo carácter de la placa (en el id externo).
+/// Marcas del POST (rechazo inmediato, sin sondeo): <c>D</c> → 422 <c>department_unsupported</c> (sin fuente para el
+/// departamento), <c>F</c> → 409 <c>source_inactive</c> (fuente inactiva). Marca del sondeo: <c>G</c> → <c>failed</c> con
+/// <c>source_inactive</c> (la fuente se desactivó entre el POST y el worker). Dígitos 0-9: ver <see cref="ConsultarAsync"/>.
+/// Datos siempre sintéticos (placas <c>TST…</c>).
 /// </summary>
 internal sealed class TransporteImpuestoSimulado : ITransporteImpuesto
 {
@@ -21,6 +26,14 @@ internal sealed class TransporteImpuestoSimulado : ITransporteImpuesto
         using var documento = JsonDocument.Parse(cuerpo);
         var placa = documento.RootElement.TryGetProperty("plateNumber", out var valor) ? valor.GetString() ?? "" : "";
         var marca = placa.Length >= 2 ? placa[^2] : '2';
+        switch (marca)
+        {
+            case 'D':
+                return Task.FromResult(new EnvioImpuesto(null, new FalloProveedor(ClaseFalloProveedor.Rechazo, 422), "department_unsupported"));
+            case 'F':
+                return Task.FromResult(new EnvioImpuesto(null, new FalloProveedor(ClaseFalloProveedor.Rechazo, 409), "source_inactive"));
+        }
+
         var id = "sim-" + marca + "-" + Guid.CreateVersion7().ToString("N");
         return Task.FromResult(new EnvioImpuesto(id, null, null));
     }
@@ -44,6 +57,7 @@ internal sealed class TransporteImpuestoSimulado : ITransporteImpuesto
             '8' => (EstadoTrabajoExterno.Exitoso, "resultado-mismatch-servicio-con-avisos.json"),
             '9' when n == 1 => (EstadoTrabajoExterno.EnCola, "get-en-cola.json"),
             '9' => (EstadoTrabajoExterno.Exitoso, "resultado-paz-y-salvo.json"),
+            'G' => (EstadoTrabajoExterno.Fallido, "resultado-fuente-inactiva.json"),
             _ => (EstadoTrabajoExterno.Exitoso, "resultado-paz-y-salvo.json"),
         };
 

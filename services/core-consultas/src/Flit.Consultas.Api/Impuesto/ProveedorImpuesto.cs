@@ -8,9 +8,13 @@ using Grpc.Core;
 namespace Flit.Consultas.Api.Impuesto;
 
 /// <summary>
-/// Fachada del impuesto asíncrono (diseño §2.3–§2.4, D9). Departamento fuera de la lista: <c>FAILED_PRECONDITION</c>.
-/// Cuando la fuente cierra el trabajo sin veredicto confirmado (solicitud inválida, no confirmado, respuesta ilegible o tiempo
-/// agotado) deja un Warning 7436 con identificadores y códigos de forma estricta; nunca texto libre ni valores de la fuente.
+/// Fachada del impuesto asíncrono (diseño §2.3–§2.4, D9). Departamento inactivo en el catálogo: <c>FAILED_PRECONDITION</c>. Con los
+/// 33 códigos DANE activos (P5' del 2026-11-23) el filtro sigue, pero la cobertura la decide la API: 422
+/// <c>department_unsupported</c> → <c>impuesto_departamento_no_soportado</c> (Diagnóstico lo cierra en N/A), 409 o <c>failed</c>
+/// asíncrono <c>source_inactive</c> → <c>impuesto_fuente_inactiva</c>, y el 422 por falta de código de departamento →
+/// <c>impuesto_rechazo</c>. Cuando la fuente cierra el trabajo sin veredicto confirmado (rechazo de negocio, solicitud inválida, no
+/// confirmado, respuesta ilegible o tiempo agotado) deja un Warning 7436 con identificadores y códigos de forma estricta; nunca texto
+/// libre ni valores de la fuente.
 /// </summary>
 internal sealed partial class ProveedorImpuesto(
     ITransporteImpuesto transporte,
@@ -23,6 +27,21 @@ internal sealed partial class ProveedorImpuesto(
     ILogger<ProveedorImpuesto> logger)
 {
     public const string ClaveProveedor = "impuesto";
+
+    /// <summary>La fuente no tiene consulta para el departamento (422 <c>department_unsupported</c>): Diagnóstico la cierra en N/A.</summary>
+    public const string ClaveDepartamentoNoSoportado = "impuesto_departamento_no_soportado";
+
+    /// <summary>La fuente del departamento está inactiva (409 o <c>failed</c> con <c>source_inactive</c>): ERROR reprocesable.</summary>
+    public const string ClaveFuenteInactiva = "impuesto_fuente_inactiva";
+
+    private const string MensajeDepartamentoNoSoportado =
+        "La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo.";
+
+    private const string MensajeFuenteInactiva =
+        "La consulta del impuesto de este departamento no está disponible en este momento. Intenta de nuevo más tarde.";
+
+    private const string MensajeNoConfirmado = "El impuesto no quedó confirmado.";
+
     private static readonly Regex ArchivoId = ArchivoIdRegex();
     private const int MaxPdfBytes = 3 * 1024 * 1024;
 
@@ -88,7 +107,7 @@ internal sealed partial class ProveedorImpuesto(
             {
                 await seguimiento.CerrarAsync(trabajoId, "error", ct).ConfigureAwait(false);
                 RegistroFallosProveedor.Anotar(falloEnvio);
-                return Error(ClaveTransporte(falloEnvio));
+                return CerrarEnvioFallido(trabajoId, request.DepartamentoCodigo, falloEnvio, envio.CodigoError);
             }
 
             var ahoraEnvio = time.GetUtcNow();
@@ -132,7 +151,7 @@ internal sealed partial class ProveedorImpuesto(
                     {
                         await seguimiento.CerrarAsync(trabajoId, "error", ct).ConfigureAwait(false);
                         RegistroFallosProveedor.Anotar(falloRe);
-                        return Error(ClaveTransporte(falloRe));
+                        return CerrarEnvioFallido(trabajoId, request.DepartamentoCodigo, falloRe, envio.CodigoError);
                     }
 
                     var ahoraRe = time.GetUtcNow();
@@ -320,6 +339,29 @@ internal sealed partial class ProveedorImpuesto(
         _ => "error",
     };
 
+    /// <summary>
+    /// POST rechazado. Un 422/409 de negocio tiene su propia clave y deja el Warning 7436 con el <c>error.code</c> (forma estricta);
+    /// lo demás cae en la clave del transporte. El <c>RegistroFallosProveedor</c> ya quedó con la clase <c>Rechazo</c> del transporte,
+    /// igual que cualquier 400/422: no cuenta como caída.
+    /// </summary>
+    private ConsultarImpuestoVehicularResponse CerrarEnvioFallido(Guid trabajoId, string? departamento, FalloProveedor fallo, string? codigoError)
+    {
+        if (ClaveRechazoNegocio(fallo.HttpStatus, codigoError) is not { } clave)
+            return Error(ClaveTransporte(fallo));
+
+        AvisarSinVeredicto(trabajoId, null, departamento, "http_" + fallo.HttpStatus, null, codigoError, clave, []);
+        return Error(clave);
+    }
+
+    private static string? ClaveRechazoNegocio(int? httpStatus, string? codigoError) => (httpStatus, codigoError) switch
+    {
+        (422, "department_unsupported") => ClaveDepartamentoNoSoportado,
+        (422, TransporteImpuestoHttp.CodigoDepartamentoAusente) => "impuesto_rechazo",
+        (409, "source_inactive") => ClaveFuenteInactiva,
+        (409, _) => "impuesto_rechazo",
+        _ => null,
+    };
+
     private static string ClaveTransporte(FalloProveedor fallo) => fallo.Codigo switch
     {
         "CREDENCIALES" => "impuesto_autenticacion",
@@ -332,7 +374,12 @@ internal sealed partial class ProveedorImpuesto(
 
     private ConsultarImpuestoVehicularResponse Error(string clave) => new()
     {
-        Resultado = Resultado(clave, EstadoChequeo.Error, Semaforo.Amarillo, "El impuesto no quedó confirmado."),
+        Resultado = Resultado(clave, EstadoChequeo.Error, Semaforo.Amarillo, clave switch
+        {
+            ClaveDepartamentoNoSoportado => MensajeDepartamentoNoSoportado,
+            ClaveFuenteInactiva => MensajeFuenteInactiva,
+            _ => MensajeNoConfirmado,
+        }),
     };
 
     private ConsultarImpuestoVehicularResponse AProto(VeredictoImpuesto veredicto)

@@ -27,7 +27,21 @@ public sealed class InterpreteImpuestoTests
         { "resultado-fallido.json", false, "NO_CONFIRMADO", false, -1, false, 0 },
         { "resultado-error.json", false, "NO_CONFIRMADO", false, -1, false, 0 },
         { "resultado-mismatch-servicio-con-avisos.json", true, "", true, 155_000, false, 1 },
+        { "resultado-fuente-inactiva.json", false, "FUENTE_INACTIVA", false, -1, false, 0 },
     };
+
+    [Theory]
+    [InlineData("source_inactive", "FUENTE_INACTIVA")]
+    [InlineData("SOURCE_INACTIVE", "FUENTE_INACTIVA")]
+    [InlineData("department_unsupported", "DEPARTAMENTO_NO_SOPORTADO")]
+    [InlineData("portal_unavailable", "NO_CONFIRMADO")]
+    public void Un_failed_asincrono_traduce_su_error_code(string codigo, string esperado)
+    {
+        var v = InterpreteImpuesto.Interpretar("{\"status\":\"failed\",\"error_code\":\"" + codigo + "\",\"result\":null}");
+        v.Confirmado.Should().BeFalse();
+        v.Codigo.Should().Be(esperado);
+        v.TieneDeuda.Should().BeFalse();
+    }
 
     [Theory]
     [MemberData(nameof(Casos))]
@@ -181,7 +195,7 @@ public sealed class InterpreteImpuestoTests
     [Fact]
     public void Los_fixtures_v2_son_sinteticos()
     {
-        FixturesImpuesto.Nombres().Should().HaveCount(18);
+        FixturesImpuesto.Nombres().Should().HaveCount(19);
         foreach (var nombre in FixturesImpuesto.Nombres().Where(n => n.EndsWith(".json", StringComparison.Ordinal)))
         {
             var json = FixturesImpuesto.Texto(nombre);
