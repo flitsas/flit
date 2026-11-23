@@ -67,6 +67,15 @@ internal sealed class ExternalAttachmentRepository(FlitDbContext context) : IExt
             OR procedure_instance_field_values.source IS DISTINCT FROM EXCLUDED.source
         """;
 
+    // Bug #14660 (ADR-0087) — espejo de ConsolidadoVigenciaTracker.InvalidarAsync para este escritor SQL crudo: sin esto,
+    // el camino perezoso del consolidado seguiría sirviendo el PDF viejo porque el INSERT de arriba no pasa por EF.
+    private const string InvalidateConsolidadoSql = """
+        UPDATE tramites.procedure_instances
+           SET consolidado_wizard_vigente = false
+         WHERE id = @procedure_id
+           AND consolidado_wizard_vigente = true
+        """;
+
     private const string DeleteSql = """
         DELETE FROM tramites.procedure_instance_attachments
          WHERE procedure_instance_id = @procedure_id AND id = ANY(@ids)
@@ -222,6 +231,14 @@ internal sealed class ExternalAttachmentRepository(FlitDbContext context) : IExt
                 ("procedure_id", NpgsqlDbType.Uuid, t.ProcedureId),
                 ("source", NpgsqlDbType.Varchar, ExternalAttachmentRules.FieldSource));
             await upsert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+        }
+
+        public async Task InvalidateConsolidadoAsync(CancellationToken cancellationToken)
+        {
+            var t = target ?? throw new InvalidOperationException("No hay trámite sobre el que escribir.");
+            await using var update = Command(conn, tx, InvalidateConsolidadoSql,
+                ("procedure_id", NpgsqlDbType.Uuid, t.ProcedureId));
+            await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
     }
 }

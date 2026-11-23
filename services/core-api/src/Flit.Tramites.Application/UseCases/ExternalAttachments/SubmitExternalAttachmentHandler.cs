@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Repositories;
 
@@ -39,19 +40,25 @@ public sealed record SubmitExternalAttachmentResult(
 
 /// <summary>
 /// HU #13263 (Feature #13261, Épica #12741) — <c>POST /api/v1/external/tramites/{id}/adjuntos</c>: el cliente externo
-/// adjunta el comprobante de pago del impuesto departamental. Solo archiva: no corre OCR, no regenera el consolidado
-/// y no toca el checklist (la casilla se satisface porque el checklist mira los adjuntos del trámite).
+/// adjunta el comprobante de pago del impuesto departamental. No corre OCR y no toca el checklist (la casilla se
+/// satisface porque el checklist mira los adjuntos del trámite).
 /// <para>Reglas: estado admitido; gana quien carga primero (un adjunto del gestor se conserva); el cliente externo
 /// reemplaza el suyo anterior (<c>reemplazoDe</c>) y el mismo contenido es idempotente. Todo ocurre con la fila del
 /// trámite bloqueada. El archivo se guarda en el almacenamiento ANTES de tocar la base y el binario viejo se retira
 /// DESPUÉS de confirmar: si algo falla el cliente conserva lo que tenía.</para>
 /// <para>HU #13264 / Bug #14625: en todo estado admitido (todos salvo anulado y revocado) el 201 también deja
 /// <c>impuesto_departamental_pagado = true</c> (<c>source = flito</c>) en la misma transacción.</para>
+/// <para>Bug #14660 (ADR-0087): cuando el tipo archivado llena una casilla real de la matriz (<c>enMatriz = true</c>) y
+/// el envío sí cambió el expediente (<c>Created</c>, no el 200 idempotente), se invalida <c>consolidado_wizard_vigente</c>
+/// en la misma transacción y se encola, best-effort y fuera de ella, la regeneración anticipada del consolidado del
+/// wizard (<see cref="IConsolidadoRegeneracionQueue"/>, HU #12795). No es síncrono: no añade la latencia de fusionar PDFs
+/// ni la dependencia de RUNT/Kyverum al POST de Flito; el worker ya existente regenera en segundo plano.</para>
 /// </summary>
 public sealed class SubmitExternalAttachmentHandler(
     IExternalAttachmentRepository repository,
     IAttachmentStorage storage,
-    IResolvedChecklistMatrixProvider matrixProvider)
+    IResolvedChecklistMatrixProvider matrixProvider,
+    IConsolidadoRegeneracionQueue? regeneracionQueue = null)
 {
     public async Task<SubmitExternalAttachmentResult> HandleAsync(
         Guid procedureId, string? tipo, ExternalAttachmentFile? file, CancellationToken cancellationToken = default)
@@ -77,6 +84,15 @@ public sealed class SubmitExternalAttachmentHandler(
         foreach (var path in result.RetiredPaths)
         {
             storage.Delete(path);
+        }
+
+        // Bug #14660 (ADR-0087) — best-effort y fuera de la transacción ya confirmada: un descarte (cola llena) no es
+        // error de este envío, la bandera ya quedó abajo y el camino perezoso reconstruye igual.
+        if (result.Result.Status == SubmitExternalAttachmentStatus.Created
+            && result.Result.Receipt is { EnMatriz: true }
+            && result.Result.TenantId is { } tenantId)
+        {
+            regeneracionQueue?.Encolar(tenantId, procedureId, TipoConsolidado.Wizard);
         }
 
         return result.Result;
@@ -158,6 +174,14 @@ public sealed class SubmitExternalAttachmentHandler(
             // que ninguna fila referencia, se retira.
             storage.Delete(stored.StoragePath);
             return new(Rejected("attachment_exists", target.TenantId), []);
+        }
+
+        // Bug #14660 (ADR-0087) — misma transacción que el insert: si el tipo llena una casilla real de la matriz, el
+        // expediente cambió y la bandera de vigencia del consolidado del wizard debe bajar (espejo de
+        // ConsolidadoVigenciaTracker para este escritor SQL crudo, que no pasa por el ChangeTracker de EF).
+        if (enMatriz)
+        {
+            await writer.InvalidateConsolidadoAsync(ct).ConfigureAwait(false);
         }
 
         // HU #13264 / Bug #14625 — en todo estado admitido el comprobante marca el impuesto como pagado (misma transacción

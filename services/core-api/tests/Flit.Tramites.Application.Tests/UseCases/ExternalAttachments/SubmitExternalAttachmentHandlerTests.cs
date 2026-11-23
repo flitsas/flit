@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.Tests.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ExternalAttachments;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
@@ -24,7 +26,7 @@ public sealed class SubmitExternalAttachmentHandlerTests
     private readonly FakeStorage _storage = new();
     private readonly FakeMatrix _matrix = new();
 
-    private SubmitExternalAttachmentHandler Handler() => new(_repo, _storage, _matrix);
+    private SubmitExternalAttachmentHandler Handler(IConsolidadoRegeneracionQueue? queue = null) => new(_repo, _storage, _matrix, queue);
 
     private static ExternalAttachmentFile Archivo(byte[]? bytes = null, string mime = "application/pdf") =>
         new("recibo.pdf", mime, bytes ?? Pdf);
@@ -82,6 +84,63 @@ public sealed class SubmitExternalAttachmentHandlerTests
         _repo.Target = Target("entregado");
         (await Handler().HandleAsync(Tramite, "liquidacion_impuesto", Archivo(OtroPdf), TestContext.Current.CancellationToken))
             .Receipt!.EnMatriz.Should().BeFalse("una casilla generada por el sistema no la completa el consumidor");
+    }
+
+    [Fact]
+    public async Task Bug14660_EnMatrizYCreado_InvalidaLaBanderaDelConsolidadoYEncolaLaRegeneracionDelWizard()
+    {
+        _repo.Target = Target("asignado");
+        _matrix.Codigos = ["liquidacion_impuesto"];
+        var cola = new RecordingRegeneracionQueue();
+
+        var result = await Handler(cola).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Created);
+        result.Receipt!.EnMatriz.Should().BeTrue();
+        _repo.Invalidaciones.Should().Be(1);
+        cola.Solicitudes.Should().ContainSingle().Which.Should().Be((Tenant, Tramite, TipoConsolidado.Wizard));
+    }
+
+    [Fact]
+    public async Task Bug14660_EnMatrizFalso_NoInvalidaNiEncolaNada()
+    {
+        _repo.Target = Target("asignado");
+        _matrix.Codigos = [];
+        var cola = new RecordingRegeneracionQueue();
+
+        var result = await Handler(cola).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Receipt!.EnMatriz.Should().BeFalse();
+        _repo.Invalidaciones.Should().Be(0);
+        cola.Solicitudes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Bug14660_ElIdempotente200NoInvalidaNiEncolaAunqueEnMatrizSeaVerdadero()
+    {
+        var vigente = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Sha(Pdf), "fm-1");
+        _repo.Target = Target("asignado") with { Vigentes = [vigente] };
+        _matrix.Codigos = ["liquidacion_impuesto"];
+        var cola = new RecordingRegeneracionQueue();
+
+        var result = await Handler(cola).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Unchanged);
+        result.Receipt!.EnMatriz.Should().BeTrue();
+        _repo.Invalidaciones.Should().Be(0, "el 200 idempotente no cambia el expediente");
+        cola.Solicitudes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Bug14660_SinColaDeRegeneracionInyectada_NoLanzaYSigueArchivando()
+    {
+        _repo.Target = Target("asignado");
+        _matrix.Codigos = ["liquidacion_impuesto"];
+
+        var result = await Handler(queue: null).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Created);
+        _repo.Invalidaciones.Should().Be(1, "la invalidación transaccional no depende de la cola");
     }
 
     [Theory]
@@ -436,6 +495,8 @@ public sealed class SubmitExternalAttachmentHandlerTests
 
         public int Marcas { get; private set; }
 
+        public int Invalidaciones { get; private set; }
+
         public List<string> Eventos { get; } = [];
 
         public async Task<T> RunLockedAsync<T>(
@@ -469,6 +530,13 @@ public sealed class SubmitExternalAttachmentHandlerTests
         {
             Marcas++;
             Eventos.Add("marcar");
+            return Task.CompletedTask;
+        }
+
+        public Task InvalidateConsolidadoAsync(CancellationToken cancellationToken)
+        {
+            Invalidaciones++;
+            Eventos.Add("invalidar");
             return Task.CompletedTask;
         }
     }
