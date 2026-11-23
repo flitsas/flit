@@ -31,13 +31,21 @@ export interface PageNavProps {
  * texto blanco y el resto con fondo --kit-hover al pasar el puntero; flechas y extremos en gris. Se conservan
  * «Primera»/«Última» (HU #13916).
  */
-const BOTON_FLECHA_CLS =
-  'inline-grid h-9 min-w-9 place-items-center rounded-full px-3 text-[0.8125rem] font-semibold ' +
+const BOTON_BASE_CLS =
+  'rounded-full text-[0.8125rem] font-semibold leading-none ' +
   'text-[color:var(--di-text-tertiary)] transition-colors hover:bg-[var(--kit-hover)] hover:text-[color:var(--di-action)] focus:outline-none ' +
   'focus-visible:ring-2 focus-visible:ring-flit-brand disabled:cursor-default disabled:opacity-45 ' +
-  'disabled:hover:bg-transparent max-sm:h-11 max-sm:min-w-11';
-/** Primera/Última llevan su nombre a la vista: un «»» suelto no se lee como «ir al final». */
-const BOTON_EXTREMO_CLS = `${BOTON_FLECHA_CLS} inline-flex shrink-0 gap-1 whitespace-nowrap`;
+  'disabled:hover:bg-transparent';
+/** Solo el glifo: círculo de 36 px (44 px en celular), igual que los números. */
+const BOTON_FLECHA_CLS =
+  `${BOTON_BASE_CLS} inline-grid h-9 w-9 place-items-center max-sm:h-11 max-sm:w-11`;
+/**
+ * Primera/Última llevan su nombre a la vista: un «»» suelto no se lee como «ir al final».
+ * Van en fila (icono + palabra), no en la rejilla del botón de flecha: esa rejilla apila
+ * el glifo encima de la letra dentro de los 36 px.
+ */
+const BOTON_EXTREMO_CLS =
+  `${BOTON_BASE_CLS} inline-flex h-9 shrink-0 items-center gap-1.5 px-3 whitespace-nowrap max-sm:h-11`;
 const NUMERO_CLS =
   'grid h-9 w-9 place-items-center rounded-full border border-transparent text-[0.8125rem] ' +
   'font-semibold tabular-nums transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand ' +
@@ -89,8 +97,8 @@ export function PageNav({
             aria-label="Primera página"
             title="Primera página"
           >
-            <Icono nombre="izquierda" size={16} />
-            <span aria-hidden="true">Primera</span>
+            <Icono nombre="izquierda" size={16} className="block shrink-0" />
+            <span aria-hidden="true" className="leading-none">Primera</span>
           </button>
           <button
             type="button"
@@ -142,8 +150,8 @@ export function PageNav({
             aria-label="Última página"
             title="Última página"
           >
-            <span aria-hidden="true">Última</span>
-            <Icono nombre="derecha" size={16} />
+            <span aria-hidden="true" className="leading-none">Última</span>
+            <Icono nombre="derecha" size={16} className="block shrink-0" />
           </button>
         </div>
       ) : null}
