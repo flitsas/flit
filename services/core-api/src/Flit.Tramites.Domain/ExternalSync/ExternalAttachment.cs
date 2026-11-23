@@ -155,6 +155,14 @@ public interface IExternalAttachmentWriter
     /// del adjunto (cualquier valor o fuente previa se reemplaza). No hace nada si la marca ya está vigente.
     /// </summary>
     Task MarkTaxPaidAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Bug #14660 (ADR-0087) — baja <c>consolidado_wizard_vigente</c> en la MISMA transacción del adjunto. Espejo, en SQL
+    /// crudo, de lo que <c>ConsolidadoVigenciaTracker.InvalidarAsync</c> hace para cualquier otro escritor EF: este
+    /// repositorio escribe por fuera del <c>ChangeTracker</c>, así que sin esto el camino perezoso seguiría sirviendo el
+    /// PDF viejo. No hace nada si la bandera ya está abajo.
+    /// </summary>
+    Task InvalidateConsolidadoAsync(CancellationToken cancellationToken);
 }
 
 /// <summary>
