@@ -133,6 +133,28 @@ public sealed class InterpreteImpuestoTests
         InterpreteImpuesto.Interpretar("{\"status\":\"" + estado + "\",\"result\":{\"status\":\"paz_y_salvo\"}}").Codigo.Should().Be("NO_CONFIRMADO");
 
     [Fact]
+    public void Una_solicitud_rechazada_conserva_el_error_code_y_los_estados_de_la_fuente()
+    {
+        const string json = """
+            {"id":"ext-1","status":"failed","error_code":"invalid_params","result":{"status":"error"}}
+            """;
+        var v = InterpreteImpuesto.Interpretar(json);
+        (v.Confirmado, v.Codigo).Should().Be((false, "SOLICITUD_INVALIDA"));
+        (v.EstadoFuente, v.EstadoResultadoFuente, v.CodigoErrorFuente).Should().Be(("failed", "error", "invalid_params"));
+    }
+
+    [Theory]
+    [InlineData("parametros con espacios")]
+    [InlineData("persona@example.invalid")]
+    [InlineData("INVALID_PARAMS")]
+    public void Un_error_code_con_forma_invalida_queda_no_reconocido_en_el_veredicto(string codigo)
+    {
+        var v = InterpreteImpuesto.Interpretar("{\"status\":\"failed\",\"error_code\":\"" + codigo + "\"}");
+        v.CodigoErrorFuente.Should().Be("no_reconocido");
+        v.ToString().Should().NotContain(codigo);
+    }
+
+    [Fact]
     public void Los_fixtures_v2_son_sinteticos()
     {
         FixturesImpuesto.Nombres().Should().HaveCount(18);

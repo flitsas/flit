@@ -35,6 +35,7 @@ public sealed class MapeoImpuestoTests
     [InlineData("impuesto_estado_no_ok", "ESTADO_NO_OK", ClaseError.Definitivo)]
     [InlineData("impuesto_credencial_no_configurada", "CREDENCIAL_NO_CONFIGURADA", ClaseError.Definitivo)]
     [InlineData("impuesto_no_confirmado_tiempo", "NO_CONFIRMADO_TIEMPO", ClaseError.Definitivo)]
+    [InlineData("impuesto_solicitud_invalida", "ESTADO_NO_OK", ClaseError.Definitivo)]
     public void Cada_clave_de_chequeo_produce_su_tipo_error_y_su_clase(string clave, string tipo, ClaseError clase)
     {
         var respuesta = ConChequeo(clave);
@@ -49,6 +50,17 @@ public sealed class MapeoImpuestoTests
         mapeada.Error!.TipoError.Should().Be(tipo);
         mapeada.Error.Clase.Should().Be(clase);
         mapeada.Error.Mensaje.Should().Be("El impuesto no quedó confirmado.");
+    }
+
+    [Fact]
+    public void Una_solicitud_rechazada_por_la_fuente_es_ESTADO_NO_OK_definitivo_y_no_HTTP_5XX()
+    {
+        var mapeada = MapeoImpuesto.Mapear(ConChequeo("impuesto_solicitud_invalida"), "05");
+
+        mapeada.Resultado.Should().BeNull();
+        mapeada.Error!.TipoError.Should().Be("ESTADO_NO_OK").And.NotBe("HTTP_5XX");
+        ClasificadorErrores.Clasificar(mapeada.Error.TipoError).Should().Be(ClaseError.Definitivo, "no se reintenta solo");
+        mapeada.Error.Mensaje.Should().NotContain("El proveedor no respondió");
     }
 
     [Fact]

@@ -25,6 +25,7 @@ public sealed class ProveedorImpuestoTests
     private readonly RelojFalso _reloj = new();
     private readonly FuenteCredencialFalsa _credenciales = new();
     private readonly SeguimientoEnMemoria _seguimiento = new();
+    private readonly ListaLogger<ProveedorImpuesto> _log = new();
 
     [Fact]
     public async Task Departamento_fuera_de_la_lista_no_llama()
@@ -314,6 +315,60 @@ public sealed class ProveedorImpuestoTests
         credencial.ToString().Should().NotContain(FuenteCredencialFalsa.Llave).And.Contain("Version = 7");
     }
 
+    [Fact]
+    public async Task Una_solicitud_rechazada_por_la_fuente_deja_un_Warning_con_trabajo_id_externo_error_code_y_clave()
+    {
+        var trabajo = Guid.NewGuid();
+        var transporte = new TransporteGuionado();
+        transporte.Estados.Enqueue(Guion.Terminal(EstadoTrabajoExterno.Fallido,
+            """{"id":"ext-1","status":"failed","error_code":"invalid_params","result":{"status":"error","warnings":[{"code":"periodo_en_cobro","message":"texto del proveedor"}]}}"""));
+
+        var respuesta = await Proveedor(transporte).ConsultarAsync(Pedido(), Llamador, trabajo, CancellationToken.None);
+
+        Clave(respuesta).Should().Be("impuesto_solicitud_invalida");
+        var texto = UnicoAvisoSinVeredicto();
+        texto.Should().Contain(trabajo.ToString()).And.Contain("ext-1").And.Contain("departamento 05")
+            .And.Contain("estado failed").And.Contain("estado del resultado error").And.Contain("error_code invalid_params")
+            .And.Contain("clave impuesto_solicitud_invalida").And.Contain("aviso:periodo_en_cobro");
+        TodoElLog().Should().NotContain("texto del proveedor").And.NotContain("900000001").And.NotContain("AAA111")
+            .And.NotContain("PROPIETARIO SINTETICO UNO");
+    }
+
+    [Theory]
+    [InlineData("parametros con espacios")]
+    [InlineData("persona@example.invalid")]
+    public async Task Un_error_code_con_forma_invalida_se_registra_como_no_reconocido_sin_el_valor_crudo(string codigo)
+    {
+        var transporte = new TransporteGuionado();
+        transporte.Estados.Enqueue(Guion.Terminal(EstadoTrabajoExterno.Fallido, "{\"status\":\"failed\",\"error_code\":\"" + codigo + "\"}"));
+
+        var respuesta = await Proveedor(transporte).ConsultarAsync(Pedido(), Llamador, Guid.NewGuid(), CancellationToken.None);
+
+        Clave(respuesta).Should().Be("impuesto_no_confirmado");
+        UnicoAvisoSinVeredicto().Should().Contain("error_code no_reconocido").And.Contain("clave impuesto_no_confirmado");
+        TodoElLog().Should().NotContain(codigo);
+    }
+
+    [Fact]
+    public async Task Agotado_el_presupuesto_deja_el_Warning_con_la_clave_de_tiempo()
+    {
+        var trabajo = Guid.NewGuid();
+        var transporte = new TransporteGuionado(); // siempre «running»
+        await Proveedor(transporte, presupuesto: 60).ConsultarAsync(Pedido(), Llamador, trabajo, CancellationToken.None);
+
+        UnicoAvisoSinVeredicto().Should().Contain(trabajo.ToString()).And.Contain("ext-1").And.Contain("estado running")
+            .And.Contain("clave impuesto_no_confirmado_tiempo");
+    }
+
+    [Fact]
+    public async Task Un_veredicto_confirmado_no_deja_el_Warning()
+    {
+        var transporte = new TransporteGuionado();
+        transporte.Estados.Enqueue(Guion.Terminal(EstadoTrabajoExterno.Exitoso, Guion.PazYSalvo));
+        await Proveedor(transporte).ConsultarAsync(Pedido(), Llamador, Guid.NewGuid(), CancellationToken.None);
+        _log.Eventos.Should().NotContain(e => e.Id == 7436);
+    }
+
     internal static ConsultarImpuestoVehicularRequest Pedido(string departamento = "05", string tipo = "CC") => new()
     {
         Placa = new Placa { Valor = "AAA111" },
@@ -325,6 +380,16 @@ public sealed class ProveedorImpuestoTests
     };
 
     private static string Clave(ConsultarImpuestoVehicularResponse r) => r.Resultado.Chequeos.Single().Clave;
+
+    private string UnicoAvisoSinVeredicto()
+    {
+        var indices = _log.Eventos.Select((e, i) => (e, i)).Where(x => x.e.Id == 7436).Select(x => x.i).ToList();
+        indices.Should().ContainSingle("un solo Warning por trabajo sin veredicto");
+        _log.Niveles[indices[0]].Should().Be(Microsoft.Extensions.Logging.LogLevel.Warning);
+        return string.Join(" | ", _log.Textos);
+    }
+
+    private string TodoElLog() => string.Join(" | ", _log.Textos);
 
     private ProveedorImpuesto Proveedor(ITransporteImpuesto transporte, params string[] departamentos) =>
         Proveedor(transporte, 280, departamentos);
@@ -338,7 +403,7 @@ public sealed class ProveedorImpuestoTests
             ["IMPUESTO_CONTACTO_CORREO"] = "contacto@example.invalid",
         }).Build());
         return new ProveedorImpuesto(transporte, opciones, new CatalogoImpuestoFijo(departamentos.Length == 0 ? ["05"] : departamentos), _credenciales,
-            _seguimiento, PlanSondeoImpuesto.Real(presupuesto), _reloj, new ListaLogger<ProveedorImpuesto>());
+            _seguimiento, PlanSondeoImpuesto.Real(presupuesto), _reloj, _log);
     }
 
     private sealed class TransporteCancelador(CancellationTokenSource cts) : ITransporteImpuesto

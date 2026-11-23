@@ -6,7 +6,8 @@ namespace Flit.Consultas.Api.Impuesto;
 
 /// <summary>
 /// Lee el cuerpo del GET /consultas/{id} en estado terminal (diseño §2.5). Lo primero que aplica gana.
-/// Nunca copia <c>sent</c>, <c>portal</c> ni <c>message</c>.
+/// Nunca copia <c>sent</c>, <c>portal</c> ni <c>message</c>. <c>status</c>, <c>result.status</c> y <c>error_code</c> viajan en el
+/// veredicto solo si pasan <c>^[a-z0-9_]{1,64}$</c> (si no, <c>no_reconocido</c>), para el log de quien tiene el logger.
 /// </summary>
 internal static class InterpreteImpuesto
 {
@@ -43,50 +44,69 @@ internal static class InterpreteImpuesto
             if (raiz.ValueKind != JsonValueKind.Object)
                 return Error("RESPUESTA_INVALIDA");
 
-            var advertencias = LeerAdvertencias(raiz);
             var status = Texto(raiz, "status");
             var result = Objeto(raiz, "result");
             var resultStatus = result.ValueKind == JsonValueKind.Object ? Texto(result, "status") : "";
             var errorCode = Texto(raiz, "error_code");
 
-            if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(resultStatus, "error", StringComparison.OrdinalIgnoreCase))
+            // Solo para el log de core-consultas: códigos con forma estricta, nunca texto libre de la fuente.
+            return Decidir(raiz, status, result, resultStatus, errorCode) with
             {
-                if (string.Equals(errorCode, "invalid_params", StringComparison.OrdinalIgnoreCase))
-                    return Error("SOLICITUD_INVALIDA", advertencias);
-                return Error("NO_CONFIRMADO", advertencias);
-            }
+                EstadoFuente = CodigoSeguro(status),
+                EstadoResultadoFuente = CodigoSeguro(resultStatus),
+                CodigoErrorFuente = CodigoSeguro(errorCode),
+            };
+        }
+    }
 
-            if (HayMismatchBloqueante(advertencias))
-                return Error("NO_CONFIRMADO", advertencias);
+    /// <summary>Código de la fuente apto para el log: pasa <c>^[a-z0-9_]{1,64}$</c> o queda en <see cref="NoReconocido"/>.</summary>
+    internal static string CodigoSeguro(string? valor) =>
+        valor is not null && CodigoAviso.IsMatch(valor) ? valor : NoReconocido;
 
-            var (vigencias, parcialPeriodos) = Vigencias(result);
-            var deudaLeida = string.Equals(resultStatus, "con_deuda", StringComparison.OrdinalIgnoreCase)
-                || vigencias.Any(v => v.Valor > 0);
+    /// <summary>Lo que se registra en lugar de un código de la fuente que no pasa la forma estricta.</summary>
+    internal const string NoReconocido = "no_reconocido";
 
-            if (string.Equals(status, "partial", StringComparison.OrdinalIgnoreCase))
-            {
-                if (deudaLeida)
-                    return Confirmado(result, true, MontoTotal(result), vigencias, datoParcial: true, advertencias);
-                return new VeredictoImpuesto(false, "NO_CONFIRMADO", false, null, false, true, vigencias,
-                    null, null, null, null, null, null, null, null, null, advertencias);
-            }
+    private static VeredictoImpuesto Decidir(JsonElement raiz, string status, JsonElement result, string resultStatus, string errorCode)
+    {
+        var advertencias = LeerAdvertencias(raiz);
 
-            if (string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase))
-            {
-                if (string.Equals(resultStatus, "con_deuda", StringComparison.OrdinalIgnoreCase))
-                    return Confirmado(result, true, MontoTotal(result), vigencias, parcialPeriodos, advertencias);
-
-                if (string.Equals(resultStatus, "paz_y_salvo", StringComparison.OrdinalIgnoreCase))
-                {
-                    if (vigencias.Any(v => v.Valor > 0))
-                        return Error("NO_CONFIRMADO", advertencias);
-                    return Confirmado(result, false, null, vigencias, parcialPeriodos, advertencias);
-                }
-            }
-
+        if (string.Equals(status, "failed", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(resultStatus, "error", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(errorCode, "invalid_params", StringComparison.OrdinalIgnoreCase))
+                return Error("SOLICITUD_INVALIDA", advertencias);
             return Error("NO_CONFIRMADO", advertencias);
         }
+
+        if (HayMismatchBloqueante(advertencias))
+            return Error("NO_CONFIRMADO", advertencias);
+
+        var (vigencias, parcialPeriodos) = Vigencias(result);
+        var deudaLeida = string.Equals(resultStatus, "con_deuda", StringComparison.OrdinalIgnoreCase)
+            || vigencias.Any(v => v.Valor > 0);
+
+        if (string.Equals(status, "partial", StringComparison.OrdinalIgnoreCase))
+        {
+            if (deudaLeida)
+                return Confirmado(result, true, MontoTotal(result), vigencias, datoParcial: true, advertencias);
+            return new VeredictoImpuesto(false, "NO_CONFIRMADO", false, null, false, true, vigencias,
+                null, null, null, null, null, null, null, null, null, advertencias);
+        }
+
+        if (string.Equals(status, "succeeded", StringComparison.OrdinalIgnoreCase))
+        {
+            if (string.Equals(resultStatus, "con_deuda", StringComparison.OrdinalIgnoreCase))
+                return Confirmado(result, true, MontoTotal(result), vigencias, parcialPeriodos, advertencias);
+
+            if (string.Equals(resultStatus, "paz_y_salvo", StringComparison.OrdinalIgnoreCase))
+            {
+                if (vigencias.Any(v => v.Valor > 0))
+                    return Error("NO_CONFIRMADO", advertencias);
+                return Confirmado(result, false, null, vigencias, parcialPeriodos, advertencias);
+            }
+        }
+
+        return Error("NO_CONFIRMADO", advertencias);
     }
 
     private static VeredictoImpuesto Confirmado(

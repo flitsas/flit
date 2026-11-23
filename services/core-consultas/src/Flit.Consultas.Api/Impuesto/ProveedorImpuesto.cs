@@ -9,6 +9,8 @@ namespace Flit.Consultas.Api.Impuesto;
 
 /// <summary>
 /// Fachada del impuesto asíncrono (diseño §2.3–§2.4, D9). Departamento fuera de la lista: <c>FAILED_PRECONDITION</c>.
+/// Cuando la fuente cierra el trabajo sin veredicto confirmado (solicitud inválida, no confirmado, respuesta ilegible o tiempo
+/// agotado) deja un Warning 7436 con identificadores y códigos de forma estricta; nunca texto libre ni valores de la fuente.
 /// </summary>
 internal sealed partial class ProveedorImpuesto(
     ITransporteImpuesto transporte,
@@ -23,9 +25,6 @@ internal sealed partial class ProveedorImpuesto(
     public const string ClaveProveedor = "impuesto";
     private static readonly Regex ArchivoId = ArchivoIdRegex();
     private const int MaxPdfBytes = 3 * 1024 * 1024;
-
-    // logger: parámetro exigido por DI/tests; no se registra la llave ni PII aquí.
-    private ILogger<ProveedorImpuesto> Logger => logger;
 
     /// <summary>Códigos activos. Vacía si el transporte no está listo.</summary>
     public async Task<IReadOnlyList<string>> DepartamentosAsync(CancellationToken ct)
@@ -44,7 +43,6 @@ internal sealed partial class ProveedorImpuesto(
     {
         ArgumentNullException.ThrowIfNull(request);
         ArgumentNullException.ThrowIfNull(caller);
-        _ = Logger;
         if (!transporte.Listo || !await catalogo.ActivoAsync(request.DepartamentoCodigo, ct).ConfigureAwait(false))
             throw new RpcException(new Status(StatusCode.FailedPrecondition, "Departamento sin consulta de impuesto."));
 
@@ -101,6 +99,7 @@ internal sealed partial class ProveedorImpuesto(
         var limite = (seg.EnviadoEn ?? time.GetUtcNow()) + plan.Presupuesto;
         var n = 0;
         var fallosSeguidos = 0;
+        string? ultimoEstado = null;
 
         while (true)
         {
@@ -117,6 +116,7 @@ internal sealed partial class ProveedorImpuesto(
             await Task.Delay(espera, time, ct).ConfigureAwait(false);
             var estado = await transporte.ConsultarAsync(seg.IdExterno!, cred.ApiKey!, ct).ConfigureAwait(false);
             n++;
+            ultimoEstado = EstadoObservado(estado.Estado);
 
             // NoEncontrado (404) se trata como estado, aunque el transporte adjunte Fallo.
             if (estado.Estado == EstadoTrabajoExterno.NoEncontrado
@@ -191,7 +191,16 @@ internal sealed partial class ProveedorImpuesto(
                 case EstadoTrabajoExterno.Fallido:
                     await seguimiento.CerrarAsync(trabajoId, EstadoCierre(estado.Estado), ct).ConfigureAwait(false);
                     RegistroFallosProveedor.Anotar((FalloProveedor?)null);
-                    return AProto(InterpreteImpuesto.Interpretar(estado.Cuerpo ?? ""));
+                    var veredicto = InterpreteImpuesto.Interpretar(estado.Cuerpo ?? "");
+                    var respuesta = AProto(veredicto);
+                    if (!veredicto.Confirmado)
+                    {
+                        AvisarSinVeredicto(trabajoId, seg.IdExterno, request.DepartamentoCodigo, veredicto.EstadoFuente,
+                            veredicto.EstadoResultadoFuente, veredicto.CodigoErrorFuente, respuesta.Resultado.Chequeos[0].Clave,
+                            veredicto.Advertencias);
+                    }
+
+                    return respuesta;
 
                 default:
                     fallosSeguidos = 0;
@@ -201,6 +210,8 @@ internal sealed partial class ProveedorImpuesto(
 
         await seguimiento.CerrarAsync(trabajoId, "timeout", ct).ConfigureAwait(false);
         RegistroFallosProveedor.Anotar((FalloProveedor?)null);
+        AvisarSinVeredicto(trabajoId, seg.IdExterno, request.DepartamentoCodigo, ultimoEstado, null, null,
+            "impuesto_no_confirmado_tiempo", []);
         return Error("impuesto_no_confirmado_tiempo");
     }
 
@@ -265,6 +276,41 @@ internal sealed partial class ProveedorImpuesto(
 
         return (envio, cred);
     }
+
+    /// <summary>
+    /// Warning 7436: la fuente no dejó veredicto confirmado. Solo identificadores y códigos que pasan una forma estricta
+    /// (los demás quedan en <c>no_reconocido</c>); nunca mensajes ni valores de campos de la fuente (Ley 1581).
+    /// </summary>
+    private void AvisarSinVeredicto(
+        Guid trabajoId, string? idExterno, string? departamento, string? estadoFuente, string? estadoResultado,
+        string? codigoError, string clave, IReadOnlyList<AdvertenciaLeida> advertencias)
+    {
+        var avisos = advertencias.Count == 0
+            ? "ninguna"
+            : string.Join(",", advertencias.Select(a => a.Tipo == TipoAdvertenciaLeida.Validacion
+                ? "validacion:" + Identificador(a.Campo)
+                : "aviso:" + InterpreteImpuesto.CodigoSeguro(a.Codigo)));
+        ProveedorImpuestoLog.SinVeredicto(
+            logger,
+            trabajoId,
+            Identificador(idExterno),
+            Identificador(departamento),
+            InterpreteImpuesto.CodigoSeguro(estadoFuente),
+            InterpreteImpuesto.CodigoSeguro(estadoResultado),
+            InterpreteImpuesto.CodigoSeguro(codigoError),
+            InterpreteImpuesto.CodigoSeguro(clave),
+            avisos);
+    }
+
+    private static string Identificador(string? valor) =>
+        valor is not null && ArchivoId.IsMatch(valor) ? valor : InterpreteImpuesto.NoReconocido;
+
+    private static string? EstadoObservado(EstadoTrabajoExterno estado) => estado switch
+    {
+        EstadoTrabajoExterno.EnCola => "queued",
+        EstadoTrabajoExterno.Ejecutando => "running",
+        _ => null,
+    };
 
     private static string EstadoCierre(EstadoTrabajoExterno estado) => estado switch
     {
@@ -394,4 +440,12 @@ internal sealed partial class ProveedorImpuesto(
 
     [GeneratedRegex("^[A-Za-z0-9_-]{1,64}$", RegexOptions.CultureInvariant)]
     private static partial Regex ArchivoIdRegex();
+}
+
+internal static partial class ProveedorImpuestoLog
+{
+    [LoggerMessage(EventId = 7436, Level = LogLevel.Warning, Message = "Impuesto sin veredicto confirmado: trabajo {TrabajoId}, consulta externa {IdExterno}, departamento {Departamento}, estado {EstadoFuente}, estado del resultado {EstadoResultado}, error_code {CodigoError}, clave {Clave}, advertencias {Advertencias}.")]
+    public static partial void SinVeredicto(
+        ILogger logger, Guid trabajoId, string idExterno, string departamento, string estadoFuente, string estadoResultado,
+        string codigoError, string clave, string advertencias);
 }
