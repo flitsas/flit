@@ -53,6 +53,9 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
     private readonly IMandateFormatTemplateProvider? _formatTemplates;
     private readonly string? _emailAssetsBaseUrl;
 
+    // Bug #14661 — prepara la firma manual del mandatario igual que el trámite: el simulador muestra el documento tal como sale.
+    private readonly global::Flit.Tramites.Application.Identity.IIdentitySignatureExtractor? _signatureExtractor;
+
     public MandateSimulatorService(
         FlitDbContext db,
         ITransitOfficeCatalog catalog,
@@ -64,8 +67,10 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
         IAttachmentStorage storage,
         IEmailSender emailSender,
         IMandateFormatTemplateProvider? formatTemplates = null,
-        IOptions<NotificationEmailAssetsOptions>? emailAssets = null)
+        IOptions<NotificationEmailAssetsOptions>? emailAssets = null,
+        global::Flit.Tramites.Application.Identity.IIdentitySignatureExtractor? signatureExtractor = null)
     {
+        _signatureExtractor = signatureExtractor;
         _db = db ?? throw new ArgumentNullException(nameof(db));
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _mandatePolicy = mandatePolicy ?? throw new ArgumentNullException(nameof(mandatePolicy));
@@ -292,7 +297,7 @@ internal sealed class MandateSimulatorService : IMandateSimulatorService
 
                 var firma = companyTenantId is { } tenantId
                     ? await MandatarioFirmaResolver
-                        .ResolveAsync(_vaultPolicy, _storage, tenantId, signer, cancellationToken: ct)
+                        .ResolveAsync(_vaultPolicy, _storage, tenantId, signer, _signatureExtractor, cancellationToken: ct)
                         .ConfigureAwait(false)
                     : default;
 
