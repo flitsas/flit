@@ -106,7 +106,23 @@ public static class ImprontaManualStampContextBuilder
                         // que no pasa IsUsableInk (p. ej. el logo «Verify» persistido) no se pinta y
                         // queda el sello de texto. Un artefacto por encima del tope del extractor
                         // tampoco se decodifica ni se pinta (review de seguridad).
+                        // Bug #14661 — la firma de una validación MANUAL (PNG opaco de fondo blanco) no pasa el
+                        // filtro de transparencia de Kyverum: con extractor solo se exige tinta visible y se le
+                        // quita el fondo; el tope es el de la captura manual.
                         if (bytes is { Length: > 0 }
+                            && signatureExtractor is not null
+                            && string.Equals(bio.Provider, BiometricProviders.Manual, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var lista = bytes.Length <= ManualCapture.ManualCaptureImages.MaxSignatureBytes
+                                ? signatureExtractor.PrepareManualSignature(bytes)
+                                : null;
+                            if (lista is not null)
+                            {
+                                imagen = lista;
+                                sidecar = sealText;
+                            }
+                        }
+                        else if (bytes is { Length: > 0 }
                             && bytes.Length <= IdentitySignatureImageFormat.MaxArtifactBytes
                             && (signatureExtractor is null || signatureExtractor.IsUsableInk(bytes)))
                         {
