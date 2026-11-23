@@ -1,0 +1,5 @@
+Hola:
+No se pudo enviar el derecho de petición del comparendo 11001000000045678901 (placa ABC123) porque Gestora de Ejemplo S.A.S. exige representante legal y no hay uno activo con permiso para firmar derechos de petición.
+Configura el representante legal en Comparendos → Configuración → Representantes legales y vuelve a intentar el envío.
+Este correo lo envía Gestora de Ejemplo S.A.S. con FLIT. Si necesitas ayuda escribe a soporte@flitsas.com .
+POLÍTICA DE PRIVACIDAD

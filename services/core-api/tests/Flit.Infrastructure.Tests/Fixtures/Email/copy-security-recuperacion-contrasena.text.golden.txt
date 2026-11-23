@@ -1,0 +1,8 @@
+Asunto: Recuperación de contraseña — FLIT
+¡RECUPERACIÓN DE CONTRASEÑA!
+Hola [ACÁ VA EL NOMBRE DEL DESTINATARIO],
+Recibimos una solicitud para restablecer tu contraseña en FLIT. Haz clic en el siguiente enlace para crear una nueva contraseña:
+Restablecer mi contraseña
+El enlace caduca en 30 minutos. Si no solicitaste este cambio, puedes ignorar este mensaje; tu contraseña seguirá siendo la misma.
+Si tienes alguna pregunta o necesitas ayuda, no dudes en ponerte en contacto con nosotros. Puedes hacerlo a través de soporte@flitsas.com o nuestro chat online.
+POLÍTICA DE PRIVACIDAD

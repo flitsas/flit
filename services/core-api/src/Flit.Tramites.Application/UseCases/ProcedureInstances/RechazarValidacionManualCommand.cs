@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Identity;
@@ -51,6 +52,14 @@ public sealed class RechazarValidacionManualHandler(
     public const string EstadoInvalido = "estado_invalido";
     public const string TramiteInactivo = "tramite_inactivo";
 
+    /// <summary>
+    /// Bug #14634 — evento de bitácora para el tracking del trámite (<see cref="GetProcedureInstanceQuery"/>): el motivo
+    /// homologado SÍ se muestra a cualquiera con acceso al módulo (ya es texto seguro, sin palabras que delaten el
+    /// mecanismo); lo que sigue oculto para el no-Super Admin es que la revisión fue del flujo MANUAL
+    /// (<c>ocultar-manual.ts</c> en el frontend sigue disfrazando provider/estado, no este evento).
+    /// </summary>
+    public const string EventoTipo = "identidad_manual_rechazada";
+
     public async Task<(RechazarValidacionManualResult? Result, string? Error)> HandleAsync(
         RechazarValidacionManualCommand command, CancellationToken ct = default)
     {
@@ -75,6 +84,30 @@ public sealed class RechazarValidacionManualHandler(
         var now = (clock ?? TimeProvider.System).GetUtcNow();
         var token = BiometricToken.Generate();
         v.RechazarRevisionManual(command.ReviewedByUserId, reasonCode, now, BiometricToken.Hash(token), tokenProtector.Protect(token));
+
+        // Bug #14634 — deja rastro en el tracking de ESTE rechazo puntual: a diferencia de `RejectionReasonCode`
+        // (que la siguiente captura limpia, HU #13299), este evento queda en la bitácora append-only y el dashboard
+        // lo pinta como nodo adicional del timeline aunque la validación ya se haya vuelto a intentar o aprobar.
+        // Sin trámite (prevalidación standalone, Épica "Prevalidación de Identidad") no hay tracking donde pintarlo.
+        if (v.ProcedureInstanceId is { } procedureInstanceId)
+        {
+            await repo.AddEventAsync(new ProcedureInstanceEvent
+            {
+                Id = Guid.NewGuid(),
+                TenantId = v.TenantId,
+                ProcedureInstanceId = procedureInstanceId,
+                Tipo = EventoTipo,
+                Payload = JsonSerializer.Serialize(new
+                {
+                    party_role = v.PartyRole,
+                    rejection_reason_code = reasonCode,
+                    rejection_reason_label = reasonLabel,
+                }),
+                CreatedAt = now,
+                CreatedBy = command.ReviewedByUserId,
+            }, ct).ConfigureAwait(false);
+        }
+
         await repo.SaveChangesAsync(ct).ConfigureAwait(false);
 
         await audit.LogAsync(new IdentityValidationAuditEntry(

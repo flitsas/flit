@@ -48,7 +48,31 @@ export interface ActionsMenuProps {
   attentionHint?: string;
 }
 
-type MenuCoords = { top: number; left: number; minWidth: number };
+type MenuCoords = { top: number; left: number; minWidth: number; maxHeight: number };
+
+const MARGEN_MENU = 8;
+const HUECO_MENU = 4;
+
+/** Cabe entero en la ventana: hacia abajo si hay sitio; si no, hacia arriba. Si no cabe en ningún lado, se recorta con scroll. */
+function colocarMenu(btn: HTMLElement, menu: HTMLElement | null): MenuCoords {
+  const rect = btn.getBoundingClientRect();
+  const menuWidth = Math.max(240, rect.width);
+  const left = Math.min(
+    Math.max(MARGEN_MENU, rect.right - menuWidth),
+    window.innerWidth - menuWidth - MARGEN_MENU,
+  );
+  // El borde del panel no entra en scrollHeight: sin ese margen la lista que sí cabe muestra una barra de scroll.
+  const alto = menu ? menu.scrollHeight + 4 : 0;
+  const abajo = window.innerHeight - rect.bottom - HUECO_MENU - MARGEN_MENU;
+  const arriba = rect.top - HUECO_MENU - MARGEN_MENU;
+  const abrirArriba = alto > abajo && arriba > abajo;
+  const disponible = Math.max(120, Math.floor(abrirArriba ? arriba : abajo));
+  const maxHeight = alto > 0 ? Math.min(alto, disponible) : disponible;
+  const top = abrirArriba
+    ? Math.max(MARGEN_MENU, rect.top - HUECO_MENU - maxHeight)
+    : rect.bottom + HUECO_MENU;
+  return { top, left, minWidth: menuWidth, maxHeight };
+}
 
 export function ActionsMenu({
   items,
@@ -65,38 +89,34 @@ export function ActionsMenu({
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const menuId = useId();
 
-  const updateCoords = () => {
-    const btn = buttonRef.current;
-    if (!btn) return;
-    const rect = btn.getBoundingClientRect();
-    const menuWidth = Math.max(240, rect.width);
-    // Alinea el borde derecho del menú con el del botón (como absolute right-0).
-    const left = Math.min(
-      Math.max(8, rect.right - menuWidth),
-      window.innerWidth - menuWidth - 8,
-    );
-    setCoords({
-      top: rect.bottom + 4,
-      left,
-      minWidth: menuWidth,
-    });
-  };
-
   useLayoutEffect(() => {
     if (!open) {
       // Coordenadas solo importan con el menú abierto; al cerrar se limpian fuera del effect
       // (ver setOpen(false) handlers) para no disparar set-state-in-effect.
       return;
     }
-    updateCoords();
-    const onReposition = () => updateCoords();
-    window.addEventListener("resize", onReposition);
-    window.addEventListener("scroll", onReposition, true);
-    return () => {
-      window.removeEventListener("resize", onReposition);
-      window.removeEventListener("scroll", onReposition, true);
+    const aplicar = () => {
+      const btn = buttonRef.current;
+      if (!btn) return;
+      const next = colocarMenu(btn, menuRef.current);
+      setCoords((prev) =>
+        prev &&
+        prev.top === next.top &&
+        prev.left === next.left &&
+        prev.minWidth === next.minWidth &&
+        prev.maxHeight === next.maxHeight
+          ? prev
+          : next,
+      );
     };
-  }, [open]);
+    aplicar();
+    window.addEventListener("resize", aplicar);
+    window.addEventListener("scroll", aplicar, true);
+    return () => {
+      window.removeEventListener("resize", aplicar);
+      window.removeEventListener("scroll", aplicar, true);
+    };
+  }, [open, items.length]);
 
   useEffect(() => {
     if (!open) {
@@ -171,7 +191,6 @@ export function ActionsMenu({
 
   const menu =
     open &&
-    coords &&
     typeof document !== "undefined" &&
     createPortal(
       <div
@@ -180,8 +199,12 @@ export function ActionsMenu({
         role="menu"
         aria-label={ariaLabel}
         onKeyDown={onMenuKeyDown}
-        style={{ top: coords.top, left: coords.left, minWidth: coords.minWidth }}
-        className="fixed z-[200] rounded-[9px] border bg-card px-4 py-1 shadow-[var(--kit-sombra)] dark:bg-card"
+        style={
+          coords
+            ? { top: coords.top, left: coords.left, minWidth: coords.minWidth, maxHeight: coords.maxHeight }
+            : { top: 0, left: 0, visibility: "hidden" }
+        }
+        className="fixed z-[200] overflow-y-auto overscroll-contain rounded-[9px] border bg-card px-4 py-1 shadow-[var(--kit-sombra)] dark:bg-card"
       >
         {items.map((item, i) => {
           const Icon = item.icon;

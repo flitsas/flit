@@ -1,0 +1,3 @@
+Asunto: Simulación de Contrato de Mandato · Secretaría de Movilidad de Prueba
+Adjunto encontrarás una simulación del Contrato Privado de Mandato para Secretaría de Movilidad de Prueba.
+Es un documento de prueba generado desde Plataforma → Mandatos: los datos del mandante, la placa y el trámite aparecen como marcadores y no corresponde a ningún trámite real.

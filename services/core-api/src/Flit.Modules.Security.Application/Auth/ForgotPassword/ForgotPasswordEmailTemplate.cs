@@ -44,10 +44,10 @@ public static class ForgotPasswordEmailTemplate
         var greetingName = string.IsNullOrWhiteSpace(displayName) ? "usuario" : displayName;
         var name = System.Net.WebUtility.HtmlEncode(greetingName);
         var body =
-            FlitBrandedEmailLayout.ParagraphHtml($"Hola {name},")
+            FlitBrandedEmailLayout.Greeting(name, theme)
             + FlitBrandedEmailLayout.Paragraph(
                 $"Recibimos una solicitud para restablecer tu contraseña en {FlitBrandedEmailLayout.PlatformName(theme)}. Haz clic en el siguiente enlace para crear una nueva contraseña:")
-            + FlitBrandedEmailLayout.ActionLink(link, "Restablecer mi contraseña", FlitBrandedEmailLayout.BrandLinkColor(theme))
+            + FlitBrandedEmailLayout.Action(link, "Restablecer mi contraseña", theme)
             + FlitBrandedEmailLayout.Paragraph(
                 $"El enlace caduca en {lifetimeMinutes} minutos. Si no solicitaste este cambio, puedes ignorar este mensaje; tu contraseña seguirá siendo la misma.");
 

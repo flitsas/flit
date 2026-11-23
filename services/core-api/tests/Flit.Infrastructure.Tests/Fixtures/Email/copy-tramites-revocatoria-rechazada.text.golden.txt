@@ -1,0 +1,11 @@
+Asunto: [FLIT] Tu solicitud de revocatoria fue rechazada — FT1-0000012
+SOLICITUD DE REVOCATORIA RECHAZADA
+Estimado/a Señor/a Juan Carlos Pérez Gómez.
+El organismo de tránsito rechazó tu solicitud de revocatoria. El trámite permanece sin cambios en su estado actual.
+Radicado: FT1-0000012
+Placa del Vehículo: ABC123
+Motivo: El documento de soporte adjunto no es legible.
+Puedes radicar un nuevo intento de revocatoria cuando corrijas el motivo indicado abajo.
+Cordialmente,
+Si tienes alguna pregunta o necesitas ayuda, no dudes en ponerte en contacto con nosotros. Puedes hacerlo a través de soporte@flitsas.com o nuestro chat online.
+POLÍTICA DE PRIVACIDAD

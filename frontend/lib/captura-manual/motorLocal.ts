@@ -104,8 +104,8 @@ export const motorLocal: MotorFotos = {
     }
     // Calentamiento silencioso de lo que ese paso usa: si falla, la validación lo reintenta y, si insiste,
     // es «sin soporte». Sin reverso (pasaporte) el anverso y el reverso solo miden textura: no cargan nada.
+    // Bug #14634 — el reverso ya no lee códigos: no se precarga zxing.
     if (kind === "rostro" || (kind === "anverso" && !sinReverso)) void cargarDetector().catch(() => undefined);
-    if (kind === "reverso" && !sinReverso) void cargarZxing().catch(() => undefined);
   },
 
   async rostros(foto): Promise<RostrosDetectados> {

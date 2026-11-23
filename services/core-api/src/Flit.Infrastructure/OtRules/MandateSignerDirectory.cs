@@ -186,7 +186,8 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
                     s.Origen, s.SignerModel, MetodoEfectivo(s.SignerModel, s.SignatureMethod, s.SignatureVaultId),
                     VaultTenantIds: tenantsVinculados.GetValueOrDefault(s.Id),
                     RubricaIdentidadPath: vigentes.GetValueOrDefault(s.Id)?.RubricaPath,
-                    SelloIdentidad: SelloDe(vigentes.GetValueOrDefault(s.Id), s.ValidityKind, s.ValidTo));
+                    SelloIdentidad: SelloDe(vigentes.GetValueOrDefault(s.Id), s.ValidityKind, s.ValidTo),
+                    RubricaIdentidadManual: EsManual(vigentes.GetValueOrDefault(s.Id)));
             }),
         ];
     }
@@ -252,8 +253,13 @@ internal sealed class MandateSignerDirectory : IMandateSignerDirectory
             VaultTenantIds: (await LoadLinkedTenantsAsync([signer.Id], cancellationToken).ConfigureAwait(false))
                 .GetValueOrDefault(signer.Id),
             RubricaIdentidadPath: vigente?.RubricaPath,
-            SelloIdentidad: SelloDe(vigente, signer.ValidityKind, signer.ValidTo));
+            SelloIdentidad: SelloDe(vigente, signer.ValidityKind, signer.ValidTo),
+            RubricaIdentidadManual: EsManual(vigente));
     }
+
+    // Bug #14661 — la firma de una validación MANUAL se prepara antes de estamparse (ver MandatarioFirmaResolver).
+    private static bool EsManual(IdentidadResuelta? identidad) =>
+        string.Equals(identidad?.Validacion?.Provider, BiometricProviders.Manual, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Sello del mandatario con la leyenda de las partes. «Vence» es el fin de su vigencia por rango; con vigencia

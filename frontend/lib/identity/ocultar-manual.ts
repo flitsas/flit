@@ -23,8 +23,9 @@ function ocultar(valor: unknown): unknown {
   if (typeof out.status === 'string' && out.status in ESTADO_NORMAL) out.status = ESTADO_NORMAL[out.status];
   if (out.provider === 'manual') out.provider = PROVEEDOR_NORMAL;
   if (out.approvalOrigin === 'manual') out.approvalOrigin = 'automatica';
-  // El motivo homologado lo elige el Super Admin al rechazar: es interno.
-  if ('rejectionReasonCode' in out) out.rejectionReasonCode = null;
+  // Bug #14634 — el motivo homologado SÍ se deja ver: es texto de la lista cerrada (HU #13299), ya sin
+  // palabras que delaten el mecanismo. Lo único que sigue siendo interno es QUE la revisión fue manual
+  // (provider/estado arriba), no el motivo del rechazo.
   return out;
 }
 

@@ -157,7 +157,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         System.Net.WebUtility.HtmlDecode(body!.Html).Should().Contain(expectedMarker);
         body.Html.Should().Contain("<img");
         if (channel == "FLIT_SMTP")
-            body.Html.Should().Contain("tramite-cambio-estado-header.png");
+            body.Html.Should().Contain("flit-banner-correo.png"); // Correos 2.0: banner FLIT nuevo
         else
             body.Html.Should().Contain("tramite-cambio-estado-renting-header.png");
     }
