@@ -238,8 +238,8 @@ const ESTADOS_EN_VUELO: readonly BiometricEstado[] = ['enviado', 'en_proceso', '
 
 /**
  * ¿Hay un enlace de captura REALMENTE utilizable? Exige las tres condiciones: que exista, que la
- * validación siga en vuelo y que el enlace no haya vencido. Gobierna tanto la celda "Enlace" como la
- * disponibilidad de "Copiar enlace" / "Abrir captura".
+ * validación siga en vuelo y que el enlace no haya vencido. Gobierna la celda "Enlace" (Sí/No).
+ * Bug #14674: el enlace en sí nunca se pinta ni se copia en la UI; solo se indica si hay uno vigente.
  */
 function tieneEnlaceUtilizable(r: TenantBiometricValidation, now: number): boolean {
   if (!r.captureUrl || r.expired) return false;
@@ -292,7 +292,6 @@ interface PrefillNueva {
 /** Resultado de un reenvío (manual, automático al editar el correo, o por documento ya existente). */
 interface ResendResultState {
   email: string;
-  captureUrl?: string | null;
   queued?: boolean;
   resendCount: number;
   /** Por qué se reenvió sin crear nada (documento ya existente); ausente en el reenvío manual. */
@@ -925,7 +924,6 @@ function ValidacionesLista({
         : `Ya existía una validación para este documento en este tenant con ese mismo correo: no se creó una nueva ni se modificó nada, solo se reenvió el enlace.`;
     setResendResult({
       email: info.email,
-      captureUrl: info.captureUrl,
       queued: info.queued,
       resendCount: nextCount,
       notice,
@@ -970,7 +968,6 @@ function ValidacionesLista({
       const nextCount = (resendMeta[row.id]?.count ?? 0) + 1;
       setResendResult({
         email: result.validation.email,
-        captureUrl: result.captureUrl,
         resendCount: nextCount,
       });
       setLiveMessage(`Datos actualizados. Validación reenviada a ${result.validation.email}.`);
@@ -991,7 +988,6 @@ function ValidacionesLista({
     bumpResendMeta(row.id);
     setResendResult({
       email: result.validation.email,
-      captureUrl: result.captureUrl,
       queued: result.queued,
       resendCount: nextCount,
     });
@@ -1508,7 +1504,6 @@ function ValidacionesLista({
       {resendResult && (
         <PrevalidacionResendResultPanel
           email={resendResult.email}
-          captureUrl={resendResult.captureUrl}
           queued={resendResult.queued}
           resendCount={resendResult.resendCount}
           notice={resendResult.notice}
@@ -2395,7 +2390,6 @@ function ValidacionRow({
   canVencer: boolean;
   onVencerClick: (row: TenantBiometricValidation) => void;
 }) {
-  const [copied, setCopied] = useState(false);
   // Estado EFECTIVO: una validación no aprobada con el enlace vencido se lee "Expirado" aunque el
   // backend la conserve como enviada o en proceso (`expired` ya aplica esa regla). Los KPIs cuentan
   // por este mismo criterio: si la fila y el contador usaran estados distintos, no cuadrarían.
@@ -2469,17 +2463,6 @@ function ValidacionRow({
     (r.instanceId ? '.' : esMandatario ? '. Validación propia del mandatario.' : '. Prevalidación standalone.') +
     (validationCount > 1 ? ` ${validationCount} validaciones en el historial de la persona.` : '');
 
-  const copiarEnlace = async () => {
-    if (!r.captureUrl) return;
-    try {
-      await navigator.clipboard.writeText(r.captureUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* sin permiso de clipboard */
-    }
-  };
-
   // HU #10944 (D12/AC3) — pertenece a un trámite ⇒ solo lectura: editar/reenviar viven en el trámite.
   const isTramite = r.instanceId !== null;
   // HU #10944 (D9/AC4) — aprobada (vigente o vencida) ⇒ editar/reenviar bloqueados; se ofrece "Nueva".
@@ -2502,26 +2485,6 @@ function ValidacionRow({
       onSelect: onViewProcess,
     },
   ];
-
-  // Copiar/abrir solo cuando el enlace sirve de verdad: en estados terminales no lleva a ninguna parte.
-  if (enlaceUtilizable) {
-    actionItems.push({
-      key: 'copiar',
-      label: copied ? 'Enlace copiado' : 'Copiar enlace',
-      icon: iconoComo("copiar"),
-      onSelect: () => {
-        void copiarEnlace();
-      },
-    });
-    actionItems.push({
-      key: 'abrir',
-      label: 'Abrir captura',
-      icon: iconoComo("externo"),
-      onSelect: () => {
-        window.open(r.captureUrl!, '_blank', 'noopener,noreferrer');
-      },
-    });
-  }
 
   if (!isTramite && isApproved) {
     actionItems.push({
@@ -2689,7 +2652,7 @@ function ValidacionRow({
     enlace: (
       <div className="min-w-0 text-[11px] leading-tight">
         {enlaceUtilizable ? (
-          <span title={r.captureUrl ?? undefined}>Sí</span>
+          <span>Sí</span>
         ) : (
           <span className="opacity-70">No</span>
         )}
@@ -2728,11 +2691,6 @@ function ValidacionRow({
           />
           {!isTramite && !esMandatario && admiteReenvio && resendDisabledReason && (
             <span className="text-[10px] opacity-60">{resendDisabledReason}</span>
-          )}
-          {copied && (
-            <span className="text-[10px] font-semibold text-flit-brand-ink" role="status" aria-live="polite">
-              Enlace copiado
-            </span>
           )}
         </div>
       </td>

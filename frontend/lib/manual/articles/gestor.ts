@@ -283,7 +283,7 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         title: "2. Flujo general",
         paragraphs: [],
         bullets: [
-          "Desde el wizard, en el paso de identidad, se invita a cada parte (enlace o QR según configuración).",
+          "Desde el wizard, en el paso de identidad, se invita a cada parte: el enlace de validación le llega por correo.",
           "La persona completa el flujo biométrico en el dispositivo indicado.",
           "El estado vuelve al trámite: pendiente, aprobado, rechazado o vencido.",
           "Con todas las identidades aprobadas, el wizard puede quitar el bloqueo correspondiente.",

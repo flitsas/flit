@@ -1,7 +1,6 @@
 'use client';
 
 import { type ReactNode, useState } from 'react';
-import { Icono } from "@flit/ui/Icono";
 import { Modal } from '@/components/atom/Modal';
 import { InlineAlert } from '@/components/atom/InlineAlert';
 import { WIZARD_CTA_GRADIENT } from './wizard-field-styles';
@@ -15,7 +14,8 @@ import type { TenantBiometricValidation } from '@/lib/api/types/procedure-runtim
 /**
  * HU #13825 (Feature #13820, Épica #13817) — «Vencer» una identidad aprobada y vigente (solo Super
  * Admin). Confirma, llama a `POST /api/v1/tramites/biometric-validations/{id}/vencer` (HU #13824) y
- * muestra el resultado: enlace nuevo copiable, envío en cola o el motivo por el que no salió enlace.
+ * muestra el resultado: envío del enlace nuevo por correo, envío en cola o el motivo por el que no salió.
+ * Bug #14674: el enlace de captura nunca se muestra ni se copia en la UI.
  * La identidad queda vencida en todos los casos de éxito (200); el 409 se informa sin cerrar.
  */
 
@@ -29,11 +29,6 @@ const MOTIVOS_SIN_ENLACE: Record<string, string> = {
   datos_incompletos: 'faltan datos de la persona en el trámite',
   actor_requerido: 'el trámite no tiene a la persona registrada',
 };
-
-/** Con el proveedor mock el enlace viene relativo (`/biometric/{token}`): se vuelve absoluto. */
-export function enlaceAbsoluto(url: string): string {
-  return url.startsWith('/') ? `${window.location.origin}${url}` : url;
-}
 
 function mensajeResultado(res: VencerIdentidadResult): string {
   if (res.enlaceEnviado && res.enlaceCaptura) {
@@ -94,9 +89,6 @@ export function VencerIdentidadModal({ row, onClose, onVencida }: VencerIdentida
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [resultado, setResultado] = useState<VencerIdentidadResult | null>(null);
-  const [copiado, setCopiado] = useState(false);
-
-  const enlace = resultado?.enlaceCaptura ? enlaceAbsoluto(resultado.enlaceCaptura) : null;
 
   const confirmar = async () => {
     setBusy(true);
@@ -116,16 +108,6 @@ export function VencerIdentidadModal({ row, onClose, onVencida }: VencerIdentida
     }
   };
 
-  const copiar = async () => {
-    if (!enlace) return;
-    try {
-      await navigator.clipboard.writeText(enlace);
-      setCopiado(true);
-    } catch {
-      setError('No se pudo copiar el enlace. Selecciónalo y cópialo a mano.');
-    }
-  };
-
   return (
     <Modal
       open
@@ -142,40 +124,9 @@ export function VencerIdentidadModal({ row, onClose, onVencida }: VencerIdentida
         {resultado ? (
           <div className="space-y-3">
             <div role="status" aria-live="polite" className="space-y-3">
-              <InlineAlert tone={resultado.enlaceEnviado && enlace ? 'success' : 'warning'}>
+              <InlineAlert tone={resultado.enlaceEnviado && resultado.enlaceCaptura ? 'success' : 'warning'}>
                 {mensajeResultado(resultado)}
               </InlineAlert>
-              {enlace ? (
-                <div className="space-y-2">
-                  <label
-                    className="block text-xs font-semibold text-foreground"
-                    htmlFor="vencer-identidad-enlace"
-                  >
-                    Enlace nuevo
-                  </label>
-                  <input
-                    id="vencer-identidad-enlace"
-                    readOnly
-                    value={enlace}
-                    onFocus={(e) => e.currentTarget.select()}
-                    className="w-full rounded-xl border px-3 py-2 text-xs text-foreground dark:bg-transparent"
-                    style={{ borderColor: 'var(--border)' }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => void copiar()}
-                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-flit-brand underline-offset-2 hover:underline"
-                  >
-                    <Icono nombre="copiar" className="h-3.5 w-3.5" />
-                    Copiar enlace
-                  </button>
-                  {copiado ? (
-                    <p className="text-xs font-semibold" style={{ color: 'var(--flit-success-ink)' }}>
-                      Enlace copiado.
-                    </p>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
             {error ? <InlineAlert tone="error">{error}</InlineAlert> : null}
             <div className="flex gap-3 pt-1">

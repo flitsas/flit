@@ -24,8 +24,6 @@ import { formatFechaHora } from '@/lib/format/date';
 import { MANUAL_INPUT_CLASS, MANUAL_SELECT_CLASS } from './manual-field-styles';
 import { ManualStatusBadge } from './ManualStatusBadge';
 import { ManualReviewDetailModal } from './ManualReviewDetailModal';
-import { useCopiarEnlaceManual } from './CopiarEnlaceManual';
-import { puedeCopiarEnlaceManual } from '@/lib/identity/manual-flow';
 import { IconoAviso } from "@flit/ui/IconoAviso";
 
 /**
@@ -147,7 +145,6 @@ export function ValidacionesManuales({
 
   const recargar = useCallback(() => setReloadKey((k) => k + 1), []);
   const hayFiltros = Boolean(status || origin || q);
-  const { copiar, region: regionCopiar } = useCopiarEnlaceManual(recargar);
 
   const columns: DataTableColumn<ManualListItem>[] = [
     {
@@ -176,18 +173,6 @@ export function ValidacionesManuales({
               icon: iconoComo("ojo"),
               onSelect: () => setDetalleId(r.id),
             },
-            // HU #14306: solo si espera captura del cliente (no aprobada ni con captura enviada).
-            ...(puedeCopiarEnlaceManual(r.status)
-              ? [
-                  {
-                    key: 'copiar-enlace',
-                    label: 'Copiar enlace',
-                    ariaLabel: `Copiar enlace de ${r.fullName}`,
-                    icon: iconoComo("externo"),
-                    onSelect: () => void copiar(r.id),
-                  },
-                ]
-              : []),
           ]}
         />
       ),
@@ -279,7 +264,6 @@ export function ValidacionesManuales({
         </div>
       )}
 
-      {regionCopiar}
 
       <p className="sr-only" role="status" aria-live="polite">
         {carga === 'loading' ? 'Cargando validaciones manuales…' : `${total} validaciones manuales`}
