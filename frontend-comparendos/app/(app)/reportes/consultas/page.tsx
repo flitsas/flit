@@ -1,12 +1,13 @@
 "use client";
 
-import { Suspense, useMemo } from "react";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { ETIQUETA_PUNTO_CLS, etiquetaKit } from "@flit/ui/StatusBadge";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { RequiereReportes } from "@/components/reportes/RequiereReportes";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
+import { ProgramarEnvio } from "@/components/consultas-personalizadas/ProgramarEnvio";
 import { QueryConsole } from "@/components/consultas-personalizadas/QueryConsole";
 import {
   COMPARENDO_DEFAULT_COLUMNS,
@@ -14,8 +15,9 @@ import {
   comparendoColumns,
   tonoEstadoLegal,
 } from "@/components/consultas-personalizadas/comparendo-columns";
-import { fuenteComparendos, type ComparendoQueryRow, type QueryField } from "@/lib/api/consultas-personalizadas";
+import { fuenteComparendos, type ComparendoQueryRow, type QueryField, type SavedQuery } from "@/lib/api/consultas-personalizadas";
 import { P } from "@/lib/nav";
+import { tienePermiso } from "@/lib/sesion";
 
 /** Celdas que se pintan distinto de su texto: el estado legal con la etiqueta del kit (texto del catálogo), como en la bandeja. */
 function renderCelda(columnId: string, fila: ComparendoQueryRow, texto: string) {
@@ -55,8 +57,17 @@ function Contenido() {
   const empresa = esSuperAdmin ? params.get("empresa") || null : null;
   const todas = esSuperAdmin && !empresa;
 
+  // «Programar envío» (ronda 2) solo con el permiso de programar, y sobre una empresa concreta: el envío es de una
+  // empresa, así que el SuperAdmin en «todas» no lo ofrece.
+  const puedeProgramar = tienePermiso(sesion, P.reportesProgramar) && !todas;
+  const [programando, setProgramando] = useState<SavedQuery | null>(null);
+  const abrirProgramar = useCallback((q: SavedQuery) => setProgramando(q), []);
+
   // El origen se memoriza por empresa: la consola lo usa como dependencia de sus efectos.
-  const source = useMemo(() => fuenteComparendos(empresa, todas), [empresa, todas]);
+  const source = useMemo(
+    () => ({ ...fuenteComparendos(empresa, todas), onSchedule: puedeProgramar ? abrirProgramar : undefined }),
+    [empresa, todas, puedeProgramar, abrirProgramar],
+  );
   // «Empresa» solo tiene dato para el SuperAdmin con «todas»: en los demás casos la columna ni se ofrece.
   const columnas = todas ? columnasConEmpresa : columnasSinEmpresa;
   const porDefecto = useMemo(() => (todas ? ["empresaNombre", ...COMPARENDO_DEFAULT_COLUMNS] : COMPARENDO_DEFAULT_COLUMNS), [todas]);
@@ -88,6 +99,7 @@ function Contenido() {
         renderCell={renderCelda}
         columnasFijas={fijas}
       />
+      {puedeProgramar && <ProgramarEnvio consulta={programando} empresa={empresa} onCerrar={() => setProgramando(null)} />}
     </section>
   );
 }

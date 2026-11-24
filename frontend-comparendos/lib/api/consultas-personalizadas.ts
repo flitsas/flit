@@ -268,3 +268,50 @@ export function fuenteComparendos(empresa: string | null, todas = false): QueryS
     remove: (id) => apiFetch<void>(`${BASE}/saved/${encodeURIComponent(id)}`, { method: "DELETE", query: { empresa } }),
   };
 }
+
+// ── Programación del envío por correo (ronda 2, contrato §4 `/programaciones`) ─────────────────────────────────────
+
+export type Periodicidad = "semanal" | "mensual";
+
+/** Envío programado de una consulta guardada. `ultimoResultado` ya viene en lenguaje de negocio. */
+export interface ConsultaProgramada {
+  id: string;
+  consultaId: string;
+  periodicidad: Periodicidad;
+  /** Día de la semana como `DayOfWeek` de .NET: 0 = domingo … 6 = sábado. Solo en semanal. */
+  diaSemana: number | null;
+  /** 1–28. Solo en mensual. */
+  diaMes: number | null;
+  /** Hora de Colombia, «HH:mm» (el servidor puede mandar «HH:mm:ss»). */
+  hora: string;
+  destinatarios: string[];
+  activa: boolean;
+  ultimaEjecucion: string | null;
+  proximaEjecucion: string | null;
+  ultimoResultado: string | null;
+}
+
+export interface GuardarProgramacion {
+  id?: string;
+  consultaId: string;
+  periodicidad: Periodicidad;
+  diaSemana?: number | null;
+  diaMes?: number | null;
+  hora: string;
+  destinatarios: string[];
+  activa: boolean;
+}
+
+const PROGRAMACIONES = `${BASE}/programaciones`;
+
+export function listarProgramaciones(empresa: string | null, signal?: AbortSignal): Promise<ConsultaProgramada[]> {
+  return apiFetch<ConsultaProgramada[]>(PROGRAMACIONES, { signal, query: { empresa } });
+}
+
+export function guardarProgramacion(entrada: GuardarProgramacion, empresa: string | null): Promise<ConsultaProgramada> {
+  return apiFetch<ConsultaProgramada>(PROGRAMACIONES, { method: "POST", body: entrada, query: { empresa } });
+}
+
+export function borrarProgramacion(id: string, empresa: string | null): Promise<void> {
+  return apiFetch<void>(`${PROGRAMACIONES}/${encodeURIComponent(id)}`, { method: "DELETE", query: { empresa } });
+}

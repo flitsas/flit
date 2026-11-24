@@ -3,6 +3,8 @@
 import { vi } from "vitest";
 import type {
   ComparendoQueryRow,
+  ConsultaProgramada,
+  GuardarProgramacion,
   QueryDefinition,
   QueryField,
   QueryResult,
@@ -74,7 +76,25 @@ export interface OpcionesMock {
   demasiadoAmplia?: string;
   cobertura?: QueryResult<ComparendoQueryRow>["cobertura"];
   totalPeriodoAnterior?: number | null;
+  /** Envíos ya programados al arrancar. */
+  programaciones?: ConsultaProgramada[];
+  /** Responder este error a POST /programaciones. */
+  errorProgramar?: { status: number; code: string; error: string };
 }
+
+export const PROGRAMADA: ConsultaProgramada = {
+  id: "prog-1",
+  consultaId: "mia-1",
+  periodicidad: "semanal",
+  diaSemana: 1,
+  diaMes: null,
+  hora: "07:00:00",
+  destinatarios: ["flota@empresa.com", "gerencia@empresa.com", "jefe@empresa.com"],
+  activa: true,
+  ultimaEjecucion: "2026-11-17T12:00:00Z",
+  proximaEjecucion: "2026-11-24T12:00:00Z",
+  ultimoResultado: "Enviado a 3 destinatarios",
+};
 
 export interface Peticion {
   metodo: string;
@@ -90,6 +110,7 @@ const json = (status: number, cuerpo: unknown) =>
 export function instalarServidor(opciones: OpcionesMock = {}) {
   const peticiones: Peticion[] = [];
   let guardadas: SavedQuery[] = [DE_FABRICA, PROPIA];
+  let programaciones: ConsultaProgramada[] = [...(opciones.programaciones ?? [])];
 
   const fetchMock = vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(entrada), "http://127.0.0.1");
@@ -112,6 +133,24 @@ export function instalarServidor(opciones: OpcionesMock = {}) {
       const id = decodeURIComponent(ruta.slice("/saved/".length));
       if (guardadas.find((q) => q.id === id)?.deFabrica) return json(409, { code: "CONSULTA_DE_FABRICA", error: "Las consultas del sistema no se borran." });
       guardadas = guardadas.filter((q) => q.id !== id);
+      return json(204, undefined);
+    }
+    if (ruta === "/programaciones" && metodo === "GET") return json(200, programaciones);
+    if (ruta === "/programaciones" && metodo === "POST") {
+      if (opciones.errorProgramar) return json(opciones.errorProgramar.status, { code: opciones.errorProgramar.code, error: opciones.errorProgramar.error });
+      const e = cuerpo as GuardarProgramacion;
+      const previa = programaciones.find((x) => x.id === e.id);
+      const guardada: ConsultaProgramada = {
+        id: e.id ?? `prog-${programaciones.length + 1}`,
+        consultaId: e.consultaId, periodicidad: e.periodicidad, diaSemana: e.diaSemana ?? null, diaMes: e.diaMes ?? null,
+        hora: `${e.hora}:00`, destinatarios: e.destinatarios, activa: e.activa,
+        ultimaEjecucion: previa?.ultimaEjecucion ?? null, proximaEjecucion: e.activa ? "2026-12-01T12:00:00Z" : null, ultimoResultado: previa?.ultimoResultado ?? null,
+      };
+      programaciones = [...programaciones.filter((x) => x.id !== guardada.id), guardada];
+      return json(200, guardada);
+    }
+    if (ruta.startsWith("/programaciones/") && metodo === "DELETE") {
+      programaciones = programaciones.filter((x) => x.id !== decodeURIComponent(ruta.slice("/programaciones/".length)));
       return json(204, undefined);
     }
     if (ruta === "/run") {

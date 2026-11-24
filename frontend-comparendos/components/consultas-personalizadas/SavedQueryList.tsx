@@ -103,7 +103,11 @@ export function SavedQueryList({
         <Grupo
           titulo="Del sistema"
           cuenta={fabrica.length}
-          nota="Ábrelas y ajústalas. Al guardar se crea una copia tuya; estas no se editan ni se borran."
+          nota={
+            onSchedule
+              ? "Ábrelas y ajústalas. Al guardar se crea una copia tuya; para programar su envío por correo, guárdala primero como tuya."
+              : "Ábrelas y ajústalas. Al guardar se crea una copia tuya; estas no se editan ni se borran."
+          }
           testId={`${testIdPrefix}-grupo-sistema`}
           icono={ICONO_DESTELLO}
           separado
@@ -474,14 +478,16 @@ function Item({
 
       {/* Programar y borrar comparten la esquina inferior derecha, en un grupo — así ninguno tapa
           la flecha ni al otro, y los dos aparecen juntos al apuntar. */}
-      {(onSchedule ?? !query.deFabrica) && (
+      {/* Programar solo las propias: una del sistema no es de la empresa; primero se guarda como propia. */}
+      {!query.deFabrica && (
         <span className="absolute bottom-1.5 right-1.5 flex items-center gap-0.5 opacity-100 [@media(hover:hover)]:opacity-0 [@media(hover:hover)]:group-hover:opacity-100 transition focus-within:opacity-100">
-          {onSchedule && (
+          {onSchedule && !query.deFabrica && (
             <button
               type="button"
               onClick={() => onSchedule(query)}
-              aria-label={`Programar informe de ${query.nombre}`}
-              title={`Programar informe de «${query.nombre}»`}
+              aria-label={`Programar envío de ${query.nombre}`}
+              title={`Programar envío por correo de «${query.nombre}»`}
+              data-testid={`${testIdPrefix}-programar-${query.id}`}
               className="grid h-7 w-7 place-items-center rounded-md text-muted-foreground transition hover:bg-flit-brand/10 hover:text-flit-brand [@media(pointer:coarse)]:h-9 [@media(pointer:coarse)]:w-9"
             >
               <ICONO_CALENDARIO className="h-3 w-3" aria-hidden="true" />
