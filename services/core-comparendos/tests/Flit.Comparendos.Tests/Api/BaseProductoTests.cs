@@ -61,7 +61,7 @@ public sealed class BaseProductoTests(ApiDePrueba api) : IClassFixture<ApiDePrue
         dias.Should().Be(new DateOnly(2040, 12, 31).DayNumber - new DateOnly(2015, 1, 1).DayNumber + 1);
         festivos2026.Should().Be(18);
         organismos.Should().Be(296, "la semilla ya no trae los gemelos de Restrepo 50606001 y Arauca 81001001 (GDC punto 3)");
-        trabajos.Should().Be(6, "avisos, contraventor, reportes semanal y mensual, la réplica de organismos y el envío automático de DP (Epic #14606); la ingesta no tiene cron global: cada empresa tiene su agenda (HU #13521)");
+        trabajos.Should().Be(7, "avisos, contraventor, reportes semanal y mensual, la réplica de organismos, el envío automático de DP (Epic #14606) y el envío de consultas programadas (Epic #14679); la ingesta no tiene cron global: cada empresa tiene su agenda (HU #13521)");
         // Correos de radicación importados de V1 (traffic_secretaries.notifier_email): sin ellos no sale ningún DP.
         var conCorreo = await api.EnDbAsync(db => db.OrganismosTransito.CountAsync(o => o.CorreosRadicacion.Count > 0));
         conCorreo.Should().Be(267);
