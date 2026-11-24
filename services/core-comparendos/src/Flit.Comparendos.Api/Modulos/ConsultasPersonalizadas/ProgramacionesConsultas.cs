@@ -42,7 +42,8 @@ public static class Programaciones
 {
     public const string Semanal = "semanal";
     public const string Mensual = "mensual";
-    public const int MaxDestinatarios = 20;
+    /// <summary>Igual que la programación de reportes de Trámites.</summary>
+    public const int MaxDestinatarios = 10;
     public const int MaxPorEmpresa = 50;
 
     /// <summary>
