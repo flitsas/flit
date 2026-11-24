@@ -137,7 +137,7 @@ describe("cmp-query · programar envío", () => {
 });
 
 describe("cmp-query · programar envío (SuperAdmin y edición)", () => {
-  it("cmp-query: el SuperAdmin en «todas» no programa; con una empresa elegida, todo va con ?empresa=", async () => {
+  it("cmp-query: el SuperAdmin en «todas» no ve envíos; con una empresa los ve en solo lectura y con ?empresa=", async () => {
     sesion.actual = { usuario: { id: "s", email: "s@x", esSuperAdmin: true }, permisos: [], empresa: null };
     instalarServidor();
     const { unmount } = render(<Page />);
@@ -149,18 +149,32 @@ describe("cmp-query · programar envío (SuperAdmin y edición)", () => {
     const { peticiones } = instalarServidor({ programaciones: [PROGRAMADA] });
     render(<Page />);
     fireEvent.click(await screen.findByTestId("cmp-query-programar-mia-1"));
-    const tarjeta = await screen.findByTestId("cmp-query-programar-envio-prog-1");
-    fireEvent.click(within(tarjeta).getByRole("switch"));
-    // Con la pausa en vuelo, la tarjeta no acepta otra operación: se espera a que termine.
-    expect(screen.getByTestId("cmp-query-programar-borrar-prog-1")).toBeDisabled();
-    expect(await within(tarjeta).findByText("En pausa")).toBeInTheDocument();
-    await waitFor(() => expect(screen.getByTestId("cmp-query-programar-borrar-prog-1")).toBeEnabled());
-    fireEvent.click(screen.getByTestId("cmp-query-programar-borrar-prog-1"));
-    fireEvent.click(screen.getByTestId("cmp-query-programar-borrar-si-prog-1"));
-    await waitFor(() => expect(peticiones.some((p) => p.metodo === "DELETE")).toBe(true));
+    const panel = await screen.findByTestId("cmp-query-programar");
+    const tarjeta = await within(panel).findByTestId("cmp-query-programar-envio-prog-1");
+
+    // Lo que sirve para soporte, a la vista.
+    expect(tarjeta).toHaveTextContent("Cada lunes a las 07:00");
+    expect(tarjeta).toHaveTextContent("flota@empresa.com");
+    expect(within(tarjeta).getByTestId("cmp-query-programar-resultado-prog-1")).toHaveTextContent("Enviado a 3 destinatarios");
+    expect(within(tarjeta).getByTestId("cmp-query-programar-estado-prog-1")).toHaveTextContent("Activo");
+    expect(within(panel).getByTestId("cmp-query-programar-solo-lectura")).toHaveTextContent("El SuperAdmin consulta los envíos; los crea y edita la empresa.");
+
+    // Nada que el servidor le vaya a rechazar.
+    expect(within(panel).queryByTestId("cmp-query-programar-nuevo")).not.toBeInTheDocument();
+    expect(within(tarjeta).queryByRole("switch")).not.toBeInTheDocument();
+    expect(within(tarjeta).queryByTestId("cmp-query-programar-editar-prog-1")).not.toBeInTheDocument();
+    expect(within(tarjeta).queryByTestId("cmp-query-programar-borrar-prog-1")).not.toBeInTheDocument();
+
     const deProgramacion = peticiones.filter((p) => p.ruta.startsWith("/programaciones"));
-    expect(deProgramacion.map((p) => p.metodo).sort()).toEqual(["DELETE", "GET", "POST"]);
-    expect(deProgramacion.every((p) => p.query.get("empresa") === "e1")).toBe(true);
+    expect(deProgramacion.map((p) => p.metodo)).toEqual(["GET"]);
+    expect(deProgramacion[0].query.get("empresa")).toBe("e1");
+  });
+
+  it("cmp-query: el usuario de la empresa no ve la nota de solo lectura", async () => {
+    const { panel } = await abrirPanel({ programaciones: [PROGRAMADA] });
+    await within(panel).findByTestId("cmp-query-programar-envio-prog-1");
+    expect(within(panel).queryByTestId("cmp-query-programar-solo-lectura")).not.toBeInTheDocument();
+    expect(within(panel).getByTestId("cmp-query-programar-nuevo")).toBeInTheDocument();
   });
 
   it("cmp-query: editar precarga el envío y lo reemplaza sin duplicarlo", async () => {

@@ -99,7 +99,10 @@ function Contenido() {
         renderCell={renderCelda}
         columnasFijas={fijas}
       />
-      {puedeProgramar && <ProgramarEnvio consulta={programando} empresa={empresa} onCerrar={() => setProgramando(null)} />}
+      {puedeProgramar && (
+        // El SuperAdmin (con una empresa elegida) los ve en solo lectura: crearlos y editarlos es de la empresa.
+        <ProgramarEnvio consulta={programando} empresa={empresa} soloLectura={esSuperAdmin} onCerrar={() => setProgramando(null)} />
+      )}
     </section>
   );
 }

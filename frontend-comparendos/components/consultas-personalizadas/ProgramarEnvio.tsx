@@ -108,11 +108,17 @@ export function ProgramarEnvio({
   consulta,
   empresa,
   onCerrar,
+  soloLectura = false,
 }: {
   /** La consulta guardada (propia) cuyo envío se programa; `null` cierra el panel. */
   consulta: SavedQuery | null;
   empresa: string | null;
   onCerrar: () => void;
+  /**
+   * El SuperAdmin ve los envíos (sirve para soporte) pero no los crea, edita, pausa ni borra: el servidor se lo
+   * rechaza (`SUPERADMIN_SOLO_LECTURA`). Sin esto vería controles que fallan siempre.
+   */
+  soloLectura?: boolean;
 }) {
   const [todas, setTodas] = useState<ConsultaProgramada[] | null>(null);
   const [errorCarga, setErrorCarga] = useState<string | null>(null);
@@ -267,6 +273,11 @@ export function ProgramarEnvio({
       }
     >
       <div className="flex flex-col gap-4" data-testid={PREFIJO}>
+        {soloLectura && (
+          <p className="rounded-[9px] bg-[var(--badge-info-bg)] px-3 py-2 text-xs text-[color:var(--badge-info-fg)]" data-testid={`${PREFIJO}-solo-lectura`}>
+            El SuperAdmin consulta los envíos; los crea y edita la empresa.
+          </p>
+        )}
         {aviso && (
           <InlineAlert tone="success" compact>
             {aviso}
@@ -305,6 +316,7 @@ export function ProgramarEnvio({
                     p={p}
                     confirmando={porBorrar === p.id}
                     ocupada={operando === p.id}
+                    soloLectura={soloLectura}
                     error={errorTarjeta?.id === p.id ? errorTarjeta.mensaje : null}
                     onEditar={() => {
                       setAviso(null);
@@ -319,6 +331,7 @@ export function ProgramarEnvio({
                 ))}
               </ul>
             )}
+            {!soloLectura && (
             <button
               ref={nuevoRef}
               type="button"
@@ -334,6 +347,7 @@ export function ProgramarEnvio({
             >
               Nuevo envío
             </button>
+            )}
           </>
         )}
       </div>
@@ -447,6 +461,7 @@ function Tarjeta({
   p,
   confirmando,
   ocupada,
+  soloLectura,
   error,
   onEditar,
   onPausar,
@@ -457,6 +472,7 @@ function Tarjeta({
   p: ConsultaProgramada;
   confirmando: boolean;
   ocupada: boolean;
+  soloLectura: boolean;
   error: string | null;
   onEditar: () => void;
   onPausar: (activa: boolean) => void;
@@ -473,7 +489,14 @@ function Tarjeta({
           <p className="break-all text-xs text-[color:var(--di-text-tertiary)]">{p.destinatarios.join(", ")}</p>
         </div>
         {/* Etiqueta fija y propia de la tarjeta: el estado lo dice aria-checked (REX). */}
-        <Interruptor activo={p.activa} onCambio={onPausar} etiqueta={`Envío activo: ${frecuencia}`} deshabilitado={ocupada} soloControl />
+        {soloLectura ? (
+          // En solo lectura el estado es texto: un interruptor apagado se lee como algo que se podría mover.
+          <span className="text-xs font-semibold text-muted-foreground" data-testid={`${PREFIJO}-estado-${p.id}`}>
+            {p.activa ? "Activo" : "En pausa"}
+          </span>
+        ) : (
+          <Interruptor activo={p.activa} onCambio={onPausar} etiqueta={`Envío activo: ${frecuencia}`} deshabilitado={ocupada} soloControl />
+        )}
       </div>
 
       <dl className="grid grid-cols-1 gap-x-4 gap-y-1 text-xs sm:grid-cols-[auto_1fr]">
@@ -495,7 +518,7 @@ function Tarjeta({
         </InlineAlert>
       )}
 
-      {confirmando ? (
+      {soloLectura ? null : confirmando ? (
         <div
           className="flex flex-wrap items-center gap-2 rounded-[9px] bg-[var(--badge-danger-bg)] p-2"
           data-testid={`${PREFIJO}-confirmar-${p.id}`}
