@@ -1,9 +1,8 @@
 import { dia } from "@/components/reportes/gestion/excel";
 import { bogotaClock, type XlsxSheet } from "@/lib/xlsx";
-import { FUENTES, TIPOS_ERROR, type ReportePlataforma } from "./tipos";
+import { etiquetaPlantilla, FUENTES, TIPOS_ERROR, type ReportePlataforma } from "./tipos";
 
 const fuente = (f: string) => FUENTES[f] ?? f;
-const ESTADO_CORREO: Record<string, string> = { Fallido: "Fallido", Rebotado: "Rebotado" };
 
 /** Hojas de Plataforma (solo SuperAdmin): aquí SÍ va la fuente (R3). */
 export function hojasPlataforma(p: ReportePlataforma): XlsxSheet[] {
@@ -49,12 +48,12 @@ export function hojasPlataforma(p: ReportePlataforma): XlsxSheet[] {
       columns: [
         { header: "Fecha", width: 18 },
         { header: "Empresa", width: 30 },
-        { header: "Plantilla", width: 26 },
+        { header: "Tipo de correo", width: 36 },
         { header: "Asunto", width: 50 },
         { header: "Estado", width: 12 },
         { header: "Motivo", width: 60 },
       ],
-      rows: p.correos.recientes.map((c) => [bogotaClock(c.creadoEn), c.empresa, c.plantilla, c.asunto, ESTADO_CORREO[c.estado] ?? c.estado, c.motivo]),
+      rows: p.correos.recientes.map((c) => [bogotaClock(c.creadoEn), c.empresa, etiquetaPlantilla(c.plantilla), c.asunto, c.estado, c.motivo]),
       notes: ["Los 50 más recientes del periodo."],
     },
   );

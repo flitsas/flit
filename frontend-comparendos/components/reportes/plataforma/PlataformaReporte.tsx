@@ -14,7 +14,7 @@ import { numeroCorto, textoPeriodo } from "@/lib/reportes";
 import { useCarga } from "@/lib/useCarga";
 import { BotonExcel } from "@/components/reportes/gestion/excel";
 import { hojasPlataforma } from "./excelPlataforma";
-import { FUENTES, TIPOS_ERROR, type ReportePlataforma } from "./tipos";
+import { etiquetaPlantilla, FUENTES, TIPOS_ERROR, type ReportePlataforma } from "./tipos";
 
 const GraficoArea = dynamic(() => import("@/components/inicio/GraficoArea").then((m) => m.GraficoArea), { loading: () => <div style={{ height: 240 }} /> });
 
@@ -63,7 +63,7 @@ function TablaCorreos({ filas }: { filas: ReportePlataforma["correos"]["reciente
       columns={[
         { key: "fecha", header: "Fecha", render: (c) => formatoFechaHora(c.creadoEn) },
         { key: "empresa", header: "Empresa", render: (c) => c.empresa },
-        { key: "plantilla", header: "Plantilla", render: (c) => <code className="text-xs">{c.plantilla}</code> },
+        { key: "plantilla", header: "Tipo de correo", render: (c) => etiquetaPlantilla(c.plantilla) },
         { key: "estado", header: "Estado", render: (c) => c.estado },
         { key: "motivo", header: "Motivo", render: (c) => <span className="line-clamp-2">{c.motivo ?? "—"}</span> },
       ]}

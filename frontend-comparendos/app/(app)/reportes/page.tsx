@@ -125,10 +125,13 @@ function Contenido() {
               aclaraciones: [
                 "La deuda y el radar son a hoy; las tasas y el ahorro, del periodo.",
                 "La deuda sin pagar incluye lo caducado y lo prescrito.",
+                // REX: si las gráficas de dinero no cargaron, el archivo lo dice en vez de omitirlas en silencio.
+                ...(dinero.estado === "error" ? ["No se incluyeron las hojas de dinero (deuda por estado, ingresado y pagado, deuda por organismo): no cargaron en la pantalla."] : []),
               ],
             }}
             hojas={d && datos.estado === "ready" ? () => hojasResumen(d, dinero.estado === "ready" ? (reparto ?? null) : null) : null}
-            deshabilitado={datos.estado !== "ready" || !!errorUrl}
+            // Espera también las gráficas de dinero: sin ellas el archivo no sería el de la pantalla.
+            deshabilitado={datos.estado !== "ready" || dinero.estado === "loading" || !!errorUrl}
           />
         }
         extra={puedeVerNits ? <SelectorNit key={empresaNits} empresa={empresaNits} valor={nit} onCambio={setNit} /> : undefined}

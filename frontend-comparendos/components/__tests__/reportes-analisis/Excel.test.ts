@@ -67,6 +67,8 @@ describe("Descargar Excel de Reportes 2.0", () => {
     expect(hoja(hojas, "Favorables").rows[0][4]).toEqual({ year: 2026, month: 11, day: 1 });
     expect(hoja(hojas, "Favorables").notes).toEqual(["Se incluyen los 1 más recientes de 3."]);
     expect(hojasDp({ ...d, consolidado: [] }).map((h) => h.name)).toContain("Consolidado por empresa");
+    // R3: fuera de Plataforma, nada de la fuente ni de claves técnicas.
+    expect(texto(hojas)).not.toMatch(/Simit|Municipal|fuente|tasaExito|sinRespuesta/);
   });
 
   it("Plataforma (solo SuperAdmin) sí nombra la fuente, con su etiqueta de negocio", () => {
@@ -75,7 +77,10 @@ describe("Descargar Excel de Reportes 2.0", () => {
       fuentes: [{ fuente: "SimitNit", consultas: 10, conError: 1, obtenidos: 30, nuevos: 2 }],
       porDia: [{ dia: "2026-11-02", fuente: "SimitNit", consultas: 10, conError: 1, obtenidos: 30, nuevos: 2 }],
       erroresPorTipo: [{ fuente: "SimitNit", tipo: "Timeout", cantidad: 1 }],
-      correos: { fallidos: 1, rebotados: 0, motivos: [{ motivo: "Buzón lleno", cantidad: 1 }], recientes: [] },
+      correos: {
+        fallidos: 1, rebotados: 0, motivos: [{ motivo: "Buzón lleno", cantidad: 1 }],
+        recientes: [{ id: "x", empresaId: "e1", empresa: "Gestora Uno", plantilla: "comparendos.aviso_2", asunto: "Aviso", estado: "Fallido", motivo: "Buzón lleno", creadoEn: "2026-11-25T03:30:00Z" }],
+      },
       empresasConMasErrores: [{ empresaId: "e1", empresa: "Gestora Uno", consultasConError: 1, correosFallidos: 1 }],
     };
     const hojas = hojasPlataforma(p);
@@ -83,6 +88,9 @@ describe("Descargar Excel de Reportes 2.0", () => {
     expect(hoja(hojas, "Errores técnicos").rows).toEqual([["SIMIT por NIT", "Tiempo de espera agotado", 1]]);
     expect(hoja(hojas, "Por día y fuente").rows[0][0]).toEqual({ year: 2026, month: 11, day: 2 });
     expect(hojasPlataforma({ ...p, erroresPorTipo: null }).map((h) => h.name)).not.toContain("Errores técnicos");
+    // El tipo de correo en negocio, no la clave de la plantilla; la hora, la de Colombia.
+    expect(hoja(hojas, "Correos recientes").rows[0].slice(0, 3)).toEqual([{ year: 2026, month: 11, day: 24, hour: 22, minute: 30 }, "Gestora Uno", "Aviso 2 al conductor"]);
+    expect(texto(hojas)).not.toMatch(/comparendos\.aviso/);
   });
 
   it("Resumen: indicadores, series y, si cargaron, las gráficas de dinero con el estado legal en negocio", () => {
@@ -104,6 +112,7 @@ describe("Descargar Excel de Reportes 2.0", () => {
     const conDinero = hojasResumen(d, dinero);
     expect(hoja(conDinero, "Deuda por estado legal").rows[0]).toEqual([ESTADO_LEGAL.Caducado.texto, 2, 900_000]);
     expect(hoja(conDinero, "Deuda por organismo").rows[0]).toEqual(["Movilidad", 3, 200, 100]);
+    expect(texto(conDinero)).not.toMatch(/Simit|Municipal|fuente|deudaActivaTotal|valorIngresado/);
   });
 
   it("Notas y nombre del archivo: el corte, la empresa, el NIT, la hora de Colombia y las aclaraciones", () => {
@@ -118,7 +127,15 @@ describe("Descargar Excel de Reportes 2.0", () => {
     expect(valor(notas, "Aclaraciones")).toBe("La deuda incluye lo caducado y lo prescrito.");
     expect(nombreArchivo(corte, "Gestora Uno S.A.S.")).toBe("reporte-gestion-gestora-uno-s-a-s-sin-periodo_hoy.xlsx");
     expect(nombreArchivo({ ...corte, pestana: "dp", desde: "2026-11-01", hasta: "2026-11-24" }, null)).toBe("reporte-dp-todas-2026-11-01_2026-11-24.xlsx");
+    expect(valor(notas, "NIT")).toBe("Todos los NIT");
+    expect(valor(notas, "Hasta")).toBe("Hoy");
+    expect(notas.rows.at(-1)).toEqual(["Aclaraciones", "La deuda incluye lo caducado y lo prescrito."]);
+    expect(texto([notas])).not.toMatch(/Simit|fuente/);
+    expect(nombreArchivo({ ...corte, pestana: "resumen", desde: "2026-11-01", hasta: null }, "Gestora Uno")).toBe("reporte-resumen-gestora-uno-2026-11-01_hoy.xlsx");
+    expect(nombreArchivo({ ...corte, pestana: "plataforma", desde: "2026-11-01", hasta: "2026-11-24" }, null)).toBe("reporte-plataforma-todas-2026-11-01_2026-11-24.xlsx");
     expect(dia("2026-11-01")).toEqual({ year: 2026, month: 11, day: 1 });
+    expect(dia(null)).toBeNull();
+    expect(dia("2026-11-01T05:00:00Z")).toBeNull();
     expect(porcentaje(null)).toBeNull();
   });
 

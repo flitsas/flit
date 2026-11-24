@@ -57,6 +57,32 @@ const dp = (consolidado: unknown[] | null) => ({
   },
 });
 
+
+/** Pulsa «Descargar Excel» y devuelve el nombre y el XML del libro (STORE: el zip no está comprimido y se lee como texto). */
+async function descargarExcel(): Promise<{ nombre: string; xml: string }> {
+  let blob: Blob | null = null;
+  let nombre = "";
+  const crear = vi.spyOn(URL, "createObjectURL").mockImplementation((b) => {
+    blob = b as Blob;
+    return "blob:prueba";
+  });
+  const revocar = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const clic = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+    nombre = this.download;
+  });
+  fireEvent.click(screen.getByTestId("descargar-excel"));
+  await waitFor(() => expect(nombre).not.toBe(""));
+  const bytes = await new Promise<ArrayBuffer>((ok) => {
+    const r = new FileReader();
+    r.onload = () => ok(r.result as ArrayBuffer);
+    r.readAsArrayBuffer(blob!);
+  });
+  crear.mockRestore();
+  revocar.mockRestore();
+  clic.mockRestore();
+  return { nombre, xml: new TextDecoder().decode(bytes) };
+}
+
 describe("Reportes 2.0 · pestañas de análisis", () => {
   beforeEach(() => {
     apiFetch.mockReset();
@@ -95,6 +121,15 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     expect((screen.getByTestId("descargar-excel") as HTMLButtonElement).disabled).toBe(false);
     expect(screen.getByTestId("descargar-excel").parentElement!.className).toMatch(/ml-auto/);
     expect(within(screen.getByTestId("vehiculos")).getByRole("link", { name: /^AAA111/ }).getAttribute("href")).toBe("/bandeja?placas=AAA111&pagado=false");
+
+    // El Excel lleva las cifras de la pantalla y su corte, con el nombre de la empresa de la gestora.
+    const { nombre, xml } = await descargarExcel();
+    expect(nombre).toBe("reporte-gestion-gestora-uno-sin-periodo_hoy.xlsx");
+    expect(within(screen.getByTestId("gestion-resumen")).getByText("42")).toBeTruthy();
+    expect(xml).toMatch(/Pendientes \(activos y sin pagar\)<\/t><\/is><\/c><c r="B2" s="0"><v>42<\/v><\/c><c r="C2" s="0"><v>130900000<\/v>/);
+    expect(xml).toContain("Pendiente a hoy");
+    expect(xml).toContain("Gestora Uno");
+    expect(xml).not.toMatch(/Simit|SinProcesar/);
   });
 
   it("Gestión con periodo y NIT en la URL: los pide a la API y cada enlace a la bandeja lleva el mismo corte", async () => {
@@ -148,6 +183,11 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     const filaCali = within(screen.getByTestId("dp-por-organismo")).getByText("Tránsito Cali").closest("tr")!;
     expect(within(filaCali).getByText("—")).toBeTruthy();
     expect(within(screen.getByTestId("dp-por-organismo")).queryByText("0 %")).toBeNull();
+    // El Excel de DP: la tasa de la pantalla (50 %) en la hoja de indicadores, y nada de la fuente.
+    const { nombre, xml } = await descargarExcel();
+    expect(nombre).toMatch(/^reporte-dp-gestora-uno-\d{4}-\d{2}-01_\d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(xml).toMatch(/Tasa de éxito \(%\)<\/t><\/is><\/c><c r="B2" s="0"><v>50<\/v>/);
+    expect(xml).not.toMatch(/Simit|Municipal/);
     expect(screen.queryByTestId("dp-consolidado")).toBeNull();
     // Sin fechas en la URL, el mes en curso (como el resto de Reportes).
     const q = apiFetch.mock.calls.find(([r]) => r === "/reportes/dp")![1].query;
