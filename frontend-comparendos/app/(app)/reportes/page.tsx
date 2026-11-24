@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { DataTable, InlineAlert, usePaginacion } from "@flit/ui";
@@ -8,7 +8,8 @@ import { ChipFiltro, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
 import { Cargador } from "@flit/ui/Loader";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
-import { FiltrosPeriodo, periodoInicial, type Periodo } from "@/components/reportes/FiltrosPeriodo";
+import { FiltrosPeriodo, type Periodo } from "@/components/reportes/FiltrosPeriodo";
+import { periodoEfectivo, useFiltrosUrl } from "@/components/reportes/gestion/filtrosUrl";
 import { BarrasApiladas } from "@/components/inicio/BarrasApiladas";
 import { PanelInicio } from "@/components/inicio/PanelInicio";
 import { RequiereReportes } from "@/components/reportes/RequiereReportes";
@@ -68,8 +69,12 @@ function SelectorNit({ empresa, valor, onCambio }: { empresa: string | null; val
 
 function Contenido() {
   const { sesion } = useSesion();
-  const [periodo, setPeriodo] = useState<Periodo>(periodoInicial);
-  const [nit, setNit] = useState<string | null>(null);
+  // Reportes 2.0 (S3, autorizado por S0): el periodo, el NIT y la empresa viven en la URL (desde, hasta, nit, empresa) y
+  // viajan entre pestañas; sin ellos, el mes en curso como antes.
+  const { filtros, escribir } = useFiltrosUrl();
+  const periodo: Periodo = { ...periodoEfectivo(filtros), empresa: filtros.empresa };
+  const nit = filtros.nit;
+  const setNit = (id: string | null) => escribir({ nit: id });
   const [serie, setSerie] = useState<Serie>("ingresados");
   const router = useRouter();
   const pg = usePaginacion(10);
@@ -91,10 +96,7 @@ function Contenido() {
   const formatoEje = (n: number) => (def.pesos ? (n === 0 ? "0" : `$${numeroCorto(n)}`) : numeroCorto(n));
   const anioActual = Number(periodo.hasta.slice(0, 4));
 
-  const aplicar = (p: Periodo) => {
-    if (p.empresa !== periodo.empresa) setNit(null);
-    setPeriodo(p);
-  };
+  const aplicar = (p: Periodo) => escribir({ desde: p.desde, hasta: p.hasta, empresa: p.empresa, ...(p.empresa !== periodo.empresa ? { nit: null } : {}) });
 
   return (
     <section className="flex flex-col gap-6">
@@ -103,6 +105,8 @@ function Contenido() {
         descripcion="Deuda, resultados de los derechos de petición, ahorro y lo que está por vencer. La deuda y el radar son a hoy; las tasas y el ahorro, del periodo. La deuda sin pagar incluye lo caducado y lo prescrito."
       />
       <FiltrosPeriodo
+        // La URL manda: si cambia por «atrás» o por otra pestaña, el borrador vuelve a leerla.
+        key={`${periodo.desde}|${periodo.hasta}|${periodo.empresa ?? ""}`}
         valor={periodo}
         onAplicar={aplicar}
         extra={puedeVerNits ? <SelectorNit key={empresaNits} empresa={empresaNits} valor={nit} onCambio={setNit} /> : undefined}
@@ -220,7 +224,9 @@ function Contenido() {
 export default function Reportes() {
   return (
     <RequiereReportes permiso={P.reportesVer}>
-      <Contenido />
+      <Suspense fallback={<Cargador />}>
+        <Contenido />
+      </Suspense>
     </RequiereReportes>
   );
 }

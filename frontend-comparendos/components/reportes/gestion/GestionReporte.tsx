@@ -47,6 +47,10 @@ export function GestionReporte() {
       />
       <BarraFiltros filtros={filtros} escribir={escribir} errorUrl={errorUrl} />
       <div className="flex flex-wrap items-center gap-3 text-sm text-[color:var(--di-text-secondary)]" data-testid="gestion-alcance">
+        {/* S0: el corte se rotula siempre, para que nadie compare cifras de cortes distintos sin saberlo. */}
+        <span className="rounded-full border border-[color:var(--di-border)] px-3 py-1 text-xs font-semibold text-[color:var(--kit-azul-texto)]" data-testid="gestion-corte">
+          {conPeriodo && a?.desde && a?.hasta ? `Impuestos del ${formatoFecha(a.desde)} al ${formatoFecha(a.hasta)}` : conPeriodo ? "Periodo elegido" : "Pendiente a hoy"}
+        </span>
         {conPeriodo ? (
           <>
             <span>Comparendos pendientes impuestos en el periodo elegido (lo que no tiene fecha de imposición queda fuera).</span>

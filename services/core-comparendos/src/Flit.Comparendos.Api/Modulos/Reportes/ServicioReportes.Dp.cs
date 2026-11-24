@@ -9,11 +9,11 @@ namespace Flit.Comparendos.Api.Modulos.Reportes;
 /// recibidas en el periodo, el mismo corte de la tasa canónica (<see cref="ServicioReportes.KpisAsync"/>), así que
 /// la suma de una columna es la cifra del Resumen.
 /// </summary>
-public sealed record FilaDp(string Clave, string Nombre, int Enviados, int Favorables, int Desfavorables, int SinRespuesta, decimal? DiasPromedio);
+public sealed record FilaDp(string Clave, string Nombre, int Enviados, int Favorables, int Desfavorables, int SinRespuesta, decimal? DiasPromedio, decimal? TasaExito);
 
-public sealed record CeldaDp(Guid OrganismoId, string Organismo, string Infraccion, int Enviados, int Favorables, int Desfavorables);
+public sealed record CeldaDp(Guid OrganismoId, string Organismo, string Infraccion, int Enviados, int Favorables, int Desfavorables, decimal? TasaExito);
 
-public sealed record ConsolidadoDp(Guid EmpresaId, string Empresa, Guid OrganismoId, string Organismo, int Enviados, int Favorables, int Desfavorables, int SinRespuesta);
+public sealed record ConsolidadoDp(Guid EmpresaId, string Empresa, Guid OrganismoId, string Organismo, int Enviados, int Favorables, int Desfavorables, int SinRespuesta, decimal? TasaExito);
 
 public sealed record DpPositivo(Guid ComparendoId, string Numero, string? Placa, string Radicado, string Organismo, DateOnly? FechaRadicacion, DateOnly FechaRespuesta, decimal? ValorAlRadicar);
 
@@ -47,6 +47,14 @@ public sealed partial class ServicioReportes
     public const int TopeListaDp = 200;
     public const int TopeCruceDp = 60;
 
+    /// <summary>
+    /// Tasa de éxito de una fila: la MISMA fórmula y el mismo corte que la tasa canónica del Resumen
+    /// (<c>ServicioReportes.cs:85-92</c>, <see cref="KpisAsync"/>): favorables / (favorables + desfavorables) sobre las
+    /// respuestas recibidas en el periodo. Sin respuestas, null («—»), no 0 %. Si cambia allá, cambia aquí.
+    /// </summary>
+    public static decimal? TasaFila(int favorables, int desfavorables) =>
+        favorables + desfavorables == 0 ? null : Math.Round((decimal)favorables / (favorables + desfavorables), 4);
+
     public async Task<ReporteDp> DpAsync(Alcance a, bool consolidado, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(a);
@@ -77,12 +85,15 @@ public sealed partial class ServicioReportes
             var l = g.ToList();
             var resp = l.Where(x => Respondido(x.Estado, x.Respuesta)).ToList();
             var conDias = resp.Where(x => x.Radicacion is not null).ToList();
+            var fav = resp.Count(x => x.Sentido == SentidoRespuestaOt.Favorable);
+            var desf = resp.Count(x => x.Sentido == SentidoRespuestaOt.Desfavorable);
             return new FilaDp(clave, nombre,
                 l.Count(x => Radicado(x.Radicacion)),
-                resp.Count(x => x.Sentido == SentidoRespuestaOt.Favorable),
-                resp.Count(x => x.Sentido == SentidoRespuestaOt.Desfavorable),
+                fav,
+                desf,
                 l.Count(x => Radicado(x.Radicacion) && x.Estado == EstadoDp.Enviado),
-                conDias.Count == 0 ? null : Math.Round((decimal)conDias.Average(x => x.Respuesta!.Value.DayNumber - x.Radicacion!.Value.DayNumber), 1));
+                conDias.Count == 0 ? null : Math.Round((decimal)conDias.Average(x => x.Respuesta!.Value.DayNumber - x.Radicacion!.Value.DayNumber), 1),
+                TasaFila(fav, desf));
         }
 
         var porOrganismo = filas.GroupBy(f => f.OrganismoTransitoId)
@@ -101,7 +112,7 @@ public sealed partial class ServicioReportes
             .Select(g =>
             {
                 var fila = Fila("", "", g.Select(x => (x.Estado, x.RespuestaSentido, x.FechaRadicacion, x.RespuestaFecha)));
-                return new CeldaDp(g.Key.OrganismoTransitoId, Organismo(g.Key.OrganismoTransitoId), g.Key.Codigo, fila.Enviados, fila.Favorables, fila.Desfavorables);
+                return new CeldaDp(g.Key.OrganismoTransitoId, Organismo(g.Key.OrganismoTransitoId), g.Key.Codigo, fila.Enviados, fila.Favorables, fila.Desfavorables, fila.TasaExito);
             })
             .OrderByDescending(c => c.Enviados).ThenByDescending(c => c.Favorables).ThenBy(c => c.Organismo, StringComparer.Ordinal).ThenBy(c => c.Infraccion, StringComparer.Ordinal)
             .Take(TopeCruceDp).ToList();
@@ -154,7 +165,7 @@ public sealed partial class ServicioReportes
                 {
                     var fila = Fila("", "", g.Select(x => (x.Estado, x.RespuestaSentido, x.FechaRadicacion, x.RespuestaFecha)));
                     return new ConsolidadoDp(g.Key.TenantId, empresas.GetValueOrDefault(g.Key.TenantId) ?? "Empresa sin nombre", g.Key.OrganismoTransitoId,
-                        Organismo(g.Key.OrganismoTransitoId), fila.Enviados, fila.Favorables, fila.Desfavorables, fila.SinRespuesta);
+                        Organismo(g.Key.OrganismoTransitoId), fila.Enviados, fila.Favorables, fila.Desfavorables, fila.SinRespuesta, fila.TasaExito);
                 })
                 .OrderBy(c => c.Empresa, StringComparer.Ordinal).ThenByDescending(c => c.Enviados).ThenBy(c => c.Organismo, StringComparer.Ordinal).ToList();
         }

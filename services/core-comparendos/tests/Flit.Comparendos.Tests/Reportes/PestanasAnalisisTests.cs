@@ -78,6 +78,17 @@ public sealed class PestanasAnalisisTests(ApiConFuente api) : IClassFixture<ApiC
             }
         }
 
+        // NIT: el propio filtra (los cuatro pendientes son de él); uno que no es de la empresa deja todo en cero, no ve nada ajeno.
+        var nit = await api.EnDbAsync(db => db.IdentificacionesMonitoreadas.Where(i => i.TenantId == empresa).Select(i => i.Id).SingleAsync(ct));
+        (await gestora.GetFromJsonAsync<JsonElement>($"{Base}/reportes/gestion?nit={nit}", ct)).GetProperty("gestion").GetProperty("operacion")
+            .GetProperty("resumen").GetProperty("pendientes").GetInt32().Should().Be(4);
+        (await gestora.GetFromJsonAsync<JsonElement>($"{Base}/reportes/gestion?nit={Guid.NewGuid()}", ct)).GetProperty("gestion").GetProperty("operacion")
+            .GetProperty("resumen").GetProperty("pendientes").GetInt32().Should().Be(0);
+
+        // El SuperAdmin con «todas las empresas» ve la suma de todas (al menos las de esta empresa).
+        (await Super.GetFromJsonAsync<JsonElement>($"{Base}/reportes/gestion", ct)).GetProperty("gestion").GetProperty("operacion")
+            .GetProperty("resumen").GetProperty("pendientes").GetInt32().Should().BeGreaterThanOrEqualTo(4);
+
         // RANGO_INVALIDO como el resto de Reportes (R8: nada de rango invertido).
         (await gestora.GetAsync($"{Base}/reportes/gestion?desde=2026-10-09&hasta=2026-10-01", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
     }
@@ -138,6 +149,18 @@ public sealed class PestanasAnalisisTests(ApiConFuente api) : IClassFixture<ApiC
         organismos.Sum(o => o.GetProperty("favorables").GetInt32()).Should().Be(kpis.GetProperty("dpFavorables").GetInt32());
         organismos.Sum(o => o.GetProperty("desfavorables").GetInt32()).Should().Be(kpis.GetProperty("dpDesfavorables").GetInt32());
         (organismos.Sum(o => o.GetProperty("enviados").GetInt32()), organismos.Sum(o => o.GetProperty("sinRespuesta").GetInt32())).Should().Be((3, 1));
+        // Tasa por fila (S0): misma fórmula y corte que el Resumen; ponderada por sus respondidos da la tasa del Resumen.
+        foreach (var filas in new[] { organismos, dp.GetProperty("porInfraccion").EnumerateArray().ToList() })
+        {
+            var respondidos = filas.Sum(o => o.GetProperty("favorables").GetInt32() + o.GetProperty("desfavorables").GetInt32());
+            var ponderada = filas.Where(o => o.GetProperty("tasaExito").ValueKind != JsonValueKind.Null)
+                .Sum(o => o.GetProperty("tasaExito").GetDecimal() * (o.GetProperty("favorables").GetInt32() + o.GetProperty("desfavorables").GetInt32())) / respondidos;
+            Math.Round(ponderada, 4).Should().Be(kpis.GetProperty("tasaExitoDp").GetDecimal());
+        }
+
+        // Una fila sin respuestas no tiene tasa («—»), no 0 %: D02 solo tiene a D-3, sin respuesta.
+        dp.GetProperty("porInfraccion").EnumerateArray().Single(i => i.GetProperty("clave").GetString() == "D02")
+            .GetProperty("tasaExito").ValueKind.Should().Be(JsonValueKind.Null);
         dp.GetProperty("porInfraccion").EnumerateArray().Select(i => (i.GetProperty("clave").GetString(), i.GetProperty("enviados").GetInt32()))
             .Should().Equal(("C29", 2), ("D02", 1));
         dp.GetProperty("cruce").EnumerateArray().Sum(c => c.GetProperty("enviados").GetInt32()).Should().Be(3);

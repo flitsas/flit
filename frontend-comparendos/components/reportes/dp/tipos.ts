@@ -10,6 +10,8 @@ export interface FilaDp {
   /** Radicados en el periodo que siguen esperando respuesta. */
   sinRespuesta: number;
   diasPromedio: number | null;
+  /** favorables / (favorables + desfavorables), el mismo corte del Resumen; null sin respuestas («—»). */
+  tasaExito: number | null;
 }
 
 export interface ReporteDp {
@@ -22,14 +24,14 @@ export interface ReporteDp {
   enviados: number;
   porOrganismo: FilaDp[];
   porInfraccion: FilaDp[];
-  cruce: { organismoId: string; organismo: string; infraccion: string; enviados: number; favorables: number; desfavorables: number }[];
+  cruce: { organismoId: string; organismo: string; infraccion: string; enviados: number; favorables: number; desfavorables: number; tasaExito: number | null }[];
   positivos: { comparendoId: string; numero: string; placa: string | null; radicado: string; organismo: string; fechaRadicacion: string | null; fechaRespuesta: string; valorAlRadicar: number | null }[];
   totalPositivos: number;
   acumulado: { dia: string; enviados: number; respondidos: number }[];
   vencidos: { comparendoId: string; numero: string; placa: string | null; radicado: string; organismo: string; fechaRadicacion: string | null; fechaLimite: string; diasVencido: number }[];
   totalVencidos: number;
   /** Solo el SuperAdmin con «todas las empresas». */
-  consolidado: { empresaId: string; empresa: string; organismoId: string; organismo: string; enviados: number; favorables: number; desfavorables: number; sinRespuesta: number }[] | null;
+  consolidado: { empresaId: string; empresa: string; organismoId: string; organismo: string; enviados: number; favorables: number; desfavorables: number; sinRespuesta: number; tasaExito: number | null }[] | null;
 }
 
 export interface RespuestaDp {

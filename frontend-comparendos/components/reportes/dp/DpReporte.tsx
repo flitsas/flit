@@ -21,6 +21,8 @@ const GraficoArea = dynamic(() => import("@/components/inicio/GraficoArea").then
 
 const n = (x: number) => x.toLocaleString("es-CO");
 const dias = (d: number | null) => (d === null ? "—" : String(d).replace(".", ","));
+/** Sin respuestas no hay tasa: «—», no 0 %. */
+const tasa = (t: number | null) => (t === null ? "—" : formatoTasa(t));
 
 /** Tabla con su paginación (cada una con su propio estado). */
 function Tabla<T>({ titulo, filas, columnas, clave, vacio, minWidth, onFila, pie }: {
@@ -58,6 +60,7 @@ const COLUMNAS_FILA = (primera: string): DataTableColumn<FilaDp>[] => [
   { key: "favorables", header: "Favorables", align: "right", render: (f) => n(f.favorables) },
   { key: "desfavorables", header: "Desfavorables", align: "right", render: (f) => n(f.desfavorables) },
   { key: "sinRespuesta", header: "Sin respuesta", align: "right", render: (f) => n(f.sinRespuesta) },
+  { key: "tasa", header: "Tasa de éxito", align: "right", render: (f) => <span className="font-semibold">{tasa(f.tasaExito)}</span> },
   { key: "dias", header: "Días hasta la respuesta", align: "right", render: (f) => dias(f.diasPromedio) },
 ];
 
@@ -152,7 +155,7 @@ export function DpReporte() {
                   ),
                   titulo: `${f.clave} ${f.nombre}`.trim(),
                   valor: f.enviados,
-                  cifra: `${n(f.enviados)} enviados`,
+                  cifra: `${n(f.enviados)} enviados · ${tasa(f.tasaExito)}`,
                   detalle: `${n(f.favorables)} favorables · ${n(f.desfavorables)} desfavorables · ${n(f.sinRespuesta)} sin respuesta`,
                 }))}
               />
@@ -172,6 +175,7 @@ export function DpReporte() {
                 { key: "enviados", header: "Enviados", align: "right", render: (c) => n(c.enviados) },
                 { key: "favorables", header: "Favorables", align: "right", render: (c) => n(c.favorables) },
                 { key: "desfavorables", header: "Desfavorables", align: "right", render: (c) => n(c.desfavorables) },
+                { key: "tasa", header: "Tasa de éxito", align: "right", render: (c) => tasa(c.tasaExito) },
               ]}
             />
           </PanelInicio>
@@ -232,6 +236,7 @@ export function DpReporte() {
                   { key: "favorables", header: "Favorables", align: "right", render: (c) => n(c.favorables) },
                   { key: "desfavorables", header: "Desfavorables", align: "right", render: (c) => n(c.desfavorables) },
                   { key: "sinRespuesta", header: "Sin respuesta", align: "right", render: (c) => n(c.sinRespuesta) },
+                  { key: "tasa", header: "Tasa de éxito", align: "right", render: (c) => tasa(c.tasaExito) },
                 ]}
               />
             </PanelInicio>

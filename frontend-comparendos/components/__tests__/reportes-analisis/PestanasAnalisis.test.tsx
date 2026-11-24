@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import GestionPage from "@/app/(app)/reportes/gestion/page";
 import DpPage from "@/app/(app)/reportes/dp/page";
 import PlataformaPage from "@/app/(app)/reportes/plataforma/page";
+import ResumenPage from "@/app/(app)/reportes/page";
 import { P } from "@/lib/nav";
 
 // Reportes 2.0 (S3): las pestañas Gestión, Derechos de petición y Plataforma leen y escriben desde, hasta, nit y empresa en la URL.
@@ -40,12 +41,12 @@ const gestion = (desde: string | null, hasta: string | null) => ({
   alcance: { empresa: "e1", nit: null, desde, hasta },
   gestion: { conPeriodo: !!desde, operacion, topOrganismos: [{ organismoId: "o1", nombre: "Movilidad Bogotá", cantidad: 40, valor: 120_000_000 }] },
 });
-const fila = (clave: string, nombre: string) => ({ clave, nombre, enviados: 3, favorables: 1, desfavorables: 1, sinRespuesta: 1, diasPromedio: 4.5 });
+const fila = (clave: string, nombre: string, tasaExito: number | null = 0.5) => ({ clave, nombre, enviados: 3, favorables: 1, desfavorables: 1, sinRespuesta: 1, diasPromedio: 4.5, tasaExito });
 const dp = (consolidado: unknown[] | null) => ({
   alcance: { empresa: null, nit: null, desde: "2026-11-01", hasta: "2026-11-24" },
   dp: {
     tasaExito: 0.5, ahorro: 604_100, favorables: 1, desfavorables: 1, sinRespuesta: 4, enviados: 3,
-    porOrganismo: [fila("o1", "Movilidad Bogotá")], porInfraccion: [fila("C29", "Exceso de velocidad")],
+    porOrganismo: [fila("o1", "Movilidad Bogotá"), fila("o2", "Tránsito Cali", null)], porInfraccion: [fila("C29", "Exceso de velocidad")],
     cruce: [{ organismoId: "o1", organismo: "Movilidad Bogotá", infraccion: "C29", enviados: 3, favorables: 1, desfavorables: 1 }],
     positivos: [{ comparendoId: "c1", numero: "1100100000001", placa: "AAA111", radicado: "FLIT-1", organismo: "Movilidad Bogotá", fechaRadicacion: "2026-11-02", fechaRespuesta: "2026-11-10", valorAlRadicar: 604_100 }],
     totalPositivos: 1,
@@ -79,6 +80,7 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     const llamada = apiFetch.mock.calls.find(([r]) => r === "/reportes/gestion")!;
     expect(llamada[1].query).toMatchObject({ desde: null, hasta: null, nit: null, empresa: null });
     expect(screen.getByTestId("gestion-alcance").textContent).toMatch(/Todo lo pendiente a hoy/);
+    expect(screen.getByTestId("gestion-corte").textContent).toBe("Pendiente a hoy");
     expect(screen.getByTestId("gestion-resumen").textContent).toMatch(/Comparendos nuevos en los últimos 30 días/);
     // Sin recorte aquí: Gestión es donde viven las lentes que salieron del Inicio, y sin «Ver en Reportes».
     for (const id of ["vehiculos", "evitables", "antiguedad", "dp-organismos", "top-organismos"]) expect(screen.getByTestId(id)).toBeTruthy();
@@ -93,6 +95,7 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     render(<GestionPage />);
     expect(await screen.findByTestId("vehiculos")).toBeTruthy();
     expect(apiFetch.mock.calls.find(([r]) => r === "/reportes/gestion")![1].query).toMatchObject({ desde: "2026-06-01", hasta: "2026-11-24", nit: "n1" });
+    expect(screen.getByTestId("gestion-corte").textContent).toMatch(/^Impuestos del .+ al .+$/);
     const corte = "imposicionDesde=2026-06-01&imposicionHasta=2026-11-24&nits=n1";
     expect(within(screen.getByTestId("vehiculos")).getByRole("link", { name: /^AAA111/ }).getAttribute("href")).toBe(`/bandeja?placas=AAA111&pagado=false&${corte}`);
     expect(within(screen.getByTestId("top-organismos")).getByRole("link").getAttribute("href")).toBe(`/bandeja?organismos=o1&pagado=false&${corte}`);
@@ -127,6 +130,10 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     expect(within(kpis).getByText("50 %")).toBeTruthy();
     expect(within(kpis).getByText("$ 604.100")).toBeTruthy();
     expect(screen.getByTestId("dp-por-organismo").textContent).toMatch(/Movilidad Bogotá/);
+    // Tasa por fila: la de la API; sin respuestas, «—» y no 0 %.
+    const filaCali = within(screen.getByTestId("dp-por-organismo")).getByText("Tránsito Cali").closest("tr")!;
+    expect(within(filaCali).getByText("—")).toBeTruthy();
+    expect(within(screen.getByTestId("dp-por-organismo")).queryByText("0 %")).toBeNull();
     expect(screen.queryByTestId("dp-consolidado")).toBeNull();
     // Sin fechas en la URL, el mes en curso (como el resto de Reportes).
     const q = apiFetch.mock.calls.find(([r]) => r === "/reportes/dp")![1].query;
@@ -135,6 +142,25 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     sesion = super_;
     render(<DpPage />);
     expect(await screen.findByTestId("dp-consolidado")).toBeTruthy();
+  });
+
+  it("Resumen: lee desde, hasta y nit de la URL (vienen de otra pestaña) y «Consultar» los escribe ahí", async () => {
+    sesion = gestora();
+    ruta = "/reportes";
+    busqueda = "desde=2026-06-01&hasta=2026-06-30&nit=n1";
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (r: string, op?: { query?: Record<string, unknown> }) => {
+      if (r === "/reportes/dashboard" || r === "/reportes/dinero") return new Promise(() => {});
+      return base(r, op);
+    });
+    render(<ResumenPage />);
+    await waitFor(() => expect(apiFetch.mock.calls.some(([r]) => r === "/reportes/dashboard")).toBe(true));
+    for (const r of ["/reportes/dashboard", "/reportes/dinero"])
+      expect(apiFetch.mock.calls.find(([x]) => x === r)![1].query).toMatchObject({ desde: "2026-06-01", hasta: "2026-06-30", nit: "n1" });
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-07-01" } });
+    fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "2026-07-31" } });
+    fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
+    expect(replace).toHaveBeenLastCalledWith("/reportes?desde=2026-07-01&hasta=2026-07-31&nit=n1", { scroll: false });
   });
 
   it("Plataforma: quien no es SuperAdmin no la ve ni la pide; el SuperAdmin sí", async () => {
