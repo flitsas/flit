@@ -71,6 +71,8 @@ export function PaginaDetalleConsulta({
   const router = useRouter();
   const { sesion } = useSesion();
   const puedeVer = backoffice || (sesion?.capacidades.verDiagnosticos ?? false);
+  // Liquidaciones del impuesto: la ruta de descarga es de la compañía; el backoffice no la tiene (sin botones).
+  const puedeDescargar = !backoffice && (sesion?.capacidades.descargarReportes ?? false);
   const valida = esFuente(fuente);
   const [carga, setCarga] = useState<Carga>({ tipo: "cargando" });
   const [intento, setIntento] = useState(0);
@@ -145,7 +147,7 @@ export function PaginaDetalleConsulta({
       </InlineAlert>
     );
   } else {
-    contenido = <VistaDetalleCelda detalle={carga.detalle} />;
+    contenido = <VistaDetalleCelda detalle={carga.detalle} descargas={{ diagnosticoId: loteId, puedeDescargar }} />;
   }
 
   return (

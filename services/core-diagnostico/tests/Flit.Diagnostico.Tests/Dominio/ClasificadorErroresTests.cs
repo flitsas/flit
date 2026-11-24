@@ -63,6 +63,7 @@ public sealed class ClasificadorErroresTests
     [InlineData("SIN_MODELO")]
     [InlineData("ORGANISMO_INCOMPLETO")]
     [InlineData("SIN_NOMBRE_PROPIETARIO")]
+    [InlineData("FUENTE_INACTIVA")]
     public void Codigos_del_impuesto_son_definitivos_y_conocidos(string codigo)
     {
         ClasificadorErrores.EsConocido(codigo).Should().BeTrue();

@@ -284,7 +284,7 @@ describe("GrillaSemaforos — HU #14087 AC5: estados con icono y texto", () => {
 
   it.each([
     ["celda-1-impuesto_departamental", "Servicio público"],
-    ["celda-2-impuesto_departamental", "Departamento no soportado"],
+    ["celda-2-impuesto_departamental", "Departamento sin cobertura"],
     ["celda-1-runt_locatario", "El RUNT no reporta locatario"],
   ])("la novedad %s muestra su motivo «%s» debajo", (id, motivo) => {
     const { container } = pintar();
@@ -381,6 +381,7 @@ describe("GrillaSemaforos — fallos del proveedor: AUTENTICACION y LIMITE_PROVE
     ["AUTENTICACION", "Credenciales del proveedor rechazadas"],
     ["LIMITE_PROVEEDOR", "Límite del proveedor"],
     ["TIMEOUT", "No se pudo consultar"],
+    ["FUENTE_INACTIVA", "Fuente inactiva"],
   ])("la celda en ERROR %s dice «%s» bajo el chip y conserva «Reprocesar»", (tipo, nota) => {
     const g = grilla({ vehiculos: [vehiculo(2, [celda(2, "RUNT", "COMPLETADO"), celda(2, "SIMIT_PROPIETARIO", "ERROR", { tipo_error: tipo })])] });
     const { container } = pintar(g, true);
@@ -448,7 +449,7 @@ describe("GrillaSemaforos — HU #13866: columna del impuesto departamental", ()
 
   it.each([
     ["SERVICIO_PUBLICO", "Servicio público"],
-    ["DEPARTAMENTO_NO_SOPORTADO", "Departamento no soportado"],
+    ["DEPARTAMENTO_NO_SOPORTADO", "Departamento sin cobertura"],
   ] as const)("N/A %s pinta el chip «Novedad» con el motivo «%s» y sin Reprocesar aunque sea admin", (motivo, textoMotivo) => {
     const { container } = pintar(conImpuesto("NA", { motivo_na: motivo }), true);
     const td = celdaDe(container, "celda-7-impuesto_departamental");

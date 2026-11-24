@@ -108,6 +108,7 @@ public static class PlatformEndpoints
                 p.UpdatedBy,
                 UpdatedByEmail = p.UpdatedBy is { } by && emails.TryGetValue(by, out var email) ? email : null,
                 ComingSoon = hosts.IsComingSoon(p.ProductCode),
+                p.ImpuestoApiKeyConfigurada,
             }));
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("ListTenantProducts");
 
@@ -150,6 +151,69 @@ public static class PlatformEndpoints
             }
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("SetTenantProduct");
 
+        // PUT /admin/tenants/{tenantId}/products/{productCode}/credentials/{credentialCode} — guarda o reemplaza la API key (ADR-0092).
+        group.MapPut("/admin/tenants/{tenantId:guid}/products/{productCode}/credentials/{credentialCode}", async (
+            Guid tenantId,
+            string productCode,
+            string credentialCode,
+            [FromBody] SetTenantProductCredentialRequest request,
+            ClaimsPrincipal user,
+            IIdentityDb db,
+            SetTenantProductCredentialHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, ct))
+                return Problem(StatusCodes.Status404NotFound, "TENANT_NOT_FOUND", "La empresa no existe.");
+
+            try
+            {
+                Guid? changedBy = Guid.TryParse(user.FindFirstValue("sub"), out var sub) ? sub : null;
+                await handler.HandleAsync(
+                    new SetTenantProductCredentialCommand(tenantId, productCode, credentialCode, request.Value),
+                    changedBy,
+                    ct);
+                return Results.NoContent();
+            }
+            catch (TenantProductException ex)
+            {
+                var status = ex.Code switch
+                {
+                    TenantProductException.CredentialNotSupported => StatusCodes.Status404NotFound,
+                    TenantProductException.CredentialInvalid => StatusCodes.Status400BadRequest,
+                    _ => StatusCodes.Status400BadRequest,
+                };
+                return Problem(status, ex.Code, ex.Message);
+            }
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("SetTenantProductCredential");
+
+        // DELETE — borra la API key; idempotente (204 también si no había fila).
+        group.MapDelete("/admin/tenants/{tenantId:guid}/products/{productCode}/credentials/{credentialCode}", async (
+            Guid tenantId,
+            string productCode,
+            string credentialCode,
+            ClaimsPrincipal user,
+            IIdentityDb db,
+            DeleteTenantProductCredentialHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, ct))
+                return Problem(StatusCodes.Status404NotFound, "TENANT_NOT_FOUND", "La empresa no existe.");
+
+            try
+            {
+                Guid? changedBy = Guid.TryParse(user.FindFirstValue("sub"), out var sub) ? sub : null;
+                await handler.HandleAsync(tenantId, productCode, credentialCode, changedBy, ct);
+                return Results.NoContent();
+            }
+            catch (TenantProductException ex)
+            {
+                var status = ex.Code == TenantProductException.CredentialNotSupported
+                    ? StatusCodes.Status404NotFound
+                    : StatusCodes.Status400BadRequest;
+                return Problem(status, ex.Code, ex.Message);
+            }
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("DeleteTenantProductCredential");
+
         return app;
     }
 
@@ -163,6 +227,8 @@ public static class PlatformEndpoints
         Results.Problem(statusCode: status, detail: detail, extensions: new Dictionary<string, object?> { ["code"] = code });
 
     internal sealed record SetTenantProductRequest(bool Enabled, string? Notes);
+
+    internal sealed record SetTenantProductCredentialRequest(string? Value);
 
     internal sealed record ManifestRequest(string? Version, List<ManifestModuleRequest>? Modules, List<ManifestRoleRequest>? DefaultRoles);
 

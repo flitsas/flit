@@ -3,7 +3,7 @@ using Microsoft.Extensions.Configuration;
 
 namespace Flit.Consultas.Api.Impuesto;
 
-/// <summary>Teléfono, correo y dirección fijos que el paso 3 manda al servicio. Los valores viven en configuración.</summary>
+/// <summary>Teléfono, correo y dirección fijos de respaldo (IMPUESTO_CONTACTO_*).</summary>
 internal sealed record ContactoImpuesto(
     string Celular,
     string Telefono,
@@ -28,16 +28,29 @@ internal sealed record ContactoImpuesto(
 }
 
 /// <summary>
-/// Variables <c>IMPUESTO_API_*</c>. Sin URL en código. Los departamentos encendidos viven en la tabla, no aquí (ADR-0080).
+/// Variables <c>IMPUESTO_API_*</c> y <c>Consultas:Identidad:Address</c>.
+/// <see cref="TimeoutSegundos"/> es el presupuesto total del sondeo (sigue &lt; 300).
 /// </summary>
-internal sealed record OpcionesImpuesto(Uri? BaseUrl, string Ruta, int TimeoutSegundos, ContactoImpuesto Contacto)
+internal sealed record OpcionesImpuesto(
+    Uri? BaseUrl,
+    string Ruta,
+    int TimeoutSegundos,
+    ContactoImpuesto Contacto,
+    Uri? IdentidadAddress,
+    int PresupuestoSimuladoSegundos)
 {
     public const string VariableBaseUrl = "IMPUESTO_API_BASE_URL";
     public const string VariableRuta = "IMPUESTO_API_PATH";
     public const string VariableTimeout = "IMPUESTO_API_TIMEOUT_SECONDS";
+    public const string ClaveIdentidadAddress = "Consultas:Identidad:Address";
+    public const string ClavePresupuestoSimulado = "Consultas:Simulacion:ImpuestoPresupuestoSegundos";
     public const int TimeoutPorDefecto = 280;
+    public const int TimeoutPeticionSegundos = 30;
+    public const int PresupuestoSimuladoPorDefecto = 3;
 
     public bool TieneRuta => BaseUrl is not null && Ruta.Length > 0;
+
+    public bool TieneIdentidad => IdentidadAddress is not null;
 
     public static string Unir(string baseUrl, string ruta)
     {
@@ -59,7 +72,14 @@ internal sealed record OpcionesImpuesto(Uri? BaseUrl, string Ruta, int TimeoutSe
             && (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)
             ? uri
             : null;
-        return new(baseUrl, Valor(VariableRuta).Trim('/'), timeout, LeerContacto(configuracion));
+        var identidad = Uri.TryCreate(Valor(ClaveIdentidadAddress), UriKind.Absolute, out var idUri)
+            && (idUri.Scheme == Uri.UriSchemeHttp || idUri.Scheme == Uri.UriSchemeHttps)
+            ? idUri
+            : null;
+        var presupuestoSimulado = int.TryParse(Valor(ClavePresupuestoSimulado), NumberStyles.Integer, CultureInfo.InvariantCulture, out var ps) && ps > 0
+            ? ps
+            : PresupuestoSimuladoPorDefecto;
+        return new(baseUrl, Valor(VariableRuta).Trim('/'), timeout, LeerContacto(configuracion), identidad, presupuestoSimulado);
     }
 
     private static ContactoImpuesto LeerContacto(IConfiguration configuracion)

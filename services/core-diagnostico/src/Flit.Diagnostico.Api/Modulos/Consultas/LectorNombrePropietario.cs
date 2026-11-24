@@ -46,7 +46,8 @@ internal static class LectorNombrePropietario
         }
     }
 
-    private static bool EsDe(JsonElement propietario, DocumentoPersona documento)
+    /// <summary>Verdadero si el propietario del JSON es el del documento ya normalizado de la solicitud.</summary>
+    internal static bool EsDe(JsonElement propietario, DocumentoPersona documento)
     {
         var suyo = MapperIntempo.DocumentoPropietario(
             Texto(propietario, "id_tipo_documento", "idTipoDocumento"),

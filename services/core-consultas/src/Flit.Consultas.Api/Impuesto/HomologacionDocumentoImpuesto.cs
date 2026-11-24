@@ -1,47 +1,34 @@
 namespace Flit.Consultas.Api.Impuesto;
 
 /// <summary>
-/// Tipo de documento que entiende cada departamento. Un par que no está en la tabla no se consulta.
-/// Diagnóstico manda <c>PAS</c>; el grupo común lo escribe <c>PASAP</c>.
+/// Tipo de documento que entiende la fuente nueva (H10): una sola tabla para todos los departamentos.
+/// Diagnóstico manda <c>PAS</c>; la fuente lo escribe <c>PA</c>. RC y nombres largos no se consultan.
 /// </summary>
 internal static class HomologacionDocumentoImpuesto
 {
-    public const string Valle = "76";
-
-    private static readonly HashSet<string> Comunes =
+    /// <summary>
+    /// Los 33 códigos DANE (32 departamentos y Bogotá D.C.). Protege solo la escritura del catálogo: es validación de forma, no de
+    /// cobertura; la cobertura la decide la API de impuesto.
+    /// </summary>
+    private static readonly HashSet<string> DepartamentosConocidos =
     [
-        "05", "25", "13", "68", "08", "11", "81", "18", "41", "44", "17", "94", "50", "52", "63",
+        "05", "08", "11", "13", "15", "17", "18", "19", "20", "23", "25", "27", "41", "44", "47", "50", "52",
+        "54", "63", "66", "68", "70", "73", "76", "81", "85", "86", "88", "91", "94", "95", "97", "99",
     ];
 
-    public static bool Conocido(string codigo) => codigo == Valle || Comunes.Contains(codigo);
+    public static bool Conocido(string codigo) => DepartamentosConocidos.Contains(codigo);
 
-    public static string? Homologar(string departamento, string? tipo)
+    public static string? Homologar(string? tipo)
     {
         var codigo = tipo?.Trim().ToUpperInvariant() ?? "";
-        if (departamento == Valle)
-        {
-            return codigo switch
-            {
-                "CC" => "Cédula Ciudadanía",
-                "NIT" => "NIT",
-                "CE" => "Cédula Extranjería",
-                "TI" => "Tarjeta de Identidad",
-                "PAS" => "Pasaporte",
-                "CD" => "Carnet Diplomático",
-                _ => null,
-            };
-        }
-
-        if (!Comunes.Contains(departamento))
-            return null;
         return codigo switch
         {
             "CC" => "CC",
             "NIT" => "NIT",
             "CE" => "CE",
+            "PAS" => "PA",
             "TI" => "TI",
-            "PAS" => "PASAP",
-            "RC" => "RC",
+            "CD" => "CD",
             _ => null,
         };
     }

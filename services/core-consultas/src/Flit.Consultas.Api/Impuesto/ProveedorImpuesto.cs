@@ -1,19 +1,51 @@
+using System.Text.RegularExpressions;
 using Flit.Consultas.Api.Bus;
 using Flit.Consultas.Grpc.V1;
-using Flit.Platform.Grpc.V1;
+using Flit.Platform.Sdk.Grpc;
+using Flit.Tramites.Application.UseCases.Consultations;
 using Grpc.Core;
 
 namespace Flit.Consultas.Api.Impuesto;
 
 /// <summary>
-/// Fachada del impuesto. Departamento fuera de la lista: <c>FAILED_PRECONDITION</c>, sin llamada.
-/// Par sin homologar: chequeo en ERROR, sin llamada. El mensaje del chequeo es fijo.
+/// Fachada del impuesto asíncrono (diseño §2.3–§2.4, D9). Departamento inactivo en el catálogo: <c>FAILED_PRECONDITION</c>. Con los
+/// 33 códigos DANE activos (P5' del 2026-11-23) el filtro sigue, pero la cobertura la decide la API: 422
+/// <c>department_unsupported</c> → <c>impuesto_departamento_no_soportado</c> (Diagnóstico lo cierra en N/A), 409 o <c>failed</c>
+/// asíncrono <c>source_inactive</c> → <c>impuesto_fuente_inactiva</c>, y el 422 por falta de código de departamento →
+/// <c>impuesto_rechazo</c>. Cuando la fuente cierra el trabajo sin veredicto confirmado (rechazo de negocio, solicitud inválida, no
+/// confirmado, respuesta ilegible o tiempo agotado) deja un Warning 7436 con identificadores y códigos de forma estricta; nunca texto
+/// libre ni valores de la fuente.
 /// </summary>
-internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, OpcionesImpuesto opciones, ICatalogoDepartamentosImpuesto catalogo)
+internal sealed partial class ProveedorImpuesto(
+    ITransporteImpuesto transporte,
+    OpcionesImpuesto opciones,
+    ICatalogoDepartamentosImpuesto catalogo,
+    IFuenteCredencialImpuesto credenciales,
+    ISeguimientoImpuesto seguimiento,
+    PlanSondeoImpuesto plan,
+    TimeProvider time,
+    ILogger<ProveedorImpuesto> logger)
 {
     public const string ClaveProveedor = "impuesto";
 
-    /// <summary>Códigos activos. Vacía si el transporte no está listo, aunque la tabla tenga filas.</summary>
+    /// <summary>La fuente no tiene consulta para el departamento (422 <c>department_unsupported</c>): Diagnóstico la cierra en N/A.</summary>
+    public const string ClaveDepartamentoNoSoportado = "impuesto_departamento_no_soportado";
+
+    /// <summary>La fuente del departamento está inactiva (409 o <c>failed</c> con <c>source_inactive</c>): ERROR reprocesable.</summary>
+    public const string ClaveFuenteInactiva = "impuesto_fuente_inactiva";
+
+    private const string MensajeDepartamentoNoSoportado =
+        "La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo.";
+
+    private const string MensajeFuenteInactiva =
+        "La consulta del impuesto de este departamento no está disponible en este momento. Intenta de nuevo más tarde.";
+
+    private const string MensajeNoConfirmado = "El impuesto no quedó confirmado.";
+
+    private static readonly Regex ArchivoId = ArchivoIdRegex();
+    private const int MaxPdfBytes = 3 * 1024 * 1024;
+
+    /// <summary>Códigos activos. Vacía si el transporte no está listo.</summary>
     public async Task<IReadOnlyList<string>> DepartamentosAsync(CancellationToken ct)
     {
         if (!transporte.Listo)
@@ -22,39 +54,315 @@ internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, Opciones
         return filas.Select(f => f.Codigo).ToArray();
     }
 
-    public async Task<ConsultarImpuestoVehicularResponse> ConsultarAsync(ConsultarImpuestoVehicularRequest request, CancellationToken ct)
+    public async Task<ConsultarImpuestoVehicularResponse> ConsultarAsync(
+        ConsultarImpuestoVehicularRequest request,
+        PlatformServiceCaller caller,
+        Guid trabajoId,
+        CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(caller);
         if (!transporte.Listo || !await catalogo.ActivoAsync(request.DepartamentoCodigo, ct).ConfigureAwait(false))
             throw new RpcException(new Status(StatusCode.FailedPrecondition, "Departamento sin consulta de impuesto."));
 
-        var homologado = HomologacionDocumentoImpuesto.Homologar(request.DepartamentoCodigo, request.Documento?.Tipo);
+        var homologado = HomologacionDocumentoImpuesto.Homologar(request.Documento?.Tipo);
         if (homologado is null || string.IsNullOrWhiteSpace(request.Documento?.Numero))
             return Error("impuesto_documento_no_homologado");
 
-        var cuerpo = SolicitudServicioImpuesto.Crear(
-            request.Placa?.Valor ?? "",
-            homologado,
-            request.Documento!.Numero,
-            request.DepartamentoCodigo,
-            request.HasOrganismoNombre ? request.OrganismoNombre : null,
-            request.HasMunicipio ? request.Municipio : null,
-            request.HasDepartamentoNombre ? request.DepartamentoNombre : null,
-            request.HasModelo ? request.Modelo : null,
-            request.HasPropietarioNombre ? request.PropietarioNombre : null,
-            opciones.Contacto);
-        var transporteResultado = await transporte.EnviarAsync(cuerpo, ct).ConfigureAwait(false);
-        if (transporteResultado.Fallo is { } fallo)
+        CredencialImpuesto cred;
+        try
         {
-            RegistroFallosProveedor.Anotar(fallo);
-            return Error(ClaveTransporte(fallo));
+            cred = await credenciales.ObtenerAsync(caller.TenantId, forzar: false, ct).ConfigureAwait(false);
+        }
+        catch (FalloCredencialImpuestoException ex)
+        {
+            RegistroFallosProveedor.Anotar(ex.Fallo);
+            return Error(ex.Clave);
         }
 
-        RegistroFallosProveedor.Anotar((Flit.Tramites.Application.UseCases.Consultations.FalloProveedor?)null);
-        return AProto(InterpreteImpuesto.Interpretar(transporteResultado.Cuerpo ?? ""));
+        if (!cred.Disponible || string.IsNullOrEmpty(cred.ApiKey))
+        {
+            RegistroFallosProveedor.Anotar(new FalloProveedor(ClaseFalloProveedor.Credenciales));
+            return Error("impuesto_credencial_no_configurada");
+        }
+
+        var cuerpo = SolicitudServicioImpuesto.Crear(request, homologado, opciones.Contacto);
+        var campoInvalido = SolicitudServicioImpuesto.Validar(cuerpo, departamentoActivo: true);
+        if (campoInvalido is not null)
+        {
+            RegistroFallosProveedor.Anotar((FalloProveedor?)null);
+            return Error("impuesto_solicitud_invalida");
+        }
+
+        var seg = await seguimiento.LeerAsync(trabajoId, ct).ConfigureAwait(false)
+            ?? await seguimiento.ReservarAsync(trabajoId, caller.TenantId, request.DepartamentoCodigo, ct).ConfigureAwait(false);
+
+        var reanudado = seg.IdExterno is not null;
+        var reenviado = false;
+
+        if (seg.IdExterno is null)
+        {
+            (var envio, cred) = await EnviarConRefrescoAsync(cuerpo, cred, caller.TenantId, ct).ConfigureAwait(false);
+            if (envio.Fallo is { } falloEnvio)
+            {
+                await seguimiento.CerrarAsync(trabajoId, "error", ct).ConfigureAwait(false);
+                RegistroFallosProveedor.Anotar(falloEnvio);
+                return CerrarEnvioFallido(trabajoId, request.DepartamentoCodigo, falloEnvio, envio.CodigoError);
+            }
+
+            var ahoraEnvio = time.GetUtcNow();
+            await seguimiento.GuardarIdExternoAsync(trabajoId, envio.IdExterno!, ahoraEnvio, ct).ConfigureAwait(false);
+            seg = new SeguimientoImpuesto(trabajoId, envio.IdExterno, ahoraEnvio, "queued");
+        }
+
+        var limite = (seg.EnviadoEn ?? time.GetUtcNow()) + plan.Presupuesto;
+        var n = 0;
+        var fallosSeguidos = 0;
+        string? ultimoEstado = null;
+
+        while (true)
+        {
+            ct.ThrowIfCancellationRequested();
+            var ahora = time.GetUtcNow();
+            if (ahora >= limite)
+                break;
+
+            var espera = plan.Intervalo(n);
+            var restante = limite - ahora;
+            if (espera > restante)
+                espera = restante;
+
+            await Task.Delay(espera, time, ct).ConfigureAwait(false);
+            var estado = await transporte.ConsultarAsync(seg.IdExterno!, cred.ApiKey!, ct).ConfigureAwait(false);
+            n++;
+            ultimoEstado = EstadoObservado(estado.Estado);
+
+            // NoEncontrado (404) se trata como estado, aunque el transporte adjunte Fallo.
+            if (estado.Estado == EstadoTrabajoExterno.NoEncontrado
+                || (estado.Fallo?.HttpStatus == 404 && estado.Estado is EstadoTrabajoExterno.Desconocido or EstadoTrabajoExterno.NoEncontrado))
+            {
+                if (reanudado && !reenviado && limite - time.GetUtcNow() >= TimeSpan.FromSeconds(60))
+                {
+                    await seguimiento.OlvidarIdExternoAsync(trabajoId, ct).ConfigureAwait(false);
+                    reenviado = true;
+                    reanudado = false;
+                    (var envio, cred) = await EnviarConRefrescoAsync(cuerpo, cred, caller.TenantId, ct).ConfigureAwait(false);
+                    if (envio.Fallo is { } falloRe)
+                    {
+                        await seguimiento.CerrarAsync(trabajoId, "error", ct).ConfigureAwait(false);
+                        RegistroFallosProveedor.Anotar(falloRe);
+                        return CerrarEnvioFallido(trabajoId, request.DepartamentoCodigo, falloRe, envio.CodigoError);
+                    }
+
+                    var ahoraRe = time.GetUtcNow();
+                    await seguimiento.GuardarIdExternoAsync(trabajoId, envio.IdExterno!, ahoraRe, ct).ConfigureAwait(false);
+                    seg = new SeguimientoImpuesto(trabajoId, envio.IdExterno, ahoraRe, "queued");
+                    fallosSeguidos = 0;
+                    continue;
+                }
+
+                RegistroFallosProveedor.Anotar(estado.Fallo ?? new FalloProveedor(ClaseFalloProveedor.Caida, 404));
+                return Error("impuesto_caida");
+            }
+
+            if (estado.Fallo is { } falloEstado)
+            {
+                if (falloEstado.Clase == ClaseFalloProveedor.Credenciales && falloEstado.HttpStatus == 401)
+                {
+                    var cred2 = await credenciales.ObtenerAsync(caller.TenantId, forzar: true, ct).ConfigureAwait(false);
+                    if (cred2.Disponible && cred2.Version != cred.Version && !string.IsNullOrEmpty(cred2.ApiKey))
+                    {
+                        cred = cred2;
+                        fallosSeguidos = 0;
+                        continue;
+                    }
+
+                    RegistroFallosProveedor.Anotar(falloEstado);
+                    return Error("impuesto_autenticacion");
+                }
+
+                if (falloEstado.Clase is ClaseFalloProveedor.Caida or ClaseFalloProveedor.Red or ClaseFalloProveedor.Timeout
+                    || (falloEstado.HttpStatus is >= 500 and <= 599))
+                {
+                    fallosSeguidos++;
+                    if (fallosSeguidos >= 3)
+                    {
+                        RegistroFallosProveedor.Anotar(falloEstado);
+                        return Error(ClaveTransporte(falloEstado));
+                    }
+
+                    continue;
+                }
+
+                RegistroFallosProveedor.Anotar(falloEstado);
+                return Error(ClaveTransporte(falloEstado));
+            }
+
+            switch (estado.Estado)
+            {
+                case EstadoTrabajoExterno.EnCola:
+                case EstadoTrabajoExterno.Ejecutando:
+                    fallosSeguidos = 0;
+                    continue;
+
+                case EstadoTrabajoExterno.Exitoso:
+                case EstadoTrabajoExterno.Parcial:
+                case EstadoTrabajoExterno.Fallido:
+                    await seguimiento.CerrarAsync(trabajoId, EstadoCierre(estado.Estado), ct).ConfigureAwait(false);
+                    RegistroFallosProveedor.Anotar((FalloProveedor?)null);
+                    var veredicto = InterpreteImpuesto.Interpretar(estado.Cuerpo ?? "");
+                    var respuesta = AProto(veredicto);
+                    if (!veredicto.Confirmado)
+                    {
+                        AvisarSinVeredicto(trabajoId, seg.IdExterno, request.DepartamentoCodigo, veredicto.EstadoFuente,
+                            veredicto.EstadoResultadoFuente, veredicto.CodigoErrorFuente, respuesta.Resultado.Chequeos[0].Clave,
+                            veredicto.Advertencias);
+                    }
+
+                    return respuesta;
+
+                default:
+                    fallosSeguidos = 0;
+                    continue;
+            }
+        }
+
+        await seguimiento.CerrarAsync(trabajoId, "timeout", ct).ConfigureAwait(false);
+        RegistroFallosProveedor.Anotar((FalloProveedor?)null);
+        AvisarSinVeredicto(trabajoId, seg.IdExterno, request.DepartamentoCodigo, ultimoEstado, null, null,
+            "impuesto_no_confirmado_tiempo", []);
+        return Error("impuesto_no_confirmado_tiempo");
     }
 
-    private static string ClaveTransporte(Flit.Tramites.Application.UseCases.Consultations.FalloProveedor fallo) => fallo.Codigo switch
+    public async Task<DescargarLiquidacionImpuestoResponse> DescargarAsync(
+        string archivoId, PlatformServiceCaller caller, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(caller);
+        if (string.IsNullOrWhiteSpace(archivoId) || !ArchivoId.IsMatch(archivoId))
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "archivo_id inválido."));
+
+        CredencialImpuesto cred;
+        try
+        {
+            cred = await credenciales.ObtenerAsync(caller.TenantId, forzar: false, ct).ConfigureAwait(false);
+        }
+        catch (FalloCredencialImpuestoException)
+        {
+            throw new RpcException(new Status(StatusCode.Unavailable, "Fuente de credencial no disponible."));
+        }
+
+        if (!cred.Disponible || string.IsNullOrEmpty(cred.ApiKey))
+            throw new RpcException(new Status(StatusCode.FailedPrecondition, "CREDENCIAL_NO_CONFIGURADA"));
+
+        var archivo = await transporte.DescargarAsync(archivoId, cred.ApiKey, ct).ConfigureAwait(false);
+        if (archivo.Fallo is { Clase: ClaseFalloProveedor.Credenciales, HttpStatus: 401 })
+        {
+            var cred2 = await credenciales.ObtenerAsync(caller.TenantId, forzar: true, ct).ConfigureAwait(false);
+            if (cred2.Disponible && cred2.Version != cred.Version && !string.IsNullOrEmpty(cred2.ApiKey))
+                archivo = await transporte.DescargarAsync(archivoId, cred2.ApiKey, ct).ConfigureAwait(false);
+            else
+                throw new RpcException(new Status(StatusCode.PermissionDenied, "CREDENCIAL_RECHAZADA"));
+        }
+
+        if (archivo.NoEncontrado || archivo.Fallo?.HttpStatus == 404)
+            throw new RpcException(new Status(StatusCode.NotFound, "Liquidación no encontrada."));
+        if (archivo.Fallo is not null)
+            throw new RpcException(new Status(StatusCode.Unavailable, "Fuente de liquidación no disponible."));
+        if (archivo.Contenido is null || archivo.Contenido.Length == 0)
+            throw new RpcException(new Status(StatusCode.Internal, "la fuente no devolvió un PDF"));
+        if (archivo.Contenido.Length > MaxPdfBytes)
+            throw new RpcException(new Status(StatusCode.ResourceExhausted, "PDF demasiado grande."));
+        if (archivo.Contenido.AsSpan(0, Math.Min(5, archivo.Contenido.Length)).SequenceEqual("%PDF-"u8) is false)
+            throw new RpcException(new Status(StatusCode.Internal, "la fuente no devolvió un PDF"));
+
+        return new DescargarLiquidacionImpuestoResponse
+        {
+            Contenido = Google.Protobuf.ByteString.CopyFrom(archivo.Contenido),
+            ContentType = string.IsNullOrWhiteSpace(archivo.ContentType) ? "application/pdf" : archivo.ContentType,
+        };
+    }
+
+    private async Task<(EnvioImpuesto Envio, CredencialImpuesto Cred)> EnviarConRefrescoAsync(
+        string cuerpo, CredencialImpuesto cred, Guid tenantId, CancellationToken ct)
+    {
+        var envio = await transporte.EnviarAsync(cuerpo, cred.ApiKey!, ct).ConfigureAwait(false);
+        if (envio.Fallo is not { Clase: ClaseFalloProveedor.Credenciales, HttpStatus: 401 })
+            return (envio, cred);
+
+        var cred2 = await credenciales.ObtenerAsync(tenantId, forzar: true, ct).ConfigureAwait(false);
+        if (cred2.Disponible && cred2.Version != cred.Version && !string.IsNullOrEmpty(cred2.ApiKey))
+            return (await transporte.EnviarAsync(cuerpo, cred2.ApiKey, ct).ConfigureAwait(false), cred2);
+
+        return (envio, cred);
+    }
+
+    /// <summary>
+    /// Warning 7436: la fuente no dejó veredicto confirmado. Solo identificadores y códigos que pasan una forma estricta
+    /// (los demás quedan en <c>no_reconocido</c>); nunca mensajes ni valores de campos de la fuente (Ley 1581).
+    /// </summary>
+    private void AvisarSinVeredicto(
+        Guid trabajoId, string? idExterno, string? departamento, string? estadoFuente, string? estadoResultado,
+        string? codigoError, string clave, IReadOnlyList<AdvertenciaLeida> advertencias)
+    {
+        var avisos = advertencias.Count == 0
+            ? "ninguna"
+            : string.Join(",", advertencias.Select(a => a.Tipo == TipoAdvertenciaLeida.Validacion
+                ? "validacion:" + Identificador(a.Campo)
+                : "aviso:" + InterpreteImpuesto.CodigoSeguro(a.Codigo)));
+        ProveedorImpuestoLog.SinVeredicto(
+            logger,
+            trabajoId,
+            Identificador(idExterno),
+            Identificador(departamento),
+            InterpreteImpuesto.CodigoSeguro(estadoFuente),
+            InterpreteImpuesto.CodigoSeguro(estadoResultado),
+            InterpreteImpuesto.CodigoSeguro(codigoError),
+            InterpreteImpuesto.CodigoSeguro(clave),
+            avisos);
+    }
+
+    private static string Identificador(string? valor) =>
+        valor is not null && ArchivoId.IsMatch(valor) ? valor : InterpreteImpuesto.NoReconocido;
+
+    private static string? EstadoObservado(EstadoTrabajoExterno estado) => estado switch
+    {
+        EstadoTrabajoExterno.EnCola => "queued",
+        EstadoTrabajoExterno.Ejecutando => "running",
+        _ => null,
+    };
+
+    private static string EstadoCierre(EstadoTrabajoExterno estado) => estado switch
+    {
+        EstadoTrabajoExterno.Exitoso => "succeeded",
+        EstadoTrabajoExterno.Parcial => "partial",
+        EstadoTrabajoExterno.Fallido => "failed",
+        _ => "error",
+    };
+
+    /// <summary>
+    /// POST rechazado. Un 422/409 de negocio tiene su propia clave y deja el Warning 7436 con el <c>error.code</c> (forma estricta);
+    /// lo demás cae en la clave del transporte. El <c>RegistroFallosProveedor</c> ya quedó con la clase <c>Rechazo</c> del transporte,
+    /// igual que cualquier 400/422: no cuenta como caída.
+    /// </summary>
+    private ConsultarImpuestoVehicularResponse CerrarEnvioFallido(Guid trabajoId, string? departamento, FalloProveedor fallo, string? codigoError)
+    {
+        if (ClaveRechazoNegocio(fallo.HttpStatus, codigoError) is not { } clave)
+            return Error(ClaveTransporte(fallo));
+
+        AvisarSinVeredicto(trabajoId, null, departamento, "http_" + fallo.HttpStatus, null, codigoError, clave, []);
+        return Error(clave);
+    }
+
+    private static string? ClaveRechazoNegocio(int? httpStatus, string? codigoError) => (httpStatus, codigoError) switch
+    {
+        (422, "department_unsupported") => ClaveDepartamentoNoSoportado,
+        (422, TransporteImpuestoHttp.CodigoDepartamentoAusente) => "impuesto_rechazo",
+        (409, "source_inactive") => ClaveFuenteInactiva,
+        (409, _) => "impuesto_rechazo",
+        _ => null,
+    };
+
+    private static string ClaveTransporte(FalloProveedor fallo) => fallo.Codigo switch
     {
         "CREDENCIALES" => "impuesto_autenticacion",
         "TIMEOUT" => "impuesto_timeout",
@@ -66,14 +374,24 @@ internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, Opciones
 
     private ConsultarImpuestoVehicularResponse Error(string clave) => new()
     {
-        Resultado = Resultado(clave, EstadoChequeo.Error, Semaforo.Amarillo, "El impuesto no quedó confirmado."),
+        Resultado = Resultado(clave, EstadoChequeo.Error, Semaforo.Amarillo, clave switch
+        {
+            ClaveDepartamentoNoSoportado => MensajeDepartamentoNoSoportado,
+            ClaveFuenteInactiva => MensajeFuenteInactiva,
+            _ => MensajeNoConfirmado,
+        }),
     };
 
     private ConsultarImpuestoVehicularResponse AProto(VeredictoImpuesto veredicto)
     {
         if (!veredicto.Confirmado)
         {
-            var respuesta = Error("impuesto_" + veredicto.Codigo!.ToLowerInvariant());
+            var clave = veredicto.Codigo switch
+            {
+                "SOLICITUD_INVALIDA" => "impuesto_solicitud_invalida",
+                _ => "impuesto_" + (veredicto.Codigo ?? "no_confirmado").ToLowerInvariant(),
+            };
+            var respuesta = Error(clave);
             respuesta.DatoParcial = veredicto.DatoParcial;
             respuesta.TieneDeuda = veredicto.TieneDeuda;
             if (veredicto.MontoTotal is { } monto)
@@ -82,6 +400,7 @@ internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, Opciones
                 respuesta.MontoInformado = true;
             }
 
+            CopiarAdvertencias(respuesta, veredicto);
             return respuesta;
         }
 
@@ -95,6 +414,7 @@ internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, Opciones
             TieneDeuda = veredicto.TieneDeuda,
             MontoInformado = veredicto.MontoInformado,
             MontoTotal = veredicto.MontoTotal ?? 0,
+            DatoParcial = veredicto.DatoParcial,
         };
         if (veredicto.InteresesMora is { } intereses)
             confirmada.InteresesMora = intereses;
@@ -126,10 +446,33 @@ internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, Opciones
                 item.LiquidacionId = id;
             if (vigencia.Avaluo is { } avaluoVigencia)
                 item.Avaluo = avaluoVigencia;
+            if (vigencia.ReferenciaPago is { } referencia)
+                item.ReferenciaPago = referencia;
+            if (vigencia.FechaVencimiento is { } vencimiento)
+                item.FechaVencimiento = vencimiento;
             confirmada.Vigencias.Add(item);
         }
 
+        CopiarAdvertencias(confirmada, veredicto);
         return confirmada;
+    }
+
+    private static void CopiarAdvertencias(ConsultarImpuestoVehicularResponse respuesta, VeredictoImpuesto veredicto)
+    {
+        foreach (var a in veredicto.Advertencias)
+        {
+            var item = new AdvertenciaImpuesto
+            {
+                Tipo = a.Tipo == TipoAdvertenciaLeida.Validacion
+                    ? TipoAdvertenciaImpuesto.Validacion
+                    : TipoAdvertenciaImpuesto.Aviso,
+                Campo = a.Campo,
+                Codigo = a.Codigo,
+            };
+            if (a.Anio is { } anio)
+                item.Anio = anio;
+            respuesta.Advertencias.Add(item);
+        }
     }
 
     private ResultadoConsulta Resultado(string clave, EstadoChequeo estado, Semaforo semaforo, string mensaje) => new()
@@ -141,4 +484,15 @@ internal sealed class ProveedorImpuesto(ITransporteImpuesto transporte, Opciones
             new Chequeo { Clave = clave, Etiqueta = "Impuesto vehicular", Estado = estado, Fuente = "IMPUESTO", Mensaje = mensaje },
         },
     };
+
+    [GeneratedRegex("^[A-Za-z0-9_-]{1,64}$", RegexOptions.CultureInvariant)]
+    private static partial Regex ArchivoIdRegex();
+}
+
+internal static partial class ProveedorImpuestoLog
+{
+    [LoggerMessage(EventId = 7436, Level = LogLevel.Warning, Message = "Impuesto sin veredicto confirmado: trabajo {TrabajoId}, consulta externa {IdExterno}, departamento {Departamento}, estado {EstadoFuente}, estado del resultado {EstadoResultado}, error_code {CodigoError}, clave {Clave}, advertencias {Advertencias}.")]
+    public static partial void SinVeredicto(
+        ILogger logger, Guid trabajoId, string idExterno, string departamento, string estadoFuente, string estadoResultado,
+        string codigoError, string clave, string advertencias);
 }

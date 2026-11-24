@@ -134,7 +134,10 @@ public static class Program
         builder.Services.AddSingleton(sp => new RuntIntempo.ProveedorRuntIntempo(sp.GetRequiredService<IHttpClientFactory>(), intempo));
         var impuesto = Impuesto.OpcionesImpuesto.Desde(builder.Configuration);
         builder.Services.AddSingleton(impuesto);
-        builder.Services.AddHttpClient(Impuesto.TransporteImpuestoHttp.HttpClientName, c => c.Timeout = TimeSpan.FromSeconds(impuesto.TimeoutSegundos));
+        builder.Services.AddMemoryCache();
+        builder.Services.AddHttpClient(Impuesto.TransporteImpuestoHttp.HttpClientName, c =>
+            c.Timeout = TimeSpan.FromSeconds(Impuesto.OpcionesImpuesto.TimeoutPeticionSegundos));
+        builder.Services.AddSingleton<Impuesto.ISeguimientoImpuesto, Impuesto.SeguimientoImpuestoBd>();
         builder.Services.AddSingleton<Impuesto.ITransporteImpuesto>(sp =>
         {
             var simulacion = sp.GetRequiredService<Simulacion.OpcionesSimulacion>();
@@ -143,12 +146,39 @@ public static class Program
             return new Impuesto.TransporteImpuestoHttp(
                 sp.GetRequiredService<IHttpClientFactory>(), impuesto, sp.GetRequiredService<ILogger<Impuesto.TransporteImpuestoHttp>>());
         });
+        if (impuesto.IdentidadAddress is not null)
+        {
+            builder.Services.AddFlitGrpcClient<Flit.Identidad.Grpc.V1.CredencialesProductoService.CredencialesProductoServiceClient>(
+                builder.Configuration, impuesto.IdentidadAddress, Impuesto.Credencial.FuenteCredencialImpuestoPlataforma.Scope,
+                o => o.Deadline = TimeSpan.FromSeconds(5));
+            builder.Services.AddSingleton<Impuesto.Credencial.FuenteCredencialImpuestoPlataforma>();
+        }
+
+        builder.Services.AddSingleton<Impuesto.IFuenteCredencialImpuesto>(sp =>
+        {
+            var simulacion = sp.GetRequiredService<Simulacion.OpcionesSimulacion>();
+            if (simulacion.Simula(Bus.FuentesBus.Impuesto) || impuesto.IdentidadAddress is null)
+                return new Impuesto.Credencial.FuenteCredencialImpuestoSimulada();
+            return sp.GetRequiredService<Impuesto.Credencial.FuenteCredencialImpuestoPlataforma>();
+        });
         builder.Services.AddScoped<Impuesto.CatalogoDepartamentosImpuesto>();
         builder.Services.AddScoped<Impuesto.ICatalogoDepartamentosImpuesto>(sp => sp.GetRequiredService<Impuesto.CatalogoDepartamentosImpuesto>());
-        builder.Services.AddScoped(sp => new Impuesto.ProveedorImpuesto(
-            sp.GetRequiredService<Impuesto.ITransporteImpuesto>(),
-            sp.GetRequiredService<Impuesto.OpcionesImpuesto>(),
-            sp.GetRequiredService<Impuesto.ICatalogoDepartamentosImpuesto>()));
+        builder.Services.AddScoped(sp =>
+        {
+            var simulacion = sp.GetRequiredService<Simulacion.OpcionesSimulacion>();
+            var plan = simulacion.Simula(Bus.FuentesBus.Impuesto)
+                ? Impuesto.PlanSondeoImpuesto.Simulado(impuesto.PresupuestoSimuladoSegundos)
+                : Impuesto.PlanSondeoImpuesto.Real(impuesto.TimeoutSegundos);
+            return new Impuesto.ProveedorImpuesto(
+                sp.GetRequiredService<Impuesto.ITransporteImpuesto>(),
+                sp.GetRequiredService<Impuesto.OpcionesImpuesto>(),
+                sp.GetRequiredService<Impuesto.ICatalogoDepartamentosImpuesto>(),
+                sp.GetRequiredService<Impuesto.IFuenteCredencialImpuesto>(),
+                sp.GetRequiredService<Impuesto.ISeguimientoImpuesto>(),
+                plan,
+                sp.GetRequiredService<TimeProvider>(),
+                sp.GetRequiredService<ILogger<Impuesto.ProveedorImpuesto>>());
+        });
         var simulados = bool.TryParse(builder.Configuration["Consultations:ComparendosSimulados"], out var sim) ? sim : builder.Environment.IsDevelopment();
         builder.Services.AddSingleton<Comparendos.IProveedorComparendos>(sp => new Comparendos.ProveedorSimulado(sp.GetRequiredService<TimeProvider>(), simulados));
 

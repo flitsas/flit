@@ -21,9 +21,12 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas;
 /// nombre del propietario: ERROR con ese código. Definitivo y reprocesable desde el tablero.</item>
 /// <item>Departamento nulo o que dejó de estar soportado en la réplica (<c>departamentos_impuesto</c>) desde que se liberó:
 /// N/A <c>DEPARTAMENTO_NO_SOPORTADO</c>, sin consultar ni dejar intento (el constructor no arma la consulta).</item>
+/// <item>La API responde que no tiene fuente para el departamento (chequeo <see cref="MapeoImpuesto.ClaveDepartamentoNoSoportado"/>):
+/// N/A <c>DEPARTAMENTO_NO_SOPORTADO</c>, definitiva y sin reintento. Lleva su <see cref="ResultadoCelda.Intento"/> como los demás
+/// cierres, pero <see cref="RegistroIntentos"/> no inserta intentos de una N/A.</item>
 /// <item>Con respuesta: COMPLETADO con <see cref="ResultadoImpuesto"/> en snake_case, sin proveedor ni transacción (R-20); el
 /// intento lleva la placa, el servicio del proveedor y la transacción si la hay.</item>
-/// <item>Error de la fuente: su código tal cual; el consumidor de resultados reintenta los transitorios (D-12) y, agotados, la celda queda en
+/// <item>Error de la fuente: su código tal cual (<c>FUENTE_INACTIVA</c> si la fuente del departamento está inactiva, definitivo); el consumidor de resultados reintenta los transitorios (D-12) y, agotados, la celda queda en
 /// ERROR reprocesable. No bloquea el vehículo (solo RUNT bloquea).</item>
 /// </list>
 /// Idempotencia por (vehículo, fuente) y reutilización del mismo día (D-10) son del publicador. Sin llenado manual (R-9,
@@ -79,6 +82,15 @@ internal sealed partial class EjecutorCeldaImpuesto(
         var r = respuesta.Mapear<ConsultarImpuestoVehicularResponse, ResultadoImpuesto>(
             ok => departamento is null ? RespuestaFuente<ResultadoImpuesto>.Fallo(RespuestaConsulta.Invalida) : MapeoImpuesto.Mapear(ok, departamento),
             MapeoImpuesto.Error);
+        if (respuesta.Respuesta is ConsultarImpuestoVehicularResponse ok && MapeoImpuesto.DepartamentoNoSoportado(ok))
+        {
+            ImpuestoNoSoportado(log, celda.Id);
+            return ResultadoCelda.Na(MotivoNa.DepartamentoNoSoportado) with
+            {
+                Intento = new DatosIntento(placa, r.Servicio, r.TransaccionProveedorId, null),
+            };
+        }
+
         var error = r.Error ?? (r.Resultado is null ? new ErrorConsulta(ErroresFuentePersona.RespuestaInvalida, "El impuesto respondió sin resultado.") : null);
         if (error is not null)
         {
@@ -112,6 +124,6 @@ internal sealed partial class EjecutorCeldaImpuesto(
     [LoggerMessage(EventId = 138621, Level = LogLevel.Warning, Message = "La celda IMPUESTO_DEPARTAMENTAL {CeldaId} terminó en error ({TipoError})")]
     private static partial void ImpuestoEnError(ILogger logger, Guid celdaId, string tipoError);
 
-    [LoggerMessage(EventId = 138622, Level = LogLevel.Information, Message = "La celda IMPUESTO_DEPARTAMENTAL {CeldaId} queda N/A: el departamento ya no está soportado")]
+    [LoggerMessage(EventId = 138622, Level = LogLevel.Information, Message = "La celda IMPUESTO_DEPARTAMENTAL {CeldaId} queda N/A: departamento sin cobertura de impuesto")]
     private static partial void ImpuestoNoSoportado(ILogger logger, Guid celdaId);
 }

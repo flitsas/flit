@@ -16,6 +16,7 @@
     <ProjectReference Include="..\..\..\core-api\src\Flit.Platform.Sdk\Flit.Platform.Sdk.csproj" />
     <!-- HU #13343: proveedores, cadena de respaldo y avalúos (ADR-0065). -->
     <ProjectReference Include="..\..\..\core-api\src\Flit.Modules.Consultas\Flit.Modules.Consultas.csproj" />
+    <ProjectReference Include="..\..\..\core-identity\src\Flit.Identidad.Grpc.Contracts\Flit.Identidad.Grpc.Contracts.csproj" />
     <ProjectReference Include="..\Flit.Consultas.Grpc.Contracts\Flit.Consultas.Grpc.Contracts.csproj" />
     <ProjectReference Include="..\Flit.Consultas.Grpc.Mapping\Flit.Consultas.Grpc.Mapping.csproj" />
   </ItemGroup>
@@ -42,6 +43,11 @@
   <!-- HU #14153 AC3: respuestas crudas inventadas de Kyverum conductor y Verifik RUES para la simulacion (sin PII, rango ficticio 99999...). -->
   <ItemGroup>
     <EmbeddedResource Include="Simulacion\Fixtures\proveedor-*.json" LogicalName="$(RootNamespace).Simulacion.Fixtures.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <!-- Impuesto asíncrono v2 (diseño §2.7): fixtures sintéticos del GET/POST/PDF. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Simulacion\Fixtures\impuesto-v2\*" LogicalName="$(RootNamespace).Simulacion.Fixtures.impuesto-v2.%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

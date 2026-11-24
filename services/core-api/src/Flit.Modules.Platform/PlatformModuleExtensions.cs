@@ -21,6 +21,10 @@ public static class PlatformModuleExtensions
     {
         services.AddScoped<SetTenantProductEnabledHandler>();
         services.AddScoped<ListTenantProductsHandler>();
+        // ADR-0092: API key del impuesto por empresa (escritura REST y entrega gRPC).
+        services.AddScoped<SetTenantProductCredentialHandler>();
+        services.AddScoped<DeleteTenantProductCredentialHandler>();
+        services.AddScoped<GetTenantProductCredentialHandler>();
         // HU #12965 (B-05): implementación real del contrato §4.
         services.AddScoped<IProductAccessResolver, ProductAccessResolver>();
         // Epic #13316 (HU #13334): productos encendidos de una empresa, para el gRPC de Identidad.

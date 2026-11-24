@@ -53,10 +53,13 @@ internal sealed record PreparacionSolicitudImpuesto(ConsultarImpuestoVehicularRe
         if (organismo is null || Limpio(organismo.Municipio) is not { } municipio || Limpio(organismo.DepartamentoNombre) is not { } departamentoNombre)
             return Cerrar(EjecutorCeldaImpuesto.OrganismoIncompleto, "El organismo no tiene municipio o nombre de departamento.");
 
-        if (LectorNombrePropietario.Leer(await JsonRuntAsync(db, celda, respuestas, ct).ConfigureAwait(false), documento) is not { } nombre)
+        var jsonRunt = await JsonRuntAsync(db, celda, respuestas, ct).ConfigureAwait(false);
+        if (LectorNombrePropietario.Leer(jsonRunt, documento) is not { } nombre)
             return Cerrar(EjecutorCeldaImpuesto.SinNombrePropietario, "La respuesta del RUNT no trae el nombre del propietario.");
 
-        return new(new ConsultarImpuestoVehicularRequest
+        var contacto = LectorContactoPropietario.Leer(jsonRunt, documento);
+        var vehiculoRunt = LectorVehiculoImpuesto.Leer(jsonRunt);
+        var solicitud = new ConsultarImpuestoVehicularRequest
         {
             Opciones = new OpcionesConsulta(),
             Placa = new Placa { Valor = placa },
@@ -67,7 +70,27 @@ internal sealed record PreparacionSolicitudImpuesto(ConsultarImpuestoVehicularRe
             DepartamentoNombre = departamentoNombre,
             Modelo = modelo,
             PropietarioNombre = nombre,
-        }, null);
+        };
+        if (contacto?.Telefono is { } telefono)
+            solicitud.PropietarioTelefono = telefono;
+        if (contacto?.Correo is { } correo)
+            solicitud.PropietarioCorreo = correo;
+        if (contacto?.Departamento is { } depto)
+            solicitud.PropietarioDepartamento = depto;
+        if (contacto?.Ciudad is { } ciudad)
+            solicitud.PropietarioCiudad = ciudad;
+        if (contacto?.Direccion is { } direccion)
+            solicitud.PropietarioDireccion = direccion;
+        if (vehiculoRunt?.Clase is { } clase)
+            solicitud.VehiculoClase = clase;
+        if (vehiculoRunt?.Marca is { } marca)
+            solicitud.VehiculoMarca = marca;
+        if (vehiculoRunt?.Servicio is { } servicio)
+            solicitud.VehiculoServicio = servicio;
+        if (vehiculoRunt?.Combustible is { } combustible)
+            solicitud.VehiculoCombustible = combustible;
+
+        return new(solicitud, null);
     }
 
     private static PreparacionSolicitudImpuesto Cerrar(string tipo, string mensaje) =>

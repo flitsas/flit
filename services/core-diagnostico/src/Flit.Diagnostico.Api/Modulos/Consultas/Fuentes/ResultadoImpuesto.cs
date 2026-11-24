@@ -3,10 +3,23 @@ using Flit.Consultas.Grpc.V1;
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
 /// <summary>Una vigencia (año gravable) del impuesto en el payload de la celda: año, valor en pesos enteros y si está pagada.</summary>
-public sealed record VigenciaResultadoImpuesto(int Anio, long Valor, bool Pagada, string? LiquidacionId = null, long? Avaluo = null);
+public sealed record VigenciaResultadoImpuesto(
+    int Anio,
+    long Valor,
+    bool Pagada,
+    string? LiquidacionId = null,
+    long? Avaluo = null,
+    string? ReferenciaPago = null,
+    string? FechaVencimiento = null);
 
 /// <summary>Último pago informado. Un campo vacío queda null: no se inventa cero ni fecha.</summary>
 public sealed record UltimoPagoResultadoImpuesto(int? Anio, long? Valor, string? Fecha);
+
+/// <summary>
+/// Aviso no bloqueante o validación que no coincidió (D6). <see cref="Tipo"/> es <c>VALIDACION</c> o <c>AVISO</c>.
+/// Nunca el valor enviado ni el del portal.
+/// </summary>
+public sealed record AdvertenciaResultadoImpuesto(string Tipo, string Campo, string Codigo, int? Anio);
 
 /// <summary>
 /// Resultado normalizado del impuesto departamental, guardado en el payload de la celda IMPUESTO_DEPARTAMENTAL en snake_case.
@@ -24,7 +37,9 @@ public sealed record ResultadoImpuesto(
     UltimoPagoResultadoImpuesto? UltimoPago = null,
     string? LiquidacionConsolidadaId = null,
     string? PeriodoCertificacion = null,
-    string? FechaConsultaProveedor = null)
+    string? FechaConsultaProveedor = null,
+    bool DatoParcial = false,
+    IReadOnlyList<AdvertenciaResultadoImpuesto>? Advertencias = null)
 {
     /// <summary>
     /// Lee el monto, las vigencias y los opcionales. <c>monto_total</c> solo si <c>monto_informado</c>; un negativo es sin dato.
@@ -41,7 +56,9 @@ public sealed record ResultadoImpuesto(
                 Math.Max(v.Valor, 0),
                 v.Pagada,
                 v.HasLiquidacionId ? Texto(v.LiquidacionId) : null,
-                v.HasAvaluo ? NoNegativo(v.Avaluo) : null))
+                v.HasAvaluo ? NoNegativo(v.Avaluo) : null,
+                v.HasReferenciaPago ? Texto(v.ReferenciaPago) : null,
+                v.HasFechaVencimiento ? Texto(v.FechaVencimiento) : null))
             .ToList();
         return new ResultadoImpuesto(
             respuesta.MontoInformado ? NoNegativo(respuesta.MontoTotal) : null,
@@ -54,7 +71,34 @@ public sealed record ResultadoImpuesto(
             Pago(respuesta.UltimoPago),
             respuesta.HasLiquidacionConsolidadaId ? Texto(respuesta.LiquidacionConsolidadaId) : null,
             respuesta.HasPeriodoCertificacion ? Texto(respuesta.PeriodoCertificacion) : null,
-            respuesta.HasFechaConsultaProveedor ? Texto(respuesta.FechaConsultaProveedor) : null);
+            respuesta.HasFechaConsultaProveedor ? Texto(respuesta.FechaConsultaProveedor) : null,
+            respuesta.DatoParcial,
+            LeerAdvertencias(respuesta));
+    }
+
+    private static List<AdvertenciaResultadoImpuesto>? LeerAdvertencias(ConsultarImpuestoVehicularResponse respuesta)
+    {
+        if (respuesta.Advertencias.Count == 0)
+            return null;
+        var lista = new List<AdvertenciaResultadoImpuesto>(respuesta.Advertencias.Count);
+        foreach (var a in respuesta.Advertencias)
+        {
+            var tipo = a.Tipo switch
+            {
+                TipoAdvertenciaImpuesto.Validacion => "VALIDACION",
+                TipoAdvertenciaImpuesto.Aviso => "AVISO",
+                _ => null,
+            };
+            if (tipo is null)
+                continue;
+            lista.Add(new AdvertenciaResultadoImpuesto(
+                tipo,
+                Texto(a.Campo) ?? string.Empty,
+                Texto(a.Codigo) ?? string.Empty,
+                a.HasAnio ? a.Anio : null));
+        }
+
+        return lista.Count == 0 ? null : lista;
     }
 
     private static long? NoNegativo(long valor) => valor < 0 ? null : valor;

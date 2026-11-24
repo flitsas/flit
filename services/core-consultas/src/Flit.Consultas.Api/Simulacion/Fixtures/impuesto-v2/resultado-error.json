@@ -1,0 +1,26 @@
+{
+  "id": "consulta-sintetica-0001",
+  "source_id": "impuesto-05",
+  "status": "succeeded",
+  "created_at": "2026-11-19T15:00:00Z",
+  "error_code": null,
+  "file_errors": [],
+  "result": {
+    "status": "error",
+    "consultedAt": "2026-11-19T15:00:45Z",
+    "totals": null,
+    "pendingPeriods": [],
+    "lastPayment": null,
+    "clearance": null,
+    "validations": [],
+    "warnings": [
+      {
+        "code": "vehiculo_no_encontrado",
+        "message": "texto sintetico del proveedor",
+        "period": null
+      }
+    ],
+    "vehicle": null,
+    "consolidatedFileId": null
+  }
+}

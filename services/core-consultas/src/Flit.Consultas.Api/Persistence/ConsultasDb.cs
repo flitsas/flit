@@ -92,6 +92,30 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
             e.HasIndex(d => d.DepartmentCode).IsUnique().HasDatabaseName("uq_vehicle_tax_departments_department_code");
         });
 
+        modelBuilder.Entity<TrabajoImpuestoExterno>(e =>
+        {
+            e.ToTable("vehicle_tax_jobs", t => t.HasComment(
+                "Seguimiento TrabajoId del bus -> id de la consulta asíncrona de impuesto (D4). Sin placa, documento ni respuesta. Retención 24 h."));
+            e.HasKey(t => t.Id).HasName("pk_vehicle_tax_jobs");
+            e.Property(t => t.Id).HasColumnName("id").ValueGeneratedNever();
+            e.Property(t => t.TrabajoId).HasColumnName("trabajo_id");
+            e.Property(t => t.TenantId).HasColumnName("tenant_id");
+            e.Property(t => t.DepartmentCode).HasColumnName("department_code").HasMaxLength(5).IsRequired();
+            e.Property(t => t.ExternalId).HasColumnName("external_id").HasMaxLength(64);
+            e.Property(t => t.Status).HasColumnName("status").HasMaxLength(20).IsRequired();
+            e.Property(t => t.SubmittedAt).HasColumnName("submitted_at");
+            e.Property(t => t.LastPolledAt).HasColumnName("last_polled_at");
+            e.Property(t => t.PollCount).HasColumnName("poll_count");
+            e.Property(t => t.CompletedAt).HasColumnName("completed_at");
+            e.Property(t => t.CreatedAt).HasColumnName("created_at");
+            e.Property(t => t.UpdatedAt).HasColumnName("updated_at");
+            e.HasIndex(t => t.TrabajoId).IsUnique().HasDatabaseName("uq_vehicle_tax_jobs_trabajo_id");
+            e.HasIndex(t => new { t.TenantId, t.CreatedAt }).HasDatabaseName("ix_vehicle_tax_jobs_tenant_id_created_at");
+            e.HasIndex(t => t.CreatedAt).HasDatabaseName("ix_vehicle_tax_jobs_created_at");
+            e.ToTable(t => t.HasCheckConstraint("ck_vehicle_tax_jobs_status",
+                "status IN ('reserved','queued','running','succeeded','partial','failed','timeout','error')"));
+        });
+
         // Épica #14644 (HU #14647): contingencia de proveedor RUNT, global de plataforma (sin tenant_id: la empresa no la ve).
         modelBuilder.Entity<ContingenciaProveedorRunt>(e =>
         {
@@ -143,6 +167,8 @@ public sealed class ConsultasDb(DbContextOptions<ConsultasDb> options) : DbConte
     public DbSet<ValorMockAvaluo> ValoresMockAvaluo => Set<ValorMockAvaluo>();
 
     public DbSet<DepartamentoConsultaImpuesto> DepartamentosImpuesto => Set<DepartamentoConsultaImpuesto>();
+
+    public DbSet<TrabajoImpuestoExterno> TrabajosImpuesto => Set<TrabajoImpuestoExterno>();
 
     public DbSet<ContingenciaProveedorRunt> ContingenciasRunt => Set<ContingenciaProveedorRunt>();
 

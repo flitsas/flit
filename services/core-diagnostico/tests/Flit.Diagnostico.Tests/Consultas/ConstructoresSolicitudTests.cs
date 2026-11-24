@@ -48,7 +48,8 @@ public sealed class ConstructoresSolicitudTests
         // HU #14183 T3: SIMIT también lleva opciones.incluirRespuestaCruda=true.
         [RpcConsultas.Multas] = ["opciones", "opciones.incluirRespuestaCruda", "documento", "documento.tipo", "documento.numero", "tipoPersona", "placa", "placa.valor"],
         [RpcConsultas.Avaluos] = ["opciones", "placa", "placa.valor", "vin", "vin.valor", "modelo", "cilindraje", "combustible", "pasajeros"],
-        [RpcConsultas.Impuesto] = ["opciones", "placa", "placa.valor", "departamentoCodigo", "documento", "documento.tipo", "documento.numero", "organismoNombre", "municipio", "departamentoNombre", "modelo", "propietarioNombre"],
+        [RpcConsultas.Impuesto] = ["opciones", "placa", "placa.valor", "departamentoCodigo", "documento", "documento.tipo", "documento.numero", "organismoNombre", "municipio", "departamentoNombre", "modelo", "propietarioNombre",
+            "vehiculoClase", "vehiculoMarca", "vehiculoServicio", "vehiculoCombustible"],
     };
 
     [Fact]
@@ -245,22 +246,38 @@ public sealed class ConstructoresSolicitudTests
                 : [(RpcConsultas.Multas, PorDocumento("CC", Natural, TipoPersona.Natural, crudo: true))],
             Fuente.SimitLocatario => tst003 ? [(RpcConsultas.Multas, PorDocumento("CC", Locatario, TipoPersona.Natural, crudo: true))] : [],
             Fuente.Avaluo => [(RpcConsultas.Avaluos, Avaluo(v, tst003))],
-            Fuente.ImpuestoDepartamental => [(RpcConsultas.Impuesto, new ConsultarImpuestoVehicularRequest
-            {
-                Opciones = opciones,
-                Placa = new Placa { Valor = v.Placa },
-                DepartamentoCodigo = MotorNa.DepartamentoSoportadoFicticio,
-                Documento = tst003
-                    ? new DocumentoIdentidad { Tipo = "NIT", Numero = Nit }
-                    : new DocumentoIdentidad { Tipo = "CC", Numero = Natural },
-                OrganismoNombre = "SECRETARIA DE TRANSITO DE PRUEBA",
-                Municipio = "MUNICIPIO DE PRUEBA",
-                DepartamentoNombre = "DEPARTAMENTO DE PRUEBA",
-                Modelo = 2020,
-                PropietarioNombre = tst003 ? "LEASING FICTICIO SA" : "PERSONA PRUEBA UNO",
-            })],
+            Fuente.ImpuestoDepartamental => [(RpcConsultas.Impuesto, Impuesto(v, tst003, opciones))],
             _ => throw new ArgumentOutOfRangeException(nameof(fuente)),
         };
+    }
+
+    /// <summary>
+    /// Impuesto: identificación del propietario y datos del vehículo de la RUNT del fixture sintético. Clase, marca y servicio vienen
+    /// en los tres; el fixture de leasing (TST003) no trae combustible y el campo (proto3 optional) queda sin valor. Los fixtures no
+    /// traen contacto del propietario, así que no viaja ninguno.
+    /// </summary>
+    private static ConsultarImpuestoVehicularRequest Impuesto(VehiculoDiagnostico v, bool tst003, OpcionesConsulta opciones)
+    {
+        var request = new ConsultarImpuestoVehicularRequest
+        {
+            Opciones = opciones,
+            Placa = new Placa { Valor = v.Placa },
+            DepartamentoCodigo = MotorNa.DepartamentoSoportadoFicticio,
+            Documento = tst003
+                ? new DocumentoIdentidad { Tipo = "NIT", Numero = Nit }
+                : new DocumentoIdentidad { Tipo = "CC", Numero = Natural },
+            OrganismoNombre = "SECRETARIA DE TRANSITO DE PRUEBA",
+            Municipio = "MUNICIPIO DE PRUEBA",
+            DepartamentoNombre = "DEPARTAMENTO DE PRUEBA",
+            Modelo = 2020,
+            PropietarioNombre = tst003 ? "LEASING FICTICIO SA" : "PERSONA PRUEBA UNO",
+            VehiculoClase = "AUTOMOVIL",
+            VehiculoMarca = "MARCA PRUEBA",
+            VehiculoServicio = "PARTICULAR",
+        };
+        if (!tst003)
+            request.VehiculoCombustible = "GASOLINA";
+        return request;
     }
 
     private static ConsultarMultasRequest PorDocumento(string tipo, string numero, TipoPersona tipoPersona, bool crudo = false) => new()

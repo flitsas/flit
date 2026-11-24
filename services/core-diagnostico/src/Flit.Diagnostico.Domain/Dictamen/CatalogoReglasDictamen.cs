@@ -13,8 +13,8 @@ public sealed record FilaReglaDictamen(
 
 /// <summary>
 /// Catálogo de reglas de la familia TRASPASO. <see cref="Filas"/> es la versión vigente (<see cref="Version"/>), la que
-/// usa el evaluador para los dictámenes nuevos. <see cref="FilasV1"/> se conserva intacta: los dictámenes ya emitidos
-/// guardan <c>catalogo_version = 1</c> y no se reevalúan. <see cref="Historico"/> es lo que se siembra en
+/// usa el evaluador para los dictámenes nuevos. <see cref="FilasV1"/> y <see cref="FilasV2"/> se conservan: los dictámenes
+/// ya emitidos guardan su <c>catalogo_version</c> y no se reevalúan. <see cref="Historico"/> es lo que se siembra en
 /// <c>reglas_dictamen</c>.
 /// </summary>
 /// <example>
@@ -26,7 +26,7 @@ public sealed record FilaReglaDictamen(
 public static class CatalogoReglasDictamen
 {
     /// <summary>Versión con la que se emite un dictamen nuevo y que se guarda junto al veredicto.</summary>
-    public const int Version = 2;
+    public const int Version = 3;
 
     private const string Bloquea = "BLOQUEA";
     private const string Advierte = "ADVIERTE";
@@ -75,7 +75,7 @@ public static class CatalogoReglasDictamen
     ];
 
     /// <summary>
-    /// Una regla v2. <see cref="EfectoUnilateral"/> y <see cref="PlantillaUnilateral"/> solo difieren en las reglas de
+    /// Una regla v2/v3. <see cref="EfectoUnilateral"/> y <see cref="PlantillaUnilateral"/> solo difieren en las reglas de
     /// multas y en la RTM: el traspaso unilateral (Res. 20233040017145, art. 5.3.2.2) no exige paz y salvo ni valida la
     /// revisión técnico-mecánica, así que ahí advierten.
     /// </summary>
@@ -96,15 +96,12 @@ public static class CatalogoReglasDictamen
     private static readonly DefinicionV2[] DefinicionesV2 =
     [
         new(DefinicionesV1[0].Codigo, DefinicionesV1[0].Efecto, DefinicionesV1[0].Plantilla),
-        // V5: a la maquinaria no se le bloquea por SOAT hasta confirmar si se le exige; el remolque está exento y no dispara.
         new("SOAT_MAQUINARIA", Advierte,
             "La maquinaria no registra un SOAT vigente en el RUNT. Mientras se confirma si se le exige, es una advertencia "
             + "y el traspaso sigue viable."),
-        // V4: el plazo depende de la clase y el servicio; el unilateral no valida RTM (art. 5.3.2.2) y solo advierte.
         new("RTM_NO_VIGENTE", Bloquea, PlazoRtm + ", así que el traspaso queda bloqueado.",
             Advierte, PlazoRtm + "." + AdvierteUnilateral),
         new(DefinicionesV1[2].Codigo, DefinicionesV1[2].Efecto, DefinicionesV1[2].Plantilla),
-        // Las multas del vehículo bloquean por política de FLIT: la norma pide el paz y salvo de las personas.
         new("SIMIT_VEHICULO", Bloquea,
             "El vehículo tiene " + Multas + " Por política de FLIT el traspaso queda bloqueado hasta que se pongan al día.",
             Advierte, "El vehículo tiene " + Multas + AdvierteUnilateral),
@@ -124,27 +121,44 @@ public static class CatalogoReglasDictamen
         .. DefinicionesV1[6..].Select(d => new DefinicionV2(d.Codigo, d.Efecto, d.Plantilla)),
     ];
 
+    // ---- Versión 3 = V2 + IMPUESTO_VALIDACION (Advierte; no cambia el veredicto). ----
+    private static readonly DefinicionV2[] DefinicionesV3 =
+    [
+        .. DefinicionesV2,
+        new("IMPUESTO_VALIDACION", Advierte,
+            "La fuente del impuesto informó datos del vehículo que no coinciden con el portal departamental. Es una advertencia."),
+    ];
+
     /// <summary>42 filas de la versión 1: 14 reglas por cada código de la familia.</summary>
     public static IReadOnlyList<FilaReglaDictamen> FilasV1 { get; } =
         TiposTramite
             .SelectMany(tipo => DefinicionesV1.Select(d => new FilaReglaDictamen(1, tipo, d.Codigo, d.Efecto, d.Plantilla)))
             .ToArray();
 
-    /// <summary>54 filas de la versión vigente: 18 reglas por cada código de la familia.</summary>
-    public static IReadOnlyList<FilaReglaDictamen> Filas { get; } =
+    /// <summary>54 filas de la versión 2: 18 reglas por cada código de la familia.</summary>
+    public static IReadOnlyList<FilaReglaDictamen> FilasV2 { get; } =
         TiposTramite
             .SelectMany(tipo => DefinicionesV2.Select(d => tipo == Unilateral
+                ? new FilaReglaDictamen(2, tipo, d.Codigo, d.EfectoUnilateral ?? d.Efecto, d.PlantillaUnilateral ?? d.Plantilla)
+                : new FilaReglaDictamen(2, tipo, d.Codigo, d.Efecto, d.Plantilla)))
+            .ToArray();
+
+    /// <summary>57 filas de la versión vigente: 19 reglas por cada código de la familia.</summary>
+    public static IReadOnlyList<FilaReglaDictamen> Filas { get; } =
+        TiposTramite
+            .SelectMany(tipo => DefinicionesV3.Select(d => tipo == Unilateral
                 ? new FilaReglaDictamen(Version, tipo, d.Codigo, d.EfectoUnilateral ?? d.Efecto, d.PlantillaUnilateral ?? d.Plantilla)
                 : new FilaReglaDictamen(Version, tipo, d.Codigo, d.Efecto, d.Plantilla)))
             .ToArray();
 
     /// <summary>Todas las versiones publicadas, en orden. Es lo que se siembra en <c>reglas_dictamen</c>.</summary>
-    public static IReadOnlyList<FilaReglaDictamen> Historico { get; } = [.. FilasV1, .. Filas];
+    public static IReadOnlyList<FilaReglaDictamen> Historico { get; } = [.. FilasV1, .. FilasV2, .. Filas];
 
     /// <summary>Las filas de una versión publicada; vacío si la versión no existe.</summary>
     public static IReadOnlyList<FilaReglaDictamen> FilasDe(int catalogoVersion) => catalogoVersion switch
     {
         1 => FilasV1,
+        2 => FilasV2,
         Version => Filas,
         _ => [],
     };

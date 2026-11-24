@@ -82,4 +82,6 @@ public sealed record HechosDictamen(
     LicenciaConductor? LicenciaLocatario,
     long? ImpuestoMontoPesos,
     bool ImpuestoTieneDeuda = false,
-    EstadoFuenteDictamen? EstadoImpuesto = null);
+    EstadoFuenteDictamen? EstadoImpuesto = null,
+    /// <summary>Celda de impuesto COMPLETADA con al menos una advertencia VALIDACION (regla IMPUESTO_VALIDACION).</summary>
+    bool ImpuestoConValidacionNoCoincidente = false);

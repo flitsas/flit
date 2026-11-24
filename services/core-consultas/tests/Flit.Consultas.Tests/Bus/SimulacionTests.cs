@@ -4,10 +4,12 @@ using Flit.Consultas.Api.Impuesto;
 using Flit.Consultas.Api.Simulacion;
 using Flit.Consultas.Grpc.V1;
 using Flit.Platform.Grpc.V1;
+using Flit.Platform.Sdk.Grpc;
 using FluentAssertions;
 using Google.Protobuf;
 using Grpc.Core;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging.Abstractions;
 using Xunit;
 
 namespace Flit.Consultas.Tests.Bus;
@@ -102,10 +104,12 @@ public sealed class SimulacionTests
         var municipios = File.ReadAllText(Path.Combine(ddl, "34-transit-offices-city-department-names.sql"));
         // La última migración que fija la lista de activos; solo su Up (el Down restaura la semilla anterior).
         // Actualizar al crear una migración posterior que cambie los departamentos activos.
-        var vigente = File.ReadAllText(Path.Combine(raiz, "services", "core-consultas", "src", "Flit.Consultas.Api", "Persistence", "Migrations", "20261117044000_ImpuestoDepartamentosActivos.cs"));
+        var vigente = File.ReadAllText(Path.Combine(raiz, "services", "core-consultas", "src", "Flit.Consultas.Api", "Persistence", "Migrations", "20261123180000_ImpuestoDepartamentosTodosActivos.cs"));
         var up = vigente[..vigente.IndexOf("void Down(", StringComparison.Ordinal)];
         var activos = Regex.Matches(up, @"'(?<codigo>\d{2})',\s*'[^']+',\s*true,").Select(m => m.Groups["codigo"].Value).ToList();
-        activos.Should().BeEquivalentTo("05", "08", "11");
+        activos.Should().BeEquivalentTo(
+            "05", "08", "11", "13", "15", "17", "18", "19", "20", "23", "25", "27", "41", "44", "47", "50", "52",
+            "54", "63", "66", "68", "70", "73", "76", "81", "85", "86", "88", "91", "94", "95", "97", "99");
         var fixture = new JsonParser(JsonParser.Settings.Default.WithIgnoreUnknownFields(false)).Parse<ConsultarVehiculoIntempoResponse>(FixturesIntempo.Todos()["intempo-impuesto.json"]);
         var organismo = fixture.Vehiculo.InformacionGeneral.OrganismoTransito;
 
@@ -218,17 +222,30 @@ public sealed class SimulacionTests
     [Fact]
     public async Task Impuesto_simulado_pasa_por_el_interprete_segun_el_penultimo_caracter()
     {
-        var opciones = OpcionesImpuesto.Desde(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>()).Build());
-        var proveedor = new ProveedorImpuesto(new TransporteImpuestoSimulado(), opciones, new Flit.Consultas.Tests.Impuesto.CatalogoImpuestoFijo("05"));
-        var deuda = await proveedor.ConsultarAsync(PedidoSimulado("TST20Z"), CancellationToken.None);
-        var sinMonto = await proveedor.ConsultarAsync(PedidoSimulado("TST21Z"), CancellationToken.None);
-        var corta = await proveedor.ConsultarAsync(PedidoSimulado("TST29Z"), CancellationToken.None);
+        var opciones = OpcionesImpuesto.Desde(new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["IMPUESTO_CONTACTO_CORREO"] = "contacto@example.invalid",
+        }).Build());
+        var llamador = new PlatformServiceCaller("svc-diagnostico", Guid.Parse("0194aaaa-0000-7000-8000-000000000001"));
+        var proveedor = new ProveedorImpuesto(
+            new TransporteImpuestoSimulado(),
+            opciones,
+            new Flit.Consultas.Tests.Impuesto.CatalogoImpuestoFijo("05"),
+            new Flit.Consultas.Tests.Impuesto.FuenteCredencialFalsa(),
+            new Flit.Consultas.Tests.Impuesto.SeguimientoEnMemoria(),
+            PlanSondeoImpuesto.Simulado(3),
+            TimeProvider.System,
+            NullLogger<ProveedorImpuesto>.Instance);
+        var deuda = await proveedor.ConsultarAsync(PedidoSimulado("TST20Z"), llamador, Guid.NewGuid(), CancellationToken.None);
+        var sinMonto = await proveedor.ConsultarAsync(PedidoSimulado("TST21Z"), llamador, Guid.NewGuid(), CancellationToken.None);
+        var pazTrasSondeo = await proveedor.ConsultarAsync(PedidoSimulado("TST29Z"), llamador, Guid.NewGuid(), CancellationToken.None);
         deuda.TieneDeuda.Should().BeTrue();
         deuda.MontoTotal.Should().Be(615_000);
         deuda.Resultado.Proveedor.Should().Be("impuesto_simulado");
         sinMonto.TieneDeuda.Should().BeTrue();
         sinMonto.MontoInformado.Should().BeFalse();
-        corta.Resultado.Chequeos[0].Clave.Should().Be("impuesto_no_confirmado");
+        pazTrasSondeo.Resultado.Chequeos[0].Estado.Should().Be(EstadoChequeo.Ok);
+        pazTrasSondeo.TieneDeuda.Should().BeFalse();
     }
 
     private static ConsultarImpuestoVehicularRequest PedidoSimulado(string placa) => new()
@@ -236,6 +253,9 @@ public sealed class SimulacionTests
         Placa = new Placa { Valor = placa },
         DepartamentoCodigo = "05",
         Documento = new DocumentoIdentidad { Tipo = "CC", Numero = "999999" },
+        PropietarioNombre = "PROPIETARIO DE PRUEBA",
+        Municipio = "SABANETA",
+        Modelo = 2020,
     };
 
     [Fact]

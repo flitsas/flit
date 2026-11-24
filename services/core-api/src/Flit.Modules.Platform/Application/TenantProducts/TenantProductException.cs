@@ -21,6 +21,12 @@ public sealed class TenantProductException : Exception
     /// <summary>Las notas pasan de <see cref="SetTenantProductEnabledHandler.NotesMaxLength"/> caracteres (400).</summary>
     public const string NotesTooLong = "PRODUCT_NOTES_TOO_LONG";
 
+    /// <summary>Combinación producto/credencial fuera de la lista blanca v1 (404).</summary>
+    public const string CredentialNotSupported = "CREDENTIAL_NOT_SUPPORTED";
+
+    /// <summary>Valor de la credencial inválido (400). El mensaje es fijo; nunca lleva el valor.</summary>
+    public const string CredentialInvalid = "CREDENTIAL_INVALID";
+
     public TenantProductException()
     {
         Code = string.Empty;
