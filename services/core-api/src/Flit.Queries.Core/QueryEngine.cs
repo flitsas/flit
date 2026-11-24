@@ -156,7 +156,7 @@ public sealed class QueryEngine<TRow>
                         pedido,
                         QueryCoverageResult.NoExiste,
                         null,
-                        $"No hay ningún trámite con este valor en {_catalog.Universo}."));
+                        $"No hay ningún {_catalog.RowNoun} con este valor en {_catalog.Universo}."));
                     continue;
                 }
 
@@ -187,7 +187,7 @@ public sealed class QueryEngine<TRow>
                     culpable.Condition is null
                         // Puede pasar si el mismo valor aparece en varias filas y ninguna pasa por
                         // razones distintas; decir «otro filtro» es más honesto que señalar uno al azar.
-                        ? "Existe, pero ningún trámite con este valor cumple todos los filtros."
+                        ? $"Existe, pero ningún {_catalog.RowNoun} con este valor cumple todos los filtros."
                         : $"Existe, pero lo dejó fuera el filtro «{_catalog.LabelOf(culpable.Condition.FieldId)}»."));
             }
         }

@@ -369,3 +369,41 @@ export function buildXlsx(sheet: XlsxSheet): Uint8Array<ArrayBuffer> {
     { name: "xl/worksheets/sheet1.xml", content: sheetXml(sheet) },
   ]);
 }
+
+/**
+ * Libro de VARIAS hojas (Reportes 2.0: una hoja por tabla o gráfico de la pestaña y una de notas). Mismo XML por hoja que
+ * `buildXlsx`; solo cambian el índice del libro y sus relaciones. Los nombres repetidos se numeran: Excel rechaza el
+ * archivo entero si dos hojas se llaman igual.
+ */
+export function buildXlsxLibro(sheets: XlsxSheet[]): Uint8Array<ArrayBuffer> {
+  if (sheets.length === 0) throw new Error("Un libro necesita al menos una hoja.");
+  const usados = new Set<string>();
+  const nombres = sheets.map((s) => {
+    const base = safeSheetName(s.name);
+    let nombre = base;
+    for (let i = 2; usados.has(nombre.toLowerCase()); i += 1) nombre = `${base.slice(0, 31 - String(i).length - 1)} ${i}`;
+    usados.add(nombre.toLowerCase());
+    return nombre;
+  });
+  const tipos = sheets
+    .map((_, i) => `<Override PartName="/xl/worksheets/sheet${i + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`)
+    .join("");
+  const contentTypes = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${tipos}<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>`;
+  const rels = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${sheets
+    .map((_, i) => `<Relationship Id="rId${i + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i + 1}.xml"/>`)
+    .join("")}<Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>`;
+  const workbook = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${nombres
+    .map((n, i) => `<sheet name="${esc(n)}" sheetId="${i + 1}" r:id="rId${i + 1}"/>`)
+    .join("")}</sheets></workbook>`;
+  return zip([
+    { name: "[Content_Types].xml", content: contentTypes },
+    { name: "_rels/.rels", content: ROOT_RELS_XML },
+    { name: "xl/workbook.xml", content: workbook },
+    { name: "xl/_rels/workbook.xml.rels", content: rels },
+    { name: "xl/styles.xml", content: STYLES_XML },
+    ...sheets.map((s, i) => ({ name: `xl/worksheets/sheet${i + 1}.xml`, content: sheetXml(s) })),
+  ]);
+}

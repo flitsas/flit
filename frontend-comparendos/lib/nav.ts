@@ -40,6 +40,8 @@ export const P = {
   mensajesVer: "comparendos.mensajes.ver",
   reportesVer: "comparendos.reportes.ver",
   productividadVer: "comparendos.productividad.ver",
+  reportesConsultas: "comparendos.reportes.consultas",
+  reportesProgramar: "comparendos.reportes.programar",
 } as const;
 
 /**
@@ -56,8 +58,7 @@ const ILUSTRACION: Record<string, Ilustracion> = {
   "dp-lotes": "notificaciones",
   pagos: "pagos",
   mensajes: "notificaciones",
-  dashboard: "reportes",
-  productividad: "colaboradores",
+  "reportes-inicio": "reportes",
   monitoreo: "consulta-placa",
   representantes: "firmas",
   ots: "organismos",
@@ -98,8 +99,8 @@ export function comparendosNav(caps: Capacidades): NavCatalog {
     { key: "mensajes", label: "Centro de mensajes", href: "/mensajes", section: "operacion", icon: iconoComo("correo"), permission: P.mensajesVer },
     ...(caps.reportes
       ? [
-          { key: "dashboard", label: "Dashboard", href: "/reportes", section: "reportes", icon: iconoComo("medidor"), permission: P.reportesVer },
-          { key: "productividad", label: "Productividad", href: "/reportes/productividad", section: "reportes", icon: iconoComo("usuarios"), permission: P.productividadVer },
+          // Reportes 2.0: un solo menú; Resumen, Gestión, DP, Productividad, Consultas y Plataforma son pestañas dentro.
+          { key: "reportes-inicio", label: "Reportes", href: "/reportes", section: "reportes", icon: iconoComo("medidor"), permission: P.reportesVer },
         ]
       : []),
     { key: "monitoreo", label: "NITs y placas", href: "/configuracion/monitoreo", section: "configuracion", icon: iconoComo("consulta"), permission: P.monitoreoVer },

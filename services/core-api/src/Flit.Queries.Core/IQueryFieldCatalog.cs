@@ -34,6 +34,15 @@ public interface IQueryFieldCatalog
     string Universo { get; }
 
     /// <summary>
+    /// Cómo se nombra una fila, en singular («trámite», «comparendo»). Sale en los avisos de cobertura y en el de
+    /// consulta demasiado amplia. Por defecto «trámite»: el motor nació en Trámites y sus catálogos no lo declaran.
+    /// </summary>
+    string RowNoun => "trámite";
+
+    /// <summary>El plural de <see cref="RowNoun"/>.</summary>
+    string RowNounPlural => RowNoun + "s";
+
+    /// <summary>
     /// Campos por los que tiene sentido rendir cuentas uno a uno en el aviso de cobertura. Son los
     /// que el usuario escribe o pega esperando ver cada valor de vuelta; avisar de que «traspaso» no
     /// salió en un filtro por tipo de trámite sería ruido, no información.

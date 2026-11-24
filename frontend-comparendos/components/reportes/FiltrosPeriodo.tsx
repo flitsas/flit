@@ -23,10 +23,30 @@ export function periodoInicial(): Periodo {
  * Filtros comunes de los reportes: periodo (por defecto el mes en curso) y, para el SuperAdmin, la empresa (vacía =
  * todas). Se aplican con «Consultar» para no disparar una consulta por cada tecla.
  */
-export function FiltrosPeriodo({ valor, onAplicar, extra }: { valor: Periodo; onAplicar: (p: Periodo) => void; extra?: React.ReactNode }) {
+export function FiltrosPeriodo({
+  valor,
+  onAplicar,
+  extra,
+  accion,
+  permitirSinPeriodo = false,
+}: {
+  valor: Periodo;
+  onAplicar: (p: Periodo) => void;
+  extra?: React.ReactNode;
+  /** Acción de la pestaña (p. ej. «Descargar Excel») a la derecha de la fila, como `ExportButtons` en Trámites. */
+  accion?: React.ReactNode;
+  /**
+   * Gestión: las DOS fechas vacías son un corte válido («Pendiente a hoy»); se aplica sin desde ni hasta. Una sola fecha
+   * sigue siendo inválida y se avisa. Sin esta prop (Resumen, DP, Plataforma, Productividad) nada cambia.
+   */
+  permitirSinPeriodo?: boolean;
+}) {
   const { sesion } = useSesion();
   const [borrador, setBorrador] = useState(valor);
-  const error = errorRango(borrador.desde, borrador.hasta);
+  const sinPeriodo = permitirSinPeriodo && !borrador.desde && !borrador.hasta;
+  const error = sinPeriodo ? null : errorRango(borrador.desde, borrador.hasta);
+  // Sin la prop, el aviso solo sale con las dos fechas puestas (como siempre); con ella, también con una sola.
+  const verAviso = !!error && (permitirSinPeriodo ? !!(borrador.desde || borrador.hasta) : !!(borrador.desde && borrador.hasta));
 
   return (
     <div className="flex flex-col gap-2">
@@ -39,18 +59,17 @@ export function FiltrosPeriodo({ valor, onAplicar, extra }: { valor: Periodo; on
           Hasta
           <input type="date" className={`${FECHA_CLS} w-full sm:w-40`} value={borrador.hasta} onChange={(e) => setBorrador({ ...borrador, hasta: e.target.value })} />
         </label>
+        {/* Patrón de GlobalFilters de Trámites: etiqueta arriba, sin texto de ayuda; la opción vacía ya dice que son todas. */}
         {sesion?.usuario.esSuperAdmin && (
-          <div className="flex flex-col gap-1">
-            <SelectorEmpresa valor={borrador.empresa} onCambio={(empresa) => setBorrador({ ...borrador, empresa })} />
-            <span className="text-xs text-[color:var(--di-text-tertiary)]">Sin empresa elegida se ven todas.</span>
-          </div>
+          <SelectorEmpresa etiquetaArriba textoVacio="Todas las empresas" valor={borrador.empresa} onCambio={(empresa) => setBorrador({ ...borrador, empresa })} />
         )}
         {extra}
         <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!!error} onClick={() => onAplicar(borrador)}>
           Consultar
         </button>
+        {accion && <div className="ml-auto">{accion}</div>}
       </div>
-      {error && borrador.desde && borrador.hasta && (
+      {verAviso && (
         <InlineAlert tone="warning" compact>
           {error}
         </InlineAlert>

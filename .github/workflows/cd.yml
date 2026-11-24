@@ -327,6 +327,7 @@ jobs:
             services/core-api/src/Flit.Modules.Security.Domain
             services/core-api/src/Flit.Platform.Sdk
             services/core-api/src/Flit.Queries.Domain
+            services/core-api/src/Flit.Queries.Core
             services/core-api/src/Flit.Suite.AspNetCore
             contracts/proto
 
@@ -413,6 +414,7 @@ jobs:
             services/core-api/src/Flit.Modules.Consultas
             services/core-api/src/Flit.Modules.Improntas.Domain
             services/core-api/src/Flit.Queries.Domain
+            services/core-api/src/Flit.Queries.Core
             services/core-identity/Directory.Build.props
             services/core-identity/Directory.Packages.props
             services/core-identity/src/Flit.Platform.Grpc.Contracts
@@ -583,6 +585,7 @@ jobs:
             services/core-api/Directory.Build.props
             services/core-api/Directory.Packages.props
             services/core-api/src/Flit.Platform.Sdk
+            services/core-api/src/Flit.Queries.Core
             services/core-api/src/Flit.Tramites.Grpc.Contracts
             services/core-identity/Directory.Build.props
             services/core-identity/Directory.Packages.props
