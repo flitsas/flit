@@ -10,7 +10,12 @@ import { iconoComo } from "@flit/ui/iconoComo";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { COPY } from '@/lib/copy/copy-catalog';
-import { canDescargarConsolidadosMasivo, decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import {
+  canDescargarConsolidadosMasivo,
+  decodeJwtPayload,
+  isSuperAdmin,
+  LOG_QX_READ_PERMISSION,
+} from '@/lib/auth/jwt';
 import { useSeleccionLote, type ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
 import { BarraSeleccionLote, CasillaFilaLote } from './BarraSeleccionLote';
 import { BotonDescargaMasivaZip } from './DescargaMasivaConfirmModal';
@@ -93,6 +98,7 @@ import {
   FIRMA_TEXTO,
   FUENTE_LABEL,
   marcasDe,
+  quipuxMarca,
   stepLabel,
   tramiteLabel,
   vehiculo,
@@ -3108,6 +3114,9 @@ function TramiteRow({
   // ADR-0053 — desplegables de copropietarios de la fila. Cada celda abre el suyo; el ícono
   // «Con múltiples propietarios» de Marcas abre (o cierra) los dos a la vez.
   const [propietariosAbiertos, setPropietariosAbiertos] = useState({ vendedor: false, comprador: false });
+  // Mismo criterio que LogQxLink: la píldora Quipux enlaza al LOG QX solo a quien puede leerlo.
+  const { permissions: permisosUsuario, isSuperAdmin: esSuperAdminFila } = usePermissions();
+  const puedeVerLogQx = esSuperAdminFila || permisosUsuario.includes(LOG_QX_READ_PERMISSION);
   const alternarPropietarios = (lado: 'vendedor' | 'comprador') =>
     setPropietariosAbiertos((prev) => ({ ...prev, [lado]: !prev[lado] }));
   const alternarTodosLosPropietarios = () =>
@@ -3580,8 +3589,8 @@ function TramiteRow({
       </span>
     ),
     marcas: (
-      <span className="flex items-center gap-1.5">
-        {marcasDe(item).length === 0 ? (
+      <span className="flex flex-wrap items-center gap-1.5">
+        {marcasDe(item).length === 0 && !quipuxMarca(item) ? (
           <span className="text-xs text-muted-foreground">—</span>
         ) : (
           marcasDe(item).map((marca) =>
@@ -3623,6 +3632,57 @@ function TramiteRow({
             ),
           )
         )}
+        {(() => {
+          // Etiqueta PLANA y pequeña (no la cinta del chip de estado, para no competir con él): dice
+          // en qué punto de Quipux está el trámite. Solo «Falló» lleva tono de alerta.
+          const quipux = quipuxMarca(item);
+          if (!quipux) return null;
+          const tono = quipux.tono;
+          const base =
+            'inline-flex shrink-0 items-center whitespace-nowrap rounded border px-1.5 py-px text-[11px] font-semibold leading-4';
+          const estilo = {
+            color: `var(--badge-${tono}-fg)`,
+            borderColor: `color-mix(in srgb, var(--badge-${tono}-border) ${tono === 'danger' ? 55 : 30}%, transparent)`,
+            backgroundColor: tono === 'danger' ? 'var(--badge-danger-bg)' : 'transparent',
+          };
+          if (!puedeVerLogQx) {
+            return (
+              <span
+                data-testid="tramite-marca-quipux"
+                title={quipux.ayuda}
+                aria-label={quipux.texto}
+                className={base}
+                style={estilo}
+              >
+                {quipux.texto}
+              </span>
+            );
+          }
+          // Con envío: directo a la trazabilidad (el querystring lleva el filtro para que «volver»
+          // regrese a la bandeja de este trámite). Sin envío (en cola): bandeja filtrada.
+          const conEnvio = Boolean(item.quipuxEnvioId);
+          const destino = conEnvio ? 'la trazabilidad en el Log QX' : 'el Log QX';
+          return (
+            <a
+              data-testid="tramite-marca-quipux"
+              href={
+                conEnvio
+                  ? `/log-qx/${item.quipuxEnvioId}?instanceId=${item.id}`
+                  : `/?m=log-qx&instanceId=${item.id}`
+              }
+              title={`${quipux.ayuda} — clic para ver ${destino}`}
+              aria-label={`${quipux.texto}: ver ${destino}`}
+              onClick={(e) => {
+                // La fila entera abre el asistente: este clic solo lleva al Log QX.
+                e.stopPropagation();
+              }}
+              className={`${base} cursor-pointer no-underline hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1`}
+              style={estilo}
+            >
+              {quipux.texto}
+            </a>
+          );
+        })()}
       </span>
     ),
   };
