@@ -18,8 +18,12 @@ import {
   motivoFallo,
   progreso,
   resumenEvaluacion,
+  tamanoLegible,
   valorInicial,
   versionAnterior,
+  vistaDuplicado,
+  vistaPorContentType,
+  ESTADO_DOCUMENTO,
   vistaOriginal,
 } from "@/lib/ocr";
 
@@ -101,10 +105,10 @@ describe("revisión de campos", () => {
     expect(vistaOriginal("IMAGE", "a.jpg")).toBe("imagen");
   });
   it("decide los botones por estado", () => {
-    expect(accionesDocumento({ estado: "Completo", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: true, registrar: true, descartar: true, reintentar: false, reprocesar: false });
+    expect(accionesDocumento({ estado: "Completo", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: true, registrar: true, descartar: true, asociar: false, reintentar: false, reprocesar: false });
     expect(accionesDocumento({ estado: "Duplicado", reintentable: false, fuenteDuplicado: "ARCHIVO" }).editar).toBe(false);
     expect(accionesDocumento({ estado: "Fallido", reintentable: true, fuenteDuplicado: null }).reintentar).toBe(true);
-    expect(accionesDocumento({ estado: "Registrado", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: false, registrar: false, descartar: false, reintentar: false, reprocesar: false });
+    expect(accionesDocumento({ estado: "Registrado", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: false, registrar: false, descartar: false, asociar: false, reintentar: false, reprocesar: false });
     // HU #13828: se reprocesa un incompleto o un ilegible; un fallido técnico se reintenta.
     expect(accionesDocumento({ estado: "Incompleto", reintentable: false, fuenteDuplicado: null }).reprocesar).toBe(true);
     expect(accionesDocumento({ estado: "Fallido", reintentable: false, fuenteDuplicado: null, tipoFallo: "Ilegible" }).reprocesar).toBe(true);
@@ -238,5 +242,40 @@ describe("número por verificar (GDC punto 14)", () => {
     expect(
       marcasRevision({ campos: [{ ...campos[0], valorCorregido: campos[0].valorFinal }], camposFaltantes: [], avisoNumero: aviso, numeroPorConfirmar: false }),
     ).toEqual({});
+  });
+});
+
+describe("asociar un documento a un comparendo existente", () => {
+  const evidencia = { archivoId: "a1", nombre: "x.pdf", contentType: "application/pdf", tamanoBytes: 10, cargadaEn: "2026-11-01T10:00:00Z" };
+  const dup = (extra: Record<string, unknown> = {}) => ({ tipo: "comparendo" as const, asociable: true, evidenciaActual: null, ...extra });
+
+  it("sin documento previo se ofrece asociar; con documento, comparar", () => {
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: dup() })).toBe("asociar");
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: dup({ evidenciaActual: evidencia }) })).toBe("comparar");
+  });
+
+  it("no asociable (o la API no lo dice) solo explica; documento contra documento y otros estados no ofrecen nada", () => {
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: dup({ asociable: false }) })).toBe("no-asociable");
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: { tipo: "comparendo" } })).toBe("no-asociable");
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: { tipo: "documento" } })).toBeNull();
+    expect(vistaDuplicado({ estado: "Completo", duplicado: dup() })).toBeNull();
+    expect(vistaDuplicado({ estado: "Duplicado", duplicado: null })).toBeNull();
+  });
+
+  it("estado Asociado: etiqueta, es final y se explica", () => {
+    expect(ESTADO_DOCUMENTO.Asociado.texto).toBe("Asociado");
+    expect(accionesDocumento({ estado: "Asociado", reintentable: false, fuenteDuplicado: null })).toEqual({ editar: false, registrar: false, descartar: false, asociar: false, reintentar: false, reprocesar: false });
+    expect(accionesDocumento({ estado: "Duplicado", reintentable: false, fuenteDuplicado: "SIMIT" }).asociar).toBe(true);
+    expect(accionesDocumento({ estado: "Duplicado", reintentable: false, fuenteDuplicado: "ARCHIVO" }).asociar).toBe(false);
+    expect(motivoDocumento({ nombreArchivo: "a.pdf", estado: "Asociado", numeroComparendoExtraido: "1", camposFaltantes: [], tipoFallo: null, mensajeError: null, fuenteDuplicado: null, comparendoId: "c" })).toMatch(/agregado/);
+  });
+
+  it("vista previa por tipo y tamaño legible", () => {
+    expect(vistaPorContentType("application/pdf", "a")).toBe("pdf");
+    expect(vistaPorContentType("image/tiff", "a.tif")).toBe("descarga");
+    expect(vistaPorContentType("image/png", "a.png")).toBe("imagen");
+    expect(vistaPorContentType("", "a.pdf")).toBe("pdf");
+    expect(tamanoLegible(500)).toBe("500 B");
+    expect(tamanoLegible(2048)).toBe("2 KB");
   });
 });

@@ -86,6 +86,7 @@ export const ESTADO_DOCUMENTO: Record<string, { texto: string; clase: string }> 
   Fallido: { texto: "Fallido", clase: "bg-[var(--badge-danger-bg)] text-[var(--badge-danger-fg)]" },
   Duplicado: { texto: "Duplicado", clase: "bg-[var(--badge-purple-bg)] text-[var(--badge-purple-fg)]" },
   Registrado: { texto: "Registrado", clase: "bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)] font-semibold" },
+  Asociado: { texto: "Asociado", clase: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)] font-semibold" },
   Descartado: { texto: "Descartado", clase: "bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)] opacity-70" },
 };
 
@@ -112,7 +113,7 @@ export function motivoFallo(tipo: string | null | undefined, mensaje: string | n
 export const FUENTE_DUPLICADO: Record<string, string> = {
   SIMIT: "SIMIT",
   MUNICIPAL: "Fuente municipal",
-  OCR: "Otro documento OCR",
+  OCR: "Otro documento escaneado",
   ARCHIVO: "El mismo archivo ya se cargó",
 };
 
@@ -221,10 +222,55 @@ export function accionesDocumento(d: { estado: string; reintentable: boolean; fu
     editar: ["Completo", "Incompleto", "Duplicado"].includes(d.estado) && d.fuenteDuplicado !== "ARCHIVO",
     registrar: d.estado === "Completo",
     descartar: ["Completo", "Incompleto", "Duplicado", "Fallido"].includes(d.estado),
+    asociar: d.estado === "Duplicado" && d.fuenteDuplicado !== "ARCHIVO",
     reintentar: d.estado === "Fallido" && d.reintentable,
     // HU #13828: un incompleto o un ilegible se vuelve a leer; el tope de reprocesos lo dice la API (motivoNoReprocesable).
     reprocesar: d.estado === "Incompleto" || (d.estado === "Fallido" && d.tipoFallo === "Ilegible"),
   };
+}
+
+/** Documento que ya tiene el comparendo existente (contrato de asociar). */
+export interface EvidenciaActual {
+  archivoId: string;
+  nombre: string;
+  contentType: string;
+  tamanoBytes: number;
+  cargadaEn: string;
+}
+
+/** Datos del comparendo existente con el que choca un documento escaneado. */
+export interface DuplicadoComparendo {
+  tipo: "comparendo" | "documento";
+  evidenciaActual?: EvidenciaActual | null;
+  asociable?: boolean;
+  motivoNoAsociable?: string | null;
+}
+
+/**
+ * Qué se ofrece cuando el número ya existe (la API vuelve a validar): asociar si el comparendo no tiene documento,
+ * comparar si ya tiene uno, o solo explicar por qué no se puede. Un duplicado contra otro documento no se asocia.
+ */
+export function vistaDuplicado(d: { estado: string; duplicado: DuplicadoComparendo | null }): "asociar" | "comparar" | "no-asociable" | null {
+  const dup = d.duplicado;
+  if (d.estado !== "Duplicado" || !dup || dup.tipo !== "comparendo") return null;
+  if (dup.asociable !== true) return "no-asociable";
+  return dup.evidenciaActual ? "comparar" : "asociar";
+}
+
+/** Cómo se previsualiza un archivo según su tipo MIME o, si falta, su extensión. */
+export function vistaPorContentType(contentType: string, nombre: string): "imagen" | "pdf" | "descarga" {
+  const ct = contentType.toLowerCase();
+  if (ct.includes("pdf")) return "pdf";
+  if (ct.includes("tif")) return "descarga";
+  if (ct.startsWith("image/")) return "imagen";
+  return vistaOriginal(extension(nombre) === ".pdf" ? "PDF" : "", nombre);
+}
+
+/** Tamaño legible: «1,2 MB». */
+export function tamanoLegible(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toLocaleString("es-CO", { maximumFractionDigits: 0 })} KB`;
+  return `${(bytes / 1024 / 1024).toLocaleString("es-CO", { maximumFractionDigits: 1 })} MB`;
 }
 
 /** Por debajo de esto el modelo dijo dudar: es la única lectura útil de su confianza, que casi siempre sale en 95 % (B12-5). */
@@ -288,6 +334,7 @@ export function registroEnLote(completos: number, porConfirmar: number): { regis
 export function motivoDocumento(d: DocumentoPaquete): string {
   if (d.estado === "Fallido") return motivoFallo(d.tipoFallo, d.mensajeError);
   if (d.estado === "Duplicado") return (d.fuenteDuplicado && FUENTE_DUPLICADO[d.fuenteDuplicado]) ?? "Ya existe";
+  if (d.estado === "Asociado") return "Documento agregado a un comparendo existente";
   if (d.estado === "Descartado") return d.motivoDescarte ?? "Descartado";
   return d.camposFaltantes.map((c) => ETIQUETA_CAMPO[c] ?? c).join(", ");
 }
@@ -315,7 +362,7 @@ export function hojaPaquete(p: { nombre: string; creadoEn: string }, docs: Docum
       d.avisoNumero ? (d.numeroPorConfirmar === false ? "Revisado por el operador" : d.avisoNumero) : null,
       motivoDocumento(d) || null,
       d.reprocesos ?? 0,
-      d.comparendoId ? "Sí" : "No",
+      d.comparendoId && d.estado !== "Asociado" ? "Sí" : "No",
     ]),
     notes: [
       `Paquete «${p.nombre}», creado ${fechaHora(p.creadoEn)} (hora de Colombia).`,

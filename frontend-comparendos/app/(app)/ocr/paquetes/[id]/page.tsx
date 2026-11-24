@@ -32,6 +32,7 @@ interface Paquete {
   cantidadFallidos: number;
   cantidadDuplicados: number;
   cantidadRegistrados: number;
+  cantidadAsociados?: number;
   cantidadDescartados: number;
   creadoEn: string;
   procesamientoIniciadoEn: string | null;
@@ -148,6 +149,7 @@ function Detalle({ id }: { id: string }) {
     ["Fallido", "Fallidos", p.cantidadFallidos],
     ["Duplicado", "Duplicados", p.cantidadDuplicados],
     ["Registrado", "Registrados", p.cantidadRegistrados],
+    ["Asociado", "Asociados", p.cantidadAsociados ?? 0],
     ["Descartado", "Descartados", p.cantidadDescartados],
   ];
   const reprocesables = estado && estado !== "Incompleto" ? p.cantidadIncompletos : docs.filter((d) => d.estado === "Incompleto" && d.reprocesable).length;
