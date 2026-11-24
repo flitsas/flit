@@ -21,7 +21,7 @@ using F = Flit.Comparendos.Api.Modulos.ConsultasPersonalizadas.ComparendoQueryFi
 namespace Flit.Comparendos.Tests.ConsultasPersonalizadas;
 
 /// <summary>Reportes 2.0, ronda 2 — envío programado por correo de una consulta guardada (CONTRATO §4 /programaciones).</summary>
-public sealed class ProgramacionesTests(ApiConFuente api) : IClassFixture<ApiConFuente>
+public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFixture<ApiConAlmacenQueSeVence>
 {
     private const string Ruta = "/api/v1/comparendos/reportes/consultas";
     private static readonly DateOnly Hoy = new(2026, 10, 9);
@@ -255,6 +255,32 @@ public sealed class ProgramacionesTests(ApiConFuente api) : IClassFixture<ApiCon
         estadoMala.ProximaEjecucion.Should().BeAfter(api.Reloj.Ahora, "no se reintenta en cada corrida");
         (await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == pb, Ct))).UltimoResultado.Should().Be("Enviado a 1 destinatario");
         (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == mala, Ct))).Should().Be(0);
+        (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == buena && c.Tipo == TipoComunicacion.ConsultaProgramada, Ct))).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Trabajo_ElTimeoutDelAlmacen_NoCortaLasSiguientes()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (lenta, clienteLenta, consultaLenta) = await EmpresaConConsultaAsync("Timeout lenta");
+        var (buena, clienteBuena, consultaBuena) = await EmpresaConConsultaAsync("Timeout buena");
+        var pl = await ProgramadaVencidaAsync(clienteLenta, consultaLenta, "samuel.cardenas@flitsas.com");
+        var pb = await ProgramadaVencidaAsync(clienteBuena, consultaBuena, "samuel.cardenas@flitsas.com");
+        await api.EnDbAsync(db => db.ConsultasProgramadas.Where(x => x.Id == pl)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.ProximaEjecucion, api.Reloj.Ahora.AddMinutes(-30)), Ct));
+        api.EmpresasQueSeVencen[lenta] = true;
+        try
+        {
+            await CorrerTrabajoAsync();
+        }
+        finally
+        {
+            api.EmpresasQueSeVencen.TryRemove(lenta, out _);
+        }
+
+        (await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == pl, Ct))).UltimoResultado
+            .Should().Be("No se envió por un problema temporal; se intentará de nuevo en la próxima fecha.");
+        (await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == pb, Ct))).UltimoResultado.Should().Be("Enviado a 1 destinatario");
         (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == buena && c.Tipo == TipoComunicacion.ConsultaProgramada, Ct))).Should().Be(1);
     }
 

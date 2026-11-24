@@ -12,7 +12,8 @@ namespace Flit.Comparendos.Api.Modulos.ConsultasPersonalizadas;
 /// </summary>
 public static class ConsultasPersonalizadasEndpoints
 {
-    private const string Superficie = "las consultas de comparendos";
+    /// <summary>Cómo se nombra la pantalla en los errores de validación (también la usa el envío programado).</summary>
+    internal const string Superficie = "las consultas de comparendos";
 
     /// <summary>Se registra con una línea en <c>Program.Build</c>; no pide servicios propios en DI.</summary>
     public static WebApplication MapConsultasPersonalizadas(this WebApplication app, string prefijo)

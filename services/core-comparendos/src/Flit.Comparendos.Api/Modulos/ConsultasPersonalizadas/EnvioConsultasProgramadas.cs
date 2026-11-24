@@ -50,7 +50,9 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
             {
                 resultado = await EnviarAsync(p, ct).ConfigureAwait(false);
             }
-            catch (Exception ex) when (ex is not OperationCanceledException)
+            // Solo se deja escapar la cancelación real (el apagado): el timeout del HttpClient también es una
+            // TaskCanceledException y, sin cancelar el token, es una falla más de esta programación.
+            catch (Exception ex) when (!ct.IsCancellationRequested)
             {
                 // Ya se reclamó: sin esto el cliente vería el resultado de la vez anterior y las demás programaciones de
                 // la corrida no saldrían. Lo que quedó a medias en el contexto no se cuela en el envío siguiente.
@@ -97,7 +99,7 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
         }
 
         // Lo mismo que valida /run: una consulta guardada con un catálogo anterior no debe reventar el envío.
-        if (QueryConditionValidator.Validate(alcance.Catalogo, definicion?.Condiciones, "las consultas de comparendos") is { } invalida)
+        if (QueryConditionValidator.Validate(alcance.Catalogo, definicion?.Condiciones, ConsultasPersonalizadasEndpoints.Superficie) is { } invalida)
             return $"No se envió: {invalida}";
 
         ComparendoQueryResult r;
