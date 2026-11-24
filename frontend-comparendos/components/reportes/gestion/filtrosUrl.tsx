@@ -103,6 +103,7 @@ export function BarraFiltros({
         valor={valor}
         onAplicar={(p) => escribir({ desde: p.desde, hasta: p.hasta, empresa: p.empresa, ...(p.empresa !== filtros.empresa ? { nit: null } : {}) })}
         accion={accion}
+        permitirSinPeriodo={vacioSinFechas}
         extra={puedeVerNits ? <SelectorNit key={empresaNits} empresa={empresaNits} valor={filtros.nit} onCambio={(nit) => escribir({ nit })} /> : undefined}
       />
       {errorUrl && (

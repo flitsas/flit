@@ -153,6 +153,80 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     expect(replace).toHaveBeenLastCalledWith("/reportes/gestion?nit=n1", { scroll: false });
   });
 
+  it("Gestión sin periodo: el SuperAdmin elige una empresa y la consulta sin fechas; volver a «Pendiente a hoy» es borrar las dos", async () => {
+    sesion = super_;
+    ruta = "/reportes/gestion";
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (r: string, op?: { query?: Record<string, unknown> }) =>
+      r === "/admin/empresas" ? [{ id: "e2", nombre: "Empresa Bravo" }] : base(r, op),
+    );
+    render(<GestionPage />);
+    await screen.findByTestId("vehiculos");
+    fireEvent.change(await screen.findByLabelText("Empresa"), { target: { value: "e2" } });
+    const consultar = screen.getByRole("button", { name: "Consultar" }) as HTMLButtonElement;
+    expect(consultar.disabled).toBe(false);
+    fireEvent.click(consultar);
+    expect(replace).toHaveBeenLastCalledWith("/reportes/gestion?empresa=e2", { scroll: false });
+
+    // Con la empresa en la URL se consulta con ella y sin fechas; el Excel toma su nombre de la lista ya cargada.
+    cleanup();
+    apiFetch.mockClear();
+    busqueda = "empresa=e2";
+    render(<GestionPage />);
+    await screen.findByTestId("vehiculos");
+    expect(apiFetch.mock.calls.find(([r]) => r === "/reportes/gestion")![1].query).toMatchObject({ empresa: "e2", desde: null, hasta: null });
+    await waitFor(() => expect((screen.getByTestId("descargar-excel") as HTMLButtonElement).disabled).toBe(false));
+    const llamadasEmpresas = apiFetch.mock.calls.filter(([r]) => r === "/admin/empresas").length;
+    const { nombre, xml } = await descargarExcel();
+    expect(nombre).toBe("reporte-gestion-empresa-bravo-sin-periodo_hoy.xlsx");
+    expect(xml).toContain("Empresa Bravo");
+    expect(apiFetch.mock.calls.filter(([r]) => r === "/admin/empresas").length).toBe(llamadasEmpresas);
+
+    // Con periodo, borrar las dos fechas vuelve a «Pendiente a hoy».
+    cleanup();
+    busqueda = "desde=2026-10-01&hasta=2026-10-31";
+    render(<GestionPage />);
+    await screen.findByTestId("vehiculos");
+    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "" } });
+    fireEvent.change(screen.getByLabelText("Hasta"), { target: { value: "" } });
+    fireEvent.click(screen.getByRole("button", { name: "Consultar" }));
+    expect(replace).toHaveBeenLastCalledWith("/reportes/gestion", { scroll: false });
+  });
+
+  it("Gestión con una sola fecha (Desde o Hasta): «Consultar» apagado y el aviso a la vista", async () => {
+    sesion = gestora();
+    ruta = "/reportes/gestion";
+    for (const campo of ["Desde", "Hasta"]) {
+      render(<GestionPage />);
+      await screen.findByTestId("vehiculos");
+      fireEvent.change(screen.getByLabelText(campo), { target: { value: "2026-10-01" } });
+      expect((screen.getByRole("button", { name: "Consultar" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText("Elige las dos fechas del periodo.")).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("Excel del SuperAdmin: si no se puede leer el nombre de la empresa, error visible y sin descarga (nunca «Empresa elegida»)", async () => {
+    sesion = super_;
+    ruta = "/reportes/gestion";
+    busqueda = "empresa=e2";
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (r: string, op?: { query?: Record<string, unknown> }) => {
+      if (r === "/admin/empresas") throw new Error("Sin conexión");
+      return base(r, op);
+    });
+    toast.mockClear();
+    render(<GestionPage />);
+    await screen.findByTestId("vehiculos");
+    const boton = screen.getByTestId("descargar-excel") as HTMLButtonElement;
+    await waitFor(() => expect(boton.disabled).toBe(false));
+    const clic = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    fireEvent.click(boton);
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.stringMatching(/^No se pudo leer el nombre de la empresa elegida/), "error"));
+    expect(clic).not.toHaveBeenCalled();
+    clic.mockRestore();
+  });
+
   it("«Consultar» escribe desde y hasta en la URL con esos nombres, y un rango invertido en la URL no se consulta (R8)", async () => {
     sesion = gestora();
     ruta = "/reportes/gestion";

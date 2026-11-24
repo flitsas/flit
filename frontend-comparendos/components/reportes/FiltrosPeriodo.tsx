@@ -28,16 +28,25 @@ export function FiltrosPeriodo({
   onAplicar,
   extra,
   accion,
+  permitirSinPeriodo = false,
 }: {
   valor: Periodo;
   onAplicar: (p: Periodo) => void;
   extra?: React.ReactNode;
   /** Acción de la pestaña (p. ej. «Descargar Excel») a la derecha de la fila, como `ExportButtons` en Trámites. */
   accion?: React.ReactNode;
+  /**
+   * Gestión: las DOS fechas vacías son un corte válido («Pendiente a hoy»); se aplica sin desde ni hasta. Una sola fecha
+   * sigue siendo inválida y se avisa. Sin esta prop (Resumen, DP, Plataforma, Productividad) nada cambia.
+   */
+  permitirSinPeriodo?: boolean;
 }) {
   const { sesion } = useSesion();
   const [borrador, setBorrador] = useState(valor);
-  const error = errorRango(borrador.desde, borrador.hasta);
+  const sinPeriodo = permitirSinPeriodo && !borrador.desde && !borrador.hasta;
+  const error = sinPeriodo ? null : errorRango(borrador.desde, borrador.hasta);
+  // Sin la prop, el aviso solo sale con las dos fechas puestas (como siempre); con ella, también con una sola.
+  const verAviso = !!error && (permitirSinPeriodo ? !!(borrador.desde || borrador.hasta) : !!(borrador.desde && borrador.hasta));
 
   return (
     <div className="flex flex-col gap-2">
@@ -60,7 +69,7 @@ export function FiltrosPeriodo({
         </button>
         {accion && <div className="ml-auto">{accion}</div>}
       </div>
-      {error && borrador.desde && borrador.hasta && (
+      {verAviso && (
         <InlineAlert tone="warning" compact>
           {error}
         </InlineAlert>
