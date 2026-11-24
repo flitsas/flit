@@ -12,6 +12,8 @@ import { apiFetch } from "@/lib/api";
 import { formatoFecha, formatoPesos } from "@/lib/format/date";
 import { hrefBandeja, pesosCorto } from "@/lib/reportes";
 import { useCarga } from "@/lib/useCarga";
+import { BotonExcel } from "./excel";
+import { hojasGestion } from "./excelGestion";
 import { BarraFiltros, useFiltrosUrl } from "./filtrosUrl";
 import type { RespuestaGestion } from "./tipos";
 
@@ -38,6 +40,8 @@ export function GestionReporte() {
   };
   const r = g?.operacion.resumen;
   const ventana = g?.conPeriodo && a?.desde && a?.hasta ? `del ${formatoFecha(a.desde)} al ${formatoFecha(a.hasta)}` : "en los últimos 30 días";
+  const etiquetaCorte =
+    conPeriodo && a?.desde && a?.hasta ? `Comparendos impuestos del ${formatoFecha(a.desde)} al ${formatoFecha(a.hasta)}` : conPeriodo ? "Periodo elegido" : "Pendiente a hoy";
 
   return (
     <section className="flex flex-col gap-6">
@@ -45,11 +49,38 @@ export function GestionReporte() {
         titulo="Gestión"
         descripcion="Cómo va la gestión de lo pendiente: vehículos que más repiten, infracciones, lo que se pudo evitar, antigüedad, calendario legal y derechos de petición por organismo. Cada cifra abre la bandeja con el mismo corte."
       />
-      <BarraFiltros filtros={filtros} escribir={escribir} errorUrl={errorUrl} vacioSinFechas />
+      <BarraFiltros
+        filtros={filtros}
+        escribir={escribir}
+        errorUrl={errorUrl}
+        vacioSinFechas
+        accion={
+          <BotonExcel
+            corte={{
+              pestana: "gestion",
+              titulo: "Reportes › Gestión",
+              empresa: filtros.empresa,
+              nit: filtros.nit,
+              desde: a?.desde ?? null,
+              hasta: a?.hasta ?? null,
+              corte: etiquetaCorte,
+              aclaraciones: [
+                conPeriodo
+                  ? "Comparendos pendientes (activos y sin pagar) impuestos en el periodo; lo que no tiene fecha de imposición queda fuera."
+                  : "Todo lo pendiente (activo y sin pagar) a hoy, sin importar cuándo se impuso.",
+                `«Entraron» y «Dejaron de estar pendientes» cuentan ${ventana}.`,
+                "Derechos de petición por organismo: agrupados por el organismo del comparendo.",
+              ],
+            }}
+            hojas={datos.datos && datos.estado === "ready" ? () => hojasGestion(datos.datos!, ventana) : null}
+            deshabilitado={datos.estado !== "ready" || !!errorUrl}
+          />
+        }
+      />
       <div className="flex flex-wrap items-center gap-3 text-sm text-[color:var(--di-text-secondary)]" data-testid="gestion-alcance">
         {/* S0: el corte se rotula siempre, para que nadie compare cifras de cortes distintos sin saberlo. */}
         <span className="rounded-full border border-[color:var(--di-border)] px-3 py-1 text-xs font-semibold text-[color:var(--kit-azul-texto)]" data-testid="gestion-corte">
-          {conPeriodo && a?.desde && a?.hasta ? `Comparendos impuestos del ${formatoFecha(a.desde)} al ${formatoFecha(a.hasta)}` : conPeriodo ? "Periodo elegido" : "Pendiente a hoy"}
+          {etiquetaCorte}
         </span>
         {conPeriodo ? (
           <>

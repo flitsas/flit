@@ -9,6 +9,8 @@ import { Cargador } from "@flit/ui/Loader";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { FiltrosPeriodo, type Periodo } from "@/components/reportes/FiltrosPeriodo";
+import { BotonExcel } from "@/components/reportes/gestion/excel";
+import { hojasResumen } from "@/components/reportes/gestion/excelResumen";
 import { periodoEfectivo, useFiltrosUrl } from "@/components/reportes/gestion/filtrosUrl";
 import { BarrasApiladas } from "@/components/inicio/BarrasApiladas";
 import { PanelInicio } from "@/components/inicio/PanelInicio";
@@ -110,6 +112,25 @@ function Contenido() {
         key={`${periodo.desde}|${periodo.hasta}|${periodo.empresa ?? ""}`}
         valor={periodo}
         onAplicar={aplicar}
+        accion={
+          <BotonExcel
+            corte={{
+              pestana: "resumen",
+              titulo: "Reportes › Resumen",
+              empresa: periodo.empresa,
+              nit,
+              desde: periodo.desde,
+              hasta: periodo.hasta,
+              corte: `Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}`,
+              aclaraciones: [
+                "La deuda y el radar son a hoy; las tasas y el ahorro, del periodo.",
+                "La deuda sin pagar incluye lo caducado y lo prescrito.",
+              ],
+            }}
+            hojas={d && datos.estado === "ready" ? () => hojasResumen(d, dinero.estado === "ready" ? (reparto ?? null) : null) : null}
+            deshabilitado={datos.estado !== "ready" || !!errorUrl}
+          />
+        }
         extra={puedeVerNits ? <SelectorNit key={empresaNits} empresa={empresaNits} valor={nit} onCambio={setNit} /> : undefined}
       />
 

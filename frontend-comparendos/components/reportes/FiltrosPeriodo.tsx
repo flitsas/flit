@@ -23,7 +23,18 @@ export function periodoInicial(): Periodo {
  * Filtros comunes de los reportes: periodo (por defecto el mes en curso) y, para el SuperAdmin, la empresa (vacía =
  * todas). Se aplican con «Consultar» para no disparar una consulta por cada tecla.
  */
-export function FiltrosPeriodo({ valor, onAplicar, extra }: { valor: Periodo; onAplicar: (p: Periodo) => void; extra?: React.ReactNode }) {
+export function FiltrosPeriodo({
+  valor,
+  onAplicar,
+  extra,
+  accion,
+}: {
+  valor: Periodo;
+  onAplicar: (p: Periodo) => void;
+  extra?: React.ReactNode;
+  /** Acción de la pestaña (p. ej. «Descargar Excel») a la derecha de la fila, como `ExportButtons` en Trámites. */
+  accion?: React.ReactNode;
+}) {
   const { sesion } = useSesion();
   const [borrador, setBorrador] = useState(valor);
   const error = errorRango(borrador.desde, borrador.hasta);
@@ -47,6 +58,7 @@ export function FiltrosPeriodo({ valor, onAplicar, extra }: { valor: Periodo; on
         <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!!error} onClick={() => onAplicar(borrador)}>
           Consultar
         </button>
+        {accion && <div className="ml-auto">{accion}</div>}
       </div>
       {error && borrador.desde && borrador.hasta && (
         <InlineAlert tone="warning" compact>

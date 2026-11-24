@@ -80,12 +80,15 @@ export function BarraFiltros({
   conNit = true,
   errorUrl,
   vacioSinFechas = false,
+  accion,
 }: {
   filtros: FiltrosUrl;
   escribir: (c: Partial<FiltrosUrl>) => void;
   conNit?: boolean;
   errorUrl: string | null;
   vacioSinFechas?: boolean;
+  /** «Descargar Excel», a la derecha de la fila. */
+  accion?: React.ReactNode;
 }) {
   const { sesion } = useSesion();
   const inicial = vacioSinFechas ? { desde: "", hasta: "" } : periodoInicial();
@@ -99,6 +102,7 @@ export function BarraFiltros({
         key={`${valor.desde}|${valor.hasta}|${valor.empresa ?? ""}`}
         valor={valor}
         onAplicar={(p) => escribir({ desde: p.desde, hasta: p.hasta, empresa: p.empresa, ...(p.empresa !== filtros.empresa ? { nit: null } : {}) })}
+        accion={accion}
         extra={puedeVerNits ? <SelectorNit key={empresaNits} empresa={empresaNits} valor={filtros.nit} onCambio={(nit) => escribir({ nit })} /> : undefined}
       />
       {errorUrl && (

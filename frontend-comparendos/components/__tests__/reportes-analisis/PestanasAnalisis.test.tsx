@@ -16,6 +16,8 @@ const push = vi.fn();
 let busqueda = "";
 let ruta = "/reportes/gestion";
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(busqueda), useRouter: () => ({ replace, push }), usePathname: () => ruta }));
+const toast = vi.fn();
+vi.mock("@/components/Toast", () => ({ useToast: () => ({ show: toast }) }));
 vi.mock("recharts", async (original) => ({ ...(await original<typeof import("recharts")>()), ResponsiveContainer: () => null }));
 
 const gestora = (reportes = true) => ({
@@ -89,6 +91,9 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     // Sin recorte aquí: Gestión es donde viven las lentes que salieron del Inicio, y sin «Ver en Reportes».
     for (const id of ["vehiculos", "evitables", "antiguedad", "dp-organismos", "top-organismos"]) expect(screen.getByTestId(id)).toBeTruthy();
     expect(screen.queryByTestId("ver-en-reportes")).toBeNull();
+    // «Descargar Excel» a la derecha de la fila de filtros, habilitado con los datos cargados.
+    expect((screen.getByTestId("descargar-excel") as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId("descargar-excel").parentElement!.className).toMatch(/ml-auto/);
     expect(within(screen.getByTestId("vehiculos")).getByRole("link", { name: /^AAA111/ }).getAttribute("href")).toBe("/bandeja?placas=AAA111&pagado=false");
   });
 
@@ -128,6 +133,7 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     render(<GestionPage />);
     expect((await screen.findAllByText(/La fecha inicial no puede ser posterior a la final/)).length).toBeGreaterThan(0);
     expect(apiFetch.mock.calls.some(([r]) => r === "/reportes/gestion")).toBe(false);
+    expect((screen.getByTestId("descargar-excel") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("DP: la tasa y el ahorro vienen de la API (los del Resumen) y el consolidado solo lo ve el SuperAdmin con todas", async () => {

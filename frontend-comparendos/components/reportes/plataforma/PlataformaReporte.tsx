@@ -12,6 +12,8 @@ import { apiFetch } from "@/lib/api";
 import { formatoFecha, formatoFechaHora } from "@/lib/format/date";
 import { numeroCorto, textoPeriodo } from "@/lib/reportes";
 import { useCarga } from "@/lib/useCarga";
+import { BotonExcel } from "@/components/reportes/gestion/excel";
+import { hojasPlataforma } from "./excelPlataforma";
 import { FUENTES, TIPOS_ERROR, type ReportePlataforma } from "./tipos";
 
 const GraficoArea = dynamic(() => import("@/components/inicio/GraficoArea").then((m) => m.GraficoArea), { loading: () => <div style={{ height: 240 }} /> });
@@ -100,7 +102,31 @@ export function PlataformaReporte() {
         titulo="Plataforma"
         descripcion="Solo administración FLIT: cómo responden las fuentes de consulta, qué errores técnicos hubo, qué correos fallaron y qué empresas acumulan más problemas."
       />
-      <BarraFiltros filtros={filtros} escribir={escribir} conNit={false} errorUrl={errorUrl} />
+      <BarraFiltros
+        filtros={filtros}
+        escribir={escribir}
+        conNit={false}
+        errorUrl={errorUrl}
+        accion={
+          <BotonExcel
+            corte={{
+              pestana: "plataforma",
+              titulo: "Reportes › Plataforma (administración FLIT)",
+              empresa: filtros.empresa,
+              nit: null,
+              desde: periodo.desde,
+              hasta: periodo.hasta,
+              corte: `Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}`,
+              aclaraciones: [
+                "Solo administración FLIT: incluye las fuentes de consulta y los errores técnicos.",
+                "Los errores técnicos por tipo solo se calculan con todas las empresas.",
+              ],
+            }}
+            hojas={p ? () => hojasPlataforma(p) : null}
+            deshabilitado={datos.estado !== "ready" || !!error}
+          />
+        }
+      />
       {errorAnio && (
         <InlineAlert tone="warning" compact>
           {errorAnio} Acorta el periodo y pulsa «Consultar».
