@@ -130,6 +130,7 @@ export function instalarServidor(opciones: OpcionesMock = {}) {
     const ruta = url.pathname.replace("/api/v1/comparendos/reportes/consultas", "");
     peticiones.push({ metodo, ruta, query: url.searchParams, cuerpo });
 
+    if (url.pathname.endsWith("/admin/empresas")) return json(200, [{ id: "e1", nombre: "Renting Colombia" }]);
     if (ruta === "/fields") return json(200, CAMPOS);
     if (ruta === "/saved" && metodo === "GET") return json(200, guardadas);
     if (ruta === "/saved" && metodo === "POST") {

@@ -33,7 +33,11 @@ describe("cmp-query · página", () => {
     render(<Page />);
     const tabla = await screen.findByTestId("cmp-query-tabla");
     expect(within(tabla).getByRole("columnheader", { name: "Empresa" })).toBeInTheDocument();
-    expect(screen.getByText("Sin empresa elegida se consulta sobre todas.")).toBeInTheDocument();
+    // El selector dice «Todas las empresas» en la opción vacía; la nota aparte ya no existe.
+    const selector = await screen.findByRole("combobox", { name: "Empresa" });
+    expect(selector).toHaveValue("");
+    expect(within(selector).getByRole("option", { name: "Todas las empresas" })).toBeInTheDocument();
+    expect(screen.queryByText("Sin empresa elegida se consulta sobre todas.")).not.toBeInTheDocument();
     const corrida = peticiones.find((p) => p.ruta === "/run")!;
     expect(corrida.query.get("empresa")).toBeNull();
   });
