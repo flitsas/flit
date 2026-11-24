@@ -297,7 +297,7 @@ export interface ConsultaProgramada {
   id: string;
   consultaId: string;
   periodicidad: Periodicidad;
-  /** Día de la semana como `DayOfWeek` de .NET: 0 = domingo … 6 = sábado. Solo en semanal. */
+  /** Día de la semana ISO (contrato §4, `ConsultaProgramada.DiaSemana`): 1 = lunes … 7 = domingo. Solo en semanal. */
   diaSemana: number | null;
   /** 1–28. Solo en mensual. */
   diaMes: number | null;

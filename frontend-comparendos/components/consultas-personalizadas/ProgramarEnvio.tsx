@@ -24,7 +24,7 @@ import {
 } from "@/lib/api/consultas-personalizadas";
 import { formatoFechaHora } from "@/lib/format/date";
 
-/** `DayOfWeek` de .NET (0 = domingo), ofrecido de lunes a domingo, que es como se lee una semana de trabajo. */
+/** Día de la semana ISO, como el contrato §4: 1 = lunes … 7 = domingo. NO es el `DayOfWeek` de .NET (0 = domingo). */
 export const DIAS_SEMANA: { valor: number; nombre: string }[] = [
   { valor: 1, nombre: "Lunes" },
   { valor: 2, nombre: "Martes" },
@@ -32,7 +32,7 @@ export const DIAS_SEMANA: { valor: number; nombre: string }[] = [
   { valor: 4, nombre: "Jueves" },
   { valor: 5, nombre: "Viernes" },
   { valor: 6, nombre: "Sábado" },
-  { valor: 0, nombre: "Domingo" },
+  { valor: 7, nombre: "Domingo" },
 ];
 
 const DIAS_MES = Array.from({ length: 28 }, (_, i) => i + 1);

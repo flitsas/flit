@@ -97,7 +97,7 @@ export const PROGRAMADA: ConsultaProgramada = {
   id: "prog-1",
   consultaId: "mia-1",
   periodicidad: "semanal",
-  diaSemana: 1,
+  diaSemana: 1, // ISO: 1 = lunes … 7 = domingo
   diaMes: null,
   hora: "07:00:00",
   destinatarios: ["flota@empresa.com", "gerencia@empresa.com", "jefe@empresa.com"],

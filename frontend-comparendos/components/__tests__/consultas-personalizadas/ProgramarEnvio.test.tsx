@@ -208,12 +208,30 @@ describe("cmp-query · programar envío (teclado)", () => {
   });
 });
 
+describe("cmp-query · día de la semana ISO", () => {
+  it("cmp-query: el domingo se envía como 7 y el selector ofrece 1–7 de lunes a domingo", async () => {
+    const { peticiones } = await abrirPanel();
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    const select = screen.getByTestId("cmp-query-programar-dia-semana") as HTMLSelectElement;
+    expect([...select.options].map((o) => [o.value, o.text])).toEqual([
+      ["1", "Lunes"], ["2", "Martes"], ["3", "Miércoles"], ["4", "Jueves"], ["5", "Viernes"], ["6", "Sábado"], ["7", "Domingo"],
+    ]);
+    fireEvent.change(select, { target: { value: "7" } });
+    fireEvent.change(screen.getByTestId("cmp-query-programar-destinatarios"), { target: { value: "a@b.co" } });
+    fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
+    await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
+    expect(posts(peticiones)[0]).toMatchObject({ periodicidad: "semanal", diaSemana: 7, diaMes: null });
+  });
+});
+
 describe("cmp-query · utilidades de programación", () => {
   it("cmp-query: separa, normaliza y deduplica correos", () => {
     expect(separarCorreos(" A@b.co, a@b.co;\nmal ,x@y.com ")).toEqual({ validos: ["a@b.co", "x@y.com"], invalidos: ["mal"] });
   });
   it("cmp-query: describe la frecuencia en palabras", () => {
-    expect(describirFrecuencia({ periodicidad: "semanal", diaSemana: 0, diaMes: null, hora: "18:00:00" })).toBe("Cada domingo a las 18:00");
+    // ISO: 7 = domingo y 1 = lunes. El 0 de .NET no es un día válido aquí.
+    expect(describirFrecuencia({ periodicidad: "semanal", diaSemana: 7, diaMes: null, hora: "18:00:00" })).toBe("Cada domingo a las 18:00");
+    expect(describirFrecuencia({ periodicidad: "semanal", diaSemana: 1, diaMes: null, hora: "07:00" })).toBe("Cada lunes a las 07:00");
     expect(describirFrecuencia({ periodicidad: "mensual", diaSemana: null, diaMes: 5, hora: "07:00" })).toBe("El día 5 de cada mes a las 07:00");
   });
 });
