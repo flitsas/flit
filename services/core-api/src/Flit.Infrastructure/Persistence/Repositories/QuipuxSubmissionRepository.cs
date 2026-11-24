@@ -414,6 +414,22 @@ internal sealed class QuipuxSubmissionRepository(FlitDbContext db) : IQuipuxSubm
                     FROM tramites.quipux_submissions s
                     WHERE s.procedure_instance_id = pi.id
                       AND s.status IN ('pendiente', 'registrado'))
+              -- Bug #14672: dead-letter NO se re-encola solo. Una submission 'fallido' creada en o
+              -- después de la última entrada a 'preparado' excluye el trámite (el operador usa el
+              -- reintento manual de la consola de cola). Si el trámite VUELVE a preparado (p. ej.
+              -- rechazado -> re-radicación, Bug #13912), la entrada nueva es posterior al fallido y
+              -- vuelve a ser elegible. Sin historial de 'preparado', cualquier fallido lo excluye.
+              AND NOT EXISTS (
+                    SELECT 1
+                    FROM tramites.quipux_submissions f
+                    WHERE f.procedure_instance_id = pi.id
+                      AND f.status = @fallido
+                      AND f.created_at >= COALESCE(
+                            (SELECT MAX(h.changed_at)
+                             FROM tramites.procedure_instance_status_history h
+                             WHERE h.procedure_instance_id = pi.id
+                               AND h.to_status = @status),
+                            '-infinity'::timestamptz))
             ORDER BY pi.created_at
             LIMIT @limit
             """;
@@ -430,6 +446,7 @@ internal sealed class QuipuxSubmissionRepository(FlitDbContext db) : IQuipuxSubm
             cmd.Transaction = db.Database.CurrentTransaction?.GetDbTransaction();
             cmd.CommandText = sql;
             AddParam(cmd, "status", TramiteEstado.Preparado);
+            AddParam(cmd, "fallido", QuipuxSubmissionEstado.Fallido);
             AddParam(cmd, "limit", limit);
 
             var elegibles = new List<QuipuxTramiteElegible>(limit);

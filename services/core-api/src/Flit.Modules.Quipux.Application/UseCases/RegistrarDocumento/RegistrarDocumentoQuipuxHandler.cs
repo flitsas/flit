@@ -223,6 +223,9 @@ public sealed class RegistrarDocumentoQuipuxHandler
                 {
                     motivo = RegistrarDocumentoQuipuxMotivos.LlamadaRegistroFallida,
                     transitorio = ex.IsTransient,
+                    // Bug #14672: el mensaje trae el código HTTP o el tipo de fallo (red / timeout);
+                    // sin él la bitácora no dice POR QUÉ falló Quipux. No lleva token ni password.
+                    error = ErrorParaBitacora(ex),
                     duration_ms = ElapsedMs(inicioRegistro),
                     origen = QuipuxJobNames.Register,
                 },
@@ -332,6 +335,7 @@ public sealed class RegistrarDocumentoQuipuxHandler
                 {
                     motivo = RegistrarDocumentoQuipuxMotivos.ConsultaPreviaFallida,
                     transitorio = ex.IsTransient,
+                    error = ErrorParaBitacora(ex),
                     duration_ms = ElapsedMs(inicioConsultaPrevia),
                     origen = QuipuxJobNames.Register,
                 },
@@ -680,6 +684,12 @@ public sealed class RegistrarDocumentoQuipuxHandler
     /// <summary>Milisegundos transcurridos desde un timestamp de <see cref="Stopwatch"/> (HU #10793).</summary>
     private static long ElapsedMs(long startTimestamp) =>
         (long)Stopwatch.GetElapsedTime(startTimestamp).TotalMilliseconds;
+
+    /// <summary>Bug #14672 — mensaje del fallo para la bitácora, acotado (el jsonb no debe crecer sin tope).</summary>
+    private static string ErrorParaBitacora(Exception ex) =>
+        ex.Message.Length <= MaxErrorBitacora ? ex.Message : ex.Message[..MaxErrorBitacora];
+
+    private const int MaxErrorBitacora = 300;
 
     private static string? Leer(Dictionary<string, string?> fieldValues, string campo) =>
         fieldValues.TryGetValue(campo, out var valor) && !string.IsNullOrWhiteSpace(valor)

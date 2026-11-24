@@ -22,6 +22,10 @@ internal static class QuipuxCanalResolver
         if (canal is null)
             return false;
 
+        // Bug #14672: integración global apagada => el worker no radica; ruta normal.
+        if (!canal.IntegracionHabilitada)
+            return false;
+
         return ProcedureTypeQuipuxGate.CanalActivoParaSecretaria(
             typeExternalRefs,
             canal.DivipoCode,
