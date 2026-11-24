@@ -272,6 +272,8 @@ export function hitosDeIdentidad(
         const aprobado =
           e.stage === 'manual_aprobado' ||
           (e.stage !== 'manual_rechazado' && OUTCOMES_CORRECTOS.has(e.outcome));
+        const quien =
+          e.stage === 'manual_aprobado' || e.stage === 'manual_rechazado' ? descripcionRevisor(e.revisor) : null;
         return {
           ...base,
           titulo: aprobado ? 'Identidad aprobada' : 'Identidad rechazada',
