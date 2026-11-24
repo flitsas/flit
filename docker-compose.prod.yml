@@ -8,13 +8,15 @@
 #   frontend   FRONTEND_PORT     4001   5001   6001   (Next.js)
 #   gateway    GATEWAY_PORT      4002   5002   6002   (API publica YARP: /api, /hubs, /ml)
 #   core-api   CORE_API_PORT     4003   5003   6003   (Flit.Api interno/debug, detras de YARP)
-#   core-ict   CORE_ICT_PORT     4020   5020   6020   (Flit.Ict.Api interno, detras de YARP)
+#   core-ict   CORE_ICT_PORT     4020   5020   6020   (Flit.Ict.Api REST, detras de YARP)
+#   core-ict   CORE_ICT_GRPC_PORT 4021  5021   6021   (callback gRPC h2c core-api→core-ict, SOLO HTTP/2)
 #   core-personanatural CORE_PERSONANATURAL_PORT 4029 5029 6029 (BFF del portal Persona Natural, perfil personanatural, detras de YARP)
 #   python-ml  PYTHON_ML_PORT    4012   5012   6012   (FastAPI OCR/ML, detras de YARP)
 #   migracion  MIGRACION_API_PORT 4030  5030   6030   (Flit.DataMigration.Api, SOLO red interna)
 #
 # gRPC este-oeste (interno, NO publicado): core-ict -> core-api en CORE_API_GRPC_PORT (default 8082);
-# el callback de estados va core-api -> core-ict en CORE_ICT_PORT (h2c en el mismo puerto REST).
+# el callback de estados va core-api -> core-ict en CORE_ICT_GRPC_PORT (h2c, puerto SOLO HTTP/2;
+# Kestrel no multiplexa HTTP/1.1+HTTP/2 en claro — HTTP_1_1_REQUIRED si se usa el REST).
 #
 # Los defaults son los de DEV. El CD exporta las vars segun la rama (develop/staging/
 # release); para operacion manual, fijalas en el .env del VPS de ese ambiente.
@@ -317,8 +319,9 @@ services:
       # Obligatoria desde el corte (HU #13348): core-api llama a core-consultas con este cliente.
       Platform__ServiceClient__ClientSecret: ${SVC_TRAMITES_CLIENT_SECRET:?SVC_TRAMITES_CLIENT_SECRET es obligatoria (core-api consulta por core-consultas como svc-tramites)}
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
-      # Plano C: reflejo del estado del trámite hacia core-ict (callback gRPC).
-      Ict__StateCallback__Address: http://core-ict:${CORE_ICT_PORT:-4020}
+      # Plano C: reflejo del estado del trámite hacia core-ict (callback gRPC h2c).
+      # Puerto dedicado HTTP/2 (CORE_ICT_GRPC_PORT); no apuntar al REST (CORE_ICT_PORT).
+      Ict__StateCallback__Address: http://core-ict:${CORE_ICT_GRPC_PORT:-4021}
     environment:
       <<: *core-api-env
       # HU #13378 (épica #13216, ADR-0070 D4) — directorio temporal dedicado del empaquetado de lotes de consolidados.
@@ -884,8 +887,12 @@ services:
     environment:
       # HU #12895 (A-02) — mismo nombre de ambiente que core-api (ver su comentario).
       ASPNETCORE_ENVIRONMENT: ${FLIT_DOTNET_ENVIRONMENT:-Development}
+      # Anula el ASPNETCORE_HTTP_PORTS=8080 de la imagen base aspnet.
+      ASPNETCORE_HTTP_PORTS: ""
       ASPNETCORE_URLS: http://+:${CORE_ICT_PORT:-4020}
       Urls: http://0.0.0.0:${CORE_ICT_PORT:-4020}
+      # Callback gRPC entrante (core-api → core-ict): puerto SOLO HTTP/2 (h2c).
+      Ict__GrpcPort: ${CORE_ICT_GRPC_PORT:-4021}
       # HU #12895 (A-02) — misma variable que core-api.
       Swagger__Enabled: ${FLIT_SWAGGER_ENABLED:-true}
       ConnectionStrings__Core: ${CONNECTION_STRING_CORE}
@@ -925,6 +932,8 @@ services:
       Ingest__RelaxRegisterCommitDurability: ${ICT_RELAX_REGISTER_COMMIT_DURABILITY:-false}
     ports:
       - "127.0.0.1:${CORE_ICT_PORT:-4020}:${CORE_ICT_PORT:-4020}"
+      # Callback gRPC h2c (solo red interna / loopback del host).
+      - "127.0.0.1:${CORE_ICT_GRPC_PORT:-4021}:${CORE_ICT_GRPC_PORT:-4021}"
     depends_on:
       core-api:
         condition: service_started

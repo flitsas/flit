@@ -39,8 +39,9 @@ services:
       Ict__GrpcPort: "8082"
       # Service-token gRPC este-oeste (HMAC compartido con core-ict). Dev únicamente; en prod llega por secreto.
       Ict__ServiceToken__Secret: dev-ict-service-token-shared-secret-change-in-prod-01234567
-      # Plano C: reflejo de estado del trámite hacia core-ict (callback gRPC). Red interna Docker.
-      Ict__StateCallback__Address: http://core-ict:4020
+      # Plano C: reflejo de estado del trámite hacia core-ict (callback gRPC h2c).
+      # Puerto dedicado HTTP/2 (Ict__GrpcPort de core-ict); no usar el REST 4020 (HTTP_1_1_REQUIRED).
+      Ict__StateCallback__Address: http://core-ict:4021
     ports:
       - "4003:8081"
     depends_on:
@@ -56,7 +57,10 @@ services:
     container_name: flit-core-ict-dev
     environment:
       ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_HTTP_PORTS: ""
       ASPNETCORE_URLS: http://+:4020
+      # Callback gRPC entrante (core-api → core-ict): puerto SOLO HTTP/2.
+      Ict__GrpcPort: "4021"
       ConnectionStrings__Core: Host=postgres;Port=5432;Database=flit_dev;Username=postgres;Password=postgres
       # gRPC hacia core-api (orquestación de creación del borrador): puerto dedicado HTTP/2 del backend.
       CoreApiGrpc__Address: http://backend:8082
@@ -65,6 +69,7 @@ services:
       Ict__ServiceToken__Secret: dev-ict-service-token-shared-secret-change-in-prod-01234567
     ports:
       - "4020:4020"
+      - "4021:4021"
     depends_on:
       postgres:
         condition: service_healthy
