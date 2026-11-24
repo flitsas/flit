@@ -15,6 +15,8 @@ public static class OcrEndpoints
 
     public sealed record PedidoDescarte(string? Motivo);
 
+    public sealed record PedidoAsociar(bool Reemplazar, Guid? EvidenciaActualId);
+
     public static void Map(RouteGroupBuilder api)
     {
         var g = api.MapGroup("/ocr");
@@ -28,6 +30,7 @@ public static class OcrEndpoints
         g.MapGet("/documentos/{id:guid}", Documento).RequirePermiso(Permisos.OcrVer);
         g.MapPut("/documentos/{id:guid}/campos", Corregir).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/registrar", Registrar).RequirePermiso(Permisos.OcrGestionar);
+        g.MapPost("/documentos/{id:guid}/asociar", Asociar).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/descartar", Descartar).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/reintentar", Reintentar).RequirePermiso(Permisos.OcrGestionar);
         g.MapPost("/documentos/{id:guid}/reprocesar", Reprocesar).RequirePermiso(Permisos.OcrGestionar);
@@ -72,7 +75,7 @@ public static class OcrEndpoints
         {
             paquetes = g.Count(), documentos = g.Sum(p => p.CantidadDocumentos), pendientes = g.Sum(p => p.CantidadPendientes), completos = g.Sum(p => p.CantidadCompletos),
             incompletos = g.Sum(p => p.CantidadIncompletos), fallidos = g.Sum(p => p.CantidadFallidos), duplicados = g.Sum(p => p.CantidadDuplicados),
-            registrados = g.Sum(p => p.CantidadRegistrados), descartados = g.Sum(p => p.CantidadDescartados),
+            registrados = g.Sum(p => p.CantidadRegistrados), descartados = g.Sum(p => p.CantidadDescartados), asociados = g.Sum(p => p.CantidadAsociados),
         }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
         if (Enum.TryParse<EstadoPaqueteOcr>(estado, true, out var e))
             q = q.Where(p => p.Estado == e);
@@ -91,7 +94,7 @@ public static class OcrEndpoints
     private static object Resumen(PaqueteOcr p) => new
     {
         p.Id, p.TenantId, p.Nombre, estado = p.Estado.ToString(), p.CantidadDocumentos, p.CantidadPendientes, p.CantidadCompletos, p.CantidadIncompletos, p.CantidadFallidos,
-        p.CantidadDuplicados, p.CantidadRegistrados, p.CantidadDescartados, procesados = p.CantidadDocumentos - p.CantidadPendientes, p.CreadoPor, p.CreadoPorNombre, p.CreadoEn,
+        p.CantidadDuplicados, p.CantidadRegistrados, p.CantidadDescartados, p.CantidadAsociados, procesados = p.CantidadDocumentos - p.CantidadPendientes, p.CreadoPor, p.CreadoPorNombre, p.CreadoEn,
         p.ProcesamientoIniciadoEn, p.CerradoEn, p.PromptVersionId,
     };
 
@@ -215,17 +218,29 @@ public static class OcrEndpoints
         object? duplicado = null;
         if (d.DuplicadoDeComparendoId is { } cid)
         {
-            duplicado = await db.Comparendos.AsNoTracking().Where(c => c.Id == cid).Select(c => new
+            var existente = await db.Comparendos.AsNoTracking().Where(c => c.Id == cid && c.TenantId == d.TenantId).Select(c => new
             {
-                tipo = "comparendo", c.Id, c.Numero, fuente = d.FuenteDuplicado, registradoEn = c.CreadoEn, estadoGestion = c.EstadoGestion.ToString(), c.Activo, c.Pagado,
+                tipo = "comparendo", c.Id, c.Numero, fuente = d.FuenteDuplicado, registradoEn = c.CreadoEn, estadoGestion = c.EstadoGestion.ToString(), c.Activo, c.Pagado, c.ArchivoEvidenciaId,
             }).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+            // GDC-ASOC: el documento que el comparendo ya tiene (para compararlo) y si este se puede asociar.
+            var actual = existente?.ArchivoEvidenciaId is { } eid
+                ? await db.Archivos.AsNoTracking().Where(a => a.Id == eid && a.TenantId == d.TenantId)
+                    .Select(a => new { archivoId = a.Id, nombre = a.NombreOriginal, contentType = a.ContentType, tamanoBytes = a.TamanoBytes, cargadaEn = a.CreadoEn }).FirstOrDefaultAsync(ct).ConfigureAwait(false)
+                : null;
+            var noAsociable = ServicioOcr.MotivoNoAsociable(d);
+            duplicado = existente is null ? null : new
+            {
+                existente.tipo, existente.Id, existente.Numero, existente.fuente, existente.registradoEn, existente.estadoGestion, existente.Activo, existente.Pagado,
+                evidenciaActual = actual, asociable = noAsociable is null, motivoNoAsociable = noAsociable,
+            };
         }
         else if (d.DuplicadoDeDocumentoId is { } did)
         {
+            var motivoDocumento = ServicioOcr.MotivoNoAsociable(d);
             duplicado = await (from o in db.DocumentosOcr.AsNoTracking()
                                join p in db.PaquetesOcr.AsNoTracking() on o.PaqueteId equals p.Id
                                where o.Id == did
-                               select new { tipo = "documento", o.Id, numero = o.NumeroComparendoExtraido, fuente = d.FuenteDuplicado, paqueteId = p.Id, paquete = p.Nombre, registradoEn = p.CreadoEn, estado = o.Estado.ToString(), o.ComparendoId })
+                               select new { tipo = "documento", o.Id, numero = o.NumeroComparendoExtraido, fuente = d.FuenteDuplicado, paqueteId = p.Id, paquete = p.Nombre, registradoEn = p.CreadoEn, estado = o.Estado.ToString(), o.ComparendoId, asociable = false, motivoNoAsociable = motivoDocumento })
                 .FirstOrDefaultAsync(ct).ConfigureAwait(false);
         }
 
@@ -258,6 +273,13 @@ public static class OcrEndpoints
     {
         var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
         return Results.Ok(await servicio.RegistrarAsync(d, Actor.De(usuario), ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> Asociar(Guid id, PedidoAsociar pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
+    {
+        var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
+        var r = await servicio.AsociarAsync(d, pedido.Reemplazar, pedido.EvidenciaActualId, Actor.De(usuario), ct).ConfigureAwait(false);
+        return Results.Ok(new { r.ComparendoId, r.Numero, estado = EstadoDocumentoOcr.Asociado.ToString(), reemplazo = r.Reemplazo });
     }
 
     private static async Task<IResult> Descartar(Guid id, PedidoDescarte pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
@@ -306,6 +328,7 @@ public static class OcrEndpoints
                 fallidos = g.Count(f => f.Estado == EstadoDocumentoOcr.Fallido),
                 duplicados = g.Count(f => f.Estado == EstadoDocumentoOcr.Duplicado),
                 descartados = g.Count(f => f.Estado == EstadoDocumentoOcr.Descartado),
+                asociados = g.Count(f => f.Estado == EstadoDocumentoOcr.Asociado),
             });
         return Results.Ok(periodos);
     }

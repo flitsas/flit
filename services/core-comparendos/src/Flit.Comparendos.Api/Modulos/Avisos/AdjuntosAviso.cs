@@ -58,6 +58,8 @@ public sealed class AdjuntosAviso(ResolutorRepresentante resolutor, RegistroArch
 
         if (tipo != TipoAviso.Aviso4 && await foto.ParaAvisoAsync(c, ct).ConfigureAwait(false) is { } documento)
             lista.Add(documento);
+        else if (tipo != TipoAviso.Aviso4)
+            faltantes.Add("el documento del comparendo (aún no tiene uno asociado)");
         return new Adjuntos(lista, autorizacion, poder, faltantes);
     }
 
