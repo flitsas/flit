@@ -181,8 +181,27 @@ describe("asociar documento escaneado a comparendo existente", () => {
     expect(screen.getByText("Número en el documento")).toBeTruthy();
     cleanup();
 
-    abrir({}, undefined, { estado: "Completo", duplicado: null, campos, numeroComparendoExtraido: "11001000000012345678", numeroAGuardar: "11001000000012345678" });
+    const sinLetra = [{ ...campos[0], valorExtraido: "11001000000012345678", valorFinal: "11001000000012345678" }];
+    abrir({}, undefined, { estado: "Completo", duplicado: null, campos: sinLetra, numeroComparendoExtraido: "11001000000012345678", numeroAGuardar: "11001000000012345678" });
     await screen.findAllByRole("button", { name: "Registrar comparendo" });
     expect(screen.queryByText("Número que se guardará")).toBeNull();
+  });
+
+  it("el operador corrigió el número: se compara contra el corregido, no contra el extraído", async () => {
+    // El extraído (mala lectura) difiere del guardado; el corregido ya coincide: no hay nada que avisar.
+    const campos = [{ nombreCampo: "numero_comparendo", obligatorio: true, valorExtraido: "D-11001000000099999999", confianza: 0.5, esNull: false, valorCorregido: "D-11001000000012345678", valorFinal: "D-11001000000012345678" }];
+    abrir({}, undefined, { estado: "Completo", duplicado: null, campos, numeroComparendoExtraido: "D-11001000000099999999", numeroAGuardar: "11001000000012345678" });
+    await screen.findAllByRole("button", { name: "Registrar comparendo" });
+    expect(screen.getByText("Número que se guardará")).toBeTruthy();
+    expect(screen.getByText("D-11001000000012345678", { selector: "dd" })).toBeTruthy();
+    expect(screen.queryByText("D-11001000000099999999", { selector: "dd" })).toBeNull();
+    cleanup();
+
+    // Y en el modal, el número del documento es el corregido: coincide con el del sistema, sin aviso.
+    abrir({ numero: "11001000000012345678" }, undefined, { campos, numeroComparendoExtraido: "D-11001000000099999999" });
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    const modal = await screen.findByRole("dialog");
+    expect(within(modal).getByText("D-11001000000012345678")).toBeTruthy();
+    expect(within(modal).queryByText(/Los números no coinciden exactamente/)).toBeNull();
   });
 });
