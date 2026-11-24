@@ -55,6 +55,9 @@ export type QueryRangePreset =
   | "mes_actual"
   | "mes_anterior"
   | "anio_actual"
+  | "ultimos_365"
+  | "proximos_30"
+  | "proximos_90"
   | "personalizado";
 
 /** El rango se guarda RELATIVO («últimos 30 días») y lo resuelve el servidor contra el día de Bogotá en cada ejecución. */
@@ -73,7 +76,11 @@ export interface QueryDefinition {
   descending?: boolean;
 }
 
-export const RANGE_PRESETS: { value: QueryRangePreset; label: string }[] = [
+/**
+ * `futuro`: el rango mira hacia adelante desde hoy. Solo tiene sentido sobre fechas que todavía no han pasado (un
+ * plazo, una caducidad), y la consola lo ofrece solo con las de `QuerySource.camposFuturos`.
+ */
+export const RANGE_PRESETS: { value: QueryRangePreset; label: string; futuro?: boolean }[] = [
   { value: "hoy", label: "Hoy" },
   { value: "ultimos_7", label: "Últimos 7 días" },
   { value: "ultimos_30", label: "Últimos 30 días" },
@@ -81,6 +88,9 @@ export const RANGE_PRESETS: { value: QueryRangePreset; label: string }[] = [
   { value: "mes_actual", label: "Mes actual" },
   { value: "mes_anterior", label: "Mes anterior" },
   { value: "anio_actual", label: "Año actual" },
+  { value: "ultimos_365", label: "Último año" },
+  { value: "proximos_30", label: "Próximos 30 días", futuro: true },
+  { value: "proximos_90", label: "Próximos 90 días", futuro: true },
   { value: "personalizado", label: "Rango propio" },
 ];
 
@@ -135,6 +145,8 @@ export interface QuerySource<TRow> {
   testIdPrefix: string;
   dateFields: { value: string; label: string }[];
   defaultDateField: string;
+  /** Fechas que miran hacia adelante: las únicas con las que se ofrecen los presets «Próximos …». */
+  camposFuturos?: string[];
   columnsStorageKey: string;
   exportPrefix: string;
   rowNoun: [string, string];
@@ -214,7 +226,13 @@ export const COMPARENDO_DATE_FIELDS: { value: string; label: string }[] = [
   { value: "dp_radicacion", label: "Radicación del DP" },
   { value: "dp_respuesta", label: "Respuesta del DP" },
   { value: "pago", label: "Pago" },
+  { value: "limite_gestion", label: "Límite de gestión" },
+  { value: "caducidad", label: "Caducidad" },
+  { value: "prescripcion", label: "Prescripción" },
 ];
+
+/** Las fechas de un comparendo que todavía pueden estar por venir. */
+export const COMPARENDO_CAMPOS_FUTUROS = ["limite_gestion", "caducidad", "prescripcion"];
 
 const BASE = "/reportes/consultas";
 
@@ -251,6 +269,7 @@ export function fuenteComparendos(empresa: string | null, todas = false): QueryS
     testIdPrefix: "cmp-query",
     dateFields: COMPARENDO_DATE_FIELDS,
     defaultDateField: "imposicion",
+    camposFuturos: COMPARENDO_CAMPOS_FUTUROS,
     // Aparte para «todas las empresas» del SuperAdmin: la columna Empresa no debería quedarse puesta al mirar una sola.
     columnsStorageKey: todas ? "flit-cmp-consultas-columnas-todas" : "flit-cmp-consultas-columnas",
     exportPrefix: "consulta-comparendos",

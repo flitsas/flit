@@ -68,6 +68,12 @@ import {
  * los veía distintos —y también se habría tragado un cambio de orden de claves— y marcaba
  * «modificada» nada más guardar, con la consulta recién guardada y sin tocar nada.</p>
  */
+/** El preset sigue si vale para el campo de fecha; si es de los que miran adelante y el campo no, pasa a 30 días atrás. */
+export function presetValido(preset: QueryRangePreset, campo: string, camposFuturos: string[] = []): QueryRangePreset {
+  const futuro = RANGE_PRESETS.find((p) => p.value === preset)?.futuro;
+  return futuro && !camposFuturos.includes(campo) ? "ultimos_30" : preset;
+}
+
 function huellaPregunta(definition: QueryDefinition): string {
   return JSON.stringify([
     [
@@ -585,7 +591,12 @@ export function QueryConsole<TRow>({
                 onChange={(e) =>
                   setDefinition((prev) => ({
                     ...prev,
-                    fechas: { ...prev.fechas, campo: e.target.value },
+                    // Un «Próximos …» sobre una fecha que ya pasó no tiene sentido: vuelve al periodo por defecto.
+                    fechas: {
+                      ...prev.fechas,
+                      campo: e.target.value,
+                      preset: presetValido(prev.fechas.preset, e.target.value, source.camposFuturos),
+                    },
                   }))
                 }
                 className={FIELD_CLS}
@@ -612,7 +623,7 @@ export function QueryConsole<TRow>({
                 className={FIELD_CLS}
                 data-testid={`${prefix}-preset`}
               >
-                {RANGE_PRESETS.map((preset) => (
+                {RANGE_PRESETS.filter((p) => !p.futuro || (source.camposFuturos ?? []).includes(definition.fechas.campo)).map((preset) => (
                   <option key={preset.value} value={preset.value}>
                     {preset.label}
                   </option>

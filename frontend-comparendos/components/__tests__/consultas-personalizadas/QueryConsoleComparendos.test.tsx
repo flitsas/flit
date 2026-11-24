@@ -206,6 +206,42 @@ describe("cmp-query · consola de Consultas de Comparendos", () => {
   });
 });
 
+describe("cmp-query · presets relativos", () => {
+  const opciones = () => [...(screen.getByTestId("cmp-query-preset") as HTMLSelectElement).options].map((o) => o.value);
+
+  it("cmp-query: «Próximos …» solo con fechas que miran adelante; «Último año» siempre", async () => {
+    instalarServidor();
+    montar();
+    await screen.findByText("11001000000041234567");
+    expect(opciones()).toContain("ultimos_365");
+    expect(opciones()).not.toContain("proximos_30");
+    fireEvent.change(screen.getByTestId("cmp-query-campo-fecha"), { target: { value: "caducidad" } });
+    expect(opciones()).toEqual(expect.arrayContaining(["proximos_30", "proximos_90"]));
+  });
+
+  it("cmp-query: la del sistema «Vence el plazo de gestión…» abre en límite de gestión y próximos 30 días", async () => {
+    const { peticiones } = instalarServidor();
+    montar();
+    const tarjeta = await screen.findByTestId("cmp-query-guardada-c0000000-0000-4000-8000-000000000001");
+    expect(tarjeta).toHaveTextContent("Vence el plazo de gestión en los próximos 30 días");
+    expect(tarjeta).toHaveTextContent("próximos 30 días");
+    fireEvent.click(tarjeta);
+    expect(screen.getByTestId("cmp-query-campo-fecha")).toHaveValue("limite_gestion");
+    expect(screen.getByTestId("cmp-query-preset")).toHaveValue("proximos_30");
+    await waitFor(() =>
+      expect(peticiones.some((p) => p.ruta === "/run" && (p.cuerpo as QueryDefinition).fechas.preset === "proximos_30")).toBe(true),
+    );
+  });
+
+  it("cmp-query: pasar de una fecha futura a una pasada quita el «Próximos …»", async () => {
+    instalarServidor();
+    montar();
+    fireEvent.click(await screen.findByTestId("cmp-query-guardada-c0000000-0000-4000-8000-000000000001"));
+    fireEvent.change(screen.getByTestId("cmp-query-campo-fecha"), { target: { value: "imposicion" } });
+    expect(screen.getByTestId("cmp-query-preset")).toHaveValue("ultimos_30");
+  });
+});
+
 describe("cmp-query · etiquetas de estado", () => {
   it("cmp-query: sin catálogo usa la etiqueta de la bandeja y nunca el valor crudo", () => {
     expect(etiquetaEstado("estadoLegal", "EnTiempo", [])).toBe("En tiempo");

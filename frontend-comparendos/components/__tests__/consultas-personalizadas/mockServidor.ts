@@ -46,6 +46,17 @@ export const FILAS: ComparendoQueryRow[] = [
 ];
 
 const AHORA = "2026-11-01T15:00:00Z";
+/** #1 de fábrica tras el cambio de S0: plazo de gestión que vence en los próximos 30 días. */
+export const DE_FABRICA_PLAZO: SavedQuery = {
+  id: "c0000000-0000-4000-8000-000000000001",
+  nombre: "Vence el plazo de gestión en los próximos 30 días",
+  descripcion: null,
+  deFabrica: true,
+  definition: { fechas: { campo: "limite_gestion", preset: "proximos_30" }, condiciones: [], columnas: [], sortBy: "fecha_limite_gestion", descending: false },
+  createdAt: "2026-11-01T15:00:00Z",
+  updatedAt: null,
+};
+
 /** Ids de las de fábrica según S1: `c0000000-0000-4000-8000-00000000000{1..8}`, en el orden de §5. */
 export const ID_FABRICA_SIN_GESTION = "c0000000-0000-4000-8000-000000000003";
 export const DE_FABRICA: SavedQuery = {
@@ -109,7 +120,7 @@ const json = (status: number, cuerpo: unknown) =>
 /** Instala el mock en `fetch` y devuelve el registro de peticiones (para afirmar lo que salió hacia el servidor). */
 export function instalarServidor(opciones: OpcionesMock = {}) {
   const peticiones: Peticion[] = [];
-  let guardadas: SavedQuery[] = [DE_FABRICA, PROPIA];
+  let guardadas: SavedQuery[] = [DE_FABRICA_PLAZO, DE_FABRICA, PROPIA];
   let programaciones: ConsultaProgramada[] = [...(opciones.programaciones ?? [])];
 
   const fetchMock = vi.fn(async (entrada: RequestInfo | URL, init?: RequestInit) => {
