@@ -24,7 +24,8 @@ public sealed class GetIdentityAuditByValidationHandler(IProcedureInstanceReposi
             .Select(e => new IdentityAuditEventDto(
                 e.OccurredAt, e.Stage, e.Outcome, e.HttpStatus,
                 e.SignaturePresent, e.SecretPresent, e.DecryptOk,
-                e.ProviderStatus, e.ErrorType, e.Message))
+                e.ProviderStatus, e.ErrorType, e.Message,
+                RevisorId: IdentityAuditRevisor.ExtraerUsuario(e.Stage, e.Detail)))
             .ToList();
 
         // Sin instanceId no aplica el concepto de "referenciada desde OTRO trámite" (eso solo tiene
