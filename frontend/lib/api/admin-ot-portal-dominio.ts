@@ -148,6 +148,7 @@ export function toTenantDomain(dominio: DominioPortal): TenantDomainResponse {
   const txt = dominio.dns.find((r) => r.tipo.toUpperCase() === "TXT");
   const a = dominio.dns.find((r) => r.tipo.toUpperCase() === "A");
   return {
+    purpose: "PORTAL",
     host: dominio.host,
     status: ESTADOS[dominio.estado],
     statusReason: dominio.motivo,
@@ -155,8 +156,6 @@ export function toTenantDomain(dominio: DominioPortal): TenantDomainResponse {
     verification: {
       txtName: txt?.nombre ?? "",
       txtValue: txt?.valor ?? "",
-      cnameName: "",
-      cnameTarget: "",
       aName: a?.nombre ?? dominio.host,
       aValue: a?.valor ?? "",
     },
