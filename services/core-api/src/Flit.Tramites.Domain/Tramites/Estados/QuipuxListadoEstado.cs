@@ -19,3 +19,9 @@ public static class QuipuxListadoEstado
 
     public const string Aprobado = "aprobado";
 }
+
+/// <summary>
+/// Marca «Quipux» de una fila del listado: el estado (<see cref="QuipuxListadoEstado"/>) y el id del ÚLTIMO envío del trámite
+/// (<c>null</c> si aún no tiene envíos, p. ej. <c>en_cola</c> sin radicar), para enlazar a la pantalla de trazabilidad.
+/// </summary>
+public sealed record QuipuxMarcaListado(string Estado, Guid? EnvioId);

@@ -121,7 +121,9 @@ public sealed record InstanceSummaryDto(
     bool MultiplesPropietarios = false,
                                               // Marca «Quipux» de la fila (QuipuxListadoEstado): "en_cola" | "radicado" | "fallido" |
                                               // "rechazado" | "aprobado"; null = el trámite no va por Quipux. Aditivo.
-    string? QuipuxEstado = null);
+    string? QuipuxEstado = null,
+                                              // Id del ÚLTIMO envío Quipux del trámite (para enlazar a la trazabilidad); null si no tiene envíos o no va por Quipux.
+    Guid? QuipuxEnvioId = null);
 
 /// <summary>
 /// ADR-0053 — un propietario de un lado en el listado: su nombre y cómo está acreditado
@@ -225,8 +227,9 @@ public sealed class ListProcedureInstancesHandler(
             instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
 
         // Marca «Quipux»: una consulta en lote para la página (último envío o en_cola).
-        IReadOnlyDictionary<Guid, string> quipuxEstados = await repo.GetQuipuxEstadosAsync(
-            instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
+        IReadOnlyDictionary<Guid, QuipuxMarcaListado> quipuxEstados = await repo.GetQuipuxEstadosAsync(
+            instances.Select(i => i.Id).ToList(), ct)
+            ?? new Dictionary<Guid, QuipuxMarcaListado>();
 
         // Excepción de firma (matrícula sin placa, canal gestor/OT): se resuelve en lote con caché de canal por OT
         // para que `canSubmit` de la fila coincida con el del wizard.
@@ -344,7 +347,7 @@ public sealed class ListProcedureInstancesHandler(
         string? revocationRequestStatus = null,
         bool firmaExenta = false,
         IReadOnlySet<ProcedureInstanceActor>? actoresAprobados = null,
-        string? quipuxEstado = null)
+        QuipuxMarcaListado? quipuxMarca = null)
     {
         var fv = e.FieldValues.ToDictionary(f => f.FieldKey, f => f.ValueText, StringComparer.OrdinalIgnoreCase);
         // ADR-0053 — un lado puede tener hasta 4 propietarios. Se ordena por `Ordinal` para que el
@@ -427,7 +430,8 @@ public sealed class ListProcedureInstancesHandler(
             VendedoresActores: ActoresListado(e, partesIdentidad, SellerActorType, sellers, actoresAprobados, firmaBaulPorPersona ?? EmptyFirmaBaul),
             CompradoresActores: ActoresListado(e, partesIdentidad, BuyerActorType, buyers, actoresAprobados, firmaBaulPorPersona ?? EmptyFirmaBaul),
             MultiplesPropietarios: sellers.Count > 1 || buyers.Count > 1,
-            QuipuxEstado: quipuxEstado);
+            QuipuxEstado: quipuxMarca?.Estado,
+            QuipuxEnvioId: quipuxMarca?.EnvioId);
     }
 
     /// <summary>

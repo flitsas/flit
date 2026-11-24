@@ -8,17 +8,22 @@ const fila = (parcial: Partial<InstanceSummary>) =>
 
 describe('quipuxMarca / marcasLabel', () => {
   it.each([
-    ['en_cola', 'Quipux · En cola', 'neutral'],
-    ['radicado', 'Quipux · Radicado', 'info'],
-    ['fallido', 'Quipux · Falló', 'danger'],
-    ['rechazado', 'Quipux · Rechazado', 'warning'],
-    ['aprobado', 'Quipux · Aprobado', 'success'],
+    ["en_cola", "QX · En cola", "neutral"],
+    ["radicado", "QX · Radicado", "info"],
+    ["fallido", "QX · Falló", "danger"],
   ] as const)('%s → «%s»', (estado, texto, tono) => {
     const m = quipuxMarca(fila({ quipuxEstado: estado }));
     expect(m?.texto).toBe(texto);
     expect(m?.tono).toBe(tono);
     expect(m?.ayuda.length).toBeGreaterThan(10);
     expect(marcasLabel(fila({ quipuxEstado: estado }))).toBe(texto);
+  });
+
+  it('aprobado y rechazado no se pintan, ni van al Excel', () => {
+    for (const e of ['aprobado', 'rechazado'] as const) {
+      expect(quipuxMarca(fila({ quipuxEstado: e }))).toBeNull();
+      expect(marcasLabel(fila({ quipuxEstado: e }))).toBe('');
+    }
   });
 
   it('null, ausente o desconocido: sin píldora', () => {
@@ -30,7 +35,7 @@ describe('quipuxMarca / marcasLabel', () => {
 
   it('va después de las demás marcas en el Excel', () => {
     expect(marcasLabel(fila({ tienePrenda: true, quipuxEstado: 'fallido' }))).toBe(
-      'prenda, Quipux · Falló',
+      'prenda, QX · Falló',
     );
   });
 });
