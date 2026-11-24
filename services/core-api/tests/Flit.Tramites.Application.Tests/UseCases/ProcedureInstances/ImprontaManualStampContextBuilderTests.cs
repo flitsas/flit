@@ -233,6 +233,44 @@ public sealed class ImprontaManualStampContextBuilderTests
         extractor.DidNotReceive().IsUsableInk(Arg.Any<byte[]>());
     }
 
+    // Bug #14661 — la firma de una validación MANUAL es un PNG opaco de fondo blanco: no pasa IsUsableInk (Kyverum),
+    // pero sí se estampa (sin fondo) con PrepareManualSignature.
+
+    [Fact]
+    public async Task Bug14661_FirmaManualOpaca_SeEstampaPreparadaAunqueNoPaseIsUsableInk()
+    {
+        var (instance, _) = JuridicaConRubricaDeIdentidad();
+        var bio = instance.BiometricValidations.Single();
+        bio.Provider = BiometricProviders.Manual;
+        var lista = new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 7, 7 };
+        var extractor = Substitute.For<IIdentitySignatureExtractor>();
+        extractor.IsUsableInk(Arg.Any<byte[]>()).Returns(false);
+        extractor.PrepareManualSignature(Arg.Any<byte[]>()).Returns(lista);
+
+        var ctx = await ImprontaManualStampContextBuilder.BuildAsync(
+            instance, Impronta(instance.TenantId, instance.Id), _storage, _vault,
+            ct: TestContext.Current.CancellationToken, signatureExtractor: extractor);
+
+        ctx.Signers[0].SignatureImage.Should().Equal(lista);
+        extractor.DidNotReceive().IsUsableInk(Arg.Any<byte[]>());
+    }
+
+    [Fact]
+    public async Task Bug14661_FirmaManualSinTinta_QuedaElSelloDeTexto()
+    {
+        var (instance, _) = JuridicaConRubricaDeIdentidad();
+        instance.BiometricValidations.Single().Provider = BiometricProviders.Manual;
+        var extractor = Substitute.For<IIdentitySignatureExtractor>();
+        extractor.PrepareManualSignature(Arg.Any<byte[]>()).Returns((byte[]?)null);
+
+        var ctx = await ImprontaManualStampContextBuilder.BuildAsync(
+            instance, Impronta(instance.TenantId, instance.Id), _storage, _vault,
+            ct: TestContext.Current.CancellationToken, signatureExtractor: extractor);
+
+        ctx.Signers[0].SignatureImage.Should().BeNull();
+        ctx.Signers[0].SealText.Should().Contain("Validación biométrica");
+    }
+
     private (ProcedureInstance Instance, byte[] SigBytes) JuridicaConRubricaDeIdentidad()
     {
         var instance = BaseInstance();
