@@ -312,11 +312,11 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
     }
 
     [Fact]
-    public async Task Trabajo_VerificaAlDuenoConElMismoIdConQueLaCreo_YSiNoTienePermisoLaPausa()
+    public async Task Trabajo_VerificaAlDuenoConElMismoIdConQueLaCreo_YSiYaNoEstaEnLaEmpresaLaPausa()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var (valida, clienteValida, consultaValida, duenoValida) = await EmpresaConDuenoAsync("Dueño válido");
-        var (sinPermiso, clienteSin, consultaSin, duenoSin) = await EmpresaConDuenoAsync("Dueño sin permiso");
+        var (sinPermiso, clienteSin, consultaSin, duenoSin) = await EmpresaConDuenoAsync("Dueño fuera");
         var pv = await ProgramadaVencidaAsync(clienteValida, consultaValida, "samuel.cardenas@flitsas.com");
         var ps = await ProgramadaVencidaAsync(clienteSin, consultaSin, "samuel.cardenas@flitsas.com");
         api.Duenos.Respuestas[duenoSin.Id] = false;
@@ -331,13 +331,13 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
         }
 
         // De punta a punta: el id que se consulta en Identidad es el del usuario que creó la programación (el sub del token).
-        api.Duenos.Preguntas.Should().Contain((valida, duenoValida.Id, Permisos.ReportesProgramar));
-        api.Duenos.Preguntas.Should().Contain((sinPermiso, duenoSin.Id, Permisos.ReportesProgramar));
+        api.Duenos.Preguntas.Should().Contain((valida, duenoValida.Id));
+        api.Duenos.Preguntas.Should().Contain((sinPermiso, duenoSin.Id));
         (await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == pv, Ct))).UltimoResultado.Should().Be("Enviado a 1 destinatario");
 
         var pausada = await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == ps, Ct));
         (pausada.Activa, pausada.ProximaEjecucion, pausada.UltimoResultado, pausada.UltimaEjecucion)
-            .Should().Be((false, null, "En pausa: quien lo programó ya no tiene permiso para programar envíos.", (DateTimeOffset?)null), "pausar no es ejecutar");
+            .Should().Be((false, null, "En pausa: quien lo programó ya no está activo en la empresa.", (DateTimeOffset?)null), "pausar no es ejecutar");
         (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == sinPermiso && c.Tipo == TipoComunicacion.ConsultaProgramada, Ct))).Should().Be(0);
     }
 

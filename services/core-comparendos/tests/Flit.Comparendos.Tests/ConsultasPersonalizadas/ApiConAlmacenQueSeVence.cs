@@ -15,7 +15,7 @@ public sealed class ApiConAlmacenQueSeVence : ApiConFuente
 {
     public ConcurrentDictionary<Guid, bool> EmpresasQueSeVencen { get; } = new();
 
-    /// <summary>Identidad falsa para los dueños de los envíos: por usuario, sí / no / no responde (null). Sin entrada, sí.</summary>
+    /// <summary>Identidad falsa para los dueños de los envíos: por usuario, sigue / ya no / no responde (null). Sin entrada, sigue.</summary>
     public DuenosDePrueba Duenos { get; } = new();
 
     protected override void Reemplazar(IServiceCollection services)
@@ -41,7 +41,7 @@ public sealed class DuenosDePrueba : IUsuariosEmpresa
 {
     public ConcurrentDictionary<Guid, bool?> Respuestas { get; } = new();
 
-    public ConcurrentQueue<(Guid Tenant, Guid Usuario, string Permiso)> Preguntas { get; } = new();
+    public ConcurrentQueue<(Guid Tenant, Guid Usuario)> Preguntas { get; } = new();
 
     /// <summary>Si está, la consulta revienta (Identidad caída con una excepción y no con un «no sé»).</summary>
     public ConcurrentDictionary<Guid, bool> Revientan { get; } = new();
@@ -49,9 +49,9 @@ public sealed class DuenosDePrueba : IUsuariosEmpresa
     public Task<IReadOnlyList<UsuarioConPermiso>> ConPermisoAsync(Guid tenant, string permiso, CancellationToken ct) =>
         Task.FromResult<IReadOnlyList<UsuarioConPermiso>>([]);
 
-    public Task<bool?> TienePermisoAsync(Guid tenant, Guid usuario, string permiso, CancellationToken ct)
+    public Task<bool?> SigueEnLaEmpresaAsync(Guid tenant, Guid usuario, CancellationToken ct)
     {
-        Preguntas.Enqueue((tenant, usuario, permiso));
+        Preguntas.Enqueue((tenant, usuario));
         if (Revientan.ContainsKey(usuario))
             throw new InvalidOperationException("Identidad no responde (prueba).");
         return Task.FromResult(Respuestas.TryGetValue(usuario, out var r) ? r : true);

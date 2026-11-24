@@ -43,13 +43,13 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
             var nueva = Programaciones.Proxima(p.Periodicidad, p.DiaSemana, p.DiaMes, p.Hora, ahora);
             var vieja = p.ProximaEjecucion;
 
-            // El dueño, ANTES de reclamar: si quien lo programó salió de la empresa o perdió el permiso, el Excel no debe
-            // seguir saliendo. Si Identidad no responde no se sabe: ni se envía ni se pausa, y sin reclamar la toma la
+            // El dueño, ANTES de reclamar: si quien lo programó salió de la empresa o su usuario está inactivo, el Excel no
+            // debe seguir saliendo. Solo se pausa con certeza de Identidad (ver IUsuariosEmpresa.SigueEnLaEmpresaAsync). Si Identidad no responde no se sabe: ni se envía ni se pausa, y sin reclamar la toma la
             // corrida siguiente.
             bool? dueno;
             try
             {
-                dueno = await usuarios.TienePermisoAsync(p.TenantId, p.CreadoPor, Permisos.ReportesProgramar, ct).ConfigureAwait(false);
+                dueno = await usuarios.SigueEnLaEmpresaAsync(p.TenantId, p.CreadoPor, ct).ConfigureAwait(false);
             }
             catch (Exception ex) when (!ct.IsCancellationRequested)
             {
@@ -69,7 +69,7 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
             {
                 await db.ConsultasProgramadas.Where(x => x.Id == p.Id && x.ProximaEjecucion == vieja && x.Activa)
                     .ExecuteUpdateAsync(s => s.SetProperty(x => x.Activa, false).SetProperty(x => x.ProximaEjecucion, (DateTimeOffset?)null)
-                        .SetProperty(x => x.UltimoResultado, "En pausa: quien lo programó ya no tiene permiso para programar envíos."), ct).ConfigureAwait(false);
+                        .SetProperty(x => x.UltimoResultado, "En pausa: quien lo programó ya no está activo en la empresa."), ct).ConfigureAwait(false);
                 continue;
             }
 

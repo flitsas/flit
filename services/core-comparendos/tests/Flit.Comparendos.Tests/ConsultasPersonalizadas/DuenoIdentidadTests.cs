@@ -31,7 +31,7 @@ public sealed class DuenoIdentidadTests
     {
         cliente = new IdentidadFalsa(responder);
         return new UsuariosEmpresaIdentidad(cliente, NullLogger<UsuariosEmpresaIdentidad>.Instance)
-            .TienePermisoAsync(Tenant, Usuario, Permisos.ReportesProgramar, TestContext.Current.CancellationToken);
+            .SigueEnLaEmpresaAsync(Tenant, Usuario, TestContext.Current.CancellationToken);
     }
 
     private static ObtenerUsuarioResponse Con(EstadoUsuario estado, params string[] roles)
@@ -42,7 +42,7 @@ public sealed class DuenoIdentidadTests
     }
 
     [Fact]
-    public async Task Activo_ConUnRolQueTieneElPermiso_EsSi_YPreguntaPorEseUsuarioEnEsaEmpresa()
+    public async Task Vigente_EsSi_YPreguntaPorEseUsuarioEnEsaEmpresa()
     {
         (await PreguntarAsync(_ => Con(EstadoUsuario.Activo, "admin_comparendos"), out var cliente)).Should().BeTrue();
         cliente.Pedidos.Should().ContainSingle().Which.Should().Match<(ObtenerUsuarioRequest Pedido, string? Tenant)>(p =>
@@ -50,11 +50,18 @@ public sealed class DuenoIdentidadTests
     }
 
     [Fact]
-    public async Task SinElRol_Inactivo_OFueraDeLaEmpresa_EsNo()
+    public async Task VigenteSinElRolPorDefecto_ConElPermisoIndividual_EsSi()
     {
-        (await PreguntarAsync(_ => Con(EstadoUsuario.Activo, "operador_comparendos"), out _)).Should().BeFalse("el operador no programa envíos");
-        (await PreguntarAsync(_ => Con(EstadoUsuario.Inactivo, "admin_comparendos"), out _)).Should().BeFalse();
+        // El caso que la deducción por roles por defecto pausaba por error: un operador con el permiso dado a él.
+        (await PreguntarAsync(_ => Con(EstadoUsuario.Activo, "operador_comparendos"), out _)).Should().BeTrue();
+        (await PreguntarAsync(_ => Con(EstadoUsuario.Activo, "rol_personalizado"), out _)).Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task FueraDeLaEmpresa_OInactivo_EsNo()
+    {
         (await PreguntarAsync(_ => throw new RpcException(new Status(StatusCode.NotFound, "El usuario no existe en esta empresa.")), out _)).Should().BeFalse();
+        (await PreguntarAsync(_ => Con(EstadoUsuario.Inactivo, "admin_comparendos"), out _)).Should().BeFalse();
     }
 
     [Fact]
