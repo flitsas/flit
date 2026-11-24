@@ -74,6 +74,8 @@ describe("ejecutar a mano (HU #13815)", () => {
     expect(ejecucionManual("AvisosConductor").correos).toBe(true);
     expect(ejecucionManual("ReporteSemanal").correos).toBe(true);
     expect(ejecucionManual("ReporteMensual").correos).toBe(true);
+    // Reportes 2.0: el envío de consultas programadas manda correo real; avisarlo antes de lanzarlo.
+    expect(ejecucionManual("ConsultasProgramadas")).toMatchObject({ correos: true, porEmpresa: true });
     expect(ejecucionManual("ReintentoContraventor").correos).toBe(false);
     expect(ejecucionManual("SincronizacionOrganismos")).toMatchObject({ correos: false, porEmpresa: false });
   });

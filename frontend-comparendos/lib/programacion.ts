@@ -167,6 +167,8 @@ export function ejecucionManual(tipo: string): { texto: string; correos: boolean
       return { texto: "Vuelve a consultar el conductor de los comparendos pendientes o con error (hasta 3 intentos por comparendo).", correos: false, porEmpresa: true };
     case "EnvioAutomaticoDp":
       return { texto: "Envía ya los derechos de petición que les tocan hoy a las empresas con el envío automático encendido, sin esperar su hora. Sale correo real a los organismos de tránsito y respeta el tope diario de cada empresa.", correos: true, porEmpresa: true };
+    case "ConsultasProgramadas":
+      return { texto: "Envía ya las consultas programadas cuya hora llegó, con su Excel, a los destinatarios que eligió cada empresa. Sale correo real y ninguna se envía dos veces por la misma programación.", correos: true, porEmpresa: true };
     case "SincronizacionOrganismos":
       return { texto: "Trae de la plataforma el catálogo de organismos de tránsito.", correos: false, porEmpresa: false };
     default:
