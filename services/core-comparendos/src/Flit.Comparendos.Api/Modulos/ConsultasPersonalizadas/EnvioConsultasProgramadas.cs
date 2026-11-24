@@ -27,7 +27,7 @@ namespace Flit.Comparendos.Api.Modulos.ConsultasPersonalizadas;
 /// envío se pierde y no se duplica.</para>
 /// </summary>
 public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, ConsultaBandeja bandeja, ServicioCorreo correo, Reloj reloj, IProductosHabilitados productos,
-    ILogger logger)
+    IUsuariosEmpresa usuarios, ILogger logger)
 {
     /// <summary>Largo de <c>consulta_programada.ultimo_resultado</c>.</summary>
     private const int MaxResultado = 300;
@@ -42,6 +42,36 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
         {
             var nueva = Programaciones.Proxima(p.Periodicidad, p.DiaSemana, p.DiaMes, p.Hora, ahora);
             var vieja = p.ProximaEjecucion;
+
+            // El dueño, ANTES de reclamar: si quien lo programó salió de la empresa o perdió el permiso, el Excel no debe
+            // seguir saliendo. Si Identidad no responde no se sabe: ni se envía ni se pausa, y sin reclamar la toma la
+            // corrida siguiente.
+            bool? dueno;
+            try
+            {
+                dueno = await usuarios.TienePermisoAsync(p.TenantId, p.CreadoPor, Permisos.ReportesProgramar, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (!ct.IsCancellationRequested)
+            {
+                dueno = null;
+                FalloDueno(logger, ex, p.Id, p.TenantId);
+            }
+
+            if (dueno is null)
+            {
+                DuenoDesconocido(logger, p.Id, p.TenantId);
+                continue;
+            }
+
+            if (dueno == false)
+            {
+                await db.ConsultasProgramadas.Where(x => x.Id == p.Id && x.ProximaEjecucion == vieja && x.Activa)
+                    .ExecuteUpdateAsync(s => s.SetProperty(x => x.Activa, false).SetProperty(x => x.ProximaEjecucion, (DateTimeOffset?)null)
+                        .SetProperty(x => x.UltimaEjecucion, ahora)
+                        .SetProperty(x => x.UltimoResultado, "En pausa: quien lo programó ya no tiene permiso para programar envíos."), ct).ConfigureAwait(false);
+                continue;
+            }
+
             if (!await ReclamarAsync(p.Id, vieja, nueva, ct).ConfigureAwait(false))
                 continue;
 
@@ -146,6 +176,12 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
             """;
         return HtmlCorreo.DeEmpresa(conjunto, consulta, cuerpo, empresa, $"{correo.AppUrl}/assets/correo");
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo verificar en Identidad al dueño de la consulta programada {Programacion} de {Empresa}")]
+    private static partial void FalloDueno(ILogger logger, Exception ex, Guid programacion, Guid empresa);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Consulta programada {Programacion} de {Empresa} sin enviar: no se pudo saber si su dueño sigue con permiso; se reintenta en la próxima corrida")]
+    private static partial void DuenoDesconocido(ILogger logger, Guid programacion, Guid empresa);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "No se pudo enviar la consulta programada {Programacion} de la empresa {Empresa}")]
     private static partial void FalloEnvio(ILogger logger, Exception ex, Guid programacion, Guid empresa);

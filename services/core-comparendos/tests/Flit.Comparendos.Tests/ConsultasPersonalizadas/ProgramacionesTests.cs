@@ -56,6 +56,12 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
 
     private async Task<(Guid Empresa, HttpClient Cliente, Guid Consulta)> EmpresaConConsultaAsync(string nombre, object? definicion = null)
     {
+        var (empresa, cliente, consulta, _) = await EmpresaConDuenoAsync(nombre, definicion);
+        return (empresa, cliente, consulta);
+    }
+
+    private async Task<(Guid Empresa, HttpClient Cliente, Guid Consulta, UsuarioDePrueba Dueno)> EmpresaConDuenoAsync(string nombre, object? definicion = null)
+    {
         api.Reloj.Hoy(Hoy);
         var empresa = await ComparendosDePrueba.EmpresaAsync(api, reportes: true);
         await api.EnDbAsync(async db =>
@@ -63,7 +69,8 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
             (await db.ConfiguracionesEmpresa.SingleAsync(e => e.TenantId == empresa, Ct)).EmpresaNombre = nombre;
             await db.SaveChangesAsync(Ct);
         });
-        var cliente = api.Cliente(Admin(empresa));
+        var dueno = Admin(empresa);
+        var cliente = api.Cliente(dueno);
         var guardada = await (await cliente.PostAsJsonAsync($"{Ruta}/saved", new
         {
             nombre = $"Mi consulta {nombre}",
@@ -74,7 +81,7 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
                 columnas = new[] { "numero", "estadoLegal", "ventanaDescuento", "pagado", "valorTotal" },
             },
         }, Ct)).Content.ReadFromJsonAsync<JsonElement>(Ct);
-        return (empresa, cliente, guardada.GetProperty("id").GetGuid());
+        return (empresa, cliente, guardada.GetProperty("id").GetGuid(), dueno);
     }
 
     private static object Semanal(Guid consulta, params string[] destinatarios) =>
@@ -302,6 +309,61 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
         var nueva = p.ProximaEjecucion!.Value.AddDays(7);
         (await Replica(r1).ReclamarAsync(p.Id, p.ProximaEjecucion, nueva, Ct)).Should().BeTrue();
         (await Replica(r2).ReclamarAsync(p.Id, p.ProximaEjecucion, nueva, Ct)).Should().BeFalse("la otra réplica ya la reclamó");
+    }
+
+    [Fact]
+    public async Task Trabajo_VerificaAlDuenoConElMismoIdConQueLaCreo_YSiNoTienePermisoLaPausa()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (valida, clienteValida, consultaValida, duenoValida) = await EmpresaConDuenoAsync("Dueño válido");
+        var (sinPermiso, clienteSin, consultaSin, duenoSin) = await EmpresaConDuenoAsync("Dueño sin permiso");
+        var pv = await ProgramadaVencidaAsync(clienteValida, consultaValida, "samuel.cardenas@flitsas.com");
+        var ps = await ProgramadaVencidaAsync(clienteSin, consultaSin, "samuel.cardenas@flitsas.com");
+        api.Duenos.Respuestas[duenoSin.Id] = false;
+        try
+        {
+            await CorrerTrabajoAsync();
+            await CorrerTrabajoAsync();
+        }
+        finally
+        {
+            api.Duenos.Respuestas.TryRemove(duenoSin.Id, out _);
+        }
+
+        // De punta a punta: el id que se consulta en Identidad es el del usuario que creó la programación (el sub del token).
+        api.Duenos.Preguntas.Should().Contain((valida, duenoValida.Id, Permisos.ReportesProgramar));
+        api.Duenos.Preguntas.Should().Contain((sinPermiso, duenoSin.Id, Permisos.ReportesProgramar));
+        (await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == pv, Ct))).UltimoResultado.Should().Be("Enviado a 1 destinatario");
+
+        var pausada = await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == ps, Ct));
+        (pausada.Activa, pausada.ProximaEjecucion, pausada.UltimoResultado)
+            .Should().Be((false, null, "En pausa: quien lo programó ya no tiene permiso para programar envíos."));
+        (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == sinPermiso && c.Tipo == TipoComunicacion.ConsultaProgramada, Ct))).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Trabajo_SiIdentidadNoResponde_NiEnviaNiPausa_YReintentaEnLaSiguiente()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, cliente, consulta, dueno) = await EmpresaConDuenoAsync("Identidad caída");
+        var id = await ProgramadaVencidaAsync(cliente, consulta, "samuel.cardenas@flitsas.com");
+        var antes = await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == id, Ct));
+
+        foreach (var caida in new Action[] { () => api.Duenos.Respuestas[dueno.Id] = null, () => api.Duenos.Revientan[dueno.Id] = true })
+        {
+            caida();
+            await CorrerTrabajoAsync();
+            api.Duenos.Respuestas.TryRemove(dueno.Id, out _);
+            api.Duenos.Revientan.TryRemove(dueno.Id, out _);
+            var igual = await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == id, Ct));
+            (igual.Activa, igual.ProximaEjecucion, igual.UltimoResultado, igual.UltimaEjecucion)
+                .Should().Be((true, antes.ProximaEjecucion, antes.UltimoResultado, antes.UltimaEjecucion), "sin saber del dueño no se toca: sigue vencida");
+            (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == empresa && c.Tipo == TipoComunicacion.ConsultaProgramada, Ct))).Should().Be(0);
+        }
+
+        // Vuelve Identidad: la corrida siguiente la envía.
+        await CorrerTrabajoAsync();
+        (await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == id, Ct))).UltimoResultado.Should().Be("Enviado a 1 destinatario");
     }
 
     [Fact]

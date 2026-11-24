@@ -13,6 +13,15 @@ public sealed record UsuarioConPermiso(string Correo, string Nombre);
 public interface IUsuariosEmpresa
 {
     Task<IReadOnlyList<UsuarioConPermiso>> ConPermisoAsync(Guid tenant, string permiso, CancellationToken ct);
+
+    /// <summary>
+    /// Si el usuario sigue activo en la empresa con ese permiso (Reportes 2.0: el dueño de un envío programado). <c>null</c>
+    /// si no se pudo saber (Identidad no responde): quien llama no debe tomarlo como un «no».
+    /// <para><b>Por defecto no bloquea</b> (fail-open, devuelve sí): es lo que usan el local sin Identidad y los dobles de
+    /// prueba que no lo implementan. La implementación real es <see cref="UsuariosEmpresaIdentidad"/>, la que se registra
+    /// siempre que hay Identidad configurada (<c>Modulos.AddModulosComparendos</c>).</para>
+    /// </summary>
+    Task<bool?> TienePermisoAsync(Guid tenant, Guid usuario, string permiso, CancellationToken ct) => Task.FromResult<bool?>(true);
 }
 
 internal sealed partial class UsuariosEmpresaIdentidad(IdentidadService.IdentidadServiceClient cliente, ILogger<UsuariosEmpresaIdentidad> logger) : IUsuariosEmpresa
@@ -40,6 +49,31 @@ internal sealed partial class UsuariosEmpresaIdentidad(IdentidadService.Identida
         }
 
         return resultado;
+    }
+
+    /// <remarks>
+    /// <c>Usuario.id</c> de Identidad es <c>User.Id</c>, el mismo valor que Identidad pone en el <c>sub</c> del token
+    /// (<c>OidcPrincipalFactory</c>) y que <see cref="UsuarioActual.Id"/> guarda en <c>consulta_programada.creado_por</c>.
+    /// </remarks>
+    public async Task<bool?> TienePermisoAsync(Guid tenant, Guid usuario, string permiso, CancellationToken ct)
+    {
+        var roles = Permisos.RolesPorDefecto.Where(r => r.Permisos.Contains(permiso)).Select(r => r.Codigo).ToHashSet(StringComparer.Ordinal);
+        try
+        {
+            var r = await cliente.ObtenerUsuarioAsync(new ObtenerUsuarioRequest { UsuarioId = usuario.ToString(), Producto = ProductosHabilitadosIdentidad.Producto },
+                new Metadata { { "x-flit-tenant-id", tenant.ToString() } }, cancellationToken: ct).ConfigureAwait(false);
+            return r.Usuario is { } u && u.Estado == EstadoUsuario.Activo && u.Roles.Any(x => roles.Contains(x.Codigo));
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.NotFound)
+        {
+            // Identidad respondió: ya no es de la empresa.
+            return false;
+        }
+        catch (RpcException ex)
+        {
+            LogNoSePudo(logger, tenant, ex.StatusCode);
+            return null;
+        }
     }
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudieron listar los usuarios de {Tenant} en Identidad ({Codigo}).")]
