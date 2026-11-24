@@ -81,13 +81,10 @@ function Contenido() {
         descripcion="Arma tu propia consulta sobre los comparendos: pega una lista de números o placas, combina filtros, guárdala y expórtala a Excel."
       />
       {esSuperAdmin && (
-        // Misma estructura que `FiltrosPeriodo` (Resumen y demás pestañas): dentro de una fila flex el selector toma su
-        // ancho compacto; colgado directo de la columna se estiraba a todo el ancho de la página.
+        // Mismo patrón que `FiltrosPeriodo` (Resumen y demás pestañas): fila flex, etiqueta arriba y «Todas las empresas»
+        // como opción vacía, que ya dice lo que antes explicaba una nota aparte.
         <div className="flex flex-wrap items-end gap-3">
-          <div className="flex flex-col gap-1">
-            <SelectorEmpresa valor={empresa} onCambio={cambiarEmpresa} />
-            <span className="text-xs text-[color:var(--di-text-tertiary)]">Sin empresa elegida se consulta sobre todas.</span>
-          </div>
+          <SelectorEmpresa valor={empresa} onCambio={cambiarEmpresa} etiquetaArriba textoVacio="Todas las empresas" />
         </div>
       )}
       {/* `key`: cambiar de empresa trae otro catálogo y otras consultas guardadas; la consola arranca limpia. */}
