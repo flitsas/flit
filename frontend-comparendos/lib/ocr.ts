@@ -257,6 +257,18 @@ export function vistaDuplicado(d: { estado: string; duplicado: DuplicadoComparen
   return dup.evidenciaActual ? "comparar" : "asociar";
 }
 
+/** Número sin letras iniciales, espacios, guiones ni puntos: solo para decidir si dos números «son el mismo». */
+export function numeroBase(n: string | null | undefined): string {
+  return (n ?? "").replace(/^[A-Za-z\s-]+/, "").replace(/[\s.-]/g, "").toUpperCase();
+}
+
+/** true si difieren en algo más que la letra inicial o el formato; sin uno de los dos números no se avisa. */
+export function numerosDifieren(documento: string | null | undefined, sistema: string | null | undefined): boolean {
+  const a = numeroBase(documento);
+  const b = numeroBase(sistema);
+  return a !== "" && b !== "" && a !== b;
+}
+
 /** Cómo se previsualiza un archivo según su tipo MIME o, si falta, su extensión. */
 export function vistaPorContentType(contentType: string, nombre: string): "imagen" | "pdf" | "descarga" {
   const ct = contentType.toLowerCase();

@@ -142,4 +142,47 @@ describe("asociar documento escaneado a comparendo existente", () => {
     expect(await screen.findByText("Es el mismo archivo que ya se cargó.")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /Asociar al comparendo|Comparar documentos/ })).toBeNull();
   });
+
+  const AVISO = /Los números no coinciden exactamente/;
+
+  it("Asociar: muestra el número del documento y el del sistema; iguales salvo la letra, sin aviso", async () => {
+    abrir({ numero: "11001000000012345678" }, undefined, { numeroComparendoExtraido: "D-11001000000012345678" });
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    const modal = await screen.findByRole("dialog");
+    expect(within(modal).getByText("Número en el documento")).toBeTruthy();
+    expect(within(modal).getByText("D-11001000000012345678")).toBeTruthy();
+    expect(within(modal).getByText("Número en el sistema")).toBeTruthy();
+    expect(within(modal).queryByText(AVISO)).toBeNull();
+  });
+
+  it("Asociar: números distintos avisan que no coinciden", async () => {
+    abrir({ numero: "11001000000012345678" }, undefined, { numeroComparendoExtraido: "11001000000099999999" });
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    expect(within(await screen.findByRole("dialog")).getByText(AVISO)).toBeTruthy();
+  });
+
+  it("Comparar: iguales sin aviso, distintos con aviso", async () => {
+    abrir({ evidenciaActual: EVIDENCIA, numero: "11001000000012345678" }, undefined, { numeroComparendoExtraido: "A 11001000000012345678" });
+    fireEvent.click(await screen.findByRole("button", { name: "Comparar documentos" }));
+    const igual = await screen.findByRole("dialog");
+    expect(within(igual).getByText("Número en el sistema")).toBeTruthy();
+    expect(within(igual).queryByText(AVISO)).toBeNull();
+    cleanup();
+
+    abrir({ evidenciaActual: EVIDENCIA, numero: "11001000000012345678" }, undefined, { numeroComparendoExtraido: "11001000000000000001" });
+    fireEvent.click(await screen.findByRole("button", { name: "Comparar documentos" }));
+    expect(within(await screen.findByRole("dialog")).getByText(AVISO)).toBeTruthy();
+  });
+
+  it("Revisión: «Número que se guardará» solo aparece cuando difiere del leído", async () => {
+    const campos = [{ nombreCampo: "numero_comparendo", obligatorio: true, valorExtraido: "D-11001000000012345678", confianza: 0.99, esNull: false, valorCorregido: null, valorFinal: "D-11001000000012345678" }];
+    abrir({}, undefined, { estado: "Completo", duplicado: null, campos, numeroComparendoExtraido: "D-11001000000012345678", numeroAGuardar: "11001000000012345678" });
+    expect(await screen.findByText("Número que se guardará")).toBeTruthy();
+    expect(screen.getByText("Número en el documento")).toBeTruthy();
+    cleanup();
+
+    abrir({}, undefined, { estado: "Completo", duplicado: null, campos, numeroComparendoExtraido: "11001000000012345678", numeroAGuardar: "11001000000012345678" });
+    await screen.findAllByRole("button", { name: "Registrar comparendo" });
+    expect(screen.queryByText("Número que se guardará")).toBeNull();
+  });
 });

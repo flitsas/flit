@@ -18,6 +18,8 @@ import {
   motivoFallo,
   progreso,
   resumenEvaluacion,
+  numeroBase,
+  numerosDifieren,
   tamanoLegible,
   valorInicial,
   versionAnterior,
@@ -277,5 +279,18 @@ describe("asociar un documento a un comparendo existente", () => {
     expect(vistaPorContentType("", "a.pdf")).toBe("pdf");
     expect(tamanoLegible(500)).toBe("500 B");
     expect(tamanoLegible(2048)).toBe("2 KB");
+  });
+});
+
+describe("comparar el número del documento con el del sistema", () => {
+  it("la letra inicial, los espacios y los guiones no cuentan", () => {
+    expect(numeroBase("D-1100 1000-0000")).toBe("110010000000");
+    expect(numerosDifieren("D11001000000012345678", "11001000000012345678")).toBe(false);
+    expect(numerosDifieren("A 11001-000000012345678", "11001000000012345678")).toBe(false);
+  });
+  it("otro dígito sí cuenta; sin uno de los dos no se avisa", () => {
+    expect(numerosDifieren("11001000000012345678", "11001000000012345679")).toBe(true);
+    expect(numerosDifieren(null, "11001000000012345678")).toBe(false);
+    expect(numerosDifieren("11001000000012345678", "")).toBe(false);
   });
 });

@@ -85,6 +85,8 @@ interface Documento {
   motivoNoReprocesable: string | null;
   versionPrompt: number | null;
   comparendoId: string | null;
+  /** Número tal como quedaría guardado (sin la letra inicial); lo calcula el servidor. */
+  numeroAGuardar?: string | null;
   procesadoEn: string | null;
   revisadoEn: string | null;
   motivoDescarte: string | null;
@@ -328,6 +330,12 @@ function Formulario({
       toast.show("El documento volvió a la cola para leerse de nuevo.", "success");
     });
 
+  // Solo mientras el comparendo se puede registrar: ya registrado o asociado, el número no cambia.
+  const numeroDistinto =
+    ["Completo", "Incompleto", "Duplicado"].includes(d.estado) &&
+    !!d.numeroAGuardar &&
+    !!d.numeroComparendoExtraido &&
+    d.numeroAGuardar.trim() !== d.numeroComparendoExtraido.trim();
   const dup = d.duplicado;
   const vistaDup = vistaDuplicado(d);
   const puedeAsociar = opera && acciones.asociar;
@@ -402,6 +410,17 @@ function Formulario({
               <span className="text-xs text-muted-foreground">Si está mal, corrígelo en el campo y guarda.</span>
             </div>
           )}
+        </InlineAlert>
+      )}
+
+      {numeroDistinto && (
+        <InlineAlert tone="info" title="El número se guardará sin la letra inicial">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+            <dt className="font-semibold">Número en el documento</dt>
+            <dd className="min-w-0 break-all tabular-nums">{d.numeroComparendoExtraido}</dd>
+            <dt className="font-semibold">Número que se guardará</dt>
+            <dd className="min-w-0 break-all tabular-nums">{d.numeroAGuardar}</dd>
+          </dl>
         </InlineAlert>
       )}
 
@@ -519,12 +538,12 @@ function Formulario({
       {botones && <div className="border-t border-border pt-3">{botones}</div>}
 
       {modal === "asociar" && comparendoExistente && (
-        <ModalAsociar comparendo={comparendoExistente} documento={d} ocupado={ocupado} onClose={() => setModal(null)} onConfirmar={() => asociar(false)} />
+        <ModalAsociar comparendo={comparendoExistente} documento={{ nombreArchivo: d.nombreArchivo, numeroComparendoExtraido: d.numeroComparendoExtraido }} ocupado={ocupado} onClose={() => setModal(null)} onConfirmar={() => asociar(false)} />
       )}
       {modal === "comparar" && comparendoExistente && dup?.evidenciaActual && (
         <ModalComparar
           comparendo={comparendoExistente}
-          entrante={{ archivoId: d.archivoId, nombreArchivo: d.nombreArchivo, tipoArchivo: d.tipoArchivo }}
+          entrante={{ archivoId: d.archivoId, nombreArchivo: d.nombreArchivo, tipoArchivo: d.tipoArchivo, numeroComparendoExtraido: d.numeroComparendoExtraido }}
           actual={dup.evidenciaActual}
           ocupado={ocupado}
           onClose={() => setModal(null)}
