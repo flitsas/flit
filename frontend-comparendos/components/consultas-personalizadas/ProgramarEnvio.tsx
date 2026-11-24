@@ -9,15 +9,15 @@
 // agregar») y la casilla «Activo». Quien usa los dos productos encuentra la misma interacción para la misma tarea.
 // Aquí se usa el `Modal` de `@flit/ui`: cuerpo con scroll propio y pie fijo, así «Guardar» sigue a la vista a 360 px.
 //
-// Desviaciones de Trámites, a propósito: la hora admite minutos (el contrato §4 guarda «HH:mm»), el máximo de
-// destinatarios es 20, el formato es siempre Excel (la consulta va como adjunto) y se puede pegar una lista entera de
-// correos. Como en Trámites, un correo se valida al agregarlo (Enter, coma o salir del campo); si quedó uno inválido
+// Como Trámites: la hora es un selector de horas en punto (00:00 … 23:00) y el máximo es de 10 destinatarios. Lo único
+// distinto, aprobado por S0: el formato es siempre Excel (la consulta va como adjunto) y se puede pegar una lista
+// entera de correos. Como en Trámites, un correo se valida al agregarlo (Enter, coma o salir del campo); si quedó uno inválido
 // sin agregar, Guardar se apaga y el error está a la vista.
 
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { InlineAlert, Modal } from "@flit/ui";
 import { Icono } from "@flit/ui/Icono";
-import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, ETIQUETA_CLS, FECHA_CLS, INPUT_CLS } from "@/components/ui/estilos";
+import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import {
   borrarProgramacion,
   guardarProgramacion,
@@ -43,7 +43,19 @@ export const DIAS_SEMANA: { valor: number; nombre: string }[] = [
 
 const DIAS_MES = Array.from({ length: 28 }, (_, i) => i + 1);
 
-export const MAX_DESTINATARIOS = 20;
+export const MAX_DESTINATARIOS = 10;
+
+/** Las horas que ofrece el selector, como en Trámites: en punto, de 00:00 a 23:00 («HH:mm», que es lo que guarda §4). */
+export const HORAS: string[] = Array.from({ length: 24 }, (_, h) => `${String(h).padStart(2, "0")}:00`);
+
+/**
+ * Opciones de hora para un envío. Una programación vieja con minutos (p. ej. 11:20) conserva su hora como opción extra,
+ * en su lugar del día: editarla por otra cosa no debe cambiarle la hora sin que nadie lo pida.
+ */
+export function opcionesHora(horaOriginal?: string | null): string[] {
+  const extra = horaOriginal ? horaOriginal.slice(0, 5) : null;
+  return extra && !HORAS.includes(extra) ? [...HORAS, extra].sort() : HORAS;
+}
 
 const CORREO = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
 
@@ -79,6 +91,8 @@ interface Borrador {
   diaSemana: number;
   diaMes: number;
   hora: string;
+  /** La hora con la que llegó el envío al editarlo: si tiene minutos, sigue ofreciéndose. */
+  horaOriginal?: string;
   destinatarios: string[];
   activa: boolean;
 }
@@ -92,6 +106,7 @@ function desde(p: ConsultaProgramada): Borrador {
     diaSemana: p.diaSemana ?? 1,
     diaMes: p.diaMes ?? 1,
     hora: horaCorta(p.hora),
+    horaOriginal: horaCorta(p.hora),
     destinatarios: [...p.destinatarios],
     activa: p.activa,
   };
@@ -468,7 +483,13 @@ function Formulario({
 
         <label className={ETIQUETA_CLS}>
           Hora (Colombia)
-          <input type="time" className={FECHA_CLS} value={borrador.hora} onChange={(e) => set({ hora: e.target.value })} data-testid={`${PREFIJO}-hora`} />
+          <select className={INPUT_CLS} value={borrador.hora} onChange={(e) => set({ hora: e.target.value })} data-testid={`${PREFIJO}-hora`}>
+            {opcionesHora(borrador.horaOriginal).map((h) => (
+              <option key={h} value={h}>
+                {h}
+              </option>
+            ))}
+          </select>
         </label>
 
         <div className={ETIQUETA_CLS}>
