@@ -17,13 +17,21 @@ namespace Flit.Comparendos.Api.Modulos.Reportes;
 /// hoy) para las empresas con <c>has_reportes_module</c> y destinatarios. Un correo HTML a <c>destinatarios_reportes</c>
 /// con copia oculta a la lista interna de FLIT. Un mismo cierre no sale dos veces el mismo día.
 /// </summary>
-public sealed class ReportesAutomaticos(ComparendosDb db, ServicioReportes reportes, ServicioCorreo correo, Reloj reloj, IProductosHabilitados productos) : IEjecutorTrabajo
+public sealed class ReportesAutomaticos(ComparendosDb db, ServicioReportes reportes, ServicioCorreo correo, Reloj reloj, IProductosHabilitados productos,
+    Bandeja.ConsultaBandeja bandeja) : IEjecutorTrabajo
 {
-    public bool Atiende(TipoTrabajo tipo) => tipo is TipoTrabajo.ReporteSemanal or TipoTrabajo.ReporteMensual;
+    public bool Atiende(TipoTrabajo tipo) => tipo is TipoTrabajo.ReporteSemanal or TipoTrabajo.ReporteMensual or TipoTrabajo.ConsultasProgramadas;
 
     public async Task EjecutarAsync(SolicitudTrabajo solicitud, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(solicitud);
+        // Reportes 2.0: el envío por correo de las consultas guardadas que la empresa programó.
+        if (solicitud.Tipo == TipoTrabajo.ConsultasProgramadas)
+        {
+            await new ConsultasPersonalizadas.EnvioConsultasProgramadas(db, bandeja, correo, reloj, productos).EjecutarAsync(solicitud.TenantId, ct).ConfigureAwait(false);
+            return;
+        }
+
         var semanal = solicitud.Tipo == TipoTrabajo.ReporteSemanal;
         var hoy = reloj.Hoy;
         var desde = semanal ? hoy.AddDays(-(((int)hoy.DayOfWeek + 6) % 7)) : new DateOnly(hoy.Year, hoy.Month, 1);

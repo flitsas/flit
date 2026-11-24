@@ -46,7 +46,8 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
 
     // ── Ejecución ─────────────────────────────────────────────────────────────────────────────
 
-    public async Task<ComparendoQueryResult> EjecutarAsync(AlcanceConsulta alcance, QueryRequest request, CancellationToken ct)
+    /// <param name="todasLasFilas">Sin paginar (la programación por correo): todas las que pasan, que el COUNT ya acotó al tope.</param>
+    public async Task<ComparendoQueryResult> EjecutarAsync(AlcanceConsulta alcance, QueryRequest request, CancellationToken ct, bool todasLasFilas = false)
     {
         ArgumentNullException.ThrowIfNull(alcance);
         ArgumentNullException.ThrowIfNull(request);
@@ -73,7 +74,7 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
         var matched = filas.Where(f => motor.InRange(f, definicion.Fechas.Campo, from, to) && Pasa(f)).ToList();
 
         var page = Math.Max(1, request.Page);
-        var pageSize = Math.Clamp(request.PageSize, 1, QueryLimits.MaxPageSize);
+        var pageSize = todasLasFilas ? Math.Max(1, matched.Count) : Math.Clamp(request.PageSize, 1, QueryLimits.MaxPageSize);
         int? anterior = page == 1 ? await AnteriorAsync(alcance, definicion, h, motor, desde, hasta, Pasa, ct).ConfigureAwait(false) : null;
 
         var extra = await ExtraCoberturaAsync(alcance, definicion, filas, h, ct).ConfigureAwait(false);

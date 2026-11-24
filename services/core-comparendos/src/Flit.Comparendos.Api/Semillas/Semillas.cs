@@ -140,6 +140,7 @@ public static class Semillas
             (TipoTrabajo.SincronizacionOrganismos, "0 3 * * *", false),
             // Epic #14606: una vez por día hábil, a media mañana (después de las consultas de la mañana). Cada empresa lo enciende aparte.
             (TipoTrabajo.EnvioAutomaticoDp, "0 11 * * *", true),
+            (TipoTrabajo.ConsultasProgramadas, "*/15 * * * *", false),
         ];
         var existentes = await db.TrabajosProgramados.Select(t => t.Tipo).ToListAsync(ct).ConfigureAwait(false);
         foreach (var (tipo, cron, soloHabiles) in trabajos.Where(t => !existentes.Contains(t.Tipo)))

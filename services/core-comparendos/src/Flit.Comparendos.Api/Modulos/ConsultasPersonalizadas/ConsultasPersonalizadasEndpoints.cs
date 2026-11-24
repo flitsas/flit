@@ -24,6 +24,9 @@ public static class ConsultasPersonalizadasEndpoints
         g.MapGet("/saved", Listar).RequirePermiso(Permisos.ReportesConsultas);
         g.MapPost("/saved", Guardar).RequirePermiso(Permisos.ReportesConsultas);
         g.MapDelete("/saved/{id:guid}", Borrar).RequirePermiso(Permisos.ReportesConsultas);
+        g.MapGet("/programaciones", ListarProgramaciones).RequirePermiso(Permisos.ReportesProgramar);
+        g.MapPost("/programaciones", GuardarProgramacion).RequirePermiso(Permisos.ReportesProgramar);
+        g.MapDelete("/programaciones/{id:guid}", BorrarProgramacion).RequirePermiso(Permisos.ReportesProgramar);
         return app;
     }
 
@@ -83,6 +86,39 @@ public static class ConsultasPersonalizadasEndpoints
         Validar(alcance, body?.Definition);
         var input = SavedQuery.BuildInput(alcance.Catalogo, body?.Nombre, body?.Descripcion, body?.Definition);
         return Results.Ok(await new RepositorioConsultasGuardadas(db, reloj).GuardarAsync(alcance, usuario.Id, body?.Id, input, ct).ConfigureAwait(false));
+    }
+
+    // ── Programaciones ────────────────────────────────────────────────────────────────────────
+
+    /// <summary>Programar es operar en nombre de la empresa (envía correos): el SuperAdmin solo lee.</summary>
+    private static async Task<Guid> EmpresaProgramacionAsync(UsuarioActual usuario, Capacidades capacidades, CancellationToken ct)
+    {
+        var tenant = usuario.EmpresaOperacion();
+        await capacidades.ExigirAsync(tenant, Capacidad.Reportes, ct).ConfigureAwait(false);
+        return tenant;
+    }
+
+    private static async Task<IResult> ListarProgramaciones(Guid? empresa, UsuarioActual usuario, Capacidades capacidades, ComparendosDb db, Reloj reloj, CancellationToken ct)
+    {
+        var tenant = usuario.EmpresaLectura(empresa, obligatoria: true)!.Value;
+        if (!usuario.EsSuperAdmin)
+            await capacidades.ExigirAsync(tenant, Capacidad.Reportes, ct).ConfigureAwait(false);
+        return Results.Ok(await new RepositorioProgramaciones(db, reloj).ListarAsync(tenant, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> GuardarProgramacion([FromBody] GuardarProgramacionRequest? body, UsuarioActual usuario, Capacidades capacidades, ComparendosDb db, Reloj reloj, CancellationToken ct)
+    {
+        var tenant = await EmpresaProgramacionAsync(usuario, capacidades, ct).ConfigureAwait(false);
+        if (body is null)
+            throw new ReglaException("PROGRAMACION_INVALIDA", "Falta la programación.");
+        return Results.Ok(await new RepositorioProgramaciones(db, reloj).GuardarAsync(tenant, usuario.Id, body, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> BorrarProgramacion(Guid id, UsuarioActual usuario, Capacidades capacidades, ComparendosDb db, Reloj reloj, CancellationToken ct)
+    {
+        var tenant = await EmpresaProgramacionAsync(usuario, capacidades, ct).ConfigureAwait(false);
+        await new RepositorioProgramaciones(db, reloj).BorrarAsync(tenant, id, ct).ConfigureAwait(false);
+        return Results.NoContent();
     }
 
     private static async Task<IResult> Borrar(Guid id, Guid? empresa, UsuarioActual usuario, Capacidades capacidades, ComparendosDb db, Reloj reloj, CancellationToken ct)
