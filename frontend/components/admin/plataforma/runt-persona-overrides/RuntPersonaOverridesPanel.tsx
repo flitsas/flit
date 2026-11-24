@@ -12,7 +12,6 @@ import { UiStateBoundary, type UiStatus } from "@/components/admin/UiStateBounda
 import { useToast } from "@/components/admin/Toast";
 import { buttonClass } from "@flit/ui/Button";
 import { Icono } from "@flit/ui/Icono";
-import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 import {
   DIALOGO_CERRAR_CLS,
   DIALOGO_PANEL_CLS,
@@ -200,7 +199,8 @@ function OverrideDialog({ override, onClose, onSaved, tenantId }: DialogProps) {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const firstRef = useRef<HTMLInputElement>(null);
-  useBloqueoScroll(true);
+  // release aún no exporta @flit/ui/useBloqueoScroll (sí en develop); el diálogo
+  // se alinea a NuevoTipoTramiteModal de esta rama, que tampoco lo usa.
 
   useEffect(() => {
     firstRef.current?.focus();
