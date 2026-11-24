@@ -55,9 +55,9 @@ function documento(dup: Record<string, unknown> = {}) {
   };
 }
 
-function abrir(dup: Record<string, unknown> = {}, falloAsociar?: ApiError) {
+function abrir(dup: Record<string, unknown> = {}, falloAsociar?: ApiError, doc: Record<string, unknown> = {}) {
   apiFetch.mockImplementation((ruta: string) => {
-    return ruta === "/ocr/documentos/d1" ? Promise.resolve(documento(dup)) : falloAsociar ? Promise.reject(falloAsociar) : Promise.resolve({ numero: "11001000000012345678" });
+    return ruta === "/ocr/documentos/d1" ? Promise.resolve({ ...documento(dup), ...doc }) : falloAsociar ? Promise.reject(falloAsociar) : Promise.resolve({ numero: "11001000000012345678" });
   });
   render(
     <ToastProvider>
@@ -127,5 +127,19 @@ describe("asociar documento escaneado a comparendo existente", () => {
     expect(await screen.findByText(/Otra persona cambió el documento del comparendo/)).toBeTruthy();
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     await waitFor(() => expect(apiFetch.mock.calls.filter(([r]) => r === "/ocr/documentos/d1").length).toBeGreaterThan(cargasAntes));
+  });
+
+  it("estado Asociado: sin el recuadro de duplicado ni «Revisa N campos»", async () => {
+    const campos = ["valor", "placa", "direccion", "fecha_infraccion"].map((n) => ({ nombreCampo: n, obligatorio: true, valorExtraido: null, confianza: 0.5, esNull: true, valorCorregido: null, valorFinal: "x" }));
+    abrir({}, undefined, { estado: "Asociado", comparendoId: "c1", campos, camposFaltantes: ["valor"] });
+    expect(await screen.findByText("Documento asociado al comparendo")).toBeTruthy();
+    expect(screen.queryByText(/Este comparendo ya existe/)).toBeNull();
+    expect(screen.queryByText(/Revisa \d+ campos? marcados?/)).toBeNull();
+  });
+
+  it("mismo archivo ya cargado: pinta el motivo que manda el servidor", async () => {
+    abrir({ tipo: "documento", fuente: "ARCHIVO", asociable: false, motivoNoAsociable: "Es el mismo archivo que ya se cargó." });
+    expect(await screen.findByText("Es el mismo archivo que ya se cargó.")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Asociar al comparendo|Comparar documentos/ })).toBeNull();
   });
 });

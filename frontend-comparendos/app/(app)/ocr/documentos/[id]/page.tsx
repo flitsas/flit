@@ -216,7 +216,8 @@ function Formulario({
 }) {
   const toast = useToast();
   const acciones = accionesDocumento({ estado: d.estado, reintentable: d.reintentable, fuenteDuplicado: d.duplicado?.fuente ?? null, tipoFallo: d.tipoFallo });
-  const marcas = marcasRevision(d);
+  // Asociado es un estado final y correcto: no quedan campos por revisar.
+  const marcas = d.estado === "Asociado" ? {} : marcasRevision(d);
   const porRevisar = Object.keys(marcas).length;
   // GDC punto 6: el NIT guardado (base sin puntos) se muestra con la misma máscara con que se escribe.
   const tipoGuardado = d.campos.find((c) => c.nombreCampo === "tipo_documento_infractor")?.valorFinal;
@@ -410,7 +411,7 @@ function Formulario({
         </InlineAlert>
       )}
 
-      {dup && (
+      {dup && d.estado !== "Asociado" && (
         <InlineAlert tone="warning" title={vistaDup === "asociar" || vistaDup === "comparar" ? "Este comparendo ya existe" : "Este comparendo ya existe: no se puede registrar"}>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
             <dt className="font-semibold">Fuente</dt>
@@ -442,7 +443,7 @@ function Formulario({
               </>
             )}
           </dl>
-          {vistaDup === "no-asociable" && dup.motivoNoAsociable && <p className="mt-1">{dup.motivoNoAsociable}</p>}
+          {dup.motivoNoAsociable && vistaDup !== "asociar" && vistaDup !== "comparar" && <p className="mt-1">{dup.motivoNoAsociable}</p>}
           {puedeAsociar && vistaDup === "asociar" && (
             <div className="mt-2 flex flex-col gap-1">
               <p>No tiene documento: puedes agregarle este archivo para que salga en sus próximos avisos.</p>

@@ -308,7 +308,7 @@ function Detalle({ id }: { id: string }) {
               render: (d) => {
                 const texto = motivoDocumento(d);
                 if (!texto) return "—";
-                const tono = d.estado === "Fallido" ? "text-destructive" : d.estado === "Duplicado" ? "text-[var(--badge-purple-fg)]" : d.estado === "Descartado" ? "text-muted-foreground" : "text-[var(--badge-warning-fg)]";
+                const tono = d.estado === "Fallido" ? "text-destructive" : d.estado === "Duplicado" ? "text-[var(--badge-purple-fg)]" : d.estado === "Descartado" ? "text-muted-foreground" : d.estado === "Asociado" ? "text-[var(--badge-info-fg)]" : "text-[var(--badge-warning-fg)]";
                 return (
                   <span className={tono} title={d.estado === "Fallido" && d.tipoFallo ? TIPO_FALLO[d.tipoFallo] : undefined}>
                     {texto}
