@@ -81,6 +81,10 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     expect(llamada[1].query).toMatchObject({ desde: null, hasta: null, nit: null, empresa: null });
     expect(screen.getByTestId("gestion-alcance").textContent).toMatch(/Todo lo pendiente a hoy/);
     expect(screen.getByTestId("gestion-corte").textContent).toBe("Pendiente a hoy");
+    // Sin periodo, los campos van vacíos: rellenos con el mes harían creer que las cifras son del mes (revisión visual de S0).
+    expect((screen.getByLabelText("Desde") as HTMLInputElement).value).toBe("");
+    expect((screen.getByLabelText("Hasta") as HTMLInputElement).value).toBe("");
+    expect(screen.getByRole("button", { name: "Consultar" })).toBeTruthy();
     expect(screen.getByTestId("gestion-resumen").textContent).toMatch(/Comparendos nuevos en los últimos 30 días/);
     // Sin recorte aquí: Gestión es donde viven las lentes que salieron del Inicio, y sin «Ver en Reportes».
     for (const id of ["vehiculos", "evitables", "antiguedad", "dp-organismos", "top-organismos"]) expect(screen.getByTestId(id)).toBeTruthy();
@@ -142,6 +146,8 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     // Sin fechas en la URL, el mes en curso (como el resto de Reportes).
     const q = apiFetch.mock.calls.find(([r]) => r === "/reportes/dp")![1].query;
     expect(q.desde).toMatch(/^\d{4}-\d{2}-01$/);
+    // En DP el periodo es obligatorio: los campos sí muestran el mes que se está viendo.
+    expect((screen.getByLabelText("Desde") as HTMLInputElement).value).toBe(q.desde);
     cleanup();
     sesion = super_;
     render(<DpPage />);
