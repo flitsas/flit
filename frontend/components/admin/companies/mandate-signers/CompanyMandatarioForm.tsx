@@ -130,8 +130,14 @@ export function CompanyMandatarioForm({
   // Firma del baúl del mandatario (solo con forma «baúl»).
   const [signatureVaultId, setSignatureVaultId] = useState<string | null>(inicial.signatureVaultId);
   // HU #13181 — compañías asociadas (una sola selección que aplica a los organismos elegidos).
+  // Desde el perfil de un organismo solo se ve y se gestiona lo de ESE organismo: las asociaciones de
+  // los demás organismos del mandatario no se precargan (se mandarían a este) y se conservan intactas.
   const [asociadasSel, setAsociadasSel] = useState<Record<string, AsociadaSeleccionada>>(() =>
-    precargarAsociadas(editing?.officeCompanies),
+    precargarAsociadas(
+      restrictToOfficeIds && restrictToOfficeIds.length > 0
+        ? editing?.officeCompanies?.filter((o) => restrictToOfficeIds.includes(o.transitOfficeId))
+        : editing?.officeCompanies,
+    ),
   );
   const [erroresAsociadas, setErroresAsociadas] = useState<Record<string, string>>({});
   // Verdadero cuando el Admin de Compañía no tiene hijas: no hay lista y el mandatario es solo suyo.
@@ -292,9 +298,14 @@ export function CompanyMandatarioForm({
         }),
         signatureVaultId: !conSelectorBaul ? undefined : conBaul ? signatureVaultId : null,
         // Sin lista (Admin de Compañía sin red) no se envía nada: aplica solo a su compañía.
+        // Desde el perfil de un organismo, solo ese organismo: el mandatario puede estar en otros donde la
+        // compañía no opera, y mandarla a todos hacía fallar el guardado (RF33 + «organismo ajeno»).
         officeCompanies:
           fuenteAsociadas && !sinRed
-            ? selected.map((transitOfficeId) => ({
+            ? (restrictToOfficeIds && restrictToOfficeIds.length > 0
+                ? selected.filter((id) => restrictToOfficeIds.includes(id))
+                : selected
+              ).map((transitOfficeId) => ({
                 transitOfficeId,
                 associatedCompanyTenantIds: Object.keys(asociadasSel),
               }))
