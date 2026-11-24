@@ -1,11 +1,11 @@
 "use client";
 
-import { Suspense, useState } from "react";
-import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
-import { DataTable, InlineAlert, Modal, StatusBadge, usePaginacion } from "@flit/ui";
+import { DataTable, InlineAlert, Modal, StatusBadge, VehicleLoader } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
-import { DetalleComparendo } from "@/components/detalle/DetalleComparendo";
+import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { useToast } from "@/components/Toast";
@@ -13,13 +13,18 @@ import { Chip } from "@/components/ui/Chip";
 import { Interruptor } from "@/components/ui/Interruptor";
 import { controlCls, ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiDownload, apiFetch } from "@/lib/api";
-import { CANAL_CORREO, ESTADO_COMUNICACION, estadoComunicacion, opciones, TIPO_COMUNICACION } from "@/lib/etiquetas";
+import { CANAL_CORREO, estadoComunicacion, opciones, TIPO_COMUNICACION } from "@/lib/etiquetas";
 import { formatoFechaHora } from "@/lib/format/date";
+import { mensajesAParams, mensajesDeParams, opcionesEstadoMensajes } from "@/lib/estadoMensajes";
 import { leerDestinatarios, resumenDestinatarios, sePuedeReintentar } from "@/lib/mensajes";
 import { P } from "@/lib/nav";
 import { tienePermiso } from "@/lib/sesion";
 import type { MensajeDetalle, MensajeFila, Pagina } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
+import { crearUrlPropia } from "@/lib/urlPropia";
+
+// Rediseño S1: filtros, página y mensaje abierto viven en la URL; al volver del detalle del comparendo queda igual.
+const UrlMensajes = crearUrlPropia();
 
 function Lista({ titulo, valores }: { titulo: string; valores: string[] }) {
   if (valores.length === 0) return null;
@@ -57,7 +62,7 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
 
   return (
     <Modal icono="correo" open onClose={onCerrar} size="2xl" title={m?.asunto ?? "Mensaje"} description={m ? `${TIPO_COMUNICACION[m.tipo] ?? m.tipo} · ${formatoFechaHora(m.creadoEn)}` : undefined}>
-      {detalle.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
+      {detalle.estado === "loading" && <VehicleLoader label="Cargando…" />}
       {detalle.estado === "error" && <InlineAlert tone="error">{detalle.error}</InlineAlert>}
       {m && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_320px]">
@@ -81,7 +86,7 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
               <p>
                 <span className="font-semibold">Apertura:</span> {m.abiertoEn ? `posiblemente abierto el ${formatoFechaHora(m.abiertoEn)} (${m.aperturas} ${m.aperturas === 1 ? "vez" : "veces"})` : "sin registro"}
               </p>
-              <p className="mt-1 opacity-70">{m.avisoApertura}</p>
+              <p className="mt-1 text-muted-foreground">{m.avisoApertura}</p>
             </div>
             {m.plantilla && <p className="text-xs"><span className="font-semibold">Plantilla:</span> v{m.plantilla.numeroVersion}</p>}
             {m.adjuntos.length > 0 && (
@@ -97,14 +102,14 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
             )}
             <div className="flex flex-col gap-1">
               <h3 className="text-xs font-semibold">Intentos de envío</h3>
-              {m.intentos.length === 0 && <p className="text-xs opacity-60">Todavía no se ha intentado enviar.</p>}
+              {m.intentos.length === 0 && <p className="text-xs text-muted-foreground">Todavía no se ha intentado enviar.</p>}
               {m.intentos.map((i) => (
                 <p key={i.numero} className="text-xs">
                   #{i.numero} · {formatoFechaHora(i.intentadoEn)} · {i.resultadoPlataforma ?? "—"}
                   {i.mensaje ? ` · ${i.mensaje}` : ""}
                 </p>
               ))}
-              {m.proximoIntentoEn && <p className="text-xs opacity-70">Próximo intento: {formatoFechaHora(m.proximoIntentoEn)}</p>}
+              {m.proximoIntentoEn && <p className="text-xs text-muted-foreground">Próximo intento: {formatoFechaHora(m.proximoIntentoEn)}</p>}
             </div>
             {puedeReintentar && (
               <button type="button" className={controlCls(false)} disabled={ocupado} onClick={reintentar}>
@@ -121,25 +126,87 @@ function DetalleMensaje({ id, onCerrar, onCambio, onComparendo }: { id: string; 
   );
 }
 
-function Centro() {
-  const { sesion } = useSesion();
-  // ?mensaje=<id> abre su detalle (enlace desde el timeline del comparendo, §7.2).
-  const params = useSearchParams();
-  const superAdmin = !!sesion?.usuario.esSuperAdmin;
-  const pg = usePaginacion(25);
-  const [empresa, setEmpresa] = useState<string | null>(null);
-  const [internas, setInternas] = useState(false);
-  const [tipo, setTipo] = useState("");
-  const [estado, setEstado] = useState("");
-  const [canal, setCanal] = useState("");
-  const [desde, setDesde] = useState("");
-  const [hasta, setHasta] = useState("");
-  const [comparendo, setComparendo] = useState("");
-  const [placa, setPlaca] = useState("");
-  const [abierto, setAbierto] = useState<string | null>(() => params.get("mensaje"));
-  const [verComparendo, setVerComparendo] = useState<string | null>(null);
+function CentroConUrl() {
+  const version = UrlMensajes.useVersion(useSearchParams().toString());
+  return <Centro key={version} />;
+}
 
-  const filtros = { empresa: internas ? undefined : (empresa ?? undefined), internas: superAdmin && internas ? true : undefined, tipo, estado, canal, desde, hasta, comparendo: comparendo.trim(), placa: placa.trim() };
+function Centro() {
+  const { sesion, cargando: cargandoSesion } = useSesion();
+  // ?mensaje=<id> abre su detalle (enlace desde el timeline del comparendo, §7.2). El resto de la URL trae los filtros.
+  const params = useSearchParams();
+  const router = useRouter();
+  const [inicial] = useState(() => mensajesDeParams(params));
+  const superAdmin = !!sesion?.usuario.esSuperAdmin;
+  const [page, setPage] = useState(inicial.pagina);
+  const [pageSize, setPageSizeEstado] = useState(inicial.tamano);
+  const pg = {
+    page,
+    pageSize,
+    setPage,
+    setPageSize: (n: number) => {
+      setPageSizeEstado(n);
+      setPage(1);
+    },
+  };
+  const [empresa, setEmpresa] = useState<string | null>(inicial.empresa);
+  const [internas, setInternas] = useState(inicial.internas);
+  const [tipo, setTipo] = useState(inicial.tipo);
+  const [estado, setEstado] = useState(inicial.estado);
+  const [canal, setCanal] = useState(inicial.canal);
+  const [desde, setDesde] = useState(inicial.desde);
+  const [hasta, setHasta] = useState(inicial.hasta);
+  const [comparendo, setComparendo] = useState(inicial.comparendo);
+  const [placa, setPlaca] = useState(inicial.placa);
+  // Lo que se ve en las cajas; el filtro (y la URL) se aplica cuando se deja de escribir, como la búsqueda de la bandeja.
+  const [textoComparendo, setTextoComparendo] = useState(inicial.comparendo);
+  const [textoPlaca, setTextoPlaca] = useState(inicial.placa);
+  // Una espera por caja: pasar de Placa a Comparendo antes de 400 ms no descarta lo escrito en la primera.
+  const espera = useRef<Record<"comparendo" | "placa", ReturnType<typeof setTimeout> | undefined>>({ comparendo: undefined, placa: undefined });
+  const escribir = (caja: "comparendo" | "placa", mostrar: (v: string) => void, aplicar: (v: string) => void) => (v: string) => {
+    mostrar(v);
+    clearTimeout(espera.current[caja]);
+    espera.current[caja] = setTimeout(() => {
+      aplicar(v);
+      setPage(1);
+    }, 400);
+  };
+  useEffect(() => {
+    const pendientes = espera.current;
+    return () => {
+      clearTimeout(pendientes.comparendo);
+      clearTimeout(pendientes.placa);
+    };
+  }, []);
+  const [abierto, setAbierto] = useState<string | null>(inicial.mensaje);
+  const setVerComparendo = useAbrirDetalle();
+
+  // Cada cambio queda en la URL sin sumar pasos al historial. Mientras carga la sesión no se sabe si es SuperAdmin:
+  // no se escribe, para no borrar la empresa elegida.
+  // La empresa solo la elige el SuperAdmin: una ?empresa= puesta a mano no viaja para nadie más.
+  const empresaVista = superAdmin ? empresa : null;
+  const nuevaQuery = mensajesAParams({
+    empresa: empresaVista,
+    internas: superAdmin && internas,
+    tipo,
+    estado,
+    canal,
+    desde,
+    hasta,
+    comparendo,
+    placa,
+    pagina: page,
+    tamano: pageSize,
+    mensaje: abierto,
+  }).toString();
+  useEffect(() => {
+    if (cargandoSesion) return;
+    UrlMensajes.registrar(nuevaQuery);
+    if (nuevaQuery === new URLSearchParams(window.location.search).toString()) return;
+    router.replace(nuevaQuery ? `/mensajes?${nuevaQuery}` : "/mensajes", { scroll: false });
+  }, [cargandoSesion, nuevaQuery, router]);
+
+  const filtros = { empresa: internas ? undefined : (empresaVista ?? undefined), internas: superAdmin && internas ? true : undefined, tipo, estado, canal, desde, hasta, comparendo: comparendo.trim(), placa: placa.trim() };
   const lista = useCarga(`mensajes:${JSON.stringify(filtros)}:${pg.page}:${pg.pageSize}`, (signal) =>
     apiFetch<Pagina<MensajeFila>>("/mensajes", {
       signal,
@@ -188,7 +255,7 @@ function Centro() {
           Estado
           <select className={INPUT_CLS} value={estado} onChange={(e) => filtrar(setEstado)(e.target.value)}>
             <option value="">Todos</option>
-            {opciones(ESTADO_COMUNICACION).map((o) => (
+            {opcionesEstadoMensajes(estado).map((o) => (
               <option key={o.valor} value={o.valor}>
                 {o.texto}
               </option>
@@ -216,11 +283,11 @@ function Centro() {
         </label>
         <label className={ETIQUETA_CLS}>
           Comparendo
-          <input className={INPUT_CLS} value={comparendo} onChange={(e) => filtrar(setComparendo)(e.target.value)} />
+          <input className={INPUT_CLS} value={textoComparendo} onChange={(e) => escribir("comparendo", setTextoComparendo, setComparendo)(e.target.value)} />
         </label>
         <label className={ETIQUETA_CLS}>
           Placa
-          <input className={INPUT_CLS} value={placa} onChange={(e) => filtrar(setPlaca)(e.target.value.toUpperCase())} />
+          <input className={INPUT_CLS} value={textoPlaca} onChange={(e) => escribir("placa", setTextoPlaca, setPlaca)(e.target.value.toUpperCase())} />
         </label>
       </div>
       <DataTable
@@ -241,7 +308,7 @@ function Centro() {
             render: (m) => (
               <div className="flex flex-col">
                 <span>{m.remitente ?? "—"}</span>
-                {m.canalCorreo && <span className="text-[11px] opacity-60">{CANAL_CORREO[m.canalCorreo] ?? m.canalCorreo}</span>}
+                {m.canalCorreo && <span className="text-xs text-muted-foreground">{CANAL_CORREO[m.canalCorreo] ?? m.canalCorreo}</span>}
               </div>
             ),
           },
@@ -263,9 +330,8 @@ function Centro() {
         ]}
         pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: lista.datos?.total ?? 0, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}
       />
-      <p className="text-[11px] opacity-60">La apertura es un dato informativo: no constituye prueba de notificación.</p>
-      {abierto && <DetalleMensaje key={abierto} id={abierto} onCerrar={() => setAbierto(null)} onCambio={lista.recargar} onComparendo={setVerComparendo} />}
-      <DetalleComparendo id={verComparendo} onCerrar={() => setVerComparendo(null)} onCambio={lista.recargar} />
+      <p className="text-xs text-muted-foreground">La apertura es un dato informativo: no constituye prueba de notificación.</p>
+      {abierto && <DetalleMensaje key={abierto} id={abierto} onCerrar={() => setAbierto(null)} onCambio={lista.recargar} onComparendo={(id) => setVerComparendo(id, null, nuevaQuery ? `/mensajes?${nuevaQuery}` : "/mensajes")} />}
     </section>
   );
 }
@@ -274,8 +340,8 @@ function Centro() {
 export default function CentroMensajes() {
   return (
     <Requiere permiso={P.mensajesVer}>
-      <Suspense fallback={<p className="text-sm opacity-60">Cargando…</p>}>
-        <Centro />
+      <Suspense fallback={<VehicleLoader label="Cargando…" />}>
+        <CentroConUrl />
       </Suspense>
     </Requiere>
   );

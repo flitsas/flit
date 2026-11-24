@@ -2,7 +2,7 @@
 
 import { useRef, useState } from "react";
 import { Icono } from "@flit/ui/Icono";
-import { InlineAlert, Modal, StatusBadge } from "@flit/ui";
+import { InlineAlert, Modal, StatusBadge, TarjetaPlegable, VehicleLoader } from "@flit/ui";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { EditorHtml } from "@/components/plantillas/EditorHtml";
 import { ListaPlantillas } from "@/components/plantillas/ListaPlantillas";
@@ -102,75 +102,85 @@ function Editor({ plantilla, onCerrar, onCambio }: { plantilla: PlantillaResumen
 
   return (
     <Modal icono="documento" open onClose={onCerrar} size="2xl" title={TIPO_PLANTILLA[plantilla.tipo] ?? plantilla.tipo} description={`${plantilla.conjunto === "Renting" ? "Renting" : "FLIT"}${plantilla.tipologia ? ` · ${plantilla.tipologia}` : ""}`}>
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[200px_1fr_1fr]">
-        <aside className="flex flex-col gap-2">
-          <h3 className="text-xs font-semibold">Versiones</h3>
-          {(detalle.datos?.versiones ?? []).map((x) => (
-            <button key={x.id} type="button" className={`${controlCls(x.id === elegida)} justify-between`} onClick={() => { setVersionId(x.id); setBorrador(null); setVista(null); }}>
-              <span>v{x.numeroVersion}</span>
-              <StatusBadge label={x.estado} tone={TONO_VERSION[x.estado] ?? "neutral"} />
-            </button>
-          ))}
-          {v && !editable && (
-            <button type="button" className={controlCls(false)} disabled={ocupado} onClick={nuevaVersion}>
-              <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
-              Nueva versión desde v{v.numeroVersion}
-            </button>
-          )}
-          {plantilla.conjunto === "Flit" && (
-            <button type="button" className={controlCls(false)} disabled={ocupado} onClick={copiarARenting} title="Si Renting no tiene la suya, usa la de FLIT">
-              <Icono nombre="copiar" className="h-3.5 w-3.5" />
-              Crear versión para Renting
-            </button>
-          )}
-        </aside>
-
-        <div className="flex flex-col gap-3">
-          {version.estado === "loading" && <p className="text-sm opacity-60">Cargando…</p>}
-          {actual && (
-            <>
-              {!editable && <InlineAlert tone="info" compact>Esta versión está {v?.estado === "Publicada" ? "publicada" : "retirada"} y no se edita: crea una nueva versión.</InlineAlert>}
-              {correo && (
-                <label className={ETIQUETA_CLS}>
-                  Asunto
-                  <input className={INPUT_CLS} value={actual.asunto} disabled={!editable} onChange={(e) => editar({ asunto: e.target.value })} />
-                </label>
-              )}
-              {editable ? (
-                <EditorHtml key={actual.versionId} inicial={actual.cuerpoHtml} variables={catalogo.datos ?? []} onCambio={(cuerpoHtml) => editar({ cuerpoHtml })} />
-              ) : (
-                <pre className="max-h-[420px] overflow-auto whitespace-pre-wrap rounded-xl border border-border p-3 font-mono text-[11px]">{actual.cuerpoHtml}</pre>
-              )}
-              {desconocidas.length > 0 && (
-                <InlineAlert tone="warning" compact>
-                  Estas variables no existen y no dejarán publicar: {desconocidas.map((x) => `{{${x}}}`).join(", ")}
-                </InlineAlert>
-              )}
-              {editable && (
-                <>
-                  <label className={ETIQUETA_CLS}>
-                    Qué cambió (obligatorio para publicar)
-                    <textarea className={TEXTAREA_CLS} rows={2} value={nota} onChange={(e) => setNota(e.target.value)} />
-                  </label>
-                  <div className="flex justify-end gap-2">
-                    <button type="button" className={controlCls(false)} disabled={ocupado} onClick={guardar}>
-                      Guardar borrador
-                    </button>
-                    <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || !nota.trim()} onClick={publicar}>
-                      <Icono nombre="radicacion" className="h-3.5 w-3.5" />
-                      Publicar
-                    </button>
-                  </div>
-                </>
-              )}
-            </>
-          )}
-          {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-semibold">Versiones</h3>
+          <div className="flex flex-wrap gap-2">
+            {(detalle.datos?.versiones ?? []).map((x) => (
+              <button key={x.id} type="button" className={`${controlCls(x.id === elegida)} justify-between`} onClick={() => { setVersionId(x.id); setBorrador(null); setVista(null); }}>
+                <span>v{x.numeroVersion}</span>
+                <StatusBadge label={x.estado} tone={TONO_VERSION[x.estado] ?? "neutral"} />
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {v && !editable && (
+              <button type="button" className={controlCls(false)} disabled={ocupado} onClick={nuevaVersion}>
+                <Icono nombre="archivo-subir" className="h-3.5 w-3.5" />
+                Nueva versión desde v{v.numeroVersion}
+              </button>
+            )}
+            {plantilla.conjunto === "Flit" && (
+              <button type="button" className={controlCls(false)} disabled={ocupado} onClick={copiarARenting} title="Si Renting no tiene la suya, usa la de FLIT">
+                <Icono nombre="copiar" className="h-3.5 w-3.5" />
+                Crear versión para Renting
+              </button>
+            )}
+          </div>
         </div>
 
-        <VistaPrevia
-          contenido={actual ? { tipo: plantilla.tipo, conjunto: plantilla.conjunto, asunto: correo ? (vista?.asunto ?? actual.asunto) || null : null, cuerpoHtml: vista?.cuerpoHtml ?? actual.cuerpoHtml } : null}
-        />
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <div className="flex min-w-0 flex-col gap-3">
+            {version.estado === "loading" && <VehicleLoader label="Cargando la versión…" />}
+            {actual && (
+              <>
+                {!editable && <InlineAlert tone="info" compact>Esta versión está {v?.estado === "Publicada" ? "publicada" : "retirada"} y no se edita: crea una nueva versión.</InlineAlert>}
+                {correo && (
+                  <label className={ETIQUETA_CLS}>
+                    Asunto
+                    <input className={INPUT_CLS} value={actual.asunto} disabled={!editable} onChange={(e) => editar({ asunto: e.target.value })} />
+                  </label>
+                )}
+                {editable ? (
+                  <EditorHtml key={actual.versionId} inicial={actual.cuerpoHtml} variables={catalogo.datos ?? []} onCambio={(cuerpoHtml) => editar({ cuerpoHtml })} />
+                ) : (
+                  <TarjetaPlegable titulo="Ver el código HTML de esta versión" nivelTitulo={4}>
+                    <code className="block max-h-96 overflow-auto whitespace-pre-wrap break-words font-mono text-xs text-muted-foreground">{actual.cuerpoHtml}</code>
+                  </TarjetaPlegable>
+                )}
+                {desconocidas.length > 0 && (
+                  <InlineAlert tone="warning" compact>
+                    Estas variables no existen y no dejarán publicar: {desconocidas.map((x) => `{{${x}}}`).join(", ")}
+                  </InlineAlert>
+                )}
+                {editable && (
+                  <>
+                    <label className={ETIQUETA_CLS}>
+                      Qué cambió (obligatorio para publicar)
+                      <textarea className={TEXTAREA_CLS} rows={2} value={nota} onChange={(e) => setNota(e.target.value)} />
+                    </label>
+                    <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                      <button type="button" className={controlCls(false)} disabled={ocupado} onClick={guardar}>
+                        Guardar borrador
+                      </button>
+                      <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado || !nota.trim()} onClick={publicar}>
+                        <Icono nombre="radicacion" className="h-3.5 w-3.5" />
+                        Publicar
+                      </button>
+                    </div>
+                  </>
+                )}
+              </>
+            )}
+            {error && <InlineAlert tone="error" compact>{error}</InlineAlert>}
+          </div>
+
+          <div className="min-w-0">
+            <VistaPrevia
+              contenido={actual ? { tipo: plantilla.tipo, conjunto: plantilla.conjunto, asunto: correo ? (vista?.asunto ?? actual.asunto) || null : null, cuerpoHtml: vista?.cuerpoHtml ?? actual.cuerpoHtml } : null}
+            />
+          </div>
+        </div>
       </div>
     </Modal>
   );

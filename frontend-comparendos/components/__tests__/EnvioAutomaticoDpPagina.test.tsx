@@ -114,6 +114,19 @@ describe("pantalla del envío automático de DP (HU #14614)", () => {
     await screen.findByText("Envío automático encendido.");
   });
 
+  it("guarda al instante, así que un clic en su título o en su ayuda NO lo enciende (soloControl)", async () => {
+    simular();
+    await abrir();
+    const interruptor = screen.getByRole("switch", { name: "Enviar solos los derechos de petición" });
+    fireEvent.click(screen.getByText("Enviar solos los derechos de petición", { selector: "span" }));
+    fireEvent.click(screen.getByText("Se guarda al cambiarlo. Empieza apagado."));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(puts()).toHaveLength(0);
+    expect(interruptor).toHaveAttribute("aria-checked", "false");
+    expect(interruptor.closest("label")).toBeNull();
+    expect(interruptor).toHaveAccessibleDescription("Se guarda al cambiarlo. Empieza apagado.");
+  });
+
   it("si el PUT del interruptor falla, vuelve a su estado y muestra el error en español", async () => {
     simular({
       alPut: () => {
