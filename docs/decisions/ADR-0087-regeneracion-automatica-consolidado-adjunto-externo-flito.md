@@ -175,3 +175,20 @@ superficie que ADR-0032/HU#12795 ya decidió no necesitar para este tipo de even
 ## Referencias externas
 
 - Ninguna (decisión interna de arquitectura, sin estándar externo involucrado).
+
+## Addendum (2026-11-24) — reapertura del Bug #14660
+
+La primera implementación no resolvía el caso reportado (trámite en `asignado`, Flito carga el comprobante, el
+consolidado se abre sin él). Dos desvíos respecto a `ConsolidadoVigenciaTracker`, que es lo que este ADR dice espejar:
+
+1. **Solo bajaba `consolidado_wizard_vigente` y solo encolaba `TipoConsolidado.Wizard`.** Este endpoint solo admite
+   trámites ya radicados (`preasignacion`/`entregado` en el historial): el expediente que mira el OT es el
+   **maestro**, cuya bandera quedaba en `true` y seguía sirviéndose el PDF viejo. El tracker llama a
+   `InvalidarConsolidados()` (las dos marcas) y encola los dos tipos que existan.
+2. **Condicionaba todo a `enMatriz`.** Ambos generadores fusionan todos los adjuntos efectivos (lo no listado va
+   al final), así que el comprobante entra al PDF esté o no en la matriz; el tracker tampoco mira la matriz.
+
+Corrección: `IExternalAttachmentWriter.InvalidateConsolidadosAsync` baja las dos marcas en la misma transacción y
+devuelve qué consolidados existen (`ConsolidadosExistentes`); tras confirmar, el handler encola Wizard y/o Maestro
+según existan, en todo `201` y nunca en estado final (mismo filtro que `EncolarRegeneracionAsync`). El `200`
+idempotente sigue sin tocar nada. Sin DDL ni cambio de contrato.
