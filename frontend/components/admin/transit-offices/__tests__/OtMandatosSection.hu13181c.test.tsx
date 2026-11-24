@@ -196,6 +196,36 @@ describe("HU #13181c — edición del mandatario desde el hub del OT", () => {
     expect([...(body.officeCompanies?.[0].associatedCompanyTenantIds ?? [])].sort()).toEqual(["cia-2", "cia-3"]);
   });
 
+  // Incidente PDN 2026-11-24 (Medellín + BANCOLOMBIA): el mandatario estaba en 9 organismos y el PUT
+  // mandaba la compañía a los 9 con transitOfficeIds=[este]. El servidor respondía «organismo ajeno» y
+  // «no lo tiene habilitado»; y, si hubiera pasado, retiraba al mandatario de los otros 8.
+  it("con el mandatario en varios organismos, solo manda este organismo y no toca la lista de organismos", async () => {
+    fetchMandateSigners.mockReset().mockResolvedValue([
+      signer({
+        companyTenantIds: ["cia-1"],
+        transitOfficeIds: ["ot-1", "ot-2", "ot-3"],
+        officeCompanies: [
+          { transitOfficeId: "ot-1", associatedCompanyTenantIds: [] },
+          { transitOfficeId: "ot-2", associatedCompanyTenantIds: ["cia-3"] },
+        ],
+      }),
+    ]);
+    const user = userEvent.setup();
+    renderSection();
+    await pulsarAccion(user, /editar mandatario hugo mandatario/i);
+    const dialogo = await screen.findByRole("dialog", { name: /editar mandatario/i });
+    await user.click(await within(dialogo).findByLabelText(/Otra Uno S\.A\.S\./));
+    await user.click(within(dialogo).getByRole("button", { name: "Guardar" }));
+
+    await waitFor(() => expect(updateMandateSigner).toHaveBeenCalledTimes(1));
+    const body = updateMandateSigner.mock.calls[0][2] as {
+      transitOfficeIds?: string[];
+      officeCompanies?: { transitOfficeId: string; associatedCompanyTenantIds: string[] }[];
+    };
+    expect(body.transitOfficeIds).toBeUndefined();
+    expect(body.officeCompanies).toEqual([{ transitOfficeId: "ot-1", associatedCompanyTenantIds: ["cia-2"] }]);
+  });
+
   it("la lista no ofrece la propia compañía del mandatario", async () => {
     const user = userEvent.setup();
     render(
