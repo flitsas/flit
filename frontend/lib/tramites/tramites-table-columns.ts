@@ -105,10 +105,10 @@ export const TRAMITES_COLUMNS: readonly TramitesColumnDef[] = [
   // Confirmado en RUNT, que lo anotan. Antes iba tras Organismo, oculta por defecto.
   { key: 'gestor', label: COPY.A06, minPx: 160, group: GRUPO_BASE },
   { key: 'tramite', label: COPY.A03, minPx: 160, group: GRUPO_BASE },
-  // HU #12183 — dos íconos como mucho, de 20px, y nunca texto: el piso cubre los dos más el
-  // padding de la celda. Fija por eso mismo: no tiene nada que hacer con el ancho sobrante.
-  // La píldora «Quipux · …» (texto) va en una segunda línea bajo los íconos: el piso cubre su ancho.
-  { key: 'marcas', label: 'Marcas', minPx: 140, fixed: true, group: GRUPO_BASE },
+  // HU #12183 — íconos de 20px y, si el trámite va por Quipux, la etiqueta «QX · …» (la más larga,
+  // «QX · Radicado», mide ~92px) más los 16px de padding por lado de la celda. Fija: no tiene nada
+  // que hacer con el ancho sobrante.
+  { key: 'marcas', label: 'Marcas', minPx: 124, fixed: true, group: GRUPO_BASE },
   // Feature #12276 (HU #12312) — píldora SÍ / NO / — y nada más. Fija: tres valores de ancho
   // constante; el piso cubre la cabecera «Confirmado en RUNT», que es lo más ancho de la columna.
   { key: 'confirmadoRunt', label: 'Confirmado en RUNT', minPx: 132, fixed: true, group: GRUPO_BASE },

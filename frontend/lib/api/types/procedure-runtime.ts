@@ -285,6 +285,8 @@ export interface InstanceSummary {
    * anterior al campo). La columna «Marcas» lo pinta como píldora con texto.
    */
   quipuxEstado?: 'en_cola' | 'radicado' | 'fallido' | 'rechazado' | 'aprobado' | null;
+  /** Id del último envío Quipux del trámite (trazabilidad en `/log-qx/{id}`). Nulo: aún sin envío. */
+  quipuxEnvioId?: string | null;
   /**
    * ADR-0053 — todos los propietarios de cada lado, principal primero, con la acreditación de CADA
    * persona. `vendedorNombre`/`compradorNombre` traen solo al principal; con copropietarios la celda

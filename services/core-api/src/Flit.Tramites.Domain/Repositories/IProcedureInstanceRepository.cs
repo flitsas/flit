@@ -130,7 +130,7 @@ public interface IProcedureInstanceRepository
     /// que van por Quipux (último envío, o <c>en_cola</c> si está <c>preparado</c> con canal activo). Los que no van por
     /// Quipux se omiten (equivale a <c>null</c>). Una consulta por página, sin N+1.
     /// </summary>
-    Task<IReadOnlyDictionary<Guid, string>> GetQuipuxEstadosAsync(
+    Task<IReadOnlyDictionary<Guid, Flit.Tramites.Domain.Tramites.Estados.QuipuxMarcaListado>> GetQuipuxEstadosAsync(
         IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
 
     /// <summary>

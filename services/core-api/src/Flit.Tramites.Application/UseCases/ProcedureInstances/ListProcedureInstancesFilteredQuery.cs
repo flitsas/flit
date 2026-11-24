@@ -330,8 +330,9 @@ public sealed class ListProcedureInstancesFilteredHandler(
             instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
 
         // Marca «Quipux»: misma consulta en lote que el listado sin filtros.
-        IReadOnlyDictionary<Guid, string> quipuxEstados = await repo.GetQuipuxEstadosAsync(
-            instances.Select(i => i.Id).ToList(), ct) ?? EmptyNames;
+        IReadOnlyDictionary<Guid, QuipuxMarcaListado> quipuxEstados = await repo.GetQuipuxEstadosAsync(
+            instances.Select(i => i.Id).ToList(), ct)
+            ?? new Dictionary<Guid, QuipuxMarcaListado>();
 
         var exentas = await ListProcedureInstancesHandler
             .ResolverExentasAsync(instances, quipuxCanalReader, ct).ConfigureAwait(false);
