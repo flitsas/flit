@@ -115,7 +115,14 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
         await Rechaza(new { consultaId = consulta, periodicidad = "mensual", diaSemana = (int?)null, diaMes = 29, hora = "08:00", destinatarios = new[] { "a@b.test" } }, "PROGRAMACION_INVALIDA");
         await Rechaza(new { consultaId = consulta, periodicidad = "semanal", diaSemana = 8, diaMes = (int?)null, hora = "08:00", destinatarios = new[] { "a@b.test" } }, "PROGRAMACION_INVALIDA");
         await Rechaza(new { consultaId = consulta, periodicidad = "diaria", diaSemana = 1, diaMes = (int?)null, hora = "08:00", destinatarios = new[] { "a@b.test" } }, "PROGRAMACION_INVALIDA");
-        await Rechaza(Semanal(consulta, Enumerable.Range(0, 21).Select(i => $"p{i}@b.test").ToArray()), "PROGRAMACION_INVALIDA");
+        // Tope de 10 destinatarios, como en Trámites: 10 entran, 11 no.
+        var once = await cliente.PostAsJsonAsync($"{Ruta}/programaciones", Semanal(consulta, Enumerable.Range(0, 11).Select(i => $"p{i}@b.test").ToArray()), Ct);
+        once.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
+        (await once.Content.ReadFromJsonAsync<JsonElement>(Ct)).GetProperty("error").GetString().Should().Be("Se puede enviar a 10 destinatarios como máximo.");
+        var diez = await (await cliente.PostAsJsonAsync($"{Ruta}/programaciones", Semanal(consulta, Enumerable.Range(0, 10).Select(i => $"p{i}@b.test").ToArray()), Ct))
+            .Content.ReadFromJsonAsync<JsonElement>(Ct);
+        diez.GetProperty("destinatarios").GetArrayLength().Should().Be(10);
+        (await cliente.DeleteAsync($"{Ruta}/programaciones/{diez.GetProperty("id").GetGuid()}", Ct)).EnsureSuccessStatusCode();
         await Rechaza(Semanal(consulta, "no-es-correo"), "CORREO_INVALIDO");
         await Rechaza(new { consultaId = consulta, periodicidad = "semanal", diaSemana = 5, diaMes = (int?)null, hora = "8 am", destinatarios = new[] { "a@b.test" } }, "PROGRAMACION_INVALIDA");
 
