@@ -204,7 +204,7 @@ public sealed class ComparendoQueryFieldCatalog : IQueryFieldCatalog
         Opcion(Departamento, "Departamento", GrupoOrganismo, []),
         Opcion(Municipio, "Municipio", GrupoOrganismo, []),
 
-        Booleano(Activo, "Activo", GrupoEstado, "Inactivo es el que ya no reporta la fuente o se inactivó a mano."),
+        Booleano(Activo, "Activo", GrupoEstado, "Inactivo: ya no figura como pendiente en tránsito, o alguien de la empresa lo inactivó."),
         Opcion(EstadoLegal, "Estado legal", GrupoEstado, EstadoLegalOptions, "Calculado con el día de hoy."),
         Opcion(VentanaDescuento, "Descuento vigente", GrupoEstado, VentanaDescuentoOptions, "Calculado con el día de hoy."),
         Booleano(CobroCoactivo, "Cobro coactivo", GrupoEstado),

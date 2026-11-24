@@ -396,7 +396,10 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
 
     private static Func<Fila, IReadOnlyList<string>> Accessor(string campo) => campo switch
     {
-        C.Numero => f => [f.C.NumeroNormalizado],
+        // Los dos: el normalizado (sin el prefijo de letras, «D-1100…» → «1100…») para «es alguno», y el original para que
+        // «contiene D-1100» encuentre el número que lleva ese prefijo. La normalización no sirve para un fragmento: solo
+        // quita el prefijo con 10 dígitos o más.
+        C.Numero => f => [f.C.NumeroNormalizado, f.C.Numero],
         C.Placa => f => Uno(f.C.Placa),
         C.Nit => f => Uno(f.C.IdentificacionMonitoreadaId?.ToString()),
         C.Empresa => f => [f.C.TenantId.ToString()],

@@ -168,6 +168,14 @@ public sealed class ConsultasPersonalizadasTests(ApiConFuente api) : IClassFixtu
         await GuardarAsync(sinCaducidad);
         Numeros(await CorrerAsync(Super, Definicion([Es(F.EstadoLegal, "Vencido")]))).Should().Contain([sinCaducidad.Numero, b.Numero]).And.NotContain(a.Numero);
 
+        // «contiene» sobre el número encuentra el que lleva prefijo de letras, aunque el normalizado lo pierda.
+        var conPrefijo = Nuevo(e1, "11001000000000000009", c => c.Numero = "D-11001000000000000009");
+        await GuardarAsync(conPrefijo);
+        Numeros(await CorrerAsync(Super, Definicion([new { fieldId = F.Numero, @operator = QueryOperator.Contiene, values = new[] { "D-1100" } }])))
+            .Should().Contain(conPrefijo.Numero).And.NotContain(a.Numero);
+        Numeros(await CorrerAsync(Super, Definicion([new { fieldId = F.Numero, @operator = QueryOperator.Contiene, values = new[] { "000000009" } }])))
+            .Should().Contain(conPrefijo.Numero);
+
         // Y cada fecha del rango filtra por la suya (A cae en el rango; B se corre fuera en esa fecha).
         var fila = (await CorrerAsync(Super, Definicion([Es(F.Numero, a.Numero)]))).GetProperty("filas")[0];
         (fila.GetProperty("estadoLegal").GetString(), fila.GetProperty("ventanaDescuento").GetString(), fila.GetProperty("dpTipologia").GetString())

@@ -142,8 +142,10 @@ public sealed class RepositorioProgramaciones(ComparendosDb db, Reloj reloj)
             db.ConsultasProgramadas.Add(p);
         }
 
-        (p.ConsultaId, p.Periodicidad, p.DiaSemana, p.DiaMes, p.Hora, p.Destinatarios, p.Activa) =
-            (consulta.Id, periodicidad, diaSemana, diaMes, hora, destinatarios, pedido.Activa);
+        // Quien guarda es el dueño de la consulta (se exige arriba) y pasa a ser el dueño del envío: es a quien se le
+        // verifica el permiso antes de cada envío.
+        (p.ConsultaId, p.Periodicidad, p.DiaSemana, p.DiaMes, p.Hora, p.Destinatarios, p.Activa, p.CreadoPor) =
+            (consulta.Id, periodicidad, diaSemana, diaMes, hora, destinatarios, pedido.Activa, usuario);
         p.ProximaEjecucion = p.Activa ? Programaciones.Proxima(periodicidad, diaSemana, diaMes, hora, reloj.Ahora) : null;
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         return Programaciones.Dto(p, consulta.Nombre);
