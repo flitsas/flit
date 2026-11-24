@@ -16,6 +16,8 @@ const push = vi.fn();
 let busqueda = "";
 let ruta = "/reportes/gestion";
 vi.mock("next/navigation", () => ({ useSearchParams: () => new URLSearchParams(busqueda), useRouter: () => ({ replace, push }), usePathname: () => ruta }));
+const toast = vi.fn();
+vi.mock("@/components/Toast", () => ({ useToast: () => ({ show: toast }) }));
 vi.mock("recharts", async (original) => ({ ...(await original<typeof import("recharts")>()), ResponsiveContainer: () => null }));
 
 const gestora = (reportes = true) => ({
@@ -55,6 +57,32 @@ const dp = (consolidado: unknown[] | null) => ({
   },
 });
 
+
+/** Pulsa «Descargar Excel» y devuelve el nombre y el XML del libro (STORE: el zip no está comprimido y se lee como texto). */
+async function descargarExcel(): Promise<{ nombre: string; xml: string }> {
+  let blob: Blob | null = null;
+  let nombre = "";
+  const crear = vi.spyOn(URL, "createObjectURL").mockImplementation((b) => {
+    blob = b as Blob;
+    return "blob:prueba";
+  });
+  const revocar = vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => {});
+  const clic = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function (this: HTMLAnchorElement) {
+    nombre = this.download;
+  });
+  fireEvent.click(screen.getByTestId("descargar-excel"));
+  await waitFor(() => expect(nombre).not.toBe(""));
+  const bytes = await new Promise<ArrayBuffer>((ok) => {
+    const r = new FileReader();
+    r.onload = () => ok(r.result as ArrayBuffer);
+    r.readAsArrayBuffer(blob!);
+  });
+  crear.mockRestore();
+  revocar.mockRestore();
+  clic.mockRestore();
+  return { nombre, xml: new TextDecoder().decode(bytes) };
+}
+
 describe("Reportes 2.0 · pestañas de análisis", () => {
   beforeEach(() => {
     apiFetch.mockReset();
@@ -89,7 +117,19 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     // Sin recorte aquí: Gestión es donde viven las lentes que salieron del Inicio, y sin «Ver en Reportes».
     for (const id of ["vehiculos", "evitables", "antiguedad", "dp-organismos", "top-organismos"]) expect(screen.getByTestId(id)).toBeTruthy();
     expect(screen.queryByTestId("ver-en-reportes")).toBeNull();
+    // «Descargar Excel» a la derecha de la fila de filtros, habilitado con los datos cargados.
+    expect((screen.getByTestId("descargar-excel") as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByTestId("descargar-excel").parentElement!.className).toMatch(/ml-auto/);
     expect(within(screen.getByTestId("vehiculos")).getByRole("link", { name: /^AAA111/ }).getAttribute("href")).toBe("/bandeja?placas=AAA111&pagado=false");
+
+    // El Excel lleva las cifras de la pantalla y su corte, con el nombre de la empresa de la gestora.
+    const { nombre, xml } = await descargarExcel();
+    expect(nombre).toBe("reporte-gestion-gestora-uno-sin-periodo_hoy.xlsx");
+    expect(within(screen.getByTestId("gestion-resumen")).getByText("42")).toBeTruthy();
+    expect(xml).toMatch(/Pendientes \(activos y sin pagar\)<\/t><\/is><\/c><c r="B2" s="0"><v>42<\/v><\/c><c r="C2" s="0"><v>130900000<\/v>/);
+    expect(xml).toContain("Pendiente a hoy");
+    expect(xml).toContain("Gestora Uno");
+    expect(xml).not.toMatch(/Simit|SinProcesar/);
   });
 
   it("Gestión con periodo y NIT en la URL: los pide a la API y cada enlace a la bandeja lleva el mismo corte", async () => {
@@ -128,6 +168,7 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     render(<GestionPage />);
     expect((await screen.findAllByText(/La fecha inicial no puede ser posterior a la final/)).length).toBeGreaterThan(0);
     expect(apiFetch.mock.calls.some(([r]) => r === "/reportes/gestion")).toBe(false);
+    expect((screen.getByTestId("descargar-excel") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("DP: la tasa y el ahorro vienen de la API (los del Resumen) y el consolidado solo lo ve el SuperAdmin con todas", async () => {
@@ -142,6 +183,11 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     const filaCali = within(screen.getByTestId("dp-por-organismo")).getByText("Tránsito Cali").closest("tr")!;
     expect(within(filaCali).getByText("—")).toBeTruthy();
     expect(within(screen.getByTestId("dp-por-organismo")).queryByText("0 %")).toBeNull();
+    // El Excel de DP: la tasa de la pantalla (50 %) en la hoja de indicadores, y nada de la fuente.
+    const { nombre, xml } = await descargarExcel();
+    expect(nombre).toMatch(/^reporte-dp-gestora-uno-\d{4}-\d{2}-01_\d{4}-\d{2}-\d{2}\.xlsx$/);
+    expect(xml).toMatch(/Tasa de éxito \(%\)<\/t><\/is><\/c><c r="B2" s="0"><v>50<\/v>/);
+    expect(xml).not.toMatch(/Simit|Municipal/);
     expect(screen.queryByTestId("dp-consolidado")).toBeNull();
     // Sin fechas en la URL, el mes en curso (como el resto de Reportes).
     const q = apiFetch.mock.calls.find(([r]) => r === "/reportes/dp")![1].query;
@@ -152,6 +198,12 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     sesion = super_;
     render(<DpPage />);
     expect(await screen.findByTestId("dp-consolidado")).toBeTruthy();
+    // Patrón de GlobalFilters de Trámites (Samuel): «Empresa» arriba como las fechas, opción vacía «Todas las empresas», sin ayuda debajo.
+    const empresa = (await screen.findByLabelText("Empresa")) as HTMLSelectElement;
+    expect(empresa.tagName).toBe("SELECT");
+    expect(empresa.options[0].textContent).toBe("Todas las empresas");
+    expect(empresa.closest("label")!.firstChild!.textContent).toBe("Empresa");
+    expect(screen.queryByText(/Sin empresa elegida/)).toBeNull();
   });
 
   it("Resumen: lee desde, hasta y nit de la URL (vienen de otra pestaña) y «Consultar» los escribe ahí", async () => {

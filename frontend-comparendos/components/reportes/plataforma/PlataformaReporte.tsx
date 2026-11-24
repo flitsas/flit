@@ -12,7 +12,9 @@ import { apiFetch } from "@/lib/api";
 import { formatoFecha, formatoFechaHora } from "@/lib/format/date";
 import { numeroCorto, textoPeriodo } from "@/lib/reportes";
 import { useCarga } from "@/lib/useCarga";
-import { FUENTES, TIPOS_ERROR, type ReportePlataforma } from "./tipos";
+import { BotonExcel } from "@/components/reportes/gestion/excel";
+import { hojasPlataforma } from "./excelPlataforma";
+import { etiquetaPlantilla, FUENTES, TIPOS_ERROR, type ReportePlataforma } from "./tipos";
 
 const GraficoArea = dynamic(() => import("@/components/inicio/GraficoArea").then((m) => m.GraficoArea), { loading: () => <div style={{ height: 240 }} /> });
 
@@ -61,7 +63,7 @@ function TablaCorreos({ filas }: { filas: ReportePlataforma["correos"]["reciente
       columns={[
         { key: "fecha", header: "Fecha", render: (c) => formatoFechaHora(c.creadoEn) },
         { key: "empresa", header: "Empresa", render: (c) => c.empresa },
-        { key: "plantilla", header: "Plantilla", render: (c) => <code className="text-xs">{c.plantilla}</code> },
+        { key: "plantilla", header: "Tipo de correo", render: (c) => etiquetaPlantilla(c.plantilla) },
         { key: "estado", header: "Estado", render: (c) => c.estado },
         { key: "motivo", header: "Motivo", render: (c) => <span className="line-clamp-2">{c.motivo ?? "—"}</span> },
       ]}
@@ -100,7 +102,31 @@ export function PlataformaReporte() {
         titulo="Plataforma"
         descripcion="Solo administración FLIT: cómo responden las fuentes de consulta, qué errores técnicos hubo, qué correos fallaron y qué empresas acumulan más problemas."
       />
-      <BarraFiltros filtros={filtros} escribir={escribir} conNit={false} errorUrl={errorUrl} />
+      <BarraFiltros
+        filtros={filtros}
+        escribir={escribir}
+        conNit={false}
+        errorUrl={errorUrl}
+        accion={
+          <BotonExcel
+            corte={{
+              pestana: "plataforma",
+              titulo: "Reportes › Plataforma (administración FLIT)",
+              empresa: filtros.empresa,
+              nit: null,
+              desde: periodo.desde,
+              hasta: periodo.hasta,
+              corte: `Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}`,
+              aclaraciones: [
+                "Solo administración FLIT: incluye las fuentes de consulta y los errores técnicos.",
+                "Los errores técnicos por tipo solo se calculan con todas las empresas.",
+              ],
+            }}
+            hojas={p ? () => hojasPlataforma(p) : null}
+            deshabilitado={datos.estado !== "ready" || !!error}
+          />
+        }
+      />
       {errorAnio && (
         <InlineAlert tone="warning" compact>
           {errorAnio} Acorta el periodo y pulsa «Consultar».

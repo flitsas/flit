@@ -9,6 +9,8 @@ import { Cargador } from "@flit/ui/Loader";
 import { useSesion } from "@/components/ComparendosShell";
 import { Encabezado } from "@/components/Pantalla";
 import { FiltrosPeriodo, type Periodo } from "@/components/reportes/FiltrosPeriodo";
+import { BotonExcel } from "@/components/reportes/gestion/excel";
+import { hojasResumen } from "@/components/reportes/gestion/excelResumen";
 import { periodoEfectivo, useFiltrosUrl } from "@/components/reportes/gestion/filtrosUrl";
 import { BarrasApiladas } from "@/components/inicio/BarrasApiladas";
 import { PanelInicio } from "@/components/inicio/PanelInicio";
@@ -110,6 +112,28 @@ function Contenido() {
         key={`${periodo.desde}|${periodo.hasta}|${periodo.empresa ?? ""}`}
         valor={periodo}
         onAplicar={aplicar}
+        accion={
+          <BotonExcel
+            corte={{
+              pestana: "resumen",
+              titulo: "Reportes › Resumen",
+              empresa: periodo.empresa,
+              nit,
+              desde: periodo.desde,
+              hasta: periodo.hasta,
+              corte: `Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}`,
+              aclaraciones: [
+                "La deuda y el radar son a hoy; las tasas y el ahorro, del periodo.",
+                "La deuda sin pagar incluye lo caducado y lo prescrito.",
+                // REX: si las gráficas de dinero no cargaron, el archivo lo dice en vez de omitirlas en silencio.
+                ...(dinero.estado === "error" ? ["No se incluyeron las hojas de dinero (deuda por estado, ingresado y pagado, deuda por organismo): no cargaron en la pantalla."] : []),
+              ],
+            }}
+            hojas={d && datos.estado === "ready" ? () => hojasResumen(d, dinero.estado === "ready" ? (reparto ?? null) : null) : null}
+            // Espera también las gráficas de dinero: sin ellas el archivo no sería el de la pantalla.
+            deshabilitado={datos.estado !== "ready" || dinero.estado === "loading" || !!errorUrl}
+          />
+        }
         extra={puedeVerNits ? <SelectorNit key={empresaNits} empresa={empresaNits} valor={nit} onCambio={setNit} /> : undefined}
       />
 

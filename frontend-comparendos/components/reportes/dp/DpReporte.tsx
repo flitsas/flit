@@ -14,6 +14,8 @@ import { apiFetch } from "@/lib/api";
 import { formatoFecha, formatoPesos } from "@/lib/format/date";
 import { formatoTasa, numeroCorto, pesosCorto, textoPeriodo } from "@/lib/reportes";
 import { useCarga } from "@/lib/useCarga";
+import { BotonExcel } from "@/components/reportes/gestion/excel";
+import { hojasDp } from "./excelDp";
 import type { FilaDp, ReporteDp, RespuestaDp } from "./tipos";
 
 /** recharts se carga aparte: las cifras y las tablas pintan sin esperarlo. */
@@ -96,7 +98,32 @@ export function DpReporte() {
         titulo="Derechos de petición"
         descripcion="Resultados de los derechos de petición enviados: por organismo y por infracción, los favorables, los que esperan respuesta y los que ya pasaron su plazo. La tasa de éxito y el ahorro son los mismos del Resumen."
       />
-      <BarraFiltros filtros={filtros} escribir={escribir} errorUrl={errorUrl} />
+      <BarraFiltros
+        filtros={filtros}
+        escribir={escribir}
+        errorUrl={errorUrl}
+        accion={
+          <BotonExcel
+            corte={{
+              pestana: "dp",
+              titulo: "Reportes › Derechos de petición",
+              empresa: filtros.empresa,
+              nit: filtros.nit,
+              desde: periodo.desde,
+              hasta: periodo.hasta,
+              corte: `Del ${formatoFecha(periodo.desde)} al ${formatoFecha(periodo.hasta)}`,
+              aclaraciones: [
+                "Enviados: radicados en el periodo. Favorables y desfavorables: respuestas recibidas en el periodo.",
+                "La tasa de éxito y el ahorro son los mismos del Resumen para el mismo periodo.",
+                "«Esperando respuesta» y «Vencidos sin respuesta» son a hoy, sin importar el periodo.",
+                "Por organismo: el organismo al que se radicó el derecho de petición.",
+              ],
+            }}
+            hojas={d ? () => hojasDp(d) : null}
+            deshabilitado={datos.estado !== "ready" || !!errorUrl}
+          />
+        }
+      />
 
       {datos.estado === "loading" && <Cargador />}
       {datos.estado === "error" && (
