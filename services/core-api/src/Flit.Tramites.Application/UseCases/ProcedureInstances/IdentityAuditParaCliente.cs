@@ -11,6 +11,9 @@ namespace Flit.Tramites.Application.UseCases.ProcedureInstances;
 /// </summary>
 public static class IdentityAuditParaCliente
 {
+    /// <summary>Código genérico que reemplaza el tipo de error técnico (p. ej. una excepción del proveedor) para la compañía.</summary>
+    public const string ErrorProveedorGenerico = "error_proveedor";
+
     public static IReadOnlyList<IdentityAuditEventDto> Aplicar(IReadOnlyList<IdentityAuditEventDto> events)
     {
         var salida = new List<IdentityAuditEventDto>(events.Count);
@@ -18,7 +21,14 @@ public static class IdentityAuditParaCliente
         {
             if (!EsManual(e.Stage))
             {
-                salida.Add(e);
+                // Eventos normales: se conservan etapa, resultado y código HTTP, pero sin mensajes ni estado del
+                // proveedor ni nombres técnicos de excepción: la compañía no debe ver qué proveedor de identidad se usa.
+                salida.Add(e with
+                {
+                    Message = null,
+                    ProviderStatus = null,
+                    ErrorType = e.ErrorType is null ? null : ErrorProveedorGenerico,
+                });
                 continue;
             }
             var equivalente = Equivalente(e);

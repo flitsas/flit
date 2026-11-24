@@ -218,6 +218,9 @@ function Hito({ hito, vigente }: { hito: HitoIdentidad; vigente: boolean }) {
       {hito.detalle ? (
         <p className="mt-0.5 text-xs text-flit-primary/70 dark:text-white/60">{hito.detalle}</p>
       ) : null}
+      {hito.revisadoPor ? (
+        <p className="mt-0.5 text-xs text-flit-primary/70 dark:text-white/60">{hito.revisadoPor}</p>
+      ) : null}
       <p className="mt-0.5 font-mono text-[11px] text-flit-primary/50 dark:text-white/40">
         {fecha(hito.cuando)}
       </p>

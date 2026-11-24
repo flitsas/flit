@@ -33,9 +33,12 @@ public sealed class DocumentBatchClassifierTests
     [Fact]
     public void Prompt_descarta_tipos_sin_soporte_ocr()
     {
-        var prompt = DocumentOcrPrompts.ClassificationPrompt(["soat", "compraventa", "cedulas"]);
+        // Un tipo que el OCR no conoce se descarta; los que sí conoce (compraventa, cedulas...) se piden.
+        // El fuente se guarda con CRLF en Windows: se normalizan los saltos antes de comparar.
+        var prompt = DocumentOcrPrompts.ClassificationPrompt(["soat", "tipo_inexistente"]).Replace("\r\n", "\n");
 
         prompt.Should().Contain("TIPOS QUE DEBES IDENTIFICAR (y SOLO estos): soat\n");
+        prompt.Should().NotContain("tipo_inexistente");
     }
 
     [Fact]
