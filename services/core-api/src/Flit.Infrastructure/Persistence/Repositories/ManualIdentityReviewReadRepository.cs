@@ -122,13 +122,12 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
 
             var v = row.v;
             string? reviewerName = null;
+            ReviewerInfo? reviewerInfo = null;
             if (v.ReviewedBy is { } reviewerId)
             {
-                reviewerName = await db.Users.AsNoTracking()
-                    .Where(u => u.Id == reviewerId)
-                    .Select(u => u.DisplayName)
-                    .FirstOrDefaultAsync(ct)
-                    .ConfigureAwait(false);
+                var resolved = await ReviewerDirectory.ResolveCoreAsync(db, [reviewerId], ct).ConfigureAwait(false);
+                reviewerInfo = resolved[reviewerId];
+                reviewerName = reviewerInfo.Name;
             }
 
             var current = TieneCapturaVigente(v.Status);
@@ -158,7 +157,8 @@ internal sealed class ManualIdentityReviewReadRepository(FlitDbContext db) : IMa
                 waitingSince,
                 // HU #14310 — null en capturas anteriores (y sin captura vigente): el detalle no muestra aviso.
                 current ? v.PhotoChecks : null,
-                v.CorrespondeCartaIdentidad && v.TieneCartaIdentidad);
+                v.CorrespondeCartaIdentidad && v.TieneCartaIdentidad,
+                reviewerInfo);
         }, ct);
 
     /// <summary>

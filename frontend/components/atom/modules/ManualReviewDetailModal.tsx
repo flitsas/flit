@@ -12,6 +12,7 @@ import type { ManualDetail } from '@/lib/api/types/manual-review';
 import { formatEspera, manualOriginLabel } from '@/lib/identidad/manual-review-meta';
 import { etiquetaMotivoRechazoManual } from '@/lib/identidad/motivos-rechazo-manual';
 import { formatFechaHora } from '@/lib/format/date';
+import { descripcionRevisor } from '@/lib/tramites/identidad-lectura';
 import { MANUAL_AVISO, MANUAL_AVISO_BASE, MANUAL_BTN_SECUNDARIO } from './manual-field-styles';
 import { CertificadoIdentidadAccion } from './CertificadoIdentidadAccion';
 import { ManualImageGallery } from './ManualImageGallery';
@@ -134,9 +135,15 @@ function contarNoVerificadas(detail: ManualDetail): number {
   return [fotos.rostro, fotos.anverso, fotos.reverso].filter((f) => f?.estado === 'no_verificada').length;
 }
 
-/** «Aprobada por X el DD/MM/YYYY HH:mm»; solo con datos, nunca «null». */
-function textoRevision(verbo: 'Aprobada' | 'Rechazada', detail: ManualDetail): string | null {
-  const quien = detail.reviewedBy?.trim();
+/**
+ * «Aprobada por <nombre> (<correo>, <rol>) el DD/MM/YYYY HH:mm»; solo con datos, nunca «null».
+ * El revisor (`reviewer`) solo llega al Super Admin; sin él se usa `reviewedBy` como respaldo.
+ */
+export function textoRevision(verbo: 'Aprobada' | 'Rechazada', detail: ManualDetail): string | null {
+  // El backend deja en `reviewedBy` el id del revisor cuando no resuelve su nombre: nunca se muestra un id.
+  const respaldo = detail.reviewedBy?.trim();
+  const esId = !!respaldo && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(respaldo);
+  const quien = descripcionRevisor(detail.reviewer) ?? (respaldo && !esId ? respaldo : null);
   const cuando = detail.reviewedAt ? formatFechaHora(detail.reviewedAt) : '';
   if (!quien && !cuando) return null;
   return `${verbo}${quien ? ` por ${quien}` : ''}${cuando ? ` el ${cuando}` : ''}`;
