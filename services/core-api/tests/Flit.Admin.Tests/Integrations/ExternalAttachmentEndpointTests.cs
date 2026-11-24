@@ -66,8 +66,12 @@ public sealed class ExternalAttachmentEndpointTests : IClassFixture<ExternalAtta
     [Theory]
     [InlineData("preasignacion", false, true)]
     [InlineData("rechazado", true, true)]
-    [InlineData("entregado", false, false)]
-    public async Task AC1_PagadoMarcadoDelCuerpoSigueAlEstadoDelTramite(string estado, bool subsanacion, bool marca)
+    [InlineData("rechazado", false, true)]
+    [InlineData("entregado", false, true)]
+    [InlineData("aprobado", false, true)]
+    [InlineData("borrador", false, true)]
+    [InlineData("preparado", false, true)]
+    public async Task BUG14625_PagadoMarcadoEsTrueEnTodoEstadoAdmitido(string estado, bool subsanacion, bool marca)
     {
         _factory.Envio.Reiniciar(Target(estado) with { SubsanacionActiva = subsanacion });
 
@@ -80,9 +84,10 @@ public sealed class ExternalAttachmentEndpointTests : IClassFixture<ExternalAtta
 
     [Theory]
     [InlineData("asignado", false, false, 200, true, 1)]
-    [InlineData("entregado", false, false, 200, false, 0)]
+    [InlineData("entregado", false, false, 200, true, 1)]
+    [InlineData("aprobado", false, false, 200, true, 1)]
     [InlineData("asignado", false, true, 200, true, 0)]
-    public async Task El200IdempotentePoneLaMarcaSoloSiElEstadoMarcaYFalta(
+    public async Task El200IdempotentePoneLaMarcaSoloSiFalta(
         string estado, bool subsanacion, bool marcaVigente, int status, bool pagado, int marcas)
     {
         var vigente = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Convert.ToHexStringLower(SHA256.HashData(Pdf)), "fm-1");
@@ -97,18 +102,6 @@ public sealed class ExternalAttachmentEndpointTests : IClassFixture<ExternalAtta
         body.GetProperty("adjuntoId").GetGuid().Should().Be(vigente.Id);
         _factory.Envio.Marcas.Should().Be(marcas);
         _factory.Envio.Escritos.Should().BeEmpty();
-    }
-
-    [Fact]
-    public async Task AC2_EnEntregadoConMarcaPreviaDeFlitoLaRespuestaLaReflejaSinEscribir()
-    {
-        _factory.Envio.Reiniciar(Target("entregado") with { PagadoMarcado = true });
-
-        var response = await Post(Url, Pdf, cliente: "adj-ac2");
-
-        response.StatusCode.Should().Be(HttpStatusCode.Created);
-        (await Json(response)).GetProperty("pagadoMarcado").GetBoolean().Should().BeTrue();
-        _factory.Envio.Marcas.Should().Be(0);
     }
 
     [Fact]
@@ -177,10 +170,15 @@ public sealed class ExternalAttachmentEndpointTests : IClassFixture<ExternalAtta
     }
 
     [Theory]
+    [InlineData("borrador", false)]
+    [InlineData("preparado", false)]
     [InlineData("preasignacion", false)]
+    [InlineData("asignado", false)]
     [InlineData("entregado", false)]
+    [InlineData("aprobado", false)]
     [InlineData("rechazado", true)]
-    public async Task AC3_LosEstadosQueAceptanResponden201(string estado, bool subsanacion)
+    [InlineData("rechazado", false)]
+    public async Task BUG14625_TodoEstadoSalvoAnuladoYRevocadoResponde201(string estado, bool subsanacion)
     {
         _factory.Envio.Reiniciar(Target(estado, subsanacion));
 
@@ -188,12 +186,8 @@ public sealed class ExternalAttachmentEndpointTests : IClassFixture<ExternalAtta
     }
 
     [Theory]
-    [InlineData("aprobado", false, true)]
     [InlineData("anulado", false, true)]
     [InlineData("revocado", false, true)]
-    [InlineData("borrador", false, false)]
-    [InlineData("preparado", false, false)]
-    [InlineData("rechazado", false, false)]
     public async Task AC3_EstadoNoPermitido409LlevaEstadoYTerminalYNoArchiva(string estado, bool subsanacion, bool terminal)
     {
         _factory.Envio.Reiniciar(Target(estado, subsanacion));

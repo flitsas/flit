@@ -31,7 +31,6 @@ import { postDrFlitChat } from "@/lib/api/dr-flit-client";
 
 import { searchTramites, searchValidaciones } from "../dr-flit-search";
 
-import { DR_FLIT_SUPPORT_CASE_URL } from "../dr-flit-intents";
 import { clearDrFlitSession } from "../dr-flit-session-store";
 
 describe("DrFlitAssistant", () => {
@@ -86,7 +85,7 @@ describe("DrFlitAssistant", () => {
     expect(screen.getByRole("button", { name: "Volver al menú" })).toBeInTheDocument();
   });
 
-  it("Soporte muestra canales y abre formulario oficial", async () => {
+  it("Soporte muestra canales y abre el formulario del caso dentro del chat", async () => {
     const user = userEvent.setup();
     render(<DrFlitAssistant displayName="Juan" />);
     await user.click(screen.getByRole("button", { name: "Abrir DR. FLIT" }));
@@ -96,18 +95,12 @@ describe("DrFlitAssistant", () => {
     // HU-F — sin NEXT_PUBLIC_DR_FLIT_SUPPORT_PHONE no se inventa una línea de atención.
     expect(screen.queryByText("Línea de atención")).not.toBeInTheDocument();
 
-    // Épica #12718 (HU #12930) — el formulario web oficial se conserva como alternativa visible.
-    await user.click(
-      screen.getByRole("button", { name: /O usa el formulario web de FLIT SAS/i }),
-    );
-    expect(window.open).toHaveBeenCalledWith(
-      DR_FLIT_SUPPORT_CASE_URL,
-      "_blank",
-      "noopener,noreferrer",
-    );
-    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // Bug #14629 — el formulario web legado de FLIT 1.0 ya no se ofrece: el único canal para
+    // radicar un caso es «Generar un caso de soporte», que abre el formulario dentro del chat.
+    expect(
+      screen.queryByRole("button", { name: /formulario web de FLIT SAS/i }),
+    ).not.toBeInTheDocument();
 
-    // …y «Generar un caso de soporte» abre el formulario del caso dentro del chat.
     await user.click(
       screen.getByRole("button", { name: /Generar un caso de soporte/i }),
     );

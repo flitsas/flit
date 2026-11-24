@@ -1,6 +1,7 @@
 using System.Data;
 using System.Data.Common;
 using System.Net.Http.Json;
+using Flit.Ict.Domain.Enums;
 using Flit.Ict.Infrastructure.Persistence;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -178,16 +179,7 @@ public sealed partial class WebhookNotificationJob(
     }
 
     /// <summary>Descripción v1 por código de estado (para el payload del webhook).</summary>
-    private static string DescribeStatus(short code) => code switch
-    {
-        1 => "Registrado",
-        2 => "En Validacion",
-        3 => "Procesado",
-        4 => "Con Novedades",
-        5 => "Borrador",
-        6 => "Anulado",
-        _ => string.Empty,
-    };
+    private static string DescribeStatus(short code) => IctProcessStatusCodes.Describe(code);
 
     private static partial class Log
     {

@@ -1104,22 +1104,51 @@ export const tramitesClient = {
       },
     ),
 
-  // ICT (paridad v1 pause-unpause-massive) — pausar/reanudar en lote. Devuelve el detalle por trámite.
+  // ICT (paridad v1 pause-unpause-massive, HU #14668) — pausar/reanudar en lote.
+  // observationMode: keep | single | perItem. Backward-compat: ids+paused+observation sin mode.
   pauseInstancesMassive: (
-    ids: string[],
-    paused: boolean,
+    body:
+      | {
+          ids: string[];
+          paused: boolean;
+          observationMode?: 'keep' | 'single' | 'perItem';
+          observation?: string | null;
+          items?: { id: string; observation: string | null }[];
+        }
+      | string[],
+    pausedOrTenant?: boolean | string,
     observation?: string | null,
     tenantId?: string,
-  ) =>
-    request<{
+  ) => {
+    // Overload legacy: (ids, paused, observation?, tenantId?)
+    const payload =
+      Array.isArray(body)
+        ? {
+            ids: body,
+            paused: Boolean(pausedOrTenant),
+            observation: observation ?? null,
+          }
+        : {
+            ids: body.ids,
+            paused: body.paused,
+            observationMode: body.observationMode,
+            observation: body.observation ?? null,
+            items: body.items,
+          };
+    const tenant =
+      typeof body === 'object' && !Array.isArray(body)
+        ? (pausedOrTenant as string | undefined)
+        : tenantId;
+    return request<{
       total: number;
       processed: number;
       detail: { id: string; ok: boolean; error: string | null }[];
     }>(`/api/v1/tramites/instances/pause-massive`, {
       method: 'POST',
-      headers: tenantHeader(tenantId),
-      body: JSON.stringify({ ids, paused, observation: observation ?? null }),
-    }),
+      headers: tenantHeader(tenant),
+      body: JSON.stringify(payload),
+    });
+  },
 
   // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
   // El operador solo puede elegir/enviar a estos en el FUR.
@@ -3001,9 +3030,15 @@ export interface VencerIdentidadResult {
   motivoSinEnlace: string | null;
 }
 
-/** HU #13822 — persona sin firmar que admite reenvío (espejo del contrato HU #13821). */
+/**
+ * HU #13822 — persona sin firmar que admite reenvío (espejo del contrato HU #13821).
+ *
+ * HU #14627 — `validationId` pasa a ser `string | null`: `null` = la persona NUNCA tuvo una
+ * validación de identidad (no hay fila que reenviar, status `'no_iniciada'`), caso que antes el
+ * backend no contemplaba en este listado — solo exponía personas con fila ya existente.
+ */
 export interface AdminValidacionReenviable {
-  validationId: string;
+  validationId: string | null;
   partyRole: string | null;
   ordinal: number | null;
   name: string;
@@ -3018,13 +3053,34 @@ export interface AdminValidacionesReenviablesResult {
   personas: AdminValidacionReenviable[];
 }
 
+/**
+ * HU #14627 — `validationId` nullable (fila sin iniciar) y `partyRole`/`ordinal` NUEVOS, obligatorios
+ * cuando `validationId` es `null` (el backend no tiene otra forma de saber a qué persona crear la
+ * fila); se envían siempre, también con `validationId` presente, para que el backend los pueda
+ * usar igual como echo en el resultado.
+ */
 export interface AdminReenviarLoteItemInput {
-  validationId: string;
+  validationId: string | null;
+  partyRole: string | null;
+  ordinal: number | null;
   email: string | null;
 }
 
+/**
+ * HU #14627 — `validationId` del resultado es `string | null`: id REAL (el existente, o el recién
+ * creado al enviar por primera vez) cuando el ítem tuvo éxito; `null` solo si falló ANTES de crear la
+ * fila (`ok: false`). `partyRole`/`ordinal` son el echo del item enviado — clave de emparejamiento
+ * estable entre request y resultado, tanto para filas existentes como nuevas.
+ *
+ * Nota de implementación — verificado contra el backend ya mergeado en esta rama (commit
+ * `4d4985300`, `AdminReenviarValidacionLoteItemResponse` en `AdminReenviarValidacionEndpoints.cs`):
+ * el contrato que se dio para implementar el frontend decía `validationId: string` SIN cambio de
+ * tipo en el resultado; el backend real lo deja `Guid?` (nullable). Se ajusta aquí al tipo real.
+ */
 export interface AdminReenviarLoteItemResult {
-  validationId: string;
+  validationId: string | null;
+  partyRole: string | null;
+  ordinal: number | null;
   ok: boolean;
   queued: boolean;
   captureUrl: string | null;

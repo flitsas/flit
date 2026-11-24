@@ -1045,6 +1045,21 @@ public sealed class BiometricaHandlerTests
             Arg.Any<TenantScope>(), Arg.Any<int>(), Arg.Any<int>(), Arg.Any<BiometricValidationListFilter?>(), Arg.Any<DateTimeOffset>(), Arg.Any<CancellationToken>());
     }
 
+    [Theory]
+    [InlineData("enviado,en_proceso", true)]
+    [InlineData(" enviado , en_proceso ", true)]
+    [InlineData("aprobado", true)]
+    [InlineData("enviado,foo", false)]
+    [InlineData(",", false)]
+    public void Validate_EstadoAceptaVariosSeparadosPorComa(string estado, bool valido)
+    {
+        // La franja de Identidad filtra «En proceso» con enviado + en_proceso en un solo parámetro.
+        var error = new TenantBiometricValidationListQuery(Status: estado).Validate();
+
+        if (valido) error.Should().BeNull();
+        else error.Should().Contain("estado inválido");
+    }
+
     [Fact]
     public async Task ListTenant_ScoreMinGreaterThanMax_ReturnsValidationError()
     {

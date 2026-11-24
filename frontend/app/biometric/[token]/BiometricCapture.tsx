@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Icono } from "@flit/ui/Icono";
+import { IconoAviso } from "@flit/ui/IconoAviso";
 import { biometricPublicClient } from '@/lib/api/tramites-client';
 import type {
   BiometriaPublicView,
@@ -139,12 +140,8 @@ export function BiometricCapture({ token }: Props) {
   if (view.estado === 'aprobado') {
     return (
       <div className={CARD} role="status">
-        <div
-          className="h-14 w-14 mx-auto rounded-full grid place-items-center mb-3"
-          style={{ background: "var(--badge-success-bg)" }}
-        >
-          <Icono nombre="check" className="h-7 w-7" style={{ color: "var(--flit-success-ink)" }} />
-        </div>
+        {/* Disco «aviso-ok» del juego de íconos FLIT (PDF): el estado de éxito no es un ✓ suelto. */}
+        <IconoAviso tipo="ok" className="mx-auto mb-3 h-14 w-14" />
         <h1 className="text-lg font-bold text-center">¡Validación aprobada!</h1>
         <p className="text-sm opacity-70 text-center mt-1">
           Tu identidad fue verificada. Ya puedes cerrar esta página.

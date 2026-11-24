@@ -23,6 +23,7 @@ export const IDENTIDAD_MODULE_TITLE = COPY.A17;
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 import { ValidacionesFiltrosBar } from './ValidacionesFiltrosBar';
 import {
+  ESTADO_EN_CURSO,
   buildPersonApiFilters,
   describeIdentityFilter,
   hasActiveValidacionesFilters,
@@ -54,6 +55,8 @@ import {
 } from '@/lib/tramites/network-scope';
 import { PersonIdentityDetailDrawer } from './PersonIdentityDetailDrawer';
 import { MANUAL_ESTADO_META, enlaceDetalleManual } from '@/lib/identity/manual-flow';
+import { FranjaEstados, type FranjaItem } from '@/components/operacion/FranjaEstados';
+import { ESTADO_CHIP_STYLES, ESTADO_ICONO, estadoAcentoVar } from '@/lib/tramites/estados';
 import { puedeGestionarIdentidad } from '@/lib/identity/permisos-modulo';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -538,6 +541,8 @@ function ValidacionesLista({
   // Tamaño recordado en la sesión; se lee sin efecto (mismo patrón que Trámites).
   const [pageSize, recordarPageSize] = useTamanoDePagina(CLAVE_TABLA);
   const [total, setTotal] = useState(0);
+  // Total de personas SIN el filtro de estado: la franja no cambia sus cifras al pulsar una de ellas.
+  const [totalSinEstado, setTotalSinEstado] = useState(0);
   const pageRef = useRef(page);
   pageRef.current = page;
   const pageSizeRef = useRef(pageSize);
@@ -592,13 +597,21 @@ function ValidacionesLista({
           pageSize: pageSizeRef.current,
         };
         // HU #12709 — en «Toda la red» o una hija, las rutas de red (el alcance lo decide el servidor).
-        const res = networkRef.current.active
-          ? await tramitesClient.listNetworkIdentityPersons(filtros, networkRef.current.child)
-          : await tramitesClient.listTenantBiometricPersons(filtros, listTenantRef.current);
+        const pedir = (f: typeof filtros) =>
+          networkRef.current.active
+            ? tramitesClient.listNetworkIdentityPersons(f, networkRef.current.child)
+            : tramitesClient.listTenantBiometricPersons(f, listTenantRef.current);
+        // Las cifras de la franja salen del conjunto SIN el filtro de estado (como en Trámites): al pulsar
+        // «Aprobadas» las demás no se ponen en cero. Solo hace falta una segunda consulta (de una fila) si hay estado.
+        const [res, sinEstado] = await Promise.all([
+          pedir(filtros),
+          filtros.status ? pedir({ ...filtros, status: undefined, page: 1, pageSize: 1 }) : Promise.resolve(null),
+        ]);
         if (reqId !== reqIdRef.current) return;
         setPersons(res.persons);
-        setStats(res.stats);
+        setStats((sinEstado ?? res).stats);
         setTotal(res.total);
+        setTotalSinEstado((sinEstado ?? res).total);
         setError(() => null);
         setLastUpdatedAt(new Date());
       } catch (err) {
@@ -1138,7 +1151,21 @@ function ValidacionesLista({
 
       <div className="relative flex flex-col items-stretch gap-4 sm:flex-row">
         <div className="min-w-0 flex-1">
-          <StatsCards stats={stats} totalPersonas={total} loading={initialLoading} />
+          <FranjaIdentidad
+            stats={stats}
+            totalPersonas={totalSinEstado}
+            loading={initialLoading}
+            estadoAplicado={appliedCondiciones.find((c) => c.fieldId === 'status')?.values[0] ?? ''}
+            onElegir={(estado) => {
+              const sinEstado = appliedCondiciones.filter((c) => c.fieldId !== 'status');
+              const next: IdentityFilterCondition[] = estado
+                ? [...sinEstado, { fieldId: 'status', values: [estado] }]
+                : sinEstado;
+              setAppliedCondiciones(next);
+              setDraftCondiciones(next);
+              setPage(1);
+            }}
+          />
         </div>
         <button
           type="button"
@@ -1993,50 +2020,107 @@ function StuckRow({
 }
 
 /**
- * KPIs reales por estado. En carga muestra placeholders accesibles.
- *
- * El primer contador es de PERSONAS, no de validaciones: es el `total` del endpoint agrupado, el mismo
- * que cuenta el toolbar y el que cuadra con las filas de la grilla (una por documento). Los otros tres
- * siguen siendo conteos de validaciones — una misma persona puede tener una rechazada y otra aprobada.
+ * Franja de Identidad con el embudo del kit (la misma de Trámites, `FranjaEstados`): el disco de cada estado, el nombre
+ * y la cifra. Pulsar Aprobadas, En proceso o Rechazadas filtra la lista por ese estado (y otra vez lo quita); «Total
+ * personas» quita el filtro. «En proceso» filtra enviado + en_proceso, que es lo que suma su cifra. Las cifras son
+ * PERSONAS (estado de la validación más reciente) y no cambian al filtrar por estado.
  */
-function StatsCards({
+const FRANJA_IDENTIDAD: readonly {
+  clave: string;
+  /** Valor del filtro de estado ('' = quitar el filtro). */
+  estado: string;
+  label: string;
+  icono: string;
+  estilo: { bg: string; color: string };
+  acento: string;
+}[] = [
+  {
+    clave: 'total',
+    estado: '',
+    label: 'Total personas',
+    icono: '/assets/kit/modulo/identidad.svg',
+    estilo: ESTADO_CHIP_STYLES.preparado,
+    acento: estadoAcentoVar('preparado'),
+  },
+  {
+    clave: 'aprobado',
+    estado: 'aprobado',
+    label: 'Aprobadas',
+    icono: ESTADO_ICONO.aprobado,
+    estilo: ESTADO_CHIP_STYLES.aprobado,
+    acento: estadoAcentoVar('aprobado'),
+  },
+  {
+    clave: 'en_proceso',
+    estado: ESTADO_EN_CURSO,
+    label: 'En proceso',
+    icono: '/assets/kit/estado-pendiente.svg',
+    estilo: ESTADO_CHIP_STYLES.subsanacion,
+    acento: estadoAcentoVar('subsanacion'),
+  },
+  {
+    clave: 'rechazado',
+    estado: 'rechazado',
+    label: 'Rechazadas',
+    icono: ESTADO_ICONO.rechazado,
+    estilo: ESTADO_CHIP_STYLES.rechazado,
+    acento: estadoAcentoVar('rechazado'),
+  },
+];
+
+function FranjaIdentidad({
   stats,
   totalPersonas,
   loading,
+  estadoAplicado,
+  onElegir,
 }: {
   stats: BiometricValidationStats | null;
   totalPersonas: number;
   loading: boolean;
+  /** Valor del filtro de estado aplicado ('' = ninguno). */
+  estadoAplicado: string;
+  onElegir: (estado: string) => void;
 }) {
-  const cards = [
-    { l: 'Total personas', v: totalPersonas, i: iconoComo("escudo"), c: 'var(--badge-info-fg)', b: 'var(--badge-info-bg)' },
-    { l: 'Aprobadas', v: stats?.aprobadas, i: iconoComo("check"), c: 'var(--badge-success-fg)', b: 'var(--badge-success-bg)' },
-    { l: 'En proceso', v: stats?.enProceso, i: iconoComo("reloj"), c: 'var(--badge-warning-fg)', b: 'var(--badge-warning-bg)' },
-    { l: 'Rechazadas', v: stats?.rechazadas, i: iconoComo("cerrar"), c: 'var(--badge-danger-fg)', b: 'var(--badge-danger-bg)' },
-  ];
+  const cifra = (clave: string): number | null => {
+    if (loading) return null;
+    switch (clave) {
+      case 'total':
+        return totalPersonas;
+      case 'aprobado':
+        return stats?.aprobadas ?? 0;
+      case 'en_proceso':
+        return stats?.enProceso ?? 0;
+      default:
+        return stats?.rechazadas ?? 0;
+    }
+  };
+  const items: FranjaItem[] = FRANJA_IDENTIDAD.map((f) => {
+    const n = cifra(f.clave);
+    return {
+      key: f.clave,
+      label: f.label,
+      icon: f.icono,
+      count: n,
+      ariaLabel:
+        f.clave === 'total'
+          ? `Total personas: ${n ?? 0}. Quitar el filtro de estado`
+          : `${f.label}: ${n ?? 0} persona${n === 1 ? '' : 's'}. Filtrar la lista`,
+      activeBg: f.estilo.bg,
+      activeColor: f.estilo.color,
+      acento: f.acento,
+    };
+  });
+  // Solo se resalta la cifra que corresponde al filtro de estado aplicado (uno puesto desde «+ Filtro» que no
+  // está en la franja, como Expirado, no resalta ninguna).
+  const seleccionada = FRANJA_IDENTIDAD.find((f) => f.estado && f.estado === estadoAplicado)?.clave ?? '';
   return (
-    <div
-      className="grid grid-cols-2 divide-x divide-border rounded-2xl border border-border bg-card sm:grid-cols-4 shrink-0"
-    >
-      {cards.map((k) => {
-        const Icon = k.i;
-        return (
-          <div key={k.l} className="flex flex-col items-center justify-center gap-1 px-3 py-2">
-            <span className="flex h-7 w-7 items-center justify-center rounded-full" style={{ background: k.b }}>
-              <Icon className="h-3.5 w-3.5" style={{ color: k.c }} aria-hidden="true" />
-            </span>
-            <p className="w-full truncate text-center text-xs font-medium opacity-70">{k.l}</p>
-            {loading ? (
-              <div className="h-6 w-12 animate-pulse rounded bg-secondary" aria-hidden="true" />
-            ) : (
-              <p className="text-lg font-bold leading-none" style={{ color: k.c }}>
-                {k.v ?? 0}
-              </p>
-            )}
-          </div>
-        );
-      })}
-    </div>
+    <FranjaEstados
+      items={items}
+      selected={seleccionada}
+      onSelect={(clave) => onElegir(FRANJA_IDENTIDAD.find((f) => f.clave === clave)?.estado ?? '')}
+      ariaLabel="Personas por estado de identidad"
+    />
   );
 }
 

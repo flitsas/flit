@@ -2,6 +2,7 @@ using System.Data;
 using System.Data.Common;
 using System.Globalization;
 using Flit.Ict.Domain.Abstractions;
+using Flit.Ict.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Ict.Infrastructure.Persistence.Repositories;
@@ -169,16 +170,7 @@ public sealed class StatusProcessV1Query(IctDbContext db) : IStatusProcessV1Quer
     }
 
     /// <summary>Descripción v1 exacta por código de estado (para no depender de la fila del catálogo).</summary>
-    private static string Describe(int code) => code switch
-    {
-        1 => "Registrado",
-        2 => "En Validacion",
-        3 => "Procesado",
-        4 => "Con Novedades",
-        5 => "Borrador",
-        6 => "Anulado",
-        _ => string.Empty,
-    };
+    private static string Describe(int code) => IctProcessStatusCodes.Describe((short)code);
 
     private static void AddParam(DbCommand cmd, string name, object value)
     {

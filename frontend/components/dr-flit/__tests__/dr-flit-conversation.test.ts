@@ -24,7 +24,6 @@ import {
   buildValuePrompt,
   DR_FLIT_FREE_TEXT_HINT,
   DR_FLIT_GESTION_INTENTS,
-  DR_FLIT_SUPPORT_CASE_URL,
   getIntentById,
 } from "../dr-flit-intents";
 
@@ -315,11 +314,5 @@ describe("dr-flit-conversation", () => {
     expect(hasActiveConversation(awaiting)).toBe(true);
     const back = applyBackToSearch(awaiting);
     expect(hasActiveConversation(back)).toBe(false);
-  });
-});
-
-describe("dr-flit-support", () => {
-  it("URL de caso de soporte oficial", () => {
-    expect(DR_FLIT_SUPPORT_CASE_URL).toBe("https://flitsas.com.co/SOPORTE/");
   });
 });
