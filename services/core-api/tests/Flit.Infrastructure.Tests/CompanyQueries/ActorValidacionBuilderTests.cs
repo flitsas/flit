@@ -15,8 +15,6 @@ namespace Flit.Infrastructure.Tests.CompanyQueries;
 public sealed class ActorValidacionBuilderTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 11, 1, 10, 0, 0, TimeSpan.Zero);
-    private static readonly IReadOnlyDictionary<Guid, int> SinConteos = new Dictionary<Guid, int>();
-    private static readonly IReadOnlySet<Guid> SinAuditoria = new HashSet<Guid>();
 
     private static ProcedureInstanceActor Actor(string tipo, int ordinal, string doc, string nombre = "Persona",
         string? personType = null, string? rlDoc = null) => new()
@@ -31,17 +29,18 @@ public sealed class ActorValidacionBuilderTests
             }),
     };
 
+    /// <summary>Una fila = una ronda. <paramref name="resends"/> = reenvíos sobre la misma fila (<c>ResendCount</c>).</summary>
     private static ProcedureInstanceBiometricValidation Val(string rol, string doc, string estado, int dias = 0,
-        int attempts = 0, string? detail = null) => new()
+        int attempts = 0, string? detail = null, int resends = 0) => new()
     {
         Id = Guid.NewGuid(), PartyRole = rol, DocumentType = "CC", DocumentNumber = doc, Status = estado,
-        Attempts = attempts, Detail = detail, CreatedAt = T0.AddDays(dias), UpdatedAt = T0.AddDays(dias),
+        Attempts = attempts, ResendCount = resends, Detail = detail,
+        CreatedAt = T0.AddDays(dias), UpdatedAt = T0.AddDays(dias),
     };
 
     private static IReadOnlyList<ActorValidacionDto> Build(string familia, ProcedureInstanceActor[] a,
-        ProcedureInstanceBiometricValidation[] v, IReadOnlyDictionary<Guid, int>? conteos = null,
-        IReadOnlySet<Guid>? conAud = null) =>
-        ActorValidacionBuilder.Build(familia, a, v, conteos ?? SinConteos, conAud ?? SinAuditoria);
+        ProcedureInstanceBiometricValidation[] v) =>
+        ActorValidacionBuilder.Build(familia, a, v);
 
     [Fact]
     public void Traspaso_uno_mas_uno_sin_validar()
@@ -70,67 +69,48 @@ public sealed class ActorValidacionBuilderTests
     }
 
     [Fact]
-    public void Dos_vendedores_uno_rechazado_luego_aprobado_conserva_motivo_e_intentos_por_persona()
+    public void Dos_rondas_del_mismo_vendedor_suman_dos_y_conservan_el_motivo_del_rechazo()
     {
-        var rech = Val("vendedor", "2", BiometricEstados.Rechazado, dias: 0,
+        // Ronda 1 rechazada (agotó sus 3 intentos de Kyverum) y ronda 2 aprobada: son 2 intentos de FLIT.
+        var rech = Val("vendedor", "2", BiometricEstados.Rechazado, dias: 0, attempts: 3,
             detail: "{\"motivo\":\"Coincidencia facial insuficiente\"}");
-        var apro = Val("vendedor", "2", BiometricEstados.Aprobado, dias: 1);
+        var apro = Val("vendedor", "2", BiometricEstados.Aprobado, dias: 1, attempts: 1);
         var otro = Val("vendedor", "3", BiometricEstados.Aprobado, dias: 0);
-        var conteos = new Dictionary<Guid, int> { [rech.Id] = 2, [apro.Id] = 1, [otro.Id] = 1 };
-        var conAud = new HashSet<Guid> { rech.Id, apro.Id, otro.Id };
 
         var r = Build(ProcedureFamilyCodes.Traspaso,
             [Actor("comprador", 1, "1"), Actor("vendedor", 1, "2"), Actor("vendedor", 2, "3")],
-            [rech, apro, otro], conteos, conAud);
+            [rech, apro, otro]);
 
         var v1 = r.Single(x => x.Rol == "vendedor" && x.Ordinal == 1);
         v1.EstadoValidacion.Should().Be("aprobado");
         v1.MotivoRechazo.Should().Be("El rostro no coincide con el documento.");
-        v1.Intentos.Should().Be(3);
+        v1.Intentos.Should().Be(2);
         var v2 = r.Single(x => x.Rol == "vendedor" && x.Ordinal == 2);
         v2.MotivoRechazo.Should().BeNull();
         v2.Intentos.Should().Be(1);
     }
 
     [Fact]
-    public void Sin_auditoria_cuenta_attempts_de_la_fila()
+    public void Cada_reenvio_sobre_la_misma_fila_suma_una_ronda_aunque_attempts_se_reinicie()
     {
-        var v = Val("comprador", "1", BiometricEstados.Rechazado, attempts: 2);
+        // Tras dos reenvíos la fila tiene Attempts = 0 (ronda nueva), pero las rondas anteriores no se pierden.
+        var v = Val("comprador", "1", BiometricEstados.EnProceso, attempts: 0, resends: 2);
         Build(ProcedureFamilyCodes.Traspaso, [Actor("comprador", 1, "1")], [v])
-            .Single().Intentos.Should().Be(2);
+            .Single().Intentos.Should().Be(3);
     }
 
     [Theory]
-    [InlineData(BiometricEstados.Aprobado, 1)]
-    [InlineData(BiometricEstados.Rechazado, 1)]
-    [InlineData(BiometricEstados.Expirado, 0)]
-    [InlineData(BiometricEstados.EnProceso, 0)]
-    [InlineData(BiometricEstados.Enviado, 0)]
-    [InlineData(BiometricEstados.ManualActivo, 0)]
-    public void Aprobado_o_rechazado_sin_rastro_cuenta_al_menos_un_intento_los_demas_estados_el_conteo_real(
-        string estado, int esperado)
+    [InlineData(BiometricEstados.Aprobado)]
+    [InlineData(BiometricEstados.Rechazado)]
+    [InlineData(BiometricEstados.Expirado)]
+    [InlineData(BiometricEstados.EnProceso)]
+    [InlineData(BiometricEstados.Enviado)]
+    [InlineData(BiometricEstados.ManualActivo)]
+    public void Cualquier_fila_es_una_ronda_sin_importar_su_estado(string estado)
     {
         var v = Val("comprador", "1", estado, attempts: 0);
         Build(ProcedureFamilyCodes.Traspaso, [Actor("comprador", 1, "1")], [v])
-            .Single().Intentos.Should().Be(esperado);
-    }
-
-    [Fact]
-    public void El_minimo_de_un_intento_no_baja_ni_cambia_los_conteos_con_bitacora()
-    {
-        var v = Val("comprador", "1", BiometricEstados.Aprobado, attempts: 0);
-        Build(ProcedureFamilyCodes.Traspaso, [Actor("comprador", 1, "1")], [v],
-                new Dictionary<Guid, int> { [v.Id] = 4 }, new HashSet<Guid> { v.Id })
-            .Single().Intentos.Should().Be(4);
-    }
-
-    [Fact]
-    public void Con_auditoria_manda_la_auditoria_aunque_attempts_se_reinicie()
-    {
-        var v = Val("comprador", "1", BiometricEstados.Aprobado, attempts: 0);
-        Build(ProcedureFamilyCodes.Traspaso, [Actor("comprador", 1, "1")], [v],
-                new Dictionary<Guid, int> { [v.Id] = 4 }, new HashSet<Guid> { v.Id })
-            .Single().Intentos.Should().Be(4);
+            .Single().Intentos.Should().Be(1);
     }
 
     [Fact]
@@ -237,13 +217,4 @@ public sealed class ActorValidacionBuilderTests
         ActorValidacionBuilder.Maximos([]).Should().Be(new MaxActoresPorRolDto(0, 0, 0));
     }
 
-    [Theory]
-    [InlineData("webhook_applied", "rechazado", true)]
-    [InlineData("manual_captura_recibida", "received", true)]
-    [InlineData("reconcile", "aprobado", true)]
-    [InlineData("reconcile", "pending", false)]
-    [InlineData("send", "ok", false)]
-    [InlineData("webhook_received", "received", false)]
-    public void Etapas_que_cuentan_como_intento(string stage, string outcome, bool cuenta) =>
-        ActorValidacionBuilder.CuentaComoIntento(stage, outcome).Should().Be(cuenta);
 }

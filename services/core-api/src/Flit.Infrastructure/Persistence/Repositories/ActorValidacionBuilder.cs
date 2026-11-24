@@ -18,43 +18,23 @@ namespace Flit.Infrastructure.Persistence.Repositories;
 /// validación coincide por documento y el rol tiene exactamente UN actor, se le atribuyen las del rol. Con 2 o más
 /// actores sin coincidencia el actor sale «sin validar»: nunca se atribuye la validación de una persona a otra.</para>
 ///
-/// <para><b>Intentos.</b> Total de resultados recibidos en todos los ciclos de todas las validaciones del actor,
-/// contados en <c>tramites.identity_validation_audit</c> (<see cref="ContarIntentos"/>). Sin ninguna fila de auditoría
-/// (datos migrados), se suma <c>attempts</c> de las filas de validación. No se usa solo <c>attempts</c> porque se
-/// reinicia con cada reenvío.</para>
+/// <para><b>Intentos.</b> Rondas de validación del actor (<see cref="ContarIntentos"/>): una por fila más una por cada
+/// reenvío. No depende de la bitácora ni de <c>attempts</c>, que se reinicia en cada ronda.</para>
 /// </summary>
 public static class ActorValidacionBuilder
 {
     /// <summary>
-    /// Cuenta los intentos de UNA validación a partir de su bitácora: un resultado aplicado del proveedor
-    /// (<c>webhook_applied</c>), una consulta de respaldo que aplicó un resultado final (<c>reconcile</c> con desenlace
-    /// aprobado o rechazado) o una captura recibida (<c>manual_captura_recibida</c>).
+    /// Intentos de FLIT de un actor = rondas. Cada fila es una ronda (un proceso de validación con su enlace) y cada
+    /// reenvío que crea un proceso nuevo sobre la misma fila suma 1 a <c>ResendCount</c>. Kyverum permite 3 intentos
+    /// dentro de un mismo enlace; eso se muestra aparte (<c>Attempts</c> de la ronda actual) y no entra en este conteo.
     /// </summary>
-    public static bool CuentaComoIntento(string stage, string outcome) =>
-        stage == IdentityValidationAuditStages.WebhookApplied
-        || stage == IdentityValidationAuditStages.ManualCapturaRecibida
-        || (stage == IdentityValidationAuditStages.Reconcile
-            && (outcome == BiometricEstados.Aprobado || outcome == BiometricEstados.Rechazado));
-
-    /// <summary>Intentos de un actor: auditoría de sus validaciones; sin auditoría, <c>attempts</c> de las filas.</summary>
-    public static int ContarIntentos(
-        IReadOnlyList<ProcedureInstanceBiometricValidation> validaciones,
-        IReadOnlyDictionary<Guid, int> intentosAuditoriaPorValidacion,
-        IReadOnlySet<Guid> validacionesConAuditoria)
-    {
-        if (validaciones.Count == 0)
-            return 0;
-        if (!validaciones.Any(v => validacionesConAuditoria.Contains(v.Id)))
-            return validaciones.Sum(v => Math.Max(0, v.Attempts));
-        return validaciones.Sum(v => intentosAuditoriaPorValidacion.GetValueOrDefault(v.Id));
-    }
+    public static int ContarIntentos(IReadOnlyList<ProcedureInstanceBiometricValidation> validaciones) =>
+        validaciones.Sum(v => 1 + Math.Max(0, v.ResendCount));
 
     public static IReadOnlyList<ActorValidacionDto> Build(
         string? familia,
         IReadOnlyList<ProcedureInstanceActor> actores,
-        IReadOnlyList<ProcedureInstanceBiometricValidation> validaciones,
-        IReadOnlyDictionary<Guid, int> intentosAuditoriaPorValidacion,
-        IReadOnlySet<Guid> validacionesConAuditoria)
+        IReadOnlyList<ProcedureInstanceBiometricValidation> validaciones)
     {
         var esTraspaso = string.Equals(familia, ProcedureFamilyCodes.Traspaso, StringComparison.OrdinalIgnoreCase);
         var resultado = new List<(int OrdenRol, ActorValidacionDto Dto)>();
@@ -82,8 +62,7 @@ public static class ActorValidacionBuilder
                     ? ActorValidacionRoles.Propietario
                     : grupo.Key;
 
-                resultado.Add((OrdenRol(rol), Armar(rol, actor, sujeto, propias,
-                    intentosAuditoriaPorValidacion, validacionesConAuditoria)));
+                resultado.Add((OrdenRol(rol), Armar(rol, actor, sujeto, propias)));
             }
         }
 
@@ -107,9 +86,7 @@ public static class ActorValidacionBuilder
         string rol,
         ProcedureInstanceActor actor,
         IdentitySubject sujeto,
-        List<ProcedureInstanceBiometricValidation> propias,
-        IReadOnlyDictionary<Guid, int> intentosAuditoria,
-        IReadOnlySet<Guid> conAuditoria)
+        List<ProcedureInstanceBiometricValidation> propias)
     {
         var ultima = propias
             .OrderByDescending(v => v.CreatedAt)
@@ -122,11 +99,7 @@ public static class ActorValidacionBuilder
             .FirstOrDefault();
 
         var estado = Estado(ultima);
-        var intentos = ContarIntentos(propias, intentosAuditoria, conAuditoria);
-        // Un actor aprobado o rechazado pasó por al menos un intento aunque no quede rastro (bitácora ausente y
-        // attempts en 0: validaciones simuladas o migradas). Los demás estados conservan el conteo real.
-        if (estado is ActorValidacionEstados.Aprobado or ActorValidacionEstados.Rechazado)
-            intentos = Math.Max(intentos, 1);
+        var intentos = ContarIntentos(propias);
 
         return new ActorValidacionDto(
             Rol: rol,
