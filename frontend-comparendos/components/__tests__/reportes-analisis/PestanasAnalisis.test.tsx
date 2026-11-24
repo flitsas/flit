@@ -152,6 +152,12 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     sesion = super_;
     render(<DpPage />);
     expect(await screen.findByTestId("dp-consolidado")).toBeTruthy();
+    // Patrón de GlobalFilters de Trámites (Samuel): «Empresa» arriba como las fechas, opción vacía «Todas las empresas», sin ayuda debajo.
+    const empresa = (await screen.findByLabelText("Empresa")) as HTMLSelectElement;
+    expect(empresa.tagName).toBe("SELECT");
+    expect(empresa.options[0].textContent).toBe("Todas las empresas");
+    expect(empresa.closest("label")!.firstChild!.textContent).toBe("Empresa");
+    expect(screen.queryByText(/Sin empresa elegida/)).toBeNull();
   });
 
   it("Resumen: lee desde, hasta y nit de la URL (vienen de otra pestaña) y «Consultar» los escribe ahí", async () => {

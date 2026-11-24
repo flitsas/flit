@@ -39,11 +39,9 @@ export function FiltrosPeriodo({ valor, onAplicar, extra }: { valor: Periodo; on
           Hasta
           <input type="date" className={`${FECHA_CLS} w-full sm:w-40`} value={borrador.hasta} onChange={(e) => setBorrador({ ...borrador, hasta: e.target.value })} />
         </label>
+        {/* Patrón de GlobalFilters de Trámites: etiqueta arriba, sin texto de ayuda; la opción vacía ya dice que son todas. */}
         {sesion?.usuario.esSuperAdmin && (
-          <div className="flex flex-col gap-1">
-            <SelectorEmpresa valor={borrador.empresa} onCambio={(empresa) => setBorrador({ ...borrador, empresa })} />
-            <span className="text-xs text-[color:var(--di-text-tertiary)]">Sin empresa elegida se ven todas.</span>
-          </div>
+          <SelectorEmpresa etiquetaArriba textoVacio="Todas las empresas" valor={borrador.empresa} onCambio={(empresa) => setBorrador({ ...borrador, empresa })} />
         )}
         {extra}
         <button type="button" className={BOTON_PRIMARIO_CLS} disabled={!!error} onClick={() => onAplicar(borrador)}>
