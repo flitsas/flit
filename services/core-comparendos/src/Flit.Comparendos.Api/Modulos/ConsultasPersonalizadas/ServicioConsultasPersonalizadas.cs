@@ -189,6 +189,12 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
             q = q.Where(c => db.DerechosPeticion.Any(x => x.ComparendoId == c.Id && x.RespuestaFecha >= desde && x.RespuestaFecha <= hasta));
         else if (campo == C.FechaPago)
             q = q.Where(c => db.Pagos.Any(x => x.ComparendoId == c.Id && x.FechaPago >= desde && x.FechaPago <= hasta));
+        else if (campo == C.FechaLimiteGestion)
+            q = q.Where(c => c.FechaLimiteGestion >= desde && c.FechaLimiteGestion <= hasta);
+        else if (campo == C.FechaCaducidad)
+            q = q.Where(c => c.FechaCaducidad >= desde && c.FechaCaducidad <= hasta);
+        else if (campo == C.FechaPrescripcion)
+            q = q.Where(c => c.FechaPrescripcion >= desde && c.FechaPrescripcion <= hasta);
 
         if (identificadores.FirstOrDefault(c => c.FieldId == C.DpRadicado) is { } radicados)
         {
@@ -365,11 +371,14 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
 
     /// <summary>
     /// El mismo filtro en el periodo anterior de igual ancho («12 % más que antes»). Se carga aparte porque el rango se
-    /// empuja a la base; si ese periodo no cabe en el tope, no se compara (null) en vez de comparar contra una porción.
+    /// empuja a la base; si ese periodo no cabe en el tope, o el rango mira hacia adelante, no se compara (null).
     /// </summary>
     private async Task<int?> AnteriorAsync(AlcanceConsulta alcance, QueryDefinition d, ConsultaBandeja.Hoy h, QueryEngine<Fila> motor,
         DateOnly desde, DateOnly hasta, Func<Fila, bool> pasa, CancellationToken ct)
     {
+        // Un rango hacia adelante («próximos 30 días») no tiene un «antes» comparable.
+        if (hasta > h.Dia)
+            return null;
         var dias = hasta.DayNumber - desde.DayNumber + 1;
         var (pDesde, pHasta) = (desde.AddDays(-dias), desde.AddDays(-1));
         var q = Universo(alcance, d, h, pDesde, pHasta);
@@ -425,6 +434,9 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
         C.FechaDpRadicacion => Instante(f.Dp?.FechaRadicacion),
         C.FechaDpRespuesta => Instante(f.Dp?.RespuestaFecha),
         C.FechaPago => Instante(f.Pago?.FechaPago),
+        C.FechaLimiteGestion => Instante(f.C.FechaLimiteGestion),
+        C.FechaCaducidad => Instante(f.C.FechaCaducidad),
+        C.FechaPrescripcion => Instante(f.C.FechaPrescripcion),
         _ => Instante(f.C.FechaImposicion),
     };
 

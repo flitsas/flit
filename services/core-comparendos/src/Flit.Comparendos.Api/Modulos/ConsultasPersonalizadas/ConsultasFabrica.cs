@@ -10,10 +10,10 @@ namespace Flit.Comparendos.Api.Modulos.ConsultasPersonalizadas;
 /// <summary>
 /// Las consultas de fábrica (CONTRATO §5): las predefinidas de V1, sin empresa ni usuario, que nadie edita ni borra.
 ///
-/// <para><b>El rango.</b> El motor solo guarda rangos con nombre de hasta 90 días o un rango propio. Las de seguimiento
-/// miran toda la historia, así que van con un rango propio desde 2015 y sin fin (llega hasta hoy). No explota el tope en
-/// Renting porque, sin identificadores, sus condiciones (activo, pagado, estado de gestión…) se empujan a la base. La
-/// única sin condiciones, «Seguimiento completo», abre con los últimos 90 días: toda la historia de Renting no cabe.</para>
+/// <para><b>El rango.</b> Las que miran toda la historia (DP, C35/D02, descuento) van con un rango propio desde 2015 y sin
+/// fin (llega hasta hoy); caben en Renting porque, sin identificadores, sus condiciones se empujan a la base. Las demás
+/// van con «último año», «últimos 90 días» o, la de plazos, «próximos 30 días» sobre el límite de gestión: con toda la
+/// historia, Renting (unos 49.000) pasaría el tope.</para>
 ///
 /// <para>Las columnas son los nombres de <see cref="ComparendoQueryRow"/> en camelCase.</para>
 /// </summary>
@@ -52,24 +52,26 @@ public static class ConsultasFabrica
         "estadoCambioContraventor", "pagoTipo",
     ];
 
-    /// <summary>En el orden en que se ofrecen.</summary>
+    /// <summary>En el orden en que se ofrecen. Rangos decididos por S0 (2026-11-24) con el volumen de Renting medido en V1.</summary>
     public static IReadOnlyList<(Guid Id, string Nombre, string Descripcion, QueryDefinition Definicion)> Todas { get; } =
     [
-        (CaducanPronto, "Caducan o prescriben en 30 días", "Comparendos activos ordenados por su fecha límite de gestión, el más urgente primero.",
-            new(Historia(C.FechaNotificacion), [Es(C.Activo, "true")], Plazos, C.OrdenFechaLimiteGestion, Descending: false)),
+        (CaducanPronto, "Vence el plazo de gestión en los próximos 30 días", "Activos y sin pagar cuyo límite de gestión llega en los próximos 30 días, el más urgente primero.",
+            new(new QueryDateFilter(C.FechaLimiteGestion, QueryRangePreset.Proximos30), [Es(C.Activo, "true"), Es(C.Pagado, "false")], Plazos,
+                C.OrdenFechaLimiteGestion, Descending: false)),
         (Descuento50, "Con descuento del 50 % vigente", "Sin pagar y todavía con el 50 % de descuento.",
             new(Historia(C.FechaImposicion), [Es(C.VentanaDescuento, "Descuento50"), Es(C.Pagado, "false")], [.. Basicas, "fechaFinDescuento50"], C.OrdenFecha)),
-        (SinGestion, "Sin gestión", "Activos, sin pagar y sin ninguna gestión.",
-            new(Historia(C.FechaImposicion), [Es(C.EstadoGestion, "SinGestion"), Es(C.Activo, "true"), Es(C.Pagado, "false")], [.. Basicas, "estadoLegal"], C.OrdenFecha)),
+        (SinGestion, "Sin gestión", "Activos, sin pagar y sin ninguna gestión, impuestos en el último año.",
+            new(new QueryDateFilter(C.FechaImposicion, QueryRangePreset.Ultimos365), [Es(C.EstadoGestion, "SinGestion"), Es(C.Activo, "true"), Es(C.Pagado, "false")],
+                [.. Basicas, "estadoLegal"], C.OrdenFecha)),
         (DpSinRespuesta, "DP sin respuesta", "Derechos de petición enviados que el organismo no ha respondido.",
             new(Historia(C.FechaDpRadicacion), [Es(C.DpEstado, "Enviado")], ColumnasDp, C.OrdenFecha)),
         (SeguimientoRadicados, "Seguimiento de radicados", "Todos los comparendos con derecho de petición y su estado.",
-            new(Historia(C.FechaImposicion), [Es(C.TieneDp, "true")], ColumnasDp, C.OrdenFecha)),
+            new(Historia(C.FechaDpRadicacion), [Es(C.TieneDp, "true")], ColumnasDp, C.OrdenFecha)),
         (InfraccionesC35D02, "Infracciones C35 y D02", "Comparendos con los códigos C35 o D02.",
             new(Historia(C.FechaImposicion), [Es(C.CodigoInfraccion, "C35", "D02")], Basicas, C.OrdenFecha)),
-        (InfraccionesC02C29D04C14, "Infracciones C02, C29, D04 y C14", "Comparendos con los códigos C02, C29, D04 o C14.",
-            new(Historia(C.FechaImposicion), [Es(C.CodigoInfraccion, "C02", "C29", "D04", "C14")], Basicas, C.OrdenFecha)),
-        (SeguimientoCompleto, "Seguimiento completo", "Todas las columnas de seguimiento de cada comparendo.",
+        (InfraccionesC02C29D04C14, "Infracciones C02, C29, D04 y C14", "Comparendos con los códigos C02, C29, D04 o C14 de los últimos 90 días.",
+            new(new QueryDateFilter(C.FechaImposicion, QueryRangePreset.Ultimos90), [Es(C.CodigoInfraccion, "C02", "C29", "D04", "C14")], Basicas, C.OrdenFecha)),
+        (SeguimientoCompleto, "Seguimiento completo", "Todas las columnas de seguimiento de cada comparendo, de los últimos 90 días.",
             new(new QueryDateFilter(C.FechaImposicion, QueryRangePreset.Ultimos90), [], Seguimiento, C.OrdenFecha)),
     ];
 
@@ -78,7 +80,8 @@ public static class ConsultasFabrica
 
 /// <summary>
 /// Siembra idempotente de las consultas de fábrica (corre en cada arranque desde <c>Semillas.SembrarAsync</c>): agrega
-/// las que faltan por id y deja como están las que ya existen.
+/// las que faltan por id y deja las existentes como dice el código. Nadie las edita por la API (guardarlas las duplica),
+/// así que el código manda: un cambio de nombre o de rango llega a los ambientes que ya las tenían sembradas.
 /// </summary>
 public static class SiembraConsultasFabrica
 {
@@ -86,23 +89,19 @@ public static class SiembraConsultasFabrica
     {
         ArgumentNullException.ThrowIfNull(db);
         var ids = ConsultasFabrica.Todas.Select(q => q.Id).ToList();
-        var existentes = await db.ConsultasGuardadas.Where(q => ids.Contains(q.Id)).Select(q => q.Id).ToListAsync(ct).ConfigureAwait(false);
-        var orden = 0;
+        var existentes = await db.ConsultasGuardadas.Where(q => ids.Contains(q.Id)).ToDictionaryAsync(q => q.Id, ct).ConfigureAwait(false);
         foreach (var (id, nombre, descripcion, definicion) in ConsultasFabrica.Todas)
         {
-            // El orden de oferta sale de creado_en: un segundo por posición.
-            var creado = ahora.AddSeconds(orden++);
-            if (existentes.Contains(id))
-                continue;
-            db.ConsultasGuardadas.Add(new ConsultaGuardada
+            var json = JsonSerializer.Serialize(QueryNormalizer.Normalize(C.Instance, definicion), RepositorioConsultasGuardadas.Json);
+            if (existentes.TryGetValue(id, out var q))
             {
-                Id = id,
-                Nombre = nombre,
-                Descripcion = descripcion,
-                DeFabrica = true,
-                Definicion = JsonSerializer.Serialize(QueryNormalizer.Normalize(C.Instance, definicion), RepositorioConsultasGuardadas.Json),
-                CreadoEn = creado,
-            });
+                if (q.Nombre == nombre && q.Descripcion == descripcion && q.Definicion == json && q.DeFabrica && q.TenantId is null && q.UsuarioId is null)
+                    continue;
+                (q.Nombre, q.Descripcion, q.Definicion, q.DeFabrica, q.TenantId, q.UsuarioId, q.ActualizadoEn) = (nombre, descripcion, json, true, null, null, ahora);
+                continue;
+            }
+
+            db.ConsultasGuardadas.Add(new ConsultaGuardada { Id = id, Nombre = nombre, Descripcion = descripcion, DeFabrica = true, Definicion = json, CreadoEn = ahora });
         }
 
         await db.SaveChangesAsync(ct).ConfigureAwait(false);

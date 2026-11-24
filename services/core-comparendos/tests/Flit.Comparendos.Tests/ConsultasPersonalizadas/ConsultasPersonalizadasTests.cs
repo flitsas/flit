@@ -176,7 +176,8 @@ public sealed class ConsultasPersonalizadasTests(ApiConFuente api) : IClassFixtu
             .Should().Be(("Gestora Uno", "800111222", "CC"));
         foreach (var fecha in F.DateFieldOptions.Select(o => o.Value))
         {
-            var dentro = await CorrerAsync(Super, Definicion([Es(F.Numero, a.Numero)], fecha, desde: new DateOnly(2026, 9, 1)));
+            // Hasta 2029 para que también entren los plazos que miran hacia adelante (límite, caducidad, prescripción).
+            var dentro = await CorrerAsync(Super, Definicion([Es(F.Numero, a.Numero)], fecha, desde: new DateOnly(2026, 9, 1), hasta: new DateOnly(2029, 12, 31)));
             var fuera = await CorrerAsync(Super, Definicion([Es(F.Numero, a.Numero)], fecha, desde: new DateOnly(2025, 1, 1), hasta: new DateOnly(2025, 12, 31)));
             Numeros(dentro).Should().Equal([a.Numero], $"la fecha «{fecha}» de A cae en el rango");
             Numeros(fuera).Should().BeEmpty($"la fecha «{fecha}» de A queda fuera de 2025");
@@ -387,12 +388,18 @@ public sealed class ConsultasPersonalizadasTests(ApiConFuente api) : IClassFixtu
         var guardada = (await gestora.GetFromJsonAsync<JsonElement>($"{Ruta}/saved", Ct)).EnumerateArray()
             .Single(q => q.GetProperty("id").GetGuid() == ConsultasFabrica.InfraccionesC35D02);
         Numeros(await CorrerAsync(gestora, guardada.GetProperty("definition"))).Should().Equal(c.Numero);
+
+        // La de plazos mira hacia adelante: trae el que vence el 16-oct y no compara con un periodo anterior.
+        var plazos = (await gestora.GetFromJsonAsync<JsonElement>($"{Ruta}/saved", Ct)).EnumerateArray().Single(q => q.GetProperty("id").GetGuid() == ConsultasFabrica.CaducanPronto);
+        var vence = await CorrerAsync(gestora, plazos.GetProperty("definition"));
+        Numeros(vence).Should().Equal(c.Numero);
+        vence.GetProperty("totalPeriodoAnterior").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
     // ── 6. Siembra ────────────────────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task Siembra_EsIdempotente_YNoPisaLoQueYaExiste()
+    public async Task Siembra_EsIdempotente_YDejaLasDeFabricaComoDiceElCodigo()
     {
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         await api.EnDbAsync(async db =>
@@ -400,15 +407,18 @@ public sealed class ConsultasPersonalizadasTests(ApiConFuente api) : IClassFixtu
             // El arranque ya sembró una vez; dos veces más no duplican.
             await SiembraConsultasFabrica.SembrarAsync(db, DateTimeOffset.UtcNow, Ct);
             await SiembraConsultasFabrica.SembrarAsync(db, DateTimeOffset.UtcNow, Ct);
-            (await db.ConsultasGuardadas.CountAsync(q => q.DeFabrica, Ct)).Should().Be(8);
+            (await db.ConsultasGuardadas.CountAsync(q => q.DeFabrica, Ct)).Should().Be(ConsultasFabrica.Todas.Count);
             (await db.ConsultasGuardadas.Where(q => q.DeFabrica).AllAsync(q => q.TenantId == null && q.UsuarioId == null, Ct)).Should().BeTrue();
 
-            var una = await db.ConsultasGuardadas.SingleAsync(q => q.Id == ConsultasFabrica.DpSinRespuesta, Ct);
-            una.Descripcion = "Ajustada a mano";
+            // Un ambiente sembrado con una versión anterior (otro nombre y otro rango) queda como dice el código.
+            var vieja = await db.ConsultasGuardadas.SingleAsync(q => q.Id == ConsultasFabrica.CaducanPronto, Ct);
+            (vieja.Nombre, vieja.Definicion) = ("Caducan o prescriben en 30 días", "{}");
             await db.SaveChangesAsync(Ct);
             db.ChangeTracker.Clear();
             await SiembraConsultasFabrica.SembrarAsync(db, DateTimeOffset.UtcNow, Ct);
-            (await db.ConsultasGuardadas.SingleAsync(q => q.Id == ConsultasFabrica.DpSinRespuesta, Ct)).Descripcion.Should().Be("Ajustada a mano");
+            var actual = await db.ConsultasGuardadas.AsNoTracking().SingleAsync(q => q.Id == ConsultasFabrica.CaducanPronto, Ct);
+            actual.Nombre.Should().Be("Vence el plazo de gestión en los próximos 30 días");
+            actual.Definicion.Should().Contain("proximos_30").And.Contain("limite_gestion");
         });
     }
 }

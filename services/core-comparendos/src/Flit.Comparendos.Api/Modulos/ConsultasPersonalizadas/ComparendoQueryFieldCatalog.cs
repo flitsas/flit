@@ -148,6 +148,11 @@ public sealed class ComparendoQueryFieldCatalog : IQueryFieldCatalog
     public const string FechaDpRespuesta = "dp_respuesta";
     public const string FechaPago = "pago";
 
+    // Plazos legales (decisión de S0): lo que caduca o prescribe pronto es lo VIEJO, que un rango por imposición deja fuera.
+    public const string FechaLimiteGestion = "limite_gestion";
+    public const string FechaCaducidad = "caducidad";
+    public const string FechaPrescripcion = "prescripcion";
+
     public static IReadOnlyList<QueryFieldOptionDto> DateFieldOptions { get; } =
     [
         new(FechaImposicion, "Fecha de imposición"),
@@ -156,6 +161,9 @@ public sealed class ComparendoQueryFieldCatalog : IQueryFieldCatalog
         new(FechaDpRadicacion, "Fecha de radicación del DP"),
         new(FechaDpRespuesta, "Fecha de respuesta del organismo"),
         new(FechaPago, "Fecha de pago"),
+        new(FechaLimiteGestion, "Límite de gestión"),
+        new(FechaCaducidad, "Fecha de caducidad"),
+        new(FechaPrescripcion, "Fecha de prescripción"),
     ];
 
     public const string OrdenFecha = "fecha";
