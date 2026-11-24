@@ -3,6 +3,7 @@ using Flit.Ict.Api.Endpoints;
 using Flit.Ict.Api.Grpc;
 using Flit.Ict.Application;
 using Flit.Ict.Infrastructure;
+using Microsoft.AspNetCore.Server.Kestrel.Core;
 
 // Permite gRPC sobre HTTP/2 en claro (h2c) hacia core-api en la red interna (sin TLS).
 AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
@@ -26,6 +27,39 @@ builder.Services.AddIctPlatformTokenValidation(builder.Configuration, builder.En
 builder.Services.AddGrpc();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+
+// Callback gRPC (core-api → core-ict) necesita un endpoint SOLO HTTP/2: Kestrel no multiplexa HTTP/1.1 y
+// HTTP/2 en el mismo puerto en texto plano (HTTP_1_1_REQUIRED). Opt-in por Ict:GrpcPort — si no está,
+// el binding REST queda como estaba (ASPNETCORE_URLS). Misma razón que Ict:GrpcPort en core-api.
+// Si gitops/compose ya define Kestrel:Endpoints:Grpc (puerto h2c explícito), no re-declarar Listen
+// para no chocar con ese binding.
+var ictGrpcPort = builder.Configuration.GetValue<int?>("Ict:GrpcPort");
+var hasExplicitGrpcEndpoint = !string.IsNullOrWhiteSpace(
+    builder.Configuration["Kestrel:Endpoints:Grpc:Url"]);
+if (ictGrpcPort is { } grpcPort && !hasExplicitGrpcEndpoint)
+{
+    builder.WebHost.ConfigureKestrel((context, options) =>
+    {
+        var restUrls = (context.Configuration[WebHostDefaults.ServerUrlsKey] ?? "http://localhost:4020")
+            .Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        foreach (var raw in restUrls)
+        {
+            var uri = new Uri(raw
+                .Replace("://+", "://0.0.0.0", StringComparison.Ordinal)
+                .Replace("://*", "://0.0.0.0", StringComparison.Ordinal));
+            if (string.Equals(uri.Host, "localhost", StringComparison.OrdinalIgnoreCase))
+            {
+                options.ListenLocalhost(uri.Port, lo => lo.Protocols = HttpProtocols.Http1AndHttp2);
+            }
+            else
+            {
+                options.ListenAnyIP(uri.Port, lo => lo.Protocols = HttpProtocols.Http1AndHttp2);
+            }
+        }
+
+        options.ListenAnyIP(grpcPort, lo => lo.Protocols = HttpProtocols.Http2);
+    });
+}
 
 var app = builder.Build();
 
@@ -57,7 +91,7 @@ app.MapIctClientAdminEndpoints();
 // HU #14668 Bloque 2 — URL prefirmada del consolidado por referencia de trámite ICT.
 app.MapIctDocumentsTransactionEndpoints();
 
-// Servidor gRPC del callback de estados (core-api -> core-ict). Requiere HTTP/2 (h2c en dev).
+// Servidor gRPC del callback de estados (core-api -> core-ict). Requiere HTTP/2 (h2c).
 // Protegido con el service-token del canal inverso (aud=core-ict-internal, scope=ict.state): solo
 // core-api autenticado como sistema puede notificar cambios de estado (no un tercero en el puerto interno).
 app.MapGrpcService<IctStateCallbackService>()
