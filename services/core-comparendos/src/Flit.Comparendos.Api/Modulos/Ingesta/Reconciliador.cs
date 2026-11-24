@@ -376,7 +376,10 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
         ArgumentNullException.ThrowIfNull(c);
         ArgumentNullException.ThrowIfNull(i);
         static string? Texto(string? nuevo, string? actual) => string.IsNullOrWhiteSpace(nuevo) ? actual : nuevo.Trim();
-        c.Numero = i.Numero.Trim();
+        // GDC-ASOC §8: si el comparendo ya existe y la fuente trae el mismo número con otra letra o formato (misma llave),
+        // se respeta el que ya tiene (el de un escaneado va sin letra). Una llave distinta sí se actualiza.
+        if (string.IsNullOrEmpty(c.Numero) || string.IsNullOrEmpty(c.NumeroNormalizado) || NumeroComparendo.Normalizar(i.Numero) != c.NumeroNormalizado)
+            c.Numero = i.Numero.Trim();
         c.Placa = Placa.Normalizar(i.Placa) ?? (string.IsNullOrWhiteSpace(i.Placa) ? c.Placa : i.Placa.Trim().ToUpperInvariant());
         c.TipoDocumentoInfractor = i.TipoDocumentoInfractor ?? c.TipoDocumentoInfractor;
         c.NumeroDocumentoInfractor = Texto(i.NumeroDocumentoInfractor, c.NumeroDocumentoInfractor);
@@ -401,6 +404,7 @@ public sealed class Reconciliador(ComparendosDb db, Timeline timeline, MapeadorO
     private static void CopiarCampos(Comparendo de, Comparendo a)
     {
         a.Numero = de.Numero;
+        a.NumeroNormalizado = de.NumeroNormalizado;
         a.Placa = de.Placa;
         a.TipoDocumentoInfractor = de.TipoDocumentoInfractor;
         a.NumeroDocumentoInfractor = de.NumeroDocumentoInfractor;

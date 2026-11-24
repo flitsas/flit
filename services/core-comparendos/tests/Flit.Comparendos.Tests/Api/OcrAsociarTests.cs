@@ -341,6 +341,29 @@ public sealed class OcrAsociarTests(ApiConOcr api) : IClassFixture<ApiConOcr>
         leido.Should().Be($"d-{Largo}");
     }
 
+    [Fact]
+    public async Task LaFuente_QueTraeElNumeroConLetra_NoRevierteElNumeroSinLetra_PeroSiRegistraLosDemasCambios()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        api.Reloj.Hoy(new DateOnly(2026, 10, 9));
+        var empresa = await EmpresaAsync(api, ocr: true);
+        var cliente = api.Cliente(new UsuarioDePrueba(empresa, Operador));
+        var (_, doc) = await SubirAsync(cliente, $"D-{Largo}", "asoc-fuente-despues");
+        (await cliente.PostAsync($"{Base}/documentos/{doc.Id}/registrar", null, ct)).EnsureSuccessStatusCode();
+
+        var ids = await IngresarAsync(api, empresa, Item($"D-{Largo}", valor: 777000m));
+
+        ids.Should().ContainSingle("misma llave: no se crea otro comparendo");
+        var id = ids.Values.Single();
+        var c = await ComparendoDbAsync(id);
+        (c.Numero, c.ValorTotal).Should().Be((Largo, 777000m));
+        var campos = await api.EnDbAsync(db => db.ComparendoCambios.AsNoTracking().Where(x => x.ComparendoId == id).Select(x => x.Campo).ToListAsync(ct));
+        campos.Should().Contain("valor_total").And.NotContain("numero");
+        (await api.EnDbAsync(db => db.Timeline.AsNoTracking().Where(t => t.ComparendoId == id).Select(t => t.Descripcion).ToListAsync(ct)))
+            .Should().NotContain(d => d.Contains("numero", StringComparison.Ordinal));
+    }
+
     private async Task SchedulerAsync(Guid empresa)
     {
         await using var scope = api.App.Services.CreateAsyncScope();
