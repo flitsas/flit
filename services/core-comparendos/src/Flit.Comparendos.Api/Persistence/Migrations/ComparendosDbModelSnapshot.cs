@@ -1696,6 +1696,135 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                     b.ToTable("consulta_fuente", "comparendos");
                 });
 
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ConsultaGuardada", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset?>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<bool>("DeFabrica")
+                        .HasColumnType("boolean")
+                        .HasColumnName("de_fabrica");
+
+                    b.Property<string>("Definicion")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("definicion");
+
+                    b.Property<string>("Descripcion")
+                        .HasColumnType("text")
+                        .HasColumnName("descripcion");
+
+                    b.Property<string>("Nombre")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)")
+                        .HasColumnName("nombre");
+
+                    b.Property<Guid?>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid?>("UsuarioId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("usuario_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_consulta_guardada");
+
+                    b.HasIndex("TenantId", "UsuarioId")
+                        .HasDatabaseName("ix_consulta_guardada_tenant_id_usuario_id");
+
+                    b.ToTable("consulta_guardada", "comparendos");
+                });
+
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ConsultaProgramada", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("Activa")
+                        .HasColumnType("boolean")
+                        .HasColumnName("activa");
+
+                    b.Property<Guid>("ConsultaId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("consulta_id");
+
+                    b.Property<DateTimeOffset>("CreadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("creado_en");
+
+                    b.Property<Guid>("CreadoPor")
+                        .HasColumnType("uuid")
+                        .HasColumnName("creado_por");
+
+                    b.PrimitiveCollection<List<string>>("Destinatarios")
+                        .IsRequired()
+                        .HasColumnType("text[]")
+                        .HasColumnName("destinatarios");
+
+                    b.Property<int?>("DiaMes")
+                        .HasColumnType("integer")
+                        .HasColumnName("dia_mes");
+
+                    b.Property<int?>("DiaSemana")
+                        .HasColumnType("integer")
+                        .HasColumnName("dia_semana");
+
+                    b.Property<TimeOnly>("Hora")
+                        .HasColumnType("time without time zone")
+                        .HasColumnName("hora");
+
+                    b.Property<string>("Periodicidad")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("periodicidad");
+
+                    b.Property<DateTimeOffset?>("ProximaEjecucion")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("proxima_ejecucion");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UltimaEjecucion")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultima_ejecucion");
+
+                    b.Property<string>("UltimoResultado")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("ultimo_resultado");
+
+                    b.HasKey("Id")
+                        .HasName("pk_consulta_programada");
+
+                    b.HasIndex("ConsultaId")
+                        .HasDatabaseName("ix_consulta_programada_consulta_id");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_consulta_programada_tenant_id");
+
+                    b.HasIndex("Activa", "ProximaEjecucion")
+                        .HasDatabaseName("ix_consulta_programada_activa_proxima_ejecucion");
+
+                    b.ToTable("consulta_programada", "comparendos");
+                });
+
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.Contraventor", b =>
                 {
                     b.Property<Guid>("ComparendoId")
@@ -4464,6 +4593,16 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired()
                         .HasConstraintName("fk_consulta_fuente_ciclo_ingesta_ciclo_id");
+                });
+
+            modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.ConsultaProgramada", b =>
+                {
+                    b.HasOne("Flit.Comparendos.Api.Persistence.Modelo.ConsultaGuardada", null)
+                        .WithMany()
+                        .HasForeignKey("ConsultaId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_consulta_programada_consulta_guardada_consulta_id");
                 });
 
             modelBuilder.Entity("Flit.Comparendos.Api.Persistence.Modelo.Contraventor", b =>

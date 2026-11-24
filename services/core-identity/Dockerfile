@@ -27,6 +27,7 @@ COPY core-api/src/Flit.Modules.Security.Application/ /services/core-api/src/Flit
 COPY core-api/src/Flit.Modules.Security.Domain/ /services/core-api/src/Flit.Modules.Security.Domain/
 COPY core-api/src/Flit.Platform.Sdk/ /services/core-api/src/Flit.Platform.Sdk/
 COPY core-api/src/Flit.Queries.Domain/ /services/core-api/src/Flit.Queries.Domain/
+COPY core-api/src/Flit.Queries.Core/ /services/core-api/src/Flit.Queries.Core/
 COPY core-api/src/Flit.Suite.AspNetCore/ /services/core-api/src/Flit.Suite.AspNetCore/
 # Configuración base compartida con core-api (Flit.Identity.Api la enlaza: mismo emisor, llaves y clientes OIDC). Solo
 # appsettings.json: appsettings.Development.json no está en git (lleva secretos locales) y no va en la imagen, igual que

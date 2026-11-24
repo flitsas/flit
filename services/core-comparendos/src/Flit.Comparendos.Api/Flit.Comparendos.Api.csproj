@@ -14,6 +14,8 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\core-api\src\Flit.Platform.Sdk\Flit.Platform.Sdk.csproj" />
+    <!-- Reportes 2.0: motor de Consultas personalizadas (el mismo de Trámites; solo BCL). -->
+    <ProjectReference Include="..\..\..\core-api\src\Flit.Queries.Core\Flit.Queries.Core.csproj" />
     <ProjectReference Include="..\Flit.Comparendos.Grpc.Contracts\Flit.Comparendos.Grpc.Contracts.csproj" />
     <ProjectReference Include="..\Flit.Comparendos.Domain\Flit.Comparendos.Domain.csproj" />
     <ProjectReference Include="..\..\..\core-notificaciones\src\Flit.Notificaciones.Grpc.Contracts\Flit.Notificaciones.Grpc.Contracts.csproj" />

@@ -2,7 +2,6 @@
 
 import { useState } from "react";
 import dynamic from "next/dynamic";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { DataTable, InlineAlert, usePaginacion } from "@flit/ui";
 import { ChipFiltro, CHIPS_FILTRO_FILA_CLS } from "@flit/ui/ChipsFiltro";
@@ -13,7 +12,7 @@ import { FiltrosPeriodo, periodoInicial, type Periodo } from "@/components/repor
 import { BarrasApiladas } from "@/components/inicio/BarrasApiladas";
 import { PanelInicio } from "@/components/inicio/PanelInicio";
 import { RequiereReportes } from "@/components/reportes/RequiereReportes";
-import { ETIQUETA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
+import { ETIQUETA_CLS, INPUT_CLS } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import { formatoFecha, formatoPesos } from "@/lib/format/date";
 import { P } from "@/lib/nav";
@@ -100,15 +99,8 @@ function Contenido() {
   return (
     <section className="flex flex-col gap-6">
       <Encabezado
-        titulo="Dashboard ejecutivo"
+        titulo="Resumen"
         descripcion="Deuda, resultados de los derechos de petición, ahorro y lo que está por vencer. La deuda y el radar son a hoy; las tasas y el ahorro, del periodo. La deuda sin pagar incluye lo caducado y lo prescrito."
-        acciones={
-          tienePermiso(sesion, P.productividadVer) ? (
-            <Link href="/reportes/productividad" className={controlCls(false)}>
-              Ver productividad
-            </Link>
-          ) : undefined
-        }
       />
       <FiltrosPeriodo
         valor={periodo}

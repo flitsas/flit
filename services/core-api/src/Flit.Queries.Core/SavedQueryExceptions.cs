@@ -62,9 +62,16 @@ public sealed class SavedQueryNameTakenException : Exception
 public sealed class SuperAdminQueryTooBroadException : Exception
 {
     public SuperAdminQueryTooBroadException(int total, int max)
+        : this(total, max, "trámites", "una o varias compañías, o un rango de fecha más corto")
+    {
+    }
+
+    /// <param name="rowNounPlural">Cómo se llaman las filas en plural («comparendos»).</param>
+    /// <param name="comoAcotar">Con qué se acota en ese módulo, tras «Acótala eligiendo».</param>
+    public SuperAdminQueryTooBroadException(int total, int max, string rowNounPlural, string comoAcotar)
         : base(
-            $"Esta consulta trae unos {total:N0} trámites, más de lo que se puede traer de una vez "
-            + $"(máximo {max:N0}). Acótala eligiendo una o varias compañías, o un rango de fecha más corto.")
+            $"Esta consulta trae unos {total:N0} {rowNounPlural}, más de lo que se puede traer de una vez "
+            + $"(máximo {max:N0}). Acótala eligiendo {comoAcotar}.")
     {
         Total = total;
         Max = max;
