@@ -30,9 +30,10 @@ using Flit.Infrastructure.OtRules;
 using Flit.Infrastructure.OtWebhooks;
 using Flit.Tramites.Application.UseCases.Consultations;
 using Flit.Tramites.Domain.Integration;
+using Flit.Infrastructure.Persistence.Repositories;
+using Flit.Admin.Application.Companies.RuntPersonOverrides;
 using Flit.Infrastructure.Tramites;
 using Flit.Admin.Domain.ProcedureSnapshots;
-using Flit.Infrastructure.Persistence.Repositories;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
@@ -501,6 +502,19 @@ public static class AdminInfrastructureExtensions
             Flit.Infrastructure.Documents.Standalone.StandaloneDocumentXlsxTemplate>();
         services.AddScoped<Flit.Admin.Domain.GeneracionDocumental.IStandaloneDocumentBatchRepository,
             Flit.Infrastructure.Persistence.Repositories.StandaloneDocumentBatchRepository>();
+
+        // HU #14642 — overrides manuales de persona RUNT por tenant (SuperAdmin CRUD + reader de cortocircuito).
+        // La misma clase implementa tanto el repositorio de Admin como el lector liviano de Trámites:
+        // se registra como concreta y se exponen los dos puertos apuntando a la instancia del scope.
+        services.AddScoped<TenantRuntPersonOverrideRepository>();
+        services.AddScoped<ITenantRuntPersonOverrideRepository>(sp =>
+            sp.GetRequiredService<TenantRuntPersonOverrideRepository>());
+        services.AddScoped<Flit.Tramites.Application.UseCases.Consultations.ITenantRuntPersonOverrideReader>(sp =>
+            sp.GetRequiredService<TenantRuntPersonOverrideRepository>());
+        // Handlers de Admin para los endpoints SuperAdmin.
+        services.AddScoped<ListTenantRuntPersonOverridesHandler>();
+        services.AddScoped<CreateTenantRuntPersonOverrideHandler>();
+        services.AddScoped<UpdateTenantRuntPersonOverrideHandler>();
 
         return services;
     }

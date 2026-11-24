@@ -23,10 +23,11 @@ public sealed class RuntPersonLookupHandlerTests
 
     public RuntPersonLookupHandlerTests()
     {
-        // Chain resolver con defaults embebidos (conductor → [kyverum_runt_conductor, verifik_conductor])
-        // sobre el registry mockeado; sin override de tenant. kyverum_runt_conductor NO está registrado
-        // (Resolve → null explícito, si no NSubstitute auto-mockea un provider fantasma) → la cadena cae
-        // a verifik_conductor, que es lo que estos tests stubbean.
+        // Chain resolver con defaults embebidos (conductor → [tenant_manual_conductor, kyverum…, verifik…])
+        // sobre el registry mockeado; sin override de tenant. Los keys sin stub explícito a null
+        // son auto-mockeados por NSubstitute (provider fantasma → NRE en HasError). El stub de
+        // verifik_conductor lo hace cada test; aquí anulamos el manual y kyverum.
+        _registry.Resolve("tenant_manual_conductor").Returns((IConsultationProvider?)null);
         _registry.Resolve("kyverum_runt_conductor").Returns((IConsultationProvider?)null);
         var resolver = new ConsultationProviderChainResolver(_registry, new ConsultationChainOptions());
         var cacheService = new ExternalQueryCacheService(_cacheRepo, _consentRepo, _catalogRepo);
