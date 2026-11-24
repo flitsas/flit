@@ -4,7 +4,7 @@ import { Modal } from "@flit/ui";
 import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls } from "@/components/ui/estilos";
 import { API_PREFIX } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
-import { type EvidenciaActual, tamanoLegible, vistaPorContentType } from "@/lib/ocr";
+import { type EvidenciaActual, numerosDifieren, tamanoLegible, vistaPorContentType } from "@/lib/ocr";
 
 /** Comparendo existente tal como lo describe la revisión (los campos que muestran los modales). */
 export interface ComparendoExistente {
@@ -21,6 +21,27 @@ export function avisoSinAvisos(c: Pick<ComparendoExistente, "activo" | "pagado">
   if (c.activo === false) return "Este comparendo está inactivo: ya no recibe avisos, pero el documento queda guardado.";
   if (c.pagado) return "Este comparendo está pagado: ya no recibe avisos, pero el documento queda guardado.";
   return null;
+}
+
+const AVISO_NUMEROS = "Los números no coinciden exactamente: confirma que es el mismo comparendo.";
+
+/** Número leído del documento junto al del sistema, y el aviso si difieren en algo más que letra o formato. */
+function Numeros({ documento, sistema }: { documento: string | null; sistema: string | null }) {
+  return (
+    <>
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-sm">
+        <dt className="font-semibold">Número en el documento</dt>
+        <dd className="min-w-0 break-all tabular-nums">{documento ?? "—"}</dd>
+        <dt className="font-semibold">Número en el sistema</dt>
+        <dd className="min-w-0 break-all tabular-nums">{sistema ?? "—"}</dd>
+      </dl>
+      {numerosDifieren(documento, sistema) && (
+        <p role="alert" className="rounded-xl border border-[var(--badge-warning-fg)] px-3 py-2 text-xs text-[var(--badge-warning-fg)]">
+          {AVISO_NUMEROS}
+        </p>
+      )}
+    </>
+  );
 }
 
 function Vista({ archivoId, nombre, contentType, titulo }: { archivoId: string; nombre: string; contentType: string; titulo: string }) {
@@ -62,7 +83,7 @@ export function ModalAsociar({
   onClose,
 }: {
   comparendo: ComparendoExistente;
-  documento: { nombreArchivo: string };
+  documento: { nombreArchivo: string; numeroComparendoExtraido?: string | null };
   ocupado: boolean;
   onConfirmar: () => void;
   onClose: () => void;
@@ -88,9 +109,8 @@ export function ModalAsociar({
       }
     >
       <div className="flex flex-col gap-3 text-sm">
+        <Numeros documento={documento.numeroComparendoExtraido ?? null} sistema={comparendo.numero} />
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
-          <dt className="font-semibold">Número</dt>
-          <dd className="min-w-0 break-words">{comparendo.numero ?? "—"}</dd>
           <dt className="font-semibold">Fuente</dt>
           <dd className="min-w-0 break-words">{comparendo.fuente ?? "—"}</dd>
           <dt className="font-semibold">Estado</dt>
@@ -120,7 +140,7 @@ export function ModalComparar({
   onClose,
 }: {
   comparendo: ComparendoExistente;
-  entrante: { archivoId: string; nombreArchivo: string; tipoArchivo: string };
+  entrante: { archivoId: string; nombreArchivo: string; tipoArchivo: string; numeroComparendoExtraido?: string | null };
   actual: EvidenciaActual;
   ocupado: boolean;
   onReemplazar: () => void;
@@ -153,6 +173,7 @@ export function ModalComparar({
       }
     >
       <div className="flex flex-col gap-3">
+        <Numeros documento={entrante.numeroComparendoExtraido ?? null} sistema={comparendo.numero} />
         {aviso && (
           <p role="note" className="rounded-xl border border-[var(--badge-warning-fg)] px-3 py-2 text-xs text-[var(--badge-warning-fg)]">
             {aviso}
