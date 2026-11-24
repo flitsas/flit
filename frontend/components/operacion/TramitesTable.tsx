@@ -10,7 +10,12 @@ import { iconoComo } from "@flit/ui/iconoComo";
 import { tramitesClient } from '@/lib/api/tramites-client';
 import { getToken } from '@/lib/api/client';
 import { COPY } from '@/lib/copy/copy-catalog';
-import { canDescargarConsolidadosMasivo, decodeJwtPayload, isSuperAdmin } from '@/lib/auth/jwt';
+import {
+  canDescargarConsolidadosMasivo,
+  decodeJwtPayload,
+  isSuperAdmin,
+  LOG_QX_READ_PERMISSION,
+} from '@/lib/auth/jwt';
 import { useSeleccionLote, type ModeloSeleccionLote } from '@/hooks/useSeleccionLote';
 import { BarraSeleccionLote, CasillaFilaLote } from './BarraSeleccionLote';
 import { BotonDescargaMasivaZip } from './DescargaMasivaConfirmModal';
@@ -93,6 +98,7 @@ import {
   FIRMA_TEXTO,
   FUENTE_LABEL,
   marcasDe,
+  quipuxMarca,
   stepLabel,
   tramiteLabel,
   vehiculo,
@@ -3115,6 +3121,9 @@ function TramiteRow({
   // ADR-0053 — desplegables de copropietarios de la fila. Cada celda abre el suyo; el ícono
   // «Con múltiples propietarios» de Marcas abre (o cierra) los dos a la vez.
   const [propietariosAbiertos, setPropietariosAbiertos] = useState({ vendedor: false, comprador: false });
+  // Mismo criterio que LogQxLink: la píldora Quipux enlaza al LOG QX solo a quien puede leerlo.
+  const { permissions: permisosUsuario, isSuperAdmin: esSuperAdminFila } = usePermissions();
+  const puedeVerLogQx = esSuperAdminFila || permisosUsuario.includes(LOG_QX_READ_PERMISSION);
   const alternarPropietarios = (lado: 'vendedor' | 'comprador') =>
     setPropietariosAbiertos((prev) => ({ ...prev, [lado]: !prev[lado] }));
   const alternarTodosLosPropietarios = () =>
@@ -3587,8 +3596,8 @@ function TramiteRow({
       </span>
     ),
     marcas: (
-      <span className="flex items-center gap-1.5">
-        {marcasDe(item).length === 0 ? (
+      <span className="flex flex-wrap items-center gap-1.5">
+        {marcasDe(item).length === 0 && !quipuxMarca(item) ? (
           <span className="text-xs text-muted-foreground">—</span>
         ) : (
           marcasDe(item).map((marca) =>
@@ -3630,6 +3639,48 @@ function TramiteRow({
             ),
           )
         )}
+        {(() => {
+          // Píldora con TEXTO: dice en qué punto de Quipux está el trámite (el texto es lo que la
+          // hace intuitiva; un círculo de color más no diría nada).
+          const quipux = quipuxMarca(item);
+          if (!quipux) return null;
+          const contenido = (
+            <>
+              <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
+              {quipux.texto}
+            </>
+          );
+          if (!puedeVerLogQx) {
+            return (
+              <span
+                data-testid="tramite-marca-quipux"
+                title={quipux.ayuda}
+                aria-label={quipux.texto}
+                {...etiquetaKit(quipux.tono)}
+              >
+                {contenido}
+              </span>
+            );
+          }
+          return (
+            <a
+              data-testid="tramite-marca-quipux"
+              href={`/?m=log-qx&instanceId=${item.id}`}
+              title={`${quipux.ayuda} — clic para ver el LOG QX`}
+              aria-label={`${quipux.texto}: ver el LOG QX`}
+              onClick={(e) => {
+                // La fila entera abre el asistente: este clic solo lleva al LOG QX.
+                e.stopPropagation();
+              }}
+              {...etiquetaKit(quipux.tono, {
+                className:
+                  'cursor-pointer no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1',
+              })}
+            >
+              {contenido}
+            </a>
+          );
+        })()}
       </span>
     ),
   };

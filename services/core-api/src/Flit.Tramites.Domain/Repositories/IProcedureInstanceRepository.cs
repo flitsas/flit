@@ -126,6 +126,14 @@ public interface IProcedureInstanceRepository
         IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
 
     /// <summary>
+    /// Marca «Quipux» del listado: id→<see cref="Flit.Tramites.Domain.Tramites.Estados.QuipuxListadoEstado"/> de los trámites
+    /// que van por Quipux (último envío, o <c>en_cola</c> si está <c>preparado</c> con canal activo). Los que no van por
+    /// Quipux se omiten (equivale a <c>null</c>). Una consulta por página, sin N+1.
+    /// </summary>
+    Task<IReadOnlyDictionary<Guid, string>> GetQuipuxEstadosAsync(
+        IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default);
+
+    /// <summary>
     /// Resuelve el nombre (razón social) de cada tenant indicado, para la columna "Compañía" del
     /// listado multi-tenant del SuperAdmin (#1). Devuelve un mapa id→nombre; ids sin tenant se omiten.
     /// </summary>
