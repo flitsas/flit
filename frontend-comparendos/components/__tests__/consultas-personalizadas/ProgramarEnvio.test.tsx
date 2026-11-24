@@ -36,6 +36,14 @@ async function abrirPanel(opciones: OpcionesMock = {}) {
   return { ...servidor, panel: await screen.findByTestId("cmp-query-programar") };
 }
 
+/** Escribe en el campo de destinatarios y presiona Enter, como hace la persona. */
+function escribirCorreos(texto: string) {
+  const campo = screen.getByTestId("cmp-query-programar-destinatarios-input");
+  fireEvent.change(campo, { target: { value: texto } });
+  fireEvent.keyDown(campo, { key: "Enter" });
+}
+const chips = () => screen.queryAllByTestId("cmp-query-programar-chip").map((c) => c.textContent);
+
 const posts = (peticiones: { metodo: string; ruta: string; cuerpo: unknown }[]) =>
   peticiones.filter((p) => p.metodo === "POST" && p.ruta === "/programaciones").map((p) => p.cuerpo as GuardarProgramacion);
 
@@ -74,9 +82,16 @@ describe("cmp-query · programar envío", () => {
     const { panel, peticiones } = await abrirPanel();
     expect(await within(panel).findByTestId("cmp-query-programar-vacio")).toHaveTextContent("todavía no se envía por correo");
     fireEvent.click(within(panel).getByTestId("cmp-query-programar-nuevo"));
-    fireEvent.change(screen.getByTestId("cmp-query-programar-destinatarios"), { target: { value: "Flota@Empresa.com, no-es-correo" } });
+    escribirCorreos("Flota@Empresa.com no-es-correo");
+    // El válido queda como ficha; el inválido se nombra y se queda en el campo para corregirlo.
+    expect(chips()).toEqual(["flota@empresa.com"]);
     expect(screen.getByTestId("cmp-query-programar-correos-invalidos")).toHaveTextContent("no-es-correo");
+    expect(screen.getByTestId("cmp-query-programar-destinatarios-input")).toHaveValue("no-es-correo");
+    // Con algo inválido sin agregar, Guardar no se deja usar: se leería como incluido y no lo está.
     expect(screen.getByTestId("cmp-query-programar-guardar")).toBeDisabled();
+    // Al corregir el campo, Guardar vuelve.
+    fireEvent.change(screen.getByTestId("cmp-query-programar-destinatarios-input"), { target: { value: "" } });
+    expect(screen.getByTestId("cmp-query-programar-guardar")).toBeEnabled();
     expect(posts(peticiones)).toHaveLength(0);
   });
 
@@ -85,7 +100,7 @@ describe("cmp-query · programar envío", () => {
     fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
     fireEvent.change(screen.getByTestId("cmp-query-programar-dia-semana"), { target: { value: "5" } });
     fireEvent.change(screen.getByTestId("cmp-query-programar-hora"), { target: { value: "06:30" } });
-    fireEvent.change(screen.getByTestId("cmp-query-programar-destinatarios"), { target: { value: "Flota@Empresa.com\nflota@empresa.com; jefe@empresa.com" } });
+    escribirCorreos("Flota@Empresa.com flota@empresa.com; jefe@empresa.com");
     fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
     await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
     expect(posts(peticiones)[0]).toEqual({
@@ -99,9 +114,9 @@ describe("cmp-query · programar envío", () => {
   it("cmp-query: el mensual manda el día del mes y no el de la semana", async () => {
     const { peticiones } = await abrirPanel();
     fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
-    fireEvent.click(screen.getByRole("radio", { name: "Cada mes" }));
+    fireEvent.change(screen.getByTestId("cmp-query-programar-periodicidad"), { target: { value: "mensual" } });
     fireEvent.change(screen.getByTestId("cmp-query-programar-dia-mes"), { target: { value: "28" } });
-    fireEvent.change(screen.getByTestId("cmp-query-programar-destinatarios"), { target: { value: "a@b.co" } });
+    escribirCorreos("a@b.co");
     fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
     await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
     expect(posts(peticiones)[0]).toMatchObject({ periodicidad: "mensual", diaMes: 28, diaSemana: null });
@@ -110,19 +125,19 @@ describe("cmp-query · programar envío", () => {
   it("cmp-query: un error del servidor se lee junto a Guardar y el formulario se conserva", async () => {
     await abrirPanel({ errorProgramar: { status: 422, code: "CONSULTA_INVALIDA", error: "La hora debe estar entre las 05:00 y las 22:00." } });
     fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
-    fireEvent.change(screen.getByTestId("cmp-query-programar-destinatarios"), { target: { value: "a@b.co" } });
+    escribirCorreos("a@b.co");
     fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
     expect(await screen.findByTestId("cmp-query-programar-error")).toHaveTextContent("La hora debe estar entre las 05:00 y las 22:00.");
-    expect(screen.getByTestId("cmp-query-programar-destinatarios")).toHaveValue("a@b.co");
+    expect(chips()).toEqual(["a@b.co"]);
   });
 
   it("cmp-query: pausar guarda al instante con activa en no", async () => {
     const { panel, peticiones } = await abrirPanel({ programaciones: [PROGRAMADA] });
     const tarjeta = await within(panel).findByTestId("cmp-query-programar-envio-prog-1");
-    fireEvent.click(within(tarjeta).getByRole("switch"));
+    fireEvent.click(within(tarjeta).getByTestId("cmp-query-programar-activo-prog-1"));
     await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
     expect(posts(peticiones)[0]).toMatchObject({ id: "prog-1", activa: false, hora: "07:00", diaSemana: 1 });
-    expect(await within(tarjeta).findByText("En pausa")).toBeInTheDocument();
+    expect(await within(tarjeta).findByText("En pausa", { selector: "dd" })).toBeInTheDocument();
   });
 
   it("cmp-query: borrar se confirma en la tarjeta antes de llamar al servidor", async () => {
@@ -161,7 +176,7 @@ describe("cmp-query · programar envío (SuperAdmin y edición)", () => {
 
     // Nada que el servidor le vaya a rechazar.
     expect(within(panel).queryByTestId("cmp-query-programar-nuevo")).not.toBeInTheDocument();
-    expect(within(tarjeta).queryByRole("switch")).not.toBeInTheDocument();
+    expect(within(tarjeta).queryByRole("checkbox")).not.toBeInTheDocument();
     expect(within(tarjeta).queryByTestId("cmp-query-programar-editar-prog-1")).not.toBeInTheDocument();
     expect(within(tarjeta).queryByTestId("cmp-query-programar-borrar-prog-1")).not.toBeInTheDocument();
 
@@ -182,7 +197,7 @@ describe("cmp-query · programar envío (SuperAdmin y edición)", () => {
     fireEvent.click(await within(panel).findByTestId("cmp-query-programar-editar-prog-1"));
     expect(screen.getByTestId("cmp-query-programar-dia-semana")).toHaveValue("1");
     expect(screen.getByTestId("cmp-query-programar-hora")).toHaveValue("07:00");
-    expect(screen.getByTestId("cmp-query-programar-destinatarios")).toHaveValue("flota@empresa.com\ngerencia@empresa.com\njefe@empresa.com");
+    expect(chips()).toEqual(["flota@empresa.com", "gerencia@empresa.com", "jefe@empresa.com"]);
     fireEvent.change(screen.getByTestId("cmp-query-programar-hora"), { target: { value: "08:15" } });
     fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
     await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
@@ -218,7 +233,7 @@ describe("cmp-query · programar envío (teclado)", () => {
   it("cmp-query: al abrir el formulario el foco va a su primer control", async () => {
     await abrirPanel();
     fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
-    expect(screen.getByRole("radio", { name: "Cada semana" })).toHaveFocus();
+    expect(screen.getByTestId("cmp-query-programar-periodicidad")).toHaveFocus();
   });
 });
 
@@ -231,10 +246,125 @@ describe("cmp-query · día de la semana ISO", () => {
       ["1", "Lunes"], ["2", "Martes"], ["3", "Miércoles"], ["4", "Jueves"], ["5", "Viernes"], ["6", "Sábado"], ["7", "Domingo"],
     ]);
     fireEvent.change(select, { target: { value: "7" } });
-    fireEvent.change(screen.getByTestId("cmp-query-programar-destinatarios"), { target: { value: "a@b.co" } });
+    escribirCorreos("a@b.co");
     fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
     await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
     expect(posts(peticiones)[0]).toMatchObject({ periodicidad: "semanal", diaSemana: 7, diaMes: null });
+  });
+});
+
+describe("cmp-query · programar envío como en Trámites", () => {
+  it("cmp-query: es un modal centrado con título, subtítulo de la consulta y formato Excel fijo", async () => {
+    await abrirPanel();
+    const dialogo = screen.getByRole("dialog", { name: "Programar envío" });
+    expect(dialogo).toHaveAttribute("aria-modal", "true");
+    expect(dialogo).toHaveTextContent("«Mis placas de flota» llega por correo");
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    expect(screen.getByTestId("cmp-query-programar-formato")).toHaveTextContent("Excel");
+    expect(screen.getByText("El resultado va como Excel adjunto.")).toBeInTheDocument();
+    expect(screen.getByText("Presiona Enter o coma para agregar. Máximo 20 destinatarios.")).toBeInTheDocument();
+  });
+
+  it("cmp-query: pegar una columna de correos (con saltos de línea) los agrega todos", async () => {
+    await abrirPanel();
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    fireEvent.paste(screen.getByTestId("cmp-query-programar-destinatarios-input"), {
+      clipboardData: { getData: () => "Ana@Empresa.com\nluis@empresa.com\nana@empresa.com" },
+    });
+    expect(chips()).toEqual(["ana@empresa.com", "luis@empresa.com"]);
+  });
+
+  it("cmp-query: los destinatarios se agregan con coma y no pasan de 20", async () => {
+    await abrirPanel();
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    const campo = screen.getByTestId("cmp-query-programar-destinatarios-input");
+    fireEvent.change(campo, { target: { value: "uno@empresa.com," } });
+    expect(chips()).toEqual(["uno@empresa.com"]);
+    escribirCorreos(Array.from({ length: 25 }, (_, i) => `p${i}@empresa.com`).join(" "));
+    expect(chips()).toHaveLength(20);
+    expect(screen.getByTestId("cmp-query-programar-correos-invalidos")).toHaveTextContent("No puedes indicar más de 20 destinatarios.");
+    fireEvent.click(screen.getByRole("button", { name: "Quitar uno@empresa.com" }));
+    expect(chips()).toHaveLength(19);
+  });
+});
+
+describe("cmp-query · programar envío (detalles del formulario)", () => {
+  it("cmp-query: desmarcar Activo manda activa en no", async () => {
+    const { peticiones } = await abrirPanel();
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    escribirCorreos("a@b.co");
+    fireEvent.click(screen.getByTestId("cmp-query-programar-activo"));
+    fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
+    await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
+    expect(posts(peticiones)[0]).toMatchObject({ activa: false });
+  });
+
+  it("cmp-query: salir del campo agrega el correo escrito, y Backspace en vacío quita la última ficha", async () => {
+    await abrirPanel();
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    const campo = screen.getByTestId("cmp-query-programar-destinatarios-input");
+    fireEvent.change(campo, { target: { value: "uno@empresa.com" } });
+    fireEvent.blur(campo);
+    expect(chips()).toEqual(["uno@empresa.com"]);
+    expect(screen.getByTestId("cmp-query-programar-guardar")).toBeEnabled();
+    fireEvent.keyDown(campo, { key: "Backspace" });
+    expect(chips()).toEqual([]);
+  });
+
+  it("cmp-query: Cancelar cierra el formulario y devuelve el foco a «Nuevo envío»", async () => {
+    await abrirPanel();
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.queryByTestId("cmp-query-programar-formulario")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("cmp-query-programar-nuevo")).toHaveFocus());
+  });
+});
+
+describe("cmp-query · programar envío (reapertura y teclado)", () => {
+  it("cmp-query: un correo inválido sin agregar no deja Guardar apagado al cerrar y volver a abrir", async () => {
+    const { peticiones } = await abrirPanel({ programaciones: [PROGRAMADA] });
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    escribirCorreos("ana@");
+    expect(screen.getByTestId("cmp-query-programar-guardar")).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar" }));
+    await waitFor(() => expect(screen.queryByTestId("cmp-query-programar")).not.toBeInTheDocument());
+
+    fireEvent.click(screen.getByTestId("cmp-query-programar-mia-1"));
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-editar-prog-1"));
+    fireEvent.change(screen.getByTestId("cmp-query-programar-hora"), { target: { value: "09:00" } });
+    expect(screen.getByTestId("cmp-query-programar-guardar")).toBeEnabled();
+    fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
+    await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
+  });
+
+  it("cmp-query: Escape con el formulario abierto cierra el modal, como en Trámites", async () => {
+    await abrirPanel();
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    fireEvent.keyDown(screen.getByTestId("cmp-query-programar-periodicidad"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByTestId("cmp-query-programar")).not.toBeInTheDocument());
+  });
+
+  it("cmp-query: escribir un correo a medias no apaga Guardar; solo un intento fallido de agregarlo", async () => {
+    await abrirPanel();
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    escribirCorreos("a@b.co");
+    fireEvent.change(screen.getByTestId("cmp-query-programar-destinatarios-input"), { target: { value: "jefe@emp" } });
+    expect(screen.getByTestId("cmp-query-programar-guardar")).toBeEnabled();
+  });
+
+  it("cmp-query: si borrar falla, el foco vuelve a «Borrar envío» y el error se lee en la tarjeta", async () => {
+    const { panel, fetchMock } = await abrirPanel({ programaciones: [PROGRAMADA] });
+    await within(panel).findByTestId("cmp-query-programar-envio-prog-1");
+    const original = fetchMock.getMockImplementation()!;
+    fetchMock.mockImplementation(async (entrada, init) =>
+      init?.method === "DELETE"
+        ? new Response(JSON.stringify({ code: "ERROR", error: "No se pudo borrar ahora." }), { status: 500, headers: { "Content-Type": "application/json" } })
+        : original(entrada, init),
+    );
+    fireEvent.click(screen.getByTestId("cmp-query-programar-borrar-prog-1"));
+    fireEvent.click(screen.getByTestId("cmp-query-programar-borrar-si-prog-1"));
+    expect(await within(panel).findByText("No se pudo borrar ahora.")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId("cmp-query-programar-borrar-si-prog-1")).toHaveFocus());
   });
 });
 
