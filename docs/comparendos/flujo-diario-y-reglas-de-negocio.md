@@ -581,20 +581,21 @@ Después, el DP y el cambio de contraventor quedan bloqueados por «propietario 
 
 ### R11. ¿Tiene en cuenta el prefijo de letra (por ejemplo «D») y evita que el comparendo ya exista?
 
-**En parte.**
+**Sí, para los números reales (10 dígitos o más).**
 
-**Lo que sí hace hoy:**
+**Cómo funciona hoy:**
 
-- La lectura copia la letra y el sistema la conserva («d-123 456» queda «D123456»).
-- Detecta como duplicado el mismo número exacto, dentro de la empresa y dentro del paquete.
-- Detecta el mismo archivo subido dos veces.
+- La llave de unicidad del comparendo ignora las letras iniciales y los separadores cuando lo que sigue son 10 dígitos o más: «D-11001000000000012345» y «11001000000000012345» son el mismo comparendo, y si el escaneo trae uno que ya llegó por la fuente se ofrece **asociar** el documento en vez de crear otro.
+- Al registrar un comparendo desde un documento escaneado se guarda **sin la letra inicial**, con la misma regla de la llave. Lo que leyó el lector queda intacto en los campos del documento, para auditoría; en la revisión se ve «Número que se guardará».
+- Los números cortos o mixtos («A-98765») conservan la letra y no se tratan como el mismo comparendo que «98765».
+- También detecta el mismo archivo subido dos veces.
+- Los comparendos que ya estaban guardados con letra antes de este cambio no se modificaron.
 
 **Lo que falta:**
 
-- **«D123…» y «123…» no se reconocen como el mismo comparendo**: si SIMIT lo trae sin letra y el OCR con letra, quedarían dos.
 - Con la letra delante no se ubica el organismo por el número (respuesta R8).
 
-**Propuesta:** comparar los números sin la letra para detectar duplicados y para ubicar el organismo, mostrando siempre el número como viene. Antes hace falta que negocio confirme qué letras existen y qué significan.
+**Propuesta:** negocio confirma qué letras existen y qué significan para ubicar el organismo.
 
 ### Pantallas
 

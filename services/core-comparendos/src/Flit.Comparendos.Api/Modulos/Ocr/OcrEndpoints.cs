@@ -252,6 +252,7 @@ public static class OcrEndpoints
             d.CamposFaltantes, tipoFallo = d.TipoFallo?.ToString(), mensajeError = usuario.EsSuperAdmin ? d.MensajeError : null, reintentable = d.Estado == EstadoDocumentoOcr.Fallido && ResultadoOcr.EsTecnico(d.TipoFallo),
             avisoNumero = NumeroComparendo.AvisoDeLectura(d.NumeroComparendoExtraido),
             numeroPorConfirmar = ServicioOcr.NumeroPorConfirmar(campos),
+            numeroAGuardar = NumeroComparendo.ParaGuardar(campos.FirstOrDefault(c => c.NombreCampo == CamposOcr.Numero)?.ValorFinal),
             d.Reprocesos, maximoReprocesos = ServicioOcr.MaximoReprocesos, motivoNoReprocesable = ServicioOcr.MotivoNoReprocesable(d), versionPrompt,
             d.ComparendoId, d.ProcesadoEn, d.RevisadoPor, d.RevisadoEn, d.MotivoDescarte, d.FuenteDuplicado, duplicado,
             campos = campos.OrderBy(c => orden.GetValueOrDefault(c.NombreCampo, 99)).Select(c => new

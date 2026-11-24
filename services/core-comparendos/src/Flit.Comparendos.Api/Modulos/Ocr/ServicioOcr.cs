@@ -449,7 +449,8 @@ public sealed partial class ServicioOcr(
         var imposicion = ValoresOcr.Fecha(V(CamposOcr.FechaInfraccion));
         var item = new ItemFuente
         {
-            Numero = V(CamposOcr.Numero)!,
+            // GDC-ASOC §8: sin la letra inicial (misma regla que la llave); lo leído queda intacto en los campos del documento.
+            Numero = NumeroComparendo.ParaGuardar(V(CamposOcr.Numero)) ?? V(CamposOcr.Numero)!,
             Placa = V(CamposOcr.Placa),
             TipoDocumentoInfractor = ValoresOcr.Documento(V(CamposOcr.TipoDocumento)),
             NumeroDocumentoInfractor = EsNit(campos) ? Nit.Normalizar(V(CamposOcr.NumeroDocumento)) ?? V(CamposOcr.NumeroDocumento) : V(CamposOcr.NumeroDocumento),
