@@ -101,47 +101,37 @@ export function marcasLabel(item: InstanceSummary): string {
   return partes.join(', ');
 }
 
-export type QuipuxEstado = NonNullable<InstanceSummary['quipuxEstado']>;
+export type QuipuxEstado = NonNullable<InstanceSummary["quipuxEstado"]>;
 
 /**
- * Píldora «Quipux · …» de la columna Marcas: en qué punto del canal Quipux está el trámite. Un
- * Preparado que espera a Quipux no se ve igual que uno trabado. Tonos del kit, sin colores nuevos.
+ * Etiqueta «QX · …» de la columna Marcas: en qué punto del canal Quipux está el trámite. Solo los
+ * estados que NO dice ya el estado del trámite: aprobado y rechazado no se pintan (ni van al Excel).
+ * Discreta a propósito: etiqueta plana pequeña, y solo «Falló» lleva tono de alerta.
  */
-export const QUIPUX_MARCA: Record<
-  QuipuxEstado,
-  { texto: string; ayuda: string; tono: 'info' | 'success' | 'warning' | 'danger' | 'neutral' }
+export const QUIPUX_MARCA: Partial<
+  Record<QuipuxEstado, { texto: string; ayuda: string; tono: "danger" | "info" | "neutral" }>
 > = {
   en_cola: {
-    texto: 'Quipux · En cola',
-    ayuda: 'Se radica automáticamente en Quipux; el estado cambia cuando Quipux lo confirme.',
-    tono: 'neutral',
+    texto: "QX · En cola",
+    ayuda: "Se radica automáticamente en Quipux; el estado cambia cuando Quipux lo confirme.",
+    tono: "neutral",
   },
   radicado: {
-    texto: 'Quipux · Radicado',
-    ayuda: 'Radicado en Quipux; esperando la decisión del organismo.',
-    tono: 'info',
+    texto: "QX · Radicado",
+    ayuda: "Radicado en Quipux; esperando la decisión del organismo.",
+    tono: "info",
   },
   fallido: {
-    texto: 'Quipux · Falló',
-    ayuda: 'Quipux no respondió tras varios intentos. Revisa el LOG QX y reintenta desde la consola de Quipux.',
-    tono: 'danger',
-  },
-  rechazado: {
-    texto: 'Quipux · Rechazado',
-    ayuda: 'Quipux lo rechazó; revisa el motivo en el LOG QX.',
-    tono: 'warning',
-  },
-  aprobado: {
-    texto: 'Quipux · Aprobado',
-    ayuda: 'Aprobado por el organismo en Quipux.',
-    tono: 'success',
+    texto: "QX · Falló",
+    ayuda: "Quipux no respondió tras varios intentos. Revisa el LOG QX y reintenta desde la consola de Quipux.",
+    tono: "danger",
   },
 };
 
 /** Datos de la píldora Quipux de la fila, o null si no va por Quipux (o estado desconocido). */
-export function quipuxMarca(item: InstanceSummary): (typeof QUIPUX_MARCA)[QuipuxEstado] | null {
+export function quipuxMarca(item: InstanceSummary): NonNullable<(typeof QUIPUX_MARCA)[QuipuxEstado]> | null {
   const estado = item.quipuxEstado;
-  return estado && estado in QUIPUX_MARCA ? QUIPUX_MARCA[estado] : null;
+  return estado ? (QUIPUX_MARCA[estado] ?? null) : null;
 }
 
 /**

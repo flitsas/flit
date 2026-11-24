@@ -3640,44 +3640,53 @@ function TramiteRow({
           )
         )}
         {(() => {
-          // Píldora con TEXTO: dice en qué punto de Quipux está el trámite (el texto es lo que la
-          // hace intuitiva; un círculo de color más no diría nada).
+          // Etiqueta PLANA y pequeña (no la cinta del chip de estado, para no competir con él): dice
+          // en qué punto de Quipux está el trámite. Solo «Falló» lleva tono de alerta.
           const quipux = quipuxMarca(item);
           if (!quipux) return null;
-          const contenido = (
-            <>
-              <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
-              {quipux.texto}
-            </>
-          );
+          const tono = quipux.tono;
+          const base =
+            'inline-flex shrink-0 items-center whitespace-nowrap rounded border px-1.5 py-px text-[11px] font-semibold leading-4';
+          const estilo = {
+            color: `var(--badge-${tono}-fg)`,
+            borderColor: `color-mix(in srgb, var(--badge-${tono}-border) ${tono === 'danger' ? 55 : 30}%, transparent)`,
+            backgroundColor: tono === 'danger' ? 'var(--badge-danger-bg)' : 'transparent',
+          };
           if (!puedeVerLogQx) {
             return (
               <span
                 data-testid="tramite-marca-quipux"
                 title={quipux.ayuda}
                 aria-label={quipux.texto}
-                {...etiquetaKit(quipux.tono)}
+                className={base}
+                style={estilo}
               >
-                {contenido}
+                {quipux.texto}
               </span>
             );
           }
+          // Con envío: directo a la trazabilidad (el querystring lleva el filtro para que «volver»
+          // regrese a la bandeja de este trámite). Sin envío (en cola): bandeja filtrada.
+          const conEnvio = Boolean(item.quipuxEnvioId);
+          const destino = conEnvio ? 'la trazabilidad en el Log QX' : 'el Log QX';
           return (
             <a
               data-testid="tramite-marca-quipux"
-              href={`/?m=log-qx&instanceId=${item.id}`}
-              title={`${quipux.ayuda} — clic para ver el LOG QX`}
-              aria-label={`${quipux.texto}: ver el LOG QX`}
+              href={
+                conEnvio
+                  ? `/log-qx/${item.quipuxEnvioId}?instanceId=${item.id}`
+                  : `/?m=log-qx&instanceId=${item.id}`
+              }
+              title={`${quipux.ayuda} — clic para ver ${destino}`}
+              aria-label={`${quipux.texto}: ver ${destino}`}
               onClick={(e) => {
-                // La fila entera abre el asistente: este clic solo lleva al LOG QX.
+                // La fila entera abre el asistente: este clic solo lleva al Log QX.
                 e.stopPropagation();
               }}
-              {...etiquetaKit(quipux.tono, {
-                className:
-                  'cursor-pointer no-underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1',
-              })}
+              className={`${base} cursor-pointer no-underline hover:brightness-95 focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-1`}
+              style={estilo}
             >
-              {contenido}
+              {quipux.texto}
             </a>
           );
         })()}

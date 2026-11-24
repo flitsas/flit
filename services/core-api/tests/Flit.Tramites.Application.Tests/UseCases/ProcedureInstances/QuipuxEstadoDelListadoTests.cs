@@ -40,13 +40,15 @@ public sealed class QuipuxEstadoDelListadoTests
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
+        var envio = Guid.NewGuid();
         ListadoDe(id);
         _repo.GetQuipuxEstadosAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
-            .Returns(new Dictionary<Guid, string>());
+            .Returns(new Dictionary<Guid, QuipuxMarcaListado>());
 
         var filas = await new ListProcedureInstancesHandler(_repo).HandleAsync(Guid.NewGuid(), ct);
 
         filas.Single().QuipuxEstado.Should().BeNull();
+        filas.Single().QuipuxEnvioId.Should().BeNull();
     }
 
     [Fact]
@@ -54,13 +56,15 @@ public sealed class QuipuxEstadoDelListadoTests
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
+        var envio = Guid.NewGuid();
         ListadoDe(id);
         _repo.GetQuipuxEstadosAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
-            .Returns(new Dictionary<Guid, string> { [id] = QuipuxListadoEstado.EnCola });
+            .Returns(new Dictionary<Guid, QuipuxMarcaListado> { [id] = new(QuipuxListadoEstado.EnCola, null) });
 
         var filas = await new ListProcedureInstancesHandler(_repo).HandleAsync(Guid.NewGuid(), ct);
 
         filas.Single().QuipuxEstado.Should().Be("en_cola");
+        filas.Single().QuipuxEnvioId.Should().BeNull();
     }
 
     [Theory]
@@ -72,14 +76,17 @@ public sealed class QuipuxEstadoDelListadoTests
     {
         var ct = TestContext.Current.CancellationToken;
         var conEnvio = Guid.NewGuid();
+        var envio = Guid.NewGuid();
         var sinQuipux = Guid.NewGuid();
         ListadoDe(conEnvio, sinQuipux);
         _repo.GetQuipuxEstadosAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
-            .Returns(new Dictionary<Guid, string> { [conEnvio] = estado });
+            .Returns(new Dictionary<Guid, QuipuxMarcaListado> { [conEnvio] = new(estado, envio) });
 
         var filas = await new ListProcedureInstancesHandler(_repo).HandleAsync(Guid.NewGuid(), ct);
 
         filas.Single(f => f.Id == conEnvio).QuipuxEstado.Should().Be(esperado);
+        filas.Single(f => f.Id == conEnvio).QuipuxEnvioId.Should().Be(envio);
+        filas.Single(f => f.Id == sinQuipux).QuipuxEnvioId.Should().BeNull();
         filas.Single(f => f.Id == sinQuipux).QuipuxEstado.Should().BeNull();
     }
 
@@ -90,7 +97,7 @@ public sealed class QuipuxEstadoDelListadoTests
         var ids = Enumerable.Range(0, 25).Select(_ => Guid.NewGuid()).ToArray();
         ListadoDe(ids);
         _repo.GetQuipuxEstadosAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
-            .Returns(new Dictionary<Guid, string>());
+            .Returns(new Dictionary<Guid, QuipuxMarcaListado>());
 
         await new ListProcedureInstancesHandler(_repo).HandleAsync(Guid.NewGuid(), ct);
 
@@ -103,18 +110,20 @@ public sealed class QuipuxEstadoDelListadoTests
     {
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
+        var envio = Guid.NewGuid();
         _repo.ListWithSummaryGraphFilteredAsync(
                 Arg.Any<Guid?>(), Arg.Any<int>(), Arg.Any<int>(),
                 Arg.Any<ProcedureInstanceListFilter>(),
                 Arg.Any<ProcedureInstanceSortBy>(), Arg.Any<SortDirection>(), ct)
             .Returns(([Instancia(id)], 1));
         _repo.GetQuipuxEstadosAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
-            .Returns(new Dictionary<Guid, string> { [id] = QuipuxListadoEstado.Radicado });
+            .Returns(new Dictionary<Guid, QuipuxMarcaListado> { [id] = new(QuipuxListadoEstado.Radicado, envio) });
 
         var (items, _) = await new ListProcedureInstancesFilteredHandler(_repo)
             .HandleAsync(new ProcedureInstanceListRequest { TenantId = Guid.NewGuid() }, ct);
 
         items.Single().QuipuxEstado.Should().Be("radicado");
+        items.Single().QuipuxEnvioId.Should().Be(envio);
     }
 
     [Fact]
@@ -123,11 +132,13 @@ public sealed class QuipuxEstadoDelListadoTests
         // La vista de red / OT arma sus filas con el mismo `ToSummariesAsync` del listado filtrado.
         var ct = TestContext.Current.CancellationToken;
         var id = Guid.NewGuid();
+        var envio = Guid.NewGuid();
         _repo.GetQuipuxEstadosAsync(Arg.Any<IReadOnlyCollection<Guid>>(), ct)
-            .Returns(new Dictionary<Guid, string> { [id] = QuipuxListadoEstado.Fallido });
+            .Returns(new Dictionary<Guid, QuipuxMarcaListado> { [id] = new(QuipuxListadoEstado.Fallido, envio) });
 
         var items = await ListProcedureInstancesFilteredHandler.ToSummariesAsync(_repo, [Instancia(id)], ct, null);
 
         items.Single().QuipuxEstado.Should().Be("fallido");
+        items.Single().QuipuxEnvioId.Should().Be(envio);
     }
 }

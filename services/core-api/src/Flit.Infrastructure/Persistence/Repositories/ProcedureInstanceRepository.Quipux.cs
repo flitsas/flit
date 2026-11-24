@@ -40,12 +40,13 @@ internal sealed partial class ProcedureInstanceRepository
                           END
                       AND EXISTS (SELECT 1 FROM admin.quipux_settings qs WHERE qs.enabled)
                    THEN '{{QuipuxListadoEstado.EnCola}}'
-               END AS estado
+               END AS estado,
+               ls.id AS envio_id
         FROM tramites.procedure_instances pi
         JOIN tramites.procedure_types pt ON pt.id = pi.procedure_type_id
         LEFT JOIN catalogs.transit_offices o ON o.id = pi.transit_office_id
         LEFT JOIN LATERAL (
-            SELECT s.status
+            SELECT s.id, s.status
             FROM tramites.quipux_submissions s
             WHERE s.procedure_instance_id = pi.id
             ORDER BY s.created_at DESC, s.id DESC
@@ -53,11 +54,11 @@ internal sealed partial class ProcedureInstanceRepository
         WHERE pi.id = ANY({0}::uuid[])
         """;
 
-    public async Task<IReadOnlyDictionary<Guid, string>> GetQuipuxEstadosAsync(
+    public async Task<IReadOnlyDictionary<Guid, QuipuxMarcaListado>> GetQuipuxEstadosAsync(
         IReadOnlyCollection<Guid> instanceIds, CancellationToken ct = default)
     {
         if (instanceIds.Count == 0 || !db.Database.IsRelational())
-            return new Dictionary<Guid, string>();
+            return new Dictionary<Guid, QuipuxMarcaListado>();
 
         var rows = await db.Database
             .SqlQueryRaw<QuipuxEstadoSqlRow>(QuipuxEstadosSql, instanceIds.Distinct().ToArray())
@@ -66,7 +67,7 @@ internal sealed partial class ProcedureInstanceRepository
 
         return rows
             .Where(r => r.Estado is not null)
-            .ToDictionary(r => r.Id, r => r.Estado!);
+            .ToDictionary(r => r.Id, r => new QuipuxMarcaListado(r.Estado!, r.EnvioId));
     }
 
     private sealed class QuipuxEstadoSqlRow
@@ -74,5 +75,7 @@ internal sealed partial class ProcedureInstanceRepository
         public Guid Id { get; init; }
 
         public string? Estado { get; init; }
+
+        public Guid? EnvioId { get; init; }
     }
 }

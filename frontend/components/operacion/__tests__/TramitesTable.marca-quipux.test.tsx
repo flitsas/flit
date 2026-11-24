@@ -116,7 +116,7 @@ describe('TramitesTable — píldora Quipux en Marcas', { timeout: 30_000 }, () 
     mocks.listInstances.mockResolvedValue([
       fila('0001', 'en_cola'),
       fila('0002', 'radicado'),
-      fila('0003', 'fallido'),
+      { ...fila('0003', 'fallido'), quipuxEnvioId: 'env-3' },
       fila('0004', 'rechazado'),
       fila('0005', 'aprobado'),
       fila('0006', null),
@@ -127,37 +127,34 @@ describe('TramitesTable — píldora Quipux en Marcas', { timeout: 30_000 }, () 
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
   });
 
-  it('muestra el texto de cada estado y nada para null; sin permiso no es enlace', async () => {
+  it('pinta solo en cola, radicado y falló; sin permiso no es enlace', async () => {
     token(['tramites.read']);
     montar();
     await screen.findByText('P0001');
-    for (const t of [
-      'Quipux · En cola',
-      'Quipux · Radicado',
-      'Quipux · Falló',
-      'Quipux · Rechazado',
-      'Quipux · Aprobado',
-    ]) {
+    for (const t of ['QX · En cola', 'QX · Radicado', 'QX · Falló']) {
       const pildora = screen.getByLabelText(t);
       expect(pildora).toHaveTextContent(t);
       expect(pildora.tagName).toBe('SPAN');
       expect(pildora).not.toHaveAttribute('href');
     }
-    expect(screen.getAllByTestId('tramite-marca-quipux')).toHaveLength(5);
+    expect(screen.getAllByTestId('tramite-marca-quipux')).toHaveLength(3);
+    expect(screen.queryByText(/QX · (Aprobado|Rechazado)/)).not.toBeInTheDocument();
   });
 
-  it('con logqx.read enlaza al LOG QX del trámite y el clic no abre la fila', async () => {
+  it('con logqx.read: con envío va a la trazabilidad; sin envío, a la bandeja filtrada; el clic no abre la fila', async () => {
     token(['tramites.read', 'logqx.read']);
     montar();
     await screen.findByText('P0001');
-    const enlace = screen.getByLabelText('Quipux · En cola: ver el LOG QX');
-    expect(enlace).toHaveAttribute('href', '/?m=log-qx&instanceId=inst-0001');
-    expect(enlace).toHaveAttribute('title', expect.stringContaining('clic para ver el LOG QX'));
+    const conEnvio = screen.getByLabelText('QX · Falló: ver la trazabilidad en el Log QX');
+    expect(conEnvio).toHaveAttribute('href', '/log-qx/env-3?instanceId=inst-0003');
+    expect(conEnvio).toHaveAttribute('title', expect.stringContaining('ver la trazabilidad en el Log QX'));
+    const sinEnvio = screen.getByLabelText('QX · En cola: ver el Log QX');
+    expect(sinEnvio).toHaveAttribute('href', '/?m=log-qx&instanceId=inst-0001');
     // React delega en el contenedor raíz: si el manejador corta la propagación, el clic no llega
     // a `document`, que es por donde seguiría hacia la fila.
     const alDocumento = vi.fn();
     document.addEventListener('click', alDocumento);
-    await userEvent.click(enlace);
+    await userEvent.click(sinEnvio);
     document.removeEventListener('click', alDocumento);
     expect(alDocumento).not.toHaveBeenCalled();
     expect(push).not.toHaveBeenCalled();
