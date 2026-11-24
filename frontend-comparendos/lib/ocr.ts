@@ -257,7 +257,11 @@ export function vistaDuplicado(d: { estado: string; duplicado: DuplicadoComparen
   return dup.evidenciaActual ? "comparar" : "asociar";
 }
 
-/** Número sin letras iniciales, espacios, guiones ni puntos: solo para decidir si dos números «son el mismo». */
+/**
+ * Número sin letras iniciales, espacios, guiones ni puntos. Solo decide el aviso de UX («los números no coinciden»):
+ * la regla de verdad (qué se guarda y la llave de duplicados) vive en NumeroComparendo.SinPrefijo del backend. Aquí no
+ * se exige un mínimo de 10 dígitos a propósito: un aviso de más es inocuo, uno de menos esconde una diferencia.
+ */
 export function numeroBase(n: string | null | undefined): string {
   return (n ?? "").replace(/^[A-Za-z\s-]+/, "").replace(/[\s.-]/g, "").toUpperCase();
 }
