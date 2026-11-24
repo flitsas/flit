@@ -54,6 +54,8 @@ app.MapIctLifecycleEndpoints();
 app.MapIctObservabilityEndpoints();
 app.MapIctTrazabilidadEndpoints();
 app.MapIctClientAdminEndpoints();
+// HU #14668 Bloque 2 — URL prefirmada del consolidado por referencia de trámite ICT.
+app.MapIctDocumentsTransactionEndpoints();
 
 // Servidor gRPC del callback de estados (core-api -> core-ict). Requiere HTTP/2 (h2c en dev).
 // Protegido con el service-token del canal inverso (aud=core-ict-internal, scope=ict.state): solo

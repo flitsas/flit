@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: FLIT Core ICT API
-  version: 1.2.0
+  version: 2.0.0
   description: |-
     API de Integración con Terceros (ICT) de FLIT. El gestor se autentica con su propio token ICT (independiente del inicio de sesión de la plataforma FLIT), registra trámites en lote, consulta su estado y los reprocesa cuando tienen novedades, adjunta los documentos del trámite, consulta las secretarías de tránsito, pausa, reanuda o anula trámites en borrador y recibe en su webhook los cambios de estado.
 
@@ -16,7 +16,7 @@ info:
   x-flit-fuente:
     repo: flitsas/flit
     contrato: contracts/openapi/core-ict.v1.yaml
-    version_contrato: 1.0.0
+    version_contrato: 2.0.0
     gateway: services/core-api/src/Flit.Gateway/appsettings.json
     excel: Contratos_Integraciones_31Jul2025.xlsx
     hojas:
@@ -35,6 +35,13 @@ info:
     generador: python -m atlas_docs.ict (ATLAS-ADR-0037); no se edita a mano
     visibilidad: las operaciones con `x-public` se comparten con clientes; las `x-internal` las quita la poda de Atlas
   x-flit-changelog:
+  - version: 2.0.0
+    fecha: '2026-11-23'
+    hoja: null
+    colaborador: Equipo de integraciones de FLIT
+    cambio: 'HU #14668: MAJOR al alinear QA/PDN con el contrato Atlas OpenAPI 3.1 (antes 3.0.3/1.0.0 en staging-release).
+      Añade GET /api/v1/documents-transaction/{id} (consolidado prefirmado), tag ICT · Documentos, catálogo status 1–13
+      y paridad de pausa con observación.'
   - version: 1.5.0
     fecha: '2025-05-16'
     hoja: 1 - Auth
@@ -113,6 +120,8 @@ tags:
   description: Secretarías de tránsito activas (compatibilidad v1).
 - name: ICT · Ciclo de vida
   description: Pausa, reanudación y anulación de trámites en borrador (compatibilidad v1).
+- name: ICT · Documentos
+  description: Entrega de documentos del trámite (consolidado PDF prefirmado) al gestor ICT.
 - name: Webhooks
   description: Notificaciones que FLIT envía a la URL que registró el gestor.
 paths:
@@ -1193,6 +1202,85 @@ paths:
             más específico sobre el problema
       x-flit-origen: código de core-ict (IctLifecycleEndpoints.cs (AbortAsync)); el contrato de flit no la declara
       x-flit-hoja-excel: 11 - AbortProcess
+      x-public: true
+  /api/v1/documents-transaction/{id}:
+    get:
+      operationId: getDocumentsTransaction
+      summary: URL prefirmada del consolidado PDF de un trámite aprobado
+      description: |-
+        HU #14668 Bloque 2 — Devuelve la URL prefirmada (TTL 600 s) del documento consolidado PDF
+        de un trámite de OT en estado **aprobado**. El parámetro `id` puede ser el `transaction_number`
+        o el `manager_id_transaction` registrado por el gestor.
+
+        Solo responde con 200 si el trámite existe, está materializado y en estado `aprobado`.
+        En cualquier otro caso devuelve el código de error correspondiente (404 / 409 / 503).
+      tags:
+      - ICT · Documentos
+      security:
+      - ictClientToken: []
+      parameters:
+      - name: id
+        in: path
+        required: true
+        description: Referencia del pre-trámite (transaction_number o manager_id_transaction).
+        schema:
+          type: string
+          example: 'TRX-0001'
+      responses:
+        '200':
+          description: URL prefirmada generada correctamente.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [url]
+                properties:
+                  url:
+                    type: string
+                    format: uri
+                    description: URL prefirmada de descarga del consolidado PDF (TTL 600 s).
+                    example: 'https://files.example.com/presigned/abc123?X-Amz-Expires=600'
+              example:
+                url: 'https://files.example.com/presigned/abc123?X-Amz-Expires=600'
+        '401':
+          description: Token ICT ausente o inválido.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorIct'
+              example:
+                error: 'unauthorized'
+        '404':
+          description: Pre-trámite no encontrado (`not_found`) o no materializado en FLIT (`not_materialized`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorIct'
+              examples:
+                not_found:
+                  value: { error: 'not_found' }
+                not_materialized:
+                  value: { error: 'not_materialized' }
+        '409':
+          description: El trámite no está en estado aprobado (`not_approved`) o el consolidado no fue generado (`consolidado_no_disponible`).
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorIct'
+              examples:
+                not_approved:
+                  value: { error: 'not_approved' }
+                consolidado_no_disponible:
+                  value: { error: 'consolidado_no_disponible' }
+        '503':
+          description: El File Manager no está disponible para firmar la URL.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorIct'
+              example:
+                error: 'storage_unavailable'
+      x-flit-origen: código de core-ict (IctDocumentsTransactionEndpoints.cs); HU #14668 Bloque 2
       x-public: true
 webhooks:
   estadoTramite:
