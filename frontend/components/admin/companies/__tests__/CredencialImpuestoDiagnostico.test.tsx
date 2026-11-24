@@ -1,7 +1,7 @@
 // Ola impuesto-fuente-real (diseno.md §5.1) — API key de impuesto de Diagnóstico por compañía. La UI nunca recibe ni
 // muestra el valor guardado: solo «Configurada» / «No configurada». Valida 16..256 ASCII imprimible sin espacios.
 // Uso de ejemplo: <CredencialImpuestoDiagnostico tenantId="t1" configurada={false} onChanged={relee} />
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CredencialImpuestoDiagnostico } from "../tabs/CredencialImpuestoDiagnostico";
@@ -19,7 +19,7 @@ const MSG_LONGITUD = "La API key debe tener entre 16 y 256 caracteres, sin espac
 const campo = () => screen.getByLabelText("API key de impuesto vehicular");
 
 describe("CredencialImpuestoDiagnostico", () => {
-  let onChanged: ReturnType<typeof vi.fn>;
+  let onChanged: Mock<() => Promise<void>>;
   beforeEach(() => {
     setTenantProductCredential.mockReset().mockResolvedValue(undefined);
     deleteTenantProductCredential.mockReset().mockResolvedValue(undefined);

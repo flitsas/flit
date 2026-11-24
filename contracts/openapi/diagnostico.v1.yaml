@@ -1416,13 +1416,13 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
         "502":
-          description: `CREDENCIAL_RECHAZADA` o `ARCHIVO_INVALIDO`.
+          description: "`CREDENCIAL_RECHAZADA` o `ARCHIVO_INVALIDO`."
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
         "503":
-          description: `FUENTE_NO_DISPONIBLE`.
+          description: "`FUENTE_NO_DISPONIBLE`."
           content:
             application/json:
               schema:
