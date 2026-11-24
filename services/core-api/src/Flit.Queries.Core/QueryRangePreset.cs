@@ -17,11 +17,24 @@ public static class QueryRangePreset
     public const string MesActual = "mes_actual";
     public const string MesAnterior = "mes_anterior";
     public const string AnioActual = "anio_actual";
+
+    /// <summary>Reportes 2.0 — hoy y los 364 días anteriores.</summary>
+    public const string Ultimos365 = "ultimos_365";
+
+    /// <summary>
+    /// Reportes 2.0 — hoy y los 29 días siguientes. Para fechas que miran hacia adelante (límite de gestión,
+    /// caducidad, prescripción): «qué vence pronto» no se puede preguntar con un rango que termina hoy.
+    /// </summary>
+    public const string Proximos30 = "proximos_30";
+
+    /// <summary>Reportes 2.0 — hoy y los 89 días siguientes.</summary>
+    public const string Proximos90 = "proximos_90";
     public const string Personalizado = "personalizado";
 
     public static bool IsKnown(string? preset) => preset is
         Hoy or Ultimos7 or Ultimos30 or Ultimos90
-        or MesActual or MesAnterior or AnioActual or Personalizado;
+        or MesActual or MesAnterior or AnioActual or Personalizado
+        or Ultimos365 or Proximos30 or Proximos90;
 
     public static IReadOnlyList<QueryFieldOptionDto> Options { get; } =
     [
@@ -32,6 +45,9 @@ public static class QueryRangePreset
         new(MesActual, "Mes actual"),
         new(MesAnterior, "Mes anterior"),
         new(AnioActual, "Año actual"),
+        new(Ultimos365, "Último año"),
+        new(Proximos30, "Próximos 30 días"),
+        new(Proximos90, "Próximos 90 días"),
         new(Personalizado, "Rango propio"),
     ];
 
@@ -60,6 +76,12 @@ public static class QueryRangePreset
                 return (primeroDelAnterior, primeroDeEste.AddDays(-1));
             case AnioActual:
                 return (new DateOnly(today.Year, 1, 1), today);
+            case Ultimos365:
+                return (today.AddDays(-364), today);
+            case Proximos30:
+                return (today, today.AddDays(29));
+            case Proximos90:
+                return (today, today.AddDays(89));
             case Personalizado:
                 // Sin extremos guardados no hay nada que respetar: se cae al defecto en vez de
                 // devolver un rango vacío que se leería como «no hay trámites».

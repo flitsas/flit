@@ -25,7 +25,7 @@ public static class OperacionEndpoints
         var conValores = usuario.EsSuperAdmin
             || (usuario.Tiene(Permisos.ReportesVer)
                 && await db.ConfiguracionesEmpresa.AsNoTracking().AnyAsync(c => c.TenantId == tenant && c.HasReportesModule, ct).ConfigureAwait(false));
-        return Results.Ok(new { empresa = tenant, operacion = await reportes.OperacionAsync(tenant, conValores, bandeja, ct).ConfigureAwait(false) });
+        return Results.Ok(new { empresa = tenant, operacion = await reportes.OperacionAsync(ServicioReportes.SinPeriodo(tenant), conValores, bandeja, ct).ConfigureAwait(false) });
     }
 
     /// <remarks><c>?partes=impacto</c> (R4): «Impacto de FLIT» del año en curso; sin <c>partes</c>, la salud y las empresas que necesitan algo.</remarks>

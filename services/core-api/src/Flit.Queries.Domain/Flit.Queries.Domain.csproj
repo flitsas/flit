@@ -6,6 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- Reportes de Comparendos 2.0: el motor de consultas vive en Flit.Queries.Core (compartido entre productos). -->
+    <ProjectReference Include="..\Flit.Queries.Core\Flit.Queries.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- HU #12321 — TenantScope.All() es internal: solo el middleware (Flit.Api) y los tests lo fabrican. -->
     <InternalsVisibleTo Include="Flit.Api" />
     <InternalsVisibleTo Include="Flit.Admin.Tests" />

@@ -1,5 +1,6 @@
 using System.Globalization;
 using Flit.Comparendos.Api.Modulos.Bandeja;
+using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Domain.Modelo;
 using Microsoft.EntityFrameworkCore;
 
@@ -60,13 +61,47 @@ public sealed partial class ServicioReportes
     public static List<DpOrganismo> OrdenarDpPorOrganismo(IEnumerable<DpOrganismo> filas) =>
         filas.OrderByDescending(x => x.Enviados).ThenBy(x => x.Nombre, StringComparer.Ordinal).Take(8).ToList();
 
-    public async Task<Operacion> OperacionAsync(Guid tenant, bool conValores, ConsultaBandeja bandeja, CancellationToken ct)
+    /// <summary>
+    /// Sin periodo: lo pendiente de hoy, sea cual sea su fecha, y los movimientos de los últimos 30 días. Es lo que ve el
+    /// Inicio (<c>/comparendos/operacion</c>) y lo que abre Gestión cuando no llegan <c>desde</c> ni <c>hasta</c>.
+    /// </summary>
+    public static Alcance SinPeriodo(Guid? tenant, Guid? nit = null) => new(tenant, nit, DateOnly.MinValue, DateOnly.MaxValue);
+
+    public static bool ConPeriodo(Alcance a)
     {
+        ArgumentNullException.ThrowIfNull(a);
+        return a.Desde != DateOnly.MinValue || a.Hasta != DateOnly.MaxValue;
+    }
+
+    /// <summary>Lo pendiente (activo y sin pagar) del alcance; con periodo, solo lo impuesto en él (lo que no trae fecha de imposición queda fuera).</summary>
+    private IQueryable<Comparendo> Pendientes(Alcance a)
+    {
+        var q = Comparendos(a).Where(c => c.Activo && !c.Pagado);
+        return ConPeriodo(a) ? q.Where(c => c.FechaImposicion >= a.Desde && c.FechaImposicion <= a.Hasta) : q;
+    }
+
+    /// <summary>El mismo corte que <see cref="Pendientes"/> en los filtros de la bandeja, para que cada cifra sea la que se ve al hacer clic.</summary>
+    public static FiltrosBandeja FiltrosDe(Alcance a, string estadoProceso)
+    {
+        ArgumentNullException.ThrowIfNull(a);
+        var conPeriodo = ConPeriodo(a);
+        return new FiltrosBandeja
+        {
+            EstadoProceso = [estadoProceso],
+            Nits = a.Nit is { } nit ? [nit] : null,
+            ImposicionDesde = conPeriodo ? a.Desde : null,
+            ImposicionHasta = conPeriodo ? a.Hasta : null,
+        };
+    }
+
+    public async Task<Operacion> OperacionAsync(Alcance a, bool conValores, ConsultaBandeja bandeja, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(a);
         ArgumentNullException.ThrowIfNull(bandeja);
         var h = await bandeja.HoyAsync(ct).ConfigureAwait(false);
         var hoy = h.Dia;
         decimal? V(decimal v) => conValores ? v : null;
-        var pendientes = db.Comparendos.AsNoTracking().Where(c => c.TenantId == tenant && c.Activo && !c.Pagado);
+        var pendientes = Pendientes(a);
 
         // 1. Una pasada: totales, antigüedad (5 tramos por fecha de imposición) y evitables.
         var d30 = hoy.AddDays(-30);
@@ -141,24 +176,33 @@ public sealed partial class ServicioReportes
             caducan.Where(x => x.Year == m.Year && x.Month == m.Month).Sum(x => x.N),
             prescriben.Where(x => x.Year == m.Year && x.Month == m.Month).Sum(x => x.N))).ToList();
 
-        // 5. Últimos 30 días: lo que entró y lo que dejó de estar pendiente (pagado o inactivado).
-        var hace30 = Alcance.Utc(d30);
-        var nuevos = await db.Comparendos.AsNoTracking().CountAsync(c => c.TenantId == tenant && c.CreadoEn >= hace30, ct).ConfigureAwait(false);
-        var pagados = await db.Pagos.AsNoTracking().Where(p => p.TenantId == tenant && p.FechaPago >= d30).Select(p => p.ComparendoId)
-            .Union(db.Comparendos.AsNoTracking().Where(c => c.TenantId == tenant && !c.Activo && c.InactivadoEn >= hace30).Select(c => c.Id))
+        // 5. Movimientos: lo que entró y lo que dejó de estar pendiente (pagado o inactivado). Sin periodo, los últimos 30
+        // días (el Inicio); con periodo, los días del periodo (Gestión).
+        var (mDesde, mHasta) = ConPeriodo(a) ? (a.Desde, a.Hasta) : (d30, DateOnly.MaxValue);
+        var mInicio = Alcance.Utc(mDesde);
+        DateTimeOffset? mFin = mHasta == DateOnly.MaxValue ? null : Alcance.Utc(mHasta.AddDays(1));
+        var nuevos = await Comparendos(a).CountAsync(c => c.CreadoEn >= mInicio && (mFin == null || c.CreadoEn < mFin), ct).ConfigureAwait(false);
+        var pagados = await (from p in db.Pagos.AsNoTracking()
+                             join c in Comparendos(a) on p.ComparendoId equals c.Id
+                             where p.FechaPago >= mDesde && p.FechaPago <= mHasta
+                             select p.ComparendoId)
+            .Union(Comparendos(a).Where(c => !c.Activo && c.InactivadoEn >= mInicio && (mFin == null || c.InactivadoEn < mFin)).Select(c => c.Id))
             .CountAsync(ct).ConfigureAwait(false);
 
         // 6. Embudo de gestión con el filtro de la bandeja: cada paso es la cifra que se ve al hacer clic.
         var pasos = new List<PasoGestion>();
         foreach (var estado in new[] { "SinProcesar", "DerechoPeticion", "RespuestaDesfavorable", "RespuestaFavorable" })
-            pasos.Add(new PasoGestion(estado, await bandeja.Filtrar(tenant, new FiltrosBandeja { EstadoProceso = [estado] }, h).CountAsync(ct).ConfigureAwait(false)));
+            pasos.Add(new PasoGestion(estado, await bandeja.Filtrar(a.Tenant, FiltrosDe(a, estado), h).CountAsync(ct).ConfigureAwait(false)));
         var fav = pasos[3].Cantidad;
         var desf = pasos[2].Cantidad;
 
         // 7. DP por organismo: enviados, favorables y días promedio hasta la respuesta (pocos miles de filas a lo sumo).
+        // Con periodo, los radicados en él.
+        var conPeriodo = ConPeriodo(a);
         var dps = await (from d in db.DerechosPeticion.AsNoTracking()
-                         join c in db.Comparendos.AsNoTracking() on d.ComparendoId equals c.Id
-                         where d.TenantId == tenant && (d.Estado == EstadoDp.Enviado || d.Estado == EstadoDp.Respondido)
+                         join c in Comparendos(a) on d.ComparendoId equals c.Id
+                         where (d.Estado == EstadoDp.Enviado || d.Estado == EstadoDp.Respondido)
+                               && (!conPeriodo || (d.FechaRadicacion >= a.Desde && d.FechaRadicacion <= a.Hasta))
                          select new { c.OrganismoTransitoId, d.Estado, d.RespuestaSentido, d.FechaRadicacion, d.RespuestaFecha }).ToListAsync(ct).ConfigureAwait(false);
         var porOrganismo = dps.GroupBy(d => d.OrganismoTransitoId).Select(g =>
         {

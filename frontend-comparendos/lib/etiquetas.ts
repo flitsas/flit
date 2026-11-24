@@ -126,6 +126,7 @@ export const TRABAJO: Record<string, string> = {
   ReintentoContraventor: "Reintento de consulta de conductor",
   ReporteSemanal: "Reporte semanal",
   ReporteMensual: "Reporte mensual",
+  ConsultasProgramadas: "Envío de consultas programadas",
   SincronizacionOrganismos: "Réplica de organismos de tránsito",
   EnvioAutomaticoDp: "Envío automático de derechos de petición",
 };
@@ -195,6 +196,7 @@ export const TIPO_COMUNICACION: Record<string, string> = {
   AlertaSinRepresentante: "Alerta sin representante legal",
   ReporteSemanal: "Reporte semanal",
   ReporteMensual: "Reporte mensual",
+  ConsultaProgramada: "Consulta programada",
   ExportacionLista: "Exportación lista",
 };
 
