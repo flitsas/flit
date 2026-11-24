@@ -3,6 +3,7 @@ using Flit.Tramites.Application.Storage;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Repositories;
+using Flit.Tramites.Domain.Tramites.Estados;
 
 namespace Flit.Tramites.Application.UseCases.ExternalAttachments;
 
@@ -48,11 +49,13 @@ public sealed record SubmitExternalAttachmentResult(
 /// DESPUÉS de confirmar: si algo falla el cliente conserva lo que tenía.</para>
 /// <para>HU #13264 / Bug #14625: en todo estado admitido (todos salvo anulado y revocado) el 201 también deja
 /// <c>impuesto_departamental_pagado = true</c> (<c>source = flito</c>) en la misma transacción.</para>
-/// <para>Bug #14660 (ADR-0087): cuando el tipo archivado llena una casilla real de la matriz (<c>enMatriz = true</c>) y
-/// el envío sí cambió el expediente (<c>Created</c>, no el 200 idempotente), se invalida <c>consolidado_wizard_vigente</c>
-/// en la misma transacción y se encola, best-effort y fuera de ella, la regeneración anticipada del consolidado del
-/// wizard (<see cref="IConsolidadoRegeneracionQueue"/>, HU #12795). No es síncrono: no añade la latencia de fusionar PDFs
-/// ni la dependencia de RUNT/Kyverum al POST de Flito; el worker ya existente regenera en segundo plano.</para>
+/// <para>Bug #14660 (ADR-0087): cuando el envío sí cambió el expediente (<c>Created</c>, no el 200 idempotente) se bajan
+/// las DOS marcas de vigencia (wizard y maestro) en la misma transacción y se encola, best-effort y fuera de ella, la
+/// regeneración anticipada de cada consolidado que el trámite YA tenga (<see cref="IConsolidadoRegeneracionQueue"/>,
+/// HU #12795) — lo mismo que hace <c>ConsolidadoVigenciaTracker</c> con cualquier adjunto que entra por EF. No depende de
+/// <c>enMatriz</c>: ambos consolidados fusionan TODOS los adjuntos efectivos (lo que no está en la matriz va al final),
+/// así que el comprobante entra al PDF igual. No es síncrono: no añade la latencia de fusionar PDFs ni la dependencia
+/// de RUNT/Kyverum al POST de Flito; el worker ya existente regenera en segundo plano.</para>
 /// </summary>
 public sealed class SubmitExternalAttachmentHandler(
     IExternalAttachmentRepository repository,
@@ -87,12 +90,13 @@ public sealed class SubmitExternalAttachmentHandler(
         }
 
         // Bug #14660 (ADR-0087) — best-effort y fuera de la transacción ya confirmada: un descarte (cola llena) no es
-        // error de este envío, la bandera ya quedó abajo y el camino perezoso reconstruye igual.
-        if (result.Result.Status == SubmitExternalAttachmentStatus.Created
-            && result.Result.Receipt is { EnMatriz: true }
-            && result.Result.TenantId is { } tenantId)
+        // error de este envío, las marcas ya quedaron abajo y el camino perezoso reconstruye igual.
+        if (regeneracionQueue is not null && result.Result.TenantId is { } tenantId)
         {
-            regeneracionQueue?.Encolar(tenantId, procedureId, TipoConsolidado.Wizard);
+            foreach (var documento in result.Regenerar)
+            {
+                regeneracionQueue.Encolar(tenantId, procedureId, documento);
+            }
         }
 
         return result.Result;
@@ -176,12 +180,18 @@ public sealed class SubmitExternalAttachmentHandler(
             return new(Rejected("attachment_exists", target.TenantId), []);
         }
 
-        // Bug #14660 (ADR-0087) — misma transacción que el insert: si el tipo llena una casilla real de la matriz, el
-        // expediente cambió y la bandera de vigencia del consolidado del wizard debe bajar (espejo de
-        // ConsolidadoVigenciaTracker para este escritor SQL crudo, que no pasa por el ChangeTracker de EF).
-        if (enMatriz)
+        // Bug #14660 (ADR-0087) — misma transacción que el insert: el expediente cambió, así que las marcas de vigencia de
+        // los dos consolidados bajan (espejo de ConsolidadoVigenciaTracker para este escritor SQL crudo, que no pasa por el
+        // ChangeTracker de EF). Se anticipan solo los que ya existen y nunca en estado final (lo mismo excluye el tracker;
+        // el worker además respeta el cargado a mano y el maestro radicado en Quipux).
+        var existentes = await writer.InvalidateConsolidadosAsync(ct).ConfigureAwait(false);
+        List<TipoConsolidado> regenerar = [];
+        if (!TramiteEstado.EsFinal(target.Status))
         {
-            await writer.InvalidateConsolidadoAsync(ct).ConfigureAwait(false);
+            if (existentes.Wizard)
+                regenerar.Add(TipoConsolidado.Wizard);
+            if (existentes.Maestro)
+                regenerar.Add(TipoConsolidado.Maestro);
         }
 
         // HU #13264 / Bug #14625 — en todo estado admitido el comprobante marca el impuesto como pagado (misma transacción
@@ -196,11 +206,19 @@ public sealed class SubmitExternalAttachmentHandler(
         return new(new(SubmitExternalAttachmentStatus.Created,
                 new ExternalAttachmentReceipt(adjuntoId, tipo, stored.Sha256, propios.Count > 0 ? propios[0].Id : null, enMatriz, pagadoMarcado),
                 TenantId: target.TenantId),
-            [.. propios.Select(a => a.StoragePath)]);
+            [.. propios.Select(a => a.StoragePath)],
+            regenerar);
     }
 
     private static SubmitExternalAttachmentResult Rejected(string error, Guid? tenantId = null) =>
         new(SubmitExternalAttachmentStatus.Rejected, Error: error, TenantId: tenantId);
 
-    private sealed record Decision(SubmitExternalAttachmentResult Result, IReadOnlyList<string> RetiredPaths);
+    /// <param name="Regenerar">Bug #14660 — consolidados a anticipar tras confirmar (vacío si el envío no cambió nada).</param>
+    private sealed record Decision(
+        SubmitExternalAttachmentResult Result,
+        IReadOnlyList<string> RetiredPaths,
+        IReadOnlyList<TipoConsolidado>? Regenerar = null)
+    {
+        public IReadOnlyList<TipoConsolidado> Regenerar { get; } = Regenerar ?? [];
+    }
 }
