@@ -1,6 +1,8 @@
 using System.Security.Cryptography;
 using Flit.Tramites.Application.Storage;
+using Flit.Tramites.Application.Tests.UseCases.ProcedureInstances.Estados;
 using Flit.Tramites.Application.UseCases.ExternalAttachments;
+using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.ExternalSync;
 using Flit.Tramites.Domain.Repositories;
 using FluentAssertions;
@@ -24,7 +26,7 @@ public sealed class SubmitExternalAttachmentHandlerTests
     private readonly FakeStorage _storage = new();
     private readonly FakeMatrix _matrix = new();
 
-    private SubmitExternalAttachmentHandler Handler() => new(_repo, _storage, _matrix);
+    private SubmitExternalAttachmentHandler Handler(IConsolidadoRegeneracionQueue? queue = null) => new(_repo, _storage, _matrix, queue);
 
     private static ExternalAttachmentFile Archivo(byte[]? bytes = null, string mime = "application/pdf") =>
         new("recibo.pdf", mime, bytes ?? Pdf);
@@ -84,6 +86,104 @@ public sealed class SubmitExternalAttachmentHandlerTests
             .Receipt!.EnMatriz.Should().BeFalse("una casilla generada por el sistema no la completa el consumidor");
     }
 
+    [Fact]
+    public async Task Bug14660_Creado_ConAmbosConsolidados_InvalidaYEncolaWizardYMaestro()
+    {
+        _repo.Target = Target("asignado");
+        _repo.Existentes = new ConsolidadosExistentes(Wizard: true, Maestro: true);
+        _matrix.Codigos = ["liquidacion_impuesto"];
+        var cola = new RecordingRegeneracionQueue();
+
+        var result = await Handler(cola).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Created);
+        _repo.Invalidaciones.Should().Be(1);
+        cola.Solicitudes.Should().BeEquivalentTo(
+            [(Tenant, Tramite, TipoConsolidado.Wizard), (Tenant, Tramite, TipoConsolidado.Maestro)],
+            "el trámite ya está radicado: el OT mira el maestro, no solo el del wizard");
+    }
+
+    [Fact]
+    public async Task Bug14660_Creado_SoloConMaestro_EncolaSoloElMaestro()
+    {
+        _repo.Target = Target("entregado");
+        _repo.Existentes = new ConsolidadosExistentes(Wizard: false, Maestro: true);
+        var cola = new RecordingRegeneracionQueue();
+
+        await Handler(cola).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        cola.Solicitudes.Should().ContainSingle().Which.Should().Be((Tenant, Tramite, TipoConsolidado.Maestro));
+    }
+
+    [Fact]
+    public async Task Bug14660_EnMatrizFalso_IgualInvalidaYEncola_PorqueElConsolidadoFusionaTodosLosAdjuntos()
+    {
+        _repo.Target = Target("asignado");
+        _repo.Existentes = new ConsolidadosExistentes(Wizard: true, Maestro: true);
+        _matrix.Codigos = [];
+        var cola = new RecordingRegeneracionQueue();
+
+        var result = await Handler(cola).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Receipt!.EnMatriz.Should().BeFalse();
+        _repo.Invalidaciones.Should().Be(1);
+        cola.Solicitudes.Should().HaveCount(2);
+    }
+
+    [Fact]
+    public async Task Bug14660_SinConsolidadosPrevios_InvalidaPeroNoEncolaNada()
+    {
+        _repo.Target = Target("asignado");
+        var cola = new RecordingRegeneracionQueue();
+
+        await Handler(cola).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        _repo.Invalidaciones.Should().Be(1);
+        cola.Solicitudes.Should().BeEmpty("no se crean consolidados que nadie pidió");
+    }
+
+    [Fact]
+    public async Task Bug14660_EstadoFinal_InvalidaPeroNoEncola()
+    {
+        _repo.Target = Target("aprobado");
+        _repo.Existentes = new ConsolidadosExistentes(Wizard: true, Maestro: true);
+        var cola = new RecordingRegeneracionQueue();
+
+        var result = await Handler(cola).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Created);
+        _repo.Invalidaciones.Should().Be(1);
+        cola.Solicitudes.Should().BeEmpty("la documentación de un trámite en estado final es definitiva");
+    }
+
+    [Fact]
+    public async Task Bug14660_ElIdempotente200NoInvalidaNiEncola()
+    {
+        var vigente = new ExternalAttachmentExisting(Guid.CreateVersion7(), "flito", Sha(Pdf), "fm-1");
+        _repo.Target = Target("asignado") with { Vigentes = [vigente] };
+        _repo.Existentes = new ConsolidadosExistentes(Wizard: true, Maestro: true);
+        _matrix.Codigos = ["liquidacion_impuesto"];
+        var cola = new RecordingRegeneracionQueue();
+
+        var result = await Handler(cola).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Unchanged);
+        _repo.Invalidaciones.Should().Be(0, "el 200 idempotente no cambia el expediente");
+        cola.Solicitudes.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Bug14660_SinColaDeRegeneracionInyectada_NoLanzaYSigueArchivando()
+    {
+        _repo.Target = Target("asignado");
+        _matrix.Codigos = ["liquidacion_impuesto"];
+
+        var result = await Handler(queue: null).HandleAsync(Tramite, "liquidacion_impuesto", Archivo(), TestContext.Current.CancellationToken);
+
+        result.Status.Should().Be(SubmitExternalAttachmentStatus.Created);
+        _repo.Invalidaciones.Should().Be(1, "la invalidación transaccional no depende de la cola");
+    }
+
     [Theory]
     [InlineData("borrador", false)]
     [InlineData("preparado", false)]
@@ -102,7 +202,7 @@ public sealed class SubmitExternalAttachmentHandlerTests
         result.Status.Should().Be(SubmitExternalAttachmentStatus.Created);
         result.Receipt!.PagadoMarcado.Should().BeTrue();
         _repo.Marcas.Should().Be(1);
-        _repo.Eventos.Should().Equal("reemplazar", "marcar", "confirmar");
+        _repo.Eventos.Should().Equal("reemplazar", "invalidar", "marcar", "confirmar");
     }
 
     [Fact]
@@ -436,6 +536,8 @@ public sealed class SubmitExternalAttachmentHandlerTests
 
         public int Marcas { get; private set; }
 
+        public int Invalidaciones { get; private set; }
+
         public List<string> Eventos { get; } = [];
 
         public async Task<T> RunLockedAsync<T>(
@@ -470,6 +572,15 @@ public sealed class SubmitExternalAttachmentHandlerTests
             Marcas++;
             Eventos.Add("marcar");
             return Task.CompletedTask;
+        }
+
+        public ConsolidadosExistentes Existentes { get; set; } = ConsolidadosExistentes.Ninguno;
+
+        public Task<ConsolidadosExistentes> InvalidateConsolidadosAsync(CancellationToken cancellationToken)
+        {
+            Invalidaciones++;
+            Eventos.Add("invalidar");
+            return Task.FromResult(Existentes);
         }
     }
 

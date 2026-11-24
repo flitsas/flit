@@ -21,10 +21,14 @@ public sealed class EnvioEnMemoria : IExternalAttachmentRepository, IExternalAtt
     /// <summary>Veces que se pidió marcar <c>impuesto_departamental_pagado</c> (HU #13264).</summary>
     public int Marcas { get; private set; }
 
+    /// <summary>Veces que se pidió invalidar las marcas de vigencia de los consolidados (Bug #14660).</summary>
+    public int Invalidaciones { get; private set; }
+
     public void Reiniciar(ExternalAttachmentTarget? target)
     {
         Target = target;
         Marcas = 0;
+        Invalidaciones = 0;
         Escritos.Clear();
         Retirados.Clear();
     }
@@ -46,6 +50,15 @@ public sealed class EnvioEnMemoria : IExternalAttachmentRepository, IExternalAtt
     {
         Marcas++;
         return Task.CompletedTask;
+    }
+
+    /// <summary>Consolidados que el trámite simulado ya tiene (Bug #14660).</summary>
+    public ConsolidadosExistentes Existentes { get; set; } = ConsolidadosExistentes.Ninguno;
+
+    public Task<ConsolidadosExistentes> InvalidateConsolidadosAsync(CancellationToken cancellationToken)
+    {
+        Invalidaciones++;
+        return Task.FromResult(Existentes);
     }
 }
 
