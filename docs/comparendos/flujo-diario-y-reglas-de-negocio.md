@@ -590,6 +590,7 @@ Después, el DP y el cambio de contraventor quedan bloqueados por «propietario 
 - Los números cortos o mixtos («A-98765») conservan la letra y no se tratan como el mismo comparendo que «98765».
 - También detecta el mismo archivo subido dos veces.
 - Los comparendos que ya estaban guardados con letra antes de este cambio no se modificaron.
+- Una vez guardado sin letra, la fuente no vuelve a ponérsela mientras la llave sea la misma.
 
 **Lo que falta:**
 

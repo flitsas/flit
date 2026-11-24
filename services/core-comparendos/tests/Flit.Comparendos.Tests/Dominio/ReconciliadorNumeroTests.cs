@@ -15,7 +15,7 @@ public sealed class ReconciliadorNumeroTests
     [InlineData($"D-{Largo}", Largo, Largo, Largo)]
     [InlineData(Largo, $"D{Largo}", $"D{Largo}", Largo)]
     [InlineData("98765", "A-98765", "98765", "A98765")]
-    [InlineData("OTRO-1", "X-9", "X-9", "OTRO1")]
+    [InlineData("OTRO-1", "X-9", "OTRO-1", "X9")]
     public void AplicarCampos_RespetaElNumeroGuardado_SoloSiLaLlaveEsLaMisma(string traeLaFuente, string guardado, string esperado, string llave)
     {
         var c = new Comparendo { Numero = guardado, NumeroNormalizado = llave };
