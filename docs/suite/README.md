@@ -15,6 +15,7 @@ Convertimos FLIT en una suite de productos al estilo de Google: un **hub en `fli
 | [Frente B — Productos y hub](frentes/frente-b-productos-y-hub.md) | Productos, roles por producto y hub |
 | [Frente C — Consultas, SDK y plantilla](frentes/frente-c-consultas-sdk-y-plantilla.md) | Eventos, consultas compartidas, SDK y plantilla |
 | [Frente L — Líder e infraestructura](frentes/frente-l-lider-e-infraestructura.md) | Plan del líder técnico |
+| [Variables de entorno para desplegar](../despliegue/variables-de-entorno.md) | Checklist por ambiente y todas las variables del compose por servicio, con obligatorias, secretas y desfases |
 | [Handoff de VPS: la suite](handoff-vps-suite.md) | Puertos, variables, nginx, DNS, certificados y orden para encenderla en cada ambiente |
 | [Handoff de VPS: identidad](handoff-vps-identidad.md) | Fase 4 del anterior: `core-identity` aparte |
 | [Handoff de VPS: Consultas y Notificaciones](handoff-vps-consultas-notificaciones.md) | Epic #13316: broker, bases, variables, despliegue, verificación y vuelta atrás |
