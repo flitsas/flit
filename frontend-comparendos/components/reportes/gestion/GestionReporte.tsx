@@ -45,7 +45,7 @@ export function GestionReporte() {
         titulo="Gestión"
         descripcion="Cómo va la gestión de lo pendiente: vehículos que más repiten, infracciones, lo que se pudo evitar, antigüedad, calendario legal y derechos de petición por organismo. Cada cifra abre la bandeja con el mismo corte."
       />
-      <BarraFiltros filtros={filtros} escribir={escribir} errorUrl={errorUrl} />
+      <BarraFiltros filtros={filtros} escribir={escribir} errorUrl={errorUrl} vacioSinFechas />
       <div className="flex flex-wrap items-center gap-3 text-sm text-[color:var(--di-text-secondary)]" data-testid="gestion-alcance">
         {/* S0: el corte se rotula siempre, para que nadie compare cifras de cortes distintos sin saberlo. */}
         <span className="rounded-full border border-[color:var(--di-border)] px-3 py-1 text-xs font-semibold text-[color:var(--kit-azul-texto)]" data-testid="gestion-corte">

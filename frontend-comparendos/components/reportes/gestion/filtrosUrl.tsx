@@ -70,11 +70,25 @@ export function SelectorNit({ empresa, valor, onCambio }: { empresa: string | nu
 
 /**
  * Barra de filtros de una pestaña: periodo (y empresa del SuperAdmin) con «Consultar», y el NIT al lado. Todo se escribe en
- * la URL. `conNit` en false para Plataforma, que no corta por NIT.
+ * la URL. `conNit` en false para Plataforma, que no corta por NIT. `vacioSinFechas` (Gestión): sin desde ni hasta en la URL
+ * los campos van vacíos, porque lo que se ve es lo pendiente a hoy y no el mes en curso; rellenarlos haría creer que las
+ * cifras son del mes.
  */
-export function BarraFiltros({ filtros, escribir, conNit = true, errorUrl }: { filtros: FiltrosUrl; escribir: (c: Partial<FiltrosUrl>) => void; conNit?: boolean; errorUrl: string | null }) {
+export function BarraFiltros({
+  filtros,
+  escribir,
+  conNit = true,
+  errorUrl,
+  vacioSinFechas = false,
+}: {
+  filtros: FiltrosUrl;
+  escribir: (c: Partial<FiltrosUrl>) => void;
+  conNit?: boolean;
+  errorUrl: string | null;
+  vacioSinFechas?: boolean;
+}) {
   const { sesion } = useSesion();
-  const inicial = periodoInicial();
+  const inicial = vacioSinFechas ? { desde: "", hasta: "" } : periodoInicial();
   const valor: Periodo = { desde: filtros.desde ?? inicial.desde, hasta: filtros.hasta ?? inicial.hasta, empresa: filtros.empresa };
   const empresaNits = sesion?.usuario.esSuperAdmin ? filtros.empresa : (sesion?.empresa?.id ?? null);
   const puedeVerNits = conNit && !!empresaNits && tienePermiso(sesion, P.monitoreoVer);
