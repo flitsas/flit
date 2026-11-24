@@ -38,9 +38,6 @@ public sealed record AlcanceConsulta(Guid? Tenant)
 /// </summary>
 public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBandeja bandeja)
 {
-    /// <summary>Tope de filas extra para la cobertura (identificadores pedidos fuera del rango).</summary>
-    public const int MaxExtraCobertura = 500;
-
     // ── Ejecución ─────────────────────────────────────────────────────────────────────────────
 
     public async Task<ComparendoQueryResult> EjecutarAsync(AlcanceConsulta alcance, QueryRequest request, CancellationToken ct)
@@ -48,7 +45,7 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
         ArgumentNullException.ThrowIfNull(alcance);
         ArgumentNullException.ThrowIfNull(request);
         var catalogo = alcance.Catalogo;
-        var (definicion, originales) = CanonizarIdentificadores(QueryNormalizer.Normalize(catalogo, request.Definition));
+        var (definicion, originales) = Canonizar(QueryNormalizer.Normalize(catalogo, request.Definition));
         var h = await bandeja.HoyAsync(ct).ConfigureAwait(false);
         var (desde, hasta) = QueryRangePreset.Resolve(definicion.Fechas, h.Dia);
         var motor = Motor(alcance);
@@ -86,22 +83,37 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
         resultado?.Filas.Where(f => f.EmpresaId is not null).Select(f => f.EmpresaId!.Value).Distinct().ToList() ?? [];
 
     /// <summary>
-    /// Para el número y la placa, el motor compara con <see cref="QueryEngine{TRow}.SinSeparadores"/>, pero en la base se
+    /// Deja los valores en la forma en que se guardan, para que lo que se empuja a la base y lo que evalúa la memoria
+    /// digan lo mismo.
+    /// <list type="bullet">
+    /// <item>Opciones fijas y sí/no: el validador las acepta sin distinguir mayúsculas («TRUE», «entiempo») y la memoria
+    /// compara en mayúsculas, pero la base compara exacto. Se pasan al valor exacto de la opción del catálogo.</item>
+    /// <item>Para el número y la placa, el motor compara con <see cref="QueryEngine{TRow}.SinSeparadores"/>, pero en la base se
     /// guardan con su normalización propia (el número además pierde el prefijo de letras: «D-1100…» → «1100…»). Sin esto
     /// la base encontraría el comparendo y la memoria lo descartaría: una fila perdida en silencio. Los valores se
-    /// canonizan igual que se guardan, y la cobertura se devuelve con lo que escribió el usuario.
+    /// canonizan igual que se guardan, y la cobertura se devuelve con lo que escribió el usuario.</item>
+    /// </list>
     /// </summary>
-    private static (QueryDefinition Definicion, Dictionary<(string, string), string> Originales) CanonizarIdentificadores(QueryDefinition d)
+    private static (QueryDefinition Definicion, Dictionary<(string, string), string> Originales) Canonizar(QueryDefinition d)
     {
         var originales = new Dictionary<(string, string), string>();
         var condiciones = d.Condiciones.Select(c =>
         {
+            if (C.TodosLosCampos.FirstOrDefault(f => f.Id == c.FieldId) is { Options.Count: > 0 } campoFijo && !C.EsDinamico(c.FieldId))
+            {
+                return c with
+                {
+                    Values = c.Values.Select(v => campoFijo.Options.FirstOrDefault(o => string.Equals(o.Value, v, StringComparison.OrdinalIgnoreCase))?.Value ?? v)
+                        .Distinct(StringComparer.Ordinal).ToList(),
+                };
+            }
+
             if (c.FieldId is not (C.Numero or C.Placa) || c.Operator is not (QueryOperator.EsAlguno or QueryOperator.NoEsNinguno))
                 return c;
             var valores = new List<string>();
             foreach (var v in c.Values)
             {
-                var canonico = c.FieldId == C.Numero ? NumeroComparendo.Normalizar(v) ?? v : Placa.Normalizar(v) ?? QueryEngine<Fila>.SinSeparadores(v);
+                var canonico = (c.FieldId == C.Numero ? NumeroComparendo.Normalizar(v) : Placa.Normalizar(v)) ?? QueryEngine<Fila>.SinSeparadores(v);
                 if (valores.Contains(canonico, StringComparer.Ordinal))
                     continue;
                 valores.Add(canonico);
@@ -139,10 +151,6 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
             NotificacionHasta = campo == C.FechaNotificacion ? hasta : null,
             RegistroDesde = campo == C.FechaIngreso ? desde : null,
             RegistroHasta = campo == C.FechaIngreso ? hasta : null,
-            Numeros = identificadores.FirstOrDefault(c => c.FieldId == C.Numero)?.Values.ToArray(),
-            Placas = identificadores.FirstOrDefault(c => c.FieldId == C.Placa)?.Values.ToArray(),
-            // El estado legal, con la misma traducción a SQL que la bandeja (R1).
-            EstadoLegal = Valores(C.EstadoLegal),
             Organismos = Guids(Valores(C.Organismo)),
             Nits = Guids(Valores(C.Nit)),
             UltimoAviso = Valores(C.NotificacionConductor),
@@ -152,6 +160,19 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
             CobroCoactivo = Bool(Valores(C.CobroCoactivo)),
         };
         var q = bandeja.Filtrar(alcance.Tenant, filtros, h);
+
+        // Ya canonizados (Canonizar), así que se comparan contra la columna tal cual y usan su índice por empresa.
+        if (identificadores.FirstOrDefault(c => c.FieldId == C.Numero) is { } numeros)
+        {
+            var valores = numeros.Values.ToList();
+            q = q.Where(c => valores.Contains(c.NumeroNormalizado));
+        }
+
+        if (identificadores.FirstOrDefault(c => c.FieldId == C.Placa) is { } placas)
+        {
+            var valores = placas.Values.ToList();
+            q = q.Where(c => c.Placa != null && valores.Contains(c.Placa));
+        }
 
         if (campo == C.FechaDpRadicacion)
             q = q.Where(c => db.DerechosPeticion.Any(x => x.ComparendoId == c.Id && x.FechaRadicacion >= desde && x.FechaRadicacion <= hasta));
@@ -170,6 +191,25 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
 
         if (!empujar)
             return q;
+
+        if (Valores(C.EstadoLegal) is { } legales)
+        {
+            // Un SUPERCONJUNTO de MotorDePlazos.Evaluar, no la traducción exacta: la de la bandeja exige
+            // «hoy <= caducidad» para Vencido y el motor no (sin caducidad sigue siendo Vencido). Con la exacta, un
+            // comparendo sin esa fecha se perdería en silencio; con ésta entra y la memoria decide.
+            var hoy = h.Dia;
+            var sin = legales.Contains("SinNotificar");
+            var enTiempo = legales.Contains("EnTiempo");
+            var vencido = legales.Contains("Vencido");
+            var caducado = legales.Contains("Caducado");
+            var prescrito = legales.Contains("Prescrito");
+            q = q.Where(c =>
+                (sin && c.FechaLimiteGestion == null)
+                || (enTiempo && c.FechaLimiteGestion != null && hoy <= c.FechaLimiteGestion)
+                || (vencido && c.FechaLimiteGestion != null && hoy > c.FechaLimiteGestion)
+                || (caducado && c.FechaLimiteGestion != null && c.FechaCaducidad != null && hoy > c.FechaCaducidad)
+                || (prescrito && c.FechaLimiteGestion != null && c.FechaPrescripcion != null && hoy > c.FechaPrescripcion));
+        }
 
         if (Guids(Valores(C.Empresa)) is { } empresas)
             q = q.Where(c => empresas.Contains(c.TenantId));
@@ -235,6 +275,7 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
                             join p in db.Pagos on c.Id equals p.ComparendoId into ps
                             from p in ps.DefaultIfEmpty()
                             select new Carga(c, d, p))
+            // Red de seguridad, no un corte: el COUNT previo ya garantizó que el universo cabe.
             .Take(QueryLimits.MaxUniverso)
             .ToListAsync(ct).ConfigureAwait(false);
         if (cargas.Count == 0)
@@ -262,8 +303,12 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
     }
 
     /// <summary>
-    /// Filas de los identificadores pedidos que no llegaron en el universo, sin filtro de fecha ni de condiciones y con
-    /// tope: solo sirven para que la cobertura diga «existe, pero…» en vez de «no existe».
+    /// Filas de los identificadores pedidos que no llegaron en el universo, sin filtro de fecha ni de condiciones: solo
+    /// sirven para que la cobertura diga «existe, pero…» en vez de «no existe».
+    ///
+    /// <para>UNA fila por valor pedido (por empresa), no todas: a la cobertura le basta con saber que existe, y una placa
+    /// tiene años de comparendos. Un tope sobre todas las filas se lo comerían unas pocas placas y las demás saldrían
+    /// como «no existe». Así lo acota el propio tope de valores por condición.</para>
     /// </summary>
     private async Task<List<Fila>> ExtraCoberturaAsync(AlcanceConsulta alcance, QueryDefinition d, List<Fila> cargadas, ConsultaBandeja.Hoy h, CancellationToken ct)
     {
@@ -278,12 +323,26 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
             return [];
 
         // Sin excluir los ya cargados: una fila cargada tiene sus valores «vistos», así que no coincide con ninguno faltante.
-        var q = db.Comparendos.AsNoTracking().Where(c => (alcance.Tenant == null || c.TenantId == alcance.Tenant)
-            && (numeros.Contains(c.NumeroNormalizado)
-                || (c.Placa != null && placas.Contains(c.Placa))
-                || db.DerechosPeticion.Any(x => x.ComparendoId == c.Id
-                    && radicados.Contains(x.Radicado.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", "")))));
-        return await CargarAsync(q.OrderBy(c => c.Id).Take(MaxExtraCobertura), h, ct).ConfigureAwait(false);
+        var t = alcance.Tenant;
+        var propios = db.Comparendos.AsNoTracking().Where(c => t == null || c.TenantId == t);
+        var ids = new List<Guid>();
+        if (numeros.Count > 0)
+            ids.AddRange(await propios.Where(c => numeros.Contains(c.NumeroNormalizado))
+                .GroupBy(c => new { c.TenantId, c.NumeroNormalizado }).Select(g => g.OrderBy(c => c.Id).Select(c => c.Id).First())
+                .ToListAsync(ct).ConfigureAwait(false));
+        if (placas.Count > 0)
+            ids.AddRange(await propios.Where(c => c.Placa != null && placas.Contains(c.Placa))
+                .GroupBy(c => new { c.TenantId, c.Placa }).Select(g => g.OrderBy(c => c.Id).Select(c => c.Id).First())
+                .ToListAsync(ct).ConfigureAwait(false));
+        if (radicados.Count > 0)
+            // El radicado es único en toda la plataforma: a lo sumo un comparendo por valor.
+            ids.AddRange(await propios.Where(c => db.DerechosPeticion.Any(x => x.ComparendoId == c.Id
+                    && radicados.Contains(x.Radicado.ToUpper().Replace("-", "").Replace(" ", "").Replace(".", ""))))
+                .Select(c => c.Id).ToListAsync(ct).ConfigureAwait(false));
+        if (ids.Count == 0)
+            return [];
+        var unicos = ids.Distinct().ToList();
+        return await CargarAsync(db.Comparendos.AsNoTracking().Where(c => unicos.Contains(c.Id)), h, ct).ConfigureAwait(false);
     }
 
     private static List<string> Faltantes(List<QueryCondition> identificadores, string campo, List<Fila> cargadas, Func<Fila, string?> valor)

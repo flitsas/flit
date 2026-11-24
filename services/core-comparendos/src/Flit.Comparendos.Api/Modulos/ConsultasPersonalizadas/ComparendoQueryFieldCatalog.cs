@@ -226,6 +226,10 @@ public sealed class ComparendoQueryFieldCatalog : IQueryFieldCatalog
 
     public static bool EsIdentificador(string fieldId) => fieldId is Numero or Placa or DpRadicado;
 
+    /// <summary>Campos cuyas opciones las pone el repositorio con los datos de la empresa (no son una lista fija).</summary>
+    public static bool EsDinamico(string fieldId) =>
+        fieldId is Nit or Empresa or CodigoInfraccion or TipoVehiculo or ServicioVehiculo or Organismo or Departamento or Municipio or DpTipologia;
+
     // ── IQueryFieldCatalog ────────────────────────────────────────────────────────────────────
 
     public IReadOnlyList<QueryFieldDto> Fields => TodasLasEmpresas ? Todos : SinEmpresa;

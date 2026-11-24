@@ -158,6 +158,16 @@ public sealed class ConsultasPersonalizadasTests(ApiConFuente api) : IClassFixtu
             Numeros(r).Should().Contain(a.Numero, $"«{campo}» = {valor} debe traer A").And.NotContain(b.Numero, $"«{campo}» = {valor} no debe traer B");
         }
 
+        // REX: el validador acepta «TRUE» o «entiempo»; lo empujado a la base tiene que entenderlo igual que la memoria.
+        Numeros(await CorrerAsync(Super, Definicion([Es(F.Pagado, "TRUE")]))).Should().Contain(a.Numero).And.NotContain(b.Numero);
+        Numeros(await CorrerAsync(Super, Definicion([Es(F.EstadoLegal, "entiempo")]))).Should().Contain(a.Numero).And.NotContain(b.Numero);
+        Numeros(await CorrerAsync(Super, Definicion([Es(F.VentanaDescuento, "descuento50")]))).Should().Contain(a.Numero).And.NotContain(b.Numero);
+
+        // GIA: sin fecha de caducidad el motor dice «Vencido»; la base no puede descartarlo antes.
+        var sinCaducidad = Nuevo(e1, "11001000000000000003", c => (c.FechaLimiteGestion, c.FechaCaducidad, c.FechaPrescripcion) = (new DateOnly(2026, 10, 2), null, null));
+        await GuardarAsync(sinCaducidad);
+        Numeros(await CorrerAsync(Super, Definicion([Es(F.EstadoLegal, "Vencido")]))).Should().Contain([sinCaducidad.Numero, b.Numero]).And.NotContain(a.Numero);
+
         // Y cada fecha del rango filtra por la suya (A cae en el rango; B se corre fuera en esa fecha).
         var fila = (await CorrerAsync(Super, Definicion([Es(F.Numero, a.Numero)]))).GetProperty("filas")[0];
         (fila.GetProperty("estadoLegal").GetString(), fila.GetProperty("ventanaDescuento").GetString(), fila.GetProperty("dpTipologia").GetString())
@@ -197,6 +207,17 @@ public sealed class ConsultasPersonalizadasTests(ApiConFuente api) : IClassFixtu
         var campos = await gestora.GetFromJsonAsync<JsonElement>($"{Ruta}/fields", Ct);
         campos.EnumerateArray().Select(f => f.GetProperty("id").GetString()).Should().NotContain(F.Empresa);
         campos.EnumerateArray().Single(f => f.GetProperty("id").GetString() == F.Placa).GetProperty("label").GetString().Should().Be("Placa");
+
+        // La cobertura no delata comparendos de otra empresa: para la gestora 1, la placa de la 2 «no existe».
+        await GuardarAsync(Nuevo(e2, "22001000000000000003", c => (c.Placa, c.FechaImposicion) = ("OTR222", new DateOnly(2024, 1, 1))));
+        var ajena = await CorrerAsync(gestora, Definicion([Es(F.Placa, "OTR222")]));
+        ajena.GetProperty("cobertura")[0].GetProperty("resultado").GetString().Should().Be(QueryCoverageResult.NoExiste);
+
+        // Periodo anterior: número en la primera página, null en las siguientes (el export no lo necesita).
+        propia.GetProperty("totalPeriodoAnterior").GetInt32().Should().Be(0);
+        (await CorrerAsync(gestora, Definicion([Es(F.Placa, "ISO111")]), "?page=2")).GetProperty("totalPeriodoAnterior").ValueKind.Should().Be(JsonValueKind.Null);
+        var rango = await gestora.PostAsJsonAsync($"{Ruta}/run", Definicion([], hasta: new DateOnly(9999, 12, 31)), Ct);
+        rango.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, "un rango absurdo es un 422, no un 500");
 
         // Sin el módulo de reportes o sin el permiso, nada.
         var sinModulo = await ComparendosDePrueba.EmpresaAsync(api);
@@ -245,6 +266,27 @@ public sealed class ConsultasPersonalizadasTests(ApiConFuente api) : IClassFixtu
         cobertura["99999999999999999999"].GetProperty("motivo").GetString().Should().Be("No hay ningún comparendo con este valor en su empresa.");
     }
 
+    [Fact]
+    public async Task Cobertura_UnaPlacaConMuchasFilas_NoTapaALasDemas()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        api.Reloj.Hoy(Hoy);
+        var empresa = await EmpresaAsync("Muchas filas");
+        var viejo = new DateOnly(2024, 3, 1);
+        await api.EnDbAsync(async db =>
+        {
+            db.ChangeTracker.AutoDetectChangesEnabled = false;
+            db.Comparendos.AddRange(Enumerable.Range(0, 600).Select(i => Nuevo(empresa, $"66{i:D18}", c => (c.Placa, c.FechaImposicion) = ("MUC111", viejo))));
+            // La otra placa queda de última por id: con un tope sobre todas las filas, la primera se lo comería.
+            db.Comparendos.Add(Nuevo(empresa, "67000000000000000001", c => (c.Id, c.Placa, c.FechaImposicion) = (Guid.Parse("ffffffff-ffff-4fff-8fff-ffffffffffff"), "ULT999", viejo)));
+            await db.SaveChangesAsync(Ct);
+        });
+
+        var r = await CorrerAsync(api.Cliente(Gestora(empresa)), Definicion([Es(F.Placa, "MUC111", "ULT999")], preset: QueryRangePreset.Ultimos30));
+        r.GetProperty("cobertura").EnumerateArray().Select(i => (i.GetProperty("valor").GetString(), i.GetProperty("resultado").GetString()))
+            .Should().BeEquivalentTo([("MUC111", QueryCoverageResult.Excluido), ("ULT999", QueryCoverageResult.Excluido)]);
+    }
+
     // ── 4. Tope ───────────────────────────────────────────────────────────────────────────────
 
     [Fact]
@@ -257,7 +299,7 @@ public sealed class ConsultasPersonalizadasTests(ApiConFuente api) : IClassFixtu
         {
             db.ChangeTracker.AutoDetectChangesEnabled = false;
             db.Comparendos.AddRange(Enumerable.Range(0, QueryLimits.MaxUniverso + 1)
-                .Select(i => Nuevo(empresa, $"44{i:D18}", c => c.FechaImposicion = new DateOnly(2025, 1, 1).AddDays(i % 365))));
+                .Select(i => Nuevo(empresa, $"44{i:D18}", c => (c.FechaImposicion, c.Pagado) = (new DateOnly(2025, 1, 1).AddDays(i % 365), i % 2 == 0))));
             await db.SaveChangesAsync(Ct);
         });
         var gestora = api.Cliente(Gestora(empresa));
@@ -267,6 +309,10 @@ public sealed class ConsultasPersonalizadasTests(ApiConFuente api) : IClassFixtu
         var error = await amplia.Content.ReadFromJsonAsync<JsonElement>(Ct);
         error.GetProperty("code").GetString().Should().Be("CONSULTA_DEMASIADO_AMPLIA");
         error.GetProperty("error").GetString().Should().Contain("comparendos").And.EndWith("Acótala eligiendo un NIT o un rango de fecha más corto.");
+
+        // GIA: sin identificadores, la condición se empuja a la base y baja el universo del tope (lo que deja abrir Renting).
+        (await CorrerAsync(gestora, Definicion([Es(F.Pagado, "false")], desde: new DateOnly(2025, 1, 1), hasta: new DateOnly(2025, 12, 31))))
+            .GetProperty("total").GetInt32().Should().Be(QueryLimits.MaxUniverso / 2);
 
         // Un mes cabe, y un identificador acota aunque el rango sea de todo el año.
         (await CorrerAsync(gestora, Definicion([], desde: new DateOnly(2025, 3, 1), hasta: new DateOnly(2025, 3, 31)))).GetProperty("total").GetInt32().Should().Be(31 * 55, "20.001 fechas repartidas en 365 días: 55 por cada día de marzo");
