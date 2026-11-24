@@ -4,12 +4,16 @@ namespace Flit.Tramites.Domain.Integration;
 /// Banderas Quipux de la secretaría DESTINO (<c>catalogs.transit_offices</c>) para decidir si el
 /// submit deja el trámite en <c>preparado</c> (Bug #13912). No confundir con
 /// <c>operation_mode = quipux</c> del perfil OT-cliente.
+/// <c>IntegracionHabilitada</c> refleja el interruptor global (<c>admin.quipux_settings.enabled</c>;
+/// sin fila = <c>false</c>): con la integración apagada el worker no radica, así que el canal no
+/// puede considerarse Quipux (Bug #14672).
 /// </summary>
 public sealed record TransitOfficeQuipuxCanal(
     string? DivipoCode,
     bool QuipuxRegistration,
     bool QuipuxTransfer,
-    bool QuipuxOther);
+    bool QuipuxOther,
+    bool IntegracionHabilitada = true);
 
 /// <summary>Puerto de lectura de DIVIPO + banderas de familia Quipux por OT.</summary>
 public interface ITransitOfficeQuipuxCanalReader

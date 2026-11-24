@@ -908,6 +908,33 @@ describe('TramiteWizard — Finalizar y blockers', () => {
     expect(screen.getByText(/La placa la asigna el organismo de tránsito/)).toBeInTheDocument();
   });
 
+  it('Bug #14672 — OT Quipux: si /submit deja el trámite en `preparado`, el acuse dice que quedó en cola', async () => {
+    const PREPARADO: WizardState = {
+      ...TRASPASO_WIZARD,
+      canSubmit: true,
+      blockers: [],
+      status: 'preparado',
+      allowedTransitions: ['entregado'],
+      steps: TRASPASO_WIZARD.steps.map((s) => ({ ...s, status: 'complete', reasons: [] as string[] })),
+    };
+    mocks.getWizardState.mockResolvedValue(PREPARADO);
+    mocks.getInstance.mockResolvedValue({ id: 'inst-1', status: 'preparado', draftFinalizedAt: null, fieldValues: [], actors: [] });
+    mocks.submitInstance.mockResolvedValue({ id: 'inst-1', status: 'preparado' });
+    const user = userEvent.setup();
+    render(<TramiteWizard existingInstanceId="inst-1" onExit={vi.fn()} />);
+
+    const radicar = await screen.findByRole('button', { name: /Finalizar y enviar trámite/ });
+    await waitFor(() => expect(radicar).toBeEnabled());
+    await user.click(radicar);
+    await screen.findByText('Confirmar radicación');
+    await user.click(screen.getByRole('button', { name: /^Sí, radicar trámite$/ }));
+
+    await screen.findByText('¡Trámite enviado!');
+    expect(screen.getByText(/quedó en cola para radicarse por Quipux/)).toBeInTheDocument();
+    expect(screen.queryByText(/enviado correctamente al organismo de tránsito/)).not.toBeInTheDocument();
+    expect(screen.queryByText('¡Trámite completado!')).not.toBeInTheDocument();
+  });
+
   it('N 03 — Radicar bloquea si el consolidado queda incompleto', async () => {
     const PREPARADO: WizardState = {
       ...TRASPASO_WIZARD,
