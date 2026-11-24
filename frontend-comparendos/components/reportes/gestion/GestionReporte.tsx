@@ -87,7 +87,7 @@ export function GestionReporte() {
             <TarjetaMetrica etiqueta="Dejaron de estar pendientes" cifra={n(r.resueltos30)} pie={`Pagados o cerrados ${ventana}`} />
           </div>
 
-          <OperacionInicio o={g.operacion} empresa={filtros.empresa} corte={corte} />
+          <OperacionInicio o={g.operacion} empresa={filtros.empresa} corte={corte} sinTasa />
 
           <PanelInicio
             titulo="Organismos con más comparendos"

@@ -20,9 +20,11 @@ public sealed partial class ServicioReportes
         // Gestión solo existe con el módulo de reportes y ReportesVer: siempre con pesos.
         var operacion = await OperacionAsync(a, conValores: true, bandeja, ct).ConfigureAwait(false);
 
+        // Una fila por organismo con pendientes (a lo sumo el catálogo, ~1.100): el corte se hace ya con el nombre, para que
+        // un empate en la frontera se resuelva por nombre y no por el identificador (REX).
         var top = await Pendientes(a).GroupBy(c => c.OrganismoTransitoId)
             .Select(g => new { Organismo = g.Key, N = g.Count(), V = g.Sum(c => c.ValorTotal ?? 0) })
-            .OrderByDescending(x => x.N).ThenBy(x => x.Organismo).Take(11).ToListAsync(ct).ConfigureAwait(false);
+            .ToListAsync(ct).ConfigureAwait(false);
         var ids = top.Where(o => o.Organismo != null).Select(o => o.Organismo!.Value).ToList();
         var nombres = await db.OrganismosTransito.AsNoTracking().Where(o => ids.Contains(o.Id)).ToDictionaryAsync(o => o.Id, o => o.Nombre, ct).ConfigureAwait(false);
         var organismos = top

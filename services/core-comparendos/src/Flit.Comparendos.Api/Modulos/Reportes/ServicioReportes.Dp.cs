@@ -5,9 +5,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Comparendos.Api.Modulos.Reportes;
 
 /// <summary>
-/// Una fila de DP agrupada. Enviados y sin respuesta: radicados en el periodo. Favorables y desfavorables: respuestas
-/// recibidas en el periodo, el mismo corte de la tasa canónica (<see cref="ServicioReportes.KpisAsync"/>), así que
-/// la suma de una columna es la cifra del Resumen.
+/// Una fila de DP agrupada por el organismo AL QUE SE RADICÓ el DP. Enviados y sin respuesta: radicados en el periodo.
+/// Favorables y desfavorables: respuestas recibidas en el periodo, el mismo corte de la tasa canónica
+/// (<see cref="ServicioReportes.KpisAsync"/>), así que esas dos columnas suman la cifra del Resumen. «Sin respuesta» de la
+/// fila NO es la del Resumen: esa es a hoy, sin periodo.
 /// </summary>
 public sealed record FilaDp(string Clave, string Nombre, int Enviados, int Favorables, int Desfavorables, int SinRespuesta, decimal? DiasPromedio, decimal? TasaExito);
 

@@ -115,7 +115,7 @@ export function DpReporte() {
             <TarjetaMetrica etiqueta="Ahorro" cifra={pesosCorto(d.ahorro)} title={formatoPesos(d.ahorro)} pie="Valor al radicar de los favorables del periodo" />
             <TarjetaMetrica etiqueta="Enviados" cifra={n(d.enviados)} pie={`Radicados ${texto}`} />
             <TarjetaMetrica
-              etiqueta="Esperando respuesta"
+              etiqueta="Esperando respuesta a hoy"
               cifra={n(d.sinRespuesta)}
               pie={d.totalVencidos > 0 ? `${n(d.totalVencidos)} ya pasaron su plazo` : "Ninguno con el plazo vencido"}
               colorCifra={d.sinRespuesta === 0 ? "var(--di-text-tertiary)" : undefined}

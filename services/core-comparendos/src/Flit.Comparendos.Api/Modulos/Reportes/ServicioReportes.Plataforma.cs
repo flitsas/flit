@@ -37,19 +37,25 @@ public sealed partial class ServicioReportes
 {
     public const int MaxDiasPlataforma = 366;
 
+
     public async Task<ReportePlataforma> PlataformaAsync(Alcance a, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(a);
         var (i, f, t) = (a.InicioUtc, a.FinUtc, a.Tenant);
 
-        // log_migracion: una fila por clave consultada y empresa. Se agrupa por día de Colombia en memoria con una proyección
-        // mínima; el rango va acotado a un año.
-        var logs = await db.LogMigracion.AsNoTracking().Where(l => (t == null || l.TenantId == t) && l.InicioEn >= i && l.InicioEn < f)
-            .Select(l => new { l.InicioEn, l.Canal, l.Resultado, l.CantidadObtenidas, l.CantidadNuevas, l.TenantId })
+        // log_migracion: una fila por clave consultada, ciclo y empresa (millones en un año de Renting). Se agrupa EN LA BASE
+        // por día de Colombia, fuente y empresa (REX): a la memoria llegan cientos de filas, no millones. Colombia no tiene
+        // horario de verano: el día es la fecha UTC menos 5 horas (ColombiaTime.Offset).
+        var grupos = await db.LogMigracion.AsNoTracking().Where(l => (t == null || l.TenantId == t) && l.InicioEn >= i && l.InicioEn < f)
+            .GroupBy(l => new { Dia = l.InicioEn.AddHours(ColombiaTime.Offset.TotalHours).Date, l.Canal, l.TenantId })
+            .Select(g => new
+            {
+                g.Key.Dia, g.Key.Canal, g.Key.TenantId, N = g.Count(), Error = g.Count(l => l.Resultado == ResultadoCiclo.Fallido),
+                Obtenidos = g.Sum(l => l.CantidadObtenidas), Nuevos = g.Sum(l => l.CantidadNuevas),
+            })
             .ToListAsync(ct).ConfigureAwait(false);
-        var porDia = logs.GroupBy(l => (Dia: DateOnly.FromDateTime(ColombiaTime.From(l.InicioEn).DateTime), l.Canal))
-            .Select(g => new PuntoFuente(g.Key.Dia, g.Key.Canal.ToString(), g.Count(), g.Count(l => l.Resultado == ResultadoCiclo.Fallido),
-                g.Sum(l => l.CantidadObtenidas), g.Sum(l => l.CantidadNuevas)))
+        var porDia = grupos.GroupBy(g => (Dia: DateOnly.FromDateTime(g.Dia), g.Canal))
+            .Select(g => new PuntoFuente(g.Key.Dia, g.Key.Canal.ToString(), g.Sum(x => x.N), g.Sum(x => x.Error), g.Sum(x => x.Obtenidos), g.Sum(x => x.Nuevos)))
             .OrderBy(p => p.Dia).ThenBy(p => p.Fuente, StringComparer.Ordinal).ToList();
         var fuentes = porDia.GroupBy(p => p.Fuente)
             .Select(g => new TotalFuente(g.Key, g.Sum(p => p.Consultas), g.Sum(p => p.ConError), g.Sum(p => p.Obtenidos), g.Sum(p => p.Nuevos)))
@@ -69,14 +75,14 @@ public sealed partial class ServicioReportes
             .Where(c => (t == null || c.TenantId == t) && c.CreadoEn >= i && c.CreadoEn < f && (c.Estado == EstadoComunicacion.Fallido || c.Estado == EstadoComunicacion.Rebotado));
         var porEstado = await correos.GroupBy(c => c.Estado).Select(g => new { Estado = g.Key, N = g.Count() }).ToListAsync(ct).ConfigureAwait(false);
         var motivos = (await correos.GroupBy(c => c.MotivoFallo).Select(g => new { Motivo = g.Key, N = g.Count() })
-                .OrderByDescending(x => x.N).Take(10).ToListAsync(ct).ConfigureAwait(false))
+                .OrderByDescending(x => x.N).ThenBy(x => x.Motivo).Take(10).ToListAsync(ct).ConfigureAwait(false))
             .Select(x => new MotivoCorreo(string.IsNullOrWhiteSpace(x.Motivo) ? "Sin motivo registrado" : x.Motivo, x.N)).ToList();
         var recientes = await correos.OrderByDescending(c => c.CreadoEn).Take(50)
             .Select(c => new { c.Id, c.TenantId, c.PlantillaClave, c.Asunto, c.Estado, c.MotivoFallo, c.CreadoEn }).ToListAsync(ct).ConfigureAwait(false);
         var correosPorEmpresa = await correos.Where(c => c.TenantId != null).GroupBy(c => c.TenantId!.Value)
             .Select(g => new { Tenant = g.Key, N = g.Count() }).ToDictionaryAsync(x => x.Tenant, x => x.N, ct).ConfigureAwait(false);
 
-        var erroresPorEmpresa = logs.Where(l => l.Resultado == ResultadoCiclo.Fallido).GroupBy(l => l.TenantId).ToDictionary(g => g.Key, g => g.Count());
+        var erroresPorEmpresa = grupos.Where(g => g.Error > 0).GroupBy(g => g.TenantId).ToDictionary(g => g.Key, g => g.Sum(x => x.Error));
         var tenants = erroresPorEmpresa.Keys.Concat(correosPorEmpresa.Keys).Concat(recientes.Where(r => r.TenantId != null).Select(r => r.TenantId!.Value)).Distinct().ToList();
         var nombres = await db.ConfiguracionesEmpresa.AsNoTracking().Where(e => tenants.Contains(e.TenantId))
             .ToDictionaryAsync(e => e.TenantId, e => e.EmpresaNombre, ct).ConfigureAwait(false);

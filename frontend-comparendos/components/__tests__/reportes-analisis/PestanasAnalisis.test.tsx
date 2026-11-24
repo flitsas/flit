@@ -29,7 +29,7 @@ const operacion = {
   hoy: "2026-11-24",
   conValores: true,
   resumen: { pendientes: 42, valorPendiente: 130_900_000, vehiculos: 30, nuevos30: 7, resueltos30: 3 },
-  gestion: { pasos: [{ estadoProceso: "SinProcesar", cantidad: 20 }], tasaExito: null },
+  gestion: { pasos: [{ estadoProceso: "SinProcesar", cantidad: 20 }], tasaExito: 0.25 },
   vehiculos: { conTresOMas: 2, concentracionDiezPorCiento: 0.3, top: [{ placa: "AAA111", cantidad: 5, organismos: 2, valor: 3_020_500 }] },
   infracciones: [{ codigo: "C29", descripcion: "Exceso de velocidad", cantidad: 30, valor: 90_000_000 }],
   evitables: { soat: { cantidad: 4, valor: 5_000_000 }, tecnicoMecanica: { cantidad: 2, valor: 1_000_000 } },
@@ -101,6 +101,10 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     expect(within(screen.getByTestId("top-organismos")).getByRole("link").getAttribute("href")).toBe(`/bandeja?organismos=o1&pagado=false&${corte}`);
     // El tramo de antigüedad se corta además por el periodo: la intersección de los dos rangos.
     expect(within(screen.getByTestId("antiguedad")).getByRole("link").getAttribute("href")).toBe("/bandeja?pagado=false&imposicionDesde=2026-06-01&imposicionHasta=2026-10-24&nits=n1");
+    // DP por organismo se cortó por radicación, no por imposición: su enlace lleva solo el NIT (REX).
+    expect(within(screen.getByTestId("dp-organismos")).getByRole("link").getAttribute("href")).toBe("/bandeja?organismos=o1&conDp=true&nits=n1");
+    // En Gestión no hay una segunda «tasa» (la canónica es la de DP y del Resumen).
+    expect(screen.getByTestId("gestion").textContent).not.toMatch(/%/);
     fireEvent.click(screen.getByRole("button", { name: "Ver todo lo pendiente" }));
     expect(replace).toHaveBeenLastCalledWith("/reportes/gestion?nit=n1", { scroll: false });
   });

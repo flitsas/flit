@@ -219,4 +219,19 @@ public sealed class PestanasAnalisisTests(ApiConFuente api) : IClassFixture<ApiC
         (await Super.GetFromJsonAsync<JsonElement>($"{Base}/admin/reportes/plataforma?{periodo}", ct)).GetProperty("erroresPorTipo").ValueKind.Should().Be(JsonValueKind.Array);
         (await Super.GetAsync($"{Base}/admin/reportes/plataforma?desde=2025-01-01&hasta=2026-10-09", ct)).StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity, "más de un año");
     }
+
+    [Fact]
+    public async Task Plataforma_AgrupaPorDiaDeColombia_NoPorDiaUtc()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var empresa = await EmpresaAsync(api, reportes: true);
+        // 22:30 del 9-oct en Colombia = 03:30 UTC del 10-oct: la consulta es del 9 para el negocio.
+        api.Reloj.En(new DateTimeOffset(2026, 10, 10, 3, 30, 0, TimeSpan.Zero));
+        await IngresarAsync(api, empresa, Item("P-1"));
+        var p = await Super.GetFromJsonAsync<JsonElement>($"{Base}/admin/reportes/plataforma?desde=2026-10-09&hasta=2026-10-10&empresa={empresa}", ct);
+        p.GetProperty("porDia").EnumerateArray().Select(d => (d.GetProperty("dia").GetString(), d.GetProperty("fuente").GetString(), d.GetProperty("consultas").GetInt32()))
+            .Should().Equal(("2026-10-09", "SimitNit", 1));
+        p.GetProperty("empresasConMasErrores").GetArrayLength().Should().Be(0);
+    }
 }

@@ -66,6 +66,11 @@ export interface OperacionInicioProps {
   /** Enlace «Ver en Reportes» del recorte (ya con la empresa del SuperAdmin). */
   hrefReportes?: string;
   corte?: CorteBandeja;
+  /**
+   * En Reportes › Gestión no se muestra la tasa del embudo (estado actual de los comparendos): la tasa de éxito de Reportes
+   * es la canónica de la pestaña DP y del Resumen, y dos porcentajes con el mismo nombre confunden (REX).
+   */
+  sinTasa?: boolean;
 }
 
 /**
@@ -73,7 +78,7 @@ export interface OperacionInicioProps {
  * gestión, vehículos que más repiten, lo que se pudo evitar, calendario legal, antigüedad y DP por organismo. Sin el módulo
  * no hay pesos. Cada cifra que tiene filtro en la bandeja lleva a ella.
  */
-export function OperacionInicio({ o, empresa, recorte = false, hrefReportes, corte = {} }: OperacionInicioProps) {
+export function OperacionInicio({ o, empresa, recorte = false, hrefReportes, corte = {}, sinTasa = false }: OperacionInicioProps) {
   const router = useRouter();
   const v = o.vehiculos;
   const pendientes = o.resumen.pendientes;
@@ -111,7 +116,7 @@ export function OperacionInicio({ o, empresa, recorte = false, hrefReportes, cor
     <>
       <PanelInicio
         titulo="Gestión de los comparendos"
-        subtitulo={o.gestion.tasaExito === null ? "Cada paso abre la bandeja con ese estado." : `De lo que ya tuvo respuesta, ${formatoTasa(o.gestion.tasaExito)} salió favorable.`}
+        subtitulo={sinTasa || o.gestion.tasaExito === null ? "Cada paso abre la bandeja con ese estado." : `De lo que ya tuvo respuesta, ${formatoTasa(o.gestion.tasaExito)} salió favorable.`}
         icono="procesos"
         accion={verEnReportes}
         data-testid="gestion"
@@ -261,7 +266,8 @@ export function OperacionInicio({ o, empresa, recorte = false, hrefReportes, cor
               d.respondidos === 0
                 ? "Sin respuestas todavía"
                 : `${n(d.respondidos)} con respuesta${d.diasPromedio === null ? "" : ` · ${String(d.diasPromedio).replace(".", ",")} días en promedio`}`,
-            href: d.organismoId ? bandeja({ organismos: d.organismoId, conDp: "true" }) : undefined,
+            // Solo el NIT: la cifra se cortó por fecha de radicación, no de imposición (REX); la bandeja no filtra por radicación.
+            href: d.organismoId ? hrefBandeja(conCorte({ organismos: d.organismoId, conDp: "true" }, { nits: corte.nits }), { empresa }) : undefined,
             // La bandeja muestra sus comparendos activos con DP, no los mismos enviados (que incluyen los ya cerrados).
             ariaLabel: `${d.nombre}: ${n(d.favorables)} de ${n(d.enviados)} derechos de petición favorables. Ver sus comparendos con DP en la bandeja`,
           }))}
