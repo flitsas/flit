@@ -29,6 +29,7 @@ public static class Semillas
         await TrabajosAsync(db, ahora, ct).ConfigureAwait(false);
         await TipologiasSemilla.SembrarAsync(db, ahora, ct).ConfigureAwait(false);
         await PromptOcrSemilla.SembrarAsync(db, ahora, ct).ConfigureAwait(false);
+        await Modulos.ConsultasPersonalizadas.SiembraConsultasFabrica.SembrarAsync(db, ahora, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await PlantillasSemilla.SembrarAsync(db, ahora, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
