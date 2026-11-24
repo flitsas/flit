@@ -26,7 +26,10 @@ public interface IUsuariosEmpresa
     /// <para>Limitaciones (decisión de S0, 2026-11-24; ver bitácora): la pérdida individual del permiso
     /// <c>comparendos.reportes.programar</c> no se detecta aquí; requiere que Identidad exponga los permisos efectivos
     /// (pendiente, ver bitácora). No se deduce de los roles por defecto: eso pausaría por error a quien tiene el permiso
-    /// dado individualmente. La suspensión temporal de la cuenta tampoco se detecta: <c>ObtenerUsuario</c> no la trae.</para>
+    /// dado individualmente. La suspensión temporal de la cuenta tampoco se detecta: <c>ObtenerUsuario</c> no la trae.
+    /// Pendiente y sin especificar cuentan como vigentes a propósito (al revés que <c>AutorDerivacion</c> de core-api, que
+    /// solo acepta «active»): si Identidad agrega un estado nuevo que bloquee (p. ej. «blocked»), llegará sin especificar
+    /// y habrá que sumarlo aquí.</para>
     /// </remarks>
     Task<bool?> SigueEnLaEmpresaAsync(Guid tenant, Guid usuario, CancellationToken ct) => Task.FromResult<bool?>(true);
 }

@@ -43,9 +43,9 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
             var nueva = Programaciones.Proxima(p.Periodicidad, p.DiaSemana, p.DiaMes, p.Hora, ahora);
             var vieja = p.ProximaEjecucion;
 
-            // El dueño, ANTES de reclamar: si quien lo programó salió de la empresa o su usuario está inactivo, el Excel no
-            // debe seguir saliendo. Solo se pausa con certeza de Identidad (ver IUsuariosEmpresa.SigueEnLaEmpresaAsync). Si Identidad no responde no se sabe: ni se envía ni se pausa, y sin reclamar la toma la
-            // corrida siguiente.
+            // El dueño, ANTES de reclamar: si quien lo programó salió de la empresa o su usuario está inactivo, el Excel
+            // no debe seguir saliendo. Solo se pausa con certeza de Identidad (IUsuariosEmpresa.SigueEnLaEmpresaAsync). Si
+            // Identidad no responde no se sabe: ni se envía ni se pausa, y sin reclamar la toma la corrida siguiente.
             bool? dueno;
             try
             {

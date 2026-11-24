@@ -55,6 +55,9 @@ public sealed class DuenoIdentidadTests
         // El caso que la deducción por roles por defecto pausaba por error: un operador con el permiso dado a él.
         (await PreguntarAsync(_ => Con(EstadoUsuario.Activo, "operador_comparendos"), out _)).Should().BeTrue();
         (await PreguntarAsync(_ => Con(EstadoUsuario.Activo, "rol_personalizado"), out _)).Should().BeTrue();
+        // Decisión de S0: solo «inactivo» o fuera de la empresa pausan; pendiente o sin especificar siguen en la empresa.
+        (await PreguntarAsync(_ => Con(EstadoUsuario.Pendiente), out _)).Should().BeTrue();
+        (await PreguntarAsync(_ => Con(EstadoUsuario.Unspecified), out _)).Should().BeTrue();
     }
 
     [Fact]
