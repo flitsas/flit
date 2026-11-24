@@ -17,10 +17,10 @@ using Microsoft.EntityFrameworkCore;
 
 namespace Flit.Comparendos.Api.Modulos.Ocr;
 
-/// <summary>Resultado de registrar un documento: el comparendo creado y la oferta de monitorear la placa (RN-062).</summary>
 /// <summary>Resultado de asociar un documento a un comparendo que ya existía (<c>Reemplazo</c>: había otro documento y se cambió).</summary>
 public sealed record Asociacion(Guid ComparendoId, string Numero, bool Reemplazo);
 
+/// <summary>Resultado de registrar un documento: el comparendo creado y la oferta de monitorear la placa (RN-062).</summary>
 public sealed record Registro(Guid DocumentoId, Guid ComparendoId, string Numero, string? Placa, bool PlacaYaMonitoreada, TipoIngreso TipoIngreso);
 
 /// <summary>
