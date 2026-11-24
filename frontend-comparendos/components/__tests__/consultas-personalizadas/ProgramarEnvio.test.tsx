@@ -99,16 +99,16 @@ describe("cmp-query · programar envío", () => {
     const { peticiones } = await abrirPanel();
     fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
     fireEvent.change(screen.getByTestId("cmp-query-programar-dia-semana"), { target: { value: "5" } });
-    fireEvent.change(screen.getByTestId("cmp-query-programar-hora"), { target: { value: "06:30" } });
+    fireEvent.change(screen.getByTestId("cmp-query-programar-hora"), { target: { value: "06:00" } });
     escribirCorreos("Flota@Empresa.com flota@empresa.com; jefe@empresa.com");
     fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
     await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
     expect(posts(peticiones)[0]).toEqual({
-      consultaId: "mia-1", periodicidad: "semanal", diaSemana: 5, diaMes: null, hora: "06:30",
+      consultaId: "mia-1", periodicidad: "semanal", diaSemana: 5, diaMes: null, hora: "06:00",
       destinatarios: ["flota@empresa.com", "jefe@empresa.com"], activa: true,
     });
-    expect(await screen.findByText(/Listo: cada viernes a las 06:30, a 2 destinatarios/)).toBeInTheDocument();
-    expect(screen.getByTestId("cmp-query-programar-lista")).toHaveTextContent("Cada viernes a las 06:30");
+    expect(await screen.findByText(/Listo: cada viernes a las 06:00, a 2 destinatarios/)).toBeInTheDocument();
+    expect(screen.getByTestId("cmp-query-programar-lista")).toHaveTextContent("Cada viernes a las 06:00");
   });
 
   it("cmp-query: el mensual manda el día del mes y no el de la semana", async () => {
@@ -198,13 +198,13 @@ describe("cmp-query · programar envío (SuperAdmin y edición)", () => {
     expect(screen.getByTestId("cmp-query-programar-dia-semana")).toHaveValue("1");
     expect(screen.getByTestId("cmp-query-programar-hora")).toHaveValue("07:00");
     expect(chips()).toEqual(["flota@empresa.com", "gerencia@empresa.com", "jefe@empresa.com"]);
-    fireEvent.change(screen.getByTestId("cmp-query-programar-hora"), { target: { value: "08:15" } });
+    fireEvent.change(screen.getByTestId("cmp-query-programar-hora"), { target: { value: "08:00" } });
     fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
     await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
-    expect(posts(peticiones)[0]).toMatchObject({ id: "prog-1", hora: "08:15" });
+    expect(posts(peticiones)[0]).toMatchObject({ id: "prog-1", hora: "08:00" });
     const lista = await screen.findByTestId("cmp-query-programar-lista");
     expect(within(lista).getAllByRole("listitem")).toHaveLength(1);
-    expect(lista).toHaveTextContent("Cada lunes a las 08:15");
+    expect(lista).toHaveTextContent("Cada lunes a las 08:00");
   });
 
   it("cmp-query: sin envíos previos lo dice y no inventa un resultado", async () => {
@@ -262,7 +262,7 @@ describe("cmp-query · programar envío como en Trámites", () => {
     fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
     expect(screen.getByTestId("cmp-query-programar-formato")).toHaveTextContent("Excel");
     expect(screen.getByText("El resultado va como Excel adjunto.")).toBeInTheDocument();
-    expect(screen.getByText("Presiona Enter o coma para agregar. Máximo 20 destinatarios.")).toBeInTheDocument();
+    expect(screen.getByText("Presiona Enter o coma para agregar. Máximo 10 destinatarios.")).toBeInTheDocument();
   });
 
   it("cmp-query: pegar una columna de correos (con saltos de línea) los agrega todos", async () => {
@@ -274,17 +274,17 @@ describe("cmp-query · programar envío como en Trámites", () => {
     expect(chips()).toEqual(["ana@empresa.com", "luis@empresa.com"]);
   });
 
-  it("cmp-query: los destinatarios se agregan con coma y no pasan de 20", async () => {
+  it("cmp-query: los destinatarios se agregan con coma y no pasan de 10", async () => {
     await abrirPanel();
     fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
     const campo = screen.getByTestId("cmp-query-programar-destinatarios-input");
     fireEvent.change(campo, { target: { value: "uno@empresa.com," } });
     expect(chips()).toEqual(["uno@empresa.com"]);
-    escribirCorreos(Array.from({ length: 25 }, (_, i) => `p${i}@empresa.com`).join(" "));
-    expect(chips()).toHaveLength(20);
-    expect(screen.getByTestId("cmp-query-programar-correos-invalidos")).toHaveTextContent("No puedes indicar más de 20 destinatarios.");
+    escribirCorreos(Array.from({ length: 15 }, (_, i) => `p${i}@empresa.com`).join(" "));
+    expect(chips()).toHaveLength(10);
+    expect(screen.getByTestId("cmp-query-programar-correos-invalidos")).toHaveTextContent("No puedes indicar más de 10 destinatarios.");
     fireEvent.click(screen.getByRole("button", { name: "Quitar uno@empresa.com" }));
-    expect(chips()).toHaveLength(19);
+    expect(chips()).toHaveLength(9);
   });
 });
 
@@ -365,6 +365,32 @@ describe("cmp-query · programar envío (reapertura y teclado)", () => {
     fireEvent.click(screen.getByTestId("cmp-query-programar-borrar-si-prog-1"));
     expect(await within(panel).findByText("No se pudo borrar ahora.")).toBeInTheDocument();
     await waitFor(() => expect(screen.getByTestId("cmp-query-programar-borrar-si-prog-1")).toHaveFocus());
+  });
+});
+
+describe("cmp-query · hora en punto como Trámites", () => {
+  const horas = () => [...(screen.getByTestId("cmp-query-programar-hora") as HTMLSelectElement).options].map((o) => o.value);
+
+  it("cmp-query: un envío nuevo ofrece solo horas en punto, de 00:00 a 23:00", async () => {
+    await abrirPanel();
+    fireEvent.click(await screen.findByTestId("cmp-query-programar-nuevo"));
+    expect(screen.getByTestId("cmp-query-programar-hora").tagName).toBe("SELECT");
+    expect(horas()).toHaveLength(24);
+    expect(horas()[0]).toBe("00:00");
+    expect(horas()[23]).toBe("23:00");
+    expect(screen.getByTestId("cmp-query-programar-hora")).toHaveValue("07:00");
+  });
+
+  it("cmp-query: al editar uno viejo de las 11:20, esa hora sigue ofrecida y se conserva al guardar", async () => {
+    const { panel, peticiones } = await abrirPanel({ programaciones: [{ ...PROGRAMADA, hora: "11:20:00" }] });
+    fireEvent.click(await within(panel).findByTestId("cmp-query-programar-editar-prog-1"));
+    expect(screen.getByTestId("cmp-query-programar-hora")).toHaveValue("11:20");
+    expect(horas()).toHaveLength(25);
+    expect(horas().indexOf("11:20")).toBe(horas().indexOf("11:00") + 1);
+    fireEvent.change(screen.getByTestId("cmp-query-programar-dia-semana"), { target: { value: "3" } });
+    fireEvent.click(screen.getByTestId("cmp-query-programar-guardar"));
+    await waitFor(() => expect(posts(peticiones)).toHaveLength(1));
+    expect(posts(peticiones)[0]).toMatchObject({ hora: "11:20", diaSemana: 3 });
   });
 });
 
