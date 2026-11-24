@@ -100,15 +100,18 @@ async function nombresDe(
   let empresa = empresaPropia;
   if (c.empresa) {
     // La lista ya cargada (como la del selector), no otra petición al hacer clic; sin ella no se inventa un nombre.
-    const elegida = empresas?.find((e) => e.id === c.empresa)?.nombre;
-    if (!elegida) throw new Error("No se pudo leer el nombre de la empresa elegida. Recarga la página e inténtalo de nuevo.");
-    empresa = elegida;
+    const elegida = empresas?.find((e) => e.id === c.empresa);
+    if (!elegida) throw new Error("No se pudo leer el nombre de la empresa elegida. Inténtalo de nuevo en un momento.");
+    // Como el selector: una empresa sin nombre se identifica por su id (no bloquea la descarga).
+    empresa = elegida.nombre ?? elegida.id;
   }
   let nit = "Todos los NIT";
   if (c.nit) {
-    const nits = await apiFetch<Nit[]>("/monitoreo/nits", { query: { empresa: c.empresa } }).catch(() => [] as Nit[]);
+    // Sin catch vacío (GIA): si no se puede leer el NIT, error visible en vez de un nombre inventado.
+    const nits = await apiFetch<Nit[]>("/monitoreo/nits", { query: { empresa: c.empresa } });
     const n = nits.find((x) => x.id === c.nit);
-    nit = n ? `${n.numero}${n.nombreTitular ? ` · ${n.nombreTitular}` : ""}` : "NIT elegido";
+    if (!n) throw new Error("No se pudo leer el NIT elegido. Inténtalo de nuevo en un momento.");
+    nit = `${n.numero}${n.nombreTitular ? ` · ${n.nombreTitular}` : ""}`;
   }
   return { empresa: empresa ?? "Todas las empresas", nit, empresaArchivo: empresa };
 }
@@ -154,6 +157,8 @@ export function BotonExcel({
       descargar(libro, nombreArchivo(corte, n.empresaArchivo));
     } catch (e) {
       toast.show(e instanceof Error ? e.message : "No se pudo generar el Excel.", "error");
+      // Si lo que falló fue la lista de empresas, se vuelve a pedir para el siguiente intento.
+      if (empresas.estado === "error") empresas.recargar();
     } finally {
       setOcupado(false);
     }

@@ -193,14 +193,38 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     expect(replace).toHaveBeenLastCalledWith("/reportes/gestion", { scroll: false });
   });
 
-  it("Gestión con una sola fecha: «Consultar» apagado y el aviso a la vista", async () => {
+  it("Gestión con una sola fecha (Desde o Hasta): «Consultar» apagado y el aviso a la vista", async () => {
     sesion = gestora();
     ruta = "/reportes/gestion";
+    for (const campo of ["Desde", "Hasta"]) {
+      render(<GestionPage />);
+      await screen.findByTestId("vehiculos");
+      fireEvent.change(screen.getByLabelText(campo), { target: { value: "2026-10-01" } });
+      expect((screen.getByRole("button", { name: "Consultar" }) as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText("Elige las dos fechas del periodo.")).toBeTruthy();
+      cleanup();
+    }
+  });
+
+  it("Excel del SuperAdmin: si no se puede leer el nombre de la empresa, error visible y sin descarga (nunca «Empresa elegida»)", async () => {
+    sesion = super_;
+    ruta = "/reportes/gestion";
+    busqueda = "empresa=e2";
+    const base = apiFetch.getMockImplementation()!;
+    apiFetch.mockImplementation(async (r: string, op?: { query?: Record<string, unknown> }) => {
+      if (r === "/admin/empresas") throw new Error("Sin conexión");
+      return base(r, op);
+    });
+    toast.mockClear();
     render(<GestionPage />);
     await screen.findByTestId("vehiculos");
-    fireEvent.change(screen.getByLabelText("Desde"), { target: { value: "2026-10-01" } });
-    expect((screen.getByRole("button", { name: "Consultar" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText("Elige las dos fechas del periodo.")).toBeTruthy();
+    const boton = screen.getByTestId("descargar-excel") as HTMLButtonElement;
+    await waitFor(() => expect(boton.disabled).toBe(false));
+    const clic = vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    fireEvent.click(boton);
+    await waitFor(() => expect(toast).toHaveBeenCalledWith(expect.stringMatching(/^No se pudo leer el nombre de la empresa elegida/), "error"));
+    expect(clic).not.toHaveBeenCalled();
+    clic.mockRestore();
   });
 
   it("«Consultar» escribe desde y hasta en la URL con esos nombres, y un rango invertido en la URL no se consulta (R8)", async () => {
