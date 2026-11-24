@@ -1348,7 +1348,7 @@ describe('Validaciones — paginación', () => {
   // CF-05 (HU #10886, AC2) — el módulo de identidad muestra el enlace vigente para reenviarlo por
   // otros medios, con su estado y su expiración.
   describe('enlace de validación vigente', () => {
-    it('ofrece "Copiar enlace" con la expiración en las validaciones en curso', async () => {
+    it('Bug #14674 AC4: en curso NO ofrece "Copiar enlace" ni "Abrir captura" (la fila conserva Ver proceso)', async () => {
       const user = userEvent.setup();
       mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([ROW_EN_PROCESO]));
 
@@ -1357,30 +1357,12 @@ describe('Validaciones — paginación', () => {
 
       expect(screen.queryByText('No disponible')).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: /acciones de validación de carlos vendedor/i }));
-      expect(screen.getByRole('menuitem', { name: /copiar enlace/i })).toBeInTheDocument();
+      expect(screen.getByRole('menuitem', { name: /ver proceso/i })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: /copiar enlace/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: /abrir captura/i })).not.toBeInTheDocument();
+      expect(screen.queryByText(/kyv_123/)).not.toBeInTheDocument();
       // El estado sigue mostrándose (la fila y el KPI comparten la etiqueta).
       expect(screen.getAllByText('En proceso').length).toBeGreaterThan(0);
-    });
-
-    it('copia el enlace al portapapeles y confirma', async () => {
-      const user = userEvent.setup();
-      // Después de `setup()`: userEvent instala su propio stub de portapapeles y pisaría este.
-      // jsdom no lo implementa y `navigator.clipboard` es de solo lectura → defineProperty.
-      const writeText = vi.fn().mockResolvedValue(undefined);
-      Object.defineProperty(navigator, 'clipboard', {
-        value: { writeText },
-        configurable: true,
-      });
-      mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([ROW_EN_PROCESO]));
-
-      renderValidaciones();
-      await screen.findByText('TRM-2026-000003');
-
-      await user.click(screen.getByRole('button', { name: /acciones de validación de carlos vendedor/i }));
-      await user.click(screen.getByRole('menuitem', { name: /copiar enlace/i }));
-
-      expect(writeText).toHaveBeenCalledWith('https://capture.kyverum.co/kyv_123');
-      expect(await screen.findByText('Enlace copiado')).toBeInTheDocument();
     });
 
     it('no ofrece enlace cuando la validación ya está en estado terminal', async () => {
@@ -1489,8 +1471,8 @@ describe('Validaciones — paginación', () => {
       await abrirAcciones({ ...STANDALONE, status: 'en_proceso' });
 
       expect(screen.queryByRole('menuitem', { name: /^reenviar$/i })).not.toBeInTheDocument();
-      // El enlace sigue disponible para compartirlo por otro medio.
-      expect(screen.getByRole('menuitem', { name: /copiar enlace/i })).toBeInTheDocument();
+      // Bug #14674: el enlace nunca se ofrece en la UI.
+      expect(screen.queryByRole('menuitem', { name: /copiar enlace/i })).not.toBeInTheDocument();
     });
 
     it('aprobada: NO ofrece Reenviar, ofrece crear una prevalidación nueva', async () => {
@@ -1559,7 +1541,7 @@ describe('Validaciones — paginación', () => {
       await abrirAcciones(ROW_EN_PROCESO);
 
       expect(screen.queryByRole('menuitem', { name: /reintentar|reiniciar/i })).not.toBeInTheDocument();
-      expect(screen.getByRole('menuitem', { name: /copiar enlace/i })).toBeInTheDocument();
+      expect(screen.queryByRole('menuitem', { name: /copiar enlace/i })).not.toBeInTheDocument();
     });
 
     it('ya no se pinta el candado de solo lectura en las filas de trámite', async () => {
@@ -1657,8 +1639,9 @@ describe('HU #12164 — reenvío administrativo de una validación de trámite (
     expect(mocks.resendPrevalidacion).not.toHaveBeenCalled();
     expect(mocks.iniciarBiometric).not.toHaveBeenCalled();
     expect(await within(dialog).findByText('Validación de identidad reenviada.')).toBeInTheDocument();
-    // HU #13822 — el modal no se cierra tras reenviar: muestra el enlace nuevo.
-    expect(within(dialog).getByRole('button', { name: 'Copiar enlace' })).toBeInTheDocument();
+    // HU #13822 — el modal no se cierra tras reenviar: muestra el resultado, sin enlace (Bug #14674).
+    expect(within(dialog).queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
+    expect(within(dialog).queryByText(/kyverum\.local/)).not.toBeInTheDocument();
   });
 
   /**
@@ -1763,7 +1746,7 @@ describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
     );
   });
 
-  it('muestra el QR Kyverum en el detalle cuando la validación es de trámite', async () => {
+  it('Bug #14674: el detalle de una validación de trámite NO muestra QR ni enlace de captura', async () => {
     const user = userEvent.setup();
     mocks.listTenantBiometricPersons.mockResolvedValue(personsResponse([ROW_EN_PROCESO]));
     mocks.listPersonBiometricValidations.mockResolvedValue({
@@ -1807,16 +1790,14 @@ describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
     await user.click(screen.getByRole('button', { name: /acciones de validación de carlos vendedor/i }));
     await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
 
-    expect(await screen.findByTestId('identity-capture-qr')).toBeInTheDocument();
-    const qr = screen.getByLabelText(/código qr del enlace de captura/i);
-    expect(qr.parentElement?.parentElement).toHaveClass('items-center');
-    expect(screen.getByRole('link', { name: /abrir captura kyverum/i })).toHaveAttribute(
-      'href',
-      'https://capture.kyverum.co/kyv_123',
-    );
+    expect(await screen.findByText(/tracking de auditoría y proceso/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('identity-capture-qr')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/código qr/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /abrir captura/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /copiar enlace/i })).not.toBeInTheDocument();
   });
 
-  it('muestra el QR Kyverum en el detalle de prevalidación (identidad, sin trámite)', async () => {
+  it('Bug #14674: el detalle de prevalidación (sin trámite) NO muestra QR ni enlace de captura', async () => {
     const user = userEvent.setup();
     const standalone = {
       ...ROW_EN_PROCESO,
@@ -1868,11 +1849,10 @@ describe('Validaciones — proceso de identidad (HU #11007/#11008)', () => {
     await user.click(screen.getByRole('button', { name: /acciones de validación de marta prevalidada/i }));
     await user.click(screen.getByRole('menuitem', { name: /ver proceso/i }));
 
-    expect(await screen.findByTestId('identity-capture-qr')).toBeInTheDocument();
-    expect(screen.getByLabelText(/código qr del enlace de captura/i).parentElement?.parentElement).toHaveClass(
-      'items-center',
-    );
-    expect(screen.getByRole('link', { name: /abrir captura kyverum/i })).toBeInTheDocument();
+    expect(await screen.findByText(/tracking de auditoría y proceso/i)).toBeInTheDocument();
+    expect(screen.queryByTestId('identity-capture-qr')).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(/código qr/i)).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /abrir captura/i })).not.toBeInTheDocument();
   });
 
   it('HU #11069 — en el listado de Validaciones NO embebe trámites (van en el detalle)', async () => {
@@ -1961,7 +1941,7 @@ describe('HU #13825 — Vencer una identidad aprobada y vigente', () => {
     expect(screen.queryByRole('menuitem', { name: /^vencer$/i })).not.toBeInTheDocument();
   });
 
-  it('AC2: pide confirmación, vence, muestra el enlace y permite copiarlo', async () => {
+  it('AC2: pide confirmación, vence y avisa el envío, sin mostrar ni ofrecer copiar el enlace (Bug #14674)', async () => {
     mocks.vencerIdentidad.mockResolvedValue(RESULTADO_BASE);
     const { user, dialog } = await abrirModalVencer();
     expect(within(dialog).getByText(/los ya radicados\s+conservan su firma/i)).toBeInTheDocument();
@@ -1976,24 +1956,23 @@ describe('HU #13825 — Vencer una identidad aprobada y vigente', () => {
         'La identidad quedó vencida. Se envió un enlace nuevo para que la persona la vuelva a hacer.',
       ),
     ).toBeInTheDocument();
-    expect(within(dialog).getByLabelText('Enlace nuevo')).toHaveValue('https://kyverum.local/captura/abc');
+    expect(within(dialog).queryByLabelText('Enlace nuevo')).not.toBeInTheDocument();
+    expect(within(dialog).queryByDisplayValue(/kyverum\.local/)).not.toBeInTheDocument();
     // La grilla se refresca tras vencer.
     await waitFor(() =>
       expect(mocks.listTenantBiometricPersons.mock.calls.length).toBeGreaterThan(llamadasAntes),
     );
 
-    await user.click(within(dialog).getByRole('button', { name: 'Copiar enlace' }));
-    expect(await within(dialog).findByText('Enlace copiado.')).toBeInTheDocument();
-    expect(await navigator.clipboard.readText()).toBe('https://kyverum.local/captura/abc');
+    expect(within(dialog).queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
   });
 
-  it('AC2: con el proveedor mock el enlace relativo se vuelve absoluto', async () => {
+  it('AC2: con el proveedor mock (enlace relativo) tampoco se muestra el enlace', async () => {
     mocks.vencerIdentidad.mockResolvedValue({ ...RESULTADO_BASE, enlaceCaptura: '/biometric/tok123' });
     const { user, dialog } = await abrirModalVencer();
     await user.click(within(dialog).getByRole('button', { name: 'Vencer identidad' }));
-    expect(await within(dialog).findByLabelText('Enlace nuevo')).toHaveValue(
-      `${window.location.origin}/biometric/tok123`,
-    );
+    expect(await within(dialog).findByText(/se envió un enlace nuevo/i)).toBeInTheDocument();
+    expect(within(dialog).queryByLabelText('Enlace nuevo')).not.toBeInTheDocument();
+    expect(within(dialog).queryByDisplayValue(/tok123/)).not.toBeInTheDocument();
   });
 
   it('AC2: si el envío quedó en cola lo dice y no muestra enlace', async () => {

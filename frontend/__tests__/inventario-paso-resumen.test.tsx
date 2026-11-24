@@ -820,7 +820,7 @@ describe('MatriculaResumen — inventario: trazabilidad de validación dentro de
     expect(within(comprador).queryByText('Verificada')).toBeNull();
   });
 
-  it('con el enlace de captura pendiente lo muestra en monoespaciada, con botón de copiar', async () => {
+  it('con el enlace de captura pendiente NO lo muestra ni lo ofrece copiar, pero conserva la trazabilidad (Bug #14674)', async () => {
     renderResumen({
       compradorBio: {
         ...BIO_APROBADA,
@@ -834,9 +834,11 @@ describe('MatriculaResumen — inventario: trazabilidad de validación dentro de
     });
 
     const comprador = await screen.findByRole('region', { name: 'Comprador' });
-    const enlace = within(comprador).getByLabelText('Enlace de captura de Beto Comprador');
-    expect(enlace).toHaveValue('https://kyverum.flit.io/captura/TRM-2026-000095');
-    expect(within(comprador).getByRole('button', { name: 'Copiar enlace' })).toBeInTheDocument();
+    expect(within(comprador).queryByLabelText(/enlace de captura/i)).not.toBeInTheDocument();
+    expect(within(comprador).queryByDisplayValue(/kyverum\.flit\.io\/captura/)).not.toBeInTheDocument();
+    expect(within(comprador).queryByText('Enlace de captura')).not.toBeInTheDocument();
+    expect(within(comprador).queryByRole('button', { name: /copiar/i })).not.toBeInTheDocument();
+    expect(within(comprador).getByText('Ver trazabilidad de validación')).toBeInTheDocument();
   });
 });
 

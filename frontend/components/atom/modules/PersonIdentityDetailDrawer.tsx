@@ -11,10 +11,6 @@ import {
   AssociatedProceduresList,
   buildAssociatedProcedures,
 } from '@/components/atom/modules/AssociatedProceduresList';
-import {
-  hasKyverumCaptureQr,
-  IdentityCaptureLinkBlock,
-} from '@/components/atom/modules/IdentityCaptureLinkBlock';
 import { IdentityManualFlowActions } from '@/components/atom/modules/IdentityManualFlowActions';
 import { MANUAL_ESTADO_META } from '@/lib/identity/manual-flow';
 import { CertificadoIdentidadAccion } from '@/components/atom/modules/CertificadoIdentidadAccion';
@@ -41,7 +37,7 @@ import { useBloqueoScroll } from "@flit/ui/useBloqueoScroll";
 
  * Detalle multi-validación por persona (HU #11273 / CF-06 / ADR-0040).
  * Cabecera personal = mismo diseño que PrevalidacionDetailDrawer (develop).
- * Debajo: acordeón con un ítem por validación (Intentos, Enlace, Score, Trámites, Tracking).
+ * Debajo: acordeón con un ítem por validación (Intentos, Score, Trámites, Tracking).
  */
 
 const ESTADO_META: Record<BiometricEstado, { label: string; tone: StatusTone }> = {
@@ -447,7 +443,6 @@ function ValidationAccordionItem({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   const panelId = useId();
-  const showCaptura = !soloConsulta && hasKyverumCaptureQr(v.captureUrl);
   // Rechazada del flujo manual: el motivo que eligió el Super Admin (etiqueta homologada); Kyverum/mock, el texto de siempre.
   const motivoManual =
     v.status === 'rechazado' && v.provider === 'manual' ? etiquetaMotivoRechazoManual(v.rejectionReasonCode) : null;
@@ -558,8 +553,6 @@ function ValidationAccordionItem({
                 : 'No quedan intentos: el estado pasará a Rechazado al confirmarse.'}
             </div>
           )}
-
-          {showCaptura && <IdentityCaptureLinkBlock captureUrl={v.captureUrl!} provider={v.provider} />}
 
           <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)' }}>
             <p className="mb-1 text-[13px] font-semibold text-foreground">
