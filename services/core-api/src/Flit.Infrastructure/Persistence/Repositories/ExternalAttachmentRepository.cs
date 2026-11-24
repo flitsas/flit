@@ -68,12 +68,23 @@ internal sealed class ExternalAttachmentRepository(FlitDbContext context) : IExt
         """;
 
     // Bug #14660 (ADR-0087) — espejo de ConsolidadoVigenciaTracker.InvalidarAsync para este escritor SQL crudo: sin esto,
-    // el camino perezoso del consolidado seguiría sirviendo el PDF viejo porque el INSERT de arriba no pasa por EF.
-    private const string InvalidateConsolidadoSql = """
+    // el camino perezoso del consolidado seguiría sirviendo el PDF viejo porque el INSERT de arriba no pasa por EF. Baja
+    // las DOS marcas, como InvalidarConsolidados(): el trámite ya está radicado y el expediente que mira el OT es el
+    // maestro (la primera corrección solo bajaba la del wizard y el maestro seguía congelado).
+    private const string InvalidateConsolidadosSql = """
         UPDATE tramites.procedure_instances
-           SET consolidado_wizard_vigente = false
+           SET consolidado_wizard_vigente = false,
+               consolidado_maestro_vigente = false
          WHERE id = @procedure_id
-           AND consolidado_wizard_vigente = true
+           AND (consolidado_wizard_vigente = true OR consolidado_maestro_vigente = true)
+        """;
+
+    // Bug #14660 — qué consolidados existen ya (mismo criterio que ConsolidadoVigenciaTracker.EncolarRegeneracionAsync).
+    private const string ConsolidadosExistentesSql = """
+        SELECT EXISTS (SELECT 1 FROM tramites.procedure_instance_attachments
+                        WHERE procedure_instance_id = @procedure_id AND tipo = 'consolidado'),
+               EXISTS (SELECT 1 FROM tramites.procedure_instance_attachments
+                        WHERE procedure_instance_id = @procedure_id AND tipo = 'consolidado_maestro')
         """;
 
     private const string DeleteSql = """
@@ -233,12 +244,21 @@ internal sealed class ExternalAttachmentRepository(FlitDbContext context) : IExt
             await upsert.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
         }
 
-        public async Task InvalidateConsolidadoAsync(CancellationToken cancellationToken)
+        public async Task<ConsolidadosExistentes> InvalidateConsolidadosAsync(CancellationToken cancellationToken)
         {
             var t = target ?? throw new InvalidOperationException("No hay trámite sobre el que escribir.");
-            await using var update = Command(conn, tx, InvalidateConsolidadoSql,
+            await using (var update = Command(conn, tx, InvalidateConsolidadosSql,
+                             ("procedure_id", NpgsqlDbType.Uuid, t.ProcedureId)))
+            {
+                await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            }
+
+            await using var select = Command(conn, tx, ConsolidadosExistentesSql,
                 ("procedure_id", NpgsqlDbType.Uuid, t.ProcedureId));
-            await update.ExecuteNonQueryAsync(cancellationToken).ConfigureAwait(false);
+            await using var reader = await select.ExecuteReaderAsync(cancellationToken).ConfigureAwait(false);
+            return await reader.ReadAsync(cancellationToken).ConfigureAwait(false)
+                ? new ConsolidadosExistentes(reader.GetBoolean(0), reader.GetBoolean(1))
+                : ConsolidadosExistentes.Ninguno;
         }
     }
 }

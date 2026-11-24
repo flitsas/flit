@@ -404,9 +404,9 @@ Reglas:
 - **Reversa en el consumidor:** si el consumidor reversa el pago, no avisa a FLIT; el adjunto y la marca
   quedan. Un nuevo comprobante posterior se reenvía y reemplaza el anterior.
 - **Solo archiva:** no corre OCR ni toca el checklist (la casilla se satisface porque el checklist mira los adjuntos
-  del trámite). Bug #14660 (ADR-0087): cuando `enMatriz=true` y el envío cambió el expediente (201, no el 200
-  idempotente), FLIT 2 encola en segundo plano, de forma best-effort y sin bloquear esta respuesta, la regeneración
-  del consolidado del wizard; no hay ningún endpoint para forzarla ni ninguna forma de request/response nueva, Flito
+  del trámite). Bug #14660 (ADR-0087): cuando el envío cambió el expediente (201, no el 200 idempotente), FLIT 2
+  encola en segundo plano, de forma best-effort y sin bloquear esta respuesta, la regeneración de los consolidados
+  que el trámite ya tenga (el del wizard y el maestro del OT), salvo en estado final; no depende de `enMatriz`; no hay ningún endpoint para forzarla ni ninguna forma de request/response nueva, Flito
   no necesita ningún cambio.
 - Exige `external.tramites.attachments.write`. Cada llamada queda en la bitácora de acceso (§6) como
   escritura con datos personales; el archivo no se registra.
