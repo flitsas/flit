@@ -26,8 +26,12 @@ namespace Flit.Comparendos.Api.Modulos.ConsultasPersonalizadas;
 /// un UPDATE condicional sobre <c>proxima_ejecucion</c>. Solo quien lo gana la envía. Si el proceso muere después, ese
 /// envío se pierde y no se duplica.</para>
 /// </summary>
-public sealed class EnvioConsultasProgramadas(ComparendosDb db, ConsultaBandeja bandeja, ServicioCorreo correo, Reloj reloj, IProductosHabilitados productos)
+public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, ConsultaBandeja bandeja, ServicioCorreo correo, Reloj reloj, IProductosHabilitados productos,
+    ILogger logger)
 {
+    /// <summary>Largo de <c>consulta_programada.ultimo_resultado</c>.</summary>
+    private const int MaxResultado = 300;
+
     public async Task EjecutarAsync(Guid? soloEmpresa, CancellationToken ct)
     {
         var ahora = reloj.Ahora;
@@ -38,17 +42,37 @@ public sealed class EnvioConsultasProgramadas(ComparendosDb db, ConsultaBandeja 
         {
             var nueva = Programaciones.Proxima(p.Periodicidad, p.DiaSemana, p.DiaMes, p.Hora, ahora);
             var vieja = p.ProximaEjecucion;
-            var reclamada = await db.ConsultasProgramadas
-                .Where(x => x.Id == p.Id && x.ProximaEjecucion == vieja && x.Activa)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.ProximaEjecucion, nueva), ct).ConfigureAwait(false);
-            if (reclamada == 0)
+            if (!await ReclamarAsync(p.Id, vieja, nueva, ct).ConfigureAwait(false))
                 continue;
 
-            var resultado = await EnviarAsync(p, ct).ConfigureAwait(false);
+            string resultado;
+            try
+            {
+                resultado = await EnviarAsync(p, ct).ConfigureAwait(false);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                // Ya se reclamó: sin esto el cliente vería el resultado de la vez anterior y las demás programaciones de
+                // la corrida no saldrían. Lo que quedó a medias en el contexto no se cuela en el envío siguiente.
+                FalloEnvio(logger, ex, p.Id, p.TenantId);
+                db.ChangeTracker.Clear();
+                resultado = "No se envió por un problema temporal; se intentará de nuevo en la próxima fecha.";
+            }
+
+            var texto = resultado.Length > MaxResultado ? resultado[..MaxResultado] : resultado;
             await db.ConsultasProgramadas.Where(x => x.Id == p.Id)
-                .ExecuteUpdateAsync(s => s.SetProperty(x => x.UltimaEjecucion, ahora).SetProperty(x => x.UltimoResultado, resultado), ct).ConfigureAwait(false);
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.UltimaEjecucion, ahora).SetProperty(x => x.UltimoResultado, texto), ct).ConfigureAwait(false);
         }
     }
+
+    /// <summary>
+    /// Compara y cambia: solo una réplica mueve <c>proxima_ejecucion</c> desde el valor que leyó. La otra, que leyó lo
+    /// mismo, espera el candado de la fila, vuelve a evaluar la condición y no afecta ninguna fila.
+    /// </summary>
+    internal async Task<bool> ReclamarAsync(Guid id, DateTimeOffset? vieja, DateTimeOffset nueva, CancellationToken ct) =>
+        await db.ConsultasProgramadas
+            .Where(x => x.Id == id && x.ProximaEjecucion == vieja && x.Activa)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.ProximaEjecucion, nueva), ct).ConfigureAwait(false) == 1;
 
     /// <summary>Arma y registra el correo. Devuelve el resultado en términos de negocio (lo lee la empresa).</summary>
     private async Task<string> EnviarAsync(ConsultaProgramada p, CancellationToken ct)
@@ -71,6 +95,10 @@ public sealed class EnvioConsultasProgramadas(ComparendosDb db, ConsultaBandeja 
         {
             return "No se envió: la consulta guardada está dañada; ábrela y vuelve a guardarla.";
         }
+
+        // Lo mismo que valida /run: una consulta guardada con un catálogo anterior no debe reventar el envío.
+        if (QueryConditionValidator.Validate(alcance.Catalogo, definicion?.Condiciones, "las consultas de comparendos") is { } invalida)
+            return $"No se envió: {invalida}";
 
         ComparendoQueryResult r;
         try
@@ -116,6 +144,9 @@ public sealed class EnvioConsultasProgramadas(ComparendosDb db, ConsultaBandeja 
             """;
         return HtmlCorreo.DeEmpresa(conjunto, consulta, cuerpo, empresa, $"{correo.AppUrl}/assets/correo");
     }
+
+    [LoggerMessage(Level = LogLevel.Error, Message = "No se pudo enviar la consulta programada {Programacion} de la empresa {Empresa}")]
+    private static partial void FalloEnvio(ILogger logger, Exception ex, Guid programacion, Guid empresa);
 
     /// <summary>Miles con punto, como se escriben en Colombia (12.345), sin depender de la cultura del proceso.</summary>
     private static string Miles(int n) => n.ToString("#,0", CultureInfo.InvariantCulture).Replace(',', '.');

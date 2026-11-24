@@ -75,7 +75,7 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
 
         var page = Math.Max(1, request.Page);
         var pageSize = todasLasFilas ? Math.Max(1, matched.Count) : Math.Clamp(request.PageSize, 1, QueryLimits.MaxPageSize);
-        int? anterior = page == 1 ? await AnteriorAsync(alcance, definicion, h, motor, desde, hasta, Pasa, ct).ConfigureAwait(false) : null;
+        int? anterior = page == 1 && !todasLasFilas ? await AnteriorAsync(alcance, definicion, h, motor, desde, hasta, Pasa, ct).ConfigureAwait(false) : null;
 
         var extra = await ExtraCoberturaAsync(alcance, definicion, filas, h, ct).ConfigureAwait(false);
         var cobertura = motor.BuildCoverage(definicion, extra.Count == 0 ? filas : [.. filas, .. extra], matched, condiciones, from, to)

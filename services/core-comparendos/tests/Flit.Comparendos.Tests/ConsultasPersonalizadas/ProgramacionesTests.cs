@@ -112,6 +112,19 @@ public sealed class ProgramacionesTests(ApiConFuente api) : IClassFixture<ApiCon
         await Rechaza(Semanal(consulta, "no-es-correo"), "CORREO_INVALIDO");
         await Rechaza(new { consultaId = consulta, periodicidad = "semanal", diaSemana = 5, diaMes = (int?)null, hora = "8 am", destinatarios = new[] { "a@b.test" } }, "PROGRAMACION_INVALIDA");
 
+        // La consulta de otro usuario de la misma empresa tampoco: sus cambios cambiarían este envío.
+        var deOtro = await (await api.Cliente(Admin(empresa)).PostAsJsonAsync($"{Ruta}/saved", new { nombre = "De otro", definition = new { } }, Ct)).Content.ReadFromJsonAsync<JsonElement>(Ct);
+        await Rechaza(Semanal(deOtro.GetProperty("id").GetGuid(), "a@b.test"), "PROGRAMACION_INVALIDA");
+
+        // Editar: la hora con segundos se guarda en HH:mm; inactiva no tiene próxima ejecución.
+        var editada = await (await cliente.PostAsJsonAsync($"{Ruta}/programaciones", new
+        {
+            id = ok.GetProperty("id").GetGuid(), consultaId = consulta, periodicidad = "mensual", diaSemana = (int?)null, diaMes = 28, hora = "07:30:45",
+            destinatarios = new[] { "a@b.test" }, activa = false,
+        }, Ct)).Content.ReadFromJsonAsync<JsonElement>(Ct);
+        (editada.GetProperty("id").GetGuid(), editada.GetProperty("hora").GetString(), editada.GetProperty("proximaEjecucion").ValueKind)
+            .Should().Be((ok.GetProperty("id").GetGuid(), "07:30", JsonValueKind.Null));
+
         // El SuperAdmin ve, pero no programa por la empresa; sin el permiso de programar, nada.
         var super = api.Cliente(new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true));
         (await super.GetFromJsonAsync<JsonElement>($"{Ruta}/programaciones?empresa={empresa}", Ct)).GetArrayLength().Should().Be(1);
@@ -124,6 +137,18 @@ public sealed class ProgramacionesTests(ApiConFuente api) : IClassFixture<ApiCon
         otraEmpresa.Should().NotBe(empresa);
         (await otroCliente.DeleteAsync($"{Ruta}/programaciones/{id}", Ct)).StatusCode.Should().Be(HttpStatusCode.NotFound);
         (await cliente.DeleteAsync($"{Ruta}/programaciones/{id}", Ct)).StatusCode.Should().Be(HttpStatusCode.NoContent);
+    }
+
+    [Fact]
+    public async Task Programaciones_TopeDe50PorEmpresa()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (_, cliente, consulta) = await EmpresaConConsultaAsync("Tope 50");
+        for (var i = 0; i < Programaciones.MaxPorEmpresa; i++)
+            (await cliente.PostAsJsonAsync($"{Ruta}/programaciones", Semanal(consulta, $"p{i}@b.test"), Ct)).EnsureSuccessStatusCode();
+        var r = await cliente.PostAsJsonAsync($"{Ruta}/programaciones", Semanal(consulta, "p51@b.test"), Ct);
+        r.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        (await CodigoAsync(r)).Should().Be("LIMITE_PROGRAMACIONES");
     }
 
     // ── El trabajo ────────────────────────────────────────────────────────────────────────────
@@ -209,6 +234,48 @@ public sealed class ProgramacionesTests(ApiConFuente api) : IClassFixture<ApiCon
         var estado = await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == pa, Ct));
         (estado.UltimoResultado, estado.ProximaEjecucion > api.Reloj.Ahora, estado.UltimaEjecucion).Should().Be(("Enviado a 1 destinatario", true, api.Reloj.Ahora));
         (await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == pb, Ct))).UltimoResultado.Should().Be("Enviado a 1 destinatario");
+    }
+
+    [Fact]
+    public async Task Trabajo_UnaQueFalla_DejaSuResultado_YNoCortaLasSiguientes()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (mala, clienteMala, consultaMala) = await EmpresaConConsultaAsync("Falla mala");
+        var (buena, clienteBuena, consultaBuena) = await EmpresaConConsultaAsync("Falla buena");
+        var pm = await ProgramadaVencidaAsync(clienteMala, consultaMala, "samuel.cardenas@flitsas.com");
+        var pb = await ProgramadaVencidaAsync(clienteBuena, consultaBuena, "samuel.cardenas@flitsas.com");
+        // La mala va primero y revienta al registrar el correo (sin destinatarios, como si fallara el envío).
+        await api.EnDbAsync(db => db.ConsultasProgramadas.Where(x => x.Id == pm)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.Destinatarios, new List<string>()).SetProperty(x => x.ProximaEjecucion, api.Reloj.Ahora.AddMinutes(-30)), Ct));
+
+        await CorrerTrabajoAsync();
+
+        var estadoMala = await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == pm, Ct));
+        estadoMala.UltimoResultado.Should().Be("No se envió por un problema temporal; se intentará de nuevo en la próxima fecha.");
+        estadoMala.ProximaEjecucion.Should().BeAfter(api.Reloj.Ahora, "no se reintenta en cada corrida");
+        (await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == pb, Ct))).UltimoResultado.Should().Be("Enviado a 1 destinatario");
+        (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == mala, Ct))).Should().Be(0);
+        (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == buena && c.Tipo == TipoComunicacion.ConsultaProgramada, Ct))).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Trabajo_DosReplicasALaVez_EnvianUnaSolaVez()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, cliente, consulta) = await EmpresaConConsultaAsync("Replicas");
+        await ProgramadaVencidaAsync(cliente, consulta, "samuel.cardenas@flitsas.com");
+        await Task.WhenAll(Enumerable.Range(0, 4).Select(_ => Task.Run(CorrerTrabajoAsync, Ct)));
+        (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == empresa && c.Tipo == TipoComunicacion.ConsultaProgramada, Ct))).Should().Be(1);
+
+        // La carrera de verdad, sin depender del reloj: dos réplicas leyeron la misma próxima ejecución antes de reclamar.
+        var p = await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().FirstAsync(x => x.TenantId == empresa, Ct));
+        await using var r1 = api.App.Services.CreateAsyncScope();
+        await using var r2 = api.App.Services.CreateAsyncScope();
+        EnvioConsultasProgramadas Replica(AsyncServiceScope s) => ActivatorUtilities.CreateInstance<EnvioConsultasProgramadas>(s.ServiceProvider,
+            s.ServiceProvider.GetRequiredService<Microsoft.Extensions.Logging.ILoggerFactory>().CreateLogger("prueba"));
+        var nueva = p.ProximaEjecucion!.Value.AddDays(7);
+        (await Replica(r1).ReclamarAsync(p.Id, p.ProximaEjecucion, nueva, Ct)).Should().BeTrue();
+        (await Replica(r2).ReclamarAsync(p.Id, p.ProximaEjecucion, nueva, Ct)).Should().BeFalse("la otra réplica ya la reclamó");
     }
 
     [Fact]

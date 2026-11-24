@@ -123,10 +123,12 @@ public sealed class RepositorioProgramaciones(ComparendosDb db, Reloj reloj)
     {
         var (periodicidad, diaSemana, diaMes, hora, destinatarios) = Programaciones.Validar(pedido);
         var consulta = await db.ConsultasGuardadas.AsNoTracking().FirstOrDefaultAsync(q => q.Id == pedido.ConsultaId, ct).ConfigureAwait(false);
-        if (consulta is null || consulta.DeFabrica || consulta.TenantId != tenant)
+        // Una guardada es de su usuario (/saved solo le muestra las suyas): programar la de otro haría que sus cambios o su
+        // borrado le cambiaran o le quitaran el envío sin saberlo.
+        if (consulta is null || consulta.DeFabrica || consulta.TenantId != tenant || consulta.UsuarioId != usuario)
             throw new ReglaException("PROGRAMACION_INVALIDA", consulta?.DeFabrica == true
                 ? "Las consultas de fábrica no se programan: guarda una copia y prográmala."
-                : "Solo se programan consultas guardadas de tu empresa.");
+                : "Solo se programan tus propias consultas guardadas.");
 
         ConsultaProgramada? p = null;
         if (pedido.Id is { } id)
