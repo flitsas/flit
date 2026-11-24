@@ -35,6 +35,8 @@ public static class Permisos
     public const string MensajesVer = "comparendos.mensajes.ver";
     public const string ReportesVer = "comparendos.reportes.ver";
     public const string ProductividadVer = "comparendos.productividad.ver";
+    public const string ReportesConsultas = "comparendos.reportes.consultas";
+    public const string ReportesProgramar = "comparendos.reportes.programar";
 
     /// <summary>Módulos del manifiesto con sus permisos y el nombre que ve el administrador de roles.</summary>
     public static readonly IReadOnlyList<(string Codigo, string Nombre, (string Slug, string Nombre)[] Permisos)> Modulos =
@@ -62,11 +64,14 @@ public static class Permisos
             (ConfiguracionEditar, "Editar remitente, copias y destinatarios"), (PlantillasVer, "Ver las plantillas"),
         ]),
         ("comparendos_reportes", "Comparendos · Reportes",
-            [(MensajesVer, "Ver el centro de mensajes"), (ReportesVer, "Ver el dashboard"), (ProductividadVer, "Ver la productividad")]),
+            [
+                (MensajesVer, "Ver el centro de mensajes"), (ReportesVer, "Ver los reportes"), (ProductividadVer, "Ver la productividad"),
+                (ReportesConsultas, "Usar las consultas personalizadas"), (ReportesProgramar, "Programar el envío de consultas por correo"),
+            ]),
     ];
 
     private static readonly string[] Lectura =
-        [BandejaVer, BandejaExportar, MensajesVer, PlantillasVer, MonitoreoVer, RepresentantesVer, ConfiguracionVer, OcrVer, ReportesVer, ProductividadVer];
+        [BandejaVer, BandejaExportar, MensajesVer, PlantillasVer, MonitoreoVer, RepresentantesVer, ConfiguracionVer, OcrVer, ReportesVer, ProductividadVer, ReportesConsultas];
 
     private static readonly string[] Operacion =
     [
@@ -75,7 +80,7 @@ public static class Permisos
         PagosRegistrar, PagosCargarMasivo, OcrGestionar,
     ];
 
-    private static readonly string[] Administracion = [MonitoreoGestionar, RepresentantesGestionar, OtsGestionar, ConfiguracionEditar];
+    private static readonly string[] Administracion = [MonitoreoGestionar, RepresentantesGestionar, OtsGestionar, ConfiguracionEditar, ReportesProgramar];
 
     /// <summary>
     /// Roles sugeridos (§2.3). <c>admin_comparendos</c> es el rol de sistema que la plataforma ya asigna a todo

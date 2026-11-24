@@ -114,6 +114,7 @@ app.UseMiddleware<LecturasSuperAdmin>();
                 : Results.Json(new { status = "not_ready" }, statusCode: StatusCodes.Status503ServiceUnavailable)).AllowAnonymous();
 
         app.MapModulosComparendos(Prefijo);
+        Modulos.ConsultasPersonalizadas.ConsultasPersonalizadasEndpoints.MapConsultasPersonalizadas(app, Prefijo);
 
         // gRPC solo en su puerto: los servicios gRPC del dominio se mapean aquí con .RequireHost(grpcHost).
         var grpcHost = $"*:{grpcPort}";

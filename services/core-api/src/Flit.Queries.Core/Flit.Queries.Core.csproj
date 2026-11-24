@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Reportes de Comparendos 2.0 — motor de Consultas personalizadas, compartido entre productos.
+
+    Salió de Flit.Queries.Domain para que Comparendos (core-comparendos) pueda usarlo sin arrastrar el TenantScope,
+    los consolidados ni la hora de Trámites. Es lo que debe significar lo mismo en todos los productos: qué es
+    «últimos 30 días», cómo se compara una placa pegada desde Excel y qué se responde cuando un valor pedido no sale.
+    El catálogo de campos NO se comparte: cada módulo escribe el suyo.
+
+    Regla (la misma de Flit.Platform.Sdk): NO referencia ningún proyecto Flit ni paquete externo; solo la BCL. Los
+    tipos conservan el espacio de nombres Flit.Queries.Domain para que ningún consumidor cambie un using.
+  -->
+  <PropertyGroup>
+    <OutputType>Library</OutputType>
+    <RootNamespace>Flit.Queries.Domain</RootNamespace>
+  </PropertyGroup>
+
+</Project>

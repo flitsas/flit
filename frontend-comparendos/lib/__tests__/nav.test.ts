@@ -7,12 +7,20 @@ describe("comparendosNav", () => {
     const keys = comparendosNav(SIN_CAPACIDADES).items.map((i) => i.key);
     expect(keys).toContain("bandeja");
     expect(keys).not.toContain("ocr");
-    expect(keys).not.toContain("dashboard");
+    expect(keys).not.toContain("reportes-inicio");
   });
 
   it("muestra OCR y reportes cuando la empresa los tiene", () => {
     const keys = comparendosNav({ ...SIN_CAPACIDADES, ocr: true, reportes: true }).items.map((i) => i.key);
-    expect(keys).toEqual(expect.arrayContaining(["ocr", "dashboard", "productividad"]));
+    expect(keys).toEqual(expect.arrayContaining(["ocr", "reportes-inicio"]));
+  });
+
+  it("Reportes es un solo menú: Productividad ya no es una entrada aparte", () => {
+    const items = comparendosNav({ ...SIN_CAPACIDADES, reportes: true }).items;
+    expect(items.filter((i) => i.section === "reportes")).toEqual([
+      expect.objectContaining({ key: "reportes-inicio", href: "/reportes", label: "Reportes" }),
+    ]);
+    expect(items.map((i) => i.key)).not.toContain("productividad");
   });
 
   it("OCR exige el permiso de ver paquetes y el prompt es solo del SuperAdmin", () => {

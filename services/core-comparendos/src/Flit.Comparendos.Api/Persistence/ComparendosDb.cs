@@ -71,6 +71,8 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
     public DbSet<DocumentoOcrEdicion> DocumentoOcrEdiciones => Set<DocumentoOcrEdicion>();
     public DbSet<DocumentoOcrIntento> DocumentoOcrIntentos => Set<DocumentoOcrIntento>();
     public DbSet<Exportacion> Exportaciones => Set<Exportacion>();
+    public DbSet<ConsultaGuardada> ConsultasGuardadas => Set<ConsultaGuardada>();
+    public DbSet<ConsultaProgramada> ConsultasProgramadas => Set<ConsultaProgramada>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
@@ -97,6 +99,30 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
         ComparendosEIngesta(modelBuilder);
         Gestion(modelBuilder);
         Ocr(modelBuilder);
+        Reportes(modelBuilder);
+    }
+
+    /// <summary>Reportes 2.0: consultas personalizadas guardadas y su envío programado.</summary>
+    private static void Reportes(ModelBuilder m)
+    {
+        m.Entity<ConsultaGuardada>(e =>
+        {
+            e.ToTable("consulta_guardada");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Nombre).HasMaxLength(120);
+            e.Property(x => x.Definicion).HasColumnType("jsonb");
+            e.HasIndex(x => new { x.TenantId, x.UsuarioId });
+        });
+        m.Entity<ConsultaProgramada>(e =>
+        {
+            e.ToTable("consulta_programada");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.Periodicidad).HasMaxLength(10);
+            e.Property(x => x.UltimoResultado).HasMaxLength(300);
+            e.HasOne<ConsultaGuardada>().WithMany().HasForeignKey(x => x.ConsultaId).OnDelete(DeleteBehavior.Cascade);
+            e.HasIndex(x => new { x.Activa, x.ProximaEjecucion });
+            e.HasIndex(x => x.TenantId);
+        });
     }
 
     private static void Base(ModelBuilder m)
