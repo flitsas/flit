@@ -71,7 +71,7 @@ function Contenido() {
   const { sesion } = useSesion();
   // Reportes 2.0 (S3, autorizado por S0): el periodo, el NIT y la empresa viven en la URL (desde, hasta, nit, empresa) y
   // viajan entre pestañas; sin ellos, el mes en curso como antes.
-  const { filtros, escribir } = useFiltrosUrl();
+  const { filtros, escribir, errorUrl } = useFiltrosUrl();
   const periodo: Periodo = { ...periodoEfectivo(filtros), empresa: filtros.empresa };
   const nit = filtros.nit;
   const setNit = (id: string | null) => escribir({ nit: id });
@@ -79,12 +79,13 @@ function Contenido() {
   const router = useRouter();
   const pg = usePaginacion(10);
 
-  const datos = useCarga(JSON.stringify({ ...periodo, nit }), (signal) =>
+  // R8: un rango inválido escrito a mano en la URL no se consulta (los filtros ya muestran el aviso).
+  const datos = useCarga(errorUrl ? null : JSON.stringify({ ...periodo, nit }), (signal) =>
     apiFetch<DatosDashboard>("/reportes/dashboard", { signal, query: { empresa: periodo.empresa, nit, desde: periodo.desde, hasta: periodo.hasta } }),
   );
   // R2: la lente de dinero completa vive aquí (tendencia, dona, organismos y cobro coactivo salieron del Inicio). Su
   // reparto por estado también rotula el indicador de deuda: una sola llamada para las dos cosas.
-  const dinero = useCarga(`dinero:${JSON.stringify({ ...periodo, nit })}`, (signal) =>
+  const dinero = useCarga(errorUrl ? null : `dinero:${JSON.stringify({ ...periodo, nit })}`, (signal) =>
     apiFetch<RespuestaDinero>("/reportes/dinero", { signal, query: { empresa: periodo.empresa, nit, desde: periodo.desde, hasta: periodo.hasta } }),
   );
   const reparto = dinero.datos?.dinero;

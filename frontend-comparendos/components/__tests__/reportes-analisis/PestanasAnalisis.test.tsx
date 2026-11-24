@@ -95,7 +95,7 @@ describe("Reportes 2.0 · pestañas de análisis", () => {
     render(<GestionPage />);
     expect(await screen.findByTestId("vehiculos")).toBeTruthy();
     expect(apiFetch.mock.calls.find(([r]) => r === "/reportes/gestion")![1].query).toMatchObject({ desde: "2026-06-01", hasta: "2026-11-24", nit: "n1" });
-    expect(screen.getByTestId("gestion-corte").textContent).toMatch(/^Impuestos del .+ al .+$/);
+    expect(screen.getByTestId("gestion-corte").textContent).toMatch(/^Comparendos impuestos del .+ al .+$/);
     const corte = "imposicionDesde=2026-06-01&imposicionHasta=2026-11-24&nits=n1";
     expect(within(screen.getByTestId("vehiculos")).getByRole("link", { name: /^AAA111/ }).getAttribute("href")).toBe(`/bandeja?placas=AAA111&pagado=false&${corte}`);
     expect(within(screen.getByTestId("top-organismos")).getByRole("link").getAttribute("href")).toBe(`/bandeja?organismos=o1&pagado=false&${corte}`);
