@@ -63,6 +63,17 @@ public sealed class MotorDeConsultasTests
             .Should().Be((new DateOnly(2026, 10, 26), hoy));
     }
 
+    [Theory]
+    [InlineData(QueryRangePreset.Ultimos365, -364, 0)]
+    [InlineData(QueryRangePreset.Proximos30, 0, 29)]
+    [InlineData(QueryRangePreset.Proximos90, 0, 89)]
+    public void PresetsDeReportes2_SonRelativosAHoy(string preset, int desde, int hasta)
+    {
+        var hoy = new DateOnly(2026, 11, 24);
+        QueryRangePreset.IsKnown(preset).Should().BeTrue();
+        QueryRangePreset.Resolve(new QueryDateFilter("x", preset), hoy).Should().Be((hoy.AddDays(desde), hoy.AddDays(hasta)));
+    }
+
     [Fact]
     public void MesAnterior_EnEnero_EsDiciembreCompletoDelAnioAnterior()
     {
