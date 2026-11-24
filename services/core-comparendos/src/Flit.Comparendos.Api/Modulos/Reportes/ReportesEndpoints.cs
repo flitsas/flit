@@ -166,7 +166,11 @@ public static class ReportesEndpoints
     {
         var a = await AlcanceAsync(usuario, capacidades, empresa, nit, desde, hasta, reloj, ct).ConfigureAwait(false);
         var consolidado = usuario.EsSuperAdmin && a.Tenant is null;
-        return Results.Ok(new { alcance = new { empresa = a.Tenant, a.Nit, a.Desde, a.Hasta }, dp = await reportes.DpAsync(a, consolidado, ct).ConfigureAwait(false) });
+        var dp = await reportes.DpAsync(a, consolidado, ct).ConfigureAwait(false);
+        // §2.4, como Consultas: el SuperAdmin con «todas» deja anotada la lectura de cada empresa que aparece en la respuesta.
+        foreach (var leida in dp.EmpresasLeidas)
+            usuario.AnotarLectura(leida);
+        return Results.Ok(new { alcance = new { empresa = a.Tenant, a.Nit, a.Desde, a.Hasta }, dp });
     }
 
     /// <summary>Pestaña Plataforma (solo SuperAdmin): fuentes, errores técnicos y correos fallidos. El rango máximo es un año.</summary>
