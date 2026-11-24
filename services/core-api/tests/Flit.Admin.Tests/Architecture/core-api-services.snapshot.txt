@@ -1021,6 +1021,7 @@ Flit.Tramites.Domain.Repositories.IProcedureTypeRepository => Flit.Infrastructur
 Flit.Tramites.Domain.Repositories.IProcedureTypeSnapshotRepository => Flit.Infrastructure.Persistence.Repositories.ProcedureTypeSnapshotRepository (Scoped)
 Flit.Tramites.Domain.Repositories.IProcedureTypeSourceRepository => Flit.Infrastructure.Persistence.Repositories.ProcedureTypeSourceRepository (Scoped)
 Flit.Tramites.Domain.Repositories.IResolvedChecklistMatrixProvider => Flit.Infrastructure.Services.ResolvedChecklistMatrixProvider (Scoped)
+Flit.Tramites.Domain.Repositories.IReviewerDirectory => Flit.Infrastructure.Persistence.Repositories.ReviewerDirectory (Scoped)
 Flit.Tramites.Domain.Repositories.ISavepointScope => Flit.Infrastructure.Persistence.EfSavepointScope (Scoped)
 Flit.Tramites.Domain.Repositories.IVehicleSignatureImprintRepository => Flit.Infrastructure.Persistence.Repositories.VehicleSignatureImprintRepository (Scoped)
 Flit.Tramites.Domain.RevocationRequests.IBusinessDayCalculator => Flit.Tramites.Domain.RevocationRequests.BusinessDayCalculator (Singleton)
