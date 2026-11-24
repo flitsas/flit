@@ -61,6 +61,7 @@ public sealed class PermisosYVisibilidadSinCambiosTests
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/deuda/excel => diagnostico.reportes.descargar",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/deuda/pdf => diagnostico.reportes.descargar",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/dictamen => diagnostico.diagnosticos.ver",
+        "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/impuesto/liquidaciones/{vigencia} => diagnostico.reportes.descargar",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/pdf => diagnostico.reportes.descargar",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/saneamiento => diagnostico.diagnosticos.ver",
         "GET /api/v1/diagnostico/diagnosticos/{id:guid}/vehiculos/{vid:guid}/saneamiento/renglones/{rid:guid}/evidencia => diagnostico.reportes.descargar",

@@ -1,5 +1,6 @@
 using System.Net;
 using Flit.Diagnostico.Api;
+using Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 using Flit.Diagnostico.Api.Modulos.Derivacion;
 using Flit.Diagnostico.Tests.Api;
 using FluentAssertions;
@@ -8,6 +9,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using Xunit;
 
 namespace Flit.Diagnostico.Tests.Aislamiento;
@@ -95,6 +97,9 @@ public sealed class FugaEntreEmpresasTests
     {
         b.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { [$"{OpcionesDerivacion.Seccion}:Habilitada"] = "true" });
         new Usuarios.UsuariosProductoFalso().Registrar(b);
+        // Descarga de liquidación del impuesto (D5): el doble devuelve un PDF con el fileId pedido (escenario RutaLiquidacionImpuesto).
+        b.Services.RemoveAll<ClienteConsultas>();
+        b.Services.AddSingleton<ClienteConsultas>(new ClienteConsultasDeFuga());
     }
 
     private static IEnumerable<EndpointDataSource> Fuentes(WebApplication app) => app.Services.GetServices<EndpointDataSource>();

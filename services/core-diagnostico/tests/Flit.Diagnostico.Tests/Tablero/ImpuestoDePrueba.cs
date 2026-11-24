@@ -24,7 +24,7 @@ internal static class ImpuestoDePrueba
     public const string TransaccionFicticia = "TX-IMPUESTO-ZQX-481";
 
     /// <summary>Texto del motivo DEPARTAMENTO_NO_SOPORTADO (el de <c>LectorContenidoReporte.TextoMotivoNa</c> y del frontend).</summary>
-    public const string TextoDepartamentoNoSoportado = "El departamento del vehículo todavía no está soportado.";
+    public const string TextoDepartamentoNoSoportado = "La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo.";
 
     /// <summary>350.000 pendientes de 2026 y 2025 pagada (180.000); las vigencias vienen desordenadas a propósito.</summary>
     public const string ConVigencias =

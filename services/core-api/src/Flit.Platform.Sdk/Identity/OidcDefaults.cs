@@ -20,6 +20,8 @@ public static class OidcDefaults
         ["platform.identidad.read"] = ServiceAudiences.Plataforma,
         // GDC B2-1/B2-4: listado global de empresas con un producto encendido (EmpresasService). Solo para el servicio que lo pide.
         ["platform.identidad.empresas"] = ServiceAudiences.Plataforma,
+        // ADR-0092: entrega de la API key del impuesto a svc-consultas.
+        ["platform.identidad.credenciales.impuesto"] = ServiceAudiences.Plataforma,
         ["platform.consultas"] = ServiceAudiences.Consultas,
         // HU #13344: configuración de consultas por empresa (la escribe la administración de FLIT).
         ["platform.consultas.admin"] = ServiceAudiences.Consultas,

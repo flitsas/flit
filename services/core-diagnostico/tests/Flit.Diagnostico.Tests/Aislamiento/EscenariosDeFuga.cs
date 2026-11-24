@@ -209,6 +209,13 @@ public static class EscenariosDeFuga
 
     public const string RutaDeudaExcel = RutaDeuda + "/excel";
 
+    /// <summary>
+    /// Descarga de la liquidación del impuesto por vigencia (D5): cada empresa siembra la celda del impuesto COMPLETADO con un
+    /// <c>liquidacion_id</c> exclusivo; el doble <see cref="ClienteConsultasDeFuga"/> lo devuelve dentro del PDF. Con el token de A
+    /// la liquidación de B responde 404 sin ese identificador (el lote de otra empresa no es visible y no se llama a la fuente).
+    /// </summary>
+    public const string RutaLiquidacionImpuesto = Program.Prefijo + global::Flit.Diagnostico.Api.Modulos.Reportes.ReportesEndpoints.RutaLiquidacionImpuesto;
+
     /// <summary>Grilla de placas (HU #14576 AC39, BE-C): devuelve el id del vehículo de la empresa y nada de la otra.</summary>
     public const string RutaVehiculos = Program.Prefijo + "/vehiculos";
 
@@ -401,6 +408,17 @@ public static class EscenariosDeFuga
         {
             var (lote, vehiculo) = await TerminadoAsync(empresa, ct);
             return new Sembrado(Saneamiento.DeudaDePrueba.RutaExcel(lote, vehiculo), ["xl/worksheets/sheet1.xml"], Exclusivos: [empresa.Id.ToString(), vehiculo.ToString()]);
+        }),
+        new EscenarioDeFuga(RutaLiquidacionImpuesto, async (empresa, ct) =>
+        {
+            var placa = PlacaDe(empresa);
+            var archivo = $"liq-{empresa.Id:N}";
+            var lote = await Tablero.Tablero.SembrarAsync(empresa, ct, nombre: "Lote del impuesto", alcance: [Fuente.Runt, Fuente.ImpuestoDepartamental],
+                vehiculos: [new(placa, [new(Fuente.Runt, EstadoCelda.Completado, 1), new(Fuente.ImpuestoDepartamental, EstadoCelda.Pendiente, 1)])]);
+            await Tablero.Tablero.PayloadAsync(empresa, lote.Celda(placa, Fuente.ImpuestoDepartamental),
+                $$"""{"monto_total":1000,"tiene_deuda":true,"vigencias":[{"anio":2025,"valor":1000,"pagada":false,"liquidacion_id":"{{archivo}}"}]}""", ct);
+            var vehiculo = lote.Vehiculos.Single().Id;
+            return new Sembrado($"{Program.Prefijo}{DiagnosticosEndpoints.Ruta}/{lote.Id}/vehiculos/{vehiculo}/impuesto/liquidaciones/2025", [archivo]);
         }),
         new EscenarioDeFuga(RutaVehiculos, async (empresa, ct) =>
         {

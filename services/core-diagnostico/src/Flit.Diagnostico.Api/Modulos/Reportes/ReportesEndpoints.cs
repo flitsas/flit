@@ -20,11 +20,15 @@ internal static class ReportesEndpoints
 
     public const string RutaExcelLote = DiagnosticosEndpoints.Ruta + "/{id:guid}/excel";
 
+    public const string RutaLiquidacionImpuesto =
+        DiagnosticosEndpoints.Ruta + "/{id:guid}/vehiculos/{vid:guid}/impuesto/liquidaciones/{vigencia}";
+
     public static void Map(RouteGroupBuilder api)
     {
         ArgumentNullException.ThrowIfNull(api);
         api.MapGet(RutaPdfVehiculo, PdfAsync).RequirePermiso(Permisos.ReportesDescargar).WithName("DescargarPdfVehiculo");
         api.MapGet(RutaExcelLote, ExcelAsync).RequirePermiso(Permisos.ReportesDescargar).WithName("DescargarExcelLote");
+        api.MapGet(RutaLiquidacionImpuesto, LiquidacionAsync).RequirePermiso(Permisos.ReportesDescargar).WithName("DescargarLiquidacionImpuesto");
     }
 
     private static async Task<IResult> PdfAsync(Guid id, Guid vid, DescargaPdfVehiculo descarga, HttpResponse respuesta, CancellationToken ct)
@@ -39,6 +43,14 @@ internal static class ReportesEndpoints
     {
         var archivo = await descarga.ObtenerAsync(id, ct).ConfigureAwait(false);
         // Igual que el PDF: documentos enmascarados y datos de la compañía, sin caché intermedia.
+        respuesta.Headers.CacheControl = "no-store";
+        return Results.File(archivo.Contenido, archivo.ContentType, archivo.Nombre);
+    }
+
+    private static async Task<IResult> LiquidacionAsync(
+        Guid id, Guid vid, string vigencia, DescargaLiquidacionImpuesto descarga, HttpResponse respuesta, CancellationToken ct)
+    {
+        var archivo = await descarga.ObtenerAsync(id, vid, vigencia, ct).ConfigureAwait(false);
         respuesta.Headers.CacheControl = "no-store";
         return Results.File(archivo.Contenido, archivo.ContentType, archivo.Nombre);
     }

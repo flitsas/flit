@@ -509,9 +509,9 @@ describe("PaginaDetalleConsulta — HU #13866: impuesto departamental", () => {
     expect(valorDe(within(pagina).getByRole("group", { name: "Respuesta de la fuente" }), "Monto total")).toBe("350000");
   });
 
-  it("la «Novedad» por departamento no soportado muestra el motivo, sin error ni reintento", async () => {
+  it("la «Novedad» por departamento sin cobertura muestra el motivo, sin error ni reintento", async () => {
     const { pagina } = await abrir("IMPUESTO_DEPARTAMENTAL", impuestoNa("DEPARTAMENTO_NO_SOPORTADO"));
-    expect((await within(pagina).findAllByText(/El departamento del vehículo todavía no está soportado\./)).length).toBeGreaterThan(0);
+    expect((await within(pagina).findAllByText(/La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo\./)).length).toBeGreaterThan(0);
     expect(within(pagina).queryByRole("alert")).not.toBeInTheDocument();
     expect(within(pagina).queryByRole("button", { name: /reprocesar|reintentar/i })).not.toBeInTheDocument();
   });
@@ -613,5 +613,88 @@ describe("respuesta cruda del proveedor en tarjeta plegable (D19)", () => {
   it("sin respuesta del proveedor no aparece la tarjeta", async () => {
     await pintarDetalle(simitVehiculo());
     expect(screen.queryByRole("button", { name: /^Respuesta del proveedor/ })).not.toBeInTheDocument();
+  });
+});
+
+// Uso de ejemplo (ola impuesto-fuente-real, diseno.md §5.2): el detalle del impuesto COMPLETADO monta «Liquidaciones del
+// impuesto» (tabla de vigencias pendientes y, con la capacidad descargarReportes, un botón por vigencia con archivo y el de la
+// consolidada) y, en COMPLETADO y en ERROR, «Advertencias de la fuente» con el campo que no coincide, nunca su valor.
+describe("PaginaDetalleConsulta — impuesto contra la fuente real: liquidaciones y advertencias", () => {
+  const conLiquidaciones = (cambios: Partial<Detalle> = {}) =>
+    detalle("IMPUESTO_DEPARTAMENTAL", {
+      resultado: {
+        tiene_deuda: true,
+        monto_total: 350000,
+        tiene_liquidacion_consolidada: true,
+        vigencias: [{ anio: 2025, valor: 350000, pagada: false, tiene_liquidacion: true, referencia_pago: "REF-0001", fecha_vencimiento: "2025-07-31" }],
+      },
+      ...cambios,
+    });
+  const ADVERTENCIAS: Detalle["advertencias"] = [
+    { tipo: "VALIDACION", campo: "vehicleType", anio: null, texto: "La clase del vehículo no coincide con el del portal del impuesto." },
+    { tipo: "VALIDACION", campo: "campoRaro", anio: null, texto: "Un dato enviado no coincide con el del portal del impuesto." },
+    { tipo: "AVISO", campo: "", anio: 2025, texto: "La fuente del impuesto dejó un aviso sobre la vigencia 2025." },
+  ];
+  const advertencias = (pagina: HTMLElement) => within(pagina).getByRole("list", { name: "Advertencias de la fuente" });
+
+  it("COMPLETADO con la capacidad descargarReportes: tabla de pendientes y botones por vigencia y consolidada", async () => {
+    h.capacidades = { verDiagnosticos: true, descargarReportes: true };
+    const { pagina } = await pintarDetalle(conLiquidaciones());
+    const zona = region(pagina, "Liquidaciones del impuesto");
+    expect(within(zona).getByRole("table", { name: "Vigencias pendientes" })).toBeInTheDocument();
+    expect(within(zona).getByRole("button", { name: "Descargar liquidación 2025" })).toBeInTheDocument();
+    expect(within(zona).getByRole("button", { name: "Descargar liquidación consolidada" })).toBeInTheDocument();
+  });
+
+  it("sin la capacidad descargarReportes: la tabla sí, ningún botón de liquidación", async () => {
+    const { pagina } = await pintarDetalle(conLiquidaciones());
+    expect(within(region(pagina, "Liquidaciones del impuesto")).getByRole("table", { name: "Vigencias pendientes" })).toBeInTheDocument();
+    expect(within(pagina).queryByRole("button", { name: /Descargar liquidación/ })).not.toBeInTheDocument();
+  });
+
+  it("backoffice: sin botones de liquidación aunque la sesión tenga la capacidad (la ruta es de la compañía)", async () => {
+    h.capacidades = { verDiagnosticos: true, descargarReportes: true };
+    const d = conLiquidaciones();
+    render(<PaginaDetalleConsulta loteId={ID} vehiculoId="vehiculo-1" fuente={d.fuente} cargar={async () => d} backoffice />);
+    await waitFor(() => expect(screen.queryByRole("status", { name: /cargando/i })).not.toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /Descargar liquidación/ })).not.toBeInTheDocument();
+  });
+
+  it("deuda con dato parcial: la frase lo dice", async () => {
+    const { pagina } = await pintarDetalle(
+      detalle("IMPUESTO_DEPARTAMENTAL", { resultado: { tiene_deuda: true, monto_total: 350000, dato_parcial: true, vigencias: [] } }),
+    );
+    expect(within(pagina).getByText("Con deuda (dato parcial): la fuente no leyó todas las vigencias.")).toBeInTheDocument();
+  });
+
+  it("COMPLETADO con advertencias: el campo legible y los avisos, nunca los valores enviados ni los del portal", async () => {
+    const { pagina } = await pintarDetalle(conLiquidaciones({ advertencias: ADVERTENCIAS }));
+    expect(within(advertencias(pagina)).getAllByRole("listitem").map((i) => i.textContent)).toEqual([
+      "Dato que no coincide con el portal: Clase del vehículo",
+      "Dato que no coincide con el portal: Otro dato",
+      "La fuente del impuesto dejó un aviso sobre la vigencia 2025.",
+    ]);
+  });
+
+  it("ERROR con advertencias: el error y también las advertencias; sin botones de liquidación", async () => {
+    h.capacidades = { verDiagnosticos: true, descargarReportes: true };
+    const { pagina } = await pintarDetalle(
+      detalle("IMPUESTO_DEPARTAMENTAL", {
+        estado: "ERROR",
+        tipo_error: "CREDENCIAL_NO_CONFIGURADA",
+        dato_obtenido_en: null,
+        resultado: null,
+        advertencias: [ADVERTENCIAS[0]],
+      }),
+    );
+    expect(within(pagina).getByText("Credencial de impuesto no configurada para la compañía.")).toBeInTheDocument();
+    expect(within(advertencias(pagina)).getByText("Dato que no coincide con el portal: Clase del vehículo")).toBeInTheDocument();
+    expect(within(pagina).queryByRole("button", { name: /Descargar liquidación/ })).not.toBeInTheDocument();
+  });
+
+  it("sin advertencias (null, vacías o en otra fuente): no aparece el bloque", async () => {
+    const { pagina } = await pintarDetalle(conLiquidaciones({ advertencias: [] }));
+    expect(within(pagina).queryByRole("list", { name: "Advertencias de la fuente" })).not.toBeInTheDocument();
+    expect(within(pagina).queryByText("Advertencias de la fuente")).not.toBeInTheDocument();
   });
 });

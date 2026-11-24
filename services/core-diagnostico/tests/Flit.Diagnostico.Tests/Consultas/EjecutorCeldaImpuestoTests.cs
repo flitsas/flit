@@ -92,7 +92,7 @@ public sealed class EjecutorCeldaImpuestoTests
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
         celda.Estado.Should().Be(EstadoCelda.Completado);
         using (var payload = JsonDocument.Parse(celda.Payload!))
-            payload.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias", "departamento_codigo", "tiene_deuda"]);
+            payload.RootElement.EnumerateObject().Select(p => p.Name).Should().BeEquivalentTo(["monto_total", "vigencias", "departamento_codigo", "tiene_deuda", "dato_parcial"]);
         celda.Payload.Should().NotContainAny(["proveedor", "transaccion", "origen", FuenteImpuestoSimulada.Transaccion, "servicio"]);
         var intento = (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Should().ContainSingle().Subject;
         // ADR-0075: el *Response del impuesto no trae transacción; el servicio sale del proveedor de la respuesta.
@@ -270,6 +270,52 @@ public sealed class EjecutorCeldaImpuestoTests
         var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
         (celda.Estado, celda.MotivoNa, celda.Payload).Should().Be((EstadoCelda.Na, (MotivoNa?)MotivoNa.DepartamentoNoSoportado, (string?)null));
         (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Select(i => i.TipoError).Should().Equal(["TIMEOUT"], "la N/A no deja otro intento ni consumo");
+    }
+
+    // Decisión del usuario 2026-11-23 (la API decide la cobertura) — core-consultas responde OK con el chequeo
+    // impuesto_departamento_no_soportado: la celda cierra en N/A DEPARTAMENTO_NO_SOPORTADO tras una sola llamada, sin reintento
+    // aunque MaxReintentos=3, sin payload ni tipo de error. Una N/A no deja fila en intentos_consulta (RegistroIntentos).
+    [Fact]
+    public async Task Departamento_sin_cobertura_en_la_fuente_queda_NA_sin_reintento()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var grpc = new ImpuestoGrpcFalso { ClaveError = "impuesto_departamento_no_soportado" };
+        await using var api = await ArrancarAsync(grpc.RegistrarAdaptadorReal, ct);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
+
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 3), ct);
+
+        grpc.Llamadas.Should().ContainSingle("la N/A de la fuente es definitiva: no se reintenta");
+        var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
+        (celda.Estado, celda.MotivoNa, celda.TipoError, celda.Payload, celda.IntentosAuto)
+            .Should().Be((EstadoCelda.Na, (MotivoNa?)MotivoNa.DepartamentoNoSoportado, (string?)null, (string?)null, 0));
+        (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Should().BeEmpty("RegistroIntentos no deja intento de una N/A");
+    }
+
+    // Decisión del usuario 2026-11-23 — chequeo impuesto_fuente_inactiva: ERROR FUENTE_INACTIVA definitivo tras una sola llamada
+    // (MaxReintentos=3), con su intento en ERROR y reprocesable desde el tablero.
+    [Fact]
+    public async Task Fuente_inactiva_queda_en_ERROR_FUENTE_INACTIVA_sin_reintento_y_reprocesable()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var grpc = new ImpuestoGrpcFalso { ClaveError = "impuesto_fuente_inactiva" };
+        await using var api = await ArrancarAsync(grpc.RegistrarAdaptadorReal, ct);
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = DosEmpresas.En(api).A;
+        var lote = await MotorNa.LoteAsync(api, empresa, [Lotes.Fila("TST001")], Alcance, null, null, ct);
+
+        await MotorRunt.ProcesarTodoAsync(Motor.Bus(api, maxReintentos: 3), ct);
+
+        grpc.Llamadas.Should().ContainSingle("FUENTE_INACTIVA es definitivo: no se reintenta");
+        var celda = await MotorPersonas.CeldaAsync(api, empresa, lote, "TST001", Fuente.ImpuestoDepartamental, ct);
+        (celda.Estado, celda.TipoError, celda.IntentosAuto).Should().Be((EstadoCelda.Error, "FUENTE_INACTIVA", 0));
+        var intento = (await MotorPersonas.IntentosAsync(empresa, celda.Id, ct)).Should().ContainSingle().Subject;
+        (intento.Estado, intento.TipoError, intento.IdentificadorConsultado, intento.Servicio)
+            .Should().Be((ResultadoIntento.Error, "FUENTE_INACTIVA", "TST001", (ServicioConsulta?)ServicioConsulta.Verifik));
+        var reproceso = await api.Cliente(MotorPersonas.Admin(api, empresa)).PostAsync($"{Program.Prefijo}/consultas/{celda.Id}/reprocesar", null, ct);
+        reproceso.StatusCode.Should().Be(HttpStatusCode.Accepted, await reproceso.Content.ReadAsStringAsync(ct));
     }
 
     // AC3 (F09-C5) — celda COMPLETADO: un segundo disparo del mismo lote no la reabre ni llama; otro lote de la misma compañía

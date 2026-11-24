@@ -29,7 +29,8 @@ internal sealed record LecturasParaDictamen(
     LecturaCelda<IReadOnlyList<ResultadoSimitDetalle>>? SimitPropietario,
     LecturaCelda<IReadOnlyList<ResultadoSimitDetalle>>? SimitLocatario,
     LecturaCelda<IReadOnlyList<ResultadoRuntPersonaDetalle>>? RuntLocatario,
-    LecturaCelda<ResultadoImpuestoDetalle>? Impuesto);
+    LecturaCelda<ResultadoImpuestoDetalle>? Impuesto,
+    IReadOnlyList<AdvertenciaImpuestoLeida>? AdvertenciasImpuesto = null);
 
 /// <summary>Estado de las hermanas al entrar al cierre, y el estado anterior de la celda que se cierra.</summary>
 internal readonly record struct FotoFlanco(EstadoCelda EstadoAnterior, IReadOnlyList<EstadoCelda> Hermanas);

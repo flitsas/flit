@@ -45,6 +45,8 @@ public sealed class MultasDictamenV2Tests
         "FUENTE_PENDIENTE",
     ];
 
+    private static readonly string[] CodigosV3 = [.. CodigosV2, "IMPUESTO_VALIDACION"];
+
     // ---- AC1 / AC3: multas del vehículo ----
 
     [Theory]
@@ -370,15 +372,16 @@ public sealed class MultasDictamenV2Tests
     // ---- AC7 / AC8: catálogo v2 y plantillas ----
 
     [Fact]
-    public void El_catalogo_vigente_es_la_version_2_con_dieciocho_reglas_por_tipo()
+    public void El_catalogo_vigente_es_la_version_3_con_diecinueve_reglas_por_tipo()
     {
-        CatalogoReglasDictamen.Version.Should().Be(2);
-        CatalogoReglasDictamen.Filas.Should().HaveCount(54);
-        CatalogoReglasDictamen.Filas.Should().OnlyContain(f => f.CatalogoVersion == 2 && f.PlantillaTexto.Length > 0);
+        CatalogoReglasDictamen.Version.Should().Be(3);
+        CatalogoReglasDictamen.Filas.Should().HaveCount(57);
+        CatalogoReglasDictamen.FilasV2.Should().HaveCount(54);
+        CatalogoReglasDictamen.Filas.Should().OnlyContain(f => f.CatalogoVersion == 3 && f.PlantillaTexto.Length > 0);
         foreach (var tipo in CatalogoReglasDictamen.TiposTramite)
         {
             CatalogoReglasDictamen.Filas.Where(f => f.TipoTramiteCodigo == tipo).Select(f => f.Codigo)
-                .Should().Equal(CodigosV2);
+                .Should().Equal(CodigosV3);
         }
     }
 
@@ -409,6 +412,9 @@ public sealed class MultasDictamenV2Tests
     [InlineData(Transferencia, "RTM_NO_VIGENTE", "BLOQUEA")]
     [InlineData(Standard, "SOAT_MAQUINARIA", "ADVIERTE")]
     [InlineData(Unilateral, "SOAT_MAQUINARIA", "ADVIERTE")]
+    [InlineData(Standard, "IMPUESTO_VALIDACION", "ADVIERTE")]
+    [InlineData(Unilateral, "IMPUESTO_VALIDACION", "ADVIERTE")]
+    [InlineData(Transferencia, "IMPUESTO_VALIDACION", "ADVIERTE")]
     [InlineData(Standard, "FUENTE_PENDIENTE", "ADVIERTE")]
     public void Efecto_de_cada_regla_v2_por_tipo(string tipo, string codigo, string efecto)
     {
@@ -450,7 +456,7 @@ public sealed class MultasDictamenV2Tests
     [Fact]
     public void Las_plantillas_v2_de_traspaso_standard_son_las_de_la_ficha()
     {
-        CatalogoReglasDictamen.Filas.Where(f => f.TipoTramiteCodigo == Standard)
+        CatalogoReglasDictamen.FilasV2.Where(f => f.TipoTramiteCodigo == Standard)
             .ToDictionary(f => f.Codigo, f => f.PlantillaTexto)
             .Should().Equal(PlantillasStandardV2);
     }
@@ -469,13 +475,14 @@ public sealed class MultasDictamenV2Tests
         v1.Single(f => f.TipoTramiteCodigo == Standard && f.Codigo == "SIMIT_VEHICULO").PlantillaTexto.Should().Be(
             "El vehículo tiene comparendos, no está en paz y salvo, figura suspendido o cancelado, "
             + "o tiene un acuerdo de pago que no está al día. Es una advertencia.");
-        CatalogoReglasDictamen.FilasDe(2).Should().Equal(CatalogoReglasDictamen.Filas);
+        CatalogoReglasDictamen.FilasDe(2).Should().Equal(CatalogoReglasDictamen.FilasV2);
+        CatalogoReglasDictamen.FilasDe(3).Should().Equal(CatalogoReglasDictamen.Filas);
     }
 
     [Fact]
-    public void El_historico_suma_v1_y_v2_sin_repetir_clave()
+    public void El_historico_suma_v1_v2_y_v3_sin_repetir_clave()
     {
-        CatalogoReglasDictamen.Historico.Should().HaveCount(96);
+        CatalogoReglasDictamen.Historico.Should().HaveCount(153);
         CatalogoReglasDictamen.Historico.Select(f => (f.CatalogoVersion, f.TipoTramiteCodigo, f.Codigo))
             .Should().OnlyHaveUniqueItems();
     }

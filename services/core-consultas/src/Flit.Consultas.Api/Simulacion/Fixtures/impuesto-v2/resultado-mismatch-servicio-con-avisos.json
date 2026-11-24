@@ -1,0 +1,76 @@
+{
+  "id": "consulta-sintetica-0001",
+  "source_id": "impuesto-05",
+  "status": "succeeded",
+  "created_at": "2026-11-19T15:00:00Z",
+  "error_code": null,
+  "file_errors": [],
+  "result": {
+    "status": "con_deuda",
+    "consultedAt": "2026-11-19T15:00:45Z",
+    "totals": {
+      "tax": 150000,
+      "penalty": 0,
+      "interest": 5000,
+      "discounts": 0,
+      "totalToPay": 155000
+    },
+    "pendingPeriods": [
+      {
+        "period": 2026,
+        "tax": 150000,
+        "penalty": 0,
+        "interest": 5000,
+        "discounts": 0,
+        "totalToPay": 155000,
+        "appraisal": 28000000,
+        "dueDate": "2026-07-31",
+        "fileId": "archivo-sintetico-2026",
+        "paymentReference": "REF-SINTETICA-2026",
+        "otherCharges": [],
+        "previousPayments": 0
+      }
+    ],
+    "lastPayment": null,
+    "clearance": null,
+    "validations": [
+      {
+        "field": "OwnerName",
+        "sent": "PERSONA PRUEBA UNO",
+        "portal": "PERSONA PRUEBA UNO",
+        "result": "match"
+      },
+      {
+        "field": "vehicleServiceType",
+        "sent": "PARTICULAR",
+        "portal": "PUBLICO",
+        "result": "mismatch"
+      },
+      {
+        "field": "campoDesconocido",
+        "sent": "A",
+        "portal": "B",
+        "result": "mismatch"
+      }
+    ],
+    "warnings": [
+      {
+        "code": "periodo_en_cobro_coactivo",
+        "message": "texto sintetico del proveedor",
+        "period": 2026
+      },
+      {
+        "code": "Codigo Con Espacios",
+        "message": "texto sintetico del proveedor",
+        "period": null
+      }
+    ],
+    "vehicle": {
+      "plate": "TST180",
+      "brand": "MARCA PRUEBA",
+      "line": "LINEA PRUEBA",
+      "model": 2020
+    },
+    "consolidatedFileId": null
+  }
+}
