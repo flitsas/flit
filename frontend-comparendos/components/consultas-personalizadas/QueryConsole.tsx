@@ -56,6 +56,21 @@ import {
 } from "./ui";
 
 
+/** El preset sigue si vale para el campo de fecha; si es de los que miran adelante y el campo no, pasa a 30 días atrás. */
+export function presetValido(preset: QueryRangePreset, campo: string, camposFuturos: string[] = []): QueryRangePreset {
+  const futuro = RANGE_PRESETS.find((p) => p.value === preset)?.futuro;
+  return futuro && !camposFuturos.includes(campo) ? "ultimos_30" : preset;
+}
+
+/** La misma corrección sobre una definición que llega de fuera (enlace `?q=` o consulta guardada). */
+function normalizarFechas(definition: QueryDefinition, camposFuturos?: string[]): QueryDefinition {
+  const preset = presetValido(definition.fechas.preset, definition.fechas.campo, camposFuturos);
+  return preset === definition.fechas.preset ? definition : { ...definition, fechas: { ...definition.fechas, preset } };
+}
+
+/** Si el preset mira hacia adelante (no tiene «periodo anterior» comparable). */
+const esFuturo = (preset: QueryRangePreset) => !!RANGE_PRESETS.find((p) => p.value === preset)?.futuro;
+
 /**
  * La huella de la PREGUNTA: fechas y condiciones, no columnas ni orden.
  *
@@ -68,12 +83,6 @@ import {
  * los veía distintos —y también se habría tragado un cambio de orden de claves— y marcaba
  * «modificada» nada más guardar, con la consulta recién guardada y sin tocar nada.</p>
  */
-/** El preset sigue si vale para el campo de fecha; si es de los que miran adelante y el campo no, pasa a 30 días atrás. */
-export function presetValido(preset: QueryRangePreset, campo: string, camposFuturos: string[] = []): QueryRangePreset {
-  const futuro = RANGE_PRESETS.find((p) => p.value === preset)?.futuro;
-  return futuro && !camposFuturos.includes(campo) ? "ultimos_30" : preset;
-}
-
 function huellaPregunta(definition: QueryDefinition): string {
   return JSON.stringify([
     [
@@ -246,8 +255,12 @@ export function QueryConsole<TRow>({
     const encoded = new URLSearchParams(window.location.search).get("q");
     if (!encoded) return;
     const decoded = decodeDefinition(encoded);
+    // Un enlace armado a mano puede traer un «Próximos …» sobre una fecha pasada: se corrige para que lo que se ve
+    // en el selector sea lo que se ejecuta.
     // eslint-disable-next-line react-hooks/set-state-in-effect -- estado inicial desde la URL: solo existe en el cliente
-    if (decoded) setDefinition(decoded);
+    if (decoded) setDefinition(normalizarFechas(decoded, source.camposFuturos));
+    // Solo al montar: el enlace se lee una vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**
@@ -373,9 +386,10 @@ export function QueryConsole<TRow>({
 
   const openSaved = useCallback(
     (query: SavedQuery) => {
-      setDefinition(query.definition);
+      const definicion = normalizarFechas(query.definition, source.camposFuturos);
+      setDefinition(definicion);
       setActiveId(query.id);
-      setActiveSnapshot(huellaPregunta(query.definition));
+      setActiveSnapshot(huellaPregunta(definicion));
       setNotice(null);
       if (query.definition.columnas.length > 0) {
         setVisibleColumns(
@@ -383,7 +397,7 @@ export function QueryConsole<TRow>({
         );
       }
     },
-    [allColumns, conFijas],
+    [allColumns, conFijas, source.camposFuturos],
   );
 
   // Nombre de la consulta activa, si es una guardada de verdad: de fábrica no cuenta —guardar sobre
@@ -678,7 +692,7 @@ export function QueryConsole<TRow>({
                   {result?.total === 1 ? singular : pluralNoun}
                 </span>
               </p>
-              {result && <Comparacion result={result} testIdPrefix={prefix} />}
+              {result && <Comparacion result={result} testIdPrefix={prefix} futuro={esFuturo(definition.fechas.preset)} />}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">
@@ -989,11 +1003,14 @@ export function QueryConsole<TRow>({
 function Comparacion<TRow>({
   result,
   testIdPrefix,
+  futuro,
 }: {
   result: QueryResult<TRow>;
+  /** Rango hacia adelante: el «periodo anterior» serían plazos ya vencidos, que no se comparan con los que vienen. */
+  futuro?: boolean;
   testIdPrefix: string;
 }) {
-  const anterior = result.totalPeriodoAnterior;
+  const anterior = futuro ? null : result.totalPeriodoAnterior;
   // `null`: el servidor no lo calculó (no cabe en el tope). No se compara contra nada; solo se dice el rango.
   if (anterior === null) {
     return (

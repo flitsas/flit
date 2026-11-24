@@ -14,7 +14,7 @@ vi.mock("@/lib/xlsx", async (original) => {
   };
 });
 
-import { QueryConsole } from "@/components/consultas-personalizadas/QueryConsole";
+import { presetValido, QueryConsole } from "@/components/consultas-personalizadas/QueryConsole";
 import { COMPARENDO_DEFAULT_COLUMNS, COMPARENDO_PRESETS, comparendoColumns, diaXlsx, etiquetaEstado } from "@/components/consultas-personalizadas/comparendo-columns";
 import { decodeDefinition, encodeDefinition } from "@/components/consultas-personalizadas/link-state";
 import { fuenteComparendos, type ComparendoQueryRow, type QueryDefinition, type QueryField } from "@/lib/api/consultas-personalizadas";
@@ -224,13 +224,38 @@ describe("cmp-query · presets relativos", () => {
     montar();
     const tarjeta = await screen.findByTestId("cmp-query-guardada-c0000000-0000-4000-8000-000000000001");
     expect(tarjeta).toHaveTextContent("Vence el plazo de gestión en los próximos 30 días");
-    expect(tarjeta).toHaveTextContent("próximos 30 días");
+    // El resumen de la tarjeta (no el nombre) dice el periodo.
+    expect(tarjeta).toHaveTextContent("Sin filtros · próximos 30 días");
     fireEvent.click(tarjeta);
     expect(screen.getByTestId("cmp-query-campo-fecha")).toHaveValue("limite_gestion");
     expect(screen.getByTestId("cmp-query-preset")).toHaveValue("proximos_30");
     await waitFor(() =>
       expect(peticiones.some((p) => p.ruta === "/run" && (p.cuerpo as QueryDefinition).fechas.preset === "proximos_30")).toBe(true),
     );
+  });
+
+  it("cmp-query: con un rango futuro no se compara contra el «periodo anterior»", async () => {
+    instalarServidor({ totalPeriodoAnterior: 5 });
+    montar();
+    expect(await screen.findByTestId("cmp-query-comparacion")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("cmp-query-guardada-c0000000-0000-4000-8000-000000000001"));
+    await waitFor(() => expect(screen.queryByTestId("cmp-query-comparacion")).not.toBeInTheDocument());
+  });
+
+  it("cmp-query: un enlace con «Próximos …» sobre una fecha pasada se corrige a lo que se ve", async () => {
+    const malo: QueryDefinition = { fechas: { campo: "imposicion", preset: "proximos_30" }, condiciones: [], columnas: [] };
+    window.history.replaceState(null, "", `/reportes/consultas?q=${encodeURIComponent(encodeDefinition(malo))}`);
+    const { peticiones } = instalarServidor();
+    montar();
+    await waitFor(() => expect(screen.getByTestId("cmp-query-preset")).toHaveValue("ultimos_30"));
+    await waitFor(() => expect(peticiones.filter((p) => p.ruta === "/run").length).toBeGreaterThan(0));
+    expect(peticiones.filter((p) => p.ruta === "/run").every((p) => (p.cuerpo as QueryDefinition).fechas.preset !== "proximos_30")).toBe(true);
+  });
+
+  it("cmp-query: presetValido solo cambia un futuro sobre un campo que no mira adelante", () => {
+    expect(presetValido("proximos_90", "imposicion", ["caducidad"])).toBe("ultimos_30");
+    expect(presetValido("proximos_90", "caducidad", ["caducidad"])).toBe("proximos_90");
+    expect(presetValido("ultimos_365", "imposicion", [])).toBe("ultimos_365");
   });
 
   it("cmp-query: pasar de una fecha futura a una pasada quita el «Próximos …»", async () => {
