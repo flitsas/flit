@@ -1104,22 +1104,51 @@ export const tramitesClient = {
       },
     ),
 
-  // ICT (paridad v1 pause-unpause-massive) — pausar/reanudar en lote. Devuelve el detalle por trámite.
+  // ICT (paridad v1 pause-unpause-massive, HU #14668) — pausar/reanudar en lote.
+  // observationMode: keep | single | perItem. Backward-compat: ids+paused+observation sin mode.
   pauseInstancesMassive: (
-    ids: string[],
-    paused: boolean,
+    body:
+      | {
+          ids: string[];
+          paused: boolean;
+          observationMode?: 'keep' | 'single' | 'perItem';
+          observation?: string | null;
+          items?: { id: string; observation: string | null }[];
+        }
+      | string[],
+    pausedOrTenant?: boolean | string,
     observation?: string | null,
     tenantId?: string,
-  ) =>
-    request<{
+  ) => {
+    // Overload legacy: (ids, paused, observation?, tenantId?)
+    const payload =
+      Array.isArray(body)
+        ? {
+            ids: body,
+            paused: Boolean(pausedOrTenant),
+            observation: observation ?? null,
+          }
+        : {
+            ids: body.ids,
+            paused: body.paused,
+            observationMode: body.observationMode,
+            observation: body.observation ?? null,
+            items: body.items,
+          };
+    const tenant =
+      typeof body === 'object' && !Array.isArray(body)
+        ? (pausedOrTenant as string | undefined)
+        : tenantId;
+    return request<{
       total: number;
       processed: number;
       detail: { id: string; ok: boolean; error: string | null }[];
     }>(`/api/v1/tramites/instances/pause-massive`, {
       method: 'POST',
-      headers: tenantHeader(tenantId),
-      body: JSON.stringify({ ids, paused, observation: observation ?? null }),
-    }),
+      headers: tenantHeader(tenant),
+      body: JSON.stringify(payload),
+    });
+  },
 
   // #2 — Organismos de tránsito habilitados para la empresa (tenant del header).
   // El operador solo puede elegir/enviar a estos en el FUR.

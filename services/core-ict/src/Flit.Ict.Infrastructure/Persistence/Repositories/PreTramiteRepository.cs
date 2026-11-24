@@ -222,6 +222,40 @@ public sealed class PreTramiteRepository(
             return 0;
         }, ct);
 
+    /// <inheritdoc/>
+    public async Task<string?> GetTramiteStatusAsync(Guid procedureInstanceId, CancellationToken ct = default)
+    {
+        // Lectura cross-schema best-effort: mismo patrón que IctStatusV2Query.TryReadTramiteStatusAsync.
+        // Si el rol no tiene SELECT sobre tramites.procedure_instances, DbException se swallows (null).
+        try
+        {
+            var connection = db.Database.GetDbConnection();
+            var wasClosed = connection.State != System.Data.ConnectionState.Open;
+            if (wasClosed) await connection.OpenAsync(ct);
+            try
+            {
+                await using var cmd = connection.CreateCommand();
+                cmd.CommandText = "SELECT status FROM tramites.procedure_instances WHERE id = @id LIMIT 1";
+                var p = cmd.CreateParameter();
+                p.ParameterName = "id";
+                p.Value = procedureInstanceId;
+                cmd.Parameters.Add(p);
+                var result = await cmd.ExecuteScalarAsync(ct);
+                return result as string;
+            }
+            finally
+            {
+                if (wasClosed) await connection.CloseAsync();
+            }
+        }
+#pragma warning disable CA1031 // best-effort: sin grant o sin tabla → null, no excepción
+        catch (Exception)
+        {
+            return null;
+        }
+#pragma warning restore CA1031
+    }
+
     /// <summary>Ejecuta <paramref name="work"/> en una transacción con el GUC de tenant fijado, dentro de la execution strategy.</summary>
     private async Task<T> InTenantTransactionAsync<T>(
         Guid tenantId, Func<Task<T>> work, CancellationToken ct, bool relaxedDurability = false)

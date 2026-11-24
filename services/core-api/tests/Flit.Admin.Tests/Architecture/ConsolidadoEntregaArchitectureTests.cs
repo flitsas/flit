@@ -9,7 +9,7 @@ namespace Flit.Admin.Tests.Architecture;
 /// leyendo trámites de sus hijas) son de LECTURA: no pueden reutilizarlo. El barrido es léxico sobre el
 /// código (sin comentarios) de <c>Flit.Api</c> y falla nombrando el archivo:
 /// <list type="bullet">
-///   <item>Solo las rutas conocidas cablean el handler (gestor/SuperAdmin y consola OT). Un archivo nuevo
+///   <item>Solo las rutas conocidas cablean el handler (gestor/SuperAdmin, consola OT e ICT gRPC). Un archivo nuevo
 ///   que lo use obliga a revisar esta regla y ampliar la lista a conciencia.</item>
 ///   <item>Ningún archivo que mapee rutas <c>/network</c> (o <c>Network*.cs</c>) lo menciona.</item>
 /// </list>
@@ -19,7 +19,13 @@ public sealed class ConsolidadoEntregaArchitectureTests
 {
     private const string Handler = "EntregarConsolidadoHandler";
 
-    private static readonly string[] RutasPermitidas = ["ConsolidadoEndpoints.cs", "AdminOtEndpoints.cs"];
+    // HU #14668: IctOrchestrationService.DeliverConsolidado — regen on-demand para documents-transaction ICT.
+    private static readonly string[] RutasPermitidas =
+    [
+        "ConsolidadoEndpoints.cs",
+        "AdminOtEndpoints.cs",
+        "IctOrchestrationService.cs",
+    ];
 
     [Fact]
     public void SoloLasRutasDeGestorYOtCablean_EntregarConsolidadoHandler()
