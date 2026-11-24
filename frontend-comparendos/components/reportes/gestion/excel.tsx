@@ -7,6 +7,7 @@ import { useToast } from "@/components/Toast";
 import { controlCls } from "@/components/ui/estilos";
 import { apiFetch } from "@/lib/api";
 import type { EmpresaResumen, Nit } from "@/lib/tipos";
+import { useCarga } from "@/lib/useCarga";
 import { bogotaClock, buildXlsxLibro, XLSX_MIME, type XlsxCell, type XlsxDate, type XlsxSheet } from "@/lib/xlsx";
 
 /**
@@ -91,11 +92,17 @@ export function nombreArchivo(c: CorteExcel, empresa: string | null): string {
 }
 
 /** Nombres de negocio de la empresa y del NIT elegidos (no sus identificadores). */
-async function nombresDe(c: CorteExcel, empresaPropia: string | null): Promise<{ empresa: string; nit: string; empresaArchivo: string | null }> {
+async function nombresDe(
+  c: CorteExcel,
+  empresaPropia: string | null,
+  empresas: EmpresaResumen[] | null,
+): Promise<{ empresa: string; nit: string; empresaArchivo: string | null }> {
   let empresa = empresaPropia;
   if (c.empresa) {
-    const empresas = await apiFetch<EmpresaResumen[]>("/admin/empresas").catch(() => [] as EmpresaResumen[]);
-    empresa = empresas.find((e) => e.id === c.empresa)?.nombre ?? "Empresa elegida";
+    // La lista ya cargada (como la del selector), no otra petición al hacer clic; sin ella no se inventa un nombre.
+    const elegida = empresas?.find((e) => e.id === c.empresa)?.nombre;
+    if (!elegida) throw new Error("No se pudo leer el nombre de la empresa elegida. Recarga la página e inténtalo de nuevo.");
+    empresa = elegida;
   }
   let nit = "Todos los NIT";
   if (c.nit) {
@@ -135,12 +142,14 @@ export function BotonExcel({
   const { sesion } = useSesion();
   // La gestora siempre ve su empresa; el SuperAdmin, la que eligió en el filtro o todas (nunca la de su propia sesión).
   const empresaPropia = sesion?.usuario.esSuperAdmin ? null : (sesion?.empresa?.nombre ?? null);
+  // Solo el SuperAdmin con una empresa elegida necesita su nombre: la misma lista que muestra el selector.
+  const empresas = useCarga(sesion?.usuario.esSuperAdmin && corte.empresa ? "empresas" : null, (signal) => apiFetch<EmpresaResumen[]>("/admin/empresas", { signal }));
   const [ocupado, setOcupado] = useState(false);
   const generar = async () => {
     if (!hojas) return;
     setOcupado(true);
     try {
-      const n = await nombresDe(corte, empresaPropia);
+      const n = await nombresDe(corte, empresaPropia, empresas.datos);
       const libro = buildXlsxLibro([...hojas(), hojaNotas(corte, n, new Date())]);
       descargar(libro, nombreArchivo(corte, n.empresaArchivo));
     } catch (e) {
@@ -150,7 +159,7 @@ export function BotonExcel({
     }
   };
   return (
-    <button type="button" className={controlCls(false)} onClick={generar} disabled={deshabilitado || !hojas || ocupado} aria-busy={ocupado} data-testid="descargar-excel">
+    <button type="button" className={controlCls(false)} onClick={generar} disabled={deshabilitado || !hojas || ocupado || (!!corte.empresa && !!sesion?.usuario.esSuperAdmin && empresas.estado === "loading")} aria-busy={ocupado} data-testid="descargar-excel">
       <Icono nombre={ocupado ? "girador" : "nube-bajar"} className={`h-3.5 w-3.5 ${ocupado ? "animate-spin" : ""}`} />
       {ocupado ? "Generando…" : "Descargar Excel"}
     </button>
