@@ -20,7 +20,9 @@ internal sealed class TransitOfficeQuipuxCanalReader(FlitDbContext db) : ITransi
                 o.DivipoCode,
                 o.QuipuxRegistration,
                 o.QuipuxTransfer,
-                o.QuipuxOther))
+                o.QuipuxOther,
+                // Bug #14672: sin fila de quipux_settings = integración deshabilitada.
+                db.QuipuxSettings.Any(s => s.Enabled)))
             .FirstOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
