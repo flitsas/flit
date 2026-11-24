@@ -22,6 +22,9 @@
 > el comprobante se acepta en **cualquier estado salvo `anulado` y `revocado`**, y en todos ellos marca el impuesto
 > como pagado (también en `aprobado` y `entregado`). `409 not_allowed_in_state` queda solo para anulado y revocado,
 > siempre con `terminal: true`, y la respuesta tiene la misma forma.
+> **Cambio v3.2.2** (2026-11-24, Bug [#14660](https://dev.azure.com/FlitDevOps/FLIT%20-%20EVOLUTION/_workitems/edit/14660)):
+> solo documentación del `POST .../adjuntos`: tras archivar (201) FLIT 2 regenera en segundo plano los consolidados
+> que el trámite ya tenga (wizard y maestro del OT). Sin cambios de request ni response.
 >
 > **Aclaración (2026-09-30, HU #13077):** el endpoint de URL de adjunto entrega **solo facturas** (cualquier
 > otro adjunto responde 404) y suma `503 storage_unavailable` si el almacenamiento no responde (§3).
