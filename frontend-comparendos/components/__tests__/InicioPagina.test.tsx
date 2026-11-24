@@ -152,6 +152,20 @@ describe("Inicio de Comparendos", () => {
     // Un frente en cero no lleva a una bandeja vacía, y sin enlace no lleva aria-label (el contenido se lee solo).
     expect(screen.getByTestId("frente-sinContraventor").getAttribute("href")).toBeNull();
     expect(screen.getByTestId("frente-sinContraventor").getAttribute("aria-label")).toBeNull();
+    // Reportes 2.0 (decisión 1): sin el módulo, Gestión no existe para él; conserva el Inicio completo y ningún enlace a Reportes.
+    for (const id of ["evitables", "calendario", "antiguedad", "dp-organismos"]) expect(screen.getByTestId(id)).toBeTruthy();
+    expect(screen.queryByTestId("ver-en-reportes")).toBeNull();
+    expect(screen.queryByTestId("ahora-en-reportes")).toBeNull();
+    expect(screen.queryByRole("link", { name: /Reportes/ })).toBeNull();
+    expect(screen.getByText(/En los últimos 30 días entraron 7 y 3 dejaron de estar pendientes/)).toBeTruthy();
+  });
+
+  it("con el módulo pero sin ReportesVer tampoco hay recorte: no podría abrir Gestión", async () => {
+    sesion = gestora(true, [P.bandejaVer]);
+    render(<Inicio />);
+    expect(await screen.findByTestId("vehiculos")).toBeTruthy();
+    for (const id of ["evitables", "antiguedad", "dp-organismos"]) expect(screen.getByTestId(id)).toBeTruthy();
+    expect(screen.queryByTestId("ver-en-reportes")).toBeNull();
   });
 
   it("con el módulo muestra el dinero abreviado, el periodo de lo pagado y el ahorro posible como estimado", async () => {
@@ -174,9 +188,22 @@ describe("Inicio de Comparendos", () => {
     expect(orden(kpis, await screen.findByTestId("gestion"))).toBeTruthy();
     expect(screen.queryByRole("link", { name: /^En cobro coactivo/ })).toBeNull();
     expect(screen.queryByText(/Tendencia de los últimos 12 meses/)).toBeNull();
-    // La operación con el módulo trae pesos, y la frase de arriba los dice.
-    expect(await screen.findByText(/^42 comparendos pendientes por \$\s130,9 M en 30 vehículos\./)).toBeTruthy();
-    expect(within(screen.getByTestId("vehiculos")).getByRole("link", { name: /^AAA111: 5 comparendos ante 2 organismos, por un valor de \$\s3\.020\.500/ })).toBeTruthy();
+    // La operación con el módulo trae pesos, y la frase de arriba los dice; el movimiento de 30 días se fue a Gestión.
+    expect(await screen.findByText(/^42 comparendos pendientes por \$\s130,9 M en 30 vehículos\.$/)).toBeTruthy();
+    expect(screen.queryByText(/En los últimos 30 días/)).toBeNull();
+    // Reportes 2.0 (decisión 1): se quedan el embudo y el calendario; lo analítico se va a Reportes › Gestión.
+    expect(screen.getByRole("button", { name: /^Sin procesar: 20 comparendos\. Ver en la bandeja$/ })).toBeTruthy();
+    expect(within(screen.getByTestId("calendario")).getAllByText(/caducan/)).toHaveLength(6);
+    for (const id of ["vehiculos", "evitables", "antiguedad", "dp-organismos"]) expect(screen.queryByTestId(id)).toBeNull();
+    expect(screen.queryByText("Infracciones más frecuentes")).toBeNull();
+    // Nadie se queda sin saber a dónde se fue: el aviso nombra lo que se movió y los dos enlaces llevan a Gestión.
+    const aviso = screen.getByTestId("ahora-en-reportes");
+    expect(within(aviso).getByText("Vehículos que más repiten")).toBeTruthy();
+    expect(within(aviso).getByText("Derechos de petición por organismo")).toBeTruthy();
+    expect(screen.getByTestId("ver-en-reportes").getAttribute("href")).toBe("/reportes/gestion");
+    expect(screen.getByRole("link", { name: "Ver en Reportes › Gestión" }).getAttribute("href")).toBe("/reportes/gestion");
+    // Orden: «Para hoy», dinero, embudo y luego calendario con el aviso.
+    expect(orden(screen.getByTestId("gestion"), screen.getByTestId("calendario"))).toBeTruthy();
   });
 
   it("sin bandeja ni reportes explica por qué no hay nada, sin pedir datos", async () => {
@@ -191,11 +218,14 @@ describe("Inicio de Comparendos", () => {
     sesion = { usuario: { id: "s", email: "s@flit.test", esSuperAdmin: true }, permisos: [], empresa: null };
     busqueda = "empresa=e1";
     render(<Inicio />);
-    expect(await screen.findByTestId("vehiculos")).toBeTruthy();
+    expect(await screen.findByTestId("gestion")).toBeTruthy();
     expect(apiFetch.mock.calls.some(([ruta, op]) => ruta === "/comparendos/operacion" && op?.query?.empresa === "e1")).toBe(true);
+    // El SuperAdmin ve los reportes: recorte, y «Ver en Reportes» lleva la empresa elegida.
+    expect(screen.getByTestId("ver-en-reportes").getAttribute("href")).toBe("/reportes/gestion?empresa=e1");
     fireEvent.click(screen.getByRole("button", { name: "Todas las empresas" }));
     expect(await screen.findByTestId("salud")).toBeTruthy();
-    expect(screen.queryByTestId("vehiculos")).toBeNull();
+    expect(screen.queryByTestId("gestion")).toBeNull();
+    expect(screen.queryByTestId("calendario")).toBeNull();
     expect(screen.queryByTestId("para-hoy")).toBeNull();
     expect(replace).toHaveBeenLastCalledWith("/", { scroll: false });
   });
@@ -212,11 +242,11 @@ describe("Inicio de Comparendos", () => {
       return base(ruta, op);
     });
     render(<Inicio />);
-    expect(await screen.findByTestId("vehiculos")).toBeTruthy();
+    expect(await screen.findByTestId("gestion")).toBeTruthy();
     expect(await screen.findByTestId("kpis-dinero")).toBeTruthy();
     expect(screen.getByText(/^42 comparendos pendientes/)).toBeTruthy();
     fireEvent.change(await screen.findByLabelText("Empresa"), { target: { value: "e2" } });
-    await waitFor(() => expect(screen.queryByTestId("vehiculos")).toBeNull());
+    await waitFor(() => expect(screen.queryByTestId("gestion")).toBeNull());
     expect(screen.queryByTestId("kpis-dinero")).toBeNull();
     expect(screen.queryByText(/^42 comparendos pendientes/)).toBeNull();
     // Los frentes de B todavía no tienen cifra: se ven en «—», no con las de A.

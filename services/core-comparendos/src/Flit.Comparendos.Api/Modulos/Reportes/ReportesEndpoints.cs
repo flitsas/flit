@@ -19,6 +19,9 @@ public static class ReportesEndpoints
         g.MapGet("/productividad", Productividad).RequirePermiso(Permisos.ProductividadVer);
         g.MapGet("/productividad/detalle", Detalle).RequirePermiso(Permisos.ProductividadVer);
         g.MapGet("/productividad/excel", Excel).RequirePermiso(Permisos.ProductividadVer);
+        g.MapGet("/gestion", Gestion).RequirePermiso(Permisos.ReportesVer);
+        g.MapGet("/dp", Dp).RequirePermiso(Permisos.ReportesVer);
+        api.MapGet("/admin/reportes/plataforma", Plataforma).RequireAuthorization(AutorizacionExtensions.PoliticaSuperAdmin);
         OperacionEndpoints.Map(api);
     }
 
@@ -138,5 +141,41 @@ public static class ReportesEndpoints
             filas.Select(f => (IReadOnlyList<Cell>)[Cell.Of(f.Usuario), Cell.Of(f.Gestionados), Cell.Of(f.DpEnviados), Cell.Of(f.ContraventoresAsignados), Cell.Of(f.Pagos),
                 Cell.Of(f.AvisosManuales), Cell.Of(f.OcrRegistrados), Cell.Of(f.RespuestasOt)]).ToList());
         return Results.File(TabularWorkbookWriter.Write([hoja]), TabularWorkbookWriter.ContentType, $"productividad-{a.Desde:yyyyMMdd}-{a.Hasta:yyyyMMdd}.xlsx");
+    }
+    /// <summary>
+    /// Pestaña Gestión (Reportes 2.0): la lente de operación con periodo y NIT. Sin <c>desde</c> ni <c>hasta</c> es lo pendiente
+    /// de hoy, exactamente lo que veía el Inicio; con ellos, lo impuesto en el periodo.
+    /// </summary>
+    private static async Task<IResult> Gestion(Guid? empresa, Guid? nit, DateOnly? desde, DateOnly? hasta, UsuarioActual usuario, Capacidades capacidades,
+        ServicioReportes reportes, Bandeja.ConsultaBandeja bandeja, Reloj reloj, CancellationToken ct)
+    {
+        var a = await AlcanceAsync(usuario, capacidades, empresa, nit, desde, hasta, reloj, ct).ConfigureAwait(false);
+        if (desde is null && hasta is null)
+            a = ServicioReportes.SinPeriodo(a.Tenant, a.Nit);
+        var conPeriodo = ServicioReportes.ConPeriodo(a);
+        return Results.Ok(new
+        {
+            alcance = new { empresa = a.Tenant, a.Nit, desde = conPeriodo ? a.Desde : (DateOnly?)null, hasta = conPeriodo ? a.Hasta : (DateOnly?)null },
+            gestion = await reportes.GestionAsync(a, bandeja, ct).ConfigureAwait(false),
+        });
+    }
+
+    /// <summary>Pestaña Derechos de petición. El consolidado empresa × organismo solo va al SuperAdmin con «todas las empresas».</summary>
+    private static async Task<IResult> Dp(Guid? empresa, Guid? nit, DateOnly? desde, DateOnly? hasta, UsuarioActual usuario, Capacidades capacidades,
+        ServicioReportes reportes, Reloj reloj, CancellationToken ct)
+    {
+        var a = await AlcanceAsync(usuario, capacidades, empresa, nit, desde, hasta, reloj, ct).ConfigureAwait(false);
+        var consolidado = usuario.EsSuperAdmin && a.Tenant is null;
+        return Results.Ok(new { alcance = new { empresa = a.Tenant, a.Nit, a.Desde, a.Hasta }, dp = await reportes.DpAsync(a, consolidado, ct).ConfigureAwait(false) });
+    }
+
+    /// <summary>Pestaña Plataforma (solo SuperAdmin): fuentes, errores técnicos y correos fallidos. El rango máximo es un año.</summary>
+    private static async Task<IResult> Plataforma(Guid? empresa, DateOnly? desde, DateOnly? hasta, UsuarioActual usuario, Capacidades capacidades, ServicioReportes reportes,
+        Reloj reloj, CancellationToken ct)
+    {
+        var a = await AlcanceAsync(usuario, capacidades, empresa, null, desde, hasta, reloj, ct).ConfigureAwait(false);
+        if (a.Hasta.DayNumber - a.Desde.DayNumber >= ServicioReportes.MaxDiasPlataforma)
+            throw new ReglaException("RANGO_INVALIDO", "El rango máximo de Plataforma es de un año.");
+        return Results.Ok(await reportes.PlataformaAsync(a, ct).ConfigureAwait(false));
     }
 }

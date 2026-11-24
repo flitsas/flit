@@ -1,18 +1,18 @@
 "use client";
 
-import { EstadoVacio } from "@flit/ui";
-import { Encabezado } from "@/components/Pantalla";
+import { Suspense } from "react";
+import { Cargador } from "@flit/ui/Loader";
+import { DpReporte } from "@/components/reportes/dp/DpReporte";
 import { RequiereReportes } from "@/components/reportes/RequiereReportes";
 import { P } from "@/lib/nav";
 
-// Reportes 2.0 — armazón de F0; lo reemplaza la sesión S3 (ver .trees/gdc-reportes-CONTRATO.md).
+/** Reportes 2.0 › Derechos de petición (S3). */
 export default function Page() {
   return (
     <RequiereReportes permiso={P.reportesVer}>
-      <section className="flex flex-col gap-6">
-        <Encabezado titulo="Derechos de petición" />
-        <EstadoVacio titulo="En construcción" mensaje="Esta sección de reportes está en preparación." />
-      </section>
+      <Suspense fallback={<Cargador />}>
+        <DpReporte />
+      </Suspense>
     </RequiereReportes>
   );
 }
