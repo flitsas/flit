@@ -281,6 +281,11 @@ export interface InstanceSummary {
    */
   multiplesPropietarios?: boolean;
   /**
+   * En qué punto del canal Quipux está el trámite. Nulo o ausente: no va por Quipux (o backend
+   * anterior al campo). La columna «Marcas» lo pinta como píldora con texto.
+   */
+  quipuxEstado?: 'en_cola' | 'radicado' | 'fallido' | 'rechazado' | 'aprobado' | null;
+  /**
    * ADR-0053 — todos los propietarios de cada lado, principal primero, con la acreditación de CADA
    * persona. `vendedorNombre`/`compradorNombre` traen solo al principal; con copropietarios la celda
    * ofrece un desplegable con esta lista. Ausentes en backends anteriores al campo: la celda cae al
