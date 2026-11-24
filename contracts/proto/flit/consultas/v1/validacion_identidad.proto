@@ -24,6 +24,11 @@ service ValidacionIdentidadService {
 
   // Certificado de la validación (PDF). `encontrado = false` si el proveedor aún no lo tiene.
   rpc DescargarCertificado(DescargarCertificadoRequest) returns (DescargarCertificadoResponse);
+
+  // Reenvío sobre la MISMA validación (contrato Kyverum, POST .../subjects/{subjectId}/reissue): enlace nuevo, intentos a
+  // cero y el enlace anterior deja de funcionar. No cambia el secreto del aviso. `resultado = no_existe` si el proveedor ya
+  // no conoce la validación; `aprobada` si la persona ya quedó aprobada (no se reenvía).
+  rpc ReemitirEnlace(ReemitirEnlaceRequest) returns (ReemitirEnlaceResponse);
 }
 
 message IniciarValidacionRequest {
@@ -70,4 +75,15 @@ message DescargarCertificadoResponse {
   bytes contenido = 2;
   string content_type = 3;
   string nombre_archivo = 4;
+}
+
+message ReemitirEnlaceRequest {
+  string verification_id = 1;
+  optional string parte = 2;
+}
+
+message ReemitirEnlaceResponse {
+  // "reemitido" | "aprobada" | "no_existe"
+  string resultado = 1;
+  string capture_url = 2;
 }

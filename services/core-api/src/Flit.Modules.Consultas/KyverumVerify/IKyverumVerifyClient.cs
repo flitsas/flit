@@ -88,4 +88,31 @@ public interface IKyverumVerifyClient
     /// 5xx/timeout/red (transitorio) o respuesta inválida (definitivo).
     /// </summary>
     Task<KyverumVerifyStatus?> GetStatusAsync(string verificationId, string? parte, CancellationToken ct = default);
+
+    /// <summary>
+    /// Reenvío sobre la MISMA validación (<c>POST /v1/validations/{id}/subjects/{subjectId}/reissue</c>): Kyverum emite
+    /// un enlace nuevo, reinicia los intentos e invalida el anterior. No rota el secreto del webhook (supuesto que se
+    /// verifica en pruebas). Devuelve el resultado; nunca lanza por 404 ni por 409.
+    /// </summary>
+    Task<KyverumReissueResult> ReissueAsync(string verificationId, CancellationToken ct = default);
+}
+
+/// <summary>Resultado de <see cref="IKyverumVerifyClient.ReissueAsync"/>.</summary>
+/// <param name="Outcome"><see cref="KyverumReissueOutcome"/>.</param>
+/// <param name="CaptureUrl">Enlace nuevo; solo con <c>Reemitido</c>.</param>
+public sealed record KyverumReissueResult(string Outcome, string? CaptureUrl = null)
+{
+    public static KyverumReissueResult Reemitido(string captureUrl) => new(KyverumReissueOutcome.Reemitido, captureUrl);
+    public static KyverumReissueResult Aprobada() => new(KyverumReissueOutcome.Aprobada);
+    public static KyverumReissueResult NoExiste() => new(KyverumReissueOutcome.NoExiste);
+    /// <summary>Consultas desplegado sin el RPC de reenvío: el llamador usa el camino de creación.</summary>
+    public static KyverumReissueResult NoSoportado() => new(KyverumReissueOutcome.NoSoportado);
+}
+
+public static class KyverumReissueOutcome
+{
+    public const string Reemitido = "reemitido";
+    public const string Aprobada = "aprobada";
+    public const string NoExiste = "no_existe";
+    public const string NoSoportado = "no_soportado";
 }

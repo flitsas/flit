@@ -368,6 +368,28 @@ public sealed class EditarPrevalidacionHandlerTests
     }
 
     [Fact]
+    public async Task Kyverum_CambioDeCorreo_CreaValidacionNueva_NoReemiteAlCorreoViejo()
+    {
+        // Con reissue, Kyverum enviaría el enlace al correo que ya tiene registrado: si el correo cambió, debe
+        // crearse una validación nueva con el correo corregido en vez de reemitir la existente.
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandaloneNatural(status: BiometricEstados.Expirado);
+        validation.Provider = BiometricProviders.Kyverum;
+        validation.KyverumVerificationId = "kyv_old";
+        _kyverum.StartVerificationAsync(Arg.Any<KyverumVerifyStartRequest>(), Arg.Any<CancellationToken>())
+            .Returns(new KyverumVerifyStartResult("kyv_new", "https://capture.example.com/new", "whsec_new", "pending", "{}", null));
+        var handler = BuildHandler(isKyverum: true);
+
+        var (result, error, _) = await handler.HandleAsync(
+            _tenantId, validation.Id, new EditarPrevalidacionRequest(Email: "ana.rios@new.com"), ct);
+
+        error.Should().BeNull();
+        result!.CaptureUrl.Should().Be("https://capture.example.com/new");
+        await _kyverum.DidNotReceive().ReissueAsync(Arg.Any<string>(), Arg.Any<CancellationToken>());
+        validation.KyverumVerificationId.Should().Be("kyv_new");
+    }
+
+    [Fact]
     public async Task NotFound_WhenValidationDoesNotExist()
     {
         var ct = TestContext.Current.CancellationToken;

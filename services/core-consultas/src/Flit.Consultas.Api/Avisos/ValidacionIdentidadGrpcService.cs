@@ -116,6 +116,31 @@ internal sealed class ValidacionIdentidadGrpcService(
         return respuesta;
     }
 
+    public override async Task<ReemitirEnlaceResponse> ReemitirEnlace(ReemitirEnlaceRequest request, ServerCallContext context)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        ArgumentNullException.ThrowIfNull(context);
+        if (string.IsNullOrWhiteSpace(request.VerificationId))
+            throw new RpcException(new Status(StatusCode.InvalidArgument, "verification_id es obligatorio."));
+
+        KyverumReissueResult resultado;
+        try
+        {
+            resultado = await kyverum.ReissueAsync(request.VerificationId, context.CancellationToken).ConfigureAwait(false);
+        }
+        catch (KyverumVerifyException ex)
+        {
+            throw new RpcException(new Status(ex.Transient ? StatusCode.Unavailable : StatusCode.FailedPrecondition, ex.Message));
+        }
+
+        // El secreto del aviso de esta validación NO cambia con el reenvío: no se toca la fila de ValidacionesKyverum.
+        return new ReemitirEnlaceResponse
+        {
+            Resultado = resultado.Outcome,
+            CaptureUrl = resultado.CaptureUrl ?? string.Empty,
+        };
+    }
+
     public override async Task<DescargarCertificadoResponse> DescargarCertificado(DescargarCertificadoRequest request, ServerCallContext context)
     {
         ArgumentNullException.ThrowIfNull(request);

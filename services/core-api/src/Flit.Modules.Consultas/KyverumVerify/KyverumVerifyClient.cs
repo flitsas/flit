@@ -228,6 +228,101 @@ internal sealed class KyverumVerifyClient(
         }
     }
 
+    /// <inheritdoc />
+    /// <remarks>
+    /// Dos llamadas: el GET para obtener el id del sujeto (el reissue va por <c>subjects/{subjectId}</c>) y el estado
+    /// actual (si ya quedó aprobada no se reenvía), y luego el POST de reissue. Un 409 también significa aprobada.
+    /// El enlace anterior deja de funcionar en Kyverum; el secreto del webhook no viene en la respuesta y no se toca.
+    /// </remarks>
+    public async Task<KyverumReissueResult> ReissueAsync(string verificationId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(verificationId))
+            throw new KyverumVerifyException("Falta el id de la validación de Kyverum.", transient: false);
+
+        var idEscapado = Uri.EscapeDataString(verificationId);
+        try
+        {
+            using var getMessage = new HttpRequestMessage(HttpMethod.Get, $"/v1/validations/{idEscapado}");
+            AplicarCabeceras(getMessage);
+            using var getResponse = await http.SendAsync(getMessage, ct);
+            if (getResponse.StatusCode == HttpStatusCode.NotFound)
+                return KyverumReissueResult.NoExiste();
+            if (!getResponse.IsSuccessStatusCode)
+                throw await ErrorDeProveedorAsync(getResponse, "consultar la validación antes de reenviarla", ct);
+
+            var estado = await getResponse.Content.ReadFromJsonAsync<KyverumStatusResponse>(JsonOptions, ct);
+            if (estado is null)
+                throw new KyverumVerifyException("Respuesta de estado inválida de Kyverum.", transient: false);
+            if (estado.Result?.Aprobado == true
+                || string.Equals(estado.Status, "aprobado", StringComparison.OrdinalIgnoreCase)
+                || estado.Subjects?.Any(s => string.Equals(s.Status, "aprobado", StringComparison.OrdinalIgnoreCase)) == true)
+                return KyverumReissueResult.Aprobada();
+
+            // Una validación creada por FLIT tiene un solo sujeto: se toma el primero con id.
+            var subjectId = estado.Subjects?.FirstOrDefault(s => !string.IsNullOrWhiteSpace(s.Id))?.Id;
+            if (subjectId is null)
+                throw new KyverumVerifyException("Kyverum no informó el sujeto de la validación.", transient: false);
+
+            // enviarCorreo: true ⇒ Kyverum manda el enlace al correo que ya tiene registrado. Si FLIT cambió el correo,
+            // el llamador no usa este camino (ver PrevalidacionResendService).
+            using var postMessage = new HttpRequestMessage(
+                HttpMethod.Post,
+                $"/v1/validations/{idEscapado}/subjects/{Uri.EscapeDataString(subjectId)}/reissue")
+            {
+                Content = JsonContent.Create(new KyverumReissueBody(EnviarCorreo: true), options: JsonOptions),
+            };
+            AplicarCabeceras(postMessage);
+            using var postResponse = await http.SendAsync(postMessage, ct);
+            if (postResponse.StatusCode == HttpStatusCode.Conflict)
+                return KyverumReissueResult.Aprobada();
+            if (postResponse.StatusCode == HttpStatusCode.NotFound)
+                return KyverumReissueResult.NoExiste();
+            if (!postResponse.IsSuccessStatusCode)
+                throw await ErrorDeProveedorAsync(postResponse, "reenviar el enlace", ct);
+
+            var reemision = await postResponse.Content.ReadFromJsonAsync<KyverumReissueResponse>(JsonOptions, ct);
+            if (string.IsNullOrWhiteSpace(reemision?.CaptureUrl))
+                throw new KyverumVerifyException("Kyverum no devolvió el enlace de captura del reenvío.", transient: false);
+
+            return KyverumReissueResult.Reemitido(reemision.CaptureUrl);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (TaskCanceledException)
+        {
+            throw new KyverumVerifyException("Timeout reenviando la validación en Kyverum.", transient: true);
+        }
+        catch (HttpRequestException ex)
+        {
+            throw new KyverumVerifyException($"Error de red reenviando la validación en Kyverum: {ex.Message}", transient: true);
+        }
+        catch (JsonException)
+        {
+            throw new KyverumVerifyException("No se pudo interpretar la respuesta de reenvío de Kyverum.", transient: false);
+        }
+    }
+
+    private void AplicarCabeceras(HttpRequestMessage message)
+    {
+        if (!string.IsNullOrWhiteSpace(_options.ApiKey))
+            message.Headers.Authorization = new AuthenticationHeaderValue(_options.AuthScheme, _options.ApiKey);
+        message.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+    }
+
+    /// <summary>Error transitorio (5xx) o definitivo (4xx) sin la API key ni el cuerpo completo.</summary>
+    private async Task<KyverumVerifyException> ErrorDeProveedorAsync(HttpResponseMessage response, string accion, CancellationToken ct)
+    {
+        var transient = (int)response.StatusCode >= 500;
+        KyverumLog.ProviderError(logger, (int)response.StatusCode, await SafeReadBodyAsync(response, ct));
+        return new KyverumVerifyException(
+            transient
+                ? $"Kyverum no disponible al {accion} ({(int)response.StatusCode})."
+                : $"Kyverum rechazó {accion} ({(int)response.StatusCode}).",
+            transient);
+    }
+
     /// <summary>Subject de la parte (match por rol, case-insensitive); si no, el primero del arreglo.</summary>
     private static KyverumStatusSubject? SelectStatusSubject(IReadOnlyList<KyverumStatusSubject>? subjects, string? parte)
     {
@@ -322,7 +417,19 @@ internal sealed class KyverumVerifyClient(
         [property: JsonPropertyName("motivo")] string? Motivo,
         [property: JsonPropertyName("validadoAt")] string? ValidadoAt,
         // Serie/hash del certificado del subject aprobado (HU #10488). Puede no venir en el GET.
-        [property: JsonPropertyName("firmaSerie")] string? FirmaSerie = null);
+        [property: JsonPropertyName("firmaSerie")] string? FirmaSerie = null,
+        // Id del sujeto en Kyverum: lo usa el reenvío (subjects/{subjectId}/reissue).
+        [property: JsonPropertyName("id")] string? Id = null);
+
+    // ── Contrato del POST .../subjects/{subjectId}/reissue ────────────────────
+    private sealed record KyverumReissueBody(
+        [property: JsonPropertyName("enviarCorreo")] bool EnviarCorreo);
+
+    private sealed record KyverumReissueResponse(
+        [property: JsonPropertyName("subjectId")] string? SubjectId,
+        [property: JsonPropertyName("captureUrl")] string? CaptureUrl,
+        [property: JsonPropertyName("enviado")] bool? Enviado,
+        [property: JsonPropertyName("tieneEmail")] bool? TieneEmail);
 }
 
 /// <summary>Logging source-generated (CA1848) del cliente Kyverum.</summary>

@@ -71,6 +71,33 @@ internal sealed class KyverumVerifyPorConsultas(
             throw new KyverumVerifyException($"Consultas respondió {ex.StatusCode} al consultar el estado.", ConsultasRemotoMetadata.Transitorio(ex));
         }
     }
+
+    public async Task<KyverumReissueResult> ReissueAsync(string verificationId, CancellationToken ct = default)
+    {
+        var tenantId = await ConsultasRemotoMetadata.EmpresaDeLaVerificacionAsync(db, verificationId, ct).ConfigureAwait(false)
+            ?? throw new KyverumVerifyException("No hay validación con ese id de verificación.", transient: false);
+        try
+        {
+            var r = await client.ReemitirEnlaceAsync(
+                new ReemitirEnlaceRequest { VerificationId = verificationId }, ConsultasRemotoMetadata.Empresa(tenantId), cancellationToken: ct).ConfigureAwait(false);
+            return r.Resultado switch
+            {
+                KyverumReissueOutcome.Reemitido => KyverumReissueResult.Reemitido(r.CaptureUrl),
+                KyverumReissueOutcome.Aprobada => KyverumReissueResult.Aprobada(),
+                KyverumReissueOutcome.NoExiste => KyverumReissueResult.NoExiste(),
+                _ => throw new KyverumVerifyException($"Consultas devolvió un resultado de reenvío desconocido: {r.Resultado}.", transient: false),
+            };
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Unimplemented)
+        {
+            // Consultas aún sin el RPC de reenvío (despliegue desfasado): el llamador usa el camino de creación.
+            return KyverumReissueResult.NoSoportado();
+        }
+        catch (RpcException ex)
+        {
+            throw new KyverumVerifyException($"Consultas respondió {ex.StatusCode} al reenviar la validación.", ConsultasRemotoMetadata.Transitorio(ex));
+        }
+    }
 }
 
 /// <summary>HU #13351 — certificado de la validación (PDF) a través de core-consultas.</summary>
