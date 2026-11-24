@@ -52,6 +52,9 @@ internal sealed partial class UsuariosEmpresaIdentidad(IdentidadService.Identida
     }
 
     /// <remarks>
+    /// Limitaciones (anotadas para S0): el permiso se deduce de los roles por defecto del manifiesto, igual que
+    /// <see cref="ConPermisoAsync"/>; un permiso dado al usuario directamente o un rol personalizado no cuentan, y
+    /// <c>ObtenerUsuario</c> no expone la suspensión temporal de la cuenta.
     /// <c>Usuario.id</c> de Identidad es <c>User.Id</c>, el mismo valor que Identidad pone en el <c>sub</c> del token
     /// (<c>OidcPrincipalFactory</c>) y que <see cref="UsuarioActual.Id"/> guarda en <c>consulta_programada.creado_por</c>.
     /// </remarks>
@@ -71,10 +74,13 @@ internal sealed partial class UsuariosEmpresaIdentidad(IdentidadService.Identida
         }
         catch (RpcException ex)
         {
-            LogNoSePudo(logger, tenant, ex.StatusCode);
+            LogPermisoNoSePudo(logger, usuario, tenant, ex.StatusCode);
             return null;
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo consultar en Identidad al usuario {Usuario} de {Tenant} ({Codigo}).")]
+    private static partial void LogPermisoNoSePudo(ILogger logger, Guid usuario, Guid tenant, StatusCode codigo);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudieron listar los usuarios de {Tenant} en Identidad ({Codigo}).")]
     private static partial void LogNoSePudo(ILogger logger, Guid tenant, StatusCode codigo);

@@ -59,15 +59,16 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
 
             if (dueno is null)
             {
-                DuenoDesconocido(logger, p.Id, p.TenantId);
-                continue;
+                // Identidad no está: las demás van a fallar igual, y cada una esperaría su plazo de 10 s. Se corta la
+                // corrida; todas siguen vencidas y las toma la siguiente.
+                DuenoDesconocido(logger, p.Id, p.TenantId, vencidas.Count);
+                return;
             }
 
             if (dueno == false)
             {
                 await db.ConsultasProgramadas.Where(x => x.Id == p.Id && x.ProximaEjecucion == vieja && x.Activa)
                     .ExecuteUpdateAsync(s => s.SetProperty(x => x.Activa, false).SetProperty(x => x.ProximaEjecucion, (DateTimeOffset?)null)
-                        .SetProperty(x => x.UltimaEjecucion, ahora)
                         .SetProperty(x => x.UltimoResultado, "En pausa: quien lo programó ya no tiene permiso para programar envíos."), ct).ConfigureAwait(false);
                 continue;
             }
@@ -180,8 +181,8 @@ public sealed partial class EnvioConsultasProgramadas(ComparendosDb db, Consulta
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo verificar en Identidad al dueño de la consulta programada {Programacion} de {Empresa}")]
     private static partial void FalloDueno(ILogger logger, Exception ex, Guid programacion, Guid empresa);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Consulta programada {Programacion} de {Empresa} sin enviar: no se pudo saber si su dueño sigue con permiso; se reintenta en la próxima corrida")]
-    private static partial void DuenoDesconocido(ILogger logger, Guid programacion, Guid empresa);
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Consulta programada {Programacion} de {Empresa} sin enviar: no se pudo saber si su dueño sigue con permiso; se corta la corrida y las {Vencidas} vencidas se reintentan en la siguiente")]
+    private static partial void DuenoDesconocido(ILogger logger, Guid programacion, Guid empresa, int vencidas);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "No se pudo enviar la consulta programada {Programacion} de la empresa {Empresa}")]
     private static partial void FalloEnvio(ILogger logger, Exception ex, Guid programacion, Guid empresa);

@@ -336,8 +336,8 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
         (await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == pv, Ct))).UltimoResultado.Should().Be("Enviado a 1 destinatario");
 
         var pausada = await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == ps, Ct));
-        (pausada.Activa, pausada.ProximaEjecucion, pausada.UltimoResultado)
-            .Should().Be((false, null, "En pausa: quien lo programó ya no tiene permiso para programar envíos."));
+        (pausada.Activa, pausada.ProximaEjecucion, pausada.UltimoResultado, pausada.UltimaEjecucion)
+            .Should().Be((false, null, "En pausa: quien lo programó ya no tiene permiso para programar envíos.", (DateTimeOffset?)null), "pausar no es ejecutar");
         (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == sinPermiso && c.Tipo == TipoComunicacion.ConsultaProgramada, Ct))).Should().Be(0);
     }
 
@@ -360,6 +360,17 @@ public sealed class ProgramacionesTests(ApiConAlmacenQueSeVence api) : IClassFix
                 .Should().Be((true, antes.ProximaEjecucion, antes.UltimoResultado, antes.UltimaEjecucion), "sin saber del dueño no se toca: sigue vencida");
             (await api.EnDbAsync(db => db.Comunicaciones.CountAsync(c => c.TenantId == empresa && c.Tipo == TipoComunicacion.ConsultaProgramada, Ct))).Should().Be(0);
         }
+
+        // Con Identidad caída se corta la corrida: no se pregunta por las demás (cada una esperaría su plazo).
+        var (_, clienteOtra, consultaOtra, duenoOtra) = await EmpresaConDuenoAsync("Identidad caída, otra");
+        var otra = await ProgramadaVencidaAsync(clienteOtra, consultaOtra, "samuel.cardenas@flitsas.com");
+        await api.EnDbAsync(db => db.ConsultasProgramadas.Where(x => x.Id == id)
+            .ExecuteUpdateAsync(s => s.SetProperty(x => x.ProximaEjecucion, api.Reloj.Ahora.AddMinutes(-30)), Ct));
+        api.Duenos.Respuestas[dueno.Id] = null;
+        await CorrerTrabajoAsync();
+        api.Duenos.Respuestas.TryRemove(dueno.Id, out _);
+        api.Duenos.Preguntas.Should().NotContain(q => q.Usuario == duenoOtra.Id, "la corrida se cortó en la primera");
+        (await api.EnDbAsync(db => db.ConsultasProgramadas.AsNoTracking().SingleAsync(x => x.Id == otra, Ct))).UltimoResultado.Should().BeNull();
 
         // Vuelve Identidad: la corrida siguiente la envía.
         await CorrerTrabajoAsync();
