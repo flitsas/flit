@@ -36,17 +36,10 @@ public static class ConsultasPersonalizadasEndpoints
         return new AlcanceConsulta(tenant);
     }
 
-    /// <summary>Fechas de un rango propio que tienen sentido (y que no revientan al calcular el periodo anterior).</summary>
-    private static readonly DateOnly FechaMinima = new(2000, 1, 1);
-
-    private static readonly DateOnly FechaMaxima = new(2100, 12, 31);
-
     private static void Validar(AlcanceConsulta alcance, QueryDefinition? definicion)
     {
         if (QueryConditionValidator.Validate(alcance.Catalogo, definicion?.Condiciones, Superficie) is { } error)
             throw new ReglaException("CONSULTA_INVALIDA", error);
-        if (definicion?.Fechas is { } f && (f.From is { } d && (d < FechaMinima || d > FechaMaxima) || f.To is { } h && (h < FechaMinima || h > FechaMaxima)))
-            throw new ReglaException("CONSULTA_INVALIDA", "Las fechas del rango deben estar entre el año 2000 y el 2100.");
     }
 
     private static async Task<IResult> Campos(Guid? empresa, UsuarioActual usuario, Capacidades capacidades, ComparendosDb db, ConsultaBandeja bandeja, CancellationToken ct)

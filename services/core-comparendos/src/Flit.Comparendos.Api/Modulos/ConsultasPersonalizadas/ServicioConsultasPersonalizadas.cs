@@ -3,6 +3,7 @@ using Flit.Comparendos.Api.Modulos.Comparendos;
 using Flit.Comparendos.Api.Modulos.Reportes;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
+using Flit.Comparendos.Api.Plataforma;
 using Flit.Comparendos.Domain.Identificadores;
 using Flit.Comparendos.Domain.Modelo;
 using Flit.Comparendos.Domain.Tiempo;
@@ -38,6 +39,11 @@ public sealed record AlcanceConsulta(Guid? Tenant)
 /// </summary>
 public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBandeja bandeja)
 {
+    /// <summary>Extremos de un rango propio que tienen sentido (y que no revientan al calcular el periodo anterior).</summary>
+    private static readonly DateOnly FechaMinima = new(2000, 1, 1);
+
+    private static readonly DateOnly FechaMaxima = new(2100, 12, 31);
+
     // ── Ejecución ─────────────────────────────────────────────────────────────────────────────
 
     public async Task<ComparendoQueryResult> EjecutarAsync(AlcanceConsulta alcance, QueryRequest request, CancellationToken ct)
@@ -48,6 +54,9 @@ public sealed class ServicioConsultasPersonalizadas(ComparendosDb db, ConsultaBa
         var (definicion, originales) = Canonizar(QueryNormalizer.Normalize(catalogo, request.Definition));
         var h = await bandeja.HoyAsync(ct).ConfigureAwait(false);
         var (desde, hasta) = QueryRangePreset.Resolve(definicion.Fechas, h.Dia);
+        // Aquí y no en el endpoint: la programación por correo corre definiciones guardadas sin pasar por él.
+        if (desde < FechaMinima || hasta > FechaMaxima)
+            throw new ReglaException("CONSULTA_INVALIDA", "Las fechas del rango deben estar entre el año 2000 y el 2100.");
         var motor = Motor(alcance);
 
         var universoQ = Universo(alcance, definicion, h, desde, hasta);
