@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { Icono } from "@flit/ui/Icono";
-import { QRCodeSVG } from 'qrcode.react';
 import { tramitesClient, getIdentitySendConflict } from '@/lib/api/tramites-client';
 import { IdentityValidationTrackingPanel } from '@/components/atom/IdentityValidationTrackingPanel';
 import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
@@ -670,7 +669,7 @@ function ParteBlock({
     );
   }
 
-  const showCaptureSide =
+  const enProcesoConEnlace =
     validation?.status === 'en_proceso' &&
     !!validation.captureUrl &&
     !validation.expired;
@@ -678,7 +677,7 @@ function ParteBlock({
   const actionView =
     estado === 'aprobado' ? (
       <VerifiedView validation={validation!} />
-    ) : showCaptureSide ? (
+    ) : enProcesoConEnlace ? (
       <KyverumPendingIntro validation={validation!} instanceId={instanceId} onChanged={onChanged} />
     ) : estado === 'rechazado' || estado === 'expirado' || validation?.expired ? (
       <RejectedView
@@ -719,7 +718,7 @@ function ParteBlock({
 
   return (
     <div className="space-y-3">
-      <div className={`grid grid-cols-1 gap-4 ${showCaptureSide ? 'md:grid-cols-2' : ''}`}>
+      <div className="grid grid-cols-1 gap-4">
         <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
           <p className="text-xs font-bold" style={{ color: 'var(--foreground)' }}>
             Datos de Identificación
@@ -746,11 +745,6 @@ function ParteBlock({
           </div>
           <div className="mt-3">{actionView}</div>
         </div>
-        {showCaptureSide && validation ? (
-          <div className="rounded-xl border p-4" style={{ borderColor: 'var(--border)' }}>
-            <KyverumCapturePanel validation={validation} />
-          </div>
-        ) : null}
       </div>
       <ParteTrazabilidadSection historial={historial} vigenteId={validation?.id ?? null} />
     </div>
@@ -1045,58 +1039,11 @@ function KyverumPendingIntro({
       )}
 
       <p className="text-xs opacity-70">
-        Enviamos el enlace de captura al correo del cliente ({v.email}). También puedes compartirlo
-        desde el panel de captura.
+        Enviamos el enlace de captura al correo del cliente ({v.email}).
       </p>
 
       <RegenerarEnlaceAction instanceId={instanceId} validationId={v.id} onRegenerated={onChanged} />
       <ReconcileAction instanceId={instanceId} validationId={v.id} onReconciled={onChanged} />
-    </div>
-  );
-}
-
-/** Columna derecha: QR + acciones de captura Kyverum (HU #12729). */
-function KyverumCapturePanel({ validation: v }: { validation: BiometricValidation }) {
-  const [copied, setCopied] = useState(false);
-  const captureUrl = v.captureUrl!;
-
-  const copy = async () => {
-    try {
-      await navigator.clipboard?.writeText(captureUrl);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      /* clipboard no disponible */
-    }
-  };
-
-  return (
-    <div className="flex flex-col items-center gap-3">
-      <div className="rounded-xl border bg-card p-2">
-        <QRCodeSVG value={captureUrl} size={120} aria-label="Código QR del enlace de captura" />
-      </div>
-      <a
-        href={captureUrl}
-        target="_blank"
-        rel="noopener noreferrer"
-        className={`${WIZARD_BTN_BRAND} inline-flex items-center gap-1.5 px-3 py-1.5`}
-        style={{ background: WIZARD_BTN_SOLID }}
-      >
-        <Icono nombre="externo" className="h-3 w-3" />
-        Abrir captura Kyverum
-      </a>
-      <button
-        type="button"
-        onClick={() => void copy()}
-        className={WIZARD_BTN_BRAND_OUTLINE}
-        style={{ borderColor: WIZARD_BTN_SOLID, color: WIZARD_BTN_SOLID }}
-        aria-label="Copiar enlace de captura"
-      >
-        <Icono nombre="copiar" className="h-3 w-3" />
-        {copied ? 'Copiado' : 'Copiar enlace'}
-      </button>
-      {/* Bug #14626: la URL ya no se muestra en texto; los clientes la abrían en el equipo del asesor y el
-          enlace de Kyverum quedaba atado a ese dispositivo. Se comparte por el QR o «Copiar enlace». */}
     </div>
   );
 }

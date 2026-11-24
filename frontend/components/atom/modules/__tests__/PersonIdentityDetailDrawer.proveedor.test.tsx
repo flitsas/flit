@@ -62,11 +62,12 @@ beforeEach(() => {
 });
 
 describe('Detalle de Identidad: etiqueta de intentos según proveedor', () => {
-  it('kyverum conserva «Intentos Kyverum» con su contador y «Abrir captura Kyverum»', async () => {
+  it('kyverum conserva «Intentos Kyverum» con su contador y NO muestra «Abrir captura Kyverum» (Bug #14674)', async () => {
     renderCon(validacion({ provider: 'kyverum', intentos: 2 }));
     expect(await screen.findByText('Intentos Kyverum')).toBeInTheDocument();
     expect(screen.getByText('2 / 5')).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Abrir captura Kyverum' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /abrir captura/i })).not.toBeInTheDocument();
+    expect(screen.queryByTestId('identity-capture-qr')).not.toBeInTheDocument();
   });
 
   it('mock muestra «Intentos» sin nombrar al proveedor', async () => {
@@ -82,7 +83,7 @@ describe('Detalle de Identidad: etiqueta de intentos según proveedor', () => {
     expect(screen.queryByText('Intentos')).not.toBeInTheDocument();
     expect(screen.queryByText('0 / 5')).not.toBeInTheDocument();
     expect(screen.queryByText(/Kyverum/i)).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Abrir enlace de captura' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: /abrir (enlace de )?captura/i })).not.toBeInTheDocument();
     expect(document.body.textContent ?? "").not.toMatch(/Kyverum/i);
     expect(document.body.querySelector('[aria-label*="Kyverum" i], [title*="Kyverum" i]')).toBeNull();
   });

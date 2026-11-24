@@ -109,6 +109,19 @@ describe('Pestaña Validaciones manuales — tabla', () => {
     await user.click(await screen.findByRole('button', { name: 'Acciones de Persona de prueba 01' }));
     expect(await screen.findByRole('menuitem', { name: 'Ver detalle de Persona de prueba 01' })).toBeInTheDocument();
   });
+
+  it('Bug #14674 (AC5): ninguna fila ofrece «Copiar enlace», sea cual sea su estado', async () => {
+    render(<ValidacionesManuales client={nuevoCliente()} />);
+    const user = userEvent.setup();
+    const botones = await screen.findAllByRole('button', { name: /^Acciones de / });
+    expect(botones.length).toBeGreaterThan(0);
+    for (const boton of botones) {
+      await user.click(boton);
+      expect(await screen.findAllByRole('menuitem')).not.toHaveLength(0);
+      expect(screen.queryByRole('menuitem', { name: /copiar enlace/i })).not.toBeInTheDocument();
+      await user.keyboard('{Escape}');
+    }
+  });
 });
 
 describe('Chips de estado', () => {

@@ -7,14 +7,16 @@ const root = join(__dirname, '..');
 const biometric = readFileSync(join(root, 'BiometricStep.tsx'), 'utf8');
 const styles = readFileSync(join(root, 'wizard-field-styles.ts'), 'utf8');
 
-describe('HU #12729 — AC1 dos columnas con firma/QR (una parte)', () => {
-  it('happy: grilla md:grid-cols-2 cuando hay captura (firma/QR)', () => {
-    expect(biometric).toMatch(/showCaptureSide \? 'md:grid-cols-2'/);
+describe('HU #12729 — AC1 una columna sin panel QR (una parte, Bug #14674)', () => {
+  it('happy: la grilla de la parte no reserva segunda columna de captura', () => {
+    expect(biometric).not.toMatch(/showCaptureSide/);
+    expect(biometric).toMatch(/<div className="grid grid-cols-1 gap-4">/);
     expect(biometric).toMatch(/grid grid-cols-1 gap-4 md:grid-cols-2/);
   });
 
-  it('contrato: QR size 120 se conserva en KyverumPendingView', () => {
-    expect(biometric).toContain('size={120}');
+  it('contrato: no hay QR de captura en el wizard', () => {
+    expect(biometric).not.toContain('QRCodeSVG');
+    expect(biometric).not.toContain('size={120}');
   });
 });
 
