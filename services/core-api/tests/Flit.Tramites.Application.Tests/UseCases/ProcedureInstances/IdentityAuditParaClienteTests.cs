@@ -51,12 +51,24 @@ public sealed class IdentityAuditParaClienteTests
         IdentityAuditParaCliente.Aplicar(new[] { Evento(stage) }).Should().BeEmpty();
 
     [Fact]
-    public void Los_eventos_normales_pasan_intactos_y_en_orden()
+    public void Los_eventos_normales_conservan_etapa_y_resultado_pero_no_revelan_el_proveedor_ni_el_error_tecnico()
     {
-        var normal = new IdentityAuditEventDto(DateTimeOffset.Parse("2026-10-06T15:29:00Z"), IdentityValidationAuditStages.Send, "ok", 200, null, null, null, "sent", null, "enviado");
-        var res = IdentityAuditParaCliente.Aplicar(new[] { normal, Evento(IdentityValidationAuditStages.ManualActivado) });
-        res[0].Should().Be(normal);
-        res.Should().HaveCount(2);
+        var normal = new IdentityAuditEventDto(DateTimeOffset.Parse("2026-10-06T15:29:00Z"), IdentityValidationAuditStages.Send, "ok", 200, null, null, null,
+            "kyverum_status", null, "Enviando validación a Kyverum (create).");
+        var conError = new IdentityAuditEventDto(DateTimeOffset.Parse("2026-10-06T15:30:00Z"), IdentityValidationAuditStages.Send, "error", 503, null, null, null,
+            null, "KyverumVerifyException", "Kyverum no respondió");
+        var res = IdentityAuditParaCliente.Aplicar(new[] { normal, conError, Evento(IdentityValidationAuditStages.ManualActivado) });
+
+        res.Should().HaveCount(3);
+        res[0].Stage.Should().Be(IdentityValidationAuditStages.Send);
+        res[0].Outcome.Should().Be("ok");
+        res[0].HttpStatus.Should().Be(200);
+        res[0].Message.Should().BeNull();
+        res[0].ProviderStatus.Should().BeNull();
+        res[1].ErrorType.Should().Be(IdentityAuditParaCliente.ErrorProveedorGenerico);
+        res[1].Message.Should().BeNull();
+        JsonText(res).Should().NotContainEquivalentOf("kyverum");
+        JsonText(res).Should().NotContainEquivalentOf("exception");
         JsonText(res).Should().NotContainEquivalentOf("manual");
     }
 

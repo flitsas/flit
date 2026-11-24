@@ -8,7 +8,8 @@ import { StatusBadge, type StatusTone } from '@/components/atom/StatusBadge';
 /**
  * Chip de «Origen de la aprobación» de una validación de identidad (Épica #13202, HU-C8): aprobada de forma automática o
  * por el proveedor, o revisada a mano por el Super Admin. Icono + texto, nunca solo color. Solo se pinta cuando el
- * origen existe; el nombre del revisor no se muestra en ningún caso.
+ * origen existe. El chip nunca nombra al revisor; su nombre, correo y rol solo los ve el Super Admin FLIT (el backend
+ * no los envía a la compañía ni al cliente) y se pintan en el detalle y la bitácora, no aquí.
  */
 export type ApprovalOrigin = 'automatica' | 'manual';
 

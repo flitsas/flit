@@ -203,7 +203,8 @@ public sealed class DocumentOcrPromptsTests
     {
         // El prompt de clasificación ya la daba por válida y el de extracción la rechazaba por «no tener
         // origen en CDA/VUS/organismo»: la misma pieza salía Verificada en el lote y Rechazada suelta.
-        var prompt = DocumentOcrPrompts.PromptFor("impronta")!;
+        // El fuente se guarda con CRLF en Windows: se normalizan los saltos antes de comparar el texto.
+        var prompt = DocumentOcrPrompts.PromptFor("impronta")!.Replace("\r\n", "\n");
 
         prompt.Should().Contain("hoja de improntas del\ncliente");
         prompt.Should().Contain("NO lleva sello de CDA");

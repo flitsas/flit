@@ -10,6 +10,7 @@ import { Pagination } from '@/components/atom/Pagination';
 import { usePaginacion } from '@/components/atom/usePaginacion';
 
 import { formatFechaHora } from '@/lib/format/date';
+import { descripcionRevisor } from '@/lib/tramites/identidad-lectura';
 /**
 
  * Etiquetas legibles de `stage` (código técnico en BD sin cambiar).
@@ -110,8 +111,22 @@ function auditOutcomeTone(e: IdentityAuditEvent): StatusTone {
 }
 
 function auditDetailText(e: IdentityAuditEvent): string {
+  // La compañía recibe el error genérico (sin nombre de proveedor ni de excepción); el Super Admin ve el técnico.
+  if (e.errorType === 'error_proveedor') return 'Error al comunicar con el proveedor de identidad';
   if (e.errorType) return e.errorType;
-  if (e.message) return e.message;
+  // Revisión manual: el mensaje crudo trae el id del revisor. Solo se muestra quién revisó (nombre, correo, rol),
+  // que el backend manda únicamente al Super Admin; sin ese dato no se enseña ningún id.
+  if (e.stage === 'manual_aprobado' || e.stage === 'manual_rechazado') {
+    const quien = descripcionRevisor(e.revisor);
+    const verbo = e.stage === 'manual_aprobado' ? 'Aprobada' : 'Rechazada';
+    return quien ? `${verbo} por ${quien}` : `${verbo} en revisión manual`;
+  }
+  if (e.message) {
+    // Otros eventos manuales (p. ej. consulta de imágenes) citan «usuario <id>»: nunca se muestra el id.
+    return e.stage.startsWith('manual_')
+      ? e.message.replace(/(?:El )?usuario [0-9a-f-]{36}/gi, 'Un revisor')
+      : e.message;
+  }
   if (e.providerStatus) return `Estado del proveedor: ${e.providerStatus}`;
   if (e.httpStatus != null) return `Respuesta HTTP ${e.httpStatus}`;
   return 'Sin novedad';

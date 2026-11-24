@@ -40,6 +40,8 @@ export interface HitoIdentidad {
   detalle: string | null;
   cuando: string;
   tono: TonoIdentidad;
+  /** «Revisado por …»: texto aparte del detalle. Solo en aprobación/rechazo manual y solo para el Super Admin. */
+  revisadoPor?: string | null;
 }
 
 /**
@@ -69,6 +71,20 @@ const ETAPAS_VISIBLES = new Set([
 ]);
 
 const OUTCOMES_CORRECTOS = new Set(['ok', 'received', 'aprobado']);
+
+/**
+ * «Nombre (correo, rol)» del revisor de una validación manual. Omite lo que falte (nunca «null» ni
+ * un identificador); `null` si no hay ningún dato. Solo llega para el Super Admin FLIT.
+ */
+export function descripcionRevisor(
+  r: { name?: string | null; email?: string | null; role?: string | null } | null | undefined,
+): string | null {
+  if (!r) return null;
+  const nombre = r.name?.trim();
+  const detalle = [r.email?.trim(), r.role?.trim()].filter(Boolean).join(', ');
+  if (nombre) return detalle ? `${nombre} (${detalle})` : nombre;
+  return detalle || null;
+}
 
 /** Primer nombre, para que la línea se lea como una frase y no como un registro. */
 export function primerNombre(nombre: string | null | undefined): string {
@@ -261,6 +277,7 @@ export function hitosDeIdentidad(
           titulo: aprobado ? 'Identidad aprobada' : 'Identidad rechazada',
           detalle: aprobado ? null : v.rejectionReason?.trim() || null,
           tono: aprobado ? 'ok' : 'alerta',
+          ...(quien ? { revisadoPor: `Revisado por ${quien}` } : {}),
         };
       }
     }

@@ -647,6 +647,37 @@ public sealed class BiometricaHandlerTests
     }
 
     [Fact]
+    public async Task Simular_ValidacionManualPendiente_NoLaAprueba()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenant = Guid.NewGuid();
+        var instance = Instance(id, tenant);
+        instance.Actors.Add(Actor(tenant, "comprador"));
+        instance.BiometricValidations.Add(new ProcedureInstanceBiometricValidation
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenant,
+            ProcedureInstanceId = id,
+            PartyRole = "comprador",
+            Provider = BiometricProviders.Manual,
+            Status = BiometricEstados.PendienteRevisionManual,
+        });
+        _repo.GetByIdWithBiometricsAndActorsAsync(id, tenant, ct).Returns(instance);
+
+        var (result, error) = await _simular.HandleAsync(id, tenant, parte: "comprador", ct: ct);
+
+        error.Should().Be("validacion_manual");
+        result.Should().BeNull();
+        var validacion = instance.BiometricValidations.Should().ContainSingle().Subject;
+        validacion.Status.Should().Be(BiometricEstados.PendienteRevisionManual);
+        validacion.Provider.Should().Be(BiometricProviders.Manual);
+        validacion.ValidatedAt.Should().BeNull();
+        validacion.ApprovalOrigin.Should().BeNull();
+        await _repo.DidNotReceive().SaveChangesAsync(ct);
+    }
+
+    [Fact]
     public async Task Simular_NoActor_ReturnsActorRequerido()
     {
         var ct = TestContext.Current.CancellationToken;
