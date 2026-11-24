@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cambioContraventor, estadoProceso, nombreActor, textoParaGestora, textoSemaforo, tonoSemaforo, ultimoHito } from "@/lib/etiquetas";
+import { EVENTO_TIMELINE, cambioContraventor, estadoProceso, nombreActor, textoParaGestora, textoSemaforo, tonoSemaforo, ultimoHito } from "@/lib/etiquetas";
 import { aQuery, contarFiltros, FILTROS_VACIOS, resumenPagina } from "@/lib/filtros";
 
 describe("semáforo legal", () => {
@@ -84,5 +84,11 @@ describe("textos sin tecnología para la gestora", () => {
     expect(nombreActor("Scheduler")).toBe("Automático");
     expect(nombreActor("API de contratos")).toBe("Consulta automática");
     expect(nombreActor("admin@empresa.local")).toBe("admin@empresa.local");
+  });
+});
+
+describe("timeline: documento escaneado asociado", () => {
+  it("el evento tiene etiqueta legible (la usan la fila y el filtro)", () => {
+    expect(EVENTO_TIMELINE.DocumentoAsociadoOcr).toBe("Documento escaneado asociado");
   });
 });

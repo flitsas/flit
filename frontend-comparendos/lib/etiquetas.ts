@@ -153,6 +153,7 @@ export const EVENTO_TIMELINE: Record<string, string> = {
   ContraventorAsignado: "Conductor asignado",
   ContraventorReemplazado: "Conductor reemplazado",
   DocumentoConductorCargado: "Documento del conductor",
+  DocumentoAsociadoOcr: "Documento escaneado asociado",
   AvisoEnviado: "Aviso enviado",
   ComunicacionEstado: "Estado del correo",
   PortalAbierto: "Portal abierto",
