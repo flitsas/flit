@@ -173,9 +173,18 @@ public sealed class PestanasAnalisisTests(ApiConFuente api) : IClassFixture<ApiC
         dp.GetProperty("consolidado").ValueKind.Should().Be(JsonValueKind.Null, "el consolidado empresa × organismo es solo del SuperAdmin con todas las empresas");
 
         // El SuperAdmin con «todas» ve el consolidado; con la empresa elegida, la misma tasa que la gestora.
-        var todas = (await Super.GetFromJsonAsync<JsonElement>($"{Base}/reportes/dp?{periodo}", ct)).GetProperty("dp");
+        var superAdmin = new UsuarioDePrueba(Guid.NewGuid(), [], SuperAdmin: true);
+        var todas = (await api.Cliente(superAdmin).GetFromJsonAsync<JsonElement>($"{Base}/reportes/dp?{periodo}", ct)).GetProperty("dp");
         todas.GetProperty("consolidado").EnumerateArray().Where(c => c.GetProperty("empresaId").GetGuid() == empresa)
             .Sum(c => c.GetProperty("enviados").GetInt32()).Should().Be(3);
+        todas.TryGetProperty("empresasLeidas", out _).Should().BeFalse("la lista de lecturas no viaja al cliente");
+
+        // §2.4: cada empresa del consolidado queda anotada como lectura del SuperAdmin.
+        var delConsolidado = todas.GetProperty("consolidado").EnumerateArray().Select(c => c.GetProperty("empresaId").GetGuid()).Distinct().ToList();
+        var anotadas = await api.EnDbAsync(db => db.AuditoriasConfiguracion
+            .Where(x => x.Entidad == "lectura_superadmin" && x.UsuarioId == superAdmin.Id && x.EntidadId.Contains("/reportes/dp"))
+            .Select(x => x.TenantId!.Value).ToListAsync(ct));
+        anotadas.Should().Contain(delConsolidado).And.Contain(empresa).And.OnlyHaveUniqueItems();
         (await Super.GetFromJsonAsync<JsonElement>($"{Base}/reportes/dp?{periodo}&empresa={empresa}", ct)).GetProperty("dp")
             .GetProperty("tasaExito").GetDecimal().Should().Be(0.5m);
     }

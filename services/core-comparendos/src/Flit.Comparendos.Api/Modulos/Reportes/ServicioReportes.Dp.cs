@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Domain.Modelo;
 using Microsoft.EntityFrameworkCore;
@@ -37,7 +38,16 @@ public sealed record ReporteDp(
     IReadOnlyList<PuntoDpDiario> Acumulado,
     IReadOnlyList<DpVencido> Vencidos,
     int TotalVencidos,
-    IReadOnlyList<ConsolidadoDp>? Consolidado);
+    IReadOnlyList<ConsolidadoDp>? Consolidado)
+{
+    /// <summary>
+    /// Con «todas las empresas» (SuperAdmin), las empresas cuyos datos van en la respuesta: las del consolidado y las de los
+    /// vencidos listados (que pueden haberse radicado antes del periodo). El endpoint las anota con <c>AnotarLectura</c> (§2.4).
+    /// No viaja en el JSON.
+    /// </summary>
+    [JsonIgnore]
+    public IReadOnlyCollection<Guid> EmpresasLeidas { get; init; } = [];
+}
 
 /// <summary>
 /// Pestaña «Derechos de petición» (V1: «Reporte DP Detallado» y el consolidado de «Resumen de reportes»). La tasa y el
@@ -150,7 +160,8 @@ public sealed partial class ServicioReportes
                         where d.Estado == EstadoDp.Enviado && d.FechaLimiteRespuestaOt != null && d.FechaLimiteRespuestaOt < hoy
                         select new { d, c.Numero, c.Placa, Organismo = o == null ? null : o.Nombre };
         var totalVencidos = await vencidosQ.CountAsync(ct).ConfigureAwait(false);
-        var vencidos = (await vencidosQ.OrderBy(x => x.d.FechaLimiteRespuestaOt).ThenBy(x => x.Numero).Take(TopeListaDp).ToListAsync(ct).ConfigureAwait(false))
+        var vencidosFilas = await vencidosQ.OrderBy(x => x.d.FechaLimiteRespuestaOt).ThenBy(x => x.Numero).Take(TopeListaDp).ToListAsync(ct).ConfigureAwait(false);
+        var vencidos = vencidosFilas
             .Select(x => new DpVencido(x.d.ComparendoId, x.Numero, x.Placa, x.d.Radicado, x.Organismo ?? "Organismo sin nombre", x.d.FechaRadicacion,
                 x.d.FechaLimiteRespuestaOt!.Value, hoy.DayNumber - x.d.FechaLimiteRespuestaOt!.Value.DayNumber))
             .ToList();
@@ -171,7 +182,11 @@ public sealed partial class ServicioReportes
                 .OrderBy(c => c.Empresa, StringComparer.Ordinal).ThenByDescending(c => c.Enviados).ThenBy(c => c.Organismo, StringComparer.Ordinal).ToList();
         }
 
+        var leidas = consolidado ? filas.Select(f => f.TenantId).Concat(vencidosFilas.Select(v => v.d.TenantId)).ToHashSet() : [];
         return new ReporteDp(kpis.TasaExitoDp, kpis.AhorroAcumulado, kpis.DpFavorables, kpis.DpDesfavorables, kpis.DpSinRespuesta,
-            porOrganismo.Sum(f => f.Enviados), porOrganismo, porInfraccion, cruce, positivos, totalPositivos, acumulado, vencidos, totalVencidos, porEmpresa);
+            porOrganismo.Sum(f => f.Enviados), porOrganismo, porInfraccion, cruce, positivos, totalPositivos, acumulado, vencidos, totalVencidos, porEmpresa)
+        {
+            EmpresasLeidas = leidas,
+        };
     }
 }
