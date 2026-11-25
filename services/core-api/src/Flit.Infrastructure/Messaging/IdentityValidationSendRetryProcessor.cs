@@ -117,6 +117,7 @@ internal sealed class IdentityValidationSendRetryProcessor(
                     v.ProcedureInstanceId, v.Id, v.PartyRole, v.Name, v.DocumentType, v.DocumentNumber, v.Email, v.TenantId),
                 ct);
 
+            var intentosDeEnvio = v.Attempts;
             // Envío logrado → en_proceso con los datos del proveedor.
             v.Status = BiometricEstados.EnProceso;
             v.KyverumVerificationId = result.VerificationId;
@@ -132,6 +133,10 @@ internal sealed class IdentityValidationSendRetryProcessor(
             if (v.LastResentAt is not null)
                 v.ResendCount += 1;
 
+            // Los intentos de ENVÍO (FLIT → Kyverum) no son intentos de VERIFICACIÓN: al lograr el envío el contador de
+            // verificación empieza en 0 (lo sube solo el webhook de intento fallido).
+            v.Attempts = 0;
+
             await events.PublishAsync(new IdentityValidationRequested
             {
                 TenantId = v.TenantId,
@@ -142,7 +147,7 @@ internal sealed class IdentityValidationSendRetryProcessor(
                 ProviderVerificationId = result.VerificationId,
             }, ct);
 
-            SendRetryLog.Sent(logger, v.Id, v.Provider, v.Attempts);
+            SendRetryLog.Sent(logger, v.Id, v.Provider, intentosDeEnvio);
         }
         catch (IdentityProviderException ex)
         {
