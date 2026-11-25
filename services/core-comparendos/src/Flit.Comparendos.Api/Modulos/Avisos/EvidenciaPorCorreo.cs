@@ -153,6 +153,9 @@ public sealed partial class ServicioEvidencia(
     /// <summary>Lo más que puede tardar el trabajo posterior a la asociación (registrar, nota y despacho).</summary>
     private static readonly TimeSpan TopeTrabajoPosterior = TimeSpan.FromSeconds(30);
 
+    /// <summary>El plazo en uso; las pruebas lo acortan para ejercer el vencimiento.</summary>
+    internal TimeSpan Plazo { get; set; } = TopeTrabajoPosterior;
+
     /// <summary>
     /// Lo que hace «asociar» después de confirmar la asociación: registra, confirma y despacha el correo. Nada de aquí lanza:
     /// un fallo del correo no deshace la asociación y se dice en el resultado. La asociación ya está confirmada: si el
@@ -164,7 +167,7 @@ public sealed partial class ServicioEvidencia(
     {
         if (peticion.IsCancellationRequested)
             LogPeticionCancelada(logger, comparendoId, tenantId);
-        using var propio = new CancellationTokenSource(TopeTrabajoPosterior);
+        using var propio = new CancellationTokenSource(Plazo);
         var ct = propio.Token;
         Guid? comunicacion;
         try
