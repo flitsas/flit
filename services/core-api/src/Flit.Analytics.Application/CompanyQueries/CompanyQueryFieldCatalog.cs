@@ -36,6 +36,12 @@ public sealed class CompanyQueryFieldCatalog : IQueryFieldCatalog
     public const string MetodoPago = "metodo_pago";
     public const string TipoTraspaso = "tipo_traspaso";
 
+    /// <summary>Épica #14666 / HU #14699 (A2): ¿firmaron todas las partes? Filtro «es» Sí/No.</summary>
+    public const string FirmadoPorTodas = "firmado_por_todas";
+
+    /// <summary>Épica #14666 / HU #14699 (A2): quién falta por firmar. Solo columna, sin filtro.</summary>
+    public const string FaltaFirmar = "falta_firmar";
+
     /// <summary>
     /// Solo para SuperAdmin en modo «todas las compañías» (<c>ExecuteForSuperAdminAsync</c>).
     /// Se excluye del catálogo que ve una empresa normal (<see cref="CompanyQueryRepository.GetFieldsAsync"/>)
@@ -134,6 +140,16 @@ public sealed class CompanyQueryFieldCatalog : IQueryFieldCatalog
             "Busca por nombre y también por número de documento.", AdmiteLista: true),
         new(Vendedor, "Vendedor", QueryFieldKind.Texto, GrupoPersonas, TextoOperators, [],
             "Solo los traspasos tienen vendedor; en matrícula inicial no hay.", AdmiteLista: true),
+
+        // HU #14699 — la regla la calcula ITramiteFirmaEvaluator en memoria (ADR-0092), nunca SQL.
+        new(FirmadoPorTodas, "Firmado por todas las partes", QueryFieldKind.Booleano, GrupoPersonas,
+            BooleanoOperators, SiNoOptions,
+            "Sí: todas las partes del trámite ya firmaron. No: falta firmar al menos una.",
+            AdmiteLista: false),
+        // Sin operadores = solo columna: el normalizador descarta cualquier condición sobre él.
+        new(FaltaFirmar, "Falta firmar", QueryFieldKind.Texto, GrupoPersonas, [], [],
+            "Nombre y rol de quien aún no ha firmado. Vacío si ya firmaron todos.",
+            AdmiteLista: false),
 
         // Las opciones las pone el repositorio con los organismos con los que esta empresa tramita.
         new(Organismo, "Organismo de tránsito", QueryFieldKind.Opcion, GrupoTramite,

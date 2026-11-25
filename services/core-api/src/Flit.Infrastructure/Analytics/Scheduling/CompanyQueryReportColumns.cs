@@ -76,6 +76,9 @@ internal static class CompanyQueryReportColumns
         ["tipo_traspaso"] = new("Tipo de traspaso", 22, r => TextOrEmpty(string.IsNullOrEmpty(r.TipoTraspaso)
             ? null
             : Label(TraspasoLabel, r.TipoTraspaso))),
+        ["firmado_por_todas"] = new("Firmado por todas las partes", 16, r =>
+            TextOrEmpty(r.FirmadoPorTodas is bool f ? SiNo(f) : null)),
+        ["falta_firmar"] = new("Falta firmar", 40, r => TextOrEmpty(r.FaltaFirmar)),
         ["creado_en"] = new("Creado", 12, r => DateCell(r.CreadoEn)),
         ["enviado_en"] = new("Enviado al organismo", 18, r => DateTimeCellOrEmpty(r.EnviadoEn)),
         ["cerrado_en"] = new("Cerrado", 18, r => DateTimeCellOrEmpty(r.CerradoEn)),
