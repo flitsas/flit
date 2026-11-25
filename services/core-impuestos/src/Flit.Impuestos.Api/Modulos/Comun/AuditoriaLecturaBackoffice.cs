@@ -26,7 +26,7 @@ public sealed class AuditoriaLecturaBackoffice(ImpuestosDb db, UsuarioActual usu
             throw new ArgumentException("La lectura auditada exige la empresa consultada.", nameof(empresaConsultada));
         usuario.EmpresaPropia();
         if (usuario.Id == Guid.Empty)
-            throw ReglaException.Prohibido("SIN_USUARIO", "El token no identifica al usuario: la lectura no se puede auditar.");
+            throw ManejadorReglas.SinUsuario();
 
         using (db.AutorizarEscrituraDe(empresaConsultada, typeof(LecturaBackoffice)))
         {
