@@ -1,4 +1,4 @@
-// Dashboard de Impuestos (contracts/openapi/impuestos.v1.yaml 1.0.0, GET /api/v1/impuestos/dashboard, schema Dashboard).
+// Dashboard de Impuestos (contracts/openapi/impuestos.v1.yaml 1.2.x, GET /api/v1/impuestos/dashboard, schema Dashboard).
 // Sin datos personales. Un bloque que llega null (back anterior o fallo parcial) se pinta «Sin datos para este bloque».
 
 /** Periodo AAAA-MM-DD, extremos incluidos (hora de Colombia). */
@@ -53,12 +53,14 @@ export interface DashboardImpuestos {
     sinResultado: number;
   } | null;
   deuda: { placasConDeuda: number; placasAlDia: number } | null;
-  /** Suma de totalAPagar sin los null; el contrato lo declara no nulo, el front tolera null («Sin dato»). */
+  /** Suma de totalAPagar sin los null; null (delta 13) = «Sin dato», nunca 0. */
   montoTotal: number | null;
   liquidacionesSinMonto: number;
   parcial: boolean;
-  serie: Array<{ fecha: string; total: number }> | null;
-  porDepartamento: Array<{ codigo: string; nombre: string; total: number }> | null;
+  /** total = individuales + masivas; el desglose llega desde la 1.1.0 (delta 10) y un back anterior lo omite. */
+  serie: Array<{ fecha: string; total: number; individuales?: number; masivas?: number }> | null;
+  /** `monto` (delta 10): suma de totalAPagar del departamento sin los null; null = «Sin dato»; ausente = back anterior. */
+  porDepartamento: Array<{ codigo: string; nombre: string; total: number; monto?: number | null }> | null;
   ultimosLotes: ResumenLiquidacion[] | null;
   /** Solo Super Admin en la vista global; null en los demás. */
   ranking: Array<{ empresa: Referencia; total: number }> | null;

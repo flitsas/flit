@@ -73,12 +73,23 @@ const FILA = (placa: string, totalAPagar: number | null, estado = "EXITOSO") => 
 });
 const pagina = (tipo: string, items: unknown[], total = items.length, columnas: unknown[] = COLUMNAS_DETALLE) => ({ tipo, columnas, items, total, page: 1, pageSize: 50 });
 
+/** GET /catalogos/reportes (delta 12): departamentos del proveedor y usuarios con solo id y nombre. */
+const USUARIO_CREADOR = "00000000-0000-7000-8000-0000000000c1";
+const CATALOGOS = {
+  departamentos: [
+    { codigo: "11", nombre: "Bogotá D.C.", activa: true },
+    { codigo: "25", nombre: "Cundinamarca", activa: true },
+  ],
+  usuarios: [{ id: USUARIO_CREADOR, nombre: "Gestora Demo" }],
+};
+
 type Llamada = { url: URL };
 let llamadas: Llamada[];
 function api(
   respuestas: {
     reporte?: (url: URL) => Response | Promise<Response>;
     exportar?: (url: URL) => Response;
+    catalogos?: (url: URL) => Response;
   } = {},
 ) {
   return vi.fn(async (u: RequestInfo | URL) => {
@@ -90,6 +101,7 @@ function api(
     if (url.pathname.startsWith("/api/v1/impuestos/reportes/")) {
       return respuestas.reporte ? respuestas.reporte(url) : Response.json(pagina(url.pathname.split("/").at(-1) as string, [FILA("ABC123", 1234567), FILA("XYZ789", null)]));
     }
+    if (url.pathname === "/api/v1/impuestos/catalogos/reportes") return respuestas.catalogos ? respuestas.catalogos(url) : Response.json(CATALOGOS);
     if (url.pathname === "/api/v1/impuestos/fuentes") return Response.json({ items: [{ codigo: "11", nombre: "Bogotá D.C." }, { codigo: "25", nombre: "Cundinamarca" }] });
     if (url.pathname === "/api/v1/impuestos/usuarios") return Response.json({ items: [{ id: "u-1", nombre: "Persona Demo", email: "nombre@empresa.com", rol: "admin_impuestos", estado: "ACTIVO" }], total: 1, page: 1, pageSize: 200 });
     return Response.json({});
@@ -97,6 +109,8 @@ function api(
 }
 const pedidosReporte = () => llamadas.map((l) => l.url).filter((u) => /^\/api\/v1\/impuestos\/reportes\/[a-z]+$/.test(u.pathname));
 const ultimoReporte = () => pedidosReporte().at(-1) as URL;
+const pedidosCatalogos = () => llamadas.map((l) => l.url).filter((u) => u.pathname === "/api/v1/impuestos/catalogos/reportes");
+const pedidosA = (ruta: string) => llamadas.map((l) => l.url).filter((u) => u.pathname === `/api/v1/impuestos${ruta}`);
 const exportaciones = () => llamadas.map((l) => l.url).filter((u) => /\/(excel|pdf)$/.test(u.pathname));
 
 beforeEach(() => {
@@ -336,5 +350,166 @@ describe("Reportes — Super Admin y permisos", () => {
     render(<Reportes />);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/403?code=SIN_PERMISO"));
     expect(pedidosReporte()).toHaveLength(0);
+  });
+});
+
+describe("Reportes — contrato 1.2.x, delta 12: opciones de los filtros de GET /catalogos/reportes", () => {
+  it("el Gestor (solo reportes.ver) ve «Departamento» y «Usuario» del catálogo, sin pedir /fuentes ni /usuarios", async () => {
+    conSesion("gestor");
+    vi.stubGlobal("fetch", api());
+    render(<Reportes />);
+    await screen.findByRole("table", { name: "Detalle de liquidaciones" });
+    const departamento = await screen.findByLabelText("Departamento");
+    expect(within(departamento).getAllByRole("option").map((o) => o.textContent)).toEqual(["Todos", "Bogotá D.C.", "Cundinamarca"]);
+    expect(await screen.findByRole("combobox", { name: "Usuario" })).toBeInTheDocument();
+    expect(pedidosCatalogos()).toHaveLength(1);
+    expect(pedidosCatalogos()[0].searchParams.has("empresa")).toBe(false);
+    expect(pedidosA("/fuentes")).toHaveLength(0);
+    expect(pedidosA("/usuarios")).toHaveLength(0);
+  });
+
+  it("el usuario se elige por su nombre y viaja su id en `usuario`", async () => {
+    vi.stubGlobal("fetch", api());
+    render(<Reportes />);
+    await screen.findByRole("table", { name: "Detalle de liquidaciones" });
+    const combo = await screen.findByRole("combobox", { name: "Usuario" });
+    fireEvent.keyDown(combo, { key: "ArrowDown" });
+    fireEvent.click(await screen.findByRole("option", { name: "Gestora Demo" }));
+    await waitFor(() => expect(ultimoReporte().searchParams.get("usuario")).toBe(USUARIO_CREADOR));
+  });
+
+  it("el Super Admin pide el catálogo de la compañía elegida (?empresa=) y, sin ella, el de la vista global", async () => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams(`empresa=${OTRA}`);
+    vi.stubGlobal("fetch", api());
+    const { unmount } = render(<Reportes />);
+    await screen.findByLabelText("Departamento");
+    expect(pedidosCatalogos().at(-1)?.searchParams.get("empresa")).toBe(OTRA);
+    unmount();
+
+    llamadas = [];
+    busqueda = new URLSearchParams();
+    render(<Reportes />);
+    await screen.findByLabelText("Departamento");
+    expect(await screen.findByRole("combobox", { name: "Usuario" })).toBeInTheDocument();
+    expect(pedidosCatalogos().at(-1)?.searchParams.has("empresa")).toBe(false);
+  });
+
+  it("un catálogo fallido no rompe el reporte: los filtros «Departamento» y «Usuario» no se pintan", async () => {
+    vi.stubGlobal("fetch", api({ catalogos: () => new Response("{}", { status: 500 }) }));
+    render(<Reportes />);
+    await screen.findByRole("table", { name: "Detalle de liquidaciones" });
+    await waitFor(() => expect(pedidosCatalogos()).toHaveLength(1));
+    expect(screen.queryByLabelText("Departamento")).not.toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Usuario" })).not.toBeInTheDocument();
+  });
+});
+
+describe("Reportes — contrato 1.2.x, delta 9: la exportación lleva los mismos filtros que el GET", () => {
+  it.each(["excel", "pdf"] as const)("exportar %s envía exactamente los filtros del reporte, sin page ni pageSize", async (formato) => {
+    vi.stubGlobal("fetch", api());
+    render(<Reportes />);
+    await screen.findByRole("table", { name: "Detalle de liquidaciones" });
+    fireEvent.click(screen.getByRole("radio", { name: "Masivas" }));
+    fireEvent.change(screen.getByLabelText("Estado"), { target: { value: "ERROR" } });
+    fireEvent.change(await screen.findByLabelText("Departamento"), { target: { value: "25" } });
+    const placa = screen.getByLabelText("Placa");
+    fireEvent.change(placa, { target: { value: "abc1" } });
+    fireEvent.submit(placa);
+    await waitFor(() => expect(ultimoReporte().searchParams.get("placa")).toBe("ABC1"));
+    await screen.findByRole("table", { name: "Detalle de liquidaciones" });
+
+    fireEvent.click(screen.getByRole("button", { name: formato === "excel" ? /Exportar Excel/ : /Exportar PDF/ }));
+    await waitFor(() => expect(exportaciones()).toHaveLength(1));
+    const get = new URLSearchParams(ultimoReporte().searchParams);
+    get.delete("page");
+    get.delete("pageSize");
+    const exp = exportaciones()[0];
+    expect(exp.pathname).toBe(`/api/v1/impuestos/reportes/detalle/${formato}`);
+    expect(Object.fromEntries([...exp.searchParams].sort())).toEqual(Object.fromEntries([...get].sort()));
+    expect(exp.searchParams.get("tipoLiquidacion")).toBe("MASIVA");
+  });
+
+  it("un 422 TOPE_EXPORTACION del PDF sin `tope` en el cuerpo usa el tope del formato (1000) en el literal", async () => {
+    vi.stubGlobal("fetch", api({ exportar: () => Response.json({ code: "TOPE_EXPORTACION", error: "x" }, { status: 422 }) }));
+    render(<Reportes />);
+    await screen.findByRole("table", { name: "Detalle de liquidaciones" });
+    fireEvent.click(screen.getByRole("button", { name: /Exportar PDF/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("El reporte supera el máximo de 1000 filas para exportar: ajusta los filtros.");
+  });
+});
+
+describe("Reportes — contrato 1.2.x, delta 11: columna «Compañía» solo en la vista global del Super Admin", () => {
+  const COLUMNAS_GLOBAL = [{ clave: "empresa", etiqueta: "Compañía" }, ...COLUMNAS_DETALLE];
+  const conEmpresaEnFila = (url: URL, columnas: unknown[]) =>
+    Response.json(pagina(url.pathname.split("/").at(-1) as string, [{ ...FILA("ABC123", 1), empresa: { id: OTRA, nombre: "Compañía Uno" } }], 1, columnas));
+  const encabezados = (tabla: HTMLElement) => within(tabla).getAllByRole("columnheader").map((c) => c.textContent);
+
+  it.each(["detalle", "lotes", "deuda", "errores"])("SA sin ?empresa= en %s: la primera columna es «Compañía» con row.empresa.nombre", async (tipo) => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams(`reporte=${tipo}`);
+    vi.stubGlobal("fetch", api({ reporte: (url) => conEmpresaEnFila(url, COLUMNAS_GLOBAL) }));
+    render(<Reportes />);
+    const tabla = await screen.findByRole("table");
+    expect(encabezados(tabla)[0]).toBe("Compañía");
+    expect(within(tabla).getAllByText("Compañía Uno").length).toBeGreaterThan(0);
+  });
+
+  it("SA sin ?empresa=: si `columnas` no la trae, la columna «Compañía» igual va primero", async () => {
+    conSesion("superadmin");
+    vi.stubGlobal("fetch", api({ reporte: (url) => conEmpresaEnFila(url, COLUMNAS_DETALLE) }));
+    render(<Reportes />);
+    const tabla = await screen.findByRole("table", { name: "Detalle de liquidaciones" });
+    expect(encabezados(tabla)[0]).toBe("Compañía");
+    expect(within(tabla).getAllByText("Compañía Uno").length).toBeGreaterThan(0);
+  });
+
+  it("SA con ?empresa= y usuario de compañía: sin columna «Compañía» aunque llegue", async () => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams(`empresa=${OTRA}`);
+    vi.stubGlobal("fetch", api({ reporte: (url) => conEmpresaEnFila(url, COLUMNAS_GLOBAL) }));
+    const { unmount } = render(<Reportes />);
+    let tabla = await screen.findByRole("table", { name: "Detalle de liquidaciones" });
+    expect(encabezados(tabla)).not.toContain("Compañía");
+    unmount();
+
+    conSesion("admin");
+    busqueda = new URLSearchParams();
+    render(<Reportes />);
+    tabla = await screen.findByRole("table", { name: "Detalle de liquidaciones" });
+    expect(encabezados(tabla)).not.toContain("Compañía");
+  });
+});
+
+describe("Reportes — errores de regla con los literales del contrato", () => {
+  it.each([
+    ["FILTRO_INVALIDO", 400, "Un filtro no es válido."],
+    ["PAGINACION_INVALIDA", 400, "La paginación no es válida."],
+    ["REPORTE_NO_ENCONTRADO", 404, "El reporte no existe."],
+    ["EMPRESA_REQUERIDA", 400, "Elige una compañía."],
+  ] as const)("%s (%i) se pinta en línea con su literal y no lleva a otra página", async (code, status, literal) => {
+    vi.stubGlobal("fetch", api({ reporte: () => Response.json({ code, error: "detalle interno" }, { status }) }));
+    render(<Reportes />);
+    expect(await screen.findByText(literal)).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalled();
+    expect(document.body).not.toHaveTextContent("detalle interno");
+  });
+
+  it("RANGO_INVALIDO del servidor se pinta junto a «Hasta» con aria-invalid", async () => {
+    vi.stubGlobal("fetch", api({ reporte: () => Response.json({ code: "RANGO_INVALIDO", error: "x" }, { status: 400 }) }));
+    render(<Reportes />);
+    expect(await screen.findByText(/Revisa el periodo/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Hasta")).toHaveAttribute("aria-invalid", "true");
+  });
+
+  it("404 EMPRESA_NO_ENCONTRADA (SA con ?empresa=): literal en línea y «Ver todas las compañías» quita la compañía, nunca la 403", async () => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams(`empresa=${OTRA}&reporte=deuda`);
+    vi.stubGlobal("fetch", api({ reporte: () => Response.json({ code: "EMPRESA_NO_ENCONTRADA", error: "x" }, { status: 404 }) }));
+    render(<Reportes />);
+    expect(await screen.findByText("La compañía no existe o no tiene Impuestos.")).toBeInTheDocument();
+    expect(replace).not.toHaveBeenCalledWith(expect.stringMatching(/^\/403/));
+    fireEvent.click(screen.getByRole("button", { name: "Ver todas las compañías" }));
+    expect(replace).toHaveBeenCalledWith("/reportes?reporte=deuda");
   });
 });

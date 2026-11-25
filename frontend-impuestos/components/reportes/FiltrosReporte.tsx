@@ -19,8 +19,9 @@ const normalizarPlaca = (texto: string) => texto.toUpperCase().replace(/\s+/g, "
 /**
  * Filtros de Reportes (spec-visual §3.7): Desde · Hasta · Tipo · Estado · Departamento · Usuario · Placa, y «Limpiar
  * filtros». Solo se pintan los que aplican al reporte activo. Fechas, tipo y listas se aplican al cambiar; la placa, al
- * pulsar Enter o al salir del campo. «Departamento» y «Usuario» solo aparecen si su catálogo cargó (GET /fuentes y GET
- * /usuarios piden permisos que un Gestor no tiene: hueco de contrato reportado).
+ * pulsar Enter o al salir del campo. «Departamento» y «Usuario» salen de GET /catalogos/reportes (delta 12, permiso
+ * impuestos.reportes.ver, también el Gestor) y solo aparecen si el catálogo cargó con opciones; el usuario se muestra por
+ * su nombre y viaja su id.
  */
 export function FiltrosReporte({
   reporte,
