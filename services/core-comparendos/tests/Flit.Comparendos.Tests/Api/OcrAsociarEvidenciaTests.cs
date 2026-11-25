@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Comparendos.Api.Modulos.Avisos;
@@ -95,8 +96,8 @@ public sealed partial class OcrAsociarTests
         var evidencias = await EvidenciasAsync(comparendo);
         evidencias.Should().HaveCount(2);
         (await api.EnDbAsync(db => db.ComunicacionAdjuntos.AsNoTracking().Where(a => a.ComunicacionId == evidencias[1].Id).Select(a => a.ArchivoId).SingleAsync(ct))).Should().Be(segundo.ArchivoId, "el correo lleva el documento NUEVO");
-        (await api.EnDbAsync(db => db.Timeline.Where(t => t.ComparendoId == comparendo && t.Tipo == TipoEventoTimeline.EvidenciaEnviada).OrderBy(t => t.Id).Select(t => t.Descripcion).ToListAsync(ct)))
-            .Last().Should().StartWith("Documento nuevo");
+        (await api.EnDbAsync(db => db.Timeline.Where(t => t.ComparendoId == comparendo && t.Tipo == TipoEventoTimeline.EvidenciaEnviada).OrderBy(t => t.OcurridoEn).ThenBy(t => t.Id).Select(t => t.Descripcion).ToListAsync(ct)))
+            .Should().HaveCount(2).And.Subject.Last().Should().StartWith("Documento nuevo");
     }
 
     [Fact]
@@ -110,8 +111,7 @@ public sealed partial class OcrAsociarTests
 
         var otraVez = await CorreoDeAsync(await Asociar(cliente, doc.Id, reemplazar: false));
 
-        otraVez.Estado.Should().Be("Omitido");
-        otraVez.Motivo.Should().NotBeNullOrWhiteSpace();
+        otraVez.Should().Be(("Omitido", "El documento ya estaba asociado: no se vuelve a enviar"));
         (await EvidenciasAsync(comparendo)).Should().HaveCount(1);
     }
 
@@ -175,7 +175,7 @@ public sealed partial class OcrAsociarTests
             var r = await Asociar(cliente, doc.Id, reemplazar: false);
 
             r.IsSuccessStatusCode.Should().BeTrue(await r.Content.ReadAsStringAsync(ct));
-            (await CorreoDeAsync(r)).Estado.Should().Be("Omitido");
+            (await CorreoDeAsync(r)).Should().Be(("Omitido", "No se pudo preparar el correo al conductor; el documento quedó asociado"));
             (await ComparendoDbAsync(comparendo)).ArchivoEvidenciaId.Should().Be(doc.ArchivoId);
             (await api.EnDbAsync(db => db.DocumentosOcr.AsNoTracking().SingleAsync(d => d.Id == doc.Id, ct))).Estado.Should().Be(EstadoDocumentoOcr.Asociado);
             (await EvidenciasAsync(comparendo)).Should().BeEmpty();
@@ -200,19 +200,40 @@ public sealed partial class OcrAsociarTests
 
         (await CorreoDeAsync(await Asociar(cliente, doc.Id, reemplazar: false))).Estado.Should().Be("Enviado");
 
-        var destinatarios = (await EvidenciasAsync(comparendo)).Select(c => c.Destinatarios).ToList();
-        destinatarios.Should().HaveCount(2, "uno para el conductor y otro para la copia visible de ese tipo");
-        string.Concat(destinatarios).Should().Contain("juan@example.test").And.Contain("copia-evidencia@example.test").And.Contain("oculta@example.test").And.NotContain("copia-aviso@example.test");
+        var correos = (await EvidenciasAsync(comparendo)).Select(c => JsonDocument.Parse(c.Destinatarios).RootElement).ToList();
+        correos.Should().HaveCount(2, "uno para el conductor y otro para la copia visible de ese tipo");
+        string Para(JsonElement e) => e.GetProperty("para")[0].GetProperty("email").GetString()!;
+        var delConductor = correos.Single(e => Para(e) == "juan@example.test");
+        delConductor.GetProperty("cc").EnumerateArray().Select(x => x.GetString()).Should().Equal("copia-evidencia@example.test");
+        correos.Single(e => Para(e) == "copia-evidencia@example.test").GetProperty("cc").EnumerateArray().Select(x => x.GetString()).Should().Equal("juan@example.test");
+        correos.Should().OnlyContain(e => e.GetProperty("bcc").EnumerateArray().Select(x => x.GetString()).SequenceEqual(new[] { "oculta@example.test" }), "la oculta va en bcc, nunca visible, y la de otro tipo no va");
     }
 
     [Theory]
-    [InlineData(true, true, true, 1024L, null)]
-    [InlineData(false, true, true, 1024L, "El comparendo está inactivo")]
-    [InlineData(true, false, true, 1024L, "El comparendo ya está pagado")]
-    public void Evaluar_DecideConUnaSolaFuncion(bool activo, bool pagadoNo, bool producto, long tamano, string? motivo)
+    [InlineData(true, false, true, null)]
+    [InlineData(false, false, false, "El comparendo está inactivo")]
+    [InlineData(true, true, false, "El comparendo ya está pagado")]
+    public void Evaluar_DecideConUnaSolaFuncion(bool activo, bool pagado, bool seEnviara, string? motivo)
     {
-        var c = Comparendo(activo, pagado: !pagadoNo, correo: "a@example.test");
-        EvidenciaPorCorreo.Evaluar(c, new ConfiguracionEmpresa(), producto, tamano).Motivo.Should().Be(motivo);
+        var c = Comparendo(activo, pagado, correo: "a@example.test");
+        EvidenciaPorCorreo.Evaluar(c, new ConfiguracionEmpresa(), productoHabilitado: true, 1024).Should().Be(new DecisionEvidencia(seEnviara, motivo));
+    }
+
+    [Fact]
+    public async Task Asociar_UnDocumentoDeOtraEmpresa_NoSeEncuentra_YNoEnviaNada()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (_, cliente, comparendo) = await ComparendoAsync("EVI-7");
+        await ConConductorAsync(cliente, comparendo);
+        var (_, doc) = await SubirAsync(cliente, "EVI-7", "evi-tenant");
+        var otraEmpresa = await EmpresaAsync(api, ocr: true);
+        var intruso = api.Cliente(new UsuarioDePrueba(otraEmpresa, Operador));
+
+        (await Asociar(intruso, doc.Id, reemplazar: false)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await intruso.GetAsync($"{Base}/documentos/{doc.Id}", TestContext.Current.CancellationToken)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        (await EvidenciasAsync(comparendo)).Should().BeEmpty();
+        (await ComparendoDbAsync(comparendo)).ArchivoEvidenciaId.Should().BeNull();
     }
 
     [Fact]
