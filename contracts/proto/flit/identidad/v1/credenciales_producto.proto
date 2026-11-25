@@ -10,16 +10,32 @@ option csharp_namespace = "Flit.Identidad.Grpc.V1";
 // Autenticación (ADR-0070, contrato §3):
 //   - authorization: token de servicio con aud=plataforma y scope platform.identidad.credenciales.impuesto.
 //   - x-flit-tenant-id: OBLIGATORIA; la empresa del sobre del trabajo. Sin ella INVALID_ARGUMENT.
-//   - Solo el cliente svc-consultas. Otro sub -> PERMISSION_DENIED reason CLIENTE_NO_PERMITIDO.
+//   - Cada rpc tiene su cliente y su scope (abajo). Otro sub -> PERMISSION_DENIED reason CLIENTE_NO_PERMITIDO.
 // Canal h2c interno: la llave viaja en claro dentro de la red de contenedores (riesgo aceptado en ADR-0092, pendiente
 // aval de Seguridad). El campo 6 queda libre para un sobre flit.platform.v1.LlaveCifrada si Seguridad lo exige.
 // core-identity NUNCA escribe la llave en logs. Errores con google.rpc.ErrorInfo (domain flitsas.com).
 service CredencialesProductoService {
+  // Solo svc-consultas, scope platform.identidad.credenciales.impuesto.
   // Idempotente y sin efectos. Fail-closed: con Diagnóstico apagado para la empresa o algún ancestro, disponible=false.
   rpc ObtenerCredencialImpuesto(ObtenerCredencialImpuestoRequest) returns (ObtenerCredencialImpuestoResponse);
+
+  // Solo svc-impuestos, scope platform.identidad.credenciales.impuesto.copia (ADR-0093, DA-2=b, DA-3 residual).
+  // Devuelve el par diagnostico/impuesto_api_key AUNQUE Diagnóstico esté apagado para la empresa o un ancestro: lo usa
+  // core-impuestos una sola vez, al aprovisionar, para copiar la llave a su propio almacén (D-CRED-DIAG). Sin efectos
+  // sobre la credencial de Diagnóstico. Cada llamada queda en admin.tenant_config_audit_logs (sin valor ni huella).
+  rpc ObtenerCredencialImpuestoParaCopia(ObtenerCredencialImpuestoParaCopiaRequest) returns (ObtenerCredencialImpuestoParaCopiaResponse);
 }
 
 message ObtenerCredencialImpuestoRequest {}
+
+// La empresa va en la metadata x-flit-tenant-id.
+message ObtenerCredencialImpuestoParaCopiaRequest {}
+
+message ObtenerCredencialImpuestoParaCopiaResponse {
+  bool existe = 1;     // false => no hay fila diagnostico/impuesto_api_key para la empresa
+  string api_key = 2;  // solo con existe = true
+  int64 version = 3;   // row_version de la fila; 0 sin fila
+}
 
 message ObtenerCredencialImpuestoResponse {
   bool disponible = 1;                    // false => el consumidor NO llama a la fuente

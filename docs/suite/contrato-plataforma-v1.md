@@ -94,6 +94,10 @@ Regla de negocio: el SuperAdmin de FLIT entra a cualquier producto, de cualquier
 | `platform.notificaciones.admin` | `notificaciones` | Administrar los mensajes muertos de Notificaciones (listar, reintentar, descartar); lo usa core-api para la consola del SuperAdmin |
 | `platform.tramites.ict` | `tramites` | Las llamadas de ICT a la orquestación de Trámites, que hoy usan un secreto compartido |
 | `platform.tramites.catalogos` | `tramites` | Leer catálogos de la plataforma que atiende `core-api` (hoy, los organismos de tránsito para la réplica de Comparendos) |
+| `platform.identidad.empresas.alta` | `plataforma` | HU #14694 (ADR-0093). Datos del alta de una empresa en el proveedor de Impuestos (`EmpresasService.ObtenerDatosAltaProveedor`); solo `svc-impuestos` |
+| `platform.identidad.credenciales.impuesto.copia` | `plataforma` | HU #14694. Copiar la llave del impuesto de Diagnóstico al aprovisionar Impuestos, aunque Diagnóstico esté apagado (`CredencialesProductoService.ObtenerCredencialImpuestoParaCopia`, auditado); solo `svc-impuestos` |
+| `platform.aprovisionamiento.reportar` | `plataforma` | HU #14694. Reportar el estado de aprovisionamiento del producto para el admin de compañías (`AprovisionamientoProductoService`); solo `svc-impuestos` |
+| `platform.usuarios.impuestos`, `platform.usuarios.impuestos.conteos` | `tramites` | HU #14694. Usuarios de Impuestos gestionados desde el producto (`flit.platform.v1.UsuariosProductoService` de `core-api`), como los de Diagnóstico (ADR-0089); solo `svc-impuestos` |
 
 - Cuando una llamada de servicio actúa por una empresa, envía la empresa en `X-Flit-Tenant-Id` (REST) o en la metadata `x-flit-tenant-id` (gRPC). El destino lo acepta **solo** con token de servicio válido y lo registra en la traza. Un token de usuario nunca puede usar esa cabecera.
 

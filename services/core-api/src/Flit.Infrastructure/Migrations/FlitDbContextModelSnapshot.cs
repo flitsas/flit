@@ -1818,6 +1818,35 @@ namespace Flit.Infrastructure.Migrations
                     b.ToTable("ot_feature_flags", "admin");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtInvitationClientScopeClientEntity", b =>
+                {
+                    b.Property<Guid>("InvitationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("invitation_id");
+
+                    b.Property<Guid>("ClientTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_tenant_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.HasKey("InvitationId", "ClientTenantId")
+                        .HasName("pk_ot_invitation_client_scope_clients");
+
+                    b.HasIndex("ClientTenantId")
+                        .HasDatabaseName("ix_ot_invitation_client_scope_clients_client_tenant_id");
+
+                    b.ToTable("ot_invitation_client_scope_clients", "admin");
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtRequirementsEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -1950,6 +1979,105 @@ namespace Flit.Infrastructure.Migrations
 
                             t.HasTrigger("tr_ot_saved_queries_row_version");
                         });
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtUserClientScopeClientEntity", b =>
+                {
+                    b.Property<Guid>("ScopeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("scope_id");
+
+                    b.Property<Guid>("ClientTenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("client_tenant_id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.HasKey("ScopeId", "ClientTenantId")
+                        .HasName("pk_ot_user_client_scope_clients");
+
+                    b.HasIndex("ClientTenantId")
+                        .HasDatabaseName("ix_ot_user_client_scope_clients_client_tenant_id");
+
+                    b.ToTable("ot_user_client_scope_clients", "admin");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtUserClientScopeEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("Mode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(12)
+                        .HasColumnType("character varying(12)")
+                        .HasDefaultValue("todos")
+                        .HasColumnName("mode");
+
+                    b.Property<long>("RowVersion")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<Guid>("TransitOfficeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transit_office_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_ot_user_client_scopes");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_ot_user_client_scopes_tenant_id");
+
+                    b.HasIndex("TransitOfficeId")
+                        .HasDatabaseName("ix_ot_user_client_scopes_transit_office_id");
+
+                    b.HasIndex("UserId", "TransitOfficeId")
+                        .IsUnique()
+                        .HasDatabaseName("uq_ot_user_client_scopes_user_office");
+
+                    b.ToTable("ot_user_client_scopes", "admin");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtWebhookSubscriptionEntity", b =>
@@ -3368,6 +3496,123 @@ namespace Flit.Infrastructure.Migrations
                         .HasDatabaseName("uq_tenant_operational_policies_tenant_id");
 
                     b.ToTable("tenant_operational_policies", "admin");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.TenantRuntPersonOverrideEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<string>("CitizenStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("ACTIVA")
+                        .HasColumnName("citizen_status");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("DocumentNumber")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("document_number");
+
+                    b.Property<string>("DocumentType")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("document_type");
+
+                    b.Property<string>("DriverStatus")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasDefaultValue("ACTIVO")
+                        .HasColumnName("driver_status");
+
+                    b.Property<DateTimeOffset?>("ExpiresAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("expires_at");
+
+                    b.Property<string>("FirstLastName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("first_last_name");
+
+                    b.Property<string>("FirstName")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("first_name");
+
+                    b.Property<bool>("HasActiveLicense")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("has_active_license");
+
+                    b.Property<bool>("HasPendingFines")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("has_pending_fines");
+
+                    b.Property<bool>("IsActive")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("LicenseCategories")
+                        .HasColumnType("text")
+                        .HasColumnName("license_categories");
+
+                    b.Property<string>("NroPazYSalvo")
+                        .HasColumnType("text")
+                        .HasColumnName("nro_paz_y_salvo");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("reason");
+
+                    b.Property<string>("SecondLastName")
+                        .HasColumnType("text")
+                        .HasColumnName("second_last_name");
+
+                    b.Property<string>("SecondName")
+                        .HasColumnType("text")
+                        .HasColumnName("second_name");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenant_runt_person_overrides");
+
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_tenant_runt_person_overrides_tenant_id");
+
+                    b.ToTable("tenant_runt_person_overrides", "admin");
                 });
 
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.TenantTransitOfficeBlock", b =>
@@ -5269,6 +5514,80 @@ namespace Flit.Infrastructure.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Platform.TenantProductCredentialEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("CreatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by");
+
+                    b.Property<string>("CredentialCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("credential_code");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("product_code");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<string>("SecretProtected")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("secret_protected");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<Guid?>("UpdatedBy")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenant_product_credentials");
+
+                    b.HasIndex(new[] { "ProductCode" }, "ix_tenant_product_credentials_product_code")
+                        .HasDatabaseName("ix_tenant_product_credentials_product_code");
+
+                    b.HasIndex(new[] { "TenantId", "ProductCode", "CredentialCode" }, "uq_tenant_product_credentials_tenant_product_credential")
+                        .IsUnique()
+                        .HasDatabaseName("uq_tenant_product_credentials_tenant_product_credential");
+
+                    b.ToTable("tenant_product_credentials", "platform", t =>
+                        {
+                            t.ExcludeFromMigrations();
+
+                            t.HasTrigger("tr_tenant_product_credentials_row_version");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Platform.TenantProductEntity", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5336,6 +5655,90 @@ namespace Flit.Infrastructure.Migrations
                             t.HasTrigger("tr_tenant_products_audit");
 
                             t.HasTrigger("tr_tenant_products_row_version");
+                        });
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Platform.TenantProductProvisioningEntity", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("id")
+                        .HasDefaultValueSql("uuidv7()");
+
+                    b.Property<string>("Accion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("accion");
+
+                    b.Property<DateTimeOffset>("ActualizadoEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("actualizado_en");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("Estado")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("estado");
+
+                    b.Property<bool?>("FirmaConfirmada")
+                        .HasColumnType("boolean")
+                        .HasColumnName("firma_confirmada");
+
+                    b.Property<string>("Mensaje")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)")
+                        .HasColumnName("mensaje");
+
+                    b.Property<string>("MotivoCodigo")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("motivo_codigo");
+
+                    b.Property<string>("ProductCode")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("product_code");
+
+                    b.Property<long>("RowVersion")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L)
+                        .HasColumnName("row_version");
+
+                    b.Property<Guid>("TenantId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("tenant_id");
+
+                    b.Property<long>("Version")
+                        .HasColumnType("bigint")
+                        .HasColumnName("version");
+
+                    b.HasKey("Id")
+                        .HasName("pk_tenant_product_provisioning");
+
+                    b.HasIndex(new[] { "ProductCode" }, "ix_tenant_product_provisioning_product_code")
+                        .HasDatabaseName("ix_tenant_product_provisioning_product_code");
+
+                    b.HasIndex(new[] { "TenantId", "ProductCode" }, "uq_tenant_product_provisioning_tenant_product")
+                        .IsUnique()
+                        .HasDatabaseName("uq_tenant_product_provisioning_tenant_product");
+
+                    b.ToTable("tenant_product_provisioning", "platform", t =>
+                        {
+                            t.ExcludeFromMigrations();
+
+                            t.HasTrigger("tr_tenant_product_provisioning_audit");
+
+                            t.HasTrigger("tr_tenant_product_provisioning_row_version");
                         });
                 });
 
@@ -13384,6 +13787,28 @@ namespace Flit.Infrastructure.Migrations
                         .HasConstraintName("fk_mandate_signer_transit_offices_mandate_signers_mandate_sign");
                 });
 
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtUserClientScopeClientEntity", b =>
+                {
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Admin.OtUserClientScopeEntity", "Scope")
+                        .WithMany("Clients")
+                        .HasForeignKey("ScopeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ot_user_client_scope_clients_scopes");
+
+                    b.Navigation("Scope");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtUserClientScopeEntity", b =>
+                {
+                    b.HasOne("Flit.Infrastructure.Persistence.Entities.Identity.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ot_user_client_scopes_users");
+                });
+
             modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.SignatureVaultEntity", b =>
                 {
                     b.HasOne("Flit.Infrastructure.Persistence.Entities.Admin.MandateSigner", null)
@@ -13915,6 +14340,11 @@ namespace Flit.Infrastructure.Migrations
                     b.Navigation("Application");
 
                     b.Navigation("Authorization");
+                });
+
+            modelBuilder.Entity("Flit.Infrastructure.Persistence.Entities.Admin.OtUserClientScopeEntity", b =>
+                {
+                    b.Navigation("Clients");
                 });
 
             modelBuilder.Entity("Flit.Tramites.Domain.Entities.BulkTramites.BulkTramitesBatch", b =>
