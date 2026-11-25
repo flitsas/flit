@@ -185,7 +185,9 @@ public static class IdentityVerificationEmailLayout
             .Append(";\">").Append(Enc(content.RequestedByLabel)).Append("<br/><strong style=\"font-size:14px;color:")
             .Append(FlitEmailLayout.Ink).Append(";\">").Append(product).Append("</strong></p>");
 
-        // Pasos: tarjeta con burbujas numeradas (el número y el texto del paso no cambian).
+        // Pasos: tarjeta con burbujas numeradas (solo si hay pasos).
+        if (content.Steps.Count > 0)
+        {
         sb.Append("<table role=\"presentation\" width=\"100%\" cellpadding=\"0\" cellspacing=\"0\" border=\"0\" style=\"margin:0 0 20px;border:1px solid ")
             .Append(FlitEmailLayout.CardBorder).Append(";border-radius:12px;border-collapse:separate;box-shadow:0 4px 14px rgba(22,39,68,0.10);\"><tr><td style=\"padding:16px 20px 8px;\">");
         sb.Append("<p style=\"margin:0 0 12px;font-size:12px;font-weight:700;letter-spacing:0.06em;color:").Append(FlitEmailLayout.Muted)
@@ -202,6 +204,7 @@ public static class IdentityVerificationEmailLayout
                 .Append(Enc(content.Steps[i])).Append("</td></tr>");
         }
         sb.Append("</table></td></tr></table>");
+        }
 
         sb.Append(FlitEmailLayout.Boton(content.ButtonLabel, link));
         sb.Append("<p style=\"margin:0 0 6px;text-align:center;font-size:12px;line-height:1.5;color:").Append(FlitEmailLayout.Muted).Append(";\">")
