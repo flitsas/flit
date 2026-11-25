@@ -98,6 +98,14 @@ Regla de negocio: el SuperAdmin de FLIT entra a cualquier producto, de cualquier
 | `platform.identidad.credenciales.impuesto.copia` | `plataforma` | HU #14694. Copiar la llave del impuesto de Diagnóstico al aprovisionar Impuestos, aunque Diagnóstico esté apagado (`CredencialesProductoService.ObtenerCredencialImpuestoParaCopia`, auditado); solo `svc-impuestos` |
 | `platform.aprovisionamiento.reportar` | `plataforma` | HU #14694. Reportar el estado de aprovisionamiento del producto para el admin de compañías (`AprovisionamientoProductoService`); solo `svc-impuestos` |
 | `platform.usuarios.impuestos`, `platform.usuarios.impuestos.conteos` | `tramites` | HU #14694. Usuarios de Impuestos gestionados desde el producto (`flit.platform.v1.UsuariosProductoService` de `core-api`), como los de Diagnóstico (ADR-0089); solo `svc-impuestos` |
+| `platform.identidad.empresas` | `plataforma` | Listado de empresas con un producto encendido (`EmpresasService`), solo para el servicio que lo pide. Lo usan `svc-comparendos`, `svc-diagnostico` y `svc-impuestos` (estaba en `OidcDefaults` sin fila en esta tabla) |
+
+- Cliente `svc-impuestos` (HU #14694, gate G-5 del plan de Impuestos): `platform.manifest`, `platform.identidad.read`,
+  `platform.identidad.empresas`, `platform.identidad.empresas.alta`, `platform.identidad.credenciales.impuesto.copia`,
+  `platform.aprovisionamiento.reportar`, `platform.consultas`, `platform.tramites.catalogos`, `platform.usuarios.impuestos`
+  y `platform.usuarios.impuestos.conteos` (`Suite:Oidc:ServiceClients` de `core-api`). Secreto por ambiente en
+  `SVC_IMPUESTOS_CLIENT_SECRET`, el mismo en core-api/core-identity y en core-impuestos. El gRPC propio del servicio
+  (`flit.impuestos.v1.ImpuestosService`) todavía no tiene scope publicado aquí: no se expone hasta que se fije.
 
 - Cuando una llamada de servicio actúa por una empresa, envía la empresa en `X-Flit-Tenant-Id` (REST) o en la metadata `x-flit-tenant-id` (gRPC). El destino lo acepta **solo** con token de servicio válido y lo registra en la traza. Un token de usuario nunca puede usar esa cabecera.
 
