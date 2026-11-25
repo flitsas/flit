@@ -44,6 +44,8 @@ const MENSAJES_OBTENER: Record<string, string> = {
 const MSG_LIMITE = "Se hicieron demasiadas solicitudes al proveedor; espera un momento e intenta de nuevo";
 const MSG_OBTENER_DEFECTO = "No se pudo obtener la llave del proveedor; intenta de nuevo";
 const MSG_VACIO = "Sin credencial del proveedor. Se obtiene del proveedor de impuesto con el NIT de la empresa.";
+const MSG_GUARDADA = "API key de impuesto guardada.";
+const MSG_BORRADA = "API key de impuesto borrada.";
 const MSG_OBTENIDA = "Llave obtenida del proveedor.";
 const MSG_RELECTURA = "No se pudo actualizar el listado; recarga la página para verlo.";
 const MSG_ROTADA ="El proveedor reemplazó la llave anterior; Impuestos se actualiza automáticamente";
@@ -145,12 +147,23 @@ export function CredencialImpuestoDiagnostico({
     try {
       await setTenantProductCredential(tenantId, PRODUCT_CODE, CREDENTIAL_CODE, valor);
       cerrar();
-      setExito("API key de impuesto guardada.");
-      await onChanged();
+      setExito(MSG_GUARDADA);
     } catch (e) {
       setError(mensajeError(e, "No se pudo guardar la API key de impuesto."));
-    } finally {
       setGuardando(false);
+      return;
+    }
+    await releer(MSG_GUARDADA);
+    setGuardando(false);
+  };
+
+  // M-3: la relectura del listado va aparte de la operación. Si falla, la operación ya se hizo: se conserva el éxito y se
+  // avisa en la misma región de estado (sin role=alert), en vez de mostrar el error de la operación junto al éxito.
+  const releer = async (mensajeExito: string) => {
+    try {
+      await onChanged();
+    } catch {
+      setExito(`${mensajeExito} ${MSG_RELECTURA}`);
     }
   };
 
@@ -161,14 +174,17 @@ export function CredencialImpuestoDiagnostico({
     try {
       await deleteTenantProductCredential(tenantId, PRODUCT_CODE, CREDENTIAL_CODE);
       setConfirmarBorrar(false);
-      setExito("API key de impuesto borrada.");
-      await onChanged();
+      // Lo obtenido del proveedor ya no existe: sin esto, el estado efectivo seguiría «Configurada» hasta releer.
+      setObtenida(null);
+      setExito(MSG_BORRADA);
     } catch (e) {
       setConfirmarBorrar(false);
       setError(mensajeError(e, "No se pudo borrar la API key de impuesto."));
-    } finally {
       setBorrando(false);
+      return;
     }
+    await releer(MSG_BORRADA);
+    setBorrando(false);
   };
 
   const obtener = async () => {
@@ -192,15 +208,8 @@ export function CredencialImpuestoDiagnostico({
       setObteniendo(false);
       return;
     }
-    // M-3: la relectura va aparte. El alta ya se hizo y su estado local manda; si el listado no se refresca, se avisa en la
-    // misma región de estado (sin role=alert) en vez de mostrar el error de obtener junto al éxito.
-    try {
-      await onChanged();
-    } catch {
-      setExito(`${MSG_OBTENIDA} ${MSG_RELECTURA}`);
-    } finally {
-      setObteniendo(false);
-    }
+    await releer(MSG_OBTENIDA);
+    setObteniendo(false);
   };
 
   const alternarManual = () => {
@@ -262,9 +271,9 @@ export function CredencialImpuestoDiagnostico({
           {!abierto && (
             <div className="flex flex-wrap gap-2">
               <Button variant="secondary" size="sm" onClick={abrir} disabled={ocupado}>
-                {configurada ? "Reemplazar" : "Configurar"}
+                {llaveConfigurada ? "Reemplazar" : "Configurar"}
               </Button>
-              {configurada && (
+              {llaveConfigurada && (
                 <Button
                   variant="alerta"
                   size="sm"
