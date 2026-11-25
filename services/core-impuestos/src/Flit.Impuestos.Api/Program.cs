@@ -2,6 +2,7 @@ using Flit.Api.Telemetry;
 using Flit.Impuestos.Api;
 using Flit.Impuestos.Api.Modulos.ApiLiquidacion;
 using Flit.Impuestos.Api.Modulos.Aprovisionamiento;
+using Flit.Impuestos.Api.Modulos.Avisos;
 using Flit.Impuestos.Api.Modulos.Backoffice;
 using Flit.Impuestos.Api.Modulos.Catalogos;
 using Flit.Impuestos.Api.Modulos.Configuracion;
@@ -74,6 +75,8 @@ public static class Program
         builder.Services.AddUsuariosPlataforma(builder.Configuration);
         builder.Services.AddBackofficeImpuestos(builder.Configuration);
         builder.Services.AddLimitesSolicitudes(builder.Configuration);
+        // M10: webhook del proveedor (anónimo con firma), aplicación del resultado y conciliación (respaldo GET e «Incierto»).
+        builder.Services.AddAvisosYConciliacion(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<ImpuestosDb>(builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();
@@ -115,6 +118,8 @@ public static class Program
             && !(await db.Database.GetPendingMigrationsAsync(ct).ConfigureAwait(false)).Any()
                 ? Results.Ok(new { status = "ready" })
                 : Results.Json(new { status = "not_ready" }, statusCode: StatusCodes.Status503ServiceUnavailable)).AllowAnonymous();
+
+        Modulos.Avisos.AvisosEndpoints.Map(app, Prefijo); // M10: fuera del grupo autenticado y del guard de suscripción
 
         // Rutas de negocio: todo lo que cuelga del prefijo exige un token del producto (audiencia impuestos). Cada módulo suma
         // aquí su Map; lo que no existe responde 404 a quien sí está autenticado (el fallback nunca tapa una ruta mapeada).
