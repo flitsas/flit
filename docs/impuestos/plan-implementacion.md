@@ -768,6 +768,7 @@ Salieron al implementar M06, M08, M16, M17 y M18. Todos son aditivos, salvo el c
 | 11 | `empresa{id, nombre}` en las cuatro filas de reporte cuando el SA está en la vista global | M14 |
 | 12 | `GET /catalogos/reportes` (`impuestos.reportes.ver`): `{departamentos[], usuarios[{id, nombre}]}` para los filtros | M14 |
 | 13 | `Dashboard.montoTotal` nullable (null = «Sin dato», nunca 0) | M14 |
+| 14 | `GET` y `PUT /configuracion`: 404 `EMPRESA_NO_ENCONTRADA` cuando el Super Admin elige con `?empresa` una compañía inexistente o sin Impuestos; no se audita ni se siembra la fila | M08-fix |
 
 Para el delta 12 se eligió una ruta propia entre tres opciones. Las otras dos eran abrir `/fuentes` a `reportes.ver` o añadir `/usuarios?soloNombres` con `reportes.ver`. Ambas ampliaban permisos de rutas que exponen más datos: correos, estados y la regla 409 del aprovisionamiento. Con la ruta propia, el Gestor solo ve id y nombre, y una compañía suspendida o en error sigue filtrando sus reportes.
 

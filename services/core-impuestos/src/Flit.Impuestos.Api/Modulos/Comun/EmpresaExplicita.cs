@@ -6,8 +6,9 @@ namespace Flit.Impuestos.Api.Modulos.Comun;
 /// <summary>
 /// Empresa explícita de las rutas que el Super Admin usa sobre otra compañía (plan §5.1: <c>?empresa=&lt;tenantId&gt;</c> o el
 /// segmento <c>{tenantId}</c> de <c>/backoffice/empresas/{tenantId}/…</c>). La lectura entre compañías nunca toma la empresa del
-/// token. Sin ella, con un valor que no es un uuid o con dos valores distintos, la ruta responde 400
-/// <c>{ code: EMPRESA_REQUERIDA }</c> antes de leer nada. Solo un Super Admin puede indicarla: otro usuario recibe 403. Con ella,
+/// token. Solo un Super Admin puede indicarla: otro usuario recibe 403 <c>EMPRESA_SOLO_SUPER_ADMIN</c> (antes que cualquier 400).
+/// Al Super Admin sin ella, con un valor que no es un uuid o con dos valores distintos, la ruta responde 400
+/// <c>EMPRESA_REQUERIDA</c> antes de leer nada (delta 8 de impuestos.v1.yaml 1.1.0; literales de <c>x-flit-literales</c>). Con ella,
 /// el filtro registra la lectura (<see cref="AuditoriaLecturaBackoffice"/>) antes de que el endpoint lea.
 /// </summary>
 /// <example>
@@ -44,6 +45,38 @@ public static class EmpresaExplicita
         return empresa;
     }
 
+    /// <summary>Literal de <c>EMPRESA_REQUERIDA</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralRequerida = "Elige una compañía.";
+
+    /// <summary>Literal de <c>EMPRESA_SOLO_SUPER_ADMIN</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralSoloSuperAdmin = "Solo el Super Admin puede elegir la compañía.";
+
+    /// <summary>
+    /// La empresa de una ruta que opera sobre una sola compañía indicada (delta 8 de la 1.1.0): quien no es Super Admin recibe
+    /// 403 <c>EMPRESA_SOLO_SUPER_ADMIN</c>, antes que cualquier 400; el Super Admin sin empresa válida (ver
+    /// <see cref="Resolver"/>, o con la consulta repetida) recibe 400 <c>EMPRESA_REQUERIDA</c>.
+    /// </summary>
+    public static Guid Exigir(bool esSuperAdmin, string? deLaRuta, StringValues deLaConsulta)
+    {
+        if (!esSuperAdmin)
+            throw SoloSuperAdmin();
+        var empresa = deLaConsulta.Count > 1 ? null : Resolver(deLaRuta, deLaConsulta.ToString());
+        return empresa ?? throw Requerida();
+    }
+
+    /// <summary>
+    /// La empresa de una ruta con <c>?empresa</c> opcional para la compañía del token: null si quien no es Super Admin no la
+    /// envía (usa la suya); en cualquier otro caso, la regla de <see cref="Exigir"/> (al Super Admin le es obligatoria).
+    /// </summary>
+    public static Guid? Opcional(bool esSuperAdmin, StringValues deLaConsulta) =>
+        !esSuperAdmin && StringValues.IsNullOrEmpty(deLaConsulta) ? null : Exigir(esSuperAdmin, null, deLaConsulta);
+
+    /// <summary>400 <c>EMPRESA_REQUERIDA</c> con su literal.</summary>
+    public static ReglaException Requerida() => new(CodigoRequerida, LiteralRequerida, StatusCodes.Status400BadRequest);
+
+    /// <summary>403 <c>EMPRESA_SOLO_SUPER_ADMIN</c> con su literal.</summary>
+    public static ReglaException SoloSuperAdmin() => ReglaException.Prohibido(CodigoSoloSuperAdmin, LiteralSoloSuperAdmin);
+
     /// <summary>Empresa que validó el filtro para esta petición.</summary>
     public static Guid De(HttpContext http)
     {
@@ -66,18 +99,10 @@ public static class EmpresaExplicita
         public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next)
         {
             var http = context.HttpContext;
-            StringValues consulta = http.Request.Query[Parametro];
-            var empresa = consulta.Count > 1 ? null : Resolver(http.Request.RouteValues[ParametroRuta]?.ToString(), consulta.ToString());
-            if (empresa is not { } id)
-            {
-                return Results.Json(
-                    new { code = CodigoRequerida, error = "Indica la empresa a consultar (un único id de empresa)." },
-                    statusCode: StatusCodes.Status400BadRequest);
-            }
-
-            if (!http.RequestServices.GetRequiredService<UsuarioActual>().EsSuperAdmin)
-                throw ReglaException.Prohibido(CodigoSoloSuperAdmin, "Solo el Super Admin consulta otras compañías.");
-
+            var id = Exigir(
+                http.RequestServices.GetRequiredService<UsuarioActual>().EsSuperAdmin,
+                http.Request.RouteValues[ParametroRuta]?.ToString(),
+                http.Request.Query[Parametro]);
             http.Items[ClaveItems] = id;
             if (HttpMethods.IsGet(http.Request.Method) || HttpMethods.IsHead(http.Request.Method))
             {

@@ -308,17 +308,84 @@ public sealed class ConfiguracionTests(ApiConfiguracionFixture fixture) : IClass
         var ct = TestContext.Current.CancellationToken;
         Assert.SkipWhen(Api.Omitir is not null, Api.Omitir ?? string.Empty);
         var empresa = Guid.NewGuid();
+        await AlmacenCredencialesTests.SembrarAprovisionamientoAsync(Api, empresa, ct);
         var sa = Api.Cliente(CargaManualCredencialesTests.TokenSuperAdmin(Api));
 
         using var deAdmin = await Api.Cliente(TokenAdmin(Api, Guid.NewGuid())).GetAsync($"{Ruta}?empresa={empresa}", ct);
         using var saSinEmpresa = await sa.GetAsync(Ruta, ct);
         using var saConEmpresa = await sa.GetAsync($"{Ruta}?empresa={empresa}", ct);
 
-        await DebeSerRegla(deAdmin, HttpStatusCode.BadRequest, "EMPRESA_NO_PERMITIDA", "Solo el Super Admin puede elegir la compañía.", null, ct);
+        await DebeSerRegla(deAdmin, HttpStatusCode.Forbidden, "EMPRESA_SOLO_SUPER_ADMIN", "Solo el Super Admin puede elegir la compañía.", null, ct);
         await DebeSerRegla(saSinEmpresa, HttpStatusCode.BadRequest, "EMPRESA_REQUERIDA", "Elige una compañía.", null, ct);
         saConEmpresa.StatusCode.Should().Be(HttpStatusCode.OK);
         await using var db = Api.Contexto(empresa);
         (await db.Set<LecturaBackoffice>().AsNoTracking().CountAsync(l => l.Recurso == "configuracion", ct)).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task El_PUT_de_configuracion_admite_empresa_solo_del_Super_Admin_y_le_es_obligatoria()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Assert.SkipWhen(Api.Omitir is not null, Api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        await SembrarListaAsync(Api, empresa, ct);
+        var sa = Api.Cliente(CargaManualCredencialesTests.TokenSuperAdmin(Api));
+        var cuerpo = new { maxRegistrosLote = 120, correosAviso = new[] { "sa@empresa.test" } };
+
+        using var deAdmin = await Api.Cliente(TokenAdmin(Api, Guid.NewGuid())).PutAsJsonAsync($"{Ruta}?empresa={empresa}", cuerpo, ct);
+        using var saSinEmpresa = await sa.PutAsJsonAsync(Ruta, cuerpo, ct);
+        using var saNoUuid = await sa.PutAsJsonAsync($"{Ruta}?empresa=no-es-uuid", cuerpo, ct);
+        using var saRepetida = await sa.PutAsJsonAsync($"{Ruta}?empresa={empresa}&empresa={Guid.NewGuid()}", cuerpo, ct);
+
+        await DebeSerRegla(deAdmin, HttpStatusCode.Forbidden, "EMPRESA_SOLO_SUPER_ADMIN", "Solo el Super Admin puede elegir la compañía.", null, ct);
+        await DebeSerRegla(saSinEmpresa, HttpStatusCode.BadRequest, "EMPRESA_REQUERIDA", "Elige una compañía.", null, ct);
+        await DebeSerRegla(saNoUuid, HttpStatusCode.BadRequest, "EMPRESA_REQUERIDA", "Elige una compañía.", null, ct);
+        await DebeSerRegla(saRepetida, HttpStatusCode.BadRequest, "EMPRESA_REQUERIDA", "Elige una compañía.", null, ct);
+        await using (var db = Api.Contexto(empresa))
+            (await db.Set<ConfiguracionEmpresa>().CountAsync(ct)).Should().Be(0, "ningún rechazo guarda");
+
+        using var saConEmpresa = await sa.PutAsJsonAsync($"{Ruta}?empresa={empresa}", cuerpo, ct);
+
+        saConEmpresa.StatusCode.Should().Be(HttpStatusCode.OK, await saConEmpresa.Content.ReadAsStringAsync(ct));
+        await using var lectura = Api.Contexto(empresa);
+        var fila = await lectura.Set<ConfiguracionEmpresa>().AsNoTracking().SingleAsync(ct);
+        fila.MaxRegistrosLoteOperativo.Should().Be(120);
+        fila.CorreosAviso.Should().Equal("sa@empresa.test");
+        fila.ActualizadoPor.Should().Be(CargaManualCredencialesTests.ActorSuperAdmin);
+    }
+
+    [Fact]
+    public async Task El_Super_Admin_con_empresa_sin_Impuestos_recibe_404_en_GET_y_PUT_sin_sembrar_ni_auditar()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Assert.SkipWhen(Api.Omitir is not null, Api.Omitir ?? string.Empty);
+        var inexistente = Guid.NewGuid();
+        var sa = Api.Cliente(CargaManualCredencialesTests.TokenSuperAdmin(Api));
+
+        using var lectura = await sa.GetAsync($"{Ruta}?empresa={inexistente}", ct);
+        using var escritura = await sa.PutAsJsonAsync($"{Ruta}?empresa={inexistente}", new { maxRegistrosLote = 10, correosAviso = Array.Empty<string>() }, ct);
+
+        await DebeSerRegla(lectura, HttpStatusCode.NotFound, "EMPRESA_NO_ENCONTRADA", "La compañía no existe o no tiene Impuestos.", null, ct);
+        await DebeSerRegla(escritura, HttpStatusCode.NotFound, "EMPRESA_NO_ENCONTRADA", "La compañía no existe o no tiene Impuestos.", null, ct);
+        await using var db = Api.Contexto(inexistente);
+        (await db.Set<ConfiguracionEmpresa>().CountAsync(ct)).Should().Be(0, "no se siembra la fila de una compañía sin Impuestos");
+        (await db.Set<LecturaBackoffice>().CountAsync(ct)).Should().Be(0, "no se audita la lectura de una compañía sin Impuestos");
+    }
+
+    [Fact]
+    public async Task El_contractual_con_tenantId_invalido_o_empresa_distinta_es_400_EMPRESA_REQUERIDA()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        Assert.SkipWhen(Api.Omitir is not null, Api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        var sa = Api.Cliente(CargaManualCredencialesTests.TokenSuperAdmin(Api));
+        var cuerpo = new { maxRegistrosLote = 800, departamentosHabilitados = (string[]?)null };
+
+        using var noUuid = await sa.PutAsJsonAsync($"{Program.Prefijo}/backoffice/empresas/no-es-uuid/configuracion-contractual", cuerpo, ct);
+        using var distinta = await sa.PutAsJsonAsync($"{RutaContractual(empresa)}?empresa={Guid.NewGuid()}", cuerpo, ct);
+
+        await DebeSerRegla(noUuid, HttpStatusCode.BadRequest, "EMPRESA_REQUERIDA", "Elige una compañía.", null, ct);
+        await DebeSerRegla(distinta, HttpStatusCode.BadRequest, "EMPRESA_REQUERIDA", "Elige una compañía.", null, ct);
     }
 
     public static string RutaContractual(Guid empresa) => $"{Program.Prefijo}/backoffice/empresas/{empresa}/configuracion-contractual";

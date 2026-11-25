@@ -117,6 +117,18 @@ public sealed class SesionTests
         cuerpo.Should().NotContain(empresaB.ToString());
     }
 
+    [Fact]
+    public void Sin_empresa_en_el_token_es_403_SIN_EMPRESA_con_el_literal()
+    {
+        var usuario = new UsuarioActual(new Microsoft.AspNetCore.Http.HttpContextAccessor(), new EmpresaFija(null));
+
+        var error = FluentActions.Invoking(() => usuario.EmpresaPropia()).Should().Throw<ReglaException>().Which;
+
+        error.Status.Should().Be(403);
+        error.Codigo.Should().Be("SIN_EMPRESA");
+        error.Message.Should().Be("Tu usuario no tiene una compañía asociada.", "el error es el literal de x-flit-literales.errores");
+    }
+
     private static List<string> Cadenas(JsonElement raiz, string propiedad) =>
         raiz.GetProperty(propiedad).EnumerateArray().Select(e => e.GetString()!).ToList();
 }

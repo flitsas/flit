@@ -11,10 +11,12 @@ public sealed record CargaCredencialesPeticion(string? ApiKey, string? WebhookSe
 
 /// <summary>
 /// Rutas del Super Admin sobre las credenciales de una compañía (plan §5.1, D-409, EP-CF3c), bajo
-/// <see cref="PoliticaBackoffice"/> y con la compañía explícita de la ruta (<see cref="EmpresaExplicita"/>, solo Super Admin):
+/// <see cref="PoliticaBackoffice"/> y con la compañía explícita de la ruta (<see cref="EmpresaExplicita"/>: 403
+/// <c>EMPRESA_SOLO_SUPER_ADMIN</c> para otro usuario, 400 <c>EMPRESA_REQUERIDA</c> si no es un uuid):
 /// <list type="bullet">
 ///   <item><c>PUT</c> (<c>impuestos.credenciales.cargar</c>): <c>{apiKey, webhookSecret?}</c> → 204 sin cuerpo; 422
-///   <c>CREDENCIAL_INVALIDA</c>; 409 si el estado no admite carga; 503 si el API no permite validar.</item>
+///   <c>CREDENCIAL_INVALIDA</c> o <c>CREDENCIAL_REQUERIDA</c>; 409 <c>ESTADO_NO_ADMITE_CARGA</c>; 503 <c>PROVEEDOR_NO_DISPONIBLE</c> si el proveedor no permite
+///   validar.</item>
 ///   <item><c>GET</c> (<c>impuestos.backoffice.ver</c>): <c>{tieneApiKey, tieneWebhookSecret, origen, apiKeyPrefijo,
 ///   actualizadoEn}</c>; la lectura queda auditada.</item>
 /// </list>

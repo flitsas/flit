@@ -606,7 +606,9 @@ paths:
       tags: [Configuracion]
       operationId: obtenerConfiguracionImpuestos
       summary: Configuración contractual (solo lectura) y operativa
-      description: Permiso impuestos.configuracion.ver (Administrador Impuestos) o Super Admin con `empresa`.
+      description: >
+        Permiso impuestos.configuracion.ver (Administrador Impuestos) o Super Admin con `empresa`. Con `empresa` de una
+        compañía inexistente o sin Impuestos, 404 EMPRESA_NO_ENCONTRADA (1.1.0).
       parameters:
         - $ref: "#/components/parameters/Empresa"
       responses:
@@ -615,6 +617,7 @@ paths:
           content: { application/json: { schema: { $ref: "#/components/schemas/Configuracion" } } }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
     put:
       tags: [Configuracion]
       operationId: guardarConfiguracionOperativa
@@ -622,7 +625,8 @@ paths:
       description: >
         Permiso impuestos.configuracion.editar. El máximo por lote no supera el contractual (422 TOPE_SUPERA_CONTRACTUAL
         con `tope`); `null` usa el contractual. El Super Admin guarda la operativa de la compañía de `empresa`, que le
-        es obligatoria (400 EMPRESA_REQUERIDA sin ella) (1.1.0).
+        es obligatoria (400 EMPRESA_REQUERIDA sin ella) (1.1.0); si la compañía no existe o no tiene Impuestos, 404
+        EMPRESA_NO_ENCONTRADA y no se guarda nada (1.1.0).
       parameters:
         - $ref: "#/components/parameters/Empresa"
       requestBody:
@@ -635,6 +639,7 @@ paths:
         "400": { $ref: "#/components/responses/Empresa400" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
         "422":
           description: TOPE_SUPERA_CONTRACTUAL (con `tope`), TOPE_INVALIDO o CORREO_INVALIDO (campo).
           content: { application/json: { schema: { $ref: "#/components/schemas/ErrorRegla" } } }

@@ -141,6 +141,7 @@ public sealed class CargaManualCredencialesTests
         r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         using var cuerpo = JsonDocument.Parse(await r.Content.ReadAsStringAsync(ct));
         cuerpo.RootElement.GetProperty("code").GetString().Should().Be("CREDENCIAL_INVALIDA");
+        cuerpo.RootElement.GetProperty("error").GetString().Should().Be(LiteralCredencialInvalida);
         await using var db = api.Contexto(empresa);
         (await db.Set<CredencialEmpresa>().AnyAsync(ct)).Should().BeFalse();
         (await db.Set<HistorialAprovisionamiento>().AnyAsync(ct)).Should().BeFalse();
@@ -164,7 +165,8 @@ public sealed class CargaManualCredencialesTests
 
         r.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
         using var cuerpo = JsonDocument.Parse(await r.Content.ReadAsStringAsync(ct));
-        cuerpo.RootElement.GetProperty("code").GetString().Should().Be("API_LIQUIDACION_NO_DISPONIBLE");
+        cuerpo.RootElement.GetProperty("code").GetString().Should().Be("PROVEEDOR_NO_DISPONIBLE");
+        cuerpo.RootElement.GetProperty("error").GetString().Should().Be("El proveedor no responde. Intenta más tarde.");
         await using var db = api.Contexto(empresa);
         (await db.Set<CredencialEmpresa>().AnyAsync(ct)).Should().BeFalse();
     }
@@ -185,7 +187,7 @@ public sealed class CargaManualCredencialesTests
 
         using var r = await api.Cliente(TokenSuperAdmin(api)).PutAsJsonAsync(Ruta(empresa), new { apiKey = ApiKey }, ct);
 
-        r.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        await DebeSerEstadoNoAdmiteCargaAsync(r, ct);
         doble.Pedidos.Should().BeEmpty();
     }
 
@@ -199,16 +201,18 @@ public sealed class CargaManualCredencialesTests
 
         using var r = await api.Cliente(TokenSuperAdmin(api)).PutAsJsonAsync(Ruta(Guid.NewGuid()), new { apiKey = ApiKey }, ct);
 
-        r.StatusCode.Should().Be(HttpStatusCode.Conflict);
+        await DebeSerEstadoNoAdmiteCargaAsync(r, ct);
         doble.Pedidos.Should().BeEmpty();
     }
 
     [Theory]
-    [InlineData("", null, "apiKey")]
-    [InlineData("   ", null, "apiKey")]
-    [InlineData("con espacio interno 0123456789", null, "apiKey")]
-    [InlineData(ApiKey, "sin-prefijo-whsec", "webhookSecret")]
-    public async Task Valores_mal_formados_son_422_sin_llamar_al_API(string apiKey, string? webhookSecret, string campo)
+    [InlineData(null, null, "apiKey", CodigoRequerida)]
+    [InlineData("", null, "apiKey", CodigoRequerida)]
+    [InlineData("   ", null, "apiKey", CodigoRequerida)]
+    [InlineData(ApiKey, "   ", "webhookSecret", CodigoRequerida)]
+    [InlineData("con espacio interno 0123456789", null, "apiKey", CodigoInvalida)]
+    [InlineData(ApiKey, "sin-prefijo-whsec", "webhookSecret", CodigoInvalida)]
+    public async Task Valores_mal_formados_son_422_sin_llamar_al_API(string? apiKey, string? webhookSecret, string campo, string codigo)
     {
         var ct = TestContext.Current.CancellationToken;
         var doble = new ApiLiquidacionDePrueba();
@@ -221,7 +225,8 @@ public sealed class CargaManualCredencialesTests
 
         r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         using var cuerpo = JsonDocument.Parse(await r.Content.ReadAsStringAsync(ct));
-        cuerpo.RootElement.GetProperty("code").GetString().Should().Be("CREDENCIAL_INVALIDA");
+        cuerpo.RootElement.GetProperty("code").GetString().Should().Be(codigo);
+        cuerpo.RootElement.GetProperty("error").GetString().Should().Be(codigo == CodigoRequerida ? LiteralCredencialRequerida : LiteralCredencialInvalida);
         cuerpo.RootElement.GetProperty("campo").GetString().Should().Be(campo);
         doble.Pedidos.Should().BeEmpty();
     }
@@ -283,6 +288,27 @@ public sealed class CargaManualCredencialesTests
     }
 
     public static string Ruta(Guid empresa) => $"{Program.Prefijo}/backoffice/empresas/{empresa}/credenciales";
+
+    /// <summary>Literal de <c>CREDENCIAL_INVALIDA</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralCredencialInvalida = "El proveedor rechazó la API key: revisa el valor e intenta de nuevo.";
+
+    /// <summary>Literal de <c>CREDENCIAL_REQUERIDA</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralCredencialRequerida = "Escribe la API key o el secreto del webhook.";
+
+    /// <summary>Literal de <c>ESTADO_NO_ADMITE_CARGA</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralEstadoNoAdmiteCarga = "En el estado actual de la compañía no se pueden cargar credenciales.";
+
+    private const string CodigoInvalida = "CREDENCIAL_INVALIDA";
+    private const string CodigoRequerida = "CREDENCIAL_REQUERIDA";
+
+    private static async Task DebeSerEstadoNoAdmiteCargaAsync(HttpResponseMessage r, CancellationToken ct)
+    {
+        var texto = await r.Content.ReadAsStringAsync(ct);
+        r.StatusCode.Should().Be(HttpStatusCode.Conflict, texto);
+        using var cuerpo = JsonDocument.Parse(texto);
+        cuerpo.RootElement.GetProperty("code").GetString().Should().Be("ESTADO_NO_ADMITE_CARGA");
+        cuerpo.RootElement.GetProperty("error").GetString().Should().Be(LiteralEstadoNoAdmiteCarga);
+    }
 
     public static string TokenSuperAdmin(ApiDePrueba api) =>
         api.Token(roles: [], permisos: [], superAdmin: true, tipoEmpresa: "FLIT", usuario: ActorSuperAdmin);
