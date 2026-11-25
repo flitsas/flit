@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   accionesDocumento,
   aFechaInput,
@@ -26,6 +26,15 @@ import {
   vistaDuplicado,
   textoCorreoAlAsociar,
   avisosAlAsociar,
+  asociarEnTandas,
+  colaReemplazos,
+  correosDelLote,
+  etiquetaAsociarLote,
+  leerCola,
+  resumenCola,
+  siguienteEnCola,
+  textosVistaPreviaLote,
+  urlCola,
   esEstadoFinalDocumento,
   vistaPorContentType,
   ESTADO_DOCUMENTO,
@@ -334,5 +343,108 @@ describe("estados finales del documento", () => {
   it("Asociado, Registrado y Descartado son de solo lectura; el resto sigue en revisión", () => {
     for (const e of ["Asociado", "Registrado", "Descartado"]) expect(esEstadoFinalDocumento(e)).toBe(true);
     for (const e of ["Completo", "Incompleto", "Duplicado", "Fallido", "EnCola"]) expect(esEstadoFinalDocumento(e)).toBe(false);
+  });
+});
+
+describe("asociar en lote (GDC-EVID §9)", () => {
+  const vista = (o: Partial<import("@/lib/ocr").VistaPreviaLote> = {}) => ({
+    asociables: 12,
+    correos: { saldran: 10, conductores: 7, omitidos: [{ motivo: "El conductor no tiene correo registrado", cantidad: 2 }] },
+    porRevisar: { reemplazos: 3, numeroDistinto: 1 },
+    ...o,
+  });
+
+  it("botón y textos de la vista previa, con singulares", () => {
+    expect(etiquetaAsociarLote(12)).toBe("Asociar los 12");
+    expect(etiquetaAsociarLote(1)).toBe("Asociar el documento");
+    const t = textosVistaPreviaLote(vista());
+    expect(t.documentos).toBe("Se asociarán 12 documentos a sus comparendos.");
+    expect(t.correos).toBe("Saldrán 10 correos a 7 conductores (cada conductor recibe uno por comparendo).");
+    expect(t.porRevisar).toEqual([
+      "Quedan 3 reemplazos para revisar uno por uno.",
+      "1 documento tiene el número distinto al del sistema: se revisa uno por uno.",
+    ]);
+    const uno = textosVistaPreviaLote(vista({ asociables: 1, correos: { saldran: 1, conductores: 1, omitidos: [] }, porRevisar: { reemplazos: 1, numeroDistinto: 0 } }));
+    expect(uno.documentos).toBe("Se asociará 1 documento a su comparendo.");
+    expect(uno.correos).toBe("Saldrá 1 correo a 1 conductor (cada conductor recibe uno por comparendo).");
+    expect(uno.porRevisar).toEqual(["Queda 1 reemplazo para revisar uno por uno."]);
+    expect(textosVistaPreviaLote(vista({ correos: { saldran: 0, conductores: 0, omitidos: [] }, porRevisar: { reemplazos: 0, numeroDistinto: 0 } }))).toMatchObject({
+      correos: "No saldrá ningún correo al conductor.",
+      porRevisar: [],
+    });
+  });
+
+  const asoc = (n: number, estado: "Pendiente" | "Omitido" = "Pendiente", motivo: string | null = null) =>
+    Array.from({ length: n }, (_, i) => ({ documentoId: `d${n}-${i}-${estado}`, comparendoId: "c", numero: "1", correo: { estado, motivo } }));
+
+  it("tandas: pide mientras queden, acumula y avisa el avance", async () => {
+    const tandas = [
+      { asociados: asoc(50), omitidos: [], restantes: 70 },
+      { asociados: asoc(49), omitidos: [{ documentoId: "x", nombreArchivo: "x.pdf", codigo: "EVIDENCIA_EXISTENTE", motivo: "Ya tiene documento" }], restantes: 20 },
+      { asociados: asoc(20, "Omitido", "El comparendo ya está pagado"), omitidos: [], restantes: 0 },
+    ];
+    const pedir = vi.fn(async () => tandas.shift()!);
+    const avances: [number, number][] = [];
+    const r = await asociarEnTandas(pedir, (h, rest) => avances.push([h, rest]));
+    expect(pedir).toHaveBeenCalledTimes(3);
+    expect(avances).toEqual([[50, 70], [100, 20], [120, 0]]);
+    expect(r.asociados).toHaveLength(119);
+    expect(r.omitidos).toHaveLength(1);
+    expect(r.interrumpido).toBeNull();
+    expect(correosDelLote(r.asociados)).toEqual({ enCamino: 99, noSalen: [{ motivo: "El comparendo ya está pagado", cantidad: 20 }] });
+  });
+
+  it("tandas: se detiene si una tanda no avanza o si una petición falla, sin perder lo hecho", async () => {
+    const sinAvance = vi.fn().mockResolvedValueOnce({ asociados: asoc(3), omitidos: [], restantes: 5 }).mockResolvedValue({ asociados: [], omitidos: [], restantes: 5 });
+    const a = await asociarEnTandas(sinAvance, () => {});
+    expect(sinAvance).toHaveBeenCalledTimes(2);
+    expect(a.asociados).toHaveLength(3);
+    expect(a.interrumpido).toMatch(/dejó de avanzar/);
+
+    const falla = vi.fn().mockResolvedValueOnce({ asociados: asoc(50), omitidos: [], restantes: 10 }).mockRejectedValueOnce(new Error("Se perdió la conexión"));
+    const b = await asociarEnTandas(falla, () => {});
+    expect(b.asociados).toHaveLength(50);
+    expect(b.interrumpido).toBe("Se perdió la conexión");
+
+    const infinita = vi.fn(async () => ({ asociados: asoc(1), omitidos: [], restantes: 1 }));
+    const c = await asociarEnTandas(infinita, () => {}, 3);
+    expect(infinita).toHaveBeenCalledTimes(3);
+    expect(c.interrumpido).toMatch(/Quedaron documentos/);
+  });
+});
+
+describe("cola de reemplazos (GDC-EVID §9)", () => {
+  const docs = [
+    { id: "a", estado: "Duplicado", revision: "reemplazo" as const },
+    { id: "b", estado: "Duplicado", revision: null },
+    { id: "c", estado: "Asociado", revision: "reemplazo" as const },
+    { id: "d", estado: "Duplicado", revision: "numeroDistinto" as const },
+    { id: "e", estado: "Duplicado", revision: "reemplazo" as const },
+  ];
+
+  it("solo los reemplazos pendientes, en el orden del listado", () => {
+    expect(colaReemplazos(docs)).toEqual(["a", "e"]);
+  });
+
+  it("la URL lleva el avance y se lee de vuelta", () => {
+    const paso = { paquete: "p1", hechos: 1, total: 7, reemplazados: 1, descartados: 0 };
+    const url = urlCola("e", paso);
+    expect(url.startsWith("/ocr/documentos/e?")).toBe(true);
+    expect(leerCola(new URLSearchParams(url.split("?")[1]))).toEqual(paso);
+    expect(leerCola(new URLSearchParams("paquete=p1"))).toBeNull();
+    expect(leerCola(new URLSearchParams("cola=reemplazos"))).toBeNull();
+    expect(leerCola(new URLSearchParams("cola=reemplazos&paquete=p1&hechos=-3&total=x"))).toEqual({ paquete: "p1", hechos: 0, total: 1, reemplazados: 0, descartados: 0 });
+  });
+
+  it("al decidir pasa al siguiente (total recalculado) y al final vuelve al paquete con el resumen", () => {
+    const paso = { paquete: "p1", hechos: 0, total: 2, reemplazados: 0, descartados: 0 };
+    const sig = siguienteEnCola(["a", "e"], "a", paso, "reemplazado");
+    expect(leerCola(new URLSearchParams(sig.split("?")[1]))).toEqual({ paquete: "p1", hechos: 1, total: 2, reemplazados: 1, descartados: 0 });
+    expect(sig.startsWith("/ocr/documentos/e?")).toBe(true);
+    const fin = siguienteEnCola(["e"], "e", { ...paso, hechos: 1, reemplazados: 1 }, "descartado");
+    expect(fin).toBe("/ocr/paquetes/p1?cola=terminada&reemplazados=1&descartados=1");
+    expect(resumenCola(new URLSearchParams(fin.split("?")[1]))).toBe("Terminaste la revisión de reemplazos: 1 reemplazado y 1 descartado.");
+    expect(resumenCola(new URLSearchParams("cola=terminada&reemplazados=5&descartados=0"))).toBe("Terminaste la revisión de reemplazos: 5 reemplazados.");
+    expect(resumenCola(new URLSearchParams(""))).toBeNull();
   });
 });

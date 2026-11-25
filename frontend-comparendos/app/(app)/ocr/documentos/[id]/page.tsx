@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ZoomOut } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Miga, Modal, VehicleLoader } from "@flit/ui";
@@ -33,6 +33,9 @@ import {
   type CorreoAsociado,
   type EvidenciaActual,
   avisosAlAsociar,
+  colaReemplazos,
+  leerCola,
+  siguienteEnCola,
   esEstadoFinalDocumento,
   valorInicial,
   vistaOriginal,
@@ -214,12 +217,15 @@ function Formulario({
   onCambio,
   onRegistrado,
   onVer,
+  onDecidido,
 }: {
   d: Documento;
   opera: boolean;
   onCambio: () => void;
   onRegistrado: (r: Registro) => void;
   onVer: (comparendoId: string) => void;
+  /** Cola de reemplazos (GDC-EVID §9): tras reemplazar o descartar, la pantalla pasa sola al siguiente. */
+  onDecidido?: (decision: "reemplazado" | "descartado") => void;
 }) {
   const toast = useToast();
   const acciones = accionesDocumento({ estado: d.estado, reintentable: d.reintentable, fuenteDuplicado: d.duplicado?.fuente ?? null, tipoFallo: d.tipoFallo });
@@ -300,6 +306,7 @@ function Formulario({
     ejecutar(async () => {
       await apiFetch(`/ocr/documentos/${d.id}/descartar`, { method: "POST", body: { motivo: motivo.trim() } });
       toast.show("Documento descartado.", "success");
+      onDecidido?.("descartado");
     });
 
   // Contrato de asociar: 409 NO_ASOCIABLE / EVIDENCIA_EXISTENTE / EVIDENCIA_CAMBIO = la pantalla estaba desactualizada.
@@ -312,6 +319,7 @@ function Formulario({
         });
         // El correo es aparte: si no salió, la asociación igual se hizo y se dice por qué.
         for (const aviso of avisosAlAsociar(r.numero, reemplazar, r.correo)) toast.show(aviso.mensaje, aviso.tono);
+        if (reemplazar) onDecidido?.("reemplazado");
       } catch (e) {
         if (!(e instanceof ApiError) || e.status !== 409) throw e;
         toast.show(
@@ -655,6 +663,20 @@ function Revision({ id }: { id: string }) {
   const [registro, setRegistro] = useState<Registro | null>(null);
   const setVerComparendo = useAbrirDetalle();
   useSondeo(!!d && hayEnCurso([d.estado]), carga.recargar);
+  const router = useRouter();
+  const toast = useToast();
+  // GDC-EVID §9: revisión de reemplazos uno por uno (?cola=reemplazos&paquete=…); el avance viaja en la URL.
+  const cola = leerCola(useSearchParams());
+  const avanzar = cola
+    ? async (decision: "reemplazado" | "descartado" | "saltado") => {
+        try {
+          const todo = await apiFetch<{ documentos: { id: string; estado: string; revision?: "reemplazo" | "numeroDistinto" | null }[] }>(`/ocr/paquetes/${cola.paquete}`);
+          router.push(siguienteEnCola(colaReemplazos(todo.documentos), id, cola, decision));
+        } catch {
+          toast.show("No pudimos abrir el siguiente reemplazo. Vuelve al paquete para seguir.", "error");
+        }
+      }
+    : undefined;
 
   if (carga.estado === "error" && !d) return <InlineAlert tone="error">{carga.error}</InlineAlert>;
   if (!d) return <VehicleLoader label="Cargando documento…" />;
@@ -690,6 +712,23 @@ function Revision({ id }: { id: string }) {
           </span>
         }
       />
+      {cola && (
+        <InlineAlert tone="info" title={`Revisión de reemplazos: ${cola.hechos + 1} de ${cola.total}`}>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {d.estado === "Duplicado" && d.duplicado?.evidenciaActual
+              ? "Compara los documentos y decide si reemplazas o descartas; luego pasa solo al siguiente."
+              : "Este documento ya no está por revisar (alguien lo resolvió o cambió)."}
+            {!(d.estado === "Duplicado" && d.duplicado?.evidenciaActual) && avanzar && (
+              <button type="button" className="font-semibold text-flit-brand-ink hover:underline" onClick={() => avanzar("saltado")}>
+                Ir al siguiente
+              </button>
+            )}
+            <Link className="font-semibold text-flit-brand-ink hover:underline" href={`/ocr/paquetes/${cola.paquete}`}>
+              Salir de la revisión
+            </Link>
+          </span>
+        </InlineAlert>
+      )}
       {registro && (
         <div className="flex flex-col gap-2">
           <InlineAlert tone="success" title={`Comparendo ${registro.numero} registrado`}>
@@ -724,6 +763,7 @@ function Revision({ id }: { id: string }) {
           onCambio={carga.recargar}
           onRegistrado={setRegistro}
           onVer={setVerComparendo}
+          onDecidido={avanzar}
         />
       </div>
       <Historial d={d} />

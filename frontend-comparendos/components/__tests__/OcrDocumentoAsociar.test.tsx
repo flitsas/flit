@@ -11,7 +11,7 @@ vi.mock("@/lib/api", async (original) => ({
   ...(await original<typeof import("@/lib/api")>()),
   apiFetch: (...a: unknown[]) => apiFetch(...a),
 }));
-vi.mock("next/navigation", () => ({ useParams: () => ({ id: "d1" }) }));
+vi.mock("next/navigation", () => ({ useParams: () => ({ id: "d1" }), useRouter: () => ({ push: vi.fn(), replace: vi.fn() }), useSearchParams: () => new URLSearchParams() }));
 vi.mock("@/components/detalle/useAbrirDetalle", () => ({ useAbrirDetalle: () => vi.fn() }));
 vi.mock("@/components/ComparendosShell", () => ({
   useSesion: () => ({

@@ -8,6 +8,7 @@ import { ChipsFiltro, DataTable, InlineAlert, Miga, Modal, TarjetaMetrica, usePa
 import { useSesion } from "@/components/ComparendosShell";
 import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { COLOR_CIFRA_DOCUMENTO, CONTADORES_GRID_CLS, EstadoDocumento, Progreso, useSondeo } from "@/components/ocr/comunes";
+import { AsociarLote } from "@/components/ocr/AsociarLote";
 import { OfertaPlacas } from "@/components/ocr/OfertaPlacas";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
@@ -16,7 +17,21 @@ import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls, ETIQUETA_CLS, INPUT_
 import { apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
-import { type DocumentoPaquete, ESTADO_DOCUMENTO, ESTADO_PAQUETE, hayEnCurso, hojaPaquete, motivoDocumento, registroEnLote, TIPO_FALLO } from "@/lib/ocr";
+import {
+  colaReemplazos,
+  type DocumentoPaquete,
+  ESTADO_DOCUMENTO,
+  ESTADO_PAQUETE,
+  etiquetaAsociarLote,
+  hayEnCurso,
+  hojaPaquete,
+  motivoDocumento,
+  registroEnLote,
+  resumenCola,
+  TIPO_FALLO,
+  urlCola,
+  type VistaPreviaLote,
+} from "@/lib/ocr";
 import { tienePermiso } from "@/lib/sesion";
 import { useCarga } from "@/lib/useCarga";
 import { buildXlsx, XLSX_MIME } from "@/lib/xlsx";
@@ -75,6 +90,14 @@ function Detalle({ id }: { id: string }) {
   const p = carga.datos?.paquete;
   const docs = carga.datos?.documentos ?? [];
   useSondeo(!!p && hayEnCurso([p.estado]), carga.recargar);
+  // GDC-EVID §9: vista previa del lote (la preselección es del servidor). Solo si hay duplicados y se puede operar; la
+  // clave cambia con los contadores, así se recalcula tras asociar, descartar o reemplazar.
+  const conLote = !!p && opera && p.estado !== "Cerrado" && p.cantidadDuplicados > 0;
+  const vista = useCarga(conLote ? `ocr-lote:${id}:${p.cantidadDuplicados}:${p.cantidadAsociados ?? 0}:${p.cantidadDescartados}` : null, (signal) =>
+    apiFetch<VistaPreviaLote>(`/ocr/paquetes/${id}/asociacion-lote`, { signal }),
+  );
+  const [asociandoLote, setAsociandoLote] = useState(false);
+  const resumen = resumenCola(params);
 
   const accion = async (hacer: () => Promise<void>) => {
     setOcupado(true);
@@ -118,6 +141,18 @@ function Detalle({ id }: { id: string }) {
           : `${r.encolados} documentos volvieron a la cola${r.omitidos ? `; ${r.omitidos} ya llegaron al máximo de reprocesos` : ""}.`,
         r.encolados ? "success" : "error",
       );
+    });
+
+  // Cola de reemplazos: siempre con el paquete completo (la tabla puede estar filtrada) y en el orden del listado.
+  const revisarReemplazos = () =>
+    accion(async () => {
+      const todo = await apiFetch<{ documentos: DocumentoFila[] }>(`/ocr/paquetes/${id}`);
+      const cola = colaReemplazos(todo.documentos);
+      if (cola.length === 0) {
+        toast.show("No quedan reemplazos por revisar.", "success");
+        return;
+      }
+      router.push(urlCola(cola[0], { paquete: id, hechos: 0, total: cola.length, reemplazados: 0, descartados: 0 }));
     });
 
   // HU #13831: siempre el paquete completo, aunque la tabla esté filtrada por estado.
@@ -202,6 +237,18 @@ function Detalle({ id }: { id: string }) {
                 Descartar fallidos
               </button>
             )}
+            {conLote && (vista.datos?.porRevisar.reemplazos ?? 0) > 0 && (
+              <button type="button" className={controlCls(false)} disabled={ocupado} onClick={revisarReemplazos}>
+                <Icono nombre="documento" className="h-3.5 w-3.5" />
+                Revisar reemplazos ({vista.datos!.porRevisar.reemplazos})
+              </button>
+            )}
+            {conLote && (vista.datos?.asociables ?? 0) > 0 && (
+              <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={() => setAsociandoLote(true)}>
+                <Icono nombre="documento" className="h-3.5 w-3.5" />
+                {etiquetaAsociarLote(vista.datos!.asociables)}
+              </button>
+            )}
             {opera && !cerrado && lote.registrables > 0 && (
               <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={registrarCompletos}>
                 <Icono nombre="doble-check" className="h-3.5 w-3.5" />
@@ -255,6 +302,17 @@ function Detalle({ id }: { id: string }) {
       {opera && !cerrado && lote.aviso && (
         <InlineAlert tone="warning" title="Hay números por verificar">
           {lote.aviso}
+        </InlineAlert>
+      )}
+
+      {resumen && (
+        <InlineAlert tone="success" title="Revisión de reemplazos">
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {resumen}
+            <button type="button" className="font-semibold text-flit-brand-ink hover:underline" onClick={() => router.replace(`/ocr/paquetes/${id}`, { scroll: false })}>
+              Cerrar
+            </button>
+          </span>
         </InlineAlert>
       )}
 
@@ -342,6 +400,20 @@ function Detalle({ id }: { id: string }) {
         />
       </div>
 
+
+      {asociandoLote && vista.datos && (
+        <AsociarLote
+          paqueteId={id}
+          vista={vista.datos}
+          onCerrar={(huboCambios) => {
+            setAsociandoLote(false);
+            if (huboCambios) {
+              carga.recargar();
+              vista.recargar();
+            }
+          }}
+        />
+      )}
 
       {reprocesando && (
         <Modal icono="reintento"

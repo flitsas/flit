@@ -384,6 +384,8 @@ export interface DocumentoPaquete {
   /** GDC punto 14: el número tiene aviso y nadie lo ha corregido ni confirmado; no se registra. */
   numeroPorConfirmar?: boolean;
   reprocesos?: number;
+  /** GDC-EVID §9: por qué el documento no entra en «Asociar los N» y se revisa uno por uno. */
+  revision?: "reemplazo" | "numeroDistinto" | null;
 }
 
 /**
@@ -484,4 +486,146 @@ export function resumenEvaluacion(e: EvaluacionPrompt): string | null {
 /** La versión a la que se vuelve: la última que dejó de estar publicada. */
 export function versionAnterior<T extends { publicada: boolean; retiradaEn: string | null }>(versiones: T[]): T | null {
   return versiones.filter((v) => !v.publicada && v.retiradaEn).reduce<T | null>((mejor, v) => (!mejor || v.retiradaEn! > mejor.retiradaEn! ? v : mejor), null);
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// GDC-EVID §9: asociar en lote («Asociar los N») y cola de revisión de reemplazos.
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** Vista previa del lote (`GET /ocr/paquetes/{id}/asociacion-lote`). La preselección la hace el servidor. */
+export interface VistaPreviaLote {
+  asociables: number;
+  correos: { saldran: number; conductores: number; omitidos: { motivo: string; cantidad: number }[] };
+  porRevisar: { reemplazos: number; numeroDistinto: number };
+}
+
+/** Una tanda de `POST /ocr/paquetes/{id}/asociar-lote` (máx. 50 documentos; `restantes` dice si hay que pedir otra). */
+export interface TandaLote {
+  asociados: { documentoId: string; comparendoId: string; numero: string; correo: CorreoAsociado }[];
+  omitidos: { documentoId: string; nombreArchivo: string; codigo: string; motivo: string }[];
+  restantes: number;
+}
+
+/** Lo acumulado de todas las tandas; `interrumpido` dice por qué se paró antes de terminar (lo hecho queda hecho). */
+export interface ResultadoLote {
+  asociados: TandaLote["asociados"];
+  omitidos: TandaLote["omitidos"];
+  interrumpido: string | null;
+}
+
+const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios.replace("{n}", String(n)));
+
+/** Etiqueta del botón primario del paquete. */
+export const etiquetaAsociarLote = (n: number) => plural(n, "Asociar el documento", "Asociar los {n}");
+
+/** Textos del modal de confirmación, a partir de la vista previa del servidor. */
+export function textosVistaPreviaLote(v: VistaPreviaLote): { documentos: string; correos: string; porRevisar: string[] } {
+  const { saldran, conductores } = v.correos;
+  const correos =
+    saldran === 0
+      ? "No saldrá ningún correo al conductor."
+      : `${plural(saldran, "Saldrá 1 correo", "Saldrán {n} correos")} a ${plural(conductores, "1 conductor", "{n} conductores")} (cada conductor recibe uno por comparendo).`;
+  const porRevisar: string[] = [];
+  if (v.porRevisar.reemplazos > 0)
+    porRevisar.push(plural(v.porRevisar.reemplazos, "Queda 1 reemplazo para revisar uno por uno.", "Quedan {n} reemplazos para revisar uno por uno."));
+  if (v.porRevisar.numeroDistinto > 0)
+    porRevisar.push(
+      plural(v.porRevisar.numeroDistinto, "1 documento tiene el número distinto al del sistema: se revisa uno por uno.", "{n} documentos tienen el número distinto al del sistema: se revisan uno por uno."),
+    );
+  return { documentos: plural(v.asociables, "Se asociará 1 documento a su comparendo.", "Se asociarán {n} documentos a sus comparendos."), correos, porRevisar };
+}
+
+/**
+ * Pide tandas hasta que el servidor diga que no quedan. Para si una tanda no avanza (evita un ciclo sin fin) o si una
+ * petición falla: lo ya asociado se conserva y se explica por qué paró.
+ */
+export async function asociarEnTandas(pedir: () => Promise<TandaLote>, alAvanzar: (hechos: number, restantes: number) => void, maxTandas = 40): Promise<ResultadoLote> {
+  const r: ResultadoLote = { asociados: [], omitidos: [], interrumpido: null };
+  for (let i = 0; i < maxTandas; i++) {
+    let t: TandaLote;
+    try {
+      t = await pedir();
+    } catch (e) {
+      r.interrumpido = e instanceof Error && e.message ? e.message : "No se pudo completar la asociación.";
+      return r;
+    }
+    r.asociados.push(...t.asociados);
+    r.omitidos.push(...t.omitidos);
+    alAvanzar(r.asociados.length + r.omitidos.length, t.restantes);
+    if (t.restantes <= 0) return r;
+    if (t.asociados.length + t.omitidos.length === 0) {
+      r.interrumpido = "La asociación dejó de avanzar. Actualiza el paquete y vuelve a intentarlo.";
+      return r;
+    }
+  }
+  r.interrumpido = "Quedaron documentos sin procesar. Vuelve a intentarlo para terminar.";
+  return r;
+}
+
+/** Correos del lote: los que quedaron por salir y los que no salen, agrupados por motivo. */
+export function correosDelLote(asociados: TandaLote["asociados"]): { enCamino: number; noSalen: { motivo: string; cantidad: number }[] } {
+  let enCamino = 0;
+  const motivos = new Map<string, number>();
+  for (const a of asociados) {
+    if (a.correo?.estado === "Pendiente" || a.correo?.estado === "Enviado") enCamino++;
+    else {
+      const m = a.correo?.motivo?.trim() || "Sin motivo";
+      motivos.set(m, (motivos.get(m) ?? 0) + 1);
+    }
+  }
+  return { enCamino, noSalen: [...motivos].map(([motivo, cantidad]) => ({ motivo, cantidad })) };
+}
+
+/** Documentos del paquete que esperan revisión de reemplazo, en el orden del listado. */
+export function colaReemplazos(docs: { id: string; estado: string; revision?: DocumentoPaquete["revision"] }[]): string[] {
+  return docs.filter((d) => d.revision === "reemplazo" && d.estado === "Duplicado").map((d) => d.id);
+}
+
+/** Dónde va la revisión de reemplazos: viaja en la URL del documento (`?cola=reemplazos&paquete=…`). */
+export interface PasoCola {
+  paquete: string;
+  hechos: number;
+  total: number;
+  reemplazados: number;
+  descartados: number;
+}
+
+const entero = (v: string | null) => {
+  const n = Number(v);
+  return Number.isInteger(n) && n >= 0 ? n : 0;
+};
+
+export function leerCola(q: URLSearchParams): PasoCola | null {
+  const paquete = q.get("paquete");
+  if (q.get("cola") !== "reemplazos" || !paquete) return null;
+  const hechos = entero(q.get("hechos"));
+  return { paquete, hechos, total: Math.max(entero(q.get("total")), hechos + 1), reemplazados: entero(q.get("reemplazados")), descartados: entero(q.get("descartados")) };
+}
+
+export function urlCola(documentoId: string, c: PasoCola): string {
+  const q = new URLSearchParams({ cola: "reemplazos", paquete: c.paquete, hechos: String(c.hechos), total: String(c.total), reemplazados: String(c.reemplazados), descartados: String(c.descartados) });
+  return `/ocr/documentos/${documentoId}?${q.toString()}`;
+}
+
+/**
+ * Tras reemplazar, descartar o saltar el actual (saltar: ya no estaba por revisar, p. ej. otra persona lo resolvió): el siguiente pendiente (el total se recalcula con lo que queda, por si otra
+ * persona avanzó la cola) o, si no queda ninguno, el paquete con el resumen.
+ */
+export function siguienteEnCola(pendientes: string[], actual: string, c: PasoCola, decision: "reemplazado" | "descartado" | "saltado"): string {
+  const hechos = c.hechos + 1;
+  const reemplazados = c.reemplazados + (decision === "reemplazado" ? 1 : 0);
+  const descartados = c.descartados + (decision === "descartado" ? 1 : 0);
+  const resto = pendientes.filter((p) => p !== actual);
+  if (resto.length > 0) return urlCola(resto[0], { paquete: c.paquete, hechos, total: hechos + resto.length, reemplazados, descartados });
+  const q = new URLSearchParams({ cola: "terminada", reemplazados: String(reemplazados), descartados: String(descartados) });
+  return `/ocr/paquetes/${c.paquete}?${q.toString()}`;
+}
+
+/** Resumen al volver al paquete. */
+export function resumenCola(q: URLSearchParams): string | null {
+  if (q.get("cola") !== "terminada") return null;
+  const r = entero(q.get("reemplazados"));
+  const d = entero(q.get("descartados"));
+  const partes = [r ? plural(r, "1 reemplazado", "{n} reemplazados") : null, d ? plural(d, "1 descartado", "{n} descartados") : null].filter(Boolean);
+  return `Terminaste la revisión de reemplazos${partes.length ? `: ${partes.join(" y ")}` : ""}.`;
 }
