@@ -128,6 +128,7 @@ describe("EstadoAprovisionamiento", () => {
     expect(enlace).toHaveAttribute("target", "_blank");
     expect(enlace).toHaveAttribute("rel", "noopener");
     expect(within(enlace).getByText("(se abre en otra pestaña)")).toHaveClass("sr-only");
+    expect(enlace).toHaveAccessibleName("Cargar credenciales (se abre en otra pestaña)");
 
     rerender(
       <EstadoAprovisionamiento tenantId="t1" provisioning={prov("LISTO_SIN_WEBHOOK", "CARGAR_SECRETO")} impuestosUrl="https://impuestos.test" onReintentado={() => {}} />,
@@ -138,7 +139,13 @@ describe("EstadoAprovisionamiento", () => {
   it("sin la URL de Impuestos no pinta el enlace: indica hacerlo desde el backoffice", () => {
     render(<EstadoAprovisionamiento tenantId="t1" provisioning={prov("REQUIERE_CREDENCIALES", "CARGAR_CREDENCIALES")} impuestosUrl={null} onReintentado={() => {}} />);
     expect(screen.queryByRole("link")).toBeNull();
-    expect(within(grupo()).getByText("Hazlo desde Impuestos › Backoffice")).toBeInTheDocument();
+    expect(within(grupo()).getByText("Cargar credenciales: hazlo desde Impuestos › Backoffice")).toBeInTheDocument();
+  });
+
+  it("sin la URL de Impuestos, el secreto conserva el nombre de la acción en el texto de respaldo", () => {
+    render(<EstadoAprovisionamiento tenantId="t1" provisioning={prov("LISTO_SIN_WEBHOOK", "CARGAR_SECRETO")} impuestosUrl={null} onReintentado={() => {}} />);
+    expect(screen.queryByRole("link")).toBeNull();
+    expect(within(grupo()).getByText("Cargar secreto: hazlo desde Impuestos › Backoffice")).toBeInTheDocument();
   });
 
   it("Corregir NIT: con onEditarCompania es un botón que lo llama", async () => {

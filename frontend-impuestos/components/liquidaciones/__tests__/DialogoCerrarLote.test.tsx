@@ -111,6 +111,20 @@ describe("DetalleLote — «Cerrar lote» solo para Administrador y Super Admin 
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
+  it("un lote cerrado sin actor muestra solo la fecha: «Cerrado manualmente el {fecha}.»", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fetchPorRuta([
+        [/^GET \/api\/v1\/impuestos\/liquidaciones\/L\/items/, () => Response.json({ items: [item({ liquidacionId: "L" })], total: 1, page: 1, pageSize: 10 })],
+        [/^GET \/api\/v1\/impuestos\/liquidaciones\/L(\?|$)/, () => Response.json(lote({ id: "L", estado: "CERRADO_MANUALMENTE", cerradaPor: null, cerradaEn: "2026-11-24T19:05:00Z" }))],
+      ]),
+    );
+    render(<DetalleLote liquidacionId="L" puedeCerrar puedeRelanzar esSuperAdmin={false} />);
+
+    expect(await screen.findByText("Cerrado manualmente el 24/11/2026 14:05.")).toBeInTheDocument();
+    expect(screen.queryByText(/por \.$/)).toBeNull();
+  });
+
   it("cuatro estados del lote: cargando y error con Reintentar", async () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
     const { unmount } = render(<DetalleLote liquidacionId="L" puedeCerrar puedeRelanzar esSuperAdmin={false} />);
