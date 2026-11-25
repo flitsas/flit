@@ -130,7 +130,10 @@ internal sealed class PrevalidacionResendService(
                     validation.Attempts = 0;
                     validation.ReconcilePollCount = 0;
                     validation.ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
-                    validation.ResendCount += 1;
+                    // La ronda cuenta solo si Kyverum confirmó el envío del correo (enviado: true). Si no salió, el enlace
+                    // queda vigente para compartirlo por otro canal, pero la ronda no se consume.
+                    if (reissue.Enviado)
+                        validation.ResendCount += 1;
                     validation.LastResentAt = now;
                     validation.UpdatedAt = now;
 

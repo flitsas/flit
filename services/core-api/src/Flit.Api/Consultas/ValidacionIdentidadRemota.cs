@@ -82,7 +82,7 @@ internal sealed class KyverumVerifyPorConsultas(
                 new ReemitirEnlaceRequest { VerificationId = verificationId }, ConsultasRemotoMetadata.Empresa(tenantId), cancellationToken: ct).ConfigureAwait(false);
             return r.Resultado switch
             {
-                KyverumReissueOutcome.Reemitido => KyverumReissueResult.Reemitido(r.CaptureUrl),
+                KyverumReissueOutcome.Reemitido => KyverumReissueResult.Reemitido(r.CaptureUrl, r.Enviado),
                 KyverumReissueOutcome.Aprobada => KyverumReissueResult.Aprobada(),
                 KyverumReissueOutcome.NoExiste => KyverumReissueResult.NoExiste(),
                 _ => throw new KyverumVerifyException($"Consultas devolvió un resultado de reenvío desconocido: {r.Resultado}.", transient: false),

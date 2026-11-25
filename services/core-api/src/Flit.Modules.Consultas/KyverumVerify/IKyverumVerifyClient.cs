@@ -100,9 +100,10 @@ public interface IKyverumVerifyClient
 /// <summary>Resultado de <see cref="IKyverumVerifyClient.ReissueAsync"/>.</summary>
 /// <param name="Outcome"><see cref="KyverumReissueOutcome"/>.</param>
 /// <param name="CaptureUrl">Enlace nuevo; solo con <c>Reemitido</c>.</param>
-public sealed record KyverumReissueResult(string Outcome, string? CaptureUrl = null)
+public sealed record KyverumReissueResult(string Outcome, string? CaptureUrl = null, bool Enviado = false)
 {
-    public static KyverumReissueResult Reemitido(string captureUrl) => new(KyverumReissueOutcome.Reemitido, captureUrl);
+    /// <param name="enviado">true si Kyverum mandó el correo o lo dejó en cola; solo entonces la ronda cuenta.</param>
+    public static KyverumReissueResult Reemitido(string captureUrl, bool enviado = false) => new(KyverumReissueOutcome.Reemitido, captureUrl, enviado);
     public static KyverumReissueResult Aprobada() => new(KyverumReissueOutcome.Aprobada);
     public static KyverumReissueResult NoExiste() => new(KyverumReissueOutcome.NoExiste);
     /// <summary>Consultas desplegado sin el RPC de reenvío: el llamador usa el camino de creación.</summary>

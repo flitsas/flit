@@ -284,7 +284,7 @@ internal sealed class KyverumVerifyClient(
             if (string.IsNullOrWhiteSpace(reemision?.CaptureUrl))
                 throw new KyverumVerifyException("Kyverum no devolvió el enlace de captura del reenvío.", transient: false);
 
-            return KyverumReissueResult.Reemitido(reemision.CaptureUrl);
+            return KyverumReissueResult.Reemitido(reemision.CaptureUrl, reemision.Enviado == true);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {

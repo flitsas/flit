@@ -216,12 +216,28 @@ public sealed class KyverumVerifyClientTests
 
         result.Outcome.Should().Be(KyverumReissueOutcome.Reemitido);
         result.CaptureUrl.Should().Be("https://verify.kyverum.test/session/s2?t=new");
+        result.Enviado.Should().BeTrue("Kyverum confirmó que el correo salió o quedó en cola");
         // La última llamada es el POST de reissue sobre el sujeto de la validación existente (no un create).
         handler.LastRequest!.Method.Should().Be(HttpMethod.Post);
         handler.LastRequest!.RequestUri!.AbsolutePath.Should().Be("/v1/validations/kyv_1/subjects/sub_1/reissue");
         handler.LastRequest!.Headers.Authorization!.Parameter.Should().Be("secret-key");
         // enviarCorreo: true ⇒ Kyverum manda el enlace al correo ya registrado.
         handler.LastBody.Should().Contain("\"enviarCorreo\":true");
+    }
+
+    [Fact]
+    public async Task Reissue_SinCorreoEnviado_DevuelveEnlacePeroNoConfirmaElEnvio()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((req, _) => req.Method == HttpMethod.Get
+            ? Json(HttpStatusCode.OK, EstadoConSujeto)
+            : Json(HttpStatusCode.OK, """{"subjectId":"sub_1","captureUrl":"https://verify.kyverum.test/session/s3?t=new","enviado":false,"tieneEmail":false}"""));
+
+        var result = await Client(handler).ReissueAsync("kyv_1", ct);
+
+        result.Outcome.Should().Be(KyverumReissueOutcome.Reemitido);
+        result.CaptureUrl.Should().Be("https://verify.kyverum.test/session/s3?t=new");
+        result.Enviado.Should().BeFalse();
     }
 
     [Fact]

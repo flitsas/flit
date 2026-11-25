@@ -100,13 +100,31 @@ public sealed class ReenviarPrevalidacionHandlerTests
     }
 
     [Fact]
+    public async Task Reissue_SinEnvioConfirmado_NoConsumeRonda_PeroDejaElEnlaceVigente()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var (_, validation) = SeedStandalone(status: BiometricEstados.Expirado, provider: BiometricProviders.Kyverum);
+        SeedKyverumExistente(validation);
+        _kyverum.ReissueAsync("kyv_old", Arg.Any<CancellationToken>())
+            .Returns(KyverumReissueResult.Reemitido("https://capture.example.com/reissue", enviado: false));
+        var handler = BuildHandler(isKyverum: true);
+
+        var (_, error, _) = await handler.HandleAsync(_tenantId, validation.Id, ct);
+
+        error.Should().BeNull();
+        validation.CaptureUrl.Should().Be("https://capture.example.com/reissue");
+        validation.Status.Should().Be(BiometricEstados.EnProceso);
+        validation.ResendCount.Should().Be(0, "Kyverum no confirmó el correo: la ronda no se consume");
+    }
+
+    [Fact]
     public async Task Reissue_MismoCorreo_ReemiteEnlaceSinCrearOtraValidacion()
     {
         var ct = TestContext.Current.CancellationToken;
         var (_, validation) = SeedStandalone(status: BiometricEstados.Expirado, provider: BiometricProviders.Kyverum);
         SeedKyverumExistente(validation);
         _kyverum.ReissueAsync("kyv_old", Arg.Any<CancellationToken>())
-            .Returns(KyverumReissueResult.Reemitido("https://capture.example.com/reissue"));
+            .Returns(KyverumReissueResult.Reemitido("https://capture.example.com/reissue", enviado: true));
         var handler = BuildHandler(isKyverum: true);
 
         var (_, error, _) = await handler.HandleAsync(_tenantId, validation.Id, ct);

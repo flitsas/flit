@@ -86,4 +86,6 @@ message ReemitirEnlaceResponse {
   // "reemitido" | "aprobada" | "no_existe"
   string resultado = 1;
   string capture_url = 2;
+  // true si Kyverum envió el correo o lo dejó en cola (enviado de la respuesta de reissue).
+  bool enviado = 3;
 }

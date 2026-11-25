@@ -138,6 +138,7 @@ internal sealed class ValidacionIdentidadGrpcService(
         {
             Resultado = resultado.Outcome,
             CaptureUrl = resultado.CaptureUrl ?? string.Empty,
+            Enviado = resultado.Enviado,
         };
     }
 
