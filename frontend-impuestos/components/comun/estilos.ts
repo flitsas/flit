@@ -17,6 +17,9 @@ export const BOTON_REINTENTAR_CLS = `rounded-full border border-current px-3 py-
 
 export const CAMPO_CLS = `h-11 w-full rounded-[9px] border border-input bg-card px-3.5 text-base text-flit-primary focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] disabled:opacity-60 ${FOCO_CLS}`;
 
+/** Campo de fecha (`input type="date"`): mismo molde, con el realce al tener el foco dentro (selector nativo). */
+export const CAMPO_FECHA_CLS = `${CAMPO_CLS} focus-within:border-[color:var(--di-action)] focus-within:shadow-[var(--kit-sombra)] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring`;
+
 /** Campo con error: borde rojo del kit cuando lleva aria-invalid. */
 export const CAMPO_INVALIDO_CLS = "aria-[invalid=true]:border-[var(--badge-danger-border)]";
 
