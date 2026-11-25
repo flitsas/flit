@@ -183,3 +183,4 @@ La ruta del gateway tiene su prueba en `services/core-api/tests/Flit.Gateway.Tes
 | El login de Impuestos vuelve al hub con error de `redirect_uri` | core-api y core-identity arrancaron con hosts distintos | Reinícialos con el mismo `Suite__Hosts__Overrides__impuestos` |
 | `ACCESS_REFUSED` en el log | Faltan permisos del usuario `impuestos` | §3.2, paso 2 |
 | Todas las placas quedan en error transitorio del RUNT | core-consultas sin `INTEMPO_API_BASE_URL` («Falta configurar Intempo») o core-impuestos sin `Impuestos__Consultas__Address` | Levanta el stub 8897 y reinicia los dos servicios (§3.1) |
+| Tras actualizar Next, `next dev` entra en un bucle de recargas con «HMR hash mismatch» | El `.next` del frontend quedó con artefactos de la versión anterior | Para ese frontend (mata el PID de su puerto, p. ej. 4034), borra su carpeta `.next` (`rm -rf frontend-impuestos/.next`) y vuelve a correr el script con `--sin-build` (§3.1) |

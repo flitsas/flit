@@ -19,9 +19,13 @@ import { expect, test, type APIRequestContext, type Locator, type Page, type Rou
  * `POST /__panel/escenario` (tipo alta | consulta | archivo): es GLOBAL, por eso la corrida va con un solo worker y cada spec
  * que lo cambia lo restaura en afterEach.
  *
- * RUNT: la respuesta depende del stub o simulador local de RUNT que se defina para Impuestos; hoy el RPC RuntIntempoService
- * no tiene simulador en la suite local. Las placas ficticias de aquí terminan en 1 y las mágicas del stub en 0 por si ese
- * simulador decide por el último carácter, como el de Diagnóstico; ningún spec debe suponer el resultado RUNT hasta que exista.
+ * RUNT: en modo `simulado` el script levanta el stub del RUNT por Intempo en 8897 (scripts/dev/stub-impuestos/stub_intempo.py;
+ * docs/impuestos/guia-entorno-local.md §4.1), que decide por el último carácter de la placa (o del VIN): 1 y cualquier otro,
+ * incluido el 0 de las placas mágicas del stub de liquidación → encontrado, persona natural, organismo de Medellín (Antioquia),
+ * y sigue al API de liquidación; 6 → organismo de Neiva (Huila), departamento inactivo («Departamento no habilitado»);
+ * 7 → responde tras el timeout de Intempo (tiempo agotado, transitorio); 8 → 200 que no es JSON (respuesta inválida,
+ * transitorio); 9 → 404 (no encontrado, definitivo). Las placas ficticias de aquí terminan en 1 y las mágicas en 0: las dos
+ * salen encontradas en Medellín. Detalle y variables (`STUB_INTEMPO_PUERTO`, `STUB_INTEMPO_RETRASO_S`) en la guía.
  *
  * PII: solo placas ficticias y placeholders («Compañía Demo», `nombre@empresa.com`, `CC 0000000`). Nunca datos de
  * context/muestras.
@@ -116,8 +120,9 @@ const CONSONANTES = "BCDFGHJKLMNPRSTVWXZ";
 const al = (alfabeto: string) => alfabeto[Math.floor(Math.random() * alfabeto.length)];
 
 /**
- * Placa ficticia de 6 caracteres (T + 2 consonantes + 2 cifras + 1): el 1 final se reserva para «persona natural» en el
- * simulador RUNT que se defina (ver cabecera) y no choca con ninguna placa mágica del stub (todas terminan en 000).
+ * Placa ficticia de 6 caracteres (T + 2 consonantes + 2 cifras + 1): con el 1 final, el stub de Intempo (8897, ver cabecera y
+ * docs/impuestos/guia-entorno-local.md §4.1) la da por encontrada, persona natural, en Medellín. No choca con ninguna placa
+ * mágica del stub de liquidación (todas terminan en 000).
  */
 export function placaFicticia(): string {
   return `T${al(CONSONANTES)}${al(CONSONANTES)}${Math.floor(Math.random() * 10)}${Math.floor(Math.random() * 10)}1`;
