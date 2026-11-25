@@ -90,20 +90,28 @@ del host. Solo cambia el permiso de **escritura**; configurar y leer quedan como
    el `write` de los dos incluye `flit\.impuestos`.
 
 4. Publicación de prueba con cada usuario. Los usuarios de servicio no tienen etiqueta de administración, así que se le
-   pone `management` solo mientras dura la prueba y se le quita al final. La clave es la de `RABBITMQ_URL_TRAMITES` /
-   `RABBITMQ_URL_PLATAFORMA` del `.env` del ambiente; la llave `impuestos.prueba.permiso` no está atada a ninguna cola,
-   así que el mensaje se descarta y no lo consume nadie.
+   pone `management` solo mientras dura la prueba y al final se le dejan **las etiquetas que tenía**. `set_user_tags`
+   reemplaza la lista entera (sin argumentos las borra todas), así que primero se anotan las actuales. La clave es la de
+   `RABBITMQ_URL_TRAMITES` / `RABBITMQ_URL_PLATAFORMA` del `.env` del ambiente; `curl -u tramites` la pide por teclado y
+   no queda en el historial de la shell. La llave `impuestos.prueba.permiso` no está atada a ninguna cola, así que el
+   mensaje se descarta y no lo consume nadie.
 
    ```bash
-   $C set_user_tags tramites management
-   curl -s -u "tramites:<clave>" -H 'content-type: application/json' \
-     -d '{"properties":{},"routing_key":"impuestos.prueba.permiso","payload":"prueba MEN-10","payload_encoding":"string"}' \
-     "http://127.0.0.1:${RABBITMQ_MGMT_PORT}/api/exchanges/flit/flit.impuestos/publish"
+   $C list_users
+   # Anotar la columna tags de tramites, p. ej. [] o [monitoring]: son las <etiquetas previas> de abajo.
+   $C set_user_tags tramites <etiquetas previas> management
+   curl -s -u tramites -H 'content-type: application/json'      -d '{"properties":{},"routing_key":"impuestos.prueba.permiso","payload":"prueba MEN-10","payload_encoding":"string"}'      "http://127.0.0.1:${RABBITMQ_MGMT_PORT}/api/exchanges/flit/flit.impuestos/publish"
+   # curl pide la clave (Enter host password for user 'tramites').
    # Esperado: {"routed":false}. Un 401 o ACCESS_REFUSED indica que falta el permiso.
-   $C set_user_tags tramites
+   $C set_user_tags tramites <etiquetas previas>
+   # Si tramites no tenía etiquetas ([]), este último comando va sin argumentos: así vuelve a su estado original.
    ```
 
-   Repetir con `plataforma`. Al terminar, `$C list_users` no debe mostrar `management` en ninguno de los dos.
+   Para una corrida sin teclado (un script), la clave va en un archivo `netrc` con permisos `600` fuera del repo y se
+   usa `curl --netrc-file <ruta>` en vez de `-u`; el archivo se borra al terminar.
+
+   Repetir con `plataforma`. Al terminar, `$C list_users` debe mostrar en los dos las mismas etiquetas que al principio
+   (sin `management` si no la tenían).
 
 ## Un exchange nuevo
 
