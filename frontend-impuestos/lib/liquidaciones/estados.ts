@@ -2,6 +2,7 @@
 // contracts/openapi/impuestos.v1.yaml 1.0.0 (`x-flit-etiquetas` de cada enum y `x-flit-literales`), que mandan ante un
 // choque con la spec. Un código desconocido se pinta en `neutral` como «Sin clasificar», nunca con el código crudo.
 import type { StatusBadgeTone } from "@flit/ui/StatusBadge";
+import { ERRORES_EMPRESA } from "@/lib/errores";
 import { rotular } from "@/lib/rotulos";
 import { bannersDeSesion, type SesionImpuestos } from "@/lib/sesion";
 import type { ClaseError, Contadores, EstadoItem, EstadoLiquidacion, Item, MotivoRecibo, Recibo, ResumenLiquidacion } from "./tipos";
@@ -15,8 +16,7 @@ export interface Chip {
 
 /** x-flit-literales.errores del contrato (solo los de liquidaciones y recibos). `{tope}` lo sustituye mensajeErrorFijo. */
 export const ERRORES_LIQUIDACIONES: Readonly<Record<string, string>> = {
-  EMPRESA_NO_PERMITIDA: "Solo el Super Admin puede elegir la compañía.",
-  EMPRESA_NO_ENCONTRADA: "La compañía no existe o no tiene Impuestos.",
+  ...ERRORES_EMPRESA,
   APROVISIONAMIENTO_NO_LISTO: "La compañía todavía no puede liquidar porque su configuración con el proveedor no está lista.",
   PRODUCTO_SUSPENDIDO: "Impuestos está suspendido para la compañía: solo lectura.",
   PLACA_INVALIDA: "Escribe una placa válida: de 4 a 10 letras o números.",

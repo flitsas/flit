@@ -115,6 +115,23 @@ describe("GridLiquidaciones — grid mixto (F3-CF6) y aislamiento (F2a-CF9/CF10)
 });
 
 describe("GridLiquidaciones — cuatro estados", () => {
+  it.each(["EMPRESA_SOLO_SUPER_ADMIN", "EMPRESA_NO_PERMITIDA"])(
+    "un 403 %s (contrato 1.1.0) se pinta en la tabla con su literal y no lleva a la 403",
+    async (code) => {
+      vi.stubGlobal("fetch", fetchPorRuta([[/liquidaciones\?/, () => Response.json({ code, error: "detalle interno" }, { status: 403 })]]));
+      render_();
+      expect(await screen.findByText("Solo el Super Admin puede elegir la compañía.")).toBeInTheDocument();
+      expect(replace).not.toHaveBeenCalledWith(expect.stringMatching(/^\/403/));
+      expect(document.body).not.toHaveTextContent("detalle interno");
+    },
+  );
+
+  it("otro 403 con código (PRODUCTO_NO_HABILITADO) sigue llevando a la 403", async () => {
+    vi.stubGlobal("fetch", fetchPorRuta([[/liquidaciones\?/, () => Response.json({ code: "PRODUCTO_NO_HABILITADO", error: "x" }, { status: 403 })]]));
+    render_();
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/403?code=PRODUCTO_NO_HABILITADO"));
+  });
+
   it("cargando: loader de la tabla, con las tarjetas usables", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
     render_();

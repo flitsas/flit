@@ -7,6 +7,27 @@ import { ApiError } from "@/lib/api";
 export const TEXTO_SIN_PERMISO = "No tienes permiso para esta acción.";
 
 /**
+ * x-flit-literales.errores de `?empresa` (contrato 1.1.0, delta 8), común a todas las rutas que la aceptan: quien no es
+ * Super Admin y la envía recibe 403 EMPRESA_SOLO_SUPER_ADMIN; el Super Admin con un valor no uuid, repetido o ausente
+ * donde opera sobre una sola compañía, 400 EMPRESA_REQUERIDA; una compañía inexistente o sin Impuestos, 404
+ * EMPRESA_NO_ENCONTRADA. EMPRESA_NO_PERMITIDA (1.0.0) ya no se emite: se conserva como alias con el mismo literal.
+ */
+export const ERRORES_EMPRESA = {
+  EMPRESA_SOLO_SUPER_ADMIN: "Solo el Super Admin puede elegir la compañía.",
+  EMPRESA_NO_PERMITIDA: "Solo el Super Admin puede elegir la compañía.",
+  EMPRESA_REQUERIDA: "Elige una compañía.",
+  EMPRESA_NO_ENCONTRADA: "La compañía no existe o no tiene Impuestos.",
+} as const satisfies Readonly<Record<string, string>>;
+
+/**
+ * ¿La API rechazó la `empresa` porque quien la envía no es Super Admin (EMPRESA_SOLO_SUPER_ADMIN o el alias
+ * EMPRESA_NO_PERMITIDA)? Es un 403 de la petición, no de acceso a la página: se pinta en línea con su literal.
+ */
+export function esRechazoDeEmpresa(error: unknown): boolean {
+  return error instanceof ApiError && (error.code === "EMPRESA_SOLO_SUPER_ADMIN" || error.code === "EMPRESA_NO_PERMITIDA");
+}
+
+/**
  * Texto fijo de un error: el del `code` en `porCodigo`, el de permiso en un 403 o, si no, `respaldo`.
  *
  * @example

@@ -1,6 +1,7 @@
 // Dashboard de Impuestos (impuestos.v1.yaml 1.0.0, tag Dashboard): GET /dashboard?desde&hasta[&empresa]. El Super Admin
 // sin `empresa` recibe la vista global con `ranking`; con `empresa`, el de esa compañía. Permiso impuestos.dashboard.ver.
 import { ApiError, apiFetch } from "@/lib/api";
+import { ERRORES_EMPRESA } from "@/lib/errores";
 import type { DashboardImpuestos, Rango } from "./tipos";
 
 export const RUTA_DASHBOARD = "/dashboard";
@@ -8,8 +9,7 @@ export const RUTA_DASHBOARD = "/dashboard";
 /** x-flit-literales.errores de la ruta del dashboard. */
 export const ERRORES_DASHBOARD: Readonly<Record<string, string>> = {
   RANGO_INVALIDO: "El rango de fechas no es válido.",
-  EMPRESA_NO_PERMITIDA: "Solo el Super Admin puede elegir la compañía.",
-  EMPRESA_NO_ENCONTRADA: "La compañía no existe o no tiene Impuestos.",
+  ...ERRORES_EMPRESA,
   PRODUCTO_NO_HABILITADO: "Impuestos no está activo para tu compañía.",
   DEMASIADAS_SOLICITUDES: "Hiciste demasiadas solicitudes. Espera un momento e intenta de nuevo.",
 };

@@ -322,6 +322,34 @@ describe("Configuración — estados y permisos", () => {
     expect(await screen.findByLabelText("Máximo de placas por lote")).toBeInTheDocument();
   });
 
+  it("un 403 EMPRESA_SOLO_SUPER_ADMIN al cargar muestra el literal del contrato 1.1.0, no el texto genérico", async () => {
+    vi.stubGlobal("fetch", api({ get: () => Response.json({ code: "EMPRESA_SOLO_SUPER_ADMIN", error: "detalle interno" }, { status: 403 }) }));
+
+    render(<Configuracion />);
+
+    expect(await screen.findByText("Solo el Super Admin puede elegir la compañía.")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("No tienes permiso para esta acción.");
+    expect(document.body).not.toHaveTextContent("detalle interno");
+  });
+
+  it("el alias retirado EMPRESA_NO_PERMITIDA recibe el mismo literal", async () => {
+    vi.stubGlobal("fetch", api({ get: () => Response.json({ code: "EMPRESA_NO_PERMITIDA", error: "x" }, { status: 400 }) }));
+
+    render(<Configuracion />);
+
+    expect(await screen.findByText("Solo el Super Admin puede elegir la compañía.")).toBeInTheDocument();
+  });
+
+  it("un 400 EMPRESA_REQUERIDA al guardar la operativa muestra «Elige una compañía.»", async () => {
+    vi.stubGlobal("fetch", api({ put: () => Response.json({ code: "EMPRESA_REQUERIDA", error: "x" }, { status: 400 }) }));
+
+    render(<Configuracion />);
+    fireEvent.change(await screen.findByLabelText("Máximo de placas por lote"), { target: { value: "120" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+
+    expect(await screen.findByText("Elige una compañía.")).toBeInTheDocument();
+  });
+
   it("el Gestor (sin impuestos.configuracion.ver) va a la 403", async () => {
     conSesion("gestor");
     vi.stubGlobal("fetch", api());

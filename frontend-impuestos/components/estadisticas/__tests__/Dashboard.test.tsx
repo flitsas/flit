@@ -207,6 +207,31 @@ describe("Dashboard — cuatro estados", () => {
     expect(screen.queryByRole("link", { name: "Liquidar por placa" })).not.toBeInTheDocument();
   });
 
+  it.each(["EMPRESA_SOLO_SUPER_ADMIN", "EMPRESA_NO_PERMITIDA"])(
+    "un 403 %s (contrato 1.1.0) se pinta en la página con su literal y no lleva a la 403",
+    async (code) => {
+      vi.stubGlobal("fetch", api(() => Response.json({ code, error: "detalle interno" }, { status: 403 })));
+      render(<Dashboard />);
+      expect(await screen.findByText("Solo el Super Admin puede elegir la compañía.")).toBeInTheDocument();
+      expect(replace).not.toHaveBeenCalled();
+      expect(document.body).not.toHaveTextContent("detalle interno");
+    },
+  );
+
+  it("un 400 EMPRESA_REQUERIDA muestra «Elige una compañía.»", async () => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams("empresa=no-es-uuid");
+    vi.stubGlobal("fetch", api(() => Response.json({ code: "EMPRESA_REQUERIDA", error: "x" }, { status: 400 })));
+    render(<Dashboard />);
+    expect(await screen.findByText("Elige una compañía.")).toBeInTheDocument();
+  });
+
+  it("otro 403 con código (PRODUCTO_NO_HABILITADO) sigue llevando a la 403 con su código", async () => {
+    vi.stubGlobal("fetch", api(() => Response.json({ code: "PRODUCTO_NO_HABILITADO", error: "x" }, { status: 403 })));
+    render(<Dashboard />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/403?code=PRODUCTO_NO_HABILITADO"));
+  });
+
   it("error: «No se pudo cargar el resumen» y «Reintentar» vuelve a pedir", async () => {
     let n = 0;
     vi.stubGlobal("fetch", api(() => (++n === 1 ? new Response("{}", { status: 500 }) : Response.json(dashboard()))));

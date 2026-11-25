@@ -13,7 +13,7 @@ import { useSesion } from "@/components/ImpuestosShell";
 import { ApiError } from "@/lib/api";
 import { useEmpresaBackoffice } from "@/lib/backoffice/api";
 import { useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
-import { mensajeErrorFijo } from "@/lib/errores";
+import { esRechazoDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
 import { formatoEntero } from "@/lib/estadisticas/formato";
 import { hoyColombia, leerRango, mensajeRangoInvalido } from "@/lib/estadisticas/periodo";
 import {
@@ -112,7 +112,8 @@ function VistaReportes({ sesion }: { sesion: SesionImpuestos }) {
   const descarga = useDescarga(tipo, filtros, empresa, claveExportacion);
 
   const error = carga.tipo === "error" ? carga.error : null;
-  const codigo403 = error instanceof ApiError && error.status === 403 ? error.code || "SIN_PERMISO" : null;
+  // El 403 EMPRESA_SOLO_SUPER_ADMIN (o su alias retirado) rechaza la petición, no el acceso: se pinta en línea con su literal.
+  const codigo403 = error instanceof ApiError && error.status === 403 && !esRechazoDeEmpresa(error) ? error.code || "SIN_PERMISO" : null;
   useEffect(() => {
     if (codigo403) router.replace(`/403?code=${encodeURIComponent(codigo403)}`);
   }, [codigo403, router]);

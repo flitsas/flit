@@ -41,7 +41,7 @@ import { ChipEstado } from "@/components/liquidaciones/ChipEstado";
 import { FormularioPlaca } from "@/components/liquidaciones/FormularioPlaca";
 import { ApiError } from "@/lib/api";
 import { hrefConEmpresa, useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
-import { mensajeErrorFijo } from "@/lib/errores";
+import { esRechazoDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
 import { descargarPlantilla, listarLiquidaciones, queryListado } from "@/lib/liquidaciones/api";
 import { ERRORES_LIQUIDACIONES, ESTADOS_LIQUIDACION, PANTALLA, chipFila, nombreTipo, terminadas } from "@/lib/liquidaciones/estados";
 import { formatoFecha, idCorto, normalizarPlaca } from "@/lib/liquidaciones/formato";
@@ -133,7 +133,8 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo }: Grid
       },
       (e: unknown) => {
         if (control.signal.aborted) return;
-        if (e instanceof ApiError && e.status === 403 && e.code) setAcceso(e.code);
+        // El 403 EMPRESA_SOLO_SUPER_ADMIN (o su alias retirado) rechaza la petición, no el acceso: va en línea con su literal.
+        if (e instanceof ApiError && e.status === 403 && e.code && !esRechazoDeEmpresa(e)) setAcceso(e.code);
         setCarga({ tipo: "error", texto: mensajeErrorFijo(e, "Revisa tu conexión e intenta de nuevo.", ERRORES_LIQUIDACIONES) });
       },
     );
