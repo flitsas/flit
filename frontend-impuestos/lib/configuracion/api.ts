@@ -36,6 +36,7 @@ export const ERRORES_CONFIGURACION: Readonly<Record<string, string>> = {
   TOPE_INVALIDO: "El máximo por lote debe ser un número entre 1 y 5000.",
   CORREO_INVALIDO: "Un correo no es válido.",
   DEPARTAMENTO_NO_DISPONIBLE: "Un departamento no está en la lista del proveedor.",
+  APROVISIONAMIENTO_NO_LISTO: "La compañía todavía no puede liquidar porque su configuración con el proveedor no está lista.",
   ...ERRORES_EMPRESA,
   PRODUCTO_SUSPENDIDO: "Impuestos está suspendido para la compañía: solo lectura.",
 };
@@ -44,10 +45,7 @@ const RUTA = "/configuracion";
 
 export const obtenerConfiguracion = (empresa: string | null, signal?: AbortSignal) => apiFetch<ConfiguracionImpuestos>(RUTA, { signal, empresa });
 
-/**
- * PUT /configuracion. El contrato 1.0.0 no declara `empresa` en el PUT (sí en el GET); se propaga igual para que el Super
- * Admin guarde la operativa de la compañía elegida, y queda reportado como hueco de contrato.
- */
+/** PUT /configuracion. Desde el contrato 1.1.0 (delta 3) el PUT declara `?empresa`, obligatoria para el Super Admin. */
 export const guardarConfiguracionOperativa = (entrada: ConfiguracionOperativaEntrada, empresa: string | null) =>
   apiFetch<ConfiguracionImpuestos>(RUTA, { method: "PUT", body: entrada, empresa });
 

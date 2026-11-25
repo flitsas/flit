@@ -3,6 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api";
 import { ERRORES_EMPRESA, TEXTO_SIN_PERMISO, esRechazoDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
+import { ERRORES_BACKOFFICE } from "@/lib/backoffice/api";
 import { ERRORES_CONFIGURACION } from "@/lib/configuracion/api";
 import { ERRORES_DASHBOARD } from "@/lib/estadisticas/api";
 import { ERRORES_REPORTES, mensajeExportacion } from "@/lib/reportes/api";
@@ -49,8 +50,31 @@ describe("ERRORES_EMPRESA — códigos de ?empresa del contrato 1.1.0", () => {
     ["reportes", ERRORES_REPORTES],
     ["usuarios", ERRORES_USUARIOS],
     ["liquidaciones", estados.ERRORES_LIQUIDACIONES],
+    ["backoffice", ERRORES_BACKOFFICE],
   ])("el mapa de %s incluye los cuatro códigos de empresa", (_nombre, mapa) => {
     expect(mapa).toMatchObject(ERRORES_EMPRESA);
+  });
+
+  it.each([
+    ["configuración", ERRORES_CONFIGURACION],
+    ["usuarios", ERRORES_USUARIOS],
+    ["backoffice", ERRORES_BACKOFFICE],
+  ])("cada código del mapa de %s lleva el literal exacto de x-flit-literales.errores (contrato 1.1.0)", (_nombre, mapa) => {
+    const contrato = literalesDelContrato();
+    for (const [codigo, texto] of Object.entries(mapa)) {
+      expect(contrato[codigo], codigo).toBeTruthy();
+      expect(texto, codigo).toBe(contrato[codigo]);
+    }
+  });
+
+  it("el backoffice trae ESTADO_NO_ADMITE_CARGA, CREDENCIAL_REQUERIDA, PROVEEDOR_NO_DISPONIBLE y EMPRESA_NO_ENCONTRADA", () => {
+    for (const codigo of ["ESTADO_NO_ADMITE_CARGA", "CREDENCIAL_REQUERIDA", "CREDENCIAL_INVALIDA", "PROVEEDOR_NO_DISPONIBLE", "EMPRESA_NO_ENCONTRADA"]) {
+      expect(ERRORES_BACKOFFICE[codigo], codigo).toBeTruthy();
+    }
+  });
+
+  it("un 403 EMPRESA_SOLO_SUPER_ADMIN en el backoffice se traduce al literal, no al texto genérico de permiso", () => {
+    expect(mensajeErrorFijo(new ApiError(403, "x", "EMPRESA_SOLO_SUPER_ADMIN"), "respaldo", ERRORES_BACKOFFICE)).toBe("Solo el Super Admin puede elegir la compañía.");
   });
 
   it("un 403 EMPRESA_SOLO_SUPER_ADMIN se traduce al literal, no al texto genérico de permiso", () => {

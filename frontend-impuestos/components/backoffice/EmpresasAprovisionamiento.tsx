@@ -37,6 +37,7 @@ import {
 } from "@/components/comun/estilos";
 import {
   ERRORES_BACKOFFICE,
+  ETIQUETA_USUARIOS_EMPRESA,
   TONO_ESTADO_APROVISIONAMIENTO,
   etiquetaEstadoAprovisionamiento,
   etiquetaMotivoAprovisionamiento,
@@ -58,9 +59,20 @@ const CELDA_CLS = `${CELDA_TABLA_CLS} ${TABLA_MOVIL_CELL_CLS}`;
 /**
  * Chip del aprovisionamiento (spec-visual §1.5): etiqueta del contrato con el tono del spec; PENDIENTE con el punto
  * pulsante de EtiquetaEnProceso. En tablas (`vivo` false) va sin role="status"; en el detalle, StatusBadge. Se suman
- * «Firma sin confirmar» (LISTO sin firma) y «Respaldo de firma», siempre con texto.
+ * «Firma sin confirmar» (LISTO sin firma), «Respaldo de firma» y, con `suspendida` (EmpresaBackoffice), la etiqueta
+ * SUSPENDIDO del contrato si el estado no lo dice ya; siempre con texto.
  */
-export function ChipAprovisionamiento({ aprovisionamiento, modoRespaldoFirma = false, vivo = false }: { aprovisionamiento: AprovisionamientoResumen; modoRespaldoFirma?: boolean; vivo?: boolean }) {
+export function ChipAprovisionamiento({
+  aprovisionamiento,
+  modoRespaldoFirma = false,
+  suspendida = false,
+  vivo = false,
+}: {
+  aprovisionamiento: AprovisionamientoResumen;
+  modoRespaldoFirma?: boolean;
+  suspendida?: boolean;
+  vivo?: boolean;
+}) {
   const { estado, firmaConfirmada } = aprovisionamiento;
   const etiqueta = etiquetaEstadoAprovisionamiento(estado);
   const tono = TONO_ESTADO_APROVISIONAMIENTO[estado] ?? "neutral";
@@ -89,6 +101,12 @@ export function ChipAprovisionamiento({ aprovisionamiento, modoRespaldoFirma = f
           Respaldo de firma
         </span>
       )}
+      {suspendida && estado !== "SUSPENDIDO" && (
+        <span {...etiquetaKit(TONO_ESTADO_APROVISIONAMIENTO.SUSPENDIDO ?? "neutral")}>
+          <span className={ETIQUETA_PUNTO_CLS} aria-hidden="true" />
+          {etiquetaEstadoAprovisionamiento("SUSPENDIDO")}
+        </span>
+      )}
     </span>
   );
 }
@@ -97,7 +115,8 @@ type Carga = { tipo: "cargando" } | { tipo: "error"; mensaje: string } | { tipo:
 
 /**
  * /backoffice/empresas (spec-visual §3.10; plan §6.1): solo Super Admin. Compañías con Impuestos, incluidas las
- * suspendidas (F4-CF10), con el estado de su conexión con el proveedor, el motivo legible del contrato y «Ver detalle».
+ * suspendidas (F4-CF10, marcadas con texto), con su número de usuarios (1.1.0; celda vacía si no llega), el estado de
+ * su conexión con el proveedor, el motivo legible del contrato y «Ver detalle».
  */
 export function EmpresasAprovisionamiento() {
   const router = useRouter();
@@ -188,10 +207,10 @@ export function EmpresasAprovisionamiento() {
     contenido = (
       <div className="flex flex-col gap-3">
         <div className={CONTENEDOR_TABLA_CLS}>
-          <table aria-label="Compañías con Impuestos" className={`w-full min-w-[820px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
+          <table aria-label="Compañías con Impuestos" className={`w-full min-w-[900px] border-collapse text-sm ${TABLA_MOVIL_TABLE_CLS}`}>
             <thead className={TABLA_MOVIL_THEAD_CLS}>
               <tr>
-                {["Compañía", "NIT", "Estado", "Motivo", "Acción"].map((t) => (
+                {["Compañía", "NIT", ETIQUETA_USUARIOS_EMPRESA, "Estado", "Motivo", "Acción"].map((t) => (
                   <th key={t} scope="col" className={CABECERA_TABLA_CLS} style={CABECERA_TABLA_ESTILO}>
                     {t}
                   </th>
@@ -209,8 +228,11 @@ export function EmpresasAprovisionamiento() {
                     <td data-label="NIT" className={`${CELDA_CLS} tabular-nums`}>
                       {e.nit ?? <span className={TEXTO_SECUNDARIO_CLS}>Sin dato</span>}
                     </td>
+                    <td data-label={ETIQUETA_USUARIOS_EMPRESA} className={`${CELDA_CLS} tabular-nums`}>
+                      {typeof e.usuarios === "number" ? e.usuarios : null}
+                    </td>
                     <td data-label="Estado" className={CELDA_CLS}>
-                      <ChipAprovisionamiento aprovisionamiento={e.aprovisionamiento} />
+                      <ChipAprovisionamiento aprovisionamiento={e.aprovisionamiento} suspendida={e.suspendida === true} />
                     </td>
                     <td data-label="Motivo" className={CELDA_CLS}>
                       {motivo ?? <span className={TEXTO_SECUNDARIO_CLS}>Sin dato</span>}

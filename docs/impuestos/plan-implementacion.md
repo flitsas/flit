@@ -772,6 +772,71 @@ Salieron al implementar M06, M08, M16, M17 y M18. Todos son aditivos, salvo el c
 
 Para el delta 12 se eligió una ruta propia entre tres opciones. Las otras dos eran abrir `/fuentes` a `reportes.ver` o añadir `/usuarios?soloNombres` con `reportes.ver`. Ambas ampliaban permisos de rutas que exponen más datos: correos, estados y la regla 409 del aprovisionamiento. Con la ruta propia, el Gestor solo ve id y nombre, y una compañía suspendida o en error sigue filtrando sus reportes.
 
+### 5.8 Ajuste por la guía del proveedor actualizada (2026-11-25): alta idempotente, entrega de secretos y webhook
+
+La guía `docs/integraciones/guia-integracion-clientes.md` cambió el contrato del alta (§3) y detalló el webhook (§6). M07 y el stub M00 se construyeron sobre el contrato anterior (alta no idempotente con `409 tax_id_taken`). M09 y M10 estaban en curso y recibieron los cambios que les tocan en su propio carril.
+
+**Qué cambió en el proveedor**
+
+| Tema | Antes (lo implementado en M07/M00) | Ahora (guía §3 y §6) |
+|---|---|---|
+| NIT existente | `409 tax_id_taken`, sin credenciales | `200` con `created:false`, la misma `company.id`, la misma `api_key` y el mismo `webhook_secret` |
+| Timeout o `5xx` del alta | No se reintenta (`INCIERTO`, marca `ALTA_ENVIADA`); el reintento daba 409 | Reintento seguro con el mismo cuerpo: devuelve las credenciales del primer intento |
+| Credencial faltante | Rotar en la consola del API y cargarla a mano | El alta genera la que falte (p. ej. el `webhook_secret`) y la devuelve |
+| Clave antigua | — | `api_key_rotated:true` una sola vez por empresa: la clave anterior deja de servir |
+| Empresa desactivada | — | `company.active:false`: las credenciales vienen, pero la `api_key` da 401 hasta reactivarla |
+| NIT con DV | Se enviaba sin DV | Se acepta con o sin `-DV`; si el DV no corresponde, `400 bad_request` |
+| Rotación del `webhook_secret` | — | Solo FLIT desde su consola; ventana en la que conviene verificar con el actual y el anterior |
+| `callbackUrl` sin secreto | — | `POST /consultas` responde `422 webhook_not_configured` |
+
+**M07b · Alta idempotente** (carril be, en cola; depende de M07 y de D-ALTA-IDEM)
+
+1. `AltaEmpresaApi`: `200` y `201` llevan a credenciales. Lee `created`, `api_key_rotated`, `company.active`, `has_webhook_secret` y `tax_id_dv`. El `409` deja de ser un camino normal: si aparece, es `ERROR(AMBIENTE)` con alerta («contrato del proveedor inesperado»).
+2. Timeout, `5xx`, `429` y «no salió» se reintentan solos con el backoff de M07 (1, 5, 15 y 60 min, máximo 5) y el mismo cuerpo. Se retiran la marca `ALTA_ENVIADA` y el paso a `INCIERTO` desde el alta. Al arrancar, las filas que ya están en `INCIERTO` por el alta vuelven a `PENDIENTE`.
+3. `company.active:false`: guarda las credenciales y queda `ERROR(AMBIENTE)` con el motivo nuevo `EMPRESA_INACTIVA_EN_PROVEEDOR`.
+4. `api_key_rotated:true`: reemplaza la llave guardada en la misma transacción y deja `CLAVE_ROTADA` en el historial. Si la llave venía de Diagnóstico, aplica D-ALTA-IDEM.
+5. `LISTO_SIN_WEBHOOK` deja de pedir «Cargar secreto» a mano: la acción pasa a `REINTENTAR`, que vuelve a llamar al alta y obtiene el secreto. Esto sujeto a D-ALTA-IDEM cuando la llave es de Diagnóstico.
+6. Una llave propia rechazada (401) se recupera con el alta antes de pasar a `REQUIERE_CREDENCIALES`. La carga manual de M06 queda como respaldo.
+7. **Webhook y rotación del secreto:** cuando se enciende `modo_respaldo_firma` (5 firmas inválidas), se encola un alta para refrescar el secreto. Si el secreto cambió, se guarda el anterior en `webhook_secret_anterior` durante una ventana de 24 h; el verificador de M10 prueba los dos. Esto requiere una columna nueva en `impuestos.credenciales_empresa` (DDL 1.2.0, database-agent).
+
+**Contrato 1.2.0 (aditivo)**
+
+- `MotivoAprovisionamiento`:
+  - suma `EMPRESA_INACTIVA_EN_PROVEEDOR` y `CLAVE_ROTADA`;
+  - `EMPRESA_YA_REGISTRADA` y `ALTA_SIN_CONFIRMAR` quedan como retirados: el literal se conserva para el historial.
+- `accion` para `LISTO_SIN_WEBHOOK`: `REINTENTAR`.
+- Se retiran los riesgos R-1 y R-2 de §12 y entra el riesgo de D-ALTA-IDEM.
+
+**Stub M00**
+
+- El alta repetida responde `200 created:false` con las mismas credenciales.
+- `alta-timeout-post-envio`: el reintento da `200`.
+- Escenarios nuevos: `alta-rotada`, `alta-inactiva`, `alta-dv-invalido` y `alta-sin-secreto`, este último para que el alta genere el secreto.
+- `alta-409` se conserva solo como «contrato viejo».
+- El stub vive en `scripts/dev/` (ignorado por git): lo copia el orquestador, como en M20.
+
+**Pruebas de M07b**
+
+- Se reescriben:
+  - `AprovisionadorTests`, en los casos de 409, de 5xx y de la marca;
+  - `AltaPersisteCredencialesAtomicoTests`, en el caso de la marca;
+  - `ReportadorEstadoTests`, en los literales;
+  - `ConsumidorCambioProductoTests`, en los casos con 409;
+  - `ReportProvisioningStatusHandlerTests` de Platform, solo si cambia la lista de motivos.
+- Se suman:
+  - `AltaIdempotenteTests` (200 existente, rotada, inactiva, reintento tras timeout);
+  - `test_stub.py`.
+- FE:
+  - `lib/backoffice/api.ts` (etiquetas y acción);
+  - `FormularioCredenciales.test.tsx`;
+  - `ProductosTab` del admin de compañías, si muestra la acción.
+
+**D-ALTA-IDEM (decisión del usuario, 2026-11-25): alta siempre + propagación.**
+
+- Impuestos llama siempre al alta. La copia de la llave de Diagnóstico deja de ser el primer paso y solo queda como respaldo si el alta no está disponible.
+- Si el alta responde `api_key_rotated:true` y la compañía tenía llave de Diagnóstico, Impuestos guarda la llave nueva y la propaga a Diagnóstico con un rpc nuevo de Identidad: `ActualizarCredencialImpuestoDiagnostico`, con scope propio, auditado y con `x-flit-tenant-id`. Se hace en el mismo flujo, con reintentos, mediante un trabajo por la bandeja (outbox) para no perderlo.
+- Toca core-identity y core-api (M04b: proto, handler y tests), además de M07b.
+
 ---
 
 ## 6. Frontend

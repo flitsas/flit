@@ -1,9 +1,10 @@
-// Backoffice del Super Admin (contracts/openapi/impuestos.v1.yaml 1.0.0, tag Backoffice; plan §5.1): compañías con su
+// Backoffice del Super Admin (contracts/openapi/impuestos.v1.yaml 1.1.0, tag Backoffice; plan §5.1): compañías con su
 // aprovisionamiento, carga de credenciales del proveedor (nunca se devuelven) y reintento. Las rutas van por tenantId en
 // la ruta, no por ?empresa=. Etiquetas y literales: x-flit-etiquetas / x-flit-literales del contrato.
 import { useEffect, useState } from "react";
 import type { StatusBadgeTone } from "@flit/ui/StatusBadge";
 import { RUTAS, apiFetch } from "@/lib/api";
+import { ERRORES_EMPRESA } from "@/lib/errores";
 import { rotular } from "@/lib/rotulos";
 
 export type EstadoAprovisionamiento =
@@ -23,12 +24,24 @@ export interface AprovisionamientoResumen {
   firmaConfirmada: boolean;
 }
 
+/**
+ * EmpresaIdentificada (contrato 1.1.0, delta 7): la compañía con su NIT para el encabezado del Super Admin, en
+ * AprovisionamientoDetalle y en PaginaUsuarios. Una compañía suspendida puede llegar con `nombre` "" y `nit` null.
+ */
+export interface EmpresaIdentificada {
+  id: string;
+  nombre: string;
+  nit: string | null;
+}
+
 export interface EmpresaBackoffice {
   id: string;
   nombre: string;
   nit: string | null;
   aprovisionamiento: AprovisionamientoResumen;
   suspendida: boolean;
+  /** Cantidad de usuarios de Impuestos de la compañía (1.1.0, delta 6). Opcional: sin él, la celda queda vacía. */
+  usuarios?: number;
 }
 
 export interface PaginaEmpresasBackoffice {
@@ -47,6 +60,8 @@ export interface TransicionAprovisionamiento {
 }
 
 export interface AprovisionamientoDetalle extends AprovisionamientoResumen {
+  /** Compañía del detalle (1.1.0, delta 7). */
+  empresa?: EmpresaIdentificada | null;
   modoRespaldoFirma: boolean;
   actualizadoEn: string;
   historial: TransicionAprovisionamiento[];
@@ -132,14 +147,20 @@ export const LITERALES_BACKOFFICE = {
     "La empresa ya existe en el proveedor: rota las credenciales en la consola del API y cárgalas aquí. Rotarlas puede afectar a Diagnóstico si comparte la empresa.",
 } as const;
 
-/** x-flit-literales.errores de las rutas del backoffice. */
+/** x-flit-etiquetas de EmpresaBackoffice (1.1.0). */
+export const ETIQUETA_USUARIOS_EMPRESA = "Usuarios";
+
+/**
+ * x-flit-literales.errores de las rutas del backoffice, con los códigos de compañía del catálogo único (ERRORES_EMPRESA):
+ * un rechazo de compañía se pinta en línea, nunca lleva a la 403.
+ */
 export const ERRORES_BACKOFFICE: Readonly<Record<string, string>> = {
+  ...ERRORES_EMPRESA,
   CREDENCIAL_INVALIDA: "El proveedor rechazó la API key: revisa el valor e intenta de nuevo.",
   CREDENCIAL_REQUERIDA: "Escribe la API key o el secreto del webhook.",
   ESTADO_NO_ADMITE_CARGA: "En el estado actual de la compañía no se pueden cargar credenciales.",
   ESTADO_NO_REINTENTABLE: "En el estado actual de la compañía no se puede reintentar.",
   PROVEEDOR_NO_DISPONIBLE: "El proveedor no responde. Intenta más tarde.",
-  EMPRESA_NO_ENCONTRADA: "La compañía no existe o no tiene Impuestos.",
   PAGINACION_INVALIDA: "La paginación no es válida.",
   FILTRO_INVALIDO: "Un filtro no es válido.",
 };
@@ -152,6 +173,21 @@ export const etiquetaEstadoAprovisionamiento = (estado: string | null | undefine
 
 export const etiquetaMotivoAprovisionamiento = (motivo: string | null | undefined) =>
   motivo ? rotular({ contexto: "motivo de aprovisionamiento", codigo: motivo, respaldo: ETIQUETA_MOTIVO_APROVISIONAMIENTO }) : null;
+
+/**
+ * Nombre visible de una EmpresaIdentificada: el `nombre` si trae texto y, si no (compañía suspendida con nombre "", o sin
+ * `empresa` en la respuesta), el id. Nunca un encabezado vacío ni un nombre genérico.
+ */
+export function nombreVisibleEmpresa(empresa: EmpresaIdentificada | null | undefined, idRespaldo: string): string {
+  const nombre = empresa?.nombre?.trim();
+  return nombre || empresa?.id || idRespaldo;
+}
+
+/** «NIT {nit}» si la compañía lo trae; si no, undefined (la cabecera omite la línea). */
+export const nitVisibleEmpresa = (empresa: EmpresaIdentificada | null | undefined): string | undefined => {
+  const nit = empresa?.nit?.trim();
+  return nit ? `NIT ${nit}` : undefined;
+};
 
 export const TAMANO_PAGINA_EMPRESAS = 50;
 
@@ -167,8 +203,9 @@ export function listarEmpresasBackoffice(filtros: { q: string; page: number; pag
 const MAX_PAGINAS = 100;
 
 /**
- * Nombre y NIT de una compañía del backoffice. El contrato no los trae en el detalle del aprovisionamiento ni en
- * /usuarios, así que se buscan en la lista paginada (la misma que lee el selector). Null si no aparece.
+ * Nombre y NIT de una compañía del backoffice, buscados en la lista paginada (la misma que lee el selector). Null si no
+ * aparece. Desde la 1.1.0 el detalle del aprovisionamiento y /usuarios traen `empresa`; esto queda para las pantallas
+ * cuya respuesta no la trae (configuración, dashboard, reportes).
  */
 export async function buscarEmpresaBackoffice(tenantId: string, signal?: AbortSignal): Promise<EmpresaBackoffice | null> {
   let vistas = 0;
