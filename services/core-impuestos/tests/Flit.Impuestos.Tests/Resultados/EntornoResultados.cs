@@ -188,14 +188,14 @@ internal static class EntornoResultados
         string result;
         if (status == "failed")
         {
-            result = $$$"""{"status":"error","plateNumber":"LHQ479","department":{"code":"25","name":"CUNDINAMARCA"},"pendingPeriods":[],"totals":null,"lastPayment":null,"clearance":null,"consolidatedFileId":null,"validations":[{"field":"OwnerName","sent":"PEDRO PEREZ","portal":null,"result":"mismatch"}],"warnings":{{{warnings}}},"error":{"code":"{{{errorCode}}}","message":"{{{errorMessage}}}"}}""";
+            result = $$$"""{"status":"error","plateNumber":"LHQ479","department":{"code":"25","name":"CUNDINAMARCA"},"pendingPeriods":[],"totals":null,"lastPayment":null,"clearance":null,"consolidatedFileId":null,"validations":[{"field":"OwnerName","sent":"PROPIETARIO PRUEBA","portal":null,"result":"mismatch"}],"warnings":{{{warnings}}},"error":{"code":"{{{errorCode}}}","message":"{{{errorMessage}}}"}}""";
         }
         else
         {
             var periodos = resultStatus == "paz_y_salvo"
                 ? "[]"
                 : $$$"""[{"period":2025,"appraisal":41738000,"tax":710000,"penalty":0,"interest":249000,"discounts":224000,"previousPayments":null,"totalToPay":{{{periodTotal}}},"otherCharges":[{"description":"Costos administrativos","amount":36700}],"dueDate":"2026-11-30","paymentReference":null,"fileId":{{{fileId}}} }]""";
-            result = $$$"""{"status":"{{{resultStatus}}}","plateNumber":"LHQ479","department":{"code":"25","name":"CUNDINAMARCA"},"consultedAt":"2026-11-25T15:01:35Z","vehicle":{"brand":null},"pendingPeriods":{{{periodos}}},"totals":{"tax":710000,"penalty":0,"interest":249000,"discounts":224000,"totalToPay":{{{totalToPay}}} },"lastPayment":null,"clearance":null,"consolidatedFileId":null,"validations":[{"field":"OwnerName","sent":"PEDRO PEREZ","portal":null,"result":"match"}],"warnings":{{{warnings}}},"error":null}""";
+            result = $$$"""{"status":"{{{resultStatus}}}","plateNumber":"LHQ479","department":{"code":"25","name":"CUNDINAMARCA"},"consultedAt":"2026-11-25T15:01:35Z","vehicle":{"brand":null},"pendingPeriods":{{{periodos}}},"totals":{"tax":710000,"penalty":0,"interest":249000,"discounts":224000,"totalToPay":{{{totalToPay}}} },"lastPayment":null,"clearance":null,"consolidatedFileId":null,"validations":[{"field":"OwnerName","sent":"PROPIETARIO PRUEBA","portal":null,"result":"match"}],"warnings":{{{warnings}}},"error":null}""";
         }
 
         var codigo = errorCode is null ? "null" : $"\"{errorCode}\"";

@@ -108,9 +108,11 @@ public sealed class AlmacenCredenciales(DbContextOptions<ImpuestosDb> opciones, 
 
     /// <summary>
     /// Prepara (sin guardar) la fila de la compañía con las credenciales nuevas cifradas: crea la fila si <paramref name="actual"/>
-    /// es null; si no, la reemplaza y sube su versión. Sin webhook_secret, el anterior se borra (la carga reemplaza el par). El id
-    /// de empresa del API se conserva si no viene uno nuevo. Si llega un secreto distinto del guardado, el guardado pasa (con su
-    /// mismo cifrado) a <c>webhook_secret_anterior_cifrado</c> durante <see cref="VentanaSecretoAnterior"/> (M07b, plan §5.8).
+    /// es null; si no, la reemplaza y sube su versión. Sin webhook_secret, el anterior se borra (la carga reemplaza el par); con la
+    /// ventana del anterior ya vencida (<c>webhook_secret_anterior_hasta &lt;= ahora</c>), también: las dos columnas
+    /// <c>anterior_*</c> quedan en null. El id de empresa del API se conserva si no viene uno nuevo. Si llega un secreto distinto
+    /// del guardado, el guardado pasa (con su mismo cifrado) a <c>webhook_secret_anterior_cifrado</c> durante
+    /// <see cref="VentanaSecretoAnterior"/> (M07b, plan §5.8).
     /// </summary>
     public CredencialEmpresa Escribir(ImpuestosDb db, CredencialEmpresa? actual, Guid empresa, CredencialesEnClaro nuevas, OrigenCredencial origen, Guid? actor)
     {
@@ -123,10 +125,18 @@ public sealed class AlmacenCredenciales(DbContextOptions<ImpuestosDb> opciones, 
             throw new ArgumentException("La fila actual es de otra compañía.", nameof(actual));
 
         var fila = actual ?? new CredencialEmpresa { TenantId = empresa, Version = 0 };
+        var ahora = reloj.GetUtcNow();
         if (CambiaSecreto(actual, empresa, nuevas.WebhookSecret))
         {
             fila.WebhookSecretAnteriorCifrado = actual!.WebhookSecretCifrado;
-            fila.WebhookSecretAnteriorHasta = reloj.GetUtcNow() + VentanaSecretoAnterior;
+            fila.WebhookSecretAnteriorHasta = ahora + VentanaSecretoAnterior;
+        }
+        else if (nuevas.WebhookSecret is null || fila.WebhookSecretAnteriorHasta is not { } hasta || hasta <= ahora || fila.WebhookSecretAnteriorCifrado is null)
+        {
+            // Sin secreto nuevo, o con la ventana del anterior vencida (o incompleta): las dos columnas en null, como exige
+            // ck_credenciales_empresa_secreto_anterior.
+            fila.WebhookSecretAnteriorCifrado = null;
+            fila.WebhookSecretAnteriorHasta = null;
         }
 
         fila.ApiKeyCifrada = proteccion.ProtegerCredencial(empresa, CodigosCredencial.ApiKey, nuevas.ApiKey);
@@ -137,7 +147,7 @@ public sealed class AlmacenCredenciales(DbContextOptions<ImpuestosDb> opciones, 
         fila.EmpresaApiId = nuevas.EmpresaApiId ?? fila.EmpresaApiId;
         fila.Origen = origen;
         fila.Version++;
-        fila.ActualizadoEn = reloj.GetUtcNow();
+        fila.ActualizadoEn = ahora;
         fila.ActualizadoPor = actor;
         if (actual is null)
             db.Add(fila);

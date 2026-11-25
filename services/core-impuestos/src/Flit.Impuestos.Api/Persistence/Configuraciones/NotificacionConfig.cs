@@ -29,7 +29,11 @@ internal sealed class NotificacionConfig : IEntityTypeConfiguration<Notificacion
         builder.HasKey(x => x.Id).HasName("pk_notificaciones");
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.Tipo).HasMaxLength(32);
-        builder.Property(x => x.LeidaPor).HasColumnType("uuid[]").HasDefaultValueSql("'{}'").ValueGeneratedNever();
+        builder.Property(x => x.LeidaPor).HasColumnType("uuid[]").HasDefaultValueSql("'{}'").ValueGeneratedNever()
+            .HasComment("@pii:low Seudónimos (ids de usuario de la plataforma) de quienes leyeron el aviso.");
+        builder.HasOne<Liquidacion>().WithMany().HasForeignKey(x => x.LiquidacionId)
+            .HasConstraintName("fk_notificaciones_liquidaciones").OnDelete(DeleteBehavior.Restrict);
+        builder.HasIndex(x => x.LiquidacionId).HasDatabaseName("ix_notificaciones_liquidacion");
         builder.HasIndex(x => new { x.TenantId, x.CreadaEn }).HasDatabaseName("ix_notificaciones_tenant_creada");
     }
 }

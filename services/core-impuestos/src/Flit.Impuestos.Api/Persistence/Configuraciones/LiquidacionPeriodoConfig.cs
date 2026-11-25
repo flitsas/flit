@@ -46,7 +46,11 @@ internal sealed class LiquidacionPeriodoConfig : IEntityTypeConfiguration<Liquid
 {
     public void Configure(EntityTypeBuilder<LiquidacionPeriodo> builder)
     {
-        builder.ToTable("liquidacion_periodos", t => t.HasComment("Vigencias liquidadas de cada ítem. Sin PII."));
+        builder.ToTable("liquidacion_periodos", t =>
+        {
+            t.HasComment("Vigencias liquidadas de cada ítem. Sin PII.");
+            t.HasCheckConstraint("ck_liquidacion_periodos_otros_cargos", "jsonb_typeof(otros_cargos) = 'array'");
+        });
         builder.HasKey(x => x.Id).HasName("pk_liquidacion_periodos");
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.HasOne<LiquidacionItem>().WithMany().HasForeignKey(x => x.ItemId)

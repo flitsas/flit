@@ -43,7 +43,7 @@ public sealed class ColumnasPropietarioTests(ApiReportesFixture fixture) : IClas
         var crudo = await json.Content.ReadAsStringAsync(ct);
         json.StatusCode.Should().Be(HttpStatusCode.OK, crudo);
         var texto = E.TextoDe(crudo);
-        texto.Should().Contain("Pedro Pérez Gómez").And.Contain("1020304050", "sin enmascarar (DA-7=b)");
+        texto.Should().Contain("Propietario Prueba Uno").And.Contain("1000000002", "sin enmascarar (DA-7=b)");
         texto.Should().NotContain(Direccion).And.NotContain(Correo).And.NotContain(Telefono);
         texto.ToLowerInvariant().Should().NotContain("direccion").And.NotContain("correo").And.NotContain("telefono");
         excel.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -52,7 +52,7 @@ public sealed class ColumnasPropietarioTests(ApiReportesFixture fixture) : IClas
         filas[0].Should().NotContain(c => c.Contains("Dirección", StringComparison.OrdinalIgnoreCase) || c.Contains("Correo", StringComparison.OrdinalIgnoreCase)
             || c.Contains("Teléfono", StringComparison.OrdinalIgnoreCase));
         var fila = filas.Single(f => f.Contains("PRO001"));
-        fila.Should().Contain(["Pedro Pérez Gómez", "CC", "1020304050"]);
+        fila.Should().Contain(["Propietario Prueba Uno", "CC", "1000000002"]);
         filas.SelectMany(f => f).Should().NotContain(c => c.Contains(Direccion) || c.Contains(Correo) || c.Contains(Telefono));
     }
 
@@ -63,7 +63,7 @@ public sealed class ColumnasPropietarioTests(ApiReportesFixture fixture) : IClas
         await E.SembrarEmpresaAsync(Api, empresa, ct);
         var (_, items) = await E.SembrarAsync(Api, empresa, Flit.Impuestos.Api.Persistence.TipoLiquidacion.Individual, Guid.NewGuid(), ct, null,
             new ItemSemilla("PRO001", ResultadoStatus: "con_deuda", Total: 50m, Departamento: "25", DepartamentoNombre: "Cundinamarca",
-                PropietarioNombre: "Pedro Pérez Gómez", DocumentoTipo: "CC", DocumentoNumero: "1020304050", Vigencias: ["2025"]));
+                PropietarioNombre: "Propietario Prueba Uno", DocumentoTipo: "CC", DocumentoNumero: "1000000002", Vigencias: ["2025"]));
         var proteccion = Api.App.Services.GetRequiredService<Flit.Impuestos.Api.Plataforma.IProteccionImpuestos>();
         var resultado = proteccion.ProtegerResultado(
             "{\"result\":{\"validations\":[{\"field\":\"OwnerAddress\",\"sent\":\"" + Direccion + "\"},{\"field\":\"OwnerEmail\",\"sent\":\"" + Correo +

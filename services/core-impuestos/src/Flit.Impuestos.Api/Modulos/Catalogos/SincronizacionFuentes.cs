@@ -100,7 +100,8 @@ public sealed partial class SincronizacionFuentes(
                 DepartamentoCodigo = codigo,
                 Nombre = string.IsNullOrEmpty(nombre) ? codigo : nombre.Length > LargoNombre ? nombre[..LargoNombre] : nombre,
                 Activa = item.Active ?? false,
-                ParamsSchema = item.ParamsSchema is { ValueKind: not (JsonValueKind.Null or JsonValueKind.Undefined) } esquema ? esquema.GetRawText() : "{}",
+                // Solo un objeto (ck_fuentes_api_params_schema); otra forma se guarda como «sin requisitos».
+                ParamsSchema = item.ParamsSchema is { ValueKind: JsonValueKind.Object } esquema ? esquema.GetRawText() : "{}",
                 SincronizadoEn = ahora,
             };
         }

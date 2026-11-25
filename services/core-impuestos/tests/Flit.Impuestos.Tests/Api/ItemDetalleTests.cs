@@ -159,8 +159,8 @@ public sealed class ItemDetalleTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var (empresa, lote, item) = await SembrarAsync(api, ct);
         var consulta = R.Consulta("c-1").Replace(
-            "\"validations\":[{\"field\":\"OwnerName\",\"sent\":\"PEDRO PEREZ\",\"portal\":null,\"result\":\"match\"}]",
-            "\"validations\":[{\"field\":\"OwnerName\",\"sent\":\"PEDRO PEREZ\",\"portal\":null,\"result\":\"match\"}," +
+            "\"validations\":[{\"field\":\"OwnerName\",\"sent\":\"PROPIETARIO PRUEBA\",\"portal\":null,\"result\":\"match\"}]",
+            "\"validations\":[{\"field\":\"OwnerName\",\"sent\":\"PROPIETARIO PRUEBA\",\"portal\":null,\"result\":\"match\"}," +
             "{\"field\":\"OwnerEmail\",\"sent\":\"pedro@correo.example\",\"portal\":null,\"result\":\"match\"}," +
             "{\"field\":\"OwnerPhone\",\"sent\":\"3001234567\",\"portal\":\"3001234567\",\"result\":\"match\"}," +
             "{\"field\":\"OwnerAddress\",\"sent\":\"CL 10 20 30\",\"portal\":null,\"result\":\"mismatch\"}]",

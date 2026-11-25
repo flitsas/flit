@@ -23,7 +23,11 @@ internal sealed class FuenteApiConfig : IEntityTypeConfiguration<FuenteApi>
 {
     public void Configure(EntityTypeBuilder<FuenteApi> builder)
     {
-        builder.ToTable("fuentes_api", t => t.HasComment("Caché de GET /fuentes del API de liquidación (global, refresco cada 6 h)."));
+        builder.ToTable("fuentes_api", t =>
+        {
+            t.HasComment("Caché de GET /fuentes del API de liquidación (global, refresco cada 6 h).");
+            t.HasCheckConstraint("ck_fuentes_api_params_schema", "jsonb_typeof(params_schema) = 'object'");
+        });
         builder.HasKey(x => x.DepartamentoCodigo).HasName("pk_fuentes_api");
         builder.Property(x => x.DepartamentoCodigo).HasMaxLength(2).ValueGeneratedNever();
         builder.Property(x => x.Nombre).HasMaxLength(80);

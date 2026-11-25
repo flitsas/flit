@@ -267,7 +267,7 @@ internal sealed class RuntDePrueba : IClienteRunt
     }
 
     public static DatosRunt Antioquia() => new(
-        TipoDocumento: "CC", NumeroDocumento: "71706228", NombrePropietario: "PEDRO PEREZ", Modelo: "2019", Marca: "CHEVROLET",
+        TipoDocumento: "CC", NumeroDocumento: "1000000001", NombrePropietario: "PROPIETARIO PRUEBA", Modelo: "2019", Marca: "CHEVROLET",
         OrganismoNombre: EntornoEjecucion.OrganismoMedellin, Correo: "pedro@correo.example", Telefono: "3001234567",
         DireccionDepartamento: "ANTIOQUIA", DireccionCiudad: "MEDELLIN", Direccion: "CL 10 20 30");
 

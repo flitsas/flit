@@ -67,7 +67,7 @@ public sealed class AvisoLoteTerminadoTests
         }
 
         var payloads = string.Join("\n", correos.Select(c => c.Payload));
-        payloads.Should().NotContain("AAA000").And.NotContain("PEDRO").And.NotContain("771700");
+        payloads.Should().NotContain("AAA000").And.NotContain("PROPIETARIO PRUEBA").And.NotContain("771700");
         var notificacion = (await M.NotificacionesAsync(api, empresa, ct)).Should().ContainSingle().Subject;
         notificacion.Tipo.Should().Be("LOTE_TERMINADO");
         notificacion.LiquidacionId.Should().Be(lote);

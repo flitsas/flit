@@ -57,7 +57,7 @@ internal static class AvisosEndpoints
         request.Headers.TryGetValue(nombre, out var v) && v.Count > 0 ? v[0] : null;
 }
 
-/// <summary>Registro de M10: receptor, cola, aplicación del resultado y conciliación.</summary>
+/// <summary>Registro de M10: receptor, cola, aplicación del resultado, conciliación y purga de los avisos recibidos.</summary>
 public static class AvisosYConciliacionExtensions
 {
     public static IServiceCollection AddAvisosYConciliacion(this IServiceCollection services, IConfiguration configuration)
@@ -75,6 +75,10 @@ public static class AvisosYConciliacionExtensions
         services.AddSingleton<TrabajadorConciliacion>();
         if (opciones.TrabajadorActivo)
             services.AddHostedService(sp => sp.GetRequiredService<TrabajadorConciliacion>());
+        // Security B-3: los avisos recibidos se purgan a los 30 días.
+        services.AddSingleton<PurgaAvisosRecibidos>();
+        if (configuration.GetValue(PurgaAvisosRecibidos.ClaveActiva, true))
+            services.AddHostedService(sp => sp.GetRequiredService<PurgaAvisosRecibidos>());
         return services;
     }
 }

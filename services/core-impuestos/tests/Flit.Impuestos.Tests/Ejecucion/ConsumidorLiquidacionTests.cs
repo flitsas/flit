@@ -86,8 +86,8 @@ public sealed class ConsumidorLiquidacionTests
         using (var scope = api.App.Services.CreateScope())
         {
             var proteccion = scope.ServiceProvider.GetRequiredService<IProteccionImpuestos>();
-            proteccion.DesprotegerPii(item.DocumentoNumeroCifrado!).Should().Be("71706228");
-            proteccion.DesprotegerPii(item.PropietarioNombreCifrado!).Should().Be("PEDRO PEREZ");
+            proteccion.DesprotegerPii(item.DocumentoNumeroCifrado!).Should().Be("1000000001");
+            proteccion.DesprotegerPii(item.PropietarioNombreCifrado!).Should().Be("PROPIETARIO PRUEBA");
         }
 
         (await EntornoEjecucion.LoteAsync(api, empresa, lote, ct)).CPendientes.Should().Be(1, "ENVIADO sigue pendiente en los contadores");
@@ -97,7 +97,7 @@ public sealed class ConsumidorLiquidacionTests
         var dto = items2.RootElement.GetProperty("items")[0];
         dto.GetProperty("secretaria").GetProperty("ciudad").GetString().Should().Be("MEDELLIN", "delta 5: secretaría según el RUNT");
         dto.GetProperty("secretaria").GetProperty("nombre").GetString().Should().Be(EntornoEjecucion.OrganismoMedellin, "secretaria_nombre (1.2.0)");
-        dto.GetProperty("propietario").GetProperty("documentoNumero").GetString().Should().Be("71706228");
+        dto.GetProperty("propietario").GetProperty("documentoNumero").GetString().Should().Be("1000000001");
     }
 
     [Fact]
@@ -570,7 +570,7 @@ public sealed class ConsumidorLiquidacionTests
         await EntornoEjecucion.ProcesarColaAsync(api, ct);
 
         logs.Todo.Should().Contain("consulta", "el consumidor sí deja rastro");
-        foreach (var prohibido in new[] { Placa, "71706228", "PEDRO PEREZ", ClienteApiLiquidacionTests.ApiKey, ClienteApiLiquidacionTests.WebhookSecret, "pedro@correo.example" })
+        foreach (var prohibido in new[] { Placa, "1000000001", "PROPIETARIO PRUEBA", ClienteApiLiquidacionTests.ApiKey, ClienteApiLiquidacionTests.WebhookSecret, "pedro@correo.example" })
             logs.Todo.Should().NotContain(prohibido);
     }
 

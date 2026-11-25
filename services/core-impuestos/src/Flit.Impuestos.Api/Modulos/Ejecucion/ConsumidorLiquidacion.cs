@@ -297,7 +297,9 @@ public sealed partial class ConsumidorLiquidacion(
             await using var tx = await propio.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
             var loteId = await propio.Set<LiquidacionItem>().AsNoTracking().Where(i => i.Id == itemId)
                 .Select(i => i.LiquidacionId).SingleAsync(ct).ConfigureAwait(false);
-            await propio.Database.ExecuteSqlAsync($"SELECT 1 FROM impuestos.liquidaciones WHERE id = {loteId} FOR UPDATE", ct).ConfigureAwait(false);
+            // Sin candado del crédito: este registro no libera (orden de bloqueos en DespachadorCredito).
+            await propio.Database.ExecuteSqlAsync($"SELECT 1 FROM impuestos.liquidaciones WHERE id = {loteId} AND tenant_id = {tenant} FOR UPDATE", ct)
+                .ConfigureAwait(false);
             var estadoLote = await propio.Set<Liquidacion>().AsNoTracking().Where(l => l.Id == loteId)
                 .Select(l => l.Estado).SingleAsync(ct).ConfigureAwait(false);
             var fila = await propio.Set<LiquidacionItem>().SingleAsync(i => i.Id == itemId, ct).ConfigureAwait(false);

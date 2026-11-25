@@ -27,6 +27,12 @@ public sealed class ConfiguracionEmpresa : IEntidadDeEmpresa
     public DateTimeOffset ActualizadoEn { get; set; }
 
     public Guid? ActualizadoPor { get; set; }
+
+    /// <summary>
+    /// Token de concurrencia optimista (columna de sistema <c>xmin</c>): un guardado sobre una lectura vieja falla con
+    /// <c>DbUpdateConcurrencyException</c> en vez de pisar la fila. <see cref="Version"/> es otra cosa: la versión de la configuración.
+    /// </summary>
+    public uint Xmin { get; set; }
 }
 
 /// <summary><c>impuestos.configuracion_empresa</c> (plan §4.1).</summary>
@@ -46,5 +52,7 @@ internal sealed class ConfiguracionEmpresaConfig : IEntityTypeConfiguration<Conf
         builder.Property(x => x.CorreosAviso).HasColumnType("varchar(254)[]").HasDefaultValueSql("'{}'").ValueGeneratedNever()
             .HasComment("@pii:low Correos de aviso de la compañía.");
         builder.Property(x => x.Version).HasDefaultValue(1L).ValueGeneratedNever();
+        builder.Property(x => x.ActualizadoPor).HasComment(ComentariosPii.Actor);
+        builder.Property(x => x.Xmin).IsRowVersion();
     }
 }

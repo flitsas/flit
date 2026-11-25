@@ -42,11 +42,15 @@ internal static class AprovisionamientoBackofficeEndpoints
         var empresa = EmpresaExplicita.De(http);
         await using (var db = almacen.ContextoDe(empresa))
         {
-            var fila = await db.Set<AprovisionamientoEmpresa>().SingleOrDefaultAsync(a => a.TenantId == empresa, ct).ConfigureAwait(false)
-                ?? throw NoEncontrada();
-            if (!ConsumidorReintentoAprovisionamiento.Reintentar(db, fila, usuario.Id, reloj.GetUtcNow()))
-                throw ReglaException.Conflicto(CodigoNoReintentable, LiteralNoReintentable);
-            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+            await BloqueoAprovisionamiento.EnTransaccionAsync(db, empresa, async c =>
+            {
+                var fila = await db.Set<AprovisionamientoEmpresa>().SingleOrDefaultAsync(a => a.TenantId == empresa, c).ConfigureAwait(false)
+                    ?? throw NoEncontrada();
+                if (!ConsumidorReintentoAprovisionamiento.Reintentar(db, fila, usuario.Id, reloj.GetUtcNow()))
+                    throw ReglaException.Conflicto(CodigoNoReintentable, LiteralNoReintentable);
+                await db.SaveChangesAsync(c).ConfigureAwait(false);
+                return true;
+            }, ct).ConfigureAwait(false);
         }
 
         // Sin esperar la ronda: el admin de compañías ve PENDIENTE de una vez (si Identidad no responde, la ronda lo reintenta).

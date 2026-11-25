@@ -268,7 +268,7 @@ public sealed class ReportesTests(ApiReportesFixture fixture) : IClassFixture<Ap
         fixture.Plataforma.Filas.Add(UsuariosPlataformaDePrueba.Fila(creador, "Ana Gestora", "ana@empresa.test", "gestor_impuestos"));
         var (lote, _) = await E.SembrarAsync(Api, empresa, TipoLiquidacion.Masiva, creador, ct, null,
             new ItemSemilla("RPT001", ResultadoStatus: "con_deuda", Total: 120m, Departamento: "25", DepartamentoNombre: "Cundinamarca",
-                PropietarioNombre: "Pedro Pérez", DocumentoTipo: "CC", DocumentoNumero: "79123456", Vigencias: ["2024", "2025"]),
+                PropietarioNombre: "Propietario Prueba Dos", DocumentoTipo: "CC", DocumentoNumero: "1000000003", Vigencias: ["2024", "2025"]),
             new ItemSemilla("RPT002", EstadoItem.Error, Departamento: "05", DepartamentoNombre: "Antioquia", ErrorCodigo: "portal_unavailable",
                 ErrorClase: ClaseError.Reintentable, ErrorMensaje: "El portal no responde"),
             new ItemSemilla("RPT003", EstadoItem.Enviado, ConCallback: true, Departamento: "25", DepartamentoNombre: "Cundinamarca"));

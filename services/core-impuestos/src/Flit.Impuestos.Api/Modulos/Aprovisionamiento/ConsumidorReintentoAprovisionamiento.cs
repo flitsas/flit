@@ -16,7 +16,8 @@ public sealed record AprovisionamientoReintentar(Guid TenantId, Guid SolicitadoP
 /// <c>PENDIENTE</c> sin intentos ni espera (la ronda siguiente lo evalúa), sube la versión y deja historial con actor
 /// <c>SUPER_ADMIN</c> y su id. Llega por dos caminos con la misma regla (<see cref="Reintentar"/>): el trabajo de la plataforma
 /// (admin de compañías, en la transacción del consumidor de <see cref="ConsumidorCambioProducto.Cola"/>; en otro estado o sin fila
-/// se confirma sin efecto) y la ruta del backoffice de Impuestos (409 <c>ESTADO_NO_REINTENTABLE</c> si no se puede).
+/// se confirma sin efecto) y la ruta del backoffice de Impuestos (409 <c>ESTADO_NO_REINTENTABLE</c> si no se puede). Los dos leen
+/// la fila con <c>FOR UPDATE</c> (<see cref="BloqueoAprovisionamiento"/>).
 /// </summary>
 /// <example>
 /// <code>
@@ -36,6 +37,7 @@ public sealed partial class ConsumidorReintentoAprovisionamiento(
             throw new SinReintentoAutomaticoException("La empresa de los datos no es la del sobre.");
 
         empresa.Fijar(envelope.TenantId);
+        await BloqueoAprovisionamiento.BloquearAsync(db, envelope.TenantId, ct).ConfigureAwait(false);
         var fila = await db.Set<AprovisionamientoEmpresa>().SingleOrDefaultAsync(a => a.TenantId == envelope.TenantId, ct).ConfigureAwait(false);
         if (fila is null || !Reintentar(db, fila, pedido.SolicitadoPor, reloj.GetUtcNow()))
             SinEfecto(log, envelope.TenantId, fila?.Estado);

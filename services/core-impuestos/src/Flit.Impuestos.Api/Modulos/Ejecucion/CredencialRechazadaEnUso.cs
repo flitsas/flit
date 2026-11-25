@@ -27,6 +27,12 @@ public sealed partial class CredencialRechazadaEnUso(AlmacenCredenciales almacen
     public async Task<bool> AplicarAsync(Guid empresa, CancellationToken ct)
     {
         await using var db = almacen.ContextoDe(empresa);
+        // Con la fila bloqueada: una suspensión o una carga manual a la vez no se pisan (IMP-4).
+        return await BloqueoAprovisionamiento.EnTransaccionAsync(db, empresa, c => AplicarEnFilaAsync(db, empresa, c), ct).ConfigureAwait(false);
+    }
+
+    private async Task<bool> AplicarEnFilaAsync(ImpuestosDb db, Guid empresa, CancellationToken ct)
+    {
         var fila = await db.Set<AprovisionamientoEmpresa>().SingleOrDefaultAsync(a => a.TenantId == empresa, ct).ConfigureAwait(false);
         if (fila is not { Estado: EstadoAprovisionamiento.Listo or EstadoAprovisionamiento.ListoSinWebhook })
             return false;

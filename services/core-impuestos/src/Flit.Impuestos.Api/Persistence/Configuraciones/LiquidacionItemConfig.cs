@@ -95,6 +95,11 @@ public sealed class LiquidacionItem : IEntidadDeEmpresa
 /// <summary><c>impuestos.liquidacion_items</c> (plan §4.1).</summary>
 internal sealed class LiquidacionItemConfig : IEntityTypeConfiguration<LiquidacionItem>
 {
+    /// <summary>Estados que ocupan crédito: los de <c>DespachadorCredito.EnVuelo</c>, que el índice parcial repite.</summary>
+    internal static readonly EstadoItem[] EnVuelo = [EstadoItem.ConsultandoRunt, EstadoItem.Enviando];
+
+    private static string ListaSql(IEnumerable<EstadoItem> estados) => string.Join(",", estados.Select(e => $"'{CodigosDeEnum.Codigo(e)}'"));
+
     public void Configure(EntityTypeBuilder<LiquidacionItem> builder)
     {
         builder.ToTable("liquidacion_items", t =>
@@ -109,7 +114,7 @@ internal sealed class LiquidacionItemConfig : IEntityTypeConfiguration<Liquidaci
             .HasConstraintName("fk_liquidacion_items_liquidaciones").OnDelete(DeleteBehavior.Restrict);
         builder.HasOne<LiquidacionItem>().WithMany().HasForeignKey(x => x.RelanzadoDesde)
             .HasConstraintName("fk_liquidacion_items_relanzado_desde").OnDelete(DeleteBehavior.Restrict);
-        builder.Property(x => x.Placa).HasMaxLength(10).HasComment("Placa normalizada (S16).");
+        builder.Property(x => x.Placa).HasMaxLength(10).HasComment("@pii:low Placa normalizada (S16).");
         builder.Property(x => x.Estado).HasConversion(CodigosDeEnum.Convertidor<EstadoItem>()).HasMaxLength(32);
         builder.Property(x => x.ErrorCodigo).HasMaxLength(48);
         builder.Property(x => x.ErrorClase).HasConversion(CodigosDeEnum.Convertidor<ClaseError>()).HasMaxLength(16);
@@ -118,7 +123,7 @@ internal sealed class LiquidacionItemConfig : IEntityTypeConfiguration<Liquidaci
         builder.Property(x => x.DepartamentoCodigo).HasMaxLength(2);
         builder.Property(x => x.DepartamentoNombre).HasMaxLength(80);
         builder.Property(x => x.SecretariaCiudad).HasMaxLength(80);
-        builder.Property(x => x.SecretariaNombre).HasMaxLength(120);
+        builder.Property(x => x.SecretariaNombre).HasMaxLength(120).HasComment("@pii:none Nombre de la secretaría de tránsito (Item.secretaria.nombre).");
         builder.Property(x => x.DocumentoTipo).HasMaxLength(3);
         builder.Property(x => x.DocumentoNumeroCifrado).HasComment("@pii:high Número de documento del propietario, cifrado (impuestos.pii.v1).");
         builder.Property(x => x.PropietarioNombreCifrado).HasComment("@pii:high Nombre del propietario, cifrado (impuestos.pii.v1).");
@@ -141,5 +146,9 @@ internal sealed class LiquidacionItemConfig : IEntityTypeConfiguration<Liquidaci
         builder.HasIndex(x => new { x.LiquidacionId, x.Estado }).HasDatabaseName("ix_items_liq");
         builder.HasIndex(x => x.ProximoPollEn).HasFilter("estado IN ('ENVIADO','INCIERTO')").HasDatabaseName("ix_items_poll");
         builder.HasIndex(x => new { x.TenantId, x.Placa }).HasDatabaseName("ix_items_tenant_placa");
+        // Conteo del crédito en vuelo (DespachadorCredito.EnVuelo) y búsqueda de los pendientes a liberar.
+        builder.HasIndex(x => x.TenantId).HasFilter($"estado IN ({ListaSql(EnVuelo)})").HasDatabaseName("ix_liquidacion_items_en_vuelo");
+        builder.HasIndex(x => new { x.TenantId, x.LiquidacionId }).HasFilter($"estado = {ListaSql([EstadoItem.Pendiente])}")
+            .HasDatabaseName("ix_liquidacion_items_pendientes");
     }
 }

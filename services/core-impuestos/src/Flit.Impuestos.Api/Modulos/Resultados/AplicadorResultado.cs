@@ -95,7 +95,7 @@ public sealed partial class AplicadorResultado(
         {
             try
             {
-                return await db.Database.CreateExecutionStrategy().ExecuteAsync(() => EnTransaccionAsync(itemId, lote, paso, ct)).ConfigureAwait(false);
+                return await db.Database.CreateExecutionStrategy().ExecuteAsync(() => EnTransaccionAsync(empresa, itemId, lote, paso, ct)).ConfigureAwait(false);
             }
             catch (DbUpdateConcurrencyException) when (intento < IntentosPorConcurrencia)
             {
@@ -104,12 +104,15 @@ public sealed partial class AplicadorResultado(
         }
     }
 
-    private async Task<Aplicacion> EnTransaccionAsync(Guid itemId, Guid loteId, Func<LiquidacionItem, DateTimeOffset, Task<Aplicacion>> paso, CancellationToken ct)
+    private async Task<Aplicacion> EnTransaccionAsync(
+        Guid empresa, Guid itemId, Guid loteId, Func<LiquidacionItem, DateTimeOffset, Task<Aplicacion>> paso, CancellationToken ct)
     {
         db.ChangeTracker.Clear();
         await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
         // Un aplicador por lote a la vez: la cabecera queda bloqueada hasta el commit (los contadores se recalculan con lo confirmado).
-        await db.Database.ExecuteSqlAsync($"SELECT 1 FROM impuestos.liquidaciones WHERE id = {loteId} FOR UPDATE", ct).ConfigureAwait(false);
+        // Esta transacción no libera crédito ni espera su candado, así que no hace falta tomarlo antes (orden en DespachadorCredito).
+        await db.Database.ExecuteSqlAsync($"SELECT 1 FROM impuestos.liquidaciones WHERE id = {loteId} AND tenant_id = {empresa} FOR UPDATE", ct)
+            .ConfigureAwait(false);
         var item = await db.Set<LiquidacionItem>().SingleAsync(i => i.Id == itemId, ct).ConfigureAwait(false);
         var ahora = reloj.GetUtcNow();
         var resultado = await paso(item, ahora).ConfigureAwait(false);

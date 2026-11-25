@@ -20,7 +20,7 @@ namespace Flit.Impuestos.Api.Modulos.Avisos;
 ///   para refrescar el secreto.</item>
 ///   <item>Firma válida: otro evento que <c>consulta.finalizada</c> se confirma con <c>200</c> y se ignora, sin cambiar nada. Si
 ///   es el evento, apaga el modo respaldo, confirma la firma (<c>LISTO</c>, F1a-CF11), deduplica por <c>X-Flit-Delivery</c>
-///   (duplicado ⇒ 200 sin repetir), descarta con alerta un <c>consulta.id</c> distinto del ítem y encola el resto. Siempre 200,
+///   y por (<c>consulta_id</c>, <c>attempt</c>) del cuerpo firmado (duplicado ⇒ 200 sin repetir), descarta con alerta un <c>consulta.id</c> distinto del ítem y encola el resto. Siempre 200,
 ///   también con la compañía suspendida (S6) o el ítem cerrado.</item>
 /// </list>
 /// El token se busca por SQL (solo el id de la compañía) y lo demás en el contexto con esa compañía fijada. No registra el
@@ -114,8 +114,10 @@ public sealed partial class ProcesadorAviso(
         var distinta = item.ConsultaApiId is not null && !string.Equals(item.ConsultaApiId, consulta.ConsultaId, StringComparison.Ordinal);
         var resultado = distinta ? ResultadoConsultaDistinta : ResultadoRecibido;
         var consultaId = consulta.ConsultaId.Length > 64 ? consulta.ConsultaId[..64] : consulta.ConsultaId;
+        // Dedupe por X-Flit-Delivery (pk, no va firmado) y por (consulta_id, attempt) del cuerpo firmado
+        // (ux_avisos_recibidos_consulta_attempt): un replay con otro X-Flit-Delivery tampoco entra (MEN-9 / security B-1).
         var nuevas = await db.Database.ExecuteSqlAsync(
-            $"INSERT INTO impuestos.avisos_recibidos (delivery_id, item_id, tenant_id, consulta_id, attempt, recibido_en, resultado) VALUES ({deliveryId}, {item.Id}, {empresa}, {consultaId}, {consulta.Attempt}, {ahora}, {resultado}) ON CONFLICT (delivery_id) DO NOTHING",
+            $"INSERT INTO impuestos.avisos_recibidos (delivery_id, item_id, tenant_id, consulta_id, attempt, recibido_en, resultado) VALUES ({deliveryId}, {item.Id}, {empresa}, {consultaId}, {consulta.Attempt}, {ahora}, {resultado}) ON CONFLICT DO NOTHING",
             ct).ConfigureAwait(false);
         if (nuevas == 0)
         {
@@ -151,14 +153,19 @@ public sealed partial class ProcesadorAviso(
         return valor.Length <= LargoDelivery ? valor : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(valor)));
     }
 
-    /// <summary>Cuenta una firma inválida de un token conocido; la cuenta se reinicia si la anterior fue hace más de una hora.</summary>
+    /// <summary>
+    /// Cuenta una firma inválida de un token conocido; la cuenta se reinicia si la anterior fue hace más de una hora. La ventana se
+    /// mide contra <c>ultima_firma_invalida_en</c> (MEN-8): contar no es un cambio del aprovisionamiento y no toca
+    /// <c>actualizado_en</c>. Es un <c>ExecuteUpdate</c> atómico (toma solo la fila, como pide <c>BloqueoAprovisionamiento</c>) y
+    /// cambia <c>xmin</c>: quien tuviera la fila leída de antes recibe un choque de concurrencia y relee.
+    /// </summary>
     private async Task FirmaInvalidaAsync(Guid empresa, DateTimeOffset ahora, CancellationToken ct)
     {
         var limite = ahora - VentanaFirmasInvalidas;
         var filas = db.Set<AprovisionamientoEmpresa>().Where(a => a.TenantId == empresa);
         await filas.ExecuteUpdateAsync(s => s
-            .SetProperty(a => a.FirmasInvalidasConsecutivas, a => a.FirmasInvalidasConsecutivas > 0 && a.ActualizadoEn >= limite ? a.FirmasInvalidasConsecutivas + 1 : 1)
-            .SetProperty(a => a.ActualizadoEn, ahora), ct).ConfigureAwait(false);
+            .SetProperty(a => a.FirmasInvalidasConsecutivas, a => a.FirmasInvalidasConsecutivas > 0 && a.UltimaFirmaInvalidaEn >= limite ? a.FirmasInvalidasConsecutivas + 1 : 1)
+            .SetProperty(a => a.UltimaFirmaInvalidaEn, ahora), ct).ConfigureAwait(false);
         var encendidas = await filas.Where(a => !a.ModoRespaldoFirma && a.FirmasInvalidasConsecutivas >= FirmasInvalidasParaRespaldo)
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.ModoRespaldoFirma, true), ct).ConfigureAwait(false);
         if (encendidas > 0)
@@ -181,7 +188,8 @@ public sealed partial class ProcesadorAviso(
         if (apagadas > 0)
             CuentaReiniciada(log, empresa);
 
-        // Transición PrimerWebhookValido de la tabla del dominio: solo en LISTO y una vez (la condición la hace atómica).
+        // Transición PrimerWebhookValido de la tabla del dominio: solo en LISTO y una vez (la condición la hace atómica). El
+        // ExecuteUpdate toma la fila y cambia xmin: un escritor con la fila leída de antes choca y relee (BloqueoAprovisionamiento).
         var confirmadas = await filas.Where(a => a.Estado == EstadoAprovisionamiento.Listo && !a.FirmaConfirmada)
             .ExecuteUpdateAsync(s => s.SetProperty(a => a.FirmaConfirmada, true).SetProperty(a => a.Version, a => a.Version + 1).SetProperty(a => a.ActualizadoEn, ahora), ct)
             .ConfigureAwait(false);
@@ -212,7 +220,7 @@ public sealed partial class ProcesadorAviso(
     [LoggerMessage(Level = LogLevel.Warning, Message = "Aviso con firma válida para el ítem {Item} pero sin una consulta legible: se descarta.")]
     private static partial void Ilegible(ILogger logger, Guid item);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Aviso duplicado para el ítem {Item}: ya se había recibido ese X-Flit-Delivery.")]
+    [LoggerMessage(Level = LogLevel.Information, Message = "Aviso duplicado para el ítem {Item}: ya se había recibido ese X-Flit-Delivery o esa consulta con ese attempt.")]
     private static partial void Duplicado(ILogger logger, Guid item);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Aviso para el ítem {Item} con un consulta.id distinto del del ítem: se descarta (aviso_consulta_distinta).")]

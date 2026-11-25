@@ -92,6 +92,8 @@ public sealed partial class ReconciliadorEjecucion(
         {
             db.ChangeTracker.Clear();
             await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            // Orden de bloqueos (DespachadorCredito): el candado del crédito antes de escribir ítems, porque al final libera.
+            await DespachadorCredito.TomarCandadoAsync(db, ct).ConfigureAwait(false);
             var vencidos = await db.Set<LiquidacionItem>()
                 .Where(i => i.Estado == EstadoItem.ReintentoProgramado && i.ProximoIntentoEn <= ahora)
                 .OrderBy(i => i.Id).Take(o.Reconciliador.Maximo).ToListAsync(ct).ConfigureAwait(false);

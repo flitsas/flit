@@ -51,6 +51,12 @@ public sealed class CredencialEmpresa : IEntidadDeEmpresa
     public DateTimeOffset ActualizadoEn { get; set; }
 
     public Guid? ActualizadoPor { get; set; }
+
+    /// <summary>
+    /// Token de concurrencia optimista (columna de sistema <c>xmin</c>): un guardado sobre una lectura vieja falla con
+    /// <c>DbUpdateConcurrencyException</c> en vez de pisar la fila. <see cref="Version"/> es otra cosa: la versión de la credencial.
+    /// </summary>
+    public uint Xmin { get; set; }
 }
 
 /// <summary><c>impuestos.credenciales_empresa</c> (plan §4.1).</summary>
@@ -62,6 +68,9 @@ internal sealed class CredencialEmpresaConfig : IEntityTypeConfiguration<Credenc
         {
             t.HasComment("Credenciales del API de liquidación por compañía, cifradas con Data Protection (DA-2=b).");
             t.HasCheckConstraint("ck_credenciales_empresa_origen", $"origen IN ({CodigosDeEnum.ListaSql<OrigenCredencial>()})");
+            // El secreto anterior y su ventana van juntos (AlmacenCredenciales.Escribir pone las dos en null o las dos con valor).
+            t.HasCheckConstraint("ck_credenciales_empresa_secreto_anterior",
+                "(webhook_secret_anterior_cifrado IS NULL) = (webhook_secret_anterior_hasta IS NULL)");
         });
         builder.HasKey(x => x.TenantId).HasName("pk_credenciales_empresa");
         builder.Property(x => x.TenantId).ValueGeneratedNever();
@@ -76,5 +85,7 @@ internal sealed class CredencialEmpresaConfig : IEntityTypeConfiguration<Credenc
         builder.Property(x => x.WebhookSecretAnteriorHasta).HasComment("Fin de la ventana en la que se acepta el secreto anterior (24 h).");
         builder.Property(x => x.Origen).HasConversion(CodigosDeEnum.Convertidor<OrigenCredencial>()).HasMaxLength(24);
         builder.Property(x => x.Version).HasDefaultValue(1L).ValueGeneratedNever();
+        builder.Property(x => x.ActualizadoPor).HasComment(ComentariosPii.Actor);
+        builder.Property(x => x.Xmin).IsRowVersion();
     }
 }

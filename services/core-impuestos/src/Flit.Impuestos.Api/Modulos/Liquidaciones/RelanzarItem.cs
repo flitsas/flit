@@ -23,7 +23,8 @@ public sealed record RelanzarEntrada(bool? ConfirmarPosibleDuplicado);
 ///   <item>Solo desde <c>INCIERTO_REQUIERE_DECISION</c> o <c>ERROR</c> <c>REINTENTABLE</c> (<see cref="EventoItem.Relanzar"/> del
 ///   dominio) ⇒ si no, 409 <c>NO_RELANZABLE</c>.</item>
 ///   <item>Crea una individual nueva con <see cref="CrearLiquidacionIndividual"/> (mismo aprovisionamiento exigido, 409) con la placa
-///   del ítem, <c>relanzado_desde</c> y <c>posible_duplicado=true</c>. El ítem y el lote originales no cambian.</item>
+///   del ítem, <c>relanzado_desde</c> y <c>posible_duplicado=true</c>. El ítem y el lote originales no cambian. La transacción que lo
+///   crea bloquea el ítem original (<see cref="BloquearOriginalAsync"/>): varios relanzamientos del mismo ítem se permiten, en serie.</item>
 /// </list>
 /// Responde 201 <c>LiquidacionConItems</c>.
 /// </summary>
@@ -52,6 +53,29 @@ public static class RelanzarItem
             ?? throw ErroresLiquidaciones.ItemNoEncontrado();
         if (!confirmado)
             throw ErroresLiquidaciones.ConfirmacionRequerida();
+        ExigirRelanzable(item);
+
+        return item.Placa;
+    }
+
+    /// <summary>
+    /// Dentro de la transacción que crea el relanzamiento: bloquea el ítem original (<c>SELECT … FOR UPDATE</c> con su compañía) hasta
+    /// el commit y comprueba que sigue relanzable. Dos relanzamientos simultáneos del mismo ítem quedan en serie y cada uno crea el
+    /// suyo (MEN-7: se permite relanzar varias veces). Si entre tanto el ítem dejó de ser relanzable, 409 <c>NO_RELANZABLE</c>.
+    /// </summary>
+    internal static async Task BloquearOriginalAsync(ImpuestosDb db, Guid empresa, Guid itemId, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        await db.Database.ExecuteSqlAsync(
+            $"SELECT 1 FROM impuestos.liquidacion_items WHERE id = {itemId} AND tenant_id = {empresa} FOR UPDATE", ct).ConfigureAwait(false);
+        var item = await db.Set<LiquidacionItem>().AsNoTracking().SingleOrDefaultAsync(i => i.Id == itemId, ct).ConfigureAwait(false)
+            ?? throw ErroresLiquidaciones.ItemNoEncontrado();
+        ExigirRelanzable(item);
+    }
+
+    /// <summary>409 <c>NO_RELANZABLE</c> si el estado del ítem no admite <see cref="EventoItem.Relanzar"/> (tabla del dominio).</summary>
+    private static void ExigirRelanzable(LiquidacionItem item)
+    {
         try
         {
             TransicionesItem.Aplicar(new SituacionItem(item.Estado, item.IntentosRunt, item.IntentosReenvio, item.ErrorClase), new EventoItem.Relanzar());
@@ -60,8 +84,6 @@ public static class RelanzarItem
         {
             throw ErroresLiquidaciones.NoRelanzable();
         }
-
-        return item.Placa;
     }
 
     private static async Task<IResult> RelanzarAsync(
