@@ -175,27 +175,32 @@ public sealed partial class OcrAsociarTests
     }
 
     // ── Vencimiento del plazo propio del trabajo posterior a la asociación ───────────────────────────────────────────────
-    private sealed class PlantillasLentas(ComparendosDb db, IConfiguration configuracion) : ServicioPlantillas(db, configuracion)
+    /// <summary>Espera hasta que el plazo propio la cancele; con <paramref name="tiempoInterno"/> lanza de inmediato un TaskCanceledException con el token VIVO (como un HttpClient que vence).</summary>
+    private sealed class PlantillasLentas(ComparendosDb db, IConfiguration configuracion, bool tiempoInterno = false) : ServicioPlantillas(db, configuracion)
     {
         public override Task<Armado> ArmarAsync(ConjuntoPlantillas conjunto, TipoPlantilla tipo, Guid? tipologiaId, IReadOnlyDictionary<string, string?> valores, CancellationToken ct) =>
-            Task.Delay(Timeout.Infinite, ct).ContinueWith<Armado>(_ => throw new InvalidOperationException("inalcanzable"), TaskScheduler.Default);
+            tiempoInterno
+                ? throw new TaskCanceledException("tiempo de espera interno del transporte")
+                : Task.Delay(Timeout.Infinite, ct).ContinueWith<Armado>(_ => throw new InvalidOperationException("inalcanzable"), TaskScheduler.Default);
     }
 
-    private sealed class DespachadorLento(IServiceScopeFactory scopes, TimeProvider tiempo, ILogger<DespachadorCorreos> logger) : DespachadorCorreos(scopes, tiempo, logger)
+    private sealed class DespachadorLento(IServiceScopeFactory scopes, TimeProvider tiempo, ILogger<DespachadorCorreos> logger, bool tiempoInterno = false) : DespachadorCorreos(scopes, tiempo, logger)
     {
         public override async Task<EstadoComunicacion> DespacharAsync(Guid id, CancellationToken ct)
         {
+            if (tiempoInterno)
+                throw new TaskCanceledException("tiempo de espera interno del transporte");
             await Task.Delay(Timeout.Infinite, ct);
             return EstadoComunicacion.Pendiente;
         }
     }
 
-    private static ServicioEvidencia ServicioConPlazo(IServiceProvider sp, bool plantillasLentas, bool despachoLento, int segundos) => new(
+    private static ServicioEvidencia ServicioConPlazo(IServiceProvider sp, bool plantillasLentas, bool despachoLento, int segundos, bool tiempoInterno = false) => new(
         sp.GetRequiredService<ComparendosDb>(), sp.GetRequiredService<Capacidades>(),
-        plantillasLentas ? new PlantillasLentas(sp.GetRequiredService<ComparendosDb>(), sp.GetRequiredService<IConfiguration>()) : sp.GetRequiredService<ServicioPlantillas>(),
+        plantillasLentas ? new PlantillasLentas(sp.GetRequiredService<ComparendosDb>(), sp.GetRequiredService<IConfiguration>(), tiempoInterno) : sp.GetRequiredService<ServicioPlantillas>(),
         sp.GetRequiredService<ContextoPlantilla>(), sp.GetRequiredService<ServicioPortal>(), sp.GetRequiredService<ServicioCorreo>(), sp.GetRequiredService<Timeline>(),
         sp.GetRequiredService<IProductosHabilitados>(),
-        despachoLento ? new DespachadorLento(sp.GetRequiredService<IServiceScopeFactory>(), TimeProvider.System, sp.GetRequiredService<ILogger<DespachadorCorreos>>()) : sp.GetRequiredService<DespachadorCorreos>(),
+        despachoLento ? new DespachadorLento(sp.GetRequiredService<IServiceScopeFactory>(), TimeProvider.System, sp.GetRequiredService<ILogger<DespachadorCorreos>>(), tiempoInterno) : sp.GetRequiredService<DespachadorCorreos>(),
         sp.GetRequiredService<ILogger<ServicioEvidencia>>())
     {
         Plazo = TimeSpan.FromSeconds(segundos),
@@ -242,6 +247,44 @@ public sealed partial class OcrAsociarTests
 
         // 4 s: el registro real (plantilla, BD) debe caber antes de que el despacho lento haga vencer el plazo, aun en frío o con carga.
         var r = await ServicioConPlazo(scope.ServiceProvider, plantillasLentas: false, despachoLento: true, segundos: 4)
+            .EnviarAlAsociarAsync(comparendo, empresa, doc.ArchivoId, reemplazo: false, Actor.Sistema, TestContext.Current.CancellationToken);
+
+        r.Should().Be(new ResultadoEvidencia(ResultadoEvidencia.Pendiente, null));
+        (await EvidenciasAsync(comparendo)).Should().ContainSingle().Which.Estado.Should().Be(EstadoComunicacion.Pendiente);
+    }
+
+    /// <summary>
+    /// Un tiempo de espera interno del transporte (TaskCanceledException con el token propio AÚN vivo) no puede escapar como un 500:
+    /// la asociación ya está confirmada. Registro: Omitido con su nota. Despacho: Pendiente (el correo ya está registrado).
+    /// </summary>
+    [Fact(Timeout = 60_000)]
+    public async Task EnviarAlAsociar_SiElTransporteCancelaPorSuCuenta_AlRegistrar_NoLanza_ConNota()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, cliente, comparendo) = await ComparendoAsync("EVI-14");
+        await ConConductorAsync(cliente, comparendo);
+        var (_, doc) = await SubirAsync(cliente, "EVI-14", "evi-cancela-registro");
+        await using var scope = api.App.Services.CreateAsyncScope();
+
+        var r = await ServicioConPlazo(scope.ServiceProvider, plantillasLentas: true, despachoLento: false, segundos: 20, tiempoInterno: true)
+            .EnviarAlAsociarAsync(comparendo, empresa, doc.ArchivoId, reemplazo: false, Actor.Sistema, ct);
+
+        r.Should().Be(new ResultadoEvidencia(ResultadoEvidencia.Omitido, "No se pudo preparar el correo al conductor; el documento quedó asociado"));
+        (await EvidenciasAsync(comparendo)).Should().BeEmpty();
+        await DebeTenerNotaAsync(comparendo, "No se pudo preparar el correo al conductor; el documento quedó asociado");
+    }
+
+    [Fact(Timeout = 60_000)]
+    public async Task EnviarAlAsociar_SiElTransporteCancelaPorSuCuenta_AlDespachar_QuedaPendiente_SinLanzar()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, cliente, comparendo) = await ComparendoAsync("EVI-15");
+        await ConConductorAsync(cliente, comparendo);
+        var (_, doc) = await SubirAsync(cliente, "EVI-15", "evi-cancela-despacho");
+        await using var scope = api.App.Services.CreateAsyncScope();
+
+        var r = await ServicioConPlazo(scope.ServiceProvider, plantillasLentas: false, despachoLento: true, segundos: 20, tiempoInterno: true)
             .EnviarAlAsociarAsync(comparendo, empresa, doc.ArchivoId, reemplazo: false, Actor.Sistema, TestContext.Current.CancellationToken);
 
         r.Should().Be(new ResultadoEvidencia(ResultadoEvidencia.Pendiente, null));

@@ -165,6 +165,18 @@ public sealed partial class ServicioEvidencia(
     /// operador cierra la pestaña o la petición vence ahora, el correo (o su nota) debe salir igual, porque al reintentar el
     /// documento ya figura asociado y no se reenvía. Por eso este trabajo NO usa el token de la petición: corre con uno propio
     /// de <see cref="TopeTrabajoPosterior"/>.
+    /// <para>
+    /// Nada de aquí lanza, ni siquiera una <see cref="OperationCanceledException"/> o un <c>TaskCanceledException</c>: como el token es
+    /// el propio y no el de la petición, una cancelación puede venir del plazo propio o de un tiempo de espera interno del
+    /// transporte con el token aún vivo; en ambos casos la asociación ya está confirmada y la respuesta no puede ser un 500.
+    /// Por eso los <c>catch</c> capturan todo <see cref="Exception"/> y degradan: «No se pudo preparar…» (Omitido, con nota)
+    /// si falla el registro, o Pendiente si falla el despacho (el correo ya está registrado y el ciclo lo reintenta).
+    /// </para>
+    /// <para>
+    /// OBSERVACIÓN (conocida, no corregida): si el plazo vence después de que el transporte aceptó el correo y antes del
+    /// <c>SaveChanges</c> que lo marca Enviado, el ciclo de fondo del despachador lo vería Pendiente y podría reenviarlo. Ya
+    /// ocurría con el token de la petición; ahora lo dispara un temporizador fijo.
+    /// </para>
     /// </summary>
     public async Task<ResultadoEvidencia> EnviarAlAsociarAsync(Guid comparendoId, Guid tenantId, Guid archivoId, bool reemplazo, Actor actor, CancellationToken peticion)
     {
@@ -181,7 +193,7 @@ public sealed partial class ServicioEvidencia(
             if (comunicacion is null)
                 return new ResultadoEvidencia(ResultadoEvidencia.Omitido, decision.Motivo);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || ct.IsCancellationRequested)
+        catch (Exception ex)
         {
             // Sin datos personales en el log: solo ids y el tipo de error.
             LogNoPreparado(logger, ex.GetType().Name, comparendoId, tenantId);
@@ -201,7 +213,7 @@ public sealed partial class ServicioEvidencia(
                 _ => new ResultadoEvidencia(ResultadoEvidencia.Omitido, "El correo no llegó al conductor; revisa el Centro de mensajes"),
             };
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || ct.IsCancellationRequested)
+        catch (Exception ex)
         {
             LogDespachoPendiente(logger, ex.GetType().Name, comunicacion.Value);
             return new ResultadoEvidencia(ResultadoEvidencia.Pendiente, null);
@@ -231,7 +243,7 @@ public sealed partial class ServicioEvidencia(
             NotaOmitida(c, motivo, reemplazo, actor);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException || ct.IsCancellationRequested)
+        catch (Exception ex)
         {
             LogNoPreparado(logger, ex.GetType().Name, comparendoId, tenantId);
             db.ChangeTracker.Clear();
