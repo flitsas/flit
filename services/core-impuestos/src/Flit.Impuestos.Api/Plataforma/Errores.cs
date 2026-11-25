@@ -67,6 +67,22 @@ internal sealed class ManejadorReglas : IExceptionHandler
     public const string CodigoValorInvalido = "VALOR_INVALIDO";
     public const string CodigoConflictoConcurrencia = "CONFLICTO_CONCURRENCIA";
     public const string CodigoEntreEmpresas = "ESCRITURA_ENTRE_EMPRESAS";
+    public const string CodigoSinUsuario = "SIN_USUARIO";
+
+    /// <summary>Literal de <c>VALOR_INVALIDO</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.2.2).</summary>
+    public const string LiteralValorInvalido = "Un valor enviado no es válido. Revisa los datos e inténtalo de nuevo.";
+
+    /// <summary>Literal de <c>CONFLICTO_CONCURRENCIA</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.2.2).</summary>
+    public const string LiteralConflictoConcurrencia = "Otro usuario cambió este registro al mismo tiempo. Recarga e inténtalo de nuevo.";
+
+    /// <summary>Literal de <c>ESCRITURA_ENTRE_EMPRESAS</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.2.2).</summary>
+    public const string LiteralEntreEmpresas = "No puedes modificar datos de otra compañía.";
+
+    /// <summary>Literal de <c>SIN_USUARIO</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.2.2).</summary>
+    public const string LiteralSinUsuario = "Tu sesión no identifica a un usuario. Vuelve a iniciar sesión.";
+
+    /// <summary>403 <c>SIN_USUARIO</c> con el literal del contrato: el token no trae un <c>sub</c> uuid.</summary>
+    public static ReglaException SinUsuario() => ReglaException.Prohibido(CodigoSinUsuario, LiteralSinUsuario);
 
     public async ValueTask<bool> TryHandleAsync(HttpContext httpContext, Exception exception, CancellationToken cancellationToken)
     {
@@ -82,11 +98,11 @@ internal sealed class ManejadorReglas : IExceptionHandler
         {
             ReglaException r => r,
             TransicionInvalida t => ReglaException.Conflicto(t.Codigo, t.Message),
-            EscrituraEntreEmpresasException => ReglaException.Prohibido(CodigoEntreEmpresas, "No se pueden escribir datos de otra empresa."),
+            EscrituraEntreEmpresasException => ReglaException.Prohibido(CodigoEntreEmpresas, LiteralEntreEmpresas),
             DbUpdateConcurrencyException =>
-                ReglaException.Conflicto(CodigoConflictoConcurrencia, "Otro cambio se guardó al mismo tiempo. Vuelve a leer y reintenta."),
+                ReglaException.Conflicto(CodigoConflictoConcurrencia, LiteralConflictoConcurrencia),
             DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.CheckViolation } } =>
-                new ReglaException(CodigoValorInvalido, "Los datos no cumplen una regla de validación del servicio."),
+                new ReglaException(CodigoValorInvalido, LiteralValorInvalido),
             _ => null,
         };
         if (regla is null)
