@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using Flit.Admin.Domain.Companies.Domains;
 using Flit.Api.Authorization;
+using Flit.Api.Platform;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Platform.Application.Apps;
 using Flit.Modules.Platform.Application.Companies;
@@ -9,6 +10,7 @@ using Flit.Modules.Platform.Application.Manifest;
 using Flit.Modules.Platform.Application.TenantProducts;
 using Flit.Modules.Platform.Domain.Companies;
 using Flit.Modules.Platform.Domain.Manifest;
+using Flit.Modules.Platform.Domain.TenantProducts;
 using Flit.Modules.Security.Application.Auth;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -111,6 +113,8 @@ public static class PlatformEndpoints
                 UpdatedByEmail = p.UpdatedBy is { } by && emails.TryGetValue(by, out var email) ? email : null,
                 ComingSoon = hosts.IsComingSoon(p.ProductCode),
                 p.ImpuestoApiKeyConfigurada,
+                // HU #14711 (platform.v1 1.2.0): si el secreto del webhook del impuesto está configurado (solo en diagnostico).
+                p.ImpuestoWebhookSecretConfigurada,
                 // HU #14694 (platform.v1 1.1.0): último estado reportado; null sin aprovisionamiento o sin reporte.
                 Provisioning = p.Provisioning is { } estado
                     ? new
@@ -287,6 +291,54 @@ public static class PlatformEndpoints
                 return Problem(status, ex.Code, ex.Message);
             }
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("DeleteTenantProductCredential");
+
+        // HU #14711 (plan §3.1) POST /admin/tenants/{tenantId}/products/diagnostico/credentials/impuesto/obtener — alta
+        // idempotente en el proveedor del impuesto: guarda la api_key y el webhook_secret. Sin cuerpo (el servidor arma los datos
+        // del alta); responde solo metadatos, nunca valores. Límite por empresa (AltaCredencialImpuestoRateLimit).
+        group.MapPost("/admin/tenants/{tenantId:guid}/products/diagnostico/credentials/impuesto/obtener", async (
+            Guid tenantId,
+            ClaimsPrincipal user,
+            IIdentityDb db,
+            ObtenerCredencialImpuestoDiagnosticoHandler handler,
+            ITenantProductProvisioningStore provisioning,
+            TimeProvider clock,
+            CancellationToken ct) =>
+        {
+            if (!await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, ct))
+                return Problem(StatusCodes.Status404NotFound, CodigosAltaCredencialImpuesto.TenantNotFound, CodigosAltaCredencialImpuesto.Literal(CodigosAltaCredencialImpuesto.TenantNotFound));
+
+            try
+            {
+                Guid? changedBy = Guid.TryParse(user.FindFirstValue("sub"), out var sub) ? sub : null;
+                var r = await handler.HandleAsync(tenantId, changedBy, ct);
+                // El estado del alta de diagnostico queda listo también cuando la credencial se obtiene a mano.
+                await provisioning.RegistrarEstadoAltaDiagnosticoAsync(AltaCredencialDiagnosticoAutomatica.EstadoTrasExito(tenantId, r, clock.GetUtcNow()), ct);
+                return Results.Ok(new
+                {
+                    apiKeyPrefix = r.ApiKeyPrefix,
+                    created = r.Created,
+                    rotated = r.Rotated,
+                    hasWebhookSecret = r.HasWebhookSecret,
+                    changed = r.Changed,
+                    updatedAt = r.UpdatedAt,
+                });
+            }
+            catch (AltaCredencialImpuestoException ex)
+            {
+                var status = ex.Code switch
+                {
+                    CodigosAltaCredencialImpuesto.NitAusente or CodigosAltaCredencialImpuesto.NitAmbiguo
+                        or CodigosAltaCredencialImpuesto.NitIgualACabeza or CodigosAltaCredencialImpuesto.SinAdmin => StatusCodes.Status422UnprocessableEntity,
+                    CodigosAltaCredencialImpuesto.ProductoNoHabilitado => StatusCodes.Status409Conflict,
+                    CodigosAltaCredencialImpuesto.TenantNotFound => StatusCodes.Status404NotFound,
+                    CodigosAltaCredencialImpuesto.ProveedorNoConfigurado => StatusCodes.Status503ServiceUnavailable,
+                    _ => StatusCodes.Status502BadGateway,
+                };
+                return Problem(status, ex.Code, ex.Message);
+            }
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy)
+          .RequireRateLimiting(AltaCredencialImpuestoRateLimit.PolicyName)
+          .WithName("ObtenerCredencialImpuestoDiagnostico");
 
         return app;
     }

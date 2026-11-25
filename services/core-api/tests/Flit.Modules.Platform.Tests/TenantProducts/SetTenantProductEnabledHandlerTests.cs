@@ -22,6 +22,8 @@ public sealed class SetTenantProductEnabledHandlerTests
     private readonly IProductAccessStore _access = Substitute.For<IProductAccessStore>();
     private readonly ITenantProductChangeJobs _jobs = Substitute.For<ITenantProductChangeJobs>();
     private readonly IPrecondicionActivacion _precondicion = Substitute.For<IPrecondicionActivacion>();
+    private readonly ITenantProductProvisioningStore _provisioning = Substitute.For<ITenantProductProvisioningStore>();
+    private readonly List<DateTimeOffset> _pendientesMarcados = [];
 
     public SetTenantProductEnabledHandlerTests()
     {
@@ -33,6 +35,10 @@ public sealed class SetTenantProductEnabledHandlerTests
         _catalog.FindAsync("impuestos", Arg.Any<CancellationToken>())
             .Returns(new Product("impuestos", "Impuestos", "receipt", ProductStatuses.Active));
         _precondicion.CumpleAsync(TenantId, "impuestos", Arg.Any<CancellationToken>()).Returns(true);
+        _catalog.FindAsync("diagnostico", Arg.Any<CancellationToken>())
+            .Returns(new Product("diagnostico", "Diagnóstico", "gauge", ProductStatuses.Active));
+        _provisioning.PrepararPendienteAltaDiagnosticoAsync(TenantId, Arg.Any<CancellationToken>())
+            .Returns(new Action<DateTimeOffset>(_pendientesMarcados.Add));
         // El repositorio de verdad invoca antesDeGuardar solo si hubo cambio (TenantProductChangeOutboxTests); aquí, siempre.
         _repository.SetAsync(default, default!, default, default, default, default, Arg.Any<CancellationToken>())
             .ReturnsForAnyArgs(ci =>
@@ -45,7 +51,7 @@ public sealed class SetTenantProductEnabledHandlerTests
             });
     }
 
-    private SetTenantProductEnabledHandler Handler() => new(_catalog, _repository, _access, _jobs, _precondicion);
+    private SetTenantProductEnabledHandler Handler() => new(_catalog, _repository, _access, _jobs, _precondicion, _provisioning);
 
     [Fact]
     public async Task Encender_NormalizaElCodigoYLasNotas_YDelegaEnElRepositorio()
@@ -198,4 +204,26 @@ public sealed class SetTenantProductEnabledHandlerTests
     [InlineData(null, false)]
     public void ProductosConAprovisionamiento_HoySoloImpuestos(string? code, bool esperado) =>
         ProductosConAprovisionamiento.Tiene(code).Should().Be(esperado);
+
+    // ── HU #14711 (AC-DC-03) — encender diagnostico deja el alta de la credencial pendiente ──────────────────
+
+    [Fact]
+    public async Task EncenderDiagnostico_DejaElAltaDeLaCredencialPendienteEnElMismoGuardado_SinPrecondicionNiTrabajo()
+    {
+        var result = await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "diagnostico", true, null), AdminId, TestContext.Current.CancellationToken);
+
+        _pendientesMarcados.Should().Equal(result.Current.UpdatedAt);
+        await _repository.Received(1).SetAsync(TenantId, "diagnostico", true, null, AdminId, Arg.Is<Action<TenantProductChange>?>(a => a != null), Arg.Any<CancellationToken>());
+        await _precondicion.DidNotReceiveWithAnyArgs().CumpleAsync(default, default!, TestContext.Current.CancellationToken);
+        _jobs.DidNotReceiveWithAnyArgs().EncolarCambio(default!);
+    }
+
+    [Fact]
+    public async Task ApagarDiagnostico_NoDejaAltaPendiente()
+    {
+        await Handler().HandleAsync(new SetTenantProductEnabledCommand(TenantId, "diagnostico", false, null), AdminId, TestContext.Current.CancellationToken);
+
+        _pendientesMarcados.Should().BeEmpty();
+        await _provisioning.DidNotReceiveWithAnyArgs().PrepararPendienteAltaDiagnosticoAsync(default, TestContext.Current.CancellationToken);
+    }
 }

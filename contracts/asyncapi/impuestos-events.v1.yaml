@@ -1,7 +1,7 @@
 asyncapi: '2.6.0'
 info:
   title: FLIT — trabajos y eventos de Impuestos
-  version: 1.1.0
+  version: 1.2.0
   description: |
     Mensajes del exchange `flit.impuestos` (producto Impuestos, core-impuestos; ADR-0093, plan
     docs/impuestos/plan-implementacion.md §5.5). Mensajes en JSON con el sobre común (comun/sobre.v1.yaml). Sin datos
@@ -18,6 +18,10 @@ info:
     - 1.1.0 (HU #14694 M07b, plan §5.8): trabajos internos de credenciales `impuestos.credencial.propagar` e
       `impuestos.secreto.refrescar`, que el servicio deja en su outbox y consume en la cola `impuestos.credenciales` (solo
       del productor `impuestos`). Solo llevan la empresa: la llave y el secreto nunca viajan por el bus.
+    - 1.2.0 (HU #14711, plan docs/diagnosticos/plan-alta-credencial-impuesto-diagnostico.md §3.4): trabajo
+      `impuestos.credencial_diagnostico.actualizada`, que la plataforma (core-identity `plataforma` o core-api `tramites`)
+      deja por su outbox con EnqueueJob cuando el alta del proveedor cambió la llave del impuesto de Diagnóstico. Llega a la
+      cola `impuestos.plataforma`. No lleva la llave: core-impuestos la relee por `ObtenerCredencialImpuestoParaCopia`.
 
     El correo «Lote terminado» no es de este exchange: core-impuestos deja el trabajo `notificaciones.email.send`
     (notificaciones-events.v1.yaml) en `flit.notificaciones`, con el correo ya armado y sin datos del propietario.
@@ -57,6 +61,23 @@ channels:
       operationId: aprovisionamientoReintentar
       message:
         $ref: '#/components/messages/AprovisionamientoReintentar'
+
+  impuestos.credencial_diagnostico.actualizada:
+    description: |
+      Trabajo (HU #14711). El alta idempotente del proveedor (botón «Obtener del proveedor» del admin de compañías o alta
+      automática al encender `diagnostico`) cambió la `impuesto_api_key` de Diagnóstico de la empresa. Se encola en el
+      mismo guardado de la credencial y solo si la llave cambió (si el alta devolvió los mismos valores no hay trabajo).
+      core-impuestos relee la llave por gRPC (`CredencialesProductoService.ObtenerCredencialImpuestoParaCopia`) y reemplaza
+      la suya si es una copia de Diagnóstico (`COPIA_DIAGNOSTICO`) o tiene otro prefijo, conservando el secreto del webhook;
+      si es propia con el mismo prefijo, o no tiene credencial, lo confirma sin efecto. Idempotente.
+    bindings:
+      amqp:
+        is: routingKey
+        exchange: { name: flit.impuestos, type: topic, durable: true, autoDelete: false, vhost: flit }
+    publish:
+      operationId: credencialDiagnosticoActualizada
+      message:
+        $ref: '#/components/messages/CredencialDiagnosticoActualizada'
 
   impuestos.liquidacion.solicitada:
     description: |
@@ -150,6 +171,23 @@ components:
                 properties:
                   tenantId: { type: string, format: uuid }
                   solicitadoPor: { type: string, format: uuid, description: "Id del Super Admin que pulsó Reintentar (va al historial)." }
+    CredencialDiagnosticoActualizada:
+      name: impuestos.credencial_diagnostico.actualizada
+      payload:
+        allOf:
+          - $ref: './comun/sobre.v1.yaml#/Sobre'
+          - type: object
+            properties:
+              producer: { type: string, enum: [tramites, plataforma], description: "core-api (tramites) o core-identity (plataforma)." }
+              data:
+                type: object
+                additionalProperties: false
+                required: [tenantId, productCode, version, occurredAt]
+                properties:
+                  tenantId: { type: string, format: uuid, description: "Empresa (la misma del sobre)." }
+                  productCode: { type: string, enum: [diagnostico] }
+                  version: { type: integer, format: int64, minimum: 0, description: "row_version de platform.tenant_product_credentials (diagnostico/impuesto_api_key) tras el cambio." }
+                  occurredAt: { type: string, format: date-time, description: "updated_at de la llave tras el cambio." }
     LiquidacionSolicitada:
       name: impuestos.liquidacion.solicitada
       payload:

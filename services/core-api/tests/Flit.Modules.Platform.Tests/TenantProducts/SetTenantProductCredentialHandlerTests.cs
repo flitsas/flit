@@ -116,6 +116,9 @@ public sealed class SetTenantProductCredentialHandlerTests
     [InlineData("diagnostico", "otra_llave")]
     [InlineData("plataforma", "impuesto_api_key")]
     [InlineData("", "")]
+    // HU #14711: los secretos del webhook solo los escribe el alta del proveedor; el PUT/DELETE manual no los acepta.
+    [InlineData("diagnostico", "impuesto_webhook_secret")]
+    [InlineData("diagnostico", "impuesto_webhook_secret_anterior")]
     public async Task CombinacionFueraDeLaListaBlanca_NoSoportada(string producto, string credencial)
     {
         var act = () => Handler().HandleAsync(new SetTenantProductCredentialCommand(TenantId, producto, credencial, Llave), AdminId, Ct);

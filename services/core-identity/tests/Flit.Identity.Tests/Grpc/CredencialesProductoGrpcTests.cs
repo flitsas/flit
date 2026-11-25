@@ -595,6 +595,11 @@ public sealed class CredencialesProductoGrpcTests
             Reemplazos.Add((tenantId, productCode, credentialCode, secretProtected, servicio));
             return Task.FromResult(Fila is { } f && f.TenantId == tenantId);
         }
+
+        // HU #14711: el alta del proveedor no pasa por estos rpc.
+        public Task<DateTimeOffset> GuardarAltaProveedorAsync(
+            Guid tenantId, string productCode, IReadOnlyList<EscrituraCredencialAlta> escrituras, string motivo, Guid? changedBy,
+            Action<DateTimeOffset>? antesDeGuardar, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class Protector : ITenantProductSecretProtector

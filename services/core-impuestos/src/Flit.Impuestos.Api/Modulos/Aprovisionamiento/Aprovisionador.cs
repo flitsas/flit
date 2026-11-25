@@ -258,11 +258,12 @@ public static class AprovisionamientoExtensions
         services.AddScoped<ReportadorEstado>();
         services.AddScoped<Aprovisionador>();
         services.AddScoped<ConsumidorReintentoAprovisionamiento>();
+        services.AddScoped<ConsumidorCredencialDiagnostico>();
         services.AddFlitConsumer<ImpuestosDb, ConsumidorCambioProducto, JsonElement>(
             configuration,
             ConsumidorCambioProducto.Cola,
             ConsumidorCambioProducto.Exchange,
-            [ConsumidorCambioProducto.TipoCambio, ConsumidorCambioProducto.TipoReintentar],
+            [ConsumidorCambioProducto.TipoCambio, ConsumidorCambioProducto.TipoReintentar, ConsumidorCredencialDiagnostico.Tipo],
             o =>
             {
                 foreach (var productor in ConsumidorCambioProducto.Productores)

@@ -23,6 +23,7 @@ public sealed record ProductoCambiado(Guid TenantId, string? ProductCode, bool E
 ///   con <c>FOR UPDATE</c> (<see cref="BloqueoAprovisionamiento"/>) y guarda el <c>changedAt</c> del último cambio recibido: uno con
 ///   un <c>changedAt</c> anterior llegó desordenado y se confirma sin efecto (MEN-6).</item>
 ///   <item><see cref="TipoReintentar"/>: lo atiende <see cref="ConsumidorReintentoAprovisionamiento"/>.</item>
+///   <item>HU #14711: <see cref="ConsumidorCredencialDiagnostico.Tipo"/> lo atiende <see cref="ConsumidorCredencialDiagnostico"/>.</item>
 /// </list>
 /// Un sobre sin empresa, con otra empresa en los datos o de una versión que no conoce va a la DLQ sin reintentos
 /// (<see cref="SinReintentoAutomaticoException"/>); otro producto u otro tipo se confirma sin efecto. Cada transición sube la
@@ -38,6 +39,7 @@ public sealed partial class ConsumidorCambioProducto(
     EmpresaDelTrabajo empresa,
     ImpuestosDb db,
     ConsumidorReintentoAprovisionamiento reintento,
+    ConsumidorCredencialDiagnostico credencialDiagnostico,
     TimeProvider reloj,
     ILogger<ConsumidorCambioProducto> log) : IEventConsumer<JsonElement>
 {
@@ -60,6 +62,12 @@ public sealed partial class ConsumidorCambioProducto(
         if (string.Equals(envelope.Type, TipoReintentar, StringComparison.Ordinal))
         {
             await reintento.AplicarAsync(envelope, data, ct).ConfigureAwait(false);
+            return;
+        }
+
+        if (string.Equals(envelope.Type, ConsumidorCredencialDiagnostico.Tipo, StringComparison.Ordinal))
+        {
+            await credencialDiagnostico.AplicarAsync(envelope, data, ct).ConfigureAwait(false);
             return;
         }
 

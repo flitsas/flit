@@ -101,6 +101,8 @@ public static class Program
         services.AddBrandLogoReader(configuration);
         services.AddPlatformStores();
         services.AddPlatformApi(configuration);
+        // HU #14711: rondas del alta automática de la credencial del impuesto de diagnostico (solo en core-identity).
+        Flit.Infrastructure.Platform.ClienteAltaProveedorImpuestoExtensions.AddTrabajadorAltaCredencialDiagnostico(services, configuration);
 
         // Casos de uso del login y la recuperación de cuenta.
         services.AddScoped<INetworkUrlBaseResolver, NetworkUrlBaseResolver>();

@@ -5,6 +5,7 @@ using Flit.Modules.Platform.Application.Manifest;
 using Flit.Modules.Platform.Application.TenantProducts;
 using Flit.Modules.Security.Application.Products;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Modules.Platform;
 
@@ -42,6 +43,10 @@ public static class PlatformModuleExtensions
         // HU #12966 (B-06): me/apps y manifiesto. IProductHosts lo registra la API.
         services.AddScoped<ListMyAppsHandler>();
         services.AddScoped<ApplyProductManifestHandler>();
+        // HU #14711: alta idempotente de la credencial del impuesto de Diagnóstico (botón del admin y alta automática).
+        services.AddScoped<ObtenerCredencialImpuestoDiagnosticoHandler>();
+        services.AddScoped<AltaCredencialDiagnosticoAutomatica>();
+        services.TryAddSingleton(TimeProvider.System);
         return services;
     }
 }
