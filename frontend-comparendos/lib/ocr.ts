@@ -260,6 +260,13 @@ export interface CorreoAsociado {
   motivo: string | null;
 }
 
+/** El motivo del servidor se muestra tal cual; solo se cierra con punto si no lo trae. */
+function motivoLiteral(motivo: string | null | undefined): string | null {
+  const m = motivo?.trim();
+  if (!m) return null;
+  return /[.!?]$/.test(m) ? m : `${m}.`;
+}
+
 /**
  * Frase para el modal ANTES de confirmar. Sin dato del servidor no se promete nada. En reemplazo, el correo lleva el
  * documento nuevo.
@@ -267,17 +274,24 @@ export interface CorreoAsociado {
 export function textoCorreoAlAsociar(c: CorreoAlAsociar | null | undefined, reemplazo: boolean): string | null {
   if (!c) return null;
   if (c.seEnviara) return reemplazo ? "Se enviará ahora al conductor un correo con el documento nuevo." : "Se enviará ahora al conductor un correo con este documento.";
-  const motivo = c.motivoNo?.trim().replace(/[.\s]+$/, "");
-  return motivo ? `No se enviará correo porque ${motivo.charAt(0).toLowerCase()}${motivo.slice(1)}.` : "No se enviará correo al conductor.";
+  const motivo = motivoLiteral(c.motivoNo);
+  return motivo ? `No se enviará correo al conductor. Motivo: ${motivo}` : "No se enviará correo al conductor.";
 }
 
-/** Aviso de la pantalla DESPUÉS de asociar, según el correo que devolvió el servidor. */
-export function avisoCorreoAsociado(c: CorreoAsociado | null | undefined): { mensaje: string; tono: "success" | "warning" } | null {
-  if (!c) return null;
-  if (c.estado === "Enviado") return { mensaje: "Se envió el documento al conductor.", tono: "success" };
-  if (c.estado === "Pendiente") return { mensaje: "El correo con el documento quedó en cola y saldrá en breve.", tono: "success" };
-  const motivo = c.motivo?.trim().replace(/[.\s]+$/, "");
-  return { mensaje: motivo ? `No se envió correo al conductor: ${motivo.charAt(0).toLowerCase()}${motivo.slice(1)}.` : "No se envió correo al conductor.", tono: "warning" };
+/**
+ * Avisos de la pantalla DESPUÉS de asociar. Correo enviado o en cola: un solo aviso combinado. Cualquier otro estado
+ * (Omitido o uno que no conocemos) es un aviso aparte con el motivo literal: la asociación igual se hizo.
+ */
+export function avisosAlAsociar(numero: string, reemplazar: boolean, correo: CorreoAsociado | null | undefined): { mensaje: string; tono: "success" | "warning" }[] {
+  const base = reemplazar ? `Documento reemplazado en el comparendo ${numero}` : `Documento asociado al comparendo ${numero}`;
+  if (!correo) return [{ mensaje: `${base}.`, tono: "success" }];
+  if (correo.estado === "Enviado") return [{ mensaje: `${base} y enviado al conductor.`, tono: "success" }];
+  if (correo.estado === "Pendiente") return [{ mensaje: `${base}. El correo al conductor saldrá en breve.`, tono: "success" }];
+  const motivo = motivoLiteral(correo.motivo);
+  return [
+    { mensaje: `${base}.`, tono: "success" },
+    { mensaje: motivo ? `No se envió correo al conductor. Motivo: ${motivo}` : "No se envió correo al conductor.", tono: "warning" },
+  ];
 }
 
 /**

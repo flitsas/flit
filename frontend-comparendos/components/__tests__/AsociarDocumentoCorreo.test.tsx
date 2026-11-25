@@ -16,9 +16,9 @@ describe("modales de asociar: qué pasa con el correo", () => {
 
   it("asociar: dice el motivo cuando no se enviará, y no promete nada sin dato", () => {
     const { unmount } = render(
-      <ModalAsociar comparendo={comparendo} documento={documento} correoAlAsociar={{ seEnviara: false, motivoNo: "El conductor no tiene correo registrado" }} ocupado={false} onConfirmar={noop} onClose={noop} />,
+      <ModalAsociar comparendo={comparendo} documento={documento} correoAlAsociar={{ seEnviara: false, motivoNo: "El conductor no tiene correo registrado." }} ocupado={false} onConfirmar={noop} onClose={noop} />,
     );
-    expect(screen.getByText("No se enviará correo porque el conductor no tiene correo registrado.")).toBeTruthy();
+    expect(screen.getByText("No se enviará correo al conductor. Motivo: El conductor no tiene correo registrado.")).toBeTruthy();
     unmount();
     render(<ModalAsociar comparendo={comparendo} documento={documento} ocupado={false} onConfirmar={noop} onClose={noop} />);
     expect(screen.queryByText(/correo/i)).toBeNull();

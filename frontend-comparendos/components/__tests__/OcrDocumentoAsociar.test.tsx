@@ -55,9 +55,9 @@ function documento(dup: Record<string, unknown> = {}) {
   };
 }
 
-function abrir(dup: Record<string, unknown> = {}, falloAsociar?: ApiError, doc: Record<string, unknown> = {}) {
+function abrir(dup: Record<string, unknown> = {}, falloAsociar?: ApiError, doc: Record<string, unknown> = {}, respuestaAsociar: Record<string, unknown> = {}) {
   apiFetch.mockImplementation((ruta: string) => {
-    return ruta === "/ocr/documentos/d1" ? Promise.resolve({ ...documento(dup), ...doc }) : falloAsociar ? Promise.reject(falloAsociar) : Promise.resolve({ numero: "11001000000012345678" });
+    return ruta === "/ocr/documentos/d1" ? Promise.resolve({ ...documento(dup), ...doc }) : falloAsociar ? Promise.reject(falloAsociar) : Promise.resolve({ numero: "11001000000012345678", ...respuestaAsociar });
   });
   render(
     <ToastProvider>
@@ -92,6 +92,36 @@ describe("asociar documento escaneado a comparendo existente", () => {
     fireEvent.click(within(modal).getByRole("button", { name: "Reemplazar" }));
     await waitFor(() => expect(posts()).toHaveLength(1));
     expect(posts()[0][1]).toMatchObject({ body: { reemplazar: true, evidenciaActualId: "ev1" } });
+  });
+
+  it("asociar con correo enviado: un solo aviso combinado", async () => {
+    abrir({}, undefined, {}, { correo: { estado: "Enviado", motivo: null } });
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar al comparendo" }));
+    expect(await screen.findByText("Documento asociado al comparendo 11001000000012345678 y enviado al conductor.")).toBeTruthy();
+    expect(screen.queryByText(/No se envió correo/)).toBeNull();
+  });
+
+  it("reemplazar con correo omitido: éxito y aviso aparte con el motivo literal", async () => {
+    abrir({ evidenciaActual: EVIDENCIA }, undefined, {}, { correo: { estado: "Omitido", motivo: "El comparendo ya está pagado" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Comparar documentos" }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Reemplazar" }));
+    expect(await screen.findByText("Documento reemplazado en el comparendo 11001000000012345678.")).toBeTruthy();
+    expect(await screen.findByText("No se envió correo al conductor. Motivo: El comparendo ya está pagado.")).toBeTruthy();
+  });
+
+  it("respuesta sin correo (servidor sin el campo) o con un estado desconocido no rompe la pantalla", async () => {
+    abrir();
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar al comparendo" }));
+    expect(await screen.findByText("Documento asociado al comparendo 11001000000012345678.")).toBeTruthy();
+    expect(screen.queryByText(/correo/i)).toBeNull();
+    cleanup();
+
+    abrir({}, undefined, {}, { correo: { estado: "Reintentando", motivo: null } });
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar al comparendo" }));
+    expect(await screen.findByText("No se envió correo al conductor.")).toBeTruthy();
   });
 
   it("Descartar este abre el descarte y Escape cierra la comparación", async () => {

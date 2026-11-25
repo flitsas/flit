@@ -32,7 +32,7 @@ import {
   type CorreoAlAsociar,
   type CorreoAsociado,
   type EvidenciaActual,
-  avisoCorreoAsociado,
+  avisosAlAsociar,
   valorInicial,
   vistaOriginal,
 } from "@/lib/ocr";
@@ -308,10 +308,8 @@ function Formulario({
           method: "POST",
           body: { reemplazar, evidenciaActualId: d.duplicado?.evidenciaActual?.archivoId ?? null },
         });
-        toast.show(reemplazar ? `Documento reemplazado en el comparendo ${r.numero}.` : `Documento asociado al comparendo ${r.numero}.`, "success");
         // El correo es aparte: si no salió, la asociación igual se hizo y se dice por qué.
-        const correo = avisoCorreoAsociado(r.correo);
-        if (correo) toast.show(correo.mensaje, correo.tono);
+        for (const aviso of avisosAlAsociar(r.numero, reemplazar, r.correo)) toast.show(aviso.mensaje, aviso.tono);
       } catch (e) {
         if (!(e instanceof ApiError) || e.status !== 409) throw e;
         toast.show(
