@@ -36,7 +36,9 @@ public partial class ImpuestosProductoYAprovisionamiento : Migration
     /// (<c>security.user_invitations.role_id</c> es FK RESTRICT; las filas de <c>invitation_roles</c> caen en cascada), reabre
     /// solo los gestor_impuestos que cerró el paso 3a del DDL (<c>deleted_by</c> = <see cref="ActorAscensoDdl205"/>) si su
     /// usuario quedó sin rol de Impuestos, y borra el producto solo si nada lo referencia (el manifiesto pudo crear módulos,
-    /// permisos y gestor_impuestos, que no son de esta migración).
+    /// permisos y gestor_impuestos, que no son de esta migración). Los overrides de permisos de Impuestos
+    /// (<c>security.user_permission_overrides.product_code</c>, FK RESTRICT, DDL 144) tampoco se borran: son concesiones
+    /// sobre permisos del manifiesto, no sobre admin_impuestos; si hay alguno, el producto se queda.
     /// </remarks>
     protected override void Down(MigrationBuilder migrationBuilder) =>
         migrationBuilder.Sql($"""
@@ -111,6 +113,7 @@ public partial class ImpuestosProductoYAprovisionamiento : Migration
              WHERE p.code = 'impuestos'
                AND NOT EXISTS (SELECT 1 FROM platform.tenant_products t WHERE t.product_code = p.code)
                AND NOT EXISTS (SELECT 1 FROM security.roles r WHERE r.product_code = p.code)
-               AND NOT EXISTS (SELECT 1 FROM security.modules m WHERE m.product_code = p.code);
+               AND NOT EXISTS (SELECT 1 FROM security.modules m WHERE m.product_code = p.code)
+               AND NOT EXISTS (SELECT 1 FROM security.user_permission_overrides o WHERE o.product_code = p.code);
             """);
 }

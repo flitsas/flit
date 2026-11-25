@@ -69,6 +69,7 @@ INSERT INTO security.user_role_assignments (tenant_id, user_id, role_id, assigne
 SELECT a.tenant_id, a.user_id, ai.id, now()
   FROM security.user_role_assignments a
   JOIN security.roles ac ON ac.id = a.role_id AND ac.code = 'AdminCompany' AND ac.target_entity_type = 'COMPANY'
+                        AND ac.deleted_at IS NULL
  CROSS JOIN LATERAL (
        SELECT id FROM security.roles
         WHERE code = 'admin_impuestos' AND target_entity_type = 'COMPANY' AND tenant_id IS NULL AND is_system
