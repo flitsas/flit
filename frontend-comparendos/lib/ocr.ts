@@ -229,6 +229,11 @@ export function accionesDocumento(d: { estado: string; reintentable: boolean; fu
   };
 }
 
+/** Estados finales del documento: solo lectura, sin validar ni pintar nada en rojo. */
+export function esEstadoFinalDocumento(estado: string): boolean {
+  return estado === "Asociado" || estado === "Registrado" || estado === "Descartado";
+}
+
 /** Documento que ya tiene el comparendo existente (contrato de asociar). */
 export interface EvidenciaActual {
   archivoId: string;

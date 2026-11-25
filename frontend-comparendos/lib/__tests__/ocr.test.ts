@@ -26,6 +26,7 @@ import {
   vistaDuplicado,
   textoCorreoAlAsociar,
   avisosAlAsociar,
+  esEstadoFinalDocumento,
   vistaPorContentType,
   ESTADO_DOCUMENTO,
   vistaOriginal,
@@ -326,5 +327,12 @@ describe("correo de evidencia al asociar", () => {
     expect(raro.map((a) => a.tono)).toEqual(["success", "warning"]);
     expect(avisosAlAsociar("123", false, undefined)).toEqual([{ mensaje: "Documento asociado al comparendo 123.", tono: "success" }]);
     expect(avisosAlAsociar("123", true, null)).toEqual([{ mensaje: "Documento reemplazado en el comparendo 123.", tono: "success" }]);
+  });
+});
+
+describe("estados finales del documento", () => {
+  it("Asociado, Registrado y Descartado son de solo lectura; el resto sigue en revisión", () => {
+    for (const e of ["Asociado", "Registrado", "Descartado"]) expect(esEstadoFinalDocumento(e)).toBe(true);
+    for (const e of ["Completo", "Incompleto", "Duplicado", "Fallido", "EnCola"]) expect(esEstadoFinalDocumento(e)).toBe(false);
   });
 });

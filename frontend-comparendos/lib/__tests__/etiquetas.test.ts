@@ -99,7 +99,7 @@ describe("etiquetas del correo de evidencia", () => {
   it("el tipo nuevo se lee en términos de negocio en comunicaciones, plantillas y línea de tiempo", () => {
     expect(TIPO_COMUNICACION.Evidencia).toBe("Documento del comparendo al conductor");
     expect(TIPO_PLANTILLA.CorreoEvidencia).toBe("Correo: documento del comparendo");
-    expect(EVENTO_TIMELINE.EvidenciaEnviada).toBe("Documento enviado al conductor");
+    expect(EVENTO_TIMELINE.EvidenciaEnviada).toBe("Correo con el documento registrado para envío");
     expect(EVENTO_TIMELINE.EvidenciaOmitida).toBe("Documento asociado sin correo al conductor");
     expect(etiquetaPlantilla("comparendos.evidencia")).toBe("Documento del comparendo al conductor");
   });
