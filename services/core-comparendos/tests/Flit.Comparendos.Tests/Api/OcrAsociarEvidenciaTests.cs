@@ -36,7 +36,7 @@ public sealed partial class OcrAsociarTests
     }
 
     private Task<List<ComunicacionSaliente>> EvidenciasAsync(Guid comparendo) =>
-        api.EnDbAsync(db => db.Comunicaciones.AsNoTracking().Where(c => c.ComparendoId == comparendo && c.Tipo == TipoComunicacion.Evidencia).OrderBy(c => c.CreadoEn).ToListAsync());
+        api.EnDbAsync(db => db.Comunicaciones.AsNoTracking().Where(c => c.ComparendoId == comparendo && c.Tipo == TipoComunicacion.Evidencia).OrderBy(c => c.CreadoEn).ThenBy(c => c.Id).ToListAsync());
 
     private Task<List<TimelineEvento>> OmitidasAsync(Guid comparendo) =>
         api.EnDbAsync(db => db.Timeline.AsNoTracking().Where(t => t.ComparendoId == comparendo && t.Tipo == TipoEventoTimeline.EvidenciaOmitida).ToListAsync());
