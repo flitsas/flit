@@ -55,6 +55,17 @@ describe("DetalleLote — cierre manual (delta 5: motivoCierre, cerradaPor, cerr
     expect(screen.queryByText(/Motivo:/)).toBeNull();
   });
 
+  it.each([null, { id: "u", nombre: "   " }, { id: "u", nombre: "" }])("sin actor (cerradaPor %j) no dice «por» suelto", async (cerradaPor) => {
+    montar({ ...CERRADO, cerradaPor, motivoCierre: null });
+    expect(await screen.findByText("Cerrado manualmente el 24/11/2026 14:05.", { exact: true })).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent(/ por\s*\./);
+  });
+
+  it("el nombre del actor sale recortado", async () => {
+    montar({ ...CERRADO, cerradaPor: { id: "u", nombre: "  Usuaria Demo  " }, motivoCierre: null });
+    expect(await screen.findByText("Cerrado manualmente el 24/11/2026 14:05 por Usuaria Demo.", { exact: true })).toBeInTheDocument();
+  });
+
   it("un lote que terminó solo (cerradaPor y motivoCierre null) no muestra el aviso de cierre", async () => {
     montar({ estado: "COMPLETADO", motivoCierre: null });
     await screen.findByRole("table", { name: "Placas del lote" });

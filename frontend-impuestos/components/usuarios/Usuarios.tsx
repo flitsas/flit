@@ -116,6 +116,8 @@ function VistaUsuarios({ sesion, empresa, onVolver }: { sesion: SesionImpuestos;
   const [carga, setCarga] = useState<Carga<PaginaUsuarios>>({ tipo: "cargando" });
   // Última compañía identificada por la API: sigue en la cabecera mientras se relee la lista con otros filtros.
   const [identificada, setIdentificada] = useState<EmpresaIdentificada | null>(null);
+  // La API ya respondió (con o sin PaginaUsuarios.empresa, campo opcional): sin compañía identificada, la cabecera cae al id.
+  const [respondida, setRespondida] = useState(false);
   const [intento, setIntento] = useState(0);
   const [dialogo, setDialogo] = useState<Dialogo | null>(null);
   const [aviso, setAviso] = useState<string | null>(null);
@@ -132,6 +134,7 @@ function VistaUsuarios({ sesion, empresa, onVolver }: { sesion: SesionImpuestos;
       (datos) => {
         if (controller.signal.aborted) return;
         setCarga({ tipo: "listo", datos });
+        setRespondida(true);
         if (datos.empresa) setIdentificada(datos.empresa);
       },
       (e: unknown) => {
@@ -187,7 +190,7 @@ function VistaUsuarios({ sesion, empresa, onVolver }: { sesion: SesionImpuestos;
   };
 
   const hayFiltro = filtros.q !== "" || Boolean(filtros.rol) || Boolean(filtros.estado);
-  const nombreEmpresa = empresa && identificada ? nombreVisibleEmpresa(identificada, empresa) : null;
+  const nombreEmpresa = empresa && (identificada || respondida) ? nombreVisibleEmpresa(identificada, empresa) : null;
   const descripcion = empresa
     ? nombreEmpresa
       ? [nombreEmpresa, nitVisibleEmpresa(identificada)].filter(Boolean).join(" · ")

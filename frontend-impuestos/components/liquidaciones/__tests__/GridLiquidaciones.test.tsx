@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { GridLiquidaciones } from "@/components/liquidaciones/GridLiquidaciones";
 import { CONTADORES_CERO, errorRegla, fetchPorRuta, item, lote, resumen } from "./fixtures";
 
-// Uso de ejemplo: <GridLiquidaciones puedeCrear mostrarCompania={false} bloqueo={null} /> en /liquidaciones. Lista las
+// Uso de ejemplo: <GridLiquidaciones puedeCrear bloqueo={null} /> en /liquidaciones. Lista las
 // liquidaciones por placa y masivas juntas (pestañas «Todas» —con columna Tipo—, «Masivas» y «Por placa»), con filtros en
 // la URL, y encima las tarjetas «Liquidar placa» (solo la placa, F2a-CF1) y «Carga masiva».
 
@@ -30,7 +30,7 @@ const INDIVIDUAL = resumen({
 const pagina = (items: unknown[], total = items.length) => ({ items, total, page: 1, pageSize: 10 });
 
 function render_(props: Partial<Parameters<typeof GridLiquidaciones>[0]> = {}) {
-  return render(<GridLiquidaciones puedeCrear mostrarCompania={false} bloqueo={null} {...props} />);
+  return render(<GridLiquidaciones puedeCrear bloqueo={null} {...props} />);
 }
 
 beforeEach(() => {
@@ -93,24 +93,19 @@ describe("GridLiquidaciones — grid mixto (F3-CF6) y aislamiento (F2a-CF9/CF10)
     expect(url.searchParams.get("tipo")).toBe("INDIVIDUAL");
   });
 
-  it("propaga la compañía elegida (?empresa=) a la API y a los enlaces; la columna Compañía solo para el Super Admin", async () => {
+  it("propaga la compañía elegida (?empresa=) a la API y a los enlaces; sin columna Compañía (no hay vista global)", async () => {
     busqueda = new URLSearchParams("empresa=e-9");
     const fetchMock = fetchPorRuta([[/^GET \/api\/v1\/impuestos\/liquidaciones\?/, () => Response.json(pagina([MASIVA]))]]);
     vi.stubGlobal("fetch", fetchMock);
 
-    const { unmount } = render_({ mostrarCompania: true });
+    render_({ esSuperAdmin: true });
 
     const tabla = await screen.findByRole("table", { name: "Liquidaciones" });
     const url = new URL(String(fetchMock.mock.calls[0][0]), "http://app");
     expect(url.searchParams.get("empresa")).toBe("e-9");
-    expect(within(tabla).getByRole("columnheader", { name: "Compañía" })).toBeInTheDocument();
-    expect(within(tabla).getByText("Compañía Demo")).toBeInTheDocument();
+    expect(within(tabla).queryByRole("columnheader", { name: "Compañía" })).toBeNull();
+    expect(within(tabla).queryByText("Compañía Demo")).toBeNull();
     expect(within(tabla).getByRole("link", { name: /0193AAAA/ })).toHaveAttribute("href", `/liquidaciones/${MASIVA.id}?empresa=e-9`);
-    unmount();
-
-    render_({ mostrarCompania: false });
-    const otra = await screen.findByRole("table", { name: "Liquidaciones" });
-    expect(within(otra).queryByRole("columnheader", { name: "Compañía" })).toBeNull();
   });
 });
 
