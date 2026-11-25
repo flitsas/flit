@@ -3,6 +3,7 @@
 > Generado: 2026-11-24 · `ui-agent` modos B (spec) y C (auditoría de M15) · rama `feature/AB-14694-producto-impuestos` (HEAD 7a8502863)
 > Revisado: 2026-11-25 (HEAD 5860c5e40) · alineada con los contratos `impuestos.v1.yaml` y `platform.v1.yaml` 1.1.0 tras M16, M18 y M19 (§0 «Precedencia del contrato») y cerrado el dashboard M17 (D-UI-GRAFICAS).
 > Revisado: 2026-11-25 (HEAD 3396655bc) · alineada con `impuestos.v1.yaml` 1.1.0 (deltas 4 a 7) y con el front ya integrado: chip y enlace de la fila `INDIVIDUAL`, motivo del cierre, Super Admin sin compañía en Liquidaciones, filtros y fila protegida de Usuarios, columna «Usuarios» y compañía identificada en el backoffice. Lo que espera al contrato 1.2.0 va marcado «en 1.2.0».
+> Revisado: 2026-11-25 (HEAD cfffcab89) · alineada con `impuestos.v1.yaml` 1.2.1 y `platform.v1.yaml` 1.1.1: lo marcado «en 1.2.0» quedó **entregado** (Reintentar en `LISTO_SIN_WEBHOOK`, motivos nuevos, `CLAVE_ROTADA` en el historial, línea de `modoRespaldoFirma`, enlace «Ver la original»); H-14 y H-17 cerrados; literal nuevo de `pantalla.avisoRotacionCredenciales`.
 > Insumo del `frontend-agent` para M16–M19 y del `ui-agent` para auditarlos. HU FE #14695.
 > Plan de referencia: `docs/impuestos/plan-implementacion.md` §3 (estados), §5.1 (contrato), §6 (rutas), §9 M15–M19. Decisiones: `.claude/state/producto-impuestos/decisiones-usuario.md` (D-DASH, D-REPORTES, D-CONFIG, D-GESTOR, D-ROL-ADMIN, DA-6b, DA-7, DA-9).
 
@@ -141,7 +142,7 @@ Bajo el chip va el motivo de `MotivoRecibo.x-flit-etiquetas`; con `SIN_FILE_ID`,
 |---|---|---|---|
 | `PENDIENTE` | Pendiente | `info` | — |
 | `LISTO` | Listo | `success` (+ chip `purple` «Firma sin confirmar» si `signatureConfirmed=false`) | — |
-| `LISTO_SIN_WEBHOOK` | Listo sin webhook | `success`, **sin** chip extra: el literal ya lo dice | Cargar secreto (en 1.2.0, `action` pasa a `REINTENTAR` → «Reintentar») |
+| `LISTO_SIN_WEBHOOK` | Listo sin webhook | `success`, **sin** chip extra: el literal ya lo dice | Reintentar (**entregado en 1.2.0**: `action` = `REINTENTAR`; `CARGAR_SECRETO` retirada, y si un reporte viejo la trae la UI la trata como «Reintentar») |
 | `ERROR` | Error | `danger` | Reintentar |
 | `INCIERTO` | Incierto | `purple` | Reintentar |
 | `REQUIERE_CREDENCIALES` | Requiere credenciales | `warning` | Cargar credenciales |
@@ -149,9 +150,9 @@ Bajo el chip va el motivo de `MotivoRecibo.x-flit-etiquetas`; con `SIN_FILE_ID`,
 | `SUSPENDIDO` | Suspendido | `neutral` | — |
 | desconocido | Sin clasificar | `neutral` | — |
 
-`ERROR` ya no se parte en «datos» y «ambiente» en el chip: lo distingue el motivo (`ALTA_DATOS_RECHAZADOS` frente a `AMBIENTE_NO_CONFIGURADO`). La marca `modo_respaldo_firma` del backoffice sigue como chip `purple` «Respaldo de firma» (no está en el contrato como etiqueta; hueco H-14).
+`ERROR` ya no se parte en «datos» y «ambiente» en el chip: lo distingue el motivo (`ALTA_DATOS_RECHAZADOS` frente a `AMBIENTE_NO_CONFIGURADO`). La marca `modoRespaldoFirma` del backoffice sigue como chip `purple` «Respaldo de firma» en el listado; en el detalle, la tarjeta «Estado» añade la línea con su etiqueta del contrato 1.2.0 («Respaldo de firma: los resultados llegan por consulta mientras se revisa el secreto.»). H-14 cerrado.
 
-**En 1.2.0** (plan §5.8, contrato aditivo): `MotivoAprovisionamiento` suma `EMPRESA_INACTIVA_EN_PROVEEDOR` y `CLAVE_ROTADA`, y `EMPRESA_YA_REGISTRADA` y `ALTA_SIN_CONFIRMAR` quedan retirados (su literal se conserva para el historial). La UI no cambia de forma: pinta la etiqueta que traiga el contrato y, mientras un código no esté en `x-flit-etiquetas`, «Sin clasificar».
+**Entregado en 1.2.0** (plan §5.8, contrato aditivo): `MotivoAprovisionamiento` suma `EMPRESA_INACTIVA_EN_PROVEEDOR` y `CLAVE_ROTADA`, y `EMPRESA_YA_REGISTRADA` y `ALTA_SIN_CONFIRMAR` quedan retirados (su literal se conserva para el historial). La UI no cambió de forma: pinta la etiqueta del contrato para los motivos nuevos y los retirados, y «Sin clasificar» solo para un código que no esté en `x-flit-etiquetas`.
 
 ### 1.6 Usuario
 
@@ -391,7 +392,7 @@ Pagination
   - `INCIERTO_REQUIERE_DECISION`: `warning`, «No se pudo confirmar si el proveedor recibió la solicitud. Puedes relanzarla; si sí la recibió, puede quedar duplicada.»
   - `SIN_RESULTADO_LOTE_CERRADO`: `info`, «El lote se cerró antes de recibir el resultado de esta placa.»
   - `resultado_tardio`: `info`, «Este resultado llegó después de cerrar el lote.»
-  - `posibleDuplicado`: `warning`, «Esta liquidación es un relanzamiento: puede estar duplicada en el proveedor.». El enlace «Ver la original» llega en 1.2.0: necesita `relanzadoDesdeLiquidacionId` para armar la ruta; `relanzadoDesdeItemId` (1.1.0) solo no alcanza (H-17).
+  - `posibleDuplicado`: `warning`, «Esta liquidación es un relanzamiento: puede estar duplicada en el proveedor.». **Entregado en 1.2.0:** enlace «Ver la original» a `/liquidaciones/{relanzadoDesdeLiquidacionId}/items/{relanzadoDesdeItemId}` (con `?empresa` si el Super Admin la trae); si falta alguno de los dos ids, no hay enlace. H-17 cerrado.
 - Vehículo y propietario (`ListaDefinicion`, `columnas={2}`, `vacio="Sin dato"`): Placa (`Placa`), Departamento, Secretaría, Propietario y Documento. Secretaría = `Item.secretaria` (1.1.0, delta 5) como «{nombre}, {ciudad}»; con uno solo de los dos, ese; sin ninguno, «Sin dato» (`formatoSecretaria`). Nada de dirección, correo ni teléfono.
 - Totales: `ListaDefinicion` con «Total a pagar» (monto §0.1, `text-base font-bold`), «Vigencias pendientes» (n) y «Vencimiento más próximo». **`null` muestra «Sin dato»; `0` muestra `$ 0`.**
 - Vigencias (`TablaVigencias.tsx`): tabla por defecto (§0.2) dentro de un contenedor con scroll horizontal (`RegionDesplazable`, con la forma de Diagnóstico: `tabIndex=0`, `role="region"`, `aria-label="Vigencias"`). Montos alineados a la derecha. Cada celda `null` dice «Sin dato». Una fila `no_liquidable` lleva el chip de §1.2. Cabeceras = `Periodo.x-flit-etiquetas`. `otros_cargos` va como sub-fila desplegable «Otros cargos ({n})». Por debajo de 1024 px se apila con `TABLA_MOVIL_*`.
@@ -518,8 +519,9 @@ DataTable + Pagination
 **Detalle:**
 - `CabeceraModulo` con titulo = compañía y miga «Backoffice › {Compañía}». Nombre y NIT salen de `AprovisionamientoDetalle.empresa` (`EmpresaIdentificada`, 1.1.0, delta 7): si el nombre llega vacío (compañía suspendida) o falta `empresa`, el título es el id; `descripcion` «NIT {nit}», omitida si `nit` es `null`.
 - Tarjeta «Estado»: chip, motivo legible (§1.5) y acción.
-  - «Reintentar aprovisionamiento» (`Button variant="secondary"`) en `ERROR`, `INCIERTO` y `REQUIERE_REVISION_NIT`. Con 202: «Reintento en cola. El estado se actualiza en unos segundos.» en la región viva (§3.8). 409 `ESTADO_NO_REINTENTABLE`: literal del contrato.
-  - En `REQUIERE_CREDENCIALES`, además, `pantalla.avisoRotacionCredenciales` (`InlineAlert warning vivo={false}`).
+  - «Reintentar aprovisionamiento» (`Button variant="secondary"`) en `ERROR`, `INCIERTO`, `REQUIERE_REVISION_NIT` y, **entregado en 1.2.0**, `LISTO_SIN_WEBHOOK` (el alta idempotente trae el secreto). Con 202: «Reintento en cola. El estado se actualiza en unos segundos.» en la región viva (§3.8). 409 `ESTADO_NO_REINTENTABLE`: literal del contrato.
+  - En `REQUIERE_CREDENCIALES`, además, `pantalla.avisoRotacionCredenciales` (`InlineAlert warning vivo={false}`): «El proveedor rechazó la API key guardada: reintenta el aprovisionamiento o carga credenciales nuevas.» (1.2.1; en la 1.2.0 ese estado nace de `CREDENCIAL_RECHAZADA`, no de una empresa ya registrada). Solo en ese estado: en `LISTO_SIN_WEBHOOK` y en `ERROR` no sale.
+  - Con `modoRespaldoFirma=true`, **entregado en 1.2.0**: línea en texto plano con la etiqueta del contrato (§1.5).
 - Tarjeta «Credenciales» (`FormularioCredenciales.tsx`):
   - Estado: «API key: {pantalla.credencialConfigurada} el {fecha} · empieza por {apiKeyPrefijo}» o «{pantalla.credencialNoConfigurada}»; lo mismo para «Secreto del webhook»; «Origen: {OrigenCredencial.x-flit-etiquetas}» («Alta automática», «Copiada de Diagnóstico», «Cargada por el Super Admin»).
   - «Cargar credenciales» / «Reemplazar» abre el formulario:
@@ -529,7 +531,7 @@ DataTable + Pagination
   - Al guardar (204): se limpian los campos, se cierra el formulario y sale «Credenciales guardadas y validadas.» en la región viva (§3.8).
   - 422 `CREDENCIAL_INVALIDA` y `CREDENCIAL_REQUERIDA`, 409 `ESTADO_NO_ADMITE_CARGA` y 503 `PROVEEDOR_NO_DISPONIBLE`: literal del contrato, dentro de la tarjeta.
 - Tarjeta «Contrato»: enlace «Editar contrato» a `/configuracion?pestana=contractual&empresa={id}`.
-- Historial: tabla Fecha · De · A · Motivo · Por. El motivo va rotulado y «Por» es la etiqueta de `actorTipo` («Sistema», «Super Admin», «Plataforma»); sin actor, «Sistema». En 1.2.0 el historial puede traer `CLAVE_ROTADA`, y los motivos retirados conservan su literal (§1.5).
+- Historial: tabla Fecha · De · A · Motivo · Por. El motivo va rotulado y «Por» es la etiqueta de `actorTipo` («Sistema», «Super Admin», «Plataforma»); sin actor, «Sistema». **Entregado en 1.2.0:** el historial pinta la fila de `CLAVE_ROTADA` con su etiqueta («El proveedor reemplazó la API key de la compañía; la nueva quedó guardada.»), y los motivos retirados conservan su literal (§1.5).
 
 | Estado | Contenido |
 |---|---|
@@ -565,7 +567,7 @@ DataTable + Pagination
 **`EstadoAprovisionamiento.tsx`:** subtarjeta bajo el `ToggleSwitch` de Impuestos, con el mismo contenedor que `CredencialImpuestoDiagnostico`.
 - Contenido: «Conexión con el proveedor:» + chip (§1.5, `StatusBadge` con `icono` de `ICONO_TONO` por tono; `PENDIENTE` en tono `info`; `LISTO_SIN_WEBHOOK` sin chip extra) + motivo legible = `provisioning.message` tal cual + acción según `action`, con el literal de `ProvisioningAction.x-flit-etiquetas`:
   - `REINTENTAR` → «Reintentar» (`Button variant="secondary" size="sm"`).
-  - `CARGAR_CREDENCIALES` / `CARGAR_SECRETO` → «Cargar credenciales» / «Cargar secreto» (en 1.2.0, `LISTO_SIN_WEBHOOK` trae `REINTENTAR` en lugar de `CARGAR_SECRETO`; la UI sigue a `action`), enlace externo a `{url}/backoffice/empresas/{id}`, donde `{url}` es la `url` del producto `impuestos` en `GET /platform/me/apps` (no una variable de entorno), con `target="_blank" rel="noopener"` y « (se abre en otra pestaña)» en `sr-only`.
+  - `CARGAR_CREDENCIALES` → «Cargar credenciales» (**entregado en 1.2.0**: `LISTO_SIN_WEBHOOK` trae `REINTENTAR` y sale «Reintentar»; `CARGAR_SECRETO` está retirada y, si llega de un reporte anterior, se trata como `REINTENTAR`), enlace externo a `{url}/backoffice/empresas/{id}`, donde `{url}` es la `url` del producto `impuestos` en `GET /platform/me/apps` (no una variable de entorno), con `target="_blank" rel="noopener"` y « (se abre en otra pestaña)» en `sr-only`.
   - Sin `url` (el usuario no tiene Impuestos en sus apps): texto sin enlace **«{acción}: hazlo desde Impuestos › Backoffice»**, que conserva el nombre de la acción.
   - `CORREGIR_NIT` → «Corregir NIT»: abre «Editar compañía». Si el tab no recibe esa acción, texto «Corrige el NIT con «Editar compañía».».
 - La actualización se anuncia en una región `role="status"` del tab.
@@ -665,10 +667,10 @@ Ninguno se crea en esta ola sin encargo (modo D). Para cada hueco se indica dón
 | H-11 | `ChipFiltro` sin prop `tono` (Diagnóstico lo pinta por `ReactNode`) | `packages/ui/src/ChipsFiltro.tsx` | Mismo arreglo local que `MetricasLote.tsx:39`. |
 | H-12 | Campo de **lista de correos** | `packages/ui` (si un tercer producto lo pide) | `textarea` local, un correo por línea (§3.9). |
 | H-13 | `docs/suite/design-system.md` no existe en la rama | ui-agent modo A | Esta spec cita como fuente `packages/ui` + el molde de Diagnóstico. |
-| H-14 | Contrato: la marca `modo_respaldo_firma` no tiene etiqueta en `x-flit-etiquetas` | `contracts/openapi/impuestos.v1.yaml` | Literal local «Respaldo de firma» hasta que el contrato lo fije. |
+| H-14 | **Cerrado en 1.2.0:** `AprovisionamientoDetalle.modoRespaldoFirma` tiene etiqueta en `x-flit-etiquetas` | `contracts/openapi/impuestos.v1.yaml` | El detalle pinta la etiqueta del contrato; el chip corto «Respaldo de firma» se mantiene en el listado (§1.5, §3.10). |
 | H-15 | **Cerrado en 1.1.0 (delta 4):** `ResumenLiquidacion` trae `estadoItem` e `itemId` en una `INDIVIDUAL` | `contracts/openapi/impuestos.v1.yaml` | El chip sale de `estadoItem` y el enlace va directo al ítem (§3.2); `contadores` queda como respaldo para respuestas viejas y para el resultado de `EXITOSO`. |
 | H-16 | **Cerrado en 1.1.0:** `Liquidacion.motivoCierre` (`maxLength` 300) | `contracts/openapi/impuestos.v1.yaml` | Segunda línea «Motivo: {texto}» en texto plano (§3.5). |
-| H-17 | Contrato: el ítem relanzado no trae la liquidación original, solo `relanzadoDesdeItemId` | `contracts/openapi/impuestos.v1.yaml`, en 1.2.0 (`relanzadoDesdeLiquidacionId`) | Sin enlace «Ver la original» hasta 1.2.0 (§3.6). |
+| H-17 | **Cerrado en 1.2.0:** `Item.relanzadoDesdeLiquidacionId` | `contracts/openapi/impuestos.v1.yaml` | Enlace «Ver la original» al ítem original (§3.6). |
 
 **Componentes nuevos locales justificados** (en `frontend-impuestos`, no compartidos):
 - `ChipEstado`: mapa de §1 sobre `etiquetaKit` y `StatusBadge`.

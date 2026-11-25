@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de plataforma
-  version: "1.1.0"
+  version: "1.1.1"
   description: >
     Endpoints de plataforma de la FLIT Suite (contrato de plataforma v1, §6), servidos por core-api
     bajo /api/v1/platform. Productos de la suite, su habilitación por empresa y el manifiesto que
@@ -17,6 +17,11 @@ info:
     .../products/{productCode}/aprovisionamiento/reintentar. PUT .../products/{productCode} suma el 409
     PROVISIONING_PREREQUISITE_MISSING al encender un producto con aprovisionamiento sin AdminCompany activo. Los textos
     visibles están cerrados en `x-flit-etiquetas` (por enum) y en los ejemplos de Problem: el front no redacta otros.
+
+
+    Versión 1.1.1 (solo descripciones, alineada con impuestos.v1.yaml 1.2.0): LISTO_SIN_WEBHOOK lleva la acción
+    REINTENTAR y CARGAR_SECRETO queda retirada (valor del enum conservado para reportes anteriores); el reintento
+    describe los estados que admite el servicio del producto; el ejemplo de `reason` usa un motivo vigente.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -224,8 +229,10 @@ paths:
         HU #14694 (plan §1.2 decisión R1). Encola por la outbox, en la misma transacción, el trabajo
         `impuestos.aprovisionamiento.reintentar` (contracts/asyncapi/impuestos-events.v1.yaml) con el id del SuperAdmin.
         No espera a core-impuestos: el estado nuevo llega cuando el servicio lo reporta (GET .../products). El front solo
-        muestra «Reintentar» cuando `provisioning.action` = REINTENTAR (estados ERROR e INCIERTO); core-impuestos ignora
-        el trabajo en cualquier otro estado. Sin cuerpo.
+        muestra «Reintentar» cuando `provisioning.action` = REINTENTAR (estados ERROR, INCIERTO y LISTO_SIN_WEBHOOK). La
+        plataforma no mira el estado: solo exige el producto encendido (409 PRODUCT_NOT_ENABLED). core-impuestos aplica
+        el trabajo desde ERROR, INCIERTO, REQUIERE_REVISION_NIT o LISTO_SIN_WEBHOOK y lo ignora en cualquier otro estado.
+        Sin cuerpo.
       parameters:
         - $ref: "#/components/parameters/TenantId"
         - $ref: "#/components/parameters/ProvisionedProductCode"
@@ -472,7 +479,7 @@ components:
           type: string
           nullable: true
           description: Código del motivo (MotivoAprovisionamiento de contracts/openapi/impuestos.v1.yaml). null = sin motivo.
-          example: EMPRESA_YA_REGISTRADA
+          example: CREDENCIAL_RECHAZADA
         message:
           type: string
           nullable: true
@@ -513,11 +520,13 @@ components:
       nullable: true
       enum: [REINTENTAR, CARGAR_SECRETO, CARGAR_CREDENCIALES, CORREGIR_NIT]
       description: >
-        Acción del SuperAdmin por estado (AC-FE-04): ERROR e INCIERTO -> REINTENTAR (botón que llama a
-        .../aprovisionamiento/reintentar); LISTO_SIN_WEBHOOK -> CARGAR_SECRETO y REQUIERE_CREDENCIALES ->
-        CARGAR_CREDENCIALES (enlace al backoffice del producto Impuestos, /backoffice/empresas/{tenantId});
+        Acción del SuperAdmin por estado (AC-FE-04): ERROR, INCIERTO y LISTO_SIN_WEBHOOK -> REINTENTAR (botón que llama
+        a .../aprovisionamiento/reintentar; en LISTO_SIN_WEBHOOK desde impuestos.v1.yaml 1.2.0, porque el alta
+        idempotente trae el secreto); REQUIERE_CREDENCIALES -> CARGAR_CREDENCIALES (enlace al backoffice del producto
+        Impuestos, /backoffice/empresas/{tenantId});
         REQUIERE_REVISION_NIT -> CORREGIR_NIT (abre la pestaña de datos de la compañía). null en PENDIENTE, LISTO y
-        SUSPENDIDO.
+        SUSPENDIDO. CARGAR_SECRETO queda retirada desde la 1.2.0 de Impuestos: ningún estado la produce y su valor y
+        literal se conservan solo para reportes anteriores (el front la trata como REINTENTAR).
       x-flit-etiquetas:
         REINTENTAR: Reintentar
         CARGAR_SECRETO: Cargar secreto

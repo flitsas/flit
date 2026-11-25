@@ -100,14 +100,14 @@ describe("FormularioCredenciales — estado (nunca los valores)", () => {
     expect(screen.getByRole("group", { name: "Credenciales" })).toHaveTextContent("API key: Sin configurar");
   });
 
-  it("en REQUIERE_CREDENCIALES avisa que hay que rotarlas (literal del contrato)", async () => {
+  it("en REQUIERE_CREDENCIALES avisa que la API key guardada fue rechazada (literal del contrato 1.2.1)", async () => {
     vi.stubGlobal("fetch", api({ credenciales: () => Response.json(SIN_NADA) }));
 
     montar("REQUIERE_CREDENCIALES");
 
     expect(
       await screen.findByText(
-        "La empresa ya existe en el proveedor: rota las credenciales en la consola del API y cárgalas aquí. Rotarlas puede afectar a Diagnóstico si comparte la empresa.",
+        "El proveedor rechazó la API key guardada: reintenta el aprovisionamiento o carga credenciales nuevas.",
       ),
     ).toBeInTheDocument();
   });
@@ -466,4 +466,4 @@ describe("FormularioCredenciales — respaldo manual con el contrato 1.2.0 (plan
 });
 
 const LITERAL_AVISO_ROTACION =
-  "La empresa ya existe en el proveedor: rota las credenciales en la consola del API y cárgalas aquí. Rotarlas puede afectar a Diagnóstico si comparte la empresa.";
+  "El proveedor rechazó la API key guardada: reintenta el aprovisionamiento o carga credenciales nuevas.";
