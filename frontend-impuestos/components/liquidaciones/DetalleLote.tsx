@@ -269,6 +269,12 @@ function VistaLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuperAdmin }: 
         onCerrado={(cerrada) => {
           setCerrando(false);
           reemplazar({ lote: cerrada, items });
+          // El lote ya es final y el sondeo se detiene: una lectura final de las placas para que las pendientes pasen a
+          // «Sin resultado (lote cerrado)». Si falla, queda la cabecera cerrada con las placas ya leídas.
+          listarItems(liquidacionId, { estado, placa, page: pg.page, pageSize: pg.pageSize }, { empresa }).then(
+            (frescos) => reemplazar({ lote: cerrada, items: frescos }),
+            () => undefined,
+          );
         }}
       />
       {relanzar ? <DialogoRelanzar open liquidacionId={liquidacionId} item={relanzar} empresa={empresa} onClose={() => setRelanzar(null)} /> : null}

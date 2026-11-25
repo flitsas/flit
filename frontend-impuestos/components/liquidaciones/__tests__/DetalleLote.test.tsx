@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { DetalleLote } from "@/components/liquidaciones/DetalleLote";
-import { errorRegla, fetchPorRuta, item, lote } from "./fixtures";
+import { CONTADORES_CERO, errorRegla, fetchPorRuta, item, lote } from "./fixtures";
 
 // Uso de ejemplo: <DetalleLote liquidacionId="L" puedeCerrar puedeRelanzar esSuperAdmin={false} /> en /liquidaciones/L.
 // Cabecera del lote con su avance y sus placas. Contrato 1.1.0: el cierre manual muestra quién, cuándo y el motivo
@@ -117,5 +117,48 @@ describe("DetalleLote — individual (delta 4)", () => {
     );
     render(<DetalleLote liquidacionId="L" puedeCerrar puedeRelanzar esSuperAdmin />);
     await waitFor(() => expect(replace).toHaveBeenCalledWith("/liquidaciones/L/items/I-9?empresa=e-9"));
+  });
+});
+
+describe("DetalleLote — tras «Cerrar lote» se releen las placas (F2, E2E liquidacion-masiva.spec.ts:130)", () => {
+  it("la fila pasa de «Reintento programado» a «Sin resultado (lote cerrado)» con una lectura final de los ítems", async () => {
+    let cerrado = false;
+    const fetchMock = fetchPorRuta([
+      [
+        ITEMS,
+        () =>
+          Response.json(
+            pagina([item({ liquidacionId: "L", estado: cerrado ? "SIN_RESULTADO_LOTE_CERRADO" : "REINTENTO_PROGRAMADO", resultadoStatus: null, totalAPagar: null })]),
+          ),
+      ],
+      [LOTE, () => Response.json(lote({ id: "L", estado: "EN_PROCESO" }))],
+      [
+        /^POST .*cerrar/,
+        () => {
+          cerrado = true;
+          return Response.json(
+            lote({
+              id: "L",
+              estado: "CERRADO_MANUALMENTE",
+              cerradaPor: { id: "u", nombre: "Usuaria Demo" },
+              cerradaEn: "2026-11-24T19:05:00Z",
+              contadores: { ...CONTADORES_CERO, sinResultado: 1 },
+            }),
+          );
+        },
+      ],
+    ]);
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DetalleLote liquidacionId="L" puedeCerrar puedeRelanzar esSuperAdmin={false} />);
+
+    const tabla = await screen.findByRole("table", { name: "Placas del lote" });
+    expect(within(tabla).getByText("Reintento programado")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Cerrar lote" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getAllByRole("button", { name: "Cerrar lote" }).at(-1)!);
+
+    await screen.findByText("Cerrado manualmente el 24/11/2026 14:05 por Usuaria Demo.");
+    expect(await within(screen.getByRole("table", { name: "Placas del lote" })).findByText("Sin resultado (lote cerrado)")).toBeInTheDocument();
+    expect(screen.queryByText("Reintento programado")).toBeNull();
   });
 });
