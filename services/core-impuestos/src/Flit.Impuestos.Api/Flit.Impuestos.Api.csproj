@@ -32,6 +32,8 @@
     <!-- M12: plantilla y lectura del .xlsx de la carga masiva (misma librería y pin de System.IO.Packaging que Diagnóstico y core-api). -->
     <PackageReference Include="DocumentFormat.OpenXml" />
     <PackageReference Include="System.IO.Packaging" />
+    <!-- M14: PDF de los reportes (misma librería y versión que el PDF de reportes de Diagnóstico, por Directory.Packages.props). -->
+    <PackageReference Include="QuestPDF" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
