@@ -14,6 +14,7 @@ export const TONO_DOCUMENTO: Record<string, StatusBadgeTone> = {
   Duplicado: "purple",
   Registrado: "success",
   Asociado: "info",
+  PorAsociar: "info",
   Descartado: "neutral",
 };
 
@@ -24,6 +25,7 @@ export const COLOR_CIFRA_DOCUMENTO: Record<string, string> = {
   Fallido: "var(--badge-danger-fg)",
   Duplicado: "var(--badge-purple-fg)",
   Asociado: "var(--badge-info-fg)",
+  PorAsociar: "var(--badge-info-fg)",
 };
 
 /** Chip de estado de un documento OCR con el StatusBadge del kit. */
