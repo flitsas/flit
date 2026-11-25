@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Spreadsheet;
@@ -14,27 +15,41 @@ public sealed record TablaLeida(IReadOnlyList<string?> Encabezados, IReadOnlyLis
 /// Lector de .xlsx de la carga masiva (HU #14694, M12) sobre <c>DocumentFormat.OpenXml</c> en modo SAX, con la misma forma que el
 /// lector de la carga de Diagnóstico (sin su código, EP-CF1): primera hoja del libro, columnas resueltas del atributo <c>r</c> de
 /// cada celda (Excel omite las vacías) y texto de cadena compartida, en línea, fórmula o número (el valor tal como lo guarda el libro).
-/// El número de fila es el de la hoja. Cada parte se lee con un tope de caracteres para que un zip inflado no agote la memoria. Un
-/// libro que no se puede abrir devuelve null: quien llama decide el error (sin la causa, que puede citar el contenido).
+/// El número de fila es el de la hoja. Contra un zip inflado (M-3): antes de abrir el libro se suma el tamaño descomprimido que declara
+/// cada entrada (tope <see cref="MaximoBytesDescomprimidos"/>), cada parte se lee con tope de caracteres
+/// (<see cref="MaximoCaracteresPorParte"/>), las cadenas compartidas tienen tope (<see cref="MaximoCadenasCompartidas"/>) y la lectura
+/// para en <c>maximoFilas</c> filas con valor. Un libro que no se puede abrir o que pasa un tope devuelve null: quien llama decide el
+/// error (sin la causa, que puede citar el contenido).
 /// </summary>
 /// <example>
 /// <code>
-/// var tabla = LectorXlsx.Leer(bytes) ?? throw ErroresCarga.Formato();
+/// var tabla = LectorXlsx.Leer(bytes, maximoFilas: 5001) ?? throw ErroresCarga.Formato();
 /// </code>
 /// </example>
 public static class LectorXlsx
 {
-    /// <summary>Tope de caracteres por parte del libro (unas 50 veces el tope de 5 MB del archivo).</summary>
-    private const long MaximoCaracteresPorParte = 256L * 1024 * 1024;
+    /// <summary>Tope de caracteres por parte del libro (16 M: de sobra para el tope de placas de un lote).</summary>
+    public const long MaximoCaracteresPorParte = 16L * 1024 * 1024;
 
-    public static TablaLeida? Leer(byte[] contenido)
+    /// <summary>Tope de la suma del tamaño descomprimido que declaran las entradas del zip (50 MB, 10 veces el tope del archivo).</summary>
+    public const long MaximoBytesDescomprimidos = 50L * 1024 * 1024;
+
+    /// <summary>Tope de cadenas compartidas del libro.</summary>
+    public const int MaximoCadenasCompartidas = 250_000;
+
+    /// <summary>Lee la primera hoja hasta <paramref name="maximoFilas"/> filas con valor (sin contar el encabezado).</summary>
+    public static TablaLeida? Leer(byte[] contenido, int maximoFilas)
     {
         ArgumentNullException.ThrowIfNull(contenido);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximoFilas, 1);
         try
         {
             using var flujo = new MemoryStream(contenido, writable: false);
+            if (DescomprimidoDeclarado(flujo) > MaximoBytesDescomprimidos)
+                return null;
+            flujo.Position = 0;
             using var libro = SpreadsheetDocument.Open(flujo, false, new OpenSettings { MaxCharactersInPart = MaximoCaracteresPorParte });
-            return Leer(libro);
+            return Leer(libro, maximoFilas);
         }
 #pragma warning disable CA1031 // Cualquier fallo al abrir o recorrer el libro es «el archivo del usuario no se puede leer».
         catch (Exception)
@@ -44,7 +59,22 @@ public static class LectorXlsx
         }
     }
 
-    private static TablaLeida? Leer(SpreadsheetDocument libro)
+    /// <summary>Suma del tamaño descomprimido que declara el directorio central del zip (sin descomprimir nada).</summary>
+    private static long DescomprimidoDeclarado(Stream flujo)
+    {
+        using var zip = new ZipArchive(flujo, ZipArchiveMode.Read, leaveOpen: true);
+        var total = 0L;
+        foreach (var entrada in zip.Entries)
+        {
+            total += entrada.Length;
+            if (total > MaximoBytesDescomprimidos)
+                break;
+        }
+
+        return total;
+    }
+
+    private static TablaLeida? Leer(SpreadsheetDocument libro, int maximoFilas)
     {
         var partes = libro.WorkbookPart;
         var hoja = partes?.Workbook?.Sheets?.Elements<Sheet>().FirstOrDefault();
@@ -72,7 +102,11 @@ public static class LectorXlsx
             }
 
             if (celdas.Any(c => !string.IsNullOrWhiteSpace(c)))
+            {
                 filas.Add(new FilaLeida(numero, celdas));
+                if (filas.Count >= maximoFilas)
+                    break;
+            }
         }
 
         return new TablaLeida(encabezados ?? [], filas);
@@ -87,8 +121,11 @@ public static class LectorXlsx
         using var lector = OpenXmlReader.Create(parte);
         while (lector.Read())
         {
-            if (lector.ElementType == typeof(SharedStringItem) && lector.IsStartElement)
-                valores.Add(lector.LoadCurrentElement()?.InnerText ?? string.Empty);
+            if (lector.ElementType != typeof(SharedStringItem) || !lector.IsStartElement)
+                continue;
+            if (valores.Count >= MaximoCadenasCompartidas)
+                throw new InvalidDataException("El libro pasa el tope de cadenas compartidas.");
+            valores.Add(lector.LoadCurrentElement()?.InnerText ?? string.Empty);
         }
 
         return valores;
