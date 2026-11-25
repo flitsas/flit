@@ -148,6 +148,14 @@ describe("Reportes — detalle por defecto (F4b-CF1)", () => {
     expect(screen.getByText("2 registros")).toBeInTheDocument();
   });
 
+  it("M21 A-4: con total 1 el contador dice «1 registro» en singular", async () => {
+    vi.stubGlobal("fetch", api({ reporte: (url) => Response.json(pagina(url.pathname.split("/").at(-1) as string, [FILA("ABC123", 1234567)], 1)) }));
+    render(<Reportes />);
+    await screen.findByRole("table", { name: "Detalle de liquidaciones" });
+    expect(screen.getByText("1 registro")).toBeInTheDocument();
+    expect(screen.queryByText("1 registros")).not.toBeInTheDocument();
+  });
+
   it("aviso de datos personales (Ley 1581) en detalle y el de registro en lotes", async () => {
     vi.stubGlobal("fetch", api());
     const { unmount } = render(<Reportes />);

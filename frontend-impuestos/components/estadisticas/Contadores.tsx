@@ -32,7 +32,7 @@ const KPIS: Kpi[] = [
     etiqueta: "Liquidaciones",
     icono: "reportes-detallados",
     cifra: (d) => d.contadores?.total,
-    pie: (d) => (d.contadores ? `${formatoEntero(d.contadores.individuales)} por placa · ${formatoEntero(d.contadores.masivas)} masivas` : null),
+    pie: (d) => (d.contadores ? `${formatoEntero(d.contadores.individuales)} individuales · ${formatoEntero(d.contadores.masivas)} masivas` : null),
   },
   { clave: "lotes", etiqueta: "Lotes en proceso", icono: "en-curso", cifra: (d) => d.contadores?.lotesEnProceso },
   { clave: "exitosas", etiqueta: "Exitosas", icono: "finalizados", cifra: (d) => d.resultados?.exitosas },

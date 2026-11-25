@@ -86,7 +86,7 @@ export function DialogoActivacionImpuestos({ open, tenantId, confirmando, error,
     >
       <div className="space-y-3">
         {estado.fase === "cargando" && (
-          <div className="flex items-center gap-2 text-sm" aria-busy="true">
+          <div role="status" className="flex items-center gap-2 text-sm" aria-busy="true">
             <Cargador />
             <span>Consultando los datos del alta…</span>
           </div>

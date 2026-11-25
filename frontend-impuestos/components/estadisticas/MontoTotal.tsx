@@ -1,7 +1,8 @@
 import { useId } from "react";
 import { StatusBadge } from "@flit/ui/StatusBadge";
-import { TARJETA_CLS, TEXTO_SECUNDARIO_CLS } from "@/components/comun/estilos";
+import { TEXTO_SECUNDARIO_CLS } from "@/components/comun/estilos";
 import { MONTO_SIN_DATO, formatoMonto } from "@/lib/estadisticas/formato";
+import { SECCION_CLS, TITULO_SECCION_CLS } from "./Figura";
 
 /** x-flit-literales.pantalla del contrato (impuestos.v1.yaml). */
 const LITERAL_SIN_MONTO = "{n} liquidaciones sin monto";
@@ -21,9 +22,9 @@ export function MontoTotal({ montoTotal, liquidacionesSinMonto, parcial }: { mon
   const sinDato = montoTotal == null || !Number.isFinite(montoTotal);
 
   return (
-    <section aria-labelledby={`${id}-titulo`} className={`${TARJETA_CLS} flex flex-col gap-2`}>
+    <section aria-labelledby={`${id}-titulo`} className={`${SECCION_CLS} flex flex-col gap-2`}>
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h2 id={`${id}-titulo`} className="text-base font-semibold text-flit-primary">
+        <h2 id={`${id}-titulo`} className={TITULO_SECCION_CLS}>
           Monto total liquidado
         </h2>
         {esParcial ? <StatusBadge tone="purple" label={LITERAL_PARCIAL} /> : null}

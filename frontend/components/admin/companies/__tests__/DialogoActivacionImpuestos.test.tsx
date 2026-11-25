@@ -113,6 +113,7 @@ describe("DialogoActivacionImpuestos", () => {
     getTenantProductProvisioningPreview.mockReturnValue(new Promise(() => {}));
     montar();
     expect(within(dialogo()).getByText("Consultando los datos del alta…")).toBeInTheDocument();
+    expect(within(dialogo()).getByRole("status")).toHaveTextContent("Consultando los datos del alta…");
     expect(cta()).toBeDisabled();
   });
 
