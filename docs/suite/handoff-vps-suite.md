@@ -140,7 +140,6 @@ quedan también en el `.env`.
 | **`core-identity`** | `CORE_IDENTITY_PORT` | **4025** | **5025** | **6025** |
 | `python-ml` | `PYTHON_ML_PORT` | 4012 | 5012 | 6012 |
 | `core-ict` | `CORE_ICT_PORT` | 4020 | el que ya tenga el `.env` | el que ya tenga el `.env` |
-| `core-ict` (callback gRPC h2c) | `CORE_ICT_GRPC_PORT` | 4021 | 5021 | 6021 |
 | `migracion-api` (no publicado) | `MIGRACION_API_PORT` | 4030 | 5030 | 6030 |
 | **Hub (`frontend-hub`)** | `HUB_PORT` | **4022** | **5022** | **6022** |
 | gRPC interno de core-api (no publicado) | `CORE_API_GRPC_PORT` | 8082 | 8082 | 8082 |

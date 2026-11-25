@@ -138,7 +138,6 @@ describe("HU #14409 AC1 — Super Admin en la ficha de una compañía", () => {
       "Representantes legales",
       "Mandatarios",
       "Usuarios",
-      "Integraciones externas",
       "Historial de Cambios",
     ]);
   });

@@ -37,15 +37,13 @@ env:
   CORE_DIAGNOSTICO_IMAGE: ghcr.io/flitsas/flitdev/core-diagnostico
   FRONTEND_DIAGNOSTICO_IMAGE: ghcr.io/flitsas/flitdev/frontend-diagnostico
 
-# runs-on: la variable de repo RUNNER (p. ej. flit-ci = runners propios de la 177) mueve estos jobs fuera de GitHub;
-# sin ella siguen en ubuntu-latest.
 jobs:
   # ── Resolver ambiente segun la rama ─────────────────────────────────────────
   # develop -> dev, staging -> qa, release -> pdn.
   # Centraliza el mapeo rama -> {ambiente, dominios, tag} en un solo lugar.
   setup:
     name: Resolve environment
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     outputs:
       env_name: ${{ steps.env.outputs.env_name }}
       gh_env: ${{ steps.env.outputs.gh_env }}
@@ -171,7 +169,7 @@ jobs:
   build-core-api:
     name: Build & push core-api (.NET) image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -188,7 +186,6 @@ jobs:
       # arrancar y a veces da timeout (context deadline exceeded). La pre-descargamos
       # con reintentos; si queda local, Buildx no la vuelve a bajar.
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -200,9 +197,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -273,7 +268,7 @@ jobs:
   build-core-identity:
     name: Build & push core-identity (.NET) image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -287,7 +282,6 @@ jobs:
           fetch-depth: 0 # para comparar contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -299,9 +293,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -364,15 +356,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=core-identity' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=core-identity' || '' }}
+          cache-from: type=gha,scope=core-identity
+          cache-to: type=gha,mode=max,scope=core-identity
 
 
   # Epic #13316 (HU #13347): core-consultas (perfil «consultas»; ver docs/suite/servicio-nuevo.md).
   build-core-consultas:
     name: Build & push core-consultas (.NET) image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -386,7 +378,6 @@ jobs:
           fetch-depth: 0 # para comparar contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -398,9 +389,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -455,8 +444,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=core-consultas' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=core-consultas' || '' }}
+          cache-from: type=gha,scope=core-consultas
+          cache-to: type=gha,mode=max,scope=core-consultas
 
 
   # Epic #14021 (HU #14038): core-personanatural, el BFF del portal Persona Natural.
@@ -465,7 +454,7 @@ jobs:
   build-core-personanatural:
     name: Build & push core-personanatural (.NET) image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -479,7 +468,6 @@ jobs:
           fetch-depth: 0 # para comparar contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -491,9 +479,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -544,15 +530,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=core-personanatural' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=core-personanatural' || '' }}
+          cache-from: type=gha,scope=core-personanatural
+          cache-to: type=gha,mode=max,scope=core-personanatural
 
 
   # Epic #12878 (GDC): core-comparendos (perfil «comparendos»; ver docs/suite/servicio-nuevo.md).
   build-core-comparendos:
     name: Build & push core-comparendos (.NET) image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -566,7 +552,6 @@ jobs:
           fetch-depth: 0 # para comparar contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -578,9 +563,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -636,14 +619,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=core-comparendos' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=core-comparendos' || '' }}
+          cache-from: type=gha,scope=core-comparendos
+          cache-to: type=gha,mode=max,scope=core-comparendos
 
   # HU #13734 (F00.1-H8): core-diagnostico (perfil «diagnostico»; ver docs/suite/servicio-nuevo.md).
   build-core-diagnostico:
     name: Build & push core-diagnostico (.NET) image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -657,7 +640,6 @@ jobs:
           fetch-depth: 0 # para comparar contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -669,9 +651,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -727,15 +707,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=core-diagnostico' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=core-diagnostico' || '' }}
+          cache-from: type=gha,scope=core-diagnostico
+          cache-to: type=gha,mode=max,scope=core-diagnostico
 
 
   # Epic #13316 (HU #13353): core-notificaciones (perfil «notificaciones»; ver docs/suite/servicio-nuevo.md).
   build-core-notificaciones:
     name: Build & push core-notificaciones (.NET) image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -749,7 +729,6 @@ jobs:
           fetch-depth: 0 # para comparar contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -761,9 +740,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -816,14 +793,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=core-notificaciones' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=core-notificaciones' || '' }}
+          cache-from: type=gha,scope=core-notificaciones
+          cache-to: type=gha,mode=max,scope=core-notificaciones
 
 
   build-frontend:
     name: Build & push frontend image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -840,7 +817,6 @@ jobs:
       # arrancar y a veces da timeout (context deadline exceeded). La pre-descargamos
       # con reintentos; si queda local, Buildx no la vuelve a bajar.
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -852,9 +828,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -923,15 +897,15 @@ jobs:
             # HU #14217 — origen del portal Persona Natural para Enlace y QR ({origen}/o/{codigo}).
             # Sale de setup por ambiente; vacío en PDN hasta definir su dominio (el diálogo lo avisa).
             NEXT_PUBLIC_CANAL_OT_ORIGEN=${{ needs.setup.outputs.personanatural_origin }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=frontend' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=frontend' || '' }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
 
   # FLIT Suite (B-09) — hub. Sin build-args: la misma imagen sirve a los tres ambientes y lee su
   # configuración en runtime. En los servidores no arranca hasta encender el perfil `suite` del compose.
   build-frontend-hub:
     name: Build & push frontend-hub image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -945,7 +919,6 @@ jobs:
           fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -957,9 +930,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -1009,14 +980,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=frontend-hub' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=frontend-hub' || '' }}
+          cache-from: type=gha,scope=frontend-hub
+          cache-to: type=gha,mode=max,scope=frontend-hub
 
   # Epic #12878 (GDC): app web de Comparendos (misma receta que el hub: config en runtime, sin build-args).
   build-frontend-comparendos:
     name: Build & push frontend-comparendos image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -1030,7 +1001,6 @@ jobs:
           fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -1042,9 +1012,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -1094,14 +1062,14 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=frontend-comparendos' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=frontend-comparendos' || '' }}
+          cache-from: type=gha,scope=frontend-comparendos
+          cache-to: type=gha,mode=max,scope=frontend-comparendos
 
   # HU #13734 (F00.1-H8): app web de Diagnóstico (misma receta que el hub: config en runtime, sin build-args).
   build-frontend-diagnostico:
     name: Build & push frontend-diagnostico image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -1115,7 +1083,6 @@ jobs:
           fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -1127,9 +1094,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -1179,15 +1144,15 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=frontend-diagnostico' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=frontend-diagnostico' || '' }}
+          cache-from: type=gha,scope=frontend-diagnostico
+          cache-to: type=gha,mode=max,scope=frontend-diagnostico
 
   # Epic #14021 (HU #14052): app web del portal Persona Natural (config en runtime, sin build-args).
   # Mismo criterio que core-personanatural: digest en GitOps solo si la kustomization ya lista la imagen.
   build-frontend-personanatural:
     name: Build & push frontend-personanatural image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -1201,7 +1166,6 @@ jobs:
           fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -1213,9 +1177,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -1261,13 +1223,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=frontend-personanatural' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=frontend-personanatural' || '' }}
+          cache-from: type=gha,scope=frontend-personanatural
+          cache-to: type=gha,mode=max,scope=frontend-personanatural
 
   build-python-ml:
     name: Build & push python-ml image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -1284,7 +1246,6 @@ jobs:
       # arrancar y a veces da timeout (context deadline exceeded). La pre-descargamos
       # con reintentos; si queda local, Buildx no la vuelve a bajar.
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -1296,9 +1257,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -1339,13 +1298,13 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=python-ml' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=python-ml' || '' }}
+          cache-from: type=gha,scope=python-ml
+          cache-to: type=gha,mode=max,scope=python-ml
 
   build-core-ict:
     name: Build & push core-ict (.NET) image
     needs: setup
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 15
     # HU #13329: digest de la imagen que queda vigente (reutilizada o recién construida). El despliegue por servicio
     # despliega tag@digest, así compose solo recrea los contenedores cuya imagen cambió de verdad.
@@ -1359,7 +1318,6 @@ jobs:
           fetch-depth: 0 # reuse-image compara contra el commit de la imagen vigente
 
       - name: Pre-pull BuildKit (reintentos ante timeouts de Docker Hub)
-        if: vars.RUNNER == ''   # el runner propio usa el driver docker, sin imagen de BuildKit
         run: |
           for i in 1 2 3 4 5; do
             docker pull moby/buildkit:buildx-stable-1 && exit 0
@@ -1371,9 +1329,7 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
         with:
-          # Runner propio (vars.RUNNER): builder del propio docker, con capas en disco entre runs; en GitHub, docker-container.
-          driver: ${{ vars.RUNNER == '' && 'docker-container' || 'docker' }}
-          driver-opts: ${{ vars.RUNNER == '' && 'image=moby/buildkit:buildx-stable-1' || '' }}
+          driver-opts: image=moby/buildkit:buildx-stable-1
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -1418,8 +1374,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: ${{ vars.RUNNER == '' && 'type=gha,scope=core-ict' || '' }}
-          cache-to: ${{ vars.RUNNER == '' && 'type=gha,mode=max,scope=core-ict' || '' }}
+          cache-from: type=gha,scope=core-ict
+          cache-to: type=gha,mode=max,scope=core-ict
 
   # ── DEV, QA y PDN: GitOps (Argo CD) ──────────────────────────────────────────
   # Ningun ambiente se despliega ya por SSH (el antiguo deploy-to-vps se retiro al nivelar
@@ -1444,7 +1400,7 @@ jobs:
     name: Deploy ${{ needs.setup.outputs.env_name }} (GitOps → Argo CD)
     needs: [setup, build-core-api, build-core-identity, build-core-consultas, build-core-notificaciones, build-core-comparendos, build-core-ict, build-frontend, build-frontend-hub, build-frontend-comparendos, build-frontend-personanatural, build-core-personanatural, build-core-diagnostico, build-frontend-diagnostico, build-python-ml]
     if: ${{ !cancelled() && needs.setup.result == 'success' && (github.ref_name == 'develop' || github.ref_name == 'staging' || github.ref_name == 'release') }}
-    runs-on: ${{ vars.RUNNER || 'ubuntu-latest' }}
+    runs-on: ubuntu-latest
     timeout-minutes: 30
     environment:
       # develop / staging / production: cada Environment tiene su GITOPS_TOKEN.

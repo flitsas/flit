@@ -47,15 +47,8 @@ public sealed class IctOrchestrationService(
     EntregarConsolidadoHandler entregarConsolidadoHandler,
     FlitDbContext db,
     IConfiguration configuration,
-    ILogger<IctOrchestrationService> logger,
-    IConsolidadoRegeneracionQueue? regeneracionQueue = null) : IctOrchestration.IctOrchestrationBase
+    ILogger<IctOrchestrationService> logger) : IctOrchestration.IctOrchestrationBase
 {
-    /// <summary>
-    /// Clave de configuración que activa la carpeta automática del trámite ICT (FUR, documentos
-    /// generados y consolidado) al materializar el borrador. Por defecto activa.
-    /// </summary>
-    internal const string CarpetaAlMaterializarKey = "Ict:CarpetaAlMaterializar";
-
     /// <summary>
     /// ErrorCode de <see cref="DraftReply"/> cuando el nombre de organismo del RUNT corresponde a un OT del
     /// catálogo que no está activo, no tiene grant habilitado para el tenant o no está operativo.
@@ -403,55 +396,7 @@ public sealed class IctOrchestrationService(
             await AsegurarIdentidadAsync(reply, summary.Id, tenantId, parte, context.CancellationToken);
         }
 
-        EncolarCarpetaIct(tenantId, summary.Id);
-
         return reply;
-    }
-
-    /// <summary>
-    /// Qué se le entrega al cliente ICT según el estado del trámite. Aprobado: el consolidado definitivo.
-    /// Antes de aprobado, solo si pidió la versión preliminar, y nunca la de un trámite anulado.
-    /// </summary>
-    /// <returns>El código de rechazo (o null) y si el trámite está aprobado.</returns>
-    internal static (string? Rechazo, bool Aprobado) DecidirEntregaIct(string status, bool permitirPreliminar)
-    {
-        if (string.Equals(status, TramiteEstado.Aprobado, StringComparison.Ordinal))
-        {
-            return (null, true);
-        }
-
-        if (!permitirPreliminar)
-        {
-            return ("not_approved", false);
-        }
-
-        return string.Equals(status, TramiteEstado.Anulado, StringComparison.Ordinal) ? ("anulado", false) : (null, false);
-    }
-
-    /// <summary>¿Se encola la carpeta del trámite ICT al materializarlo? Por defecto sí.</summary>
-    internal static bool CarpetaAlMaterializarActiva(IConfiguration configuration) =>
-        configuration.GetValue(CarpetaAlMaterializarKey, true);
-
-    /// <summary>
-    /// Carpeta del trámite ICT: el cliente ya entregó los documentos (la materialización exige el cierre
-    /// o la dispensa), así que se encola la generación del consolidado del wizard, que en cascada genera
-    /// el FUR y los documentos del sistema (mandato, solicitud virtual, certificados). Va por la cola de
-    /// regeneración anticipada: corre en segundo plano, con su propio scope, y un fallo queda en la
-    /// bitácora del trámite sin tocar la materialización. Mientras la identidad de las partes no esté
-    /// aprobada el FUR sale sin firmar; al aprobarse, el rastreador de vigencia invalida el consolidado
-    /// existente y lo vuelve a encolar, y el FUR se regenera firmado por desactualización.
-    /// </summary>
-    private void EncolarCarpetaIct(Guid tenantId, Guid instanceId)
-    {
-        if (regeneracionQueue is null || !CarpetaAlMaterializarActiva(configuration))
-        {
-            return;
-        }
-
-        if (!regeneracionQueue.Encolar(tenantId, instanceId, TipoConsolidado.Wizard))
-        {
-            IctOrchestrationLog.CarpetaNoEncolada(logger, instanceId);
-        }
     }
 
     /// <summary>
@@ -1855,15 +1800,11 @@ public sealed class IctOrchestrationService(
             return new DeliverConsolidadoReply { ErrorCode = "not_found" };
         }
 
-        var (rechazo, aprobado) = DecidirEntregaIct(status, request.PermitirPreliminar);
-        if (rechazo is not null)
+        if (!string.Equals(status, TramiteEstado.Aprobado, StringComparison.Ordinal))
         {
-            return new DeliverConsolidadoReply { ErrorCode = rechazo, Status = status };
+            return new DeliverConsolidadoReply { ErrorCode = "not_approved" };
         }
 
-        // Aprobado: la entrega de siempre (regenera solo si el PDF quedó obsoleto). Antes de aprobado, la
-        // versión preliminar se sirve tal cual (solo lectura): la mantiene al día la cola de regeneración
-        // anticipada y la consulta del cliente no dispara una composición de PDF.
         var (result, error) = await entregarConsolidadoHandler.HandleAsync(
             new EntregarConsolidadoRequest(
                 instanceId,
@@ -1871,14 +1812,13 @@ public sealed class IctOrchestrationService(
                 ConsolidadoEntregaTipo.Wizard,
                 UserId: null,
                 Force: false,
-                SoloLectura: !aprobado),
+                SoloLectura: false),
             context.CancellationToken);
 
         if (error is not null || result is null)
         {
             return new DeliverConsolidadoReply
             {
-                Status = status,
                 ErrorCode = error switch
                 {
                     EntregarConsolidadoHandler.ConsolidadoNoGenerado => "consolidado_no_disponible",
@@ -1900,15 +1840,13 @@ public sealed class IctOrchestrationService(
 
         if (string.IsNullOrWhiteSpace(storagePath))
         {
-            return new DeliverConsolidadoReply { ErrorCode = "consolidado_no_disponible", Status = status };
+            return new DeliverConsolidadoReply { ErrorCode = "consolidado_no_disponible" };
         }
 
         return new DeliverConsolidadoReply
         {
             StoragePath = storagePath,
             AttachmentId = attachmentId.ToString(),
-            Status = status,
-            Definitivo = aprobado,
         };
     }
 
@@ -1959,9 +1897,6 @@ public sealed class IctOrchestrationService(
 /// <summary>Logs del orquestador ICT sin PII (solo ids, parte y códigos).</summary>
 internal static partial class IctOrchestrationLog
 {
-    [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: no se pudo encolar la carpeta (FUR y consolidado) del trámite {InstanceId}.")]
-    public static partial void CarpetaNoEncolada(ILogger logger, Guid instanceId);
-
     [LoggerMessage(Level = LogLevel.Warning, Message = "ICT: identidad sin asegurar ({Code}). Instancia {InstanceId}, parte {Parte}.")]
     public static partial void IdentityWarning(ILogger logger, string code, Guid instanceId, string parte);
 

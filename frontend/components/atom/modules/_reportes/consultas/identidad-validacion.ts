@@ -25,17 +25,17 @@ export const ESTADO_VALIDACION_LABEL: Record<EstadoValidacion, string> = {
   sin_validacion: "Sin validar",
 };
 
-/** Color semántico por estado, con los tokens de estado del rediseño (cero hex sueltos). */
+/** Color semántico por estado, con los tokens de estado del rediseño y, donde aún no existen (staging), el badge equivalente. */
 export const ESTADO_VALIDACION_COLOR: Record<EstadoValidacion, string> = {
-  aprobado: "var(--estado-aprobado-fg)",
-  rechazado: "var(--estado-rechazado-fg)",
-  en_proceso: "var(--estado-preparado-fg)",
-  enviado: "var(--estado-entregado-fg)",
-  pendiente_envio: "var(--estado-borrador-fg)",
-  error_envio: "var(--estado-anulado-fg)",
-  expirado: "var(--estado-revocado-fg)",
-  esperando_captura: "var(--estado-asignado-fg)",
-  pendiente_revision: "var(--estado-subsanacion-fg)",
+  aprobado: "var(--estado-aprobado-fg, var(--badge-success-fg))",
+  rechazado: "var(--estado-rechazado-fg, var(--badge-danger-fg))",
+  en_proceso: "var(--estado-preparado-fg, var(--badge-info-fg))",
+  enviado: "var(--estado-entregado-fg, var(--badge-info-fg))",
+  pendiente_envio: "var(--estado-borrador-fg, var(--badge-pending-fg))",
+  error_envio: "var(--estado-anulado-fg, var(--badge-danger-fg))",
+  expirado: "var(--estado-revocado-fg, var(--badge-warning-fg))",
+  esperando_captura: "var(--estado-asignado-fg, var(--badge-pending-fg))",
+  pendiente_revision: "var(--estado-subsanacion-fg, var(--badge-warning-fg))",
   sin_validacion: "var(--border)",
 };
 

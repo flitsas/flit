@@ -49,7 +49,7 @@ public class ServicioPlantillas(ComparendosDb db, IConfiguration configuration)
     /// (Renting). Las alertas y reportes internos conservan el marco sencillo.
     /// </summary>
     public static bool ConMarca(TipoPlantilla tipo) => tipo is TipoPlantilla.CorreoAviso1 or TipoPlantilla.CorreoAviso2 or TipoPlantilla.CorreoAviso3
-        or TipoPlantilla.CorreoAviso4 or TipoPlantilla.CorreoCambioContraventorOt;
+        or TipoPlantilla.CorreoAviso4 or TipoPlantilla.CorreoCambioContraventorOt or TipoPlantilla.CorreoEvidencia;
 
     /// <summary>
     /// HU #14621: correos a organismos y a la empresa con cabecera con imagen: la de FLIT, o la de Renting sin el texto de

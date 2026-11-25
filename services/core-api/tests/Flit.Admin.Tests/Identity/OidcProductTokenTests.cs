@@ -32,19 +32,8 @@ namespace Flit.Admin.Tests.Identity;
 /// el producto está apagado o el usuario no tiene rol, refresh rotado que se relee de la base, SuperAdmin con bypass,
 /// y core-api aceptando el token del hub.
 /// </summary>
-public sealed class OidcProductTokenTests : IClassFixture<OidcProductTokenTests.Host>, IDisposable
+public sealed class OidcProductTokenTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
-    /// <summary>Un host para toda la clase (<see cref="HostPorClase"/>): cada prueba siembra su propio tenant y usuario.</summary>
-    public sealed class Host : HostPorClase
-    {
-        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
-            OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
-            {
-                b.UseSetting("Jwt:PersistSigningKey", "true");
-                b.UseSetting("Jwt:ValidateIssuedTokens", "true");
-            });
-    }
-
     private const string Password = "OidcPass1!";
     private const string PlatformCallback = "https://dev.flitsas.online/auth/callback";
 
@@ -60,9 +49,13 @@ public sealed class OidcProductTokenTests : IClassFixture<OidcProductTokenTests.
     private string TramitesSlug => $"oidc{_suffix}.bandeja.read";
     private string PlatformSlug => $"oidcplat{_suffix}.empresa.read";
 
-    public OidcProductTokenTests(Host host)
+    public OidcProductTokenTests(WebApplicationFactory<Program> factory)
     {
-        _factory = host.Factory;
+        _factory = OidcServerTests.WithOidc(factory).WithWebHostBuilder(b =>
+        {
+            b.UseSetting("Jwt:PersistSigningKey", "true");
+            b.UseSetting("Jwt:ValidateIssuedTokens", "true");
+        });
         SeedAsync().GetAwaiter().GetResult();
     }
 

@@ -328,13 +328,13 @@ function renderCelda(
           )}
           {/* Ajuste 2026-11-10 (D3=b) — el radicado es el ÚNICO control que abre el detalle: la fila
               ya no lo hace, para poder seleccionar y copiar datos sin abrir nada. Mismo aspecto que
-              el radicado del listado del gestor (TramitesTable): azul de acción, subrayado al pasar. */}
+              el radicado del listado del gestor (TramitesTable): font-mono semibold, subrayado al pasar. */}
           {onVerDetalle ? (
             <button
               type="button"
               onClick={() => onVerDetalle(row)}
               aria-label={`Ver detalle del trámite ${row.referenceNumber}`}
-              className="font-mono font-semibold text-[color:var(--di-action)] underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2"
+              className="font-mono font-semibold text-flit-primary underline-offset-2 hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-flit-brand focus-visible:ring-offset-2 dark:text-white"
             >
               {row.referenceNumber}
             </button>

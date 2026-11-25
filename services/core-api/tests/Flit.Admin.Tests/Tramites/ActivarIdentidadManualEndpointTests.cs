@@ -29,23 +29,8 @@ namespace Flit.Admin.Tests.Tramites;
 /// <para>Uso: <c>await Post(validationId)</c> tras <c>AuthenticateSuperAdmin()</c>; las filas se siembran por persona
 /// (prevalidación standalone) en la compañía dueña.</para>
 /// </summary>
-public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<ActivarIdentidadManualEndpointTests.Host>, IDisposable
+public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
-    /// <summary>
-    /// Un host para toda la clase (<see cref="HostPorClase"/>). El correo real (HU #13287) no debe salir ni ensuciar la
-    /// auditoría con 'manual_correo_fallido': estas pruebas verifican la activación; el envío del correo se cubre en
-    /// RegenerarEnlaceManualEndpointTests. El notificador no guarda estado, así que se comparte sin riesgo.
-    /// </summary>
-    public sealed class Host : HostPorClase
-    {
-        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
-            factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
-            {
-                s.RemoveAll<IManualCaptureLinkNotifier>();
-                s.AddSingleton<IManualCaptureLinkNotifier, SinCorreoNotifier>();
-            }));
-    }
-
     private static readonly SymmetricSecurityKey DummyKey = new(Encoding.UTF8.GetBytes(new string('k', 64)));
 
     private readonly WebApplicationFactory<Program> _factory;
@@ -64,9 +49,15 @@ public sealed class ActivarIdentidadManualEndpointTests : IClassFixture<ActivarI
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    public ActivarIdentidadManualEndpointTests(Host host)
+    public ActivarIdentidadManualEndpointTests(WebApplicationFactory<Program> factory)
     {
-        _factory = host.Factory;
+        // El correo real (HU #13287) no debe salir ni ensuciar la auditoría con 'manual_correo_fallido': estas pruebas
+        // verifican la activación; el envío del correo se cubre en RegenerarEnlaceManualEndpointTests.
+        _factory = factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        {
+            s.RemoveAll<IManualCaptureLinkNotifier>();
+            s.AddSingleton<IManualCaptureLinkNotifier, SinCorreoNotifier>();
+        }));
         _client = _factory.CreateClient();
         using var db = NewDb();
         db.Tenants.AddRange(NewTenant(_dueno, "Compania duena HU13284"), NewTenant(_otraCompania, "Otra compania HU13284"),

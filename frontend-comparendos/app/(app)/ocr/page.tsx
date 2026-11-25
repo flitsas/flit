@@ -39,6 +39,8 @@ interface PaqueteResumen {
   cantidadIncompletos: number;
   cantidadFallidos: number;
   cantidadDuplicados: number;
+  /** §10: los que un lote está asociando en segundo plano (aditivo). Siguen contando como duplicados en esta columna. */
+  cantidadPorAsociar?: number;
   cantidadRegistrados: number;
   cantidadDescartados: number;
   procesados: number;
@@ -365,7 +367,7 @@ function Paquetes() {
             { key: "completos", header: "Completos", align: "right", render: (p) => p.cantidadCompletos },
             { key: "incompletos", header: "Incompletos", align: "right", render: (p) => p.cantidadIncompletos },
             { key: "fallidos", header: "Fallidos", align: "right", render: (p) => p.cantidadFallidos },
-            { key: "duplicados", header: "Duplicados", align: "right", render: (p) => p.cantidadDuplicados },
+            { key: "duplicados", header: "Duplicados", align: "right", render: (p) => p.cantidadDuplicados + (p.cantidadPorAsociar ?? 0) },
             { key: "registrados", header: "Registrados", align: "right", render: (p) => p.cantidadRegistrados },
           ]}
           pagination={{ page: pg.page, pageSize: pg.pageSize, totalCount: items.length, onPageChange: pg.setPage, onPageSizeChange: pg.setPageSize }}

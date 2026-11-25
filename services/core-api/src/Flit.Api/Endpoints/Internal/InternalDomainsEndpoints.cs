@@ -103,8 +103,7 @@ public static class InternalDomainsEndpoints
         HttpRequest request,
         [FromServices] ITenantDomainRepository repository,
         [FromServices] IConfiguration configuration,
-        CancellationToken cancellationToken,
-        [FromServices] IPortalDominioRepository? portales = null)
+        CancellationToken cancellationToken)
     {
         var expectedKey = configuration[ConfigKey];
         if (string.IsNullOrEmpty(expectedKey) || !HasValidKey(request, expectedKey))
@@ -113,12 +112,7 @@ public static class InternalDomainsEndpoints
         }
 
         var domains = await repository.ListProvisioningAsync(cancellationToken).ConfigureAwait(false);
-        // HU #14383: los dominios de portal se agregan con el proposito portal-pn (lo de marca blanca no cambia).
-        IReadOnlyList<PortalDominioAprovisionamiento> delPortal = portales is null ? [] : await portales.ListarAprovisionamientoAsync(cancellationToken).ConfigureAwait(false);
-        var todos = domains.Concat(delPortal.Select(p => new DomainProvisioningItem(p.Host, PortalDomainPurpose, p.Status, p.CertificateIssuedAt, p.CertificateExpiresAt)))
-            .OrderBy(d => d.Host, StringComparer.Ordinal)
-            .ToList();
-        return Results.Ok(new ProvisioningDomainsResponse(todos));
+        return Results.Ok(new ProvisioningDomainsResponse(domains));
     }
 
     internal static async Task<IResult> PutCertificateAsync(

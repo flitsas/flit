@@ -28,7 +28,7 @@ describe("HU #14409 AC6 — manual del Super Admin", () => {
   });
 
   it("el conteo de pestañas coincide con las viñetas que quedan", () => {
-    expect(companias.paragraphs.join(" ")).toContain("con 8 pestañas");
+    expect(companias.paragraphs.join(" ")).toContain("con 7 pestañas");
     const pestanas = (companias.bullets ?? []).map((b) => b.split(":")[0]);
     expect(pestanas).toEqual([
       "Productos",
@@ -37,7 +37,6 @@ describe("HU #14409 AC6 — manual del Super Admin", () => {
       "Representantes legales",
       "Mandatarios",
       "Usuarios",
-      "Integraciones externas",
       "Historial de Cambios",
     ]);
   });

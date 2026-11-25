@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { ZoomOut } from "lucide-react";
 import { Icono } from "@flit/ui/Icono";
 import { DataTable, InlineAlert, Miga, Modal, VehicleLoader } from "@flit/ui";
@@ -29,7 +29,14 @@ import {
   ETIQUETA_TIPO_DOCUMENTO,
   tipoEntrada,
   vistaDuplicado,
+  type CorreoAlAsociar,
+  type CorreoAsociado,
   type EvidenciaActual,
+  avisosAlAsociar,
+  colaReemplazos,
+  leerCola,
+  siguienteEnCola,
+  esEstadoFinalDocumento,
   valorInicial,
   vistaOriginal,
 } from "@/lib/ocr";
@@ -62,6 +69,7 @@ interface Duplicado {
   evidenciaActual?: EvidenciaActual | null;
   asociable?: boolean;
   motivoNoAsociable?: string | null;
+  correoAlAsociar?: CorreoAlAsociar | null;
 }
 
 interface Documento {
@@ -209,17 +217,22 @@ function Formulario({
   onCambio,
   onRegistrado,
   onVer,
+  onDecidido,
 }: {
   d: Documento;
   opera: boolean;
   onCambio: () => void;
   onRegistrado: (r: Registro) => void;
   onVer: (comparendoId: string) => void;
+  /** Cola de reemplazos (GDC-EVID §9): tras reemplazar o descartar, la pantalla pasa sola al siguiente. */
+  onDecidido?: (decision: "reemplazado" | "descartado") => void;
 }) {
   const toast = useToast();
   const acciones = accionesDocumento({ estado: d.estado, reintentable: d.reintentable, fuenteDuplicado: d.duplicado?.fuente ?? null, tipoFallo: d.tipoFallo });
-  // Asociado es un estado final y correcto: no quedan campos por revisar.
-  const marcas = d.estado === "Asociado" ? {} : marcasRevision(d);
+  // Asociado, Registrado y Descartado son finales, y PorAsociar (§10) está en manos del lote: solo lectura, sin marcas de
+  // revisión ni campos en rojo.
+  const final = esEstadoFinalDocumento(d.estado) || d.estado === "PorAsociar";
+  const marcas = final ? {} : marcasRevision(d);
   const porRevisar = Object.keys(marcas).length;
   // GDC punto 6: el NIT guardado (base sin puntos) se muestra con la misma máscara con que se escribe.
   const tipoGuardado = d.campos.find((c) => c.nombreCampo === "tipo_documento_infractor")?.valorFinal;
@@ -294,17 +307,20 @@ function Formulario({
     ejecutar(async () => {
       await apiFetch(`/ocr/documentos/${d.id}/descartar`, { method: "POST", body: { motivo: motivo.trim() } });
       toast.show("Documento descartado.", "success");
+      onDecidido?.("descartado");
     });
 
   // Contrato de asociar: 409 NO_ASOCIABLE / EVIDENCIA_EXISTENTE / EVIDENCIA_CAMBIO = la pantalla estaba desactualizada.
   const asociar = (reemplazar: boolean) =>
     ejecutar(async () => {
       try {
-        const r = await apiFetch<{ numero: string }>(`/ocr/documentos/${d.id}/asociar`, {
+        const r = await apiFetch<{ numero: string; correo?: CorreoAsociado | null }>(`/ocr/documentos/${d.id}/asociar`, {
           method: "POST",
           body: { reemplazar, evidenciaActualId: d.duplicado?.evidenciaActual?.archivoId ?? null },
         });
-        toast.show(reemplazar ? `Documento reemplazado en el comparendo ${r.numero}.` : `Documento asociado al comparendo ${r.numero}.`, "success");
+        // El correo es aparte: si no salió, la asociación igual se hizo y se dice por qué.
+        for (const aviso of avisosAlAsociar(r.numero, reemplazar, r.correo)) toast.show(aviso.mensaje, aviso.tono);
+        if (reemplazar) onDecidido?.("reemplazado");
       } catch (e) {
         if (!(e instanceof ApiError) || e.status !== 409) throw e;
         toast.show(
@@ -429,7 +445,7 @@ function Formulario({
         </InlineAlert>
       )}
 
-      {dup && d.estado !== "Asociado" && (
+      {dup && d.estado !== "Asociado" && d.estado !== "PorAsociar" && (
         <InlineAlert tone="warning" title={vistaDup === "asociar" || vistaDup === "comparar" ? "Este comparendo ya existe" : "Este comparendo ya existe: no se puede registrar"}>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
             <dt className="font-semibold">Fuente</dt>
@@ -464,7 +480,7 @@ function Formulario({
           {dup.motivoNoAsociable && vistaDup !== "asociar" && vistaDup !== "comparar" && <p className="mt-1">{dup.motivoNoAsociable}</p>}
           {puedeAsociar && vistaDup === "asociar" && (
             <div className="mt-2 flex flex-col gap-1">
-              <p>No tiene documento: puedes agregarle este archivo para que salga en sus próximos avisos.</p>
+              <p>No tiene documento: puedes agregarle este archivo para que salga en sus avisos.</p>
               <div>
                 <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={() => setModal("asociar")}>
                   <Icono nombre="documento" className="h-3.5 w-3.5" />
@@ -491,7 +507,7 @@ function Formulario({
       {d.campos.length > 0 && (
         <div className="flex flex-col gap-3">
           {d.campos.map((c) => {
-            const faltante = d.camposFaltantes.includes(c.nombreCampo);
+            const faltante = !final && d.camposFaltantes.includes(c.nombreCampo);
             const marca = marcas[c.nombreCampo];
             return (
               <label key={c.nombreCampo} className={ETIQUETA_CLS}>
@@ -537,13 +553,14 @@ function Formulario({
       {botones && <div className="border-t border-border pt-3">{botones}</div>}
 
       {modal === "asociar" && comparendoExistente && (
-        <ModalAsociar comparendo={comparendoExistente} documento={{ nombreArchivo: d.nombreArchivo, numeroComparendoExtraido: numeroLeido }} ocupado={ocupado} onClose={() => setModal(null)} onConfirmar={() => asociar(false)} />
+        <ModalAsociar comparendo={comparendoExistente} documento={{ nombreArchivo: d.nombreArchivo, numeroComparendoExtraido: numeroLeido }} correoAlAsociar={dup?.correoAlAsociar} ocupado={ocupado} onClose={() => setModal(null)} onConfirmar={() => asociar(false)} />
       )}
       {modal === "comparar" && comparendoExistente && dup?.evidenciaActual && (
         <ModalComparar
           comparendo={comparendoExistente}
           entrante={{ archivoId: d.archivoId, nombreArchivo: d.nombreArchivo, tipoArchivo: d.tipoArchivo, numeroComparendoExtraido: numeroLeido }}
           actual={dup.evidenciaActual}
+          correoAlAsociar={dup.correoAlAsociar}
           ocupado={ocupado}
           onClose={() => setModal(null)}
           onReemplazar={() => asociar(true)}
@@ -646,7 +663,22 @@ function Revision({ id }: { id: string }) {
   const d = carga.datos;
   const [registro, setRegistro] = useState<Registro | null>(null);
   const setVerComparendo = useAbrirDetalle();
-  useSondeo(!!d && hayEnCurso([d.estado]), carga.recargar);
+  // §10: mientras el lote lo asocia, la pantalla se actualiza sola hasta que cambie de estado.
+  useSondeo(!!d && (hayEnCurso([d.estado]) || d.estado === "PorAsociar"), carga.recargar);
+  const router = useRouter();
+  const toast = useToast();
+  // GDC-EVID §9: revisión de reemplazos uno por uno (?cola=reemplazos&paquete=…); el avance viaja en la URL.
+  const cola = leerCola(useSearchParams());
+  const avanzar = cola
+    ? async (decision: "reemplazado" | "descartado" | "saltado") => {
+        try {
+          const todo = await apiFetch<{ documentos: { id: string; estado: string; revision?: "reemplazo" | "numeroDistinto" | null }[] }>(`/ocr/paquetes/${cola.paquete}`);
+          router.push(siguienteEnCola(colaReemplazos(todo.documentos), id, cola, decision));
+        } catch {
+          toast.show("No pudimos abrir el siguiente reemplazo. Vuelve al paquete para seguir.", "error");
+        }
+      }
+    : undefined;
 
   if (carga.estado === "error" && !d) return <InlineAlert tone="error">{carga.error}</InlineAlert>;
   if (!d) return <VehicleLoader label="Cargando documento…" />;
@@ -682,6 +714,23 @@ function Revision({ id }: { id: string }) {
           </span>
         }
       />
+      {cola && (
+        <InlineAlert tone="info" title={`Revisión de reemplazos: ${cola.hechos + 1} de ${cola.total}`}>
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            {d.estado === "Duplicado" && d.duplicado?.evidenciaActual
+              ? "Compara los documentos y decide si reemplazas o descartas; luego pasa solo al siguiente."
+              : "Este documento ya no está por revisar (alguien lo resolvió o cambió)."}
+            {!(d.estado === "Duplicado" && d.duplicado?.evidenciaActual) && avanzar && (
+              <button type="button" className="font-semibold text-flit-brand-ink hover:underline" onClick={() => avanzar("saltado")}>
+                Ir al siguiente
+              </button>
+            )}
+            <Link className="font-semibold text-flit-brand-ink hover:underline" href={`/ocr/paquetes/${cola.paquete}`}>
+              Salir de la revisión
+            </Link>
+          </span>
+        </InlineAlert>
+      )}
       {registro && (
         <div className="flex flex-col gap-2">
           <InlineAlert tone="success" title={`Comparendo ${registro.numero} registrado`}>
@@ -696,6 +745,7 @@ function Revision({ id }: { id: string }) {
 
       {d.estado === "Asociado" && (
         <InlineAlert tone="success" title="Documento asociado al comparendo">
+          <p className="mb-1">El documento quedó guardado en el comparendo.</p>
           {d.comparendoId ? (
             <button type="button" className="font-semibold text-flit-brand-ink hover:underline" onClick={() => setVerComparendo(d.comparendoId!)}>
               Ver el comparendo
@@ -707,6 +757,12 @@ function Revision({ id }: { id: string }) {
       )}
 
       {hayEnCurso([d.estado]) && <InlineAlert tone="info">El documento está en cola; esta vista se actualiza sola.</InlineAlert>}
+      {d.estado === "PorAsociar" && (
+        <InlineAlert tone="info" title="Se está asociando…">
+          Este documento se asocia a su comparendo en segundo plano, junto con los demás del lote. Mientras tanto es solo de
+          lectura; esta vista se actualiza sola.
+        </InlineAlert>
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
         <Original d={d} />
         {/* La clave fuerza un formulario nuevo cada vez que cambian los valores guardados. */}
@@ -715,6 +771,7 @@ function Revision({ id }: { id: string }) {
           onCambio={carga.recargar}
           onRegistrado={setRegistro}
           onVer={setVerComparendo}
+          onDecidido={avanzar}
         />
       </div>
       <Historial d={d} />

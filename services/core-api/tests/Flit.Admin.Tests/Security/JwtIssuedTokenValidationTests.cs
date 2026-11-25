@@ -27,14 +27,8 @@ namespace Flit.Admin.Tests.Security;
 /// el compose de los servidores), la API solo acepta los tokens que ella misma firmó, vigentes y con su emisor y
 /// audiencia. Antes aceptaba cualquier token sin llave pública configurada (a-inventario-ambientes.md, punto 4).
 /// </summary>
-public sealed class JwtIssuedTokenValidationTests : IClassFixture<JwtIssuedTokenValidationTests.Host>, IDisposable
+public sealed class JwtIssuedTokenValidationTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
-    /// <summary>Un host con la validación encendida para toda la clase (<see cref="HostPorClase"/>); cada prueba siembra su usuario.</summary>
-    public sealed class Host : HostPorClase
-    {
-        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) => Validating(factory);
-    }
-
     private const string Password = "ValidacionPass1!";
 
     private readonly WebApplicationFactory<Program> _factory;
@@ -44,9 +38,9 @@ public sealed class JwtIssuedTokenValidationTests : IClassFixture<JwtIssuedToken
     private readonly Guid _roleId = Guid.NewGuid();
     private string Email => $"jwt-{_suffix}@flit.local";
 
-    public JwtIssuedTokenValidationTests(Host host)
+    public JwtIssuedTokenValidationTests(WebApplicationFactory<Program> factory)
     {
-        _factory = host.Factory;
+        _factory = Validating(factory);
         SeedAsync().GetAwaiter().GetResult();
     }
 
@@ -111,9 +105,7 @@ public sealed class JwtIssuedTokenValidationTests : IClassFixture<JwtIssuedToken
         (await MeAsync(_factory, token)).Should().Be(HttpStatusCode.Unauthorized);
     }
 
-    // Arranca un segundo host a propósito (el reinicio es lo que se prueba): es la prueba lenta de la clase.
     [Fact]
-    [Trait("lenta", "si")]
     public async Task LaLlaveSobreviveAUnReinicio_OtraInstanciaAceptaElToken()
     {
         var token = await LoginAsync(_factory);

@@ -67,6 +67,8 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
     public DbSet<CargaMasivaPagosFila> CargaMasivaPagosFilas => Set<CargaMasivaPagosFila>();
     public DbSet<PaqueteOcr> PaquetesOcr => Set<PaqueteOcr>();
     public DbSet<DocumentoOcr> DocumentosOcr => Set<DocumentoOcr>();
+    public DbSet<AsociacionLote> AsociacionesLote => Set<AsociacionLote>();
+    public DbSet<AsociacionLoteDocumento> AsociacionLoteDocumentos => Set<AsociacionLoteDocumento>();
     public DbSet<DocumentoOcrCampo> DocumentoOcrCampos => Set<DocumentoOcrCampo>();
     public DbSet<DocumentoOcrEdicion> DocumentoOcrEdiciones => Set<DocumentoOcrEdicion>();
     public DbSet<DocumentoOcrIntento> DocumentoOcrIntentos => Set<DocumentoOcrIntento>();
@@ -642,6 +644,29 @@ public sealed class ComparendosDb(DbContextOptions<ComparendosDb> options) : DbC
             e.HasIndex(x => new { x.TenantId, x.NumeroNormalizado });
             e.HasIndex(x => new { x.Estado, x.ProximoIntentoEn });
             e.HasOne<PaqueteOcr>().WithMany().HasForeignKey(x => x.PaqueteId);
+        });
+        // GDC-EVID §10: «Asociar los N» en segundo plano.
+        m.Entity<AsociacionLote>(e =>
+        {
+            e.ToTable("asociacion_lote");
+            e.HasKey(x => x.Id);
+            e.Property(x => x.SolicitadoPorNombre).HasMaxLength(200);
+            e.HasIndex(x => new { x.PaqueteId, x.SolicitadoEn });
+            e.HasOne<PaqueteOcr>().WithMany().HasForeignKey(x => x.PaqueteId).OnDelete(DeleteBehavior.Cascade);
+        });
+        m.Entity<AsociacionLoteDocumento>(e =>
+        {
+            e.ToTable("asociacion_lote_documento");
+            e.HasKey(x => new { x.LoteId, x.DocumentoId });
+            e.Property(x => x.Motivo).HasMaxLength(500);
+            e.Property(x => x.CorreoEstado).HasMaxLength(20);
+            e.Property(x => x.CorreoMotivo).HasMaxLength(500);
+            e.HasIndex(x => x.DocumentoId, "ix_asociacion_lote_documento_documento_id").HasDatabaseName("ix_asociacion_lote_documento_documento_id");
+            // La cola del trabajador y la garantía de que un documento está en un solo lote activo.
+            e.HasIndex(x => x.ProximoIntentoEn, "ix_asociacion_lote_documento_cola").HasFilter("resultado = 'PorAsociar'").HasDatabaseName("ix_asociacion_lote_documento_cola");
+            e.HasIndex(x => x.DocumentoId, "ux_asociacion_lote_documento_activo").IsUnique().HasFilter("resultado = 'PorAsociar'").HasDatabaseName("ux_asociacion_lote_documento_activo");
+            e.HasOne<AsociacionLote>().WithMany().HasForeignKey(x => x.LoteId).OnDelete(DeleteBehavior.Cascade);
+            e.HasOne<DocumentoOcr>().WithMany().HasForeignKey(x => x.DocumentoId).OnDelete(DeleteBehavior.Cascade);
         });
         m.Entity<DocumentoOcrCampo>(e =>
         {

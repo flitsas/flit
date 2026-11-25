@@ -786,17 +786,16 @@ public static class BiometricRules
     public const int TokenTtlHoras = 24;
 
     /// <summary>
-    /// Vigencia (días calendario) del enlace de captura del FLUJO MANUAL de identidad: activación, regeneración y enlace nuevo
-    /// tras un rechazo. Es más larga que <see cref="TokenTtlHoras"/> porque la persona puede tardar en tomar sus fotos y su
-    /// firma; el resto de enlaces (Kyverum, prevalidación, biometría) sigue con horas.
-    /// </summary>
-    public const int TokenTtlManualDias = 30;
-
     /// Vigencia del registro de una validación de Kyverum Verify (30 días, pedido del PO 18/11/2026): la misma del
     /// enlace de captura en Verify. Antes era <see cref="TokenTtlHoras"/> (24 h) y FLIT daba por vencida la
     /// validación aunque el enlace siguiera sirviendo. El flujo manual conserva sus 24 h.
     /// </summary>
     public const int KyverumTokenTtlHoras = 720;
+    /// Vigencia (días calendario) del enlace de captura del FLUJO MANUAL de identidad: activación, regeneración y enlace nuevo
+    /// tras un rechazo. Es más larga que <see cref="TokenTtlHoras"/> porque la persona puede tardar en tomar sus fotos y su
+    /// firma; el resto de enlaces (Kyverum, prevalidación, biometría) sigue con horas.
+    /// </summary>
+    public const int TokenTtlManualDias = 30;
 
     public const string ParteComprador = "comprador";
     public const string ParteVendedor = "vendedor";

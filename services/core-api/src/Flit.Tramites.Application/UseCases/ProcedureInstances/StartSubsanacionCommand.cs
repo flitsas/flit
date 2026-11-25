@@ -81,7 +81,6 @@ public sealed class StartSubsanacionHandler(IProcedureInstanceRepository repo, I
             CreatedBy           = changedBy,
         };
         await repo.AddEventAsync(evtSubsanacion, ct);
-
         if (publisher is not null)
             await publisher.EnqueueAsync(instance, ct).ConfigureAwait(false);
 

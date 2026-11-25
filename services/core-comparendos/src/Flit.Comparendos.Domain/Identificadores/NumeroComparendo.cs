@@ -6,7 +6,7 @@
 /// de comparendo real (≥ <see cref="DigitosMinimosParaQuitarPrefijo"/>), p. ej. «d-1100…5678» → dígitos.
 /// Identificadores cortos de prueba o mixtos («AV3», «OCRRENTING1») conservan las letras.
 /// </summary>
-public static class NumeroComparendo
+public static partial class NumeroComparendo
 {
     public const int LargoMaximo = 40;
 
@@ -26,6 +26,29 @@ public static class NumeroComparendo
         var sin = SinPrefijo(alfanum);
         return sin.Length != alfanum.Length ? sin : texto!.Trim();
     }
+
+    /// <summary>
+    /// GDC-EVID §9: el número «a la vista», copia EXACTA de <c>numeroBase</c> del frontend (lib/ocr.ts): sin letras, espacios ni
+    /// guiones iniciales (de cualquier largo) y sin espacios, puntos ni guiones en el resto, en mayúscula. No es la llave
+    /// (<see cref="Normalizar"/>): solo decide el aviso «los números no coinciden exactamente», el mismo en pantalla y en el lote.
+    /// Si se cambia aquí, se cambia también en el front (las dos pruebas comparten la misma tabla de casos).
+    /// </summary>
+    public static string ALaVista(string? texto) =>
+        RegexEspaciosPuntosGuiones().Replace(RegexPrefijoVista().Replace(texto ?? string.Empty, string.Empty), string.Empty).ToUpperInvariant();
+
+    /// <summary>Copia de <c>numerosDifieren</c> del front: true si difieren en algo más que la letra inicial o el formato; sin uno de los dos, false.</summary>
+    public static bool DifiereALaVista(string? documento, string? sistema)
+    {
+        var a = ALaVista(documento);
+        var b = ALaVista(sistema);
+        return a.Length > 0 && b.Length > 0 && !string.Equals(a, b, StringComparison.Ordinal);
+    }
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"^[A-Za-z\s-]+")]
+    private static partial System.Text.RegularExpressions.Regex RegexPrefijoVista();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"[\s.-]")]
+    private static partial System.Text.RegularExpressions.Regex RegexEspaciosPuntosGuiones();
 
     private static string? Alfanumerico(string? texto)
     {

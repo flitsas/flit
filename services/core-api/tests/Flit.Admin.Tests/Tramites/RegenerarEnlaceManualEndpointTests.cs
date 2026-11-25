@@ -28,29 +28,13 @@ namespace Flit.Admin.Tests.Tramites;
 /// respuesta NO trae el token; un fallo de correo no revierte la regeneración y se informa.
 /// <para>Uso: <c>await Post(validationId)</c> tras <c>Authenticate("SuperAdmin", ...)</c>; filas por persona en la compañía dueña.</para>
 /// </summary>
-public sealed class RegenerarEnlaceManualEndpointTests : IClassFixture<RegenerarEnlaceManualEndpointTests.Host>, IDisposable
+public sealed class RegenerarEnlaceManualEndpointTests : IClassFixture<WebApplicationFactory<Program>>, IDisposable
 {
-    /// <summary>
-    /// Un host para toda la clase (<see cref="HostPorClase"/>) con el notificador que captura los correos. Las pruebas de
-    /// la clase corren en serie: cada una lo reinicia en el constructor.
-    /// </summary>
-    public sealed class Host : HostPorClase
-    {
-        internal CapturingNotifier Notifier { get; } = new();
-
-        protected override WebApplicationFactory<Program> Configurar(WebApplicationFactory<Program> factory) =>
-            factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
-            {
-                s.RemoveAll<IManualCaptureLinkNotifier>();
-                s.AddSingleton<IManualCaptureLinkNotifier>(Notifier);
-            }));
-    }
-
     private static readonly SymmetricSecurityKey DummyKey = new(Encoding.UTF8.GetBytes(new string('k', 64)));
 
     private readonly WebApplicationFactory<Program> _factory;
     private readonly HttpClient _client;
-    private readonly CapturingNotifier _notifier;
+    private readonly CapturingNotifier _notifier = new();
 
     private readonly Guid _dueno = Guid.NewGuid();
     private readonly Guid _tenantSuperAdmin = Guid.NewGuid();
@@ -61,12 +45,13 @@ public sealed class RegenerarEnlaceManualEndpointTests : IClassFixture<Regenerar
 
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
-    public RegenerarEnlaceManualEndpointTests(Host host)
+    public RegenerarEnlaceManualEndpointTests(WebApplicationFactory<Program> factory)
     {
-        _notifier = host.Notifier;
-        _notifier.Enviados.Clear();
-        _notifier.Resultado = true;
-        _factory = host.Factory;
+        _factory = factory.WithWebHostBuilder(b => b.ConfigureTestServices(s =>
+        {
+            s.RemoveAll<IManualCaptureLinkNotifier>();
+            s.AddSingleton<IManualCaptureLinkNotifier>(_notifier);
+        }));
         _client = _factory.CreateClient();
         using var db = NewDb();
         db.Tenants.AddRange(NewTenant(_dueno, "Compania duena HU13287"), NewTenant(_tenantSuperAdmin, "Super admin HU13287"));
@@ -269,7 +254,7 @@ public sealed class RegenerarEnlaceManualEndpointTests : IClassFixture<Regenerar
         });
 
     /// <summary>Notificador simulado: registra los enlaces recibidos (token en claro) en lugar de enviar correo real.</summary>
-    internal sealed class CapturingNotifier : IManualCaptureLinkNotifier
+    private sealed class CapturingNotifier : IManualCaptureLinkNotifier
     {
         public List<ManualCaptureLink> Enviados { get; } = [];
         public bool Resultado { get; set; } = true;

@@ -32,9 +32,7 @@ RUN pnpm --filter @flit/frontend-hub build
 ENV NODE_ENV=production
 EXPOSE 4022
 
-# Solo el .next queda del usuario node: next start escribe ahí su caché (imágenes, fetch). Un chown -R de /app
-# duplicaba en una capa toda la app con node_modules (~170 s solo en exportar la caché gha del build).
-RUN chown -R node:node /app/frontend-hub/.next
+RUN chown -R node:node /app
 USER node
 
 CMD ["pnpm", "--filter", "@flit/frontend-hub", "start"]

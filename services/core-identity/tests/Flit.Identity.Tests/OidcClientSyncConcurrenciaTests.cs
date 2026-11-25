@@ -55,21 +55,23 @@ public sealed class OidcClientSyncConcurrenciaTests : IClassFixture<OidcClientSy
 
     private async Task BorrarClienteAsync(string clientId, CancellationToken ct)
     {
-        // El host también sincroniza este cliente al arrancar: si lo actualizó entre leer y borrar, se vuelve a leer y se reintenta.
-        for (var intento = 1; ; intento++)
+        // El CI comparte la base entre hosts. Otra instancia puede mover la fila entre el Find y el
+        // Delete: OpenIddict espera 1 fila y, si afecta 0, lanza ConcurrencyException. El arranque
+        // real ya reintenta esa carrera; esta limpieza no debe tumbar la prueba.
+        const int intentos = 5;
+        for (var intento = 1; intento <= intentos; intento++)
         {
-            await using var scope = _host.Services.CreateAsyncScope();
-            var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
-            if (await manager.FindByClientIdAsync(clientId, ct) is not { } app)
-                return;
             try
             {
+                await using var scope = _host.Services.CreateAsyncScope();
+                var manager = scope.ServiceProvider.GetRequiredService<IOpenIddictApplicationManager>();
+                if (await manager.FindByClientIdAsync(clientId, ct) is not { } app)
+                    return;
                 await manager.DeleteAsync(app, ct);
                 return;
             }
-            catch (OpenIddictExceptions.ConcurrencyException) when (intento < 5)
+            catch (OpenIddictExceptions.ConcurrencyException)
             {
-                await Task.Delay(TimeSpan.FromMilliseconds(100 * intento), ct);
             }
         }
     }

@@ -19,22 +19,22 @@ namespace Flit.Modules.Security.Application.Tests.Auth;
 /// ANTES de tocar <see cref="ITenantNetworkMembership"/> — el chequeo de red solo se alcanza con
 /// contraseña correcta (documentado abajo, <see cref="Login_ContrasenaCorrectaFueraDeRed_HaceUnaLlamadaAdicional"/>:
 /// no es un vector de enumeración porque exige conocer YA la contraseña).
-/// <c>Uso de ejemplo</c>: <see cref="MeasureMedianPairMsAsync"/> hashea cada camino varias veces con
+/// <c>Uso de ejemplo</c>: <see cref="MeasureMedianMs"/> hashea <paramref name="samples"/> veces con
 /// un <see cref="IPasswordHasher"/> de coste FIJO (Argon2 real de bajo coste, no simulado) y devuelve
 /// la mediana en milisegundos.
 /// <para>
 /// <see cref="TraitAttribute"/> "Timing": sensible al entorno de CI (carga de la máquina). Tolerancia
-/// amplia (ratio ≤ 3.0) a propósito: el objetivo es detectar una regresión estructural (un camino que
-/// se salta el hash), no medir microsegundos. 1.6 fallaba en runners cargados (~1.84 observado);
-/// 2.5 también (JIT Argon2id ~86 vs ~25 ms, ratio ~3.5; y en CI 2.517 vs 2.5 por jitter).
-/// Por eso cada camino se calienta, las muestras se intercalan y el umbral queda en 3.0.
+/// amplia (ratio ≤ 4) a propósito: el objetivo es detectar una regresión estructural (un camino que
+/// se salta el hash), no medir microsegundos. 1.6 fallaba en runners cargados (~1.84). 2.5 falló en
+/// el PR #743 con ambos caminos hasheando (30 ms y 9 ms, ratio 3.48).
 /// </para>
 /// </summary>
 [Trait("Category", "Timing")]
 public sealed class LoginTimingTests
 {
     private const int Samples = 20;
-    private const double ToleranceRatio = 3.0;
+    private const int Warmup = 5;
+    private const double ToleranceRatio = 4.0;
 
     private static readonly Guid HeadA = Guid.NewGuid();
     private static readonly Guid OffNetworkTenant = Guid.NewGuid();
@@ -75,8 +75,9 @@ public sealed class LoginTimingTests
             repository, _hasher, jwtIssuer, auditWriter, NullAuditContextAccessor.Instance,
             membership, domainContext);
 
-        var (inexistente, fueraDeRed) = await MeasureMedianPairMsAsync(
-            () => handlerFor.HandleAsync(new LoginCommand("ghost@flit.local", "WrongPass1!"), CancellationToken.None),
+        var inexistente = await MeasureMedianMsAsync(
+            () => handlerFor.HandleAsync(new LoginCommand("ghost@flit.local", "WrongPass1!"), CancellationToken.None));
+        var fueraDeRed = await MeasureMedianMsAsync(
             () => handlerFor.HandleAsync(new LoginCommand("offnetwork@empresa.com", "WrongPass1!"), CancellationToken.None));
 
         var ratio = Math.Max(inexistente, fueraDeRed) / Math.Min(inexistente, fueraDeRed);
@@ -131,49 +132,35 @@ public sealed class LoginTimingTests
         await membership.Received(1).ResolveAsync(OffNetworkTenant, Arg.Any<CancellationToken>());
     }
 
-    /// <summary>
-    /// Calienta los dos caminos y luego alterna las muestras. Si se mide un camino completo y después
-    /// el otro, la mediana del primero incluye el JIT de Argon2id y la del segundo no: en CI eso
-    /// superó el ratio 2.5 sin que ningún camino se saltara el hash.
-    /// </summary>
-    private static async Task<(double First, double Second)> MeasureMedianPairMsAsync(
-        Func<Task> first, Func<Task> second)
+    private static async Task<double> MeasureMedianMsAsync(Func<Task> attempt)
     {
-        for (var i = 0; i < 5; i++)
+        for (var i = 0; i < Warmup; i++)
         {
-            await TimeOnceMsAsync(first);
-            await TimeOnceMsAsync(second);
+            try
+            {
+                await attempt();
+            }
+            catch (InvalidCredentialsException)
+            {
+            }
         }
 
-        var firstSamples = new List<double>(Samples);
-        var secondSamples = new List<double>(Samples);
+        var samples = new List<double>(Samples);
         for (var i = 0; i < Samples; i++)
         {
-            firstSamples.Add(await TimeOnceMsAsync(first));
-            secondSamples.Add(await TimeOnceMsAsync(second));
+            var sw = Stopwatch.StartNew();
+            try
+            {
+                await attempt();
+            }
+            catch (InvalidCredentialsException)
+            {
+                // Resultado esperado — lo que se mide es cuánto tarda en llegar aquí.
+            }
+            sw.Stop();
+            samples.Add(sw.Elapsed.TotalMilliseconds);
         }
 
-        return (Median(firstSamples), Median(secondSamples));
-    }
-
-    private static async Task<double> TimeOnceMsAsync(Func<Task> attempt)
-    {
-        var sw = Stopwatch.StartNew();
-        try
-        {
-            await attempt();
-        }
-        catch (InvalidCredentialsException)
-        {
-            // Resultado esperado — lo que se mide es cuánto tarda en llegar aquí.
-        }
-
-        sw.Stop();
-        return sw.Elapsed.TotalMilliseconds;
-    }
-
-    private static double Median(List<double> samples)
-    {
         samples.Sort();
         return samples[samples.Count / 2];
     }

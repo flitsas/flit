@@ -186,10 +186,11 @@ export function createMockManualReviewClient(options: MockOptions = {}): ManualR
       row.status = 'rechazado';
       row.waitingMinutes = null;
       row.rejectionReasonCode = reasonCode;
+      // Tras un rechazo el enlace nuevo del flujo manual vive 30 días (como el backend).
+      row.linkExpiresAt = new Date(Date.now() + 30 * 24 * 3_600_000).toISOString();
       row.reviewedAt = new Date().toISOString();
       row.reviewedBy = 'Revisor demo';
       row.reviewer = { name: 'Revisor demo', email: 'revisor@flit.local', role: 'Super Admin' };
-      row.linkExpiresAt = new Date(Date.now() + 30 * 24 * 3_600_000).toISOString();
       return {
         validationId: row.id,
         tenantId: 'mock-tenant',

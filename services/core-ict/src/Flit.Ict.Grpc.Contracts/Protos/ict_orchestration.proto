@@ -166,15 +166,10 @@ message StatusReply {
 message DeliverConsolidadoRequest {
   string tenant_id             = 1;
   string procedure_instance_id = 2;
-  // Con true también responde antes de "aprobado": sirve el consolidado vigente tal cual (sin
-  // regenerarlo); el trámite anulado no se entrega. Con false (valor por defecto), solo "aprobado".
-  bool   permitir_preliminar   = 3;
 }
 
 message DeliverConsolidadoReply {
   string storage_path  = 1;  // referencia opaca del File Manager
   string attachment_id = 2;
-  string error_code    = 3;  // vacío si OK; not_found|not_approved|anulado|consolidado_no_disponible|…
-  string status        = 4;  // estado del trámite en core-api (p. ej. borrador, aprobado)
-  bool   definitivo    = 5;  // true solo para el consolidado de un trámite aprobado
+  string error_code    = 3;  // vacío si OK; not_found|not_approved|consolidado_no_disponible|…
 }

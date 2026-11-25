@@ -31,16 +31,6 @@ public sealed partial class IctFileManagerConsolidadoClient(
         Guid procedureInstanceId,
         CancellationToken ct = default)
     {
-        var (entrega, error) = await GetConsolidadoAsync(tenantId, procedureInstanceId, preliminar: false, ct);
-        return (entrega?.Url, error);
-    }
-
-    public async Task<(ConsolidadoEntregado? Entrega, string? Error)> GetConsolidadoAsync(
-        Guid tenantId,
-        Guid procedureInstanceId,
-        bool preliminar,
-        CancellationToken ct = default)
-    {
         // 1. Regenerar/entregar consolidado en core-api (on-demand si falta o está stale).
         DeliverConsolidadoReply deliver;
         try
@@ -50,7 +40,6 @@ public sealed partial class IctFileManagerConsolidadoClient(
                 {
                     TenantId = tenantId.ToString(),
                     ProcedureInstanceId = procedureInstanceId.ToString(),
-                    PermitirPreliminar = preliminar,
                 },
                 cancellationToken: ct);
         }
@@ -76,7 +65,7 @@ public sealed partial class IctFileManagerConsolidadoClient(
         var url = await GetPresignedUrlFromFileManagerAsync(deliver.StoragePath, ct);
         return string.IsNullOrWhiteSpace(url)
             ? (null, "storage_unavailable")
-            : (new ConsolidadoEntregado(url, string.IsNullOrWhiteSpace(deliver.Status) ? null : deliver.Status, deliver.Definitivo), null);
+            : (url, null);
     }
 
     /// <summary>

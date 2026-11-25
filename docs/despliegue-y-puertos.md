@@ -143,7 +143,7 @@ Para arrancar todo: `pnpm dev` (front + gateway + core-api) o
 
 Asignados en L-03 según el contrato de plataforma (`docs/suite/contrato-plataforma-v1.md`, §11).
 Siguen el mismo esquema: local y DEV `40xx`, QA `50xx`, PDN `60xx`. Los números ya ocupados
-(`x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` core-ict, `x021` file-manager (repo aparte), `x030` migración, `x061` flit-taxes-scraping (repo aparte: DEV `4061`, QA `5061`))
+(`x001` frontend, `x002` gateway, `x003` core-api, `x012` python-ml, `x020` core-ict, `x021` file-manager (repo aparte), `x030` migración)
 no se reutilizan.
 
 | Servicio | Local y DEV | QA | PDN |

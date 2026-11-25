@@ -381,9 +381,7 @@ public sealed class PersonaNaturalGrpcTests(PersonaNaturalGrpcTests.Anfitrion an
         using var scope = host.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<FlitDbContext>();
         var tipo = db.ProcedureTypes.Where(t => !t.Code.StartsWith("PN_")).OrderBy(t => t.Code).First();
-        // El tenant MÁS ANTIGUO (sembrado por las migraciones), no el primero por código: ese podía ser el temporal que otra
-        // clase crea y borra en paralelo, y su limpieza fallaba por procedure_instances_tenant_id_fkey (admin-1 de #900).
-        var tenant = empresa ?? db.Tenants.Where(t => t.Id != PlatformTenants.PersonaNatural).OrderBy(t => t.CreatedAt).ThenBy(t => t.Id).Select(t => t.Id).First();
+        var tenant = empresa ?? db.Tenants.Where(t => t.Id != PlatformTenants.PersonaNatural).OrderBy(t => t.Code).Select(t => t.Id).First();
         // Usuario propio: tomar uno existente podía caer en el temporal de otra prueba en paralelo, que luego no lograba borrarlo.
         var usuario = Guid.NewGuid();
         db.Users.Add(new User
