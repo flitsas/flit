@@ -1260,6 +1260,7 @@ internal sealed partial class ProcedureInstanceRepository(
                     v.capture_url,
                     v.attempts,
                     v.max_attempts,
+                    v.resend_count,
                     -- La validación PROPIA del mandatario se lista, pero como persona aparte: nunca se mezcla con
                     -- las del trámite o la prevalidación del mismo documento (no se apalancan entre sí).
                     (v.mandate_signer_id IS NOT NULL) AS es_mandatario
@@ -1375,6 +1376,7 @@ internal sealed partial class ProcedureInstanceRepository(
                 capture_url,
                 attempts,
                 max_attempts,
+                resend_count,
                 es_mandatario,
                 validation_count,
                 COUNT(*) OVER() AS total_persons
