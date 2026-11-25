@@ -82,6 +82,8 @@ public static class Program
         builder.Services.AddLimitesSolicitudes(builder.Configuration);
         // M10: webhook del proveedor (anónimo con firma), aplicación del resultado y conciliación (respaldo GET e «Incierto»).
         builder.Services.AddAvisosYConciliacion(builder.Configuration);
+        // M11: recibos PDF (cola impuestos.recibos con reintentos 1/5/30 min y file-manager categoría impuestos, fail-closed).
+        Modulos.Recibos.RecibosEndpoints.AddRecibosImpuestos(builder.Services, builder.Configuration);
         builder.Services.AddFlitGrpcServer();
         builder.Services.AddFlitOutbox<ImpuestosDb>(builder.Configuration);
         builder.Services.AddExceptionHandler<ManejadorReglas>();
@@ -142,6 +144,7 @@ public static class Program
         Modulos.Carga.CargaEndpoints.Map(liquidaciones);
         Modulos.Liquidaciones.CerrarLiquidacion.Map(liquidaciones);
         Modulos.Liquidaciones.RelanzarItem.Map(liquidaciones);
+        Modulos.Recibos.RecibosEndpoints.Map(liquidaciones);
         Modulos.Notificaciones.NotificacionesEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
 
