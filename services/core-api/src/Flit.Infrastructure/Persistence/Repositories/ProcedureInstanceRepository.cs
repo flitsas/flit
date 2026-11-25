@@ -1603,6 +1603,7 @@ internal sealed partial class ProcedureInstanceRepository(
                     ValidationCount = g.Count(),
                     Attempts = latest.Attempts,
                     MaxAttempts = latest.MaxAttempts,
+                    ResendCount = latest.ResendCount,
                     EsMandatario = g.Key.EsMandatario,
                 };
             })
@@ -1704,6 +1705,7 @@ internal sealed partial class ProcedureInstanceRepository(
         public string? CaptureUrl { get; init; }
         public int Attempts { get; init; }
         public int MaxAttempts { get; init; }
+        public int ResendCount { get; init; }
         public bool EsMandatario { get; init; }
         public int ValidationCount { get; init; }
         public int TotalPersons { get; init; }
@@ -1733,6 +1735,7 @@ internal sealed partial class ProcedureInstanceRepository(
             ValidationCount = ValidationCount,
             Attempts = Attempts,
             MaxAttempts = MaxAttempts,
+            ResendCount = ResendCount,
             EsMandatario = EsMandatario,
         };
     }
