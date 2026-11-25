@@ -636,29 +636,6 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        var validacionIds = validaciones.Select(v => v.Id).ToList();
-        var intentos = new Dictionary<Guid, int>();
-        var conAuditoria = new HashSet<Guid>();
-
-        if (validacionIds.Count > 0)
-        {
-            var bitacora = await _context.IdentityValidationAudits
-                .AsNoTracking()
-                .Where(a => a.ValidationId != null && validacionIds.Contains(a.ValidationId.Value))
-                .Select(a => new { ValidationId = a.ValidationId!.Value, a.Stage, a.Outcome })
-                .ToListAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            foreach (var e in bitacora)
-            {
-                conAuditoria.Add(e.ValidationId);
-                if (ActorValidacionBuilder.CuentaComoIntento(e.Stage, e.Outcome))
-                {
-                    intentos[e.ValidationId] = intentos.GetValueOrDefault(e.ValidationId) + 1;
-                }
-            }
-        }
-
         var actoresPorTramite = actores.ToLookup(a => a.ProcedureInstanceId);
         var validacionesPorTramite = validaciones.ToLookup(v => v.ProcedureInstanceId!.Value);
 
@@ -667,9 +644,7 @@ internal sealed class CompanyQueryRepository : ICompanyQueryRepository
             resultado[fila.Instance.Id] = ActorValidacionBuilder.Build(
                 fila.Instance.Modalidad,
                 actoresPorTramite[fila.Instance.Id].ToList(),
-                validacionesPorTramite[fila.Instance.Id].ToList(),
-                intentos,
-                conAuditoria);
+                validacionesPorTramite[fila.Instance.Id].ToList());
         }
 
         return resultado;

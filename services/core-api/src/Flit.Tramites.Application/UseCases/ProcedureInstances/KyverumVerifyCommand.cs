@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Identity.Events;
+using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
@@ -45,7 +46,8 @@ public sealed class IniciarKyverumVerifyHandler(
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
     IIdentityValidationAuditLog audit,
-    ISignatureVaultPolicy? vaultPolicy = null)
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IIdentityRoundsPolicy? rondas = null)
 {
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
 
@@ -191,6 +193,10 @@ public sealed class IniciarKyverumVerifyHandler(
     {
         var id = instance.Id;
 
+        // Rondas por PERSONA en la empresa: una fila nueva también consume ronda (no solo el reenvío).
+        if (rondas is not null && await rondas.IsPersonBlockedAsync(tenantId, tipoDoc, documento, ct))
+            return (null, IdentityRoundsErrors.LimiteRondasAlcanzado, null);
+
         // Id de NUESTRA validación: se genera ANTES de llamar al proveedor para incrustarlo en la
         // webhookUrl (el webhook de Kyverum no repite el id en el cuerpo → correlación por URL).
         var validationId = Guid.NewGuid();
@@ -237,7 +243,7 @@ public sealed class IniciarKyverumVerifyHandler(
                 RegisteredEmail = email,
                 Status = BiometricEstados.PendienteEnvio,
                 TokenHash = BiometricToken.Hash(BiometricToken.Generate()),
-                ExpiresAt = queuedAt.AddHours(BiometricRules.TokenTtlHoras),
+                ExpiresAt = queuedAt.AddHours(BiometricRules.KyverumTokenTtlHoras),
                 Attempts = 1, // el primer intento (síncrono) ya falló
                 MaxAttempts = BiometricRules.KyverumMaxIntentos,
                 CreatedAt = queuedAt,
@@ -277,7 +283,7 @@ public sealed class IniciarKyverumVerifyHandler(
             // Vencimiento REAL del enlace de captura (Kyverum lo informa en `expiresAt`). Si el proveedor no
             // lo envía, se cae al TTL local por defecto. Es lo que decide cuándo el enlace queda inservible y
             // el gestor debe pedir uno nuevo (Expired del DTO + terminalización del worker).
-            ExpiresAt = provider.ExpiresAt ?? now.AddHours(BiometricRules.TokenTtlHoras),
+            ExpiresAt = provider.ExpiresAt ?? now.AddHours(BiometricRules.KyverumTokenTtlHoras),
             Attempts = 0,
             MaxAttempts = BiometricRules.KyverumMaxIntentos,
             CreatedAt = now,
@@ -364,7 +370,8 @@ public sealed class KyverumWebhookHandler(
     IKyverumVerifyClient kyverum,
     IdentityValidationResultApplier applier,
     IIdentityValidationAuditLog audit,
-    ILogger<KyverumWebhookHandler> logger)
+    ILogger<KyverumWebhookHandler> logger,
+    IIdentityRoundsPolicy? rondas = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -471,6 +478,10 @@ public sealed class KyverumWebhookHandler(
             return (null, "firma_invalida");
         }
 
+        // La persona pidió reintentar el registro desde la pantalla de captura (validation.reopened).
+        if (await TryReabrirAsync(v, input.RawBody, ct))
+            return ("ok", null);
+
         // Idempotencia: estados terminales no se re-procesan (AC2), salvo el rechazo aplicado antes de agotar los
         // intentos: un aprobado posterior del mismo enlace lo reemplaza (el applier decide).
         if ((v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
@@ -516,10 +527,100 @@ public sealed class KyverumWebhookHandler(
             return ("ok", null);
         }
 
+        if (await TryReabrirAsync(v, rawBody, ct))
+            return ("ok", null);
+
         if (v.Status is BiometricEstados.Aprobado or BiometricEstados.Rechazado)
             return ("ok", null);
 
         return await ApplyFromBodyAsync(v, rawBody, ct);
+    }
+
+    /// <summary>Evento de Kyverum Verify cuando la persona, tras agotar los intentos, pulsa «Reintentar registro».</summary>
+    public const string EventoReabierta = "validation.reopened";
+
+    /// <summary>
+    /// Aviso <c>validation.reopened</c> (pedido del PO 18/11/2026): la persona agotó los intentos, Verify le
+    /// dio intentos nuevos en el MISMO enlace y el soporte no tiene que reenviarlo. Si esta validación de
+    /// Kyverum quedó rechazada por agotar los intentos, vuelve a <c>en_proceso</c> con el conteo en cero y la
+    /// vigencia renovada, para que el resultado de los intentos nuevos se aplique como el de cualquier intento.
+    /// Devuelve <c>true</c> si el aviso era de reapertura (aplicado o no); <c>false</c> para cualquier otro evento.
+    /// </summary>
+    private async Task<bool> TryReabrirAsync(ProcedureInstanceBiometricValidation v, byte[] rawBody, CancellationToken ct)
+    {
+        KyverumWebhookPayload? payload;
+        try
+        {
+            payload = JsonSerializer.Deserialize<KyverumWebhookPayload>(rawBody, JsonOptions);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        if (!string.Equals(payload?.Evento, EventoReabierta, StringComparison.Ordinal))
+            return false;
+
+        var aplica = string.Equals(v.Provider, BiometricProviders.Kyverum, StringComparison.OrdinalIgnoreCase)
+            && v.Status == BiometricEstados.Rechazado
+            && v.RejectionReasonCode is null
+            && !string.IsNullOrWhiteSpace(v.KyverumVerificationId)
+            && string.Equals(v.KyverumVerificationId, payload!.RequestId, StringComparison.OrdinalIgnoreCase);
+        if (!aplica)
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.Ok,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                SecretPresent: true, DecryptOk: true, ProviderStatus: EventoReabierta, HttpStatus: 200,
+                Message: $"Reapertura de Kyverum sin efecto: la validación está en {v.Status}."), ct);
+            return true;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+
+        // La reapertura cuenta como ronda: si la persona ya no tiene rondas, no se reabre y el rechazo queda final.
+        if (rondas is not null && await rondas.IsResendBlockedAsync(v, ct))
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.RoundExhausted, IdentityValidationAuditOutcomes.Rejected,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole, ProviderStatus: EventoReabierta,
+                Message: "Reapertura pedida por la persona, pero no tiene rondas disponibles: el rechazo queda final."), ct);
+            return true;
+        }
+
+        v.Status = BiometricEstados.EnProceso;
+        v.Attempts = 0;
+        v.ReconcilePollCount = 0;
+        v.ExpiresAt = now.AddHours(BiometricRules.KyverumTokenTtlHoras);
+        v.ResendCount += 1;
+        v.LastResentAt = now;
+        v.UpdatedAt = now;
+        try
+        {
+            await repo.SaveChangesAsync(ct);
+        }
+        catch (Domain.Identity.IdentityInFlightConflictException)
+        {
+            // Ya hay otra validación en vuelo para el mismo documento: esa es la vigente.
+            await repo.ReloadBiometricAsync(v, ct);
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.WebhookReceived, IdentityValidationAuditOutcomes.Ok,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+                SecretPresent: true, DecryptOk: true, ProviderStatus: EventoReabierta, HttpStatus: 200,
+                Message: "Reapertura de Kyverum sin efecto: hay otra validación en vuelo para el mismo documento."), ct);
+            return true;
+        }
+
+        await audit.LogAsync(new IdentityValidationAuditEntry(
+            IdentityValidationAuditStages.WebhookApplied, BiometricEstados.EnProceso,
+            TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+            KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole,
+            SecretPresent: true, DecryptOk: true, ProviderStatus: EventoReabierta, HttpStatus: 200,
+            Message: "La persona pidió reintentar el registro: intentos en cero y vigencia renovada."), ct);
+        return true;
     }
 
     /// <summary>

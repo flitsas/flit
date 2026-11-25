@@ -893,7 +893,7 @@ export const SUPERADMIN_ARTICLES: ManualArticle[] = [
         title: "1. Qué es y cuándo usarla",
         paragraphs: [
           "La validación manual es la alternativa cuando la persona no logra validar su identidad por el camino normal. La persona toma sus fotos y su firma desde un enlace, y tú decides si aprueba o no. Solo el Super Admin puede activarla y resolverla.",
-          "Se activa sobre cualquier validación que no esté aprobada y vigente. Al activarla, la validación en curso deja de contar para FLIT y la persona recibe un enlace nuevo por correo, vigente 24 horas.",
+          "Se activa sobre cualquier validación que no esté aprobada y vigente. Al activarla, la validación en curso deja de contar para FLIT y la persona recibe un enlace nuevo por correo, vigente 30 días.",
         ],
       },
       {

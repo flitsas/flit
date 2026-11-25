@@ -1,6 +1,7 @@
 using Flit.Api.Authorization;
 using Flit.Queries.Domain.Tenancy;
 using Flit.Tramites.Application.Identity;
+using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
 using Flit.Tramites.Domain.Repositories;
@@ -48,6 +49,7 @@ internal static class BiometricaEndpoints
                         Results.Json(IdentitySendConflictDto.From(kConflict), statusCode: StatusCodes.Status409Conflict),
                     "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
                     "enlace_vencido_reenvio" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Hay una validación en vuelo con enlace vencido; reenvía la existente."),
+                    "limite_rondas_alcanzado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La persona ya usó todas las rondas de validación permitidas."),
                     "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor de validación de identidad rechazó la solicitud."),
                     "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
                     // Encolado (fallo transitorio del proveedor): 202 Accepted — el worker reintentará el envío.
@@ -382,6 +384,7 @@ internal static class BiometricaEndpoints
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
                 "sin_certificado" => Results.Problem(statusCode: 404, title: "Not Found", detail: "No hay certificado disponible para esta validación."),
+                "limite_rondas_alcanzado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La persona ya usó todas las rondas de validación permitidas."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la descarga del certificado."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
                 // HU #14302 — carta de una validación manual que aún no se pudo generar/leer: reintentable.
@@ -534,6 +537,7 @@ internal static class BiometricaEndpoints
                     detail: "Ya existe una prevalidación activa para este documento."),
                 "enlace_vencido_reenvio" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Hay una validación en vuelo con enlace vencido; reenvía en lugar de crear una nueva."),
+                "limite_rondas_alcanzado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La persona ya usó todas las rondas de validación permitidas."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
                     detail: "El proveedor de validación de identidad rechazó la solicitud."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
@@ -584,6 +588,9 @@ internal static class BiometricaEndpoints
                 "validacion_en_curso" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
                 // HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum.
+                // Configurador global de rondas: la fila ya usó todas las rondas permitidas.
+                IdentityRoundsErrors.LimiteRondasAlcanzado => Results.Problem(statusCode: 409, title: IdentityRoundsErrors.LimiteRondasAlcanzado,
+                    detail: IdentityRoundsErrors.LimiteRondasAlcanzadoMensaje),
                 "identidad_manual" => Results.Problem(statusCode: 409, title: "identidad_manual",
                     detail: "La validación está en el flujo manual: no se reenvía a Kyverum."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
@@ -599,7 +606,7 @@ internal static class BiometricaEndpoints
         .Produces<EditarPrevalidacionResult>(StatusCodes.Status200OK);
 
         // POST reenviar manualmente la validación de identidad de una prevalidación standalone (HU #10943,
-        // CF-03, D8): mismo registro, token/enlace nuevo, TTL 24h, intentos/sondeos reiniciados. 200 si el
+        // CF-03, D8): mismo registro, token/enlace nuevo, TTL de 30 días, intentos/sondeos reiniciados. 200 si el
         // envío se completó; 202 si quedó encolada (falla transitoria del proveedor).
         group.MapPost("/biometric-validations/{id:guid}/resend", async (
             Guid id,
@@ -626,6 +633,9 @@ internal static class BiometricaEndpoints
                 "validacion_en_curso" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Ya existe otra validación de identidad en curso para este mismo documento. Espera a que finalice antes de reenviar."),
                 // HU #13286 — la validación es del flujo manual: no se reenvía a Kyverum.
+                // Configurador global de rondas: la fila ya usó todas las rondas permitidas.
+                IdentityRoundsErrors.LimiteRondasAlcanzado => Results.Problem(statusCode: 409, title: IdentityRoundsErrors.LimiteRondasAlcanzado,
+                    detail: IdentityRoundsErrors.LimiteRondasAlcanzadoMensaje),
                 "identidad_manual" => Results.Problem(statusCode: 409, title: "identidad_manual",
                     detail: "La validación está en el flujo manual: no se reenvía a Kyverum."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
@@ -769,7 +779,7 @@ internal static class BiometricaEndpoints
         .Produces(StatusCodes.Status409Conflict);
 
         // POST regenerar el enlace de captura manual (HU #13287, Feature #13280, Épica #13202). SOLO Super Admin (misma policy
-        // que activate-manual). Emite un token nuevo de 24 h (solo su hash en BD) que REEMPLAZA al anterior: el viejo deja de
+        // que activate-manual). Emite un token nuevo de 30 días (solo su hash en BD) que REEMPLAZA al anterior: el viejo deja de
         // encontrarse por hash (el público recibe 404, igual que ante un enlace inválido). Cross-tenant: el tenant sale de la
         // fila, no de X-Tenant-Id. El token NO viaja en la respuesta: se entrega por correo; `emailEnviado` avisa si no salió.
         group.MapPost("/biometric-validations/{id:guid}/regenerate-manual-link", async (
@@ -899,6 +909,7 @@ internal static class BiometricaEndpoints
     {
         "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
         "no_kyverum" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación no es del proveedor Kyverum."),
+        "limite_rondas_alcanzado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La persona ya usó todas las rondas de validación permitidas."),
         "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la consulta de estado."),
         "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
         "persist_error" => Results.Problem(statusCode: 500, title: "Internal Server Error", detail: "No se pudo guardar el resultado de la validación. Revisa la bitácora (Historial técnico)."),

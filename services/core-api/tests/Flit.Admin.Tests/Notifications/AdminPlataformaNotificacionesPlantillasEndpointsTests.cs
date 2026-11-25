@@ -80,7 +80,7 @@ public sealed class AdminPlataformaNotificacionesPlantillasEndpointsTests
         response.StatusCode.Should().Be(HttpStatusCode.OK);
         var body = await response.Content.ReadFromJsonAsync<ListDto>(TestContext.Current.CancellationToken);
         body.Should().NotBeNull();
-        body!.Items.Should().HaveCount(14);
+        body!.Items.Should().HaveCount(15);
         body.Items.Select(i => i.Id).Should().OnlyHaveUniqueItems();
         body.Items.Should().Contain(i =>
             i.Id == "security.invitation"

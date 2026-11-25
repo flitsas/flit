@@ -186,6 +186,8 @@ public sealed class ListTenantBiometricPersonsHandlerTests
                         Email = "c@b.co",
                         Provider = BiometricProviders.Mock,
                         ValidationCount = 3,
+                        // Rondas: 1 + reenvíos. El reenvío no reinicia la ronda.
+                        ResendCount = 1,
                         Attempts = 2,
                         MaxAttempts = 5,
                     },
@@ -199,8 +201,8 @@ public sealed class ListTenantBiometricPersonsHandlerTests
         var (result, error) = await Handler().HandleAsync(tenantId, ct: TestContext.Current.CancellationToken);
 
         error.Should().BeNull();
-        result!.Persons[0].Intentos.Should().Be(2);
-        result.Persons[0].MaxIntentos.Should().Be(5);
+        result!.Persons[0].Intentos.Should().Be(2, "1 ronda inicial + 1 reenvío");
+        result.Persons[0].MaxIntentos.Should().Be(3, "máximo global de rondas por defecto");
     }
 
     /// <summary>
@@ -254,7 +256,7 @@ public sealed class ListTenantBiometricPersonsHandlerTests
                         Email = validation.Email,
                         Provider = validation.Provider,
                         ValidationCount = 1,
-                        // Misma fuente que el detalle: Attempts/MaxAttempts de la entidad.
+                        ResendCount = validation.ResendCount,
                         Attempts = validation.Attempts,
                         MaxAttempts = validation.MaxAttempts,
                     },
@@ -268,8 +270,11 @@ public sealed class ListTenantBiometricPersonsHandlerTests
         var (result, error) = await Handler().HandleAsync(tenantId, ct: TestContext.Current.CancellationToken);
 
         error.Should().BeNull();
-        result!.Persons[0].Intentos.Should().Be(detalleIntentos);
-        result.Persons[0].MaxIntentos.Should().Be(detalleMaxIntentos);
+        // La lista cuenta RONDAS (1 + reenvíos); el detalle sigue mostrando los intentos del enlace.
+        result!.Persons[0].Intentos.Should().Be(1 + validation.ResendCount);
+        result.Persons[0].MaxIntentos.Should().Be(3);
+        detalleIntentos.Should().Be(3);
+        detalleMaxIntentos.Should().Be(5);
     }
     /// <summary>
     /// Búsqueda por número de radicado en la grilla agrupada: el término llega al repositorio recortado y en

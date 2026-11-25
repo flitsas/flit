@@ -130,8 +130,8 @@ public sealed class IniciarKyverumVerifyHandlerTests
 
         error.Should().BeNull();
         var v = instance.BiometricValidations.Should().ContainSingle().Subject;
-        // Fallback al TTL local (24h) cuando el proveedor no reporta expiresAt.
-        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddHours(BiometricRules.TokenTtlHoras), TimeSpan.FromMinutes(1));
+        // Fallback al TTL local de Kyverum (30 días) cuando el proveedor no reporta expiresAt.
+        v.ExpiresAt.Should().BeCloseTo(DateTimeOffset.UtcNow.AddHours(BiometricRules.KyverumTokenTtlHoras), TimeSpan.FromMinutes(1));
     }
 
     [Fact]

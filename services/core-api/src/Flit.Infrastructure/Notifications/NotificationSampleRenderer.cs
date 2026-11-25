@@ -59,6 +59,13 @@ public static class NotificationSampleRenderer
                 RevocationRequestEmailMilestone.Rechazada, channel, baseUrl, effectiveTheme),
             ManualCaptureEmailComposer.TemplateId => ManualCaptureEmailPreviewSample.Build(baseUrl, effectiveTheme),
             ManualCaptureEmailComposer.RejectionTemplateId => ManualCaptureRejectedEmailPreviewSample.Build(baseUrl, effectiveTheme),
+            Flit.Infrastructure.IdentityRounds.IdentityRoundsAlertSender.TemplateKey => Flit.Infrastructure.IdentityRounds.IdentityRoundsAlertSender.Compose(
+                new Flit.Tramites.Application.Identity.Rounds.IdentityRoundsAlertMessage(
+                    Guid.Empty, Guid.Empty, null, "Trámite de ejemplo", "Persona de ejemplo", "CC", "0000000000",
+                    "Imagen borrosa", 3, 3, "al_maximo", DateTimeOffset.UnixEpoch),
+                "http://localhost:3000", // vista previa: enlace al frontend local (no es la base de imágenes)
+                effectiveTheme ?? Flit.Modules.Security.Domain.Auth.EmailTheme.Flit,
+                baseUrl),
             _ => throw new InvalidOperationException(
                 $"El catálogo resolvió el id '{templateId}' pero no hay muestra registrada para él."),
         };

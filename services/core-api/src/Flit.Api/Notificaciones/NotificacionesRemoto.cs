@@ -27,7 +27,10 @@ internal static class NotificacionesRemoto
             throw new InvalidOperationException($"{AddressKey} no es una URL (p. ej. http://core-notificaciones:8085): core-api envía por core-notificaciones.");
 
         services.AddFlitGrpcClient<MensajesMuertosService.MensajesMuertosServiceClient>(configuration, uri, "platform.notificaciones.admin");
-        services.AddFlitGrpcClient<NotificacionesService.NotificacionesServiceClient>(configuration, uri, "platform.notificaciones.send");
+        // El envío SMTP puede tardar más que el deadline por defecto del interceptor (3 s): sin esto el correo se corta.
+        var deadlineEnvio = TimeSpan.FromSeconds(configuration.GetValue("Notificaciones:Remoto:DeadlineSegundos", 60));
+        services.AddFlitGrpcClient<NotificacionesService.NotificacionesServiceClient>(
+            configuration, uri, "platform.notificaciones.send", o => o.Deadline = deadlineEnvio);
         services.AddScoped<ICanalesDeNotificaciones, CanalesPorNotificaciones>();
         services.AddScoped<INotificationDeliveryLogRepository, EntregasPorNotificaciones>();
         return services;

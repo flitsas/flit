@@ -491,6 +491,10 @@ public static class InfrastructureExtensions
             PlateAssignmentEmailModelProjectorService>();
         // HU #13287 (Feature #13280, Épica #13202) — correo con el enlace de captura de la identidad manual, por el mismo
         // canal de correo (IEmailSender) y el mismo tema de marca que el resto de avisos.
+        // Configurador global de rondas de identidad: almacén global (admin.*), alerta por correo y auditoría de cambios.
+        services.AddScoped<Flit.Tramites.Application.Identity.Rounds.IIdentityRoundsStore, Flit.Infrastructure.IdentityRounds.IdentityRoundsStore>();
+        services.AddScoped<Flit.Tramites.Application.Identity.Rounds.IIdentityRoundsAlertSender, Flit.Infrastructure.IdentityRounds.IdentityRoundsAlertSender>();
+        services.AddScoped<Flit.Tramites.Application.Identity.Rounds.IIdentityRoundsConfigAuditor, Flit.Infrastructure.IdentityRounds.IdentityRoundsConfigAuditor>();
         services.AddScoped<Flit.Tramites.Application.Identity.IManualCaptureLinkNotifier,
             Flit.Infrastructure.Notifications.Identity.EmailManualCaptureLinkNotifier>();
         services.AddSingleton<Flit.Tramites.Application.Identity.IManualCaptureTokenProtector,
