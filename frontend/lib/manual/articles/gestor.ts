@@ -829,6 +829,8 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
       "kpi",
       "productividad",
       "consultas personalizadas",
+      "firmado por todas las partes",
+      "falta firmar",
       "exportar excel",
       "tiempos",
       "organismo",
@@ -895,6 +897,26 @@ export const GESTOR_ARTICLES: ManualArticle[] = [
         paragraphs: [
           "Los reportes miran tu compañía. Si eres Administrador de una cabeza de red (concesión o marca blanca) y eliges «Toda la red» o un cliente en el selector de alcance, la analítica cambia con él; algunas exportaciones están disponibles solo para la compañía propia.",
           "Toda exportación a Excel usa el mismo formato de fecha de la interfaz (DD/MM/YYYY HH:mm, hora de Colombia).",
+        ],
+      },
+      {
+        id: "consultas-firma",
+        title: "5. Consultas personalizadas: saber quién falta por firmar",
+        paragraphs: [
+          "En la pestaña «Consultas personalizadas» puedes buscar y ver qué trámites ya firmaron todas las partes y quién falta por firmar. Hay un filtro y dos columnas, y se guardan y exportan como cualquier otro campo.",
+        ],
+        bullets: [
+          "Paso 1. Pulsa «Agregar filtro», busca el grupo «Personas» y elige «Firmado por todas las partes».",
+          "Paso 2. Marca «Sí» para ver solo los trámites en los que todos ya firmaron, o «No» para ver los que tienen al menos una parte pendiente o que rechazó firmar. Aplica el filtro; la tabla y el contador cambian.",
+          "Paso 3. Abre el selector de columnas y activa «Firmado por todas las partes» (muestra Sí o No) y «Falta firmar» (nombre y rol de quien aún no ha firmado; queda vacía si ya firmaron todos). Si una parte rechazó firmar, aparece marcada como «(rechazada)».",
+          "Paso 4. Pulsa «Guardar consulta» para reutilizarla. Al reabrirla conserva el filtro, el valor y las columnas que dejaste visibles.",
+          "Paso 5. Pulsa exportar a Excel: el archivo trae las mismas columnas visibles y los mismos valores de la tabla; si ocultaste las dos columnas de firma, no se incluyen.",
+        ],
+        callouts: [
+          {
+            variant: "info",
+            text: "«Falta firmar» solo se puede ver como columna: no se ofrece como filtro. Para filtrar usa «Firmado por todas las partes». Las consultas guardadas antes de este cambio funcionan igual que siempre y puedes agregarles estos campos después. Si una consulta no calculó la firma, la celda muestra «—» en lugar de un «No».",
+          },
         ],
       },
     ],
