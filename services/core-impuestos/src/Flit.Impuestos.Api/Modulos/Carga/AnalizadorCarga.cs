@@ -37,6 +37,9 @@ public sealed record ResultadoCarga(IReadOnlyList<PlacaCargada> Placas, int Dupl
 ///   <c>COLUMNA_PLACA_AUSENTE</c>.</item>
 ///   <item>Cada fila: celda vacía ⇒ <c>PLACA_VACIA</c>; placa que no se normaliza (S16) o de menos de 4 caracteres ⇒
 ///   <c>PLACA_INVALIDA</c>; repetida tras normalizar ⇒ cuenta como duplicada contra su primera aparición (S4).</item>
+///   <item>Topes (B-1, M-3, N-2), iguales en CSV y XLSX: se deja de leer al juntar <see cref="MaximoPlacas"/> placas únicas válidas;
+///   más de <see cref="MaximoFilasLeidas"/> filas leídas antes de eso ⇒ 415 <c>FORMATO_NO_SOPORTADO</c>; cada fila se lee hasta la
+///   columna <see cref="LectorXlsx.MaximoColumnas"/>.</item>
 /// </list>
 /// No escribe nada: la masiva lo vuelve a correr al crear el lote.
 /// </summary>
@@ -51,10 +54,18 @@ public static class AnalizadorCarga
     public const int MaximoBytes = 5 * 1024 * 1024;
 
     /// <summary>
-    /// Filas de un .xlsx que se leen como mucho (M-3): el tope de placas más alto que admite cualquier compañía
+    /// Placas únicas válidas que se juntan como mucho (B-1): el tope de placas más alto que admite cualquier compañía
     /// (<see cref="Persistence.Siembra.ConfiguracionPorDefecto.MaxRegistrosLoteMaximo"/>) más una, que basta para saber que lo supera.
+    /// Al llegar ahí se deja de leer, en CSV y en XLSX; las filas siguientes no cuentan como duplicadas ni inválidas.
     /// </summary>
-    public const int MaximoFilasXlsx = Persistence.Siembra.ConfiguracionPorDefecto.MaxRegistrosLoteMaximo + 1;
+    public const int MaximoPlacas = Persistence.Siembra.ConfiguracionPorDefecto.MaxRegistrosLoteMaximo + 1;
+
+    /// <summary>
+    /// Filas que se leen como mucho, contando encabezado, vacías, repetidas e inválidas (M-3, B-1, N-2): 4 veces el tope de placas
+    /// más alto, holgura para un archivo real con el tope completo y tres filas de ruido por placa. Si se pasa antes de juntar
+    /// <see cref="MaximoPlacas"/>, el archivo se rechaza con 415 <c>FORMATO_NO_SOPORTADO</c>, como los demás topes contra la bomba.
+    /// </summary>
+    public const int MaximoFilasLeidas = 4 * Persistence.Siembra.ConfiguracionPorDefecto.MaxRegistrosLoteMaximo;
     public const string Columna = "placa";
     public const string MotivoVacia = "PLACA_VACIA";
     public const string MotivoInvalida = "PLACA_INVALIDA";
@@ -71,52 +82,65 @@ public static class AnalizadorCarga
             throw ErroresCarga.DemasiadoGrande();
         var extension = Path.GetExtension(archivo.Nombre ?? string.Empty).ToUpperInvariant();
         var esZip = archivo.Contenido.AsSpan().StartsWith(FirmaZip);
+        var recolector = new Recolector();
         var tabla = extension switch
         {
-            ".XLSX" when esZip => LectorXlsx.Leer(archivo.Contenido, MaximoFilasXlsx),
-            ".CSV" when !esZip => LeerCsv(archivo.Contenido),
+            ".XLSX" when esZip => LectorXlsx.Leer(archivo.Contenido, MaximoFilasLeidas, recolector.Seguir),
+            ".CSV" when !esZip => LeerCsv(archivo.Contenido, MaximoFilasLeidas, recolector.Seguir),
             _ => null,
         } ?? throw ErroresCarga.Formato();
 
-        var columna = -1;
-        for (var i = 0; i < tabla.Encabezados.Count; i++)
-        {
-            if (string.Equals(Normalizar(tabla.Encabezados[i]), Columna, StringComparison.Ordinal))
-            {
-                columna = i;
-                break;
-            }
-        }
-
-        if (columna < 0)
+        if (ColumnaPlaca(tabla.Encabezados) < 0)
             throw ErroresCarga.ColumnaAusente();
 
-        var placas = new List<PlacaCargada>();
-        var vistas = new HashSet<string>(StringComparer.Ordinal);
-        var invalidas = new List<FilaInvalidaDto>();
-        var duplicadas = 0;
-        foreach (var fila in tabla.Filas)
+        return recolector.Resultado();
+    }
+
+    /// <summary>Índice de la columna «placa» en los encabezados; -1 si no está.</summary>
+    private static int ColumnaPlaca(IReadOnlyList<string?> encabezados)
+    {
+        for (var i = 0; i < encabezados.Count; i++)
         {
-            var valor = (columna < fila.Celdas.Count ? fila.Celdas[columna] : null)?.Trim() ?? string.Empty;
+            if (string.Equals(Normalizar(encabezados[i]), Columna, StringComparison.Ordinal))
+                return i;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Clasifica las filas a medida que se leen, igual en CSV y XLSX, y pide parar al juntar <see cref="MaximoPlacas"/> placas únicas
+    /// válidas (o en la primera fila, si no hay columna «placa»).
+    /// </summary>
+    private sealed class Recolector
+    {
+        private readonly List<PlacaCargada> placas = [];
+        private readonly HashSet<string> vistas = new(StringComparer.Ordinal);
+        private readonly List<FilaInvalidaDto> invalidas = [];
+        private int duplicadas;
+        private int? columna;
+
+        public bool Seguir(IReadOnlyList<string?> encabezados, FilaLeida fila)
+        {
+            columna ??= ColumnaPlaca(encabezados);
+            var indice = columna.Value;
+            if (indice < 0)
+                return false;
+
+            var valor = (indice < fila.Celdas.Count ? fila.Celdas[indice] : null)?.Trim() ?? string.Empty;
             if (valor.Length == 0)
-            {
                 invalidas.Add(new FilaInvalidaDto(fila.Numero, string.Empty, MotivoVacia));
-                continue;
-            }
-
-            if (!Placa.TryNormalizar(valor, out var placa) || placa.Length < Liquidaciones.CrearLiquidacionIndividual.LargoMinimoPlaca)
-            {
+            else if (!Placa.TryNormalizar(valor, out var placa) || placa.Length < Liquidaciones.CrearLiquidacionIndividual.LargoMinimoPlaca)
                 invalidas.Add(new FilaInvalidaDto(fila.Numero, valor.Length <= LargoMaximoValor ? valor : valor[..LargoMaximoValor], MotivoInvalida));
-                continue;
-            }
-
-            if (vistas.Add(placa))
+            else if (vistas.Add(placa))
                 placas.Add(new PlacaCargada(fila.Numero, placa));
             else
                 duplicadas++;
+
+            return placas.Count < MaximoPlacas;
         }
 
-        return new ResultadoCarga(placas, duplicadas, invalidas);
+        public ResultadoCarga Resultado() => new(placas, duplicadas, invalidas);
     }
 
     /// <summary>Encabezado comparable: recortado, sin BOM ni tildes y en minúsculas.</summary>
@@ -133,8 +157,13 @@ public static class AnalizadorCarga
         return sb.ToString();
     }
 
-    /// <summary>El CSV como tabla; null si no es texto UTF-8 (bytes nulos o secuencias inválidas).</summary>
-    internal static TablaLeida? LeerCsv(byte[] contenido)
+    /// <summary>
+    /// El CSV como tabla, con las reglas de <see cref="LectorXlsx"/>: cada fila con valor después del encabezado va a
+    /// <paramref name="seguir"/> hasta que devuelva false, se leen a lo sumo <see cref="LectorXlsx.MaximoColumnas"/> campos por registro
+    /// y todo registro (encabezado y líneas vacías incluidos) cuenta contra <paramref name="maximoFilasLeidas"/>. Null si no es texto
+    /// UTF-8 (bytes nulos o secuencias inválidas) o si pasa ese tope.
+    /// </summary>
+    internal static TablaLeida? LeerCsv(byte[] contenido, int maximoFilasLeidas, Func<IReadOnlyList<string?>, FilaLeida, bool>? seguir = null)
     {
         string texto;
         try
@@ -155,8 +184,11 @@ public static class AnalizadorCarga
         List<string?>? encabezados = null;
         char separador = ',';
         var filas = new List<FilaLeida>();
+        var leidas = 0;
         foreach (var (linea, crudo) in registros)
         {
+            if (++leidas > maximoFilasLeidas)
+                return null;
             if (encabezados is null)
             {
                 if (string.IsNullOrWhiteSpace(crudo))
@@ -168,7 +200,12 @@ public static class AnalizadorCarga
 
             var celdas = Campos(crudo, separador);
             if (celdas.Any(c => !string.IsNullOrWhiteSpace(c)))
-                filas.Add(new FilaLeida(linea, celdas));
+            {
+                var fila = new FilaLeida(linea, celdas);
+                filas.Add(fila);
+                if (seguir is not null && !seguir(encabezados, fila))
+                    break;
+            }
         }
 
         return new TablaLeida(encabezados ?? [], filas);
@@ -231,6 +268,7 @@ public static class AnalizadorCarga
         return puntoYComa > 0 && puntoYComa >= coma ? ';' : ',';
     }
 
+    /// <summary>Campos del registro; después del <see cref="LectorXlsx.MaximoColumnas"/>-ésimo se ignoran (N-2, igual que en XLSX).</summary>
     private static List<string?> Campos(string registro, char separador)
     {
         var campos = new List<string?>();
@@ -263,6 +301,8 @@ public static class AnalizadorCarga
             {
                 campos.Add(actual.ToString());
                 actual.Clear();
+                if (campos.Count == LectorXlsx.MaximoColumnas)
+                    return campos;
             }
             else
             {

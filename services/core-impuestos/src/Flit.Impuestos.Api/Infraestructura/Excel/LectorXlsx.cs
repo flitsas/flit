@@ -17,13 +17,15 @@ public sealed record TablaLeida(IReadOnlyList<string?> Encabezados, IReadOnlyLis
 /// cada celda (Excel omite las vacías) y texto de cadena compartida, en línea, fórmula o número (el valor tal como lo guarda el libro).
 /// El número de fila es el de la hoja. Contra un zip inflado (M-3): antes de abrir el libro se suma el tamaño descomprimido que declara
 /// cada entrada (tope <see cref="MaximoBytesDescomprimidos"/>), cada parte se lee con tope de caracteres
-/// (<see cref="MaximoCaracteresPorParte"/>), las cadenas compartidas tienen tope (<see cref="MaximoCadenasCompartidas"/>) y la lectura
-/// para en <c>maximoFilas</c> filas con valor. Un libro que no se puede abrir o que pasa un tope devuelve null: quien llama decide el
-/// error (sin la causa, que puede citar el contenido).
+/// (<see cref="MaximoCaracteresPorParte"/>), las cadenas compartidas tienen tope (<see cref="MaximoCadenasCompartidas"/>), las celdas
+/// después de la columna <see cref="MaximoColumnas"/> se ignoran (N-2) y toda fila del XML cuenta contra <c>maximoFilasLeidas</c>,
+/// también el encabezado y las vacías (B-1, N-2). Quien llama corta antes la lectura con <c>seguir</c> (la carga, al juntar el tope de
+/// placas únicas válidas más una). Un libro que no se puede abrir o que pasa un tope devuelve null: quien llama decide el error (sin
+/// la causa, que puede citar el contenido).
 /// </summary>
 /// <example>
 /// <code>
-/// var tabla = LectorXlsx.Leer(bytes, maximoFilas: 5001) ?? throw ErroresCarga.Formato();
+/// var tabla = LectorXlsx.Leer(bytes, maximoFilasLeidas: 20_000, (encabezados, fila) => sigue) ?? throw ErroresCarga.Formato();
 /// </code>
 /// </example>
 public static class LectorXlsx
@@ -37,11 +39,21 @@ public static class LectorXlsx
     /// <summary>Tope de cadenas compartidas del libro.</summary>
     public const int MaximoCadenasCompartidas = 250_000;
 
-    /// <summary>Lee la primera hoja hasta <paramref name="maximoFilas"/> filas con valor (sin contar el encabezado).</summary>
-    public static TablaLeida? Leer(byte[] contenido, int maximoFilas)
+    /// <summary>
+    /// Columnas que se leen de cada fila (N-2). La plantilla oficial (<see cref="Modulos.Carga.PlantillaCarga"/>) trae una sola
+    /// (<c>placa</c>, columna A); 64 deja sitio de sobra a una hoja propia de la compañía con columnas extra sin rellenar cada fila
+    /// hasta la columna <c>ZZZ</c> (18.278 posiciones).
+    /// </summary>
+    public const int MaximoColumnas = 64;
+
+    /// <summary>
+    /// Lee la primera hoja. Cada fila con valor después del encabezado va a <paramref name="seguir"/> (si viene) y la lectura para
+    /// cuando devuelve false. Más de <paramref name="maximoFilasLeidas"/> filas leídas (encabezado, vacías y con valor) ⇒ null.
+    /// </summary>
+    public static TablaLeida? Leer(byte[] contenido, int maximoFilasLeidas, Func<IReadOnlyList<string?>, FilaLeida, bool>? seguir = null)
     {
         ArgumentNullException.ThrowIfNull(contenido);
-        ArgumentOutOfRangeException.ThrowIfLessThan(maximoFilas, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(maximoFilasLeidas, 1);
         try
         {
             using var flujo = new MemoryStream(contenido, writable: false);
@@ -49,7 +61,7 @@ public static class LectorXlsx
                 return null;
             flujo.Position = 0;
             using var libro = SpreadsheetDocument.Open(flujo, false, new OpenSettings { MaxCharactersInPart = MaximoCaracteresPorParte });
-            return Leer(libro, maximoFilas);
+            return Leer(libro, maximoFilasLeidas, seguir);
         }
 #pragma warning disable CA1031 // Cualquier fallo al abrir o recorrer el libro es «el archivo del usuario no se puede leer».
         catch (Exception)
@@ -74,7 +86,7 @@ public static class LectorXlsx
         return total;
     }
 
-    private static TablaLeida? Leer(SpreadsheetDocument libro, int maximoFilas)
+    private static TablaLeida? Leer(SpreadsheetDocument libro, int maximoFilasLeidas, Func<IReadOnlyList<string?>, FilaLeida, bool>? seguir)
     {
         var partes = libro.WorkbookPart;
         var hoja = partes?.Workbook?.Sheets?.Elements<Sheet>().FirstOrDefault();
@@ -84,11 +96,14 @@ public static class LectorXlsx
         var compartidas = CadenasCompartidas(partes);
         List<string?>? encabezados = null;
         var filas = new List<FilaLeida>();
+        var leidas = 0;
         using var lector = OpenXmlReader.Create(parteHoja);
         while (lector.Read())
         {
             if (lector.ElementType != typeof(Row) || !lector.IsStartElement)
                 continue;
+            if (++leidas > maximoFilasLeidas)
+                return null;
 
             var fila = (Row)lector.LoadCurrentElement()!;
             var celdas = Celdas(fila, compartidas);
@@ -103,8 +118,9 @@ public static class LectorXlsx
 
             if (celdas.Any(c => !string.IsNullOrWhiteSpace(c)))
             {
-                filas.Add(new FilaLeida(numero, celdas));
-                if (filas.Count >= maximoFilas)
+                var leida = new FilaLeida(numero, celdas);
+                filas.Add(leida);
+                if (seguir is not null && !seguir(encabezados, leida))
                     break;
             }
         }
@@ -139,6 +155,8 @@ public static class LectorXlsx
         {
             var columna = Columna(celda.CellReference?.Value) ?? siguiente;
             siguiente = columna + 1;
+            if (columna >= MaximoColumnas)
+                continue;
             while (celdas.Count <= columna)
                 celdas.Add(null);
             celdas[columna] = Valor(celda, compartidas);
