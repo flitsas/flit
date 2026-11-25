@@ -197,11 +197,12 @@ describe("F6-CF3 / AC-FE-09: módulos según el rol", () => {
   });
 });
 
+/** Títulos: literales de `x-flit-literales.pantalla` (contracts/openapi/impuestos.v1.yaml); NO_LISTO no tiene literal en el contrato (spec §4.3). */
 const TITULOS_BANNER = {
-  SUSPENDIDO: "Impuestos está suspendido: solo lectura",
+  SUSPENDIDO: "Producto suspendido: solo lectura",
   NO_LISTO: "Impuestos todavía no está listo para liquidar",
-  SIN_WEBHOOK: "Los resultados pueden tardar un poco más",
-  FIRMA_SIN_CONFIRMAR: "Conexión con el proveedor en verificación",
+  SIN_WEBHOOK: "Modo sin webhook: los resultados se consultan al proveedor y pueden tardar más.",
+  FIRMA_SIN_CONFIRMAR: "Firma sin confirmar: los resultados llegan por webhook en cuanto el proveedor confirme la firma.",
 } as const;
 
 const TEXTOS_BANNER = {

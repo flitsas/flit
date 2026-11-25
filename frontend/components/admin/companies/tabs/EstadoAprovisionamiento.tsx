@@ -100,11 +100,11 @@ export function EstadoAprovisionamiento({ tenantId, provisioning, impuestosUrl, 
         rel="noopener"
         className="font-semibold text-[color:var(--di-action)] underline underline-offset-2 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        {texto}
+        {texto}{" "}
         <span className="sr-only">(se abre en otra pestaña)</span>
       </a>
     ) : (
-      <span>Hazlo desde Impuestos › Backoffice</span>
+      <span>{`${texto}: hazlo desde Impuestos › Backoffice`}</span>
     );
 
   let accionUi: ReactNode = null;

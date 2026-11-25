@@ -187,7 +187,9 @@ export function DetalleLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuper
       ) : null}
       {lote.estado === "CERRADO_MANUALMENTE" ? (
         <InlineAlert tone="info" vivo={false}>
-          {`Cerrado manualmente el ${formatoFecha(lote.cerradaEn)} por ${lote.cerradaPor?.nombre ?? ""}.`}
+          {lote.cerradaPor
+            ? `Cerrado manualmente el ${formatoFecha(lote.cerradaEn)} por ${lote.cerradaPor.nombre}.`
+            : `Cerrado manualmente el ${formatoFecha(lote.cerradaEn)}.`}
         </InlineAlert>
       ) : null}
       <section aria-labelledby="lote-avance" className={`${TARJETA_CLS} flex flex-col gap-3`}>

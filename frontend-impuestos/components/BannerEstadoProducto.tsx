@@ -3,14 +3,15 @@ import { InlineAlert, type InlineAlertTone } from "@flit/ui/InlineAlert";
 import { ENLACE_ACCION_CLS } from "@/components/comun/estilos";
 import { PRIORIDAD_BANNERS, type BannerEstado } from "@/lib/sesion";
 
-// Banners de estado del producto (plan §6.1, spec-visual §4.3). Títulos en lenguaje de negocio, sin nombrar credenciales,
-// webhooks ni códigos internos. Contenido estático (`vivo={false}`): se pintan al abrir el producto, no se cierran y no
+// Banners de estado del producto (plan §6.1, spec-visual §4.3). Los títulos de SUSPENDIDO, SIN_WEBHOOK y
+// FIRMA_SIN_CONFIRMAR son los literales de `x-flit-literales.pantalla` (contracts/openapi/impuestos.v1.yaml: el contrato
+// manda); NO_LISTO no tiene literal en el contrato y conserva el de la spec. El texto (cuerpo) es el de la spec. Contenido estático (`vivo={false}`): se pintan al abrir el producto, no se cierran y no
 // interrumpen al lector de pantalla; el icono y el título dicen el estado, no solo el color. FIRMA_SIN_CONFIRMAR va en
 // `info` (azul, en proceso): no pide ninguna acción.
 const BANNERS: Readonly<Record<BannerEstado, { tono: InlineAlertTone; titulo: string; texto: string }>> = {
   SUSPENDIDO: {
     tono: "warning",
-    titulo: "Impuestos está suspendido: solo lectura",
+    titulo: "Producto suspendido: solo lectura",
     texto: "Puedes consultar las liquidaciones, los recibos y los reportes, pero no crear liquidaciones nuevas. Los lotes que estaban en curso terminan solos.",
   },
   NO_LISTO: {
@@ -21,12 +22,12 @@ const BANNERS: Readonly<Record<BannerEstado, { tono: InlineAlertTone; titulo: st
   },
   SIN_WEBHOOK: {
     tono: "info",
-    titulo: "Los resultados pueden tardar un poco más",
+    titulo: "Modo sin webhook: los resultados se consultan al proveedor y pueden tardar más.",
     texto: "Ya puedes liquidar. Los resultados se consultan con el proveedor cada pocos minutos, en lugar de llegar al instante.",
   },
   FIRMA_SIN_CONFIRMAR: {
     tono: "info",
-    titulo: "Conexión con el proveedor en verificación",
+    titulo: "Firma sin confirmar: los resultados llegan por webhook en cuanto el proveedor confirme la firma.",
     texto: "Ya puedes liquidar. Se confirma sola con el primer resultado que llegue.",
   },
 };
