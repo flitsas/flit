@@ -396,6 +396,9 @@ public enum TipoEventoTimeline
 
     /// <summary>GDC-EVID: el correo con el documento del comparendo salió al conductor al asociarlo.</summary>
     EvidenciaEnviada,
+
+    /// <summary>GDC-EVID: se asoció el documento pero no se envió el correo al conductor; el motivo queda en la nota.</summary>
+    EvidenciaOmitida,
 }
 
 public enum ActorTipo

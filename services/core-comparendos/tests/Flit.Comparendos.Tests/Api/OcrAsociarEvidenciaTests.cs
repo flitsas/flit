@@ -2,10 +2,13 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Comparendos.Api.Modulos.Avisos;
+using Flit.Comparendos.Api.Modulos.Comparendos;
+using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Domain.Modelo;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 using static Flit.Comparendos.Tests.Api.ComparendosDePrueba;
 
@@ -27,6 +30,17 @@ public sealed partial class OcrAsociarTests
 
     private Task<List<ComunicacionSaliente>> EvidenciasAsync(Guid comparendo) =>
         api.EnDbAsync(db => db.Comunicaciones.AsNoTracking().Where(c => c.ComparendoId == comparendo && c.Tipo == TipoComunicacion.Evidencia).OrderBy(c => c.CreadoEn).ToListAsync());
+
+    private Task<List<TimelineEvento>> OmitidasAsync(Guid comparendo) =>
+        api.EnDbAsync(db => db.Timeline.AsNoTracking().Where(t => t.ComparendoId == comparendo && t.Tipo == TipoEventoTimeline.EvidenciaOmitida).ToListAsync());
+
+    private async Task DebeTenerNotaAsync(Guid comparendo, string motivo, bool reemplazo = false)
+    {
+        var nota = (await OmitidasAsync(comparendo)).Should().ContainSingle().Subject;
+        nota.Descripcion.Should().Be($"Documento asociado: no se envió correo al conductor. Motivo: {motivo}.");
+        using var datos = JsonDocument.Parse(nota.Datos!);
+        (datos.RootElement.GetProperty("motivo").GetString(), datos.RootElement.GetProperty("reemplazo").GetBoolean()).Should().Be((motivo, reemplazo));
+    }
 
     private static async Task<(string Estado, string? Motivo)> CorreoDeAsync(HttpResponseMessage r)
     {
@@ -79,6 +93,58 @@ public sealed partial class OcrAsociarTests
         (await EvidenciasAsync(comparendo)).Should().HaveCount(1, "el aviso 3 no vuelve a mandar la evidencia");
     }
 
+    /// <summary>Si la evidencia se omite (documento muy pesado), el estado no cambia por ella y el aviso 3 sí lleva el documento.</summary>
+    [Fact]
+    public async Task Asociar_ConEvidenciaOmitida_ElEstadoNoCambia_YElAviso3SiLlevaElDocumento()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, cliente, comparendo) = await ComparendoAsync("EVI-8", dia: 2);
+        await ConConductorAsync(cliente, comparendo);
+        await SchedulerAsync(empresa);
+        await SchedulerAsync(empresa);
+        api.Reloj.Hoy(new DateOnly(2026, 10, 6));
+        await SchedulerAsync(empresa);
+        await SchedulerAsync(empresa);
+        (await ComparendoDbAsync(comparendo)).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.Aviso2);
+        var (_, doc) = await SubirAsync(cliente, "EVI-8", "evi-omitida-aviso3");
+        await api.EnDbAsync(db => db.Archivos.Where(a => a.Id == doc.ArchivoId).ExecuteUpdateAsync(u => u.SetProperty(a => a.TamanoBytes, 3L * 1024 * 1024 + 1)));
+
+        (await CorreoDeAsync(await Asociar(cliente, doc.Id, reemplazar: false))).Should().Be(("Omitido", "El documento pesa demasiado para enviarlo por correo"));
+
+        (await EvidenciasAsync(comparendo)).Should().BeEmpty();
+        (await ComparendoDbAsync(comparendo)).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.Aviso2, "la evidencia omitida no mueve el estado");
+        api.Reloj.Hoy(new DateOnly(2026, 11, 10));
+        await SchedulerAsync(empresa);
+        await SchedulerAsync(empresa);
+        (await ComparendoDbAsync(comparendo)).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.Aviso3);
+        (await api.EnDbAsync(db => (from c in db.Comunicaciones where c.ComparendoId == comparendo && c.Tipo == TipoComunicacion.Aviso3
+                                    join a in db.ComunicacionAdjuntos on c.Id equals a.ComunicacionId select a.Nombre).ToListAsync(ct))).Should().Contain("comparendo-EVI-8.pdf");
+    }
+
+    /// <summary>
+    /// El comparendo que dejó AsociarAsync en el contexto está viejo (ExecuteUpdate no lo actualiza). Si el servicio lo usara tal cual,
+    /// decidiría con datos de antes: aquí el comparendo se paga «por fuera» y el servicio debe verlo.
+    /// </summary>
+    [Fact]
+    public async Task RegistrarEvidencia_NoDecideConUnComparendoViejoDelContexto()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, cliente, comparendo) = await ComparendoAsync("EVI-9");
+        await ConConductorAsync(cliente, comparendo);
+        var (_, doc) = await SubirAsync(cliente, "EVI-9", "evi-viejo");
+        await using var scope = api.App.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
+        (await db.Comparendos.SingleAsync(c => c.Id == comparendo, ct)).Pagado.Should().BeFalse("queda rastreado, como tras AsociarAsync");
+        await api.EnDbAsync(d => d.Comparendos.Where(c => c.Id == comparendo).ExecuteUpdateAsync(u => u.SetProperty(c => c.Pagado, true)));
+
+        var (comunicacion, decision) = await scope.ServiceProvider.GetRequiredService<ServicioEvidencia>()
+            .RegistrarAsync(comparendo, empresa, doc.ArchivoId, reemplazo: false, Actor.Sistema, ct);
+
+        (comunicacion, decision.Motivo).Should().Be(((Guid?)null, "El comparendo ya está pagado"));
+    }
+
     [Fact]
     public async Task Asociar_AlReemplazar_EnviaElDocumentoNuevo()
     {
@@ -93,11 +159,29 @@ public sealed partial class OcrAsociarTests
         var r = await Asociar(cliente, segundo.Id, reemplazar: true, vista: primero.ArchivoId);
 
         (await CorreoDeAsync(r)).Estado.Should().Be("Enviado");
+        (await OmitidasAsync(comparendo)).Should().BeEmpty("si el correo sale, ni la asociación ni el reemplazo dejan nota de omitido");
         var evidencias = await EvidenciasAsync(comparendo);
         evidencias.Should().HaveCount(2);
         (await api.EnDbAsync(db => db.ComunicacionAdjuntos.AsNoTracking().Where(a => a.ComunicacionId == evidencias[1].Id).Select(a => a.ArchivoId).SingleAsync(ct))).Should().Be(segundo.ArchivoId, "el correo lleva el documento NUEVO");
         (await api.EnDbAsync(db => db.Timeline.Where(t => t.ComparendoId == comparendo && t.Tipo == TipoEventoTimeline.EvidenciaEnviada).OrderBy(t => t.OcurridoEn).ThenBy(t => t.Id).Select(t => t.Descripcion).ToListAsync(ct)))
             .Should().HaveCount(2).And.Subject.Last().Should().StartWith("Documento nuevo");
+    }
+
+    [Fact]
+    public async Task Asociar_AlReemplazarSinCorreo_LaNotaDiceQueEsReemplazo_YSiSaleNoHayNota()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (_, cliente, comparendo) = await ComparendoAsync("EVI-10");
+        await ConConductorAsync(cliente, comparendo);
+        var (_, primero) = await SubirAsync(cliente, "EVI-10", "evi-nota-1");
+        (await CorreoDeAsync(await Asociar(cliente, primero.Id, reemplazar: false))).Estado.Should().Be("Enviado");
+        (await OmitidasAsync(comparendo)).Should().BeEmpty("si el correo sale no hay nota");
+        var (_, segundo) = await SubirAsync(cliente, "EVI-10", "evi-nota-2");
+        await api.EnDbAsync(db => db.Archivos.Where(a => a.Id == segundo.ArchivoId).ExecuteUpdateAsync(u => u.SetProperty(a => a.TamanoBytes, 3L * 1024 * 1024 + 1)));
+
+        (await CorreoDeAsync(await Asociar(cliente, segundo.Id, reemplazar: true, vista: primero.ArchivoId))).Estado.Should().Be("Omitido");
+
+        await DebeTenerNotaAsync(comparendo, "El documento pesa demasiado para enviarlo por correo", reemplazo: true);
     }
 
     [Fact]
@@ -112,6 +196,7 @@ public sealed partial class OcrAsociarTests
         var otraVez = await CorreoDeAsync(await Asociar(cliente, doc.Id, reemplazar: false));
 
         otraVez.Should().Be(("Omitido", "El documento ya estaba asociado: no se vuelve a enviar"));
+        (await OmitidasAsync(comparendo)).Should().BeEmpty("un documento ya asociado no deja nota nueva");
         (await EvidenciasAsync(comparendo)).Should().HaveCount(1);
     }
 
@@ -144,6 +229,10 @@ public sealed partial class OcrAsociarTests
         (await ComparendoDbAsync(comparendo)).ArchivoEvidenciaId.Should().Be(doc.ArchivoId, "la asociación se hace igual");
         (await EvidenciasAsync(comparendo)).Should().BeEmpty();
         (await api.EnDbAsync(db => db.Timeline.AnyAsync(t => t.ComparendoId == comparendo && t.Tipo == TipoEventoTimeline.EvidenciaEnviada, ct))).Should().BeFalse();
+        await DebeTenerNotaAsync(comparendo, motivo);
+        // Asociarlo otra vez es idempotente: no agrega otra nota.
+        (await CorreoDeAsync(await Asociar(cliente, doc.Id, reemplazar: false))).Estado.Should().Be("Omitido");
+        (await OmitidasAsync(comparendo)).Should().HaveCount(1);
     }
 
     [Fact]
@@ -158,6 +247,7 @@ public sealed partial class OcrAsociarTests
 
         (await CorreoDeAsync(await Asociar(cliente, doc.Id, reemplazar: false))).Should().Be(("Omitido", "La empresa no usa correo para notificar"));
         (await EvidenciasAsync(comparendo)).Should().BeEmpty();
+        await DebeTenerNotaAsync(comparendo, "La empresa no usa correo para notificar");
     }
 
     /// <summary>Un fallo al preparar el correo (aquí, sin plantilla publicada) no deshace la asociación.</summary>
@@ -180,6 +270,7 @@ public sealed partial class OcrAsociarTests
             (await api.EnDbAsync(db => db.DocumentosOcr.AsNoTracking().SingleAsync(d => d.Id == doc.Id, ct))).Estado.Should().Be(EstadoDocumentoOcr.Asociado);
             (await EvidenciasAsync(comparendo)).Should().BeEmpty();
             (await api.EnDbAsync(db => db.Timeline.AnyAsync(t => t.ComparendoId == comparendo && t.Tipo == TipoEventoTimeline.EvidenciaEnviada, ct))).Should().BeFalse();
+            await DebeTenerNotaAsync(comparendo, "No se pudo preparar el correo al conductor; el documento quedó asociado");
         }
         finally
         {

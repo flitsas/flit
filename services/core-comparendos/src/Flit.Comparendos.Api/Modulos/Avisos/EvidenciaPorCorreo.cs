@@ -112,7 +112,12 @@ public sealed partial class ServicioEvidencia(
         var archivo = await db.Archivos.AsNoTracking().FirstOrDefaultAsync(a => a.Id == archivoId && a.TenantId == tenantId, ct).ConfigureAwait(false);
         var decision = EvidenciaPorCorreo.Evaluar(c, config, await productos.ComparendosHabilitadoAsync(tenantId, ct).ConfigureAwait(false), archivo?.TamanoBytes);
         if (!decision.SeEnviara || archivo is null)
+        {
+            // Sin archivo, Evaluar ya dijo que no (no hay tamaño); el respaldo evita una nota sin motivo.
+            decision = decision.Motivo is null ? DecisionEvidencia.No("El comparendo no tiene un documento para enviar") : decision;
+            NotaOmitida(c, decision.Motivo!, reemplazo, actor);
             return (null, decision);
+        }
 
         var enlace = portal.Emitir(c);
         var valores = await contexto.DeAsync(c, new ExtrasContexto(PortalEnlace: enlace.Url, PortalVence: enlace.Vence), ct).ConfigureAwait(false);
@@ -155,16 +160,18 @@ public sealed partial class ServicioEvidencia(
         {
             DecisionEvidencia decision;
             (comunicacion, decision) = await RegistrarAsync(comparendoId, tenantId, archivoId, reemplazo, actor, ct).ConfigureAwait(false);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
             if (comunicacion is null)
                 return new ResultadoEvidencia(ResultadoEvidencia.Omitido, decision.Motivo);
-            await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             // Sin datos personales en el log: solo ids y el tipo de error.
             LogNoPreparado(logger, ex.GetType().Name, comparendoId, tenantId);
             db.ChangeTracker.Clear();
-            return new ResultadoEvidencia(ResultadoEvidencia.Omitido, "No se pudo preparar el correo al conductor; el documento quedó asociado");
+            const string motivoFallo = "No se pudo preparar el correo al conductor; el documento quedó asociado";
+            await DejarNotaAsync(comparendoId, tenantId, motivoFallo, reemplazo, actor, ct).ConfigureAwait(false);
+            return new ResultadoEvidencia(ResultadoEvidencia.Omitido, motivoFallo);
         }
 
         try
@@ -181,6 +188,30 @@ public sealed partial class ServicioEvidencia(
         {
             LogDespachoPendiente(logger, ex.GetType().Name, comunicacion.Value);
             return new ResultadoEvidencia(ResultadoEvidencia.Pendiente, null);
+        }
+    }
+
+    /// <summary>
+    /// La fuente persistente del motivo: el aviso de la pantalla se cierra solo, la línea de tiempo no. Sin comunicación ni
+    /// cambio de estado: es solo una nota del comparendo.
+    /// </summary>
+    private void NotaOmitida(Comparendo c, string motivo, bool reemplazo, Actor actor) =>
+        timeline.Agregar(c, TipoEventoTimeline.EvidenciaOmitida, $"Documento asociado: no se envió correo al conductor. Motivo: {motivo}.", actor, new { motivo, reemplazo });
+
+    /// <summary>Tras un fallo (contexto limpio): relee el comparendo y deja la nota; si tampoco se puede, no pasa nada más.</summary>
+    private async Task DejarNotaAsync(Guid comparendoId, Guid tenantId, string motivo, bool reemplazo, Actor actor, CancellationToken ct)
+    {
+        try
+        {
+            if (await db.Comparendos.FirstOrDefaultAsync(x => x.Id == comparendoId && x.TenantId == tenantId, ct).ConfigureAwait(false) is not { } c)
+                return;
+            NotaOmitida(c, motivo, reemplazo, actor);
+            await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            LogNoPreparado(logger, ex.GetType().Name, comparendoId, tenantId);
+            db.ChangeTracker.Clear();
         }
     }
 
