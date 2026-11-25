@@ -83,10 +83,14 @@ internal static class ConsultasRemoto
     /// </summary>
     private static void AddValidacionIdentidadRemota(IServiceCollection services, IConfiguration configuration, Uri uri)
     {
+        var deadline = TimeSpan.FromSeconds(configuration.GetValue("Consultas:Remoto:DeadlineSegundos", 180));
         if (!configuration.GetValue("Tramites:Bus:Habilitado", false))
             throw new InvalidOperationException("core-api exige Tramites:Bus:Habilitado=true: el aviso de Kyverum Verify vuelve de Consultas por el bus.");
 
-        services.AddFlitGrpcClient<ValidacionIdentidadService.ValidacionIdentidadServiceClient>(configuration, uri, "platform.consultas");
+        // Mismo deadline que el resto de consultas: el valor por defecto del interceptor (3 s) cortaba las llamadas a Kyverum
+        // (crear, consultar estado, reemitir) antes de que core-consultas respondiera.
+        services.AddFlitGrpcClient<ValidacionIdentidadService.ValidacionIdentidadServiceClient>(
+            configuration, uri, "platform.consultas", o => o.Deadline = deadline);
         services.RemoveAll<IKyverumVerifyClient>();
         services.RemoveAll<IKyverumCertificateClient>();
         services.AddScoped<IKyverumVerifyClient, KyverumVerifyPorConsultas>();
