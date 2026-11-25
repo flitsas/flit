@@ -95,6 +95,34 @@ public sealed partial class ServicioEvidencia(
     }
 
     /// <summary>
+    /// GDC-EVID §9: lo que dirá el modal de «Asociar los N» para cada documento del lote (misma regla que el envío), con la
+    /// identidad del conductor para contar conductores DISTINTOS: tipo y número de documento; si falta, el correo normalizado.
+    /// Nunca se devuelve al cliente (solo se cuenta). Todo de la empresa <paramref name="tenantId"/>.
+    /// </summary>
+    public async Task<IReadOnlyList<(DecisionEvidencia Decision, string? Conductor)>> PrevistasAsync(Guid tenantId, IReadOnlyList<(Guid ComparendoId, Guid ArchivoId)> lote, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(lote);
+        if (lote.Count == 0)
+            return [];
+        var ids = lote.Select(x => x.ComparendoId).Distinct().ToList();
+        var archivosIds = lote.Select(x => x.ArchivoId).Distinct().ToList();
+        var comparendos = await db.Comparendos.AsNoTracking().Include(x => x.Contraventor).Where(x => x.TenantId == tenantId && ids.Contains(x.Id))
+            .ToDictionaryAsync(x => x.Id, ct).ConfigureAwait(false);
+        var tamanos = await db.Archivos.AsNoTracking().Where(a => a.TenantId == tenantId && archivosIds.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, a => a.TamanoBytes, ct).ConfigureAwait(false);
+        var config = await capacidades.DeAsync(tenantId, ct).ConfigureAwait(false);
+        var producto = await productos.ComparendosHabilitadoAsync(tenantId, ct).ConfigureAwait(false);
+        return lote.Select(x => comparendos.TryGetValue(x.ComparendoId, out var c)
+            ? (EvidenciaPorCorreo.Evaluar(c, config, producto, tamanos.TryGetValue(x.ArchivoId, out var t) ? t : null), Identidad(c.Contraventor))
+            : (DecisionEvidencia.No("El comparendo ya no existe"), (string?)null)).ToList();
+    }
+
+    private static string? Identidad(Persistence.Modelo.Contraventor? k) =>
+        k is null ? null
+        : !string.IsNullOrWhiteSpace(k.NumeroDocumento) ? $"{k.TipoDocumento}:{k.NumeroDocumento.Trim().ToUpperInvariant()}"
+        : k.Correo?.Trim().ToLowerInvariant();
+
+    /// <summary>
     /// Registra el correo con <paramref name="archivoId"/> (el documento recién asociado) y su evento en la línea de
     /// tiempo. Devuelve la comunicación a despachar, o el motivo por el que no sale. No confirma: SaveChanges es de quien llama.
     /// </summary>
@@ -178,7 +206,12 @@ public sealed partial class ServicioEvidencia(
     /// ocurría con el token de la petición; ahora lo dispara un temporizador fijo.
     /// </para>
     /// </summary>
-    public async Task<ResultadoEvidencia> EnviarAlAsociarAsync(Guid comparendoId, Guid tenantId, Guid archivoId, bool reemplazo, Actor actor, CancellationToken peticion)
+    /// <param name="despachar">
+    /// false en «Asociar los N» (§9): el correo queda registrado y en cola (Pendiente) y lo envía el ciclo de fondo del
+    /// despachador; 50 envíos en serie dentro de la petición pasarían el tiempo de espera del proxy.
+    /// </param>
+    public async Task<ResultadoEvidencia> EnviarAlAsociarAsync(Guid comparendoId, Guid tenantId, Guid archivoId, bool reemplazo, Actor actor, CancellationToken peticion,
+        bool despachar = true)
     {
         if (peticion.IsCancellationRequested)
             LogPeticionCancelada(logger, comparendoId, tenantId);
@@ -202,6 +235,9 @@ public sealed partial class ServicioEvidencia(
             await DejarNotaAsync(comparendoId, tenantId, motivoFallo, reemplazo, actor).ConfigureAwait(false);
             return new ResultadoEvidencia(ResultadoEvidencia.Omitido, motivoFallo);
         }
+
+        if (!despachar)
+            return new ResultadoEvidencia(ResultadoEvidencia.Pendiente, null);
 
         try
         {
