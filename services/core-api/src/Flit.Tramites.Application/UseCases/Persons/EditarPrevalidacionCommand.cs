@@ -195,8 +195,8 @@ internal sealed class PrevalidacionResendService(
         validation.Status = BiometricEstados.EnProceso;
         validation.Attempts = 0;
         validation.ReconcilePollCount = 0;
-        // D8: TTL fijo de 24h en el reenvío (no el expiresAt reportado por el proveedor).
-        validation.ExpiresAt = now.AddHours(BiometricRules.TokenTtlHoras);
+        // D8: TTL fijo (BiometricRules.KyverumTokenTtlHoras, 30 días) en el reenvío (no el expiresAt reportado por el proveedor).
+        validation.ExpiresAt = now.AddHours(BiometricRules.KyverumTokenTtlHoras);
         validation.ResendCount += 1;
         validation.LastResentAt = now;
         validation.UpdatedAt = now;

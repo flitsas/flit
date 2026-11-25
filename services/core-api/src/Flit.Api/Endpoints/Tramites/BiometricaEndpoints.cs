@@ -592,7 +592,7 @@ internal static class BiometricaEndpoints
         .Produces<EditarPrevalidacionResult>(StatusCodes.Status200OK);
 
         // POST reenviar manualmente la validación de identidad de una prevalidación standalone (HU #10943,
-        // CF-03, D8): mismo registro, token/enlace nuevo, TTL 24h, intentos/sondeos reiniciados. 200 si el
+        // CF-03, D8): mismo registro, token/enlace nuevo, TTL de 30 días, intentos/sondeos reiniciados. 200 si el
         // envío se completó; 202 si quedó encolada (falla transitoria del proveedor).
         group.MapPost("/biometric-validations/{id:guid}/resend", async (
             Guid id,
