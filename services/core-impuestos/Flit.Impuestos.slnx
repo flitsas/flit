@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Flit.Impuestos.Api/Flit.Impuestos.Api.csproj" />
+    <Project Path="src/Flit.Impuestos.Domain/Flit.Impuestos.Domain.csproj" />
+    <Project Path="src/Flit.Impuestos.Grpc.Contracts/Flit.Impuestos.Grpc.Contracts.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Flit.Impuestos.Tests/Flit.Impuestos.Tests.csproj" />
+  </Folder>
+</Solution>

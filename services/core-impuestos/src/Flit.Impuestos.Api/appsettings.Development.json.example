@@ -1,0 +1,34 @@
+{
+  // core-impuestos en tu máquina (docs/suite/local.md). Copia este archivo a appsettings.Development.json (ignorado por git) y
+  // reemplaza cada CAMBIAR. Puertos del plan (docs/impuestos/plan-implementacion.md §0): API 4033, gRPC interno 8089.
+  "Urls": "http://127.0.0.1:4033",
+  "Servicio": { "GrpcPort": 8089, "MigrateOnStartup": true },
+  "ConnectionStrings": {
+    // El servicio usa su esquema propio «impuestos» y lo migra al arrancar. En local, la instancia de pruebas 5433.
+    "Servicio": "Host=127.0.0.1;Port=5433;Database=CAMBIAR;Username=CAMBIAR;Password=CAMBIAR"
+  },
+  "Impuestos": {
+    // Solo en local: la empresa queda suscrita al producto sin preguntarle a Identidad. Nunca en DEV, QA ni PDN.
+    "Identidad": { "SimularSuscripcionActiva": true },
+    // Data Protection propio (plan §4.2): .pfx RSA con llave privada, fuera del repo. Sin él el servicio no arranca.
+    "DataProtection": {
+      "CertificadoRuta": "CAMBIAR-ruta-al-pfx-local",
+      "CertificadoClave": "CAMBIAR"
+    },
+    // Sin GatewayUrl el manifiesto no se registra (solo un aviso en el log).
+    "Plataforma": { "GatewayUrl": "http://127.0.0.1:4002" }
+  },
+  "Platform": {
+    "Auth": {
+      "JwksUri": "http://127.0.0.1:4003/.well-known/jwks.json",
+      "Issuers": [ "http://127.0.0.1:4022/" ]
+    },
+    "ServiceClient": {
+      "ClientSecret": "CAMBIAR-igual-a-svc-impuestos-en-core-api",
+      "TokenEndpoint": "http://127.0.0.1:4003/connect/token"
+    },
+    "Messaging": {
+      "ConnectionString": "amqp://impuestos:CAMBIAR@127.0.0.1:5672/flit"
+    }
+  }
+}

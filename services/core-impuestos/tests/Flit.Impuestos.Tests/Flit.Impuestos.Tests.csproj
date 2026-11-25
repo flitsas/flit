@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Pruebas de core-impuestos (HU #14694, M05): arranque y migración del esquema, máquinas de estado del dominio, aislamiento
+    por empresa, permisos y manifiesto, guard de suscripción, redacción de cabeceras, independencia de Diagnóstico y sesión.
+    Program.Build real sobre un Postgres efímero (ConnectionStrings__Core, en local la 5433).
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.Impuestos.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Flit.Impuestos.Api\Flit.Impuestos.Api.csproj" />
+    <ProjectReference Include="..\..\src\Flit.Impuestos.Domain\Flit.Impuestos.Domain.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" />
+    <PackageReference Include="Microsoft.AspNetCore.Mvc.Testing" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>
