@@ -103,4 +103,19 @@ public sealed class TextoNormalizadoTests
     [InlineData("900.123.456", null, "900123456-8")]
     public void ConDigito_ComoEnLosDocumentos(string documento, string? conocida, string esperado) =>
         Nit.ConDigito(documento, conocida).Should().Be(esperado);
+
+    [Theory]
+    [InlineData("D-11001000000000012345", "11001000000000012345")]
+    [InlineData("a 11001000000000012345", "11001000000000012345")]
+    [InlineData("11001000000000012345", "11001000000000012345")]
+    [InlineData("A-98765", "A-98765")]
+    [InlineData("OCR-RENTING1", "OCR-RENTING1")]
+    [InlineData("  ", null)]
+    public void NumeroComparendo_ParaGuardar_QuitaLaLetraSoloConLaReglaDeLaLlave(string texto, string? esperado)
+    {
+        Flit.Comparendos.Domain.Identificadores.NumeroComparendo.ParaGuardar(texto).Should().Be(esperado);
+        // Una sola regla: lo guardado y la llave coinciden cuando hubo prefijo que quitar.
+        if (esperado is not null && esperado.All(char.IsAsciiDigit))
+            Flit.Comparendos.Domain.Identificadores.NumeroComparendo.Normalizar(texto).Should().Be(esperado);
+    }
 }

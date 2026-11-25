@@ -156,6 +156,8 @@ public enum EstadoDocumentoOcr
     Duplicado,
     Registrado,
     Descartado,
+    /// <summary>El documento escaneado se asoció a un comparendo que ya existía (estado final).</summary>
+    Asociado,
 }
 
 /// <summary>Los cuatro primeros se reintentan (hasta 3 veces); ilegible y archivo inválido no.</summary>
@@ -381,6 +383,7 @@ public enum TipoEventoTimeline
     PagoRegistrado,
     CobroCoactivoDetectado,
     NotaManual,
+    DocumentoAsociadoOcr,
 }
 
 public enum ActorTipo

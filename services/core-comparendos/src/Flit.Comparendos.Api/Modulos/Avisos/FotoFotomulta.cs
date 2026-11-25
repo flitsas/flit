@@ -15,20 +15,20 @@ public interface IDescargaFoto
 }
 
 /// <summary>
-/// La foto de la fotomulta va adjunta al aviso al conductor (D7, 2026-10-13: lo pide la Epic). Si el comparendo tiene
-/// archivo de evidencia (OCR) se adjunta ese; si no, la imagen de la URL de la fuente. Nada de esto detiene el aviso.
+/// El documento del comparendo va adjunto al aviso al conductor (D7, 2026-10-13: lo pide la Epic). Si el comparendo tiene
+/// archivo de evidencia (cargado por OCR o asociado después) se adjunta ese, sea fotomulta o físico; si no y es fotomulta,
+/// la imagen de la URL de la fuente. Nada de esto detiene el aviso.
 /// </summary>
 public sealed partial class FotoFotomulta(ComparendosDb db, IDescargaFoto descarga, ILogger<FotoFotomulta> logger)
 {
     public async Task<AdjuntoCorreo?> ParaAvisoAsync(Comparendo c, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(c);
-        if (c.EsFotomulta != true)
-            return null;
+        // El documento del comparendo va siempre que exista, sea fotomulta o físico (GDC-ASOC); la URL de la fuente es solo de fotomultas.
         if (c.ArchivoEvidenciaId is { } id && await db.Archivos.AsNoTracking().FirstOrDefaultAsync(a => a.Id == id, ct).ConfigureAwait(false) is { } archivo)
             // HU #13884: es el documento del comparendo cargado por OCR; se nombra por su número, no por el archivo subido.
             return new AdjuntoCorreo($"comparendo-{c.Numero}{Path.GetExtension(archivo.NombreOriginal)}", archivo.ContentType, [], archivo.Id);
-        if (string.IsNullOrWhiteSpace(c.FotoEvidenciaUrl))
+        if (c.EsFotomulta != true || string.IsNullOrWhiteSpace(c.FotoEvidenciaUrl))
             return null;
 
         var foto = await descarga.DescargarAsync(c.FotoEvidenciaUrl, ct).ConfigureAwait(false);

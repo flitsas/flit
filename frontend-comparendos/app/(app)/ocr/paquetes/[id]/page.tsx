@@ -32,6 +32,7 @@ interface Paquete {
   cantidadFallidos: number;
   cantidadDuplicados: number;
   cantidadRegistrados: number;
+  cantidadAsociados?: number;
   cantidadDescartados: number;
   creadoEn: string;
   procesamientoIniciadoEn: string | null;
@@ -148,6 +149,7 @@ function Detalle({ id }: { id: string }) {
     ["Fallido", "Fallidos", p.cantidadFallidos],
     ["Duplicado", "Duplicados", p.cantidadDuplicados],
     ["Registrado", "Registrados", p.cantidadRegistrados],
+    ["Asociado", "Asociados", p.cantidadAsociados ?? 0],
     ["Descartado", "Descartados", p.cantidadDescartados],
   ];
   const reprocesables = estado && estado !== "Incompleto" ? p.cantidadIncompletos : docs.filter((d) => d.estado === "Incompleto" && d.reprocesable).length;
@@ -306,7 +308,7 @@ function Detalle({ id }: { id: string }) {
               render: (d) => {
                 const texto = motivoDocumento(d);
                 if (!texto) return "—";
-                const tono = d.estado === "Fallido" ? "text-destructive" : d.estado === "Duplicado" ? "text-[var(--badge-purple-fg)]" : d.estado === "Descartado" ? "text-muted-foreground" : "text-[var(--badge-warning-fg)]";
+                const tono = d.estado === "Fallido" ? "text-destructive" : d.estado === "Duplicado" ? "text-[var(--badge-purple-fg)]" : d.estado === "Descartado" ? "text-muted-foreground" : d.estado === "Asociado" ? "text-[var(--badge-info-fg)]" : "text-[var(--badge-warning-fg)]";
                 return (
                   <span className={tono} title={d.estado === "Fallido" && d.tipoFallo ? TIPO_FALLO[d.tipoFallo] : undefined}>
                     {texto}
