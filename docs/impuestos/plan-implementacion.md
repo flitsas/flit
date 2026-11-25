@@ -851,7 +851,8 @@ Las pruebas .NET corren con `scripts/dev/t.sh dotnet <csproj> --filter "FullyQua
 
 ### M00 · Stub del API — carril **fe2** · depende de: —
 - Crear: `scripts/dev/stub-impuestos/stub_impuestos.py`, `scripts/dev/stub-impuestos/escenarios.py`, `scripts/dev/stub-impuestos/test_stub.py`, `scripts/dev/stub-impuestos/README.md`.
-- Pruebas: `python -I -m unittest scripts/dev/stub-impuestos/test_stub.py` (vector de firma, chunked, 201/409, reintento con timestamp nuevo, attempt desordenado, `file_missing`).
+- Pruebas: `python -I -m unittest discover -s scripts/dev/stub-impuestos -p test_stub.py` (vector de firma, chunked, 201/409, reintento con timestamp nuevo, attempt desordenado, `file_missing`).
+- **No se versiona:** `scripts/dev/` está en `.gitignore` (herramientas locales, igual que el stub de Kyverum en 8899). El stub vive en la copia local del repo; arranque: `python -I scripts/dev/stub-impuestos/stub_impuestos.py` (puerto 8898, panel `/__panel`).
 
 ### M01 · Contratos — carril **be2** · depende de: —
 - Crear: `contracts/proto/flit/impuestos/v1/impuestos.proto`, `contracts/proto/flit/identidad/v1/aprovisionamiento_producto.proto`, `contracts/asyncapi/impuestos-events.v1.yaml`, `contracts/openapi/impuestos.v1.yaml`.
