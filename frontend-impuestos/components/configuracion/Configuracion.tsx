@@ -11,7 +11,7 @@ import { Pestanas } from "@flit/ui/Pestanas";
 import { useSesion } from "@/components/ImpuestosShell";
 import { BOTON_REINTENTAR_CLS, TARJETA_CLS } from "@/components/comun/estilos";
 import { useEmpresaBackoffice } from "@/lib/backoffice/api";
-import { obtenerConfiguracion, type ConfiguracionImpuestos } from "@/lib/configuracion/api";
+import { ERRORES_CONFIGURACION, obtenerConfiguracion, type ConfiguracionImpuestos } from "@/lib/configuracion/api";
 import { useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
 import { mensajeErrorFijo } from "@/lib/errores";
 import { PERMISOS, tienePermiso } from "@/lib/sesion";
@@ -37,7 +37,7 @@ export function Configuracion() {
   const puedeVer = tienePermiso(sesion, PERMISOS.configuracionVer);
   const sinAcceso = sesion !== null && !puedeVer;
   const superAdmin = sesion?.esSuperAdmin === true;
-  // Para otro usuario ?empresa= no cuenta: la API respondería 400 EMPRESA_NO_PERMITIDA.
+  // Para otro usuario ?empresa= no cuenta: la API respondería 403 EMPRESA_SOLO_SUPER_ADMIN (contrato 1.1.0).
   const empresaVista = superAdmin ? empresa : null;
   const faltaEmpresa = superAdmin && !empresaVista;
   const consultar = sesion !== null && puedeVer && !faltaEmpresa;
@@ -59,7 +59,7 @@ export function Configuracion() {
       },
       (e: unknown) => {
         // Texto fijo; nunca el mensaje del servidor.
-        if (!controller.signal.aborted) setCarga({ tipo: "error", mensaje: mensajeErrorFijo(e, "Revisa tu conexión e intenta de nuevo.") });
+        if (!controller.signal.aborted) setCarga({ tipo: "error", mensaje: mensajeErrorFijo(e, "Revisa tu conexión e intenta de nuevo.", ERRORES_CONFIGURACION) });
       },
     );
     return () => controller.abort();

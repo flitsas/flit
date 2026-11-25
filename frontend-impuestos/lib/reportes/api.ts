@@ -4,7 +4,7 @@
 import { isReauthenticating, reauthenticate } from "@flit/auth/client";
 import { API_PREFIX, ApiError, apiFetch } from "@/lib/api";
 import { conEmpresa } from "@/lib/empresaSeleccionada";
-import { conTope } from "@/lib/errores";
+import { ERRORES_EMPRESA, conTope } from "@/lib/errores";
 import type { Rango } from "@/lib/estadisticas/tipos";
 import { reporteDe, type FiltroReporte, type FormatoExportacion, type TipoReporte } from "./catalogo";
 
@@ -99,8 +99,7 @@ export const ERRORES_REPORTES: Readonly<Record<string, string>> = {
   FILTRO_INVALIDO: "Un filtro no es válido.",
   PAGINACION_INVALIDA: "La paginación no es válida.",
   REPORTE_NO_ENCONTRADO: "El reporte no existe.",
-  EMPRESA_NO_PERMITIDA: "Solo el Super Admin puede elegir la compañía.",
-  EMPRESA_NO_ENCONTRADA: "La compañía no existe o no tiene Impuestos.",
+  ...ERRORES_EMPRESA,
   TOPE_EXPORTACION: "El reporte supera el máximo de {tope} filas para exportar: ajusta los filtros.",
   DEMASIADAS_SOLICITUDES: "Hiciste demasiadas solicitudes. Espera un momento e intenta de nuevo.",
 };

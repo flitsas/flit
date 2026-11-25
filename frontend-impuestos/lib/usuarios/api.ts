@@ -2,6 +2,7 @@
 // la plataforma con la forma de Diagnóstico (ADR-0089). Todas las rutas admiten `empresa` (solo Super Admin). Las
 // acciones responden 204 sin la fila: quien llama relee la lista.
 import { apiFetch } from "@/lib/api";
+import { ERRORES_EMPRESA } from "@/lib/errores";
 import { rotular } from "@/lib/rotulos";
 
 export type RolImpuestos = "gestor_impuestos" | "admin_impuestos";
@@ -48,9 +49,7 @@ export const ETIQUETA_ESTADO_USUARIO: Readonly<Record<string, string>> = { ACTIV
 
 /** x-flit-literales.errores de las rutas de usuarios. */
 export const ERRORES_USUARIOS: Readonly<Record<string, string>> = {
-  EMPRESA_NO_PERMITIDA: "Solo el Super Admin puede elegir la compañía.",
-  EMPRESA_REQUERIDA: "Elige una compañía.",
-  EMPRESA_NO_ENCONTRADA: "La compañía no existe o no tiene Impuestos.",
+  ...ERRORES_EMPRESA,
   CORREO_INVALIDO: "Un correo no es válido.",
   NOMBRE_REQUERIDO: "Escribe el nombre.",
   ROL_NO_PERMITIDO: "El rol no es válido para Impuestos.",

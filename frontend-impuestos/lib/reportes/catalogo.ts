@@ -1,6 +1,7 @@
 // Catálogo de los 4 reportes de Impuestos (D-REPORTES; impuestos.v1.yaml 1.0.0, tag Reportes, enum TipoReporte). Los
 // nombres de reporte y de cada valor de enum salen de `x-flit-etiquetas` del contrato; el front no redacta otros textos
 // para esos valores. Topes de exportación: Excel 5000 y PDF 1000 filas (más ⇒ 422 TOPE_EXPORTACION, sin truncar).
+import { CAMPOS_FALTANTES, CLASES_ERROR, ESTADOS_ITEM, ESTADOS_LIQUIDACION, RESULTADOS, TIPOS } from "@/lib/liquidaciones/estados";
 import { rotular } from "@/lib/rotulos";
 
 export type TipoReporte = "detalle" | "lotes" | "deuda" | "errores";
@@ -35,52 +36,26 @@ export const TOPE_EXPORTACION: Readonly<Record<FormatoExportacion, number>> = { 
 export const NOMBRE_FORMATO: Readonly<Record<FormatoExportacion, string>> = { excel: "Excel", pdf: "PDF" };
 
 // ── x-flit-etiquetas de los enums que aparecen en las filas y en los filtros ─────────────────────────────────────────
+// Una sola fuente: los mapas de lib/liquidaciones/estados.ts (literales de x-flit-etiquetas del contrato). Aquí solo se
+// reexportan con el nombre que usa el módulo de reportes; no se vuelven a escribir.
 
-export const ETIQUETA_TIPO_LIQUIDACION: Readonly<Record<string, string>> = { INDIVIDUAL: "Individual", MASIVA: "Masiva" };
+/** TipoLiquidacion.x-flit-etiquetas. */
+export const ETIQUETA_TIPO_LIQUIDACION: Readonly<Record<string, string>> = TIPOS;
 
-export const ETIQUETA_ESTADO_LIQUIDACION: Readonly<Record<string, string>> = {
-  CREADO: "Creado",
-  EN_PROCESO: "En proceso",
-  COMPLETADO: "Completado",
-  COMPLETADO_CON_NOVEDADES: "Completado con novedades",
-  CERRADO_MANUALMENTE: "Cerrado manualmente",
-};
+/** EstadoLiquidacion.x-flit-etiquetas. */
+export const ETIQUETA_ESTADO_LIQUIDACION: Readonly<Record<string, string>> = ESTADOS_LIQUIDACION;
 
 /** EstadoItem en el orden del contrato (también es el orden del filtro «Estado»). */
-export const ETIQUETA_ESTADO_ITEM: Readonly<Record<string, string>> = {
-  PENDIENTE: "Pendiente",
-  CONSULTANDO_RUNT: "Consultando RUNT",
-  REINTENTO_PROGRAMADO: "Reintento programado",
-  ENVIANDO: "Enviando",
-  ENVIADO: "Esperando resultado",
-  INCIERTO: "Incierto",
-  INCIERTO_REQUIERE_DECISION: "Incierto — requiere decisión",
-  DATOS_INCOMPLETOS: "Datos incompletos",
-  DEPARTAMENTO_NO_HABILITADO: "Departamento no habilitado",
-  EXITOSO: "Exitosa",
-  ERROR: "Con error",
-  SIN_RESULTADO_LOTE_CERRADO: "Sin resultado (lote cerrado)",
-};
+export const ETIQUETA_ESTADO_ITEM: Readonly<Record<string, string>> = ESTADOS_ITEM;
 
-export const ETIQUETA_RESULTADO: Readonly<Record<string, string>> = { con_deuda: "Con deuda", paz_y_salvo: "Paz y salvo", error: "Con error" };
+/** ResultadoStatus.x-flit-etiquetas. */
+export const ETIQUETA_RESULTADO: Readonly<Record<string, string>> = RESULTADOS;
 
-export const ETIQUETA_CLASE_ERROR: Readonly<Record<string, string>> = {
-  CORREGIR_DATOS: "Corregir datos",
-  DEPENDE: "Depende del mensaje",
-  REINTENTABLE: "Reintentable como nueva consulta",
-};
+/** ClaseError.x-flit-etiquetas. */
+export const ETIQUETA_CLASE_ERROR: Readonly<Record<string, string>> = CLASES_ERROR;
 
-export const ETIQUETA_CAMPO_FALTANTE: Readonly<Record<string, string>> = {
-  documentType: "Tipo de documento del propietario",
-  documentNumber: "Número de documento del propietario",
-  OwnerName: "Nombre del propietario",
-  vehicleModel: "Modelo del vehículo",
-  secretaryDepartmentCode: "Secretaría de tránsito sin homologar",
-  secretaryCity: "Municipio de la secretaría de tránsito",
-  OwnerEmail: "Correo del propietario",
-  OwnerPhone: "Celular o teléfono del propietario",
-  OwnerAddress: "Dirección del propietario",
-};
+/** CampoFaltante.x-flit-etiquetas. */
+export const ETIQUETA_CAMPO_FALTANTE: Readonly<Record<string, string>> = CAMPOS_FALTANTES;
 
 /** Opciones del filtro «Tipo» (SelectorSegmentado): vocabulario de pestañas de D-UI-PESTANAS. */
 export const OPCIONES_TIPO: ReadonlyArray<{ valor: "" | "INDIVIDUAL" | "MASIVA"; label: string }> = [

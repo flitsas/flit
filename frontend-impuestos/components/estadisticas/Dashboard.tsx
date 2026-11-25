@@ -12,7 +12,7 @@ import { useSesion } from "@/components/ImpuestosShell";
 import { ApiError } from "@/lib/api";
 import { useEmpresaBackoffice } from "@/lib/backoffice/api";
 import { hrefConEmpresa, useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
-import { mensajeErrorFijo } from "@/lib/errores";
+import { esRechazoDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
 import { ERRORES_DASHBOARD, esErrorDeRango, obtenerDashboard } from "@/lib/estadisticas/api";
 import { hoyColombia, leerRango, mensajeRangoInvalido, rangoPorDefecto } from "@/lib/estadisticas/periodo";
 import type { DashboardImpuestos, Rango } from "@/lib/estadisticas/tipos";
@@ -72,7 +72,7 @@ export function Dashboard() {
   const puede = tienePermiso(sesion, PERMISOS.dashboardVer);
   const sinAcceso = sesion !== null && !puede;
   const superAdmin = sesion?.esSuperAdmin === true;
-  // Solo el Super Admin elige compañía: para otro usuario `empresa` respondería 400 EMPRESA_NO_PERMITIDA.
+  // Solo el Super Admin elige compañía: para otro usuario `empresa` respondería 403 EMPRESA_SOLO_SUPER_ADMIN (contrato 1.1.0).
   const empresa = superAdmin ? empresaUrl : null;
   const vistaGlobal = superAdmin && !empresa;
 
@@ -104,7 +104,8 @@ export function Dashboard() {
   }, [sesion, puede, rango, empresa, clave]);
 
   const error = carga.tipo === "error" ? carga.error : null;
-  const codigo403 = error instanceof ApiError && error.status === 403 ? error.code || "SIN_PERMISO" : null;
+  // El 403 EMPRESA_SOLO_SUPER_ADMIN (o su alias retirado) rechaza la petición, no el acceso: se pinta en línea con su literal.
+  const codigo403 = error instanceof ApiError && error.status === 403 && !esRechazoDeEmpresa(error) ? error.code || "SIN_PERMISO" : null;
   useEffect(() => {
     if (codigo403) router.replace(`/403?code=${encodeURIComponent(codigo403)}`);
   }, [codigo403, router]);

@@ -3,6 +3,7 @@
 // Impuestos, PUT /configuracion), con el máximo operativo ≤ contractual. Literales: x-flit-literales / x-flit-etiquetas.
 import { apiFetch } from "@/lib/api";
 import { RUTAS_BACKOFFICE } from "@/lib/backoffice/api";
+import { ERRORES_EMPRESA } from "@/lib/errores";
 
 export interface Departamento {
   codigo: string;
@@ -35,9 +36,7 @@ export const ERRORES_CONFIGURACION: Readonly<Record<string, string>> = {
   TOPE_INVALIDO: "El máximo por lote debe ser un número entre 1 y 5000.",
   CORREO_INVALIDO: "Un correo no es válido.",
   DEPARTAMENTO_NO_DISPONIBLE: "Un departamento no está en la lista del proveedor.",
-  EMPRESA_NO_PERMITIDA: "Solo el Super Admin puede elegir la compañía.",
-  EMPRESA_REQUERIDA: "Elige una compañía.",
-  EMPRESA_NO_ENCONTRADA: "La compañía no existe o no tiene Impuestos.",
+  ...ERRORES_EMPRESA,
   PRODUCTO_SUSPENDIDO: "Impuestos está suspendido para la compañía: solo lectura.",
 };
 
