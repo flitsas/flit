@@ -11,7 +11,8 @@ namespace Flit.Consultas.Api.Impuesto.Avisos;
 /// (patrón <see cref="Credencial.FuenteCredencialImpuestoPlataforma"/>): <see cref="TtlConSecreto"/> con secreto y
 /// <see cref="TtlSinSecreto"/> sin él. Con <c>forzar</c> (la firma no coincidió con la versión cacheada) relee, pero como mucho una
 /// vez cada <see cref="EsperaMinimaForzada"/> por empresa, para que una ráfaga de avisos inválidos no se vuelva una ráfaga contra
-/// Identidad. Identidad caída o denegando: <see cref="FalloSecretoWebhookImpuestoException"/>. Nunca registra los secretos.
+/// Identidad. Identidad caída o denegando, o cualquier otra falla del cliente que no sea <see cref="RpcException"/> (L2, log solo con
+/// el tipo): <see cref="FalloSecretoWebhookImpuestoException"/>. Nunca registra los secretos.
 /// </summary>
 /// <example>
 /// <code>
@@ -60,6 +61,12 @@ internal sealed partial class FuenteSecretoWebhookImpuesto(
                 SecretoNoDisponible(logger, ex.StatusCode.ToString());
                 throw new FalloSecretoWebhookImpuestoException(ex.StatusCode.ToString());
             }
+            catch (Exception ex) when (ex is not RpcException && !(ex is OperationCanceledException && ct.IsCancellationRequested))
+            {
+                // L2: canal roto, DNS, TLS o cualquier otra falla del cliente: para el receptor es lo mismo que Identidad caída (503).
+                FallaInesperada(logger, ex.GetType().Name);
+                throw new FalloSecretoWebhookImpuestoException("falla_inesperada");
+            }
 
             var secreto = Mapear(respuesta);
             _ultimaLectura[tenantId] = time.GetUtcNow();
@@ -105,4 +112,7 @@ internal sealed partial class FuenteSecretoWebhookImpuesto(
 
     [LoggerMessage(EventId = 7441, Level = LogLevel.Warning, Message = "Secreto del webhook del impuesto no disponible en Identidad ({Status}).")]
     private static partial void SecretoNoDisponible(ILogger logger, string status);
+
+    [LoggerMessage(EventId = 7442, Level = LogLevel.Error, Message = "Secreto del webhook del impuesto: falla inesperada al pedirlo a Identidad ({Tipo}).")]
+    private static partial void FallaInesperada(ILogger logger, string tipo);
 }

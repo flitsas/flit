@@ -18,17 +18,39 @@ internal sealed record AvisoImpuestoVerificado(int Attempt, EstadoTrabajoExterno
 /// polling y sin el GET. Así hay un solo cierre y una sola publicación a Diagnóstico por ejecución del trabajo. Lo que no se recoge
 /// vence a los <see cref="Retencion"/> y el buzón no pasa de <see cref="Capacidad"/> consultas. En memoria a propósito: el resultado
 /// tiene datos personales y no se persiste; si el aviso llega a otra réplica o el servicio se reinicia, el polling cierra igual.
+/// La retención es el presupuesto máximo del sondeo (<see cref="OpcionesImpuesto.TimeoutSegundos"/>) más
+/// <see cref="MargenRetencion"/> (N-1): pasado ese tiempo ningún sondeo sigue esperando esa consulta y el aviso solo ocuparía memoria
+/// con datos personales.
 /// </summary>
 /// <example>
 /// <code>
+/// var buzon = new BuzonAvisosImpuesto(time, BuzonAvisosImpuesto.RetencionPara(opciones.TimeoutSegundos));
 /// buzon.Entregar(tenantId, "ext-1", aviso);                              // receptor
 /// var aviso = await buzon.EsperarAsync(tenantId, "ext-1", intervalo, ct); // sondeo: null = no llegó, hacer el GET
 /// </code>
 /// </example>
-internal sealed class BuzonAvisosImpuesto(TimeProvider time)
+internal sealed class BuzonAvisosImpuesto(TimeProvider time, TimeSpan retencion)
 {
-    public static readonly TimeSpan Retencion = TimeSpan.FromMinutes(10);
+    /// <summary>Holgura sobre el presupuesto del sondeo: cubre el último GET en vuelo y el desfase entre réplicas.</summary>
+    public static readonly TimeSpan MargenRetencion = TimeSpan.FromSeconds(60);
     public const int Capacidad = 10_000;
+
+    /// <summary>Con el presupuesto por defecto (<see cref="OpcionesImpuesto.TimeoutPorDefecto"/>); pruebas y hosts sin opciones.</summary>
+    public BuzonAvisosImpuesto(TimeProvider time)
+        : this(time, RetencionPara(OpcionesImpuesto.TimeoutPorDefecto))
+    {
+    }
+
+    /// <summary>Presupuesto total del sondeo en segundos más <see cref="MargenRetencion"/>.</summary>
+    public static TimeSpan RetencionPara(int timeoutSegundos)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(timeoutSegundos);
+        return TimeSpan.FromSeconds(timeoutSegundos) + MargenRetencion;
+    }
+
+    public TimeSpan Retencion { get; } = retencion > TimeSpan.Zero
+        ? retencion
+        : throw new ArgumentOutOfRangeException(nameof(retencion), "La retención del buzón debe ser positiva.");
 
     private readonly ConcurrentDictionary<(Guid, string), (AvisoImpuestoVerificado Aviso, DateTimeOffset Entregado)> _avisos = new();
     private readonly ConcurrentDictionary<(Guid, string), TaskCompletionSource> _esperas = new();

@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
+using Grpc.Core;
 
 namespace Flit.Consultas.Api.Impuesto.Avisos;
 
@@ -22,11 +23,19 @@ internal sealed record CabecerasAvisoImpuesto(string? Timestamp, string? Firma, 
 ///   cacheada se relee el secreto una vez (rotación) y se vuelve a verificar. Sigue sin coincidir: <c>401</c> sin detalle.</item>
 ///   <item>Firma válida: otro evento que <c>consulta.finalizada</c>, o un cuerpo sin <c>consulta.id</c>/<c>attempt</c>/estado
 ///   terminal, se confirma con <c>200</c> y se descarta.</item>
-///   <item>Deduplica por <c>X-Flit-Delivery</c> (sin él, <c>sin-delivery:{consulta}:{attempt}</c>): duplicado, <c>200</c> sin repetir.</item>
 ///   <item>La consulta debe ser de esa empresa y seguir abierta; si es de otra o ya se cerró, <c>200</c> y se descarta (log sin
-///   datos de la consulta). Si sigue abierta, el aviso va al <see cref="BuzonAvisosImpuesto"/> (gana el mayor <c>attempt</c>) y el
-///   sondeo la cierra por el mismo camino del polling.</item>
+///   datos de la consulta) <b>sin</b> registrar la entrega.</item>
+///   <item>Solo con la consulta abierta se deduplica por <c>X-Flit-Delivery</c> (sin él, <c>sin-delivery:{consulta}:{attempt}</c>),
+///   justo antes de dejar el aviso: duplicado, <c>200</c> sin repetir; nuevo, el aviso va al <see cref="BuzonAvisosImpuesto"/> (gana
+///   el mayor <c>attempt</c>) y el sondeo la cierra por el mismo camino del polling.</item>
 /// </list>
+/// M-1 (orden estado → deduplicación): marcar la entrega antes de saber el estado dejaba el delivery «visto» aunque no se hubiera
+/// entregado, y la reentrega del proveedor se descartaba como duplicado. Ahora, si leer el estado falla, se responde <c>503</c> sin
+/// marcar nada y el proveedor reintenta el mismo delivery; si la consulta no se encuentra (ajena o todavía sin <c>id</c> externo
+/// guardado), <c>200</c> sin marcar: el proveedor no reintenta un 200, pero una reentrega del mismo delivery se vuelve a evaluar y no
+/// queda una marca para una consulta que no es de la empresa. El polling cierra igual en cualquier caso.
+/// L2: cualquier falla inesperada que no sea <see cref="RpcException"/> (ni la cancelación del pedido) responde <c>503</c> sin
+/// cuerpo y deja en el log solo el tipo de la excepción (evento 7463); nunca llega a la DeveloperExceptionPage.
 /// Responde en cuanto deja el aviso: el cierre y la publicación los hace el sondeo. No registra token, secreto, firma ni cuerpo.
 /// </summary>
 /// <example>
@@ -49,6 +58,19 @@ internal sealed partial class ProcesadorAvisoImpuesto(
     public async Task<int> ProcesarAsync(string? token, CabecerasAvisoImpuesto cabeceras, ReadOnlyMemory<byte> cuerpo, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(cabeceras);
+        try
+        {
+            return await ProcesarSinCapturarAsync(token, cabeceras, cuerpo, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not RpcException && !(ex is OperationCanceledException && ct.IsCancellationRequested))
+        {
+            AvisosImpuestoLog.FallaInesperada(logger, ex.GetType().Name);
+            return StatusCodes.Status503ServiceUnavailable;
+        }
+    }
+
+    private async Task<int> ProcesarSinCapturarAsync(string? token, CabecerasAvisoImpuesto cabeceras, ReadOnlyMemory<byte> cuerpo, CancellationToken ct)
+    {
         if (opciones.Llave is not { } llave || !TokenAvisoImpuesto.TryLeer(token, llave, out var tenantId))
         {
             AvisosImpuestoLog.TokenDesconocido(logger);
@@ -71,13 +93,7 @@ internal sealed partial class ProcesadorAvisoImpuesto(
             return StatusCodes.Status200OK;
         }
 
-        var delivery = Delivery(cabeceras.Delivery, aviso.IdExterno, aviso.Attempt);
-        if (!await registro.RegistrarEntregaAsync(tenantId, delivery, aviso.IdExterno, aviso.Attempt, ct).ConfigureAwait(false))
-        {
-            AvisosImpuestoLog.Duplicado(logger, tenantId);
-            return StatusCodes.Status200OK;
-        }
-
+        // M-1: primero el estado (si lanza, 503 sin marcar la entrega); la deduplicación solo en la rama Abierta.
         switch (await registro.EstadoConsultaAsync(tenantId, aviso.IdExterno, ct).ConfigureAwait(false))
         {
             case EstadoConsultaAviso.NoEncontrada:
@@ -87,6 +103,13 @@ internal sealed partial class ProcesadorAvisoImpuesto(
                 AvisosImpuestoLog.ConsultaCerrada(logger, tenantId, aviso.Attempt);
                 return StatusCodes.Status200OK;
             default:
+                var delivery = Delivery(cabeceras.Delivery, aviso.IdExterno, aviso.Attempt);
+                if (!await registro.RegistrarEntregaAsync(tenantId, delivery, aviso.IdExterno, aviso.Attempt, ct).ConfigureAwait(false))
+                {
+                    AvisosImpuestoLog.Duplicado(logger, tenantId);
+                    return StatusCodes.Status200OK;
+                }
+
                 buzon.Entregar(tenantId, aviso.IdExterno, new AvisoImpuestoVerificado(aviso.Attempt, aviso.Estado, aviso.Consulta, time.GetUtcNow()));
                 AvisosImpuestoLog.Recibido(logger, tenantId, aviso.Attempt);
                 return StatusCodes.Status200OK;
@@ -207,4 +230,7 @@ internal static partial class AvisosImpuestoLog
 
     [LoggerMessage(EventId = 7459, Level = LogLevel.Information, Message = "Aviso de impuesto con otro evento para la empresa {TenantId}; se ignora.")]
     public static partial void OtroEvento(ILogger logger, Guid tenantId);
+
+    [LoggerMessage(EventId = 7463, Level = LogLevel.Error, Message = "Aviso de impuesto: falla inesperada ({Tipo}); responde 503 para que el proveedor reintente.")]
+    public static partial void FallaInesperada(ILogger logger, string tipo);
 }

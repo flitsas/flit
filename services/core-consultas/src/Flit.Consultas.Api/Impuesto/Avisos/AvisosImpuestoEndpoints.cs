@@ -78,7 +78,8 @@ internal static class AvisosImpuestoEndpoints
 /// <summary>
 /// Límites del receptor de avisos (HU #14711), con los valores de <c>LimitesSolicitudes</c> de core-impuestos: ventana fija de un minuto
 /// con <see cref="PorIpPorMinuto"/> por IP y <see cref="GlobalesPorMinuto"/> de todas las IP juntas, solo en este endpoint. Un token sin
-/// forma no consume cupo (el endpoint responde 401 sin trabajo). Por encima: 429 con <c>Retry-After</c>, sin cuerpo, y un aviso en el
+/// forma no consume cupo (el endpoint responde 401 sin trabajo). El global solo lo consume un token válido (forma y HMAC, L1); uno con
+/// forma y HMAC inválido gasta solo el cupo de su IP. Por encima: 429 con <c>Retry-After</c>, sin cuerpo, y un aviso en el
 /// log solo con la política. La IP es la de la conexión: detrás del gateway hereda el pendiente G-6 de core-impuestos.
 /// </summary>
 internal static partial class LimitesAvisosImpuesto
@@ -97,9 +98,11 @@ internal static partial class LimitesAvisosImpuesto
                 : RateLimitPartition.GetFixedWindowLimiter(
                     $"{Politica}:{ctx.Connection.RemoteIpAddress?.ToString() ?? "desconocida"}",
                     _ => PorMinuto(PorIpPorMinuto)));
-            // El global corre antes que la política del endpoint: solo cuenta en el receptor de avisos y con token con forma.
+            // El global corre antes que la política del endpoint: solo cuenta en el receptor de avisos y con un token VÁLIDO (L1): el
+            // HMAC del token se verifica aquí con la llave del servicio. Un token con forma pero HMAC inválido no lo toca y solo gasta
+            // el cupo de su IP, así que nadie sin la llave agota el cupo de todas las empresas fabricando tokens desde muchas IP.
             limitador.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(ctx =>
-                !EsAvisos(ctx) || TokenSinForma(ctx)
+                !EsAvisos(ctx) || !TokenValido(ctx)
                     ? RateLimitPartition.GetNoLimiter(string.Empty)
                     : RateLimitPartition.GetFixedWindowLimiter($"{Politica}:global", _ => PorMinuto(GlobalesPorMinuto)));
             limitador.OnRejected = (contexto, _) =>
@@ -127,8 +130,13 @@ internal static partial class LimitesAvisosImpuesto
     private static bool EsAvisos(HttpContext ctx) =>
         string.Equals(ctx.GetEndpoint()?.Metadata.GetMetadata<EnableRateLimitingAttribute>()?.PolicyName, Politica, StringComparison.Ordinal);
 
-    private static bool TokenSinForma(HttpContext ctx) =>
-        !TokenAvisoImpuesto.TieneForma(ctx.Request.RouteValues.TryGetValue("token", out var t) ? t as string : null);
+    private static string? Token(HttpContext ctx) => ctx.Request.RouteValues.TryGetValue("token", out var t) ? t as string : null;
+
+    private static bool TokenSinForma(HttpContext ctx) => !TokenAvisoImpuesto.TieneForma(Token(ctx));
+
+    /// <summary>Forma y HMAC del token con la llave del servicio; sin llave ningún token es válido (el receptor responde 401).</summary>
+    private static bool TokenValido(HttpContext ctx) =>
+        ctx.RequestServices.GetService<OpcionesAvisoImpuesto>()?.Llave is { } llave && TokenAvisoImpuesto.TryLeer(Token(ctx), llave, out _);
 
     [LoggerMessage(EventId = 7460, Level = LogLevel.Warning, Message = "Límite de avisos de impuesto superado; reintento en {Segundos} s.")]
     private static partial void Rechazada(ILogger logger, int segundos);

@@ -184,7 +184,9 @@ public static class Program
                 return new Impuesto.Avisos.FuenteSecretoWebhookImpuestoSimulada();
             return sp.GetRequiredService<Impuesto.Avisos.FuenteSecretoWebhookImpuesto>();
         });
-        builder.Services.AddSingleton<Impuesto.Avisos.BuzonAvisosImpuesto>();
+        // N-1: el aviso no recogido vence con el presupuesto máximo del sondeo más el margen, no a los 10 min.
+        builder.Services.AddSingleton(sp => new Impuesto.Avisos.BuzonAvisosImpuesto(
+            sp.GetRequiredService<TimeProvider>(), Impuesto.Avisos.BuzonAvisosImpuesto.RetencionPara(impuesto.TimeoutSegundos)));
         builder.Services.AddSingleton<Impuesto.Avisos.CallbackAvisoImpuesto>();
         builder.Services.AddSingleton<Impuesto.Avisos.IRegistroAvisosImpuesto, Impuesto.Avisos.RegistroAvisosImpuestoBd>();
         builder.Services.AddSingleton<Impuesto.Avisos.ProcesadorAvisoImpuesto>();

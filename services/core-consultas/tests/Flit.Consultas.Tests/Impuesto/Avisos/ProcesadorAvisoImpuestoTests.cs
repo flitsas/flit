@@ -238,4 +238,67 @@ public sealed class ProcesadorAvisoImpuestoTests
         todo.Should().NotContain(AvisosDePrueba.Secreto).And.NotContain(firma[3..]).And.NotContain(_token).And.NotContain("paz_y_salvo");
         _log.Eventos.Should().NotBeEmpty();
     }
+
+    // ── M-1: la deduplicación se registra solo con la consulta abierta, justo antes de entregar ──────────────────────
+
+    [Fact]
+    public async Task M1_EstadoDeLaConsultaLanza_503SinRegistrar_YLaReentregaDelMismoDeliverySeProcesa()
+    {
+        _registro.LanzarEnEstado = new InvalidOperationException("base caida (prueba)");
+
+        (await Enviar(AvisosDePrueba.Cuerpo("ext-1", 1))).Should().Be(503, "el proveedor reintenta");
+        _registro.Registradas.Should().BeEmpty("sin estado no se marca la entrega");
+
+        (await Enviar(AvisosDePrueba.Cuerpo("ext-1", 1))).Should().Be(200);
+        (await Recogido())!.Attempt.Should().Be(1, "la reentrega del mismo delivery llega al buzón");
+        _registro.Registradas.Should().Equal((Empresa, "d-1", "ext-1", 1));
+    }
+
+    [Fact]
+    public async Task M1_ConsultaNoEncontrada_200SinRegistrar_YLaReentregaPosteriorSeProcesa()
+    {
+        _registro.Empresas[Trabajo] = Otra;
+
+        (await Enviar(AvisosDePrueba.Cuerpo("ext-1", 1))).Should().Be(200);
+        _registro.Registradas.Should().BeEmpty();
+
+        _registro.Empresas[Trabajo] = Empresa;
+        (await Enviar(AvisosDePrueba.Cuerpo("ext-1", 1))).Should().Be(200);
+        (await Recogido())!.Attempt.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task M1_ConsultaCerrada_NoRegistraLaEntrega()
+    {
+        await _seguimiento.CerrarAsync(Trabajo, "succeeded", Ct);
+
+        (await Enviar(AvisosDePrueba.Cuerpo("ext-1", 1))).Should().Be(200);
+
+        _registro.Registradas.Should().BeEmpty();
+    }
+
+    // ── L2: una falla inesperada responde 503 y solo deja el tipo en el log ──────────────────────────────────────────
+
+    [Fact]
+    public async Task L2_FallaInesperadaDelSecreto_503_YElLogSoloLlevaElTipo()
+    {
+        _secretos.Lanzar = new InvalidOperationException("detalle-interno-que-no-va-al-log");
+
+        (await Enviar(AvisosDePrueba.Cuerpo("ext-1", 1))).Should().Be(503);
+
+        _log.Eventos.Select(e => e.Id).Should().Contain(7463);
+        var todo = string.Join("|", _log.Textos);
+        todo.Should().Contain(nameof(InvalidOperationException)).And.NotContain("detalle-interno-que-no-va-al-log");
+    }
+
+    [Fact]
+    public async Task L2_FallaInesperadaDelRegistro_503_SinEntregar()
+    {
+        _registro.LanzarEnRegistro = new TimeoutException("detalle-del-registro");
+
+        (await Enviar(AvisosDePrueba.Cuerpo("ext-1", 1))).Should().Be(503);
+
+        (await Recogido()).Should().BeNull();
+        string.Join("|", _log.Textos).Should().NotContain("detalle-del-registro");
+    }
 }

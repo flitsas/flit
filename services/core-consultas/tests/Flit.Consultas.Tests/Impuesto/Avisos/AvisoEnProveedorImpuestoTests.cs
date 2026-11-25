@@ -132,6 +132,25 @@ public sealed class AvisoEnProveedorImpuestoTests
         respuesta.Resultado.Chequeos.Single().Clave.Should().Be("impuesto");
     }
 
+    [Fact]
+    public async Task N3_ReenvioTras404_Rechazo422WebhookNotConfigured_CaeAlCuerpoSinCallback_YCierra()
+    {
+        var trabajo = Guid.NewGuid();
+        _seguimiento.Sembrar(new SeguimientoImpuesto(trabajo, "ext-viejo", _reloj.GetUtcNow(), "queued"));
+        var transporte = new TransporteGuionado
+        {
+            Envios = { Guion.Rechazo(ClaseFalloProveedor.Rechazo, 422, "webhook_not_configured") },
+            Estados = { Guion.NoEncontrado(), Guion.Terminal(EstadoTrabajoExterno.Exitoso, Guion.PazYSalvo) },
+        };
+
+        var respuesta = await Proveedor(transporte).ConsultarAsync(Pedido(), Llamador, trabajo, Ct);
+
+        transporte.CuerposEnviados.Should().HaveCount(2, "un solo ida y vuelta con callback y el respaldo sin él");
+        CallbackDe(transporte.CuerposEnviados[0]).Should().NotBeNull();
+        CallbackDe(transporte.CuerposEnviados[1]).Should().BeNull();
+        respuesta.Resultado.Chequeos.Single().Clave.Should().Be("impuesto");
+    }
+
     // ── Cierre único aviso + polling ──────────────────────────────────────────────────────────────────────────────────
 
     [Fact]
