@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Xunit;
 
@@ -23,6 +24,7 @@ public sealed class AvisosImpuestoEndpointsTests : IAsyncLifetime
     private static readonly Guid Trabajo = Guid.Parse("0194cccc-0000-7000-8000-000000000003");
     private readonly SeguimientoEnMemoria _seguimiento = new();
     private readonly FuenteSecretoFalsa _secretos = new();
+    private const string CabeceraIp = "X-Prueba-Ip";
     private WebApplication? _app;
     private HttpClient? _cliente;
 
@@ -35,7 +37,8 @@ public sealed class AvisosImpuestoEndpointsTests : IAsyncLifetime
         var registro = new RegistroEnMemoria(_seguimiento);
         registro.Empresas[Trabajo] = Empresa;
 
-        var builder = WebApplication.CreateBuilder();
+        // Development a propósito: si una falla se escapara, la DeveloperExceptionPage respondería 500 con cuerpo (L2).
+        var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = Environments.Development });
         builder.WebHost.UseTestServer();
         builder.Logging.ClearProviders();
         builder.Services.AddSingleton(TimeProvider.System);
@@ -46,6 +49,13 @@ public sealed class AvisosImpuestoEndpointsTests : IAsyncLifetime
         builder.Services.AddSingleton<ProcesadorAvisoImpuesto>();
         builder.Services.AddLimitesAvisosImpuesto();
         _app = builder.Build();
+        // M-2: la IP de la conexión la fija la prueba (X-Prueba-Ip) para simular varios orígenes.
+        _app.Use(async (ctx, next) =>
+        {
+            if (ctx.Request.Headers.TryGetValue(CabeceraIp, out var ip) && IPAddress.TryParse(ip.ToString(), out var dir))
+                ctx.Connection.RemoteIpAddress = dir;
+            await next(ctx);
+        });
         _app.UseRateLimiter();
         _app.MapAvisosImpuesto();
         await _app.StartAsync(Ct);
@@ -59,9 +69,11 @@ public sealed class AvisosImpuestoEndpointsTests : IAsyncLifetime
             await _app.DisposeAsync();
     }
 
-    private Task<HttpResponseMessage> Post(string token, byte[] cuerpo, bool firmar = true)
+    private Task<HttpResponseMessage> Post(string token, byte[] cuerpo, bool firmar = true, string? ip = null)
     {
         var pedido = new HttpRequestMessage(HttpMethod.Post, AvisosImpuestoEndpoints.Prefijo + "/" + token) { Content = new ByteArrayContent(cuerpo) };
+        if (ip is not null)
+            pedido.Headers.Add(CabeceraIp, ip);
         pedido.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("application/json");
         var ts = AvisosDePrueba.Ts(DateTimeOffset.UtcNow);
         pedido.Headers.Add("X-Flit-Timestamp", ts);
@@ -123,5 +135,55 @@ public sealed class AvisosImpuestoEndpointsTests : IAsyncLifetime
         rechazada.Headers.RetryAfter.Should().NotBeNull();
         LimitesAvisosImpuesto.GlobalesPorMinuto.Should().Be(600);
         LimitesAvisosImpuesto.PorIpPorMinuto.Should().Be(60);
+    }
+
+    private static string Ip(int n) => "10.0.0." + n.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
+    [Fact]
+    public async Task M2_ElGlobal_600DeTodasLasIpJuntas_El601DesdeOtraIpEs429ConRetryAfter()
+    {
+        var token = TokenAvisoImpuesto.Emitir(Guid.NewGuid(), AvisosDePrueba.Llave);
+        var ips = LimitesAvisosImpuesto.GlobalesPorMinuto / LimitesAvisosImpuesto.PorIpPorMinuto;
+        for (var ip = 1; ip <= ips; ip++)
+        {
+            for (var i = 0; i < LimitesAvisosImpuesto.PorIpPorMinuto; i++)
+                (await Post(token, AvisosDePrueba.Cuerpo("ext-x", 1), ip: Ip(ip))).StatusCode.Should().NotBe(HttpStatusCode.TooManyRequests, $"ip {ip}, petición {i + 1}");
+        }
+
+        var rechazada = await Post(token, AvisosDePrueba.Cuerpo("ext-x", 1), ip: Ip(ips + 1));
+
+        rechazada.StatusCode.Should().Be(HttpStatusCode.TooManyRequests, "la IP nueva tiene cupo propio pero el global se agotó");
+        rechazada.Headers.RetryAfter.Should().NotBeNull();
+        (await rechazada.Content.ReadAsByteArrayAsync(Ct)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task L1_TokenConFormaPeroHmacInvalido_NoConsumeElGlobal_SoloElCupoPorIp()
+    {
+        var falso = TokenAvisoImpuesto.Emitir(Guid.NewGuid(), System.Text.Encoding.UTF8.GetBytes("otra-llave-de-prueba-0123456789-abcdefgh"));
+        TokenAvisoImpuesto.TieneForma(falso).Should().BeTrue("tiene la forma, solo el HMAC no coincide");
+        var ips = LimitesAvisosImpuesto.GlobalesPorMinuto / LimitesAvisosImpuesto.PorIpPorMinuto;
+        for (var ip = 1; ip <= ips; ip++)
+        {
+            for (var i = 0; i < LimitesAvisosImpuesto.PorIpPorMinuto; i++)
+                (await Post(falso, AvisosDePrueba.Cuerpo("ext-x", 1), ip: Ip(ip))).StatusCode.Should().Be(HttpStatusCode.Unauthorized, $"ip {ip}, petición {i + 1}");
+        }
+
+        (await Post(falso, AvisosDePrueba.Cuerpo("ext-x", 1), ip: Ip(1))).StatusCode
+            .Should().Be(HttpStatusCode.TooManyRequests, "el token falso sí consume el cupo por IP");
+
+        var legitimo = await Post(TokenAvisoImpuesto.Emitir(Empresa, AvisosDePrueba.Llave), AvisosDePrueba.Cuerpo("ext-1", 1), ip: Ip(ips + 1));
+        legitimo.StatusCode.Should().Be(HttpStatusCode.OK, "600 tokens falsos no agotan el global del aviso legítimo");
+    }
+
+    [Fact]
+    public async Task L2_FallaInesperada_503SinCuerpo_NuncaLaDeveloperExceptionPage()
+    {
+        _secretos.Lanzar = new InvalidOperationException("detalle-interno-que-no-sale");
+
+        var respuesta = await Post(TokenAvisoImpuesto.Emitir(Empresa, AvisosDePrueba.Llave), AvisosDePrueba.Cuerpo("ext-1", 1));
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
+        (await respuesta.Content.ReadAsByteArrayAsync(Ct)).Should().BeEmpty();
     }
 }

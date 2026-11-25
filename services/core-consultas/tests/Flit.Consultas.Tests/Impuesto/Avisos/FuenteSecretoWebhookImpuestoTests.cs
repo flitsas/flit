@@ -122,11 +122,24 @@ public sealed class FuenteSecretoWebhookImpuestoTests : IDisposable
         string.Join("|", _log.Textos).Should().NotContain(AvisosDePrueba.Secreto).And.NotContain(AvisosDePrueba.SecretoAnterior);
     }
 
+    [Fact]
+    public async Task L2_ExcepcionQueNoEsRpc_FalloSecreto_YElLogSoloLlevaElTipo()
+    {
+        _cliente.Lanzar = new HttpRequestException("detalle-del-canal-que-no-va-al-log");
+
+        var act = () => Fuente().ObtenerAsync(Empresa, false, Ct);
+
+        await act.Should().ThrowAsync<FalloSecretoWebhookImpuestoException>();
+        _log.Eventos.Select(e => e.Id).Should().Contain(7442);
+        var todo = string.Join("|", _log.Textos);
+        todo.Should().Contain(nameof(HttpRequestException)).And.NotContain("detalle-del-canal-que-no-va-al-log");
+    }
+
     private sealed class ClienteFalso : ClienteSecretoWebhookImpuesto
     {
         public Queue<ObtenerSecretoWebhookImpuestoResponse> Respuestas { get; } = new();
 
-        public RpcException? Lanzar { get; set; }
+        public Exception? Lanzar { get; set; }
 
         public int Llamadas { get; private set; }
 
@@ -202,7 +215,27 @@ public sealed class BuzonAvisosImpuestoTests
         (await buzon.EsperarAsync(Empresa, "ext-1", TimeSpan.Zero, Ct)).Should().BeNull();
 
         buzon.Entregar(Empresa, "ext-2", Aviso(1));
-        reloj.Avanzar(BuzonAvisosImpuesto.Retencion + TimeSpan.FromSeconds(1));
+        reloj.Avanzar(buzon.Retencion + TimeSpan.FromSeconds(1));
         (await buzon.EsperarAsync(Empresa, "ext-2", TimeSpan.Zero, Ct)).Should().BeNull();
+    }
+
+    [Fact]
+    public async Task N1_LaRetencionEsElPresupuestoDelSondeoMasElMargen_NoDiezMinutos()
+    {
+        BuzonAvisosImpuesto.MargenRetencion.Should().Be(TimeSpan.FromSeconds(60));
+        BuzonAvisosImpuesto.RetencionPara(280).Should().Be(TimeSpan.FromSeconds(340));
+        new BuzonAvisosImpuesto(TimeProvider.System).Retencion.Should().Be(BuzonAvisosImpuesto.RetencionPara(OpcionesImpuesto.TimeoutPorDefecto));
+
+        var reloj = new RelojFalso();
+        var buzon = new BuzonAvisosImpuesto(reloj, BuzonAvisosImpuesto.RetencionPara(100));
+        buzon.Retencion.Should().Be(TimeSpan.FromSeconds(160));
+
+        buzon.Entregar(Empresa, "ext-1", Aviso(1));
+        reloj.Avanzar(TimeSpan.FromSeconds(159));
+        (await buzon.EsperarAsync(Empresa, "ext-1", TimeSpan.Zero, Ct)).Should().NotBeNull("sigue dentro de la retención");
+
+        buzon.Entregar(Empresa, "ext-2", Aviso(1));
+        reloj.Avanzar(TimeSpan.FromSeconds(161));
+        (await buzon.EsperarAsync(Empresa, "ext-2", TimeSpan.Zero, Ct)).Should().BeNull("pasó el presupuesto del sondeo más el margen");
     }
 }

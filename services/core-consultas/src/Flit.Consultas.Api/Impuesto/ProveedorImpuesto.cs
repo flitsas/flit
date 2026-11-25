@@ -119,8 +119,10 @@ internal sealed partial class ProveedorImpuesto(
 
         if (seg.IdExterno is null)
         {
-            (var envio, cred) = await EnviarConAvisoAsync(await CuerpoConAvisoAsync().ConfigureAwait(false), cuerpo, cred, caller.TenantId, ct)
+            (var envio, cred, var respaldo) = await EnviarConAvisoAsync(await CuerpoConAvisoAsync().ConfigureAwait(false), cuerpo, cred, caller.TenantId, ct)
                 .ConfigureAwait(false);
+            if (respaldo)
+                cuerpoConAviso = cuerpo;
             if (envio.Fallo is { } falloEnvio)
             {
                 await seguimiento.CerrarAsync(trabajoId, "error", ct).ConfigureAwait(false);
@@ -175,8 +177,10 @@ internal sealed partial class ProveedorImpuesto(
                     await seguimiento.OlvidarIdExternoAsync(trabajoId, ct).ConfigureAwait(false);
                     reenviado = true;
                     reanudado = false;
-                    (var envio, cred) = await EnviarConAvisoAsync(await CuerpoConAvisoAsync().ConfigureAwait(false), cuerpo, cred, caller.TenantId, ct)
+                    (var envio, cred, var respaldo) = await EnviarConAvisoAsync(await CuerpoConAvisoAsync().ConfigureAwait(false), cuerpo, cred, caller.TenantId, ct)
                         .ConfigureAwait(false);
+                    if (respaldo)
+                        cuerpoConAviso = cuerpo;
                     if (envio.Fallo is { } falloRe)
                     {
                         await seguimiento.CerrarAsync(trabajoId, "error", ct).ConfigureAwait(false);
@@ -336,14 +340,22 @@ internal sealed partial class ProveedorImpuesto(
     /// POST con el <c>callbackUrl</c> si lo hay (<paramref name="cuerpo"/>); si el proveedor responde 422 <c>webhook_not_configured</c>
     /// (la empresa perdió el secreto después de cachearlo), se reenvía sin él (<paramref name="cuerpoSinAviso"/>) y sigue el polling.
     /// </summary>
-    private async Task<(EnvioImpuesto Envio, CredencialImpuesto Cred)> EnviarConAvisoAsync(
+    /// <summary>
+    /// Envía con <c>callbackUrl</c>; ante 422 <c>webhook_not_configured</c> reenvía el cuerpo sin él y lo indica en <c>Respaldo</c>
+    /// para que quien llama memorice ese cuerpo (N-3) y un reenvío posterior no repita la ida y vuelta del 422.
+    /// </summary>
+    private async Task<(EnvioImpuesto Envio, CredencialImpuesto Cred, bool Respaldo)> EnviarConAvisoAsync(
         string cuerpo, string cuerpoSinAviso, CredencialImpuesto cred, Guid tenantId, CancellationToken ct)
     {
         var (envio, credUsada) = await EnviarConRefrescoAsync(cuerpo, cred, tenantId, ct).ConfigureAwait(false);
         if (envio.Fallo is { HttpStatus: 422 } && string.Equals(envio.CodigoError, CodigoWebhookNoConfigurado, StringComparison.Ordinal)
             && !ReferenceEquals(cuerpo, cuerpoSinAviso))
-            return await EnviarConRefrescoAsync(cuerpoSinAviso, credUsada, tenantId, ct).ConfigureAwait(false);
-        return (envio, credUsada);
+        {
+            var (respaldo, credRespaldo) = await EnviarConRefrescoAsync(cuerpoSinAviso, credUsada, tenantId, ct).ConfigureAwait(false);
+            return (respaldo, credRespaldo, true);
+        }
+
+        return (envio, credUsada, false);
     }
 
     private async Task<(EnvioImpuesto Envio, CredencialImpuesto Cred)> EnviarConRefrescoAsync(

@@ -68,8 +68,16 @@ internal sealed class RegistroEnMemoria(SeguimientoEnMemoria seguimiento) : IReg
 
     public List<(Guid Tenant, string Delivery, string IdExterno, int Attempt)> Registradas { get; } = [];
 
+    /// <summary>Se lanza una sola vez en el próximo <see cref="EstadoConsultaAsync"/> (base caída) y se limpia.</summary>
+    public Exception? LanzarEnEstado { get; set; }
+
+    /// <summary>Se lanza en cada <see cref="RegistrarEntregaAsync"/> mientras no sea null.</summary>
+    public Exception? LanzarEnRegistro { get; set; }
+
     public Task<bool> RegistrarEntregaAsync(Guid tenantId, string deliveryId, string idExterno, int attempt, CancellationToken ct)
     {
+        if (LanzarEnRegistro is not null)
+            throw LanzarEnRegistro;
         var nueva = _entregas.Add((tenantId, deliveryId));
         if (nueva)
             Registradas.Add((tenantId, deliveryId, idExterno, attempt));
@@ -78,6 +86,12 @@ internal sealed class RegistroEnMemoria(SeguimientoEnMemoria seguimiento) : IReg
 
     public Task<EstadoConsultaAviso> EstadoConsultaAsync(Guid tenantId, string idExterno, CancellationToken ct)
     {
+        if (LanzarEnEstado is { } fallo)
+        {
+            LanzarEnEstado = null;
+            throw fallo;
+        }
+
         foreach (var (trabajo, empresa) in Empresas)
         {
             if (empresa != tenantId || seguimiento.Fila(trabajo) is not { } fila || fila.IdExterno != idExterno)
