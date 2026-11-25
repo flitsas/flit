@@ -959,6 +959,13 @@ public sealed class SimularBiometriaHandler(
         if (existing is { Status: BiometricEstados.Aprobado })
             return (IniciarBiometriaHandler.ToDto(existing, now, actor.Ordinal), null);
 
+        // La aprobación manual solo la decide un revisor humano (Super Admin FLIT) desde la revisión manual. Este
+        // flujo mock NO puede aprobar una validación de proveedor manual: ni la pendiente de revisión ni ninguna
+        // otra que aún no esté aprobada. Sin esta guarda, el paso de identidad del wizard la aprobaba sola.
+        if (existing is not null
+            && string.Equals(existing.Provider, BiometricProviders.Manual, StringComparison.Ordinal))
+            return (null, "validacion_manual");
+
         var detalle = JsonSerializer.Serialize(new
         {
             score = MockScore,

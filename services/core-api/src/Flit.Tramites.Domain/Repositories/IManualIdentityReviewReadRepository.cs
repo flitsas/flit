@@ -74,7 +74,8 @@ public sealed record ManualIdentityReviewDetailRow(
     DateTimeOffset? LinkExpiresAt,
     DateTimeOffset? WaitingSince = null,
     Flit.Tramites.Domain.Entities.ManualPhotoChecks? PhotoChecks = null,
-    bool CartaDisponible = false);
+    bool CartaDisponible = false,
+    ReviewerInfo? Reviewer = null);
 
 /// <summary>Referencia (interna, nunca sale por HTTP) a la imagen de una validación manual en el storage.</summary>
 public sealed record ManualIdentityImageRef(

@@ -334,6 +334,37 @@ describe('flujo manual', () => {
     expect(hitos[2].tono).toBe('alerta');
   });
 
+  it('con revisor: «Revisado por nombre (correo, rol)» aparte del motivo', () => {
+    const v = validacion({ provider: 'manual', status: 'rechazado', rejectionReason: 'Firma ilegible' });
+    const hitos = hitosDeIdentidad(v, [
+      evento('manual_rechazado', '2026-08-27T12:00:00Z', {
+        outcome: 'rechazado',
+        revisor: { name: 'Ana Pérez', email: 'ana@flit.co', role: 'Super Admin' },
+      }),
+      evento('manual_aprobado', '2026-08-27T12:10:00Z', {
+        outcome: 'aprobado',
+        revisor: { name: 'Luis Gómez', email: null, role: 'Super Admin' },
+      }),
+    ]);
+    const [aprobado, rechazado] = hitos;
+    expect(aprobado.revisadoPor).toBe('Revisado por Luis Gómez (Super Admin)');
+    expect(rechazado.detalle).toBe('Firma ilegible');
+    expect(rechazado.revisadoPor).toBe('Revisado por Ana Pérez (ana@flit.co, Super Admin)');
+    expect(`${aprobado.revisadoPor} ${rechazado.revisadoPor}`).not.toMatch(/null|undefined/);
+  });
+
+  it('sin revisor (o vacío) no agrega la línea', () => {
+    const v = validacion({ provider: 'manual', status: 'aprobado' });
+    const hitos = hitosDeIdentidad(v, [
+      evento('manual_aprobado', '2026-08-27T12:00:00Z', { outcome: 'aprobado' }),
+      evento('manual_aprobado', '2026-08-27T12:05:00Z', {
+        outcome: 'aprobado',
+        revisor: { name: null, email: ' ', role: null },
+      }),
+    ]);
+    for (const h of hitos) expect(h.revisadoPor).toBeUndefined();
+  });
+
   it('Bug #14634 — un rechazo manual YA reintentado conserva su motivo en el hito histórico', () => {
     // La validación VIGENTE ya se volvió a capturar y se aprobó: rejectionReason quedó en null (lo
     // borra RegistrarCapturaManual). El motivo de ESE rechazo puntual debe salir del propio evento
