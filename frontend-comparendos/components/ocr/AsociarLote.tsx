@@ -8,6 +8,8 @@ import { asociarEnTandas, correosDelLote, type ResultadoLote, type TandaLote, te
 
 const PIE_CLS = "flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>button]:w-full sm:[&>button]:w-auto";
 const NOTA_CLS = "min-w-0 break-words rounded-xl border border-border bg-secondary px-3 py-2 text-xs";
+/** Oculta la X del Modal del kit sin tocar el paquete (el botón no tiene prop propia para eso). */
+const CERRAR_OCULTO_CLS = "[&_button[aria-label=Cerrar]]:invisible";
 const ALERTA_CLS = "min-w-0 break-words rounded-xl border border-[var(--badge-warning-fg)] px-3 py-2 text-xs text-[var(--badge-warning-fg)]";
 
 function Lista({ titulo, items }: { titulo: string; items: { clave: string; texto: string }[] }) {
@@ -40,13 +42,34 @@ export function AsociarLote({ paqueteId, vista, onCerrar }: { paqueteId: string;
   useEffect(() => {
     if (fase === "procesando") avanceRef.current?.focus();
   }, [fase]);
+  // Mientras asocia, el navegador pregunta antes de cerrar la pestaña o recargar. Lo ya asociado se conserva igual.
+  useEffect(() => {
+    if (fase !== "procesando") return;
+    const avisar = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", avisar);
+    return () => window.removeEventListener("beforeunload", avisar);
+  }, [fase]);
+  // Si se navega a otra pantalla, las tandas terminan en segundo plano (los datos quedan bien), sin tocar estado.
+  const montado = useRef(true);
+  useEffect(() => {
+    montado.current = true;
+    return () => {
+      montado.current = false;
+    };
+  }, []);
 
   const confirmar = async () => {
     setFase("procesando");
     const r = await asociarEnTandas(
       () => apiFetch<TandaLote>(`/ocr/paquetes/${paqueteId}/asociar-lote`, { method: "POST", body: {} }),
-      (hechos, restantes) => setAvance({ hechos, total: hechos + restantes }),
+      (hechos, restantes) => {
+        if (montado.current) setAvance({ hechos, total: hechos + restantes });
+      },
     );
+    if (!montado.current) return;
     setResultado(r);
     setFase("resultado");
   };
@@ -97,6 +120,8 @@ export function AsociarLote({ paqueteId, vista, onCerrar }: { paqueteId: string;
       open
       onClose={() => onCerrar(false)}
       busy={procesando}
+      // Con `busy` la X ya no cierra; mientras asocia además se oculta (invisible: no mueve nada ni recibe foco).
+      panelClassName={procesando ? CERRAR_OCULTO_CLS : ""}
       title={procesando ? "Asociando documentos…" : "Asociar documentos a sus comparendos"}
       description={textos.documentos}
       footer={
@@ -121,7 +146,7 @@ export function AsociarLote({ paqueteId, vista, onCerrar }: { paqueteId: string;
           </p>
         ))}
         {procesando && (
-          <div ref={avanceRef} tabIndex={-1} data-avance-lote className="flex flex-col gap-1 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-flit-brand" aria-live="polite">
+          <div ref={avanceRef} tabIndex={-1} data-avance-lote className="flex flex-col gap-1 rounded-lg p-2 outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-flit-brand" aria-live="polite">
             <div
               role="progressbar"
               aria-label="Avance de la asociación"
@@ -135,6 +160,7 @@ export function AsociarLote({ paqueteId, vista, onCerrar }: { paqueteId: string;
             <p className="text-xs tabular-nums text-muted-foreground">
               {avance.hechos} de {avance.total}
             </p>
+            <p className="text-xs text-muted-foreground">Si cierras esta ventana, lo ya asociado se conserva y lo que falte podrás asociarlo después.</p>
           </div>
         )}
       </div>

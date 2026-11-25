@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import Pagina from "@/app/(app)/ocr/paquetes/[id]/page";
 import { ToastProvider } from "@/components/Toast";
+import { BOTON_PRIMARIO_CLS } from "@/components/ui/estilos";
 
 // GDC-EVID §9: «Asociar los N» con la vista previa del servidor, tandas de máx. 50 hasta que no queden, resultado; y
 // «Revisar reemplazos (n)» que abre el primero de la cola. El API de S1 se simula por ruta.
@@ -206,5 +207,98 @@ describe("lote cortado y doble clic", () => {
     resolver({ asociados: asoc(55, "a"), omitidos: [], restantes: 0 });
     expect(await screen.findByText("Resultado de la asociación")).toBeTruthy();
     expect(posts()).toHaveLength(1);
+  });
+});
+
+describe("cabecera: un solo primario y sin salto al cargar", () => {
+  afterEach(cleanup);
+  const montar = (paquete: Record<string, unknown>, vista: () => Promise<unknown>) => {
+    apiFetch.mockReset();
+    permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
+    query = "";
+    apiFetch.mockImplementation((ruta: string) => {
+      if (ruta === "/ocr/paquetes/p1/asociacion-lote") return vista();
+      return Promise.resolve({ paquete, documentos: [], completosPorConfirmar: 0 });
+    });
+    render(
+      <ToastProvider>
+        <Pagina />
+      </ToastProvider>,
+    );
+  };
+
+  it("solo asociables: «Asociar los N» es el primario", async () => {
+    montar(PAQUETE, () => Promise.resolve(VISTA));
+    expect((await screen.findByRole("button", { name: "Asociar los 55" })).className).toBe(BOTON_PRIMARIO_CLS);
+  });
+
+  it("con completos por registrar: «Registrar» primario y «Asociar» secundario", async () => {
+    montar({ ...PAQUETE, cantidadCompletos: 3 }, () => Promise.resolve(VISTA));
+    const asociar = await screen.findByRole("button", { name: "Asociar los 55" });
+    expect(screen.getByRole("button", { name: "Registrar los 3 completos" }).className).toBe(BOTON_PRIMARIO_CLS);
+    expect(asociar.className).not.toBe(BOTON_PRIMARIO_CLS);
+  });
+
+  it("mientras carga la vista previa reserva el lugar con «Calculando…» deshabilitado", async () => {
+    let soltar: (v: unknown) => void = () => {};
+    montar(PAQUETE, () => new Promise((r) => (soltar = r)));
+    const reserva = await screen.findByRole("button", { name: "Calculando…" });
+    expect((reserva as HTMLButtonElement).disabled).toBe(true);
+    soltar(VISTA);
+    expect(await screen.findByRole("button", { name: "Asociar los 55" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Calculando…" })).toBeNull();
+  });
+});
+
+describe("cerrar mientras asocia", () => {
+  afterEach(cleanup);
+  const cerrarVentana = () => {
+    const e = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(e);
+    return e.defaultPrevented;
+  };
+  const iniciar = async (asociarLote: () => Promise<unknown>) => {
+    apiFetch.mockReset();
+    permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
+    query = "";
+    apiFetch.mockImplementation((ruta: string) => {
+      if (ruta === "/ocr/paquetes/p1/asociacion-lote") return Promise.resolve(VISTA);
+      if (ruta === "/ocr/paquetes/p1/asociar-lote") return asociarLote();
+      return Promise.resolve({ paquete: PAQUETE, documentos: [], completosPorConfirmar: 0 });
+    });
+    const r = render(
+      <ToastProvider>
+        <Pagina />
+      </ToastProvider>,
+    );
+    fireEvent.click(await screen.findByRole("button", { name: "Asociar los 55" }));
+    const m = await screen.findByRole("dialog");
+    const panel = within(m).getByRole("button", { name: "Cerrar" }).closest('div[tabindex="-1"]')!;
+    expect(panel.className).not.toContain("aria-label=Cerrar]]:invisible");
+    expect(cerrarVentana()).toBe(false);
+    fireEvent.click(within(m).getByRole("button", { name: "Asociar y enviar" }));
+    return { ...r, panel };
+  };
+
+  it("pregunta antes de cerrar la pestaña, oculta la X y lo explica; al terminar deja de preguntar", async () => {
+    let soltar: (v: unknown) => void = () => {};
+    const { panel } = await iniciar(() => new Promise((r) => (soltar = r)));
+    expect(await screen.findByText("Si cierras esta ventana, lo ya asociado se conserva y lo que falte podrás asociarlo después.")).toBeTruthy();
+    expect(cerrarVentana()).toBe(true);
+    expect(panel.className).toContain("[&_button[aria-label=Cerrar]]:invisible");
+    soltar({ asociados: asoc(55, "a"), omitidos: [], restantes: 0 });
+    expect(await screen.findByText("Resultado de la asociación")).toBeTruthy();
+    expect(cerrarVentana()).toBe(false);
+  });
+
+  it("si se sale de la pantalla a mitad, deja de preguntar y termina sin romper", async () => {
+    let soltar: (v: unknown) => void = () => {};
+    const { unmount } = await iniciar(() => new Promise((r) => (soltar = r)));
+    await screen.findByRole("progressbar");
+    expect(cerrarVentana()).toBe(true);
+    unmount();
+    expect(cerrarVentana()).toBe(false);
+    soltar({ asociados: asoc(55, "a"), omitidos: [], restantes: 0 });
+    await new Promise((r) => setTimeout(r, 0));
   });
 });

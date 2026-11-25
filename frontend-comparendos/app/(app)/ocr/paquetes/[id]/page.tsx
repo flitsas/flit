@@ -243,8 +243,16 @@ function Detalle({ id }: { id: string }) {
                 Revisar reemplazos ({vista.datos!.porRevisar.reemplazos})
               </button>
             )}
+            {/* Un solo primario por zona: con completos por registrar, «Registrar» es el primario y «Asociar» secundario. Mientras
+                carga la vista previa se reserva el lugar con el botón deshabilitado, para que la fila no salte. */}
+            {conLote && !vista.datos && vista.estado === "loading" && (
+              <button type="button" className={lote.registrables > 0 ? controlCls(false) : BOTON_PRIMARIO_CLS} disabled>
+                <Icono nombre="documento" className="h-3.5 w-3.5" />
+                Calculando…
+              </button>
+            )}
             {conLote && (vista.datos?.asociables ?? 0) > 0 && (
-              <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={() => setAsociandoLote(true)}>
+              <button type="button" className={lote.registrables > 0 ? controlCls(false) : BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={() => setAsociandoLote(true)}>
                 <Icono nombre="documento" className="h-3.5 w-3.5" />
                 {etiquetaAsociarLote(vista.datos!.asociables)}
               </button>
