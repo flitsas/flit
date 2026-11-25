@@ -226,6 +226,8 @@ public static class DependencyInjection
         services.AddScoped<Identity.IdentityValidationResultApplier>();
         // Configurador GLOBAL de rondas de identidad: tope de reenvíos (por fila) y alerta por correo al rechazo terminal.
         services.AddScoped<Identity.Rounds.IIdentityRoundsPolicy, Identity.Rounds.IdentityRoundsPolicy>();
+        // Reemisión automática tras un rechazo terminal de Kyverum (respeta el tope de rondas).
+        services.AddScoped<Identity.IIdentityRejectionReissue, UseCases.Persons.IdentityRejectionReissueService>();
         services.AddScoped<UseCases.IdentityRounds.GetIdentityRoundsConfigHandler>();
         services.AddScoped<UseCases.IdentityRounds.UpdateIdentityRoundsConfigHandler>();
         services.AddScoped<ReconciliarIdentidadHandler>();

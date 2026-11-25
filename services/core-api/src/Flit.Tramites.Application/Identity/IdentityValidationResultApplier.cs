@@ -42,7 +42,8 @@ public sealed class IdentityValidationResultApplier(
     IIdentityValidationEventPublisher events,
     IProcedureInstanceRepository? repo = null,
     ImprontaValidationPolicyOptions? policy = null,
-    IIdentityRoundsPolicy? rounds = null)
+    IIdentityRoundsPolicy? rounds = null,
+    IIdentityRejectionReissue? reissue = null)
 {
     private const string EtiquetaIdentidad = "Validación de identidad";
     private const string CampoIdentidad = "identidad";
@@ -156,6 +157,11 @@ public sealed class IdentityValidationResultApplier(
         // correo. Nunca lanza ni cambia el veredicto.
         if (!result.Approved && rounds is not null)
             await rounds.NotifyRoundRejectedAsync(v, now, ct);
+
+        // Reemisión automática: si la persona aún tiene rondas, se abre la siguiente con un enlace nuevo (la ronda cuenta
+        // solo si Kyverum confirma el envío). Va después de la alerta y nunca cambia el veredicto.
+        if (!result.Approved && reissue is not null)
+            await reissue.TryReissueAsync(v, now, ct);
 
         return true;
     }

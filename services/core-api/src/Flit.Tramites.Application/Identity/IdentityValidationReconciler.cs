@@ -66,6 +66,9 @@ public static class IdentityValidationReconciler
 
                     // El conteo lo lleva el webhook (autoritativo). Aquí NO se incrementa: si el webhook ya agotó los
                     // intentos, se terminaliza en rechazado; si aún quedan, solo se refresca el motivo del último intento.
+                    // Kyverum es la fuente de los intentos: la fila muestra el total agotado, no «intentos disponibles».
+                    if (intentosAgotados)
+                        v.Attempts = Math.Max(v.Attempts, status.Intentos ?? v.MaxAttempts);
                     if (intentosAgotados || v.Attempts >= v.MaxAttempts)
                         // Intentos AGOTADOS → rechazo TERMINAL (publica el evento y habilita "Reintentar").
                         return await applier.ApplyAsync(

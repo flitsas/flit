@@ -154,6 +154,21 @@ public sealed class IdentityValidationReconcilerTests
         v.Status.Should().NotBe(BiometricEstados.Rechazado);
     }
 
+    [Fact]
+    public async Task RechazoTerminal_DisparaLaReemisionAutomatica()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var reissue = Substitute.For<Flit.Tramites.Application.Identity.IIdentityRejectionReissue>();
+        var applier = new IdentityValidationResultApplier(_events, reissue: reissue);
+        var v = Seed(attempts: 0, maxAttempts: 3, procedureInstanceId: Guid.NewGuid());
+        var status = new KyverumVerifyStatus("rechazado", null, "{\"status\":\"rechazado\"}", Intentos: 3, MaxIntentos: 3);
+
+        await IdentityValidationReconciler.ApplyStatusAsync(applier, v, status, _now, ct);
+
+        v.Attempts.Should().Be(3, "Kyverum reporta los intentos agotados");
+        await reissue.Received(1).TryReissueAsync(v, _now, Arg.Any<CancellationToken>());
+    }
+
     [Theory]
     [InlineData(null)] // prevalidación standalone
     [InlineData("procedure")] // identidad de trámite (comprador)
