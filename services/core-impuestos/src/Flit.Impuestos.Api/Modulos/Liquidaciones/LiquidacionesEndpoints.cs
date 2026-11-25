@@ -95,10 +95,11 @@ internal static class LiquidacionesEndpoints
 
     private static async Task<IResult> CrearIndividualAsync(
         HttpContext http, SolicitudIndividualEntrada? entrada, UsuarioActual usuario, ServicioConfiguracion configuracion, AmbitoDeLaEmpresa ambito,
-        CrearLiquidacionIndividual crear, CancellationToken ct)
+        CrearLiquidacionIndividual crear, INombreActor nombres, CancellationToken ct)
     {
         var (empresa, referencia) = await EmpresaDeEscrituraAsync(http.Request.Query[EmpresaExplicita.Parametro], usuario, configuracion, ambito, ct).ConfigureAwait(false);
-        var creada = await crear.CrearAsync(empresa, entrada?.Placa, usuario.Id, referencia, ct, actorNombre: usuario.Nombre).ConfigureAwait(false);
+        var actorNombre = await nombres.NombreAsync(usuario, ct).ConfigureAwait(false);
+        var creada = await crear.CrearAsync(empresa, entrada?.Placa, usuario.Id, referencia, ct, actorNombre: actorNombre).ConfigureAwait(false);
         return Results.Created($"{Program.Prefijo}{Ruta}/{creada.Id}", creada);
     }
 

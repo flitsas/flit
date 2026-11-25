@@ -61,12 +61,13 @@ internal static class CargaEndpoints
 
     private static async Task<IResult> CrearAsync(
         HttpContext http, UsuarioActual usuario, ServicioConfiguracion configuracion, AmbitoDeLaEmpresa ambito, CrearLiquidacionMasiva masiva,
-        CancellationToken ct)
+        INombreActor nombres, CancellationToken ct)
     {
         var (empresa, referencia) = await LiquidacionesEndpoints.EmpresaDeEscrituraAsync(
             http.Request.Query[EmpresaExplicita.Parametro], usuario, configuracion, ambito, ct).ConfigureAwait(false);
         var archivo = await ArchivoAsync(http.Request, ct).ConfigureAwait(false);
-        var creada = await masiva.CrearAsync(empresa, archivo, usuario.Id, usuario.Nombre, referencia, ct).ConfigureAwait(false);
+        var actorNombre = await nombres.NombreAsync(usuario, ct).ConfigureAwait(false);
+        var creada = await masiva.CrearAsync(empresa, archivo, usuario.Id, actorNombre, referencia, ct).ConfigureAwait(false);
         return Results.Created($"{Program.Prefijo}{LiquidacionesEndpoints.Ruta}/{creada.Id}", creada);
     }
 

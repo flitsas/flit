@@ -66,7 +66,7 @@ public static class RelanzarItem
 
     private static async Task<IResult> RelanzarAsync(
         Guid id, Guid itemId, HttpContext http, UsuarioActual usuario, ServicioConfiguracion configuracion, AmbitoDeLaEmpresa ambito,
-        AlmacenCredenciales almacen, CrearLiquidacionIndividual crear, CancellationToken ct)
+        AlmacenCredenciales almacen, CrearLiquidacionIndividual crear, INombreActor nombres, CancellationToken ct)
     {
         var (empresa, referencia) = await LiquidacionesEndpoints.EmpresaDeEscrituraAsync(
             http.Request.Query[EmpresaExplicita.Parametro], usuario, configuracion, ambito, ct).ConfigureAwait(false);
@@ -74,7 +74,8 @@ public static class RelanzarItem
         string placa;
         await using (var db = almacen.ContextoDe(empresa))
             placa = await PlacaRelanzableAsync(db, id, itemId, entrada?.ConfirmarPosibleDuplicado == true, ct).ConfigureAwait(false);
-        var creada = await crear.CrearAsync(empresa, placa, usuario.Id, referencia, ct, relanzadoDesde: itemId, actorNombre: usuario.Nombre).ConfigureAwait(false);
+        var actorNombre = await nombres.NombreAsync(usuario, ct).ConfigureAwait(false);
+        var creada = await crear.CrearAsync(empresa, placa, usuario.Id, referencia, ct, relanzadoDesde: itemId, actorNombre: actorNombre).ConfigureAwait(false);
         return Results.Created($"{Program.Prefijo}{LiquidacionesEndpoints.Ruta}/{creada.Id}", creada);
     }
 

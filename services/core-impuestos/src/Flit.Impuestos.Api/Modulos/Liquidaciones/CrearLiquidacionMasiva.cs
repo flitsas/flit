@@ -23,7 +23,7 @@ namespace Flit.Impuestos.Api.Modulos.Liquidaciones;
 /// </summary>
 /// <example>
 /// <code>
-/// var lote = await masiva.CrearAsync(empresa, new ArchivoCarga("placas.csv", bytes), usuario.Id, usuario.Nombre, empresaRef, ct);
+/// var lote = await masiva.CrearAsync(empresa, new ArchivoCarga("placas.csv", bytes), usuario.Id, await nombres.NombreAsync(usuario, ct), empresaRef, ct);
 /// </code>
 /// </example>
 public sealed partial class CrearLiquidacionMasiva(

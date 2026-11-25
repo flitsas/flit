@@ -42,7 +42,7 @@ public sealed partial class CrearLiquidacionIndividual(
 
     /// <summary>
     /// Crea la individual. Con <paramref name="relanzadoDesde"/> es el relanzamiento de ese ítem (<see cref="RelanzarItem"/>): el ítem
-    /// nuevo lleva <c>relanzado_desde</c> y <c>posible_duplicado=true</c>. <paramref name="actorNombre"/> es el nombre del token en el
+    /// nuevo lleva <c>relanzado_desde</c> y <c>posible_duplicado=true</c>. <paramref name="actorNombre"/> es el nombre de quien actúa (<see cref="Plataforma.INombreActor"/>) en el
     /// momento de crear (<see cref="RegistrarNombreCreador"/>).
     /// </summary>
     public async Task<LiquidacionConItemsDto> CrearAsync(
