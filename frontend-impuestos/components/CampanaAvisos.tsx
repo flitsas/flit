@@ -21,6 +21,12 @@ const TIPOS_AVISO: Readonly<Record<string, string>> = {
   LOTE_TERMINADO: "Lote terminado",
 };
 
+/** Mensaje bajo el título (spec-visual §4.4); el tipo desconocido lleva el genérico. */
+const MENSAJES_AVISO: Readonly<Record<string, string>> = {
+  LOTE_TERMINADO: "Ya está el resultado de cada placa del lote.",
+};
+const MENSAJE_SIN_CLASIFICAR = "Abre el lote para ver el detalle.";
+
 type Estado = { tipo: "cargando" } | { tipo: "error" } | { tipo: "listo"; items: AvisoImpuestos[] };
 
 const FOCO = "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--di-action)]";
@@ -117,6 +123,7 @@ export function CampanaAvisos() {
       <ul className="flex max-h-96 flex-col overflow-y-auto">
         {items.map((aviso) => {
           const titulo = rotular({ contexto: "tipo de aviso", codigo: aviso.tipo, respaldo: TIPOS_AVISO });
+          const mensaje = Object.prototype.hasOwnProperty.call(MENSAJES_AVISO, aviso.tipo) ? MENSAJES_AVISO[aviso.tipo] : MENSAJE_SIN_CLASIFICAR;
           const cuando = fecha(aviso.creadaEn);
           return (
             <li key={aviso.id} className="flex gap-3 border-t border-[color:var(--di-divider)] px-4 py-3 first:border-t-0">
@@ -126,6 +133,7 @@ export function CampanaAvisos() {
                   {titulo}
                   {!aviso.leida && <span className="sr-only"> (sin leer)</span>}
                 </p>
+                <p className="text-sm text-[color:var(--di-text-secondary)]">{mensaje}</p>
                 <time dateTime={aviso.creadaEn} className="text-xs tabular-nums text-[color:var(--di-text-tertiary)]">
                   {cuando}
                 </time>
@@ -179,7 +187,7 @@ export function CampanaAvisos() {
           onKeyDown={(e) => {
             if (e.key === "Escape") cerrarPanel();
           }}
-          className="suite-panel-barra rounded-[var(--di-radius-modal)] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--kit-sombra)]"
+          className="suite-panel-barra rounded-[var(--di-radius-modal)] border border-[color:var(--di-border)] bg-[var(--di-surface-elevated)] shadow-[var(--kit-sombra)] transition-opacity duration-[var(--di-motion-base)] motion-reduce:transition-none"
         >
           <div className="border-b border-[color:var(--di-divider)] px-4 py-3">
             <h2 className="text-sm font-semibold text-[color:var(--di-heading)]">Avisos</h2>

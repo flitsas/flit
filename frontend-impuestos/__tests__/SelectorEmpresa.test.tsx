@@ -37,14 +37,37 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("SelectorEmpresa", () => {
-  it("mientras carga lo anuncia y el combobox queda deshabilitado", () => {
+  it("mientras carga lo dice dentro del propio control (placeholder, deshabilitado, aria-busy) sin líneas debajo", () => {
     vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    const { container } = render(<SelectorEmpresa />);
+
+    const combo = screen.getByRole("combobox", { name: "Compañía" });
+    expect(combo).toBeDisabled();
+    expect(combo).toHaveAttribute("placeholder", "Cargando compañías…");
+    expect(container.firstElementChild).toHaveAttribute("aria-busy", "true");
+    expect(screen.queryByText("Cargando compañías…")).toBeNull();
+  });
+
+  it("vive en la barra: ancho w-40 sm:w-56", () => {
+    vi.stubGlobal("fetch", vi.fn(() => new Promise<Response>(() => {})));
+
+    const { container } = render(<SelectorEmpresa />);
+
+    expect(container.firstElementChild).toHaveClass("w-40", "sm:w-56");
+    expect(container.firstElementChild).not.toHaveClass("w-56");
+  });
+
+  it("«Quitar selección» mide al menos 24 × 24 px (WCAG 2.5.8), como en Diagnóstico", async () => {
+    busqueda = new URLSearchParams("empresa=e-2");
+    vi.stubGlobal("fetch", dosPaginas());
 
     render(<SelectorEmpresa />);
 
-    // El SearchableSelect trae su propia región viva (resultados); la de carga es la del selector.
-    expect(screen.getByText("Cargando compañías…")).toHaveAttribute("role", "status");
-    expect(screen.getByRole("combobox", { name: "Compañía" })).toBeDisabled();
+    const quitar = await screen.findByRole("button", { name: "Quitar selección" });
+    const raiz = quitar.closest("[class*='min-w-6']");
+    expect(raiz?.className).toContain("[&_button[aria-label^='Quitar']]:min-w-6");
+    expect(raiz?.className).toContain("[&_button[aria-label^='Quitar']]:min-h-6");
   });
 
   it("lista todas las compañías (recorre las páginas) con «Todas las compañías» por defecto", async () => {
@@ -97,32 +120,44 @@ describe("SelectorEmpresa", () => {
     expect(replace).toHaveBeenCalledWith("/liquidaciones?estado=TERMINADA");
   });
 
-  it("si falla muestra el error fijo con Reintentar y, al reintentar, carga la lista", async () => {
+  it("si falla lo dice en el propio control (tono warning) con Reintentar de 32 px en la misma fila y, al reintentar, carga la lista", async () => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(Response.json({ error: "mensaje del servidor que no debe verse" }, { status: 500 }))
       .mockImplementation(async () => Response.json(pagina([UNO], 1, 1)));
     vi.stubGlobal("fetch", fetchMock);
 
-    render(<SelectorEmpresa />);
+    const { container } = render(<SelectorEmpresa />);
 
-    const alerta = await screen.findByRole("alert");
-    expect(alerta).toHaveTextContent("No se pudieron cargar las compañías.");
-    expect(alerta).not.toHaveTextContent("mensaje del servidor que no debe verse");
-    fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Compañía" })).toBeEnabled());
+    const reintentar = await screen.findByRole("button", { name: "Reintentar cargar compañías" });
+    expect(reintentar).toHaveTextContent("Reintentar");
+    expect(reintentar).toHaveClass("min-h-8", "text-[color:var(--di-warning)]");
+    const combo = screen.getByRole("combobox", { name: "Compañía" });
+    expect(combo).toBeDisabled();
+    expect(combo).toHaveAttribute("placeholder", "No se cargaron las compañías");
+    // Fila única: el combobox y el botón comparten la fila; nada debajo, ni alerta ni el mensaje del servidor.
+    expect(reintentar.parentElement).toHaveClass("flex", "items-center", "gap-1");
+    expect(reintentar.parentElement).toContainElement(combo);
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(container).not.toHaveTextContent("mensaje del servidor que no debe verse");
+
+    fireEvent.click(reintentar);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Compañía" })).toBeEnabled());
+    expect(screen.queryByRole("button", { name: "Reintentar cargar compañías" })).toBeNull();
   });
 
-  it("sin compañías lo dice y deja solo la vista global", async () => {
+  it("sin compañías no pone texto debajo, deja solo la vista global y la búsqueda dice «No hay compañías con Impuestos»", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => Response.json(pagina([], 1, 0))));
 
     render(<SelectorEmpresa />);
 
-    expect(await screen.findByText("No hay compañías con Impuestos.")).toBeInTheDocument();
     const combo = screen.getByRole("combobox", { name: "Compañía" });
+    await waitFor(() => expect(combo).toBeEnabled());
+    expect(screen.queryByText(/No hay compañías con Impuestos/)).toBeNull();
     fireEvent.click(combo);
     expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(["Todas las compañías"]);
+    fireEvent.change(combo, { target: { value: "zzz" } });
+    expect(screen.getByText("No hay compañías con Impuestos")).toBeInTheDocument();
   });
 });
 

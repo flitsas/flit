@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { BannerEstadoProducto } from "@/components/BannerEstadoProducto";
 import { ImpuestosShell } from "@/components/ImpuestosShell";
+import { bannersDeSesion } from "@/lib/sesion";
 
 // Uso de ejemplo: <ImpuestosShell user={usuarioDelToken} tramitesUrl="https://tramites">{pantalla}</ImpuestosShell>
 // pide GET /api/v1/impuestos/sesion y, con la sesión, dibuja la barra de la suite con los módulos que el rol permite
@@ -192,18 +194,45 @@ describe("F6-CF3 / AC-FE-09: módulos según el rol", () => {
   });
 });
 
-describe("Banners de estado del producto", () => {
+const TITULOS_BANNER = {
+  SUSPENDIDO: "Impuestos está suspendido: solo lectura",
+  NO_LISTO: "Impuestos todavía no está listo para liquidar",
+  SIN_WEBHOOK: "Los resultados pueden tardar un poco más",
+  FIRMA_SIN_CONFIRMAR: "Conexión con el proveedor en verificación",
+} as const;
+
+const TEXTOS_BANNER = {
+  SUSPENDIDO: "Puedes consultar las liquidaciones, los recibos y los reportes, pero no crear liquidaciones nuevas. Los lotes que estaban en curso terminan solos.",
+  NO_LISTO:
+    "La conexión de tu compañía con el proveedor se está configurando. Puedes consultar lo que ya existe; para liquidar, espera a que termine o pídele ayuda a tu administrador.",
+  SIN_WEBHOOK: "Ya puedes liquidar. Los resultados se consultan con el proveedor cada pocos minutos, en lugar de llegar al instante.",
+  FIRMA_SIN_CONFIRMAR: "Ya puedes liquidar. Se confirma sola con el primer resultado que llegue.",
+} as const;
+
+/** Contenedor del InlineAlert que lleva el título (el tono viaja en su `style`: `var(--badge-<tono>-bg)`). */
+const alertaDe = (titulo: string) => screen.getByText(titulo).closest("div[style]") as HTMLElement;
+
+describe("Banners de estado del producto (spec-visual §4.3)", () => {
   it.each([
-    ["LISTO con la firma sin confirmar", { estado: "LISTO", firmaConfirmada: false }, "Firma sin confirmar"],
-    ["LISTO_SIN_WEBHOOK", { estado: "LISTO_SIN_WEBHOOK", firmaConfirmada: false }, "Modo sin webhook"],
-    ["SUSPENDIDO", { estado: "SUSPENDIDO", firmaConfirmada: true }, "Producto suspendido: solo lectura"],
-  ])("%s muestra «%s» sobre la pantalla", async (_n, aprovisionamiento, titulo) => {
+    ["LISTO con la firma sin confirmar", "FIRMA_SIN_CONFIRMAR", "info", { estado: "LISTO", firmaConfirmada: false }],
+    ["LISTO_SIN_WEBHOOK", "SIN_WEBHOOK", "info", { estado: "LISTO_SIN_WEBHOOK", firmaConfirmada: false }],
+    ["SUSPENDIDO", "SUSPENDIDO", "warning", { estado: "SUSPENDIDO", firmaConfirmada: true }],
+    ["PENDIENTE", "NO_LISTO", "pending", { estado: "PENDIENTE", firmaConfirmada: false }],
+    ["ERROR", "NO_LISTO", "pending", { estado: "ERROR", firmaConfirmada: false }],
+    ["INCIERTO", "NO_LISTO", "pending", { estado: "INCIERTO", firmaConfirmada: false }],
+    ["REQUIERE_CREDENCIALES", "NO_LISTO", "pending", { estado: "REQUIERE_CREDENCIALES", firmaConfirmada: false }],
+    ["REQUIERE_REVISION_NIT", "NO_LISTO", "pending", { estado: "REQUIERE_REVISION_NIT", firmaConfirmada: false }],
+  ] as const)("%s muestra el banner %s (tono %s) con sus literales, sin anunciarse", async (_n, clave, tono, aprovisionamiento) => {
     vi.stubGlobal("fetch", api(sesion("admin", aprovisionamiento)));
 
     montar();
     await screen.findByText("pantalla base");
 
-    expect(screen.getByText(titulo)).toBeInTheDocument();
+    const alerta = alertaDe(TITULOS_BANNER[clave]);
+    expect(alerta).toHaveTextContent(TEXTOS_BANNER[clave]);
+    expect(alerta.getAttribute("style")).toContain(`--badge-${tono}-bg`);
+    expect(alerta).not.toHaveAttribute("role");
+    for (const otro of Object.values(TITULOS_BANNER).filter((t) => t !== TITULOS_BANNER[clave])) expect(screen.queryByText(otro)).toBeNull();
   });
 
   it("LISTO con la firma confirmada no muestra ningún banner", async () => {
@@ -212,7 +241,43 @@ describe("Banners de estado del producto", () => {
     montar();
     await screen.findByText("pantalla base");
 
-    for (const titulo of ["Firma sin confirmar", "Modo sin webhook", "Producto suspendido: solo lectura"]) expect(screen.queryByText(titulo)).toBeNull();
+    for (const titulo of Object.values(TITULOS_BANNER)) expect(screen.queryByText(titulo)).toBeNull();
+  });
+
+  it("bannersDeSesion: NO_LISTO para los cinco estados no listos y nada sin bloque de aprovisionamiento", () => {
+    const de = (estado: string, firmaConfirmada = false) => bannersDeSesion({ ...sesion("admin"), aprovisionamiento: { estado, firmaConfirmada } });
+    for (const estado of ["PENDIENTE", "ERROR", "INCIERTO", "REQUIERE_CREDENCIALES", "REQUIERE_REVISION_NIT"]) expect(de(estado)).toEqual(["NO_LISTO"]);
+    expect(de("LISTO", true)).toEqual([]);
+    expect(bannersDeSesion({ ...sesion("admin"), aprovisionamiento: null })).toEqual([]);
+  });
+
+  it.each([
+    [["FIRMA_SIN_CONFIRMAR", "SIN_WEBHOOK", "NO_LISTO", "SUSPENDIDO"], "SUSPENDIDO"],
+    [["FIRMA_SIN_CONFIRMAR", "SIN_WEBHOOK", "NO_LISTO"], "NO_LISTO"],
+    [["FIRMA_SIN_CONFIRMAR", "SIN_WEBHOOK"], "SIN_WEBHOOK"],
+    [["FIRMA_SIN_CONFIRMAR"], "FIRMA_SIN_CONFIRMAR"],
+  ] as const)("con varios (%j) muestra solo el de mayor prioridad: %s", (banners, ganador) => {
+    render(<BannerEstadoProducto banners={banners} />);
+
+    expect(screen.getByText(TITULOS_BANNER[ganador])).toBeInTheDocument();
+    for (const otro of Object.values(TITULOS_BANNER).filter((t) => t !== TITULOS_BANNER[ganador])) expect(screen.queryByText(otro)).toBeNull();
+  });
+});
+
+describe("Dock (spec-visual §2 y §4: dockDistribucion=\"equilibrada\")", () => {
+  it("Gestor: los dos módulos se reparten 1 | 1 alrededor del inicio, sin espaciadores", async () => {
+    vi.stubGlobal("fetch", api(sesion("gestor")));
+
+    montar();
+    await screen.findByText("pantalla base");
+
+    const nav = screen.getByRole("navigation", { name: "Navegación principal" });
+    const hijos = Array.from(nav.children);
+    const inicio = hijos.findIndex((el) => el.getAttribute("aria-label") === "Inicio Impuestos");
+    expect(inicio).toBeGreaterThan(0);
+    expect(hijos.slice(0, inicio).map((el) => el.textContent)).toEqual(["Impuestos"]);
+    expect(hijos.slice(inicio + 1).map((el) => el.textContent)).toEqual(["Reportes"]);
+    expect(hijos.filter((el) => el.tagName === "SPAN" && el.getAttribute("aria-hidden") === "true")).toHaveLength(0);
   });
 });
 
@@ -238,6 +303,34 @@ describe("Campana de avisos", () => {
     const verLote = within(panel).getAllByRole("link", { name: /^Ver lote/ });
     expect(verLote.map((a) => a.getAttribute("href"))).toEqual(["/liquidaciones/l-1", "/liquidaciones/l-2", "/liquidaciones/l-3"]);
     expect(within(panel).getAllByText("Lote terminado")).toHaveLength(3);
+  });
+
+  it("cada aviso lleva la línea de mensaje bajo el título (§4.4), también el de tipo desconocido", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const conDesconocido = { items: [...avisos.items.slice(0, 1), { id: "n-9", tipo: "TIPO_NUEVO", liquidacionId: "l-9", creadaEn: "2026-11-17T15:00:00Z", leida: false }] };
+    vi.stubGlobal("fetch", api(sesion("gestor"), conDesconocido));
+
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "Avisos, 2 avisos sin leer" }));
+
+    const panel = screen.getByRole("region", { name: "Avisos" });
+    const [terminado, desconocido] = within(panel).getAllByRole("listitem");
+    expect(within(terminado).getByText("Lote terminado")).toBeInTheDocument();
+    expect(within(terminado).getByText("Ya está el resultado de cada placa del lote.")).toBeInTheDocument();
+    expect(within(desconocido).getByText("Sin clasificar")).toBeInTheDocument();
+    expect(within(desconocido).getByText("Abre el lote para ver el detalle.")).toBeInTheDocument();
+    expect(within(desconocido).queryByText(/TIPO_NUEVO/)).toBeNull();
+    warn.mockRestore();
+  });
+
+  it("el panel entra con la transición del token de movimiento y la quita con movimiento reducido", async () => {
+    vi.stubGlobal("fetch", api(sesion("gestor"), avisos));
+
+    montar();
+    fireEvent.click(await screen.findByRole("button", { name: "Avisos, 2 avisos sin leer" }));
+
+    const panel = screen.getByRole("region", { name: "Avisos" });
+    expect(panel).toHaveClass("transition-opacity", "duration-[var(--di-motion-base)]", "motion-reduce:transition-none");
   });
 
   it("Escape cierra el panel y devuelve el foco al botón", async () => {
