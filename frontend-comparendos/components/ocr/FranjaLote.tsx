@@ -2,7 +2,7 @@
 
 import { InlineAlert } from "@flit/ui";
 import { formatoFechaHora } from "@/lib/format/date";
-import { avisoSinAvanceLote, type LoteEnCurso, textoAvanceLote, textosResumenLote } from "@/lib/ocr";
+import { avisoSinAvanceLote, type LoteEnCurso, motivoLote, textoAvanceLote, textosResumenLote } from "@/lib/ocr";
 
 const ENLACE_CLS = "font-semibold text-flit-brand-ink hover:underline";
 
@@ -70,8 +70,8 @@ export function FranjaLote({ lote, onCerrar, onVer }: { lote: LoteEnCurso; onCer
       <div className="flex min-w-0 flex-col" data-franja-lote="terminado">
         <p>{textos.titulo}</p>
         {textos.correos && <p>{textos.correos}</p>}
-        <Lista titulo="Sin correo al conductor" items={lote.sinCorreo.map((m) => ({ clave: m.motivo, texto: `${m.motivo} (${m.cantidad})` }))} />
-        <Lista titulo="No se asociaron" items={lote.noAsociados.map((n) => ({ clave: n.documentoId, texto: `${n.nombreArchivo}: ${n.motivo}` }))} />
+        <Lista titulo="Sin correo al conductor" items={lote.sinCorreo.map((m, i) => ({ clave: `${i}:${m.motivo ?? ""}`, texto: `${motivoLote(m.motivo)} (${m.cantidad})` }))} />
+        <Lista titulo="No se asociaron" items={lote.noAsociados.map((n) => ({ clave: n.documentoId, texto: `${n.nombreArchivo}: ${motivoLote(n.motivo)}` }))} />
         <p className="mt-2 text-muted-foreground">
           {pedido}
           {lote.terminadoEn ? ` · terminó el ${formatoFechaHora(lote.terminadoEn)}` : ""}

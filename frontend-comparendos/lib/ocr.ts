@@ -509,9 +509,9 @@ export interface LoteEnCurso {
   porAsociar: number;
   total: number;
   asociados: number;
-  noAsociados: { documentoId: string; nombreArchivo: string; motivo: string }[];
+  noAsociados: { documentoId: string; nombreArchivo: string; motivo: string | null }[];
   correosEnCamino: number;
-  sinCorreo: { motivo: string; cantidad: number }[];
+  sinCorreo: { motivo: string | null; cantidad: number }[];
   solicitadoPor: string | null;
   solicitadoEn: string;
   terminadoEn: string | null;
@@ -569,6 +569,9 @@ export function textosResumenLote(l: LoteEnCurso): { titulo: string; correos: st
       : plural(l.correosEnCamino, "1 correo con el documento va en camino al conductor.", "{n} correos con el documento van en camino a los conductores.");
   return { titulo, correos };
 }
+
+/** El servidor garantiza motivo; si algún día llega nulo o vacío, la franja no muestra «null» ni un hueco. */
+export const motivoLote = (m: string | null | undefined) => m?.trim() || "Sin motivo registrado";
 
 /** Minutos sin avance a partir de los cuales la franja lo avisa. */
 export const MINUTOS_SIN_AVANCE_AVISO = 5;

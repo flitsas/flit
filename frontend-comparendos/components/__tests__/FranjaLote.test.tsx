@@ -49,3 +49,19 @@ describe("franja del lote: sin avance", () => {
     expect(screen.queryByText(/Sin avance/)).toBeNull();
   });
 });
+
+describe("franja del lote: motivos que llegan mal", () => {
+  afterEach(cleanup);
+  it("motivo nulo o vacío → «Sin motivo registrado» (no asociados y sin correo)", () => {
+    ver({
+      porAsociar: 0, asociados: 46, terminadoEn: "2026-11-25T15:10:00Z",
+      sinCorreo: [{ motivo: null, cantidad: 2 }, { motivo: "  ", cantidad: 1 }],
+      noAsociados: [{ documentoId: "a", nombreArchivo: "a.pdf", motivo: null }, { documentoId: "b", nombreArchivo: "b.pdf", motivo: "" }],
+    });
+    expect(screen.getByText("Sin motivo registrado (2)")).toBeTruthy();
+    expect(screen.getByText("Sin motivo registrado (1)")).toBeTruthy();
+    expect(screen.getByText("a.pdf: Sin motivo registrado")).toBeTruthy();
+    expect(screen.getByText("b.pdf: Sin motivo registrado")).toBeTruthy();
+    expect(screen.queryByText(/null/)).toBeNull();
+  });
+});

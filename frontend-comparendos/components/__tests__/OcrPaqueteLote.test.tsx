@@ -180,7 +180,7 @@ describe("franja del lote", () => {
   it("en curso: avance, filtro «Asociando» y se actualiza sola cada pocos segundos", async () => {
     vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
     vista = () => Promise.resolve({ ...VISTA, enCurso: LOTE });
-    abrir();
+    abrir({ ...PAQUETE, cantidadPorAsociar: 36 });
     expect(await screen.findByText("Asociando 12 de 48…")).toBeTruthy();
     expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("12");
     expect(within(screen.getByRole("group", { name: "Filtrar documentos por estado" })).getByRole("button", { name: /Asociando/ })).toBeTruthy();
@@ -290,5 +290,30 @@ describe("cabecera y cola de reemplazos", () => {
     query = "cola=terminada&reemplazados=3&descartados=1";
     abrir();
     expect(await screen.findByText("Terminaste la revisión de reemplazos: 3 reemplazados y 1 descartado.")).toBeTruthy();
+  });
+});
+
+describe("tarjeta «Asociando» desde el contador del paquete", () => {
+  it("se muestra aunque falle la consulta del lote, y sigue actualizándose", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    vista = () => Promise.reject(new ApiError(500, "No disponible"));
+    abrir({ ...PAQUETE, cantidadPorAsociar: 5 });
+    const grupo = await screen.findByRole("group", { name: "Filtrar documentos por estado" });
+    const tarjeta = await within(grupo).findByRole("button", { name: /Asociando/ });
+    expect(tarjeta.textContent).toContain("5");
+    expect(screen.queryByText(/Asociando \d+ de/)).toBeNull();
+    const cargas = () => apiFetch.mock.calls.filter(([r]) => r === "/ocr/paquetes/p1").length;
+    const antes = cargas();
+    await act(async () => {
+      vi.advanceTimersByTime(4100);
+    });
+    await waitFor(() => expect(cargas()).toBeGreaterThan(antes));
+  });
+
+  it("sin documentos por asociar no hay tarjeta «Asociando»", async () => {
+    abrir({ ...PAQUETE, cantidadPorAsociar: 0 });
+    const grupo = await screen.findByRole("group", { name: "Filtrar documentos por estado" });
+    await screen.findByRole("button", { name: "Asociar los 55" });
+    expect(within(grupo).queryByRole("button", { name: /Asociando/ })).toBeNull();
   });
 });

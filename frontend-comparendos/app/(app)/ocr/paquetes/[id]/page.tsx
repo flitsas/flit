@@ -53,6 +53,8 @@ interface Paquete {
   cantidadDuplicados: number;
   cantidadRegistrados: number;
   cantidadAsociados?: number;
+  /** §10: documentos que el lote está asociando en segundo plano. */
+  cantidadPorAsociar?: number;
   cantidadDescartados: number;
   creadoEn: string;
   procesamientoIniciadoEn: string | null;
@@ -109,8 +111,9 @@ function Detalle({ id }: { id: string }) {
     carga.recargar();
     vista.recargar();
   }, [carga.recargar, vista.recargar]); // eslint-disable-line react-hooks/exhaustive-deps
-  // Solo se consulta seguido mientras hay un lote avanzando; sin lote en curso no hay sondeo.
-  useSondeo(loteAvanzando, recargarCargaYLote);
+  // Solo se consulta seguido mientras hay un lote avanzando (según el lote o el contador del paquete); sin lote no hay sondeo.
+  const porAsociar = p?.cantidadPorAsociar ?? 0;
+  useSondeo(loteAvanzando || porAsociar > 0, recargarCargaYLote);
   const [resumenesCerrados, setResumenesCerrados] = useState<string[]>([]);
   const verResumen = !!enCurso && (loteAvanzando || !(resumenesCerrados.includes(enCurso.loteId) || resumenLoteCerrado(enCurso.loteId)));
   const resumen = resumenCola(params);
@@ -201,8 +204,9 @@ function Detalle({ id }: { id: string }) {
     ["Duplicado", "Duplicados", p.cantidadDuplicados],
     ["Registrado", "Registrados", p.cantidadRegistrados],
     ["Asociado", "Asociados", p.cantidadAsociados ?? 0],
-    // §10: mientras un lote avanza, los documentos encolados se pueden ver aparte.
-    ...(loteAvanzando ? [["PorAsociar", "Asociando", enCurso!.porAsociar] as [string, string, number]] : []),
+    // §10: mientras un lote avanza, los documentos encolados se pueden ver aparte (contador del propio paquete, así no depende
+    // de la consulta del lote).
+    ...(porAsociar > 0 ? [["PorAsociar", "Asociando", porAsociar] as [string, string, number]] : []),
     ["Descartado", "Descartados", p.cantidadDescartados],
   ];
   const reprocesables = estado && estado !== "Incompleto" ? p.cantidadIncompletos : docs.filter((d) => d.estado === "Incompleto" && d.reprocesable).length;
