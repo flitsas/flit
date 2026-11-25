@@ -3233,6 +3233,10 @@ namespace Flit.Comparendos.Api.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<int>("CantidadAsociados")
+                        .HasColumnType("integer")
+                        .HasColumnName("cantidad_asociados");
+
                     b.Property<int>("CantidadCompletos")
                         .HasColumnType("integer")
                         .HasColumnName("cantidad_completos");

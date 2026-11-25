@@ -169,9 +169,13 @@ describe("detalle del comparendo como página (rediseño S1)", () => {
     montar({ seccionInicial: "dp" });
     expect(await screen.findByText("extension DP")).toBeInTheDocument();
     expect(montajes.pago).toBe(0);
-    await act(async () => vi.advanceTimersByTime(10));
-    expect(document.activeElement?.id).toBe("detalle-dp-titulo");
-    vi.useRealTimers();
+    // El foco se fija cuando termina de cargar el detalle (setTimeout 0 tras `cargado`): se espera con waitFor, que avanza
+    // los temporizadores falsos, y no un instante fijo, que dependía de qué tan cargada estuviera la máquina.
+    try {
+      await waitFor(() => expect(document.activeElement?.id).toBe("detalle-dp-titulo"));
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("la barra lleva a la sección y la marca como la que se está viendo", async () => {
