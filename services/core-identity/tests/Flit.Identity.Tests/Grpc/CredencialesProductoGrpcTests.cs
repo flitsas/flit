@@ -456,6 +456,30 @@ public sealed class CredencialesProductoGrpcTests
         _protector.Descifrados.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task M4_SecretoWebhook_SinConfigurar_EsInformationConEventoPropio_NoDenegacion()
+    {
+        await SecretoWebhook(Servicio());
+
+        _logger.Entradas.Should().ContainSingle(e => e.Nivel == LogLevel.Information
+            && e.Texto.Contains("impuesto.webhook.secreto.sin_configurar", StringComparison.Ordinal));
+        _logger.Entradas.Should().NotContain(e => e.Nivel == LogLevel.Warning);
+        _logger.Entradas.Should().NotContain(e => e.Texto.Contains("impuesto.webhook.secreto.denegado", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task M4_SecretoWebhook_ProductoApagado_SigueComoDenegacionWarning()
+    {
+        ConSecretos(anteriorVigente: true);
+        _acceso.Encendidas = [Cabeza];
+
+        await SecretoWebhook(Servicio());
+
+        _logger.Entradas.Should().ContainSingle(e => e.Nivel == LogLevel.Warning
+            && e.Texto.Contains("impuesto.webhook.secreto.denegado", StringComparison.Ordinal)
+            && e.Texto.Contains("motivo=ProductoApagado", StringComparison.Ordinal));
+    }
+
     [Theory]
     [InlineData("svc-impuestos")]
     [InlineData("svc-diagnostico")]

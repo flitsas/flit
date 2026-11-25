@@ -259,7 +259,11 @@ internal sealed partial class CredencialesProductoGrpcService(
             var entrega = await secretoWebhook.HandleAsync(caller.TenantId, context.CancellationToken).ConfigureAwait(false);
             if (!entrega.Configurado)
             {
-                LogSecretoWebhookDenegado(logger, quien.Sub, quien.Jti, quien.Tenant, entrega.Motivo.ToString(), quien.Ip);
+                // M-4: una empresa sin secreto todavía no es una denegación (Information 7408); solo el producto apagado lo es (7409).
+                if (entrega.Motivo == MotivoCredencialImpuesto.SinConfigurar)
+                    LogSecretoWebhookSinConfigurar(logger, quien.Sub, quien.Jti, quien.Tenant, quien.Ip);
+                else
+                    LogSecretoWebhookDenegado(logger, quien.Sub, quien.Jti, quien.Tenant, entrega.Motivo.ToString(), quien.Ip);
                 return new ObtenerSecretoWebhookImpuestoResponse { Configurado = false, Actual = string.Empty, Anterior = string.Empty, Version = 0 };
             }
 
@@ -327,6 +331,10 @@ internal sealed partial class CredencialesProductoGrpcService(
     [LoggerMessage(EventId = 7419, EventName = "impuesto.webhook.secreto.entregado", Level = LogLevel.Information,
         Message = "impuesto.webhook.secreto.entregado sub={Sub} jti={Jti} tenant={Tenant} version={Version} con_anterior={ConAnterior} ip={Ip}")]
     private static partial void LogSecretoWebhookEntregado(ILogger logger, string sub, string? jti, Guid tenant, long version, bool conAnterior, string ip);
+
+    [LoggerMessage(EventId = 7408, EventName = "impuesto.webhook.secreto.sin_configurar", Level = LogLevel.Information,
+        Message = "impuesto.webhook.secreto.sin_configurar sub={Sub} jti={Jti} tenant={Tenant} ip={Ip}")]
+    private static partial void LogSecretoWebhookSinConfigurar(ILogger logger, string sub, string? jti, Guid tenant, string ip);
 
     [LoggerMessage(EventId = 7409, EventName = "impuesto.webhook.secreto.denegado", Level = LogLevel.Warning,
         Message = "impuesto.webhook.secreto.denegado sub={Sub} jti={Jti} tenant={Tenant} motivo={Motivo} ip={Ip}")]
