@@ -156,6 +156,64 @@ namespace Flit.Consultas.Api.Persistence.Migrations
                     b.ToTable("consumo", "consultas");
                 });
 
+            modelBuilder.Entity("Flit.Consultas.Api.Persistence.ContingenciaProveedorRunt", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Kind")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("kind");
+
+                    b.Property<string>("Provider")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("provider");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("reason");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedById")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_id");
+
+                    b.Property<string>("UpdatedByName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("updated_by_name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_runt_contingencies");
+
+                    b.HasIndex("Kind")
+                        .IsUnique()
+                        .HasDatabaseName("uq_runt_contingencies_kind");
+
+                    b.ToTable("runt_contingencies", "consultas", t =>
+                        {
+                            t.HasComment("Contingencia de proveedor RUNT por tipo de consulta. Global de plataforma, sin tenant_id: la empresa no la ve. provider nulo = sin contingencia. Épica #14644.");
+
+                            t.HasCheckConstraint("ck_runt_contingencies_kind", "kind IN ('vehicle_vin', 'vehicle_plate', 'conductor')");
+
+                            t.HasCheckConstraint("ck_runt_contingencies_kind_provider", "provider IS NULL OR (kind IN ('vehicle_vin', 'vehicle_plate') AND provider IN ('kyverum_runt', 'verifik')) OR (kind = 'conductor' AND provider IN ('kyverum_runt_conductor', 'verifik_conductor'))");
+                        });
+                });
+
             modelBuilder.Entity("Flit.Consultas.Api.Persistence.DepartamentoConsultaImpuesto", b =>
                 {
                     b.Property<Guid>("Id")

@@ -36,13 +36,21 @@ public sealed class PlatformServiceCallInterceptor(string requiredScope, string 
 {
     public const string TenantMetadata = "x-flit-tenant-id";
 
+    /// <summary>Servicio + método completos ("/paquete.Servicio/Metodo") que no exigen empresa. Lista cerrada: no se compara por sufijo.</summary>
+    private static readonly HashSet<string> MetodosGlobales = new(StringComparer.Ordinal)
+    {
+        "/flit.consultas.v1.ConsultasService/ListarDepartamentosImpuesto",
+        "/flit.consultas.v1.ConsultasAdminService/ObtenerContingenciaRunt",
+        "/flit.consultas.v1.ConsultasAdminService/GuardarContingenciaRunt",
+    };
+
     public override async Task<TResponse> UnaryServerHandler<TRequest, TResponse>(
         TRequest request, ServerCallContext context, UnaryServerMethod<TRequest, TResponse> continuation)
     {
         ArgumentNullException.ThrowIfNull(context);
         ArgumentNullException.ThrowIfNull(continuation);
-        var exigeEmpresa = requireTenant
-            && !context.Method.EndsWith("/ListarDepartamentosImpuesto", StringComparison.Ordinal);
+        // Métodos globales de plataforma: responden por todas las empresas y no exigen la metadata de empresa.
+        var exigeEmpresa = requireTenant && !MetodosGlobales.Contains(context.Method);
         Validate(context.GetHttpContext().User, context.RequestHeaders.GetValue(TenantMetadata), exigeEmpresa).Store(context);
         return await continuation(request, context).ConfigureAwait(false);
     }

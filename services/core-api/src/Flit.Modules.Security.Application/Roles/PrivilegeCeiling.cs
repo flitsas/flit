@@ -13,9 +13,17 @@ public static class PrivilegeCeiling
     /// <summary>Producto cuyos permisos no son delegables a una compañía.</summary>
     public const string PlatformProduct = "plataforma";
 
+    /// <summary>
+    /// Permisos que afectan a TODAS las empresas y solo puede tener el rol SuperAdmin (Super Admin FLIT): nunca un rol de empresa,
+    /// ni un usuario por permiso individual. Épica #14644: la contingencia de proveedor RUNT.
+    /// </summary>
+    public static bool IsSuperAdminOnly(string? slug) =>
+        string.Equals(slug, "runt_contingency.manage", StringComparison.OrdinalIgnoreCase);
+
     /// <summary>Permisos que solo gestiona FLIT: ninguna compañía puede ponerlos en un rol propio.</summary>
     public static bool IsPlatformOnly(string slug) =>
-        slug.StartsWith("banners.", StringComparison.OrdinalIgnoreCase)
+        IsSuperAdminOnly(slug)
+        || slug.StartsWith("banners.", StringComparison.OrdinalIgnoreCase)
         || slug.StartsWith("superadmin.", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Lanza <see cref="PrivilegeCeilingException"/> si algún permiso pedido excede el techo.</summary>

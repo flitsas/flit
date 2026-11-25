@@ -27,6 +27,14 @@ service ConsultasAdminService {
 
   // Crea o actualiza un departamento. Solo códigos de la homologación. activo=false lo saca de la lista efectiva.
   rpc GuardarDepartamentoImpuesto(GuardarDepartamentoImpuestoRequest) returns (GuardarDepartamentoImpuestoResponse);
+
+  // Contingencia de proveedor RUNT (Épica #14644): estado global de plataforma, sin empresa. La metadata de empresa
+  // no se exige. Los tres tipos siempre vienen, en el orden vehicle_vin, vehicle_plate, conductor.
+  rpc ObtenerContingenciaRunt(ObtenerContingenciaRuntRequest) returns (ObtenerContingenciaRuntResponse);
+
+  // Activa, cambia o apaga (proveedor vacío) la contingencia de un tipo. Valida tipo y proveedor; el motivo es obligatorio.
+  // La siguiente consulta de Trámites, Persona Natural o ICT ya la aplica (otras réplicas, con caché de hasta 20 s).
+  rpc GuardarContingenciaRunt(GuardarContingenciaRuntRequest) returns (GuardarContingenciaRuntResponse);
 }
 
 message ConfiguracionEmpresa {
@@ -91,6 +99,37 @@ message DepartamentoImpuestoCatalogo {
   string codigo = 1;
   string nombre = 2;
   bool activo = 3;
+}
+
+message ContingenciaRunt {
+  // vehicle_vin | vehicle_plate | conductor.
+  string tipo = 1;
+  // Proveedor forzado; vacío = sin contingencia.
+  string proveedor = 2;
+  string motivo = 3;
+  // Nombre visible de quien hizo el último cambio.
+  string actualizado_por = 4;
+  google.protobuf.Timestamp actualizado_en = 5;
+}
+
+message ObtenerContingenciaRuntRequest {}
+
+message ObtenerContingenciaRuntResponse {
+  repeated ContingenciaRunt tipos = 1;
+}
+
+message GuardarContingenciaRuntRequest {
+  string tipo = 1;
+  // Vacío apaga la contingencia de ese tipo.
+  string proveedor = 2;
+  string motivo = 3;
+  string actualizado_por = 4;
+  // Id del usuario, para la auditoría.
+  string actualizado_por_id = 5;
+}
+
+message GuardarContingenciaRuntResponse {
+  ContingenciaRunt contingencia = 1;
 }
 
 message ConsumoAgregado {
