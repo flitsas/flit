@@ -18,6 +18,18 @@ public interface ITenantProductCredentialRepository
         Guid? changedBy,
         CancellationToken cancellationToken = default);
 
+    /// <summary>
+    /// HU #14694 (D-CRED-DIAG) — deja en <c>admin.tenant_config_audit_logs</c> que <paramref name="lector"/> leyó la
+    /// credencial para copiarla (sin valor ni huella). Se llama también si no hay fila (<paramref name="existe"/> en false).
+    /// </summary>
+    Task RegistrarLecturaParaCopiaAsync(
+        Guid tenantId,
+        string productCode,
+        string credentialCode,
+        string lector,
+        bool existe,
+        CancellationToken cancellationToken = default);
+
     Task<bool> DeleteAsync(
         Guid tenantId,
         string productCode,

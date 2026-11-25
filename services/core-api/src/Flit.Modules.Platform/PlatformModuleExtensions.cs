@@ -1,5 +1,6 @@
 using Flit.Modules.Platform.Application.Access;
 using Flit.Modules.Platform.Application.Apps;
+using Flit.Modules.Platform.Application.Companies;
 using Flit.Modules.Platform.Application.Manifest;
 using Flit.Modules.Platform.Application.TenantProducts;
 using Flit.Modules.Security.Application.Products;
@@ -25,6 +26,12 @@ public static class PlatformModuleExtensions
         services.AddScoped<SetTenantProductCredentialHandler>();
         services.AddScoped<DeleteTenantProductCredentialHandler>();
         services.AddScoped<GetTenantProductCredentialHandler>();
+        // HU #14694: reintentar el aprovisionamiento y datos del alta en el proveedor (plan §1.2 R1 y §1.3 P1).
+        services.AddScoped<RetryProvisioningHandler>();
+        services.AddScoped<ObtenerDatosAltaProveedorHandler>();
+        // HU #14694: estado de aprovisionamiento que reporta el producto y copia de la llave de Diagnóstico (D-CRED-DIAG).
+        services.AddScoped<ReportProvisioningStatusHandler>();
+        services.AddScoped<GetTenantProductCredentialForCopyHandler>();
         // HU #12965 (B-05): implementación real del contrato §4.
         services.AddScoped<IProductAccessResolver, ProductAccessResolver>();
         // Epic #13316 (HU #13334): productos encendidos de una empresa, para el gRPC de Identidad.

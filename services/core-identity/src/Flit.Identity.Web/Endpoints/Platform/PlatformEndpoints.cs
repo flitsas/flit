@@ -3,9 +3,11 @@ using Flit.Admin.Domain.Companies.Domains;
 using Flit.Api.Authorization;
 using Flit.Infrastructure.Persistence;
 using Flit.Modules.Platform.Application.Apps;
+using Flit.Modules.Platform.Application.Companies;
 using Flit.Modules.Platform.Application.Hosts;
 using Flit.Modules.Platform.Application.Manifest;
 using Flit.Modules.Platform.Application.TenantProducts;
+using Flit.Modules.Platform.Domain.Companies;
 using Flit.Modules.Platform.Domain.Manifest;
 using Flit.Modules.Security.Application.Auth;
 using Microsoft.AspNetCore.Mvc;
@@ -109,6 +111,18 @@ public static class PlatformEndpoints
                 UpdatedByEmail = p.UpdatedBy is { } by && emails.TryGetValue(by, out var email) ? email : null,
                 ComingSoon = hosts.IsComingSoon(p.ProductCode),
                 p.ImpuestoApiKeyConfigurada,
+                // HU #14694 (platform.v1 1.1.0): último estado reportado; null sin aprovisionamiento o sin reporte.
+                Provisioning = p.Provisioning is { } estado
+                    ? new
+                    {
+                        status = estado.Estado,
+                        reason = estado.MotivoCodigo,
+                        message = estado.Mensaje,
+                        action = estado.Accion,
+                        signatureConfirmed = estado.FirmaConfirmada,
+                        updatedAt = estado.ActualizadoEn,
+                    }
+                    : null,
             }));
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("ListTenantProducts");
 
@@ -145,11 +159,71 @@ public static class PlatformEndpoints
                 {
                     TenantProductException.ProductNotFound => StatusCodes.Status404NotFound,
                     TenantProductException.ProductInactive or TenantProductException.ProductNotEnabledForHead => StatusCodes.Status409Conflict,
+                    TenantProductException.ProvisioningPrerequisiteMissing => StatusCodes.Status409Conflict,
                     _ => StatusCodes.Status400BadRequest,
                 };
-                return Problem(status, ex.Code, ex.Message);
+                return Problem(status, ex.Code, ex.Message, TituloDe(ex.Code));
             }
         }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("SetTenantProduct");
+
+        // HU #14694 (platform.v1 1.1.0, plan §1.3 P1) GET /admin/tenants/{tenantId}/products/{productCode}/alta-previa —
+        // lo que el servicio del producto enviará al alta del proveedor (diálogo de activación). Solo lectura.
+        group.MapGet("/admin/tenants/{tenantId:guid}/products/{productCode}/alta-previa", async (
+            Guid tenantId,
+            string productCode,
+            ObtenerDatosAltaProveedorHandler handler,
+            CancellationToken ct) =>
+        {
+            try
+            {
+                var datos = await handler.HandleAsync(tenantId, productCode, ct);
+                if (datos is null)
+                    return Problem(StatusCodes.Status404NotFound, "TENANT_NOT_FOUND", "La empresa no existe.");
+
+                return Results.Ok(new
+                {
+                    legalName = datos.LegalName,
+                    taxIdBase = datos.TaxIdBase,
+                    nitStatus = NitEmpresa.Codigo(datos.EstadoNit),
+                    contactEmail = datos.ContactEmail,
+                    blocking = datos.CodigoBloqueo,
+                });
+            }
+            catch (TenantProductException ex) when (ex.Code == TenantProductException.ProductWithoutProvisioning)
+            {
+                return Problem(StatusCodes.Status404NotFound, ex.Code, ex.Message);
+            }
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("GetTenantProductProvisioningPreview");
+
+        // HU #14694 (platform.v1 1.1.0, plan §1.2 R1) POST …/aprovisionamiento/reintentar — encola el trabajo
+        // <producto>.aprovisionamiento.reintentar por la outbox con el id del SuperAdmin. Sin cuerpo; 202.
+        group.MapPost("/admin/tenants/{tenantId:guid}/products/{productCode}/aprovisionamiento/reintentar", async (
+            Guid tenantId,
+            string productCode,
+            ClaimsPrincipal user,
+            IIdentityDb db,
+            RetryProvisioningHandler handler,
+            CancellationToken ct) =>
+        {
+            if (!Guid.TryParse(user.FindFirstValue("sub"), out var solicitadoPor))
+                return Results.Unauthorized();
+
+            if (!await db.Tenants.AsNoTracking().AnyAsync(t => t.Id == tenantId, ct))
+                return Problem(StatusCodes.Status404NotFound, "TENANT_NOT_FOUND", "La empresa no existe.");
+
+            try
+            {
+                await handler.HandleAsync(new RetryProvisioningCommand(tenantId, productCode), solicitadoPor, ct);
+                return Results.Accepted();
+            }
+            catch (TenantProductException ex)
+            {
+                var status = ex.Code == TenantProductException.ProductNotEnabled
+                    ? StatusCodes.Status409Conflict
+                    : StatusCodes.Status404NotFound;
+                return Problem(status, ex.Code, ex.Message);
+            }
+        }).RequireAuthorization(AdminAuthorization.SuperAdminPolicy).WithName("RetryTenantProductProvisioning");
 
         // PUT /admin/tenants/{tenantId}/products/{productCode}/credentials/{credentialCode} — guarda o reemplaza la API key (ADR-0092).
         group.MapPut("/admin/tenants/{tenantId:guid}/products/{productCode}/credentials/{credentialCode}", async (
@@ -223,8 +297,12 @@ public static class PlatformEndpoints
             .SelectMany(c => c.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             .Contains(scope, StringComparer.Ordinal);
 
-    private static IResult Problem(int status, string code, string detail) =>
-        Results.Problem(statusCode: status, detail: detail, extensions: new Dictionary<string, object?> { ["code"] = code });
+    private static IResult Problem(int status, string code, string detail, string? title = null) =>
+        Results.Problem(statusCode: status, detail: detail, title: title, extensions: new Dictionary<string, object?> { ["code"] = code });
+
+    /// <summary>Títulos cerrados en el contrato (platform.v1 1.1.0); los demás códigos usan el título por defecto del estado.</summary>
+    private static string? TituloDe(string code) =>
+        code == TenantProductException.ProvisioningPrerequisiteMissing ? "Falta un requisito para activar el producto" : null;
 
     internal sealed record SetTenantProductRequest(bool Enabled, string? Notes);
 

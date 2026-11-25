@@ -27,6 +27,24 @@ public sealed class TenantProductException : Exception
     /// <summary>Valor de la credencial inválido (400). El mensaje es fijo; nunca lleva el valor.</summary>
     public const string CredentialInvalid = "CREDENTIAL_INVALID";
 
+    /// <summary>
+    /// HU #14694 — se pidió encender un producto con aprovisionamiento y la compañía no cumple la precondición: no tiene
+    /// un AdminCompany activo (409, D-EMAIL). No se guarda nada ni se encola trabajo.
+    /// </summary>
+    public const string ProvisioningPrerequisiteMissing = "PROVISIONING_PREREQUISITE_MISSING";
+
+    /// <summary>HU #14694 — el producto no tiene aprovisionamiento (404).</summary>
+    public const string ProductWithoutProvisioning = "PRODUCT_WITHOUT_PROVISIONING";
+
+    /// <summary>HU #14694 — el producto está apagado para la compañía (409 en Reintentar).</summary>
+    public const string ProductNotEnabled = "PRODUCT_NOT_ENABLED";
+
+    /// <summary>HU #14694 — la empresa no existe (404 / gRPC NOT_FOUND).</summary>
+    public const string TenantNotFound = "TENANT_NOT_FOUND";
+
+    /// <summary>HU #14694 — el reporte de aprovisionamiento no cumple el contrato (gRPC INVALID_ARGUMENT).</summary>
+    public const string ProvisioningReportInvalid = "PROVISIONING_REPORT_INVALID";
+
     public TenantProductException()
     {
         Code = string.Empty;

@@ -1,4 +1,5 @@
 using Flit.Admin.Application.Auditing;
+using Flit.Api.Authorization;
 using Flit.Api.Grpc;
 using Flit.Api.Usuarios;
 using Flit.Modules.Security.Application.UserRoles.ProductRoles;
@@ -210,8 +211,100 @@ public sealed class UsuariosProductoGrpcServiceTests
         _actores.UltimoTenant.Should().BeNull("los conteos son globales");
     }
 
+    // ── HU #14694 — la autorización se generaliza a un mapa cliente → producto (svc-impuestos → impuestos) ────────────
+
+    [Fact]
+    public async Task SvcImpuestos_ConSuProducto_Entra_YLaAuditoriaLlevaSuCliente()
+    {
+        _repo.ListMembersAsync(Empresa, "impuestos", Arg.Any<CancellationToken>()).Returns([]);
+        _repo.ListPendingInvitationsAsync(Empresa, "impuestos", Arg.Any<CancellationToken>()).Returns([]);
+
+        var respuesta = await Servicio().ListarUsuariosProducto(new ListarUsuariosProductoRequest { Producto = "impuestos" }, Contexto("svc-impuestos"));
+
+        respuesta.Total.Should().Be(0);
+        _actores.Productos.Should().Equal("impuestos");
+
+        _actores.Permitir = false;
+        await Falla(() => Servicio().SuspenderEnProducto(new SuspenderEnProductoRequest { Producto = "impuestos", UsuarioId = Guid.NewGuid().ToString() }, Contexto("svc-impuestos")),
+            StatusCode.PermissionDenied);
+        _auditoria.Entradas.Should().ContainSingle().Which.UserAgent.Should().Be("svc-impuestos");
+    }
+
+    [Theory]
+    [InlineData("svc-impuestos", "diagnostico")]
+    [InlineData("svc-diagnostico", "impuestos")]
+    [InlineData("svc-impuestos", "tramites")]
+    [InlineData("svc-comparendos", "comparendos")]
+    public async Task ProductoQueNoEsElDelCliente_PermissionDenied_SinConsultarAlActor(string cliente, string producto)
+    {
+        await Falla(() => Servicio().ListarUsuariosProducto(new ListarUsuariosProductoRequest { Producto = producto }, Contexto(cliente)), StatusCode.PermissionDenied);
+
+        _actores.Llamadas.Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Conteos_SvcImpuestos_SoloDeSuProducto()
+    {
+        _repo.CountByTenantAsync("impuestos", Arg.Any<IReadOnlyCollection<string>>(), "admin_impuestos", Arg.Any<CancellationToken>()).Returns([new ProductTenantCount(Empresa, 2, 1)]);
+        var servicio = new UsuariosProductoConteoGrpcService(_actores, new ListProductUsersHandler(_repo));
+        _actores.SuperAdmin = true;
+
+        var respuesta = await servicio.ContarPorEmpresa(new ContarPorEmpresaRequest { Producto = "impuestos" }, new ContextoFalso("svc-impuestos", Guid.Empty, ActorId.ToString(), Ct));
+        respuesta.Conteos.Should().ContainSingle().Which.Usuarios.Should().Be(2);
+
+        await Falla(() => servicio.ContarPorEmpresa(new ContarPorEmpresaRequest { Producto = P }, new ContextoFalso("svc-impuestos", Guid.Empty, ActorId.ToString(), Ct)),
+            StatusCode.PermissionDenied);
+    }
+
+    [Theory]
+    [InlineData("svc-diagnostico", "diagnostico", "platform.usuarios.diagnostico", "platform.usuarios.diagnostico.conteos")]
+    [InlineData("svc-impuestos", "impuestos", "platform.usuarios.impuestos", "platform.usuarios.impuestos.conteos")]
+    public void MapaClienteProducto_DaElProductoYSusDosScopes(string cliente, string producto, string scope, string scopeConteos)
+    {
+        UsuariosProductoServicioAuthorization.ProductoDe(cliente).Should().Be(producto);
+        UsuariosProductoServicioAuthorization.ScopeDe(cliente, conteos: false).Should().Be(scope);
+        UsuariosProductoServicioAuthorization.ScopeDe(cliente, conteos: true).Should().Be(scopeConteos);
+    }
+
+    [Theory]
+    [InlineData("svc-ict")]
+    [InlineData("svc-consultas")]
+    [InlineData(null)]
+    public void ClienteSinUsuariosDeProducto_NoTieneProductoNiScope(string? cliente)
+    {
+        UsuariosProductoServicioAuthorization.ProductoDe(cliente).Should().BeNull();
+        UsuariosProductoServicioAuthorization.ScopeDe(cliente, conteos: false).Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData("svc-impuestos", "platform.usuarios.impuestos", false, true, "su scope por empresa")]
+    [InlineData("svc-impuestos", "platform.usuarios.impuestos.conteos", true, true, "su scope de conteos")]
+    [InlineData("svc-impuestos", "platform.usuarios.diagnostico", false, false, "el scope de otro producto")]
+    [InlineData("svc-impuestos", "platform.usuarios.impuestos.conteos", false, false, "conteos no abre las operaciones por empresa")]
+    [InlineData("svc-diagnostico", "platform.usuarios.diagnostico", false, true, "Diagnóstico sigue entrando")]
+    [InlineData("svc-diagnostico", "platform.usuarios.impuestos", false, false, "Diagnóstico con el scope de Impuestos")]
+    [InlineData("svc-ict", "platform.usuarios.impuestos", false, false, "un cliente fuera del mapa")]
+    public void LaPolicyGeneral_ExigeElScopeDelProductoDelCliente(string sub, string scope, bool conteos, bool entra, string motivo)
+    {
+        var identity = new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim("sub", sub), new System.Security.Claims.Claim("aud", "tramites"), new System.Security.Claims.Claim("scope", scope)], "Bearer");
+
+        UsuariosProductoServicioAuthorization.EsTokenDeProducto(identity, conteos).Should().Be(entra, motivo);
+    }
+
+    [Fact]
+    public void LaPolicyGeneral_RechazaOtraAudiencia()
+    {
+        var identity = new System.Security.Claims.ClaimsIdentity(
+            [new System.Security.Claims.Claim("sub", "svc-impuestos"), new System.Security.Claims.Claim("aud", "plataforma"), new System.Security.Claims.Claim("scope", "platform.usuarios.impuestos")], "Bearer");
+
+        UsuariosProductoServicioAuthorization.EsTokenDeProducto(identity, conteos: false).Should().BeFalse();
+    }
+
     private sealed class ActorFalso : IActorUsuariosProducto
     {
+        public List<string> Productos { get; } = [];
+
         public bool Permitir { get; set; } = true;
         public bool EmpresaHabilitada { get; set; } = true;
         public bool SuperAdmin { get; set; }
@@ -222,6 +315,7 @@ public sealed class UsuariosProductoGrpcServiceTests
         {
             Llamadas++;
             UltimoTenant = tenantId;
+            Productos.Add(producto);
             if (!Permitir)
                 return Task.FromResult<ProductActor?>(null);
             if (tenantId is null && !SuperAdmin)

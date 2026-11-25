@@ -15,15 +15,18 @@ public sealed class ListTenantProductsHandler
     private readonly IProductCatalog _catalog;
     private readonly ITenantProductRepository _repository;
     private readonly ITenantProductCredentialRepository _credentials;
+    private readonly ITenantProductProvisioningStore _provisioning;
 
     public ListTenantProductsHandler(
         IProductCatalog catalog,
         ITenantProductRepository repository,
-        ITenantProductCredentialRepository credentials)
+        ITenantProductCredentialRepository credentials,
+        ITenantProductProvisioningStore provisioning)
     {
         _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
         _repository = repository ?? throw new ArgumentNullException(nameof(repository));
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
+        _provisioning = provisioning ?? throw new ArgumentNullException(nameof(provisioning));
     }
 
     public async Task<IReadOnlyList<TenantProductView>> HandleAsync(Guid tenantId, CancellationToken cancellationToken = default)
@@ -39,6 +42,11 @@ public sealed class ListTenantProductsHandler
                 cancellationToken)
             .ConfigureAwait(false);
 
+        // HU #14694 (plan §1.2 R1): último estado reportado, solo para los productos con aprovisionamiento.
+        var provisioning = (await _provisioning.ListByTenantAsync(tenantId, cancellationToken).ConfigureAwait(false))
+            .Where(p => ProductosConAprovisionamiento.Tiene(p.ProductCode))
+            .ToDictionary(p => p.ProductCode, StringComparer.Ordinal);
+
         return products
             .Where(p => p.Code != ProductCodes.Plataforma)
             .Select(p =>
@@ -46,9 +54,10 @@ public sealed class ListTenantProductsHandler
                 bool? impuesto = string.Equals(p.Code, TenantProductCredentialCodes.Diagnostico, StringComparison.Ordinal)
                     ? impuestoConfigurada
                     : null;
+                var estado = provisioning.GetValueOrDefault(p.Code);
                 return rows.TryGetValue(p.Code, out var row)
-                    ? new TenantProductView(p.Code, p.Name, row.Enabled, row.Notes, row.UpdatedAt, row.UpdatedBy, impuesto)
-                    : new TenantProductView(p.Code, p.Name, false, null, null, null, impuesto);
+                    ? new TenantProductView(p.Code, p.Name, row.Enabled, row.Notes, row.UpdatedAt, row.UpdatedBy, impuesto, estado)
+                    : new TenantProductView(p.Code, p.Name, false, null, null, null, impuesto, estado);
             })
             .ToList();
     }
@@ -62,4 +71,5 @@ public sealed record TenantProductView(
     string? Notes,
     DateTimeOffset? UpdatedAt,
     Guid? UpdatedBy,
-    bool? ImpuestoApiKeyConfigurada = null);
+    bool? ImpuestoApiKeyConfigurada = null,
+    TenantProductProvisioning? Provisioning = null);

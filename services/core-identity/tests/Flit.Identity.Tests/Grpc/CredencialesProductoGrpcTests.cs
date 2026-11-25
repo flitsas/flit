@@ -47,7 +47,10 @@ public sealed class CredencialesProductoGrpcTests
     private static CancellationToken Ct => TestContext.Current.CancellationToken;
 
     private CredencialesProductoGrpcService Servicio() =>
-        new(new GetTenantProductCredentialHandler(_acceso, _credenciales, _protector), _logger);
+        new(new GetTenantProductCredentialHandler(_acceso, _credenciales, _protector), new GetTenantProductCredentialForCopyHandler(_credenciales, _protector), _logger);
+
+    private static Task<ObtenerCredencialImpuestoParaCopiaResponse> Copiar(CredencialesProductoGrpcService servicio, string cliente = "svc-impuestos", Guid? empresa = null) =>
+        servicio.ObtenerCredencialImpuestoParaCopia(new ObtenerCredencialImpuestoParaCopiaRequest(), new Contexto(cliente, empresa ?? Empresa, Ct));
 
     private static Task<ObtenerCredencialImpuestoResponse> Llamar(CredencialesProductoGrpcService servicio, string cliente = "svc-consultas", Guid? empresa = null) =>
         servicio.ObtenerCredencialImpuesto(new ObtenerCredencialImpuestoRequest(), new Contexto(cliente, empresa ?? Empresa, Ct));
@@ -121,6 +124,7 @@ public sealed class CredencialesProductoGrpcTests
     [Theory]
     [InlineData("svc-diagnostico")]
     [InlineData("svc-tramites")]
+    [InlineData("svc-impuestos")] // HU #14694: svc-impuestos solo tiene el rpc de copia
     public async Task OtroCliente_PermissionDenied_ClienteNoPermitido(string cliente)
     {
         var act = () => Llamar(Servicio(), cliente);
@@ -194,6 +198,85 @@ public sealed class CredencialesProductoGrpcTests
         _credenciales.Fila!.ToString().Should().NotContain("cifrado-opaco");
     }
 
+    // ── HU #14694 — ObtenerCredencialImpuestoParaCopia (D-CRED-DIAG, DA-3 residual) ───────────────────────────────
+
+    [Fact]
+    public async Task Copia_SvcImpuestos_RecibeLaLlaveAunqueDiagnosticoEsteApagado_YSeAudita()
+    {
+        _acceso.Encendidas = [];
+
+        var r = await Copiar(Servicio());
+
+        r.Existe.Should().BeTrue();
+        r.ApiKey.Should().Be(Centinela);
+        r.Version.Should().Be(7);
+        _credenciales.LecturasParaCopia.Should().Equal((Empresa, "diagnostico", "impuesto_api_key", "svc-impuestos", true));
+        _logger.Entradas.Should().ContainSingle(e => e.Texto.Contains("impuesto.credencial.copia.entregada", StringComparison.Ordinal));
+        _logger.Entradas.Should().OnlyContain(e => !e.Texto.Contains(Centinela, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task Copia_SinFila_ExisteFalse_Version0_SinDescifrar_YTambienSeAudita()
+    {
+        _credenciales.Fila = null;
+
+        var r = await Copiar(Servicio());
+
+        r.Existe.Should().BeFalse();
+        r.ApiKey.Should().BeEmpty();
+        r.Version.Should().Be(0);
+        _protector.Descifrados.Should().BeEmpty();
+        _credenciales.LecturasParaCopia.Should().Equal((Empresa, "diagnostico", "impuesto_api_key", "svc-impuestos", false));
+    }
+
+    [Theory]
+    [InlineData("svc-consultas")]
+    [InlineData("svc-diagnostico")]
+    public async Task Copia_OtroCliente_PermissionDenied_ClienteNoPermitido_SinLeer(string cliente)
+    {
+        var act = () => Copiar(Servicio(), cliente);
+
+        var ex = (await act.Should().ThrowAsync<RpcException>()).Which;
+        ex.StatusCode.Should().Be(StatusCode.PermissionDenied);
+        PlatformRpcErrors.Reason(ex).Should().Be("CLIENTE_NO_PERMITIDO");
+        _credenciales.Consultas.Should().BeEmpty();
+        _credenciales.LecturasParaCopia.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Copia_SinEmpresa_InvalidArgument()
+    {
+        var act = () => Copiar(Servicio(), empresa: Guid.Empty);
+
+        (await act.Should().ThrowAsync<RpcException>()).Which.StatusCode.Should().Be(StatusCode.InvalidArgument);
+        _credenciales.LecturasParaCopia.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Copia_ErrorInesperado_InternalGenerico_SinLaLlave()
+    {
+        _protector.Falla = new CryptographicException($"detalle interno {Centinela}");
+
+        var act = () => Copiar(Servicio());
+
+        var ex = (await act.Should().ThrowAsync<RpcException>()).Which;
+        ex.StatusCode.Should().Be(StatusCode.Internal);
+        ex.Status.Detail.Should().NotContain(Centinela);
+        _logger.Entradas.Should().OnlyContain(e => !e.Texto.Contains(Centinela, StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void CadaRpc_ExigeSuScope_ElDeCopiaNoAbreLaEntregaAConsultas()
+    {
+        const string Servicio = "/flit.identidad.v1.CredencialesProductoService/";
+
+        ServiceTokenPorMetodoInterceptor.Requisito(Servicio + "ObtenerCredencialImpuestoParaCopia", CredencialesProductoGrpcService.Scope, true)
+            .Should().Be(("platform.identidad.credenciales.impuesto.copia", true));
+        ServiceTokenPorMetodoInterceptor.Requisito(Servicio + "ObtenerCredencialImpuesto", CredencialesProductoGrpcService.Scope, true)
+            .Should().Be((CredencialesProductoGrpcService.Scope, true));
+        CredencialesProductoGrpcService.ScopeCopia.Should().Be("platform.identidad.credenciales.impuesto.copia");
+    }
+
     private static ClaimsPrincipal Usuario(string sub, string aud, string scope) =>
         new(new ClaimsIdentity([new Claim("sub", sub), new Claim("aud", aud), new Claim("scope", scope)], "Bearer"));
 
@@ -232,6 +315,14 @@ public sealed class CredencialesProductoGrpcTests
 
         public Task<bool> DeleteAsync(Guid tenantId, string productCode, string credentialCode, Guid? changedBy, CancellationToken cancellationToken = default) =>
             throw new NotSupportedException();
+
+        public List<(Guid, string, string, string, bool)> LecturasParaCopia { get; } = [];
+
+        public Task RegistrarLecturaParaCopiaAsync(Guid tenantId, string productCode, string credentialCode, string lector, bool existe, CancellationToken cancellationToken = default)
+        {
+            LecturasParaCopia.Add((tenantId, productCode, credentialCode, lector, existe));
+            return Task.CompletedTask;
+        }
     }
 
     private sealed class Protector : ITenantProductSecretProtector

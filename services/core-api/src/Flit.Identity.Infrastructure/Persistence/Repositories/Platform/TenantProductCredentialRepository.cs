@@ -20,6 +20,10 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
     private const string ValorConfigurada = "configurada";
     private const string ValorReemplazada = "reemplazada";
     private const string ValorNoConfigurada = "no_configurada";
+    private const string ValorLeidaParaCopia = "leida_para_copia";
+
+    /// <summary>HU #14694 — operación de la lectura para copia (no está en <c>AuditVocabulary</c>: es propia de este rastro).</summary>
+    internal const string OperacionLecturaParaCopia = "read_for_copy";
 
     private readonly IIdentityDb _context;
     private readonly IAuditContextAccessor _auditContext;
@@ -140,6 +144,44 @@ internal sealed class TenantProductCredentialRepository : ITenantProductCredenti
         _context.Set<TenantProductCredentialEntity>().Remove(row);
         await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
         return true;
+    }
+
+    /// <summary>
+    /// HU #14694 (D-CRED-DIAG) — una fila por lectura para copia, en su propio guardado: operación
+    /// <see cref="OperacionLecturaParaCopia"/>, valor legible (<c>leida_para_copia</c> o <c>no_configurada</c>) y el cliente
+    /// de servicio en <c>user_agent</c>. Nunca la llave ni una huella.
+    /// </summary>
+    public async Task RegistrarLecturaParaCopiaAsync(
+        Guid tenantId,
+        string productCode,
+        string credentialCode,
+        string lector,
+        bool existe,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(productCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(credentialCode);
+        ArgumentException.ThrowIfNullOrWhiteSpace(lector);
+
+        _context.TenantConfigAuditLogs.Add(new TenantConfigAuditLog
+        {
+            Id = Guid.NewGuid(),
+            TenantId = tenantId,
+            EntityName = AuditEntityName,
+            FieldName = credentialCode,
+            OldValue = null,
+            NewValue = JsonSerializer.Serialize(existe ? ValorLeidaParaCopia : ValorNoConfigurada),
+            ChangedAt = _clock.GetUtcNow(),
+            ChangedBy = null,
+            ClientIp = _auditContext.ClientIp,
+            Operation = OperacionLecturaParaCopia,
+            Result = AuditVocabulary.Results.Success,
+            Module = AuditVocabulary.Modules.Companies,
+            TargetEntityType = AuditTargetType,
+            TargetEntityId = null,
+            UserAgent = lector,
+        });
+        await _context.SaveChangesAsync(cancellationToken).ConfigureAwait(false);
     }
 
     private void AddAudit(
