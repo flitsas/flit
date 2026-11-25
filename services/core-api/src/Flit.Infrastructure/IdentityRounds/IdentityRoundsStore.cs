@@ -60,9 +60,9 @@ internal sealed class IdentityRoundsStore(FlitDbContext db) : IIdentityRoundsSto
         const string sql = """
             SELECT COUNT(*)::int + COALESCE(SUM(resend_count), 0)::int
             FROM tramites.procedure_instance_biometric_validations
-            WHERE tenant_id = 
-              AND upper(btrim(document_type)) = upper(btrim())
-              AND upper(btrim(document_number)) = upper(btrim())
+            WHERE tenant_id = @tenant
+              AND upper(btrim(document_type)) = upper(btrim(@tipo))
+              AND upper(btrim(document_number)) = upper(btrim(@documento))
             """;
         var total = await WithCommandAsync(sql, cmd =>
         {
