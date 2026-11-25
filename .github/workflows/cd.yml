@@ -799,6 +799,9 @@ jobs:
             services/core-identity/Directory.Packages.props
             services/core-identity/src/Flit.Platform.Grpc.Contracts
             services/core-identity/src/Flit.Identidad.Grpc.Contracts
+            services/core-consultas/Directory.Build.props
+            services/core-consultas/Directory.Packages.props
+            services/core-consultas/src/Flit.Consultas.Grpc.Contracts
             contracts/proto
 
       - name: Extract metadata — core-impuestos

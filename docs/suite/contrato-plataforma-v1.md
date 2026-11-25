@@ -32,6 +32,7 @@
 | `tramites` | Trámites | `tramites.flitsas.online` | `qa.tramites.flitsas.online` | `dev.tramites.flitsas.online` |
 | `comparendos` | Comparendos | `comparendos.flitsas.online` | `qa.comparendos.flitsas.online` | `dev.comparendos.flitsas.online` |
 | `diagnostico` | Diagnóstico | `diagnostico.flitsas.online` | `qa.diagnostico.flitsas.online` | `dev.diagnostico.flitsas.online` |
+| `impuestos` | Impuestos (HU #14694, ADR-0093) | `impuestos.flitsas.online` | `qa.impuestos.flitsas.online` | `dev.impuestos.flitsas.online` |
 
 - El código es el mismo en carpeta (`core-<código>`, `frontend-<código>`), schema, `aud` del token, roles y aplicación de Argo CD. Excepción histórica: Trámites vive en `services/core-api` y `frontend/`.
 - La API para integradores sigue en `api.<ambiente>.flitsas.online` (`api.flitsas.online` en PDN).
@@ -306,6 +307,11 @@ Puertos nuevos, siguiendo el esquema actual (DEV y local `40xx`, QA `50xx`, PDN 
 | Comparendos (`frontend-comparendos`) | 4023 | 5023 | 6023 |
 | Diagnóstico (`frontend-diagnostico`) | 4024 | 5024 | 6024 |
 | `core-identity` | 4025 | 5025 | 6025 |
+| Impuestos (`frontend-impuestos`, HU #14694) | 4034 | 5034 | 6034 |
+| `core-impuestos` (interno, sin publicar; gRPC 8089) | 4033 | 5033 | 6033 |
+
+Los de Impuestos quedan fuera del bloque `x022`–`x025` porque estaba lleno; están **propuestos** (gate G-4 del plan de
+Impuestos) hasta que el líder los confirme en `docs/despliegue-y-puertos.md` §2.d.
 
 El líder los registra en `docs/despliegue-y-puertos.md` en L-03.
 

@@ -6,7 +6,8 @@
     { "name": "flit.tramites", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
     { "name": "flit.consultas", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
     { "name": "flit.notificaciones", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
-    { "name": "flit.diagnostico", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} }
+    { "name": "flit.diagnostico", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} },
+    { "name": "flit.impuestos", "vhost": "flit", "type": "topic", "durable": true, "auto_delete": false, "internal": false, "arguments": {} }
   ],
   "queues": [
     { "name": "consultas.diagnostico", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
@@ -14,7 +15,11 @@
     { "name": "consultas.diagnostico-impuesto", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
     { "name": "consultas.diagnostico-impuesto-express", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
     { "name": "diagnostico.consultas-resultados", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
-    { "name": "diagnostico.derivaciones", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} }
+    { "name": "diagnostico.derivaciones", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "impuestos.plataforma", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "impuestos.credenciales", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "impuestos.liquidaciones", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} },
+    { "name": "impuestos.recibos", "vhost": "flit", "durable": true, "auto_delete": false, "arguments": {} }
   ],
   "bindings": [
     { "source": "flit.consultas", "vhost": "flit", "destination": "consultas.diagnostico", "destination_type": "queue", "routing_key": "consultas.diagnostico.*", "arguments": {} },
@@ -22,7 +27,13 @@
     { "source": "flit.consultas", "vhost": "flit", "destination": "consultas.diagnostico-impuesto", "destination_type": "queue", "routing_key": "consultas.diagnostico-impuesto.*", "arguments": {} },
     { "source": "flit.consultas", "vhost": "flit", "destination": "consultas.diagnostico-impuesto-express", "destination_type": "queue", "routing_key": "consultas.diagnostico-impuesto-express.*", "arguments": {} },
     { "source": "flit.consultas", "vhost": "flit", "destination": "diagnostico.consultas-resultados", "destination_type": "queue", "routing_key": "consultas.resultado.diagnostico", "arguments": {} },
-    { "source": "flit.diagnostico", "vhost": "flit", "destination": "diagnostico.derivaciones", "destination_type": "queue", "routing_key": "diagnostico.derivacion.solicitada", "arguments": {} }
+    { "source": "flit.diagnostico", "vhost": "flit", "destination": "diagnostico.derivaciones", "destination_type": "queue", "routing_key": "diagnostico.derivacion.solicitada", "arguments": {} },
+    { "source": "flit.impuestos", "vhost": "flit", "destination": "impuestos.plataforma", "destination_type": "queue", "routing_key": "impuestos.producto.cambiado", "arguments": {} },
+    { "source": "flit.impuestos", "vhost": "flit", "destination": "impuestos.plataforma", "destination_type": "queue", "routing_key": "impuestos.aprovisionamiento.reintentar", "arguments": {} },
+    { "source": "flit.impuestos", "vhost": "flit", "destination": "impuestos.credenciales", "destination_type": "queue", "routing_key": "impuestos.credencial.propagar", "arguments": {} },
+    { "source": "flit.impuestos", "vhost": "flit", "destination": "impuestos.credenciales", "destination_type": "queue", "routing_key": "impuestos.secreto.refrescar", "arguments": {} },
+    { "source": "flit.impuestos", "vhost": "flit", "destination": "impuestos.liquidaciones", "destination_type": "queue", "routing_key": "impuestos.liquidacion.solicitada", "arguments": {} },
+    { "source": "flit.impuestos", "vhost": "flit", "destination": "impuestos.recibos", "destination_type": "queue", "routing_key": "impuestos.recibos.descargar", "arguments": {} }
   ],
   "users": [],
   "permissions": [],
