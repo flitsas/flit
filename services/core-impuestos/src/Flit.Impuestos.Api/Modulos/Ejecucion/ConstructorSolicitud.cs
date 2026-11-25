@@ -13,6 +13,12 @@ namespace Flit.Impuestos.Api.Modulos.Ejecucion;
 public sealed record DatosItem(
     string? DocumentoTipo, string? DocumentoNumero, string? NombrePropietario, string? DepartamentoCodigo, string? DepartamentoNombre, string? Ciudad)
 {
+    /// <summary>Máximo de <c>secretaria_nombre</c> (1.2.0).</summary>
+    public const int LargoMaximoSecretariaNombre = 120;
+
+    /// <summary>Nombre de la secretaría (el organismo del RUNT, el mismo que va como <c>secretaryName</c>); null si el RUNT no lo trae.</summary>
+    public string? SecretariaNombre { get; init; }
+
     public override string ToString() => $"DatosItem {{ Departamento = {DepartamentoCodigo}, [REDACTADO: PII] }}";
 }
 
@@ -77,8 +83,12 @@ public static class ConstructorSolicitud
         var tipo = runt.TipoDocumento;
         var numero = tipo is null ? null : NumeroDocumento(tipo, runt.NumeroDocumento);
         var fuente = secretaria is null ? null : fuentes.FirstOrDefault(f => f.DepartamentoCodigo == secretaria.DepartamentoCodigo);
+        var organismo = Texto(runt.OrganismoNombre);
         var datos = new DatosItem(tipo, numero ?? Texto(runt.NumeroDocumento), Texto(runt.NombrePropietario),
-            secretaria?.DepartamentoCodigo, fuente?.Nombre, secretaria?.Ciudad);
+            secretaria?.DepartamentoCodigo, fuente?.Nombre, secretaria?.Ciudad)
+        {
+            SecretariaNombre = organismo is { Length: > DatosItem.LargoMaximoSecretariaNombre } ? organismo[..DatosItem.LargoMaximoSecretariaNombre] : organismo,
+        };
 
         if (tipo is null)
             return new Construccion.Incompleta(CampoDocumentoTipo, datos);

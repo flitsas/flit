@@ -112,13 +112,13 @@ public sealed partial class CrearLiquidacionIndividual(
     }
 
     /// <summary>
-    /// Nombre de quien crea la individual o la relanza (columna <c>creada_por_nombre</c> de la 1.2.0). Es el único punto que lo escribe
-    /// para estas dos acciones: se conecta al integrar M07b; mientras tanto no guarda nada y la respuesta lleva <c>creadaPor.nombre</c> vacío.
+    /// Nombre de quien crea la individual o la relanza, tal como viene en su token (columna <c>creada_por_nombre</c> de la 1.2.0). Es
+    /// el único punto que lo escribe para estas dos acciones.
     /// </summary>
     internal static void RegistrarNombreCreador(Liquidacion lote, string? nombre)
     {
         ArgumentNullException.ThrowIfNull(lote);
-        _ = nombre;
+        lote.CreadaPorNombre = CerrarLiquidacion.NombreDelActor(nombre);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Liquidación individual {Liquidacion} creada para la empresa {Empresa}.")]

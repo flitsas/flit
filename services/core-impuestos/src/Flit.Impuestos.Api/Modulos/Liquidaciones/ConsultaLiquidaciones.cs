@@ -18,8 +18,8 @@ internal sealed record FiltrosLiquidaciones(TipoLiquidacion? Tipo, EstadoLote? E
 /// (<see cref="AlmacenCredenciales.ContextoDe"/>), así que el filtro de empresa vale igual para el Super Admin que elige otra con
 /// <c>?empresa</c> (sin <c>IgnoreQueryFilters</c>). Una liquidación de otra compañía no existe: 404 <c>LIQUIDACION_NO_ENCONTRADA</c>;
 /// un ítem que no es del lote, 404 <c>ITEM_NO_ENCONTRADO</c>. La PII del propietario se descifra para mostrarla completa (DA-7=b).
-/// <c>creadaPor.nombre</c> y <c>cerradaPor.nombre</c> van vacíos hasta que se conecten las columnas de nombre de la 1.2.0, y
-/// <c>motivoCierre</c> va null hasta la columna <c>motivo_cierre</c> (<see cref="MotivoCierreDe"/>, el único punto que la lee).
+/// <c>creadaPor.nombre</c> y <c>cerradaPor.nombre</c> salen de <c>creada_por_nombre</c> y <c>cerrada_por_nombre</c> (1.2.0; vacíos en
+/// filas anteriores) y <c>motivoCierre</c> de <c>motivo_cierre</c> (<see cref="MotivoCierreDe"/>, el único punto que la lee).
 /// <c>relanzadoDesdeLiquidacionId</c> sale del join con el ítem original.
 /// </summary>
 /// <example>
@@ -110,7 +110,7 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
         var b = Item(item, origenes);
         return new ItemDetalleDto(b.Id, b.LiquidacionId, b.Fila, b.Placa, b.Estado, b.ErrorCodigo, b.ErrorClase, b.ErrorMensaje, b.CampoFaltante,
             b.Departamento, b.Propietario, b.TotalAPagar, b.ResultadoStatus, b.Parcial, b.PosibleDuplicado, b.ResultadoTardio, b.RelanzadoDesde,
-            b.RelanzadoDesdeItemId, b.RelanzadoDesdeLiquidacionId, b.Secretaria, empresaRef, new ReferenciaDto(lote.CreadaPor, string.Empty), lote.CreadaEn,
+            b.RelanzadoDesdeItemId, b.RelanzadoDesdeLiquidacionId, b.Secretaria, empresaRef, CreadorDe(lote), lote.CreadaEn,
             item.ConsultaStatus, Resultado(item.ResultadoCifrado),
             [.. periodos.Select(p => new PeriodoDto(p.Periodo, p.Avaluo, p.Impuesto, p.Sancion, p.Intereses, p.Descuentos, p.PagosPrevios, p.TotalAPagar,
                 OtrosCargos(p.OtrosCargos), p.Vencimiento, p.ReferenciaPago, p.NoLiquidable,
@@ -130,18 +130,18 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
         return new ItemDto(i.Id, i.LiquidacionId, i.Fila, i.Placa, CodigosDeEnum.Codigo(i.Estado), i.ErrorCodigo,
             i.ErrorClase is { } c ? CodigosDeEnum.Codigo(c) : null, i.ErrorMensaje, i.CampoFaltante, departamento, propietario, i.TotalAPagar,
             i.ResultadoStatus, i.Parcial, i.PosibleDuplicado, i.ResultadoTardio, i.RelanzadoDesde, i.RelanzadoDesde, loteOrigen,
-            i.SecretariaCiudad is null ? null : new SecretariaDto(null, i.SecretariaCiudad));
+            i.SecretariaNombre is null && i.SecretariaCiudad is null ? null : new SecretariaDto(i.SecretariaNombre, i.SecretariaCiudad));
     }
 
-    /// <summary>
-    /// Motivo del cierre manual de la cabecera. Es el único punto de la respuesta que lo lee: se conecta al integrar M07b (columna
-    /// <c>motivo_cierre</c> de la 1.2.0); mientras tanto, null.
-    /// </summary>
+    /// <summary>Motivo del cierre manual de la cabecera (columna <c>motivo_cierre</c> de la 1.2.0); null sin motivo. Es el único punto que lo lee.</summary>
     internal static string? MotivoCierreDe(Liquidacion lote)
     {
         ArgumentNullException.ThrowIfNull(lote);
-        return null;
+        return lote.MotivoCierre;
     }
+
+    /// <summary>Quien creó la cabecera: su id y el nombre de <c>creada_por_nombre</c> (vacío en filas anteriores a la 1.2.0).</summary>
+    internal static ReferenciaDto CreadorDe(Liquidacion lote) => new(lote.CreadaPor, lote.CreadaPorNombre ?? string.Empty);
 
     /// <summary>Lote de cada ítem original de los relanzados de <paramref name="items"/> (join sobre <c>relanzado_desde</c>).</summary>
     private static async Task<Dictionary<Guid, Guid>> LotesDeOrigenAsync(ImpuestosDb db, IReadOnlyList<LiquidacionItem> items, CancellationToken ct)
@@ -198,7 +198,7 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
     {
         var esIndividual = l.Tipo == TipoLiquidacion.Individual && individual.Id != Guid.Empty;
         return new ResumenLiquidacionDto(l.Id, CodigosDeEnum.Codigo(l.Tipo), CodigosDeEnum.Codigo(l.Estado), l.TotalItems, Contadores(l), l.CreadaEn,
-            new ReferenciaDto(l.CreadaPor, string.Empty), empresaRef, l.NombreArchivo,
+            CreadorDe(l), empresaRef, l.NombreArchivo,
             esIndividual ? individual.Placa : null, esIndividual ? individual.Id : null, esIndividual ? CodigosDeEnum.Codigo(individual.Estado) : null);
     }
 
@@ -207,7 +207,7 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
         var r = Resumen(l, empresaRef, individual);
         var copia = CopiaConfiguracion.DesdeJson(l.ConfigCopia);
         return new LiquidacionDto(r.Id, r.Tipo, r.Estado, r.TotalItems, r.Contadores, r.CreadaEn, r.CreadaPor, r.Empresa, r.NombreArchivo, r.Placa, r.ItemId,
-            r.EstadoItem, l.TerminadaEn, l.CerradaPor is { } p ? new ReferenciaDto(p, string.Empty) : null, l.CerradaEn, MotivoCierreDe(l),
+            r.EstadoItem, l.TerminadaEn, l.CerradaPor is { } p ? new ReferenciaDto(p, l.CerradaPorNombre ?? string.Empty) : null, l.CerradaEn, MotivoCierreDe(l),
             new ConfigCopiaDto(copia.MaxRegistros, copia.DepartamentosHabilitados, copia.Concurrencia));
     }
 

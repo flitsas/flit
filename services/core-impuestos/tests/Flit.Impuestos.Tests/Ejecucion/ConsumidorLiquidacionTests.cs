@@ -81,6 +81,7 @@ public sealed class ConsumidorLiquidacionTests
         item.ProximoPollEn.Should().Be(item.EnviadoEn!.Value + TimeSpan.FromMinutes(2), "con webhook, primer GET de respaldo a los 2 min");
         item.DepartamentoCodigo.Should().Be("05");
         item.SecretariaCiudad.Should().Be("MEDELLIN");
+        item.SecretariaNombre.Should().Be(EntornoEjecucion.OrganismoMedellin, "el organismo del RUNT, el mismo que va como secretaryName");
         item.DocumentoTipo.Should().Be("CC");
         using (var scope = api.App.Services.CreateScope())
         {
@@ -95,7 +96,7 @@ public sealed class ConsumidorLiquidacionTests
         using var items2 = JsonDocument.Parse(await cliente.GetStringAsync($"{Flit.Impuestos.Api.Program.Prefijo}/liquidaciones/{lote}/items", ct));
         var dto = items2.RootElement.GetProperty("items")[0];
         dto.GetProperty("secretaria").GetProperty("ciudad").GetString().Should().Be("MEDELLIN", "delta 5: secretaría según el RUNT");
-        dto.GetProperty("secretaria").GetProperty("nombre").ValueKind.Should().Be(JsonValueKind.Null, "el modelo no tiene columna para el nombre");
+        dto.GetProperty("secretaria").GetProperty("nombre").GetString().Should().Be(EntornoEjecucion.OrganismoMedellin, "secretaria_nombre (1.2.0)");
         dto.GetProperty("propietario").GetProperty("documentoNumero").GetString().Should().Be("71706228");
     }
 
