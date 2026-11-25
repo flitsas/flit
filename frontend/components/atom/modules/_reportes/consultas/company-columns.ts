@@ -248,7 +248,7 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     // `null`/ausente = el backend no lo calculó (consulta anterior): «—», no un «No» que afirmaría
     // que falta alguien por firmar.
     value: (r) => (typeof r.firmadoPorTodas === "boolean" ? siNo(r.firmadoPorTodas) : "—"),
-    raw: (r) => (typeof r.firmadoPorTodas === "boolean" ? siNo(r.firmadoPorTodas) : null),
+    raw: (r) => (typeof r.firmadoPorTodas === "boolean" ? siNo(r.firmadoPorTodas) : "—"),
     width: 16,
   },
   {
@@ -257,7 +257,7 @@ export const COMPANY_QUERY_COLUMNS: DataColumn<CompanyQueryRow>[] = [
     group: GRUPO_PERSONAS,
     // Vacío = ya firmaron todos; «—» = no calculado. Se muestra tal cual: el texto lo arma el backend.
     value: (r) => (r.faltaFirmar == null ? "—" : r.faltaFirmar),
-    raw: (r) => (r.faltaFirmar == null || r.faltaFirmar === "" ? null : r.faltaFirmar),
+    raw: (r) => (r.faltaFirmar == null ? "—" : r.faltaFirmar === "" ? null : r.faltaFirmar),
     width: 40,
     wrap: true,
   },
