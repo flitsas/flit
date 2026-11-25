@@ -7,7 +7,7 @@ import { InlineAlert } from "@flit/ui/InlineAlert";
 import { AYUDA_CLS, BOTON_REINTENTAR_CLS, CAMPO_CLS, CAMPO_INVALIDO_CLS, ERROR_CLS, ETIQUETA_CLS } from "@/components/comun/estilos";
 import { ApiError } from "@/lib/api";
 import { hrefConEmpresa } from "@/lib/empresaSeleccionada";
-import { mensajeErrorFijo } from "@/lib/errores";
+import { ERRORES_EMPRESA, esErrorDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
 import { crearIndividual } from "@/lib/liquidaciones/api";
 import { ERRORES_LIQUIDACIONES, PANTALLA } from "@/lib/liquidaciones/estados";
 import { normalizarPlaca, placaValida } from "@/lib/liquidaciones/formato";
@@ -18,6 +18,11 @@ export interface FormularioPlacaProps {
   empresa: string | null;
   /** Literal del contrato por el que no se puede liquidar (suspendido / no listo); null = se puede. */
   bloqueo: string | null;
+  /**
+   * Super Admin: liquida para la compañía de ?empresa (contrato 1.1.0, delta 2). Sin compañía elegida, el formulario
+   * queda deshabilitado con el literal EMPRESA_REQUERIDA («Elige una compañía.») y no llama a la API.
+   */
+  esSuperAdmin?: boolean;
   /** id de un texto ya visible con el motivo del bloqueo; sin él, el formulario pinta el suyo. */
   motivoId?: string;
   placaInicial?: string;
@@ -30,9 +35,21 @@ export interface FormularioPlacaProps {
  * Liquidación por placa (F2a-CF1, D-ENTRADA): el usuario da solo la placa; el resto sale del RUNT. Se normaliza como el
  * servidor y se valida antes de enviar (literal PLACA_INVALIDA junto al campo, con aria-invalid). Con el 201 navega al
  * detalle de la placa (`items[0]`). 409 APROVISIONAMIENTO_NO_LISTO / PRODUCTO_SUSPENDIDO en aviso warning con el literal
- * del contrato; otro error, «No se pudo crear la liquidación» + Reintentar. Nunca se pierde lo digitado.
+ * del contrato; otro error, «No se pudo crear la liquidación» + Reintentar. Nunca se pierde lo digitado. Los errores de
+ * compañía (400 EMPRESA_REQUERIDA, 404 EMPRESA_NO_ENCONTRADA, 403 EMPRESA_SOLO_SUPER_ADMIN) van en el mismo aviso con su
+ * literal: nunca a la 403.
  */
-export function FormularioPlaca({ empresa, bloqueo, motivoId, placaInicial = "", autoFocus = false, onCancelar }: FormularioPlacaProps) {
+export function FormularioPlaca({
+  empresa,
+  bloqueo: bloqueoSesion,
+  esSuperAdmin = false,
+  motivoId,
+  placaInicial = "",
+  autoFocus = false,
+  onCancelar,
+}: FormularioPlacaProps) {
+  // Para el Super Admin sin compañía manda ese motivo: su sesión no dice nada de la compañía sobre la que liquidaría.
+  const bloqueo = esSuperAdmin && !empresa ? ERRORES_EMPRESA.EMPRESA_REQUERIDA : bloqueoSesion;
   const router = useRouter();
   const base = useId();
   const idCampo = `${base}-placa`;
@@ -60,7 +77,7 @@ export function FormularioPlaca({ empresa, bloqueo, motivoId, placaInicial = "",
     } catch (e) {
       setEnviando(false);
       if (e instanceof ApiError && e.code === "PLACA_INVALIDA") setError({ tipo: "campo", texto: ERRORES_LIQUIDACIONES.PLACA_INVALIDA });
-      else if (e instanceof ApiError && (e.code === "APROVISIONAMIENTO_NO_LISTO" || e.code === "PRODUCTO_SUSPENDIDO" || e.status === 403))
+      else if (e instanceof ApiError && (e.code === "APROVISIONAMIENTO_NO_LISTO" || e.code === "PRODUCTO_SUSPENDIDO" || e.status === 403 || esErrorDeEmpresa(e)))
         setError({ tipo: "aviso", texto: mensajeErrorFijo(e, "", ERRORES_LIQUIDACIONES) });
       else setError({ tipo: "otro" });
     }

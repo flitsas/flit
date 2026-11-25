@@ -1,4 +1,4 @@
-// Tipos de liquidaciones tal como los define contracts/openapi/impuestos.v1.yaml 1.0.0 (componentes ResumenLiquidacion,
+// Tipos de liquidaciones tal como los define contracts/openapi/impuestos.v1.yaml 1.1.0 (componentes ResumenLiquidacion,
 // Liquidacion, LiquidacionConItems, Item, ItemDetalle, Periodo, Recibo y AnalisisCarga). Un monto `null` es «sin dato»
 // y nunca suma como 0. Ninguna respuesta trae dirección, correo ni teléfono del propietario.
 
@@ -56,12 +56,18 @@ export interface ResumenLiquidacion {
   nombreArchivo?: string | null;
   /** Solo en INDIVIDUAL. */
   placa?: string | null;
+  /** Solo en INDIVIDUAL (1.1.0, delta 4): id de su único ítem, para enlazar directo al detalle de la placa. */
+  itemId?: string | null;
+  /** Solo en INDIVIDUAL (1.1.0, delta 4): estado de su único ítem; null en MASIVA. */
+  estadoItem?: EstadoItem | null;
 }
 
 export interface Liquidacion extends ResumenLiquidacion {
   terminadaEn?: string | null;
   cerradaPor?: Referencia | null;
   cerradaEn?: string | null;
+  /** Motivo del cierre manual (1.1.0, delta 5); null si no hubo cierre o no se dio. Texto plano. */
+  motivoCierre?: string | null;
   configCopia: { maxRegistrosLote: number; departamentosHabilitados: string[] | null; concurrencia: number };
 }
 
@@ -75,6 +81,12 @@ export interface Departamento {
   codigo: string;
   nombre: string;
   activa?: boolean;
+}
+
+/** Secretaría de tránsito de la placa según el RUNT (1.1.0, delta 5); null si el RUNT no la trajo. */
+export interface Secretaria {
+  nombre: string | null;
+  ciudad: string | null;
 }
 
 export interface Item {
@@ -95,6 +107,9 @@ export interface Item {
   posibleDuplicado: boolean;
   resultadoTardio?: boolean;
   relanzadoDesde?: string | null;
+  /** Ítem original del que se relanzó (1.1.0, delta 5; mismo valor que `relanzadoDesde`). */
+  relanzadoDesdeItemId?: string | null;
+  secretaria?: Secretaria | null;
 }
 
 export interface LiquidacionConItems extends Liquidacion {
