@@ -1,3 +1,4 @@
+using Flit.Comparendos.Api.Modulos.Avisos;
 using Flit.Comparendos.Api.Modulos.Comparendos;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
@@ -194,7 +195,7 @@ public static class OcrEndpoints
         return Results.Ok(new { encolados, omitidos = docs.Count - encolados });
     }
 
-    private static async Task<IResult> Documento(Guid id, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, CancellationToken ct)
+    private static async Task<IResult> Documento(Guid id, UsuarioActual usuario, ComparendosDb db, Capacidades capacidades, ServicioEvidencia evidencia, CancellationToken ct)
     {
         var d = await DocumentoAsync(db, id, usuario, operar: false, capacidades, ct).ConfigureAwait(false);
         var campos = await db.DocumentoOcrCampos.AsNoTracking().Where(c => c.DocumentoOcrId == id).ToListAsync(ct).ConfigureAwait(false);
@@ -228,10 +229,13 @@ public static class OcrEndpoints
                     .Select(a => new { archivoId = a.Id, nombre = a.NombreOriginal, contentType = a.ContentType, tamanoBytes = a.TamanoBytes, cargadaEn = a.CreadoEn }).FirstOrDefaultAsync(ct).ConfigureAwait(false)
                 : null;
             var noAsociable = ServicioOcr.MotivoNoAsociable(d);
+            // GDC-EVID: lo que pasará con el correo al conductor, con el documento que se va a asociar (el de este escaneado).
+            var correoAlAsociar = existente is null ? null : await evidencia.PrevistaAsync(existente.Id, d.TenantId, d.ArchivoId, ct).ConfigureAwait(false);
             duplicado = existente is null ? null : new
             {
                 existente.tipo, existente.Id, existente.Numero, existente.fuente, existente.registradoEn, existente.estadoGestion, existente.Activo, existente.Pagado,
                 evidenciaActual = actual, asociable = noAsociable is null, motivoNoAsociable = noAsociable,
+                correoAlAsociar = new { seEnviara = correoAlAsociar!.SeEnviara, motivoNo = correoAlAsociar.Motivo },
             };
         }
         else if (d.DuplicadoDeDocumentoId is { } did)
@@ -276,11 +280,18 @@ public static class OcrEndpoints
         return Results.Ok(await servicio.RegistrarAsync(d, Actor.De(usuario), ct).ConfigureAwait(false));
     }
 
-    private static async Task<IResult> Asociar(Guid id, PedidoAsociar pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)
+    private static async Task<IResult> Asociar(Guid id, PedidoAsociar pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades,
+        ServicioEvidencia evidencia, CancellationToken ct)
     {
         var d = await DocumentoAsync(db, id, usuario, operar: true, capacidades, ct).ConfigureAwait(false);
-        var r = await servicio.AsociarAsync(d, pedido.Reemplazar, pedido.EvidenciaActualId, Actor.De(usuario), ct).ConfigureAwait(false);
-        return Results.Ok(new { r.ComparendoId, r.Numero, estado = EstadoDocumentoOcr.Asociado.ToString(), reemplazo = r.Reemplazo });
+        var actor = Actor.De(usuario);
+        var r = await servicio.AsociarAsync(d, pedido.Reemplazar, pedido.EvidenciaActualId, actor, ct).ConfigureAwait(false);
+        // GDC-EVID: ya confirmada la asociación, sale el correo con el documento. Un fallo aquí NUNCA la deshace; un documento ya
+        // asociado no reenvía.
+        var correo = r.YaAsociado
+            ? new ResultadoEvidencia(ResultadoEvidencia.Omitido, "El documento ya estaba asociado: no se vuelve a enviar")
+            : await evidencia.EnviarAlAsociarAsync(r.ComparendoId, d.TenantId, d.ArchivoId, r.Reemplazo, actor, ct).ConfigureAwait(false);
+        return Results.Ok(new { r.ComparendoId, r.Numero, estado = EstadoDocumentoOcr.Asociado.ToString(), reemplazo = r.Reemplazo, correo = new { estado = correo.Estado, motivo = correo.Motivo } });
     }
 
     private static async Task<IResult> Descartar(Guid id, PedidoDescarte pedido, UsuarioActual usuario, ComparendosDb db, ServicioOcr servicio, Capacidades capacidades, CancellationToken ct)

@@ -72,7 +72,7 @@ public sealed partial class CopyCongeladoTests
         foreach (var tipo in new[]
                  {
                      TipoPlantilla.CorreoAviso1, TipoPlantilla.CorreoAviso2, TipoPlantilla.CorreoAviso3, TipoPlantilla.CorreoAviso4, TipoPlantilla.CorreoDpOt,
-                     TipoPlantilla.CorreoCambioContraventorOt, TipoPlantilla.CorreoAlertaSinRl,
+                     TipoPlantilla.CorreoCambioContraventorOt, TipoPlantilla.CorreoAlertaSinRl, TipoPlantilla.CorreoEvidencia,
                  })
         {
             yield return new($"plantilla-{tipo}-flit", false, () => DePlantilla(tipo, ConjuntoPlantillas.Flit, $"{tipo}.html"));

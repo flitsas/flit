@@ -18,7 +18,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Flit.Comparendos.Api.Modulos.Ocr;
 
 /// <summary>Resultado de asociar un documento a un comparendo que ya existía (<c>Reemplazo</c>: había otro documento y se cambió).</summary>
-public sealed record Asociacion(Guid ComparendoId, string Numero, bool Reemplazo);
+public sealed record Asociacion(Guid ComparendoId, string Numero, bool Reemplazo, bool YaAsociado = false);
 
 /// <summary>Resultado de registrar un documento: el comparendo creado y la oferta de monitorear la placa (RN-062).</summary>
 public sealed record Registro(Guid DocumentoId, Guid ComparendoId, string Numero, string? Placa, bool PlacaYaMonitoreada, TipoIngreso TipoIngreso);
@@ -610,7 +610,7 @@ public sealed partial class ServicioOcr(
         if (doc is { Estado: EstadoDocumentoOcr.Asociado, ComparendoId: { } ya })
         {
             var numeroYa = await db.Comparendos.AsNoTracking().Where(c => c.Id == ya && c.TenantId == doc.TenantId).Select(c => c.Numero).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-            return new Asociacion(ya, numeroYa ?? string.Empty, false);
+            return new Asociacion(ya, numeroYa ?? string.Empty, false, YaAsociado: true);
         }
 
         if (MotivoNoAsociable(doc) is { } motivo)
