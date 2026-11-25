@@ -40,7 +40,7 @@ public sealed class CalendarioTests(ApiConFuente api) : IClassFixture<ApiConFuen
         r.GetProperty("recalculados").GetInt32().Should().BeGreaterThanOrEqualTo(1);
         var despues = await api.EnDbAsync(db => db.Comparendos.AsNoTracking().SingleAsync(c => c.Id == id, ct));
         despues.FechaLimiteGestion.Should().Be(new DateOnly(2026, 10, 20), "el 14 dejó de ser hábil");
-        var evento = await api.EnDbAsync(db => db.Timeline.Where(t => t.ComparendoId == id && t.Tipo == TipoEventoTimeline.PlazosCalculados).OrderByDescending(t => t.OcurridoEn).FirstAsync(ct));
+        var evento = await api.EnDbAsync(db => db.Timeline.Where(t => t.ComparendoId == id && t.Tipo == TipoEventoTimeline.PlazosCalculados).OrderByDescending(t => t.OcurridoEn).ThenByDescending(t => t.Id).FirstAsync(ct));
         evento.Descripcion.Should().Contain("Día cívico");
         evento.Datos.Should().Contain("2026-10-19").And.Contain("2026-10-20");
         (await api.EnDbAsync(db => db.AuditoriasConfiguracion.AnyAsync(a => a.Entidad == "calendario_dia" && a.EntidadId == "2026-10-14", ct))).Should().BeTrue();
