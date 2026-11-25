@@ -7,6 +7,7 @@ import {
   checkPillLabel,
   checkRoleSuffix,
   selloDeConsulta,
+  sourceLabel,
 } from '../PreflightPanel';
 import type {
   PreflightCheck,
@@ -535,5 +536,21 @@ describe('PreflightPanel — respaldo de los checks en verde', () => {
     expect(
       screen.getByText('Sin gravámenes ni prendas registradas en el RUNT'),
     ).toBeInTheDocument();
+  });
+});
+
+// HU #14650 — el origen de toda consulta al RUNT dice «RUNT», sin nombrar al proveedor.
+describe('sourceLabel · origen RUNT (HU #14650)', () => {
+  it('AC1 · conductor por Kyverum muestra RUNT', () => {
+    expect(sourceLabel('kyverum_runt_conductor')).toBe('RUNT');
+  });
+
+  it('AC2 · conductor por Verifik muestra RUNT', () => {
+    expect(sourceLabel('verifik_conductor')).toBe('RUNT');
+  });
+
+  it('AC3 · vehículo sigue mostrando RUNT', () => {
+    expect(sourceLabel('kyverum_runt')).toBe('RUNT');
+    expect(sourceLabel('verifik')).toBe('RUNT');
   });
 });

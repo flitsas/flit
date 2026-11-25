@@ -43,14 +43,14 @@ export function IdentityCaptureLinkBlock({
       <p className="mb-2 text-[12px] font-semibold" style={{ color: 'var(--di-action)' }}>
         Enlace de captura
       </p>
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="flex flex-col items-center gap-3">
         <div
           className="grid w-fit place-items-center rounded-xl border bg-white p-2"
           style={{ borderColor: 'var(--border)' }}
         >
           <QRCodeSVG value={href} size={112} aria-label="Código QR del enlace de captura" />
         </div>
-        <div className="flex min-w-0 flex-col gap-2">
+        <div className="flex min-w-0 flex-col items-center gap-2">
           <a
             href={href}
             target="_blank"
