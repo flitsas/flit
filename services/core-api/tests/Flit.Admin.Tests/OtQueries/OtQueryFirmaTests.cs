@@ -12,6 +12,7 @@ using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Tramites.Estados;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using Xunit;
 
 namespace Flit.Admin.Tests.OtQueries;
@@ -209,6 +210,169 @@ public sealed class OtQueryFirmaTests
 
         hoja.Columns.Select(c => c.Header).Should().Equal("Firmado por todas las partes", "Falta firmar");
         hoja.Rows.Should().HaveCount(1);
+    }
+
+    // ── HU #14701 (A4): el Excel de la consulta guardada del organismo ────────────────────────────
+
+    [Fact] // Las dos columnas visibles: mismos valores que la tabla, fila por fila.
+    public async Task Excel_ConAmbasColumnas_TraeLosMismosValoresQueLaTabla()
+    {
+        var db = await SembrarAsync();
+        var def = DefinirConColumnas([], "placa", "firmado_por_todas", "falta_firmar");
+
+        var (tabla, hoja) = await TablaYExcelAsync(db, def, ["100", "300", "301"], ["201"]);
+
+        hoja.Headers.Should().Equal("Placa", "Firmado por todas las partes", "Falta firmar");
+        hoja.Rows.Should().HaveCount(tabla.Filas.Count).And.HaveCount(3);
+        foreach (var fila in tabla.Filas)
+        {
+            var celdas = hoja.Rows.Single(r => r[0] == fila.Placa);
+            celdas[1].Should().Be(fila.FirmadoPorTodas == true ? "Sí" : "No");
+            celdas[2].Should().Be(fila.FaltaFirmar ?? string.Empty);
+        }
+
+        hoja.Rows.Single(r => r[0] == "AAA111").Should().Equal("AAA111", "Sí", "");
+        hoja.Rows.Single(r => r[0] == "BBB222")[2]
+            .Should().Be("Vendedor: Vera Vendedora (rechazada) · Comprador: Carlos Comprador");
+    }
+
+    [Fact] // Una sola columna visible: solo esa sale.
+    public async Task Excel_ConUnaSolaColumna_SoloTraeEsaColumna()
+    {
+        var db = await SembrarAsync();
+
+        var (_, soloFaltaFirmar) = await TablaYExcelAsync(db, DefinirConColumnas([], "falta_firmar"), ["100"], null);
+        soloFaltaFirmar.Headers.Should().Equal("Falta firmar");
+        soloFaltaFirmar.Rows.Select(r => r[0]).Should().Contain("Comprador: Nora Nadie");
+
+        var (_, soloFirmado) = await TablaYExcelAsync(db, DefinirConColumnas([], "firmado_por_todas"), ["100"], null);
+        soloFirmado.Headers.Should().Equal("Firmado por todas las partes");
+        soloFirmado.Rows.Select(r => r[0]).Should().BeEquivalentTo("Sí", "No", "No");
+    }
+
+    [Fact] // Filtro «es No»: el archivo trae exactamente las filas del listado (y respeta el alcance del organismo).
+    public async Task Excel_ConFiltroEsNo_TraeExactamenteLasMismasFilasQueElListado()
+    {
+        var db = await SembrarAsync();
+        var def = DefinirConColumnas(
+            [Cond(OtQueryFieldCatalog.FirmadoPorTodas, "false")], "placa", "firmado_por_todas", "falta_firmar");
+
+        var (tabla, hoja) = await TablaYExcelAsync(db, def, ["100", "300", "301"], ["201"]);
+
+        tabla.Total.Should().Be(2);
+        hoja.Rows.Select(r => r[0]).Should().BeEquivalentTo(tabla.Filas.Select(f => f.Placa));
+        hoja.Rows.Select(r => r[0]).Should().NotContain("DDD444"); // otro organismo
+        hoja.Rows.Should().OnlyContain(r => r[1] == "No");
+
+        var (tablaUna, hojaUna) = await TablaYExcelAsync(db,
+            DefinirConColumnas([Cond(OtQueryFieldCatalog.FirmadoPorTodas, "false")], "placa"),
+            ["100", "300", "301"], ["201"]);
+        hojaUna.Rows.Select(r => r[0]).Should().BeEquivalentTo(tablaUna.Filas.Select(f => f.Placa));
+    }
+
+    [Fact] // Volumen: 10.000 filas, el exportador del organismo no llama a nadie y las columnas nuevas no lo frenan >20 %.
+    public async Task Excel_Volumen10000Filas_NoLlamaProveedoresYNoSubeMasDel20PorCiento()
+    {
+        const int N = 10_000;
+        var filas = Enumerable.Range(0, N).Select(i => new OtQueryRowDto(
+            Guid.NewGuid(), $"REF-{i}", $"P{i:D5}", null, ClientTenant, "Empresa", "Matrícula", "entregado",
+            "en_revision", i % 7 == 0, false, null, null, false, null, false, [], DateTimeOffset.UtcNow, null, null,
+            null, null, null, null, null, null, 0, [],
+            FirmadoPorTodas: i % 3 == 0, FaltaFirmar: i % 3 == 0 ? string.Empty : $"Comprador: Persona {i}")).ToList();
+
+        var repoSintetico = Substitute.For<IOtQueryRepository>();
+        repoSintetico.ExecuteAsync(Arg.Any<Guid>(), Arg.Any<QueryRequest>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(ci =>
+            {
+                var r = ci.ArgAt<QueryRequest>(1);
+                return Task.FromResult<OtQueryResultDto?>(new OtQueryResultDto(
+                    N, r.Page, r.PageSize, default, default, 0,
+                    filas.Skip((r.Page - 1) * r.PageSize).Take(r.PageSize).ToList(), []));
+            });
+
+        var conColumnas = new SavedQueryDto(Guid.NewGuid(), "Vol", null, false,
+            DefinirConColumnas([], "placa", "estado", "firmado_por_todas", "falta_firmar"), DateTimeOffset.UtcNow, null);
+        var sinColumnas = conColumnas with
+        {
+            Definition = DefinirConColumnas([], "placa", "estado", "prioritario", "tipo_tramite"),
+        };
+
+        // Sin proveedores: el exportador solo depende del repositorio de consultas del organismo.
+        typeof(OtQueryReportDocumentBuilder).GetConstructors().Single().GetParameters()
+            .Select(p => p.ParameterType).Should().Equal(typeof(IOtQueryRepository));
+
+        async Task<double> MedirAsync(SavedQueryDto saved)
+        {
+            repoSintetico.GetSavedByIdAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+                .Returns(Task.FromResult<SavedQueryDto?>(saved));
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var r = await new OtQueryReportDocumentBuilder(repoSintetico)
+                .BuildAsync(OtTenant, saved.Id, TestContext.Current.CancellationToken);
+            sw.Stop();
+            r!.Total.Should().Be(N);
+            r.Truncated.Should().BeTrue(); // tope del correo: 5.000 filas
+            LeerXlsx(r.Bytes).Rows.Should().HaveCount(OtQueryReportDocumentBuilder.RowCap);
+            return sw.Elapsed.TotalMilliseconds;
+        }
+
+        await MedirAsync(sinColumnas); // calentamiento
+        await MedirAsync(conColumnas);
+        var baseMs = new List<double>();
+        var nuevoMs = new List<double>();
+        for (var i = 0; i < 7; i++)
+        {
+            baseMs.Add(await MedirAsync(sinColumnas));
+            nuevoMs.Add(await MedirAsync(conColumnas));
+        }
+
+        static double Mediana(List<double> l) => l.Min(); // el mínimo es la medida menos sensible al ruido de CI
+        Mediana(nuevoMs).Should().BeLessThanOrEqualTo(Mediana(baseMs) * 1.20,
+            $"base {Mediana(baseMs):F0} ms vs con columnas {Mediana(nuevoMs):F0} ms");
+    }
+
+    private static QueryDefinition DefinirConColumnas(QueryCondition[] condiciones, params string[] columnas) =>
+        new(new QueryDateFilter(OtQueryDateField.Radicacion, QueryRangePreset.Ultimos30), condiciones, columnas);
+
+    private static async Task<(OtQueryResultDto Tabla, Hoja Hoja)> TablaYExcelAsync(
+        string db, QueryDefinition def, string[] firmados, string[]? rechazados)
+    {
+        await using var ctx = NewContext(db);
+        var real = new OtQueryRepository(ctx,
+            firma: new FakeEvaluator(firmados.ToHashSet(), rechazados?.ToHashSet()));
+        var saved = new SavedQueryDto(Guid.NewGuid(), "Q", null, false, def, DateTimeOffset.UtcNow, null);
+
+        var repo = Substitute.For<IOtQueryRepository>();
+        repo.GetSavedByIdAsync(Arg.Any<Guid>(), Arg.Any<Guid>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(Task.FromResult<SavedQueryDto?>(saved));
+        repo.ExecuteAsync(Arg.Any<Guid>(), Arg.Any<QueryRequest>(), Arg.Any<Guid?>(), Arg.Any<CancellationToken>())
+            .Returns(ci => real.ExecuteAsync(
+                ci.ArgAt<Guid>(0), ci.ArgAt<QueryRequest>(1), ci.ArgAt<Guid?>(2), ci.ArgAt<CancellationToken>(3)));
+
+        var resultado = await new OtQueryReportDocumentBuilder(repo)
+            .BuildAsync(OtTenant, saved.Id, TestContext.Current.CancellationToken);
+        var tabla = await real.ExecuteAsync(
+            OtTenant, new QueryRequest(def, 1, 50), cancellationToken: TestContext.Current.CancellationToken);
+        return (tabla!, LeerXlsx(resultado!.Bytes));
+    }
+
+    private sealed record Hoja(IReadOnlyList<string> Headers, IReadOnlyList<IReadOnlyList<string>> Rows);
+
+    /// <summary>Lee la primera hoja (cadenas en línea, como las escribe TabularWorkbookWriter).</summary>
+    private static Hoja LeerXlsx(byte[] bytes)
+    {
+        using var ms = new MemoryStream(bytes);
+        using var doc = DocumentFormat.OpenXml.Packaging.SpreadsheetDocument.Open(ms, false);
+        var sheetData = doc.WorkbookPart!.WorksheetParts.First().Worksheet
+            .Descendants<DocumentFormat.OpenXml.Spreadsheet.SheetData>().First();
+        var shared = doc.WorkbookPart.SharedStringTablePart?.SharedStringTable
+            .Elements<DocumentFormat.OpenXml.Spreadsheet.SharedStringItem>().Select(x => x.InnerText).ToList();
+        var filas = sheetData.Elements<DocumentFormat.OpenXml.Spreadsheet.Row>()
+            .Select(r => (IReadOnlyList<string>)r.Elements<DocumentFormat.OpenXml.Spreadsheet.Cell>().Select(c =>
+                c.DataType?.Value == DocumentFormat.OpenXml.Spreadsheet.CellValues.SharedString && shared is not null
+                    ? shared[int.Parse(c.CellValue!.Text)]
+                    : c.InlineString?.InnerText ?? c.CellValue?.Text ?? string.Empty).ToList())
+            .ToList();
+        return new Hoja(filas[0], filas.Skip(1).ToList());
     }
 
     // ── Bandeja del organismo ─────────────────────────────────────────────────────────────────
