@@ -51,7 +51,14 @@ const ESTADOS_NO_LISTOS: ReadonlySet<string> = new Set(["PENDIENTE", "ERROR", "I
  * LISTO hasta el primer webhook válido. Sin el bloque de aprovisionamiento (un back anterior) no se pinta nada.
  */
 export function bannersDeSesion(sesion: SesionImpuestos | null | undefined): BannerEstado[] {
-  const a = sesion?.aprovisionamiento;
+  return bannersDeAprovisionamiento(sesion?.aprovisionamiento);
+}
+
+/**
+ * La misma regla sobre un aprovisionamiento cualquiera: el de la sesión o, para el Super Admin con ?empresa=, el de la
+ * compañía elegida (GET /backoffice/empresas/{id}/aprovisionamiento, spec-visual §4 observación para M18).
+ */
+export function bannersDeAprovisionamiento(a: { estado?: string | null; firmaConfirmada?: boolean | null } | null | undefined): BannerEstado[] {
   if (!a?.estado) return [];
   if (a.estado === "SUSPENDIDO") return ["SUSPENDIDO"];
   if (ESTADOS_NO_LISTOS.has(a.estado)) return ["NO_LISTO"];

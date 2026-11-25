@@ -10,10 +10,11 @@ import { bannersDeSesion } from "@/lib/sesion";
 
 const replace = vi.fn();
 let pathname = "/";
+let busqueda = new URLSearchParams();
 vi.mock("next/navigation", () => ({
   usePathname: () => pathname,
   useRouter: () => ({ replace, push: vi.fn(), refresh: vi.fn() }),
-  useSearchParams: () => new URLSearchParams(),
+  useSearchParams: () => busqueda,
 }));
 
 const usuario = { email: "ana@empresa-prueba.co", tenantName: "Nombre del token", permissions: [], roles: [], isSuperAdmin: false };
@@ -49,11 +50,12 @@ function sesion(rol: "gestor" | "admin" | "superadmin", aprovisionamiento: Aprov
 
 const EMPRESAS = { items: [{ id: "e-1", nombre: "Empresa Uno", nit: "900000001" }], total: 1, page: 1, pageSize: 50 };
 
-/** fetch simulado por ruta: sesión, avisos y compañías del selector. */
-function api(cuerpoSesion: unknown, avisos: unknown = { items: [] }) {
+/** fetch simulado por ruta: sesión, avisos, compañías del selector y aprovisionamiento de la compañía elegida (SA). */
+function api(cuerpoSesion: unknown, avisos: unknown = { items: [] }, aprovisionamiento?: unknown) {
   return vi.fn(async (u: RequestInfo | URL) => {
     const url = String(u);
     if (url.startsWith("/api/v1/impuestos/notificaciones")) return Response.json(avisos);
+    if (/\/backoffice\/empresas\/[^/]+\/aprovisionamiento/.test(url)) return Response.json(aprovisionamiento ?? {});
     if (url.startsWith("/api/v1/impuestos/backoffice/empresas")) return Response.json(EMPRESAS);
     return Response.json(cuerpoSesion);
   });
@@ -72,6 +74,7 @@ const enlaces = (nombre: string) => screen.queryAllByRole("link", { name: nombre
 beforeEach(() => {
   replace.mockReset();
   pathname = "/";
+  busqueda = new URLSearchParams();
 });
 afterEach(() => vi.unstubAllGlobals());
 
@@ -261,6 +264,78 @@ describe("Banners de estado del producto (spec-visual §4.3)", () => {
 
     expect(screen.getByText(TITULOS_BANNER[ganador])).toBeInTheDocument();
     for (const otro of Object.values(TITULOS_BANNER).filter((t) => t !== TITULOS_BANNER[ganador])) expect(screen.queryByText(otro)).toBeNull();
+  });
+});
+
+describe("Banners de la compañía elegida por el Super Admin (spec-visual §4: observación para M18)", () => {
+  const detalle = (estado: string, firmaConfirmada = true) => ({
+    estado,
+    motivo: null,
+    accion: null,
+    firmaConfirmada,
+    modoRespaldoFirma: false,
+    actualizadoEn: "2026-11-20T15:00:00Z",
+    historial: [],
+  });
+
+  it("con ?empresa= los banners salen del aprovisionamiento de esa compañía, no del de la sesión", async () => {
+    busqueda = new URLSearchParams("empresa=e-1");
+    const fetchMock = api(sesion("superadmin", { estado: "LISTO", firmaConfirmada: true }), { items: [] }, detalle("SUSPENDIDO"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    montar();
+
+    expect(await screen.findByText(TITULOS_BANNER.SUSPENDIDO)).toBeInTheDocument();
+    expect(fetchMock.mock.calls.map(([u]) => String(u))).toContain("/api/v1/impuestos/backoffice/empresas/e-1/aprovisionamiento");
+  });
+
+  it.each([
+    ["SUSPENDIDO", "SUSPENDIDO"],
+    ["NO_LISTO", "REQUIERE_CREDENCIALES"],
+  ] as const)("%s lleva «Ver en el backoffice» a la compañía elegida, después del texto", async (clave, estado) => {
+    busqueda = new URLSearchParams("empresa=e-1");
+    vi.stubGlobal("fetch", api(sesion("superadmin"), { items: [] }, detalle(estado)));
+
+    montar();
+
+    await screen.findByText(TITULOS_BANNER[clave]);
+    const alerta = alertaDe(TITULOS_BANNER[clave]);
+    const enlace = within(alerta).getByRole("link", { name: "Ver en el backoffice" });
+    expect(enlace).toHaveAttribute("href", "/backoffice/empresas/e-1?empresa=e-1");
+    expect(alerta.textContent?.indexOf(TEXTOS_BANNER[clave])).toBeLessThan(alerta.textContent?.indexOf("Ver en el backoffice") ?? -1);
+  });
+
+  it("SIN_WEBHOOK de la compañía elegida no lleva enlace", async () => {
+    busqueda = new URLSearchParams("empresa=e-1");
+    vi.stubGlobal("fetch", api(sesion("superadmin"), { items: [] }, detalle("LISTO_SIN_WEBHOOK", false)));
+
+    montar();
+
+    expect(await screen.findByText(TITULOS_BANNER.SIN_WEBHOOK)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Ver en el backoffice" })).toBeNull();
+  });
+
+  it("sin ?empresa= el Super Admin ve los banners de la sesión, sin enlace y sin pedir el aprovisionamiento", async () => {
+    const fetchMock = api(sesion("superadmin", { estado: "SUSPENDIDO", firmaConfirmada: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    montar();
+
+    expect(await screen.findByText(TITULOS_BANNER.SUSPENDIDO)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Ver en el backoffice" })).toBeNull();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes("/aprovisionamiento"))).toBe(false);
+  });
+
+  it("un usuario que no es Super Admin ignora ?empresa= y nunca ve el enlace", async () => {
+    busqueda = new URLSearchParams("empresa=e-1");
+    const fetchMock = api(sesion("admin", { estado: "SUSPENDIDO", firmaConfirmada: true }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    montar();
+
+    expect(await screen.findByText(TITULOS_BANNER.SUSPENDIDO)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Ver en el backoffice" })).toBeNull();
+    expect(fetchMock.mock.calls.some(([u]) => String(u).includes("/aprovisionamiento"))).toBe(false);
   });
 });
 

@@ -111,6 +111,10 @@ export function SelectorEmpresa({ id = "impuestos-empresa" }: { id?: string }) {
       ) : (
         selector
       )}
+      {/* El error se anuncia sin crecer en alto en la barra (M15-ajustes para M18): región estable, solo para el lector. */}
+      <span role="status" aria-live="polite" aria-atomic="true" className="sr-only">
+        {listado.tipo === "error" ? "No se cargaron las compañías" : ""}
+      </span>
     </div>
   );
 }

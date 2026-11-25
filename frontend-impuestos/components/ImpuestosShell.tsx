@@ -11,8 +11,10 @@ import { BannerEstadoProducto } from "@/components/BannerEstadoProducto";
 import { CampanaAvisos } from "@/components/CampanaAvisos";
 import { SelectorEmpresa } from "@/components/SelectorEmpresa";
 import { ApiError, RUTAS, apiFetch } from "@/lib/api";
+import { obtenerAprovisionamiento, type AprovisionamientoDetalle } from "@/lib/backoffice/api";
+import { hrefConEmpresa, useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
 import { mensajeErrorFijo } from "@/lib/errores";
-import { PERMISOS, bannersDeSesion, type SesionImpuestos } from "@/lib/sesion";
+import { PERMISOS, bannersDeAprovisionamiento, bannersDeSesion, type BannerEstado, type SesionImpuestos } from "@/lib/sesion";
 
 export interface UsuarioShell extends ShellUser {
   permissions: string[];
@@ -141,7 +143,8 @@ export function ImpuestosShell({ user, tramitesUrl, children }: { user: UsuarioS
     }),
     [user, sesion],
   );
-  const banners = useMemo(() => bannersDeSesion(sesion), [sesion]);
+  const { empresa } = useEmpresaSeleccionada();
+  const { banners, enlaceBackoffice } = useBannersDeLaVista(sesion, empresa);
 
   let contenido: ReactNode;
   if (estado.cargando) contenido = <VehicleLoader label="Abriendo Impuestos…" />;
@@ -166,7 +169,7 @@ export function ImpuestosShell({ user, tramitesUrl, children }: { user: UsuarioS
   else
     contenido = (
       <>
-        <BannerEstadoProducto banners={banners} />
+        <BannerEstadoProducto banners={banners} enlaceBackoffice={enlaceBackoffice} />
         {children}
       </>
     );
@@ -195,4 +198,40 @@ export function ImpuestosShell({ user, tramitesUrl, children }: { user: UsuarioS
       </SuiteShell>
     </SesionContext.Provider>
   );
+}
+
+type AprovisionamientoElegido = { empresa: string; detalle: AprovisionamientoDetalle | null };
+
+/**
+ * Banners de la vista (spec-visual §4, observación para M18). Sin ?empresa= salen de la sesión. Para el Super Admin con
+ * una compañía elegida salen del aprovisionamiento de **esa** compañía (GET /backoffice/empresas/{id}/aprovisionamiento)
+ * y los de SUSPENDIDO y NO_LISTO enlazan a su detalle del backoffice. Mientras llega, o si falla, no se pinta banner: un
+ * banner de la compañía propia del Super Admin no describe la que está mirando. Para otro usuario ?empresa= no cuenta.
+ */
+function useBannersDeLaVista(sesion: SesionImpuestos | null, empresa: string | null): { banners: BannerEstado[]; enlaceBackoffice: string | null } {
+  const elegida = sesion?.esSuperAdmin === true && empresa ? empresa : null;
+  const [aprovisionamiento, setAprovisionamiento] = useState<AprovisionamientoElegido | null>(null);
+
+  useEffect(() => {
+    if (!elegida) return;
+    const controller = new AbortController();
+    obtenerAprovisionamiento(elegida, controller.signal).then(
+      (detalle) => {
+        if (!controller.signal.aborted) setAprovisionamiento({ empresa: elegida, detalle });
+      },
+      () => {
+        if (!controller.signal.aborted) setAprovisionamiento({ empresa: elegida, detalle: null });
+      },
+    );
+    return () => controller.abort();
+  }, [elegida]);
+
+  return useMemo(() => {
+    if (!elegida) return { banners: bannersDeSesion(sesion), enlaceBackoffice: null };
+    const detalle = aprovisionamiento?.empresa === elegida ? aprovisionamiento.detalle : null;
+    return {
+      banners: bannersDeAprovisionamiento(detalle),
+      enlaceBackoffice: hrefConEmpresa(`/backoffice/empresas/${encodeURIComponent(elegida)}`, elegida),
+    };
+  }, [elegida, aprovisionamiento, sesion]);
 }

@@ -15,8 +15,22 @@ export const TEXTO_SIN_PERMISO = "No tienes permiso para esta acción.";
  */
 export function mensajeErrorFijo(error: unknown, respaldo: string, porCodigo: Readonly<Record<string, string>> = {}): string {
   if (error instanceof ApiError) {
-    if (error.code && Object.prototype.hasOwnProperty.call(porCodigo, error.code)) return porCodigo[error.code];
+    if (error.code && Object.prototype.hasOwnProperty.call(porCodigo, error.code)) return conTope(porCodigo[error.code], error.detalle?.tope);
     if (error.status === 403) return TEXTO_SIN_PERMISO;
   }
   return respaldo;
+}
+
+/**
+ * Sustituye `{tope}` de un literal de x-flit-literales.errores (LIMITE_SUPERADO, TOPE_SUPERA_CONTRACTUAL,
+ * TOPE_EXPORTACION) por el `tope` del cuerpo del error. Sin un número, el literal queda tal cual.
+ */
+export function conTope(literal: string, tope: unknown): string {
+  return typeof tope === "number" && Number.isFinite(tope) ? literal.split("{tope}").join(String(tope)) : literal;
+}
+
+/** Campo del cuerpo que incumple la regla (`campo` de ErrorRegla), si la API lo nombró. */
+export function campoDeError(error: unknown): string | null {
+  const campo = error instanceof ApiError ? error.detalle?.campo : undefined;
+  return typeof campo === "string" && campo ? campo : null;
 }

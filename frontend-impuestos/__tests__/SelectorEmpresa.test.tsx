@@ -140,10 +140,18 @@ describe("SelectorEmpresa", () => {
     expect(reintentar.parentElement).toContainElement(combo);
     expect(screen.queryByRole("alert")).toBeNull();
     expect(container).not.toHaveTextContent("mensaje del servidor que no debe verse");
+    // Se anuncia sin crecer en alto: región role="status" solo para el lector, con la frase completa.
+    const anuncio = screen.getAllByRole("status").find((el) => el.textContent === "No se cargaron las compañías");
+    expect(anuncio).toBeDefined();
+    expect(anuncio).toHaveClass("sr-only");
+    expect(anuncio).toHaveAttribute("aria-live", "polite");
+    expect(anuncio).toHaveAttribute("aria-atomic", "true");
+    expect(anuncio).toHaveTextContent("No se cargaron las compañías");
 
     fireEvent.click(reintentar);
     await waitFor(() => expect(screen.getByRole("combobox", { name: "Compañía" })).toBeEnabled());
     expect(screen.queryByRole("button", { name: "Reintentar cargar compañías" })).toBeNull();
+    expect(screen.queryByText("No se cargaron las compañías")).toBeNull();
   });
 
   it("sin compañías no pone texto debajo, deja solo la vista global y la búsqueda dice «No hay compañías con Impuestos»", async () => {

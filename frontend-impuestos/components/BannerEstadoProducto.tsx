@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { InlineAlert, type InlineAlertTone } from "@flit/ui/InlineAlert";
+import { ENLACE_ACCION_CLS } from "@/components/comun/estilos";
 import { PRIORIDAD_BANNERS, type BannerEstado } from "@/lib/sesion";
 
 // Banners de estado del producto (plan §6.1, spec-visual §4.3). Títulos en lenguaje de negocio, sin nombrar credenciales,
@@ -29,13 +31,29 @@ const BANNERS: Readonly<Record<BannerEstado, { tono: InlineAlertTone; titulo: st
   },
 };
 
-/** Si llegan varios, solo se muestra el de mayor prioridad (SUSPENDIDO > NO_LISTO > SIN_WEBHOOK > FIRMA_SIN_CONFIRMAR). */
-export function BannerEstadoProducto({ banners }: { banners: readonly BannerEstado[] }) {
+/** Banners que, para el Super Admin con una compañía elegida, llevan «Ver en el backoffice» (spec-visual §4.3). */
+const CON_ENLACE_BACKOFFICE: ReadonlySet<BannerEstado> = new Set(["SUSPENDIDO", "NO_LISTO"]);
+
+/**
+ * Si llegan varios, solo se muestra el de mayor prioridad (SUSPENDIDO > NO_LISTO > SIN_WEBHOOK > FIRMA_SIN_CONFIRMAR).
+ * `enlaceBackoffice` (solo Super Admin con ?empresa=): en SUSPENDIDO y NO_LISTO agrega, después del texto, el enlace
+ * «Ver en el backoffice» a esa compañía.
+ */
+export function BannerEstadoProducto({ banners, enlaceBackoffice }: { banners: readonly BannerEstado[]; enlaceBackoffice?: string | null }) {
   const b = PRIORIDAD_BANNERS.find((clave) => banners.includes(clave));
   if (!b) return null;
+  const enlace = enlaceBackoffice && CON_ENLACE_BACKOFFICE.has(b) ? enlaceBackoffice : null;
   return (
     <InlineAlert tone={BANNERS[b].tono} title={BANNERS[b].titulo} vivo={false}>
       {BANNERS[b].texto}
+      {enlace && (
+        <>
+          {" "}
+          <Link href={enlace} className={ENLACE_ACCION_CLS}>
+            Ver en el backoffice
+          </Link>
+        </>
+      )}
     </InlineAlert>
   );
 }
