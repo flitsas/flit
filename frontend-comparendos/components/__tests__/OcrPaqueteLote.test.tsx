@@ -339,3 +339,17 @@ describe("tarjeta «Asociando» desde el contador del paquete", () => {
     expect(within(grupo).queryByRole("button", { name: /Asociando/ })).toBeNull();
   });
 });
+
+describe("cabecera de un paquete cerrado mientras el lote avanza", () => {
+  it("todo «Asociando» (duplicados en 0): no dice «solo lectura»; al terminar sin duplicados, sí", async () => {
+    vista = () => Promise.resolve({ ...VISTA, asociables: 0, porRevisar: { reemplazos: 0, numeroDistinto: 0 }, enCurso: { ...LOTE, porAsociar: 5, total: 5, asociados: 0 } });
+    abrir({ ...PAQUETE, cantidadDuplicados: 0, cantidadPorAsociar: 5 });
+    expect(await screen.findByText("Asociando 0 de 5…")).toBeTruthy();
+    expect(screen.queryByText(/solo lectura/)).toBeNull();
+    cleanup();
+    vista = () => Promise.resolve({ ...VISTA, asociables: 0, porRevisar: { reemplazos: 0, numeroDistinto: 0 }, enCurso: { ...TERMINADO, total: 5, asociados: 5, noAsociados: [] } });
+    abrir({ ...PAQUETE, cantidadDuplicados: 0, cantidadPorAsociar: 0, cantidadAsociados: 5 });
+    expect(await screen.findByText("Asociación terminada")).toBeTruthy();
+    expect(screen.getByText(/solo lectura/)).toBeTruthy();
+  });
+});

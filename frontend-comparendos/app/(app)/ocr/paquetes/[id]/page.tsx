@@ -229,11 +229,12 @@ function Detalle({ id }: { id: string }) {
           <span className="flex flex-wrap items-center gap-3">
             <Chip e={ESTADO_PAQUETE[p.estado] ?? { texto: p.estado, tono: "neutral" }} />
             <span>Creado {formatoFechaHora(p.creadoEn)}</span>
-            {/* «Solo lectura» ya no es cierto si quedan duplicados por asociar: se puede asociar aunque esté cerrado. */}
+            {/* «Solo lectura» ya no es cierto si quedan duplicados por asociar (se puede asociar aunque esté cerrado) ni mientras un
+                lote está asociando documentos (en ese rato los duplicados pasan a «Asociando» y su contador queda en 0). */}
             {p.cerradoEn && (
               <span>
                 · Cerrado {formatoFechaHora(p.cerradoEn)}
-                {conLote ? "" : " (solo lectura)"}
+                {conLote || porAsociar > 0 ? "" : " (solo lectura)"}
               </span>
             )}
             <Progreso p={p} />
