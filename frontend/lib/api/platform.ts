@@ -38,6 +38,11 @@ export interface TenantProduct {
    */
   impuestoApiKeyConfigurada?: boolean | null;
   /**
+   * HU #14711. Solo en `diagnostico`: si la compañía tiene secreto de webhook del proveedor de impuesto (`null` en los demás
+   * productos). Nunca trae el valor.
+   */
+  impuestoWebhookSecretConfigurada?: boolean | null;
+  /**
    * HU #14694/#14695 (platform.v1.yaml 1.1.0). Estado de aprovisionamiento que reporta el servicio del producto. `null` en
    * los productos sin aprovisionamiento (hoy solo `impuestos` lo tiene) y mientras no llega el primer reporte.
    */
@@ -170,6 +175,38 @@ export function setTenantProductCredential(
 /** DELETE de la misma ruta — solo SuperAdmin. Idempotente (204). */
 export function deleteTenantProductCredential(tenantId: string, productCode: string, credentialCode: string): Promise<void> {
   return apiFetch<void>(credentialPath(tenantId, productCode, credentialCode), { method: "DELETE" });
+}
+
+/**
+ * Resultado del alta idempotente con el proveedor de impuesto (HU #14711). Solo metadatos: nunca la llave ni el secreto.
+ */
+export interface CredencialImpuestoObtenida {
+  apiKeyPrefix: string;
+  created: boolean;
+  rotated: boolean;
+  hasWebhookSecret: boolean;
+  changed: boolean;
+  updatedAt: string;
+}
+
+/**
+ * POST /api/v1/platform/admin/tenants/{tenantId}/products/diagnostico/credentials/impuesto/obtener — solo SuperAdmin, sin
+ * cuerpo (el servidor arma el alta con el NIT de la empresa). Se copian solo los campos del contrato, para que un campo de
+ * más en la respuesta no llegue al estado de la UI.
+ */
+export async function obtenerCredencialImpuestoDiagnostico(tenantId: string): Promise<CredencialImpuestoObtenida> {
+  const r = await apiFetch<CredencialImpuestoObtenida>(
+    `/api/v1/platform/admin/tenants/${encodeURIComponent(tenantId)}/products/diagnostico/credentials/impuesto/obtener`,
+    { method: "POST" },
+  );
+  return {
+    apiKeyPrefix: r.apiKeyPrefix,
+    created: r.created,
+    rotated: r.rotated,
+    hasWebhookSecret: r.hasWebhookSecret,
+    changed: r.changed,
+    updatedAt: r.updatedAt,
+  };
 }
 
 const productPath = (tenantId: string, productCode: string) =>

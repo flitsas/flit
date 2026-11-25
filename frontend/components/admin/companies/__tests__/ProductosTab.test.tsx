@@ -14,6 +14,7 @@ const deleteTenantProductCredential = vi.fn();
 const listMyApps = vi.fn();
 const getTenantProductProvisioningPreview = vi.fn();
 const retryTenantProductProvisioning = vi.fn();
+const obtenerCredencialImpuestoDiagnostico = vi.fn();
 vi.mock("@/lib/api/platform", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/api/platform")>()),
   listTenantProducts: (id: string) => listTenantProducts(id),
@@ -23,6 +24,7 @@ vi.mock("@/lib/api/platform", async (importOriginal) => ({
   listMyApps: () => listMyApps(),
   getTenantProductProvisioningPreview: (...a: unknown[]) => getTenantProductProvisioningPreview(...a),
   retryTenantProductProvisioning: (...a: unknown[]) => retryTenantProductProvisioning(...a),
+  obtenerCredencialImpuestoDiagnostico: (...a: unknown[]) => obtenerCredencialImpuestoDiagnostico(...a),
 }));
 
 const product = (code: string, name: string, enabled: boolean, extra: Partial<TenantProduct> = {}): TenantProduct => ({
@@ -54,6 +56,7 @@ describe("ProductosTab", () => {
       blocking: null,
     });
     retryTenantProductProvisioning.mockReset().mockResolvedValue(undefined);
+    obtenerCredencialImpuestoDiagnostico.mockReset();
   });
 
   it("muestra el estado real de los tres productos, con quién y cuándo los cambió", async () => {
@@ -171,12 +174,41 @@ describe("ProductosTab", () => {
         .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: false })])
         .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: true })]);
       render(<ProductosTab tenantId="t1" />);
-      await user.click(await screen.findByRole("button", { name: "Configurar" }));
+      await user.click(await screen.findByRole("button", { name: "Ingresar manualmente" }));
+      await user.click(screen.getByRole("button", { name: "Configurar" }));
       await user.click(screen.getByLabelText("API key de impuesto vehicular"));
       await user.paste("llave-sintetica-0123456789");
       await user.click(screen.getByRole("button", { name: "Guardar" }));
       expect(setTenantProductCredential).toHaveBeenCalledWith("t1", "diagnostico", "impuesto_api_key", "llave-sintetica-0123456789");
       expect(await screen.findByText("Configurada")).toBeInTheDocument();
+      expect(listTenantProducts).toHaveBeenCalledTimes(2);
+    });
+
+    // HU #14711 · AC-DC-13 — el alta con el proveedor relee el listado; el secreto del webhook sale del listado.
+    it("«Obtener del proveedor» relee los productos y muestra el secreto de webhook del listado", async () => {
+      const user = userEvent.setup();
+      obtenerCredencialImpuestoDiagnostico.mockResolvedValue({
+        apiKeyPrefix: "AbCdEfGh",
+        created: true,
+        rotated: false,
+        hasWebhookSecret: true,
+        changed: true,
+        updatedAt: "2026-11-25T10:00:00Z",
+      });
+      listTenantProducts
+        .mockResolvedValueOnce([
+          product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: false, impuestoWebhookSecretConfigurada: false }),
+        ])
+        .mockResolvedValueOnce([
+          product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: true, impuestoWebhookSecretConfigurada: true }),
+        ]);
+      render(<ProductosTab tenantId="t1" />);
+      expect(await screen.findByText("Sin secreto de webhook")).toBeInTheDocument();
+      await user.click(screen.getByRole("button", { name: "Obtener del proveedor" }));
+      expect(obtenerCredencialImpuestoDiagnostico).toHaveBeenCalledWith("t1");
+      expect(await screen.findByText("Configurada")).toBeInTheDocument();
+      expect(screen.getByText("Llave configurada · prefijo AbCdEfGh…")).toBeInTheDocument();
+      expect(screen.getByText("Secreto de webhook configurado")).toBeInTheDocument();
       expect(listTenantProducts).toHaveBeenCalledTimes(2);
     });
   });

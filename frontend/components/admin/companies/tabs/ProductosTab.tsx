@@ -206,6 +206,7 @@ export function ProductosTab({ tenantId, onEditarCompania }: ProductosTabProps) 
                   <CredencialImpuestoDiagnostico
                     tenantId={tenantId}
                     configurada={p.impuestoApiKeyConfigurada}
+                    webhookSecretConfigurada={p.impuestoWebhookSecretConfigurada ?? null}
                     sugerirAbierto={sugerirLlave}
                     onChanged={async () => {
                       setSugerirLlave(false);
