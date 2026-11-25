@@ -144,17 +144,28 @@ public sealed partial class ServicioEvidencia(
         }, ct).ConfigureAwait(false);
 
         timeline.Agregar(c, TipoEventoTimeline.EvidenciaEnviada,
-            $"{(reemplazo ? "Documento nuevo" : "Documento")} del comparendo enviado a {c.Contraventor.Correo} como evidencia.",
+            // «Registrado para envío»: se escribe al armar el correo, antes del despacho; el estado real de entrega es el del Centro de mensajes.
+            $"Correo con el {(reemplazo ? "documento nuevo" : "documento")} del comparendo registrado para envío a {c.Contraventor.Correo}.",
             actor, new { destinatario = c.Contraventor.Correo, adjunto = nombre, reemplazo }, "comunicacion_saliente", enviados[0].Id);
         return (enviados[0].Id, DecisionEvidencia.Si);
     }
 
+    /// <summary>Lo más que puede tardar el trabajo posterior a la asociación (registrar, nota y despacho).</summary>
+    private static readonly TimeSpan TopeTrabajoPosterior = TimeSpan.FromSeconds(30);
+
     /// <summary>
     /// Lo que hace «asociar» después de confirmar la asociación: registra, confirma y despacha el correo. Nada de aquí lanza:
-    /// un fallo del correo no deshace la asociación y se dice en el resultado.
+    /// un fallo del correo no deshace la asociación y se dice en el resultado. La asociación ya está confirmada: si el
+    /// operador cierra la pestaña o la petición vence ahora, el correo (o su nota) debe salir igual, porque al reintentar el
+    /// documento ya figura asociado y no se reenvía. Por eso este trabajo NO usa el token de la petición: corre con uno propio
+    /// de <see cref="TopeTrabajoPosterior"/>.
     /// </summary>
-    public async Task<ResultadoEvidencia> EnviarAlAsociarAsync(Guid comparendoId, Guid tenantId, Guid archivoId, bool reemplazo, Actor actor, CancellationToken ct)
+    public async Task<ResultadoEvidencia> EnviarAlAsociarAsync(Guid comparendoId, Guid tenantId, Guid archivoId, bool reemplazo, Actor actor, CancellationToken peticion)
     {
+        if (peticion.IsCancellationRequested)
+            LogPeticionCancelada(logger, comparendoId, tenantId);
+        using var propio = new CancellationTokenSource(TopeTrabajoPosterior);
+        var ct = propio.Token;
         Guid? comunicacion;
         try
         {
@@ -164,7 +175,7 @@ public sealed partial class ServicioEvidencia(
             if (comunicacion is null)
                 return new ResultadoEvidencia(ResultadoEvidencia.Omitido, decision.Motivo);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ct.IsCancellationRequested)
         {
             // Sin datos personales en el log: solo ids y el tipo de error.
             LogNoPreparado(logger, ex.GetType().Name, comparendoId, tenantId);
@@ -184,7 +195,7 @@ public sealed partial class ServicioEvidencia(
                 _ => new ResultadoEvidencia(ResultadoEvidencia.Omitido, "El correo no llegó al conductor; revisa el Centro de mensajes"),
             };
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ct.IsCancellationRequested)
         {
             LogDespachoPendiente(logger, ex.GetType().Name, comunicacion.Value);
             return new ResultadoEvidencia(ResultadoEvidencia.Pendiente, null);
@@ -208,12 +219,15 @@ public sealed partial class ServicioEvidencia(
             NotaOmitida(c, motivo, reemplazo, actor);
             await db.SaveChangesAsync(ct).ConfigureAwait(false);
         }
-        catch (Exception ex) when (ex is not OperationCanceledException)
+        catch (Exception ex) when (ex is not OperationCanceledException || ct.IsCancellationRequested)
         {
             LogNoPreparado(logger, ex.GetType().Name, comparendoId, tenantId);
             db.ChangeTracker.Clear();
         }
     }
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "La petición de asociar el comparendo {Comparendo} de la empresa {Tenant} se canceló; el correo de evidencia sigue con su propio plazo.")]
+    private static partial void LogPeticionCancelada(ILogger logger, Guid comparendo, Guid tenant);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "No se pudo preparar el correo de evidencia ({Tipo}) del comparendo {Comparendo} de la empresa {Tenant}.")]
     private static partial void LogNoPreparado(ILogger logger, string tipo, Guid comparendo, Guid tenant);

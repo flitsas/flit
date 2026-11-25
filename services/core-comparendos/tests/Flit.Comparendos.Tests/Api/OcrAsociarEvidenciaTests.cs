@@ -79,7 +79,7 @@ public sealed partial class OcrAsociarTests
         var adjuntos = await api.EnDbAsync(db => db.ComunicacionAdjuntos.AsNoTracking().Where(a => a.ComunicacionId == evidencias[0].Id).ToListAsync(ct));
         adjuntos.Should().ContainSingle().Which.Should().Match<ComunicacionAdjunto>(a => a.Nombre == "comparendo-EVI-1.pdf" && a.ArchivoId == doc.ArchivoId, "solo el documento: sin autorización ni poder");
         (await api.EnDbAsync(db => db.Timeline.AsNoTracking().SingleAsync(t => t.ComparendoId == comparendo && t.Tipo == TipoEventoTimeline.EvidenciaEnviada, ct)))
-            .Descripcion.Should().Contain("juan@example.test").And.NotContainAny("OCR", "API", "LLM");
+            .Descripcion.Should().Be("Correo con el documento del comparendo registrado para envío a juan@example.test.");
         // No es un aviso: la secuencia y el estado siguen donde estaban.
         (await api.EnDbAsync(db => db.AvisosConductor.CountAsync(a => a.ComparendoId == comparendo, ct))).Should().Be(2);
         (await ComparendoDbAsync(comparendo)).EstadoNotificacionConductor.Should().Be(EstadoNotificacionConductor.Aviso2);
@@ -145,6 +145,28 @@ public sealed partial class OcrAsociarTests
         (comunicacion, decision.Motivo).Should().Be(((Guid?)null, "El comparendo ya está pagado"));
     }
 
+    /// <summary>
+    /// Ya confirmada la asociación, que se cierre la pestaña o venza la petición no debe perder el correo: al reintentar el
+    /// documento ya figura asociado y no se reenvía. El trabajo posterior corre con su propio plazo.
+    /// </summary>
+    [Fact]
+    public async Task EnviarAlAsociar_ConLaPeticionYaCancelada_IgualRegistraElCorreo()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, cliente, comparendo) = await ComparendoAsync("EVI-11");
+        await ConConductorAsync(cliente, comparendo);
+        var (_, doc) = await SubirAsync(cliente, "EVI-11", "evi-cancelada");
+        await using var scope = api.App.Services.CreateAsyncScope();
+        using var cancelada = new CancellationTokenSource();
+        await cancelada.CancelAsync();
+
+        var r = await scope.ServiceProvider.GetRequiredService<ServicioEvidencia>()
+            .EnviarAlAsociarAsync(comparendo, empresa, doc.ArchivoId, reemplazo: false, Actor.Sistema, cancelada.Token);
+
+        r.Estado.Should().BeOneOf("Enviado", "Pendiente");
+        (await EvidenciasAsync(comparendo)).Should().ContainSingle();
+    }
+
     [Fact]
     public async Task Asociar_AlReemplazar_EnviaElDocumentoNuevo()
     {
@@ -164,7 +186,7 @@ public sealed partial class OcrAsociarTests
         evidencias.Should().HaveCount(2);
         (await api.EnDbAsync(db => db.ComunicacionAdjuntos.AsNoTracking().Where(a => a.ComunicacionId == evidencias[1].Id).Select(a => a.ArchivoId).SingleAsync(ct))).Should().Be(segundo.ArchivoId, "el correo lleva el documento NUEVO");
         (await api.EnDbAsync(db => db.Timeline.Where(t => t.ComparendoId == comparendo && t.Tipo == TipoEventoTimeline.EvidenciaEnviada).OrderBy(t => t.OcurridoEn).ThenBy(t => t.Id).Select(t => t.Descripcion).ToListAsync(ct)))
-            .Should().HaveCount(2).And.Subject.Last().Should().StartWith("Documento nuevo");
+            .Should().HaveCount(2).And.Subject.Last().Should().Be("Correo con el documento nuevo del comparendo registrado para envío a juan@example.test.");
     }
 
     [Fact]
