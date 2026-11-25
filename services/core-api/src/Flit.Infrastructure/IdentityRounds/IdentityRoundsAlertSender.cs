@@ -61,7 +61,7 @@ internal sealed partial class IdentityRoundsAlertSender(
         return new IdentityRoundsAlertDelivery(enviados, fallidos);
     }
 
-    /// <summary>Asunto y HTML de la alerta. Pública para pruebas; encodea cada valor.</summary>
+    /// <summary>Asunto y HTML de la alerta, con el mismo diseño de los correos de identidad de FLIT. Pública para pruebas; encodea cada valor.</summary>
     internal static (string Subject, string Html) Compose(
         IdentityRoundsAlertMessage m, string publicBaseUrl, EmailTheme theme, string assetsBaseUrl)
     {
@@ -75,32 +75,37 @@ internal sealed partial class IdentityRoundsAlertSender(
             ? m.TramiteReferencia!
             : m.ProcedureInstanceId?.ToString() ?? "Sin trámite (prevalidación)";
 
-        var sb = new StringBuilder();
-        sb.Append("<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#162244;\">");
-        var producto = IdentityVerificationEmailLayout.ProductName(theme);
-        var acento = theme.IsBrand ? BrandedEmailChrome.LinkColor(theme) : "#557EFF";
-        sb.Append(IdentityVerificationEmailLayout.LogoHtml(IdentityVerificationEmailLayout.LogoUrl(theme, assetsBaseUrl), Enc(producto), 32, acento));
-        sb.Append("<h2 style=\"margin:0 0 12px;color:").Append(acento).Append(";\">Validación de identidad rechazada</h2>");
-        sb.Append("<p style=\"margin:0 0 16px;\">").Append(Enc(cuando)).Append("</p>");
-        sb.Append("<table cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse;\">");
-        Row(sb, "Nombre", m.Nombre);
-        Row(sb, "Tipo de documento", m.TipoDocumento);
-        Row(sb, "Número de documento", m.NumeroDocumento);
-        Row(sb, "Motivo del último rechazo", m.Motivo);
-        Row(sb, "Rondas usadas", $"{m.RondasUsadas} de {m.RondasMaximas}");
-        Row(sb, "Trámite", tramite);
-        Row(sb, "Fecha", fecha);
-        sb.Append("</table>");
+        var intro = new StringBuilder();
+        intro.Append("<p style=\"margin:0 0 14px;\">").Append(Enc(cuando)).Append("</p>");
+        intro.Append("<table cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse;margin:0 0 4px;\">");
+        Row(intro, "Nombre", m.Nombre);
+        Row(intro, "Tipo de documento", m.TipoDocumento);
+        Row(intro, "Número de documento", m.NumeroDocumento);
+        Row(intro, "Motivo del último rechazo", m.Motivo);
+        Row(intro, "Rondas usadas", $"{m.RondasUsadas} de {m.RondasMaximas}");
+        Row(intro, "Trámite", tramite);
+        Row(intro, "Fecha", fecha);
+        intro.Append("</table>");
 
-        if (m.ProcedureInstanceId is Guid instanceId)
-        {
-            var baseUrl = string.IsNullOrWhiteSpace(publicBaseUrl) ? "http://localhost:3000" : publicBaseUrl.Trim().TrimEnd('/');
-            var url = $"{baseUrl}/tramites/{instanceId}";
-            sb.Append("<p style=\"margin:16px 0 0;\"><a href=\"").Append(Enc(url)).Append("\">Ver la ficha en FLIT</a></p>");
-        }
+        var baseUrl = string.IsNullOrWhiteSpace(publicBaseUrl) ? "http://localhost:3000" : publicBaseUrl.Trim().TrimEnd('/');
+        var link = m.ProcedureInstanceId is Guid instanceId
+            ? $"{baseUrl}/tramites/{instanceId}"
+            : $"{baseUrl}/?m=validaciones";
 
-        sb.Append("</div>");
-        return (subject, sb.ToString());
+        var content = new IdentityVerificationEmailContent(
+            Subject: subject,
+            Eyebrow: "Verificación de identidad",
+            Title: "Validación de identidad rechazada",
+            IntroHtml: intro.ToString(),
+            Steps: Array.Empty<string>(),
+            ButtonLabel: "Ver la validación en FLIT",
+            FallbackLinkIntro: "Si el botón no funciona, copia este enlace:",
+            FooterNote: "Aviso para operación: contiene datos personales. No lo reenvíes a terceros.",
+            StepsHeading: "",
+            RequestedByLabel: "Aviso de operación");
+
+        var html = IdentityVerificationEmailLayout.Render(theme, assetsBaseUrl, null, link, content);
+        return (subject, html);
     }
 
     private static void Row(StringBuilder sb, string label, string value) =>
