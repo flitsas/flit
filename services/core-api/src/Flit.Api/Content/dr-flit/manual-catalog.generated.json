@@ -3676,7 +3676,7 @@
           ],
           "bullets": [
             "Simple: consulta las fuentes elegidas y entrega el consolidado, sin dictamen.",
-            "Con Análisis IA: además emite un dictamen Viable o Bloqueado para un tipo de trámite de la familia traspaso. El veredicto lo da un motor de reglas; la IA solo redacta la explicación.",
+            "Con análisis: además emite un dictamen Viable o Bloqueado para un tipo de trámite de la familia traspaso. El veredicto lo da un motor de reglas; la IA solo redacta la explicación.",
             "Después de diagnosticar puedes crear el trámite en Trámites o pedir a FLIT el saneamiento del vehículo."
           ],
           "callouts": []
@@ -3759,7 +3759,7 @@
           "id": "diagnosticos",
           "title": "2. Pestaña «Diagnósticos»",
           "paragraphs": [
-            "La tabla «Diagnósticos de la compañía» lista cada lote con Nombre, Modalidad (Express o Masivo), Tipo (Simple o Con análisis IA), Trámite analizado, Estado, Creado y Creador. Pulsa el nombre para abrir el tablero del lote.",
+            "La tabla «Diagnósticos de la compañía» lista cada lote con Nombre, Modalidad (Express o Masivo), Tipo (Simple o Con análisis), Trámite analizado, Estado, Creado y Creador. Pulsa el nombre para abrir el tablero del lote.",
             "Filtros: rango de fechas (desde y hasta), tipo, estado y «Buscar por nombre del diagnóstico». Si no hay resultados verás «Ningún diagnóstico coincide»; si aún no hay diagnósticos, «Aún no tienes diagnósticos».",
             "Qué lotes ves depende de la configuración «Quién ve los diagnósticos»: por defecto, todos los de la compañía; si el administrador eligió «Solo los propios», cada usuario ve los que creó y el administrador los ve todos."
           ],
@@ -3788,11 +3788,11 @@
     },
     {
       "slug": "6-diagnostico/3-nuevo-diagnostico",
-      "title": "Nuevo diagnóstico: Express o Masivo, Simple o Con Análisis IA",
+      "title": "Nuevo diagnóstico: Express o Masivo, Simple o Con análisis",
       "href": "/manual/6-diagnostico/3-nuevo-diagnostico",
       "audience": "Gestor",
       "sectionId": "diagnostico",
-      "summary": "Cómo crear un diagnóstico de un vehículo o de un archivo, qué fuentes elegir y qué cambia entre los modos Simple y Con Análisis IA.",
+      "summary": "Cómo crear un diagnóstico de un vehículo o de un archivo, qué fuentes elegir y qué cambia entre los modos Simple y Con análisis.",
       "primarySource": false,
       "blocks": [
         {
@@ -3828,7 +3828,7 @@
             "La pantalla de alta va en una sola columna. Arriba, a lo ancho, la tarjeta «Parámetros» con tres partes en este orden: «Información general», «Modo» y «Alcance». En una pantalla ancha se ven las tres lado a lado; en una mediana, «Información general» y «Modo» arriba y «Alcance» debajo; en el celular, una debajo de la otra. Debajo va la tarjeta «Vehículos» (la placa o el archivo) y, al final, una barra con el estimado de consultas, los avisos, «Cancelar» y el botón para continuar. El orden en que avanzas con la tecla Tab es el mismo que ves.",
             "El «Alcance» agrupa las fuentes por vehículo, por propietario y por locatario. Solo ves las que tu compañía tiene contratadas y vienen marcadas las fuentes por defecto de la configuración. El RUNT del vehículo siempre se consulta: es la base del diagnóstico y va marcado sin poder quitarse.",
             "Las fuentes del propietario dependen del propietario que reporta el RUNT del vehículo. Las del locatario dependen del documento que declares en la carga; sin documento, quedan como Novedad «Sin documento del locatario» y no se consumen.",
-            "«Modo»: Simple consulta las fuentes y entrega el consolidado. Con Análisis IA suma el dictamen y exige elegir el tipo de trámite (la familia traspaso: traspaso, traspaso unilateral y transferencia de dominio). En Con Análisis IA las fuentes que exige ese trámite quedan marcadas y bloqueadas con el aviso «Fuente obligatoria para el tipo de trámite elegido»; si alguna no está en tu contrato verás «Fuentes obligatorias no contratadas» y no podrás lanzar."
+            "«Modo»: Simple consulta las fuentes y entrega el consolidado. Con análisis suma el dictamen y exige elegir el tipo de trámite (la familia traspaso: traspaso, traspaso unilateral y transferencia de dominio). En Con análisis las fuentes que exige ese trámite quedan marcadas y bloqueadas con el aviso «Fuente obligatoria para el tipo de trámite elegido»; si alguna no está en tu contrato verás «Fuentes obligatorias no contratadas» y no podrás lanzar."
           ],
           "bullets": [],
           "callouts": [
@@ -3897,9 +3897,9 @@
         },
         {
           "id": "dictamen",
-          "title": "4. El dictamen por reglas (Con Análisis IA)",
+          "title": "4. El dictamen por reglas (Con análisis)",
           "paragraphs": [
-            "Cuando un vehículo cierra sus consultas, el motor de reglas evalúa el catálogo vigente y emite el veredicto: Viable o Bloqueado. Una regla que bloquea deja el dictamen Bloqueado; si solo hay advertencias, o ninguna regla dispara, el dictamen es Viable. La IA redacta la explicación y no cambia el veredicto; mientras redacta verás «redacción IA pendiente» y, si no responde, el dictamen sale con un texto de plantilla.",
+            "Cuando un vehículo cierra sus consultas, el motor de reglas evalúa el catálogo vigente y emite el veredicto: Viable o Bloqueado. Una regla que bloquea deja el dictamen Bloqueado; si solo hay advertencias, o ninguna regla dispara, el dictamen es Viable. La IA redacta la explicación y no cambia el veredicto; mientras redacta verás «redacción IA pendiente» y, si no responde, el dictamen sale con un texto de plantilla. Si la redacción no está en cola, el dictamen muestra «Sin análisis»: el texto estándar es el definitivo y no se redactará después.",
             "Pulsa «Dictamen» bajo la placa («Ver dictamen de ABC123») para abrir la ventana del dictamen: veredicto, trámite analizado, versión del catálogo, fecha de emisión y los alertamientos, cada uno con su fuente y su efecto («Bloquea» o «Advertencia»).",
             "El dictamen y la deuda se abren en una ventana centrada sobre el tablero, de 640 px de ancho en pantallas grandes, con el mismo contenido que antes. Se cierra con «Cerrar», con la tecla Escape o con un clic fuera, y al cerrarla el foco vuelve al botón que la abrió. Desde un dictamen Bloqueado, «Ver deuda» cambia la ventana por la de «Deuda y saneamiento» sin abrir una encima de otra."
           ],
@@ -3960,7 +3960,7 @@
             {
               "variant": "tip",
               "title": null,
-              "text": "En Con Análisis IA una deuda de impuesto es una advertencia del dictamen, no un bloqueo. En la ventana «Deuda y saneamiento» aparece como «Vigencias del impuesto» con el «Total pendiente»."
+              "text": "En Con análisis una deuda de impuesto es una advertencia del dictamen, no un bloqueo. En la ventana «Deuda y saneamiento» aparece como «Vigencias del impuesto» con el «Total pendiente»."
             }
           ]
         }
@@ -4032,7 +4032,7 @@
           "id": "cuando",
           "title": "1. Cuándo se puede",
           "paragraphs": [
-            "Un vehículo se puede llevar a trámite cuando terminó sus consultas y todavía no tiene trámite. En Con Análisis IA además su dictamen vigente debe ser Viable: con Bloqueado no se ofrece «Crear trámite». En Simple no hay dictamen y tú eliges el tipo de trámite. Un vehículo origina como máximo un trámite."
+            "Un vehículo se puede llevar a trámite cuando terminó sus consultas y todavía no tiene trámite. En Con análisis además su dictamen vigente debe ser Viable: con Bloqueado no se ofrece «Crear trámite». En Simple no hay dictamen y tú eliges el tipo de trámite. Un vehículo origina como máximo un trámite."
           ],
           "bullets": [],
           "callouts": []
@@ -4041,7 +4041,7 @@
           "id": "individual",
           "title": "2. Un vehículo",
           "paragraphs": [
-            "En la fila abre «Acciones» y elige «Crear trámite». En Simple elige el «Tipo de trámite»; en Con Análisis IA se usa el trámite analizado del lote. Confirma y, al terminar, verás «Se creó el borrador del trámite» con «Ir al wizard», que abre Trámites en una pestaña nueva para que completes allí el borrador. Si la placa ya tenía trámite, verás «La placa ya tenía el trámite» y «Ver trámite». Cuando el vehículo ya tiene trámite, el menú «Acciones» muestra «Ver trámite #N», que lo abre en una pestaña nueva. Si el vehículo aún no cumple las condiciones, «Crear trámite» aparece atenuada con el motivo."
+            "En la fila abre «Acciones» y elige «Crear trámite». En Simple elige el «Tipo de trámite»; en Con análisis se usa el trámite analizado del lote. Confirma y, al terminar, verás «Se creó el borrador del trámite» con «Ir al wizard», que abre Trámites en una pestaña nueva para que completes allí el borrador. Si la placa ya tenía trámite, verás «La placa ya tenía el trámite» y «Ver trámite». Cuando el vehículo ya tiene trámite, el menú «Acciones» muestra «Ver trámite #N», que lo abre en una pestaña nueva. Si el vehículo aún no cumple las condiciones, «Crear trámite» aparece atenuada con el motivo."
           ],
           "bullets": [],
           "callouts": []
@@ -4134,7 +4134,7 @@
           "id": "llenado",
           "title": "2. Llenar a mano una consulta en error",
           "paragraphs": [
-            "En una celda en error pulsa «Llenar a mano» para abrir el formulario de esa fuente (por ejemplo comparendos del SIMIT o el valor del avalúo) y confirma con «Confirmar llenado». La celda queda verde con la marca «Manual», el lote vuelve a En proceso y, en Con Análisis IA, el dictamen se recalcula.",
+            "En una celda en error pulsa «Llenar a mano» para abrir el formulario de esa fuente (por ejemplo comparendos del SIMIT o el valor del avalúo) y confirma con «Confirmar llenado». La celda queda verde con la marca «Manual», el lote vuelve a En proceso y, en Con análisis, el dictamen se recalcula.",
             "No se llenan a mano el RUNT del vehículo ni el impuesto departamental. Una celda que depende del RUNT del vehículo en error se resuelve reprocesando el RUNT."
           ],
           "bullets": [],
@@ -4161,7 +4161,7 @@
           "title": "4. Contrato y fuentes obligatorias",
           "paragraphs": [
             "En «Configuración → Contrato» el backoffice elige la empresa y edita sus «Fuentes habilitadas» y su «Límite de vehículos por lote» con «Guardar contrato». Al quitar una fuente habilitada se recortan las fuentes por defecto de la empresa. El interruptor «Suspender la redacción con IA» es de emergencia: mientras esté activo, los dictámenes salen sin redacción automática.",
-            "«Fuentes obligatorias» define, por tipo de trámite o por familia, qué fuentes se exigen en Con Análisis IA. El RUNT del vehículo siempre es obligatorio y no se configura aquí. Hay pisos que no se pueden quitar: el SIMIT del propietario en el traspaso y en la transferencia de dominio. En el traspaso unilateral no se exige el SIMIT y no se puede marcar. Una lista vacía guardada es válida y evita heredar las fuentes de la familia."
+            "«Fuentes obligatorias» define, por tipo de trámite o por familia, qué fuentes se exigen en Con análisis. El RUNT del vehículo siempre es obligatorio y no se configura aquí. Hay pisos que no se pueden quitar: el SIMIT del propietario en el traspaso y en la transferencia de dominio. En el traspaso unilateral no se exige el SIMIT y no se puede marcar. Una lista vacía guardada es válida y evita heredar las fuentes de la familia."
           ],
           "bullets": [],
           "callouts": []
@@ -4335,7 +4335,7 @@
             "¿Por qué no se consultaron las demás fuentes de un vehículo? Porque su RUNT falló: sin RUNT no hay placa definitiva ni propietario, y las demás fuentes esperan. Al reprocesar el RUNT, se consultan.",
             "¿Por qué una consulta no aparece en el consumo? Porque se reutilizó el dato del mismo día de esa placa y fuente en tu compañía, o porque quedó en Novedad.",
             "¿Puedo cambiar las fuentes de un lote ya lanzado? No. Crea un diagnóstico nuevo con el alcance que necesitas.",
-            "¿Por qué no puedo crear el trámite? El vehículo aún no termina, ya tiene trámite, ya está en curso de creación o, en Con Análisis IA, su dictamen no es Viable.",
+            "¿Por qué no puedo crear el trámite? El vehículo aún no termina, ya tiene trámite, ya está en curso de creación o, en Con análisis, su dictamen no es Viable.",
             "¿El saneamiento cuesta algo o cambia el dictamen? Diagnóstico no cobra el saneamiento y no cambia el dictamen al cerrarlo; si corresponde, FLIT ajusta el dictamen.",
             "¿Quién llena datos a mano o corrige el dictamen? Solo el equipo FLIT. Ningún usuario de la compañía puede hacerlo, ni por pantalla ni por API.",
             "¿Dónde quedaron los botones de cada vehículo? En el menú «Acciones» de la última columna del tablero. La bandera de saneamiento, «Crear trámite», «Ver deuda», el PDF y el reintento están ahí.",

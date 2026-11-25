@@ -8,9 +8,13 @@ import type { TenantProduct } from "@/lib/api/platform";
 
 const listTenantProducts = vi.fn();
 const setTenantProduct = vi.fn();
+const setTenantProductCredential = vi.fn();
+const deleteTenantProductCredential = vi.fn();
 vi.mock("@/lib/api/platform", () => ({
   listTenantProducts: (id: string) => listTenantProducts(id),
   setTenantProduct: (id: string, code: string, enabled: boolean) => setTenantProduct(id, code, enabled),
+  setTenantProductCredential: (...a: unknown[]) => setTenantProductCredential(...a),
+  deleteTenantProductCredential: (...a: unknown[]) => deleteTenantProductCredential(...a),
 }));
 
 const product = (code: string, name: string, enabled: boolean, extra: Partial<TenantProduct> = {}): TenantProduct => ({
@@ -31,6 +35,8 @@ describe("ProductosTab", () => {
   beforeEach(() => {
     listTenantProducts.mockReset();
     setTenantProduct.mockReset().mockResolvedValue({});
+    setTenantProductCredential.mockReset().mockResolvedValue(undefined);
+    deleteTenantProductCredential.mockReset().mockResolvedValue(undefined);
   });
 
   it("muestra el estado real de los tres productos, con quién y cuándo los cambió", async () => {
@@ -96,5 +102,65 @@ describe("ProductosTab", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("La empresa no existe.");
     expect(switchOf("Comparendos")).not.toBeChecked();
+  });
+
+  describe("API key de impuesto de Diagnóstico (ola impuesto-fuente-real, diseno.md §5.1)", () => {
+    const campo = () => screen.queryByLabelText("API key de impuesto vehicular");
+
+    it("solo Diagnóstico muestra el estado de la llave, sin valor", async () => {
+      listTenantProducts.mockResolvedValue([
+        product("tramites", "Trámites", true, { impuestoApiKeyConfigurada: null }),
+        product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: true }),
+      ]);
+      render(<ProductosTab tenantId="t1" />);
+      const region = await screen.findByRole("group", { name: "API key de impuesto de Diagnóstico" });
+      expect(within(region).getByText("Configurada")).toBeInTheDocument();
+      expect(screen.getAllByRole("group", { name: /API key de impuesto/ })).toHaveLength(1);
+      expect(campo()).toBeNull();
+    });
+
+    it("al encender Diagnóstico sin llave abre el formulario con «Ahora no» (opcional, no bloquea)", async () => {
+      const user = userEvent.setup();
+      listTenantProducts
+        .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", false, { impuestoApiKeyConfigurada: false })])
+        .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: false })]);
+      render(<ProductosTab tenantId="t1" />);
+      expect(await screen.findByText("No configurada")).toBeInTheDocument();
+      expect(campo()).toBeNull();
+
+      await user.click(switchOf("Diagnóstico"));
+
+      expect(await screen.findByLabelText("API key de impuesto vehicular")).toHaveValue("");
+      expect(switchOf("Diagnóstico")).toBeChecked();
+      await user.click(screen.getByRole("button", { name: "Ahora no" }));
+      expect(campo()).toBeNull();
+      expect(setTenantProductCredential).not.toHaveBeenCalled();
+    });
+
+    it("al encender Diagnóstico con llave ya configurada no abre el formulario", async () => {
+      const user = userEvent.setup();
+      listTenantProducts
+        .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", false, { impuestoApiKeyConfigurada: true })])
+        .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: true })]);
+      render(<ProductosTab tenantId="t1" />);
+      await user.click(await screen.findByRole("switch", { name: /^Diagnóstico$/ }));
+      expect(await screen.findByRole("switch", { name: /^Diagnóstico$/ })).toBeChecked();
+      expect(campo()).toBeNull();
+    });
+
+    it("guardar la llave relee los productos y pasa a «Configurada»", async () => {
+      const user = userEvent.setup();
+      listTenantProducts
+        .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: false })])
+        .mockResolvedValueOnce([product("diagnostico", "Diagnóstico", true, { impuestoApiKeyConfigurada: true })]);
+      render(<ProductosTab tenantId="t1" />);
+      await user.click(await screen.findByRole("button", { name: "Configurar" }));
+      await user.click(screen.getByLabelText("API key de impuesto vehicular"));
+      await user.paste("llave-sintetica-0123456789");
+      await user.click(screen.getByRole("button", { name: "Guardar" }));
+      expect(setTenantProductCredential).toHaveBeenCalledWith("t1", "diagnostico", "impuesto_api_key", "llave-sintetica-0123456789");
+      expect(await screen.findByText("Configurada")).toBeInTheDocument();
+      expect(listTenantProducts).toHaveBeenCalledTimes(2);
+    });
   });
 });

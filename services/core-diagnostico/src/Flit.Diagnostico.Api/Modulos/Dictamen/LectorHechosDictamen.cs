@@ -25,7 +25,9 @@ public sealed record PedidoLectura(
     LecturaCelda<IReadOnlyList<ResultadoSimitDetalle>>? SimitPropietario,
     LecturaCelda<IReadOnlyList<ResultadoSimitDetalle>>? SimitLocatario,
     LecturaCelda<IReadOnlyList<ResultadoRuntPersonaDetalle>>? RuntLocatario,
-    LecturaCelda<ResultadoImpuestoDetalle>? Impuesto);
+    LecturaCelda<ResultadoImpuestoDetalle>? Impuesto,
+    /// <summary>Advertencias del payload de impuesto COMPLETADO (solo VALIDACION dispara el hecho).</summary>
+    IReadOnlyList<AdvertenciaImpuestoLeida>? AdvertenciasImpuesto = null);
 
 /// <summary>
 /// Arma <see cref="HechosDictamen"/> desde lecturas ya proyectadas. No evalúa reglas y no persiste.
@@ -48,6 +50,8 @@ public static class LectorHechosDictamen
         var (_, simitLocatario) = Lista(pedido.SimitLocatario, true);
         var (estadoLocatario, personasLocatario) = Lista(pedido.RuntLocatario, false);
         var impuesto = Impuesto(pedido.Impuesto);
+        var validacion = impuesto.Estado == EstadoFuenteDictamen.Disponible
+            && pedido.AdvertenciasImpuesto?.Any(a => string.Equals(a.Tipo, "VALIDACION", StringComparison.Ordinal)) == true;
 
         return new HechosDictamen(
             pedido.TipoTramiteCodigo,
@@ -66,7 +70,8 @@ public static class LectorHechosDictamen
                 : null,
             impuesto.Monto,
             impuesto.TieneDeuda,
-            impuesto.Estado);
+            impuesto.Estado,
+            validacion);
     }
 
     private static HechosRuntVehiculo Runt(DetalleRuntReporte detalle, PedidoLectura pedido)

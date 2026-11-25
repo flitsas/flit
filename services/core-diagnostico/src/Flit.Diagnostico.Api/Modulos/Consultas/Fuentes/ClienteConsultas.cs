@@ -2,6 +2,7 @@ using Flit.Consultas.Grpc.V1;
 using Flit.Platform.Sdk.Grpc;
 using Grpc.Core;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using PlatformRpcErrors = Flit.Platform.Sdk.Grpc.PlatformRpcErrors;
 
 namespace Flit.Diagnostico.Api.Modulos.Consultas.Fuentes;
 
@@ -13,6 +14,9 @@ public sealed record RespuestaConsultas<T>(T? Respuesta, ErrorConsulta? Error)
 
     /// <summary>Código gRPC del fallo (HU #13861: la capacidad lo registra); null si la llamada fue exitosa.</summary>
     public StatusCode? Codigo { get; init; }
+
+    /// <summary>Reason de <c>google.rpc.ErrorInfo</c> (dominio FLIT), si vino; null si no.</summary>
+    public string? Reason { get; init; }
 }
 
 /// <summary>
@@ -31,14 +35,14 @@ public sealed record RespuestaConsultas<T>(T? Respuesta, ErrorConsulta? Error)
 ///     (c, opciones) => c.ListarDepartamentosImpuestoAsync(new ListarDepartamentosImpuestoRequest(), opciones), ct);
 /// </code>
 /// </example>
-public sealed class ClienteConsultas(ConsultasService.ConsultasServiceClient cliente, ILogger<ClienteConsultas> log)
+public class ClienteConsultas(ConsultasService.ConsultasServiceClient cliente, ILogger<ClienteConsultas> log)
 {
     public const string Scope = "platform.consultas";
     public const string ClaveDireccion = "Diagnostico:Consultas:Address";
     public const string ClaveDeadline = "Diagnostico:Consultas:DeadlineSegundos";
     public const int DeadlinePorDefectoSegundos = 90;
 
-    public Task<RespuestaConsultas<T>> LlamarAsync<T>(
+    public virtual Task<RespuestaConsultas<T>> LlamarAsync<T>(
         Guid empresa, Func<ConsultasService.ConsultasServiceClient, CallOptions, AsyncUnaryCall<T>> llamada, CancellationToken ct)
         where T : class
     {
@@ -87,7 +91,7 @@ internal static partial class LlamadaConsultas
         {
             var error = TraductorErroresConsultas.Traducir(ex);
             LlamadaFallida(log, typeof(T).Name, ex.StatusCode, error.TipoError);
-            return new RespuestaConsultas<T>(null, error) { Codigo = ex.StatusCode };
+            return new RespuestaConsultas<T>(null, error) { Codigo = ex.StatusCode, Reason = PlatformRpcErrors.Reason(ex) };
         }
     }
 

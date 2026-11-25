@@ -94,7 +94,7 @@ function BandaBackoffice() {
 export function contextoLote(d: DiagnosticoBackoffice): string {
   const partes = [d.id];
   if (d.modo) {
-    partes.push(d.modo === "CON_ANALISIS" ? "Con análisis IA" : "Simple");
+    partes.push(d.modo === "CON_ANALISIS" ? "Con análisis" : "Simple");
     if (d.tipo_tramite) partes.push(d.tipo_tramite.nombre);
     else if (d.es_express) partes.push("Express");
   }

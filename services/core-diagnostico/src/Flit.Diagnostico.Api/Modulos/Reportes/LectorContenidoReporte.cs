@@ -13,6 +13,7 @@ using Flit.Diagnostico.Domain.Diagnosticos;
 using Flit.Diagnostico.Domain.Personas;
 using Flit.Diagnostico.Domain.Vehiculos;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 
 namespace Flit.Diagnostico.Api.Modulos.Reportes;
 
@@ -41,7 +42,7 @@ namespace Flit.Diagnostico.Api.Modulos.Reportes;
 /// </remarks>
 internal sealed class LectorContenidoReporte(
     DiagnosticoDb db, IProtectorDocumentoPersona protector, IProtectorRespuestaFuente protectorRespuesta, IResolutorNombresUsuario nombres,
-    ICatalogoTiposTramite catalogo)
+    ICatalogoTiposTramite catalogo, IOptions<Trabajos.OpcionesRedaccion> redaccion)
 {
     /// <summary>Texto de cada motivo de N/A (los mismos del detalle de celda de la interfaz).</summary>
     /// <remarks>Sale de <see cref="RotulosDiagnostico.MotivosNa"/> (punto 5): el mismo texto de <c>motivo_na_etiqueta</c> en la API.</remarks>
@@ -107,20 +108,31 @@ internal sealed class LectorContenidoReporte(
 
     /// <summary>
     /// El dictamen vigente del vehículo, si existe. Sin fila no hay claves de dictamen. Solo veredicto, estado y los textos de
-    /// los alertamientos: ni documentos ni nombres.
+    /// los alertamientos: ni documentos ni nombres. HU-3: con el estado de cola de <see cref="Trabajos.RedactorEnCola.EnCola"/>
+    /// (la misma regla de <c>redaccion_en_cola</c>), calculado sobre la misma fila.
     /// </summary>
     private async Task<DictamenEnHuella?> DictamenVigenteAsync(CabeceraDiagnostico cabecera, Guid vehiculoId, CancellationToken ct)
     {
         var fila = await db.Set<DictamenVehiculo>().AsNoTracking()
             .Where(d => d.VehiculoId == vehiculoId && d.TenantId == cabecera.TenantId && d.Vigente)
-            .Select(d => new { d.Veredicto, d.EstadoRedaccion, d.Alertamientos, d.Version, Ajustado = d.AjusteMotivo != null, d.OverrideEn })
+            .Select(d => new
+            {
+                d.Veredicto,
+                d.EstadoRedaccion,
+                d.Alertamientos,
+                d.Version,
+                Ajustado = d.AjusteMotivo != null,
+                d.OverrideEn,
+                d.RedaccionDisponibleDesde,
+            })
             .SingleOrDefaultAsync(ct)
             .ConfigureAwait(false);
         return fila is null
             ? null
             : new DictamenEnHuella(
                 fila.Veredicto, fila.EstadoRedaccion, ContenidoReporteVehiculo.TextoDeAlertamientos(fila.Alertamientos), fila.Version,
-                fila.Ajustado ? fila.OverrideEn : null);
+                fila.Ajustado ? fila.OverrideEn : null,
+                Trabajos.RedactorEnCola.EnCola(fila.EstadoRedaccion, fila.RedaccionDisponibleDesde, redaccion.Value));
     }
 
     /// <summary>El contenido del lote para la compañía del token, con su visibilidad y la empresa del claim.</summary>

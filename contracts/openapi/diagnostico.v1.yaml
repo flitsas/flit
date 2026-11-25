@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Diagnóstico Vehicular
-  version: "1.6.0"
+  version: "1.6.1"
   description: >
     Endpoints REST del producto Diagnóstico (core-diagnostico) bajo /api/v1/diagnostico, plan
     docs/diagnosticos/plan-implementacion-diagnostico-vehicular-v2.md §6.1. La app web llega por el
@@ -68,6 +68,12 @@ info:
     ROL_NO_ASIGNABLE, OBJETIVO_PROTEGIDO, ACCION_SOBRE_SI_MISMO, USUARIO_NO_ENCONTRADO, USUARIO_SUSPENDIDO, INVITACION_PENDIENTE,
     ULTIMO_ADMINISTRADOR, ROL_YA_VIGENTE, CORREO_INVALIDO, NOMBRE_REQUERIDO, FILTRO_INVALIDO, PAGINACION_INVALIDA,
     DEMASIADAS_SOLICITUDES, PLATAFORMA_NO_DISPONIBLE y PLATAFORMA_NO_CONFIGURADA.
+
+    Versión 1.6.1 (redactor IA, registro diferido HU-2): cambio aditivo. DictamenVehiculo y DictamenVehiculoBackoffice traen
+    redaccion_en_cola (boolean, requerido): true solo si la redacción del modelo está encendida en el servicio
+    (Diagnostico:Redaccion:Habilitado), estado_redaccion es PENDIENTE y redaccion_disponible_desde no es nula, el mismo
+    predicado de la toma de la cola. Al agotar los reintentos la cola deja la fecha nula y el campo pasa a false.
+    No se exponen intentos, lease ni fecha de toma.
   license:
     name: Propietario FLIT
     url: https://flitsas.com
@@ -263,7 +269,7 @@ paths:
     get:
       tags: [Catalogos]
       operationId: listarTiposTramiteDiagnostico
-      summary: Tipos de trámite de la etapa (modo Con Análisis IA)
+      summary: Tipos de trámite de la etapa (modo Con análisis)
       description: >
         Permiso diagnostico.diagnosticos.crear (HU #13742). Proxy del rpc ListarTiposTramite de
         flit.tramites.v1.CatalogosService (core-api, token de servicio svc-diagnostico con scope
@@ -1311,7 +1317,7 @@ paths:
         INCOMPLETO con todas sus celdas cerradas: la fuente en ERROR sale «consulta no disponible», sin código de error ni causa
         (Q7). Encabezado con ID del diagnóstico, nombre del lote, empresa (claim company_name), creador («No disponible» si
         Identidad no responde), fecha y hora de creación (hora Colombia), tipo de análisis («Diagnóstico Simple» o «Diagnóstico
-        Con Análisis IA — TRÁMITE») e identificación; una sección por fuente del alcance en el orden de la grilla (SIMIT con hasta
+        Con análisis — TRÁMITE») e identificación; una sección por fuente del alcance en el orden de la grilla (SIMIT con hasta
         100 comparendos y «y N más»; avalúo con valor sugerido o «sin valor comercial»; personas con «****» + 4 últimos y el
         rótulo «Declarado por el cliente»; impuesto departamental con «Total adeudado» y la grilla Vigencia / Valor / Estado
         «Pagada» o «Pendiente», o «No registra vigencias», HU #13864; N/A con su motivo); pie con «Generado el …» y «Página X de Y». Sin origen, usuario
@@ -1361,6 +1367,67 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorRegla"
 
+  /api/v1/diagnostico/diagnosticos/{id}/vehiculos/{vid}/impuesto/liquidaciones/{vigencia}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: vid
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+      - name: vigencia
+        in: path
+        required: true
+        description: Año AAAA o `consolidada`.
+        schema:
+          type: string
+          pattern: '^(\d{4}|consolidada)$'
+    get:
+      tags: [Reportes]
+      operationId: descargarLiquidacionImpuesto
+      summary: PDF de liquidación de impuesto por vigencia
+      description: >
+        Permiso diagnostico.reportes.descargar y visibilidad AccesoLote. El fileId sale del payload de la celda
+        IMPUESTO_DEPARTAMENTAL en COMPLETADO; el cliente no lo envía. Nombre impuesto-{8 del id}-{placa}-{vigencia}.pdf.
+      responses:
+        "200":
+          description: application/pdf con Cache-Control no-store.
+          content:
+            application/pdf:
+              schema: { type: string, format: binary }
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Sin diagnostico.reportes.descargar.
+        "404":
+          description: >
+            Lote/vehículo no visible (`NO_ENCONTRADO`) o liquidación no encontrada en la fuente (`LIQUIDACION_NO_ENCONTRADA`).
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "409":
+          description: >
+            `LIQUIDACION_NO_DISPONIBLE` (celda no COMPLETADA o vigencia sin archivo) o `CREDENCIAL_NO_CONFIGURADA`.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "502":
+          description: "`CREDENCIAL_RECHAZADA` o `ARCHIVO_INVALIDO`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+        "503":
+          description: "`FUENTE_NO_DISPONIBLE`."
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorRegla"
+
   /api/v1/diagnostico/diagnosticos/{id}/excel:
     parameters:
       - name: id
@@ -1391,7 +1458,7 @@ paths:
         El valor total en pesos es número; si el SIMIT trajo más comparendos de los que se listan (tope 100) sale el texto
         «al menos N». «Diagnóstico»: ID del diagnóstico, nombre del lote, empresa (claim company_name), usuario creador («No
         disponible» si Identidad no responde), fecha de creación (hora Colombia) y tipo de análisis («Diagnóstico Simple» o
-        «Diagnóstico Con Análisis IA — TRÁMITE»). «Consultas»: solo con estimado_consultas=AL_FINALIZAR en la copia de
+        «Diagnóstico Con análisis — TRÁMITE»). «Consultas»: solo con estimado_consultas=AL_FINALIZAR en la copia de
         configuración del lote y el lote COMPLETADO o INCOMPLETO; fuente, consultas estimadas, consultas consumidas y
         «al menos» si el estimado es mínimo (el mismo cálculo de la grilla). Sin origen, usuario manual, proveedor ni transacción
         (R-20): una celda llenada a mano produce la misma fila que una de API. Toda celda de texto que empiece por =, +, -, @,
@@ -6464,8 +6531,8 @@ components:
       description: >
         Dictamen vigente que ve la compañía. Sin override, lease, intentos ni empresa. HU #14563 (D6, P1 = a): la marca
         ajustado_por_flit y ajustado_en; nunca el autor, el motivo, la versión anterior ni la marca ajuste por alertamiento.
-        HU #14582: cambio_propietario del vehículo.
-      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, cambio_propietario]
+        HU #14582: cambio_propietario del vehículo. 1.6.1: redaccion_en_cola.
+      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, cambio_propietario, redaccion_en_cola]
       properties:
         version: { type: integer, minimum: 1 }
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
@@ -6490,12 +6557,18 @@ components:
           type: boolean
           nullable: true
           description: HU #14582. El del vehículo (FilaVehiculo.cambio_propietario); sin documentos.
+        redaccion_en_cola:
+          type: boolean
+          description: >
+            Versión 1.6.1. true si la redacción está encendida, estado_redaccion es PENDIENTE y redaccion_disponible_desde no es
+            nula (el predicado de la toma). false con COMPLETADA, con la redacción apagada o suspendida, o con los reintentos
+            agotados (la cola deja la fecha nula).
 
     DictamenVehiculoBackoffice:
       type: object
       additionalProperties: false
       description: El de la compañía más los tres campos de override. Sin lease, intentos ni texto de cola.
-      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, analisis_override, usuario_override_id, override_en, cambio_propietario]
+      required: [version, veredicto, estado_redaccion, alertamientos, catalogo_version, creado_en, analisis_override, usuario_override_id, override_en, cambio_propietario, redaccion_en_cola]
       properties:
         version: { type: integer, minimum: 1 }
         veredicto: { type: string, enum: [VIABLE, BLOQUEADO] }
@@ -6513,6 +6586,12 @@ components:
           type: boolean
           nullable: true
           description: HU #14582. El del vehículo (FilaVehiculo.cambio_propietario); sin documentos.
+        redaccion_en_cola:
+          type: boolean
+          description: >
+            Versión 1.6.1. true si la redacción está encendida, estado_redaccion es PENDIENTE y redaccion_disponible_desde no es
+            nula (el predicado de la toma). false con COMPLETADA, con la redacción apagada o suspendida, o con los reintentos
+            agotados (la cola deja la fecha nula).
 
     CuerpoOverrideDictamen:
       type: object
@@ -6661,14 +6740,29 @@ components:
           nullable: true
           description: >
             Solo con estado ERROR; mismos códigos que CeldaGrilla.tipo_error. El impuesto añade NO_CONFIRMADO,
-            MODELO_NO_ACEPTADO, DOCUMENTO_NO_COINCIDE, DOCUMENTO_NO_HOMOLOGADO, VEHICULO_NO_ENCONTRADO,
-            VEHICULO_NO_CONSULTABLE, REQUIERE_ACTUALIZACION, SIN_DOCUMENTO, SIN_MODELO, ORGANISMO_INCOMPLETO
-            y SIN_NOMBRE_PROPIETARIO.
+            NO_CONFIRMADO_TIEMPO, CREDENCIAL_NO_CONFIGURADA, MODELO_NO_ACEPTADO, DOCUMENTO_NO_COINCIDE,
+            DOCUMENTO_NO_HOMOLOGADO, VEHICULO_NO_ENCONTRADO, VEHICULO_NO_CONSULTABLE, REQUIERE_ACTUALIZACION,
+            SIN_DOCUMENTO, SIN_MODELO, ORGANISMO_INCOMPLETO, SIN_NOMBRE_PROPIETARIO y FUENTE_INACTIVA (la fuente del
+            departamento está inactiva; definitivo y reprocesable).
         dato_parcial:
           type: boolean
           description: >
             Solo impuesto en ERROR cuando la fuente marcó dato parcial. El detalle lo rotula y no muestra el monto.
             Ausente cuando es false. No sale en PDF, Excel ni dictamen.
+        advertencias:
+          type: array
+          nullable: true
+          description: >
+            Solo IMPUESTO_DEPARTAMENTAL en COMPLETADO o ERROR. Texto rotulado por el servidor; nunca valores enviados
+            ni del portal. Null en las demás fuentes.
+          items:
+            type: object
+            required: [tipo, campo, texto]
+            properties:
+              tipo: { type: string, enum: [VALIDACION, AVISO] }
+              campo: { type: string }
+              anio: { type: integer, nullable: true }
+              texto: { type: string }
         auditoria:
           nullable: true
           description: >
@@ -6948,7 +7042,7 @@ components:
         Impuesto vehicular departamental. `tiene_deuda` confirma la deuda. `monto_total` es null y se omite cuando el
         servicio no informó valor: la pantalla, el PDF y el Excel dicen «Deuda sin valor informado», nunca `$ 0`.
         Sin deuda no trae fechas ni valores que no vinieron. Sin proveedor, transacción, origen ni departamento (R-20).
-      required: [tiene_deuda, vigencias]
+      required: [tiene_deuda, vigencias, tiene_liquidacion_consolidada]
       properties:
         tiene_deuda: { type: boolean, description: "true si la fuente confirmó deuda, también sin monto." }
         monto_total:
@@ -6961,7 +7055,15 @@ components:
         sanciones: { type: integer, format: int64, nullable: true }
         avaluo_comercial: { type: integer, format: int64, nullable: true }
         ultimo_pago: { $ref: "#/components/schemas/UltimoPagoImpuestoDetalle" }
-        liquidacion_consolidada_id: { type: string, nullable: true }
+        liquidacion_consolidada_id:
+          type: string
+          nullable: true
+          deprecated: true
+          description: "Deprecated: el front usa tiene_liquidacion_consolidada y descarga por vigencia."
+        tiene_liquidacion_consolidada: { type: boolean }
+        dato_parcial:
+          type: boolean
+          description: "Ausente cuando es false. true si la fuente respondió partial con deuda confirmada."
         periodo_certificacion: { type: string, nullable: true }
         fecha_consulta: { type: string, nullable: true }
         vigencias:
@@ -6972,9 +7074,10 @@ components:
       example:
         tiene_deuda: true
         monto_total: 350000
+        tiene_liquidacion_consolidada: false
         vigencias:
-          - { anio: 2025, valor: 180000, pagada: true }
-          - { anio: 2026, valor: 350000, pagada: false }
+          - { anio: 2025, valor: 180000, pagada: true, tiene_liquidacion: false }
+          - { anio: 2026, valor: 350000, pagada: false, tiene_liquidacion: true }
 
     UltimoPagoImpuestoDetalle:
       type: object
@@ -6985,11 +7088,14 @@ components:
 
     VigenciaImpuestoDetalle:
       type: object
-      required: [anio, valor, pagada]
+      required: [anio, valor, pagada, tiene_liquidacion]
       properties:
         anio: { type: integer, example: 2026 }
         valor: { type: integer, format: int64, description: "Pesos colombianos.", example: 350000 }
         pagada: { type: boolean }
+        referencia_pago: { type: string, nullable: true }
+        fecha_vencimiento: { type: string, nullable: true, description: "AAAA-MM-DD" }
+        tiene_liquidacion: { type: boolean }
 
     ResultadoRuntPersonaDetalle:
       type: object

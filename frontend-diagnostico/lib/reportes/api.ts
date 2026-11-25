@@ -123,6 +123,55 @@ export function mensajeDescarga(error: unknown): string {
   return error instanceof Error ? error.message : "No se pudo descargar el archivo.";
 }
 
+// ── Liquidaciones del impuesto (ola impuesto-fuente-real, contrato-api.md B2) ──────────────────────────────────────
+// GET /diagnosticos/{id}/vehiculos/{vid}/impuesto/liquidaciones/{vigencia}: la API toma el id del archivo del payload
+// guardado; el navegador solo manda el vehículo y el año (o «consolidada»). Exige `diagnostico.reportes.descargar`.
+
+export type VigenciaLiquidacion = number | "consolidada";
+
+/** URL del BFF del PDF de liquidación de una vigencia o de la consolidada. */
+export const urlLiquidacionImpuesto = (id: string, vid: string, vigencia: VigenciaLiquidacion): string =>
+  `${API_PREFIX}${ruta(id, `/vehiculos/${encodeURIComponent(vid)}/impuesto/liquidaciones/${encodeURIComponent(String(vigencia))}`)}`;
+
+/** «liquidacion-<placa>-<año>.pdf»: la placa (o VIN) en mayúsculas y solo letras y dígitos. */
+export function nombreLiquidacionImpuesto(placa: string, vigencia: VigenciaLiquidacion): string {
+  const limpia = placa.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  return `liquidacion-${limpia}-${vigencia}.pdf`;
+}
+
+/**
+ * Baja por blob el PDF de liquidación con el nombre `liquidacion-<placa>-<año>.pdf` y devuelve ese nombre. Un error HTTP
+ * lanza `ApiError` con el `code` del cuerpo y no descarga nada; con la sesión renovándose se rechaza (el botón no se cuelga).
+ */
+export async function descargarLiquidacionImpuesto(id: string, vid: string, vigencia: VigenciaLiquidacion, placa: string): Promise<string> {
+  if (isReauthenticating()) throw new ApiError(401, "Sesión en renovación.", "SESION_RENOVANDO");
+  const respuesta = await fetch(urlLiquidacionImpuesto(id, vid, vigencia), { method: "GET", cache: "no-store" });
+  if (!respuesta.ok) {
+    if (respuesta.status === 401) reauthenticate({ silent: true });
+    const datos = await leerError(respuesta);
+    throw new ApiError(respuesta.status, "No se pudo descargar la liquidación.", datos?.code);
+  }
+  const nombre = nombreLiquidacionImpuesto(placa, vigencia);
+  guardar(await respuesta.blob(), nombre);
+  return nombre;
+}
+
+export const MENSAJE_LIQUIDACION_NO_ENCONTRADA = "La fuente ya no tiene este archivo.";
+export const MENSAJE_LIQUIDACION_SIN_CREDENCIAL =
+  "La compañía no tiene configurada la credencial del impuesto. Pídele al administrador que la configure.";
+export const MENSAJE_LIQUIDACION_GENERICO = "No se pudo descargar la liquidación. Intenta de nuevo en un momento.";
+
+/** Texto fijo del error de una liquidación (nunca el mensaje ni el código del servidor). */
+export function mensajeDescargaLiquidacion(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.code === "CREDENCIAL_NO_CONFIGURADA" || error.status === 412 || error.status === 422) return MENSAJE_LIQUIDACION_SIN_CREDENCIAL;
+    if (error.status === 404) return MENSAJE_LIQUIDACION_NO_ENCONTRADA;
+    if (error.code === "SESION_RENOVANDO") return "Tu sesión se está renovando. Intenta de nuevo en unos segundos.";
+    if (error.status === 403) return "No tienes permiso para descargar reportes.";
+  }
+  return MENSAJE_LIQUIDACION_GENERICO;
+}
+
 const CERRADAS: ReadonlySet<EstadoCelda> = new Set(["COMPLETADO", "NA", "ERROR"]);
 
 /**

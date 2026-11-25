@@ -51,10 +51,10 @@ public sealed class ContratoImpuestoProtoTests
     }
 
     [Fact]
-    public void El_cliente_generado_expone_los_dos_rpcs_de_impuesto()
+    public void El_cliente_generado_expone_los_rpcs_de_impuesto()
     {
         var cliente = typeof(ConsultasService.ConsultasServiceClient);
-        foreach (var metodo in new[] { "ConsultarImpuestoVehicular", "ListarDepartamentosImpuesto" })
+        foreach (var metodo in new[] { "ConsultarImpuestoVehicular", "ListarDepartamentosImpuesto", "DescargarLiquidacionImpuesto" })
         {
             cliente.GetMethods(BindingFlags.Public | BindingFlags.Instance).Select(x => x.Name)
                 .Should().Contain($"{metodo}Async", $"el cliente generado debe exponer {metodo}Async");
@@ -82,7 +82,16 @@ public sealed class ContratoImpuestoProtoTests
         Campo(req, "departamento_nombre", 7, FieldType.String);
         Campo(req, "modelo", 8, FieldType.Int32);
         Campo(req, "propietario_nombre", 9, FieldType.String);
-        req.Fields.InFieldNumberOrder().Should().HaveCount(9);
+        Campo(req, "propietario_telefono", 10, FieldType.String);
+        Campo(req, "propietario_correo", 11, FieldType.String);
+        Campo(req, "propietario_departamento", 12, FieldType.String);
+        Campo(req, "propietario_ciudad", 13, FieldType.String);
+        Campo(req, "propietario_direccion", 14, FieldType.String);
+        Campo(req, "vehiculo_clase", 15, FieldType.String);
+        Campo(req, "vehiculo_marca", 16, FieldType.String);
+        Campo(req, "vehiculo_servicio", 17, FieldType.String);
+        Campo(req, "vehiculo_combustible", 18, FieldType.String);
+        req.Fields.InFieldNumberOrder().Should().HaveCount(18);
 
         var resp = MensajeObligatorio("ConsultarImpuestoVehicularResponse");
         Campo(resp, "resultado", 1, FieldType.Message, tipoMensaje: "flit.consultas.v1.ResultadoConsulta");
@@ -98,7 +107,8 @@ public sealed class ContratoImpuestoProtoTests
         Campo(resp, "periodo_certificacion", 11, FieldType.String);
         Campo(resp, "fecha_consulta_proveedor", 12, FieldType.String);
         Campo(resp, "dato_parcial", 13, FieldType.Bool);
-        resp.Fields.InFieldNumberOrder().Should().HaveCount(13);
+        Campo(resp, "advertencias", 14, FieldType.Message, repetido: true, tipoMensaje: "flit.consultas.v1.AdvertenciaImpuesto");
+        resp.Fields.InFieldNumberOrder().Should().HaveCount(14);
 
         var vigencia = MensajeObligatorio("VigenciaImpuesto");
         Campo(vigencia, "anio", 1, FieldType.Int32);
@@ -106,7 +116,9 @@ public sealed class ContratoImpuestoProtoTests
         Campo(vigencia, "pagada", 3, FieldType.Bool);
         Campo(vigencia, "liquidacion_id", 4, FieldType.String);
         Campo(vigencia, "avaluo", 5, FieldType.Int64);
-        vigencia.Fields.InFieldNumberOrder().Should().HaveCount(5);
+        Campo(vigencia, "referencia_pago", 6, FieldType.String);
+        Campo(vigencia, "fecha_vencimiento", 7, FieldType.String);
+        vigencia.Fields.InFieldNumberOrder().Should().HaveCount(7);
 
         var ultimoPago = MensajeObligatorio("UltimoPagoImpuesto");
         Campo(ultimoPago, "anio", 1, FieldType.Int32);

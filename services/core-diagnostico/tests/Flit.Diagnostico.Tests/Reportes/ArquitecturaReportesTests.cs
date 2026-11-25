@@ -58,7 +58,10 @@ public sealed class ArquitecturaReportesTests
     }
 
     // HU #13864 (F09-C9, R-20) — el resultado del impuesto llega al renderizador y ni él ni sus vigencias tienen proveedor,
-    // transacción, origen ni departamento. C3-8 suma tiene_deuda y los opcionales; las vigencias siguen en anio/valor/pagada.
+    // transacción, origen ni departamento. C3-8 suma tiene_deuda y los opcionales.
+    // La fuente real suma dato_parcial (consulta incompleta) y tiene_liquidacion_consolidada (habilita la descarga): ninguno es
+    // proveedor, transacción ni origen. Cada vigencia suma referencia_pago y fecha_vencimiento (datos del recibo del contribuyente)
+    // y tiene_liquidacion (habilita su descarga).
     [Fact]
     public void ResultadoImpuestoDetalle_no_tiene_proveedor_transaccion_ni_origen()
     {
@@ -69,8 +72,10 @@ public sealed class ArquitecturaReportesTests
             "el resultado del impuesto es un derivado registrado de ResultadoDetalleDto (JsonDerivedType)");
         Violaciones([typeof(ResultadoImpuestoDetalle)]).Should().BeEmpty();
         Json(typeof(ResultadoImpuestoDetalle)).Should().BeEquivalentTo(
-            ["monto_total", "vigencias", "tiene_deuda", "intereses_mora", "sanciones", "avaluo_comercial", "ultimo_pago", "liquidacion_consolidada_id", "periodo_certificacion", "fecha_consulta"]);
-        Json(typeof(VigenciaImpuestoDetalle)).Should().BeEquivalentTo(["anio", "valor", "pagada"]);
+            ["monto_total", "vigencias", "tiene_deuda", "intereses_mora", "sanciones", "avaluo_comercial", "ultimo_pago", "liquidacion_consolidada_id", "periodo_certificacion", "fecha_consulta",
+             "dato_parcial", "tiene_liquidacion_consolidada"]);
+        Json(typeof(VigenciaImpuestoDetalle)).Should().BeEquivalentTo(
+            ["anio", "valor", "pagada", "referencia_pago", "fecha_vencimiento", "tiene_liquidacion"]);
         Propiedades([typeof(ResultadoImpuestoDetalle)]).Select(p => p.Name)
             .Should().NotContain(n => n.Contains("Proveedor", StringComparison.OrdinalIgnoreCase) || n.Contains("Departamento", StringComparison.OrdinalIgnoreCase));
     }

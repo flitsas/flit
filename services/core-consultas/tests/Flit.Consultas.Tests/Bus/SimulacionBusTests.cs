@@ -55,8 +55,11 @@ public sealed class SimulacionBusTests(AnfitrionBusSimulado bus) : IClassFixture
             {
                 Opciones = new OpcionesConsulta(),
                 Placa = new Placa { Valor = "TST20Z" },
-                DepartamentoCodigo = "11",
+                DepartamentoCodigo = "05",
                 Documento = new DocumentoIdentidad { Tipo = "CC", Numero = "999999" },
+                PropietarioNombre = "PROPIETARIO DE PRUEBA",
+                Municipio = "SABANETA",
+                Modelo = 2020,
             }, esExpress: true);
 
         await bus.EjecutarAsync<ConsumidorTrabajosExpress>(sobre);

@@ -98,7 +98,7 @@ public static class Modulos
         services.AddSingleton<Trabajos.RedactorEnCola>();
         services.AddOptions<Trabajos.OpcionesRedaccion>()
             .Bind(configuration.GetSection(Trabajos.OpcionesRedaccion.Seccion))
-            .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesRedaccion.Seccion} tiene valores fuera de rango (Intervalo > 0, DuracionLease >= 30 s, MaxReintentos 0-5).")
+            .Validate(o => o.Errores().Count == 0, $"{Trabajos.OpcionesRedaccion.Seccion} tiene valores fuera de rango (Intervalo > 0, DuracionLease >= 30 s, MaxReintentos 0-5, EsperaReintento > 0).")
             .ValidateOnStart();
         if (configuration.GetValue($"{Trabajos.OpcionesRedaccion.Seccion}:{nameof(Trabajos.OpcionesRedaccion.Habilitado)}", false))
             services.AddHostedService<Trabajos.TrabajadorRedaccion>();
@@ -167,6 +167,8 @@ public static class Modulos
         services.AddScoped<Reportes.DescargaPdfVehiculo>();
         // HU #13849: Excel del lote (mismo contenido de F07-H2, huella del lote y registro de F07-H1).
         services.AddScoped<Reportes.DescargaExcelLote>();
+        // Impuesto fuente real (D5): PDF de liquidación por vigencia; fileId del payload, no del cliente.
+        services.AddScoped<Reportes.DescargaLiquidacionImpuesto>();
         // HU #13850: ZIP de los PDF del lote en segundo plano (pedido/estado/archivo, cola entre compañías y empaquetador con la
         // empresa de cada ZIP fijada en su contexto). El trabajador solo se registra con Diagnostico:Evidencias:Habilitado=true.
         services.AddScoped<Reportes.SolicitudZip>();

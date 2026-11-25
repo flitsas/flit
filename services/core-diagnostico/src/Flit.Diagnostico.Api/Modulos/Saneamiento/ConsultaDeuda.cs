@@ -195,7 +195,7 @@ internal sealed class ConsultaDeuda(DiagnosticoDb db, UsuarioActual usuario, Lec
 
     private static DictamenDeudaDto Dictamen(DictamenVehiculo fila)
     {
-        var compania = ConsultaDictamen.Compania(fila);
+        var compania = ConsultaDictamen.CompaniaSinCola(fila);
         return new DictamenDeudaDto(compania.Veredicto, compania.CatalogoVersion, [.. compania.Alertamientos.Select(a => new MotivoDeudaDto(a.Codigo, a.Efecto, a.Texto))]);
     }
 

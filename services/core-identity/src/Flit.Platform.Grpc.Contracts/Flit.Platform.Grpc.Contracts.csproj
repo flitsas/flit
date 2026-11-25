@@ -17,10 +17,13 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Protobuf Include="$(ProtoRoot)\flit\platform\v1\*.proto" Exclude="$(ProtoRoot)\flit\platform\v1\usuarios_producto.proto" ProtoRoot="$(ProtoRoot)" GrpcServices="None" />
+    <Protobuf Include="$(ProtoRoot)\flit\platform\v1\*.proto" Exclude="$(ProtoRoot)\flit\platform\v1\usuarios_producto.proto;$(ProtoRoot)\flit\platform\v1\configuracion_ia.proto" ProtoRoot="$(ProtoRoot)" GrpcServices="None" />
     <!-- ADR-0089 (HU #14587): usuarios por producto. Lo atiende core-api y lo llama core-diagnostico: este archivo genera
          cliente y servidor aquí, una sola copia de los tipos para los dos lados. -->
     <Protobuf Include="$(ProtoRoot)\flit\platform\v1\usuarios_producto.proto" ProtoRoot="$(ProtoRoot)" GrpcServices="Both" />
+    <!-- ADR-0091: configuración de IA por herramienta. La atiende core-api y la llama core-diagnostico: cliente y servidor
+         aquí, una sola copia de los tipos para los dos lados (como usuarios_producto.proto). -->
+    <Protobuf Include="$(ProtoRoot)\flit\platform\v1\configuracion_ia.proto" ProtoRoot="$(ProtoRoot)" GrpcServices="Both" />
   </ItemGroup>
 
   <ItemGroup>

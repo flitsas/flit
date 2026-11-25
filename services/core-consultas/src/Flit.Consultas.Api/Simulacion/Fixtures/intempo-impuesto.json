@@ -14,7 +14,7 @@
       "marca": "MARCA PRUEBA",
       "linea": "LINEA PRUEBA",
       "modelo": "2020",
-      "organismoTransito": "SECRETARIA DISTRITAL DE MOVILIDAD DE BOGOTA"
+      "organismoTransito": "STRIA TTOyTTE MCPAL SABANETA"
     },
     "propietariosActuales": [
       {
@@ -25,7 +25,15 @@
         "nombreCompleto": "PROPIETARIO DE PRUEBA",
         "tipoPropiedad": 1,
         "detallePropiedad": "PROPIO",
-        "locatarios": []
+        "locatarios": [],
+        "direcciones": [
+          {
+            "direccion": "CALLE 1 # 2-3",
+            "departamento": "ANTIOQUIA",
+            "ciudad": "SABANETA",
+            "fechaActualizacion": "15/01/2026"
+          }
+        ]
       }
     ],
     "owner": [

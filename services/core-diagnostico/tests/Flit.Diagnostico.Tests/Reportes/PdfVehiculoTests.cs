@@ -30,7 +30,7 @@ namespace Flit.Diagnostico.Tests.Reportes;
 /// <summary>
 /// HU #13848 (F07-H3, F07-C1..C4/C8..C11, R-7, R-20, Q4, Q7) — <c>GET /diagnosticos/{id}/vehiculos/{vid}/pdf</c>: el PDF corporativo
 /// de un vehículo con el membrete FLIT. Las pruebas leen el TEXTO del PDF (<see cref="PdfTextExtractor"/>), no solo el código HTTP:
-/// encabezado con ID, lote, creador, empresa, fecha y «Diagnóstico Simple»; solo las secciones del alcance; 200 con el vehículo
+/// encabezado con ID, placa y fecha de generación (la nota del pie nombra creador y empresa); solo las secciones del alcance; 200 con el vehículo
 /// terminado aunque el lote siga EN_PROCESO y 409 <c>VEHICULO_NO_TERMINADO</c> si no; con el lote INCOMPLETO la fuente en ERROR
 /// sale «consulta no disponible»; manual y API dan el mismo texto; sin origen, proveedor ni transacción; documentos «****» + 4;
 /// misma huella → mismos bytes y un cambio de celda invalida el anterior; 404 para otra compañía o PROPIOS ajeno; 403 sin permiso.
@@ -63,11 +63,15 @@ public sealed class PdfVehiculoTests
 
     private static readonly DateTimeOffset Dato = new(2026, 10, 22, 15, 0, 0, TimeSpan.Zero);
 
-    // AC1 (F07-C1, F07-C2, Q4) — lote Simple con un vehículo terminado: el texto trae el ID, el nombre del lote, el creador de
-    // Identidad, la empresa del claim, la fecha y hora de creación en hora Colombia, «Diagnóstico Simple» y la placa; adjunto
-    // diagnostico-{8}-{placa}.pdf sin caché; el membrete y Poppins son copia fiel de la marca de core-api.
+    /// <summary>Datos que la cabecera dejó de pintar (ajustes 2026-11-18): lote, fecha de creación y tipo de análisis.</summary>
+    private static readonly string[] CabeceraRetirada = ["Flota octubre", "22/10/2026 14:30", "Diagnóstico Simple"];
+
+    // AC1 (F07-C1, F07-C2, Q4) — lote Simple con un vehículo terminado: el texto trae el ID, la placa y la fecha de generación, y
+    // la nota del pie nombra al creador de Identidad y la empresa del claim; desde los ajustes del 2026-11-18 la cabecera ya no
+    // pinta el lote, el tipo de análisis ni la fecha de creación. Adjunto diagnostico-{8}-{placa}.pdf sin caché; el membrete y
+    // Poppins son copia fiel de la marca de core-api.
     [Fact]
-    public async Task Encabezado_trae_id_lote_usuario_empresa_fecha_y_tipo_de_analisis()
+    public async Task Encabezado_trae_id_placa_y_fecha_de_generacion_y_la_nota_al_usuario_y_la_empresa()
     {
         var ct = TestContext.Current.CancellationToken;
         var identidad = new UsuariosIdentidadDePrueba();
@@ -91,10 +95,11 @@ public sealed class PdfVehiculoTests
         var texto = await PdfDePrueba.TextoAsync(respuesta, ct);
         foreach (var esperado in new[]
                  {
-                     lote.Id.ToString(), "Flota octubre", "Ana Prueba", "Empresa de prueba", "22/10/2026 14:30", "Diagnóstico Simple", "TST301",
-                     "Página 1 de ", "Fecha de generación", "Certificado de Diagnóstico",
+                     lote.Id.ToString(), "Ana Prueba", "Empresa de prueba", "TST301",
+                     "Página 1/", "Fecha y hora de generación", "Certificado de Diagnóstico",
                  })
             PdfDePrueba.Tiene(texto, esperado).Should().BeTrue($"el texto del PDF trae «{esperado}»: {texto}");
+        texto.Should().NotContainAny([.. CabeceraRetirada.Select(PdfDePrueba.Plano)]);
 
         // Marca FLIT copiada (no referenciada) de core-api: membrete y Poppins idénticos byte a byte.
         var marca = MarcaCoreApi();
@@ -662,7 +667,7 @@ internal static class PdfDePrueba
 
     /// <summary>El texto aplanado sin los pies de página («Certificado de Diagnóstico … Página X de Y»), para leer una sección partida entre páginas.</summary>
     public static string SinPies(string texto) =>
-        System.Text.RegularExpressions.Regex.Replace(texto, @"CertificadodeDiagnóstico.*?Página\d+de\d+", string.Empty, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5));
+        System.Text.RegularExpressions.Regex.Replace(texto, @"CertificadodeDiagnóstico.*?Página\d+(?:de|/)\d+", string.Empty, System.Text.RegularExpressions.RegexOptions.None, TimeSpan.FromSeconds(5));
 
     /// <summary>
     /// La sección que empieza en <paramref name="titulo"/>, hasta el título de la sección siguiente, la nota o el pie, lo
@@ -704,7 +709,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     private const string Vin = "9BWZZZ377VT004251";
 
     [Fact]
-    public void Version_de_plantilla_es_7() => PdfVehiculo.VersionPlantilla.Should().Be(7);
+    public void Version_de_plantilla_es_9() => PdfVehiculo.VersionPlantilla.Should().Be(9);
 
     /// <summary>Sin fila de dictamen el PDF sigue igual: no hay sección ni aviso de redacción.</summary>
     [Fact]
@@ -719,20 +724,21 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     }
 
     /// <summary>
-    /// Pendiente y bloqueado: la palabra, el aviso y los dos párrafos distintos, en ese orden, antes de «DATOS DEL VEHÍCULO».
+    /// Pendiente y bloqueado: la palabra, el aviso y los dos párrafos distintos, en ese orden, al final del documento (membrete
+    /// 2026-11-19: el recuadro del dictamen va después de la última sección).
     /// </summary>
     [Fact]
-    public void Dictamen_pendiente_bloqueado_pinta_veredicto_aviso_y_los_dos_parrafos_antes_de_datos_del_vehiculo()
+    public void Dictamen_pendiente_bloqueado_pinta_veredicto_aviso_y_los_dos_parrafos_despues_de_la_ultima_seccion()
     {
         const string primero = "qx17 alfa dictamen bloqueo unico";
         const string segundo = "qy28 beta dictamen multa unica";
         var contenido = Contenido("ABC123") with
         {
-            Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", primero + "\n" + segundo),
+            Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", primero + "\n" + segundo, EnCola: true),
         };
         var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
 
-        var orden = new[] { "Bloqueado", "Análisis en preparación", primero, segundo, "DATOS DEL VEHÍCULO" };
+        var orden = new[] { "DATOS DEL VEHÍCULO", "IMPUESTO VEHICULAR DEPARTAMENTAL", "DICTAMEN:", "Bloqueado", "Análisis en preparación", primero, segundo };
         var desde = 0;
         foreach (var literal in orden)
         {
@@ -775,8 +781,9 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         sin.ParaHuella().Keys.Should().NotContain(k => k.StartsWith("dictamen/", StringComparison.Ordinal));
 
         var con = sin with { Dictamen = new DictamenEnHuella("BLOQUEADO", "PENDIENTE", textoDictamen) };
+        // HU-3: con PENDIENTE la huella suma dictamen/en_cola (el rótulo depende de él); con COMPLETADA no (B7 abajo).
         con.ParaHuella().Keys.Where(k => k.StartsWith("dictamen/", StringComparison.Ordinal))
-            .Should().BeEquivalentTo(["dictamen/veredicto", "dictamen/estado", "dictamen/texto"]);
+            .Should().BeEquivalentTo(["dictamen/veredicto", "dictamen/estado", "dictamen/texto", "dictamen/en_cola"]);
         con.ParaHuella()["dictamen/veredicto"].Should().Be("BLOQUEADO");
         con.ParaHuella()["dictamen/estado"].Should().Be("PENDIENTE");
         con.ParaHuella()["dictamen/texto"].Should().Be(textoDictamen);
@@ -797,7 +804,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         };
         var texto = PdfDePrueba.SinPies(PdfDePrueba.Texto(PdfVehiculo.Generar(contenido, GeneradoEn)));
 
-        var orden = new[] { "Bloqueado", "Ajustado por FLIT el 13/11/2026 10:30", parrafo };
+        var orden = new[] { "Bloqueado", "Ajustado por FLIT el 13/11/2026", parrafo };
         var desde = 0;
         foreach (var literal in orden)
         {
@@ -839,8 +846,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
 
         var orden = new[]
         {
-            "Diagnóstico vehicular",
-            $"Diagnóstico ID {Id}", "Placa ABC123", "Fecha de generación 27/10/2026 10:04:05",
+            "DIAGNÓSTICO VEHICULAR", "Placa: ABC123", "Fecha y hora de generación: 27/10/2026 10:04:05",
             "DATOS DEL VEHÍCULO", "INFORMACIÓN DEL VEHÍCULO", "Placa VIN Servicio", "PROPIETARIOS", "Propietario 1",
             "COMPARENDOS DEL VEHÍCULO", "Número Fecha Valor Estado Organismo", "COMPARENDOS DE LOS PROPIETARIOS", "No aplica.",
             "AVALÚO COMERCIAL", "$ 48.500.000", "IMPUESTO VEHICULAR DEPARTAMENTAL", "Vigencia Valor Estado 2025 $ 180.000 Pagada",
@@ -855,7 +861,8 @@ public sealed partial class PdfVehiculoDisenoV2Tests
 
         PdfDePrueba.Tiene(texto, "DATOS DEL DIAGNÓSTICO").Should().BeFalse(texto);
         PdfDePrueba.Tiene(texto, "Este documento reúne").Should().BeFalse(texto);
-        PdfDePrueba.Tiene(texto, "Consultado el 22/10/2026 10:00 (hora Colombia)").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "Consultado el 22/10/2026").Should().BeTrue(texto);
+        PdfDePrueba.Tiene(texto, "(hora Colombia)").Should().BeFalse(texto);
         PdfDePrueba.Tiene(texto, "Este informe se elaboró a solicitud de Ana Prueba, de Empresa de prueba, para la placa ABC123.").Should().BeTrue(texto);
         PdfDePrueba.Tiene(texto, "NOTA").Should().BeTrue(texto);
     }
@@ -866,7 +873,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
         var texto = PdfDePrueba.Texto(PdfVehiculo.Generar(Contenido("ABC123"), GeneradoEn));
 
         PdfDePrueba.Tiene(texto, "Certificado de Diagnóstico").Should().BeTrue(texto);
-        System.Text.RegularExpressions.Regex.IsMatch(texto, @"Página1de[2-9]").Should().BeTrue($"el contenido de muestra ocupa varias páginas: {texto}");
+        System.Text.RegularExpressions.Regex.IsMatch(texto, @"Página1/[2-9]").Should().BeTrue($"el contenido de muestra ocupa varias páginas: {texto}");
         texto.Should().NotContainAny([PdfDePrueba.Plano("Generado el"), PdfDePrueba.Plano(PdfVehiculo.Titulo), "RUNT—", "SIMIT—"]);
     }
 
@@ -877,7 +884,7 @@ public sealed partial class PdfVehiculoDisenoV2Tests
 
         PdfDePrueba.Tiene(texto, Vin).Should().BeTrue(texto);
         PdfDePrueba.Tiene(texto, $"para el VIN {Vin}").Should().BeTrue(texto);
-        PdfDePrueba.Tiene(texto, "No hay información").Should().BeTrue("sin placa la celda Placa queda vacía de dato");
+        PdfDePrueba.Tiene(texto, "No hay datos").Should().BeTrue("sin placa la celda Placa queda vacía de dato");
     }
 
     /// <summary>
@@ -890,7 +897,13 @@ public sealed partial class PdfVehiculoDisenoV2Tests
     {
         var destino = Environment.GetEnvironmentVariable("FLIT_PDF_MUESTRA");
         Assert.SkipWhen(string.IsNullOrWhiteSpace(destino), "Sin FLIT_PDF_MUESTRA: no se escribe el PDF de muestra.");
-        var documento = PdfVehiculo.Documento(ContenidoConDetalle("ABC123"), GeneradoEn);
+        var conDictamen = ContenidoConDetalle("ABC123") with
+        {
+            Dictamen = new DictamenEnHuella("BLOQUEADO", "COMPLETADA",
+                "El SOAT no está vigente, así que el traspaso queda bloqueado.\nLa revisión técnico-mecánica no está vigente y el vehículo ya cumplió el plazo de su primera revisión, así que el traspaso queda bloqueado.\nFalta el resultado de una consulta obligatoria. El dictamen se emite con la información disponible y esta novedad queda advertida.",
+                Version: 1),
+        };
+        var documento = PdfVehiculo.Documento(conDictamen, GeneradoEn);
         File.WriteAllBytes(destino!, QuestPDF.Fluent.GenerateExtensions.GeneratePdf(documento));
         var pagina = 0;
         foreach (var imagen in QuestPDF.Fluent.GenerateExtensions.GenerateImages(documento, new QuestPDF.Infrastructure.ImageGenerationSettings { RasterDpi = 110 }))

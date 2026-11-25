@@ -63,7 +63,16 @@ internal sealed partial class ConsultasGrpcService(
         ConsultarAvaluos(request, Llamador(context), context.CancellationToken);
 
     public override Task<ConsultarImpuestoVehicularResponse> ConsultarImpuestoVehicular(ConsultarImpuestoVehicularRequest request, ServerCallContext context) =>
-        ConsultarImpuestoVehicular(request, Llamador(context), context.CancellationToken);
+        ConsultarImpuestoVehicular(request, Llamador(context), Guid.CreateVersion7(), context.CancellationToken);
+
+    public override Task<DescargarLiquidacionImpuestoResponse> DescargarLiquidacionImpuesto(
+        DescargarLiquidacionImpuestoRequest request, ServerCallContext context)
+    {
+        var caller = Llamador(context);
+        return consumo.MedirAsync(caller, "impuesto_liquidacion",
+            () => impuesto.DescargarAsync(request.ArchivoId, caller, context.CancellationToken),
+            _ => ("impuesto", "ok", false), context.CancellationToken);
+    }
 
     public override async Task<ListarDepartamentosImpuestoResponse> ListarDepartamentosImpuesto(ListarDepartamentosImpuestoRequest request, ServerCallContext context)
     {
@@ -93,8 +102,13 @@ internal sealed partial class ConsultasGrpcService(
         consumo.MedirAsync(caller, "avaluos", () => ConsultarAvaluosCore(request, caller, ct),
             r => (r.FuentePrincipal, r.ValorSugerido > 0 ? "verde" : "sin_datos", false), ct);
 
-    internal Task<ConsultarImpuestoVehicularResponse> ConsultarImpuestoVehicular(ConsultarImpuestoVehicularRequest request, PlatformServiceCaller caller, CancellationToken ct) =>
-        consumo.MedirAsync(caller, "impuesto", () => impuesto.ConsultarAsync(request, ct), r => Resumen(r.Resultado), ct);
+    internal Task<ConsultarImpuestoVehicularResponse> ConsultarImpuestoVehicular(
+        ConsultarImpuestoVehicularRequest request, PlatformServiceCaller caller, CancellationToken ct) =>
+        ConsultarImpuestoVehicular(request, caller, Guid.CreateVersion7(), ct);
+
+    internal Task<ConsultarImpuestoVehicularResponse> ConsultarImpuestoVehicular(
+        ConsultarImpuestoVehicularRequest request, PlatformServiceCaller caller, Guid trabajoId, CancellationToken ct) =>
+        consumo.MedirAsync(caller, "impuesto", () => impuesto.ConsultarAsync(request, caller, trabajoId, ct), r => Resumen(r.Resultado), ct);
 
     private async Task<ConsultarVehiculoResponse> ConsultarVehiculoCore(ConsultarVehiculoRequest request, PlatformServiceCaller caller, DateTime deadline, CancellationToken ct)
     {

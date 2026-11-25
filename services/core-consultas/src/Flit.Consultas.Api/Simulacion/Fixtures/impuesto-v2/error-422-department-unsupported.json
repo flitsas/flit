@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "department_unsupported",
+    "message": "texto sintetico del proveedor"
+  }
+}

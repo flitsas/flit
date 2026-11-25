@@ -20,6 +20,8 @@ public static class OidcDefaults
         ["platform.identidad.read"] = ServiceAudiences.Plataforma,
         // GDC B2-1/B2-4: listado global de empresas con un producto encendido (EmpresasService). Solo para el servicio que lo pide.
         ["platform.identidad.empresas"] = ServiceAudiences.Plataforma,
+        // ADR-0092: entrega de la API key del impuesto a svc-consultas.
+        ["platform.identidad.credenciales.impuesto"] = ServiceAudiences.Plataforma,
         ["platform.consultas"] = ServiceAudiences.Consultas,
         // HU #13344: configuración de consultas por empresa (la escribe la administración de FLIT).
         ["platform.consultas.admin"] = ServiceAudiences.Consultas,
@@ -36,6 +38,8 @@ public static class OidcDefaults
         // ADR-0089 (HU #14587): usuarios de Diagnóstico gestionados desde el producto; los atiende core-api (solo svc-diagnostico).
         ["platform.usuarios.diagnostico"] = ServiceAudiences.Tramites,
         ["platform.usuarios.diagnostico.conteos"] = ServiceAudiences.Tramites,
+        // ADR-0091: configuración de IA y llave sellada del redactor de Diagnóstico; la atiende core-api (solo svc-diagnostico).
+        ["platform.ia.diagnostico"] = ServiceAudiences.Tramites,
         // HU #14050 (Épica #14021): lectura por pull de las solicitudes radicadas en core-personanatural (la usa core-api, svc-tramites).
         ["platform.personanatural.leer"] = ServiceAudiences.PersonaNatural,
         // HU #14461 (Épica #14210, ADR-0082): administración del cobro en caja desde el hub del OT (la usa core-api, svc-tramites).

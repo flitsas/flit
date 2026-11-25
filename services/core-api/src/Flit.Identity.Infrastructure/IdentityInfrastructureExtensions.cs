@@ -12,6 +12,7 @@ using Flit.Infrastructure.Persistence.Repositories.Platform;
 using Flit.Infrastructure.Security;
 using Flit.Modules.Notificaciones;
 using Flit.Modules.Platform;
+using Flit.Modules.Platform.Application.TenantProducts;
 using Flit.Modules.Platform.Domain.Access;
 using Flit.Modules.Platform.Domain.Manifest;
 using Flit.Modules.Platform.Domain.Products;
@@ -247,6 +248,8 @@ public static class IdentityInfrastructureExtensions
         services.AddPlatformModule();
         services.AddScoped<IProductCatalog, ProductCatalogRepository>();
         services.AddScoped<ITenantProductRepository, TenantProductRepository>();
+        services.AddScoped<ITenantProductCredentialRepository, TenantProductCredentialRepository>();
+        services.AddScoped<ITenantProductSecretProtector, DataProtectionTenantProductSecretProtector>();
         services.AddScoped<IProductAccessStore, ProductAccessStore>();
         services.AddScoped<IProductManifestStore, ProductManifestStore>();
         return services;

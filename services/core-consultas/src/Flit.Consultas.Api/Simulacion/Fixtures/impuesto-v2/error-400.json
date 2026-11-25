@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "bad_request",
+    "message": "texto sintetico del proveedor"
+  }
+}

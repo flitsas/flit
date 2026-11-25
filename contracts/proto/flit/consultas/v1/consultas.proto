@@ -63,6 +63,10 @@ service ConsultasService {
   // las empresas: EXCEPCIÓN a la cabecera del servicio, no exige `x-flit-tenant-id` (sí el token de servicio).
   // Lista vacía si el transporte del impuesto no está listo.
   rpc ListarDepartamentosImpuesto(ListarDepartamentosImpuestoRequest) returns (ListarDepartamentosImpuestoResponse);
+
+  // Liquidación (PDF) de una vigencia o la consolidada del impuesto, bajo demanda (D5). Con la credencial de la empresa de
+  // x-flit-tenant-id. NOT_FOUND si la fuente no la tiene; FAILED_PRECONDITION CREDENCIAL_NO_CONFIGURADA sin llave.
+  rpc DescargarLiquidacionImpuesto(DescargarLiquidacionImpuestoRequest) returns (DescargarLiquidacionImpuestoResponse);
 }
 
 // Opciones comunes a todas las consultas.
@@ -258,6 +262,19 @@ message ConsultarImpuestoVehicularRequest {
   optional int32 modelo = 8;
   // Descifrado en memoria de la respuesta RUNT. Solo en este mensaje; Diagnóstico no lo persiste.
   optional string propietario_nombre = 9;
+  // Contacto del propietario leído del RUNT (D3), en memoria; Diagnóstico no lo persiste. core-consultas completa lo
+  // que falte con IMPUESTO_CONTACTO_*. Datos personales en claro en la ida del bus: enmienda C3-bis de ADR-0075.
+  optional string propietario_telefono = 10;
+  optional string propietario_correo = 11;
+  optional string propietario_departamento = 12;
+  optional string propietario_ciudad = 13;
+  // Dirección completa en texto libre, como la trae el RUNT (OwnerAddressComplete).
+  optional string propietario_direccion = 14;
+  // Vehículo según el RUNT (informacion_general), tal cual.
+  optional string vehiculo_clase = 15;
+  optional string vehiculo_marca = 16;
+  optional string vehiculo_servicio = 17;
+  optional string vehiculo_combustible = 18;
 }
 
 message ConsultarImpuestoVehicularResponse {
@@ -266,7 +283,7 @@ message ConsultarImpuestoVehicularResponse {
   // Suma de lo no pagado o total informado. Significativo solo con monto_informado.
   int64 monto_total = 2;
   repeated VigenciaImpuesto vigencias = 3;
-  // El servicio confirma deuda con typeError=0, tenga o no valor.
+  // Deuda confirmada (result.status con_deuda o una vigencia pendiente con valor), tenga o no valor total.
   bool tiene_deuda = 4;
   bool monto_informado = 5;
   optional int64 intereses_mora = 6;
@@ -277,8 +294,11 @@ message ConsultarImpuestoVehicularResponse {
   optional string periodo_certificacion = 11;
   // AAAA-MM-DD.
   optional string fecha_consulta_proveedor = 12;
-  // Con chequeo en ERROR: lo informado es parcial y no confirma.
+  // La fuente respondió partial. Con chequeo FAIL (deuda leída) la deuda se confirma como dato parcial; con chequeo ERROR
+  // no confirma (D6).
   bool dato_parcial = 13;
+  // Avisos no bloqueantes y validaciones que no coincidieron (D6). También con chequeo en ERROR.
+  repeated AdvertenciaImpuesto advertencias = 14;
 }
 
 // Una vigencia (año gravable) del impuesto.
@@ -289,6 +309,37 @@ message VigenciaImpuesto {
   bool pagada = 3;
   optional string liquidacion_id = 4;
   optional int64 avaluo = 5;
+  // Referencia de pago de la vigencia (paymentReference).
+  optional string referencia_pago = 6;
+  // AAAA-MM-DD (dueDate).
+  optional string fecha_vencimiento = 7;
+}
+
+// Un aviso de la fuente del impuesto. Nunca el valor enviado ni el del portal (datos personales) ni el texto del proveedor.
+message AdvertenciaImpuesto {
+  TipoAdvertenciaImpuesto tipo = 1;
+  // VALIDACION: clave de detail que no coincidió (vehicleServiceType, vehicleType, OwnerName, …) u "otro".
+  string campo = 2;
+  // AVISO: warnings[].code si es [a-z0-9_]{1,64}; si no, "otro".
+  string codigo = 3;
+  optional int32 anio = 4;
+}
+
+enum TipoAdvertenciaImpuesto {
+  TIPO_ADVERTENCIA_IMPUESTO_UNSPECIFIED = 0;
+  TIPO_ADVERTENCIA_IMPUESTO_VALIDACION = 1;
+  TIPO_ADVERTENCIA_IMPUESTO_AVISO = 2;
+}
+
+message DescargarLiquidacionImpuestoRequest {
+  // fileId de la fuente (VigenciaImpuesto.liquidacion_id o liquidacion_consolidada_id). 1..64 [A-Za-z0-9_-].
+  string archivo_id = 1;
+}
+
+message DescargarLiquidacionImpuestoResponse {
+  // application/pdf, hasta 3 MiB.
+  bytes contenido = 1;
+  string content_type = 2;
 }
 
 // Último pago informado por el servicio. Las fechas son AAAA-MM-DD y no cambian la clasificación.

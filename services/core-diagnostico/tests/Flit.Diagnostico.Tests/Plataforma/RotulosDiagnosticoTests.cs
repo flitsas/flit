@@ -32,6 +32,27 @@ public sealed class RotulosDiagnosticoTests
 {
     private static readonly JsonSerializerOptions Web = new(JsonSerializerDefaults.Web);
 
+    /// <summary>HU-3 (decisión del usuario 2026-11-18): literales exactos del rótulo del dictamen en el PDF.</summary>
+    [Fact]
+    public void HU3_rotulos_del_dictamen_pendiente_son_literales_exactos()
+    {
+        RotulosDiagnostico.SinAnalisis.Should().Be("Sin análisis");
+        RotulosDiagnostico.AnalisisEnPreparacion.Should().Be("Análisis en preparación");
+    }
+
+    /// <summary>
+    /// Impuesto con la respuesta de la API como fuente de verdad (decisión del usuario 2026-11-23, P4): literales exactos del
+    /// N/A por departamento sin cobertura y del error por fuente inactiva.
+    /// </summary>
+    [Fact]
+    public void Impuesto_departamento_sin_cobertura_y_fuente_inactiva_tienen_literales_exactos()
+    {
+        RotulosDiagnostico.DeMotivoNa(MotivoNa.DepartamentoNoSoportado)
+            .Should().Be("La liquidación del impuesto aún no está disponible para el departamento donde está matriculado el vehículo.");
+        RotulosDiagnostico.DeTipoError("FUENTE_INACTIVA")
+            .Should().Be("La consulta del impuesto de este departamento no está disponible en este momento. Intenta de nuevo más tarde.");
+    }
+
     // ---- AC5: cobertura de todos los códigos ----
 
     [Fact]

@@ -5,7 +5,8 @@
 **Deciders**: Líder Técnico FLIT (pendiente validar) · Architecture Agent · Producto (marco Épica #13272 / Feature #13508)  
 **Tags**: arquitectura, backend, frontend, llm, ocr, integracion-externa, modulo-admin-ia, seguridad  
 **Relacionado**: [ADR-0060] (Dr. FLIT + Anthropic; Nivel 2 «override en caliente» queda materializado y generalizado aquí) · [ADR-0058] (tabla global `admin` sin tenant) · patrón `OCR_PROVIDER` / `ANTHROPIC_API_KEY`  
-**Diseño detallado**: `docs/ado-drafts/epic-13272-admin-ia/DISENO-TECNICO.md`
+**Diseño detallado**: `docs/ado-drafts/epic-13272-admin-ia/DISENO-TECNICO.md`  
+**Enmendado por**: [ADR-0091](../../../../docs/decisions/ADR-0091-diagnostico-llave-ia-cifrada-desde-configuracion-de-ia.md) (core-api entrega cifrada a Diagnóstico la llave de la herramienta `diagnostico_dictamen`; `ocr` y `dr_flit` no se entregan)
 
 ## Contexto
 

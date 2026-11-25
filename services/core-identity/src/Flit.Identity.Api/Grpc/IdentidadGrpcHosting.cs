@@ -24,7 +24,9 @@ internal static class IdentidadGrpcHosting
         builder.Services.AddFlitGrpcServer()
             .RequireServiceToken<IdentidadGrpcService>(IdentidadGrpcService.Scope, ServiceAudiences.Plataforma)
             // Global: responde por todas las empresas, con su propio scope y sin x-flit-tenant-id.
-            .RequireServiceTokenSinEmpresa<EmpresasGrpcService>(EmpresasGrpcService.Scope, ServiceAudiences.Plataforma);
+            .RequireServiceTokenSinEmpresa<EmpresasGrpcService>(EmpresasGrpcService.Scope, ServiceAudiences.Plataforma)
+            // ADR-0092: API key del impuesto; solo svc-consultas, con x-flit-tenant-id.
+            .RequireServiceToken<CredencialesProductoGrpcService>(CredencialesProductoGrpcService.Scope, ServiceAudiences.Plataforma);
 
         // h2c necesita un endpoint dedicado solo HTTP/2: Kestrel no mezcla HTTP/1.1 y HTTP/2 en texto plano en un mismo
         // puerto. Al declarar endpoints por código Kestrel ignora ASPNETCORE_URLS, así que se vuelven a declarar las
@@ -55,6 +57,7 @@ internal static class IdentidadGrpcHosting
 
         app.MapGrpcService<IdentidadGrpcService>().RequireHost($"*:{grpcPort}");
         app.MapGrpcService<EmpresasGrpcService>().RequireHost($"*:{grpcPort}");
+        app.MapGrpcService<CredencialesProductoGrpcService>().RequireHost($"*:{grpcPort}");
         app.MapFlitGrpcPlatform(app.Environment, $"*:{grpcPort}");
     }
 }
