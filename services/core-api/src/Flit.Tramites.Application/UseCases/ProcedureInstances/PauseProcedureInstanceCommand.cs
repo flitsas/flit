@@ -113,6 +113,7 @@ public sealed class PauseProcedureInstanceHandler(IProcedureInstanceRepository r
             ProcedureInstanceId = id,
             Tipo = paused ? "tramite_pausado" : "tramite_reanudado",
             CreatedAt = DateTimeOffset.UtcNow,
+            CreatedBy = changedBy,
             // El evento siempre registra el valor efectivo resultante de PausedObservation.
             Payload = JsonSerializer.Serialize(new { observation = instance.PausedObservation, changedBy }),
         }, ct);
