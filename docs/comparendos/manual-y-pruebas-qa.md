@@ -410,7 +410,7 @@ Marca cada caso como OK, Falla o Bloqueado. Prioridad A = flujo principal, B = i
 | CP-PAG-01 | A | Pago individual | Comparendo sin pagar. | 1. Registrar pago desde el detalle. | Queda pagado con quién lo registró; deshabilita Registrar pago, avisos y DP. | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-PAG-02 | A | Carga por Excel | — | 1. Descargar la plantilla.<br>2. Subir con 2 filas buenas y 2 malas. | Registra las buenas; explica cada error; el historial dice quién cargó. | ☐ OK ☐ Falla ☐ Bloq. |
 
-### Carga por OCR (CP-OCR · 8 casos)
+### Carga por OCR (CP-OCR · 11 casos)
 
 | Código | Prior. | Caso | Antes | Pasos | Esperado | Resultado |
 |---|---|---|---|---|---|---|
@@ -422,6 +422,9 @@ Marca cada caso como OK, Falla o Bloqueado. Prioridad A = flujo principal, B = i
 | CP-OCR-06 | B | Exportar paquete | — | 1. Exportar el paquete. | Excel con los datos de cada documento. | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-OCR-07 | B | Sin tecnología a la vista | Usuario de empresa. | 1. Recorrer la pantalla de OCR. | No menciona prompt, modelo, proveedor ni costos (eso solo lo ve el SuperAdmin). | ☐ OK ☐ Falla ☐ Bloq. |
 | CP-OCR-08 | C | Versiones de lectura (SuperAdmin) | — | 1. Crear versión → Evaluar → Publicar.<br>2. Volver a la versión anterior. | Sin evaluación aprobada no publica; la anterior vuelve sin evaluar; todo auditado. | ☐ OK ☐ Falla ☐ Bloq. |
+| CP-OCR-09 | A | Asociar en lote | Paquete con varios escaneados de comparendos que ya existen: unos sin documento (con y sin conductor con correo), uno que ya tiene documento y uno nuevo. Conductores con el correo del buzón de pruebas. | 1. Paquete → «Asociar los N».<br>2. Leer el resumen y confirmar.<br>3. Volver a pulsar. | El resumen cuenta los que se asociarán, los correos que saldrán y a cuántos conductores, y los que no saldrían con su motivo; el que ya tenía documento queda en «Revisar reemplazos». Al confirmar, la ventana se cierra y la asociación sigue en segundo plano (se puede salir de la pantalla): al volver, la franja muestra el avance y al final el resumen (asociados, correos en camino, sin correo con motivo, no asociados con motivo). Se asocian solo los sin documento y sus correos salen en segundos (Centro de mensajes); el nuevo y el de reemplazo no cambian. Mientras se asocian, esos documentos no se pueden editar ni descartar. Pulsar de nuevo no asocia ni envía nada más. | ☐ OK ☐ Falla ☐ Bloq. |
+| CP-OCR-10 | B | Cola de reemplazos | El paquete del caso anterior. | 1. «Revisar reemplazos».<br>2. Comparar y reemplazar o descartar. | Abre el primero, dice «1 de n» y al decidir pasa al siguiente; al terminar vuelve al paquete. El reemplazo envía el documento nuevo al conductor. | ☐ OK ☐ Falla ☐ Bloq. |
+| CP-OCR-11 | B | Asociar en lote: algo cambió | Paquete con un escaneado asociable. | 1. «Asociar los N».<br>2. Antes de que termine, a otro usuario asociarle un documento a ese comparendo desde la ficha (o hacerlo justo antes). | Ese documento no se asocia: el resumen lo lista en «No se asociaron» con el motivo y vuelve a quedar para revisar (como reemplazo); no sale correo por él. | ☐ OK ☐ Falla ☐ Bloq. |
 
 ### Centro de mensajes (CP-MSG · 3 casos)
 

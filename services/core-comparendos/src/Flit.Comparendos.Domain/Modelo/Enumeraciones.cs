@@ -158,6 +158,19 @@ public enum EstadoDocumentoOcr
     Descartado,
     /// <summary>El documento escaneado se asoció a un comparendo que ya existía (estado final).</summary>
     Asociado,
+
+    /// <summary>
+    /// GDC-EVID §10: en un lote de «Asociar los N», esperando al trabajador de fondo. No es final, ni editable, ni asociable a mano.
+    /// </summary>
+    PorAsociar,
+}
+
+/// <summary>GDC-EVID §10: cómo terminó un documento de un lote de «Asociar los N».</summary>
+public enum ResultadoAsociacionLote
+{
+    PorAsociar,
+    Asociado,
+    NoAsociado,
 }
 
 /// <summary>Los cuatro primeros se reintentan (hasta 3 veces); ilegible y archivo inválido no.</summary>
