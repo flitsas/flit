@@ -15,7 +15,25 @@ export const BOTON_SECUNDARIO_CLS = buttonClass({ variant: "secondary", size: "s
 
 export const BOTON_REINTENTAR_CLS = `rounded-full border border-current px-3 py-1 text-xs font-semibold ${FOCO_CLS}`;
 
+/**
+ * Reintentar dentro de la barra (selector de compañía, M15): la receta de arriba con 32 px de alto y tono warning, porque
+ * la vista global sigue sirviendo.
+ */
+export const BOTON_REINTENTAR_BARRA_CLS = `inline-flex min-h-8 shrink-0 items-center text-[color:var(--di-warning)] ${BOTON_REINTENTAR_CLS}`;
+
+/**
+ * WCAG 2.2 · 2.5.8: el botón «Quitar selección» del SearchableSelect del kit mide 22 px; se le da 24 × 24 px desde el
+ * contenedor, como `SelectorCompania` de Diagnóstico. El hueco real es del kit (spec-visual §5, H-6).
+ */
+export const QUITAR_24PX_CLS = "[&_button[aria-label^='Quitar']]:min-w-6 [&_button[aria-label^='Quitar']]:min-h-6";
+
 export const CAMPO_CLS = `h-11 w-full rounded-[9px] border border-input bg-card px-3.5 text-base text-flit-primary focus:border-[color:var(--di-action)] focus:shadow-[var(--kit-sombra)] disabled:opacity-60 ${FOCO_CLS}`;
+
+/**
+ * Campo de fecha: en Chromium el foco puede quedar en el botón del calendario (shadow DOM) y el host deja de casar con
+ * :focus; :focus-within repite el foco del kit (molde CAMPO_FECHA_CLS de Diagnóstico).
+ */
+export const CAMPO_FECHA_CLS = `${CAMPO_CLS} focus-within:border-[color:var(--di-action)] focus-within:shadow-[var(--kit-sombra)] focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring`;
 
 /** Campo con error: borde rojo del kit cuando lleva aria-invalid. */
 export const CAMPO_INVALIDO_CLS = "aria-[invalid=true]:border-[var(--badge-danger-border)]";
