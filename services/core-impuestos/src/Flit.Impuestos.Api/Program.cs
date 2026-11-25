@@ -6,6 +6,8 @@ using Flit.Impuestos.Api.Modulos.Avisos;
 using Flit.Impuestos.Api.Modulos.Backoffice;
 using Flit.Impuestos.Api.Modulos.Catalogos;
 using Flit.Impuestos.Api.Modulos.Configuracion;
+using Flit.Impuestos.Api.Modulos.Ejecucion;
+using Flit.Impuestos.Api.Modulos.Liquidaciones;
 using Flit.Impuestos.Api.Persistence;
 using Flit.Impuestos.Api.Plataforma;
 using Flit.Platform.Sdk.Authentication;
@@ -74,6 +76,9 @@ public static class Program
         // M13: usuarios delegados en la plataforma (UsuariosProductoService de core-api) y backoffice de compañías del Super Admin.
         builder.Services.AddUsuariosPlataforma(builder.Configuration);
         builder.Services.AddBackofficeImpuestos(builder.Configuration);
+        // M09: solicitud de liquidación (RUNT por core-consultas, crédito 2/6, consumidor de impuestos.liquidaciones y reconciliador).
+        builder.Services.AddEjecucionImpuestos(builder.Configuration);
+        builder.Services.AddLiquidacionesImpuestos();
         builder.Services.AddLimitesSolicitudes(builder.Configuration);
         // M10: webhook del proveedor (anónimo con firma), aplicación del resultado y conciliación (respaldo GET e «Incierto»).
         builder.Services.AddAvisosYConciliacion(builder.Configuration);
@@ -132,6 +137,8 @@ public static class Program
         Modulos.Catalogos.FuentesEndpoints.Map(api);
         Modulos.Usuarios.UsuariosEndpoints.Map(api);
         Modulos.Backoffice.EmpresasBackofficeEndpoints.Map(api);
+        // M09: grid, detalle e individual; M10/M12 suman sus rutas sobre el grupo que devuelve (relanzar, cerrar, masiva).
+        Modulos.Liquidaciones.LiquidacionesEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
 
         // gRPC solo en su puerto: los servicios gRPC del dominio se mapean aquí con .RequireHost(grpcHost).

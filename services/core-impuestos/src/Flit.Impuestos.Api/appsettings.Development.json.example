@@ -17,6 +17,9 @@
     },
     // API del proveedor (obligatorio al arrancar, M07). En local, el stub scripts/dev/stub-impuestos (8898) y el token que imprime.
     "Api": { "BaseUrl": "http://127.0.0.1:8898", "IntegrationToken": "CAMBIAR-el-que-imprime-el-stub" },
+    // Receptor del webhook (M09, guía §2.2): https, sin usuario ni fragmento. http solo en loopback y solo con PermitirHttpLocal=true
+    // (apagada por defecto). Sin UrlBase válida las liquidaciones salen sin callbackUrl y se concilian por GET.
+    "Avisos": { "UrlBase": "CAMBIAR-https-publica/api/v1/impuestos/avisos", "PermitirHttpLocal": false },
     // Sin GatewayUrl el manifiesto no se registra (solo un aviso en el log).
     "Plataforma": { "GatewayUrl": "http://127.0.0.1:4002" }
   },

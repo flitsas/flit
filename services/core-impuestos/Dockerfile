@@ -2,8 +2,8 @@
 # Build context: services/   +   contexto con nombre «contracts» = contracts/proto
 #   docker build -f services/core-impuestos/Dockerfile --build-context contracts=contracts/proto services
 #
-# Solo copia lo que compila: su código, el SDK de plataforma, el contrato gRPC de catálogos de core-api y los tipos comunes
-# de los contratos. Replica la estructura del repo bajo /services para que las ProjectReference relativas resuelvan igual que
+# Solo copia lo que compila: su código, el SDK de plataforma, el contrato gRPC de catálogos de core-api, el del RUNT de
+# core-consultas y los tipos comunes de los contratos. Replica la estructura del repo bajo /services para que las ProjectReference relativas resuelvan igual que
 # en local.
 
 FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
@@ -15,6 +15,8 @@ COPY core-api/src/Flit.Tramites.Grpc.Contracts/ /services/core-api/src/Flit.Tram
 COPY core-identity/Directory.Build.props core-identity/Directory.Packages.props /services/core-identity/
 COPY core-identity/src/Flit.Platform.Grpc.Contracts/ /services/core-identity/src/Flit.Platform.Grpc.Contracts/
 COPY core-identity/src/Flit.Identidad.Grpc.Contracts/ /services/core-identity/src/Flit.Identidad.Grpc.Contracts/
+COPY core-consultas/Directory.Build.props core-consultas/Directory.Packages.props /services/core-consultas/
+COPY core-consultas/src/Flit.Consultas.Grpc.Contracts/ /services/core-consultas/src/Flit.Consultas.Grpc.Contracts/
 COPY --from=contracts . /contracts/proto/
 COPY core-impuestos/src/ ./src/
 RUN dotnet publish src/Flit.Impuestos.Api/Flit.Impuestos.Api.csproj \
