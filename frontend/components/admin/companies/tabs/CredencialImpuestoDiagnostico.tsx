@@ -147,6 +147,8 @@ export function CredencialImpuestoDiagnostico({
     try {
       await setTenantProductCredential(tenantId, PRODUCT_CODE, CREDENTIAL_CODE, valor);
       cerrar();
+      // La llave escrita a mano reemplaza la obtenida del proveedor: su prefijo ya no corresponde a la llave en uso.
+      setObtenida(null);
       setExito(MSG_GUARDADA);
     } catch (e) {
       setError(mensajeError(e, "No se pudo guardar la API key de impuesto."));

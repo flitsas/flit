@@ -520,4 +520,19 @@ describe("CredencialImpuestoDiagnostico · relectura aparte y estado efectivo (M
     expect(screen.queryByRole("button", { name: "Borrar" })).toBeNull();
     expect(screen.queryByText(/prefijo/)).toBeNull();
   });
+
+  it("guardar a mano tras obtener deja de mostrar el prefijo de la llave del proveedor", async () => {
+    const user = userEvent.setup();
+    render(<CredencialImpuestoDiagnostico tenantId="t1" configurada onChanged={onChanged} />);
+    await user.click(obtener());
+    await screen.findByText("Llave configurada · prefijo AbCdEfGh…");
+    await expandirManual();
+    await user.click(screen.getByRole("button", { name: "Reemplazar" }));
+    await user.click(campo());
+    await user.paste(LLAVE);
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    await screen.findByText("API key de impuesto guardada.");
+    expect(screen.queryByText(/prefijo/)).toBeNull();
+    expect(screen.getByText("Llave configurada")).toBeInTheDocument();
+  });
 });
