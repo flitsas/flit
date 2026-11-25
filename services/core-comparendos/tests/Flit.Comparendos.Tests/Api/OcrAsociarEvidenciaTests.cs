@@ -437,7 +437,7 @@ public sealed partial class OcrAsociarTests
 
         (await CorreoDeAsync(await Asociar(cliente, doc.Id, reemplazar: false))).Estado.Should().Be("Enviado");
 
-        var correos = (await EvidenciasAsync(comparendo)).Select(c => JsonDocument.Parse(c.Destinatarios).RootElement).ToList();
+        var correos = (await EvidenciasAsync(comparendo)).Select(c => JsonElement.Parse(c.Destinatarios)).ToList();
         correos.Should().HaveCount(2, "uno para el conductor y otro para la copia visible de ese tipo");
         string Para(JsonElement e) => e.GetProperty("para")[0].GetProperty("email").GetString()!;
         var delConductor = correos.Single(e => Para(e) == "juan@example.test");
