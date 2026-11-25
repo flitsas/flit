@@ -411,7 +411,7 @@ public sealed partial class OcrAsociarTests
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var ct = TestContext.Current.CancellationToken;
         await ProcesarLoteAsync();
-        var (lote, documento, _) = await UnoEnColaAsync("LOTEI1", intentos: 2);
+        var (lote, documento, comparendo) = await UnoEnColaAsync("LOTEI1", intentos: 2);
         await using (var scope = api.App.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
@@ -423,6 +423,70 @@ public sealed partial class OcrAsociarTests
 
         var fila = (await FilasDelLoteAsync(lote)).Single();
         (fila.Resultado, fila.CorreoEstado, fila.CorreoMotivo).Should().Be((ResultadoAsociacionLote.Asociado, "Omitido", "No se pudo preparar el correo al conductor; el documento quedó asociado"));
+        await DebeTenerNotaAsync(comparendo, "No se pudo preparar el correo al conductor; el documento quedó asociado");
+        (await EvidenciasAsync(comparendo)).Should().BeEmpty("al agotar intentos no se registra ningún correo");
+    }
+
+    /// <summary>Tercer error técnico cuando el correo SÍ alcanzó a registrarse: el resumen dice «en camino», no «sin correo», y no hay nota.</summary>
+    [Fact]
+    public async Task AsociarLote_TercerErrorTecnico_ConCorreoYaRegistrado_QuedaEnCamino()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await ProcesarLoteAsync();
+        var (lote, documento, comparendo) = await UnoEnColaAsync("LOTEQ1", intentos: 2);
+        await using (var scope = api.App.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
+            var doc = await db.DocumentosOcr.FirstAsync(d => d.Id == documento, ct);
+            await scope.ServiceProvider.GetRequiredService<AsociacionDocumentos>().UnoAsync(doc, false, null, Actor.Sistema, despachar: false, ct, desdeLote: true);
+        }
+
+        await UnaVueltaConErrorTecnicoAsync();
+
+        var fila = (await FilasDelLoteAsync(lote)).Single();
+        (fila.Resultado, fila.CorreoEstado).Should().Be((ResultadoAsociacionLote.Asociado, "Pendiente"));
+        (await EvidenciasAsync(comparendo)).Should().ContainSingle();
+        (await OmitidasAsync(comparendo)).Should().BeEmpty();
+    }
+
+    /// <summary>
+    /// Dos réplicas intercaladas: esta vuelta tarda más que la concesión y otra reclama la fila. Al retomar, esta ve que la concesión
+    /// ya no es suya y no registra el correo (lo hará la otra): nunca dos correos.
+    /// </summary>
+    [Fact]
+    public async Task AsociarLote_RetomaConLaConcesionDeOtraReplica_NoRegistraElCorreo()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await ProcesarLoteAsync();
+        var (lote, documento, comparendo) = await UnoEnColaAsync("LOTEU7", intentos: 0);
+        await using (var scope = api.App.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<ComparendosDb>();
+            var doc = await db.DocumentosOcr.FirstAsync(d => d.Id == documento, ct);
+            await scope.ServiceProvider.GetRequiredService<ServicioOcr>().AsociarAsync(doc, false, null, Actor.Sistema, ct, desdeLote: true); // cayó tras asociar
+        }
+
+        var trabajador = api.App.Services.GetRequiredService<ProcesadorAsociacionLote>();
+        var otra = api.Reloj.GetUtcNow().AddMinutes(25);
+        trabajador.AntesDeProcesar = _ => api.EnDbAsync(db => db.AsociacionLoteDocumentos.Where(i => i.LoteId == lote)
+            .ExecuteUpdateAsync(u => u.SetProperty(i => i.ProximoIntentoEn, otra))).GetAwaiter().GetResult(); // la otra réplica la reclama
+        try
+        {
+            await trabajador.ProcesarSiguienteAsync(ct);
+        }
+        finally
+        {
+            trabajador.AntesDeProcesar = null;
+        }
+
+        (await EvidenciasAsync(comparendo)).Should().BeEmpty("la concesión ya es de la otra réplica");
+        (await FilasDelLoteAsync(lote)).Single().Should().Match<AsociacionLoteDocumento>(i => i.Resultado == ResultadoAsociacionLote.PorAsociar && i.ProximoIntentoEn == otra);
+        // La otra réplica (aquí: la siguiente vuelta con la concesión vencida) hace la retoma: un solo correo.
+        await api.EnDbAsync(db => db.AsociacionLoteDocumentos.Where(i => i.LoteId == lote).ExecuteUpdateAsync(u => u.SetProperty(i => i.ProximoIntentoEn, api.Reloj.GetUtcNow().AddSeconds(-1))));
+        await ProcesarLoteAsync();
+        (await EvidenciasAsync(comparendo)).Should().ContainSingle();
     }
 
     /// <summary>El resumen nunca muestra un motivo nulo ni vacío (la pantalla lo pinta tal cual).</summary>

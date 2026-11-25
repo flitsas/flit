@@ -35,7 +35,8 @@ public sealed partial class ProcesadorAsociacionLote(IServiceScopeFactory scopes
         _ => ex.Message,
     };
 
-    private sealed record Reclamo(Guid LoteId, Guid DocumentoId, short Intentos);
+    /// <summary>La fila reclamada y la concesión que le puso ESTA vuelta (si otra réplica la reclama de nuevo, cambia).</summary>
+    private sealed record Reclamo(Guid LoteId, Guid DocumentoId, short Intentos, DateTimeOffset? ProximoIntentoEn);
 
     /// <summary>Solo pruebas: se llama al empezar cada documento (para simular un error técnico del trabajador).</summary>
     internal Action<Guid>? AntesDeProcesar { get; set; }
@@ -73,7 +74,7 @@ public sealed partial class ProcesadorAsociacionLote(IServiceScopeFactory scopes
                 SELECT lote_id, documento_id FROM comparendos.asociacion_lote_documento
                 WHERE resultado = 'PorAsociar' AND (proximo_intento_en IS NULL OR proximo_intento_en <= {ahora})
                 ORDER BY lote_id, documento_id LIMIT 1 FOR UPDATE SKIP LOCKED)
-            RETURNING lote_id, documento_id, intentos
+            RETURNING lote_id, documento_id, intentos, proximo_intento_en
             """).ToListAsync(ct).ConfigureAwait(false);
         if (reclamos.Count == 0)
         {
@@ -107,11 +108,21 @@ public sealed partial class ProcesadorAsociacionLote(IServiceScopeFactory scopes
                 await db.AsociacionLoteDocumentos.Where(i => i.LoteId == r.LoteId && i.DocumentoId == r.DocumentoId && i.Resultado == ResultadoAsociacionLote.PorAsociar)
                     .ExecuteUpdateAsync(u => u.SetProperty(i => i.ProximoIntentoEn, pronto), ct).ConfigureAwait(false);
             }
-            else if (await db.DocumentosOcr.AsNoTracking().AnyAsync(d => d.Id == r.DocumentoId && d.Estado == EstadoDocumentoOcr.Asociado, ct).ConfigureAwait(false))
+            else if (await db.DocumentosOcr.AsNoTracking().Where(d => d.Id == r.DocumentoId && d.Estado == EstadoDocumentoOcr.Asociado && d.ComparendoId != null)
+                         .Select(d => new { ComparendoId = d.ComparendoId!.Value, d.ArchivoId }).FirstOrDefaultAsync(ct).ConfigureAwait(false) is { } asociado)
             {
-                // Sí quedó asociado (lo que falló fue el correo): no se dice «no se asoció».
-                await CerrarAsync(db, r, ResultadoAsociacionLote.Asociado, null,
-                    new ResultadoEvidencia(ResultadoEvidencia.Omitido, "No se pudo preparar el correo al conductor; el documento quedó asociado"), ct).ConfigureAwait(false);
+                // Sí quedó asociado (lo que falló fue el correo): no se dice «no se asoció». Si el correo o su nota ya existen, se
+                // respetan; si no, se deja la nota de que no salió. Nunca se registra un correo aquí.
+                if (await CorreoPrevioAsync(db, lote.TenantId, asociado.ComparendoId, asociado.ArchivoId, lote.SolicitadoEn, ct).ConfigureAwait(false) is { } previo)
+                {
+                    await CerrarAsync(db, r, ResultadoAsociacionLote.Asociado, null, previo, ct).ConfigureAwait(false);
+                }
+                else
+                {
+                    const string motivo = "No se pudo preparar el correo al conductor; el documento quedó asociado";
+                    await scope.ServiceProvider.GetRequiredService<ServicioEvidencia>().DejarNotaOmitidaAsync(asociado.ComparendoId, lote.TenantId, motivo, reemplazo: false, actor).ConfigureAwait(false);
+                    await CerrarAsync(db, r, ResultadoAsociacionLote.Asociado, null, new ResultadoEvidencia(ResultadoEvidencia.Omitido, motivo), ct).ConfigureAwait(false);
+                }
             }
             else
             {
@@ -173,28 +184,39 @@ public sealed partial class ProcesadorAsociacionLote(IServiceScopeFactory scopes
         CancellationToken ct)
     {
         db.ChangeTracker.Clear();
+        if (await CorreoPrevioAsync(db, tenant, comparendo, archivo, solicitadoEn, ct).ConfigureAwait(false) is { } previo)
+        {
+            await CerrarAsync(db, r, ResultadoAsociacionLote.Asociado, null, previo, ct).ConfigureAwait(false);
+            return;
+        }
+
+        // Justo antes de registrar: si la concesión ya no es la de esta vuelta (otra réplica la reclamó porque esta tardó más de 10
+        // minutos), no se registra nada: la otra se encarga. No es atómico con el registro, pero cierra la ventana a milisegundos.
+        if (!await SigueSiendoMiaAsync(db, r, ct).ConfigureAwait(false))
+            return;
+
+        var correo = await sp.GetRequiredService<ServicioEvidencia>().EnviarAlAsociarAsync(comparendo, tenant, archivo, false, actor, ct, despachar: false).ConfigureAwait(false);
+        await CerrarAsync(db, r, ResultadoAsociacionLote.Asociado, null, correo, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>El correo (Pendiente) o la nota de que no salió (Omitido con su motivo) ya registrados desde que se pidió el lote; si no, null.</summary>
+    private static async Task<ResultadoEvidencia?> CorreoPrevioAsync(ComparendosDb db, Guid tenant, Guid comparendo, Guid archivo, DateTimeOffset solicitadoEn, CancellationToken ct)
+    {
         var yaRegistrado = await (from c in db.Comunicaciones.AsNoTracking()
                                   join a in db.ComunicacionAdjuntos.AsNoTracking() on c.Id equals a.ComunicacionId
                                   where c.TenantId == tenant && c.ComparendoId == comparendo && c.Tipo == TipoComunicacion.Evidencia && a.ArchivoId == archivo && c.CreadoEn >= solicitadoEn
                                   select c.Id).AnyAsync(ct).ConfigureAwait(false);
         if (yaRegistrado)
-        {
-            await CerrarAsync(db, r, ResultadoAsociacionLote.Asociado, null, new ResultadoEvidencia(ResultadoEvidencia.Pendiente, null), ct).ConfigureAwait(false);
-            return;
-        }
-
+            return new ResultadoEvidencia(ResultadoEvidencia.Pendiente, null);
         var nota = await db.Timeline.AsNoTracking()
             .Where(t => t.TenantId == tenant && t.ComparendoId == comparendo && t.Tipo == TipoEventoTimeline.EvidenciaOmitida && t.OcurridoEn >= solicitadoEn)
             .OrderByDescending(t => t.OcurridoEn).Select(t => t.Datos).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-        if (nota is not null)
-        {
-            await CerrarAsync(db, r, ResultadoAsociacionLote.Asociado, null, new ResultadoEvidencia(ResultadoEvidencia.Omitido, MotivoDeNota(nota)), ct).ConfigureAwait(false);
-            return;
-        }
-
-        var correo = await sp.GetRequiredService<ServicioEvidencia>().EnviarAlAsociarAsync(comparendo, tenant, archivo, false, actor, ct, despachar: false).ConfigureAwait(false);
-        await CerrarAsync(db, r, ResultadoAsociacionLote.Asociado, null, correo, ct).ConfigureAwait(false);
+        return nota is null ? null : new ResultadoEvidencia(ResultadoEvidencia.Omitido, MotivoDeNota(nota));
     }
+
+    private static Task<bool> SigueSiendoMiaAsync(ComparendosDb db, Reclamo r, CancellationToken ct) =>
+        db.AsociacionLoteDocumentos.AsNoTracking().AnyAsync(i => i.LoteId == r.LoteId && i.DocumentoId == r.DocumentoId
+            && i.Resultado == ResultadoAsociacionLote.PorAsociar && i.ProximoIntentoEn == r.ProximoIntentoEn, ct);
 
     private static string? MotivoDeNota(string datos)
     {

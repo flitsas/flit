@@ -268,6 +268,10 @@ public sealed partial class ServicioEvidencia(
     /// token corto e independiente: el plazo del trabajo ya pudo vencer (justo el caso en que la nota más hace falta, porque
     /// el operador ya vio el aviso de la pantalla y no quedaría rastro persistente) y el de la petición pudo cancelarse.
     /// </summary>
+    /// <summary>GDC-EVID §10: la misma nota «no se envió correo» para el trabajador del lote (con su propio plazo; nunca lanza).</summary>
+    public Task DejarNotaOmitidaAsync(Guid comparendoId, Guid tenantId, string motivo, bool reemplazo, Actor actor) =>
+        DejarNotaAsync(comparendoId, tenantId, motivo, reemplazo, actor);
+
     private async Task DejarNotaAsync(Guid comparendoId, Guid tenantId, string motivo, bool reemplazo, Actor actor)
     {
         using var propio = new CancellationTokenSource(TopeNota);
