@@ -2,13 +2,20 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using Flit.Comparendos.Api.Modulos.Avisos;
+using Flit.Comparendos.Api.Modulos.Calendario;
 using Flit.Comparendos.Api.Modulos.Comparendos;
+using Flit.Comparendos.Api.Modulos.Correo;
+using Flit.Comparendos.Api.Modulos.Plantillas;
+using Flit.Comparendos.Api.Modulos.Portal;
+using Flit.Comparendos.Api.Plataforma;
 using Flit.Comparendos.Api.Persistence;
 using Flit.Comparendos.Api.Persistence.Modelo;
 using Flit.Comparendos.Domain.Modelo;
 using FluentAssertions;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Xunit;
 using static Flit.Comparendos.Tests.Api.ComparendosDePrueba;
 
@@ -165,6 +172,80 @@ public sealed partial class OcrAsociarTests
 
         r.Estado.Should().BeOneOf("Enviado", "Pendiente");
         (await EvidenciasAsync(comparendo)).Should().ContainSingle();
+    }
+
+    // ── Vencimiento del plazo propio del trabajo posterior a la asociación ───────────────────────────────────────────────
+    private sealed class PlantillasLentas(ComparendosDb db, IConfiguration configuracion) : ServicioPlantillas(db, configuracion)
+    {
+        public override Task<Armado> ArmarAsync(ConjuntoPlantillas conjunto, TipoPlantilla tipo, Guid? tipologiaId, IReadOnlyDictionary<string, string?> valores, CancellationToken ct) =>
+            Task.Delay(Timeout.Infinite, ct).ContinueWith<Armado>(_ => throw new InvalidOperationException("inalcanzable"), TaskScheduler.Default);
+    }
+
+    private sealed class DespachadorLento(IServiceScopeFactory scopes, TimeProvider tiempo, ILogger<DespachadorCorreos> logger) : DespachadorCorreos(scopes, tiempo, logger)
+    {
+        public override async Task<EstadoComunicacion> DespacharAsync(Guid id, CancellationToken ct)
+        {
+            await Task.Delay(Timeout.Infinite, ct);
+            return EstadoComunicacion.Pendiente;
+        }
+    }
+
+    private static ServicioEvidencia ServicioConPlazo(IServiceProvider sp, bool plantillasLentas, bool despachoLento, int segundos) => new(
+        sp.GetRequiredService<ComparendosDb>(), sp.GetRequiredService<Capacidades>(),
+        plantillasLentas ? new PlantillasLentas(sp.GetRequiredService<ComparendosDb>(), sp.GetRequiredService<IConfiguration>()) : sp.GetRequiredService<ServicioPlantillas>(),
+        sp.GetRequiredService<ContextoPlantilla>(), sp.GetRequiredService<ServicioPortal>(), sp.GetRequiredService<ServicioCorreo>(), sp.GetRequiredService<Timeline>(),
+        sp.GetRequiredService<IProductosHabilitados>(),
+        despachoLento ? new DespachadorLento(sp.GetRequiredService<IServiceScopeFactory>(), TimeProvider.System, sp.GetRequiredService<ILogger<DespachadorCorreos>>()) : sp.GetRequiredService<DespachadorCorreos>(),
+        sp.GetRequiredService<ILogger<ServicioEvidencia>>())
+    {
+        Plazo = TimeSpan.FromSeconds(segundos),
+    };
+
+    /// <summary>El plazo vence mientras se arma el correo: no lanza, dice que no se pudo preparar, y la asociación queda intacta.</summary>
+    [Fact(Timeout = 60_000)]
+    public async Task EnviarAlAsociar_SiElPlazoVenceAlRegistrar_NoLanza_YLaAsociacionQuedaIntacta()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (empresa, cliente, comparendo) = await ComparendoAsync("EVI-12");
+        await ConConductorAsync(cliente, comparendo);
+        var (_, doc) = await SubirAsync(cliente, "EVI-12", "evi-plazo-registro");
+        // Se asocia con el canal apagado (no sale correo) para que la asociación quede hecha antes de ejercer el vencimiento.
+        await api.EnDbAsync(db => db.ConfiguracionesEmpresa.Where(c => c.TenantId == empresa).ExecuteUpdateAsync(u => u.SetProperty(c => c.NotificationChannel, CanalComunicacion.Whatsapp)));
+        (await Asociar(cliente, doc.Id, reemplazar: false)).EnsureSuccessStatusCode();
+        await api.EnDbAsync(db => db.ConfiguracionesEmpresa.Where(c => c.TenantId == empresa).ExecuteUpdateAsync(u => u.SetProperty(c => c.NotificationChannel, CanalComunicacion.Email)));
+        await using var scope = api.App.Services.CreateAsyncScope();
+
+        var r = await ServicioConPlazo(scope.ServiceProvider, plantillasLentas: true, despachoLento: false, segundos: 1)
+            .EnviarAlAsociarAsync(comparendo, empresa, doc.ArchivoId, reemplazo: false, Actor.Sistema, ct);
+
+        r.Should().Be(new ResultadoEvidencia(ResultadoEvidencia.Omitido, "No se pudo preparar el correo al conductor; el documento quedó asociado"));
+        (await EvidenciasAsync(comparendo)).Should().BeEmpty();
+        (await ComparendoDbAsync(comparendo)).ArchivoEvidenciaId.Should().Be(doc.ArchivoId);
+        (await api.EnDbAsync(db => db.DocumentosOcr.AsNoTracking().SingleAsync(d => d.Id == doc.Id, ct))).Estado.Should().Be(EstadoDocumentoOcr.Asociado);
+        // El plazo ya venció, pero la nota (con su token propio) queda: es el único rastro persistente de por qué no salió.
+        // (La primera nota es la de la asociación con el canal apagado; la segunda, la del vencimiento.)
+        (await OmitidasAsync(comparendo)).Select(n => n.Descripcion).Should().Equal(
+            "Documento asociado: no se envió correo al conductor. Motivo: La empresa no usa correo para notificar.",
+            "Documento asociado: no se envió correo al conductor. Motivo: No se pudo preparar el correo al conductor; el documento quedó asociado.");
+    }
+
+    /// <summary>El plazo vence durante el despacho: el correo ya está registrado y queda Pendiente para el ciclo; no lanza.</summary>
+    [Fact(Timeout = 60_000)]
+    public async Task EnviarAlAsociar_SiElPlazoVenceAlDespachar_QuedaPendiente_SinLanzar()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, cliente, comparendo) = await ComparendoAsync("EVI-13");
+        await ConConductorAsync(cliente, comparendo);
+        var (_, doc) = await SubirAsync(cliente, "EVI-13", "evi-plazo-despacho");
+        await using var scope = api.App.Services.CreateAsyncScope();
+
+        // 4 s: el registro real (plantilla, BD) debe caber antes de que el despacho lento haga vencer el plazo, aun en frío o con carga.
+        var r = await ServicioConPlazo(scope.ServiceProvider, plantillasLentas: false, despachoLento: true, segundos: 4)
+            .EnviarAlAsociarAsync(comparendo, empresa, doc.ArchivoId, reemplazo: false, Actor.Sistema, TestContext.Current.CancellationToken);
+
+        r.Should().Be(new ResultadoEvidencia(ResultadoEvidencia.Pendiente, null));
+        (await EvidenciasAsync(comparendo)).Should().ContainSingle().Which.Estado.Should().Be(EstadoComunicacion.Pendiente);
     }
 
     [Fact]
