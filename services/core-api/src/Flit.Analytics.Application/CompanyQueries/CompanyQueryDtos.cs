@@ -104,7 +104,11 @@ public sealed record CompanyQueryRowDto(
     double? DiasEnOrganismo,
     int Devoluciones,
     /// <summary>Validación de identidad por persona (compradores, vendedores, propietarios), una por línea.</summary>
-    IReadOnlyList<ActorValidacionDto> Actores);
+    IReadOnlyList<ActorValidacionDto> Actores,
+    /// <summary>HU #14699: ¿firmaron todas las partes? <c>null</c> si la consulta no lo calculó.</summary>
+    bool? FirmadoPorTodas = null,
+    /// <summary>HU #14699: «Vendedor: A · Comprador: B (rechazada)»; vacío si ya firmaron; <c>null</c> si no se calculó.</summary>
+    string? FaltaFirmar = null);
 
 /// <summary>
 /// El resultado de una consulta de empresa.
