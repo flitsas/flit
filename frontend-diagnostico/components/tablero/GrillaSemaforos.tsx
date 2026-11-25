@@ -267,7 +267,7 @@ export function GrillaSemaforos({
                   // Sujeto (dos consultas): una td con los dos badges apilados; fuente única: la td es la de CeldaSemaforo.
                   return col.fuentes.length > 1 ? (
                     <td key={col.rotulo} data-columna={col.rotulo} data-label={col.rotulo} className={TD_CLS}>
-                      <div className="flex flex-col items-start gap-1.5 max-[900px]:items-end">{celdas}</div>
+                      <div className="flex flex-col items-start gap-1.5 max-lg:items-end">{celdas}</div>
                     </td>
                   ) : (
                     <Fragment key={col.rotulo}>{celdas}</Fragment>
