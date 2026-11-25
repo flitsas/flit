@@ -33,6 +33,7 @@ import {
   type CorreoAsociado,
   type EvidenciaActual,
   avisosAlAsociar,
+  esEstadoFinalDocumento,
   valorInicial,
   vistaOriginal,
 } from "@/lib/ocr";
@@ -222,8 +223,9 @@ function Formulario({
 }) {
   const toast = useToast();
   const acciones = accionesDocumento({ estado: d.estado, reintentable: d.reintentable, fuenteDuplicado: d.duplicado?.fuente ?? null, tipoFallo: d.tipoFallo });
-  // Asociado es un estado final y correcto: no quedan campos por revisar.
-  const marcas = d.estado === "Asociado" ? {} : marcasRevision(d);
+  // Asociado, Registrado y Descartado son finales: solo lectura, sin marcas de revisión ni campos en rojo.
+  const final = esEstadoFinalDocumento(d.estado);
+  const marcas = final ? {} : marcasRevision(d);
   const porRevisar = Object.keys(marcas).length;
   // GDC punto 6: el NIT guardado (base sin puntos) se muestra con la misma máscara con que se escribe.
   const tipoGuardado = d.campos.find((c) => c.nombreCampo === "tipo_documento_infractor")?.valorFinal;
@@ -496,7 +498,7 @@ function Formulario({
       {d.campos.length > 0 && (
         <div className="flex flex-col gap-3">
           {d.campos.map((c) => {
-            const faltante = d.camposFaltantes.includes(c.nombreCampo);
+            const faltante = !final && d.camposFaltantes.includes(c.nombreCampo);
             const marca = marcas[c.nombreCampo];
             return (
               <label key={c.nombreCampo} className={ETIQUETA_CLS}>
@@ -702,7 +704,7 @@ function Revision({ id }: { id: string }) {
 
       {d.estado === "Asociado" && (
         <InlineAlert tone="success" title="Documento asociado al comparendo">
-          <p className="mb-1">El documento sale adjunto en los avisos al conductor.</p>
+          <p className="mb-1">El documento quedó guardado en el comparendo.</p>
           {d.comparendoId ? (
             <button type="button" className="font-semibold text-flit-brand-ink hover:underline" onClick={() => setVerComparendo(d.comparendoId!)}>
               Ver el comparendo

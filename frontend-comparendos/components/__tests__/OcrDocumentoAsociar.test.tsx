@@ -163,8 +163,30 @@ describe("asociar documento escaneado a comparendo existente", () => {
     const campos = ["valor", "placa", "direccion", "fecha_infraccion"].map((n) => ({ nombreCampo: n, obligatorio: true, valorExtraido: null, confianza: 0.5, esNull: true, valorCorregido: null, valorFinal: "x" }));
     abrir({}, undefined, { estado: "Asociado", comparendoId: "c1", campos, camposFaltantes: ["valor"] });
     expect(await screen.findByText("Documento asociado al comparendo")).toBeTruthy();
+    expect(screen.getByText("El documento quedó guardado en el comparendo.")).toBeTruthy();
+    expect(screen.queryByText(/sale adjunto en los avisos/)).toBeNull();
+    // Final y de solo lectura: ni «falta o no es válido» ni campos en rojo.
+    expect(screen.queryByText(/falta o no es válido/)).toBeNull();
+    expect(document.querySelector(".ring-destructive")).toBeNull();
     expect(screen.queryByText(/Este comparendo ya existe/)).toBeNull();
     expect(screen.queryByText(/Revisa \d+ campos? marcados?/)).toBeNull();
+  });
+
+  it("Registrado y Descartado: tampoco pintan campos en rojo aunque falten datos", async () => {
+    const campos = ["valor", "placa"].map((n) => ({ nombreCampo: n, obligatorio: true, valorExtraido: null, confianza: 0.5, esNull: true, valorCorregido: null, valorFinal: "x" }));
+    for (const estado of ["Registrado", "Descartado"]) {
+      abrir({}, undefined, { estado, duplicado: null, comparendoId: "c1", campos, camposFaltantes: ["valor"] });
+      await screen.findAllByText(/Valor|Placa/i);
+      expect(screen.queryByText(/falta o no es válido/)).toBeNull();
+      expect(document.querySelector(".ring-destructive")).toBeNull();
+      cleanup();
+    }
+  });
+
+  it("revisión (Duplicado con faltantes): sigue marcando en rojo lo que falta", async () => {
+    const campos = ["valor", "placa"].map((n) => ({ nombreCampo: n, obligatorio: true, valorExtraido: null, confianza: 0.5, esNull: true, valorCorregido: null, valorFinal: "x" }));
+    abrir({}, undefined, { campos, camposFaltantes: ["valor"] });
+    expect((await screen.findAllByText(/falta o no es válido/)).length).toBeGreaterThan(0);
   });
 
   it("mismo archivo ya cargado: pinta el motivo que manda el servidor", async () => {

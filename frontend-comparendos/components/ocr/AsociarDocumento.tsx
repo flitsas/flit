@@ -23,7 +23,11 @@ export function avisoSinAvisos(c: Pick<ComparendoExistente, "activo" | "pagado">
   return null;
 }
 
-/** Qué pasará con el correo al conductor; sin dato del servidor no se muestra nada. */
+/**
+ * Qué pasará con el correo al conductor; sin dato del servidor no se muestra nada. Si el comparendo está inactivo o pagado,
+ * `avisoSinAvisos` ya lo dice (y habla también de correos): no se repite con una segunda nota. Se decide por el estado del
+ * comparendo, no por el texto del motivo.
+ */
 function AvisoCorreo({ correo, reemplazo }: { correo: CorreoAlAsociar | null | undefined; reemplazo: boolean }) {
   const texto = textoCorreoAlAsociar(correo, reemplazo);
   if (!texto) return null;
@@ -102,6 +106,7 @@ export function ModalAsociar({
   onClose: () => void;
 }) {
   const aviso = avisoSinAvisos(comparendo);
+  const correo = aviso && correoAlAsociar && !correoAlAsociar.seEnviara ? null : correoAlAsociar;
   return (
     <Modal
       icono="documento"
@@ -122,7 +127,7 @@ export function ModalAsociar({
       }
     >
       <div className="flex flex-col gap-3 text-sm">
-        <AvisoCorreo correo={correoAlAsociar} reemplazo={false} />
+        <AvisoCorreo correo={correo} reemplazo={false} />
         <Numeros documento={documento.numeroComparendoExtraido ?? null} sistema={comparendo.numero} />
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
           <dt className="font-semibold">Fuente</dt>
@@ -164,6 +169,7 @@ export function ModalComparar({
   onClose: () => void;
 }) {
   const aviso = avisoSinAvisos(comparendo);
+  const correo = aviso && correoAlAsociar && !correoAlAsociar.seEnviara ? null : correoAlAsociar;
   const tipoEntrante = entrante.tipoArchivo === "PDF" ? "application/pdf" : "";
   return (
     <Modal
@@ -189,7 +195,7 @@ export function ModalComparar({
       }
     >
       <div className="flex flex-col gap-3">
-        <AvisoCorreo correo={correoAlAsociar} reemplazo />
+        <AvisoCorreo correo={correo} reemplazo />
         <Numeros documento={entrante.numeroComparendoExtraido ?? null} sistema={comparendo.numero} />
         {aviso && (
           <p role="note" className="rounded-xl border border-[var(--badge-warning-fg)] px-3 py-2 text-xs text-[var(--badge-warning-fg)]">
