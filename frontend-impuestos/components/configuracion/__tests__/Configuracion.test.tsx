@@ -412,6 +412,19 @@ describe("Configuración — estados y permisos", () => {
     expect(replace).not.toHaveBeenCalled();
   });
 
+  it("PUT /configuracion con 409 CONFLICTO_CONCURRENCIA: literal común del contrato 1.2.2 y conserva lo digitado", async () => {
+    vi.stubGlobal("fetch", api({ put: () => Response.json({ code: "CONFLICTO_CONCURRENCIA", error: "detalle interno" }, { status: 409 }) }));
+
+    render(<Configuracion />);
+    fireEvent.change(await screen.findByLabelText("Máximo de placas por lote"), { target: { value: "120" } });
+    fireEvent.click(screen.getByRole("button", { name: "Guardar configuración" }));
+
+    expect(await screen.findByText("Otro usuario cambió este registro al mismo tiempo. Recarga e inténtalo de nuevo.")).toBeInTheDocument();
+    expect(screen.getByText("No se guardó la configuración")).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("detalle interno");
+    expect(campoMaximo()).toHaveValue(120);
+  });
+
   it("el Gestor (sin impuestos.configuracion.ver) va a la 403", async () => {
     conSesion("gestor");
     vi.stubGlobal("fetch", api());
