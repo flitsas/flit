@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Net;
 using System.Text;
+using Flit.Infrastructure.Notifications.Identity;
 using Flit.Infrastructure.Notifications.Theme;
 using Flit.Modules.Security.Domain.Auth;
 using Flit.Platform.Sdk;
@@ -23,7 +24,8 @@ internal sealed partial class IdentityRoundsAlertSender(
 {
     public const string TemplateKey = "identidad.alerta-rondas-agotadas";
 
-    private static readonly CultureInfo Es = new("es-CO");
+    // Cultura invariante a propósito: el formato dd/MM/yyyy HH:mm es numérico, y "es-CO" no existe en modo de globalización invariante.
+    private static readonly CultureInfo Formato = CultureInfo.InvariantCulture;
 
     public async Task<IdentityRoundsAlertDelivery> SendAsync(
         IdentityRoundsAlertMessage message, IReadOnlyList<string> recipients, CancellationToken ct = default)
@@ -31,7 +33,7 @@ internal sealed partial class IdentityRoundsAlertSender(
         ArgumentNullException.ThrowIfNull(message);
         ArgumentNullException.ThrowIfNull(recipients);
 
-        var (subject, html) = Compose(message, branding.PublicBaseUrl);
+        var (subject, html) = Compose(message, branding.PublicBaseUrl, EmailTheme.Flit, branding.PublicBaseUrl);
         var enviados = 0;
         var fallidos = 0;
         foreach (var destinatario in recipients)
@@ -60,10 +62,11 @@ internal sealed partial class IdentityRoundsAlertSender(
     }
 
     /// <summary>Asunto y HTML de la alerta. Pública para pruebas; encodea cada valor.</summary>
-    internal static (string Subject, string Html) Compose(IdentityRoundsAlertMessage m, string publicBaseUrl)
+    internal static (string Subject, string Html) Compose(
+        IdentityRoundsAlertMessage m, string publicBaseUrl, EmailTheme theme, string assetsBaseUrl)
     {
         var subject = $"[FLIT] Identidad rechazada: ronda {m.RondasUsadas} de {m.RondasMaximas}";
-        var fecha = m.Fecha.ToOffset(TimeSpan.FromHours(-5)).ToString("dd/MM/yyyy HH:mm", Es);
+        var fecha = m.Fecha.ToOffset(TimeSpan.FromHours(-5)).ToString("dd/MM/yyyy HH:mm", Formato);
         var cuando = m.RondasUsadas >= m.RondasMaximas
             ? "Se alcanzó el máximo de rondas: ya no se puede reenviar la validación."
             : "La ronda cerró en rechazo; aún quedan rondas disponibles.";
@@ -74,7 +77,10 @@ internal sealed partial class IdentityRoundsAlertSender(
 
         var sb = new StringBuilder();
         sb.Append("<div style=\"font-family:Arial,Helvetica,sans-serif;font-size:14px;color:#162244;\">");
-        sb.Append("<h2 style=\"margin:0 0 12px;\">Validación de identidad rechazada</h2>");
+        var producto = IdentityVerificationEmailLayout.ProductName(theme);
+        var acento = theme.IsBrand ? BrandedEmailChrome.LinkColor(theme) : "#557EFF";
+        sb.Append(IdentityVerificationEmailLayout.LogoHtml(IdentityVerificationEmailLayout.LogoUrl(theme, assetsBaseUrl), Enc(producto), 32, acento));
+        sb.Append("<h2 style=\"margin:0 0 12px;color:").Append(acento).Append(";\">Validación de identidad rechazada</h2>");
         sb.Append("<p style=\"margin:0 0 16px;\">").Append(Enc(cuando)).Append("</p>");
         sb.Append("<table cellpadding=\"6\" cellspacing=\"0\" style=\"border-collapse:collapse;\">");
         Row(sb, "Nombre", m.Nombre);

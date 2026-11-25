@@ -18,11 +18,11 @@ public class NotificationTemplateCatalogTests
     [Fact]
     public void All_DebeTenerExactamenteCatorceEntradas()
     {
-        NotificationTemplateCatalog.All.Should().HaveCount(14);
+        NotificationTemplateCatalog.All.Should().HaveCount(15);
     }
 
     [Fact]
-    public void All_DebeCubrirLosCatorceIdsEsperados()
+    public void All_DebeCubrirLosQuinceIdsEsperados()
     {
         NotificationTemplateCatalog.All.Select(t => t.Id).Should().BeEquivalentTo(
         [
@@ -40,6 +40,7 @@ public class NotificationTemplateCatalogTests
             "tramites.revocatoria-rechazada",
             "identidad.captura-manual",
             "identidad.captura-manual-rechazo",
+            "identidad.alerta-rondas-agotadas",
         ]);
     }
 
@@ -170,7 +171,7 @@ public class NotificationTemplateCatalogTests
     {
         // Invitación declara 2; el resto 1 cada una → 15.
         var totalTriggers = NotificationTemplateCatalog.All.Sum(t => t.Triggers.Count);
-        totalTriggers.Should().Be(15);
+        totalTriggers.Should().Be(16);
     }
 
     [Fact]

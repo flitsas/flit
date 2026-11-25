@@ -223,7 +223,7 @@ public static class IdentityVerificationEmailLayout
 
     private static IEnumerable<char> Clean(string value) => value.Trim().Select(c => char.IsControl(c) ? ' ' : c);
 
-    private static string? LogoUrl(EmailTheme theme, string assetsBaseUrl)
+    internal static string? LogoUrl(EmailTheme theme, string assetsBaseUrl)
     {
         if (theme.IsBrand)
         {
@@ -237,7 +237,7 @@ public static class IdentityVerificationEmailLayout
         return FlitEmailLayout.LogoUrl(assetsBaseUrl);
     }
 
-    private static string LogoHtml(string? logoUrl, string productEncoded, int heightPx, string accent) =>
+    internal static string LogoHtml(string? logoUrl, string productEncoded, int heightPx, string accent) =>
         logoUrl is null
             ? $"<span style=\"font-size:20px;font-weight:700;color:{accent};\">{productEncoded}</span>"
             : $"<img src=\"{EncAttr(logoUrl)}\" alt=\"{productEncoded}\" height=\"{heightPx}\" style=\"display:block;border:0;height:{heightPx}px;width:auto;\"/>";

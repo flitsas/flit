@@ -69,4 +69,7 @@ public enum NotificationTrigger
     /// (Feature #13282, Épica #13202) — motivo de la lista cerrada y enlace nuevo de 24 horas.
     /// </summary>
     ManualCaptureRejected,
+
+    // Alerta a operación cuando una validación de identidad agota el máximo de rondas (Feature #14684).
+    IdentityRoundsExhausted,
 }
