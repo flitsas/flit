@@ -51,6 +51,9 @@ public interface IIdentityRoundsStore
     /// <summary>Configuración vigente; <see cref="IdentityRoundsConfig.Default"/> si la fila única no existe.</summary>
     Task<IdentityRoundsConfig> GetConfigAsync(CancellationToken ct = default);
 
+    /// <summary>Rondas usadas por la persona (tipo y número de documento) en la empresa: suma de <c>1 + ResendCount</c> de todas sus filas.</summary>
+    Task<int> CountRoundsForPersonAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default);
+
     /// <summary>Guarda la fila única (upsert) con quién y cuándo.</summary>
     Task SaveConfigAsync(IdentityRoundsConfig config, Guid? updatedBy, DateTimeOffset now, CancellationToken ct = default);
 
@@ -84,6 +87,9 @@ public interface IIdentityRoundsPolicy
 {
     /// <summary><c>true</c> si la fila ya usó todas las rondas permitidas (el reenvío debe responder <c>limite_rondas_alcanzado</c>).</summary>
     Task<bool> IsResendBlockedAsync(ProcedureInstanceBiometricValidation validation, CancellationToken ct = default);
+
+    /// <summary><c>true</c> si la persona ya usó todas las rondas permitidas en la empresa: no se puede crear una fila nueva.</summary>
+    Task<bool> IsPersonBlockedAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default);
 
     /// <summary>Si corresponde según el disparador, manda la alerta de la ronda rechazada UNA sola vez. Nunca lanza.</summary>
     Task NotifyRoundRejectedAsync(ProcedureInstanceBiometricValidation validation, DateTimeOffset now, CancellationToken ct = default);

@@ -5,8 +5,8 @@ using Microsoft.Extensions.Logging;
 namespace Flit.Tramites.Application.Identity.Rounds;
 
 /// <summary>
-/// Aplica el configurador GLOBAL de rondas (<see cref="IdentityRoundsConfig"/>). El conteo es POR FILA de validación:
-/// <c>1 + ResendCount</c> (ver <see cref="IdentityRoundsConfig.RoundsUsed"/>).
+/// Aplica el configurador GLOBAL de rondas (<see cref="IdentityRoundsConfig"/>). El conteo es POR PERSONA en la empresa (suma de sus filas):
+/// <c>1 + ResendCount</c> de cada fila (ver <see cref="IdentityRoundsConfig.RoundsUsed"/>).
 /// <para>
 /// Alerta: idempotente por (validación, ronda). La fila de auditoría se registra ANTES de enviar y es la guardia: un webhook repetido o la
 /// reconciliación llegan a <see cref="IIdentityRoundsStore.TryRegisterAlertAsync"/> y no vuelven a enviar. Best-effort: un fallo de
@@ -22,7 +22,15 @@ public sealed partial class IdentityRoundsPolicy(
     {
         ArgumentNullException.ThrowIfNull(validation);
         var config = await store.GetConfigAsync(ct).ConfigureAwait(false);
-        return !config.AllowsNewRound(validation);
+        var usadas = await store.CountRoundsForPersonAsync(validation.TenantId, validation.DocumentType, validation.DocumentNumber, ct).ConfigureAwait(false);
+        return !config.AllowsNewRound(usadas);
+    }
+
+    public async Task<bool> IsPersonBlockedAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default)
+    {
+        var config = await store.GetConfigAsync(ct).ConfigureAwait(false);
+        var usadas = await store.CountRoundsForPersonAsync(tenantId, documentType, documentNumber, ct).ConfigureAwait(false);
+        return !config.AllowsNewRound(usadas);
     }
 
     public async Task NotifyRoundRejectedAsync(ProcedureInstanceBiometricValidation validation, DateTimeOffset now, CancellationToken ct = default)
@@ -33,11 +41,12 @@ public sealed partial class IdentityRoundsPolicy(
         if (validation.Status != BiometricEstados.Rechazado || BiometricRules.EsRechazoKyverumConIntentosDisponibles(validation))
             return;
 
-        var ronda = IdentityRoundsConfig.RoundsUsed(validation);
+        var ronda = 0;
         try
         {
             var config = await store.GetConfigAsync(ct).ConfigureAwait(false);
-            if (!config.ShouldAlert(validation))
+            ronda = await store.CountRoundsForPersonAsync(validation.TenantId, validation.DocumentType, validation.DocumentNumber, ct).ConfigureAwait(false);
+            if (!config.ShouldAlert(ronda))
                 return;
 
             var destinatarios = config.CorreosAlerta;

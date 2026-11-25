@@ -251,13 +251,13 @@ public sealed class IdentityRoundsTests
     {
         var env = new Env(rondas: 3, disparador: "al_maximo", correos: ["ops@flit.co"]);
 
-        await env.Policy.NotifyRoundRejectedAsync(Rechazada(resendCount: 0), Now, TestContext.Current.CancellationToken);
-        await env.Policy.NotifyRoundRejectedAsync(Rechazada(resendCount: 1), Now, TestContext.Current.CancellationToken);
+        await env.NotifyAsync(Rechazada(resendCount: 0), Now, TestContext.Current.CancellationToken);
+        await env.NotifyAsync(Rechazada(resendCount: 1), Now, TestContext.Current.CancellationToken);
         env.Sender.Sent.Should().BeEmpty();
         env.Store.Alerts.Should().BeEmpty();
 
         var ultima = Rechazada(resendCount: 2);
-        await env.Policy.NotifyRoundRejectedAsync(ultima, Now, TestContext.Current.CancellationToken);
+        await env.NotifyAsync(ultima, Now, TestContext.Current.CancellationToken);
 
         env.Sender.Sent.Should().ContainSingle();
         var (mensaje, destinatarios) = env.Sender.Sent.Single();
@@ -270,13 +270,29 @@ public sealed class IdentityRoundsTests
     }
 
     [Fact]
+    public async Task Persona_RondasDeTodasSusFilas_BloqueanUnaFilaNuevaAunqueSuFilaTengaCeroReenvios()
+    {
+        // La persona lleva 3 rondas repartidas entre dos filas (p. ej. 2 en la fila A y 1 en la fila B). Con máximo 3, una fila nueva
+        // con 0 reenvíos NO debe abrir otra ronda: el límite es por persona en la empresa, no por fila.
+        var ct = TestContext.Current.CancellationToken;
+        var env = new Env(rondas: 3);
+        env.Store.PersonRounds = 3;
+
+        (await env.Policy.IsPersonBlockedAsync(env.TenantId, "CC", "1020304050", ct)).Should().BeTrue();
+        (await env.Policy.IsResendBlockedAsync(Rechazada(resendCount: 0), ct)).Should().BeTrue();
+
+        env.Store.PersonRounds = 2;
+        (await env.Policy.IsPersonBlockedAsync(env.TenantId, "CC", "1020304050", ct)).Should().BeFalse();
+    }
+
+    [Fact]
     public async Task Alerta_CadaRonda_EnCualquierRondaRechazada()
     {
         var env = new Env(rondas: 3, disparador: "cada_ronda", correos: ["ops@flit.co"]);
 
-        await env.Policy.NotifyRoundRejectedAsync(Rechazada(resendCount: 0), Now, TestContext.Current.CancellationToken);
-        await env.Policy.NotifyRoundRejectedAsync(Rechazada(resendCount: 1), Now, TestContext.Current.CancellationToken);
-        await env.Policy.NotifyRoundRejectedAsync(Rechazada(resendCount: 2), Now, TestContext.Current.CancellationToken);
+        await env.NotifyAsync(Rechazada(resendCount: 0), Now, TestContext.Current.CancellationToken);
+        await env.NotifyAsync(Rechazada(resendCount: 1), Now, TestContext.Current.CancellationToken);
+        await env.NotifyAsync(Rechazada(resendCount: 2), Now, TestContext.Current.CancellationToken);
 
         env.Sender.Sent.Should().HaveCount(3);
         env.Store.Alerts.Select(a => a.Ronda).Should().Equal(1, 2, 3);
@@ -288,8 +304,8 @@ public sealed class IdentityRoundsTests
         var env = new Env(rondas: 3, disparador: "al_maximo", correos: ["ops@flit.co", "jefe@flit.co"]);
         var v = Rechazada(resendCount: 2);
 
-        await env.Policy.NotifyRoundRejectedAsync(v, Now, TestContext.Current.CancellationToken);
-        await env.Policy.NotifyRoundRejectedAsync(v, Now.AddMinutes(1), TestContext.Current.CancellationToken); // reconciliación / webhook repetido
+        await env.NotifyAsync(v, Now, TestContext.Current.CancellationToken);
+        await env.NotifyAsync(v, Now.AddMinutes(1), TestContext.Current.CancellationToken); // reconciliación / webhook repetido
 
         env.Sender.Sent.Should().ContainSingle();
         env.Store.Alerts.Should().ContainSingle();
@@ -300,7 +316,7 @@ public sealed class IdentityRoundsTests
     {
         var env = new Env(rondas: 3, disparador: "cada_ronda", correos: []);
 
-        await env.Policy.NotifyRoundRejectedAsync(Rechazada(resendCount: 0), Now, TestContext.Current.CancellationToken);
+        await env.NotifyAsync(Rechazada(resendCount: 0), Now, TestContext.Current.CancellationToken);
 
         env.Sender.Sent.Should().BeEmpty();
         env.Store.Alerts.Single().Resultado.Should().Be("sin_destinatarios");
@@ -313,14 +329,14 @@ public sealed class IdentityRoundsTests
 
         var enProceso = Rechazada(0);
         enProceso.Status = BiometricEstados.EnProceso;
-        await env.Policy.NotifyRoundRejectedAsync(enProceso, Now, TestContext.Current.CancellationToken);
+        await env.NotifyAsync(enProceso, Now, TestContext.Current.CancellationToken);
 
         var prematuro = Rechazada(0);
         prematuro.Provider = BiometricProviders.Kyverum;
         prematuro.KyverumVerificationId = "kyv_1";
         prematuro.Attempts = 1; // rechazo con intentos disponibles: aún puede aprobarse
         prematuro.MaxAttempts = 3;
-        await env.Policy.NotifyRoundRejectedAsync(prematuro, Now, TestContext.Current.CancellationToken);
+        await env.NotifyAsync(prematuro, Now, TestContext.Current.CancellationToken);
 
         env.Sender.Sent.Should().BeEmpty();
         env.Store.Alerts.Should().BeEmpty();
@@ -332,7 +348,7 @@ public sealed class IdentityRoundsTests
         var env = new Env(rondas: 3, disparador: "cada_ronda", correos: ["ops@flit.co"]) { };
         env.Sender.Fallidos = 1;
 
-        var act = () => env.Policy.NotifyRoundRejectedAsync(Rechazada(0), Now, TestContext.Current.CancellationToken);
+        var act = () => env.NotifyAsync(Rechazada(0), Now, TestContext.Current.CancellationToken);
 
         await act.Should().NotThrowAsync();
         env.Store.Alerts.Single().Resultado.Should().Be("fallido");
@@ -344,7 +360,7 @@ public sealed class IdentityRoundsTests
         var env = new Env(rondas: 3, disparador: "cada_ronda", correos: ["ops@flit.co"]);
         env.Sender.Throw = true;
 
-        var act = () => env.Policy.NotifyRoundRejectedAsync(Rechazada(0), Now, TestContext.Current.CancellationToken);
+        var act = () => env.NotifyAsync(Rechazada(0), Now, TestContext.Current.CancellationToken);
 
         await act.Should().NotThrowAsync();
     }
@@ -452,6 +468,12 @@ public sealed class IdentityRoundsTests
 
         public Task<IdentityRoundsConfig> GetConfigAsync(CancellationToken ct = default) => Task.FromResult(Config);
 
+        /// <summary>Rondas que la persona lleva en la empresa (suma de sus filas). Lo fija cada prueba.</summary>
+        public int PersonRounds { get; set; } = 1;
+
+        public Task<int> CountRoundsForPersonAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default) =>
+            Task.FromResult(PersonRounds);
+
         public Task SaveConfigAsync(IdentityRoundsConfig newConfig, Guid? updatedBy, DateTimeOffset now, CancellationToken ct = default)
         {
             Config = newConfig;
@@ -534,6 +556,13 @@ public sealed class IdentityRoundsTests
             Policy = new IdentityRoundsPolicy(Store, Sender, NullLogger<IdentityRoundsPolicy>.Instance);
         }
 
+        /// <summary>Notifica el rechazo de la ronda; fija antes las rondas de la persona (en estas pruebas, la de la fila).</summary>
+        public Task NotifyAsync(ProcedureInstanceBiometricValidation v, DateTimeOffset now, CancellationToken ct)
+        {
+            Store.PersonRounds = IdentityRoundsConfig.RoundsUsed(v);
+            return Policy.NotifyRoundRejectedAsync(v, now, ct);
+        }
+
         public ProcedureInstanceBiometricValidation SeedStandalone(int resendCount)
         {
             var person = new Person
@@ -549,6 +578,7 @@ public sealed class IdentityRoundsTests
                 ExpiresAt = Now.AddHours(-1), ResendCount = resendCount, CreatedAt = Now,
             };
             Repo.GetBiometricByIdWithPersonAsync(v.Id, TenantId, Arg.Any<CancellationToken>()).Returns(v);
+            Store.PersonRounds = 1 + resendCount;
             return v;
         }
 
@@ -562,6 +592,7 @@ public sealed class IdentityRoundsTests
                 ExpiresAt = Now.AddHours(-1), ResendCount = resendCount, CreatedAt = Now,
             };
             Repo.GetBiometricByIdWithPersonAsync(v.Id, TenantId, Arg.Any<CancellationToken>()).Returns(v);
+            Store.PersonRounds = 1 + resendCount;
             return v;
         }
     }

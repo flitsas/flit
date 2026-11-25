@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Identity.Events;
+using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Domain.Entities;
 using Flit.Tramites.Domain.Enums;
 using Flit.Tramites.Domain.Integration;
@@ -45,7 +46,8 @@ public sealed class IniciarKyverumVerifyHandler(
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
     IIdentityValidationAuditLog audit,
-    ISignatureVaultPolicy? vaultPolicy = null)
+    ISignatureVaultPolicy? vaultPolicy = null,
+    IIdentityRoundsPolicy? rondas = null)
 {
     private readonly ISignatureVaultPolicy _vaultPolicy = vaultPolicy ?? NullSignatureVaultPolicy.Instance;
 
@@ -190,6 +192,10 @@ public sealed class IniciarKyverumVerifyHandler(
         CancellationToken ct)
     {
         var id = instance.Id;
+
+        // Rondas por PERSONA en la empresa: una fila nueva también consume ronda (no solo el reenvío).
+        if (rondas is not null && await rondas.IsPersonBlockedAsync(tenantId, tipoDoc, documento, ct))
+            return (null, IdentityRoundsErrors.LimiteRondasAlcanzado, null);
 
         // Id de NUESTRA validación: se genera ANTES de llamar al proveedor para incrustarlo en la
         // webhookUrl (el webhook de Kyverum no repite el id en el cuerpo → correlación por URL).

@@ -48,6 +48,7 @@ internal static class BiometricaEndpoints
                         Results.Json(IdentitySendConflictDto.From(kConflict), statusCode: StatusCodes.Status409Conflict),
                     "biometria_activa" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Ya existe una biométrica activa o aprobada para esta parte."),
                     "enlace_vencido_reenvio" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Hay una validación en vuelo con enlace vencido; reenvía la existente."),
+                    "limite_rondas_alcanzado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La persona ya usó todas las rondas de validación permitidas."),
                     "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor de validación de identidad rechazó la solicitud."),
                     "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
                     // Encolado (fallo transitorio del proveedor): 202 Accepted — el worker reintentará el envío.
@@ -381,6 +382,7 @@ internal static class BiometricaEndpoints
             {
                 "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
                 "sin_certificado" => Results.Problem(statusCode: 404, title: "Not Found", detail: "No hay certificado disponible para esta validación."),
+                "limite_rondas_alcanzado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La persona ya usó todas las rondas de validación permitidas."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la descarga del certificado."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
                 // HU #14302 — carta de una validación manual que aún no se pudo generar/leer: reintentable.
@@ -521,6 +523,7 @@ internal static class BiometricaEndpoints
                     detail: "Ya existe una prevalidación activa para este documento."),
                 "enlace_vencido_reenvio" => Results.Problem(statusCode: 409, title: "Conflict",
                     detail: "Hay una validación en vuelo con enlace vencido; reenvía en lugar de crear una nueva."),
+                "limite_rondas_alcanzado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La persona ya usó todas las rondas de validación permitidas."),
                 "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway",
                     detail: "El proveedor de validación de identidad rechazó la solicitud."),
                 "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable",
@@ -885,6 +888,7 @@ internal static class BiometricaEndpoints
     {
         "not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada."),
         "no_kyverum" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación no es del proveedor Kyverum."),
+        "limite_rondas_alcanzado" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La persona ya usó todas las rondas de validación permitidas."),
         "proveedor_error" => Results.Problem(statusCode: 502, title: "Bad Gateway", detail: "El proveedor rechazó la consulta de estado."),
         "proveedor_no_disponible" => Results.Problem(statusCode: 503, title: "Service Unavailable", detail: "El proveedor de validación de identidad no está disponible. Reintenta más tarde."),
         "persist_error" => Results.Problem(statusCode: 500, title: "Internal Server Error", detail: "No se pudo guardar el resultado de la validación. Revisa la bitácora (Historial técnico)."),

@@ -55,6 +55,24 @@ internal sealed class IdentityRoundsStore(FlitDbContext db) : IIdentityRoundsSto
         }, async cmd => await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false), ct);
     }
 
+    public async Task<int> CountRoundsForPersonAsync(Guid tenantId, string documentType, string documentNumber, CancellationToken ct = default)
+    {
+        const string sql = """
+            SELECT COUNT(*)::int + COALESCE(SUM(resend_count), 0)::int
+            FROM tramites.procedure_instance_biometric_validations
+            WHERE tenant_id = 
+              AND upper(btrim(document_type)) = upper(btrim())
+              AND upper(btrim(document_number)) = upper(btrim())
+            """;
+        var total = await WithCommandAsync(sql, cmd =>
+        {
+            cmd.Parameters.Add(new NpgsqlParameter("tenant", NpgsqlDbType.Uuid) { Value = tenantId });
+            cmd.Parameters.Add(new NpgsqlParameter("tipo", NpgsqlDbType.Text) { Value = documentType });
+            cmd.Parameters.Add(new NpgsqlParameter("documento", NpgsqlDbType.Text) { Value = documentNumber });
+        }, async cmd => Convert.ToInt32(await cmd.ExecuteScalarAsync(ct).ConfigureAwait(false) ?? 0, System.Globalization.CultureInfo.InvariantCulture), ct).ConfigureAwait(false);
+        return total;
+    }
+
     public async Task<bool> TryRegisterAlertAsync(IdentityRoundsAlertRecord alert, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(alert);

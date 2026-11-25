@@ -27,7 +27,8 @@ public sealed class IdentityRoundsConfigException(IReadOnlyDictionary<string, st
 /// Configuración GLOBAL (no por empresa) de las rondas de validación de identidad. Una RONDA es un proceso de validación: una
 /// fila de <see cref="ProcedureInstanceBiometricValidation"/> con hasta <see cref="ProcedureInstanceBiometricValidation.MaxAttempts"/>
 /// intentos de Kyverum dentro del mismo enlace. Un reenvío abre la siguiente ronda sobre la MISMA fila, así que el conteo es
-/// POR FILA (no por persona ni por documento): <c>rondas usadas = 1 + ResendCount</c> (<see cref="RoundsUsed"/>).
+/// POR PERSONA dentro de la empresa: la suma de <c>1 + ResendCount</c> de todas sus filas (tipo y número de documento).
+/// <see cref="RoundsUsed"/> es la cuenta de una sola fila.
 /// Inmutable; las reglas (rango, disparador, correos) viven aquí y no solo en el endpoint.
 /// </summary>
 public sealed record IdentityRoundsConfig
@@ -111,15 +112,21 @@ public sealed record IdentityRoundsConfig
     }
 
     /// <summary>¿Puede abrirse otra ronda? Con las rondas usadas ya en el máximo, el reenvío se bloquea.</summary>
-    public bool AllowsNewRound(ProcedureInstanceBiometricValidation validation) => RoundsUsed(validation) < RondasMaximas;
+    public bool AllowsNewRound(ProcedureInstanceBiometricValidation validation) => AllowsNewRound(RoundsUsed(validation));
+
+    /// <summary>¿Cabe otra ronda con <paramref name="roundsUsed"/> ya usadas por la persona en la empresa?</summary>
+    public bool AllowsNewRound(int roundsUsed) => roundsUsed < RondasMaximas;
 
     /// <summary>
     /// ¿Corresponde alerta por correo cuando la ronda actual cierra en rechazo? <c>cada_ronda</c>: siempre; <c>al_maximo</c>: solo si es
     /// la última permitida (rondas usadas ≥ máximo).
     /// </summary>
-    public bool ShouldAlert(ProcedureInstanceBiometricValidation validation) =>
+    public bool ShouldAlert(ProcedureInstanceBiometricValidation validation) => ShouldAlert(RoundsUsed(validation));
+
+    /// <summary>Igual que <see cref="ShouldAlert(ProcedureInstanceBiometricValidation)"/>, con las rondas usadas por la persona.</summary>
+    public bool ShouldAlert(int roundsUsed) =>
         string.Equals(DisparadorAlerta, IdentityRoundsAlertTriggers.CadaRonda, StringComparison.Ordinal)
-        || RoundsUsed(validation) >= RondasMaximas;
+        || roundsUsed >= RondasMaximas;
 
     private static bool EsCorreoValido(string correo)
     {
