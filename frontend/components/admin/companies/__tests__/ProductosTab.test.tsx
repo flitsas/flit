@@ -278,7 +278,7 @@ describe("ProductosTab", () => {
       listTenantProducts.mockResolvedValue([impuestos(true, { provisioning: prov("LISTO_SIN_WEBHOOK", "CARGAR_SECRETO") })]);
       listMyApps.mockRejectedValue(new Error("x"));
       render(<ProductosTab tenantId="t1" />);
-      expect(await within(await screen.findByRole("group", { name: "Conexión con el proveedor de Impuestos" })).findByText("Hazlo desde Impuestos › Backoffice")).toBeInTheDocument();
+      expect(await within(await screen.findByRole("group", { name: "Conexión con el proveedor de Impuestos" })).findByText("Cargar secreto: hazlo desde Impuestos › Backoffice")).toBeInTheDocument();
       expect(screen.queryByRole("link")).toBeNull();
     });
 
