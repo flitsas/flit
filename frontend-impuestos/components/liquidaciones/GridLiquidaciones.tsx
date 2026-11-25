@@ -38,10 +38,11 @@ import {
   TARJETA_CLS,
 } from "@/components/comun/estilos";
 import { ChipEstado } from "@/components/liquidaciones/ChipEstado";
+import { EligeCompania } from "@/components/liquidaciones/EligeCompania";
 import { FormularioPlaca } from "@/components/liquidaciones/FormularioPlaca";
 import { ApiError } from "@/lib/api";
 import { hrefConEmpresa, useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
-import { esRechazoDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
+import { ERRORES_EMPRESA, esErrorDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
 import { descargarPlantilla, listarLiquidaciones, queryListado } from "@/lib/liquidaciones/api";
 import { ERRORES_LIQUIDACIONES, ESTADOS_LIQUIDACION, PANTALLA, chipFila, nombreTipo, terminadas } from "@/lib/liquidaciones/estados";
 import { formatoFecha, idCorto, normalizarPlaca } from "@/lib/liquidaciones/formato";
@@ -88,10 +89,13 @@ function urlPantalla(f: FiltrosLiquidaciones, empresa: string | null): string {
 export interface GridLiquidacionesProps {
   /** impuestos.liquidaciones.crear: tarjetas «Liquidar placa» y «Carga masiva». */
   puedeCrear: boolean;
-  /** Super Admin en vista global: columna «Compañía». */
-  mostrarCompania: boolean;
   /** Literal del contrato por el que no se puede crear (suspendido / no listo); null = se puede. */
   bloqueo: string | null;
+  /**
+   * Super Admin: el grid y la creación son de la compañía de ?empresa (regla del backend 1.1.0). Sin compañía elegida no
+   * se pide nada: «Elige una compañía.» en la tabla y las acciones de creación deshabilitadas con ese motivo.
+   */
+  esSuperAdmin?: boolean;
 }
 
 /**
@@ -100,10 +104,12 @@ export interface GridLiquidacionesProps {
  * y la tabla paginada. Cuatro estados: cargando (las tarjetas siguen usables), error con Reintentar, vacío sin datos y
  * vacío por filtro, y lleno. La compañía elegida por el Super Admin (?empresa=) viaja a la API y a cada enlace.
  */
-export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo }: GridLiquidacionesProps) {
+export function GridLiquidaciones({ puedeCrear, bloqueo: bloqueoSesion, esSuperAdmin = false }: GridLiquidacionesProps) {
   const router = useRouter();
   const params = useSearchParams();
   const { empresa } = useEmpresaSeleccionada();
+  const faltaEmpresa = esSuperAdmin && !empresa;
+  const bloqueo = faltaEmpresa ? ERRORES_EMPRESA.EMPRESA_REQUERIDA : bloqueoSesion;
   const motivoId = useId();
   const clave = params.toString();
   const [claveVista, setClaveVista] = useState(clave);
@@ -126,6 +132,7 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo }: Grid
   }
 
   useEffect(() => {
+    if (faltaEmpresa) return;
     const control = new AbortController();
     listarLiquidaciones(filtros, { empresa, signal: control.signal }).then(
       (pagina) => {
@@ -133,13 +140,14 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo }: Grid
       },
       (e: unknown) => {
         if (control.signal.aborted) return;
-        // El 403 EMPRESA_SOLO_SUPER_ADMIN (o su alias retirado) rechaza la petición, no el acceso: va en línea con su literal.
-        if (e instanceof ApiError && e.status === 403 && e.code && !esRechazoDeEmpresa(e)) setAcceso(e.code);
+        // Un error de compañía (403 EMPRESA_SOLO_SUPER_ADMIN, 400 EMPRESA_REQUERIDA, 404 EMPRESA_NO_ENCONTRADA) rechaza la
+        // petición, no el acceso: va en línea con su literal.
+        if (e instanceof ApiError && e.status === 403 && e.code && !esErrorDeEmpresa(e)) setAcceso(e.code);
         setCarga({ tipo: "error", texto: mensajeErrorFijo(e, "Revisa tu conexión e intenta de nuevo.", ERRORES_LIQUIDACIONES) });
       },
     );
     return () => control.abort();
-  }, [filtros, empresa, intento]);
+  }, [filtros, empresa, intento, faltaEmpresa]);
 
   useEffect(() => {
     if (acceso) router.replace(`/403?code=${encodeURIComponent(acceso)}`);
@@ -165,7 +173,9 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo }: Grid
   const columnaTipo = filtros.tipo === null;
 
   let contenido: ReactNode;
-  if (carga.tipo === "cargando" || acceso) {
+  if (faltaEmpresa) {
+    contenido = <EligeCompania nivelTitulo={3} enTarjeta={false} />;
+  } else if (carga.tipo === "cargando" || acceso) {
     contenido = <VehicleLoader label="Cargando liquidaciones…" />;
   } else if (carga.tipo === "error") {
     contenido = (
@@ -215,7 +225,7 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo }: Grid
     );
   } else {
     const { pagina } = carga;
-    const columnas = ["ID", ...(columnaTipo ? ["Tipo"] : []), "Creada", "Placas", "Avance", "Estado", "Creada por", ...(mostrarCompania ? ["Compañía"] : [])];
+    const columnas = ["ID", ...(columnaTipo ? ["Tipo"] : []), "Creada", "Placas", "Avance", "Estado", "Creada por"];
     contenido = (
       <div className="flex flex-col gap-3">
         <div className={CONTENEDOR_TABLA_CLS}>
@@ -231,8 +241,13 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo }: Grid
             </thead>
             <tbody className={TABLA_MOVIL_TBODY_CLS}>
               {pagina.items.map((l) => {
-                // La individual abre la página del lote, que redirige al detalle de su única placa (el resumen no trae items[0]).
-                const destino = hrefConEmpresa(`/liquidaciones/${encodeURIComponent(l.id)}`, empresa);
+                // La individual va directo al detalle de su única placa (itemId, contrato 1.1.0); sin él (respuesta vieja),
+                // a la página del lote, que redirige.
+                const ruta =
+                  l.tipo === "INDIVIDUAL" && l.itemId
+                    ? `/liquidaciones/${encodeURIComponent(l.id)}/items/${encodeURIComponent(l.itemId)}`
+                    : `/liquidaciones/${encodeURIComponent(l.id)}`;
+                const destino = hrefConEmpresa(ruta, empresa);
                 const hechas = terminadas(l);
                 return (
                   <tr
@@ -277,11 +292,6 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo }: Grid
                     <td data-label="Creada por" className={CELDA_CLS}>
                       {l.creadaPor?.nombre}
                     </td>
-                    {mostrarCompania ? (
-                      <td data-label="Compañía" className={CELDA_CLS}>
-                        {l.empresa?.nombre}
-                      </td>
-                    ) : null}
                   </tr>
                 );
               })}
@@ -383,7 +393,7 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo }: Grid
                 Liquidar por placa
               </h2>
               <p className={AYUDA_CLS}>Una placa, sin crear un lote.</p>
-              <FormularioPlaca empresa={empresa} bloqueo={bloqueo} motivoId={motivoId} />
+              <FormularioPlaca empresa={empresa} bloqueo={bloqueo} esSuperAdmin={esSuperAdmin} motivoId={motivoId} />
             </section>
             <section aria-labelledby={`${motivoId}-t2`} className={`${TARJETA_CLS} flex flex-col gap-2`}>
               <h2 id={`${motivoId}-t2`} className="text-lg font-semibold text-flit-primary">
@@ -404,7 +414,10 @@ export function GridLiquidaciones({ puedeCrear, mostrarCompania, bloqueo }: Grid
                 )}
                 <button
                   type="button"
-                  className={BOTON_SECUNDARIO_CLS}
+                  className={`${BOTON_SECUNDARIO_CLS} disabled:opacity-60`}
+                  // La plantilla del Super Admin también es de una compañía (?empresa, delta 2).
+                  disabled={faltaEmpresa}
+                  aria-describedby={faltaEmpresa ? motivoId : undefined}
                   onClick={() => {
                     setErrorPlantilla(null);
                     descargarPlantilla(empresa).catch((e: unknown) => setErrorPlantilla(mensajeErrorFijo(e, "No se descargó la plantilla. Intenta de nuevo.", ERRORES_LIQUIDACIONES)));

@@ -848,6 +848,28 @@ La guía `docs/integraciones/guia-integracion-clientes.md` cambió el contrato d
 - Rpc M04b: `CredencialesProductoService.ActualizarCredencialImpuestoDiagnostico`, scope `platform.identidad.credenciales.impuesto.actualizar`. Solo reemplaza una fila existente; sin fila responde `actualizada=false`. La propagación se encola en cada rotación; el rpc decide si había llave de Diagnóstico.
 - Al arrancar, `TrabajadorReintentoAlta` devuelve a `PENDIENTE` las filas `INCIERTO` con `ALTA_SIN_CONFIRMAR` (historial `ALTA_IDEMPOTENTE`, actor `SISTEMA`) y limpia la marca `ALTA_ENVIADA`.
 
+### 5.9 Aviso «lote terminado» y columnas 1.2.0 (decisión del orquestador, 2026-11-25)
+
+**Correo** (M12, `AvisoLoteTerminado`). Solo para lotes MASIVA y una sola vez por lote. Se publica `notificaciones.email.send` por la bandeja (outbox) con:
+- `plantilla`: `impuestos.lote.terminado`.
+- `canal`: `flit_smtp`.
+- `destinatario`: `{email, nombre}`, donde `nombre` es el mismo correo porque `correos_aviso` no guarda nombres. Se envía un correo por cada dirección.
+- Tema: ninguno. Se usa el de FLIT por defecto, porque core-impuestos no tiene acceso a los temas.
+
+Textos del correo:
+- `asunto`: «Impuestos: terminó la liquidación masiva «{nombreArchivo}»».
+- `html`, en texto plano envuelto en párrafos:
+  - «La liquidación masiva «{nombreArchivo}» de {empresa} terminó: {estado}.»
+  - «Placas: {total}. Con resultado: {exitosos}. Con novedad: {conNovedad}. Sin resultado: {sinResultado}.»
+  - «Consulta el detalle en Impuestos: {enlace}.»
+- `{estado}` usa la etiqueta del contrato para el estado del lote.
+- `{enlace}` es `{Impuestos:Avisos:UrlFrontend}/liquidaciones/{id}`. Si la opción falta, el párrafo del enlace no se incluye.
+- El correo no lleva placas, propietarios, documentos ni montos. Los valores se escapan como HTML.
+
+**Columnas 1.2.0.** Van en la misma migración de M07b, junto con `webhook_secret_anterior`:
+- `liquidaciones.motivo_cierre varchar(300) NULL`: lo escribe M12 en `/cerrar`.
+- `secretaria_nombre varchar(120) NULL` del ítem: lo llena la homologación del RUNT de M09 cuando el RUNT lo trae.
+
 ---
 
 ## 6. Frontend

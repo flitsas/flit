@@ -152,3 +152,38 @@ describe("CargaMasiva — errores del análisis con los literales del contrato",
     expect(analizar.getAttribute("aria-describedby")).toContain(motivo.id);
   });
 });
+
+describe("CargaMasiva — Super Admin sin ?empresa (abierta por URL)", () => {
+  it("muestra «Elige una compañía.», deja las acciones deshabilitadas con ese motivo y no analiza ni envía nada", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CargaMasiva bloqueo={null} esSuperAdmin />);
+
+    expect(screen.getByRole("heading", { name: "Elige una compañía." })).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Archivo de placas (.xlsx o .csv)"), { target: { files: [archivo()] } });
+    const analizar = screen.getByRole("button", { name: "Analizar archivo" });
+    const plantilla = screen.getByRole("button", { name: "Descargar plantilla" });
+    expect(analizar).toBeDisabled();
+    expect(plantilla).toBeDisabled();
+    for (const boton of [analizar, plantilla]) {
+      const ids = (boton.getAttribute("aria-describedby") ?? "").split(" ").filter(Boolean);
+      expect(ids.length).toBeGreaterThan(0);
+      expect(ids.map((id) => document.getElementById(id)?.textContent ?? "").join(" ")).toContain("Elige una compañía.");
+    }
+    fireEvent.click(analizar);
+    fireEvent.click(plantilla);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("con ?empresa el Super Admin analiza normalmente sobre esa compañía", async () => {
+    busqueda = new URLSearchParams("empresa=e-9");
+    const fetchMock = fetchPorRuta([[/^POST \/api\/v1\/impuestos\/liquidaciones\/masiva\/analizar\?empresa=e-9$/, () => Response.json(ANALISIS)]]);
+    vi.stubGlobal("fetch", fetchMock);
+    render(<CargaMasiva bloqueo={null} esSuperAdmin />);
+
+    expect(screen.queryByText("Elige una compañía.")).toBeNull();
+    fireEvent.change(screen.getByLabelText("Archivo de placas (.xlsx o .csv)"), { target: { files: [archivo()] } });
+    fireEvent.click(screen.getByRole("button", { name: "Analizar archivo" }));
+    expect(await screen.findByText("Válidas: 8")).toBeInTheDocument();
+  });
+});

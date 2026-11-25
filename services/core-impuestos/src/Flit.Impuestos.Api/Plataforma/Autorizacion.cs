@@ -84,6 +84,12 @@ public sealed class UsuarioActual(IHttpContextAccessor http, IPlatformTenantAcce
 
     public string Email => User.FindFirstValue("email") ?? string.Empty;
 
+    /// <summary>
+    /// Nombre del usuario en el momento de la acción, para <c>creada_por_nombre</c> y <c>cerrada_por_nombre</c> (1.2.0): el claim
+    /// <c>name</c> si el token lo trae; el token del producto de Identidad hoy solo trae <c>sub</c> y <c>email</c>, así que cae al correo.
+    /// </summary>
+    public string Nombre => User.FindFirstValue("name") is { Length: > 0 } nombre ? nombre : Email;
+
     public bool EsSuperAdmin => PlatformPrincipal.IsSuperAdmin(User);
 
     public Guid? EmpresaId => tenants.Current.TenantId;

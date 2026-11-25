@@ -25,6 +25,9 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" />
+    <!-- M12: arma los .xlsx de las pruebas de la carga masiva (misma librería y pin que la API). -->
+    <PackageReference Include="DocumentFormat.OpenXml" />
+    <PackageReference Include="System.IO.Packaging" />
   </ItemGroup>
 
 </Project>

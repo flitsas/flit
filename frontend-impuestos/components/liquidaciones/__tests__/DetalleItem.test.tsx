@@ -98,6 +98,8 @@ describe("DetalleItem — estado y relanzar", () => {
   });
 
   it("sin impuestos.liquidaciones.crear no hay «Relanzar» en el DOM; el SA ve el código", async () => {
+    // El Super Admin lee con ?empresa (regla del backend 1.1.0).
+    busqueda = new URLSearchParams("empresa=e-9");
     montar(detalle({ estado: "INCIERTO_REQUIERE_DECISION", errorCodigo: "X_CODE" }), { puedeRelanzar: false, esSuperAdmin: true });
     await screen.findByRole("status", { name: "Estado: Incierto — requiere decisión" });
     expect(screen.queryByRole("button", { name: "Relanzar" })).toBeNull();
@@ -172,5 +174,53 @@ describe("DetalleItem — cargando y error", () => {
     expect(await screen.findByText("No se pudo cargar la placa")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Reintentar" }));
     expect(await screen.findByText("Propietario Demo")).toBeInTheDocument();
+  });
+});
+
+describe("DetalleItem — contrato 1.1.0 (delta 5: secretaría)", () => {
+  const secretariaDe = () => within(screen.getByRole("region", { name: "Vehículo y propietario" })).getByText("Secretaría").nextElementSibling;
+
+  it("con nombre y ciudad muestra ambos", async () => {
+    montar(detalle({ secretaria: { nombre: "Secretaría Demo", ciudad: "Ciudad Demo" } }));
+    await screen.findByText("Propietario Demo");
+    expect(secretariaDe()).toHaveTextContent("Secretaría Demo, Ciudad Demo");
+  });
+
+  it("con nombre null (lo que hoy devuelve el backend) muestra solo la ciudad", async () => {
+    montar(detalle({ secretaria: { nombre: null, ciudad: "Ciudad Demo" } }));
+    await screen.findByText("Propietario Demo");
+    expect(secretariaDe()).toHaveTextContent(/^Ciudad Demo$/);
+  });
+
+  it("sin secretaría (null) dice «Sin dato»", async () => {
+    montar(detalle({ secretaria: null }));
+    await screen.findByText("Propietario Demo");
+    expect(secretariaDe()).toHaveTextContent("Sin dato");
+  });
+});
+
+describe("DetalleItem — Super Admin y ?empresa", () => {
+  it("el Super Admin sin compañía no pide nada y ve «Elige una compañía.»", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    render(<DetalleItem liquidacionId="L" itemId="I" puedeRelanzar puedeDescargar esSuperAdmin />);
+    expect(screen.getByText("Elige una compañía.")).toBeInTheDocument();
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("el Super Admin con compañía la envía al pedir la placa", async () => {
+    busqueda = new URLSearchParams("empresa=e-9");
+    const fetchMock = montar(detalle(), { esSuperAdmin: true }, [[/^GET \/api\/v1\/impuestos\/liquidaciones\/L\?/, () => Response.json({})]]);
+    await screen.findByText("Propietario Demo");
+    const pedida = fetchMock.mock.calls.map(([u]) => new URL(String(u), "http://app")).find((u) => u.pathname.endsWith("/items/I"));
+    expect(pedida?.searchParams.get("empresa")).toBe("e-9");
+  });
+
+  it("un 404 EMPRESA_NO_ENCONTRADA va en línea con su literal, no a la 404", async () => {
+    busqueda = new URLSearchParams("empresa=e-9");
+    vi.stubGlobal("fetch", fetchPorRuta([[/liquidaciones\/L/, () => errorRegla(404, "EMPRESA_NO_ENCONTRADA", "detalle interno")]]));
+    render(<DetalleItem liquidacionId="L" itemId="I" puedeRelanzar puedeDescargar esSuperAdmin />);
+    expect(await screen.findByText("No se pudo cargar la placa")).toBeInTheDocument();
+    expect(screen.getByText("La compañía no existe o no tiene Impuestos.")).toBeInTheDocument();
   });
 });

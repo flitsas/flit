@@ -13,11 +13,12 @@ import { TarjetaPlegable } from "@flit/ui/TarjetaPlegable";
 import { BOTON_REINTENTAR_CLS, TARJETA_CLS, TEXTO_SECUNDARIO_CLS } from "@/components/comun/estilos";
 import { ChipEstado, Marca } from "@/components/liquidaciones/ChipEstado";
 import { DialogoRelanzar } from "@/components/liquidaciones/DialogoRelanzar";
+import { EligeCompania } from "@/components/liquidaciones/EligeCompania";
 import { ListaRecibos } from "@/components/liquidaciones/ListaRecibos";
 import { Monto, TablaVigencias } from "@/components/liquidaciones/TablaVigencias";
 import { ApiError } from "@/lib/api";
 import { hrefConEmpresa, useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
-import { mensajeErrorFijo } from "@/lib/errores";
+import { esErrorDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
 import { obtenerItem, obtenerLiquidacion, useCargaConSondeo } from "@/lib/liquidaciones/api";
 import {
   ERRORES_LIQUIDACIONES,
@@ -29,7 +30,7 @@ import {
   nombreClaseError,
   nombreTipo,
 } from "@/lib/liquidaciones/estados";
-import { formatoDocumento, formatoFecha, formatoFechaDia, formatoHora, idCorto } from "@/lib/liquidaciones/formato";
+import { formatoDocumento, formatoFecha, formatoFechaDia, formatoHora, formatoSecretaria, idCorto } from "@/lib/liquidaciones/formato";
 import type { ItemDetalle, Liquidacion } from "@/lib/liquidaciones/tipos";
 
 interface Props {
@@ -104,8 +105,16 @@ function avisos(item: ItemDetalle): Array<{ tono: InlineAlertTone; titulo?: stri
  * «Relanzar» (solo en placas relanzables y con permiso). Aviso de resultado por estado; vehículo y propietario (sin
  * dirección, correo ni teléfono); totales y vigencias con «Sin dato» para cada null; recibos por el BFF; observaciones
  * del proveedor plegadas. Se sondea mientras la placa espera resultado. 404 → notFound(); otro error con Reintentar.
+ * El Super Admin lee con ?empresa (regla del backend 1.1.0): sin compañía elegida no se pide nada y se le pide elegir
+ * una; un error de compañía (p. ej. 404 EMPRESA_NO_ENCONTRADA) va en línea con su literal, no a la 404.
  */
-export function DetalleItem({ liquidacionId, itemId, puedeRelanzar, puedeDescargar, esSuperAdmin }: Props) {
+export function DetalleItem(props: Props) {
+  const { empresa } = useEmpresaSeleccionada();
+  if (props.esSuperAdmin && !empresa) return <EligeCompania />;
+  return <VistaItem {...props} />;
+}
+
+function VistaItem({ liquidacionId, itemId, puedeRelanzar, puedeDescargar, esSuperAdmin }: Props) {
   const { empresa } = useEmpresaSeleccionada();
   const [relanzando, setRelanzando] = useState(false);
   const { carga, reintentar } = useCargaConSondeo<Vista>(
@@ -122,7 +131,7 @@ export function DetalleItem({ liquidacionId, itemId, puedeRelanzar, puedeDescarg
 
   if (carga.tipo === "cargando") return <VehicleLoader label="Cargando la placa…" />;
   if (carga.tipo === "error") {
-    if (carga.error instanceof ApiError && carga.error.status === 404) notFound();
+    if (carga.error instanceof ApiError && carga.error.status === 404 && !esErrorDeEmpresa(carga.error)) notFound();
     return (
       <InlineAlert
         tone="error"
@@ -202,6 +211,8 @@ export function DetalleItem({ liquidacionId, itemId, puedeRelanzar, puedeDescarg
             items={[
               { termino: "Placa", valor: <Placa placa={item.placa} /> },
               { termino: "Departamento", valor: item.departamento?.nombre },
+              // Secretaria (contrato 1.1.0, delta 5): hoy el backend solo trae la ciudad; el nombre llega null.
+              { termino: "Secretaría", valor: formatoSecretaria(item.secretaria) },
               { termino: "Propietario", valor: item.propietario?.nombre },
               {
                 termino: "Documento",

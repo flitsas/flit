@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api";
-import { ERRORES_EMPRESA, TEXTO_SIN_PERMISO, esRechazoDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
+import { ERRORES_EMPRESA, TEXTO_SIN_PERMISO, esErrorDeEmpresa, esRechazoDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
 import { ERRORES_BACKOFFICE } from "@/lib/backoffice/api";
 import { ERRORES_CONFIGURACION } from "@/lib/configuracion/api";
 import { ERRORES_DASHBOARD } from "@/lib/estadisticas/api";
@@ -59,6 +59,7 @@ describe("ERRORES_EMPRESA — códigos de ?empresa del contrato 1.1.0", () => {
     ["configuración", ERRORES_CONFIGURACION],
     ["usuarios", ERRORES_USUARIOS],
     ["backoffice", ERRORES_BACKOFFICE],
+    ["liquidaciones", estados.ERRORES_LIQUIDACIONES],
   ])("cada código del mapa de %s lleva el literal exacto de x-flit-literales.errores (contrato 1.1.0)", (_nombre, mapa) => {
     const contrato = literalesDelContrato();
     for (const [codigo, texto] of Object.entries(mapa)) {
@@ -102,6 +103,33 @@ describe("ERRORES_EMPRESA — códigos de ?empresa del contrato 1.1.0", () => {
     expect(esRechazoDeEmpresa(new ApiError(400, "x", "EMPRESA_REQUERIDA"))).toBe(false);
     expect(esRechazoDeEmpresa(new Error("x"))).toBe(false);
     expect(esRechazoDeEmpresa(null)).toBe(false);
+  });
+});
+
+describe("esErrorDeEmpresa — errores de ?empresa que se pintan en línea (liquidaciones, contrato 1.1.0)", () => {
+  it.each([
+    [400, "EMPRESA_REQUERIDA"],
+    [404, "EMPRESA_NO_ENCONTRADA"],
+    [403, "EMPRESA_SOLO_SUPER_ADMIN"],
+    [403, "EMPRESA_NO_PERMITIDA"],
+  ])("%i %s es un error de compañía", (status, code) => {
+    expect(esErrorDeEmpresa(new ApiError(status, "x", code))).toBe(true);
+  });
+
+  it("otro código, un ApiError sin código, un Error o null no lo son", () => {
+    expect(esErrorDeEmpresa(new ApiError(404, "x", "LIQUIDACION_NO_ENCONTRADA"))).toBe(false);
+    expect(esErrorDeEmpresa(new ApiError(403, "x", "PRODUCTO_NO_HABILITADO"))).toBe(false);
+    expect(esErrorDeEmpresa(new ApiError(404, "x"))).toBe(false);
+    expect(esErrorDeEmpresa(new Error("EMPRESA_REQUERIDA"))).toBe(false);
+    expect(esErrorDeEmpresa(null)).toBe(false);
+  });
+
+  it.each([
+    ["FILTRO_INVALIDO", "Un filtro no es válido."],
+    ["PAGINACION_INVALIDA", "La paginación no es válida."],
+    ["RANGO_INVALIDO", "El rango de fechas no es válido."],
+  ])("un 400 %s del grid de liquidaciones se traduce al literal del contrato", (code, literal) => {
+    expect(mensajeErrorFijo(new ApiError(400, "detalle interno", code), "respaldo", estados.ERRORES_LIQUIDACIONES)).toBe(literal);
   });
 });
 

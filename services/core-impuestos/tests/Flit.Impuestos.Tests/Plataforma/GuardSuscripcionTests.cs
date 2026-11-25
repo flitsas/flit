@@ -51,6 +51,22 @@ public sealed class GuardSuscripcionTests
     }
 
     [Fact]
+    public async Task El_error_del_bloqueo_es_el_literal_del_contrato()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await ApiDePrueba.SinBaseAsync();
+        var empresa = Guid.NewGuid();
+        api.Productos.Apagar(empresa);
+
+        var respuesta = await api.Cliente(api.Token(empresa: empresa, permisos: PermisosGestor)).GetAsync(Sesion, ct);
+
+        respuesta.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+        using var cuerpo = JsonDocument.Parse(await respuesta.Content.ReadAsStringAsync(ct));
+        cuerpo.RootElement.GetProperty("code").GetString().Should().Be("PRODUCTO_NO_HABILITADO");
+        cuerpo.RootElement.GetProperty("error").GetString().Should().Be("Impuestos no está activo para tu compañía.", "literal de x-flit-literales.errores");
+    }
+
+    [Fact]
     public async Task Sin_el_producto_responde_403()
     {
         var ct = TestContext.Current.CancellationToken;

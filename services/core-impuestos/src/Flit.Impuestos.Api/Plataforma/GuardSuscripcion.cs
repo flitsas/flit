@@ -16,6 +16,9 @@ internal sealed partial class GuardSuscripcion(RequestDelegate siguiente, string
 {
     public const string CodigoNoHabilitado = "PRODUCTO_NO_HABILITADO";
 
+    /// <summary>Literal de <c>x-flit-literales.errores.PRODUCTO_NO_HABILITADO</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralNoHabilitado = "Impuestos no está activo para tu compañía.";
+
     public async Task InvokeAsync(HttpContext context, IProductosHabilitados productos, IPlatformTenantAccessor tenants)
     {
         // El webhook del proveedor (M10) es anónimo y lo autentica su firma: una compañía suspendida recibe 200 (S6).
@@ -44,7 +47,7 @@ internal sealed partial class GuardSuscripcion(RequestDelegate siguiente, string
         LogNegado(logger, empresa);
         context.Response.StatusCode = StatusCodes.Status403Forbidden;
         await context.Response.WriteAsJsonAsync(
-            new { code = CodigoNoHabilitado, error = "Impuestos no está habilitado para tu empresa." }, context.RequestAborted).ConfigureAwait(false);
+            new { code = CodigoNoHabilitado, error = LiteralNoHabilitado }, context.RequestAborted).ConfigureAwait(false);
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Petición a Impuestos negada: la empresa {Empresa} no tiene el producto activo o no se pudo verificar.")]

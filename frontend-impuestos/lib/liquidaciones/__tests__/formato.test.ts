@@ -6,6 +6,7 @@ import {
   formatoFecha,
   formatoFechaDia,
   formatoMonto,
+  formatoSecretaria,
   idCorto,
   normalizarPlaca,
   placaValida,
@@ -75,5 +76,26 @@ describe("placa, documento, cifras e id", () => {
   it("cifras es-CO y id corto en mayúsculas", () => {
     expect(formatoCifra(1234)).toBe("1.234");
     expect(idCorto("0193abcd-0000-7000-8000-000000000001")).toBe("0193ABCD");
+  });
+});
+
+describe("formatoSecretaria (Item.secretaria, contrato 1.1.0 delta 5)", () => {
+  it("nombre y ciudad: «{nombre}, {ciudad}»", () => {
+    expect(formatoSecretaria({ nombre: "Secretaría Demo", ciudad: "Ciudad Demo" })).toBe("Secretaría Demo, Ciudad Demo");
+  });
+
+  it("nombre null o vacío: solo la ciudad", () => {
+    expect(formatoSecretaria({ nombre: null, ciudad: "Ciudad Demo" })).toBe("Ciudad Demo");
+    expect(formatoSecretaria({ nombre: "  ", ciudad: " Ciudad Demo " })).toBe("Ciudad Demo");
+  });
+
+  it("ciudad null: solo el nombre", () => {
+    expect(formatoSecretaria({ nombre: "Secretaría Demo", ciudad: null })).toBe("Secretaría Demo");
+  });
+
+  it("sin secretaría, o con ambos null, devuelve null (la lista pinta «Sin dato»)", () => {
+    expect(formatoSecretaria(null)).toBeNull();
+    expect(formatoSecretaria(undefined)).toBeNull();
+    expect(formatoSecretaria({ nombre: null, ciudad: null })).toBeNull();
   });
 });

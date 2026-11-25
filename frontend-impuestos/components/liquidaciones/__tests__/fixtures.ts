@@ -1,5 +1,5 @@
 // Datos de prueba de liquidaciones con placeholders (Ley 1581): ABC123, «Propietario Demo», CC 0000000, «Compañía Demo».
-// Forma literal de contracts/openapi/impuestos.v1.yaml 1.0.0 (ResumenLiquidacion, Liquidacion, Item, ItemDetalle).
+// Forma literal de contracts/openapi/impuestos.v1.yaml 1.1.0 (ResumenLiquidacion, Liquidacion, Item, ItemDetalle).
 import { vi } from "vitest";
 
 export const EMPRESA = { id: "00000000-0000-7000-8000-0000000000e1", nombre: "Compañía Demo" };
@@ -29,6 +29,9 @@ export function resumen(parcial: Record<string, unknown> = {}) {
     empresa: EMPRESA,
     nombreArchivo: "placas.xlsx",
     placa: null,
+    // 1.1.0 (delta 4): solo en INDIVIDUAL; null en MASIVA.
+    itemId: null,
+    estadoItem: null,
     ...parcial,
   };
 }
@@ -39,6 +42,7 @@ export function lote(parcial: Record<string, unknown> = {}) {
     terminadaEn: null,
     cerradaPor: null,
     cerradaEn: null,
+    motivoCierre: null,
     configCopia: { maxRegistrosLote: 500, departamentosHabilitados: null, concurrencia: 2 },
     ...parcial,
   };
@@ -63,6 +67,9 @@ export function item(parcial: Record<string, unknown> = {}) {
     posibleDuplicado: false,
     resultadoTardio: false,
     relanzadoDesde: null,
+    // 1.1.0 (delta 5).
+    relanzadoDesdeItemId: null,
+    secretaria: null,
     ...parcial,
   };
 }

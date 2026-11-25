@@ -14,11 +14,12 @@ import { usePaginacion } from "@flit/ui/usePaginacion";
 import { AYUDA_CLS, BOTON_REINTENTAR_CLS, BOTON_SECUNDARIO_CLS, CAMPO_CLS, ETIQUETA_CLS, TARJETA_CLS } from "@/components/comun/estilos";
 import { ChipEstado } from "@/components/liquidaciones/ChipEstado";
 import { DialogoCerrarLote } from "@/components/liquidaciones/DialogoCerrarLote";
+import { EligeCompania } from "@/components/liquidaciones/EligeCompania";
 import { DialogoRelanzar } from "@/components/liquidaciones/DialogoRelanzar";
 import { GridItems } from "@/components/liquidaciones/GridItems";
 import { ApiError } from "@/lib/api";
 import { hrefConEmpresa, useEmpresaSeleccionada } from "@/lib/empresaSeleccionada";
-import { mensajeErrorFijo } from "@/lib/errores";
+import { esErrorDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
 import { listarItems, obtenerLiquidacion, useCargaConSondeo } from "@/lib/liquidaciones/api";
 import { CONTADORES, ERRORES_LIQUIDACIONES, PANTALLA, chipLote, loteAbierto, terminadas } from "@/lib/liquidaciones/estados";
 import { formatoFecha, formatoHora, idCorto, normalizarPlaca } from "@/lib/liquidaciones/formato";
@@ -57,8 +58,16 @@ const SOLO_CIFRA: Array<keyof Contadores> = ["conDeuda", "pazYSalvo", "incierto"
  * solo con el lote abierto), avance con el embudo de contadores y la tabla de placas con búsqueda, paginación y acciones.
  * Se sondea mientras el lote está abierto (5 s, se duplica hasta 30 s sin cambios); si el sondeo falla, se avisa sin
  * borrar lo leído. Una liquidación individual redirige al detalle de su placa. 404 → notFound(); otro error, Reintentar.
+ * El Super Admin lee con ?empresa (regla del backend 1.1.0): sin compañía elegida no se pide nada y se le pide elegir una;
+ * un error de compañía (EMPRESA_NO_ENCONTRADA, EMPRESA_REQUERIDA, EMPRESA_SOLO_SUPER_ADMIN) va en línea, no a la 404.
  */
-export function DetalleLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuperAdmin }: Props) {
+export function DetalleLote(props: Props) {
+  const { empresa } = useEmpresaSeleccionada();
+  if (props.esSuperAdmin && !empresa) return <EligeCompania />;
+  return <VistaLote {...props} />;
+}
+
+function VistaLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuperAdmin }: Props) {
   const router = useRouter();
   const { empresa } = useEmpresaSeleccionada();
   const pg = usePaginacion("impuestos.lote.placas");
@@ -80,17 +89,18 @@ export function DetalleLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuper
     (v) => loteAbierto(v.lote.estado),
   );
 
-  const destinoIndividual =
-    carga.tipo === "listo" && carga.dato.lote.tipo === "INDIVIDUAL" && carga.dato.items.items[0]
-      ? hrefConEmpresa(`/liquidaciones/${encodeURIComponent(liquidacionId)}/items/${encodeURIComponent(carga.dato.items.items[0].id)}`, empresa)
-      : null;
+  // La individual va al detalle de su única placa: el itemId de la cabecera (contrato 1.1.0) o, si no viene, items[0].
+  const itemIndividual = carga.tipo === "listo" && carga.dato.lote.tipo === "INDIVIDUAL" ? (carga.dato.lote.itemId ?? carga.dato.items.items[0]?.id) : null;
+  const destinoIndividual = itemIndividual
+    ? hrefConEmpresa(`/liquidaciones/${encodeURIComponent(liquidacionId)}/items/${encodeURIComponent(itemIndividual)}`, empresa)
+    : null;
   useEffect(() => {
     if (destinoIndividual) router.replace(destinoIndividual);
   }, [destinoIndividual, router]);
 
   if (carga.tipo === "cargando" || destinoIndividual) return <VehicleLoader label="Cargando el lote…" />;
   if (carga.tipo === "error") {
-    if (carga.error instanceof ApiError && carga.error.status === 404) notFound();
+    if (carga.error instanceof ApiError && carga.error.status === 404 && !esErrorDeEmpresa(carga.error)) notFound();
     return (
       <InlineAlert
         tone="error"
@@ -109,6 +119,7 @@ export function DetalleLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuper
   const { lote, items } = carga.dato;
   const hechas = terminadas(lote);
   const abierto = loteAbierto(lote.estado);
+  const actorCierre = lote.cerradaPor?.nombre?.trim() || null;
   const filtrado = Boolean(estado || placa);
   const filtrar = (e: EstadoItem | null) => {
     setEstado(e);
@@ -187,9 +198,14 @@ export function DetalleLote({ liquidacionId, puedeCerrar, puedeRelanzar, esSuper
       ) : null}
       {lote.estado === "CERRADO_MANUALMENTE" ? (
         <InlineAlert tone="info" vivo={false}>
-          {lote.cerradaPor
-            ? `Cerrado manualmente el ${formatoFecha(lote.cerradaEn)} por ${lote.cerradaPor.nombre}.`
-            : `Cerrado manualmente el ${formatoFecha(lote.cerradaEn)}.`}
+          <p>
+            {/* Un nombre solo de espacios es lo mismo que no tener actor: nunca «por  .». */}
+            {actorCierre
+              ? `Cerrado manualmente el ${formatoFecha(lote.cerradaEn)} por ${actorCierre}.`
+              : `Cerrado manualmente el ${formatoFecha(lote.cerradaEn)}.`}
+          </p>
+          {/* motivoCierre (contrato 1.1.0, delta 5): texto del usuario, siempre como texto plano. */}
+          {lote.motivoCierre?.trim() ? <p>{`Motivo: ${lote.motivoCierre.trim()}`}</p> : null}
         </InlineAlert>
       ) : null}
       <section aria-labelledby="lote-avance" className={`${TARJETA_CLS} flex flex-col gap-3`}>

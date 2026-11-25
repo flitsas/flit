@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { GridLiquidaciones } from "@/components/liquidaciones/GridLiquidaciones";
 import { CONTADORES_CERO, errorRegla, fetchPorRuta, item, lote, resumen } from "./fixtures";
 
-// Uso de ejemplo: <GridLiquidaciones puedeCrear mostrarCompania={false} bloqueo={null} /> en /liquidaciones. Lista las
+// Uso de ejemplo: <GridLiquidaciones puedeCrear bloqueo={null} /> en /liquidaciones. Lista las
 // liquidaciones por placa y masivas juntas (pestañas «Todas» —con columna Tipo—, «Masivas» y «Por placa»), con filtros en
 // la URL, y encima las tarjetas «Liquidar placa» (solo la placa, F2a-CF1) y «Carga masiva».
 
@@ -30,7 +30,7 @@ const INDIVIDUAL = resumen({
 const pagina = (items: unknown[], total = items.length) => ({ items, total, page: 1, pageSize: 10 });
 
 function render_(props: Partial<Parameters<typeof GridLiquidaciones>[0]> = {}) {
-  return render(<GridLiquidaciones puedeCrear mostrarCompania={false} bloqueo={null} {...props} />);
+  return render(<GridLiquidaciones puedeCrear bloqueo={null} {...props} />);
 }
 
 beforeEach(() => {
@@ -93,24 +93,19 @@ describe("GridLiquidaciones — grid mixto (F3-CF6) y aislamiento (F2a-CF9/CF10)
     expect(url.searchParams.get("tipo")).toBe("INDIVIDUAL");
   });
 
-  it("propaga la compañía elegida (?empresa=) a la API y a los enlaces; la columna Compañía solo para el Super Admin", async () => {
+  it("propaga la compañía elegida (?empresa=) a la API y a los enlaces; sin columna Compañía (no hay vista global)", async () => {
     busqueda = new URLSearchParams("empresa=e-9");
     const fetchMock = fetchPorRuta([[/^GET \/api\/v1\/impuestos\/liquidaciones\?/, () => Response.json(pagina([MASIVA]))]]);
     vi.stubGlobal("fetch", fetchMock);
 
-    const { unmount } = render_({ mostrarCompania: true });
+    render_({ esSuperAdmin: true });
 
     const tabla = await screen.findByRole("table", { name: "Liquidaciones" });
     const url = new URL(String(fetchMock.mock.calls[0][0]), "http://app");
     expect(url.searchParams.get("empresa")).toBe("e-9");
-    expect(within(tabla).getByRole("columnheader", { name: "Compañía" })).toBeInTheDocument();
-    expect(within(tabla).getByText("Compañía Demo")).toBeInTheDocument();
+    expect(within(tabla).queryByRole("columnheader", { name: "Compañía" })).toBeNull();
+    expect(within(tabla).queryByText("Compañía Demo")).toBeNull();
     expect(within(tabla).getByRole("link", { name: /0193AAAA/ })).toHaveAttribute("href", `/liquidaciones/${MASIVA.id}?empresa=e-9`);
-    unmount();
-
-    render_({ mostrarCompania: false });
-    const otra = await screen.findByRole("table", { name: "Liquidaciones" });
-    expect(within(otra).queryByRole("columnheader", { name: "Compañía" })).toBeNull();
   });
 });
 
@@ -240,5 +235,107 @@ describe("GridLiquidaciones — liquidar por placa (F2a-CF1: solo la placa) y pe
     const motivo = screen.getAllByText("Impuestos está suspendido para la compañía: solo lectura.")[0];
     expect(liquidar.getAttribute("aria-describedby")).toContain(motivo.id);
     expect(screen.getByRole("button", { name: "Carga masiva" })).toBeDisabled();
+  });
+});
+
+describe("GridLiquidaciones — contrato 1.1.0 (delta 4: itemId y estadoItem de la individual)", () => {
+  const INDIVIDUAL_110 = resumen({
+    id: "0193dddd-0000-7000-8000-000000000003",
+    tipo: "INDIVIDUAL",
+    estado: "COMPLETADO_CON_NOVEDADES",
+    totalItems: 1,
+    contadores: { ...CONTADORES_CERO, incierto: 1 },
+    nombreArchivo: null,
+    placa: "ABC123",
+    itemId: "0193eeee-0000-7000-8000-000000000004",
+    estadoItem: "INCIERTO_REQUIERE_DECISION",
+  });
+
+  it("la individual enlaza directo al detalle de su placa y muestra el chip de estadoItem; la masiva sigue con el lote", async () => {
+    busqueda = new URLSearchParams("empresa=e-9");
+    vi.stubGlobal("fetch", fetchPorRuta([[/^GET \/api\/v1\/impuestos\/liquidaciones\?/, () => Response.json(pagina([MASIVA, INDIVIDUAL_110]))]]));
+
+    render_({ esSuperAdmin: true });
+
+    const tabla = await screen.findByRole("table", { name: "Liquidaciones" });
+    const [filaMasiva, filaIndividual] = within(tabla).getAllByRole("row").slice(1);
+    expect(within(filaIndividual).getByRole("link")).toHaveAttribute(
+      "href",
+      `/liquidaciones/${INDIVIDUAL_110.id}/items/${INDIVIDUAL_110.itemId}?empresa=e-9`,
+    );
+    // El chip sale de estadoItem (no de los contadores, que solo dirían «Inciertas»).
+    expect(within(filaIndividual).getByText("Incierto — requiere decisión")).toBeInTheDocument();
+    expect(within(filaMasiva).getByRole("link")).toHaveAttribute("href", `/liquidaciones/${MASIVA.id}?empresa=e-9`);
+    expect(within(filaMasiva).getByText("En proceso")).toBeInTheDocument();
+  });
+
+  it("una individual EXITOSO muestra el resultado de su placa («Con deuda») con estadoItem", async () => {
+    vi.stubGlobal(
+      "fetch",
+      fetchPorRuta([
+        [
+          /liquidaciones\?/,
+          () =>
+            Response.json(
+              pagina([{ ...INDIVIDUAL_110, estado: "COMPLETADO", estadoItem: "EXITOSO", contadores: { ...CONTADORES_CERO, exitosas: 1, conDeuda: 1 } }]),
+            ),
+        ],
+      ]),
+    );
+    render_();
+    const tabla = await screen.findByRole("table", { name: "Liquidaciones" });
+    expect(within(tabla).getByText("Con deuda")).toBeInTheDocument();
+  });
+
+  it("una individual sin itemId (respuesta vieja) sigue enlazando al lote, que redirige", async () => {
+    vi.stubGlobal("fetch", fetchPorRuta([[/liquidaciones\?/, () => Response.json(pagina([INDIVIDUAL]))]]));
+    render_();
+    const tabla = await screen.findByRole("table", { name: "Liquidaciones" });
+    expect(within(tabla).getByRole("link")).toHaveAttribute("href", `/liquidaciones/${INDIVIDUAL.id}`);
+  });
+});
+
+describe("GridLiquidaciones — Super Admin y ?empresa (delta 2)", () => {
+  it("el Super Admin sin compañía no pide el grid: «Elige una compañía.» y las acciones de creación deshabilitadas con el motivo", () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+
+    render_({ esSuperAdmin: true });
+
+    expect(screen.getAllByText("Elige una compañía.").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("status", { name: "Cargando liquidaciones…" })).toBeNull();
+    expect(fetchMock).not.toHaveBeenCalled();
+    const liquidar = screen.getByRole("button", { name: "Liquidar placa" });
+    expect(liquidar).toBeDisabled();
+    const motivo = screen.getAllByText("Elige una compañía.")[0];
+    expect(liquidar.getAttribute("aria-describedby")).toContain(motivo.id);
+    expect(screen.getByRole("button", { name: "Carga masiva" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Descargar plantilla" })).toBeDisabled();
+    expect(replace).not.toHaveBeenCalled();
+  });
+
+  it("quien no es Super Admin, sin ?empresa, pide el grid de su compañía", async () => {
+    const fetchMock = fetchPorRuta([[/liquidaciones\?/, () => Response.json(pagina([MASIVA]))]]);
+    vi.stubGlobal("fetch", fetchMock);
+    render_({ esSuperAdmin: false });
+    await screen.findByRole("table", { name: "Liquidaciones" });
+    const url = new URL(String(fetchMock.mock.calls[0][0]), "http://app");
+    expect(url.searchParams.has("empresa")).toBe(false);
+  });
+
+  it.each([
+    [400, "FILTRO_INVALIDO", "Un filtro no es válido."],
+    [400, "PAGINACION_INVALIDA", "La paginación no es válida."],
+    [400, "RANGO_INVALIDO", "El rango de fechas no es válido."],
+    [400, "EMPRESA_REQUERIDA", "Elige una compañía."],
+    [404, "EMPRESA_NO_ENCONTRADA", "La compañía no existe o no tiene Impuestos."],
+  ])("un %i %s del grid se pinta en línea con el literal del contrato, sin ir a la 403", async (status, code, literal) => {
+    busqueda = new URLSearchParams("empresa=e-9&desde=2026-12-01&hasta=2026-01-01");
+    vi.stubGlobal("fetch", fetchPorRuta([[/liquidaciones\?/, () => errorRegla(status, code, "detalle interno")]]));
+    render_({ esSuperAdmin: true });
+    expect(await screen.findByText("No se pudieron cargar las liquidaciones")).toBeInTheDocument();
+    expect(screen.getByText(literal)).toBeInTheDocument();
+    expect(document.body).not.toHaveTextContent("detalle interno");
+    expect(replace).not.toHaveBeenCalledWith(expect.stringMatching(/^\/403/));
   });
 });

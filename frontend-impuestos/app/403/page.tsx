@@ -5,12 +5,13 @@ import { impuestosConfig } from "@/lib/config.server";
 // respondió 403 a GET /sesion). Está fuera del middleware, así que se muestra sin volver al login y sin ningún módulo.
 // «Ir a mis productos» vuelve al hub. Un código desconocido nunca se muestra: cae en el texto general.
 const MESSAGES: Record<string, string> = {
-  PRODUCTO_NO_HABILITADO: "Impuestos no está habilitado para tu empresa.",
-  PRODUCT_NOT_ENABLED: "Impuestos no está habilitado para tu empresa.",
+  // Literales de x-flit-literales.errores (impuestos.v1.yaml 1.1.0); PRODUCT_NOT_ENABLED es su alias del hub.
+  PRODUCTO_NO_HABILITADO: "Impuestos no está activo para tu compañía.",
+  PRODUCT_NOT_ENABLED: "Impuestos no está activo para tu compañía.",
   PRODUCTO_SUSPENDIDO: "Impuestos está suspendido para tu empresa. Pídele ayuda a tu administrador.",
   SIN_PERMISOS_IMPUESTOS: "No tienes un rol en Impuestos. Pídele acceso a tu administrador.",
   PRODUCT_ROLE_REQUIRED: "No tienes un rol en Impuestos. Pídele acceso a tu administrador.",
-  SIN_EMPRESA: "Tu usuario no tiene una empresa asociada. Pídele ayuda a tu administrador.",
+  SIN_EMPRESA: "Tu usuario no tiene una compañía asociada.",
   SESSION_INVALID: "Tu cuenta cambió o fue suspendida. Vuelve a iniciar sesión.",
 };
 

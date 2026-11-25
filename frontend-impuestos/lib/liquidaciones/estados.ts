@@ -1,5 +1,5 @@
 // Mapa único estado → chip de liquidaciones (spec-visual §1) con los literales cerrados del contrato
-// contracts/openapi/impuestos.v1.yaml 1.0.0 (`x-flit-etiquetas` de cada enum y `x-flit-literales`), que mandan ante un
+// contracts/openapi/impuestos.v1.yaml 1.1.0 (`x-flit-etiquetas` de cada enum y `x-flit-literales`), que mandan ante un
 // choque con la spec. Un código desconocido se pinta en `neutral` como «Sin clasificar», nunca con el código crudo.
 import type { StatusBadgeTone } from "@flit/ui/StatusBadge";
 import { ERRORES_EMPRESA } from "@/lib/errores";
@@ -207,12 +207,18 @@ export function chipItem(item: Pick<Item, "estado" | "resultadoStatus">): Chip {
 }
 
 /**
- * Chip de una fila del grid. La masiva lleva el del lote; la individual, el de su única placa, que el resumen no trae y se
- * deduce de los contadores (supuesto de contrato: ResumenLiquidacion no tiene el estado del ítem). Con la placa aún sin
- * resultado, o si los contadores no deciden, el del lote.
+ * Chip de una fila del grid. La masiva lleva el del lote; la individual, el de su única placa: `estadoItem` (contrato
+ * 1.1.0, delta 4) y, en EXITOSO, el resultado que dicen los contadores (el resumen no trae `resultadoStatus`). Una
+ * respuesta sin `estadoItem` (backend anterior a la 1.1.0) lo deduce de los contadores y, si no deciden, el del lote.
  */
-export function chipFila(r: Pick<ResumenLiquidacion, "tipo" | "estado" | "contadores">): Chip {
-  if (r.tipo !== "INDIVIDUAL" || !r.contadores) return chipLote(r.estado);
+export function chipFila(r: Pick<ResumenLiquidacion, "tipo" | "estado" | "contadores" | "estadoItem">): Chip {
+  if (r.tipo !== "INDIVIDUAL") return chipLote(r.estado);
+  if (r.estadoItem) {
+    const c = r.contadores;
+    const resultadoStatus = c && c.conDeuda > 0 ? "con_deuda" : c && c.pazYSalvo > 0 ? "paz_y_salvo" : null;
+    return chipItem({ estado: r.estadoItem, resultadoStatus });
+  }
+  if (!r.contadores) return chipLote(r.estado);
   const c = r.contadores;
   if (c.pendientes > 0) return chipLote(r.estado);
   if (c.conDeuda > 0) return { texto: RESULTADOS.con_deuda, tono: "warning" };

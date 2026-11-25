@@ -62,6 +62,16 @@ export function formatoDocumento(tipo: string | null | undefined, numero: string
   return tipo ? `${tipo} ${numero.trim()}` : numero.trim();
 }
 
+/**
+ * Secretaría de tránsito (Item.secretaria, contrato 1.1.0): «{nombre}, {ciudad}»; con uno solo, ese (hoy el backend no
+ * guarda el nombre y llega null). Sin ninguno, null: la lista pinta «Sin dato».
+ * @example formatoSecretaria({ nombre: null, ciudad: "Ciudad Demo" }) // "Ciudad Demo"
+ */
+export function formatoSecretaria(secretaria: { nombre: string | null; ciudad: string | null } | null | undefined): string | null {
+  const partes = [secretaria?.nombre, secretaria?.ciudad].map((v) => v?.trim()).filter((v): v is string => Boolean(v));
+  return partes.length > 0 ? partes.join(", ") : null;
+}
+
 /** Placa como la normaliza el servidor: mayúsculas, sin espacios ni guiones (" abc-123 " → "ABC123"). */
 export function normalizarPlaca(texto: string): string {
   return texto.toUpperCase().replace(/[\s-]+/g, "");
