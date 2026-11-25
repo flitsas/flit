@@ -44,8 +44,9 @@
    - si el secreto cambió, el anterior pasa a `impuesto_webhook_secret_anterior` y vence a las 24 h;
    - `row_version` sube;
    - auditoría `CREDENCIAL_OBTENIDA` o `CLAVE_ROTADA`, sin valores;
-   - si la llave cambió, el evento `platform.credencial_impuesto.actualizada {tenantId, version}` sale por la outbox.
-5. **Lista blanca:** se agregan los dos códigos nuevos a `TenantProductCredentialCodes`. La tabla es clave/valor, así que no hace falta DDL; falta verificar que no tenga un CHECK sobre `credential_code`, lo que confirmará db-schema-validator.
+   - si la llave cambió, el evento trabajo `impuestos.credencial_diagnostico.actualizada {tenantId, version}` sale por la outbox (`EnqueueJob`, documentado en `contracts/asyncapi/impuestos-events.v1.yaml`).
+5. **Lista blanca y DDL 206:** se agregan los dos códigos nuevos a `TenantProductCredentialCodes`. El CHECK `ck_tenant_product_credentials_code` (DDL 204) se amplía en un DDL 206 con su migración, que también agrega a `tenant_product_provisioning` las columnas de intentos si faltan.
+6. **Host:** el endpoint y el trabajador del alta automática corren en core-identity, donde vive `/api/v1/platform`; core-api conserva el respaldo con `MapIdentityEndpoints`. Activar `diagnostico` no cambia la precondición del PUT de activación.
 
 ### 3.2 Lectura del secreto (core-identity)
 
@@ -72,7 +73,7 @@
 
 ### 3.4 Propagación a Impuestos (core-impuestos)
 
-- **Consumidor:** escucha `platform.credencial_impuesto.actualizada`. Si su llave salió de `CopiaDiagnostico` o tiene otro prefijo, la recopia por el rpc existente `ObtenerCredencialImpuestoParaCopia`.
+- **Consumidor:** escucha `impuestos.credencial_diagnostico.actualizada`. Si su llave salió de `CopiaDiagnostico` o tiene otro prefijo, la recopia por el rpc existente `ObtenerCredencialImpuestoParaCopia`.
 - **Contrato:** `platform.v1` pasa a la versión menor siguiente.
 
 ### 3.5 Frontend (`frontend`, admin de compañías)
@@ -97,9 +98,9 @@
 |---|---|---|
 | **P1** | be1 | core-api: códigos nuevos, cliente del alta, handler, endpoint `POST /api/v1/platform/admin/tenants/{tenantId}/products/diagnostico/credentials/impuesto/obtener`, `ListTenantProducts` con `ImpuestoWebhookSecretConfigurado`, auditoría y evento por la outbox |
 | **P2** | be1 | core-api: disparo automático al activar `diagnostico`, con reintentos y estado en `tenant_product_provisioning` |
-| **P3** | be1 | core-identity: rpc `ObtenerSecretoWebhookImpuesto` + scope + contrato |
+| **P3** | be2 | core-identity: rpc `ObtenerSecretoWebhookImpuesto` + scope + contrato, y el handler de Platform que lee el secreto |
 | **P4** | be2 | core-consultas: `callbackUrl` + token, receptor, verificación, dedupe (migración), cierre idempotente compartido con el polling, límites, lectura del secreto por gRPC con caché |
-| **P5** | be2 (después de P4) | core-impuestos: consumidor de `platform.credencial_impuesto.actualizada` |
+| **P5** | be1 | core-impuestos: consumidor del trabajo `impuestos.credencial_diagnostico.actualizada` |
 | **P6** | fe1 | frontend: tab de credencial + test |
 | **P7** | orquestador | `appsettings` y variables (`Platform:ImpuestoProveedor:*`, `Consultas:Impuesto:AvisoBaseUrl`, llave del token), script local apuntando al stub del proveedor (el alta y el envío de avisos ya existen en `scripts/dev/stub-impuestos`), guía de despliegue, guía del entorno local |
 
