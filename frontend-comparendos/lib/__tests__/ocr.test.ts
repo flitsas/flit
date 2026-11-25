@@ -492,3 +492,33 @@ describe("lote estancado (GDC-EVID §10)", () => {
     expect(avisoSinAvanceLote({ ...base, porAsociar: 0, ultimoAvanceEn: hace(30) }, ahora)).toBeNull();
   });
 });
+
+// MISMA tabla que la prueba de NumeroComparendo.DifiereALaVista en core-comparendos (services/core-comparendos): las dos copias
+// de la regla «el número difiere más allá de la letra o el formato» deben dar lo mismo. Si cambias una copia o esta tabla,
+// cambia también la otra; si una fila falla aquí, es una diferencia real entre front y back (no se ajusta la tabla).
+describe("numerosDifieren: tabla compartida con el backend (DifiereALaVista)", () => {
+  it.each<[string | null, string | null, boolean]>([
+    ["D-11001000000000012345", "11001000000000012345", false],
+    ["A-98765", "98765", false],
+    ["A98765", "98765", false],
+    ["11001 0000 0000 0012345", "11001000000000012345", false],
+    ["11001.000000000.012345", "11001000000000012345", false],
+    ["11001-000000000-012345", "11001000000000012345", false],
+    ["  d - 11001000000000012345", "11001000000000012345", false],
+    ["11001/000000000012345", "11001000000000012345", true],
+    ["11001_000000000012345", "11001000000000012345", true],
+    ["11001,000000000012345", "11001000000000012345", true],
+    ["11001:000000000012345", "11001000000000012345", true],
+    ["#11001000000000012345", "11001000000000012345", true],
+    ["11001/00000999/0308", "11001000009990308", true],
+    ["11001000000000012346", "11001000000000012345", true],
+    ["AB12C34", "AB12C35", true],
+    ["11001a00000000012345", "11001A00000000012345", false],
+    ["   ", "11001000000000012345", false],
+    [null, null, false],
+    [null, "11001000000000012345", false],
+    ["11001000000000012345", "", false],
+  ])("%j vs %j → %s", (leido, sistema, esperado) => {
+    expect(numerosDifieren(leido, sistema)).toBe(esperado);
+  });
+});
