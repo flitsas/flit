@@ -17,6 +17,8 @@ COPY core-api/src/Flit.Queries.Core/ /services/core-api/src/Flit.Queries.Core/
 COPY core-api/src/Flit.Modules.Improntas.Domain/ /services/core-api/src/Flit.Modules.Improntas.Domain/
 COPY core-identity/Directory.Build.props core-identity/Directory.Packages.props /services/core-identity/
 COPY core-identity/src/Flit.Platform.Grpc.Contracts/ /services/core-identity/src/Flit.Platform.Grpc.Contracts/
+# HU #14681: cliente CredencialesProductoService (impuesto API key por compañía).
+COPY core-identity/src/Flit.Identidad.Grpc.Contracts/ /services/core-identity/src/Flit.Identidad.Grpc.Contracts/
 COPY --from=contracts . /contracts/proto/
 COPY core-consultas/src/ ./src/
 RUN dotnet publish src/Flit.Consultas.Api/Flit.Consultas.Api.csproj \
