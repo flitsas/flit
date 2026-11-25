@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Impuestos
-  version: "1.2.1"
+  version: "1.2.2"
   description: >
     Endpoints REST del producto Impuestos (core-impuestos) bajo /api/v1/impuestos (HU #14694, ADR-0093; plan
     docs/impuestos/plan-implementacion.md §5.1; deltas de la 1.1.0 en §5.7 y de la 1.2.0 en §5.8). La app web llega por el gateway con el
@@ -28,6 +28,14 @@ info:
     declara LISTO_SIN_WEBHOOK entre los estados admitidos (ya lo admitía en la 1.2.0) y
     `x-flit-literales.pantalla.avisoRotacionCredenciales` describe el REQUIERE_CREDENCIALES de la 1.2.0, que nace de una
     API key rechazada (CREDENCIAL_RECHAZADA) y no de una empresa ya registrada.
+
+
+    Delta 1.2.2 (solo literales): `x-flit-literales.errores` declara los códigos transversales que ya emitía el
+    servicio sin literal en el contrato: CONFLICTO_CONCURRENCIA (409, otro cambio guardado a la vez),
+    ESCRITURA_ENTRE_EMPRESAS (403, escritura sobre datos de otra compañía), SIN_USUARIO (403, el token no trae un `sub`
+    uuid en una lectura auditada del Super Admin, la carga de credenciales del backoffice o la gestión de usuarios) y
+    VALOR_INVALIDO (422, un CHECK de la base, sin su detalle). Pueden salir en cualquier ruta que lea o escriba con esas
+    reglas; el `error` es el literal y el front lo muestra tal cual.
 
 
     Toda ruta de negocio pasa por el guard de suscripción (producto `impuestos` encendido para la compañía y sus
@@ -106,6 +114,11 @@ x-flit-literales:
     ROL_YA_VIGENTE: El usuario ya tiene un rol vigente en Impuestos.
     NOMBRE_REQUERIDO: Escribe el nombre.
     PLATAFORMA_NO_DISPONIBLE: La plataforma no responde. Intenta más tarde.
+    # 1.2.2: códigos transversales (manejador global y lecturas auditadas); pueden salir en cualquier ruta.
+    CONFLICTO_CONCURRENCIA: Otro usuario cambió este registro al mismo tiempo. Recarga e inténtalo de nuevo.
+    ESCRITURA_ENTRE_EMPRESAS: No puedes modificar datos de otra compañía.
+    SIN_USUARIO: Tu sesión no identifica a un usuario. Vuelve a iniciar sesión.
+    VALOR_INVALIDO: Un valor enviado no es válido. Revisa los datos e inténtalo de nuevo.
   pantalla:
     montoSinDato: Sin dato
     liquidacionesSinMonto: "{n} liquidaciones sin monto"
