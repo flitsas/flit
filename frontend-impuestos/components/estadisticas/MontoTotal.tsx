@@ -22,7 +22,7 @@ export function MontoTotal({ montoTotal, liquidacionesSinMonto, parcial }: { mon
   const sinDato = montoTotal == null || !Number.isFinite(montoTotal);
 
   return (
-    <section aria-labelledby={`${id}-titulo`} className={`${SECCION_CLS} flex flex-col gap-2`}>
+    <section aria-labelledby={`${id}-titulo`} className={SECCION_CLS}>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 id={`${id}-titulo`} className={TITULO_SECCION_CLS}>
           Monto total liquidado
