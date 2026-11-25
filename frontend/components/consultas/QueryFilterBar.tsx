@@ -108,7 +108,11 @@ export function QueryFilterBar({
     setEditing(null);
   }
 
-  const disponibles = fields.filter((f) => !conditions.some((c) => c.fieldId === f.id));
+  // Un campo sin operadores es solo columna (p. ej. «Falta firmar»): ofrecerlo como filtro daría un
+  // editor sin forma de aplicarse.
+  const disponibles = fields.filter(
+    (f) => f.operators.length > 0 && !conditions.some((c) => c.fieldId === f.id),
+  );
 
   return (
     <div className="flex flex-wrap items-center gap-2" ref={containerRef} data-testid={`${testIdPrefix}-filtros`}>
@@ -200,7 +204,9 @@ export function QueryFieldPicker({
   testIdPrefix: string;
   className?: string;
 }) {
-  const grupos = [...new Set(fields.map((f) => f.group))];
+  // Lo mismo que en la barra: sin operadores no es filtrable, así lo pida el panel de trámites.
+  const filtrables = fields.filter((f) => f.operators.length > 0);
+  const grupos = [...new Set(filtrables.map((f) => f.group))];
 
   return (
     <div className={className} data-testid={`${testIdPrefix}-campos`}>
@@ -209,7 +215,7 @@ export function QueryFieldPicker({
           <p className="mb-1 rounded-md bg-secondary px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-flit-primary dark:text-muted-foreground">
             {grupo}
           </p>
-          {fields
+          {filtrables
             .filter((f) => f.group === grupo)
             .map((field) => (
               <button
