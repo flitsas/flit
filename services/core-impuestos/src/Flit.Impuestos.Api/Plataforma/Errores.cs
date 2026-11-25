@@ -43,6 +43,9 @@ public sealed class ReglaException : Exception
     /// <summary>Campo de la petición que incumple la regla; null si no es de un campo.</summary>
     public string? Campo { get; init; }
 
+    /// <summary>Tope de la regla (<c>LIMITE_SUPERADO</c>, <c>TOPE_SUPERA_CONTRACTUAL</c>, <c>TOPE_EXPORTACION</c>); null si no aplica.</summary>
+    public int? Tope { get; init; }
+
     /// <summary>Segundos de <c>Retry-After</c>; null si no aplica.</summary>
     public int? RetryAfterSegundos { get; init; }
 
@@ -54,9 +57,10 @@ public sealed class ReglaException : Exception
 }
 
 /// <summary>
-/// Convierte las excepciones de negocio en <c>{ code, error }</c>: <see cref="ReglaException"/> con su estado,
-/// <see cref="TransicionInvalida"/> del dominio como 409 con su código, una escritura entre empresas como 403, un CHECK de la base
-/// como 422 <c>VALOR_INVALIDO</c> (sin el detalle de la base) y un conflicto de <c>xmin</c> como 409. Lo demás sigue su curso.
+/// Convierte las excepciones de negocio en <c>{ code, error }</c>: <see cref="ReglaException"/> con su estado (y
+/// <c>campo</c> y <c>tope</c> si los trae), <see cref="TransicionInvalida"/> del dominio como 409 con su código, una escritura
+/// entre empresas como 403, un CHECK de la base como 422 <c>VALOR_INVALIDO</c> (sin el detalle de la base) y un conflicto de
+/// <c>xmin</c> como 409. Lo demás sigue su curso.
 /// </summary>
 internal sealed class ManejadorReglas : IExceptionHandler
 {
@@ -84,9 +88,11 @@ internal sealed class ManejadorReglas : IExceptionHandler
         httpContext.Response.StatusCode = regla.Status;
         if (regla.RetryAfterSegundos is { } segundos)
             httpContext.Response.Headers.RetryAfter = segundos.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        object cuerpo = regla.Campo is null
-            ? new { code = regla.Codigo, error = regla.Message }
-            : new { code = regla.Codigo, error = regla.Message, campo = regla.Campo };
+        var cuerpo = new Dictionary<string, object> { ["code"] = regla.Codigo, ["error"] = regla.Message };
+        if (regla.Campo is not null)
+            cuerpo["campo"] = regla.Campo;
+        if (regla.Tope is { } tope)
+            cuerpo["tope"] = tope;
         await httpContext.Response.WriteAsJsonAsync(cuerpo, cancellationToken).ConfigureAwait(false);
         return true;
     }

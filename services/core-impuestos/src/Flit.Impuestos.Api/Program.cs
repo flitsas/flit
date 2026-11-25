@@ -1,6 +1,8 @@
 using Flit.Api.Telemetry;
 using Flit.Impuestos.Api;
 using Flit.Impuestos.Api.Modulos.ApiLiquidacion;
+using Flit.Impuestos.Api.Modulos.Catalogos;
+using Flit.Impuestos.Api.Modulos.Configuracion;
 using Flit.Impuestos.Api.Persistence;
 using Flit.Impuestos.Api.Plataforma;
 using Flit.Platform.Sdk.Authentication;
@@ -57,6 +59,9 @@ public static class Program
         builder.Services.AddClienteApiLiquidacion(builder.Configuration);
         builder.Services.AddScoped<Modulos.Credenciales.AlmacenCredenciales>();
         builder.Services.AddScoped<Modulos.Credenciales.CredencialesEmpresa>();
+        // M08: configuración contractual/operativa, réplica de organismos (gRPC de catálogos de core-api) y caché de /fuentes.
+        builder.Services.AddCatalogosImpuestos(builder.Configuration);
+        builder.Services.AddConfiguracionImpuestos();
         builder.Services.AddSuscripcionImpuestos(builder.Configuration);
         builder.Services.AddLimitesSolicitudes(builder.Configuration);
         builder.Services.AddFlitGrpcServer();
@@ -106,6 +111,9 @@ public static class Program
         var api = app.MapGroup(Prefijo).RequireAuthorization();
         Modulos.Sesion.SesionEndpoints.Map(api);
         Modulos.Credenciales.CredencialesBackofficeEndpoints.Map(api);
+        Modulos.Configuracion.ConfiguracionEndpoints.Map(api);
+        Modulos.Configuracion.ConfiguracionContractualBackofficeEndpoints.Map(api);
+        Modulos.Catalogos.FuentesEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
 
         // gRPC solo en su puerto: los servicios gRPC del dominio se mapean aquí con .RequireHost(grpcHost).

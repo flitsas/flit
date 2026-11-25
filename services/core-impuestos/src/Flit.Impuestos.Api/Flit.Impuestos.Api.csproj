@@ -18,6 +18,8 @@
     <ProjectReference Include="..\Flit.Impuestos.Grpc.Contracts\Flit.Impuestos.Grpc.Contracts.csproj" />
     <!-- Suscripción por petición (ObtenerProductosHabilitados de Identidad). -->
     <ProjectReference Include="..\..\..\core-identity\src\Flit.Identidad.Grpc.Contracts\Flit.Identidad.Grpc.Contracts.csproj" />
+    <!-- Réplica de organismos de tránsito (flit.tramites.v1.CatalogosService de core-api, M08): solo el contrato gRPC público. -->
+    <ProjectReference Include="..\..\..\core-api\src\Flit.Tramites.Grpc.Contracts\Flit.Tramites.Grpc.Contracts.csproj" />
   </ItemGroup>
 
   <ItemGroup>
