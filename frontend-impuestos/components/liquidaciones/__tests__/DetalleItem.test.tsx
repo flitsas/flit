@@ -224,3 +224,37 @@ describe("DetalleItem — Super Admin y ?empresa", () => {
     expect(screen.getByText("La compañía no existe o no tiene Impuestos.")).toBeInTheDocument();
   });
 });
+
+describe("DetalleItem — contrato 1.2.0: «Ver la original» (relanzadoDesdeLiquidacionId, H-17)", () => {
+  const RELANZADO = { posibleDuplicado: true, relanzadoDesde: "I-0", relanzadoDesdeItemId: "I-0", relanzadoDesdeLiquidacionId: "L-0" };
+
+  it("con los dos ids, el aviso de posible duplicado enlaza al ítem original", async () => {
+    montar(detalle(RELANZADO));
+    const texto = await screen.findByText(/Esta liquidación es un relanzamiento: puede estar duplicada en el proveedor\./);
+    const enlace = screen.getByRole("link", { name: "Ver la original" });
+    expect(enlace).toHaveAttribute("href", "/liquidaciones/L-0/items/I-0");
+    // El enlace va dentro del mismo aviso que el texto del posible duplicado.
+    expect(texto.closest("div")?.contains(enlace) || texto.contains(enlace)).toBe(true);
+  });
+
+  it("el Super Admin conserva ?empresa en el enlace", async () => {
+    busqueda = new URLSearchParams("empresa=e-9");
+    montar(detalle(RELANZADO), { esSuperAdmin: true }, [[/^GET \/api\/v1\/impuestos\/liquidaciones\/L\?/, () => Response.json({})]]);
+    expect(await screen.findByRole("link", { name: "Ver la original" })).toHaveAttribute("href", "/liquidaciones/L-0/items/I-0?empresa=e-9");
+  });
+
+  it("los ids van codificados en la ruta", async () => {
+    montar(detalle({ ...RELANZADO, relanzadoDesdeLiquidacionId: "L 0", relanzadoDesdeItemId: "I/0" }));
+    expect(await screen.findByRole("link", { name: "Ver la original" })).toHaveAttribute("href", "/liquidaciones/L%200/items/I%2F0");
+  });
+
+  it.each([
+    ["relanzadoDesdeLiquidacionId null", { relanzadoDesdeLiquidacionId: null }],
+    ["relanzadoDesdeItemId null", { relanzadoDesdeItemId: null }],
+    ["sin relanzadoDesdeLiquidacionId (respuesta 1.1.0)", { relanzadoDesdeLiquidacionId: undefined }],
+  ])("%s: el aviso sigue y no hay enlace", async (_caso, cambio) => {
+    montar(detalle({ ...RELANZADO, ...cambio }));
+    expect(await screen.findByText(/Esta liquidación es un relanzamiento: puede estar duplicada en el proveedor\./)).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Ver la original" })).toBeNull();
+  });
+});

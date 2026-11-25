@@ -8,6 +8,7 @@ import {
   ETIQUETA_ACCION_APROVISIONAMIENTO,
   ETIQUETA_ESTADO_APROVISIONAMIENTO,
   ETIQUETA_FIRMA_SIN_CONFIRMAR,
+  accionVigente,
   retryTenantProductProvisioning,
   type ProvisioningStatus,
   type TenantProductProvisioning,
@@ -17,7 +18,9 @@ import { StatusBadge } from "@/components/atom/StatusBadge";
 // HU #14695 · M19 (plan §3.1 y §1.2 R1; platform.v1.yaml 1.1.0; spec-visual §3.11) — estado de la conexión de la
 // compañía con el proveedor de Impuestos, bajo el interruptor del producto. Mismo contenedor que
 // CredencialImpuestoDiagnostico. Etiquetas y acciones salen del contrato (`x-flit-etiquetas`); el motivo es `message`,
-// que ya pone el servicio. Nunca solo color: chip con ícono y texto.
+// que ya pone el servicio (con los motivos 1.2.0: EMPRESA_INACTIVA_EN_PROVEEDOR, CLAVE_ROTADA). Desde impuestos.v1.yaml
+// 1.2.0, LISTO_SIN_WEBHOOK lleva REINTENTAR y la retirada CARGAR_SECRETO se ofrece como «Reintentar» (accionVigente).
+// Nunca solo color: chip con ícono y texto.
 
 const PRODUCT_CODE = "impuestos";
 const SIN_CLASIFICAR = "Sin clasificar";
@@ -77,7 +80,7 @@ export function EstadoAprovisionamiento({ tenantId, provisioning, impuestosUrl, 
 
   const etiqueta = etiquetaEstadoAprovisionamiento(provisioning);
   const tono = tonoDe(provisioning);
-  const accion = provisioning?.action ?? null;
+  const accion = accionVigente(provisioning?.action);
 
   const reintentar = async () => {
     setErrorReintento(false);
@@ -114,8 +117,8 @@ export function EstadoAprovisionamiento({ tenantId, provisioning, impuestosUrl, 
         {ETIQUETA_ACCION_APROVISIONAMIENTO.REINTENTAR}
       </Button>
     );
-  } else if (accion === "CARGAR_CREDENCIALES" || accion === "CARGAR_SECRETO") {
-    accionUi = enlaceBackoffice(ETIQUETA_ACCION_APROVISIONAMIENTO[accion]);
+  } else if (accion === "CARGAR_CREDENCIALES") {
+    accionUi = enlaceBackoffice(ETIQUETA_ACCION_APROVISIONAMIENTO.CARGAR_CREDENCIALES);
   } else if (accion === "CORREGIR_NIT") {
     accionUi = onEditarCompania ? (
       <Button variant="secondary" size="sm" onClick={onEditarCompania}>

@@ -3,7 +3,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "@/lib/api";
 import { ERRORES_EMPRESA, TEXTO_SIN_PERMISO, esErrorDeEmpresa, esRechazoDeEmpresa, mensajeErrorFijo } from "@/lib/errores";
-import { ERRORES_BACKOFFICE } from "@/lib/backoffice/api";
+import { ERRORES_BACKOFFICE, ETIQUETA_MODO_RESPALDO_FIRMA, ETIQUETA_MOTIVO_APROVISIONAMIENTO } from "@/lib/backoffice/api";
 import { ERRORES_CONFIGURACION } from "@/lib/configuracion/api";
 import { ERRORES_DASHBOARD } from "@/lib/estadisticas/api";
 import { ERRORES_REPORTES, mensajeExportacion } from "@/lib/reportes/api";
@@ -165,5 +165,44 @@ describe("Catálogo de reportes — una sola fuente de etiquetas (estados.ts)", 
     expect(catalogo.rotuloDeColumna("detalle", "estado", "INCIERTO_REQUIERE_DECISION")).toBe("Incierto — requiere decisión");
     expect(catalogo.rotuloDeColumna("detalle", "tipo", "MASIVA")).toBe("Masiva");
     expect(catalogo.rotuloDeColumna("detalle", "estado", "OTRO")).toBe("Sin clasificar");
+  });
+});
+
+/**
+ * x-flit-etiquetas del esquema `nombre` de components.schemas (el primer bloque de etiquetas tras su declaración), leído
+ * del YAML sin parser: claves en MAYÚSCULAS o entre comillas, valores con o sin comillas.
+ */
+function etiquetasDelEsquema(nombre: string, desde = 0): Record<string, string> {
+  const yaml = contratoYaml();
+  const decl = yaml.slice(desde).search(new RegExp(`\n +${nombre}:\n`)) + desde;
+  expect(decl, nombre).toBeGreaterThanOrEqual(desde);
+  const marca = yaml.indexOf("x-flit-etiquetas:\n", decl);
+  expect(marca, nombre).toBeGreaterThan(decl);
+  const sangria = marca - yaml.lastIndexOf("\n", marca) - 1;
+  const etiquetas: Record<string, string> = {};
+  for (const linea of yaml.slice(marca).split("\n").slice(1)) {
+    const m = /^( *)"?([A-Za-z_]+)"?: (.*)$/.exec(linea);
+    if (!m || m[1].length <= sangria) break;
+    etiquetas[m[2]] = m[3].replace(/^"(.*)"$/, "$1");
+  }
+  return etiquetas;
+}
+
+const contratoYaml = () => readFileSync(path.resolve(__dirname, "../../../contracts/openapi/impuestos.v1.yaml"), "utf8").replace(/\r\n/g, "\n");
+
+describe("Backoffice — etiquetas del aprovisionamiento según el contrato 1.2.0 (plan §5.8)", () => {
+  it("ETIQUETA_MOTIVO_APROVISIONAMIENTO es exactamente MotivoAprovisionamiento.x-flit-etiquetas (incluidos los retirados)", () => {
+    const contrato = etiquetasDelEsquema("MotivoAprovisionamiento");
+    expect(Object.keys(contrato)).toEqual(expect.arrayContaining(["EMPRESA_INACTIVA_EN_PROVEEDOR", "CLAVE_ROTADA", "EMPRESA_YA_REGISTRADA", "ALTA_SIN_CONFIRMAR"]));
+    expect(ETIQUETA_MOTIVO_APROVISIONAMIENTO).toEqual(contrato);
+  });
+
+  it("ETIQUETA_MODO_RESPALDO_FIRMA es la etiqueta \"true\" de AprovisionamientoDetalle.modoRespaldoFirma", () => {
+    const yaml = contratoYaml();
+    const detalle = yaml.indexOf("\n    AprovisionamientoDetalle:\n");
+    expect(detalle).toBeGreaterThanOrEqual(0);
+    const etiquetas = etiquetasDelEsquema("modoRespaldoFirma", detalle).true;
+    expect(etiquetas).toBeTruthy();
+    expect(ETIQUETA_MODO_RESPALDO_FIRMA).toBe(etiquetas);
   });
 });

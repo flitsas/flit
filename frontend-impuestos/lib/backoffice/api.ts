@@ -1,4 +1,4 @@
-// Backoffice del Super Admin (contracts/openapi/impuestos.v1.yaml 1.1.0, tag Backoffice; plan §5.1): compañías con su
+// Backoffice del Super Admin (contracts/openapi/impuestos.v1.yaml 1.2.0, tag Backoffice; plan §5.1 y §5.8): compañías con su
 // aprovisionamiento, carga de credenciales del proveedor (nunca se devuelven) y reintento. Las rutas van por tenantId en
 // la ruta, no por ?empresa=. Etiquetas y literales: x-flit-etiquetas / x-flit-literales del contrato.
 import { useEffect, useState } from "react";
@@ -62,6 +62,7 @@ export interface TransicionAprovisionamiento {
 export interface AprovisionamientoDetalle extends AprovisionamientoResumen {
   /** Compañía del detalle (1.1.0, delta 7). */
   empresa?: EmpresaIdentificada | null;
+  /** Marca ortogonal al estado: 5 firmas inválidas seguidas encienden el respaldo (1.2.0, con etiqueta en el contrato). */
   modoRespaldoFirma: boolean;
   actualizadoEn: string;
   historial: TransicionAprovisionamiento[];
@@ -112,7 +113,11 @@ export const TONO_ESTADO_APROVISIONAMIENTO: Readonly<Record<string, StatusBadgeT
   SUSPENDIDO: "neutral",
 };
 
-/** x-flit-etiquetas de MotivoAprovisionamiento (el mismo texto que muestra el admin de compañías). */
+/**
+ * x-flit-etiquetas de MotivoAprovisionamiento (el mismo texto que muestra el admin de compañías). 1.2.0 suma
+ * EMPRESA_INACTIVA_EN_PROVEEDOR y CLAVE_ROTADA (esta solo en el historial); ALTA_SIN_CONFIRMAR y EMPRESA_YA_REGISTRADA
+ * quedan retirados, pero conservan su literal porque el historial puede traerlos.
+ */
 export const ETIQUETA_MOTIVO_APROVISIONAMIENTO: Readonly<Record<string, string>> = {
   REINTENTO_PROGRAMADO: "No se pudo contactar al proveedor; se reintentará automáticamente.",
   SIN_WEBHOOK_SECRET: "Falta el secreto del webhook: los resultados se consultan al proveedor.",
@@ -127,7 +132,12 @@ export const ETIQUETA_MOTIVO_APROVISIONAMIENTO: Readonly<Record<string, string>>
   NIT_AMBIGUO: "No se puede separar el dígito de verificación del NIT.",
   NIT_IGUAL_A_CABEZA: "El NIT es el mismo de su compañía cabeza.",
   PRODUCTO_DESACTIVADO: "Impuestos está desactivado para la compañía.",
+  EMPRESA_INACTIVA_EN_PROVEEDOR: "El proveedor tiene la compañía desactivada: pide su reactivación y luego reintenta.",
+  CLAVE_ROTADA: "El proveedor reemplazó la API key de la compañía; la nueva quedó guardada.",
 };
+
+/** x-flit-etiquetas de AprovisionamientoDetalle.modoRespaldoFirma = true (1.2.0). El chip corto sigue siendo «Respaldo de firma». */
+export const ETIQUETA_MODO_RESPALDO_FIRMA = "Respaldo de firma: los resultados llegan por consulta mientras se revisa el secreto.";
 
 /** x-flit-etiquetas del actor del historial. */
 export const ETIQUETA_ACTOR: Readonly<Record<string, string>> = { SISTEMA: "Sistema", SUPER_ADMIN: "Super Admin", PLATAFORMA: "Plataforma" };
@@ -165,8 +175,14 @@ export const ERRORES_BACKOFFICE: Readonly<Record<string, string>> = {
   FILTRO_INVALIDO: "Un filtro no es válido.",
 };
 
-/** Estados desde los que se puede reintentar (contrato: ERROR, INCIERTO o REQUIERE_REVISION_NIT). */
-export const ESTADOS_REINTENTABLES: ReadonlySet<string> = new Set(["ERROR", "INCIERTO", "REQUIERE_REVISION_NIT"]);
+/**
+ * Estados desde los que se puede reintentar: ERROR, INCIERTO, REQUIERE_REVISION_NIT y, desde la 1.2.0,
+ * LISTO_SIN_WEBHOOK (su acción pasa a REINTENTAR: el alta idempotente trae el secreto; CARGAR_SECRETO queda retirada).
+ */
+export const ESTADOS_REINTENTABLES: ReadonlySet<string> = new Set(["ERROR", "INCIERTO", "REQUIERE_REVISION_NIT", "LISTO_SIN_WEBHOOK"]);
+
+/** ¿Se ofrece «Reintentar aprovisionamiento»? Por el estado o porque el contrato manda la acción REINTENTAR. */
+export const esReintentable = (a: Pick<AprovisionamientoResumen, "estado" | "accion">) => a.accion === "REINTENTAR" || ESTADOS_REINTENTABLES.has(a.estado);
 
 export const etiquetaEstadoAprovisionamiento = (estado: string | null | undefined) =>
   rotular({ contexto: "estado de aprovisionamiento", codigo: estado, respaldo: ETIQUETA_ESTADO_APROVISIONAMIENTO });

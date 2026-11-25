@@ -85,3 +85,47 @@ describe("Backoffice — lista con el conteo de usuarios y la suspensión (contr
     expect(within(celda(fila("Compañía Tres"), "Estado")!).getAllByText("Suspendido")).toHaveLength(1);
   });
 });
+
+describe("Backoffice — motivos del contrato 1.2.0 en la lista (alta idempotente, plan §5.8)", () => {
+  const conMotivos = (...motivos: Array<[string, string, string | null]>) =>
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          items: motivos.map(([id, estado, motivo]) => ({
+            id,
+            nombre: `Compañía ${id}`,
+            nit: "900000001",
+            aprovisionamiento: { estado, motivo, accion: estado === "ERROR" || estado === "LISTO_SIN_WEBHOOK" ? "REINTENTAR" : null, firmaConfirmada: true },
+            suspendida: false,
+          })),
+          total: motivos.length,
+          page: 1,
+          pageSize: 50,
+        }),
+      ),
+    );
+
+  it("EMPRESA_INACTIVA_EN_PROVEEDOR muestra su literal de x-flit-etiquetas, nunca el código ni «Sin clasificar»", async () => {
+    conMotivos(["i-1", "ERROR", "EMPRESA_INACTIVA_EN_PROVEEDOR"]);
+    render(<EmpresasAprovisionamiento />);
+    await screen.findByText("Compañía i-1");
+
+    const motivo = celda(fila("Compañía i-1"), "Motivo")!;
+    expect(motivo).toHaveTextContent("El proveedor tiene la compañía desactivada: pide su reactivación y luego reintenta.");
+    expect(motivo).not.toHaveTextContent("EMPRESA_INACTIVA_EN_PROVEEDOR");
+    expect(motivo).not.toHaveTextContent("Sin clasificar");
+  });
+
+  it("CLAVE_ROTADA y los retirados (EMPRESA_YA_REGISTRADA, ALTA_SIN_CONFIRMAR) conservan su literal", async () => {
+    conMotivos(["r-1", "LISTO", "CLAVE_ROTADA"], ["r-2", "REQUIERE_CREDENCIALES", "EMPRESA_YA_REGISTRADA"], ["r-3", "INCIERTO", "ALTA_SIN_CONFIRMAR"]);
+    render(<EmpresasAprovisionamiento />);
+    await screen.findByText("Compañía r-1");
+
+    expect(celda(fila("Compañía r-1"), "Motivo")).toHaveTextContent("El proveedor reemplazó la API key de la compañía; la nueva quedó guardada.");
+    expect(celda(fila("Compañía r-2"), "Motivo")).toHaveTextContent(
+      "La empresa ya existe en el proveedor: rota las credenciales en la consola del API y cárgalas en Impuestos.",
+    );
+    expect(celda(fila("Compañía r-3"), "Motivo")).toHaveTextContent("El proveedor no confirmó el alta: puede haberla recibido. Reintenta para verificar.");
+  });
+});

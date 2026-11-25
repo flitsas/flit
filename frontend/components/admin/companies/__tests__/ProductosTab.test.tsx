@@ -275,11 +275,37 @@ describe("ProductosTab", () => {
     });
 
     it("si me/apps falla, el estado se pinta igual sin enlace", async () => {
-      listTenantProducts.mockResolvedValue([impuestos(true, { provisioning: prov("LISTO_SIN_WEBHOOK", "CARGAR_SECRETO") })]);
+      listTenantProducts.mockResolvedValue([impuestos(true, { provisioning: prov("REQUIERE_CREDENCIALES", "CARGAR_CREDENCIALES") })]);
       listMyApps.mockRejectedValue(new Error("x"));
       render(<ProductosTab tenantId="t1" />);
-      expect(await within(await screen.findByRole("group", { name: "Conexión con el proveedor de Impuestos" })).findByText("Cargar secreto: hazlo desde Impuestos › Backoffice")).toBeInTheDocument();
+      expect(await within(await screen.findByRole("group", { name: "Conexión con el proveedor de Impuestos" })).findByText("Cargar credenciales: hazlo desde Impuestos › Backoffice")).toBeInTheDocument();
       expect(screen.queryByRole("link")).toBeNull();
+    });
+
+    // Contrato impuestos.v1.yaml 1.2.0 (plan §5.8 punto 5): LISTO_SIN_WEBHOOK lleva REINTENTAR, como en el backoffice.
+    it("LISTO_SIN_WEBHOOK: «Reintentar» pide el reintento y relee; ya no hay «Cargar secreto»", async () => {
+      const user = userEvent.setup();
+      listTenantProducts
+        .mockResolvedValueOnce([impuestos(true, { provisioning: prov("LISTO_SIN_WEBHOOK", "REINTENTAR", "Falta el secreto del webhook: los resultados se consultan al proveedor.") })])
+        .mockResolvedValueOnce([impuestos(true, { provisioning: prov("PENDIENTE", null) })]);
+      listMyApps.mockResolvedValue([{ code: "impuestos", name: "Impuestos", icon: "receipt", url: "https://impuestos.test", current: false }]);
+      render(<ProductosTab tenantId="t1" />);
+      const g = await screen.findByRole("group", { name: "Conexión con el proveedor de Impuestos" });
+      expect(within(g).getByText("Falta el secreto del webhook: los resultados se consultan al proveedor.")).toBeInTheDocument();
+      expect(screen.queryByText(/Cargar secreto/)).toBeNull();
+      await user.click(within(g).getByRole("button", { name: "Reintentar" }));
+      expect(retryTenantProductProvisioning).toHaveBeenCalledWith("t1", "impuestos");
+      expect(await screen.findByText("Conexión con el proveedor: Pendiente")).toBeInTheDocument();
+    });
+
+    it("un reporte anterior con CARGAR_SECRETO (retirada) también ofrece «Reintentar»", async () => {
+      listTenantProducts.mockResolvedValue([impuestos(true, { provisioning: prov("LISTO_SIN_WEBHOOK", "CARGAR_SECRETO") })]);
+      listMyApps.mockResolvedValue([{ code: "impuestos", name: "Impuestos", icon: "receipt", url: "https://impuestos.test", current: false }]);
+      render(<ProductosTab tenantId="t1" />);
+      const g = await screen.findByRole("group", { name: "Conexión con el proveedor de Impuestos" });
+      expect(await within(g).findByRole("button", { name: "Reintentar" })).toBeInTheDocument();
+      expect(within(g).queryByRole("link")).toBeNull();
+      expect(screen.queryByText(/Cargar secreto/)).toBeNull();
     });
 
     it("Reintentar relee los productos", async () => {

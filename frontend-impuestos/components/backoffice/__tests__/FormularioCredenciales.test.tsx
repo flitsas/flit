@@ -438,3 +438,32 @@ describe("Backoffice — detalle de la compañía", () => {
     await waitFor(() => expect(notFound).toHaveBeenCalled());
   });
 });
+
+describe("FormularioCredenciales — respaldo manual con el contrato 1.2.0 (plan §5.8 punto 6)", () => {
+  it("en LISTO_SIN_WEBHOOK (la acción es Reintentar) la carga manual sigue disponible y guarda con PUT", async () => {
+    vi.stubGlobal("fetch", api());
+    const onGuardado = vi.fn();
+    montar("LISTO_SIN_WEBHOOK", onGuardado);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Reemplazar" }));
+    fireEvent.change(screen.getByLabelText("Secreto del webhook (opcional)"), { target: { value: SECRETO } });
+    fireEvent.click(screen.getByRole("button", { name: "Validar y guardar" }));
+
+    expect(await screen.findByText("Credenciales guardadas y validadas.")).toBeInTheDocument();
+    expect(llamadas.find((l) => l.method === "PUT")?.body).toEqual({ apiKey: null, webhookSecret: SECRETO });
+    expect(onGuardado).toHaveBeenCalled();
+    expect(screen.queryByText(LITERAL_AVISO_ROTACION)).toBeNull();
+    expect(screen.queryByText("Cargar secreto")).toBeNull();
+  });
+
+  it("en ERROR por EMPRESA_INACTIVA_EN_PROVEEDOR también se puede cargar a mano, sin el aviso de rotación", async () => {
+    vi.stubGlobal("fetch", api({ credenciales: () => Response.json(SIN_NADA) }));
+    montar("ERROR");
+
+    expect(await screen.findByRole("button", { name: "Cargar credenciales" })).toBeInTheDocument();
+    expect(screen.queryByText(LITERAL_AVISO_ROTACION)).toBeNull();
+  });
+});
+
+const LITERAL_AVISO_ROTACION =
+  "La empresa ya existe en el proveedor: rota las credenciales en la consola del API y cárgalas aquí. Rotarlas puede afectar a Diagnóstico si comparte la empresa.";

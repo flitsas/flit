@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Button } from "@flit/ui/Button";
 import { CabeceraModulo } from "@flit/ui/CabeceraModulo";
@@ -10,7 +11,7 @@ import { ListaDefinicion } from "@flit/ui/ListaDefinicion";
 import { VehicleLoader } from "@flit/ui/Loader";
 import { Placa } from "@flit/ui/Placa";
 import { TarjetaPlegable } from "@flit/ui/TarjetaPlegable";
-import { BOTON_REINTENTAR_CLS, TARJETA_CLS, TEXTO_SECUNDARIO_CLS } from "@/components/comun/estilos";
+import { BOTON_REINTENTAR_CLS, ENLACE_ACCION_CLS, TARJETA_CLS, TEXTO_SECUNDARIO_CLS } from "@/components/comun/estilos";
 import { ChipEstado, Marca } from "@/components/liquidaciones/ChipEstado";
 import { DialogoRelanzar } from "@/components/liquidaciones/DialogoRelanzar";
 import { EligeCompania } from "@/components/liquidaciones/EligeCompania";
@@ -68,8 +69,21 @@ function observaciones(resultado: Record<string, unknown> | null) {
   return { advertencias, validaciones, archivos, hay: advertencias.length + validaciones.length + archivos.length > 0 };
 }
 
+const TEXTO_POSIBLE_DUPLICADO = "Esta liquidación es un relanzamiento: puede estar duplicada en el proveedor.";
+
+/**
+ * Ruta del ítem original de un relanzamiento (contrato 1.2.0, `relanzadoDesdeLiquidacionId` + `relanzadoDesdeItemId`;
+ * H-17), con la `empresa` del Super Admin. null si falta cualquiera de los dos ids: sin enlace.
+ */
+function rutaOriginal(item: ItemDetalle, empresa: string | null): string | null {
+  const liquidacion = item.relanzadoDesdeLiquidacionId;
+  const original = item.relanzadoDesdeItemId;
+  if (!liquidacion || !original) return null;
+  return hrefConEmpresa(`/liquidaciones/${encodeURIComponent(liquidacion)}/items/${encodeURIComponent(original)}`, empresa);
+}
+
 /** Aviso de resultado según el estado (spec-visual §3.6), estático (vivo=false). */
-function avisos(item: ItemDetalle): Array<{ tono: InlineAlertTone; titulo?: string; texto: ReactNode }> {
+function avisos(item: ItemDetalle, empresa: string | null): Array<{ tono: InlineAlertTone; titulo?: string; texto: ReactNode }> {
   const lista: Array<{ tono: InlineAlertTone; titulo?: string; texto: ReactNode }> = [];
   if (itemEnCurso(item.estado) && item.estado !== "INCIERTO")
     lista.push({
@@ -96,7 +110,22 @@ function avisos(item: ItemDetalle): Array<{ tono: InlineAlertTone; titulo?: stri
   if (item.estado === "SIN_RESULTADO_LOTE_CERRADO") lista.push({ tono: "info", texto: "El lote se cerró antes de recibir el resultado de esta placa." });
   if (item.parcial) lista.push({ tono: "pending", texto: "Resultado parcial: el proveedor no pudo liquidar todas las vigencias." });
   if (item.resultadoTardio) lista.push({ tono: "info", texto: "Este resultado llegó después de cerrar el lote." });
-  if (item.posibleDuplicado) lista.push({ tono: "warning", texto: "Esta liquidación es un relanzamiento: puede estar duplicada en el proveedor." });
+  if (item.posibleDuplicado) {
+    const original = rutaOriginal(item, empresa);
+    lista.push({
+      tono: "warning",
+      texto: original ? (
+        <span className="flex flex-wrap items-center gap-x-2">
+          {TEXTO_POSIBLE_DUPLICADO}
+          <Link href={original} className={ENLACE_ACCION_CLS}>
+            Ver la original
+          </Link>
+        </span>
+      ) : (
+        TEXTO_POSIBLE_DUPLICADO
+      ),
+    });
+  }
   return lista;
 }
 
@@ -194,7 +223,7 @@ function VistaItem({ liquidacionId, itemId, puedeRelanzar, puedeDescargar, esSup
           Se muestra lo último que se leyó.
         </InlineAlert>
       ) : null}
-      {avisos(item).map((a, i) => (
+      {avisos(item, empresa).map((a, i) => (
         <InlineAlert key={i} tone={a.tono} title={a.titulo} vivo={false}>
           {a.texto}
         </InlineAlert>
