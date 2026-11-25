@@ -412,12 +412,127 @@ describe("CredencialImpuestoDiagnostico · Obtener del proveedor (HU #14711)", (
 
     let resolverPut: () => void = () => {};
     setTenantProductCredential.mockReturnValue(new Promise<void>((r) => (resolverPut = r)));
-    await user.click(screen.getByRole("button", { name: "Configurar" }));
+    // Tras obtener, la llave ya está configurada (estado efectivo, M-3): la captura manual ofrece «Reemplazar».
+    await user.click(screen.getByRole("button", { name: "Reemplazar" }));
     await user.click(campo());
     await user.paste(LLAVE);
     await user.click(screen.getByRole("button", { name: "Guardar" }));
     expect(obtener()).toBeDisabled();
     resolverPut();
     await screen.findByText("API key de impuesto guardada.");
+  });
+
+  // M-3 (code review): el alta y la relectura del listado son pasos distintos; un fallo de la relectura no niega el alta.
+  it("si la relectura del listado falla tras obtener, el éxito se mantiene con un aviso no alarmante y sin role=alert", async () => {
+    const user = userEvent.setup();
+    onChanged.mockRejectedValue(new Error("fallo de red al releer"));
+    render(<CredencialImpuestoDiagnostico tenantId="t1" configurada={false} onChanged={onChanged} />);
+    await user.click(obtener());
+    expect(
+      await screen.findByText("Llave obtenida del proveedor. No se pudo actualizar el listado; recarga la página para verlo."),
+    ).toHaveAttribute("role", "status");
+    expect(screen.getByText("Llave configurada · prefijo AbCdEfGh…")).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/No se pudo obtener la llave/)).toBeNull();
+    expect(obtener()).not.toHaveAttribute("aria-busy");
+  });
+
+  it("el chip dice «Configurada» tras obtener aunque el listado aún no se haya refrescado", async () => {
+    const user = userEvent.setup();
+    render(<CredencialImpuestoDiagnostico tenantId="t1" configurada={false} onChanged={onChanged} />);
+    expect(screen.getByText("No configurada")).toBeInTheDocument();
+    await user.click(obtener());
+    await screen.findByText("Llave configurada · prefijo AbCdEfGh…");
+    expect(screen.getByText("Configurada")).toBeInTheDocument();
+    expect(screen.queryByText("No configurada")).toBeNull();
+  });
+});
+
+// M-3 (code review, ampliado): la relectura va aparte también al guardar y al borrar a mano, y la captura manual usa el
+// estado efectivo de la llave (listado o alta recién hecha).
+// Uso de ejemplo: <CredencialImpuestoDiagnostico tenantId="t1" configurada={false} onChanged={releeQueFalla} />
+describe("CredencialImpuestoDiagnostico · relectura aparte y estado efectivo (M-3)", () => {
+  let onChanged: Mock<() => Promise<void>>;
+  const AVISO = "No se pudo actualizar el listado; recarga la página para verlo.";
+  beforeEach(() => {
+    setTenantProductCredential.mockReset().mockResolvedValue(undefined);
+    deleteTenantProductCredential.mockReset().mockResolvedValue(undefined);
+    obtenerCredencialImpuestoDiagnostico.mockReset().mockResolvedValue({
+      apiKeyPrefix: "AbCdEfGh",
+      created: true,
+      rotated: false,
+      hasWebhookSecret: true,
+      changed: true,
+      updatedAt: "2026-11-25T10:00:00Z",
+    });
+    onChanged = vi.fn().mockResolvedValue(undefined);
+  });
+  const obtener = () => screen.getByRole("button", { name: "Obtener del proveedor" });
+
+  it("si la relectura falla tras guardar, el éxito se mantiene con el aviso y sin role=alert", async () => {
+    const user = userEvent.setup();
+    onChanged.mockRejectedValue(new Error("fallo de red al releer"));
+    render(<CredencialImpuestoDiagnostico tenantId="t1" configurada={false} onChanged={onChanged} />);
+    await expandirManual();
+    await user.click(screen.getByRole("button", { name: "Configurar" }));
+    await user.click(campo());
+    await user.paste(LLAVE);
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    expect(await screen.findByText(`API key de impuesto guardada. ${AVISO}`)).toHaveAttribute("role", "status");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/No se pudo guardar/)).toBeNull();
+  });
+
+  it("si la relectura falla tras borrar, el éxito se mantiene con el aviso y sin role=alert", async () => {
+    const user = userEvent.setup();
+    onChanged.mockRejectedValue(new Error("fallo de red al releer"));
+    render(<CredencialImpuestoDiagnostico tenantId="t1" configurada onChanged={onChanged} />);
+    await expandirManual();
+    await user.click(screen.getByRole("button", { name: "Borrar" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Borrar API key" }));
+    expect(await screen.findByText(`API key de impuesto borrada. ${AVISO}`)).toHaveAttribute("role", "status");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/No se pudo borrar/)).toBeNull();
+  });
+
+  it("tras obtener, sin refresco del listado, la captura manual ofrece «Reemplazar» y «Borrar»", async () => {
+    const user = userEvent.setup();
+    render(<CredencialImpuestoDiagnostico tenantId="t1" configurada={false} onChanged={onChanged} />);
+    await user.click(obtener());
+    await screen.findByText("Llave configurada · prefijo AbCdEfGh…");
+    await expandirManual();
+    expect(screen.getByRole("button", { name: "Reemplazar" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Borrar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Configurar" })).toBeNull();
+  });
+
+  it("borrar lo obtenido deja la llave como no configurada aunque el listado no se refresque", async () => {
+    const user = userEvent.setup();
+    render(<CredencialImpuestoDiagnostico tenantId="t1" configurada={false} onChanged={onChanged} />);
+    await user.click(obtener());
+    await screen.findByText("Llave configurada · prefijo AbCdEfGh…");
+    await expandirManual();
+    await user.click(screen.getByRole("button", { name: "Borrar" }));
+    await user.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "Borrar API key" }));
+    await screen.findByText("API key de impuesto borrada.");
+    expect(screen.getByText("No configurada")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Configurar" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Borrar" })).toBeNull();
+    expect(screen.queryByText(/prefijo/)).toBeNull();
+  });
+
+  it("guardar a mano tras obtener deja de mostrar el prefijo de la llave del proveedor", async () => {
+    const user = userEvent.setup();
+    render(<CredencialImpuestoDiagnostico tenantId="t1" configurada onChanged={onChanged} />);
+    await user.click(obtener());
+    await screen.findByText("Llave configurada · prefijo AbCdEfGh…");
+    await expandirManual();
+    await user.click(screen.getByRole("button", { name: "Reemplazar" }));
+    await user.click(campo());
+    await user.paste(LLAVE);
+    await user.click(screen.getByRole("button", { name: "Guardar" }));
+    await screen.findByText("API key de impuesto guardada.");
+    expect(screen.queryByText(/prefijo/)).toBeNull();
+    expect(screen.getByText("Llave configurada")).toBeInTheDocument();
   });
 });
