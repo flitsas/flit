@@ -75,6 +75,27 @@ public sealed class LiquidacionIndividualEndpointsTests
         solicitud.Payload.Should().NotContain("ABC123", "el evento lleva solo ids");
     }
 
+    [Fact]
+    public async Task Sin_claim_name_creada_por_nombre_sale_de_Identidad_y_no_del_correo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var identidad = new Flit.Impuestos.Tests.Plataforma.IdentidadUsuarios { Nombre = "Gestora Identidad" };
+        await using var api = await EntornoEjecucion.ConApiAsync(new ApiLiquidacionDePrueba(), new RuntDePrueba(),
+            configurar: b => Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(b.Services, identidad.Cliente()));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        var usuario = Guid.NewGuid();
+        await EntornoEjecucion.SembrarEmpresaAsync(api, empresa, ct);
+
+        var r = await api.Cliente(api.Token(empresa: empresa, permisos: Gestor, usuario: usuario)).PostAsJsonAsync(Ruta, new { placa = "ABC123" }, ct);
+
+        r.StatusCode.Should().Be(HttpStatusCode.Created, await r.Content.ReadAsStringAsync(ct));
+        using var cuerpo = JsonDocument.Parse(await r.Content.ReadAsStringAsync(ct));
+        cuerpo.RootElement.GetProperty("creadaPor").GetProperty("nombre").GetString().Should().Be("Gestora Identidad", "el token no trae name: Identidad");
+        identidad.UltimaEmpresa.Should().Be(empresa.ToString());
+        identidad.UltimoUsuario.Should().Be(usuario.ToString());
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData(EstadoAprovisionamiento.Pendiente)]

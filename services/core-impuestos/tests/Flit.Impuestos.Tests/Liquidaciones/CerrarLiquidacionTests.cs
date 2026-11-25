@@ -70,6 +70,28 @@ public sealed class CerrarLiquidacionTests
     }
 
     [Fact]
+    public async Task Sin_claim_name_cerrada_por_nombre_sale_de_Identidad_y_no_del_correo()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var identidad = new Flit.Impuestos.Tests.Plataforma.IdentidadUsuarios { Nombre = "Admin Identidad" };
+        await using var api = await M.ConApiAsync(
+            configurar: b => Microsoft.Extensions.DependencyInjection.ServiceCollectionServiceExtensions.AddSingleton(b.Services, identidad.Cliente()));
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var (empresa, lote, _) = await EvaluadorTerminacionTests.SembrarMasivaAsync(api, ct, EstadoItem.Enviado, EstadoItem.Pendiente);
+        var admin = Guid.NewGuid();
+
+        var r = await api.Cliente(api.Token(empresa: empresa, permisos: Admin, usuario: admin)).PostAsync(Ruta(lote), null, ct);
+
+        var texto = await r.Content.ReadAsStringAsync(ct);
+        r.StatusCode.Should().Be(HttpStatusCode.OK, texto);
+        using var cuerpo = JsonDocument.Parse(texto);
+        cuerpo.RootElement.GetProperty("cerradaPor").GetProperty("nombre").GetString().Should().Be("Admin Identidad", "el token no trae name: Identidad");
+        (await EntornoEjecucion.LoteAsync(api, empresa, lote, ct)).CerradaPorNombre.Should().Be("Admin Identidad");
+        identidad.UltimaEmpresa.Should().Be(empresa.ToString());
+        identidad.UltimoUsuario.Should().Be(admin.ToString());
+    }
+
+    [Fact]
     public async Task El_Gestor_recibe_403_y_el_lote_no_cambia()
     {
         var ct = TestContext.Current.CancellationToken;

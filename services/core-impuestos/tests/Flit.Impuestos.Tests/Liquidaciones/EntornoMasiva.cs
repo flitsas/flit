@@ -45,7 +45,7 @@ internal static class EntornoMasiva
 
     public static Task<ApiDePrueba> ConApiAsync(
         ApiLiquidacionDePrueba? proveedor = null, RuntDePrueba? runt = null, string? urlFrontend = null, DirectorioEmpresasDePrueba? directorio = null,
-        TimeProvider? reloj = null) =>
+        TimeProvider? reloj = null, Action<Microsoft.AspNetCore.Builder.WebApplicationBuilder>? configurar = null) =>
         ApiDePrueba.ConBaseAsync(b =>
         {
             var config = new Dictionary<string, string?>
@@ -65,6 +65,7 @@ internal static class EntornoMasiva
                 b.Services.AddSingleton<IDirectorioEmpresas>(directorio);
             if (reloj is not null)
                 b.Services.AddSingleton(reloj);
+            configurar?.Invoke(b);
         });
 
     /// <summary>CSV en UTF-8 (con BOM si se pide): una línea por elemento, tal cual.</summary>

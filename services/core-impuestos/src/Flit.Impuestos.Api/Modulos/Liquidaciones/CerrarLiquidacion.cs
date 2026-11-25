@@ -99,7 +99,7 @@ public sealed partial class CerrarLiquidacion(IServiceScopeFactory scopes, Consu
     }
 
     /// <summary>
-    /// Motivo del cierre y nombre de quien cierra tal como viene en su token (columnas <c>motivo_cierre</c> y
+    /// Motivo del cierre y nombre de quien cierra según <see cref="INombreActor"/> (columnas <c>motivo_cierre</c> y
     /// <c>cerrada_por_nombre</c> de la 1.2.0). Es el único punto que los escribe; un nombre vacío queda null.
     /// </summary>
     internal static void RegistrarCierre(Liquidacion lote, string? motivo, string? nombre)
@@ -112,7 +112,7 @@ public sealed partial class CerrarLiquidacion(IServiceScopeFactory scopes, Consu
     /// <summary>Máximo de <c>creada_por_nombre</c> y <c>cerrada_por_nombre</c>.</summary>
     public const int LargoMaximoNombreActor = 200;
 
-    /// <summary>El nombre del token, recortado al largo de la columna; null si no hay.</summary>
+    /// <summary>El nombre de quien actúa, recortado al largo de la columna; null si no hay.</summary>
     internal static string? NombreDelActor(string? nombre)
     {
         var limpio = string.IsNullOrWhiteSpace(nombre) ? null : nombre.Trim();
@@ -121,12 +121,13 @@ public sealed partial class CerrarLiquidacion(IServiceScopeFactory scopes, Consu
 
     private static async Task<IResult> CerrarEndpointAsync(
         Guid id, HttpContext http, UsuarioActual usuario, ServicioConfiguracion configuracion, AmbitoDeLaEmpresa ambito, CerrarLiquidacion cerrar,
-        CancellationToken ct)
+        INombreActor nombres, CancellationToken ct)
     {
         var (empresa, referencia) = await LiquidacionesEndpoints.EmpresaDeEscrituraAsync(
             http.Request.Query[EmpresaExplicita.Parametro], usuario, configuracion, ambito, ct).ConfigureAwait(false);
         var entrada = await LeerEntradaAsync(http, ct).ConfigureAwait(false);
-        return Results.Ok(await cerrar.CerrarAsync(empresa, id, entrada?.Motivo, usuario.Id, usuario.Nombre, referencia, ct).ConfigureAwait(false));
+        var actorNombre = await nombres.NombreAsync(usuario, ct).ConfigureAwait(false);
+        return Results.Ok(await cerrar.CerrarAsync(empresa, id, entrada?.Motivo, usuario.Id, actorNombre, referencia, ct).ConfigureAwait(false));
     }
 
     /// <summary>El cuerpo es opcional: vacío o sin JSON es «sin motivo»; un JSON mal formado, también (no hay código para él).</summary>

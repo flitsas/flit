@@ -1,6 +1,7 @@
 using Flit.Platform.Sdk.Authentication;
 using Flit.Platform.Sdk.Grpc;
 using Flit.Platform.Sdk.Tenancy;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace Flit.Impuestos.Api.Plataforma;
@@ -62,7 +63,8 @@ public static class GuardSuscripcionExtensions
     /// <summary>
     /// Con <see cref="IdentidadAddressKey"/>: Identidad por gRPC (scope <c>platform.identidad.read</c>, plazo 5 s). Sin ella: ninguna
     /// compañía tiene Impuestos, salvo <see cref="SimularSuscripcionKey"/>=true explícito. Un registro previo de
-    /// <see cref="IProductosHabilitados"/> (pruebas) se respeta.
+    /// <see cref="IProductosHabilitados"/> (pruebas) se respeta. <see cref="INombreActor"/> usa el mismo cliente de Identidad (mismo
+    /// scope); sin él, siempre el respaldo.
     /// </summary>
     public static IServiceCollection AddSuscripcionImpuestos(this IServiceCollection services, IConfiguration configuration)
     {
@@ -79,6 +81,9 @@ public static class GuardSuscripcionExtensions
             services.TryAddSingleton<IProductosHabilitados>(new ProductosSinIdentidad(configuration.GetValue(SimularSuscripcionKey, false)));
         }
 
+        services.TryAddSingleton<INombreActor>(sp => new ResolvedorNombreActor(
+            sp.GetService<Flit.Identidad.Grpc.V1.IdentidadService.IdentidadServiceClient>(), sp.GetRequiredService<IMemoryCache>(),
+            sp.GetRequiredService<ILogger<ResolvedorNombreActor>>()));
         return services;
     }
 

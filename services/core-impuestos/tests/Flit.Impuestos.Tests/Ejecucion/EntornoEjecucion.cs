@@ -45,7 +45,8 @@ internal static class EntornoEjecucion
     public const string OrganismoMedellin = "STRIA TTO MEDELLIN";
     public const string OrganismoChia = "STRIA TTO CHIA";
 
-    public static Task<ApiDePrueba> ConApiAsync(ApiLiquidacionDePrueba proveedor, RuntDePrueba runt, RelojDePrueba? reloj = null, RegistroDeLogs? logs = null) =>
+    public static Task<ApiDePrueba> ConApiAsync(ApiLiquidacionDePrueba proveedor, RuntDePrueba runt, RelojDePrueba? reloj = null, RegistroDeLogs? logs = null,
+        Action<Microsoft.AspNetCore.Builder.WebApplicationBuilder>? configurar = null) =>
         ApiDePrueba.ConBaseAsync(b =>
         {
             b.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
@@ -64,6 +65,8 @@ internal static class EntornoEjecucion
                 b.Logging.AddProvider(logs);
                 b.Logging.AddFilter<RegistroDeLogs>(null, LogLevel.Trace);
             }
+
+            configurar?.Invoke(b);
         });
 
     /// <summary>Aprovisionamiento en <paramref name="estado"/> con su api_key (y el secreto si <paramref name="secreto"/>) y los catálogos.</summary>

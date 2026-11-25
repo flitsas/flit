@@ -209,6 +209,7 @@ public sealed partial class ConsumidorLiquidacion(
         }
 
         var solicitud = lista.Solicitud;
+        await freno.EsperarTurnoAsync(ct).ConfigureAwait(false);
         if (!await RegistrarEnvioAsync(tenant, item.Id, lista.Datos, url is null ? null : token.Hash, desdeRunt: !reenvio, ct).ConfigureAwait(false))
             return;
         if (credenciales is null)
@@ -223,6 +224,7 @@ public sealed partial class ConsumidorLiquidacion(
             // El proveedor no tiene el secreto de la compañía: no es un error de datos. Mismo ítem, sin callbackUrl (se concilia por GET).
             SinWebhookEnProveedor(log, tenant, item.Id);
             solicitud = solicitud with { CallbackUrl = null };
+            await freno.EsperarTurnoAsync(ct).ConfigureAwait(false);
             if (!await RegistrarEnvioAsync(tenant, item.Id, lista.Datos, null, desdeRunt: false, ct).ConfigureAwait(false))
                 return;
             resultado = await EnviarAsync(credenciales.ApiKey, solicitud, ct).ConfigureAwait(false);
@@ -231,9 +233,12 @@ public sealed partial class ConsumidorLiquidacion(
         await AplicarEnvioAsync(tenant, item.Id, resultado, aprovisionamiento?.ModoRespaldoFirma ?? false, ct).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// POST al proveedor. El turno del <see cref="FrenoGlobal"/> se toma antes del registro previo, para que entre la relectura del
+    /// lote (<see cref="RegistrarEnvioAsync"/>) y la llamada no quede una espera en la que el lote se pueda cerrar.
+    /// </summary>
     private async Task<ResultadoEnvio<ConsultaCreada>> EnviarAsync(string apiKey, SolicitudConsulta solicitud, CancellationToken ct)
     {
-        await freno.EsperarTurnoAsync(ct).ConfigureAwait(false);
         try
         {
             return await api.CrearConsultaAsync(apiKey, solicitud, ct).ConfigureAwait(false);
@@ -277,30 +282,70 @@ public sealed partial class ConsumidorLiquidacion(
 
     /// <summary>
     /// Registro previo al POST en un contexto propio que se confirma ya (F2a-CF7): <c>ENVIANDO</c>, hash del token (null sin
-    /// callbackUrl), <c>con_callback</c>, <c>enviado_en</c> y los datos del propietario cifrados. False si otro proceso movió el ítem.
+    /// callbackUrl), <c>con_callback</c>, <c>enviado_en</c> y los datos del propietario cifrados. Va en una transacción con la cabecera
+    /// del lote bloqueada (<c>FOR UPDATE</c>, el mismo bloqueo que toman <see cref="Flit.Impuestos.Api.Modulos.Liquidaciones.CerrarLiquidacion"/> y el aplicador
+    /// de resultados), así que el cierre y el envío quedan en serie: si el lote ya está cerrado, el ítem no se envía y queda
+    /// <c>SIN_RESULTADO_LOTE_CERRADO</c> (la transición del cierre manual). False si no hay que enviar: otro proceso movió el ítem o el
+    /// lote está cerrado.
     /// </summary>
     private async Task<bool> RegistrarEnvioAsync(Guid tenant, Guid itemId, DatosItem datos, byte[]? tokenHash, bool desdeRunt, CancellationToken ct)
     {
         await using var propio = almacen.ContextoDe(tenant);
-        var fila = await propio.Set<LiquidacionItem>().SingleAsync(i => i.Id == itemId, ct).ConfigureAwait(false);
-        var esperado = desdeRunt ? EstadoItem.ConsultandoRunt : EstadoItem.Enviando;
-        if (fila.Estado != esperado)
+        var registro = await propio.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
         {
-            Descartado(log, itemId, "CAMBIO_CONCURRENTE");
-            return false;
-        }
+            propio.ChangeTracker.Clear();
+            await using var tx = await propio.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+            var loteId = await propio.Set<LiquidacionItem>().AsNoTracking().Where(i => i.Id == itemId)
+                .Select(i => i.LiquidacionId).SingleAsync(ct).ConfigureAwait(false);
+            await propio.Database.ExecuteSqlAsync($"SELECT 1 FROM impuestos.liquidaciones WHERE id = {loteId} FOR UPDATE", ct).ConfigureAwait(false);
+            var estadoLote = await propio.Set<Liquidacion>().AsNoTracking().Where(l => l.Id == loteId)
+                .Select(l => l.Estado).SingleAsync(ct).ConfigureAwait(false);
+            var fila = await propio.Set<LiquidacionItem>().SingleAsync(i => i.Id == itemId, ct).ConfigureAwait(false);
+            if (estadoLote == EstadoLote.CerradoManualmente)
+                return EstadosItem.EsFinal(fila.Estado) ? Registro.LoteCerradoItemFinal : Registro.LoteCerrado;
+            var esperado = desdeRunt ? EstadoItem.ConsultandoRunt : EstadoItem.Enviando;
+            if (fila.Estado != esperado)
+                return Registro.CambioConcurrente;
 
-        if (desdeRunt)
-            fila.Estado = TransicionesItem.Aplicar(Situacion(fila), new EventoItem.RuntCompleto()).Nueva.Estado;
-        var ahora = reloj.GetUtcNow();
-        GuardarDatos(fila, datos);
-        fila.TokenHash = tokenHash;
-        fila.ConCallback = tokenHash is not null;
-        fila.EnviadoEn = ahora;
-        fila.ProximoIntentoEn = null;
-        fila.ActualizadoEn = ahora;
-        await propio.SaveChangesAsync(ct).ConfigureAwait(false);
-        return true;
+            if (desdeRunt)
+                fila.Estado = TransicionesItem.Aplicar(Situacion(fila), new EventoItem.RuntCompleto()).Nueva.Estado;
+            var ahora = reloj.GetUtcNow();
+            GuardarDatos(fila, datos);
+            fila.TokenHash = tokenHash;
+            fila.ConCallback = tokenHash is not null;
+            fila.EnviadoEn = ahora;
+            fila.ProximoIntentoEn = null;
+            fila.ActualizadoEn = ahora;
+            await propio.SaveChangesAsync(ct).ConfigureAwait(false);
+            await tx.CommitAsync(ct).ConfigureAwait(false);
+            return Registro.Listo;
+        }).ConfigureAwait(false);
+
+        switch (registro)
+        {
+            case Registro.Listo:
+                return true;
+            case Registro.LoteCerradoItemFinal:
+                // El cierre ya lo pasó a SIN_RESULTADO_LOTE_CERRADO.
+                LoteCerradoSinEnviar(log, itemId);
+                return false;
+            case Registro.LoteCerrado:
+                // Sigue en vuelo en un lote cerrado: la misma transición del cierre manual (contadores y crédito incluidos).
+                LoteCerradoSinEnviar(log, itemId);
+                await AplicarAsync(tenant, itemId, new EventoItem.CierreManual(), null, ct).ConfigureAwait(false);
+                return false;
+            default:
+                Descartado(log, itemId, "CAMBIO_CONCURRENTE");
+                return false;
+        }
+    }
+
+    private enum Registro
+    {
+        Listo,
+        CambioConcurrente,
+        LoteCerrado,
+        LoteCerradoItemFinal,
     }
 
     /// <summary>
@@ -402,6 +447,9 @@ public sealed partial class ConsumidorLiquidacion(
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Liquidación: el proveedor respondió 422 webhook_not_configured para la empresa {Empresa} (no tiene el secreto del webhook): el ítem {ItemId} se reenvía sin callbackUrl.")]
     private static partial void SinWebhookEnProveedor(ILogger logger, Guid empresa, Guid itemId);
+
+    [LoggerMessage(Level = LogLevel.Information, Message = "Liquidación: el lote del ítem {ItemId} está cerrado; no se envía al proveedor.")]
+    private static partial void LoteCerradoSinEnviar(ILogger logger, Guid itemId);
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Liquidación: ítem {ItemId} en {Estado} ({Codigo}).")]
     private static partial void Aplicado(ILogger logger, Guid itemId, EstadoItem estado, string? codigo);
