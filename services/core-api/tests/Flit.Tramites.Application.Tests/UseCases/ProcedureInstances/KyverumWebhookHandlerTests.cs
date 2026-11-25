@@ -158,6 +158,52 @@ public sealed class KyverumWebhookHandlerTests
     }
 
     [Fact]
+    public async Task Reabierta_SinRondasDisponibles_NoReabre_YElRechazoQuedaFinal()
+    {
+        // La reapertura cuenta como ronda: si la persona ya no tiene rondas, no se reabre.
+        var ct = TestContext.Current.CancellationToken;
+        var rondas = Substitute.For<Flit.Tramites.Application.Identity.Rounds.IIdentityRoundsPolicy>();
+        rondas.IsResendBlockedAsync(Arg.Any<ProcedureInstanceBiometricValidation>(), Arg.Any<CancellationToken>()).Returns(true);
+        var handler = new KyverumWebhookHandler(
+            _repo, _protector, _kyverum, new IdentityValidationResultApplier(_events),
+            Substitute.For<IIdentityValidationAuditLog>(), NullLogger<KyverumWebhookHandler>.Instance, rondas);
+        var v = Seed(BiometricEstados.Rechazado);
+        v.MaxAttempts = 3;
+        v.Attempts = 3;
+        var resendsAntes = v.ResendCount;
+        var body = BodyReabierta();
+
+        var (result, error) = await handler.HandleAsync(new KyverumWebhookInput(v.Id, body, "sha256=" + Sign(body)), ct);
+
+        error.Should().BeNull();
+        v.Status.Should().Be(BiometricEstados.Rechazado);
+        v.ResendCount.Should().Be(resendsAntes);
+    }
+
+    [Fact]
+    public async Task Reabierta_ConRondasDisponibles_ReabreYCuentaLaRonda()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var rondas = Substitute.For<Flit.Tramites.Application.Identity.Rounds.IIdentityRoundsPolicy>();
+        rondas.IsResendBlockedAsync(Arg.Any<ProcedureInstanceBiometricValidation>(), Arg.Any<CancellationToken>()).Returns(false);
+        var handler = new KyverumWebhookHandler(
+            _repo, _protector, _kyverum, new IdentityValidationResultApplier(_events),
+            Substitute.For<IIdentityValidationAuditLog>(), NullLogger<KyverumWebhookHandler>.Instance, rondas);
+        var v = Seed(BiometricEstados.Rechazado);
+        v.MaxAttempts = 3;
+        v.Attempts = 3;
+        var resendsAntes = v.ResendCount;
+        var body = BodyReabierta();
+
+        var (result, error) = await handler.HandleAsync(new KyverumWebhookInput(v.Id, body, "sha256=" + Sign(body)), ct);
+
+        error.Should().BeNull();
+        v.Status.Should().Be(BiometricEstados.EnProceso);
+        v.Attempts.Should().Be(0);
+        v.ResendCount.Should().Be(resendsAntes + 1, "la reapertura cuenta como ronda");
+    }
+
+    [Fact]
     public async Task Webhook_ValidSignatureApproved_UpdatesStateAndEmitsCompleted()
     {
         var ct = TestContext.Current.CancellationToken;

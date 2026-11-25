@@ -370,7 +370,8 @@ public sealed class KyverumWebhookHandler(
     IKyverumVerifyClient kyverum,
     IdentityValidationResultApplier applier,
     IIdentityValidationAuditLog audit,
-    ILogger<KyverumWebhookHandler> logger)
+    ILogger<KyverumWebhookHandler> logger,
+    IIdentityRoundsPolicy? rondas = null)
 {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
@@ -577,10 +578,24 @@ public sealed class KyverumWebhookHandler(
         }
 
         var now = DateTimeOffset.UtcNow;
+
+        // La reapertura cuenta como ronda: si la persona ya no tiene rondas, no se reabre y el rechazo queda final.
+        if (rondas is not null && await rondas.IsResendBlockedAsync(v, ct))
+        {
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.RoundExhausted, IdentityValidationAuditOutcomes.Rejected,
+                TenantId: v.TenantId, ProcedureInstanceId: v.ProcedureInstanceId, ValidationId: v.Id,
+                KyverumVerificationId: v.KyverumVerificationId, PartyRole: v.PartyRole, ProviderStatus: EventoReabierta,
+                Message: "Reapertura pedida por la persona, pero no tiene rondas disponibles: el rechazo queda final."), ct);
+            return true;
+        }
+
         v.Status = BiometricEstados.EnProceso;
         v.Attempts = 0;
         v.ReconcilePollCount = 0;
         v.ExpiresAt = now.AddHours(BiometricRules.KyverumTokenTtlHoras);
+        v.ResendCount += 1;
+        v.LastResentAt = now;
         v.UpdatedAt = now;
         try
         {
