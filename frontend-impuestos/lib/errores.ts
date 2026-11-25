@@ -28,6 +28,15 @@ export function esRechazoDeEmpresa(error: unknown): boolean {
 }
 
 /**
+ * ¿Es un error de la `empresa` de la petición (cualquiera de ERRORES_EMPRESA: 400 EMPRESA_REQUERIDA, 404
+ * EMPRESA_NO_ENCONTRADA, 403 EMPRESA_SOLO_SUPER_ADMIN o su alias)? Se pinta en línea con su literal: no es la 404 del
+ * recurso ni la 403 de acceso.
+ */
+export function esErrorDeEmpresa(error: unknown): boolean {
+  return error instanceof ApiError && Boolean(error.code) && Object.prototype.hasOwnProperty.call(ERRORES_EMPRESA, error.code as string);
+}
+
+/**
  * Texto fijo de un error: el del `code` en `porCodigo`, el de permiso en un 403 o, si no, `respaldo`.
  *
  * @example

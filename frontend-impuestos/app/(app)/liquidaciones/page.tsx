@@ -9,13 +9,14 @@ import { PERMISOS, tienePermiso } from "@/lib/sesion";
 
 /**
  * /liquidaciones (plan §6.1, spec-visual §3.2): grid mixto de liquidaciones por placa y masivas con las tarjetas de
- * creación. El Super Admin en vista global ve «Todas las compañías» y la columna Compañía.
+ * creación. El Super Admin trabaja sobre la compañía de ?empresa (el backend 1.1.0 la exige en GET /liquidaciones):
+ * sin ella, el grid le pide elegir una y no consulta. La columna Compañía queda para una vista global que hoy no existe.
  */
 export default function PaginaLiquidaciones() {
   const { sesion } = useSesion();
   const { empresa } = useEmpresaSeleccionada();
   const esSuperAdmin = sesion?.esSuperAdmin === true;
-  const descripcion = esSuperAdmin ? (empresa ? undefined : "Todas las compañías") : (sesion?.empresa.nombre ?? undefined);
+  const descripcion = esSuperAdmin ? undefined : (sesion?.empresa.nombre ?? undefined);
   return (
     <>
       <CabeceraModulo titulo="Liquidaciones" icono="pesos" descripcion={descripcion} />
@@ -23,6 +24,7 @@ export default function PaginaLiquidaciones() {
         puedeCrear={tienePermiso(sesion, PERMISOS.liquidacionesCrear)}
         mostrarCompania={esSuperAdmin && !empresa}
         bloqueo={bloqueoCreacion(sesion)}
+        esSuperAdmin={esSuperAdmin}
       />
     </>
   );

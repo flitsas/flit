@@ -24,6 +24,7 @@ export default function PaginaNuevaLiquidacion() {
           <FormularioPlaca
             empresa={empresa}
             bloqueo={bloqueoCreacion(sesion)}
+            esSuperAdmin={sesion?.esSuperAdmin === true}
             placaInicial={params?.get("placa") ?? ""}
             autoFocus
             onCancelar={() => router.push(volver)}
