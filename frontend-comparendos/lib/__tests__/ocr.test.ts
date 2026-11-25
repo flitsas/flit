@@ -24,6 +24,8 @@ import {
   valorInicial,
   versionAnterior,
   vistaDuplicado,
+  textoCorreoAlAsociar,
+  avisoCorreoAsociado,
   vistaPorContentType,
   ESTADO_DOCUMENTO,
   vistaOriginal,
@@ -292,5 +294,25 @@ describe("comparar el número del documento con el del sistema", () => {
     expect(numerosDifieren("11001000000012345678", "11001000000012345679")).toBe(true);
     expect(numerosDifieren(null, "11001000000012345678")).toBe(false);
     expect(numerosDifieren("11001000000012345678", "")).toBe(false);
+  });
+});
+
+describe("correo de evidencia al asociar", () => {
+  it("antes: dice que se enviará, con el documento nuevo si es reemplazo", () => {
+    expect(textoCorreoAlAsociar({ seEnviara: true, motivoNo: null }, false)).toBe("Se enviará ahora al conductor un correo con este documento.");
+    expect(textoCorreoAlAsociar({ seEnviara: true, motivoNo: null }, true)).toContain("documento nuevo");
+  });
+  it("antes: si no sale, explica el motivo; sin dato del servidor no promete nada", () => {
+    expect(textoCorreoAlAsociar({ seEnviara: false, motivoNo: "El conductor no tiene correo registrado." }, false)).toBe("No se enviará correo porque el conductor no tiene correo registrado.");
+    expect(textoCorreoAlAsociar({ seEnviara: false, motivoNo: null }, false)).toBe("No se enviará correo al conductor.");
+    expect(textoCorreoAlAsociar(undefined, false)).toBeNull();
+    expect(textoCorreoAlAsociar(null, true)).toBeNull();
+  });
+  it("después: éxito si salió o quedó en cola; warning con el motivo si se omitió", () => {
+    expect(avisoCorreoAsociado({ estado: "Enviado", motivo: null })).toEqual({ mensaje: "Se envió el documento al conductor.", tono: "success" });
+    expect(avisoCorreoAsociado({ estado: "Pendiente", motivo: null })?.tono).toBe("success");
+    expect(avisoCorreoAsociado({ estado: "Omitido", motivo: "El comparendo ya está pagado" })).toEqual({ mensaje: "No se envió correo al conductor: el comparendo ya está pagado.", tono: "warning" });
+    expect(avisoCorreoAsociado({ estado: "Omitido", motivo: null })?.tono).toBe("warning");
+    expect(avisoCorreoAsociado(undefined)).toBeNull();
   });
 });

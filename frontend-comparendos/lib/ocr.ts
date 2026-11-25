@@ -244,6 +244,40 @@ export interface DuplicadoComparendo {
   evidenciaActual?: EvidenciaActual | null;
   asociable?: boolean;
   motivoNoAsociable?: string | null;
+  /** Qué pasará con el correo al conductor si se asocia ahora (lo decide el servidor con la misma regla del envío). */
+  correoAlAsociar?: CorreoAlAsociar | null;
+}
+
+/** Lo que el servidor adelanta antes de asociar: si saldrá el correo con el documento y, si no, por qué. */
+export interface CorreoAlAsociar {
+  seEnviara: boolean;
+  motivoNo: string | null;
+}
+
+/** Resultado del correo al asociar (respuesta del POST): enviado, en cola u omitido con su motivo. */
+export interface CorreoAsociado {
+  estado: "Enviado" | "Pendiente" | "Omitido";
+  motivo: string | null;
+}
+
+/**
+ * Frase para el modal ANTES de confirmar. Sin dato del servidor no se promete nada. En reemplazo, el correo lleva el
+ * documento nuevo.
+ */
+export function textoCorreoAlAsociar(c: CorreoAlAsociar | null | undefined, reemplazo: boolean): string | null {
+  if (!c) return null;
+  if (c.seEnviara) return reemplazo ? "Se enviará ahora al conductor un correo con el documento nuevo." : "Se enviará ahora al conductor un correo con este documento.";
+  const motivo = c.motivoNo?.trim().replace(/[.\s]+$/, "");
+  return motivo ? `No se enviará correo porque ${motivo.charAt(0).toLowerCase()}${motivo.slice(1)}.` : "No se enviará correo al conductor.";
+}
+
+/** Aviso de la pantalla DESPUÉS de asociar, según el correo que devolvió el servidor. */
+export function avisoCorreoAsociado(c: CorreoAsociado | null | undefined): { mensaje: string; tono: "success" | "warning" } | null {
+  if (!c) return null;
+  if (c.estado === "Enviado") return { mensaje: "Se envió el documento al conductor.", tono: "success" };
+  if (c.estado === "Pendiente") return { mensaje: "El correo con el documento quedó en cola y saldrá en breve.", tono: "success" };
+  const motivo = c.motivo?.trim().replace(/[.\s]+$/, "");
+  return { mensaje: motivo ? `No se envió correo al conductor: ${motivo.charAt(0).toLowerCase()}${motivo.slice(1)}.` : "No se envió correo al conductor.", tono: "warning" };
 }
 
 /**

@@ -29,7 +29,10 @@ import {
   ETIQUETA_TIPO_DOCUMENTO,
   tipoEntrada,
   vistaDuplicado,
+  type CorreoAlAsociar,
+  type CorreoAsociado,
   type EvidenciaActual,
+  avisoCorreoAsociado,
   valorInicial,
   vistaOriginal,
 } from "@/lib/ocr";
@@ -62,6 +65,7 @@ interface Duplicado {
   evidenciaActual?: EvidenciaActual | null;
   asociable?: boolean;
   motivoNoAsociable?: string | null;
+  correoAlAsociar?: CorreoAlAsociar | null;
 }
 
 interface Documento {
@@ -300,11 +304,14 @@ function Formulario({
   const asociar = (reemplazar: boolean) =>
     ejecutar(async () => {
       try {
-        const r = await apiFetch<{ numero: string }>(`/ocr/documentos/${d.id}/asociar`, {
+        const r = await apiFetch<{ numero: string; correo?: CorreoAsociado | null }>(`/ocr/documentos/${d.id}/asociar`, {
           method: "POST",
           body: { reemplazar, evidenciaActualId: d.duplicado?.evidenciaActual?.archivoId ?? null },
         });
         toast.show(reemplazar ? `Documento reemplazado en el comparendo ${r.numero}.` : `Documento asociado al comparendo ${r.numero}.`, "success");
+        // El correo es aparte: si no salió, la asociación igual se hizo y se dice por qué.
+        const correo = avisoCorreoAsociado(r.correo);
+        if (correo) toast.show(correo.mensaje, correo.tono);
       } catch (e) {
         if (!(e instanceof ApiError) || e.status !== 409) throw e;
         toast.show(
@@ -464,7 +471,7 @@ function Formulario({
           {dup.motivoNoAsociable && vistaDup !== "asociar" && vistaDup !== "comparar" && <p className="mt-1">{dup.motivoNoAsociable}</p>}
           {puedeAsociar && vistaDup === "asociar" && (
             <div className="mt-2 flex flex-col gap-1">
-              <p>No tiene documento: puedes agregarle este archivo para que salga en sus próximos avisos.</p>
+              <p>No tiene documento: puedes agregarle este archivo para que salga en sus avisos.</p>
               <div>
                 <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={() => setModal("asociar")}>
                   <Icono nombre="documento" className="h-3.5 w-3.5" />
@@ -537,13 +544,14 @@ function Formulario({
       {botones && <div className="border-t border-border pt-3">{botones}</div>}
 
       {modal === "asociar" && comparendoExistente && (
-        <ModalAsociar comparendo={comparendoExistente} documento={{ nombreArchivo: d.nombreArchivo, numeroComparendoExtraido: numeroLeido }} ocupado={ocupado} onClose={() => setModal(null)} onConfirmar={() => asociar(false)} />
+        <ModalAsociar comparendo={comparendoExistente} documento={{ nombreArchivo: d.nombreArchivo, numeroComparendoExtraido: numeroLeido }} correoAlAsociar={dup?.correoAlAsociar} ocupado={ocupado} onClose={() => setModal(null)} onConfirmar={() => asociar(false)} />
       )}
       {modal === "comparar" && comparendoExistente && dup?.evidenciaActual && (
         <ModalComparar
           comparendo={comparendoExistente}
           entrante={{ archivoId: d.archivoId, nombreArchivo: d.nombreArchivo, tipoArchivo: d.tipoArchivo, numeroComparendoExtraido: numeroLeido }}
           actual={dup.evidenciaActual}
+          correoAlAsociar={dup.correoAlAsociar}
           ocupado={ocupado}
           onClose={() => setModal(null)}
           onReemplazar={() => asociar(true)}
@@ -696,6 +704,7 @@ function Revision({ id }: { id: string }) {
 
       {d.estado === "Asociado" && (
         <InlineAlert tone="success" title="Documento asociado al comparendo">
+          <p className="mb-1">El documento sale adjunto en los avisos al conductor.</p>
           {d.comparendoId ? (
             <button type="button" className="font-semibold text-flit-brand-ink hover:underline" onClick={() => setVerComparendo(d.comparendoId!)}>
               Ver el comparendo

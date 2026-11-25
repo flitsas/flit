@@ -4,7 +4,7 @@ import { Modal } from "@flit/ui";
 import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, controlCls } from "@/components/ui/estilos";
 import { API_PREFIX } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
-import { type EvidenciaActual, numerosDifieren, tamanoLegible, vistaPorContentType } from "@/lib/ocr";
+import { type CorreoAlAsociar, type EvidenciaActual, numerosDifieren, textoCorreoAlAsociar, tamanoLegible, vistaPorContentType } from "@/lib/ocr";
 
 /** Comparendo existente tal como lo describe la revisión (los campos que muestran los modales). */
 export interface ComparendoExistente {
@@ -17,10 +17,21 @@ export interface ComparendoExistente {
 
 /** Aviso cuando el comparendo ya no recibe avisos: inactivo o pagado. */
 export function avisoSinAvisos(c: Pick<ComparendoExistente, "activo" | "pagado">): string | null {
-  if (c.activo === false && c.pagado) return "Este comparendo está inactivo y pagado: ya no recibe avisos, pero el documento queda guardado.";
-  if (c.activo === false) return "Este comparendo está inactivo: ya no recibe avisos, pero el documento queda guardado.";
-  if (c.pagado) return "Este comparendo está pagado: ya no recibe avisos, pero el documento queda guardado.";
+  if (c.activo === false && c.pagado) return "Este comparendo está inactivo y pagado: ya no recibe avisos ni correos, pero el documento queda guardado.";
+  if (c.activo === false) return "Este comparendo está inactivo: ya no recibe avisos ni correos, pero el documento queda guardado.";
+  if (c.pagado) return "Este comparendo está pagado: ya no recibe avisos ni correos, pero el documento queda guardado.";
   return null;
+}
+
+/** Qué pasará con el correo al conductor; sin dato del servidor no se muestra nada. */
+function AvisoCorreo({ correo, reemplazo }: { correo: CorreoAlAsociar | null | undefined; reemplazo: boolean }) {
+  const texto = textoCorreoAlAsociar(correo, reemplazo);
+  if (!texto) return null;
+  return (
+    <p role="note" data-correo-al-asociar={correo?.seEnviara ? "si" : "no"} className="min-w-0 break-words rounded-xl border border-border bg-secondary px-3 py-2 text-xs">
+      {texto}
+    </p>
+  );
 }
 
 const AVISO_NUMEROS = "Los números no coinciden exactamente: confirma que es el mismo comparendo.";
@@ -78,12 +89,14 @@ function Columna({ rotulo, nombre, detalle, children }: { rotulo: string; nombre
 export function ModalAsociar({
   comparendo,
   documento,
+  correoAlAsociar,
   ocupado,
   onConfirmar,
   onClose,
 }: {
   comparendo: ComparendoExistente;
   documento: { nombreArchivo: string; numeroComparendoExtraido?: string | null };
+  correoAlAsociar?: CorreoAlAsociar | null;
   ocupado: boolean;
   onConfirmar: () => void;
   onClose: () => void;
@@ -96,7 +109,7 @@ export function ModalAsociar({
       onClose={onClose}
       busy={ocupado}
       title="Asociar al comparendo"
-      description={`El archivo «${documento.nombreArchivo}» se agrega al comparendo ${comparendo.numero ?? ""}. Los datos del comparendo no cambian; sale adjunto en sus próximos avisos.`}
+      description={`El archivo «${documento.nombreArchivo}» se agrega al comparendo ${comparendo.numero ?? ""}. Los datos del comparendo no cambian; el documento sale adjunto en sus avisos.`}
       footer={
         <div className="flex flex-col-reverse gap-2 sm:flex-row sm:flex-wrap sm:justify-end [&>button]:w-full sm:[&>button]:w-auto">
           <button type="button" className={controlCls(false)} disabled={ocupado} onClick={onClose}>
@@ -109,6 +122,7 @@ export function ModalAsociar({
       }
     >
       <div className="flex flex-col gap-3 text-sm">
+        <AvisoCorreo correo={correoAlAsociar} reemplazo={false} />
         <Numeros documento={documento.numeroComparendoExtraido ?? null} sistema={comparendo.numero} />
         <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
           <dt className="font-semibold">Fuente</dt>
@@ -134,6 +148,7 @@ export function ModalComparar({
   comparendo,
   entrante,
   actual,
+  correoAlAsociar,
   ocupado,
   onReemplazar,
   onDescartar,
@@ -142,6 +157,7 @@ export function ModalComparar({
   comparendo: ComparendoExistente;
   entrante: { archivoId: string; nombreArchivo: string; tipoArchivo: string; numeroComparendoExtraido?: string | null };
   actual: EvidenciaActual;
+  correoAlAsociar?: CorreoAlAsociar | null;
   ocupado: boolean;
   onReemplazar: () => void;
   onDescartar: () => void;
@@ -173,6 +189,7 @@ export function ModalComparar({
       }
     >
       <div className="flex flex-col gap-3">
+        <AvisoCorreo correo={correoAlAsociar} reemplazo />
         <Numeros documento={entrante.numeroComparendoExtraido ?? null} sistema={comparendo.numero} />
         {aviso && (
           <p role="note" className="rounded-xl border border-[var(--badge-warning-fg)] px-3 py-2 text-xs text-[var(--badge-warning-fg)]">
