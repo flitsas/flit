@@ -38,7 +38,7 @@ internal sealed class IdentityRejectionReissueService(
                 IdentityValidationAuditStages.RoundRejected, IdentityValidationAuditOutcomes.Rejected,
                 TenantId: validation.TenantId, ValidationId: validation.Id, KyverumVerificationId: validation.KyverumVerificationId,
                 PartyRole: validation.PartyRole, ProviderStatus: validation.ProviderStatus,
-                Message: $"Ronda {rondaCerrada} cerrada en rechazo: se agotaron los intentos de la captura.",
+                Message: $"Ronda {rondaCerrada} cerrada en rechazo: el enlace usó {validation.Attempts} de {validation.MaxAttempts} intentos.",
                 Detail: $"ronda={rondaCerrada}; intentos={validation.Attempts}/{validation.MaxAttempts}"), ct);
 
             var subject = new IdentitySubjectStandalone(validation.Name, validation.DocumentType, validation.DocumentNumber, validation.Email);
@@ -59,7 +59,7 @@ internal sealed class IdentityRejectionReissueService(
                     IdentityValidationAuditStages.RoundReissued, IdentityValidationAuditOutcomes.Ok,
                     TenantId: validation.TenantId, ValidationId: validation.Id, KyverumVerificationId: validation.KyverumVerificationId,
                     PartyRole: validation.PartyRole,
-                    Message: $"Ronda {rondaCerrada + 1} abierta: enlace nuevo emitido tras el rechazo.",
+                    Message: $"Ronda {rondaCerrada + 1} abierta: enlace nuevo con 0 de {validation.MaxAttempts} intentos.",
                     Detail: $"ronda={rondaCerrada + 1}"), ct);
             }
         }
