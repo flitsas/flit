@@ -493,10 +493,11 @@ describe('Validaciones — HU #11505 intentos consumidos en la grilla', () => {
     renderValidaciones();
 
     const row = await screen.findByLabelText(/^validación de luis vendedor/i);
-    // El texto (no solo el color) dice que el rechazo es legítimo: intentos agotados.
-    expect(within(row).getByText('Rechazado (intentos agotados)')).toBeInTheDocument();
+    // Rechazo final: la etiqueta es solo «Rechazado»; el conteo 3 / 3 intentos lo explica.
+    expect(within(row).getByText('Rechazado')).toBeInTheDocument();
+    expect(within(row).queryByText(/intentos agotados/i)).not.toBeInTheDocument();
     expect(within(row).getByText('3 / 3 intentos')).toBeInTheDocument();
-    expect(row.getAttribute('aria-label')).toMatch(/estado rechazado \(intentos agotados\)/i);
+    expect(row.getAttribute('aria-label')).toMatch(/estado rechazado/i);
     expect(row.getAttribute('aria-label')).not.toMatch(/rechazo con intentos disponibles/i);
   });
 

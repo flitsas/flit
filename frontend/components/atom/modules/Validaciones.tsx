@@ -2421,8 +2421,9 @@ function ValidacionRow({
   let badgeTone: StatusTone = meta.tone;
   if (estado === 'rechazado' && intentosInfo != null) {
     if (intentosAgotados) {
-      badgeLabel = 'Rechazado (intentos agotados)';
-      badgeCelda = badgeLabel;
+      // Rechazo final: se rotula solo «Rechazado» (el conteo 3 / 3 intentos ya lo explica en la celda).
+      badgeLabel = meta.label;
+      badgeCelda = meta.shortLabel ?? meta.label;
       badgeTone = 'danger';
     } else {
       badgeLabel = 'Rechazado (intentos disponibles)';
