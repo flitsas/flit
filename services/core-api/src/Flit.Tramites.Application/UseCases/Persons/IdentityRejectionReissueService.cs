@@ -16,6 +16,7 @@ internal sealed class IdentityRejectionReissueService(
     BiometricsProviderOptions providerOptions,
     IWebhookSecretProtector secretProtector,
     IIdentityValidationEventPublisher events,
+    IIdentityValidationAuditLog audit,
     IIdentityRoundsPolicy? rounds = null) : IIdentityRejectionReissue
 {
     private readonly PrevalidacionResendService _resend = new(kyverum, providerOptions, secretProtector, events, rounds);
@@ -31,9 +32,36 @@ internal sealed class IdentityRejectionReissueService(
 
         try
         {
+            // Ronda que acaba de cerrar en rechazo final (antes del reenvío, para que quede en el historial aunque el reenvío falle).
+            var rondaCerrada = 1 + Math.Max(0, validation.ResendCount);
+            await audit.LogAsync(new IdentityValidationAuditEntry(
+                IdentityValidationAuditStages.RoundRejected, IdentityValidationAuditOutcomes.Rejected,
+                TenantId: validation.TenantId, ValidationId: validation.Id, KyverumVerificationId: validation.KyverumVerificationId,
+                PartyRole: validation.PartyRole, ProviderStatus: validation.ProviderStatus,
+                Message: $"Ronda {rondaCerrada} cerrada en rechazo: se agotaron los intentos de la captura.",
+                Detail: $"ronda={rondaCerrada}; intentos={validation.Attempts}/{validation.MaxAttempts}"), ct);
+
             var subject = new IdentitySubjectStandalone(validation.Name, validation.DocumentType, validation.DocumentNumber, validation.Email);
             // El error (p. ej. limite_rondas_alcanzado) no es una falla: significa que la persona ya no tiene rondas.
-            await _resend.ResendAsync(validation.TenantId, validation, subject, now, ct);
+            var (error, _, _, captureUrl) = await _resend.ResendAsync(validation.TenantId, validation, subject, now, ct);
+            if (error is not null)
+            {
+                await audit.LogAsync(new IdentityValidationAuditEntry(
+                    IdentityValidationAuditStages.RoundExhausted, IdentityValidationAuditOutcomes.Rejected,
+                    TenantId: validation.TenantId, ValidationId: validation.Id, KyverumVerificationId: validation.KyverumVerificationId,
+                    PartyRole: validation.PartyRole, ErrorType: error,
+                    Message: "Sin rondas disponibles: el rechazo queda como final.",
+                    Detail: $"ronda={rondaCerrada}; motivo={error}"), ct);
+            }
+            else if (!string.IsNullOrWhiteSpace(captureUrl))
+            {
+                await audit.LogAsync(new IdentityValidationAuditEntry(
+                    IdentityValidationAuditStages.RoundReissued, IdentityValidationAuditOutcomes.Ok,
+                    TenantId: validation.TenantId, ValidationId: validation.Id, KyverumVerificationId: validation.KyverumVerificationId,
+                    PartyRole: validation.PartyRole,
+                    Message: $"Ronda {rondaCerrada + 1} abierta: enlace nuevo emitido tras el rechazo.",
+                    Detail: $"ronda={rondaCerrada + 1}"), ct);
+            }
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
