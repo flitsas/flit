@@ -263,6 +263,23 @@ describe("Reportes — exportar y topes (5000 Excel / 1000 PDF)", () => {
 });
 
 describe("Reportes — cuatro estados", () => {
+  it.each(["EMPRESA_SOLO_SUPER_ADMIN", "EMPRESA_NO_PERMITIDA"])(
+    "un 403 %s (contrato 1.1.0) se pinta en la página con su literal y no lleva a la 403",
+    async (code) => {
+      vi.stubGlobal("fetch", api({ reporte: () => Response.json({ code, error: "detalle interno" }, { status: 403 }) }));
+      render(<Reportes />);
+      expect(await screen.findByText("Solo el Super Admin puede elegir la compañía.")).toBeInTheDocument();
+      expect(replace).not.toHaveBeenCalledWith(expect.stringMatching(/^\/403/));
+      expect(document.body).not.toHaveTextContent("detalle interno");
+    },
+  );
+
+  it("otro 403 con código (PRODUCTO_NO_HABILITADO) sigue llevando a la 403", async () => {
+    vi.stubGlobal("fetch", api({ reporte: () => Response.json({ code: "PRODUCTO_NO_HABILITADO", error: "x" }, { status: 403 }) }));
+    render(<Reportes />);
+    await waitFor(() => expect(replace).toHaveBeenCalledWith("/403?code=PRODUCTO_NO_HABILITADO"));
+  });
+
   it("cargando: contador «— registros» y exportar deshabilitado con «Espera a que cargue el reporte»", async () => {
     vi.stubGlobal("fetch", api({ reporte: () => new Promise<Response>(() => {}) }));
     render(<Reportes />);
