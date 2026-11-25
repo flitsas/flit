@@ -281,6 +281,21 @@ describe("Configuración — Contractual", () => {
     expect(llamadas.find((l) => l.method === "PUT")?.body).toEqual({ maxRegistrosLote: 300, departamentosHabilitados: null });
   });
 
+  it("Super Admin: un 409 APROVISIONAMIENTO_NO_LISTO al guardar el contrato muestra el literal del contrato 1.1.0", async () => {
+    conSesion("superadmin");
+    busqueda = new URLSearchParams("empresa=e-1&pestana=contractual");
+    vi.stubGlobal("fetch", api({ put: () => Response.json({ code: "APROVISIONAMIENTO_NO_LISTO", error: "detalle interno" }, { status: 409 }) }));
+
+    render(<Configuracion />);
+    await screen.findByLabelText("Máximo de placas por lote contratado");
+    fireEvent.click(screen.getByRole("button", { name: "Guardar contrato" }));
+
+    expect(
+      await screen.findByText("La compañía todavía no puede liquidar porque su configuración con el proveedor no está lista."),
+    ).toBeInTheDocument();
+    expect(screen.queryByText("detalle interno")).not.toBeInTheDocument();
+  });
+
   it("Super Admin sin compañía elegida: «Elige una compañía en la barra para editar su contrato» y no pide nada", async () => {
     conSesion("superadmin");
     vi.stubGlobal("fetch", api());
