@@ -5,9 +5,9 @@ líder técnico. Cada paso trae qué hacer, cómo comprobarlo y cómo volver atr
 solo con aprobación del líder y después de que DEV esté estable. Mismo modelo que
 [handoff-vps-diagnostico.md](handoff-vps-diagnostico.md).
 
-> Estado (2026-11-25): documento escrito con M20, antes de M07 y M09–M14. Las variables marcadas como «llegan con su
-> módulo» (§4.3) todavía no las lee el servicio. Los puertos (G-4) y el cliente OIDC (G-5) están **propuestos** y los
-> confirma el líder.
+> Estado (2026-11-25): escrito con M20 y actualizado en M20b tras M07–M14 (y las claves del file-manager de M11). Todas las
+> variables de §4 ya las lee el servicio. Los puertos (G-4) y el cliente OIDC (G-5) están **propuestos** y los confirma el
+> líder.
 
 **Qué llega.** Dos contenedores en el perfil `impuestos` del compose:
 
@@ -79,10 +79,22 @@ docker compose exec -T rabbitmq rabbitmqctl list_user_permissions -p flit plataf
 # Agregar |flit\.impuestos a la expresión de ESCRITURA que devolvió cada uno; configurar y leer quedan iguales.
 ```
 
-Las colas, sus `.retry.<n>` y `.dlq` las declara cada consumidor al arrancar. Si el ambiente aplica políticas de TTL o de
-`dlq-7d` por nombre, revise que alcancen a `impuestos.*` (las `.dlq` guardan placas: Ley 1581).
+**Exchange y colas por adelantado (M20b).** `deploy/rabbitmq/definitions.json` trae `flit.impuestos` y las colas
+`impuestos.plataforma`, `impuestos.credenciales`, `impuestos.liquidaciones` e `impuestos.recibos` con sus bindings (tabla en
+[deploy/rabbitmq/README.md](../../deploy/rabbitmq/README.md)). Recárguelo **antes** de encender el perfil: core-api y
+core-identity comprueban `flit.impuestos` en modo pasivo al publicar y, si core-impuestos nunca arrancó, el exchange no
+existe y su outbox falla.
 
-**Comprobar:** `rabbitmqctl list_user_permissions -p flit impuestos` y, ya arriba el servicio,
+```bash
+docker compose -f docker-compose.prod.yml exec rabbitmq rabbitmqctl import_definitions /etc/rabbitmq/definitions.json
+```
+
+Las `.retry.<n>`, las `.dlq` y los exchanges `<cola>.reintentos` los declara cada consumidor al arrancar; el patrón propio
+del usuario `impuestos` (`^(flit\.impuestos|impuestos\..*)$`) ya los cubre, también los de `impuestos.recibos` (M11). Los
+mensajes de Impuestos solo llevan identificadores (sin PII), así que no entran en la política `dlq-7d`.
+
+**Comprobar:** `rabbitmqctl list_user_permissions -p flit impuestos`, `rabbitmqctl list_exchanges -p flit | grep impuestos`
+y, ya arriba el servicio,
 `rabbitmqctl list_queues -p flit name consumers | grep impuestos`. **Volver atrás:** `rabbitmqctl delete_user impuestos`
 (con el servicio detenido) y quitar `flit\.impuestos` de la escritura de `tramites` y `plataforma`.
 
@@ -132,20 +144,35 @@ IMPUESTOS_SVC_INTEGRATION_TOKEN=<token de integración del ambiente>
 IMPUESTOS_SVC_HTTP_TIMEOUT_SECONDS=30
 ```
 
-La base tiene que ser https (http solo en loopback, para el stub local). Sin ellas el servicio **arranca**, pero el alta y
-las consultas fallan cerradas con un mensaje que dice qué variable falta. El token solo se usa en el alta: las llamadas
-de cada empresa van con su propia `api_key`, cifrada en la base.
+La base tiene que ser https (http solo en loopback, para el stub local). **Sin las dos el servicio no arranca** (desde
+M07, `ServicioSettings`) y el log dice qué variable falta. El token solo se usa en el alta: las llamadas de cada empresa
+van con su propia `api_key`, cifrada en la base.
 
-### 4.3 Variables que llegan con su módulo
+### 4.3 RUNT, aviso, correo y ritmo (M09–M12)
 
-El plan (§8) las define, pero core-impuestos todavía no las lee en esta rama. Cuando su módulo entre, se suman al compose
-y a este documento; definirlas antes no tiene efecto.
+```
+IMPUESTOS_SVC_CONSULTAS_ADDRESS=http://core-consultas:8084   # RUNT de cada placa; vacía = ítems en error reintentable
+IMPUESTOS_SVC_AVISOS_URL_BASE=https://<host público>/api/v1/impuestos/avisos   # gate G-6, §8; vacía = solo conciliación por GET
+IMPUESTOS_SVC_AVISOS_URL_FRONTEND=https://<prefijo>impuestos.flitsas.online   # enlace del correo «Lote terminado»; opcional
+```
 
-| Variable del plan | Módulo | Para qué |
-|---|---|---|
-| `IMPUESTOS_SVC_AVISOS_URL_BASE` | M09 | Base del `callbackUrl` del aviso: `https://<host público>/api/v1/impuestos/avisos` (gate G-6, §8) |
-| `IMPUESTOS_SVC_ARCHIVOS_URL` | M11 | file-manager de los recibos PDF, categoría `impuestos` (gate G-11) |
-| `IMPUESTOS_SVC_CONCURRENCIA_EMPRESA` (2), `IMPUESTOS_SVC_CONCURRENCIA_GLOBAL` (6) | M12 | Ritmo del masivo |
+`Impuestos__Avisos__PermitirHttpLocal` queda fijo en `false` en el compose. Afinación con los defectos del código (solo si
+hace falta): `IMPUESTOS_SVC_CONCURRENCIA_EMPRESA` (2), `IMPUESTOS_SVC_CONCURRENCIA_GLOBAL` (6),
+`IMPUESTOS_SVC_TASA_POR_SEGUNDO` (2), `IMPUESTOS_SVC_ALTA_INTERVALO_SEGUNDOS` (10),
+`IMPUESTOS_SVC_CONCILIACION_ESPERA_INCIERTO` (`00:30:00`) e `IMPUESTOS_SVC_AVISOS_POR_IP_POR_MINUTO` (60).
+
+### 4.4 Recibos PDF: file-manager (gate G-11, M11)
+
+Sin `FILE_MANAGER_BASE_URL` core-impuestos **no arranca**. Usa las mismas `FILE_MANAGER_*` que core-api y core-diagnostico
+(el compose tiene el mismo defecto), con su categoría propia, que hay que registrar en el file-manager antes de encender
+(ADR-0057):
+
+```
+IMPUESTOS_FILE_MANAGER_CATEGORY=impuestos   # el defecto del compose; solo si el file-manager usa otro nombre
+# FILE_MANAGER_AUTH_TOKEN ya está en el .env si core-api lo usa (Contabo, PDN)
+```
+
+`Impuestos__Archivos__GuardarEnMemoria` es solo para local y pruebas: nunca en un ambiente.
 
 ## 5. Certificado de Data Protection (gate G-10, obligatorio)
 

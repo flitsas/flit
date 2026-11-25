@@ -25,7 +25,8 @@ contenedor por ambiente (hasta k3s), virtual host `flit`, un usuario por servici
    ```
 
    Servicios y su exchange: `tramites` (core-api, `flit.tramites`), `plataforma` (core-identity, `flit.plataforma`),
-   `consultas` (core-consultas), `notificaciones` (core-notificaciones), `diagnostico` (core-diagnostico, HU #13734).
+   `consultas` (core-consultas), `notificaciones` (core-notificaciones), `diagnostico` (core-diagnostico, HU #13734),
+   `impuestos` (core-impuestos, HU #14694).
    El script rechaza los nombres reservados `flit` (su patrón propio abarcaría todos los `flit.*`) y `guest` (usuario
    por defecto del broker), como servicio y como destino de trabajos.
 
@@ -41,6 +42,15 @@ en el exchange de ese otro. Se le da con un tercer argumento, sin tocar configur
 `deploy/rabbitmq/usuario-de-servicio.sh tramites "$CLAVE" notificaciones`. Hoy lo necesitan `tramites` (core-api) y
 `plataforma` (core-identity), con destino `notificaciones`, y `diagnostico` (core-diagnostico), con destino `consultas`
 (trabajos de consulta, ADR-0075). `consultas` no necesita destino: devuelve los resultados en su propio exchange.
+
+**Impuestos (HU #14694, gate G-8).** `deploy/rabbitmq/usuario-de-servicio.sh impuestos "$CLAVE" notificaciones` (correo
+«Lote terminado»). Su patrón propio `^(flit\.impuestos|impuestos\..*)$` ya cubre configurar, escribir y leer sus colas
+(`impuestos.plataforma`, `impuestos.credenciales`, `impuestos.liquidaciones`, `impuestos.recibos`), sus `.retry.<n>`, sus
+`.dlq` y sus exchanges `<cola>.reintentos`. Además, core-api y core-identity le dejan trabajos en `flit.impuestos`: a
+`tramites` y `plataforma` se les suma `impuestos` como destino (`... tramites "$CLAVE" notificaciones,impuestos` y
+`... plataforma "$CLAVE" notificaciones,impuestos`). Correr el script otra vez **cambia la clave**: hacerlo con la
+clave nueva en el `.env` del ambiente, o sumar `|flit\.impuestos` a mano con `set_permissions` leyendo antes
+`list_user_permissions`.
 
 ## Un exchange nuevo
 
@@ -62,6 +72,18 @@ van en `definitions.json` con los **mismos argumentos** que declara el SDK: ning
 | `consultas.diagnostico-impuesto` | core-consultas | `consultas.diagnostico-impuesto.*` |
 | `consultas.diagnostico-impuesto-express` | core-consultas | `consultas.diagnostico-impuesto-express.*` |
 | `diagnostico.consultas-resultados` | core-diagnostico | `consultas.resultado.diagnostico` |
+
+Impuestos (HU #14694): `flit.impuestos` va en los exchanges porque core-api y core-identity lo comprueban en modo
+pasivo al publicar y core-impuestos puede no haber arrancado nunca (perfil apagado). Sus colas van por adelantado,
+sin argumentos, para que no se pierda un mensaje publicado antes del primer arranque del consumidor. Los mensajes solo
+llevan identificadores (sin PII), así que no entran en `dlq-7d` ni tienen política de TTL.
+
+| Cola | Dueño | Atada a `flit.impuestos` con |
+|---|---|---|
+| `impuestos.plataforma` | core-impuestos | `impuestos.producto.cambiado`, `impuestos.aprovisionamiento.reintentar` |
+| `impuestos.credenciales` | core-impuestos | `impuestos.credencial.propagar`, `impuestos.secreto.refrescar` |
+| `impuestos.liquidaciones` | core-impuestos | `impuestos.liquidacion.solicitada` |
+| `impuestos.recibos` | core-impuestos | `impuestos.recibos.descargar` |
 
 **Retención (U1 de ADR-0075, Ley 1581).** La política `dlq-7d` (prioridad 10) pone `message-ttl` de 7 días
 (604800000 ms) en las `.dlq` de esas tres colas, que llevan placa, VIN y documentos en claro. RabbitMQ aplica **una

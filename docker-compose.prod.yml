@@ -650,7 +650,8 @@ services:
       Platform__ServiceClient__TokenEndpoint: http://gateway:${GATEWAY_PORT:-4002}/connect/token
       Platform__Auth__JwksUri: http://gateway:${GATEWAY_PORT:-4002}/.well-known/jwks.json
       Platform__Auth__Issuers__0: ${FLIT_HUB_URL:-https://dev.flitsas.online}/
-      # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh impuestos <clave>): publica en flit.impuestos. Sin
+      # Su usuario del broker (deploy/rabbitmq/usuario-de-servicio.sh impuestos <clave> notificaciones, gate G-8): publica en
+      # flit.impuestos y deja el correo «Lote terminado» en flit.notificaciones. Colas y binding en definitions.json. Sin
       # valor por defecto y sin «:?»: con el perfil apagado el compose no la exige; con el perfil encendido el servicio no
       # arranca sin ella y el log lo dice (ServicioSettings).
       Platform__Messaging__ConnectionString: ${RABBITMQ_URL_IMPUESTOS:-}
@@ -663,12 +664,44 @@ services:
       # Réplica de organismos de tránsito (homologación de la secretaría) por el gRPC de catálogos de core-api. Sin ella la
       # réplica no se sincroniza.
       Impuestos__Tramites__Address: http://core-api:${CORE_API_GRPC_PORT:-8082}
+      # RUNT de cada placa (M09) por el gRPC RuntIntempoService de core-consultas, con scope platform.consultas (el consumo
+      # se mide por producto). Sin valor por defecto, como en Diagnóstico: cada ambiente la define (p. ej.
+      # http://core-consultas:8084). Vacía = RUNT «no conectado»: los ítems terminan en error reintentable.
+      Impuestos__Consultas__Address: ${IMPUESTOS_SVC_CONSULTAS_ADDRESS:-}
       # API de liquidación (plan §5.6). Base https (http solo en loopback, para el stub local); el token de integración es
-      # secreto del ambiente y solo se usa en el alta de cada empresa (gate G-9). Sin ellos el servicio arranca, pero el alta
-      # y las consultas fallan cerradas diciendo qué variable falta.
+      # secreto del ambiente y solo se usa en el alta de cada empresa (gate G-9). Sin valor por defecto y sin «:?» (el perfil
+      # apagado no los exige), pero con el perfil encendido el servicio NO arranca sin los dos (ServicioSettings, M07) y el
+      # log dice qué variable falta. Los emite FLIT API por ambiente; no se inventan.
       Impuestos__Api__BaseUrl: ${IMPUESTOS_SVC_API_BASE_URL:-}
       Impuestos__Api__IntegrationToken: ${IMPUESTOS_SVC_INTEGRATION_TOKEN:-}
       Impuestos__Api__TimeoutSegundos: ${IMPUESTOS_SVC_HTTP_TIMEOUT_SECONDS:-30}
+      # Receptor del aviso del proveedor (M09/M10, gate G-6): base del callbackUrl, https público sin redirecciones, p. ej.
+      # https://api.dev.flitsas.online/api/v1/impuestos/avisos. Vacía o inválida = las liquidaciones salen sin callbackUrl y
+      # se concilian solo por GET. http solo en loopback y solo en local: PermitirHttpLocal queda fijo en false aquí.
+      Impuestos__Avisos__UrlBase: ${IMPUESTOS_SVC_AVISOS_URL_BASE:-}
+      Impuestos__Avisos__PermitirHttpLocal: "false"
+      # Enlace del correo «Lote terminado» (plan §5.9): {UrlFrontend}/liquidaciones/{id}, p. ej.
+      # https://dev.impuestos.flitsas.online. Vacía = el correo sale sin el párrafo del enlace.
+      Impuestos__Avisos__UrlFrontend: ${IMPUESTOS_SVC_AVISOS_URL_FRONTEND:-}
+      # Límite por IP del receptor de avisos (menor que 1 impide arrancar).
+      Impuestos__LimitesSolicitudes__AvisosPorIpPorMinuto: ${IMPUESTOS_SVC_AVISOS_POR_IP_POR_MINUTO:-60}
+      # Ritmo de la ejecución (DA-5): ítems en vuelo por compañía y en total, y POST por segundo al API. Los defectos son los
+      # del código (OpcionesEjecucion); el resto de esa sección (reintentos, pausa, reconciliador) queda en el código.
+      Impuestos__Ejecucion__ConcurrenciaPorEmpresa: ${IMPUESTOS_SVC_CONCURRENCIA_EMPRESA:-2}
+      Impuestos__Ejecucion__ConcurrenciaGlobal: ${IMPUESTOS_SVC_CONCURRENCIA_GLOBAL:-6}
+      Impuestos__Ejecucion__TasaPorSegundo: ${IMPUESTOS_SVC_TASA_POR_SEGUNDO:-2}
+      # Pausa entre rondas del reintento del alta (M07b) y espera del «Incierto» antes de buscarlo en el listado del
+      # proveedor (M10, formato hh:mm:ss). Defectos del código.
+      Impuestos__Aprovisionamiento__IntervaloSegundos: ${IMPUESTOS_SVC_ALTA_INTERVALO_SEGUNDOS:-10}
+      Impuestos__Conciliacion__EsperaIncierto: ${IMPUESTOS_SVC_CONCILIACION_ESPERA_INCIERTO:-00:30:00}
+      # Recibos PDF (M11, gate G-11) por el file-manager corporativo: las mismas variables que core-api y core-diagnostico,
+      # con el mismo defecto (AWS pdn) para que apunten siempre al mismo sitio, en su propia categoría «impuestos» (ADR-0057;
+      # registrarla en el file-manager antes de encender). Sin URL el servicio no arranca. En PDN (Contabo) exige el token.
+      FILE_MANAGER_BASE_URL: ${FILE_MANAGER_BASE_URL:-https://ny46zhyeti.execute-api.us-east-1.amazonaws.com/pdn/}
+      FILE_MANAGER_FILES_PATH: ${FILE_MANAGER_FILES_PATH:-api/v1/files}
+      FILE_MANAGER_CATEGORY: ${IMPUESTOS_FILE_MANAGER_CATEGORY:-impuestos}
+      FILE_MANAGER_TIMEOUT_SECONDS: ${FILE_MANAGER_TIMEOUT_SECONDS:-30}
+      FILE_MANAGER_AUTH_TOKEN: ${FILE_MANAGER_AUTH_TOKEN:-}
       # Data Protection (plan §4.2, fail-closed): credenciales del API por empresa, PII del propietario y resultado van
       # cifrados con el anillo de impuestos.data_protection_keys, protegido con este certificado RSA. El .pfx vive FUERA del
       # repo (IMPUESTOS_SVC_DP_CERTIFICADO_RUTA, ver secrets: al final) y entra como secreto; la clave sale del .env del
