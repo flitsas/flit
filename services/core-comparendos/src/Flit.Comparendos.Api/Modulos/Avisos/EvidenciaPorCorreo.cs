@@ -151,7 +151,7 @@ public sealed partial class ServicioEvidencia(
     }
 
     /// <summary>Lo más que puede tardar el trabajo posterior a la asociación (registrar, nota y despacho).</summary>
-    private static readonly TimeSpan TopeTrabajoPosterior = TimeSpan.FromSeconds(30);
+    private static readonly TimeSpan TopeTrabajoPosterior = TimeSpan.FromSeconds(20);
 
     /// <summary>Plazo propio de la nota de «no se envió»: corto e independiente del plazo del correo.</summary>
     private static readonly TimeSpan TopeNota = TimeSpan.FromSeconds(10);
