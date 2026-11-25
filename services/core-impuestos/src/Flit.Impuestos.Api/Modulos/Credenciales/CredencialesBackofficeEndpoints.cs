@@ -49,7 +49,7 @@ internal static class CredencialesBackofficeEndpoints
         HttpContext http, CargaCredencialesPeticion peticion, CredencialesEmpresa credenciales, UsuarioActual usuario, CancellationToken ct)
     {
         if (usuario.Id == Guid.Empty)
-            throw ReglaException.Prohibido("SIN_USUARIO", "El token no identifica al usuario: la carga no se puede auditar.");
+            throw ManejadorReglas.SinUsuario();
         await credenciales.CargarAsync(EmpresaExplicita.De(http), peticion.ApiKey, peticion.WebhookSecret, usuario.Id, ct).ConfigureAwait(false);
         return Results.NoContent();
     }
