@@ -109,6 +109,10 @@ export interface CompanyQueryRow {
   devoluciones: number;
   /** Ausente en un backend anterior: se lee como lista vacía. */
   actores?: ActorValidacionDto[];
+  /** HU #14699: ¿firmaron todas las partes? Ausente/`null` si la consulta no lo calculó. */
+  firmadoPorTodas?: boolean | null;
+  /** HU #14699: «Vendedor: A · Comprador: B»; `""` si ya firmaron todos; ausente/`null` si no se calculó. */
+  faltaFirmar?: string | null;
 }
 
 export type CompanyQueryResult = QueryResult<CompanyQueryRow> & {

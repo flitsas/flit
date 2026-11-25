@@ -719,7 +719,8 @@ export function QueryConsole<TRow>({
                         {columns.map((column) => (
                           <td
                             key={column.id}
-                            className={`${CARDLIST_CELL} ${column.numeric ? "text-right tabular-nums" : ""}`}
+                            className={`${CARDLIST_CELL} ${column.numeric ? "text-right tabular-nums" : ""} ${column.wrap ? "min-w-[12rem] max-w-[22rem] whitespace-normal break-words" : ""}`}
+                            data-testid={column.wrap ? `${prefix}-celda-${column.id}` : undefined}
                           >
                             {renderCell?.(column.id, fila) ?? column.value(fila)}
                           </td>
