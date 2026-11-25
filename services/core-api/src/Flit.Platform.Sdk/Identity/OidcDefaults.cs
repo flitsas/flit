@@ -28,6 +28,8 @@ public static class OidcDefaults
         ["platform.identidad.credenciales.impuesto.copia"] = ServiceAudiences.Plataforma,
         // HU #14694 (M04b, D-ALTA-IDEM): reemplazo de la llave de Diagnóstico cuando el alta del proveedor la rota.
         ["platform.identidad.credenciales.impuesto.actualizar"] = ServiceAudiences.Plataforma,
+        // HU #14711: secreto del webhook del impuesto para svc-consultas (verifica los avisos del proveedor).
+        ["platform.identidad.credenciales.impuesto.webhook"] = ServiceAudiences.Plataforma,
         ["platform.aprovisionamiento.reportar"] = ServiceAudiences.Plataforma,
         ["platform.consultas"] = ServiceAudiences.Consultas,
         // HU #13344: configuración de consultas por empresa (la escribe la administración de FLIT).

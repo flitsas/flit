@@ -83,6 +83,8 @@ internal sealed class ServiceTokenPorMetodoInterceptor(string scope, string audi
         {
             ["/flit.identidad.v1.CredencialesProductoService/ObtenerCredencialImpuestoParaCopia"] = (CredencialesProductoGrpcService.ScopeCopia, true),
             ["/flit.identidad.v1.CredencialesProductoService/ActualizarCredencialImpuestoDiagnostico"] = (CredencialesProductoGrpcService.ScopeActualizar, true),
+            // HU #14711: secreto del webhook del impuesto, solo svc-consultas con su scope propio.
+            ["/flit.identidad.v1.CredencialesProductoService/ObtenerSecretoWebhookImpuesto"] = (CredencialesProductoGrpcService.ScopeWebhook, true),
             ["/flit.identidad.v1.EmpresasService/ObtenerDatosAltaProveedor"] = (EmpresasGrpcService.ScopeAlta, true),
         }.ToFrozenDictionary(StringComparer.Ordinal);
 
