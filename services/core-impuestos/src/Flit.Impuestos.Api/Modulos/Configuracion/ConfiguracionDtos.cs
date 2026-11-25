@@ -22,7 +22,8 @@ public sealed record ConfiguracionContractualEntrada(int? MaxRegistrosLote, IRea
 
 /// <summary>
 /// Errores de regla de configuración y catálogos con el literal exacto de <c>x-flit-literales.errores</c> del contrato
-/// (impuestos.v1.yaml 1.0.0): el front muestra el <c>error</c> tal cual.
+/// (impuestos.v1.yaml 1.1.0): el front muestra el <c>error</c> tal cual. Los errores de <c>?empresa</c> (<c>EMPRESA_REQUERIDA</c>,
+/// <c>EMPRESA_SOLO_SUPER_ADMIN</c>) son de <see cref="Comun.EmpresaExplicita"/>; <c>EMPRESA_NO_PERMITIDA</c> quedó retirado.
 /// </summary>
 internal static class ErroresConfiguracion
 {
@@ -32,8 +33,6 @@ internal static class ErroresConfiguracion
     public const string DepartamentoNoDisponible = "DEPARTAMENTO_NO_DISPONIBLE";
     public const string AprovisionamientoNoListo = "APROVISIONAMIENTO_NO_LISTO";
     public const string ProveedorNoDisponible = "PROVEEDOR_NO_DISPONIBLE";
-    public const string EmpresaNoPermitida = "EMPRESA_NO_PERMITIDA";
-    public const string EmpresaRequerida = "EMPRESA_REQUERIDA";
     public const string EmpresaNoEncontrada = "EMPRESA_NO_ENCONTRADA";
 
     public static ReglaException TopeInvalidoEn(string campo) =>
@@ -52,11 +51,6 @@ internal static class ErroresConfiguracion
 
     public static ReglaException SinProveedor() =>
         new(ProveedorNoDisponible, "El proveedor no responde. Intenta más tarde.", StatusCodes.Status503ServiceUnavailable);
-
-    public static ReglaException NoPermitida() =>
-        new(EmpresaNoPermitida, "Solo el Super Admin puede elegir la compañía.", StatusCodes.Status400BadRequest);
-
-    public static ReglaException Requerida() => new(EmpresaRequerida, "Elige una compañía.", StatusCodes.Status400BadRequest);
 
     public static ReglaException NoEncontrada() =>
         new(EmpresaNoEncontrada, "La compañía no existe o no tiene Impuestos.", StatusCodes.Status404NotFound);

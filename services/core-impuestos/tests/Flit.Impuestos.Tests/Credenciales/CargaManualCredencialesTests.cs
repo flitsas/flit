@@ -141,6 +141,7 @@ public sealed class CargaManualCredencialesTests
         r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         using var cuerpo = JsonDocument.Parse(await r.Content.ReadAsStringAsync(ct));
         cuerpo.RootElement.GetProperty("code").GetString().Should().Be("CREDENCIAL_INVALIDA");
+        cuerpo.RootElement.GetProperty("error").GetString().Should().Be(LiteralCredencialInvalida);
         await using var db = api.Contexto(empresa);
         (await db.Set<CredencialEmpresa>().AnyAsync(ct)).Should().BeFalse();
         (await db.Set<HistorialAprovisionamiento>().AnyAsync(ct)).Should().BeFalse();
@@ -164,7 +165,8 @@ public sealed class CargaManualCredencialesTests
 
         r.StatusCode.Should().Be(HttpStatusCode.ServiceUnavailable);
         using var cuerpo = JsonDocument.Parse(await r.Content.ReadAsStringAsync(ct));
-        cuerpo.RootElement.GetProperty("code").GetString().Should().Be("API_LIQUIDACION_NO_DISPONIBLE");
+        cuerpo.RootElement.GetProperty("code").GetString().Should().Be("PROVEEDOR_NO_DISPONIBLE");
+        cuerpo.RootElement.GetProperty("error").GetString().Should().Be("El proveedor no responde. Intenta más tarde.");
         await using var db = api.Contexto(empresa);
         (await db.Set<CredencialEmpresa>().AnyAsync(ct)).Should().BeFalse();
     }
@@ -222,6 +224,7 @@ public sealed class CargaManualCredencialesTests
         r.StatusCode.Should().Be(HttpStatusCode.UnprocessableEntity);
         using var cuerpo = JsonDocument.Parse(await r.Content.ReadAsStringAsync(ct));
         cuerpo.RootElement.GetProperty("code").GetString().Should().Be("CREDENCIAL_INVALIDA");
+        cuerpo.RootElement.GetProperty("error").GetString().Should().Be(LiteralCredencialInvalida);
         cuerpo.RootElement.GetProperty("campo").GetString().Should().Be(campo);
         doble.Pedidos.Should().BeEmpty();
     }
@@ -283,6 +286,9 @@ public sealed class CargaManualCredencialesTests
     }
 
     public static string Ruta(Guid empresa) => $"{Program.Prefijo}/backoffice/empresas/{empresa}/credenciales";
+
+    /// <summary>Literal de <c>CREDENCIAL_INVALIDA</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralCredencialInvalida = "El proveedor rechazó la API key: revisa el valor e intenta de nuevo.";
 
     public static string TokenSuperAdmin(ApiDePrueba api) =>
         api.Token(roles: [], permisos: [], superAdmin: true, tipoEmpresa: "FLIT", usuario: ActorSuperAdmin);

@@ -27,17 +27,21 @@ public sealed record VistaCredenciales(bool TieneApiKey, bool TieneWebhookSecret
 public sealed partial class CredencialesEmpresa(AlmacenCredenciales almacen, ClienteApiLiquidacion api, TimeProvider reloj, ILogger<CredencialesEmpresa> log)
 {
     public const string CodigoInvalida = "CREDENCIAL_INVALIDA";
-    public const string CodigoApiNoDisponible = "API_LIQUIDACION_NO_DISPONIBLE";
+    public const string CodigoApiNoDisponible = "PROVEEDOR_NO_DISPONIBLE";
+
+    /// <summary>Literal de <c>CREDENCIAL_INVALIDA</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralInvalida = "El proveedor rechazó la API key: revisa el valor e intenta de nuevo.";
+
+    /// <summary>Literal de <c>PROVEEDOR_NO_DISPONIBLE</c> en <c>x-flit-literales.errores</c> (impuestos.v1.yaml 1.1.0).</summary>
+    public const string LiteralApiNoDisponible = "El proveedor no responde. Intenta más tarde.";
     public const string MotivoCargaManual = "CARGA_MANUAL";
     public const string ActorSuperAdmin = "SUPER_ADMIN";
     public const string PrefijoWebhookSecret = "whsec_";
 
     public async Task CargarAsync(Guid empresa, string? apiKey, string? webhookSecret, Guid actor, CancellationToken ct)
     {
-        var llave = Validar(apiKey, "apiKey", "La api_key es obligatoria y solo admite caracteres visibles, sin espacios.");
-        var secreto = string.IsNullOrEmpty(webhookSecret)
-            ? null
-            : Validar(webhookSecret, "webhookSecret", $"El webhook_secret debe empezar por {PrefijoWebhookSecret} y no llevar espacios.", PrefijoWebhookSecret);
+        var llave = Validar(apiKey, "apiKey");
+        var secreto = string.IsNullOrEmpty(webhookSecret) ? null : Validar(webhookSecret, "webhookSecret", PrefijoWebhookSecret);
 
         await using var db = almacen.ContextoDe(empresa);
         var aprovisionamiento = await db.Set<AprovisionamientoEmpresa>().FirstOrDefaultAsync(a => a.TenantId == empresa, ct).ConfigureAwait(false);
@@ -55,13 +59,11 @@ public sealed partial class CredencialesEmpresa(AlmacenCredenciales almacen, Cli
             if (validacion is { Clase: ClaseEnvio.Respuesta, Status: StatusCodes.Status401Unauthorized })
             {
                 Rechazada(log, empresa);
-                throw new ReglaException(CodigoInvalida, "El API de liquidación rechazó la api_key. Verifica que sea la vigente.") { Campo = "apiKey" };
+                throw new ReglaException(CodigoInvalida, LiteralInvalida) { Campo = "apiKey" };
             }
 
             NoValidada(log, empresa, validacion.Clase, validacion.Status, validacion.CodigoError);
-            throw new ReglaException(
-                CodigoApiNoDisponible, "No se pudo validar la credencial con el API de liquidación. Intenta de nuevo en unos minutos.",
-                StatusCodes.Status503ServiceUnavailable);
+            throw new ReglaException(CodigoApiNoDisponible, LiteralApiNoDisponible, StatusCodes.Status503ServiceUnavailable);
         }
 
         var actual = await almacen.FilaAsync(db, empresa, ct).ConfigureAwait(false);
@@ -109,13 +111,16 @@ public sealed partial class CredencialesEmpresa(AlmacenCredenciales almacen, Cli
             : new VistaCredenciales(true, fila.TieneSecreto, CodigosDeEnum.Codigo(fila.Origen), fila.ApiKeyPrefijo, fila.ActualizadoEn);
     }
 
-    /// <summary>Texto visible (ASCII 0x21–0x7E) y, si se da, con el prefijo; si no, 422 <see cref="CodigoInvalida"/> con el campo.</summary>
-    private static string Validar(string? valor, string campo, string mensaje, string? prefijo = null)
+    /// <summary>
+    /// Texto visible (ASCII 0x21–0x7E) y, si se da, con el prefijo; si no, 422 <see cref="CodigoInvalida"/> con el campo y el
+    /// literal del contrato (el campo indica cuál de los dos valores revisar).
+    /// </summary>
+    private static string Validar(string? valor, string campo, string? prefijo = null)
     {
         if (string.IsNullOrEmpty(valor)
             || valor.Any(c => c is < '!' or > '~')
             || (prefijo is not null && (!valor.StartsWith(prefijo, StringComparison.Ordinal) || valor.Length == prefijo.Length)))
-            throw new ReglaException(CodigoInvalida, mensaje) { Campo = campo };
+            throw new ReglaException(CodigoInvalida, LiteralInvalida) { Campo = campo };
         return valor;
     }
 
