@@ -176,16 +176,17 @@ test.describe("HU #14694 backoffice de aprovisionamiento (Super Admin)", () => {
   test("QA_TC06_IMPUESTOS_Aprovisionamiento - Carga manual de credenciales como respaldo en Requiere credenciales", async ({ page }) => {
     // page.route: REQUIERE_CREDENCIALES sin llave guardada; el PUT se simula (204) para no reemplazar la llave real del stub.
     await reescribir<Detalle>(page, rutaAprov(EMPRESA!), (real) => ({ ...real, estado: "REQUIERE_CREDENCIALES", motivo: "CREDENCIAL_RECHAZADA", accion: "CARGAR_CREDENCIALES" }));
-    let lecturas = 0;
+    // «Configurada» depende de que ya ocurrió el PUT, no del número de GET (en dev, StrictMode lee dos veces al montar).
+    let guardada = false;
     await page.route(rutaCredenciales(EMPRESA!), async (route) => {
       const metodo = route.request().method();
       if (metodo === "PUT") {
         const cuerpo = route.request().postDataJSON() as { apiKey?: string | null; webhookSecret?: string | null };
         expect(cuerpo.apiKey, "PUT credenciales: apiKey").toBe(LLAVE_FICTICIA);
+        guardada = true;
         return route.fulfill({ status: 204, body: "" });
       }
-      lecturas += 1;
-      const configurada = lecturas > 1;
+      const configurada = guardada;
       return route.fulfill({
         status: 200,
         contentType: "application/json",

@@ -19,9 +19,9 @@ import { expect, test, type APIRequestContext, type Locator, type Page, type Rou
  * `POST /__panel/escenario` (tipo alta | consulta | archivo): es GLOBAL, por eso la corrida va con un solo worker y cada spec
  * que lo cambia lo restaura en afterEach.
  *
- * RUNT: core-consultas simulado decide por el ÚLTIMO carácter de la placa (1 persona natural; 6 departamento no soportado;
- * 7 tiempo agotado; 8 respuesta inválida). Las placas ficticias de aquí terminan en 1, y las mágicas del stub en 0 (persona
- * natural por defecto).
+ * RUNT: la respuesta depende del stub o simulador local de RUNT que se defina para Impuestos; hoy el RPC RuntIntempoService
+ * no tiene simulador en la suite local. Las placas ficticias de aquí terminan en 1 y las mágicas del stub en 0 por si ese
+ * simulador decide por el último carácter, como el de Diagnóstico; ningún spec debe suponer el resultado RUNT hasta que exista.
  *
  * PII: solo placas ficticias y placeholders («Compañía Demo», `nombre@empresa.com`, `CC 0000000`). Nunca datos de
  * context/muestras.
@@ -116,8 +116,8 @@ const CONSONANTES = "BCDFGHJKLMNPRSTVWXZ";
 const al = (alfabeto: string) => alfabeto[Math.floor(Math.random() * alfabeto.length)];
 
 /**
- * Placa ficticia de 6 caracteres (T + 2 consonantes + 2 cifras + 1): el 1 final es «persona natural» en el RUNT simulado y no
- * choca con ninguna placa mágica del stub (todas terminan en 000).
+ * Placa ficticia de 6 caracteres (T + 2 consonantes + 2 cifras + 1): el 1 final se reserva para «persona natural» en el
+ * simulador RUNT que se defina (ver cabecera) y no choca con ninguna placa mágica del stub (todas terminan en 000).
  */
 export function placaFicticia(): string {
   return `T${al(CONSONANTES)}${al(CONSONANTES)}${Math.floor(Math.random() * 10)}${Math.floor(Math.random() * 10)}1`;
@@ -153,9 +153,15 @@ export async function responder(page: Page, ruta: RegExp, status: number, cuerpo
 export async function reescribir<T>(page: Page, ruta: RegExp, cambiar: (real: T) => T, metodo = "GET") {
   await page.route(ruta, async (route: Route) => {
     if (route.request().method() !== metodo) return route.fallback();
-    const real = await route.fetch();
-    const cuerpo = cambiar((await real.json()) as T);
-    await route.fulfill({ response: real, body: JSON.stringify(cuerpo), headers: { ...real.headers(), "content-type": "application/json" } });
+    // Si el contexto se cierra con la petición en vuelo (fin del test), Playwright lanza «Response has been disposed» o
+    // «Target page, context or browser has been closed»: la petición ya no le importa a nadie y se descarta en silencio.
+    try {
+      const real = await route.fetch();
+      const cuerpo = cambiar((await real.json()) as T);
+      await route.fulfill({ response: real, body: JSON.stringify(cuerpo), headers: { ...real.headers(), "content-type": "application/json" } });
+    } catch {
+      await route.abort().catch(() => undefined);
+    }
   });
 }
 
