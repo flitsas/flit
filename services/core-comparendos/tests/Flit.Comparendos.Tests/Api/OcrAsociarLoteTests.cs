@@ -225,8 +225,27 @@ public sealed partial class OcrAsociarTests
         var fin = (await PreviaAsync(cliente, paquete)).GetProperty("enCurso");
         (fin.GetProperty("loteId").GetGuid(), fin.GetProperty("asociados").GetInt32()).Should().Be((loteId, 1));
         fin.GetProperty("noAsociados").EnumerateArray().Select(n => (n.GetProperty("documentoId").GetGuid(), n.GetProperty("nombreArchivo").GetString(), n.GetProperty("motivo").GetString()))
-            .Should().Equal((docs["otro-1"].Id, docs["otro-1"].NombreArchivo, "Otra persona cambió el documento del comparendo mientras lo revisabas. Vuelve a abrirlo para compararlos."));
+            .Should().Equal((docs["otro-1"].Id, docs["otro-1"].NombreArchivo, "Otra persona le puso un documento a este comparendo mientras tanto; revísalo uno por uno."));
         (await PreviaAsync(cliente, paquete)).GetProperty("porRevisar").GetProperty("reemplazos").GetInt32().Should().Be(1, "ahora es un reemplazo");
+    }
+
+    /// <summary>Entre encolar y procesar el comparendo dejó de existir para ese número: «ya no se puede asociar», sin el «mientras lo revisabas».</summary>
+    [Fact]
+    public async Task AsociarLote_SiYaNoEsAsociable_ElMotivoEsDelLote()
+    {
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        var (_, cliente, ids) = await EmpresaConAsync("LOTEY1");
+        var (paquete, docs) = await SubirVariosAsync(cliente, ("LOTEY1", "ya-no"));
+        (await AsociarLoteAsync(cliente, paquete)).GetProperty("encolados").GetInt32().Should().Be(1);
+        // El comparendo cambia de número (la fuente lo corrigió): el escaneado ya no es su duplicado.
+        await api.EnDbAsync(db => db.Comparendos.Where(c => c.Id == ids["LOTEY1"]).ExecuteUpdateAsync(u => u.SetProperty(c => c.NumeroNormalizado, "OTRONUMERO99")));
+
+        await ProcesarLoteAsync();
+
+        var fin = (await PreviaAsync(cliente, paquete)).GetProperty("enCurso");
+        fin.GetProperty("noAsociados").EnumerateArray().Select(n => n.GetProperty("motivo").GetString()).Should().Equal("Ya no se puede asociar: revísalo uno por uno.");
+        (await api.EnDbAsync(db => db.DocumentosOcr.AsNoTracking().SingleAsync(d => d.Id == docs["ya-no"].Id, ct))).Estado.Should().NotBe(EstadoDocumentoOcr.PorAsociar);
     }
 
     /// <summary>Una concesión vigente no se toca (otra réplica lo está procesando); vencida, el trabajador la retoma.</summary>
