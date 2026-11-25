@@ -11,10 +11,14 @@ namespace Flit.Modules.Security.Application.Tests.Products;
 /// </summary>
 public sealed class ProductCodesTests
 {
+    /// <summary>
+    /// HU #14694: <c>impuestos</c> se agrega al final (los agregados después de v1 van en orden de llegada). De esta lista
+    /// salen el cliente OIDC del producto (<c>OidcClientSync</c>), su host y las audiencias que aceptan los servicios.
+    /// </summary>
     [Fact]
-    public void All_son_los_cuatro_codigos_del_contrato_v1_mas_caja()
+    public void All_son_los_cuatro_codigos_del_contrato_v1_mas_caja_e_impuestos()
     {
-        ProductCodes.All.Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "caja");
+        ProductCodes.All.Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "caja", "impuestos");
     }
 
     [Fact]

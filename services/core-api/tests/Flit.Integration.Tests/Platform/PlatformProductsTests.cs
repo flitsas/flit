@@ -37,13 +37,14 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
     // ── AC1 — catálogo ─────────────────────────────────────────────────────────────
 
     [PostgresFact]
-    public async Task AC1_ElCatalogoTraeLosCincoProductosEnElOrdenDelContrato()
+    public async Task AC1_ElCatalogoTraeLosSeisProductosEnElOrdenDelContrato()
     {
         await using var ctx = NewContext();
         var products = await new ProductCatalogRepository(ctx).ListAsync();
 
         // `caja` (DDL 199) existe porque el rol ot_caja es de ese producto; no es una app de la suite (ListMyApps la excluye, ADR-0082).
-        products.Select(p => p.Code).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "caja");
+        // `impuestos` (DDL 205, HU #14694) va al final (sort_order 60).
+        products.Select(p => p.Code).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "caja", "impuestos");
         products.Should().OnlyContain(p => p.IsActive);
         products.Single(p => p.Code == "tramites").Name.Should().Be("Trámites");
     }
@@ -100,8 +101,9 @@ public sealed class PlatformProductsTests(PostgresDatabaseFixture fixture) : Pos
                     await cmd.ExecuteNonQueryAsync();
                 }
 
-                // Cuatro del catálogo + `caja` (DDL 199) + `demo`, que el DDL 119 vuelve a sembrar: sin duplicados.
-                (await ctx.Set<ProductEntity>().CountAsync()).Should().Be(6);
+                // Cuatro del catálogo + `caja` (DDL 199) + `impuestos` (DDL 205) + `demo`, que el DDL 119 vuelve a
+                // sembrar: sin duplicados.
+                (await ctx.Set<ProductEntity>().CountAsync()).Should().Be(7);
             }
             finally
             {
