@@ -1,4 +1,4 @@
-// Backoffice del Super Admin (contracts/openapi/impuestos.v1.yaml 1.2.0, tag Backoffice; plan §5.1 y §5.8): compañías con su
+// Backoffice del Super Admin (contracts/openapi/impuestos.v1.yaml 1.2.1, tag Backoffice; plan §5.1 y §5.8): compañías con su
 // aprovisionamiento, carga de credenciales del proveedor (nunca se devuelven) y reintento. Las rutas van por tenantId en
 // la ruta, no por ?empresa=. Etiquetas y literales: x-flit-etiquetas / x-flit-literales del contrato.
 import { useEffect, useState } from "react";
@@ -149,12 +149,12 @@ export const ETIQUETA_ORIGEN_CREDENCIAL: Readonly<Record<string, string>> = {
   CARGA_MANUAL: "Cargada por el Super Admin",
 };
 
-/** x-flit-literales.pantalla usados por el backoffice. */
+/** x-flit-literales.pantalla usados por el backoffice (avisoRotacionCredenciales: texto de la 1.2.1, REQUIERE_CREDENCIALES nace de CREDENCIAL_RECHAZADA). */
 export const LITERALES_BACKOFFICE = {
   credencialConfigurada: "Configurada",
   credencialNoConfigurada: "Sin configurar",
   avisoRotacionCredenciales:
-    "La empresa ya existe en el proveedor: rota las credenciales en la consola del API y cárgalas aquí. Rotarlas puede afectar a Diagnóstico si comparte la empresa.",
+    "El proveedor rechazó la API key guardada: reintenta el aprovisionamiento o carga credenciales nuevas.",
 } as const;
 
 /** x-flit-etiquetas de EmpresaBackoffice (1.1.0). */
