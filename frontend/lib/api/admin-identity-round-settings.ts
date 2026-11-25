@@ -3,10 +3,10 @@ import { ApiError } from "./types";
 
 /**
  * Configuración GLOBAL de rondas de validación de identidad (SuperAdmin de FLIT).
- * GET/PUT `/api/v1/admin/identity/round-settings`. 400 con `details[]`; 403 si no es SuperAdmin.
+ * GET/PUT `/api/v1/admin/platform/identity-rounds`. 400 con `details[]`; 403 si no es SuperAdmin.
  */
 
-const RUTA = "/api/v1/admin/identity/round-settings";
+const RUTA = "/api/v1/admin/platform/identity-rounds";
 
 export const RONDAS_MIN = 1;
 export const RONDAS_MAX = 10;

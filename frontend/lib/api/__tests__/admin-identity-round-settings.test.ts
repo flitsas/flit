@@ -10,7 +10,7 @@ import {
 } from "../admin-identity-round-settings";
 import { ApiError } from "../types";
 
-const RUTA = "/api/v1/admin/identity/round-settings";
+const RUTA = "/api/v1/admin/platform/identity-rounds";
 const AJUSTES: IdentityRoundSettings = {
   rondasMaximas: 3,
   disparadorAlerta: "al_maximo",
