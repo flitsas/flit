@@ -244,6 +244,54 @@ export interface DuplicadoComparendo {
   evidenciaActual?: EvidenciaActual | null;
   asociable?: boolean;
   motivoNoAsociable?: string | null;
+  /** Qué pasará con el correo al conductor si se asocia ahora (lo decide el servidor con la misma regla del envío). */
+  correoAlAsociar?: CorreoAlAsociar | null;
+}
+
+/** Lo que el servidor adelanta antes de asociar: si saldrá el correo con el documento y, si no, por qué. */
+export interface CorreoAlAsociar {
+  seEnviara: boolean;
+  motivoNo: string | null;
+}
+
+/** Resultado del correo al asociar (respuesta del POST): enviado, en cola u omitido con su motivo. */
+export interface CorreoAsociado {
+  estado: "Enviado" | "Pendiente" | "Omitido";
+  motivo: string | null;
+}
+
+/** El motivo del servidor se muestra tal cual; solo se cierra con punto si no lo trae. */
+function motivoLiteral(motivo: string | null | undefined): string | null {
+  const m = motivo?.trim();
+  if (!m) return null;
+  return /[.!?]$/.test(m) ? m : `${m}.`;
+}
+
+/**
+ * Frase para el modal ANTES de confirmar. Sin dato del servidor no se promete nada. En reemplazo, el correo lleva el
+ * documento nuevo.
+ */
+export function textoCorreoAlAsociar(c: CorreoAlAsociar | null | undefined, reemplazo: boolean): string | null {
+  if (!c) return null;
+  if (c.seEnviara) return reemplazo ? "Se enviará ahora al conductor un correo con el documento nuevo." : "Se enviará ahora al conductor un correo con este documento.";
+  const motivo = motivoLiteral(c.motivoNo);
+  return motivo ? `No se enviará correo al conductor. Motivo: ${motivo}` : "No se enviará correo al conductor.";
+}
+
+/**
+ * Avisos de la pantalla DESPUÉS de asociar. Correo enviado o en cola: un solo aviso combinado. Cualquier otro estado
+ * (Omitido o uno que no conocemos) es un aviso aparte con el motivo literal: la asociación igual se hizo.
+ */
+export function avisosAlAsociar(numero: string, reemplazar: boolean, correo: CorreoAsociado | null | undefined): { mensaje: string; tono: "success" | "warning" }[] {
+  const base = reemplazar ? `Documento reemplazado en el comparendo ${numero}` : `Documento asociado al comparendo ${numero}`;
+  if (!correo) return [{ mensaje: `${base}.`, tono: "success" }];
+  if (correo.estado === "Enviado") return [{ mensaje: `${base} y enviado al conductor.`, tono: "success" }];
+  if (correo.estado === "Pendiente") return [{ mensaje: `${base}. El correo al conductor saldrá en breve.`, tono: "success" }];
+  const motivo = motivoLiteral(correo.motivo);
+  return [
+    { mensaje: `${base}.`, tono: "success" },
+    { mensaje: motivo ? `No se envió correo al conductor. Motivo: ${motivo}` : "No se envió correo al conductor.", tono: "warning" },
+  ];
 }
 
 /**

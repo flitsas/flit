@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { EVENTO_TIMELINE, cambioContraventor, estadoProceso, nombreActor, textoParaGestora, textoSemaforo, tonoSemaforo, ultimoHito } from "@/lib/etiquetas";
+import { etiquetaPlantilla } from "@/components/reportes/plataforma/tipos";
+import { TIPOS_AVISO } from "@/lib/avisos";
+import { TIPO_COMUNICACION, TIPO_PLANTILLA, EVENTO_TIMELINE, cambioContraventor, estadoProceso, nombreActor, textoParaGestora, textoSemaforo, tonoSemaforo, ultimoHito } from "@/lib/etiquetas";
 import { aQuery, contarFiltros, FILTROS_VACIOS, resumenPagina } from "@/lib/filtros";
 
 describe("semáforo legal", () => {
@@ -90,5 +92,18 @@ describe("textos sin tecnología para la gestora", () => {
 describe("timeline: documento escaneado asociado", () => {
   it("el evento tiene etiqueta legible (la usan la fila y el filtro)", () => {
     expect(EVENTO_TIMELINE.DocumentoAsociadoOcr).toBe("Documento escaneado asociado");
+  });
+});
+
+describe("etiquetas del correo de evidencia", () => {
+  it("el tipo nuevo se lee en términos de negocio en comunicaciones, plantillas y línea de tiempo", () => {
+    expect(TIPO_COMUNICACION.Evidencia).toBe("Documento del comparendo al conductor");
+    expect(TIPO_PLANTILLA.CorreoEvidencia).toBe("Correo: documento del comparendo");
+    expect(EVENTO_TIMELINE.EvidenciaEnviada).toBe("Documento enviado al conductor");
+    expect(EVENTO_TIMELINE.EvidenciaOmitida).toBe("Documento asociado sin correo al conductor");
+    expect(etiquetaPlantilla("comparendos.evidencia")).toBe("Documento del comparendo al conductor");
+  });
+  it("no es un aviso: el envío manual y masivo no lo ofrece", () => {
+    expect(TIPOS_AVISO.map((t) => t.valor)).not.toContain("Evidencia");
   });
 });

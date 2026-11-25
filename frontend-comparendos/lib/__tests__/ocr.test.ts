@@ -24,6 +24,8 @@ import {
   valorInicial,
   versionAnterior,
   vistaDuplicado,
+  textoCorreoAlAsociar,
+  avisosAlAsociar,
   vistaPorContentType,
   ESTADO_DOCUMENTO,
   vistaOriginal,
@@ -292,5 +294,37 @@ describe("comparar el número del documento con el del sistema", () => {
     expect(numerosDifieren("11001000000012345678", "11001000000012345679")).toBe(true);
     expect(numerosDifieren(null, "11001000000012345678")).toBe(false);
     expect(numerosDifieren("11001000000012345678", "")).toBe(false);
+  });
+});
+
+describe("correo de evidencia al asociar", () => {
+  it("antes: dice que se enviará, con el documento nuevo si es reemplazo", () => {
+    expect(textoCorreoAlAsociar({ seEnviara: true, motivoNo: null }, false)).toBe("Se enviará ahora al conductor un correo con este documento.");
+    expect(textoCorreoAlAsociar({ seEnviara: true, motivoNo: null }, true)).toContain("documento nuevo");
+  });
+  it("antes: si no sale, muestra el motivo literal (solo agrega el punto si falta); sin dato no promete nada", () => {
+    expect(textoCorreoAlAsociar({ seEnviara: false, motivoNo: "El conductor no tiene correo registrado" }, false)).toBe("No se enviará correo al conductor. Motivo: El conductor no tiene correo registrado.");
+    expect(textoCorreoAlAsociar({ seEnviara: false, motivoNo: "FLIT SAS no usa correo." }, false)).toBe("No se enviará correo al conductor. Motivo: FLIT SAS no usa correo.");
+    expect(textoCorreoAlAsociar({ seEnviara: false, motivoNo: null }, false)).toBe("No se enviará correo al conductor.");
+    expect(textoCorreoAlAsociar(undefined, false)).toBeNull();
+    expect(textoCorreoAlAsociar(null, true)).toBeNull();
+  });
+  it("después: enviado o en cola = un solo aviso; en reemplazo dice reemplazado", () => {
+    expect(avisosAlAsociar("123", false, { estado: "Enviado", motivo: null })).toEqual([{ mensaje: "Documento asociado al comparendo 123 y enviado al conductor.", tono: "success" }]);
+    expect(avisosAlAsociar("123", true, { estado: "Enviado", motivo: null })).toEqual([{ mensaje: "Documento reemplazado en el comparendo 123 y enviado al conductor.", tono: "success" }]);
+    expect(avisosAlAsociar("123", false, { estado: "Pendiente", motivo: null })).toHaveLength(1);
+  });
+  it("después: omitido = éxito más aviso con el motivo literal", () => {
+    expect(avisosAlAsociar("123", false, { estado: "Omitido", motivo: "El comparendo ya está pagado" })).toEqual([
+      { mensaje: "Documento asociado al comparendo 123.", tono: "success" },
+      { mensaje: "No se envió correo al conductor. Motivo: El comparendo ya está pagado.", tono: "warning" },
+    ]);
+    expect(avisosAlAsociar("123", false, { estado: "Omitido", motivo: null })[1].tono).toBe("warning");
+  });
+  it("después: un estado desconocido cae en aviso, sin lanzar; sin correo solo el éxito de siempre", () => {
+    const raro = avisosAlAsociar("123", false, { estado: "Reintentando" as never, motivo: "Algo nuevo" });
+    expect(raro.map((a) => a.tono)).toEqual(["success", "warning"]);
+    expect(avisosAlAsociar("123", false, undefined)).toEqual([{ mensaje: "Documento asociado al comparendo 123.", tono: "success" }]);
+    expect(avisosAlAsociar("123", true, null)).toEqual([{ mensaje: "Documento reemplazado en el comparendo 123.", tono: "success" }]);
   });
 });
