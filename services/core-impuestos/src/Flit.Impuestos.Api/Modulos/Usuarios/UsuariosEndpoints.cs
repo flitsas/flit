@@ -139,7 +139,7 @@ internal static class UsuariosEndpoints
     {
         var empresa = elegida ?? d.Usuario.EmpresaPropia();
         if (d.Usuario.Id == Guid.Empty)
-            throw ReglaException.Prohibido("SIN_USUARIO", "El token no identifica al usuario.");
+            throw ManejadorReglas.SinUsuario();
         if (elegida is { } id)
         {
             await d.Configuracion.ExigirConImpuestosAsync(id, ct).ConfigureAwait(false);
