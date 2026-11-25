@@ -1,3 +1,5 @@
+using System.Collections.Frozen;
+using Flit.Modules.Security.Application.Products;
 using Flit.Modules.Security.Domain.UserRoles.ProductRoles;
 
 namespace Flit.Modules.Security.Application.UserRoles.ProductRoles;
@@ -42,16 +44,29 @@ public sealed record ProductUserRow(
 
 /// <summary>
 /// ADR-0089 (HU #14587) — reglas que core-api vuelve a aplicar sobre los usuarios de un producto (contrato §3.4, SP-10 a
-/// SP-13). Puras: sin E/S. Los roles asignables son SOLO <c>usuario_&lt;producto&gt;</c> y <c>admin_&lt;producto&gt;</c>,
-/// por código (SP-10); el admin del producto solo lo da o lo quita el SuperAdmin (SP-11=a); AdminCompany y SuperAdmin no
-/// se tocan desde el producto y nadie actúa sobre sí mismo (SP-12).
+/// SP-13). Puras: sin E/S. Los roles asignables son SOLO el rol de usuario del producto (<see cref="UserRole"/>) y
+/// <c>admin_&lt;producto&gt;</c>, por código (SP-10); el admin del producto solo lo da o lo quita el SuperAdmin (SP-11=a);
+/// AdminCompany y SuperAdmin no se tocan desde el producto y nadie actúa sobre sí mismo (SP-12).
 /// </summary>
+/// <remarks>
+/// HU #14694 (M13): el rol de usuario es el que crea el manifiesto de cada producto. Por defecto <c>usuario_&lt;producto&gt;</c>
+/// (Diagnóstico: <c>usuario_diagnostico</c>); Impuestos lo llama <c>gestor_impuestos</c> (plan §5.2, impuestos.v1.yaml
+/// <c>RolImpuestos</c>), así que va en <see cref="RolUsuarioPorProducto"/>. El admin sigue siendo <c>admin_&lt;producto&gt;</c>, el
+/// que siembra el DDL.
+/// </remarks>
 public static class ProductRoleRules
 {
     /// <summary>Único producto con módulo de usuarios en esta ola: el scope del cliente lo ata.</summary>
     public const string Diagnostico = "diagnostico";
 
-    public static string UserRole(string productCode) => "usuario_" + productCode;
+    /// <summary>Productos cuyo manifiesto nombra el rol de usuario distinto de <c>usuario_&lt;producto&gt;</c>.</summary>
+    private static readonly FrozenDictionary<string, string> RolUsuarioPorProducto = new Dictionary<string, string>(StringComparer.Ordinal)
+    {
+        [ProductCodes.Impuestos] = "gestor_impuestos",
+    }.ToFrozenDictionary(StringComparer.Ordinal);
+
+    public static string UserRole(string productCode) =>
+        RolUsuarioPorProducto.TryGetValue(productCode, out var rol) ? rol : "usuario_" + productCode;
 
     public static string AdminRole(string productCode) => "admin_" + productCode;
 
@@ -108,7 +123,7 @@ public static class ProductRoleRules
 
     /// <summary>
     /// SP-11=a / CR-1: un admin del producto solo actúa sobre usuarios con el rol de usuario del producto (exactamente
-    /// <c>usuario_&lt;producto&gt;</c>, de la lista blanca); ni sobre otro admin ni sobre un rol propio de la compañía.
+    /// <see cref="UserRole"/>, de la lista blanca); ni sobre otro admin ni sobre un rol propio de la compañía.
     /// </summary>
     public static void EnsureCanTouch(ProductActor actor, string productCode, ProductMemberSnapshot member)
     {

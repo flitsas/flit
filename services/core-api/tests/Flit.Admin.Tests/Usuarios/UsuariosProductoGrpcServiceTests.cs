@@ -230,6 +230,26 @@ public sealed class UsuariosProductoGrpcServiceTests
         _auditoria.Entradas.Should().ContainSingle().Which.UserAgent.Should().Be("svc-impuestos");
     }
 
+    [Fact]
+    public async Task SvcImpuestos_RolesAsignablesYCambioDeRol_SonLosDelManifiesto_GestorImpuestos()
+    {
+        var gestor = new ProductRoleRef(Guid.NewGuid(), "gestor_impuestos");
+        var admin = new ProductRoleRef(Guid.NewGuid(), "admin_impuestos");
+        _repo.FindAssignableRoleAsync("impuestos", gestor.Code, Arg.Any<CancellationToken>()).Returns(gestor);
+        _repo.FindAssignableRoleAsync("impuestos", admin.Code, Arg.Any<CancellationToken>()).Returns(admin);
+        _repo.ListMembersAsync(Empresa, "impuestos", Arg.Any<CancellationToken>()).Returns([
+            new ProductMemberSnapshot(Guid.NewGuid(), "Ana", "ana@ejemplo.test", true, false, false, gestor, null)]);
+        _repo.ListPendingInvitationsAsync(Empresa, "impuestos", Arg.Any<CancellationToken>()).Returns([]);
+
+        var lista = await Servicio().ListarUsuariosProducto(new ListarUsuariosProductoRequest { Producto = "impuestos" }, Contexto("svc-impuestos"));
+
+        lista.RolesAsignables.Should().Equal("gestor_impuestos");
+        lista.Usuarios.Should().ContainSingle().Which.RolCodigo.Should().Be("gestor_impuestos");
+        await Falla(() => Servicio().CambiarRolProducto(
+                new CambiarRolProductoRequest { Producto = "impuestos", UsuarioId = Guid.NewGuid().ToString(), RolCodigo = "usuario_impuestos" }, Contexto("svc-impuestos")),
+            StatusCode.InvalidArgument, "ROL_NO_PERMITIDO");
+    }
+
     [Theory]
     [InlineData("svc-impuestos", "diagnostico")]
     [InlineData("svc-diagnostico", "impuestos")]
