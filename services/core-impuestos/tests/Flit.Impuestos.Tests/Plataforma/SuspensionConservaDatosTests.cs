@@ -59,7 +59,7 @@ public sealed class SuspensionConservaDatosTests(ApiUsuariosFixture fixture) : I
         a.GetProperty("suspendida").GetBoolean().Should().BeFalse();
         a.GetProperty("usuarios").GetInt32().Should().Be(7);
         a.GetProperty("aprovisionamiento").GetProperty("estado").GetString().Should().Be("LISTO_SIN_WEBHOOK");
-        a.GetProperty("aprovisionamiento").GetProperty("accion").GetString().Should().Be("CARGAR_SECRETO");
+        a.GetProperty("aprovisionamiento").GetProperty("accion").GetString().Should().Be("REINTENTAR", "1.2.0: LISTO_SIN_WEBHOOK se reintenta (el alta trae el secreto)");
         a.GetProperty("aprovisionamiento").GetProperty("firmaConfirmada").GetBoolean().Should().BeFalse();
 
         var s = items[suspendida];
@@ -104,8 +104,12 @@ public sealed class SuspensionConservaDatosTests(ApiUsuariosFixture fixture) : I
             fila.Estado = EstadoAprovisionamiento.Suspendido;
             db.Add(new HistorialAprovisionamiento
             {
-                TenantId = empresa, Desde = EstadoAprovisionamiento.Listo, Hacia = EstadoAprovisionamiento.Suspendido,
-                MotivoCodigo = "PRODUCTO_DESACTIVADO", ActorTipo = "PLATAFORMA", En = DateTimeOffset.UtcNow,
+                TenantId = empresa,
+                Desde = EstadoAprovisionamiento.Listo,
+                Hacia = EstadoAprovisionamiento.Suspendido,
+                MotivoCodigo = "PRODUCTO_DESACTIVADO",
+                ActorTipo = "PLATAFORMA",
+                En = DateTimeOffset.UtcNow,
             });
             await db.SaveChangesAsync(ct);
         }
@@ -219,8 +223,12 @@ public sealed class SuspensionConservaDatosTests(ApiUsuariosFixture fixture) : I
             db.Add(new HistorialAprovisionamiento { TenantId = empresa, Desde = null, Hacia = EstadoAprovisionamiento.Pendiente, ActorTipo = "PLATAFORMA", En = antes });
             db.Add(new HistorialAprovisionamiento
             {
-                TenantId = empresa, Desde = EstadoAprovisionamiento.Pendiente, Hacia = EstadoAprovisionamiento.Listo, MotivoCodigo = "CARGA_MANUAL",
-                ActorTipo = "SUPER_ADMIN", En = antes.AddMinutes(1),
+                TenantId = empresa,
+                Desde = EstadoAprovisionamiento.Pendiente,
+                Hacia = EstadoAprovisionamiento.Listo,
+                MotivoCodigo = "CARGA_MANUAL",
+                ActorTipo = "SUPER_ADMIN",
+                En = antes.AddMinutes(1),
             });
             await db.SaveChangesAsync(ct);
         }
@@ -247,8 +255,13 @@ public sealed class SuspensionConservaDatosTests(ApiUsuariosFixture fixture) : I
         await using var db = Api.Contexto(empresa);
         var lote = new Liquidacion
         {
-            TenantId = empresa, Tipo = TipoLiquidacion.Masiva, Estado = EstadoLote.EnProceso, TotalItems = 3, CPendientes = 3,
-            CreadaPor = Guid.NewGuid(), CreadaEn = DateTimeOffset.UtcNow,
+            TenantId = empresa,
+            Tipo = TipoLiquidacion.Masiva,
+            Estado = EstadoLote.EnProceso,
+            TotalItems = 3,
+            CPendientes = 3,
+            CreadaPor = Guid.NewGuid(),
+            CreadaEn = DateTimeOffset.UtcNow,
         };
         db.Add(lote);
         await db.SaveChangesAsync(ct);

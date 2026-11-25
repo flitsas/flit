@@ -26,6 +26,8 @@ public static class OidcDefaults
         // estado de aprovisionamiento. Los atiende core-identity (solo svc-impuestos).
         ["platform.identidad.empresas.alta"] = ServiceAudiences.Plataforma,
         ["platform.identidad.credenciales.impuesto.copia"] = ServiceAudiences.Plataforma,
+        // HU #14694 (M04b, D-ALTA-IDEM): reemplazo de la llave de Diagnóstico cuando el alta del proveedor la rota.
+        ["platform.identidad.credenciales.impuesto.actualizar"] = ServiceAudiences.Plataforma,
         ["platform.aprovisionamiento.reportar"] = ServiceAudiences.Plataforma,
         ["platform.consultas"] = ServiceAudiences.Consultas,
         // HU #13344: configuración de consultas por empresa (la escribe la administración de FLIT).

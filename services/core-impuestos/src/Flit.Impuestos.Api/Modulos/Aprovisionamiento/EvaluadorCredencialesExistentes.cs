@@ -6,22 +6,22 @@ using Flit.Impuestos.Domain.Aprovisionamiento;
 namespace Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 
 /// <summary>
-/// Pasos 1 y 2 de D-CRED-DIAG (plan §2.1 y §3.1), antes de cualquier alta:
+/// Respaldo del alta (M07b, D-ALTA-IDEM, plan §5.8): el <see cref="Aprovisionador"/> lo usa solo cuando el alta idempotente no
+/// dejó credenciales (sin reintentos automáticos pendientes y sin un 409). Mira las credenciales que ya hay:
 /// <list type="number">
 ///   <item>Si la compañía ya tiene credencial propia en core-impuestos, se valida con <c>GET /fuentes</c>: 200 con secreto ⇒
-///   <c>LISTO</c>, sin secreto ⇒ <c>LISTO_SIN_WEBHOOK</c>; 401 ⇒ <c>REQUIERE_CREDENCIALES</c>.</item>
+///   <c>LISTO</c>, sin secreto ⇒ <c>LISTO_SIN_WEBHOOK</c>; 401 ⇒ <c>REQUIERE_CREDENCIALES</c> (el alta ya se intentó).</item>
 ///   <item>Si no, se pide a Identidad la llave de Diagnóstico (<c>ObtenerCredencialImpuestoParaCopia</c>, DA-3 residual) y se
-///   valida igual: 200 ⇒ se copia (origen <c>COPIA_DIAGNOSTICO</c>, sin secreto) y queda <c>LISTO_SIN_WEBHOOK</c>, sin alta ni
-///   rotación, así que la credencial de Diagnóstico no cambia; 401 ⇒ <c>REQUIERE_CREDENCIALES</c> y no se guarda.</item>
+///   valida igual: 200 ⇒ se copia (origen <c>COPIA_DIAGNOSTICO</c>, sin secreto) y queda <c>LISTO_SIN_WEBHOOK</c>, sin rotación;
+///   401 ⇒ <c>REQUIERE_CREDENCIALES</c> y no se guarda.</item>
 /// </list>
-/// Devuelve null si no hay ninguna de las dos (sigue el alta). <c>GET /fuentes</c> es idempotente: si no salió, se cortó o
-/// respondió 5xx se reintenta solo (<see cref="EventoAprovisionamiento.NoSalio"/>); otro 4xx o el API sin configurar es error del
-/// ambiente. Si Identidad no responde tampoco se da de alta (sin saber si hay llave de Diagnóstico el alta podría terminar en 409):
-/// se reintenta solo. Nunca registra las llaves.
+/// Devuelve null si no hay ninguna de las dos (queda el resultado del alta). <c>GET /fuentes</c> es idempotente: si no salió,
+/// se cortó o respondió 5xx se reintenta solo (<see cref="EventoAprovisionamiento.NoSalio"/>); otro 4xx o el API sin configurar
+/// es error del ambiente. Si Identidad no responde también se reintenta. Nunca registra las llaves.
 /// </summary>
 /// <example>
 /// <code>
-/// var resultado = await evaluador.EvaluarAsync(empresa, ct) ?? await alta.EjecutarAsync(empresa, marcar, ct);
+/// var resultado = await evaluador.EvaluarAsync(empresa, ct) ?? resultadoDelAlta;
 /// </code>
 /// </example>
 public sealed partial class EvaluadorCredencialesExistentes(

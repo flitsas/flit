@@ -9,8 +9,8 @@ namespace Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 /// <summary>
 /// «Reintentar» del Super Admin desde Impuestos (plan §5.1): <c>POST /backoffice/empresas/{tenantId}/aprovisionamiento/reintentar</c>
 /// (<c>impuestos.backoffice.ver</c>), bajo <see cref="PoliticaBackoffice"/>, con la compañía explícita de la ruta
-/// (<see cref="EmpresaExplicita"/>) y <c>Cache-Control: no-store</c>: 202 desde <c>ERROR</c>, <c>INCIERTO</c> o
-/// <c>REQUIERE_REVISION_NIT</c> (pasa a <c>PENDIENTE</c> y se evalúa en la siguiente ronda); 409 <c>ESTADO_NO_REINTENTABLE</c> en
+/// (<see cref="EmpresaExplicita"/>) y <c>Cache-Control: no-store</c>: 202 desde <c>ERROR</c>, <c>INCIERTO</c>,
+/// <c>REQUIERE_REVISION_NIT</c> o <c>LISTO_SIN_WEBHOOK</c> (pasa a <c>PENDIENTE</c> y se evalúa en la siguiente ronda); 409 <c>ESTADO_NO_REINTENTABLE</c> en
 /// otro estado; 404 <c>EMPRESA_NO_ENCONTRADA</c> sin aprovisionamiento. El <c>GET</c> del estado con su historial es de M13
 /// (<c>EmpresasBackofficeEndpoints.DetalleAsync</c>).
 /// </summary>

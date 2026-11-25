@@ -24,6 +24,23 @@ service CredencialesProductoService {
   // core-impuestos una sola vez, al aprovisionar, para copiar la llave a su propio almacén (D-CRED-DIAG). Sin efectos
   // sobre la credencial de Diagnóstico. Cada llamada queda en admin.tenant_config_audit_logs (sin valor ni huella).
   rpc ObtenerCredencialImpuestoParaCopia(ObtenerCredencialImpuestoParaCopiaRequest) returns (ObtenerCredencialImpuestoParaCopiaResponse);
+
+  // Solo svc-impuestos, scope platform.identidad.credenciales.impuesto.actualizar (HU #14694, D-ALTA-IDEM, plan §5.8).
+  // El alta del proveedor respondió api_key_rotated=true: la llave anterior de la empresa ya no sirve y core-impuestos
+  // propaga la nueva a Diagnóstico. Solo REEMPLAZA una fila diagnostico/impuesto_api_key que ya existe para la empresa;
+  // nunca la crea (actualizada = false sin fila). No mira si Diagnóstico está encendido. Idempotente: repetir con la misma
+  // llave deja el mismo valor. Cada reemplazo queda en admin.tenant_config_audit_logs (sin valor ni huella, con el cliente).
+  // Llave con forma inválida -> INVALID_ARGUMENT reason CREDENCIAL_INVALIDA (no se reintenta).
+  rpc ActualizarCredencialImpuestoDiagnostico(ActualizarCredencialImpuestoDiagnosticoRequest) returns (ActualizarCredencialImpuestoDiagnosticoResponse);
+}
+
+// La empresa va en la metadata x-flit-tenant-id. api_key: la nueva llave del impuesto (texto visible, 16 a 256 caracteres).
+message ActualizarCredencialImpuestoDiagnosticoRequest {
+  string api_key = 1;
+}
+
+message ActualizarCredencialImpuestoDiagnosticoResponse {
+  bool actualizada = 1;  // false => no hay fila diagnostico/impuesto_api_key para la empresa (no se crea)
 }
 
 message ObtenerCredencialImpuestoRequest {}

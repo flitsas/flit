@@ -96,13 +96,13 @@ public sealed partial class CrearLiquidacionMasiva(
     }
 
     /// <summary>
-    /// Nombre de quien crea la masiva (columna <c>creada_por_nombre</c> de la 1.2.0). Es el único punto que lo escribe para esta acción:
-    /// se conecta al integrar M07b; mientras tanto no guarda nada y la respuesta lleva <c>creadaPor.nombre</c> vacío.
+    /// Nombre de quien crea la masiva, tal como viene en su token (columna <c>creada_por_nombre</c> de la 1.2.0). Es el único punto que
+    /// lo escribe para esta acción.
     /// </summary>
     internal static void RegistrarNombreCreador(Liquidacion lote, string? nombre)
     {
         ArgumentNullException.ThrowIfNull(lote);
-        _ = nombre;
+        lote.CreadaPorNombre = CerrarLiquidacion.NombreDelActor(nombre);
     }
 
     /// <summary>El nombre del archivo sin ruta, recortado al largo de la columna.</summary>

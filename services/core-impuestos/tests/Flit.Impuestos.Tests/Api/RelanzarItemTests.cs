@@ -53,6 +53,7 @@ public sealed class RelanzarItemTests
         nuevo.Should().NotBe(lote);
         raiz.GetProperty("tipo").GetString().Should().Be("INDIVIDUAL");
         raiz.GetProperty("creadaPor").GetProperty("id").GetGuid().Should().Be(usuario);
+        raiz.GetProperty("creadaPor").GetProperty("nombre").GetString().Should().Be("operador@empresa.test", "creada_por_nombre (1.2.0)");
         var nuevoItem = raiz.GetProperty("items").EnumerateArray().Should().ContainSingle().Subject;
         nuevoItem.GetProperty("placa").GetString().Should().Be("AAA001");
         nuevoItem.GetProperty("posibleDuplicado").GetBoolean().Should().BeTrue();

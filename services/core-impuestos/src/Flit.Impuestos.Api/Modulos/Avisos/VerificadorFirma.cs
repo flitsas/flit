@@ -62,7 +62,7 @@ public static class VerificadorFirma
 
     /// <summary>
     /// Ventana de rotación: prueba con cada secreto en orden (el vigente primero y luego el anterior) y vale si alguno coincide.
-    /// Hoy el modelo guarda solo el vigente; el anterior queda pendiente de DDL.
+    /// El anterior lo guarda core-impuestos durante 24 h tras un cambio (M07b, <c>webhook_secret_anterior_cifrado</c>).
     /// </summary>
     public static ResultadoFirma Verificar(IReadOnlyList<string> secretos, string? timestamp, string? firma, ReadOnlySpan<byte> cuerpo, DateTimeOffset ahora)
     {

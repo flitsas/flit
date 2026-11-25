@@ -18,21 +18,37 @@ public sealed record AltaEmpresaPeticion(
     public override string ToString() => $"AltaEmpresaPeticion {{ TaxId = {TaxId}, LegalName = [{LegalName.Length} car.], ContactEmail = [REDACTADO] }}";
 }
 
-/// <summary>Empresa del API (<c>company</c> del 201 del alta). Sin secretos: <c>api_key_prefix</c> no lo es.</summary>
+/// <summary>Empresa del API (<c>company</c> del alta). Sin secretos: <c>api_key_prefix</c> no lo es.</summary>
 public sealed record EmpresaApi(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("tax_id")] string? TaxId,
     [property: JsonPropertyName("active")] bool? Active,
     [property: JsonPropertyName("api_key_prefix")] string? ApiKeyPrefix,
-    [property: JsonPropertyName("has_webhook_secret")] bool? HasWebhookSecret);
+    [property: JsonPropertyName("has_webhook_secret")] bool? HasWebhookSecret)
+{
+    /// <summary>Dígito de verificación que calculó el proveedor (guía §3); FLIT envía el NIT base (D-TAXID).</summary>
+    [JsonPropertyName("tax_id_dv")]
+    public int? TaxIdDv { get; init; }
+}
 
-/// <summary>201 del alta: la empresa y, UNA sola vez, <c>api_key</c> y <c>webhook_secret</c> (guía §3).</summary>
+/// <summary>
+/// 200 o 201 del alta idempotente (guía §3, 2026-11-25): la empresa, <c>created</c> (201 = nació en esta llamada, 200 = ya
+/// existía), la <c>api_key</c> y el <c>webhook_secret</c> (vienen SIEMPRE, los mismos en cada llamada con ese NIT) y
+/// <c>api_key_rotated</c> (true una sola vez por empresa: la llave anterior dejó de servir).
+/// </summary>
 public sealed record AltaEmpresaRespuesta(
     [property: JsonPropertyName("company")] EmpresaApi Company,
     [property: JsonPropertyName("api_key")] string ApiKey,
     [property: JsonPropertyName("webhook_secret")] string? WebhookSecret)
 {
-    public override string ToString() => $"AltaEmpresaRespuesta {{ Company = {Company.Id}, ApiKey = [REDACTADO], WebhookSecret = [REDACTADO] }}";
+    [JsonPropertyName("created")]
+    public bool? Created { get; init; }
+
+    [JsonPropertyName("api_key_rotated")]
+    public bool? ApiKeyRotated { get; init; }
+
+    public override string ToString() =>
+        $"AltaEmpresaRespuesta {{ Company = {Company.Id}, Created = {Created}, ApiKeyRotated = {ApiKeyRotated}, ApiKey = [REDACTADO], WebhookSecret = [REDACTADO] }}";
 }
 
 /// <summary>Una fuente (departamento) de <c>GET /api/v1/fuentes</c> (guía §4).</summary>

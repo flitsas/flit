@@ -14,11 +14,12 @@ using E = Flit.Impuestos.Domain.Aprovisionamiento.EstadoAprovisionamiento;
 namespace Flit.Impuestos.Tests.Aprovisionamiento;
 
 /// <summary>
-/// HU #14694 (M07; EP-CF2, F1a-CF4, F1a-CF7, F1a-CF8, F1a-CF9; D-CRED-DIAG, D-ALTA-REINTENTOS, D-409, D-TAXID, DA-8) — el
-/// <see cref="Aprovisionador"/> evalúa una compañía en <c>PENDIENTE</c> en el orden de D-CRED-DIAG: (1) credencial propia →
-/// <c>GET /fuentes</c>; (2) si no, la llave de Diagnóstico copiada y validada, sin alta ni rotación; (3) si no, el alta con los
-/// datos de Identidad. Cada respuesta del alta lleva al estado de D-ALTA-REINTENTOS y solo «no salió» se reintenta solo. Incluye
-/// las rutas del backoffice del aprovisionamiento (estado con historial y Reintentar).
+/// HU #14694 (M07 y M07b; EP-CF2, F1a-CF4, F1a-CF7, F1a-CF8, F1a-CF9; D-ALTA-IDEM, D-TAXID, DA-8) — el
+/// <see cref="Aprovisionador"/> evalúa una compañía en <c>PENDIENTE</c> llamando SIEMPRE primero al alta idempotente del
+/// proveedor con los datos de Identidad. Si el alta no deja credenciales (y no le quedan reintentos automáticos, o no se pudo
+/// hacer), usa de respaldo las existentes: (1) credencial propia → <c>GET /fuentes</c>; (2) la llave de Diagnóstico copiada y
+/// validada. Un 409 es un contrato inesperado: <c>ERROR(AMBIENTE)</c> sin respaldo. Incluye las rutas del backoffice del
+/// aprovisionamiento (estado con historial y Reintentar).
 /// </summary>
 /// <example>
 /// <code>
@@ -30,11 +31,21 @@ public sealed class AprovisionadorTests
     private const string ApiKey = ClienteApiLiquidacionTests.ApiKey;
     private const string Secreto = ClienteApiLiquidacionTests.WebhookSecret;
 
+    /// <summary>Proveedor con el alta no disponible en el ambiente (404) y <c>GET /fuentes</c> con <paramref name="fuentes"/>.</summary>
+    private static ApiLiquidacionDePrueba SinAlta(HttpStatusCode fuentes = HttpStatusCode.OK) => new()
+    {
+        Responder = r => r.RequestUri!.AbsolutePath == EntornoAprovisionamiento.RutaAlta
+            ? ApiLiquidacionDePrueba.Json(HttpStatusCode.NotFound, EntornoAprovisionamiento.ErrorApi("not_found"))
+            : fuentes == HttpStatusCode.OK
+                ? ApiLiquidacionDePrueba.Json(HttpStatusCode.OK, ClienteApiLiquidacionTests.Fuentes200)
+                : ApiLiquidacionDePrueba.Json(fuentes, EntornoAprovisionamiento.ErrorApi("unauthorized")),
+    };
+
     [Fact]
-    public async Task Con_credencial_propia_y_secreto_valida_con_fuentes_y_queda_LISTO_sin_copia_ni_alta()
+    public async Task Sin_alta_disponible_la_credencial_propia_con_secreto_se_valida_con_fuentes_y_queda_LISTO_sin_copia()
     {
         var ct = TestContext.Current.CancellationToken;
-        var proveedor = new ApiLiquidacionDePrueba();
+        var proveedor = SinAlta();
         var identidad = new IdentidadDePrueba();
         await using var api = await EntornoAprovisionamiento.ConApiAsync(proveedor, identidad);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
@@ -48,9 +59,9 @@ public sealed class AprovisionadorTests
         fila!.Estado.Should().Be(E.Listo);
         fila.FirmaConfirmada.Should().BeFalse();
         fila.Version.Should().Be(2);
-        proveedor.Pedidos.Should().ContainSingle().Which.Cabeceras["X-API-Key"].Should().Be(ApiKey);
+        proveedor.Pedidos.Should().ContainSingle(p => p.Uri.EndsWith(EntornoAprovisionamiento.RutaFuentes)).Which.Cabeceras["X-API-Key"].Should().Be(ApiKey);
+        EntornoAprovisionamiento.Altas(proveedor).Should().Be(1, "D-ALTA-IDEM: el alta va primero");
         identidad.LlamadasLlave.Should().Be(0, "con credencial propia no se pide la de Diagnóstico");
-        identidad.LlamadasDatos.Should().Be(0, "ni se hace el alta");
         var paso = (await EntornoAprovisionamiento.HistorialAsync(api, empresa, ct)).Should().ContainSingle().Subject;
         paso.Desde.Should().Be(E.Pendiente);
         paso.Hacia.Should().Be(E.Listo);
@@ -58,10 +69,10 @@ public sealed class AprovisionadorTests
     }
 
     [Fact]
-    public async Task Con_credencial_propia_sin_secreto_queda_LISTO_SIN_WEBHOOK_con_motivo()
+    public async Task Sin_alta_disponible_la_credencial_propia_sin_secreto_queda_LISTO_SIN_WEBHOOK_con_motivo()
     {
         var ct = TestContext.Current.CancellationToken;
-        var proveedor = new ApiLiquidacionDePrueba();
+        var proveedor = SinAlta();
         await using var api = await EntornoAprovisionamiento.ConApiAsync(proveedor, new IdentidadDePrueba());
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = Guid.NewGuid();
@@ -76,13 +87,10 @@ public sealed class AprovisionadorTests
     }
 
     [Fact]
-    public async Task Credencial_propia_rechazada_con_401_pide_credenciales_sin_alta()
+    public async Task Sin_alta_disponible_la_credencial_propia_rechazada_con_401_pide_credenciales()
     {
         var ct = TestContext.Current.CancellationToken;
-        var proveedor = new ApiLiquidacionDePrueba
-        {
-            Responder = _ => ApiLiquidacionDePrueba.Json(HttpStatusCode.Unauthorized, EntornoAprovisionamiento.ErrorApi("unauthorized")),
-        };
+        var proveedor = SinAlta(HttpStatusCode.Unauthorized);
         var identidad = new IdentidadDePrueba();
         await using var api = await EntornoAprovisionamiento.ConApiAsync(proveedor, identidad);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
@@ -95,15 +103,15 @@ public sealed class AprovisionadorTests
         var fila = await EntornoAprovisionamiento.FilaAsync(api, empresa, ct);
         fila!.Estado.Should().Be(E.RequiereCredenciales);
         fila.MotivoCodigo.Should().Be("CREDENCIAL_RECHAZADA");
-        EntornoAprovisionamiento.Altas(proveedor).Should().Be(0);
+        EntornoAprovisionamiento.Altas(proveedor).Should().Be(1, "el alta se intentó antes de pedir credenciales");
         identidad.LlamadasLlave.Should().Be(0);
     }
 
     [Fact]
-    public async Task Sin_credencial_propia_copia_la_llave_de_Diagnostico_valida_sin_alta_y_queda_LISTO_SIN_WEBHOOK()
+    public async Task Sin_alta_disponible_ni_credencial_propia_copia_la_llave_de_Diagnostico_valida_y_queda_LISTO_SIN_WEBHOOK()
     {
         var ct = TestContext.Current.CancellationToken;
-        var proveedor = new ApiLiquidacionDePrueba();
+        var proveedor = SinAlta();
         var identidad = new IdentidadDePrueba { Llave = new LlaveDiagnostico(true, EntornoAprovisionamiento.LlaveDiagnostico, 3) };
         await using var api = await EntornoAprovisionamiento.ConApiAsync(proveedor, identidad);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
@@ -115,10 +123,9 @@ public sealed class AprovisionadorTests
         var fila = await EntornoAprovisionamiento.FilaAsync(api, empresa, ct);
         fila!.Estado.Should().Be(E.ListoSinWebhook);
         fila.MotivoCodigo.Should().Be("SIN_WEBHOOK_SECRET");
-        var pedido = proveedor.Pedidos.Should().ContainSingle("solo se valida la llave copiada; Diagnóstico queda intacto (sin alta ni rotación)").Subject;
-        pedido.Uri.Should().EndWith(EntornoAprovisionamiento.RutaFuentes);
+        var pedido = proveedor.Pedidos.Should().ContainSingle(p => p.Uri.EndsWith(EntornoAprovisionamiento.RutaFuentes), "solo se valida la llave copiada").Subject;
         pedido.Cabeceras["X-API-Key"].Should().Be(EntornoAprovisionamiento.LlaveDiagnostico);
-        identidad.LlamadasDatos.Should().Be(0, "con copia válida no hay alta");
+        identidad.LlamadasDatos.Should().Be(1, "el alta se intentó primero");
         var copia = await EntornoAprovisionamiento.LeerCredencialAsync(api, empresa, ct);
         copia!.ApiKey.Should().Be(EntornoAprovisionamiento.LlaveDiagnostico);
         copia.WebhookSecret.Should().BeNull("Diagnóstico no tiene secreto de webhook; lo carga el Super Admin");
@@ -127,13 +134,10 @@ public sealed class AprovisionadorTests
     }
 
     [Fact]
-    public async Task Llave_de_Diagnostico_rechazada_pide_credenciales_y_no_la_guarda()
+    public async Task Sin_alta_disponible_la_llave_de_Diagnostico_rechazada_pide_credenciales_y_no_la_guarda()
     {
         var ct = TestContext.Current.CancellationToken;
-        var proveedor = new ApiLiquidacionDePrueba
-        {
-            Responder = _ => ApiLiquidacionDePrueba.Json(HttpStatusCode.Unauthorized, EntornoAprovisionamiento.ErrorApi("unauthorized")),
-        };
+        var proveedor = SinAlta(HttpStatusCode.Unauthorized);
         var identidad = new IdentidadDePrueba { Llave = new LlaveDiagnostico(true, EntornoAprovisionamiento.LlaveDiagnostico, 3) };
         await using var api = await EntornoAprovisionamiento.ConApiAsync(proveedor, identidad);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
@@ -144,7 +148,6 @@ public sealed class AprovisionadorTests
 
         (await EntornoAprovisionamiento.FilaAsync(api, empresa, ct))!.Estado.Should().Be(E.RequiereCredenciales);
         (await EntornoAprovisionamiento.LeerCredencialAsync(api, empresa, ct)).Should().BeNull();
-        identidad.LlamadasDatos.Should().Be(0);
     }
 
     [Fact]
@@ -160,7 +163,7 @@ public sealed class AprovisionadorTests
 
         await EntornoAprovisionamiento.EvaluarAsync(api, empresa, ct);
 
-        identidad.LlamadasLlave.Should().Be(1, "primero se busca la llave de Diagnóstico");
+        identidad.LlamadasLlave.Should().Be(0, "D-ALTA-IDEM: el alta va primero y dio credenciales");
         var alta = proveedor.Pedidos.Should().ContainSingle(p => p.Uri.EndsWith(EntornoAprovisionamiento.RutaAlta)).Subject;
         alta.Cabeceras["Authorization"].Should().Be("Bearer " + ClienteApiLiquidacionTests.Token);
         using var cuerpo = JsonDocument.Parse(alta.Cuerpo);
@@ -170,11 +173,11 @@ public sealed class AprovisionadorTests
         var fila = await EntornoAprovisionamiento.FilaAsync(api, empresa, ct);
         fila!.Estado.Should().Be(E.Listo);
         fila.FirmaConfirmada.Should().BeFalse();
-        fila.MotivoDetalle.Should().BeNull("la marca del envío se limpia al guardar el resultado");
+        fila.MotivoDetalle.Should().BeNull("no hay marca del envío: el alta es idempotente");
     }
 
     [Fact]
-    public async Task Alta_409_pide_credenciales_sin_reintento()
+    public async Task Alta_409_es_error_de_ambiente_sin_reintento()
     {
         var ct = TestContext.Current.CancellationToken;
         var proveedor = EntornoAprovisionamiento.ProveedorConAlta(HttpStatusCode.Conflict, EntornoAprovisionamiento.ErrorApi("tax_id_taken"));
@@ -184,11 +187,12 @@ public sealed class AprovisionadorTests
         await EntornoAprovisionamiento.SembrarAsync(api, empresa, E.Pendiente, ct);
 
         await EntornoAprovisionamiento.EvaluarAsync(api, empresa, ct);
-        (await EntornoAprovisionamiento.EvaluarAsync(api, empresa, ct)).Should().BeFalse("REQUIERE_CREDENCIALES no se vuelve a evaluar");
+        (await EntornoAprovisionamiento.EvaluarAsync(api, empresa, ct)).Should().BeFalse("ERROR no se vuelve a evaluar solo");
 
         var fila = await EntornoAprovisionamiento.FilaAsync(api, empresa, ct);
-        fila!.Estado.Should().Be(E.RequiereCredenciales);
-        fila.MotivoCodigo.Should().Be("EMPRESA_YA_REGISTRADA");
+        fila!.Estado.Should().Be(E.Error);
+        fila.ErrorTipo.Should().Be(TipoErrorAprovisionamiento.Ambiente);
+        fila.MotivoCodigo.Should().Be("AMBIENTE_NO_CONFIGURADO", "el 409 del contrato viejo ya no es EMPRESA_YA_REGISTRADA");
         fila.ProximoIntentoEn.Should().BeNull();
         EntornoAprovisionamiento.Altas(proveedor).Should().Be(1);
     }
@@ -198,8 +202,6 @@ public sealed class AprovisionadorTests
     [InlineData(415, E.Error, TipoErrorAprovisionamiento.Datos, "ALTA_DATOS_RECHAZADOS")]
     [InlineData(401, E.Error, TipoErrorAprovisionamiento.Ambiente, "AMBIENTE_NO_CONFIGURADO")]
     [InlineData(404, E.Error, TipoErrorAprovisionamiento.Ambiente, "AMBIENTE_NO_CONFIGURADO")]
-    [InlineData(500, E.Incierto, null, "ALTA_SIN_CONFIRMAR")]
-    [InlineData(503, E.Incierto, null, "ALTA_SIN_CONFIRMAR")]
     public async Task Cada_respuesta_del_alta_lleva_a_su_estado_sin_reintento_automatico(int status, E hacia, TipoErrorAprovisionamiento? tipo, string motivo)
     {
         var ct = TestContext.Current.CancellationToken;
@@ -217,7 +219,7 @@ public sealed class AprovisionadorTests
         fila.ErrorTipo.Should().Be(tipo);
         fila.MotivoCodigo.Should().Be(motivo);
         fila.ProximoIntentoEn.Should().BeNull("sin reintento automático");
-        EntornoAprovisionamiento.Altas(proveedor).Should().Be(1, "un alta que pudo llegar o que se rechazó no se repite sola");
+        EntornoAprovisionamiento.Altas(proveedor).Should().Be(1, "un alta rechazada no se repite sola");
     }
 
     [Fact]
@@ -308,21 +310,21 @@ public sealed class AprovisionadorTests
     }
 
     [Fact]
-    public async Task Una_marca_de_alta_enviada_de_un_intento_anterior_es_INCIERTO_sin_volver_a_enviar()
+    public async Task Una_marca_ALTA_ENVIADA_que_quedo_de_M07_no_impide_el_alta_idempotente()
     {
         var ct = TestContext.Current.CancellationToken;
         var proveedor = EntornoAprovisionamiento.ProveedorConAlta(HttpStatusCode.Created, ClienteApiLiquidacionTests.Alta201);
         await using var api = await EntornoAprovisionamiento.ConApiAsync(proveedor, new IdentidadDePrueba());
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = Guid.NewGuid();
-        await EntornoAprovisionamiento.SembrarAsync(api, empresa, E.Pendiente, ct, f => f.MotivoDetalle = Aprovisionador.MarcaAltaEnviada);
+        await EntornoAprovisionamiento.SembrarAsync(api, empresa, E.Pendiente, ct, f => f.MotivoDetalle = "ALTA_ENVIADA");
 
         await EntornoAprovisionamiento.EvaluarAsync(api, empresa, ct);
 
         var fila = await EntornoAprovisionamiento.FilaAsync(api, empresa, ct);
-        fila!.Estado.Should().Be(E.Incierto, "el proceso cayó con el alta en el aire: pudo llegar");
-        fila.MotivoCodigo.Should().Be("ALTA_SIN_CONFIRMAR");
-        proveedor.Pedidos.Should().BeEmpty();
+        fila!.Estado.Should().Be(E.Listo, "repetir el alta devuelve las credenciales del primer intento");
+        fila.MotivoDetalle.Should().BeNull();
+        EntornoAprovisionamiento.Altas(proveedor).Should().Be(1);
     }
 
     [Theory]
@@ -347,11 +349,11 @@ public sealed class AprovisionadorTests
     }
 
     [Fact]
-    public async Task Identidad_caida_al_buscar_la_llave_reintenta_y_no_da_de_alta()
+    public async Task Identidad_caida_al_pedir_los_datos_del_alta_reintenta_sin_llamar_al_proveedor()
     {
         var ct = TestContext.Current.CancellationToken;
         var proveedor = EntornoAprovisionamiento.ProveedorConAlta(HttpStatusCode.Created, ClienteApiLiquidacionTests.Alta201);
-        var identidad = new IdentidadDePrueba { LlaveCaida = true };
+        var identidad = new IdentidadDePrueba { DatosCaido = true };
         await using var api = await EntornoAprovisionamiento.ConApiAsync(proveedor, identidad);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = Guid.NewGuid();
@@ -362,14 +364,16 @@ public sealed class AprovisionadorTests
         var fila = await EntornoAprovisionamiento.FilaAsync(api, empresa, ct);
         fila!.Estado.Should().Be(E.Pendiente);
         fila.MotivoCodigo.Should().Be("REINTENTO_PROGRAMADO");
-        EntornoAprovisionamiento.Altas(proveedor).Should().Be(0, "sin saber si Diagnóstico tiene llave no se da de alta (evita un 409)");
+        fila.IntentosAutomaticos.Should().Be(1);
+        EntornoAprovisionamiento.Altas(proveedor).Should().Be(0, "sin los datos de Identidad no hay alta");
+        identidad.LlamadasLlave.Should().Be(0, "quedan reintentos: todavía no se usa el respaldo");
     }
 
     [Fact]
     public async Task Backoffice_ver_aprovisionamiento_devuelve_estado_accion_e_historial_mas_reciente_primero()
     {
         var ct = TestContext.Current.CancellationToken;
-        var proveedor = EntornoAprovisionamiento.ProveedorConAlta(HttpStatusCode.Conflict, EntornoAprovisionamiento.ErrorApi("tax_id_taken"));
+        var proveedor = EntornoAprovisionamiento.ProveedorConAlta(HttpStatusCode.BadRequest, EntornoAprovisionamiento.ErrorApi("bad_request"));
         await using var api = await EntornoAprovisionamiento.ConApiAsync(proveedor, new IdentidadDePrueba());
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = Guid.NewGuid();
@@ -381,14 +385,14 @@ public sealed class AprovisionadorTests
         r.StatusCode.Should().Be(HttpStatusCode.OK);
         using var cuerpo = JsonDocument.Parse(await r.Content.ReadAsStringAsync(ct));
         var raiz = cuerpo.RootElement;
-        raiz.GetProperty("estado").GetString().Should().Be("REQUIERE_CREDENCIALES");
-        raiz.GetProperty("motivo").GetString().Should().Be("EMPRESA_YA_REGISTRADA");
-        raiz.GetProperty("accion").GetString().Should().Be("CARGAR_CREDENCIALES");
+        raiz.GetProperty("estado").GetString().Should().Be("ERROR");
+        raiz.GetProperty("motivo").GetString().Should().Be("ALTA_DATOS_RECHAZADOS");
+        raiz.GetProperty("accion").GetString().Should().Be("REINTENTAR");
         raiz.GetProperty("firmaConfirmada").GetBoolean().Should().BeFalse();
         raiz.GetProperty("modoRespaldoFirma").GetBoolean().Should().BeFalse();
         var historial = raiz.GetProperty("historial").EnumerateArray().ToList();
         historial.Should().HaveCount(2);
-        historial[0].GetProperty("hacia").GetString().Should().Be("REQUIERE_CREDENCIALES");
+        historial[0].GetProperty("hacia").GetString().Should().Be("ERROR");
         historial[0].GetProperty("actorTipo").GetString().Should().Be("SISTEMA");
         historial[1].GetProperty("desde").ValueKind.Should().Be(JsonValueKind.Null);
         historial[1].GetProperty("hacia").GetString().Should().Be("PENDIENTE");
@@ -443,6 +447,21 @@ public sealed class AprovisionadorTests
         var texto = await rechazado.Content.ReadAsStringAsync(ct);
         texto.Should().Contain("ESTADO_NO_REINTENTABLE").And.Contain("En el estado actual de la compañía no se puede reintentar.");
         (await EntornoAprovisionamiento.FilaAsync(api, lista, ct))!.Version.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Backoffice_reintentar_desde_LISTO_SIN_WEBHOOK_responde_202_y_pasa_a_PENDIENTE()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        await using var api = await EntornoAprovisionamiento.ConApiAsync(new ApiLiquidacionDePrueba(), new IdentidadDePrueba());
+        Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
+        var empresa = Guid.NewGuid();
+        await EntornoAprovisionamiento.SembrarAsync(api, empresa, E.ListoSinWebhook, ct, f => f.MotivoCodigo = "SIN_WEBHOOK_SECRET");
+
+        using var r = await api.Cliente(CargaManualCredencialesTests.TokenSuperAdmin(api)).PostAsync(RutaBackoffice(empresa) + "/reintentar", null, ct);
+
+        r.StatusCode.Should().Be(HttpStatusCode.Accepted, "M07b: la acción de LISTO_SIN_WEBHOOK es REINTENTAR (el alta trae el secreto)");
+        (await EntornoAprovisionamiento.FilaAsync(api, empresa, ct))!.Estado.Should().Be(E.Pendiente);
     }
 
     private static string RutaBackoffice(Guid empresa) => $"{Program.Prefijo}/backoffice/empresas/{empresa}/aprovisionamiento";

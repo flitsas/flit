@@ -32,6 +32,8 @@ public static class PlatformModuleExtensions
         // HU #14694: estado de aprovisionamiento que reporta el producto y copia de la llave de Diagnóstico (D-CRED-DIAG).
         services.AddScoped<ReportProvisioningStatusHandler>();
         services.AddScoped<GetTenantProductCredentialForCopyHandler>();
+        // HU #14694 (M04b, D-ALTA-IDEM): Impuestos propaga a Diagnóstico la llave que el alta del proveedor rotó.
+        services.AddScoped<UpdateTenantProductCredentialFromServiceHandler>();
         // HU #12965 (B-05): implementación real del contrato §4.
         services.AddScoped<IProductAccessResolver, ProductAccessResolver>();
         // Epic #13316 (HU #13334): productos encendidos de una empresa, para el gRPC de Identidad.

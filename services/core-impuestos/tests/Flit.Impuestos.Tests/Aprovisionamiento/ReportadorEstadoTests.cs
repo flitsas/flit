@@ -107,7 +107,13 @@ public sealed partial class ReportadorEstadoTests
     {
         var ct = TestContext.Current.CancellationToken;
         var identidad = new IdentidadDePrueba();
-        var proveedor = new ApiLiquidacionDePrueba();
+        // M07b: el alta va primero; con el alta no disponible (404) queda la credencial propia de respaldo.
+        var proveedor = new ApiLiquidacionDePrueba
+        {
+            Responder = r => r.RequestUri!.AbsolutePath == EntornoAprovisionamiento.RutaAlta
+                ? ApiLiquidacionDePrueba.Json(System.Net.HttpStatusCode.NotFound, EntornoAprovisionamiento.ErrorApi("not_found"))
+                : ApiLiquidacionDePrueba.Json(System.Net.HttpStatusCode.OK, ClienteApiLiquidacionTests.Fuentes200),
+        };
         await using var api = await EntornoAprovisionamiento.ConApiAsync(proveedor, identidad);
         Assert.SkipWhen(api.Omitir is not null, api.Omitir ?? string.Empty);
         var empresa = Guid.NewGuid();
@@ -118,7 +124,7 @@ public sealed partial class ReportadorEstadoTests
 
         var reporte = identidad.Reportes.Should().ContainSingle().Subject.Reporte;
         reporte.Estado.Should().Be("LISTO_SIN_WEBHOOK");
-        reporte.Accion.Should().Be("CARGAR_SECRETO");
+        reporte.Accion.Should().Be("REINTENTAR", "1.2.0: el alta idempotente trae el secreto");
         reporte.MotivoCodigo.Should().Be("SIN_WEBHOOK_SECRET");
         reporte.Version.Should().Be(2);
     }
@@ -126,7 +132,7 @@ public sealed partial class ReportadorEstadoTests
     [Theory]
     [InlineData(E.Pendiente, "")]
     [InlineData(E.Listo, "")]
-    [InlineData(E.ListoSinWebhook, "CARGAR_SECRETO")]
+    [InlineData(E.ListoSinWebhook, "REINTENTAR")]
     [InlineData(E.Error, "REINTENTAR")]
     [InlineData(E.Incierto, "REINTENTAR")]
     [InlineData(E.RequiereCredenciales, "CARGAR_CREDENCIALES")]
@@ -153,8 +159,10 @@ public sealed partial class ReportadorEstadoTests
     {
         var contrato = LiteralesDelContrato();
 
-        contrato.Should().HaveCount(13);
+        contrato.Should().HaveCount(15, "1.2.0 suma EMPRESA_INACTIVA_EN_PROVEEDOR y CLAVE_ROTADA y conserva los retirados");
         MotivosAprovisionamiento.Literales.Should().BeEquivalentTo(contrato);
+        MotivosAprovisionamiento.Retirados.Should().BeEquivalentTo(["EMPRESA_YA_REGISTRADA", "ALTA_SIN_CONFIRMAR"]);
+        MotivosAprovisionamiento.Retirados.Should().OnlyContain(r => MotivosAprovisionamiento.EsDelContrato(r), "el historial puede traerlos");
         MotivosAprovisionamiento.Literales.Keys.Should().OnlyContain(k => k.Length <= 64);
         MotivosAprovisionamiento.Literales.Values.Should().OnlyContain(v => v.Length <= 300);
     }

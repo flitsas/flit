@@ -837,6 +837,16 @@ La guía `docs/integraciones/guia-integracion-clientes.md` cambió el contrato d
 - Si el alta responde `api_key_rotated:true` y la compañía tenía llave de Diagnóstico, Impuestos guarda la llave nueva y la propaga a Diagnóstico con un rpc nuevo de Identidad: `ActualizarCredencialImpuestoDiagnostico`, con scope propio, auditado y con `x-flit-tenant-id`. Se hace en el mismo flujo, con reintentos, mediante un trabajo por la bandeja (outbox) para no perderlo.
 - Toca core-identity y core-api (M04b: proto, handler y tests), además de M07b.
 
+**Notas de implementación de M07b/M04b (2026-11-25)** — lo que quedó fijado al implementar y no estaba literal arriba:
+
+- Respaldo: si el alta no deja credenciales y no es un 409, se usan las existentes (propia validada con `GET /fuentes`, luego la copia de Diagnóstico) cuando ya no quedan reintentos automáticos o cuando el alta no se pudo hacer (NIT no válido, datos, ambiente sin configurar, 401/403/404). Sin respaldo, queda el resultado del alta.
+- El 409 usa el motivo `AMBIENTE_NO_CONFIGURADO` con `motivo_detalle = ALTA_409_CONTRATO_INESPERADO` y alerta; no hay motivo nuevo para él.
+- `CLAVE_ROTADA` va en una fila de historial aparte (desde = hacia = el estado resultante); el motivo del estado no cambia.
+- `LISTO_SIN_WEBHOOK` + Reintentar pasa a `PENDIENTE` (no liquida hasta la siguiente ronda, unos 10 s).
+- Columnas en `impuestos.credenciales_empresa`: `webhook_secret_anterior_cifrado` (bytea, mismo propósito que el vigente) y `webhook_secret_anterior_hasta` (timestamptz). Migración `R1_AltaIdempotente`, que también suma `liquidaciones.motivo_cierre` (300), `liquidaciones.creada_por_nombre` y `cerrada_por_nombre` (200) y `liquidacion_items.secretaria_nombre` (120), todo nulable y solo mapeado.
+- Trabajos internos por la outbox (`impuestos-events.v1.yaml` 1.1.0, cola `impuestos.credenciales`, solo del productor `impuestos`): `impuestos.credencial.propagar` (llave rotada → Diagnóstico) e `impuestos.secreto.refrescar` (al encenderse `modo_respaldo_firma`). Solo llevan la empresa.
+- Rpc M04b: `CredencialesProductoService.ActualizarCredencialImpuestoDiagnostico`, scope `platform.identidad.credenciales.impuesto.actualizar`. Solo reemplaza una fila existente; sin fila responde `actualizada=false`. La propagación se encola en cada rotación; el rpc decide si había llave de Diagnóstico.
+- Al arrancar, `TrabajadorReintentoAlta` devuelve a `PENDIENTE` las filas `INCIERTO` con `ALTA_SIN_CONFIRMAR` (historial `ALTA_IDEMPOTENTE`, actor `SISTEMA`) y limpia la marca `ALTA_ENVIADA`.
 
 ### 5.9 Aviso «lote terminado» y columnas 1.2.0 (decisión del orquestador, 2026-11-25)
 

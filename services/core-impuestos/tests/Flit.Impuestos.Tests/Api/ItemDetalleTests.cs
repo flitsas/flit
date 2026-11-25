@@ -62,6 +62,9 @@ public sealed class ItemDetalleTests
         d.GetProperty("totalAPagar").GetDecimal().Should().Be(771700m);
         d.GetProperty("empresa").GetProperty("id").GetGuid().Should().Be(empresa);
         d.GetProperty("creadaPor").GetProperty("id").ValueKind.Should().Be(JsonValueKind.String);
+        d.GetProperty("creadaPor").GetProperty("nombre").GetString().Should().Be("Gestora Demo", "creada_por_nombre (1.2.0)");
+        d.GetProperty("secretaria").GetProperty("nombre").GetString().Should().Be("STRIA TTO CHIA", "secretaria_nombre (1.2.0)");
+        d.GetProperty("secretaria").GetProperty("ciudad").GetString().Should().Be("CHIA");
         d.GetProperty("creadaEn").ValueKind.Should().Be(JsonValueKind.String);
         d.GetProperty("departamento").GetProperty("codigo").GetString().Should().Be("25");
         var propietario = d.GetProperty("propietario");
@@ -218,12 +221,15 @@ public sealed class ItemDetalleTests
         var nombre = proteccion.ProtegerPii("Propietario Demo");
         var numero = proteccion.ProtegerPii("0000000");
         await using var db = api.Contexto(empresa);
-        await db.Set<Liquidacion>().Where(l => l.Id == lote).ExecuteUpdateAsync(s => s.SetProperty(l => l.Estado, EstadoLote.EnProceso), ct);
+        await db.Set<Liquidacion>().Where(l => l.Id == lote)
+            .ExecuteUpdateAsync(s => s.SetProperty(l => l.Estado, EstadoLote.EnProceso).SetProperty(l => l.CreadaPorNombre, "Gestora Demo"), ct);
         await db.Set<LiquidacionItem>().Where(i => i.Id == items[0]).ExecuteUpdateAsync(s => s
             .SetProperty(i => i.ConsultaApiId, "c-1")
             .SetProperty(i => i.DocumentoTipo, "CC")
             .SetProperty(i => i.PropietarioNombreCifrado, nombre)
-            .SetProperty(i => i.DocumentoNumeroCifrado, numero), ct);
+            .SetProperty(i => i.DocumentoNumeroCifrado, numero)
+            .SetProperty(i => i.SecretariaNombre, "STRIA TTO CHIA")
+            .SetProperty(i => i.SecretariaCiudad, "CHIA"), ct);
         return (empresa, lote, items[0]);
     }
 }

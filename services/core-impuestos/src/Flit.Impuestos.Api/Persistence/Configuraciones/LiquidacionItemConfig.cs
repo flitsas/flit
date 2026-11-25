@@ -39,6 +39,9 @@ public sealed class LiquidacionItem : IEntidadDeEmpresa
 
     public string? SecretariaCiudad { get; set; }
 
+    /// <summary>Nombre de la secretaría (<c>Item.secretaria.nombre</c>, 1.1.0; lo llena la homologación de M09).</summary>
+    public string? SecretariaNombre { get; set; }
+
     public string? DocumentoTipo { get; set; }
 
     public byte[]? DocumentoNumeroCifrado { get; set; }
@@ -115,6 +118,7 @@ internal sealed class LiquidacionItemConfig : IEntityTypeConfiguration<Liquidaci
         builder.Property(x => x.DepartamentoCodigo).HasMaxLength(2);
         builder.Property(x => x.DepartamentoNombre).HasMaxLength(80);
         builder.Property(x => x.SecretariaCiudad).HasMaxLength(80);
+        builder.Property(x => x.SecretariaNombre).HasMaxLength(120);
         builder.Property(x => x.DocumentoTipo).HasMaxLength(3);
         builder.Property(x => x.DocumentoNumeroCifrado).HasComment("@pii:high Número de documento del propietario, cifrado (impuestos.pii.v1).");
         builder.Property(x => x.PropietarioNombreCifrado).HasComment("@pii:high Nombre del propietario, cifrado (impuestos.pii.v1).");

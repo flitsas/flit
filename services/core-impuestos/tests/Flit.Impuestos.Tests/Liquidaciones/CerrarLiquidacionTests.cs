@@ -18,7 +18,8 @@ namespace Flit.Impuestos.Tests.Liquidaciones;
 /// Administrador Impuestos (<c>impuestos.liquidaciones.cerrar</c>) o el Super Admin (con <c>?empresa</c>); el Gestor recibe 403. Los
 /// ítems no finales pasan a <c>SIN_RESULTADO_LOTE_CERRADO</c>, los finales no cambian, y el lote queda <c>CERRADO_MANUALMENTE</c>
 /// con <c>cerradaPor</c> y <c>cerradaEn</c>. Un lote terminado responde 409 <c>YA_TERMINADA</c>. El motivo admite hasta 300
-/// caracteres; <c>motivoCierre</c> sale null hasta que M07b sume la columna. Cerrar libera el crédito de los ítems en vuelo.
+/// caracteres y queda en <c>motivo_cierre</c> (<c>motivoCierre</c>); <c>cerradaPor.nombre</c> sale de <c>cerrada_por_nombre</c> (el
+/// nombre del token; sin claim <c>name</c>, el correo). Cerrar libera el crédito de los ítems en vuelo.
 /// </summary>
 /// <example>
 /// <code>
@@ -49,8 +50,9 @@ public sealed class CerrarLiquidacionTests
         var raiz = cuerpo.RootElement;
         raiz.GetProperty("estado").GetString().Should().Be("CERRADO_MANUALMENTE");
         raiz.GetProperty("cerradaPor").GetProperty("id").GetGuid().Should().Be(admin);
+        raiz.GetProperty("cerradaPor").GetProperty("nombre").GetString().Should().Be("operador@empresa.test", "el token de prueba no trae name: el correo");
         raiz.GetProperty("cerradaEn").ValueKind.Should().Be(JsonValueKind.String);
-        raiz.GetProperty("motivoCierre").ValueKind.Should().Be(JsonValueKind.Null, "la columna motivo_cierre llega con M07b (1.2.0)");
+        raiz.GetProperty("motivoCierre").GetString().Should().Be("Proveedor caído", "columna motivo_cierre (1.2.0)");
         raiz.GetProperty("contadores").GetProperty("sinResultado").GetInt32().Should().Be(3);
         raiz.GetProperty("contadores").GetProperty("pendientes").GetInt32().Should().Be(0);
         raiz.GetProperty("contadores").GetProperty("incierto").GetInt32().Should().Be(1);

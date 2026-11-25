@@ -56,6 +56,7 @@ public sealed class LiquidacionIndividualEndpointsTests
         raiz.GetProperty("totalItems").GetInt32().Should().Be(1);
         raiz.GetProperty("placa").GetString().Should().Be("ABC123");
         raiz.GetProperty("creadaPor").GetProperty("id").GetGuid().Should().Be(usuario);
+        raiz.GetProperty("creadaPor").GetProperty("nombre").GetString().Should().Be("operador@empresa.test", "creada_por_nombre (1.2.0)");
         raiz.GetProperty("empresa").GetProperty("id").GetGuid().Should().Be(empresa);
         raiz.GetProperty("contadores").GetProperty("pendientes").GetInt32().Should().Be(1);
         var copia = raiz.GetProperty("configCopia");

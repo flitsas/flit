@@ -131,6 +131,48 @@ public sealed class ServicioHostTests : IAsyncLifetime
         ids.Should().Contain(id => id.EndsWith("_R0_Modelo", StringComparison.Ordinal));
     }
 
+    private static readonly string[] ColumnasR1 =
+    [
+        "webhook_secret_anterior_cifrado", "webhook_secret_anterior_hasta", "motivo_cierre", "creada_por_nombre", "cerrada_por_nombre",
+        "secretaria_nombre",
+    ];
+
+    [Fact]
+    public async Task La_migracion_R1_1_2_0_suma_las_columnas_aditivas_nulables()
+    {
+        Assert.SkipWhen(_skip is not null, _skip ?? string.Empty);
+        var ct = TestContext.Current.CancellationToken;
+        await Program.MigrateAsync(_app!);
+
+        await using var connection = new NpgsqlConnection(_database);
+        await connection.OpenAsync(ct);
+        await using var query = new NpgsqlCommand(
+            "SELECT table_name || '.' || column_name || ':' || data_type || ':' || coalesce(character_maximum_length::text, '') || ':' || is_nullable " +
+            "FROM information_schema.columns WHERE table_schema = @s AND column_name = ANY(@c) ORDER BY 1", connection);
+        query.Parameters.AddWithValue("s", ImpuestosDb.Schema);
+        query.Parameters.AddWithValue("c", ColumnasR1);
+        var columnas = new List<string>();
+        await using (var reader = await query.ExecuteReaderAsync(ct))
+            while (await reader.ReadAsync(ct))
+                columnas.Add(reader.GetString(0));
+
+        columnas.Should().BeEquivalentTo(
+        [
+            "credenciales_empresa.webhook_secret_anterior_cifrado:bytea::YES",
+            "credenciales_empresa.webhook_secret_anterior_hasta:timestamp with time zone::YES",
+            "liquidacion_items.secretaria_nombre:character varying:120:YES",
+            "liquidaciones.cerrada_por_nombre:character varying:200:YES",
+            "liquidaciones.creada_por_nombre:character varying:200:YES",
+            "liquidaciones.motivo_cierre:character varying:300:YES",
+        ], "plan §5.8 y deltas 1.2.0: todo aditivo y nulable, sin tocar filas existentes");
+        await using var migraciones = new NpgsqlCommand("SELECT migration_id FROM impuestos.\"__EFMigrationsHistory\"", connection);
+        var ids = new List<string>();
+        await using (var reader = await migraciones.ExecuteReaderAsync(ct))
+            while (await reader.ReadAsync(ct))
+                ids.Add(reader.GetString(0));
+        ids.Should().Contain(id => id.EndsWith("_R1_AltaIdempotente", StringComparison.Ordinal));
+    }
+
     [Fact]
     public void Sin_el_certificado_de_data_protection_no_arranca_y_nombra_la_variable()
     {

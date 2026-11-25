@@ -35,6 +35,15 @@ public sealed class CredencialEmpresa : IEntidadDeEmpresa
     /// <summary><c>company.id</c> en el API; opcional.</summary>
     public string? EmpresaApiId { get; set; }
 
+    /// <summary>
+    /// El webhook_secret anterior, con el mismo cifrado y propósito que <see cref="WebhookSecretCifrado"/>, mientras dura la ventana
+    /// de rotación (M07b, plan §5.8 punto 7). Nunca se devuelve ni se registra.
+    /// </summary>
+    public byte[]? WebhookSecretAnteriorCifrado { get; set; }
+
+    /// <summary>Hasta cuándo se acepta <see cref="WebhookSecretAnteriorCifrado"/> al verificar un aviso.</summary>
+    public DateTimeOffset? WebhookSecretAnteriorHasta { get; set; }
+
     public OrigenCredencial Origen { get; set; }
 
     public long Version { get; set; } = 1;
@@ -62,6 +71,9 @@ internal sealed class CredencialEmpresaConfig : IEntityTypeConfiguration<Credenc
         builder.Property(x => x.ApiKeyPrefijo).HasMaxLength(12).HasComment("Prefijo de la api_key para soporte; no es secreto.");
         builder.Property(x => x.WebhookSecretCifrado).HasComment("@secret Data Protection, purpose impuestos.credenciales.v1.{tenant}.webhook_secret.");
         builder.Property(x => x.EmpresaApiId).HasMaxLength(64);
+        builder.Property(x => x.WebhookSecretAnteriorCifrado)
+            .HasComment("@secret Data Protection, purpose impuestos.credenciales.v1.{tenant}.webhook_secret. Secreto anterior durante la ventana de rotación.");
+        builder.Property(x => x.WebhookSecretAnteriorHasta).HasComment("Fin de la ventana en la que se acepta el secreto anterior (24 h).");
         builder.Property(x => x.Origen).HasConversion(CodigosDeEnum.Convertidor<OrigenCredencial>()).HasMaxLength(24);
         builder.Property(x => x.Version).HasDefaultValue(1L).ValueGeneratedNever();
     }

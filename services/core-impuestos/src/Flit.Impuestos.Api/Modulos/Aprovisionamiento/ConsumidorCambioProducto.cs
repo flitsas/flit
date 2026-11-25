@@ -117,8 +117,6 @@ public sealed partial class ConsumidorCambioProducto(
         fila.ErrorTipo = nueva.TipoError;
         fila.IntentosAutomaticos = nueva.IntentosAutomaticos;
         fila.FirmaConfirmada = nueva.FirmaConfirmada;
-        // La marca de un alta en el aire (motivo_detalle) se conserva: si el proceso cayó con el alta enviada, la evaluación
-        // siguiente queda en INCIERTO en vez de repetirla.
         fila.MotivoCodigo = MotivosAprovisionamiento.DelEstado(fila.Estado);
         fila.ProximoIntentoEn = null;
         fila.UltimoCambioPlataformaId = envelope.EventId;

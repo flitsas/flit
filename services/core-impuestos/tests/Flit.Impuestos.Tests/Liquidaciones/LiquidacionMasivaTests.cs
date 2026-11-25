@@ -53,8 +53,9 @@ public sealed class LiquidacionMasivaTests
         raiz.GetProperty("totalItems").GetInt32().Should().Be(3);
         raiz.GetProperty("nombreArchivo").GetString().Should().Be("flota marzo.csv");
         raiz.GetProperty("creadaPor").GetProperty("id").GetGuid().Should().Be(usuario);
+        raiz.GetProperty("creadaPor").GetProperty("nombre").GetString().Should().Be("operador@empresa.test", "creada_por_nombre (1.2.0)");
         raiz.GetProperty("itemId").ValueKind.Should().Be(JsonValueKind.Null);
-        raiz.GetProperty("motivoCierre").ValueKind.Should().Be(JsonValueKind.Null);
+        raiz.GetProperty("motivoCierre").ValueKind.Should().Be(JsonValueKind.Null, "un lote recién creado no tiene motivo de cierre");
         raiz.TryGetProperty("items", out _).Should().BeFalse("los ítems de la masiva se paginan aparte");
         var copia = raiz.GetProperty("configCopia");
         copia.GetProperty("maxRegistrosLote").GetInt32().Should().Be(300);

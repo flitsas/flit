@@ -1,10 +1,10 @@
 openapi: 3.0.3
 info:
   title: FLIT Suite — API de Impuestos
-  version: "1.1.0"
+  version: "1.2.0"
   description: >
     Endpoints REST del producto Impuestos (core-impuestos) bajo /api/v1/impuestos (HU #14694, ADR-0093; plan
-    docs/impuestos/plan-implementacion.md §5.1; deltas de la 1.1.0 en §5.7). La app web llega por el gateway con el
+    docs/impuestos/plan-implementacion.md §5.1; deltas de la 1.1.0 en §5.7 y de la 1.2.0 en §5.8). La app web llega por el gateway con el
     token del producto (aud=impuestos) a través de su BFF. La compañía sale siempre del token; solo el Super Admin elige
     otra con `?empresa=<tenantId>` en las rutas que lo admiten (EmpresaExplicita, con auditoría de lectura).
 
@@ -15,6 +15,13 @@ info:
     configuración, usuarios), recibe 400 EMPRESA_REQUERIDA; (3) una compañía inexistente o sin Impuestos responde 404
     EMPRESA_NO_ENCONTRADA. El código EMPRESA_NO_PERMITIDA de la 1.0.0 queda retirado: ninguna ruta lo emite y su
     literal se conserva solo para clientes viejos.
+
+
+    Deltas 1.2.0 (aditivos; alta idempotente del proveedor, plan §5.8): MotivoAprovisionamiento suma
+    EMPRESA_INACTIVA_EN_PROVEEDOR y CLAVE_ROTADA y retira EMPRESA_YA_REGISTRADA y ALTA_SIN_CONFIRMAR (literal conservado
+    para el historial); la acción de LISTO_SIN_WEBHOOK pasa a REINTENTAR (CARGAR_SECRETO queda retirada);
+    Item.relanzadoDesdeLiquidacionId; `empresa` declarado (Super Admin, obligatorio) en el grid y en los GET de detalle de
+    liquidaciones; etiqueta de modoRespaldoFirma.
 
 
     Toda ruta de negocio pasa por el guard de suscripción (producto `impuestos` encendido para la compañía y sus
@@ -183,7 +190,11 @@ paths:
       tags: [Liquidaciones]
       operationId: listarLiquidaciones
       summary: Grid de liquidaciones (individuales y masivas juntas)
-      description: Permiso impuestos.liquidaciones.ver. Orden por creadaEn descendente. Solo de la compañía (o la elegida por el Super Admin).
+      description: >
+        Permiso impuestos.liquidaciones.ver. Orden por creadaEn descendente. Solo de la compañía del token. El Super Admin
+        DEBE enviar `empresa` (no hay vista global de liquidaciones, 1.2.0): sin ella, o con un valor que no es uuid o
+        repetido, 400 EMPRESA_REQUERIDA; `empresa` enviada por quien no es Super Admin, 403 EMPRESA_SOLO_SUPER_ADMIN;
+        compañía inexistente o sin Impuestos, 404 EMPRESA_NO_ENCONTRADA.
       parameters:
         - { name: tipo, in: query, schema: { $ref: "#/components/schemas/TipoLiquidacion" } }
         - { name: estado, in: query, schema: { $ref: "#/components/schemas/EstadoLiquidacion" } }
@@ -200,6 +211,7 @@ paths:
         "400": { $ref: "#/components/responses/Regla400" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Prohibido" }
+        "404": { $ref: "#/components/responses/NoEncontrado" }
 
   /api/v1/impuestos/liquidaciones/individual:
     post:
@@ -333,13 +345,17 @@ paths:
       tags: [Liquidaciones]
       operationId: obtenerLiquidacion
       summary: Cabecera del lote con su avance
-      description: Permiso impuestos.liquidaciones.ver. Otra compañía responde 404 (aislamiento).
+      description: >
+        Permiso impuestos.liquidaciones.ver. Otra compañía responde 404 (aislamiento). El Super Admin
+        DEBE enviar `empresa` (1.2.0): sin ella o mal formada, 400 EMPRESA_REQUERIDA; enviada por quien no es Super Admin,
+        403 EMPRESA_SOLO_SUPER_ADMIN; compañía inexistente o sin Impuestos, 404 EMPRESA_NO_ENCONTRADA.
       parameters:
         - $ref: "#/components/parameters/Empresa"
       responses:
         "200":
           description: Liquidación.
           content: { application/json: { schema: { $ref: "#/components/schemas/Liquidacion" } } }
+        "400": { $ref: "#/components/responses/Regla400" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Prohibido" }
         "404": { $ref: "#/components/responses/NoEncontrado" }
@@ -351,7 +367,10 @@ paths:
       tags: [Liquidaciones]
       operationId: listarItemsLiquidacion
       summary: Placas del lote
-      description: Permiso impuestos.liquidaciones.ver. Orden por fila del archivo (o por placa en la individual).
+      description: >
+        Permiso impuestos.liquidaciones.ver. Orden por fila del archivo (o por placa en la individual). El Super Admin
+        DEBE enviar `empresa` (1.2.0): sin ella o mal formada, 400 EMPRESA_REQUERIDA; enviada por quien no es Super Admin,
+        403 EMPRESA_SOLO_SUPER_ADMIN; compañía inexistente o sin Impuestos, 404 EMPRESA_NO_ENCONTRADA.
       parameters:
         - { name: estado, in: query, schema: { $ref: "#/components/schemas/EstadoItem" } }
         - $ref: "#/components/parameters/Placa"
@@ -375,13 +394,17 @@ paths:
       tags: [Liquidaciones]
       operationId: obtenerItemLiquidacion
       summary: Detalle de la placa con el resultado completo
-      description: Permiso impuestos.liquidaciones.ver.
+      description: >
+        Permiso impuestos.liquidaciones.ver. El Super Admin
+        DEBE enviar `empresa` (1.2.0): sin ella o mal formada, 400 EMPRESA_REQUERIDA; enviada por quien no es Super Admin,
+        403 EMPRESA_SOLO_SUPER_ADMIN; compañía inexistente o sin Impuestos, 404 EMPRESA_NO_ENCONTRADA.
       parameters:
         - $ref: "#/components/parameters/Empresa"
       responses:
         "200":
           description: Ítem con resultado, vigencias y recibos.
           content: { application/json: { schema: { $ref: "#/components/schemas/ItemDetalle" } } }
+        "400": { $ref: "#/components/responses/Regla400" }
         "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Prohibido" }
         "404": { $ref: "#/components/responses/NoEncontrado" }
@@ -1175,6 +1198,9 @@ components:
     AccionAprovisionamiento:
       type: string
       nullable: true
+      description: >
+        Acción del Super Admin para el estado (plan §3.1). Desde la 1.2.0, LISTO_SIN_WEBHOOK lleva REINTENTAR (el alta
+        idempotente trae el secreto); CARGAR_SECRETO queda retirada (ningún estado la emite; literal conservado).
       enum: [REINTENTAR, CARGAR_SECRETO, CARGAR_CREDENCIALES, CORREGIR_NIT]
       x-flit-etiquetas:
         REINTENTAR: Reintentar
@@ -1188,7 +1214,10 @@ components:
       description: >
         Código del motivo del estado (motivo_codigo). El servicio reporta a la plataforma el literal como `mensaje`
         (platform.v1.yaml TenantProductProvisioning.message), así que el admin de compañías y el backoffice muestran el
-        mismo texto.
+        mismo texto. 1.2.0: EMPRESA_INACTIVA_EN_PROVEEDOR (el alta trajo las credenciales con company.active=false) y
+        CLAVE_ROTADA (el alta respondió api_key_rotated y se reemplazó la llave; aparece en el historial). Retirados
+        (ningún flujo los emite; literal conservado porque el historial puede traerlos): EMPRESA_YA_REGISTRADA y
+        ALTA_SIN_CONFIRMAR.
       enum:
         - REINTENTO_PROGRAMADO
         - SIN_WEBHOOK_SECRET
@@ -1203,6 +1232,8 @@ components:
         - NIT_AMBIGUO
         - NIT_IGUAL_A_CABEZA
         - PRODUCTO_DESACTIVADO
+        - EMPRESA_INACTIVA_EN_PROVEEDOR
+        - CLAVE_ROTADA
       x-flit-etiquetas:
         REINTENTO_PROGRAMADO: No se pudo contactar al proveedor; se reintentará automáticamente.
         SIN_WEBHOOK_SECRET: "Falta el secreto del webhook: los resultados se consultan al proveedor."
@@ -1217,6 +1248,8 @@ components:
         NIT_AMBIGUO: No se puede separar el dígito de verificación del NIT.
         NIT_IGUAL_A_CABEZA: El NIT es el mismo de su compañía cabeza.
         PRODUCTO_DESACTIVADO: Impuestos está desactivado para la compañía.
+        EMPRESA_INACTIVA_EN_PROVEEDOR: "El proveedor tiene la compañía desactivada: pide su reactivación y luego reintenta."
+        CLAVE_ROTADA: El proveedor reemplazó la API key de la compañía; la nueva quedó guardada.
 
     TipoLiquidacion:
       type: string
@@ -1511,6 +1544,13 @@ components:
         resultadoTardio: { type: boolean }
         relanzadoDesde: { type: string, format: uuid, nullable: true, description: "Id del ítem original. Desde la 1.1.0 se prefiere relanzadoDesdeItemId (mismo valor)." }
         relanzadoDesdeItemId: { type: string, format: uuid, nullable: true, description: "Id del ítem original del que se relanzó (1.1.0)." }
+        relanzadoDesdeLiquidacionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Id de la liquidación (lote) del ítem original (1.2.0), para armar /liquidaciones/{id}/items/{itemId} del
+            original. null si el ítem no es un relanzamiento. Se deriva del ítem original; no es una columna propia.
         secretaria: { $ref: "#/components/schemas/Secretaria" }
 
     PaginaItems:
@@ -2005,7 +2045,13 @@ components:
           required: [modoRespaldoFirma, actualizadoEn, historial]
           properties:
             empresa: { $ref: "#/components/schemas/EmpresaIdentificada" }
-            modoRespaldoFirma: { type: boolean }
+            modoRespaldoFirma:
+              type: boolean
+              description: >
+                Marca ortogonal al estado (plan §3.1): 5 firmas inválidas seguidas encienden el respaldo; las consultas
+                salen sin callbackUrl y el servicio pide un alta para refrescar el secreto (1.2.0).
+              x-flit-etiquetas:
+                "true": "Respaldo de firma: los resultados llegan por consulta mientras se revisa el secreto."
             actualizadoEn: { type: string, format: date-time }
             historial:
               type: array

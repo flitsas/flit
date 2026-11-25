@@ -46,12 +46,18 @@ public sealed class IdentidadNoDisponibleException : Exception
     }
 }
 
-/// <summary>Los tres rpc de Identidad que usa el aprovisionamiento (M04), siempre con <c>x-flit-tenant-id</c> de la compañía.</summary>
+/// <summary>Los rpc de Identidad que usa el aprovisionamiento (M04 y M04b), siempre con <c>x-flit-tenant-id</c> de la compañía.</summary>
 public interface IClienteIdentidadAlta
 {
     Task<DatosAltaProveedor> ObtenerDatosAltaAsync(Guid empresa, CancellationToken ct);
 
     Task<LlaveDiagnostico> ObtenerLlaveDiagnosticoAsync(Guid empresa, CancellationToken ct);
+
+    /// <summary>
+    /// M04b (D-ALTA-IDEM): reemplaza la llave del impuesto de Diagnóstico por <paramref name="apiKey"/> tras una rotación del
+    /// proveedor. true si la compañía tenía llave de Diagnóstico y se reemplazó; false si no tenía (no se crea).
+    /// </summary>
+    Task<bool> ActualizarLlaveDiagnosticoAsync(Guid empresa, string apiKey, CancellationToken ct);
 
     Task<RespuestaReporte> ReportarAsync(Guid empresa, ReporteEstadoAprovisionamiento reporte, CancellationToken ct);
 }
@@ -84,6 +90,18 @@ internal sealed class ClienteIdentidadAltaGrpc(
             .ConfigureAwait(false);
         return new LlaveDiagnostico(r.Existe && !string.IsNullOrEmpty(r.ApiKey), r.Existe && !string.IsNullOrEmpty(r.ApiKey) ? r.ApiKey : null, r.Version);
     }, "ObtenerCredencialImpuestoParaCopia", ct);
+
+    public Task<bool> ActualizarLlaveDiagnosticoAsync(Guid empresa, string apiKey, CancellationToken ct)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(apiKey);
+        return LlamarAsync(async () =>
+        {
+            var r = await credenciales.ActualizarCredencialImpuestoDiagnosticoAsync(
+                    new Flit.Identidad.Grpc.V1.ActualizarCredencialImpuestoDiagnosticoRequest { ApiKey = apiKey }, Cabeceras(empresa), cancellationToken: ct)
+                .ConfigureAwait(false);
+            return r.Actualizada;
+        }, "ActualizarCredencialImpuestoDiagnostico", ct);
+    }
 
     public Task<RespuestaReporte> ReportarAsync(Guid empresa, ReporteEstadoAprovisionamiento reporte, CancellationToken ct)
     {
@@ -141,6 +159,8 @@ internal sealed class ClienteIdentidadSinConfigurar : IClienteIdentidadAlta
     public Task<DatosAltaProveedor> ObtenerDatosAltaAsync(Guid empresa, CancellationToken ct) => throw SinConfigurar();
 
     public Task<LlaveDiagnostico> ObtenerLlaveDiagnosticoAsync(Guid empresa, CancellationToken ct) => throw SinConfigurar();
+
+    public Task<bool> ActualizarLlaveDiagnosticoAsync(Guid empresa, string apiKey, CancellationToken ct) => throw SinConfigurar();
 
     public Task<RespuestaReporte> ReportarAsync(Guid empresa, ReporteEstadoAprovisionamiento reporte, CancellationToken ct) => throw SinConfigurar();
 }

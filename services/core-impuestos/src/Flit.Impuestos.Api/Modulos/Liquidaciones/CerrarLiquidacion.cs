@@ -99,15 +99,24 @@ public sealed partial class CerrarLiquidacion(IServiceScopeFactory scopes, Consu
     }
 
     /// <summary>
-    /// Motivo del cierre y nombre de quien cierra (columnas <c>motivo_cierre</c> y <c>cerrada_por_nombre</c> de la 1.2.0). Es el único
-    /// punto que los escribe: se conecta al integrar M07b; mientras tanto no guarda nada y la respuesta lleva <c>motivoCierre</c> null y
-    /// <c>cerradaPor.nombre</c> vacío.
+    /// Motivo del cierre y nombre de quien cierra tal como viene en su token (columnas <c>motivo_cierre</c> y
+    /// <c>cerrada_por_nombre</c> de la 1.2.0). Es el único punto que los escribe; un nombre vacío queda null.
     /// </summary>
     internal static void RegistrarCierre(Liquidacion lote, string? motivo, string? nombre)
     {
         ArgumentNullException.ThrowIfNull(lote);
-        _ = motivo;
-        _ = nombre;
+        lote.MotivoCierre = motivo;
+        lote.CerradaPorNombre = NombreDelActor(nombre);
+    }
+
+    /// <summary>Máximo de <c>creada_por_nombre</c> y <c>cerrada_por_nombre</c>.</summary>
+    public const int LargoMaximoNombreActor = 200;
+
+    /// <summary>El nombre del token, recortado al largo de la columna; null si no hay.</summary>
+    internal static string? NombreDelActor(string? nombre)
+    {
+        var limpio = string.IsNullOrWhiteSpace(nombre) ? null : nombre.Trim();
+        return limpio is { Length: > LargoMaximoNombreActor } ? limpio[..LargoMaximoNombreActor] : limpio;
     }
 
     private static async Task<IResult> CerrarEndpointAsync(

@@ -377,6 +377,7 @@ public sealed partial class ConsumidorLiquidacion(
         fila.DepartamentoCodigo = datos.DepartamentoCodigo;
         fila.DepartamentoNombre = datos.DepartamentoNombre;
         fila.SecretariaCiudad = datos.Ciudad;
+        fila.SecretariaNombre = datos.SecretariaNombre;
     }
 
     private static SituacionItem Situacion(LiquidacionItem i) => new(i.Estado, i.IntentosRunt, i.IntentosReenvio, i.ErrorClase);

@@ -27,7 +27,10 @@ public enum EventoAprovisionamiento
     /// <summary>El alta respondió 201.</summary>
     Alta201,
 
-    /// <summary>El alta respondió 409 (la compañía ya existe en el API).</summary>
+    /// <summary>
+    /// El alta respondió 409. Con el alta idempotente del proveedor (M07b, plan §5.8) no es un camino normal: es un contrato
+    /// inesperado del ambiente.
+    /// </summary>
     Alta409,
 
     /// <summary>El alta respondió 400 o 415, o la razón social pasa de 200 caracteres.</summary>
@@ -39,7 +42,10 @@ public enum EventoAprovisionamiento
     /// <summary>La petición no salió (DNS, conexión rechazada, TLS).</summary>
     NoSalio,
 
-    /// <summary>Timeout, 5xx o corte después de enviar.</summary>
+    /// <summary>
+    /// Timeout, 5xx o corte después de enviar. Desde M07b el alta ya no lo emite (el reintento es seguro y va por
+    /// <see cref="NoSalio"/>); se conserva para las filas que quedaron en <c>INCIERTO</c>.
+    /// </summary>
     Incierto,
 
     /// <summary>El Super Admin pidió reintentar (trabajo de reintento).</summary>
@@ -122,8 +128,9 @@ public static class TransicionesAprovisionamiento
                 Ok(Hacia(actual, EstadoAprovisionamiento.Listo) with { FirmaConfirmada = false }),
             (EstadoAprovisionamiento.Pendiente, EventoAprovisionamiento.CredencialPropiaValidaSinSecreto or EventoAprovisionamiento.CopiaDiagnosticoValida) =>
                 Ok(Hacia(actual, EstadoAprovisionamiento.ListoSinWebhook) with { FirmaConfirmada = false }),
-            (EstadoAprovisionamiento.Pendiente, EventoAprovisionamiento.CredencialRechazada or EventoAprovisionamiento.Alta409) =>
+            (EstadoAprovisionamiento.Pendiente, EventoAprovisionamiento.CredencialRechazada) =>
                 Ok(Hacia(actual, EstadoAprovisionamiento.RequiereCredenciales)),
+            (EstadoAprovisionamiento.Pendiente, EventoAprovisionamiento.Alta409) => ConAlerta(ErrorDe(actual, TipoErrorAprovisionamiento.Ambiente)),
             (EstadoAprovisionamiento.Pendiente, EventoAprovisionamiento.NitNoValido) => Ok(Hacia(actual, EstadoAprovisionamiento.RequiereRevisionNit)),
             (EstadoAprovisionamiento.Pendiente, EventoAprovisionamiento.AltaDatosInvalidos) => Ok(ErrorDe(actual, TipoErrorAprovisionamiento.Datos)),
             (EstadoAprovisionamiento.Pendiente, EventoAprovisionamiento.AltaAmbienteInvalido) => ConAlerta(ErrorDe(actual, TipoErrorAprovisionamiento.Ambiente)),
@@ -133,7 +140,9 @@ public static class TransicionesAprovisionamiento
                     : Ok(ErrorDe(actual, TipoErrorAprovisionamiento.Ambiente)),
             (EstadoAprovisionamiento.Pendiente, EventoAprovisionamiento.Incierto) => Ok(Hacia(actual, EstadoAprovisionamiento.Incierto)),
 
-            (EstadoAprovisionamiento.Error or EstadoAprovisionamiento.Incierto or EstadoAprovisionamiento.RequiereRevisionNit, EventoAprovisionamiento.Reintentar) =>
+            // M07b: desde LISTO_SIN_WEBHOOK, Reintentar vuelve a dar de alta y el alta idempotente trae el secreto.
+            (EstadoAprovisionamiento.Error or EstadoAprovisionamiento.Incierto or EstadoAprovisionamiento.RequiereRevisionNit or EstadoAprovisionamiento.ListoSinWebhook,
+                EventoAprovisionamiento.Reintentar) =>
                 Ok(Pendiente() with { FirmaConfirmada = actual.FirmaConfirmada }),
 
             (EstadoAprovisionamiento.RequiereCredenciales or EstadoAprovisionamiento.ListoSinWebhook, EventoAprovisionamiento.CargaManualConSecreto) =>
