@@ -229,8 +229,9 @@ function Formulario({
 }) {
   const toast = useToast();
   const acciones = accionesDocumento({ estado: d.estado, reintentable: d.reintentable, fuenteDuplicado: d.duplicado?.fuente ?? null, tipoFallo: d.tipoFallo });
-  // Asociado, Registrado y Descartado son finales: solo lectura, sin marcas de revisión ni campos en rojo.
-  const final = esEstadoFinalDocumento(d.estado);
+  // Asociado, Registrado y Descartado son finales, y PorAsociar (§10) está en manos del lote: solo lectura, sin marcas de
+  // revisión ni campos en rojo.
+  const final = esEstadoFinalDocumento(d.estado) || d.estado === "PorAsociar";
   const marcas = final ? {} : marcasRevision(d);
   const porRevisar = Object.keys(marcas).length;
   // GDC punto 6: el NIT guardado (base sin puntos) se muestra con la misma máscara con que se escribe.
@@ -444,7 +445,7 @@ function Formulario({
         </InlineAlert>
       )}
 
-      {dup && d.estado !== "Asociado" && (
+      {dup && d.estado !== "Asociado" && d.estado !== "PorAsociar" && (
         <InlineAlert tone="warning" title={vistaDup === "asociar" || vistaDup === "comparar" ? "Este comparendo ya existe" : "Este comparendo ya existe: no se puede registrar"}>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
             <dt className="font-semibold">Fuente</dt>
@@ -662,7 +663,8 @@ function Revision({ id }: { id: string }) {
   const d = carga.datos;
   const [registro, setRegistro] = useState<Registro | null>(null);
   const setVerComparendo = useAbrirDetalle();
-  useSondeo(!!d && hayEnCurso([d.estado]), carga.recargar);
+  // §10: mientras el lote lo asocia, la pantalla se actualiza sola hasta que cambie de estado.
+  useSondeo(!!d && (hayEnCurso([d.estado]) || d.estado === "PorAsociar"), carga.recargar);
   const router = useRouter();
   const toast = useToast();
   // GDC-EVID §9: revisión de reemplazos uno por uno (?cola=reemplazos&paquete=…); el avance viaja en la URL.
@@ -755,6 +757,12 @@ function Revision({ id }: { id: string }) {
       )}
 
       {hayEnCurso([d.estado]) && <InlineAlert tone="info">El documento está en cola; esta vista se actualiza sola.</InlineAlert>}
+      {d.estado === "PorAsociar" && (
+        <InlineAlert tone="info" title="Se está asociando…">
+          Este documento se asocia a su comparendo en segundo plano, junto con los demás del lote. Mientras tanto es solo de
+          lectura; esta vista se actualiza sola.
+        </InlineAlert>
+      )}
       <div className="grid gap-6 lg:grid-cols-2">
         <Original d={d} />
         {/* La clave fuerza un formulario nuevo cada vez que cambian los valores guardados. */}

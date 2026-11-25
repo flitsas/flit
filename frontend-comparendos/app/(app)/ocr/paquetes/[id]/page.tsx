@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Icono } from "@flit/ui/Icono";
@@ -9,6 +9,7 @@ import { useSesion } from "@/components/ComparendosShell";
 import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { COLOR_CIFRA_DOCUMENTO, CONTADORES_GRID_CLS, EstadoDocumento, Progreso, useSondeo } from "@/components/ocr/comunes";
 import { AsociarLote } from "@/components/ocr/AsociarLote";
+import { FranjaLote } from "@/components/ocr/FranjaLote";
 import { OfertaPlacas } from "@/components/ocr/OfertaPlacas";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
@@ -18,6 +19,9 @@ import { apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
 import {
+  AVISO_SIN_DOCUMENTOS_LOTE,
+  avisoLoteEncolado,
+  cerrarResumenLote,
   colaReemplazos,
   type DocumentoPaquete,
   ESTADO_DOCUMENTO,
@@ -28,6 +32,7 @@ import {
   motivoDocumento,
   registroEnLote,
   resumenCola,
+  resumenLoteCerrado,
   TIPO_FALLO,
   urlCola,
   type VistaPreviaLote,
@@ -90,13 +95,24 @@ function Detalle({ id }: { id: string }) {
   const p = carga.datos?.paquete;
   const docs = carga.datos?.documentos ?? [];
   useSondeo(!!p && hayEnCurso([p.estado]), carga.recargar);
-  // GDC-EVID §9: vista previa del lote (la preselección es del servidor). Solo si hay duplicados y se puede operar; la
+  // GDC-EVID §9/§10: vista previa del lote (la preselección es del servidor) y el último lote del paquete (avance o
+  // resumen). Se pide siempre que haya paquete: el resumen sale aunque el paquete ya esté cerrado o sin duplicados. La
   // clave cambia con los contadores, así se recalcula tras asociar, descartar o reemplazar.
   const conLote = !!p && opera && p.estado !== "Cerrado" && p.cantidadDuplicados > 0;
-  const vista = useCarga(conLote ? `ocr-lote:${id}:${p.cantidadDuplicados}:${p.cantidadAsociados ?? 0}:${p.cantidadDescartados}` : null, (signal) =>
+  const vista = useCarga(p ? `ocr-lote:${id}:${p.cantidadDuplicados}:${p.cantidadAsociados ?? 0}:${p.cantidadDescartados}` : null, (signal) =>
     apiFetch<VistaPreviaLote>(`/ocr/paquetes/${id}/asociacion-lote`, { signal }),
   );
   const [asociandoLote, setAsociandoLote] = useState(false);
+  const enCurso = vista.datos?.enCurso ?? null;
+  const loteAvanzando = (enCurso?.porAsociar ?? 0) > 0;
+  const recargarCargaYLote = useCallback(() => {
+    carga.recargar();
+    vista.recargar();
+  }, [carga.recargar, vista.recargar]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Solo se consulta seguido mientras hay un lote avanzando; sin lote en curso no hay sondeo.
+  useSondeo(loteAvanzando, recargarCargaYLote);
+  const [resumenesCerrados, setResumenesCerrados] = useState<string[]>([]);
+  const verResumen = !!enCurso && (loteAvanzando || !(resumenesCerrados.includes(enCurso.loteId) || resumenLoteCerrado(enCurso.loteId)));
   const resumen = resumenCola(params);
 
   const accion = async (hacer: () => Promise<void>) => {
@@ -185,6 +201,8 @@ function Detalle({ id }: { id: string }) {
     ["Duplicado", "Duplicados", p.cantidadDuplicados],
     ["Registrado", "Registrados", p.cantidadRegistrados],
     ["Asociado", "Asociados", p.cantidadAsociados ?? 0],
+    // §10: mientras un lote avanza, los documentos encolados se pueden ver aparte.
+    ...(loteAvanzando ? [["PorAsociar", "Asociando", enCurso!.porAsociar] as [string, string, number]] : []),
     ["Descartado", "Descartados", p.cantidadDescartados],
   ];
   const reprocesables = estado && estado !== "Incompleto" ? p.cantidadIncompletos : docs.filter((d) => d.estado === "Incompleto" && d.reprocesable).length;
@@ -313,6 +331,17 @@ function Detalle({ id }: { id: string }) {
         </InlineAlert>
       )}
 
+      {verResumen && enCurso && (
+        <FranjaLote
+          lote={enCurso}
+          onVer={filtrar}
+          onCerrar={() => {
+            cerrarResumenLote(enCurso.loteId);
+            setResumenesCerrados((c) => [...c, enCurso.loteId]);
+          }}
+        />
+      )}
+
       {resumen && (
         <InlineAlert tone="success" title="Revisión de reemplazos">
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -413,11 +442,21 @@ function Detalle({ id }: { id: string }) {
         <AsociarLote
           paqueteId={id}
           vista={vista.datos}
-          onCerrar={(huboCambios) => {
+          onCerrar={() => setAsociandoLote(false)}
+          onError={(m) => toast.show(m, "error")}
+          onEncolado={async (r) => {
             setAsociandoLote(false);
-            if (huboCambios) {
-              carga.recargar();
-              vista.recargar();
+            recargarCargaYLote();
+            if (r.encolados > 0) {
+              toast.show(avisoLoteEncolado(r.encolados), "success");
+              return;
+            }
+            // No encoló nada (doble clic o ya no había elegibles): si otro clic ya creó el lote, lo muestra la franja.
+            try {
+              const v = await apiFetch<VistaPreviaLote>(`/ocr/paquetes/${id}/asociacion-lote`);
+              if (!v.enCurso) toast.show(AVISO_SIN_DOCUMENTOS_LOTE, "warning");
+            } catch {
+              toast.show(AVISO_SIN_DOCUMENTOS_LOTE, "warning");
             }
           }}
         />

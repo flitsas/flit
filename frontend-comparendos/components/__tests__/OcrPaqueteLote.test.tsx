@@ -1,11 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import Pagina from "@/app/(app)/ocr/paquetes/[id]/page";
 import { ToastProvider } from "@/components/Toast";
 import { BOTON_PRIMARIO_CLS } from "@/components/ui/estilos";
+import { ApiError } from "@/lib/api";
 
-// GDC-EVID §9: «Asociar los N» con la vista previa del servidor, tandas de máx. 50 hasta que no queden, resultado; y
-// «Revisar reemplazos (n)» que abre el primero de la cola. El API de S1 se simula por ruta.
+// GDC-EVID §9/§10: «Asociar los N» confirma con la vista previa del servidor y ENCOLA; un trabajador del servidor asocia en
+// segundo plano. La franja del paquete muestra el avance (se actualiza sola solo mientras hay lote) y, al terminar, el
+// resumen hasta que la gestora lo cierre (recordado por lote). «Revisar reemplazos (n)» abre el primero de la cola.
 const apiFetch = vi.fn();
 vi.mock("@/lib/api", async (original) => ({
   ...(await original<typeof import("@/lib/api")>()),
@@ -20,7 +22,7 @@ vi.mock("next/navigation", () => ({
   useSearchParams: () => new URLSearchParams(query),
   usePathname: () => "/ocr/paquetes/p1",
 }));
-let permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
+let permisos: string[] = [];
 vi.mock("@/components/ComparendosShell", () => ({
   useSesion: () => ({ sesion: { usuario: { esSuperAdmin: false }, permisos }, cargando: false, error: null }),
 }));
@@ -46,39 +48,72 @@ const VISTA = {
   asociables: 55,
   correos: { saldran: 53, conductores: 40, omitidos: [{ motivo: "El conductor no tiene correo registrado", cantidad: 2 }] },
   porRevisar: { reemplazos: 4, numeroDistinto: 1 },
+  enCurso: null as unknown,
+};
+const LOTE = {
+  loteId: "l1",
+  porAsociar: 36,
+  total: 48,
+  asociados: 12,
+  noAsociados: [] as { documentoId: string; nombreArchivo: string; motivo: string }[],
+  correosEnCamino: 11,
+  sinCorreo: [] as { motivo: string; cantidad: number }[],
+  solicitadoPor: "admin@empresa.local",
+  solicitadoEn: "2026-11-25T15:00:00Z",
+  terminadoEn: null as string | null,
+};
+const TERMINADO = {
+  ...LOTE,
+  porAsociar: 0,
+  asociados: 45,
+  correosEnCamino: 43,
+  sinCorreo: [{ motivo: "El conductor no tiene correo registrado", cantidad: 2 }],
+  noAsociados: [{ documentoId: "z", nombreArchivo: "z.pdf", motivo: "Otra persona le puso un documento mientras tanto" }],
+  terminadoEn: "2026-11-25T15:03:00Z",
 };
 const doc = (id: string, revision: string | null) => ({
   id, nombreArchivo: `${id}.pdf`, estado: "Duplicado", numeroComparendoExtraido: "1", camposFaltantes: [], tipoFallo: null, mensajeError: null,
   fuenteDuplicado: "SIMIT", comparendoId: null, tipoArchivo: "PDF", intentos: 1, procesadoEn: null, reprocesable: false, revision,
 });
-const asoc = (n: number, pref: string) => Array.from({ length: n }, (_, i) => ({ documentoId: `${pref}${i}`, comparendoId: "c", numero: "1", correo: { estado: "Pendiente", motivo: null } }));
 
-let tandas: unknown[] = [];
-function abrir(paquete: Record<string, unknown> = PAQUETE, vista: unknown = VISTA) {
+let vista: () => Promise<unknown> = () => Promise.resolve(VISTA);
+let post: () => Promise<unknown> = () => Promise.resolve({ encolados: 55, loteId: "l1" });
+function abrir(paquete: Record<string, unknown> = PAQUETE) {
   apiFetch.mockImplementation((ruta: string) => {
-    if (ruta === "/ocr/paquetes/p1/asociacion-lote") return Promise.resolve(vista);
-    if (ruta === "/ocr/paquetes/p1/asociar-lote") return Promise.resolve(tandas.shift());
+    if (ruta === "/ocr/paquetes/p1/asociacion-lote") return vista();
+    if (ruta === "/ocr/paquetes/p1/asociar-lote") return post();
     return Promise.resolve({ paquete, documentos: [doc("d1", null), doc("r1", "reemplazo"), doc("n1", "numeroDistinto"), doc("r2", "reemplazo")], completosPorConfirmar: 0 });
   });
-  render(
+  return render(
     <ToastProvider>
       <Pagina />
     </ToastProvider>,
   );
 }
 const posts = () => apiFetch.mock.calls.filter(([r]) => r === "/ocr/paquetes/p1/asociar-lote");
+const previas = () => apiFetch.mock.calls.filter(([r]) => r === "/ocr/paquetes/p1/asociacion-lote").length;
+const confirmar = async () => {
+  fireEvent.click(await screen.findByRole("button", { name: "Asociar los 55" }));
+  fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar y enviar" }));
+};
 
-describe("asociar en lote y cola de reemplazos (paquete)", () => {
-  beforeEach(() => {
-    apiFetch.mockReset();
-    push.mockReset();
-    replace.mockReset();
-    query = "";
-    permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
-  });
-  afterEach(cleanup);
+beforeEach(() => {
+  apiFetch.mockReset();
+  push.mockReset();
+  replace.mockReset();
+  query = "";
+  permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
+  vista = () => Promise.resolve(VISTA);
+  post = () => Promise.resolve({ encolados: 55, loteId: "l1" });
+  window.localStorage.clear();
+});
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 
-  it("vista previa: cuenta documentos y correos, omitidos con motivo y reemplazos aparte", async () => {
+describe("confirmar y encolar", () => {
+  it("vista previa: cuenta documentos y correos, omitidos con motivo y reemplazos aparte; cancelar no envía", async () => {
     abrir();
     fireEvent.click(await screen.findByRole("button", { name: "Asociar los 55" }));
     const m = await screen.findByRole("dialog");
@@ -86,29 +121,159 @@ describe("asociar en lote y cola de reemplazos (paquete)", () => {
     expect(within(m).getByText("Saldrán 53 correos a 40 conductores (cada conductor recibe uno por comparendo).")).toBeTruthy();
     expect(within(m).getByText("El conductor no tiene correo registrado (2)")).toBeTruthy();
     expect(within(m).getByText("Quedan 4 reemplazos para revisar uno por uno.")).toBeTruthy();
-    expect(posts()).toHaveLength(0);
     fireEvent.click(within(m).getByRole("button", { name: "Cancelar" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(posts()).toHaveLength(0);
   });
 
-  it("confirmar: pide tandas hasta que no queden y muestra el resultado", async () => {
-    tandas = [
-      { asociados: asoc(50, "a"), omitidos: [], restantes: 5 },
-      { asociados: asoc(4, "b"), omitidos: [{ documentoId: "z", nombreArchivo: "z.pdf", codigo: "EVIDENCIA_EXISTENTE", motivo: "Otra persona ya le puso documento" }], restantes: 0 },
-    ];
+  it("asociar y enviar: un solo POST, se cierra el modal y avisa que sigue en segundo plano", async () => {
+    abrir();
+    await confirmar();
+    expect(await screen.findByText("Asociando 55 documentos en segundo plano; puedes seguir trabajando.")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(posts()).toHaveLength(1);
+    expect(posts()[0][1]).toMatchObject({ method: "POST" });
+  });
+
+  it("doble clic: el botón queda deshabilitado mientras envía", async () => {
+    let soltar: (v: unknown) => void = () => {};
+    post = () => new Promise((r) => (soltar = r));
     abrir();
     fireEvent.click(await screen.findByRole("button", { name: "Asociar los 55" }));
-    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar y enviar" }));
-    expect(await screen.findByText("Resultado de la asociación")).toBeTruthy();
-    expect(posts()).toHaveLength(2);
-    const m = screen.getByRole("dialog");
-    expect(within(m).getByText("Se asociaron 54 documentos a sus comparendos.")).toBeTruthy();
-    expect(within(m).getByText(/54 correos con el documento van en camino/)).toBeTruthy();
-    expect(within(m).getByText("z.pdf: Otra persona ya le puso documento")).toBeTruthy();
-    const cargasAntes = apiFetch.mock.calls.filter(([r]) => r === "/ocr/paquetes/p1").length;
-    fireEvent.click(within(m).getByRole("button", { name: "Listo" }));
-    await waitFor(() => expect(apiFetch.mock.calls.filter(([r]) => r === "/ocr/paquetes/p1").length).toBeGreaterThan(cargasAntes));
+    const m = await screen.findByRole("dialog");
+    fireEvent.click(within(m).getByRole("button", { name: "Asociar y enviar" }));
+    fireEvent.click(within(m).getByRole("button", { name: "Enviando…" }));
+    expect(posts()).toHaveLength(1);
+    soltar({ encolados: 55, loteId: "l1" });
+    expect(await screen.findByText(/en segundo plano/)).toBeTruthy();
+  });
+
+  it("si el POST falla, lo dice y el modal sigue abierto para reintentar", async () => {
+    post = () => Promise.reject(new ApiError(500, "No se pudo iniciar la asociación. Intenta de nuevo."));
+    abrir();
+    await confirmar();
+    expect(await screen.findByText("No se pudo iniciar la asociación. Intenta de nuevo.")).toBeTruthy();
+    expect((within(screen.getByRole("dialog")).getByRole("button", { name: "Asociar y enviar" }) as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("encola 0 y no hay lote del paquete: «No había documentos por asociar.»", async () => {
+    post = () => Promise.resolve({ encolados: 0, loteId: null });
+    abrir();
+    await confirmar();
+    expect(await screen.findByText("No había documentos por asociar.")).toBeTruthy();
+    expect(screen.queryByText(/Asociando 0/)).toBeNull();
+  });
+
+  it("encola 0 pero otro clic ya creó el lote: sin aviso, lo muestra la franja", async () => {
+    post = () => Promise.resolve({ encolados: 0, loteId: null });
+    let n = 0;
+    vista = () => Promise.resolve(n++ === 0 ? VISTA : { ...VISTA, asociables: 0, enCurso: LOTE });
+    abrir();
+    await confirmar();
+    expect(await screen.findByText("Asociando 12 de 48…")).toBeTruthy();
+    expect(screen.queryByText("No había documentos por asociar.")).toBeNull();
+    expect(screen.queryByText(/Asociando 0/)).toBeNull();
+  });
+});
+
+describe("franja del lote", () => {
+  it("en curso: avance, filtro «Asociando» y se actualiza sola cada pocos segundos", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    vista = () => Promise.resolve({ ...VISTA, enCurso: LOTE });
+    abrir();
+    expect(await screen.findByText("Asociando 12 de 48…")).toBeTruthy();
+    expect(screen.getByRole("progressbar").getAttribute("aria-valuenow")).toBe("12");
+    expect(within(screen.getByRole("group", { name: "Filtrar documentos por estado" })).getByRole("button", { name: /Asociando/ })).toBeTruthy();
+    const antes = previas();
+    await act(async () => {
+      vi.advanceTimersByTime(4100);
+    });
+    await waitFor(() => expect(previas()).toBeGreaterThan(antes));
+  });
+
+  it("sin lote en curso no consulta seguido", async () => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    abrir();
+    await screen.findByRole("button", { name: "Asociar los 55" });
+    const antes = apiFetch.mock.calls.length;
+    await act(async () => {
+      vi.advanceTimersByTime(20000);
+    });
+    expect(apiFetch.mock.calls.length).toBe(antes);
+  });
+
+  it("terminado: resumen con correos, sin correo y no asociados; los enlaces filtran", async () => {
+    vista = () => Promise.resolve({ ...VISTA, enCurso: TERMINADO });
+    abrir();
+    expect(await screen.findByText("Asociación terminada")).toBeTruthy();
+    expect(screen.getByText("Se asociaron 45 documentos a sus comparendos.")).toBeTruthy();
+    expect(screen.getByText("43 correos con el documento van en camino a los conductores.")).toBeTruthy();
+    expect(screen.getByText("El conductor no tiene correo registrado (2)")).toBeTruthy();
+    expect(screen.getByText("z.pdf: Otra persona le puso un documento mientras tanto")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Ver los no asociados" }));
+    expect(replace).toHaveBeenLastCalledWith("/ocr/paquetes/p1?estado=Duplicado", { scroll: false });
+    fireEvent.click(screen.getByRole("button", { name: "Ver los asociados" }));
+    expect(replace).toHaveBeenLastCalledWith("/ocr/paquetes/p1?estado=Asociado", { scroll: false });
+  });
+
+  it("el resumen se queda hasta cerrarlo y, cerrado, no vuelve a salir para ese lote", async () => {
+    vista = () => Promise.resolve({ ...VISTA, enCurso: TERMINADO });
+    abrir();
+    fireEvent.click(await screen.findByRole("button", { name: "Cerrar resumen" }));
+    await waitFor(() => expect(screen.queryByText("Asociación terminada")).toBeNull());
+    cleanup();
+    abrir();
+    await screen.findByRole("button", { name: "Asociar los 55" });
+    expect(screen.queryByText("Asociación terminada")).toBeNull();
+    cleanup();
+    vista = () => Promise.resolve({ ...VISTA, enCurso: { ...TERMINADO, loteId: "l2" } });
+    abrir();
+    expect(await screen.findByText("Asociación terminada")).toBeTruthy();
+  });
+
+  it("el resumen se ve también sin permiso de gestión y con el paquete cerrado (sin botones de lote)", async () => {
+    permisos = ["comparendos.ocr.ver"];
+    vista = () => Promise.resolve({ ...VISTA, enCurso: TERMINADO });
+    abrir({ ...PAQUETE, estado: "Cerrado", cerradoEn: "2026-11-25T15:04:00Z" });
+    expect(await screen.findByText("Asociación terminada")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Asociar los|Revisar reemplazos/ })).toBeNull();
+  });
+});
+
+describe("cabecera y cola de reemplazos", () => {
+  it("solo asociables: «Asociar los N» es el primario", async () => {
+    abrir();
+    expect((await screen.findByRole("button", { name: "Asociar los 55" })).className).toBe(BOTON_PRIMARIO_CLS);
+  });
+
+  it("con completos por registrar: «Registrar» primario y «Asociar» secundario", async () => {
+    abrir({ ...PAQUETE, cantidadCompletos: 3 });
+    const asociar = await screen.findByRole("button", { name: "Asociar los 55" });
+    expect(screen.getByRole("button", { name: "Registrar los 3 completos" }).className).toBe(BOTON_PRIMARIO_CLS);
+    expect(asociar.className).not.toBe(BOTON_PRIMARIO_CLS);
+  });
+
+  it("mientras carga la vista previa reserva el lugar con «Calculando…» deshabilitado", async () => {
+    let soltar: (v: unknown) => void = () => {};
+    vista = () => new Promise((r) => (soltar = r));
+    abrir();
+    const reserva = await screen.findByRole("button", { name: "Calculando…" });
+    expect((reserva as HTMLButtonElement).disabled).toBe(true);
+    soltar(VISTA);
+    expect(await screen.findByRole("button", { name: "Asociar los 55" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Calculando…" })).toBeNull();
+  });
+
+  it("sin permiso de gestión o paquete cerrado: sin botones de lote", async () => {
+    permisos = ["comparendos.ocr.ver"];
+    abrir();
+    await screen.findByRole("group", { name: "Filtrar documentos por estado" });
+    expect(screen.queryByRole("button", { name: /Asociar los|Revisar reemplazos|Calculando/ })).toBeNull();
+    cleanup();
+    permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
+    abrir({ ...PAQUETE, estado: "Cerrado", cerradoEn: "2026-11-02T10:00:00Z" });
+    await screen.findByRole("group", { name: "Filtrar documentos por estado" });
+    expect(screen.queryByRole("button", { name: /Asociar los|Revisar reemplazos|Calculando/ })).toBeNull();
   });
 
   it("revisar reemplazos: abre el primero de la cola con el avance en la URL", async () => {
@@ -118,187 +283,11 @@ describe("asociar en lote y cola de reemplazos (paquete)", () => {
     const url = String(push.mock.calls[0][0]);
     expect(url.startsWith("/ocr/documentos/r1?")).toBe(true);
     expect(new URLSearchParams(url.split("?")[1]).get("total")).toBe("2");
-    expect(new URLSearchParams(url.split("?")[1]).get("cola")).toBe("reemplazos");
   });
 
-  it("sin permiso de gestión o paquete cerrado: ni vista previa ni botones", async () => {
-    permisos = ["comparendos.ocr.ver"];
-    abrir();
-    await screen.findByRole("group", { name: "Filtrar documentos por estado" });
-    expect(screen.queryByRole("button", { name: /Asociar los/ })).toBeNull();
-    expect(apiFetch.mock.calls.some(([r]) => r === "/ocr/paquetes/p1/asociacion-lote")).toBe(false);
-    cleanup();
-    permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
-    abrir({ ...PAQUETE, estado: "Cerrado", cerradoEn: "2026-11-02T10:00:00Z" });
-    await screen.findByRole("group", { name: "Filtrar documentos por estado" });
-    expect(screen.queryByRole("button", { name: /Asociar los|Revisar reemplazos/ })).toBeNull();
-  });
-
-  it("al volver de la cola muestra el resumen", async () => {
+  it("al volver de la cola muestra el resumen de la revisión", async () => {
     query = "cola=terminada&reemplazados=3&descartados=1";
     abrir();
     expect(await screen.findByText("Terminaste la revisión de reemplazos: 3 reemplazados y 1 descartado.")).toBeTruthy();
-  });
-});
-
-describe("foco durante el lote", () => {
-  afterEach(cleanup);
-  it("al confirmar, el foco pasa al avance (el botón se deshabilita) y Escape no cierra mientras asocia", async () => {
-    apiFetch.mockReset();
-    permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
-    query = "";
-    apiFetch.mockImplementation((ruta: string) => {
-      if (ruta === "/ocr/paquetes/p1/asociacion-lote") return Promise.resolve(VISTA);
-      if (ruta === "/ocr/paquetes/p1/asociar-lote") return new Promise(() => {});
-      return Promise.resolve({ paquete: PAQUETE, documentos: [], completosPorConfirmar: 0 });
-    });
-    render(
-      <ToastProvider>
-        <Pagina />
-      </ToastProvider>,
-    );
-    fireEvent.click(await screen.findByRole("button", { name: "Asociar los 55" }));
-    const m = await screen.findByRole("dialog");
-    fireEvent.click(within(m).getByRole("button", { name: "Asociar y enviar" }));
-    const barra = await screen.findByRole("progressbar");
-    await waitFor(() => expect(document.activeElement).toBe(barra.parentElement));
-    fireEvent.keyDown(document, { key: "Escape" });
-    expect(screen.getByRole("dialog")).toBeTruthy();
-  });
-});
-
-describe("lote cortado y doble clic", () => {
-  afterEach(cleanup);
-  const montar = (asociarLote: () => Promise<unknown>) => {
-    apiFetch.mockReset();
-    permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
-    query = "";
-    apiFetch.mockImplementation((ruta: string) => {
-      if (ruta === "/ocr/paquetes/p1/asociacion-lote") return Promise.resolve(VISTA);
-      if (ruta === "/ocr/paquetes/p1/asociar-lote") return asociarLote();
-      return Promise.resolve({ paquete: PAQUETE, documentos: [], completosPorConfirmar: 0 });
-    });
-    render(
-      <ToastProvider>
-        <Pagina />
-      </ToastProvider>,
-    );
-  };
-
-  it("si una tanda falla, el resultado conserva lo asociado y explica por qué paró", async () => {
-    let n = 0;
-    montar(() => (n++ === 0 ? Promise.resolve({ asociados: asoc(50, "a"), omitidos: [], restantes: 5 }) : Promise.reject(new Error("Se perdió la conexión. Intenta de nuevo."))));
-    fireEvent.click(await screen.findByRole("button", { name: "Asociar los 55" }));
-    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar y enviar" }));
-    expect(await screen.findByText("Resultado de la asociación")).toBeTruthy();
-    expect(screen.getByText("Se asociaron 50 documentos a sus comparendos.")).toBeTruthy();
-    expect(screen.getByRole("alert").textContent).toBe("Se perdió la conexión. Intenta de nuevo.");
-  });
-
-  it("doble clic en confirmar pide una sola tanda", async () => {
-    let resolver: (v: unknown) => void = () => {};
-    montar(() => new Promise((r) => (resolver = r)));
-    fireEvent.click(await screen.findByRole("button", { name: "Asociar los 55" }));
-    const boton = within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar y enviar" });
-    fireEvent.click(boton);
-    fireEvent.click(boton);
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Asociando…" }));
-    expect(posts()).toHaveLength(1);
-    resolver({ asociados: asoc(55, "a"), omitidos: [], restantes: 0 });
-    expect(await screen.findByText("Resultado de la asociación")).toBeTruthy();
-    expect(posts()).toHaveLength(1);
-  });
-});
-
-describe("cabecera: un solo primario y sin salto al cargar", () => {
-  afterEach(cleanup);
-  const montar = (paquete: Record<string, unknown>, vista: () => Promise<unknown>) => {
-    apiFetch.mockReset();
-    permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
-    query = "";
-    apiFetch.mockImplementation((ruta: string) => {
-      if (ruta === "/ocr/paquetes/p1/asociacion-lote") return vista();
-      return Promise.resolve({ paquete, documentos: [], completosPorConfirmar: 0 });
-    });
-    render(
-      <ToastProvider>
-        <Pagina />
-      </ToastProvider>,
-    );
-  };
-
-  it("solo asociables: «Asociar los N» es el primario", async () => {
-    montar(PAQUETE, () => Promise.resolve(VISTA));
-    expect((await screen.findByRole("button", { name: "Asociar los 55" })).className).toBe(BOTON_PRIMARIO_CLS);
-  });
-
-  it("con completos por registrar: «Registrar» primario y «Asociar» secundario", async () => {
-    montar({ ...PAQUETE, cantidadCompletos: 3 }, () => Promise.resolve(VISTA));
-    const asociar = await screen.findByRole("button", { name: "Asociar los 55" });
-    expect(screen.getByRole("button", { name: "Registrar los 3 completos" }).className).toBe(BOTON_PRIMARIO_CLS);
-    expect(asociar.className).not.toBe(BOTON_PRIMARIO_CLS);
-  });
-
-  it("mientras carga la vista previa reserva el lugar con «Calculando…» deshabilitado", async () => {
-    let soltar: (v: unknown) => void = () => {};
-    montar(PAQUETE, () => new Promise((r) => (soltar = r)));
-    const reserva = await screen.findByRole("button", { name: "Calculando…" });
-    expect((reserva as HTMLButtonElement).disabled).toBe(true);
-    soltar(VISTA);
-    expect(await screen.findByRole("button", { name: "Asociar los 55" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Calculando…" })).toBeNull();
-  });
-});
-
-describe("cerrar mientras asocia", () => {
-  afterEach(cleanup);
-  const cerrarVentana = () => {
-    const e = new Event("beforeunload", { cancelable: true });
-    window.dispatchEvent(e);
-    return e.defaultPrevented;
-  };
-  const iniciar = async (asociarLote: () => Promise<unknown>) => {
-    apiFetch.mockReset();
-    permisos = ["comparendos.ocr.ver", "comparendos.ocr.gestionar"];
-    query = "";
-    apiFetch.mockImplementation((ruta: string) => {
-      if (ruta === "/ocr/paquetes/p1/asociacion-lote") return Promise.resolve(VISTA);
-      if (ruta === "/ocr/paquetes/p1/asociar-lote") return asociarLote();
-      return Promise.resolve({ paquete: PAQUETE, documentos: [], completosPorConfirmar: 0 });
-    });
-    const r = render(
-      <ToastProvider>
-        <Pagina />
-      </ToastProvider>,
-    );
-    fireEvent.click(await screen.findByRole("button", { name: "Asociar los 55" }));
-    const m = await screen.findByRole("dialog");
-    const panel = within(m).getByRole("button", { name: "Cerrar" }).closest('div[tabindex="-1"]')!;
-    expect(panel.className).not.toContain("aria-label=Cerrar]]:invisible");
-    expect(cerrarVentana()).toBe(false);
-    fireEvent.click(within(m).getByRole("button", { name: "Asociar y enviar" }));
-    return { ...r, panel };
-  };
-
-  it("pregunta antes de cerrar la pestaña, oculta la X y lo explica; al terminar deja de preguntar", async () => {
-    let soltar: (v: unknown) => void = () => {};
-    const { panel } = await iniciar(() => new Promise((r) => (soltar = r)));
-    expect(await screen.findByText("Si cierras esta ventana, lo ya asociado se conserva y lo que falte podrás asociarlo después.")).toBeTruthy();
-    expect(cerrarVentana()).toBe(true);
-    expect(panel.className).toContain("[&_button[aria-label=Cerrar]]:invisible");
-    soltar({ asociados: asoc(55, "a"), omitidos: [], restantes: 0 });
-    expect(await screen.findByText("Resultado de la asociación")).toBeTruthy();
-    expect(cerrarVentana()).toBe(false);
-  });
-
-  it("si se sale de la pantalla a mitad, deja de preguntar y termina sin romper", async () => {
-    let soltar: (v: unknown) => void = () => {};
-    const { unmount } = await iniciar(() => new Promise((r) => (soltar = r)));
-    await screen.findByRole("progressbar");
-    expect(cerrarVentana()).toBe(true);
-    unmount();
-    expect(cerrarVentana()).toBe(false);
-    soltar({ asociados: asoc(55, "a"), omitidos: [], restantes: 0 });
-    await new Promise((r) => setTimeout(r, 0));
   });
 });

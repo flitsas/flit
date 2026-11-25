@@ -257,3 +257,37 @@ describe("asociar documento escaneado a comparendo existente", () => {
     expect(within(modal).queryByText(/Los números no coinciden exactamente/)).toBeNull();
   });
 });
+
+describe("documento en un lote en segundo plano (GDC-EVID §10)", () => {
+  beforeEach(() => {
+    apiFetch.mockReset();
+  });
+  afterEach(cleanup);
+  const EN_ASOCIACION = "Este documento se está asociando en segundo plano; espera a que termine.";
+
+  it("PorAsociar: «Se está asociando…», solo lectura, sin recuadro de duplicado ni campos en rojo ni acciones", async () => {
+    const campos = ["valor", "placa"].map((n) => ({ nombreCampo: n, obligatorio: true, valorExtraido: null, confianza: 0.5, esNull: true, valorCorregido: null, valorFinal: "x" }));
+    abrir({}, undefined, { estado: "PorAsociar", campos, camposFaltantes: ["valor"] });
+    expect(await screen.findByText("Se está asociando…")).toBeTruthy();
+    expect(screen.queryByText(/Este comparendo ya existe/)).toBeNull();
+    expect(screen.queryByText(/falta o no es válido/)).toBeNull();
+    expect(document.querySelector(".ring-destructive")).toBeNull();
+    expect(screen.queryByRole("button", { name: /Asociar al comparendo|Comparar documentos|Descartar|Guardar/ })).toBeNull();
+  });
+
+  it("409 EN_ASOCIACION al asociar: muestra el motivo del servidor tal cual", async () => {
+    abrir({}, new ApiError(409, EN_ASOCIACION, "EN_ASOCIACION"));
+    fireEvent.click(await screen.findByRole("button", { name: /Asociar al comparendo/ }));
+    fireEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Asociar al comparendo" }));
+    expect(await screen.findByText(EN_ASOCIACION)).toBeTruthy();
+  });
+
+  it("409 EN_ASOCIACION al descartar: también tal cual", async () => {
+    abrir({}, new ApiError(409, EN_ASOCIACION, "EN_ASOCIACION"));
+    fireEvent.click((await screen.findAllByRole("button", { name: "Descartar" }))[0]);
+    const m = await screen.findByRole("dialog");
+    fireEvent.change(within(m).getByRole("textbox"), { target: { value: "No sirve" } });
+    fireEvent.click(within(m).getByRole("button", { name: "Descartar" }));
+    expect(await screen.findByText(EN_ASOCIACION)).toBeTruthy();
+  });
+});

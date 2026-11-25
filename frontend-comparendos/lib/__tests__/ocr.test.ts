@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
   accionesDocumento,
   aFechaInput,
@@ -26,9 +26,13 @@ import {
   vistaDuplicado,
   textoCorreoAlAsociar,
   avisosAlAsociar,
-  asociarEnTandas,
+  avisoLoteEncolado,
+  cerrarResumenLote,
   colaReemplazos,
-  correosDelLote,
+  type LoteEnCurso,
+  resumenLoteCerrado,
+  textoAvanceLote,
+  textosResumenLote,
   etiquetaAsociarLote,
   leerCola,
   resumenCola,
@@ -374,42 +378,63 @@ describe("asociar en lote (GDC-EVID §9)", () => {
     });
   });
 
-  const asoc = (n: number, estado: "Pendiente" | "Omitido" = "Pendiente", motivo: string | null = null) =>
-    Array.from({ length: n }, (_, i) => ({ documentoId: `d${n}-${i}-${estado}`, comparendoId: "c", numero: "1", correo: { estado, motivo } }));
+});
 
-  it("tandas: pide mientras queden, acumula y avisa el avance", async () => {
-    const tandas = [
-      { asociados: asoc(50), omitidos: [], restantes: 70 },
-      { asociados: asoc(49), omitidos: [{ documentoId: "x", nombreArchivo: "x.pdf", codigo: "EVIDENCIA_EXISTENTE", motivo: "Ya tiene documento" }], restantes: 20 },
-      { asociados: asoc(20, "Omitido", "El comparendo ya está pagado"), omitidos: [], restantes: 0 },
-    ];
-    const pedir = vi.fn(async () => tandas.shift()!);
-    const avances: [number, number][] = [];
-    const r = await asociarEnTandas(pedir, (h, rest) => avances.push([h, rest]));
-    expect(pedir).toHaveBeenCalledTimes(3);
-    expect(avances).toEqual([[50, 70], [100, 20], [120, 0]]);
-    expect(r.asociados).toHaveLength(119);
-    expect(r.omitidos).toHaveLength(1);
-    expect(r.interrumpido).toBeNull();
-    expect(correosDelLote(r.asociados)).toEqual({ enCamino: 99, noSalen: [{ motivo: "El comparendo ya está pagado", cantidad: 20 }] });
+describe("lote en segundo plano (GDC-EVID §10)", () => {
+  const lote = (o: Partial<LoteEnCurso> = {}): LoteEnCurso => ({
+    loteId: "l1",
+    porAsociar: 36,
+    total: 48,
+    asociados: 12,
+    noAsociados: [],
+    correosEnCamino: 11,
+    sinCorreo: [],
+    solicitadoPor: "admin@empresa.local",
+    solicitadoEn: "2026-11-25T15:00:00Z",
+    terminadoEn: null,
+    ...o,
   });
 
-  it("tandas: se detiene si una tanda no avanza o si una petición falla, sin perder lo hecho", async () => {
-    const sinAvance = vi.fn().mockResolvedValueOnce({ asociados: asoc(3), omitidos: [], restantes: 5 }).mockResolvedValue({ asociados: [], omitidos: [], restantes: 5 });
-    const a = await asociarEnTandas(sinAvance, () => {});
-    expect(sinAvance).toHaveBeenCalledTimes(2);
-    expect(a.asociados).toHaveLength(3);
-    expect(a.interrumpido).toMatch(/dejó de avanzar/);
+  it("aviso al encolar y avance de la franja", () => {
+    expect(avisoLoteEncolado(48)).toBe("Asociando 48 documentos en segundo plano; puedes seguir trabajando.");
+    expect(avisoLoteEncolado(1)).toBe("Asociando 1 documento en segundo plano; puedes seguir trabajando.");
+    expect(textoAvanceLote(lote())).toBe("Asociando 12 de 48…");
+    expect(textoAvanceLote(lote({ porAsociar: 60 }))).toBe("Asociando 0 de 48…");
+  });
 
-    const falla = vi.fn().mockResolvedValueOnce({ asociados: asoc(50), omitidos: [], restantes: 10 }).mockRejectedValueOnce(new Error("Se perdió la conexión"));
-    const b = await asociarEnTandas(falla, () => {});
-    expect(b.asociados).toHaveLength(50);
-    expect(b.interrumpido).toBe("Se perdió la conexión");
+  it("resumen: asociados y correos en camino, con singulares; sin correos no hay línea", () => {
+    expect(textosResumenLote(lote({ porAsociar: 0, asociados: 47, correosEnCamino: 45 }))).toEqual({
+      titulo: "Se asociaron 47 documentos a sus comparendos.",
+      correos: "45 correos con el documento van en camino a los conductores.",
+    });
+    expect(textosResumenLote(lote({ porAsociar: 0, asociados: 1, correosEnCamino: 1 }))).toEqual({
+      titulo: "Se asoció 1 documento a su comparendo.",
+      correos: "1 correo con el documento va en camino al conductor.",
+    });
+    expect(textosResumenLote(lote({ porAsociar: 0, correosEnCamino: 0 })).correos).toBeNull();
+  });
 
-    const infinita = vi.fn(async () => ({ asociados: asoc(1), omitidos: [], restantes: 1 }));
-    const c = await asociarEnTandas(infinita, () => {}, 3);
-    expect(infinita).toHaveBeenCalledTimes(3);
-    expect(c.interrumpido).toMatch(/Quedaron documentos/);
+  it("el resumen cerrado se recuerda por lote; si el almacenamiento falla, se muestra igual y no rompe", () => {
+    window.localStorage.clear();
+    expect(resumenLoteCerrado("l1")).toBe(false);
+    cerrarResumenLote("l1");
+    expect(resumenLoteCerrado("l1")).toBe(true);
+    expect(resumenLoteCerrado("l2")).toBe(false);
+    // Navegador con el almacenamiento bloqueado: acceder a localStorage lanza.
+    const original = Object.getOwnPropertyDescriptor(window, "localStorage")!;
+    Object.defineProperty(window, "localStorage", {
+      configurable: true,
+      get() {
+        throw new Error("bloqueado");
+      },
+    });
+    try {
+      expect(resumenLoteCerrado("l1")).toBe(false);
+      expect(() => cerrarResumenLote("l3")).not.toThrow();
+    } finally {
+      Object.defineProperty(window, "localStorage", original);
+    }
+    expect(resumenLoteCerrado("l1")).toBe(true);
   });
 });
 

@@ -87,6 +87,8 @@ export const ESTADO_DOCUMENTO: Record<string, { texto: string; clase: string }> 
   Duplicado: { texto: "Duplicado", clase: "bg-[var(--badge-purple-bg)] text-[var(--badge-purple-fg)]" },
   Registrado: { texto: "Registrado", clase: "bg-[var(--badge-success-bg)] text-[var(--badge-success-fg)] font-semibold" },
   Asociado: { texto: "Asociado", clase: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)] font-semibold" },
+  // §10: encolado en un lote; el trabajador de fondo lo asocia. Solo lectura mientras tanto.
+  PorAsociar: { texto: "Asociando", clase: "bg-[var(--badge-info-bg)] text-[var(--badge-info-fg)]" },
   Descartado: { texto: "Descartado", clase: "bg-[var(--badge-neutral-bg)] text-[var(--badge-neutral-fg)] opacity-70" },
 };
 
@@ -497,20 +499,22 @@ export interface VistaPreviaLote {
   asociables: number;
   correos: { saldran: number; conductores: number; omitidos: { motivo: string; cantidad: number }[] };
   porRevisar: { reemplazos: number; numeroDistinto: number };
+  /** §10: el último lote del paquete (null si nunca hubo). */
+  enCurso?: LoteEnCurso | null;
 }
 
-/** Una tanda de `POST /ocr/paquetes/{id}/asociar-lote` (máx. 50 documentos; `restantes` dice si hay que pedir otra). */
-export interface TandaLote {
-  asociados: { documentoId: string; comparendoId: string; numero: string; correo: CorreoAsociado }[];
-  omitidos: { documentoId: string; nombreArchivo: string; codigo: string; motivo: string }[];
-  restantes: number;
-}
-
-/** Lo acumulado de todas las tandas; `interrumpido` dice por qué se paró antes de terminar (lo hecho queda hecho). */
-export interface ResultadoLote {
-  asociados: TandaLote["asociados"];
-  omitidos: TandaLote["omitidos"];
-  interrumpido: string | null;
+/** Último lote del paquete: avance mientras `porAsociar > 0` y, al terminar, el resumen. */
+export interface LoteEnCurso {
+  loteId: string;
+  porAsociar: number;
+  total: number;
+  asociados: number;
+  noAsociados: { documentoId: string; nombreArchivo: string; motivo: string }[];
+  correosEnCamino: number;
+  sinCorreo: { motivo: string; cantidad: number }[];
+  solicitadoPor: string | null;
+  solicitadoEn: string;
+  terminadoEn: string | null;
 }
 
 const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios.replace("{n}", String(n)));
@@ -535,45 +539,52 @@ export function textosVistaPreviaLote(v: VistaPreviaLote): { documentos: string;
   return { documentos: plural(v.asociables, "Se asociará 1 documento a su comparendo.", "Se asociarán {n} documentos a sus comparendos."), correos, porRevisar };
 }
 
-/**
- * Pide tandas hasta que el servidor diga que no quedan. Para si una tanda no avanza (evita un ciclo sin fin) o si una
- * petición falla: lo ya asociado se conserva y se explica por qué paró.
- */
-export async function asociarEnTandas(pedir: () => Promise<TandaLote>, alAvanzar: (hechos: number, restantes: number) => void, maxTandas = 40): Promise<ResultadoLote> {
-  const r: ResultadoLote = { asociados: [], omitidos: [], interrumpido: null };
-  for (let i = 0; i < maxTandas; i++) {
-    let t: TandaLote;
-    try {
-      t = await pedir();
-    } catch (e) {
-      r.interrumpido = e instanceof Error && e.message ? e.message : "No se pudo completar la asociación.";
-      return r;
-    }
-    r.asociados.push(...t.asociados);
-    r.omitidos.push(...t.omitidos);
-    alAvanzar(r.asociados.length + r.omitidos.length, t.restantes);
-    if (t.restantes <= 0) return r;
-    if (t.asociados.length + t.omitidos.length === 0) {
-      r.interrumpido = "La asociación dejó de avanzar. Actualiza el paquete y vuelve a intentarlo.";
-      return r;
-    }
-  }
-  r.interrumpido = "Quedaron documentos sin procesar. Vuelve a intentarlo para terminar.";
-  return r;
+/** Respuesta de `POST /ocr/paquetes/{id}/asociar-lote` (§10): el servidor encola y un trabajador asocia en segundo plano. */
+export interface LoteEncolado {
+  encolados: number;
+  /** null cuando no encoló nada (doble clic o nada elegible): no se crea lote. */
+  loteId: string | null;
 }
 
-/** Correos del lote: los que quedaron por salir y los que no salen, agrupados por motivo. */
-export function correosDelLote(asociados: TandaLote["asociados"]): { enCamino: number; noSalen: { motivo: string; cantidad: number }[] } {
-  let enCamino = 0;
-  const motivos = new Map<string, number>();
-  for (const a of asociados) {
-    if (a.correo?.estado === "Pendiente" || a.correo?.estado === "Enviado") enCamino++;
-    else {
-      const m = a.correo?.motivo?.trim() || "Sin motivo";
-      motivos.set(m, (motivos.get(m) ?? 0) + 1);
-    }
+/** Aviso tras confirmar: el lote ya no se espera frente a un modal. */
+export const avisoLoteEncolado = (n: number) => `${plural(n, "Asociando 1 documento", "Asociando {n} documentos")} en segundo plano; puedes seguir trabajando.`;
+
+/** Si el POST no encoló nada y tampoco hay un lote del paquete que mostrar en la franja. */
+export const AVISO_SIN_DOCUMENTOS_LOTE = "No había documentos por asociar.";
+
+/** Texto de la franja mientras el lote avanza (procesados = los que ya no están por asociar). */
+export function textoAvanceLote(l: LoteEnCurso): string {
+  const hechos = Math.max(0, l.total - l.porAsociar);
+  return `Asociando ${hechos} de ${l.total}…`;
+}
+
+/** Resumen del último lote, cuando terminó. */
+export function textosResumenLote(l: LoteEnCurso): { titulo: string; correos: string | null } {
+  const titulo = plural(l.asociados, "Se asoció 1 documento a su comparendo.", "Se asociaron {n} documentos a sus comparendos.");
+  const correos =
+    l.correosEnCamino === 0
+      ? null
+      : plural(l.correosEnCamino, "1 correo con el documento va en camino al conductor.", "{n} correos con el documento van en camino a los conductores.");
+  return { titulo, correos };
+}
+
+const CLAVE_RESUMEN_CERRADO = "comparendos.ocr.lote-resumen-cerrado:";
+
+/** ¿La gestora ya cerró el resumen de este lote? (por navegador; si el almacenamiento falla, se muestra). */
+export function resumenLoteCerrado(loteId: string): boolean {
+  try {
+    return window.localStorage.getItem(CLAVE_RESUMEN_CERRADO + loteId) === "1";
+  } catch {
+    return false;
   }
-  return { enCamino, noSalen: [...motivos].map(([motivo, cantidad]) => ({ motivo, cantidad })) };
+}
+
+export function cerrarResumenLote(loteId: string): void {
+  try {
+    window.localStorage.setItem(CLAVE_RESUMEN_CERRADO + loteId, "1");
+  } catch {
+    // Sin almacenamiento (privado, bloqueado): el resumen se cierra en esta vista y vuelve a salir al recargar.
+  }
 }
 
 /** Documentos del paquete que esperan revisión de reemplazo, en el orden del listado. */
