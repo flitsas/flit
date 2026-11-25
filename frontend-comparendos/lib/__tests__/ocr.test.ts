@@ -27,6 +27,7 @@ import {
   textoCorreoAlAsociar,
   avisosAlAsociar,
   avisoLoteEncolado,
+  avisoSinAvanceLote,
   cerrarResumenLote,
   colaReemplazos,
   type LoteEnCurso,
@@ -471,5 +472,23 @@ describe("cola de reemplazos (GDC-EVID §9)", () => {
     expect(resumenCola(new URLSearchParams(fin.split("?")[1]))).toBe("Terminaste la revisión de reemplazos: 1 reemplazado y 1 descartado.");
     expect(resumenCola(new URLSearchParams("cola=terminada&reemplazados=5&descartados=0"))).toBe("Terminaste la revisión de reemplazos: 5 reemplazados.");
     expect(resumenCola(new URLSearchParams(""))).toBeNull();
+  });
+});
+
+describe("lote estancado (GDC-EVID §10)", () => {
+  const base = {
+    loteId: "l1", porAsociar: 10, total: 20, asociados: 10, noAsociados: [], correosEnCamino: 10, sinCorreo: [],
+    solicitadoPor: null, solicitadoEn: "2026-11-25T15:00:00Z", terminadoEn: null,
+  };
+  const ahora = Date.parse("2026-11-25T15:30:00Z");
+  const hace = (min: number) => new Date(ahora - min * 60000).toISOString();
+
+  it("más de 5 minutos en curso: avisa con los minutos; 5 o menos, sin campo, fecha inválida o terminado: null", () => {
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: hace(6) }, ahora)).toBe("Sin avance desde hace 6 minutos; se retomará automáticamente.");
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: hace(5) }, ahora)).toBeNull();
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: hace(4) }, ahora)).toBeNull();
+    expect(avisoSinAvanceLote(base, ahora)).toBeNull();
+    expect(avisoSinAvanceLote({ ...base, ultimoAvanceEn: "no es fecha" }, ahora)).toBeNull();
+    expect(avisoSinAvanceLote({ ...base, porAsociar: 0, ultimoAvanceEn: hace(30) }, ahora)).toBeNull();
   });
 });

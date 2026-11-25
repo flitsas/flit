@@ -515,6 +515,8 @@ export interface LoteEnCurso {
   solicitadoPor: string | null;
   solicitadoEn: string;
   terminadoEn: string | null;
+  /** Último documento procesado (o solicitadoEn si aún ninguno). Aditivo: puede no venir. */
+  ultimoAvanceEn?: string | null;
 }
 
 const plural = (n: number, uno: string, varios: string) => (n === 1 ? uno : varios.replace("{n}", String(n)));
@@ -566,6 +568,22 @@ export function textosResumenLote(l: LoteEnCurso): { titulo: string; correos: st
       ? null
       : plural(l.correosEnCamino, "1 correo con el documento va en camino al conductor.", "{n} correos con el documento van en camino a los conductores.");
   return { titulo, correos };
+}
+
+/** Minutos sin avance a partir de los cuales la franja lo avisa. */
+export const MINUTOS_SIN_AVANCE_AVISO = 5;
+
+/**
+ * Si el lote sigue en curso y lleva más de 5 minutos sin procesar un documento, el aviso para la franja (el servidor lo
+ * retoma solo). Sin `ultimoAvanceEn`, terminado o con fecha inválida: null.
+ */
+export function avisoSinAvanceLote(l: LoteEnCurso, ahora: number = Date.now()): string | null {
+  if (l.porAsociar <= 0 || !l.ultimoAvanceEn) return null;
+  const desde = Date.parse(l.ultimoAvanceEn);
+  if (Number.isNaN(desde)) return null;
+  const minutos = Math.floor((ahora - desde) / 60000);
+  if (minutos <= MINUTOS_SIN_AVANCE_AVISO) return null;
+  return `Sin avance desde hace ${minutos} minutos; se retomará automáticamente.`;
 }
 
 const CLAVE_RESUMEN_CERRADO = "comparendos.ocr.lote-resumen-cerrado:";

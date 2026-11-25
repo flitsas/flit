@@ -2,7 +2,7 @@
 
 import { InlineAlert } from "@flit/ui";
 import { formatoFechaHora } from "@/lib/format/date";
-import { type LoteEnCurso, textoAvanceLote, textosResumenLote } from "@/lib/ocr";
+import { avisoSinAvanceLote, type LoteEnCurso, textoAvanceLote, textosResumenLote } from "@/lib/ocr";
 
 const ENLACE_CLS = "font-semibold text-flit-brand-ink hover:underline";
 
@@ -46,6 +46,17 @@ export function FranjaLote({ lote, onCerrar, onVer }: { lote: LoteEnCurso; onCer
           >
             <div className="h-full rounded-full bg-flit-brand transition-[width]" style={{ width: `${pct}%` }} />
           </div>
+          {(() => {
+            // La franja se vuelve a pintar con cada consulta (cada pocos segundos), así que los minutos se mantienen al día.
+            const estancado = avisoSinAvanceLote(lote);
+            return (
+              estancado && (
+                <p role="status" data-sin-avance className="font-semibold text-[var(--badge-warning-fg)]">
+                  {estancado}
+                </p>
+              )
+            );
+          })()}
           <p>Se asocian en segundo plano: puedes seguir trabajando o cerrar esta pantalla. El avance se actualiza solo.</p>
           <p className="text-muted-foreground">{pedido}</p>
         </div>

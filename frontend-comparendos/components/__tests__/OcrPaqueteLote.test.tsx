@@ -257,7 +257,8 @@ describe("cabecera y cola de reemplazos", () => {
     let soltar: (v: unknown) => void = () => {};
     vista = () => new Promise((r) => (soltar = r));
     abrir();
-    const reserva = await screen.findByRole("button", { name: "Calculando…" });
+    // Con la máquina cargada (suites en paralelo) la primera carga puede pasar de 1 s: margen explícito.
+    const reserva = await screen.findByRole("button", { name: "Calculando…" }, { timeout: 4000 });
     expect((reserva as HTMLButtonElement).disabled).toBe(true);
     soltar(VISTA);
     expect(await screen.findByRole("button", { name: "Asociar los 55" })).toBeTruthy();
