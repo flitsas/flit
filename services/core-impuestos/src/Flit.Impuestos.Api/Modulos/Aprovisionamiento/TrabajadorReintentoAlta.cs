@@ -58,38 +58,45 @@ public sealed partial class TrabajadorReintentoAlta(
             await using var scope = scopes.CreateAsyncScope();
             var almacen = scope.ServiceProvider.GetRequiredService<Credenciales.AlmacenCredenciales>();
             await using var db = almacen.ContextoDe(empresa);
-            var fila = await db.Set<AprovisionamientoEmpresa>().SingleOrDefaultAsync(a => a.TenantId == empresa, ct).ConfigureAwait(false);
-            if (fila is not { Estado: Domain.Aprovisionamiento.EstadoAprovisionamiento.Incierto, MotivoCodigo: MotivosAprovisionamiento.AltaSinConfirmar })
-                continue;
-            var ahora = reloj.GetUtcNow();
-            var nueva = Domain.Aprovisionamiento.TransicionesAprovisionamiento.Aplicar(
-                Aprovisionador.Situacion(fila), Domain.Aprovisionamiento.EventoAprovisionamiento.Reintentar).Nueva;
-            fila.Estado = nueva.Estado!.Value;
-            fila.EstadoPrevio = nueva.EstadoPrevio;
-            fila.ErrorTipo = nueva.TipoError;
-            fila.IntentosAutomaticos = nueva.IntentosAutomaticos;
-            fila.FirmaConfirmada = nueva.FirmaConfirmada;
-            fila.MotivoCodigo = null;
-            fila.MotivoDetalle = null;
-            fila.ProximoIntentoEn = null;
-            fila.Version++;
-            fila.ActualizadoEn = ahora;
-            db.Add(new HistorialAprovisionamiento
-            {
-                TenantId = empresa,
-                Desde = Domain.Aprovisionamiento.EstadoAprovisionamiento.Incierto,
-                Hacia = fila.Estado,
-                MotivoCodigo = MotivoAltaIdempotente,
-                ActorTipo = Aprovisionador.ActorSistema,
-                En = ahora,
-            });
-            await db.SaveChangesAsync(ct).ConfigureAwait(false);
-            vueltas++;
+            if (await BloqueoAprovisionamiento.EnTransaccionAsync(db, empresa, c => NormalizarAsync(db, empresa, c), ct).ConfigureAwait(false))
+                vueltas++;
         }
 
         if (vueltas > 0)
             Normalizadas(log, vueltas);
         return vueltas;
+    }
+
+    /// <summary>Con la fila bloqueada: si sigue en <c>INCIERTO</c> por el alta, vuelve a <c>PENDIENTE</c> sin intentos.</summary>
+    private async Task<bool> NormalizarAsync(ImpuestosDb db, Guid empresa, CancellationToken ct)
+    {
+        var fila = await db.Set<AprovisionamientoEmpresa>().SingleOrDefaultAsync(a => a.TenantId == empresa, ct).ConfigureAwait(false);
+        if (fila is not { Estado: Domain.Aprovisionamiento.EstadoAprovisionamiento.Incierto, MotivoCodigo: MotivosAprovisionamiento.AltaSinConfirmar })
+            return false;
+        var ahora = reloj.GetUtcNow();
+        var nueva = Domain.Aprovisionamiento.TransicionesAprovisionamiento.Aplicar(
+            Aprovisionador.Situacion(fila), Domain.Aprovisionamiento.EventoAprovisionamiento.Reintentar).Nueva;
+        fila.Estado = nueva.Estado!.Value;
+        fila.EstadoPrevio = nueva.EstadoPrevio;
+        fila.ErrorTipo = nueva.TipoError;
+        fila.IntentosAutomaticos = nueva.IntentosAutomaticos;
+        fila.FirmaConfirmada = nueva.FirmaConfirmada;
+        fila.MotivoCodigo = null;
+        fila.MotivoDetalle = null;
+        fila.ProximoIntentoEn = null;
+        fila.Version++;
+        fila.ActualizadoEn = ahora;
+        db.Add(new HistorialAprovisionamiento
+        {
+            TenantId = empresa,
+            Desde = Domain.Aprovisionamiento.EstadoAprovisionamiento.Incierto,
+            Hacia = fila.Estado,
+            MotivoCodigo = MotivoAltaIdempotente,
+            ActorTipo = Aprovisionador.ActorSistema,
+            En = ahora,
+        });
+        await db.SaveChangesAsync(ct).ConfigureAwait(false);
+        return true;
     }
 
     /// <summary>Una ronda: evalúa las pendientes vencidas y reporta lo no reportado. Devuelve cuántas evaluó.</summary>

@@ -95,6 +95,16 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasDefaultValue(0L)
                         .HasColumnName("reportado_version");
 
+                    b.Property<DateTimeOffset?>("UltimaFirmaInvalidaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultima_firma_invalida_en")
+                        .HasComment("Última firma inválida de un aviso; mide la ventana de una hora del contador.");
+
+                    b.Property<DateTimeOffset?>("UltimoCambioPlataformaEn")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("ultimo_cambio_plataforma_en")
+                        .HasComment("changedAt del último impuestos.producto.cambiado recibido; uno anterior se ignora.");
+
                     b.Property<Guid?>("UltimoCambioPlataformaId")
                         .HasColumnType("uuid")
                         .HasColumnName("ultimo_cambio_plataforma_id")
@@ -104,6 +114,12 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasColumnType("bigint")
                         .HasDefaultValue(1L)
                         .HasColumnName("version");
+
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("TenantId")
                         .HasName("pk_aprovisionamientos");
@@ -160,9 +176,14 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                     b.HasIndex("RecibidoEn")
                         .HasDatabaseName("ix_avisos_recibidos_recibido_en");
 
+                    b.HasIndex("ConsultaId", "Attempt")
+                        .IsUnique()
+                        .HasDatabaseName("ux_avisos_recibidos_consulta_attempt")
+                        .HasFilter("consulta_id IS NOT NULL AND attempt IS NOT NULL");
+
                     b.ToTable("avisos_recibidos", "impuestos", t =>
                         {
-                            t.HasComment("Dedupe de avisos por X-Flit-Delivery; sin cuerpo (PII). Purga a los 30 días. Global.");
+                            t.HasComment("Dedupe de avisos por X-Flit-Delivery y por (consulta_id, attempt); sin cuerpo (PII). Purga a los 30 días. Global.");
                         });
                 });
 
@@ -178,7 +199,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
 
                     b.Property<Guid?>("ActualizadoPor")
                         .HasColumnType("uuid")
-                        .HasColumnName("actualizado_por");
+                        .HasColumnName("actualizado_por")
+                        .HasComment("@pii:low Seudónimo del usuario (id de usuario de la plataforma).");
 
                     b.PrimitiveCollection<string[]>("CorreosAviso")
                         .IsRequired()
@@ -206,6 +228,12 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasDefaultValue(1L)
                         .HasColumnName("version");
 
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("TenantId")
                         .HasName("pk_configuracion_empresa");
 
@@ -229,7 +257,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
 
                     b.Property<Guid?>("ActualizadoPor")
                         .HasColumnType("uuid")
-                        .HasColumnName("actualizado_por");
+                        .HasColumnName("actualizado_por")
+                        .HasComment("@pii:low Seudónimo del usuario (id de usuario de la plataforma).");
 
                     b.Property<byte[]>("ApiKeyCifrada")
                         .IsRequired()
@@ -274,6 +303,12 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasColumnName("webhook_secret_cifrado")
                         .HasComment("@secret Data Protection, purpose impuestos.credenciales.v1.{tenant}.webhook_secret.");
 
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
+
                     b.HasKey("TenantId")
                         .HasName("pk_credenciales_empresa");
 
@@ -282,6 +317,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                             t.HasComment("Credenciales del API de liquidación por compañía, cifradas con Data Protection (DA-2=b).");
 
                             t.HasCheckConstraint("ck_credenciales_empresa_origen", "origen IN ('ALTA', 'COPIA_DIAGNOSTICO', 'CARGA_MANUAL')");
+
+                            t.HasCheckConstraint("ck_credenciales_empresa_secreto_anterior", "(webhook_secret_anterior_cifrado IS NULL) = (webhook_secret_anterior_hasta IS NULL)");
                         });
                 });
 
@@ -317,6 +354,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                     b.ToTable("fuentes_api", "impuestos", t =>
                         {
                             t.HasComment("Caché de GET /fuentes del API de liquidación (global, refresco cada 6 h).");
+
+                            t.HasCheckConstraint("ck_fuentes_api_params_schema", "jsonb_typeof(params_schema) = 'object'");
                         });
                 });
 
@@ -328,7 +367,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
 
                     b.Property<Guid?>("ActorId")
                         .HasColumnType("uuid")
-                        .HasColumnName("actor_id");
+                        .HasColumnName("actor_id")
+                        .HasComment("@pii:low Seudónimo del usuario (id de usuario de la plataforma).");
 
                     b.Property<string>("ActorTipo")
                         .IsRequired()
@@ -384,7 +424,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
 
                     b.Property<Guid>("ActorId")
                         .HasColumnType("uuid")
-                        .HasColumnName("actor_id");
+                        .HasColumnName("actor_id")
+                        .HasComment("@pii:low Seudónimo del usuario (id de usuario de la plataforma).");
 
                     b.Property<DateTimeOffset>("En")
                         .HasColumnType("timestamp with time zone")
@@ -472,13 +513,14 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
 
                     b.Property<Guid?>("CerradaPor")
                         .HasColumnType("uuid")
-                        .HasColumnName("cerrada_por");
+                        .HasColumnName("cerrada_por")
+                        .HasComment("@pii:low Seudónimo del usuario (id de usuario de la plataforma).");
 
                     b.Property<string>("CerradaPorNombre")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("cerrada_por_nombre")
-                        .HasComment("Nombre del actor según su token al cerrar (1.2.0).");
+                        .HasComment("@pii:medium Nombre del usuario interno (en claro por decisión del usuario)");
 
                     b.Property<string>("ConfigCopia")
                         .IsRequired()
@@ -492,13 +534,14 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
 
                     b.Property<Guid>("CreadaPor")
                         .HasColumnType("uuid")
-                        .HasColumnName("creada_por");
+                        .HasColumnName("creada_por")
+                        .HasComment("@pii:low Seudónimo del usuario (id de usuario de la plataforma).");
 
                     b.Property<string>("CreadaPorNombre")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("creada_por_nombre")
-                        .HasComment("Nombre del actor según su token al crear (1.2.0).");
+                        .HasComment("@pii:medium Nombre del usuario interno (en claro por decisión del usuario)");
 
                     b.Property<string>("Estado")
                         .IsRequired()
@@ -509,7 +552,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                     b.Property<string>("MotivoCierre")
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)")
-                        .HasColumnName("motivo_cierre");
+                        .HasColumnName("motivo_cierre")
+                        .HasComment("@pii:low Texto libre del usuario; puede contener datos personales");
 
                     b.Property<string>("NombreArchivo")
                         .HasMaxLength(200)
@@ -550,6 +594,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                     b.ToTable("liquidaciones", "impuestos", t =>
                         {
                             t.HasComment("Liquidaciones (lotes) de la compañía; la individual es un lote de un ítem (S-A).");
+
+                            t.HasCheckConstraint("ck_liquidaciones_config_copia", "jsonb_typeof(config_copia) = 'object'");
 
                             t.HasCheckConstraint("ck_liquidaciones_estado", "estado IN ('CREADO', 'EN_PROCESO', 'COMPLETADO', 'COMPLETADO_CON_NOVEDADES', 'CERRADO_MANUALMENTE')");
 
@@ -665,7 +711,7 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("character varying(10)")
                         .HasColumnName("placa")
-                        .HasComment("Placa normalizada (S16).");
+                        .HasComment("@pii:low Placa normalizada (S16).");
 
                     b.Property<bool>("PosibleDuplicado")
                         .HasColumnType("boolean")
@@ -712,7 +758,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                     b.Property<string>("SecretariaNombre")
                         .HasMaxLength(120)
                         .HasColumnType("character varying(120)")
-                        .HasColumnName("secretaria_nombre");
+                        .HasColumnName("secretaria_nombre")
+                        .HasComment("@pii:none Nombre de la secretaría de tránsito (Item.secretaria.nombre).");
 
                     b.Property<Guid>("TenantId")
                         .HasColumnType("uuid")
@@ -751,12 +798,20 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                     b.HasIndex("RelanzadoDesde")
                         .HasDatabaseName("ix_liquidacion_items_relanzado_desde");
 
+                    b.HasIndex("TenantId")
+                        .HasDatabaseName("ix_liquidacion_items_en_vuelo")
+                        .HasFilter("estado IN ('CONSULTANDO_RUNT','ENVIANDO')");
+
                     b.HasIndex("TokenHash")
                         .IsUnique()
                         .HasDatabaseName("ux_liquidacion_items_token_hash");
 
                     b.HasIndex("LiquidacionId", "Estado")
                         .HasDatabaseName("ix_items_liq");
+
+                    b.HasIndex("TenantId", "LiquidacionId")
+                        .HasDatabaseName("ix_liquidacion_items_pendientes")
+                        .HasFilter("estado = 'PENDIENTE'");
 
                     b.HasIndex("TenantId", "Placa")
                         .HasDatabaseName("ix_items_tenant_placa");
@@ -860,6 +915,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                     b.ToTable("liquidacion_periodos", "impuestos", t =>
                         {
                             t.HasComment("Vigencias liquidadas de cada ítem. Sin PII.");
+
+                            t.HasCheckConstraint("ck_liquidacion_periodos_otros_cargos", "jsonb_typeof(otros_cargos) = 'array'");
                         });
                 });
 
@@ -877,7 +934,8 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("uuid[]")
                         .HasColumnName("leida_por")
-                        .HasDefaultValueSql("'{}'");
+                        .HasDefaultValueSql("'{}'")
+                        .HasComment("@pii:low Seudónimos (ids de usuario de la plataforma) de quienes leyeron el aviso.");
 
                     b.Property<Guid>("LiquidacionId")
                         .HasColumnType("uuid")
@@ -895,6 +953,9 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_notificaciones");
+
+                    b.HasIndex("LiquidacionId")
+                        .HasDatabaseName("ix_notificaciones_liquidacion");
 
                     b.HasIndex("TenantId", "CreadaEn")
                         .HasDatabaseName("ix_notificaciones_tenant_creada");
@@ -1015,6 +1076,12 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .HasMaxLength(12)
                         .HasColumnType("character varying(12)")
                         .HasColumnName("tipo");
+
+                    b.Property<uint>("Xmin")
+                        .IsConcurrencyToken()
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasColumnType("xid")
+                        .HasColumnName("xmin");
 
                     b.HasKey("Id")
                         .HasName("pk_recibos");
@@ -1170,6 +1237,16 @@ namespace Flit.Impuestos.Api.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_liquidacion_periodos_liquidacion_items");
+                });
+
+            modelBuilder.Entity("Flit.Impuestos.Api.Persistence.Notificacion", b =>
+                {
+                    b.HasOne("Flit.Impuestos.Api.Persistence.Liquidacion", null)
+                        .WithMany()
+                        .HasForeignKey("LiquidacionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_notificaciones_liquidaciones");
                 });
 
             modelBuilder.Entity("Flit.Impuestos.Api.Persistence.Recibo", b =>

@@ -47,6 +47,9 @@ public sealed class Recibo : IEntidadDeEmpresa
     public int Intentos { get; set; }
 
     public string? Motivo { get; set; }
+
+    /// <summary>Token de concurrencia optimista (columna de sistema <c>xmin</c>).</summary>
+    public uint Xmin { get; set; }
 }
 
 /// <summary><c>impuestos.recibos</c> (plan §4.1).</summary>
@@ -72,6 +75,7 @@ internal sealed class ReciboConfig : IEntityTypeConfiguration<Recibo>
         builder.Property(x => x.Sha256).HasColumnType("char(64)");
         builder.Property(x => x.Intentos).HasDefaultValue(0).ValueGeneratedNever();
         builder.Property(x => x.Motivo).HasMaxLength(64);
+        builder.Property(x => x.Xmin).IsRowVersion();
         builder.HasIndex(x => new { x.ItemId, x.FileIdApi }).IsUnique().HasDatabaseName("ux_recibos_item_file");
     }
 }

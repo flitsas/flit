@@ -31,6 +31,7 @@ internal sealed class LecturaBackofficeConfig : IEntityTypeConfiguration<Lectura
         builder.ToTable("auditoria_lectura_backoffice", t => t.HasComment("Lecturas del Super Admin entre compañías (forma ADR-0073). Solo inserción."));
         builder.HasKey(x => x.Id).HasName("pk_auditoria_lectura_backoffice");
         builder.Property(x => x.Id).ValueGeneratedNever();
+        builder.Property(x => x.ActorId).HasComment(ComentariosPii.Actor);
         builder.Property(x => x.Recurso).HasMaxLength(64);
         builder.HasIndex(x => new { x.TenantId, x.En }).HasDatabaseName("ix_auditoria_lectura_backoffice_tenant_en");
     }

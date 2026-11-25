@@ -44,6 +44,7 @@ internal sealed class HistorialAprovisionamientoConfig : IEntityTypeConfiguratio
         builder.Property(x => x.Desde).HasConversion(CodigosDeEnum.Convertidor<EstadoAprovisionamiento>()).HasMaxLength(32);
         builder.Property(x => x.Hacia).HasConversion(CodigosDeEnum.Convertidor<EstadoAprovisionamiento>()).HasMaxLength(32);
         builder.Property(x => x.MotivoCodigo).HasMaxLength(64);
+        builder.Property(x => x.ActorId).HasComment(ComentariosPii.Actor);
         builder.Property(x => x.ActorTipo).HasMaxLength(16);
         builder.HasIndex(x => new { x.TenantId, x.En }).HasDatabaseName("ix_historial_aprovisionamiento_tenant_en");
     }

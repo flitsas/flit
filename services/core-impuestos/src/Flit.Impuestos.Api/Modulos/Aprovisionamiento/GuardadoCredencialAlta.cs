@@ -6,7 +6,8 @@ using Flit.Platform.Sdk.Messaging;
 namespace Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 
 /// <summary>
-/// Guarda en el contexto dado (sin <c>SaveChanges</c>: va en la transacción de quien llama) las credenciales que trajo el alta
+/// Guarda en el contexto dado (sin <c>SaveChanges</c>: va en la transacción de quien llama, que debe existir; antes bloquea la
+/// fila del aprovisionamiento, <see cref="BloqueoAprovisionamiento"/>) las credenciales que trajo el alta
 /// idempotente (M07b, plan §5.8): las cifra con <see cref="AlmacenCredenciales"/> (que conserva el secreto anterior 24 h si cambió)
 /// y, con <c>api_key_rotated</c>, deja el historial <c>CLAVE_ROTADA</c> y encola en la outbox del servicio el trabajo
 /// <see cref="ConsumidorCredenciales.TipoPropagar"/> para llevar la llave nueva a Diagnóstico (D-ALTA-IDEM). El mensaje solo lleva
@@ -29,6 +30,8 @@ public sealed class GuardadoCredencialAlta(AlmacenCredenciales almacen, Platform
         ArgumentNullException.ThrowIfNull(db);
         ArgumentNullException.ThrowIfNull(resultado);
         var credenciales = resultado.Credenciales ?? throw new ArgumentException("El resultado no trae credenciales.", nameof(resultado));
+        // Orden de bloqueos: aprovisionamiento antes que credencial (BloqueoAprovisionamiento). Si quien llama ya la bloqueó, no cambia nada.
+        await BloqueoAprovisionamiento.BloquearAsync(db, empresa, ct).ConfigureAwait(false);
         var actual = await almacen.FilaAsync(db, empresa, ct).ConfigureAwait(false);
         var secretoNuevo = actual?.WebhookSecretCifrado is null ? credenciales.WebhookSecret is not null : almacen.CambiaSecreto(actual, empresa, credenciales.WebhookSecret);
         var fila = almacen.Escribir(db, actual, empresa, credenciales, resultado.Origen ?? OrigenCredencial.Alta, null);

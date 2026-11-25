@@ -37,6 +37,15 @@ public sealed class AprovisionamientoEmpresa : IEntidadDeEmpresa
     /// <summary>eventId del último <c>impuestos.producto.cambiado</c> aplicado.</summary>
     public Guid? UltimoCambioPlataformaId { get; set; }
 
+    /// <summary>
+    /// <c>changedAt</c> del último <c>impuestos.producto.cambiado</c> recibido (con o sin efecto). Uno con un <c>changedAt</c> anterior
+    /// llegó desordenado y se ignora (MEN-6).
+    /// </summary>
+    public DateTimeOffset? UltimoCambioPlataformaEn { get; set; }
+
+    /// <summary>Cuándo llegó la última firma inválida de un aviso; contra ella se mide la ventana del contador (MEN-8).</summary>
+    public DateTimeOffset? UltimaFirmaInvalidaEn { get; set; }
+
     public long Version { get; set; } = 1;
 
     public long ReportadoVersion { get; set; }
@@ -44,6 +53,12 @@ public sealed class AprovisionamientoEmpresa : IEntidadDeEmpresa
     public DateTimeOffset CreadoEn { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset ActualizadoEn { get; set; } = DateTimeOffset.UtcNow;
+
+    /// <summary>
+    /// Token de concurrencia optimista (columna de sistema <c>xmin</c>): un guardado sobre una lectura vieja falla con
+    /// <c>DbUpdateConcurrencyException</c> en vez de pisar la fila. <see cref="Version"/> es otra cosa: la versión del estado que se reporta a la plataforma.
+    /// </summary>
+    public uint Xmin { get; set; }
 }
 
 /// <summary><c>impuestos.aprovisionamientos</c> (plan §4.1).</summary>
@@ -71,9 +86,12 @@ internal sealed class AprovisionamientoEmpresaConfig : IEntityTypeConfiguration<
         builder.Property(x => x.FirmasInvalidasConsecutivas).HasDefaultValue(0).ValueGeneratedNever();
         builder.Property(x => x.IntentosAutomaticos).HasDefaultValue(0).ValueGeneratedNever();
         builder.Property(x => x.UltimoCambioPlataformaId).HasComment("eventId del último trabajo impuestos.producto.cambiado aplicado.");
+        builder.Property(x => x.UltimoCambioPlataformaEn).HasComment("changedAt del último impuestos.producto.cambiado recibido; uno anterior se ignora.");
+        builder.Property(x => x.UltimaFirmaInvalidaEn).HasComment("Última firma inválida de un aviso; mide la ventana de una hora del contador.");
         builder.Property(x => x.Version).HasDefaultValue(1L).ValueGeneratedNever();
         builder.Property(x => x.ReportadoVersion).HasDefaultValue(0L).ValueGeneratedNever();
         builder.Property(x => x.CreadoEn).HasDefaultValueSql("now()").ValueGeneratedNever();
         builder.Property(x => x.ActualizadoEn).HasDefaultValueSql("now()").ValueGeneratedNever();
+        builder.Property(x => x.Xmin).IsRowVersion();
     }
 }

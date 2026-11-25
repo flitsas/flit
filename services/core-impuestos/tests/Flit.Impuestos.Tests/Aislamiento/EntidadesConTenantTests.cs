@@ -118,7 +118,10 @@ public sealed class EntidadesConTenantTests
         var b = Guid.NewGuid();
         await using (var deA = api.Contexto(a))
         {
-            deA.Add(new Notificacion { LiquidacionId = Guid.NewGuid(), Tipo = "LOTE_TERMINADO", CreadaEn = DateTimeOffset.UtcNow });
+            // R2: notificaciones.liquidacion_id tiene FK a liquidaciones.
+            var lote = new Liquidacion { Tipo = TipoLiquidacion.Individual, TotalItems = 1, ConfigCopia = "{}", CreadaPor = Guid.NewGuid(), CreadaEn = DateTimeOffset.UtcNow };
+            deA.Add(lote);
+            deA.Add(new Notificacion { LiquidacionId = lote.Id, Tipo = "LOTE_TERMINADO", CreadaEn = DateTimeOffset.UtcNow });
             await deA.SaveChangesAsync(ct);
         }
 

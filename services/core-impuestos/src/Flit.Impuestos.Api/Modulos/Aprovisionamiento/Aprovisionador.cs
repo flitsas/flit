@@ -110,16 +110,25 @@ public sealed partial class Aprovisionador(
         && alta.Evento != EventoAprovisionamiento.Alta409
         && (alta.Evento != EventoAprovisionamiento.NoSalio || intentos >= TransicionesAprovisionamiento.MaximoIntentosAutomaticos);
 
+    /// <summary>
+    /// Aplica el resultado con la fila bloqueada (<see cref="BloqueoAprovisionamiento"/>): lee lo último confirmado, así que una
+    /// suspensión que llegó durante el alta se ve y no se pisa; ante un choque de concurrencia se relee y se vuelve a aplicar.
+    /// </summary>
     private async Task AplicarAsync(Guid empresa, ResultadoEvaluacion resultado, CancellationToken ct)
     {
         await using var db = almacen.ContextoDe(empresa);
+        await BloqueoAprovisionamiento.EnTransaccionAsync(db, empresa, c => AplicarEnFilaAsync(db, empresa, resultado, c), ct).ConfigureAwait(false);
+    }
+
+    private async Task<bool> AplicarEnFilaAsync(ImpuestosDb db, Guid empresa, ResultadoEvaluacion resultado, CancellationToken ct)
+    {
         var fila = await db.Set<AprovisionamientoEmpresa>().SingleOrDefaultAsync(a => a.TenantId == empresa, ct).ConfigureAwait(false);
         if (fila is null)
-            return;
+            return false;
         if (fila.Estado != EstadoAprovisionamiento.Pendiente)
         {
             await ConservarAsync(db, fila, empresa, resultado, ct).ConfigureAwait(false);
-            return;
+            return true;
         }
 
         var desde = fila.Estado;
@@ -167,6 +176,8 @@ public sealed partial class Aprovisionador(
             MetricasImpuestos.ContarAlerta(AlertaAmbiente);
             Alerta(log, empresa, fila.Estado, fila.MotivoCodigo);
         }
+
+        return true;
     }
 
     /// <summary>

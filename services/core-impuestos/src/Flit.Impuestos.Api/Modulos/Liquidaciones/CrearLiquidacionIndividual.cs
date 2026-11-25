@@ -42,7 +42,8 @@ public sealed partial class CrearLiquidacionIndividual(
 
     /// <summary>
     /// Crea la individual. Con <paramref name="relanzadoDesde"/> es el relanzamiento de ese ítem (<see cref="RelanzarItem"/>): el ítem
-    /// nuevo lleva <c>relanzado_desde</c> y <c>posible_duplicado=true</c>. <paramref name="actorNombre"/> es el nombre de quien actúa (<see cref="Plataforma.INombreActor"/>) en el
+    /// nuevo lleva <c>relanzado_desde</c> y <c>posible_duplicado=true</c>, y la transacción toma el ítem original con
+    /// <c>FOR UPDATE</c> (<see cref="RelanzarItem.BloquearOriginalAsync"/>): dos relanzamientos del mismo ítem quedan en serie. <paramref name="actorNombre"/> es el nombre de quien actúa (<see cref="Plataforma.INombreActor"/>) en el
     /// momento de crear (<see cref="RegistrarNombreCreador"/>).
     /// </summary>
     public async Task<LiquidacionConItemsDto> CrearAsync(
@@ -62,6 +63,14 @@ public sealed partial class CrearLiquidacionIndividual(
             {
                 db.ChangeTracker.Clear();
                 await using var tx = await db.Database.BeginTransactionAsync(ct).ConfigureAwait(false);
+                if (relanzadoDesde is { } original)
+                {
+                    // MEN-7: los relanzamientos del mismo ítem van en serie. Orden de bloqueos (DespachadorCredito): primero el candado
+                    // del crédito (esta transacción libera al final) y luego el ítem original.
+                    await DespachadorCredito.TomarCandadoAsync(db, ct).ConfigureAwait(false);
+                    await RelanzarItem.BloquearOriginalAsync(db, empresa, original, ct).ConfigureAwait(false);
+                }
+
                 var ahora = reloj.GetUtcNow();
                 var lote = new Liquidacion
                 {

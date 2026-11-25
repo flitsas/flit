@@ -86,15 +86,18 @@ internal sealed class LiquidacionConfig : IEntityTypeConfiguration<Liquidacion>
             t.HasComment("Liquidaciones (lotes) de la compañía; la individual es un lote de un ítem (S-A).");
             t.HasCheckConstraint("ck_liquidaciones_tipo", $"tipo IN ({CodigosDeEnum.ListaSql<TipoLiquidacion>()})");
             t.HasCheckConstraint("ck_liquidaciones_estado", $"estado IN ({CodigosDeEnum.ListaSql<EstadoLote>()})");
+            t.HasCheckConstraint("ck_liquidaciones_config_copia", "jsonb_typeof(config_copia) = 'object'");
         });
         builder.HasKey(x => x.Id).HasName("pk_liquidaciones");
         builder.Property(x => x.Id).ValueGeneratedNever();
         builder.Property(x => x.Tipo).HasConversion(CodigosDeEnum.Convertidor<TipoLiquidacion>()).HasMaxLength(12);
         builder.Property(x => x.Estado).HasConversion(CodigosDeEnum.Convertidor<EstadoLote>()).HasMaxLength(28);
         builder.Property(x => x.NombreArchivo).HasMaxLength(200);
-        builder.Property(x => x.CreadaPorNombre).HasMaxLength(200).HasComment("Nombre del actor según su token al crear (1.2.0).");
-        builder.Property(x => x.CerradaPorNombre).HasMaxLength(200).HasComment("Nombre del actor según su token al cerrar (1.2.0).");
-        builder.Property(x => x.MotivoCierre).HasMaxLength(300);
+        builder.Property(x => x.CreadaPor).HasComment(ComentariosPii.Actor);
+        builder.Property(x => x.CreadaPorNombre).HasMaxLength(200).HasComment(ComentariosPii.NombreUsuarioInterno);
+        builder.Property(x => x.CerradaPor).HasComment(ComentariosPii.Actor);
+        builder.Property(x => x.CerradaPorNombre).HasMaxLength(200).HasComment(ComentariosPii.NombreUsuarioInterno);
+        builder.Property(x => x.MotivoCierre).HasMaxLength(300).HasComment(ComentariosPii.TextoLibre);
         foreach (var contador in new[]
                  {
                      nameof(Liquidacion.CExitosas), nameof(Liquidacion.CConDeuda), nameof(Liquidacion.CPazYSalvo), nameof(Liquidacion.CError),

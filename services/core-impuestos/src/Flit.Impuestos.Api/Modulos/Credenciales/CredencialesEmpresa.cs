@@ -1,4 +1,5 @@
 using Flit.Impuestos.Api.Modulos.ApiLiquidacion;
+using Flit.Impuestos.Api.Modulos.Aprovisionamiento;
 using Flit.Impuestos.Api.Persistence;
 using Flit.Impuestos.Api.Plataforma;
 using Flit.Impuestos.Domain;
@@ -14,7 +15,8 @@ public sealed record VistaCredenciales(bool TieneApiKey, bool TieneWebhookSecret
 /// Servicio de las credenciales de una compañía (D-409, DA-2=b, plan §3.1 y §5.1). <see cref="CargarAsync"/> es la carga
 /// manual del Super Admin: valida la forma, comprueba con la máquina de estados que el aprovisionamiento la admite
 /// (<c>REQUIERE_CREDENCIALES</c> o <c>LISTO_SIN_WEBHOOK</c>; si no, 409 <c>ESTADO_NO_ADMITE_CARGA</c> sin llamar al API), valida la
-/// api_key con <c>GET /fuentes</c> y, en una sola transacción, guarda la credencial cifrada, aplica la transición
+/// api_key con <c>GET /fuentes</c> y, en una sola transacción con la fila del aprovisionamiento bloqueada (que vuelve a comprobar la
+/// transición con el estado de ese momento), guarda la credencial cifrada, aplica la transición
 /// (<c>LISTO</c> con secreto, <c>LISTO_SIN_WEBHOOK</c> sin él), sube la versión y escribe el historial. Un secreto nuevo apaga el
 /// modo respaldo de firma (F2b-CF3). El reporte a la plataforma lo hace el reportador de M07 por la versión. Nunca registra ni
 /// devuelve valores.
@@ -52,26 +54,11 @@ public sealed partial class CredencialesEmpresa(AlmacenCredenciales almacen, Cli
         var llave = Validar(apiKey, "apiKey");
         var secreto = string.IsNullOrEmpty(webhookSecret) ? null : Validar(webhookSecret, "webhookSecret", PrefijoWebhookSecret);
 
-        await using var db = almacen.ContextoDe(empresa);
-        var aprovisionamiento = await db.Set<AprovisionamientoEmpresa>().FirstOrDefaultAsync(a => a.TenantId == empresa, ct).ConfigureAwait(false);
-        var situacion = aprovisionamiento is null
-            ? SituacionAprovisionamiento.SinFila
-            : new SituacionAprovisionamiento(
-                aprovisionamiento.Estado, aprovisionamiento.EstadoPrevio, aprovisionamiento.IntentosAutomaticos, aprovisionamiento.FirmaConfirmada, aprovisionamiento.ErrorTipo);
         var evento = secreto is null ? EventoAprovisionamiento.CargaManualSinSecreto : EventoAprovisionamiento.CargaManualConSecreto;
-        // Antes de llamar al API: un estado que no admite carga es 409 ESTADO_NO_ADMITE_CARGA y no gasta la llamada. El dominio
-        // responde con TransicionInvalida; el código del contrato se pone aquí, en el borde.
-        ResultadoAprovisionamiento resultado;
-        try
-        {
-            resultado = TransicionesAprovisionamiento.Aplicar(situacion, evento);
-        }
-        catch (TransicionInvalida)
-        {
-            throw ReglaException.Conflicto(CodigoEstadoNoAdmiteCarga, LiteralEstadoNoAdmiteCarga);
-        }
-
-        var nueva = resultado.Nueva;
+        await using var db = almacen.ContextoDe(empresa);
+        // Antes de llamar al API: un estado que no admite carga es 409 ESTADO_NO_ADMITE_CARGA y no gasta la llamada.
+        var previa = await db.Set<AprovisionamientoEmpresa>().AsNoTracking().FirstOrDefaultAsync(a => a.TenantId == empresa, ct).ConfigureAwait(false);
+        _ = Transicion(previa, evento);
 
         var validacion = await api.ObtenerFuentesAsync(llave, ct).ConfigureAwait(false);
         if (!validacion.Exitoso)
@@ -86,37 +73,64 @@ public sealed partial class CredencialesEmpresa(AlmacenCredenciales almacen, Cli
             throw new ReglaException(CodigoApiNoDisponible, LiteralApiNoDisponible, StatusCodes.Status503ServiceUnavailable);
         }
 
-        var actual = await almacen.FilaAsync(db, empresa, ct).ConfigureAwait(false);
-        almacen.Escribir(db, actual, empresa, new CredencialesEnClaro(llave, secreto), OrigenCredencial.CargaManual, actor);
-
-        var ahora = reloj.GetUtcNow();
-        var desde = aprovisionamiento!.Estado;
-        aprovisionamiento.Estado = nueva.Estado!.Value;
-        aprovisionamiento.EstadoPrevio = nueva.EstadoPrevio;
-        aprovisionamiento.ErrorTipo = nueva.TipoError;
-        aprovisionamiento.FirmaConfirmada = nueva.FirmaConfirmada;
-        aprovisionamiento.MotivoCodigo = null;
-        aprovisionamiento.MotivoDetalle = null;
-        if (secreto is not null)
+        // Con la fila bloqueada se relee el estado (pudo cambiar durante la validación, p. ej. una suspensión) y se vuelve a
+        // comprobar la transición; aprovisionamiento y credencial se guardan juntos (IMP-4).
+        var estado = await BloqueoAprovisionamiento.EnTransaccionAsync(db, empresa, async c =>
         {
-            aprovisionamiento.ModoRespaldoFirma = false;
-            aprovisionamiento.FirmasInvalidasConsecutivas = 0;
+            var aprovisionamiento = await db.Set<AprovisionamientoEmpresa>().FirstOrDefaultAsync(a => a.TenantId == empresa, c).ConfigureAwait(false);
+            var nueva = Transicion(aprovisionamiento, evento).Nueva;
+            var actual = await almacen.FilaAsync(db, empresa, c).ConfigureAwait(false);
+            almacen.Escribir(db, actual, empresa, new CredencialesEnClaro(llave, secreto), OrigenCredencial.CargaManual, actor);
+
+            var ahora = reloj.GetUtcNow();
+            var desde = aprovisionamiento!.Estado;
+            aprovisionamiento.Estado = nueva.Estado!.Value;
+            aprovisionamiento.EstadoPrevio = nueva.EstadoPrevio;
+            aprovisionamiento.ErrorTipo = nueva.TipoError;
+            aprovisionamiento.FirmaConfirmada = nueva.FirmaConfirmada;
+            aprovisionamiento.MotivoCodigo = null;
+            aprovisionamiento.MotivoDetalle = null;
+            if (secreto is not null)
+            {
+                aprovisionamiento.ModoRespaldoFirma = false;
+                aprovisionamiento.FirmasInvalidasConsecutivas = 0;
+            }
+
+            aprovisionamiento.Version++;
+            aprovisionamiento.ActualizadoEn = ahora;
+            db.Add(new HistorialAprovisionamiento
+            {
+                TenantId = empresa,
+                Desde = desde,
+                Hacia = aprovisionamiento.Estado,
+                MotivoCodigo = MotivoCargaManual,
+                ActorId = actor,
+                ActorTipo = ActorSuperAdmin,
+                En = ahora,
+            });
+            await db.SaveChangesAsync(c).ConfigureAwait(false);
+            return aprovisionamiento.Estado;
+        }, ct).ConfigureAwait(false);
+        Cargadas(log, empresa, estado, secreto is not null);
+    }
+
+    /// <summary>
+    /// La transición de la carga manual desde el estado de la fila. El dominio responde con <c>TransicionInvalida</c>; el código
+    /// del contrato (409 <c>ESTADO_NO_ADMITE_CARGA</c>) se pone aquí, en el borde.
+    /// </summary>
+    private static ResultadoAprovisionamiento Transicion(AprovisionamientoEmpresa? fila, EventoAprovisionamiento evento)
+    {
+        var situacion = fila is null
+            ? SituacionAprovisionamiento.SinFila
+            : new SituacionAprovisionamiento(fila.Estado, fila.EstadoPrevio, fila.IntentosAutomaticos, fila.FirmaConfirmada, fila.ErrorTipo);
+        try
+        {
+            return TransicionesAprovisionamiento.Aplicar(situacion, evento);
         }
-
-        aprovisionamiento.Version++;
-        aprovisionamiento.ActualizadoEn = ahora;
-        db.Add(new HistorialAprovisionamiento
+        catch (TransicionInvalida)
         {
-            TenantId = empresa,
-            Desde = desde,
-            Hacia = aprovisionamiento.Estado,
-            MotivoCodigo = MotivoCargaManual,
-            ActorId = actor,
-            ActorTipo = ActorSuperAdmin,
-            En = ahora,
-        });
-        await db.SaveChangesAsync(ct).ConfigureAwait(false);
-        Cargadas(log, empresa, aprovisionamiento.Estado, secreto is not null);
+            throw ReglaException.Conflicto(CodigoEstadoNoAdmiteCarga, LiteralEstadoNoAdmiteCarga);
+        }
     }
 
     public async Task<VistaCredenciales> VerAsync(Guid empresa, CancellationToken ct)

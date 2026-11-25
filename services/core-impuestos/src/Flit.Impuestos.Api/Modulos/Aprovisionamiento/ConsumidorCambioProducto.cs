@@ -19,7 +19,9 @@ public sealed record ProductoCambiado(Guid TenantId, string? ProductCode, bool E
 ///   (<see cref="EmpresaDelTrabajo"/>) y aplica la máquina de estados: encender sin fila crea <c>PENDIENTE</c> (versión 1) para
 ///   que <see cref="TrabajadorReintentoAlta"/> lo evalúe; apagar suspende guardando el estado previo (D-DESACT, sin tocar la
 ///   credencial ni el API); encender una suspendida recupera el previo listo sin alta o vuelve a <c>PENDIENTE</c>. Tolera el
-///   apagado sin fila y el encendido de una que ya está encendida (cambio solo de notas): se confirman sin efecto.</item>
+///   apagado sin fila y el encendido de una que ya está encendida (cambio solo de notas): se confirman sin efecto. La fila se lee
+///   con <c>FOR UPDATE</c> (<see cref="BloqueoAprovisionamiento"/>) y guarda el <c>changedAt</c> del último cambio recibido: uno con
+///   un <c>changedAt</c> anterior llegó desordenado y se confirma sin efecto (MEN-6).</item>
 ///   <item><see cref="TipoReintentar"/>: lo atiende <see cref="ConsumidorReintentoAprovisionamiento"/>.</item>
 /// </list>
 /// Un sobre sin empresa, con otra empresa en los datos o de una versión que no conoce va a la DLQ sin reintentos
@@ -78,6 +80,8 @@ public sealed partial class ConsumidorCambioProducto(
 
         empresa.Fijar(envelope.TenantId);
         var ahora = reloj.GetUtcNow();
+        // En la transacción del SDK: la fila queda bloqueada hasta el commit y se lee lo último confirmado (IMP-4).
+        await BloqueoAprovisionamiento.BloquearAsync(db, envelope.TenantId, ct).ConfigureAwait(false);
         var fila = await db.Set<AprovisionamientoEmpresa>().SingleOrDefaultAsync(a => a.TenantId == envelope.TenantId, ct).ConfigureAwait(false);
         if (fila is null)
         {
@@ -93,6 +97,7 @@ public sealed partial class ConsumidorCambioProducto(
                 Estado = EstadoAprovisionamiento.Pendiente,
                 Version = 1,
                 UltimoCambioPlataformaId = envelope.EventId,
+                UltimoCambioPlataformaEn = cambio.ChangedAt,
                 CreadoEn = ahora,
                 ActualizadoEn = ahora,
             });
@@ -101,9 +106,18 @@ public sealed partial class ConsumidorCambioProducto(
             return;
         }
 
+        // MEN-6: un cambio anterior al último recibido llegó desordenado (p. ej. un «encender» reprocesado tras un «apagar»).
+        if (fila.UltimoCambioPlataformaEn is { } ultimo && cambio.ChangedAt < ultimo)
+        {
+            SinEfecto(log, envelope.TenantId, "cambio anterior al último recibido");
+            return;
+        }
+
         var encendido = fila.Estado != EstadoAprovisionamiento.Suspendido;
         if (cambio.Enabled == encendido || fila.UltimoCambioPlataformaId == envelope.EventId)
         {
+            // Sin efecto, pero es el último estado que la plataforma dijo: uno más viejo que llegue después no lo contradice.
+            fila.UltimoCambioPlataformaEn = cambio.ChangedAt;
             SinEfecto(log, envelope.TenantId, cambio.Enabled ? "ya estaba encendido" : "ya estaba apagado");
             return;
         }
@@ -120,6 +134,7 @@ public sealed partial class ConsumidorCambioProducto(
         fila.MotivoCodigo = MotivosAprovisionamiento.DelEstado(fila.Estado);
         fila.ProximoIntentoEn = null;
         fila.UltimoCambioPlataformaId = envelope.EventId;
+        fila.UltimoCambioPlataformaEn = cambio.ChangedAt;
         fila.Version++;
         fila.ActualizadoEn = ahora;
         db.Add(Historial(envelope.TenantId, desde, fila.Estado, fila.MotivoCodigo, ahora));
