@@ -69,7 +69,7 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
     {
         Use(_client, "SuperAdmin", Guid.NewGuid());
 
-        (await GetAppCodesAsync(_client)).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico");
+        (await GetAppCodesAsync(_client)).Should().Equal("plataforma", "tramites", "comparendos", "diagnostico", "impuestos");
     }
 
     // ── HU #12967: el Admin de Compañía entra a todo producto encendido ──────────────
@@ -86,7 +86,7 @@ public sealed class PlatformEndpointsTests : IClassFixture<WebApplicationFactory
             where a.UserId == _adminId && a.TenantId == _tenantId && a.DeletedAt == null
             select r.Code).ToListAsync(TestContext.Current.CancellationToken);
 
-        roles.Should().BeEquivalentTo("AdminCompany", "admin_tramites", "admin_comparendos", "admin_diagnostico");
+        roles.Should().BeEquivalentTo("AdminCompany", "admin_tramites", "admin_comparendos", "admin_diagnostico", "admin_impuestos");
     }
 
     [Fact]
