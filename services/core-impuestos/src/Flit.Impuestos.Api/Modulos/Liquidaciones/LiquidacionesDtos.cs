@@ -1,5 +1,7 @@
+using System.Text.Json;
 using Flit.Impuestos.Api.Modulos.Comun;
 using Flit.Impuestos.Api.Plataforma;
+using Flit.Impuestos.Domain.Liquidaciones;
 
 namespace Flit.Impuestos.Api.Modulos.Liquidaciones;
 
@@ -24,20 +26,24 @@ public record ResumenLiquidacionDto(
 /// <summary>Copia de configuración de la cabecera (<c>configCopia</c>; en la base <c>maxRegistros</c>, en el contrato <c>maxRegistrosLote</c>).</summary>
 public sealed record ConfigCopiaDto(int MaxRegistrosLote, IReadOnlyList<string>? DepartamentosHabilitados, int Concurrencia);
 
-/// <summary>Esquema <c>Liquidacion</c>: el resumen más fechas de terminación y cierre y la copia de configuración.</summary>
+/// <summary>
+/// Esquema <c>Liquidacion</c>: el resumen más fechas de terminación y cierre, el motivo del cierre manual (delta 5; null hasta que se
+/// conecte la columna <c>motivo_cierre</c> de la 1.2.0) y la copia de configuración.
+/// </summary>
 public record LiquidacionDto(
     Guid Id, string Tipo, string Estado, int TotalItems, ContadoresDto Contadores, DateTimeOffset CreadaEn, ReferenciaDto CreadaPor,
     ReferenciaDto Empresa, string? NombreArchivo, string? Placa, Guid? ItemId, string? EstadoItem,
-    DateTimeOffset? TerminadaEn, ReferenciaDto? CerradaPor, DateTimeOffset? CerradaEn, ConfigCopiaDto ConfigCopia)
+    DateTimeOffset? TerminadaEn, ReferenciaDto? CerradaPor, DateTimeOffset? CerradaEn, string? MotivoCierre, ConfigCopiaDto ConfigCopia)
     : ResumenLiquidacionDto(Id, Tipo, Estado, TotalItems, Contadores, CreadaEn, CreadaPor, Empresa, NombreArchivo, Placa, ItemId, EstadoItem);
 
 /// <summary>Esquema <c>LiquidacionConItems</c>: respuesta 201 de la individual con <c>items[0]</c>.</summary>
 public sealed record LiquidacionConItemsDto(
     Guid Id, string Tipo, string Estado, int TotalItems, ContadoresDto Contadores, DateTimeOffset CreadaEn, ReferenciaDto CreadaPor,
     ReferenciaDto Empresa, string? NombreArchivo, string? Placa, Guid? ItemId, string? EstadoItem,
-    DateTimeOffset? TerminadaEn, ReferenciaDto? CerradaPor, DateTimeOffset? CerradaEn, ConfigCopiaDto ConfigCopia, IReadOnlyList<ItemDto> Items)
+    DateTimeOffset? TerminadaEn, ReferenciaDto? CerradaPor, DateTimeOffset? CerradaEn, string? MotivoCierre, ConfigCopiaDto ConfigCopia,
+    IReadOnlyList<ItemDto> Items)
     : LiquidacionDto(Id, Tipo, Estado, TotalItems, Contadores, CreadaEn, CreadaPor, Empresa, NombreArchivo, Placa, ItemId, EstadoItem,
-        TerminadaEn, CerradaPor, CerradaEn, ConfigCopia);
+        TerminadaEn, CerradaPor, CerradaEn, MotivoCierre, ConfigCopia);
 
 /// <summary>Esquema <c>Departamento</c> del ítem.</summary>
 public sealed record DepartamentoItemDto(string Codigo, string Nombre);
@@ -51,11 +57,37 @@ public sealed record PropietarioDto(string? Nombre, string? DocumentoTipo, strin
 /// </summary>
 public sealed record SecretariaDto(string? Nombre, string? Ciudad);
 
-/// <summary>Esquema <c>Item</c> (placa del lote). <see cref="TotalAPagar"/> null = «Sin dato», nunca 0.</summary>
-public sealed record ItemDto(
+/// <summary>
+/// Esquema <c>Item</c> (placa del lote). <see cref="TotalAPagar"/> null = «Sin dato», nunca 0. <see cref="RelanzadoDesdeItemId"/> lleva
+/// el mismo valor que <see cref="RelanzadoDesde"/> (delta 5) y <see cref="RelanzadoDesdeLiquidacionId"/> es el lote del ítem original,
+/// que sale del join sobre <c>relanzado_desde</c> (sin columna propia).
+/// </summary>
+public record ItemDto(
     Guid Id, Guid LiquidacionId, int? Fila, string Placa, string Estado, string? ErrorCodigo, string? ErrorClase, string? ErrorMensaje,
     string? CampoFaltante, DepartamentoItemDto? Departamento, PropietarioDto? Propietario, decimal? TotalAPagar, string? ResultadoStatus,
-    bool Parcial, bool PosibleDuplicado, bool ResultadoTardio, Guid? RelanzadoDesde, SecretariaDto? Secretaria);
+    bool Parcial, bool PosibleDuplicado, bool ResultadoTardio, Guid? RelanzadoDesde, Guid? RelanzadoDesdeItemId, Guid? RelanzadoDesdeLiquidacionId,
+    SecretariaDto? Secretaria);
+
+/// <summary>Esquema <c>Periodo</c>: una vigencia; todo monto puede ser null («Sin dato»). <see cref="ReciboId"/> es el recibo de su <c>fileId</c>.</summary>
+public sealed record PeriodoDto(
+    string Periodo, decimal? Avaluo, decimal? Impuesto, decimal? Sancion, decimal? Intereses, decimal? Descuentos, decimal? PagosPrevios,
+    decimal? TotalAPagar, JsonElement OtrosCargos, DateOnly? Vencimiento, string? ReferenciaPago, bool NoLiquidable, Guid? ReciboId);
+
+/// <summary>Esquema <c>Recibo</c> tal como está declarado (la descarga es de M11). <see cref="Razon"/> va null: el modelo no la guarda.</summary>
+public sealed record ReciboDto(Guid Id, string Tipo, IReadOnlyList<string> Periodos, string Estado, string? Motivo, string? Razon);
+
+/// <summary>
+/// Esquema <c>ItemDetalle</c>: el <see cref="ItemDto"/> más la compañía, quién y cuándo creó la liquidación, <c>consultaStatus</c>, el
+/// <c>resultado</c> del proveedor (null sin resultado), las vigencias y los recibos.
+/// </summary>
+public sealed record ItemDetalleDto(
+    Guid Id, Guid LiquidacionId, int? Fila, string Placa, string Estado, string? ErrorCodigo, string? ErrorClase, string? ErrorMensaje,
+    string? CampoFaltante, DepartamentoItemDto? Departamento, PropietarioDto? Propietario, decimal? TotalAPagar, string? ResultadoStatus,
+    bool Parcial, bool PosibleDuplicado, bool ResultadoTardio, Guid? RelanzadoDesde, Guid? RelanzadoDesdeItemId, Guid? RelanzadoDesdeLiquidacionId,
+    SecretariaDto? Secretaria, ReferenciaDto Empresa, ReferenciaDto CreadaPor, DateTimeOffset CreadaEn, string? ConsultaStatus,
+    JsonElement? Resultado, IReadOnlyList<PeriodoDto> Periodos, IReadOnlyList<ReciboDto> Recibos)
+    : ItemDto(Id, LiquidacionId, Fila, Placa, Estado, ErrorCodigo, ErrorClase, ErrorMensaje, CampoFaltante, Departamento, Propietario, TotalAPagar,
+        ResultadoStatus, Parcial, PosibleDuplicado, ResultadoTardio, RelanzadoDesde, RelanzadoDesdeItemId, RelanzadoDesdeLiquidacionId, Secretaria);
 
 /// <summary>Página del contrato: <c>{ items, total, page, pageSize }</c>.</summary>
 public sealed record PaginaDto<T>(IReadOnlyList<T> Items, int Total, int Page, int PageSize);
@@ -89,6 +121,25 @@ internal static class ErroresLiquidaciones
     public static ReglaException Suspendido() => ReglaException.Conflicto(ProductoSuspendido, LiteralSuspendido);
 
     public static ReglaException NoEncontrada() => new(LiquidacionNoEncontrada, LiteralNoEncontrada, StatusCodes.Status404NotFound);
+
+    public static ReglaException ItemNoEncontrado() =>
+        new("ITEM_NO_ENCONTRADO", "La placa no existe en esta liquidación.", StatusCodes.Status404NotFound);
+
+    public static ReglaException YaTerminada() =>
+        ReglaException.Conflicto(CierreLote.CodigoYaTerminada, "La liquidación ya terminó: no se puede cerrar.");
+
+    public static ReglaException NoRelanzable() =>
+        ReglaException.Conflicto("NO_RELANZABLE", "Solo se relanzan placas en «Incierto — requiere decisión» o con error reintentable.");
+
+    public static ReglaException ConfirmacionRequerida() =>
+        new("CONFIRMACION_REQUERIDA", "Confirma que aceptas un posible duplicado en el proveedor.") { Campo = "confirmarPosibleDuplicado" };
+
+    /// <summary>
+    /// Motivo de cierre de más de <c>maxLength</c> 300. El contrato no le da un código propio: va el genérico del servicio
+    /// (<see cref="ManejadorReglas.CodigoValorInvalido"/>, el mismo de un CHECK de la base) en el campo <c>motivo</c>.
+    /// </summary>
+    public static ReglaException MotivoInvalido() =>
+        new(ManejadorReglas.CodigoValorInvalido, "Los datos no cumplen una regla de validación del servicio.") { Campo = "motivo" };
 
     public static ReglaException Filtro(string campo) => new(FiltroInvalido, LiteralFiltroInvalido, StatusCodes.Status400BadRequest) { Campo = campo };
 

@@ -1,3 +1,4 @@
+using Flit.Impuestos.Api.Modulos.Ejecucion;
 using Flit.Impuestos.Api.Modulos.Resultados;
 using Flit.Impuestos.Api.Persistence;
 using Flit.Impuestos.Api.Plataforma;
@@ -132,6 +133,9 @@ public sealed partial class TrabajadorConciliacion(
             {
                 MetricasImpuestos.ContarAlerta("conciliacion_sin_credencial");
                 SinCredencial(log, empresa, lectura.Clase);
+                // F1a-CF12: un 401 en uso lleva la compañía a REQUIERE_CREDENCIALES, igual que al liquidar (M09).
+                if (lectura.Clase == ClaseLectura.CredencialRechazada)
+                    await sp.GetRequiredService<CredencialRechazadaEnUso>().AplicarAsync(empresa, ct).ConfigureAwait(false);
             }
         }
 

@@ -1,3 +1,4 @@
+using Flit.Impuestos.Api.Modulos.Liquidaciones;
 using Flit.Impuestos.Api.Persistence;
 using Flit.Impuestos.Api.Plataforma;
 using Flit.Impuestos.Domain;
@@ -46,7 +47,8 @@ public enum Aplicacion
 ///   datos del propietario, DA-7); las vigencias se reemplazan.</item>
 ///   <item>Un éxito con archivos deja <see cref="TipoRecibos"/> en la outbox (lo consume M11).</item>
 /// </list>
-/// Fija la compañía en el scope (<see cref="EmpresaDelTrabajo"/>): un scope por compañía. No registra montos, placa ni cuerpo.
+/// Fija la compañía en el scope (<see cref="EmpresaDelTrabajo"/>): un scope por compañía. No registra montos, placa ni cuerpo. Los
+/// contadores, la terminación del lote y su aviso (M12) van por <see cref="EvaluadorTerminacion"/> en la misma transacción.
 /// </summary>
 /// <example>
 /// <code>
@@ -54,7 +56,8 @@ public enum Aplicacion
 /// </code>
 /// </example>
 public sealed partial class AplicadorResultado(
-    ImpuestosDb db, EmpresaDelTrabajo empresaDelTrabajo, IPlatformOutbox outbox, IProteccionImpuestos proteccion, TimeProvider reloj, ILogger<AplicadorResultado> log)
+    ImpuestosDb db, EmpresaDelTrabajo empresaDelTrabajo, IPlatformOutbox outbox, IProteccionImpuestos proteccion, EvaluadorTerminacion evaluador,
+    TimeProvider reloj, ILogger<AplicadorResultado> log)
 {
     /// <summary>Evento interno de M11 (asyncapi <c>impuestos-events.v1.yaml</c>): solo el id del ítem.</summary>
     public const string TipoRecibos = "impuestos.recibos.descargar";
@@ -119,7 +122,7 @@ public sealed partial class AplicadorResultado(
             .Select(i => new EstadoParaContar(i.Estado, i.ResultadoStatus))
             .ToListAsync(ct).ConfigureAwait(false);
         estados.Add(new EstadoParaContar(item.Estado, item.ResultadoStatus));
-        var anterior = ContadoresLote.Recalcular(lote, estados, ahora);
+        var anterior = await evaluador.EvaluarAsync(lote, estados, ahora, ct).ConfigureAwait(false);
         await db.SaveChangesAsync(ct).ConfigureAwait(false);
         await tx.CommitAsync(ct).ConfigureAwait(false);
         Aplicado(log, item.Id, item.Estado, lote.Id, anterior, lote.Estado);

@@ -17,6 +17,7 @@ namespace Flit.Impuestos.Api.Modulos.Liquidaciones;
 ///   pageSize</c>; orden por <c>creadaEn</c> descendente; <c>itemId</c>, <c>estadoItem</c> y <c>placa</c> solo en la individual.</item>
 ///   <item><c>GET /liquidaciones/{id}</c> y <c>GET /liquidaciones/{id}/items</c> (<c>…ver</c>): cabecera con <c>configCopia</c> y
 ///   placas del lote; otra compañía ⇒ 404 <c>LIQUIDACION_NO_ENCONTRADA</c>.</item>
+///   <item><c>GET /liquidaciones/{id}/items/{itemId}</c> (<c>…ver</c>, M12): detalle de la placa (esquema <c>ItemDetalle</c>).</item>
 /// </list>
 /// <c>?empresa</c> sigue la regla única de <see cref="EmpresaExplicita"/>: quien no es Super Admin y la envía recibe 403
 /// <c>EMPRESA_SOLO_SUPER_ADMIN</c>; el Super Admin sin ella o con un valor inválido, 400 <c>EMPRESA_REQUERIDA</c>; con una compañía
@@ -45,6 +46,11 @@ internal static class LiquidacionesEndpoints
     {
         services.AddScoped<ConsultaLiquidaciones>();
         services.AddScoped<CrearLiquidacionIndividual>();
+        // M12: masiva, cierre manual, terminación del lote con su aviso (correo y pantalla).
+        services.AddScoped<CrearLiquidacionMasiva>();
+        services.AddScoped<CerrarLiquidacion>();
+        services.AddScoped<EvaluadorTerminacion>();
+        services.AddScoped<Avisos.AvisoLoteTerminado>();
         return services;
     }
 
@@ -56,6 +62,7 @@ internal static class LiquidacionesEndpoints
         grupo.MapPost("/individual", CrearIndividualAsync).RequirePermiso(Permisos.LiquidacionesCrear).CuerpoAcotado().WithName("CrearLiquidacionIndividual");
         grupo.MapGet("/{id:guid}", ObtenerAsync).RequirePermiso(Permisos.LiquidacionesVer).WithName("ObtenerLiquidacion");
         grupo.MapGet("/{id:guid}/items", ItemsAsync).RequirePermiso(Permisos.LiquidacionesVer).WithName("ListarItemsLiquidacion");
+        grupo.MapGet("/{id:guid}/items/{itemId:guid}", ItemDetalleAsync).RequirePermiso(Permisos.LiquidacionesVer).WithName("ObtenerItemLiquidacion");
         return grupo;
     }
 
@@ -91,7 +98,7 @@ internal static class LiquidacionesEndpoints
         CrearLiquidacionIndividual crear, CancellationToken ct)
     {
         var (empresa, referencia) = await EmpresaDeEscrituraAsync(http.Request.Query[EmpresaExplicita.Parametro], usuario, configuracion, ambito, ct).ConfigureAwait(false);
-        var creada = await crear.CrearAsync(empresa, entrada?.Placa, usuario.Id, referencia, ct).ConfigureAwait(false);
+        var creada = await crear.CrearAsync(empresa, entrada?.Placa, usuario.Id, referencia, ct, actorNombre: usuario.Nombre).ConfigureAwait(false);
         return Results.Created($"{Program.Prefijo}{Ruta}/{creada.Id}", creada);
     }
 
@@ -129,6 +136,14 @@ internal static class LiquidacionesEndpoints
         var pageSize = Entero(query, "pageSize", PageSizePorDefecto, 1, PageSizeMaximo);
         var (empresa, _) = await EmpresaDeLecturaAsync(query[EmpresaExplicita.Parametro], usuario, configuracion, ambito, auditoria, ct).ConfigureAwait(false);
         return Results.Ok(await consulta.ItemsAsync(empresa, id, estado, placa, page, pageSize, ct).ConfigureAwait(false));
+    }
+
+    private static async Task<IResult> ItemDetalleAsync(
+        Guid id, Guid itemId, HttpContext http, UsuarioActual usuario, ServicioConfiguracion configuracion, AmbitoDeLaEmpresa ambito,
+        AuditoriaLecturaBackoffice auditoria, ConsultaLiquidaciones consulta, CancellationToken ct)
+    {
+        var (empresa, referencia) = await EmpresaDeLecturaAsync(http.Request.Query[EmpresaExplicita.Parametro], usuario, configuracion, ambito, auditoria, ct).ConfigureAwait(false);
+        return Results.Ok(await consulta.ItemDetalleAsync(empresa, id, itemId, referencia, ct).ConfigureAwait(false));
     }
 
     private static (Guid, ReferenciaDto) Propia(UsuarioActual usuario)
