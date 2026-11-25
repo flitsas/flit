@@ -110,7 +110,7 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
     }
 
     private Task<List<DerechoPeticion>> DpsAsync(Guid empresa) =>
-        api.EnDbAsync(db => db.DerechosPeticion.AsNoTracking().Where(d => d.TenantId == empresa).OrderBy(d => d.CreadoEn).ToListAsync());
+        api.EnDbAsync(db => db.DerechosPeticion.AsNoTracking().Where(d => d.TenantId == empresa).OrderBy(d => d.CreadoEn).ThenBy(d => d.Id).ToListAsync());
 
     private Task<int> ArchivosAsync(Guid empresa) => api.EnDbAsync(db => db.Archivos.CountAsync(a => a.TenantId == empresa));
 
@@ -530,7 +530,7 @@ public sealed class EnvioAutomaticoDpTests(ApiConGanchosDp api) : IClassFixture<
         await ComparendosAsync(empresa, "AUTO-MARCO", 1);
         async Task<string> ResumenAsync()
         {
-            var c = (await api.EnDbAsync(db => db.Comunicaciones.AsNoTracking().Where(x => x.TenantId == empresa && x.Tipo == TipoComunicacion.ResumenEnvioAutomaticoDp).OrderByDescending(x => x.CreadoEn).ToListAsync(ct)))[0];
+            var c = (await api.EnDbAsync(db => db.Comunicaciones.AsNoTracking().Where(x => x.TenantId == empresa && x.Tipo == TipoComunicacion.ResumenEnvioAutomaticoDp).OrderByDescending(x => x.CreadoEn).ThenByDescending(x => x.Id).ToListAsync(ct)))[0];
             await using var scope = api.App.Services.CreateAsyncScope();
             return System.Text.Encoding.UTF8.GetString((await scope.ServiceProvider.GetRequiredService<Flit.Comparendos.Api.Modulos.Comun.RegistroArchivos>().LeerAsync(c.CuerpoHtmlArchivoId, ct))!.Value.Contenido);
         }

@@ -16,7 +16,7 @@ using static Flit.Comparendos.Tests.Api.ComparendosDePrueba;
 namespace Flit.Comparendos.Tests.Api;
 
 /// <summary>GDC-ASOC: asociar el documento escaneado de un comparendo que ya existe (antes quedaba en Duplicado, estado final).</summary>
-public sealed class OcrAsociarTests(ApiConOcr api) : IClassFixture<ApiConOcr>
+public sealed partial class OcrAsociarTests(ApiConOcr api) : IClassFixture<ApiConOcr>
 {
     private const string Base = "/api/v1/comparendos/ocr";
     private static readonly string[] Operador = [Permisos.OcrVer, Permisos.OcrGestionar, Permisos.BandejaVer, Permisos.ContraventorAsignar, Permisos.AvisosEnviar];
