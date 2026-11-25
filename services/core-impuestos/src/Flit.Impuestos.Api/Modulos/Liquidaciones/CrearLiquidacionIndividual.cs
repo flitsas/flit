@@ -40,7 +40,13 @@ public sealed partial class CrearLiquidacionIndividual(
     public static string NormalizarPlaca(string? entrada) =>
         Placa.TryNormalizar(entrada, out var placa) && placa.Length >= LargoMinimoPlaca ? placa : throw ErroresLiquidaciones.Placa();
 
-    public async Task<LiquidacionConItemsDto> CrearAsync(Guid empresa, string? placaEntrada, Guid actor, ReferenciaDto empresaRef, CancellationToken ct)
+    /// <summary>
+    /// Crea la individual. Con <paramref name="relanzadoDesde"/> es el relanzamiento de ese ítem (<see cref="RelanzarItem"/>): el ítem
+    /// nuevo lleva <c>relanzado_desde</c> y <c>posible_duplicado=true</c>. <paramref name="actorNombre"/> es el nombre del token en el
+    /// momento de crear (<see cref="RegistrarNombreCreador"/>).
+    /// </summary>
+    public async Task<LiquidacionConItemsDto> CrearAsync(
+        Guid empresa, string? placaEntrada, Guid actor, ReferenciaDto empresaRef, CancellationToken ct, Guid? relanzadoDesde = null, string? actorNombre = null)
     {
         var placa = NormalizarPlaca(placaEntrada);
         Guid loteId;
@@ -49,12 +55,7 @@ public sealed partial class CrearLiquidacionIndividual(
             scope.ServiceProvider.GetRequiredService<EmpresaDelTrabajo>().Fijar(empresa);
             var db = scope.ServiceProvider.GetRequiredService<ImpuestosDb>();
             var despachador = scope.ServiceProvider.GetRequiredService<DespachadorCredito>();
-            var estado = await db.Set<AprovisionamientoEmpresa>().AsNoTracking().Where(a => a.TenantId == empresa)
-                .Select(a => (EstadoAprovisionamiento?)a.Estado).FirstOrDefaultAsync(ct).ConfigureAwait(false);
-            if (estado == EstadoAprovisionamiento.Suspendido)
-                throw ErroresLiquidaciones.Suspendido();
-            if (estado is not (EstadoAprovisionamiento.Listo or EstadoAprovisionamiento.ListoSinWebhook))
-                throw ErroresLiquidaciones.NoListo();
+            await ExigirAprovisionamientoAsync(db, empresa, ct).ConfigureAwait(false);
 
             var copia = await configuracion.CopiaAsync(empresa, opciones.Value.ConcurrenciaPorEmpresa, ct).ConfigureAwait(false);
             loteId = await db.Database.CreateExecutionStrategy().ExecuteAsync(async () =>
@@ -73,8 +74,18 @@ public sealed partial class CrearLiquidacionIndividual(
                     CreadaPor = actor,
                     CreadaEn = ahora,
                 };
+                RegistrarNombreCreador(lote, actorNombre);
                 db.Add(lote);
-                db.Add(new LiquidacionItem { TenantId = empresa, LiquidacionId = lote.Id, Placa = placa, Estado = EstadoItem.Pendiente, ActualizadoEn = ahora });
+                db.Add(new LiquidacionItem
+                {
+                    TenantId = empresa,
+                    LiquidacionId = lote.Id,
+                    Placa = placa,
+                    Estado = EstadoItem.Pendiente,
+                    ActualizadoEn = ahora,
+                    RelanzadoDesde = relanzadoDesde,
+                    PosibleDuplicado = relanzadoDesde is not null,
+                });
                 await despachador.LiberarAsync(empresa, ct).ConfigureAwait(false);
                 await tx.CommitAsync(ct).ConfigureAwait(false);
                 return lote.Id;
@@ -83,6 +94,31 @@ public sealed partial class CrearLiquidacionIndividual(
 
         Creada(log, empresa, loteId);
         return await consulta.ConItemsAsync(empresa, loteId, empresaRef, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Aprovisionamiento que admite crear (individual, masiva o relanzamiento): <c>SUSPENDIDO</c> ⇒ 409 <c>PRODUCTO_SUSPENDIDO</c>; otro que
+    /// no sea <c>LISTO</c> o <c>LISTO_SIN_WEBHOOK</c> (o sin fila) ⇒ 409 <c>APROVISIONAMIENTO_NO_LISTO</c>.
+    /// </summary>
+    internal static async Task ExigirAprovisionamientoAsync(ImpuestosDb db, Guid empresa, CancellationToken ct)
+    {
+        ArgumentNullException.ThrowIfNull(db);
+        var estado = await db.Set<AprovisionamientoEmpresa>().AsNoTracking().Where(a => a.TenantId == empresa)
+            .Select(a => (EstadoAprovisionamiento?)a.Estado).FirstOrDefaultAsync(ct).ConfigureAwait(false);
+        if (estado == EstadoAprovisionamiento.Suspendido)
+            throw ErroresLiquidaciones.Suspendido();
+        if (estado is not (EstadoAprovisionamiento.Listo or EstadoAprovisionamiento.ListoSinWebhook))
+            throw ErroresLiquidaciones.NoListo();
+    }
+
+    /// <summary>
+    /// Nombre de quien crea la individual o la relanza (columna <c>creada_por_nombre</c> de la 1.2.0). Es el único punto que lo escribe
+    /// para estas dos acciones: se conecta al integrar M07b; mientras tanto no guarda nada y la respuesta lleva <c>creadaPor.nombre</c> vacío.
+    /// </summary>
+    internal static void RegistrarNombreCreador(Liquidacion lote, string? nombre)
+    {
+        ArgumentNullException.ThrowIfNull(lote);
+        _ = nombre;
     }
 
     [LoggerMessage(Level = LogLevel.Information, Message = "Liquidación individual {Liquidacion} creada para la empresa {Empresa}.")]

@@ -1,3 +1,5 @@
+using System.Text.Json;
+using System.Text.Json.Nodes;
 using Flit.Impuestos.Api.Modulos.Comun;
 using Flit.Impuestos.Api.Modulos.Configuracion;
 using Flit.Impuestos.Api.Modulos.Credenciales;
@@ -14,18 +16,23 @@ internal sealed record FiltrosLiquidaciones(TipoLiquidacion? Tipo, EstadoLote? E
 /// <summary>
 /// Lecturas de las liquidaciones de UNA compañía (plan §5.1; F2a-CF9/CF10): siempre con el contexto de esa compañía
 /// (<see cref="AlmacenCredenciales.ContextoDe"/>), así que el filtro de empresa vale igual para el Super Admin que elige otra con
-/// <c>?empresa</c> (sin <c>IgnoreQueryFilters</c>). Una liquidación de otra compañía no existe: 404 <c>LIQUIDACION_NO_ENCONTRADA</c>.
-/// La PII del propietario se descifra para mostrarla completa (DA-7=b). <c>creadaPor.nombre</c> y <c>cerradaPor.nombre</c> van
-/// vacíos: el servicio no guarda nombres de usuario.
+/// <c>?empresa</c> (sin <c>IgnoreQueryFilters</c>). Una liquidación de otra compañía no existe: 404 <c>LIQUIDACION_NO_ENCONTRADA</c>;
+/// un ítem que no es del lote, 404 <c>ITEM_NO_ENCONTRADO</c>. La PII del propietario se descifra para mostrarla completa (DA-7=b).
+/// <c>creadaPor.nombre</c> y <c>cerradaPor.nombre</c> van vacíos hasta que se conecten las columnas de nombre de la 1.2.0, y
+/// <c>motivoCierre</c> va null hasta la columna <c>motivo_cierre</c> (<see cref="MotivoCierreDe"/>, el único punto que la lee).
+/// <c>relanzadoDesdeLiquidacionId</c> sale del join con el ítem original.
 /// </summary>
 /// <example>
 /// <code>
 /// var pagina = await consulta.ListarAsync(empresa, filtros, new ReferenciaDto(empresa, "Flota Andina SAS"), ct);
-/// var lote = await consulta.LiquidacionAsync(empresa, id, empresaRef, ct);
+/// var detalle = await consulta.ItemDetalleAsync(empresa, lote, item, empresaRef, ct);
 /// </code>
 /// </example>
 public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProteccionImpuestos proteccion)
 {
+    /// <summary>Campos de <c>validations[]</c> con datos de contacto del propietario: nunca salen en una respuesta.</summary>
+    public static IReadOnlySet<string> CamposDeContacto { get; } = new HashSet<string>(StringComparer.Ordinal) { "OwnerEmail", "OwnerPhone", "OwnerAddress" };
+
     internal async Task<PaginaDto<ResumenLiquidacionDto>> ListarAsync(Guid empresa, FiltrosLiquidaciones f, ReferenciaDto empresaRef, CancellationToken ct)
     {
         ArgumentNullException.ThrowIfNull(f);
@@ -57,13 +64,13 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
         return Detalle(lote, empresaRef, individuales.GetValueOrDefault(lote.Id));
     }
 
-    /// <summary>La liquidación con sus ítems (respuesta 201 de la individual).</summary>
+    /// <summary>La liquidación con sus ítems (respuesta 201 de la individual y del relanzamiento).</summary>
     public async Task<LiquidacionConItemsDto> ConItemsAsync(Guid empresa, Guid id, ReferenciaDto empresaRef, CancellationToken ct)
     {
         var d = await LiquidacionAsync(empresa, id, empresaRef, ct).ConfigureAwait(false);
         var items = await ItemsAsync(empresa, id, null, null, 1, 200, ct).ConfigureAwait(false);
         return new LiquidacionConItemsDto(d.Id, d.Tipo, d.Estado, d.TotalItems, d.Contadores, d.CreadaEn, d.CreadaPor, d.Empresa, d.NombreArchivo, d.Placa,
-            d.ItemId, d.EstadoItem, d.TerminadaEn, d.CerradaPor, d.CerradaEn, d.ConfigCopia, items.Items);
+            d.ItemId, d.EstadoItem, d.TerminadaEn, d.CerradaPor, d.CerradaEn, d.MotivoCierre, d.ConfigCopia, items.Items);
     }
 
     /// <summary>Placas del lote por fila del archivo (o por placa en la individual); 404 si el lote no es de la compañía.</summary>
@@ -80,20 +87,100 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
         var total = await q.CountAsync(ct).ConfigureAwait(false);
         var filas = await q.OrderBy(i => i.Fila).ThenBy(i => i.Placa).ThenBy(i => i.Id)
             .Skip((page - 1) * pageSize).Take(pageSize).ToListAsync(ct).ConfigureAwait(false);
-        return new PaginaDto<ItemDto>([.. filas.Select(Item)], total, page, pageSize);
+        var origenes = await LotesDeOrigenAsync(db, filas, ct).ConfigureAwait(false);
+        return new PaginaDto<ItemDto>([.. filas.Select(i => Item(i, origenes))], total, page, pageSize);
     }
 
-    public ItemDto Item(LiquidacionItem i)
+    /// <summary>
+    /// Detalle de una placa (esquema <c>ItemDetalle</c>): el ítem, el <c>result</c> del proveedor tal cual (con <c>file_errors</c> de
+    /// la consulta y sin los campos de contacto de <c>validations</c>), las vigencias con su recibo y los recibos declarados.
+    /// </summary>
+    public async Task<ItemDetalleDto> ItemDetalleAsync(Guid empresa, Guid id, Guid itemId, ReferenciaDto empresaRef, CancellationToken ct)
+    {
+        await using var db = almacen.ContextoDe(empresa);
+        var lote = await db.Set<Liquidacion>().AsNoTracking().SingleOrDefaultAsync(l => l.Id == id, ct).ConfigureAwait(false)
+            ?? throw ErroresLiquidaciones.NoEncontrada();
+        var item = await db.Set<LiquidacionItem>().AsNoTracking().SingleOrDefaultAsync(i => i.Id == itemId && i.LiquidacionId == id, ct).ConfigureAwait(false)
+            ?? throw ErroresLiquidaciones.ItemNoEncontrado();
+        var periodos = await db.Set<LiquidacionPeriodo>().AsNoTracking().Where(p => p.ItemId == itemId).OrderBy(p => p.Periodo).ToListAsync(ct).ConfigureAwait(false);
+        var recibos = await db.Set<Recibo>().AsNoTracking().Where(r => r.ItemId == itemId).OrderBy(r => r.Id).ToListAsync(ct).ConfigureAwait(false);
+        var origenes = await LotesDeOrigenAsync(db, [item], ct).ConfigureAwait(false);
+        var reciboPorArchivo = recibos.GroupBy(r => r.FileIdApi, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First().Id, StringComparer.Ordinal);
+
+        var b = Item(item, origenes);
+        return new ItemDetalleDto(b.Id, b.LiquidacionId, b.Fila, b.Placa, b.Estado, b.ErrorCodigo, b.ErrorClase, b.ErrorMensaje, b.CampoFaltante,
+            b.Departamento, b.Propietario, b.TotalAPagar, b.ResultadoStatus, b.Parcial, b.PosibleDuplicado, b.ResultadoTardio, b.RelanzadoDesde,
+            b.RelanzadoDesdeItemId, b.RelanzadoDesdeLiquidacionId, b.Secretaria, empresaRef, new ReferenciaDto(lote.CreadaPor, string.Empty), lote.CreadaEn,
+            item.ConsultaStatus, Resultado(item.ResultadoCifrado),
+            [.. periodos.Select(p => new PeriodoDto(p.Periodo, p.Avaluo, p.Impuesto, p.Sancion, p.Intereses, p.Descuentos, p.PagosPrevios, p.TotalAPagar,
+                OtrosCargos(p.OtrosCargos), p.Vencimiento, p.ReferenciaPago, p.NoLiquidable,
+                p.FileIdApi is { } f && reciboPorArchivo.TryGetValue(f, out var r) ? r : null))],
+            [.. recibos.Select(r => new ReciboDto(r.Id, CodigosDeEnum.Codigo(r.Tipo), r.Periodos, CodigosDeEnum.Codigo(r.Estado), r.Motivo, null))]);
+    }
+
+    /// <summary>El ítem del contrato; <paramref name="origenes"/> da el lote de cada ítem original (relanzamientos).</summary>
+    public ItemDto Item(LiquidacionItem i, IReadOnlyDictionary<Guid, Guid>? origenes = null)
     {
         ArgumentNullException.ThrowIfNull(i);
         var nombre = i.PropietarioNombreCifrado is null ? null : proteccion.DesprotegerPii(i.PropietarioNombreCifrado);
         var numero = i.DocumentoNumeroCifrado is null ? null : proteccion.DesprotegerPii(i.DocumentoNumeroCifrado);
         var propietario = nombre is null && numero is null && i.DocumentoTipo is null ? null : new PropietarioDto(nombre, i.DocumentoTipo, numero);
         var departamento = i.DepartamentoCodigo is null ? null : new DepartamentoItemDto(i.DepartamentoCodigo, i.DepartamentoNombre ?? i.DepartamentoCodigo);
+        Guid? loteOrigen = i.RelanzadoDesde is { } o && origenes is not null && origenes.TryGetValue(o, out var l) ? l : null;
         return new ItemDto(i.Id, i.LiquidacionId, i.Fila, i.Placa, CodigosDeEnum.Codigo(i.Estado), i.ErrorCodigo,
             i.ErrorClase is { } c ? CodigosDeEnum.Codigo(c) : null, i.ErrorMensaje, i.CampoFaltante, departamento, propietario, i.TotalAPagar,
-            i.ResultadoStatus, i.Parcial, i.PosibleDuplicado, i.ResultadoTardio, i.RelanzadoDesde,
+            i.ResultadoStatus, i.Parcial, i.PosibleDuplicado, i.ResultadoTardio, i.RelanzadoDesde, i.RelanzadoDesde, loteOrigen,
             i.SecretariaCiudad is null ? null : new SecretariaDto(null, i.SecretariaCiudad));
+    }
+
+    /// <summary>
+    /// Motivo del cierre manual de la cabecera. Es el único punto de la respuesta que lo lee: se conecta al integrar M07b (columna
+    /// <c>motivo_cierre</c> de la 1.2.0); mientras tanto, null.
+    /// </summary>
+    internal static string? MotivoCierreDe(Liquidacion lote)
+    {
+        ArgumentNullException.ThrowIfNull(lote);
+        return null;
+    }
+
+    /// <summary>Lote de cada ítem original de los relanzados de <paramref name="items"/> (join sobre <c>relanzado_desde</c>).</summary>
+    private static async Task<Dictionary<Guid, Guid>> LotesDeOrigenAsync(ImpuestosDb db, IReadOnlyList<LiquidacionItem> items, CancellationToken ct)
+    {
+        var originales = items.Where(i => i.RelanzadoDesde is not null).Select(i => i.RelanzadoDesde!.Value).Distinct().ToList();
+        if (originales.Count == 0)
+            return [];
+        return await db.Set<LiquidacionItem>().AsNoTracking().Where(i => originales.Contains(i.Id))
+            .ToDictionaryAsync(i => i.Id, i => i.LiquidacionId, ct).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// El <c>result</c> de la consulta guardada, tal cual, con <c>file_errors</c> de la consulta si el <c>result</c> no lo trae, y sin
+    /// las filas de <c>validations</c> de <see cref="CamposDeContacto"/>. Null sin resultado.
+    /// </summary>
+    private JsonElement? Resultado(byte[]? cifrado)
+    {
+        if (cifrado is null)
+            return null;
+        if (JsonNode.Parse(proteccion.DesprotegerResultado(cifrado)) is not JsonObject consulta || consulta["result"] is not JsonObject result)
+            return null;
+        if (!result.ContainsKey("file_errors"))
+            result["file_errors"] = consulta["file_errors"]?.DeepClone() ?? new JsonArray();
+        if (result["validations"] is JsonArray validaciones)
+        {
+            foreach (var v in validaciones.ToList())
+            {
+                if (v is JsonObject o && o["field"] is JsonValue campo && campo.TryGetValue<string>(out var nombre) && CamposDeContacto.Contains(nombre))
+                    validaciones.Remove(v);
+            }
+        }
+
+        return JsonSerializer.SerializeToElement(result);
+    }
+
+    private static JsonElement OtrosCargos(string json)
+    {
+        using var doc = JsonDocument.Parse(string.IsNullOrWhiteSpace(json) ? "[]" : json);
+        return doc.RootElement.Clone();
     }
 
     private static async Task<Dictionary<Guid, (Guid Id, string Placa, EstadoItem Estado)>> ItemsIndividualesAsync(
@@ -120,7 +207,7 @@ public sealed class ConsultaLiquidaciones(AlmacenCredenciales almacen, IProtecci
         var r = Resumen(l, empresaRef, individual);
         var copia = CopiaConfiguracion.DesdeJson(l.ConfigCopia);
         return new LiquidacionDto(r.Id, r.Tipo, r.Estado, r.TotalItems, r.Contadores, r.CreadaEn, r.CreadaPor, r.Empresa, r.NombreArchivo, r.Placa, r.ItemId,
-            r.EstadoItem, l.TerminadaEn, l.CerradaPor is { } p ? new ReferenciaDto(p, string.Empty) : null, l.CerradaEn,
+            r.EstadoItem, l.TerminadaEn, l.CerradaPor is { } p ? new ReferenciaDto(p, string.Empty) : null, l.CerradaEn, MotivoCierreDe(l),
             new ConfigCopiaDto(copia.MaxRegistros, copia.DepartamentosHabilitados, copia.Concurrencia));
     }
 

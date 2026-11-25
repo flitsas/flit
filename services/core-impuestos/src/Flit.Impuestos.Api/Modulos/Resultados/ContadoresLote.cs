@@ -10,7 +10,8 @@ public readonly record struct EstadoParaContar(EstadoItem Estado, string? Result
 /// Contadores de la cabecera de una liquidación (plan §3.2 «Cuenta en el dashboard como» y §3.3), recalculados desde los estados
 /// de TODOS sus ítems, nunca sumando o restando: así un resultado tardío o un attempt que reemplaza a otro no los descuadra. Después
 /// evalúa el cierre con <see cref="CierreLote.Evaluar"/>: un lote en proceso con todos sus ítems en estado final termina (y guarda
-/// <c>terminada_en</c>); uno terminado o cerrado a mano no cambia de estado. El correo y el aviso del lote terminado son de M12.
+/// <c>terminada_en</c>); uno terminado o cerrado a mano no cambia de estado. Es la única regla de contadores y terminación: la usa
+/// <c>EvaluadorTerminacion</c> (M12), que suma el correo y el aviso del lote terminado.
 /// </summary>
 /// <example>
 /// <code>

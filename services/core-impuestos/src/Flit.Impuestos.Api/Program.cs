@@ -138,7 +138,11 @@ public static class Program
         Modulos.Usuarios.UsuariosEndpoints.Map(api);
         Modulos.Backoffice.EmpresasBackofficeEndpoints.Map(api);
         // M09: grid, detalle e individual; M10/M12 suman sus rutas sobre el grupo que devuelve (relanzar, cerrar, masiva).
-        Modulos.Liquidaciones.LiquidacionesEndpoints.Map(api);
+        var liquidaciones = Modulos.Liquidaciones.LiquidacionesEndpoints.Map(api);
+        Modulos.Carga.CargaEndpoints.Map(liquidaciones);
+        Modulos.Liquidaciones.CerrarLiquidacion.Map(liquidaciones);
+        Modulos.Liquidaciones.RelanzarItem.Map(liquidaciones);
+        Modulos.Notificaciones.NotificacionesEndpoints.Map(api);
         api.MapFallback(() => Results.NotFound());
 
         // gRPC solo en su puerto: los servicios gRPC del dominio se mapean aquí con .RequireHost(grpcHost).
