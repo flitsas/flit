@@ -40,6 +40,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     private readonly IEffectiveTransitOfficeListResolver? _effectiveOffices;
     private readonly Flit.Tramites.Application.Documents.IFurTemplateResolver? _furTemplateResolver;
     private readonly IOtUserClientScopeResolver? _clientScope;
+    private readonly ITramiteFirmaEvaluator _firma;
 
     /// <summary>
     /// Alcance de compañías cliente del usuario en curso para la operación actual (<c>null</c> = todas). Lo fija
@@ -60,8 +61,10 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         ILogger<OtClientProcedureRepository>? logger = null,
         IEffectiveTransitOfficeListResolver? effectiveOffices = null,
         Flit.Tramites.Application.Documents.IFurTemplateResolver? furTemplateResolver = null,
-        IOtUserClientScopeResolver? clientScope = null)
+        IOtUserClientScopeResolver? clientScope = null,
+        ITramiteFirmaEvaluator? firma = null)
     {
+        _firma = firma ?? new TramiteFirmaEvaluator(new ProcedureInstanceRepository(context));
         // Alcance de compañías cliente por usuario OT. Null en tests que construyen el repo a mano: todas.
         _clientScope = clientScope;
         _context = context ?? throw new ArgumentNullException(nameof(context));
@@ -93,6 +96,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 return await ExecuteCrossTenantReadAsync(
                     async () =>
                     {
+                        filter = await ResolverFirmaAsync(transitOfficeId, filter, cancellationToken).ConfigureAwait(false);
                         var query = BuildAccessibleQuery(transitOfficeId);
                         query = ApplyListFilters(query, filter);
 
@@ -265,6 +269,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             async transitOfficeId => await ExecuteCrossTenantReadAsync(
                 async () =>
                 {
+                    filter = await ResolverFirmaAsync(transitOfficeId, filter, cancellationToken).ConfigureAwait(false);
                     // Modo ids: orden por defecto de la bandeja (prioritario, fecha desc, id desc).
                     var query = ApplyListSort(AccessibleRefsQuery(transitOfficeId, filter, ids), filter ?? new OtClientProcedureFilter())
                         .Select(p => new OtClientProcedureRef(p.Id, p.TenantId, p.ReferenceNumber, p.Plate));
@@ -299,7 +304,12 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
             otTenantId,
             transitOfficeIdOverride,
             transitOfficeId => ExecuteCrossTenantReadAsync(
-                () => AccessibleRefsQuery(transitOfficeId, filter, ids).CountAsync(cancellationToken),
+                async () =>
+                {
+                    filter = await ResolverFirmaAsync(transitOfficeId, filter, cancellationToken).ConfigureAwait(false);
+                    return await AccessibleRefsQuery(transitOfficeId, filter, ids).CountAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                },
                 cancellationToken),
             cancellationToken);
 
@@ -498,7 +508,9 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                         var accesibles = BuildAccessibleQuery(transitOfficeId);
                         if (filter is not null)
                         {
-                            accesibles = ApplyListFilters(accesibles, SinFiltroDeTarjeta(filter));
+                            var sinTarjeta = await ResolverFirmaAsync(
+                                transitOfficeId, SinFiltroDeTarjeta(filter), cancellationToken).ConfigureAwait(false);
+                            accesibles = ApplyListFilters(accesibles, sinTarjeta);
                         }
 
                         // UNA consulta agrupada en vez de seis COUNT: la bandeja los pide juntos y
@@ -2278,7 +2290,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
     }
 
     /// <summary>Copia del filtro sin lo que eligen las tarjetas (estado y solicitud de revocatoria).</summary>
-    private static OtClientProcedureFilter SinFiltroDeTarjeta(OtClientProcedureFilter f) => new()
+    private static OtClientProcedureFilter SinFiltroDeTarjeta(OtClientProcedureFilter f) => new OtClientProcedureFilter
     {
         ProcedureTypeId = f.ProcedureTypeId,
         Familia = f.Familia,
@@ -2293,7 +2305,7 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
         CreatedTo = f.CreatedTo,
         UpdatedFrom = f.UpdatedFrom,
         UpdatedTo = f.UpdatedTo,
-    };
+    }.ConIdsPorFirma(f.IdsPorFirmaResueltos());
 
     private IQueryable<ProcedureInstance> ApplyListFilters(
         IQueryable<ProcedureInstance> query,
@@ -2412,7 +2424,68 @@ internal sealed class OtClientProcedureRepository : IOtClientProcedureRepository
                 query = ApplyCondition(query, condicion);
         }
 
+        // HU #14700 — firma ya resuelta en memoria por ResolverFirmaAsync.
+        if (filter.IdsPorFirmaResueltos() is { } idsFirma)
+        {
+            var lista = idsFirma as List<Guid> ?? idsFirma.ToList();
+            query = query.Where(p => lista.Contains(p.Id));
+        }
+
         return query;
+    }
+
+    /// <summary>
+    /// HU #14700 — si el filtro trae «Firmado por todas las partes», resuelve en memoria (criterio único
+    /// de <see cref="ITramiteFirmaEvaluator"/>) qué trámites del universo ya filtrado cumplen el Sí/No y
+    /// devuelve una copia con esos ids. Sin esa condición devuelve el MISMO filtro (cero costo extra).
+    /// Con «Sí» y «No» a la vez no se filtra: es el universo entero.
+    /// </summary>
+    private async Task<OtClientProcedureFilter> ResolverFirmaAsync(
+        Guid transitOfficeId, OtClientProcedureFilter? filter, CancellationToken cancellationToken)
+    {
+        if (filter?.Condiciones is not { Count: > 0 } condiciones)
+            return filter!;
+
+        var firma = condiciones
+            .Where(c => c.FieldId == OtBandejaQueryFieldCatalog.FirmadoPorTodas
+                && c.Operator == QueryOperator.EsAlguno)
+            .ToList();
+        if (firma.Count == 0)
+            return filter;
+
+        // Cada condición exige su valor (varias condiciones = AND); una con ambos valores no acota.
+        bool? requerido = null;
+        foreach (var c in firma)
+        {
+            var valores = c.Values
+                .Select(v => v.Trim().ToLowerInvariant()).Where(v => v is "true" or "false").Distinct().ToList();
+            if (valores.Count != 1) continue;
+            var quiere = valores[0] == "true";
+            if (requerido is { } previo && previo != quiere)
+                return filter.ConIdsPorFirma([]); // Sí AND No = nadie
+            requerido = quiere;
+        }
+
+        if (requerido is not { } esperado)
+            return filter;
+
+        // El universo ya acotado por el resto de filtros (sin la parte de firma): solo ese se evalúa.
+        var tramites = await ApplyListFilters(BuildAccessibleQuery(transitOfficeId), filter)
+            .AsSplitQuery()
+            .Include(p => p.ProcedureType)
+            .Include(p => p.Actors)
+            .Include(p => p.BiometricValidations)
+            .ToListAsync(cancellationToken)
+            .ConfigureAwait(false);
+
+        var ahora = DateTimeOffset.UtcNow;
+        var contexto = await _firma.CargarContextoAsync(tramites, ahora, cancellationToken).ConfigureAwait(false);
+        var ids = tramites
+            .Where(t => _firma.Evaluar(t, contexto, ahora).FirmadoPorTodas == esperado)
+            .Select(t => t.Id)
+            .ToList();
+
+        return filter.ConIdsPorFirma(ids);
     }
 
     // ── Condiciones de la gramática de Consultas (HU #12217) ──────────────────────────────────

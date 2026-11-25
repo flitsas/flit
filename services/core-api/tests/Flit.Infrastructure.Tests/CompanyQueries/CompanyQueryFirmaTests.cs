@@ -210,6 +210,54 @@ public sealed class CompanyQueryFirmaTests
         si.Filas[0].FaltaFirmar.Should().BeEmpty();
     }
 
+    [Fact] // HU #14700 — Super Admin: «es No» sobre varias compañías hereda filtro y columnas, sin salirse de la consulta.
+    public async Task SuperAdmin_FiltraEsNoSobreVariasCompanias_YHeredaLasColumnas()
+    {
+        var db = NewDbName();
+        await using (var seed = NewContext(db))
+        {
+            SeedCatalogos(seed);
+            foreach (var (id, code, nit) in new[] { (Empresa, "TESLA", "900000001"), (OtraEmpresa, "RENTING", "900000002") })
+            {
+                seed.Tenants.Add(new Flit.Infrastructure.Persistence.Entities.Identity.Tenant
+                {
+                    Id = id, Code = code, LegalName = code, TaxId = nit, TenantType = "FLIT", IsActive = true,
+                    CreatedAt = DateTimeOffset.UtcNow,
+                });
+            }
+
+            var a = Tramite(seed, "REF-A-FIRMADO", "AAA111", Empresa);
+            Actor(seed, a, "comprador", "Carla Compradora", "100", Empresa);
+            var b = Tramite(seed, "REF-A-FALTA", "BBB222", Empresa);
+            Actor(seed, b, "comprador", "Nora Nadie", "203", Empresa);
+            var c = Tramite(seed, "REF-B-FALTA", "CCC333", OtraEmpresa);
+            Actor(seed, c, "vendedor", "Vera Vendedora", "201", OtraEmpresa);
+            var d = Tramite(seed, "REF-B-FIRMADO", "DDD444", OtraEmpresa);
+            Actor(seed, d, "comprador", "Ana Ajena", "999", OtraEmpresa);
+            await seed.SaveChangesAsync(TestContext.Current.CancellationToken);
+        }
+
+        await using var ctx = NewContext(db);
+        var repo = new CompanyQueryRepository(ctx, new FakeEvaluator(["100", "999"]));
+        var definicion = new QueryDefinition(
+            new QueryDateFilter(CompanyQueryDateField.Creacion, QueryRangePreset.Ultimos30),
+            [Cond(CompanyQueryFieldCatalog.FirmadoPorTodas, "false")],
+            [CompanyQueryFieldCatalog.FaltaFirmar]);
+
+        var no = await repo.ExecuteForSuperAdminAsync(
+            new QueryRequest(definicion, 1, 50), TestContext.Current.CancellationToken);
+
+        no.Total.Should().Be(2);
+        no.Filas.Select(f => f.ReferenceNumber).Should().BeEquivalentTo("REF-A-FALTA", "REF-B-FALTA");
+        no.Filas.Select(f => f.CompaniaId).Should().BeEquivalentTo([Empresa, OtraEmpresa]);
+        no.Filas.Single(f => f.ReferenceNumber == "REF-B-FALTA").FaltaFirmar.Should().Be("Vendedor: Vera Vendedora");
+        no.Filas.Should().OnlyContain(f => f.FirmadoPorTodas == null || f.FirmadoPorTodas == false);
+
+        // El catálogo de Super Admin también publica los campos (misma definición que el del gestor).
+        var campos = await repo.GetFieldsForSuperAdminAsync(TestContext.Current.CancellationToken);
+        campos.Select(f => f.Id).Should().Contain([CompanyQueryFieldCatalog.FirmadoPorTodas, CompanyQueryFieldCatalog.FaltaFirmar]);
+    }
+
     [Fact] // La exportación (hoja de Excel) lleva las dos columnas.
     public void LaExportacionIncluyeLasColumnas()
     {
