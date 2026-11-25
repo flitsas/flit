@@ -804,6 +804,52 @@ public sealed class SubmitProcedureInstanceTests
     }
 
     [Fact]
+    public async Task HandleAsync_Quipux_OtConBanderas_PeroIntegracionGlobalDeshabilitada_RadicaAEntregado()
+    {
+        // Bug #14672: el worker solo trabaja con admin.quipux_settings.enabled = true. Con la
+        // integración apagada el trámite NO debe quedar atrapado en preparado.
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var otId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        instance.TransitOfficeId = otId;
+        MarcarTipoConBloqueQuipux(instance);
+        _quipuxCanal
+            .GetAsync(otId, ct)
+            .Returns(new TransitOfficeQuipuxCanal("05631", true, true, true, IntegracionHabilitada: false));
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Entregado);
+        instance.Status.Should().Be(TramiteEstado.Entregado);
+        _recorder.Records.Should().Contain(r => r.ToStatus == TramiteEstado.Entregado);
+    }
+
+    [Fact]
+    public async Task HandleAsync_Quipux_OtConBanderas_IntegracionGlobalHabilitada_QuedaEnPreparado()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var id = Guid.NewGuid();
+        var tenantId = Guid.NewGuid();
+        var otId = Guid.NewGuid();
+        var instance = ConPlaca(FullyGated(id, tenantId));
+        instance.TransitOfficeId = otId;
+        MarcarTipoConBloqueQuipux(instance);
+        _quipuxCanal
+            .GetAsync(otId, ct)
+            .Returns(new TransitOfficeQuipuxCanal("05631", true, true, true, IntegracionHabilitada: true));
+        Wire(instance, ct);
+
+        var (result, error) = await _sut.HandleAsync(id, tenantId, changedBy: null, ct);
+
+        error.Should().BeNull();
+        result!.Status.Should().Be(TramiteEstado.Preparado);
+    }
+
+    [Fact]
     public async Task HandleAsync_YaPreparado_OtSinIntegrar_AlReenviarPasaAEntregado()
     {
         // Remediación de trámites atrapados tras el falso positivo del submit.
