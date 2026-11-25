@@ -5,7 +5,8 @@ namespace Flit.Modules.Platform.Application.TenantProducts;
 /// <summary>
 /// HU #14694 (plan §1.2 decisión R1; platform.v1 1.1.0 <c>POST …/aprovisionamiento/reintentar</c>) — encola el trabajo
 /// <c>&lt;producto&gt;.aprovisionamiento.reintentar</c> con el id de quien lo pidió. No mira el estado de aprovisionamiento:
-/// el servicio del producto ignora el trabajo fuera de ERROR, INCIERTO o REQUIERE_REVISION_NIT.
+/// el servicio del producto ignora el trabajo fuera de ERROR, INCIERTO, REQUIERE_REVISION_NIT o LISTO_SIN_WEBHOOK
+/// (impuestos.v1 1.2.1).
 /// </summary>
 public sealed class RetryProvisioningHandler
 {
