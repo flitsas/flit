@@ -36,6 +36,7 @@ Flit.Admin.Application.Companies.Deeds.IDeedDocumentStorage => Flit.Infrastructu
 Flit.Admin.Application.Companies.Deeds.ListActiveDeeds.ListActiveDeedsForTenantHandler => Flit.Admin.Application.Companies.Deeds.ListActiveDeeds.ListActiveDeedsForTenantHandler (Scoped)
 Flit.Admin.Application.Companies.Deeds.ListDeeds.ListDeedsHandler => Flit.Admin.Application.Companies.Deeds.ListDeeds.ListDeedsHandler (Scoped)
 Flit.Admin.Application.Companies.Deeds.UpdateDeed.UpdateDeedHandler => Flit.Admin.Application.Companies.Deeds.UpdateDeed.UpdateDeedHandler (Scoped)
+Flit.Admin.Application.Companies.Domains.Activation.ActivateNetworkHandler => Flit.Admin.Application.Companies.Domains.Activation.ActivateNetworkHandler (Scoped)
 Flit.Admin.Application.Companies.Domains.DomainOptions => factory (Singleton)
 Flit.Admin.Application.Companies.Domains.GetDomain.GetDomainHandler => Flit.Admin.Application.Companies.Domains.GetDomain.GetDomainHandler (Scoped)
 Flit.Admin.Application.Companies.Domains.ITenantDomainResolver => Flit.Infrastructure.Domains.CachedTenantDomainResolver (Scoped)

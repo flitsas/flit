@@ -100,7 +100,7 @@ public sealed class TenantDomainPurposeTests(PostgresDatabaseFixture fixture) : 
         await AddActiveDomainAsync("tramites.red.example.com", "tramites", "tok-0000000000000017");
 
         await using var ctx = NewContext();
-        var domain = await new TenantDomainRepository(ctx).GetByTenantIdAsync(HeadId, TestContext.Current.CancellationToken);
+        var domain = await new TenantDomainRepository(ctx).GetByTenantIdAsync(HeadId, TenantDomainPurposes.Hub, TestContext.Current.CancellationToken);
 
         domain.Should().NotBeNull();
         domain!.Host.Should().Be("red.example.com");
