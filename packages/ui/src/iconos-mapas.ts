@@ -66,6 +66,7 @@ export const MAPA_ICONO: Record<string, NombreIcono | `@${string}`> = {
  "rapido": "medidor",
  "devoluciones": "devolucion",
  "ingresos": "ingreso",
+ "impuestos": "pesos",
  "celular": "celular",
  "destacado": "medalla",
  "llamadas": "intercambio",

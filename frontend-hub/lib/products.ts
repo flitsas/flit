@@ -79,6 +79,25 @@ export const PRODUCTS: ProductInfo[] = [
     audiences: ["Concesionarios y compraventas", "Aseguradoras", "Renting y leasing", "Flotas"],
     status: "soon",
   },
+  {
+    // HU #14695 · M19 (spec-visual §3.11). `receipt` es el ícono de platform.products; @flit/shell lo dibuja con `pesos`.
+    code: "impuestos",
+    name: "Impuestos",
+    icon: "receipt",
+    tagline: "Liquidación del impuesto vehicular de tus placas",
+    description:
+      "Liquida el impuesto vehicular de una placa o de toda tu flota con los datos del RUNT, y guarda los recibos en PDF " +
+      "para pagar en el departamento que corresponda.",
+    features: [
+      "Liquidación por placa con datos del RUNT",
+      "Liquidación masiva por lotes con avance en línea",
+      "Recibos en PDF descargables",
+      "Tablero con totales por compañía y rango de fechas",
+      "Reportes filtrables y exportables",
+    ],
+    audiences: ["Flotas", "Concesionarios", "Gestores de trámites"],
+    status: "soon",
+  },
 ];
 
 export function productInfo(code: string): ProductInfo | null {
