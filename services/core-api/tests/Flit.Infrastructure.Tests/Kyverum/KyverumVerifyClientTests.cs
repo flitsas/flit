@@ -111,6 +111,21 @@ public sealed class KyverumVerifyClientTests
     }
 
     [Fact]
+    public async Task GetStatus_RechazoConIntentosAgotados_ExponeIntentosYTope()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var handler = new MockHttpMessageHandler((_, _) => Json(HttpStatusCode.OK,
+            """{"id":"kyv_1","status":"rechazado","result":{"aprobado":false,"closedAt":"2026-11-25T16:37:52Z"},"subjects":[{"rol":"titular","status":"rechazado","intentos":3,"maxIntentos":3,"intentosRestantes":0,"motivo":"documento no legible"}]}"""));
+
+        var result = await Client(handler).GetStatusAsync("kyv_1", "titular", ct);
+
+        result.Should().NotBeNull();
+        result!.Status.Should().Be("rechazado");
+        result.Intentos.Should().Be(3);
+        result.MaxIntentos.Should().Be(3);
+    }
+
+    [Fact]
     public async Task GetStatus_Approved_ReturnsStatusAndScore()
     {
         var ct = TestContext.Current.CancellationToken;

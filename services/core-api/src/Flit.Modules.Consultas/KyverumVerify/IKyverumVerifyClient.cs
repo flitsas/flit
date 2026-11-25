@@ -69,7 +69,7 @@ public sealed class KyverumVerifyException(string message, bool transient) : Exc
 /// </summary>
 public sealed record KyverumVerifyStatus(
     string Status, int? Score, string RawPayloadSanitized, string? AttemptAt = null, string? Motivo = null,
-    string? FirmaSerie = null);
+    string? FirmaSerie = null, int? Intentos = null, int? MaxIntentos = null);
 
 /// <summary>
 /// Contrato del cliente HTTP de Kyverum Verify (HU #10233). La implementación vive en Infraestructura

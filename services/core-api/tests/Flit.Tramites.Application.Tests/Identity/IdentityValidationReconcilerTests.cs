@@ -128,6 +128,32 @@ public sealed class IdentityValidationReconcilerTests
         v.Status.Should().Be(BiometricEstados.Rechazado);
     }
 
+    [Fact]
+    public async Task Rechazado_IntentosAgotadosSegunKyverum_TerminalizaSinEsperarElWebhook()
+    {
+        // El webhook aún no contó (Attempts = 0), pero Kyverum reporta 3 de 3 intentos: la validación ya cerró.
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(attempts: 0, maxAttempts: 3, procedureInstanceId: Guid.NewGuid());
+        var status = new KyverumVerifyStatus("rechazado", null, "{\"status\":\"rechazado\"}", Intentos: 3, MaxIntentos: 3);
+
+        var updated = await IdentityValidationReconciler.ApplyStatusAsync(_applier, v, status, _now, ct);
+
+        updated.Should().BeTrue();
+        v.Status.Should().Be(BiometricEstados.Rechazado);
+    }
+
+    [Fact]
+    public async Task RechazadoIntento_IntentosDeKyverumDisponibles_NoTerminaliza()
+    {
+        var ct = TestContext.Current.CancellationToken;
+        var v = Seed(attempts: 0, maxAttempts: 3, procedureInstanceId: Guid.NewGuid());
+        var status = new KyverumVerifyStatus("rechazado_intento", null, "{\"status\":\"rechazado_intento\"}", Intentos: 1, MaxIntentos: 3);
+
+        await IdentityValidationReconciler.ApplyStatusAsync(_applier, v, status, _now, ct);
+
+        v.Status.Should().NotBe(BiometricEstados.Rechazado);
+    }
+
     [Theory]
     [InlineData(null)] // prevalidación standalone
     [InlineData("procedure")] // identidad de trámite (comprador)

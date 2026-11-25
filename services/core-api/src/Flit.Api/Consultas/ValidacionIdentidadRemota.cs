@@ -63,7 +63,8 @@ internal sealed class KyverumVerifyPorConsultas(
             return r.Encontrada
                 ? new KyverumVerifyStatus(
                     r.Status, r.HasScore ? r.Score : null, r.RawPayloadSanitized,
-                    r.HasAttemptAt ? r.AttemptAt : null, r.HasMotivo ? r.Motivo : null, r.HasFirmaSerie ? r.FirmaSerie : null)
+                    r.HasAttemptAt ? r.AttemptAt : null, r.HasMotivo ? r.Motivo : null, r.HasFirmaSerie ? r.FirmaSerie : null,
+                    r.HasIntentos ? r.Intentos : null, r.HasMaxIntentos ? r.MaxIntentos : null)
                 : null;
         }
         catch (RpcException ex)

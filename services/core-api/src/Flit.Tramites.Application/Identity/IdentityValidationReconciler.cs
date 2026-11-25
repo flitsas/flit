@@ -47,6 +47,9 @@ public static class IdentityValidationReconciler
         if (v.CongeladaPorTramite)
             return false;
 
+        // Kyverum informa los intentos usados y el tope de la persona: al agotarlos la validación cierra rechazada.
+        var intentosAgotados = status.Intentos is { } usados && status.MaxIntentos is { } tope && usados >= tope;
+
         switch ((status.Status ?? string.Empty).Trim().ToLowerInvariant())
         {
             case "aprobado":
@@ -63,7 +66,7 @@ public static class IdentityValidationReconciler
 
                     // El conteo lo lleva el webhook (autoritativo). Aquí NO se incrementa: si el webhook ya agotó los
                     // intentos, se terminaliza en rechazado; si aún quedan, solo se refresca el motivo del último intento.
-                    if (v.Attempts >= v.MaxAttempts)
+                    if (intentosAgotados || v.Attempts >= v.MaxAttempts)
                         // Intentos AGOTADOS → rechazo TERMINAL (publica el evento y habilita "Reintentar").
                         return await applier.ApplyAsync(
                             v, new IdentityValidationTerminalResult(false, status.Status, status.RawPayloadSanitized, status.Score), now, ct);

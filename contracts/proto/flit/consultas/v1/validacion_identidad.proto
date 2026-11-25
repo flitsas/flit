@@ -64,6 +64,9 @@ message ConsultarEstadoValidacionResponse {
   optional string attempt_at = 5;
   optional string motivo = 6;
   optional string firma_serie = 7;
+  // Intentos de captura de la persona y su tope, tal como los reporta Kyverum en el estado.
+  optional int32 intentos = 8;
+  optional int32 max_intentos = 9;
 }
 
 message DescargarCertificadoRequest {

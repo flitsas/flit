@@ -208,7 +208,7 @@ internal sealed class KyverumVerifyClient(
                 proveedor = "kyverum",
             });
 
-            return new KyverumVerifyStatus(effectiveStatus, score, sanitized, attemptAt, motivo, firmaSerie);
+            return new KyverumVerifyStatus(effectiveStatus, score, sanitized, attemptAt, motivo, firmaSerie, subject?.Intentos, subject?.MaxIntentos);
         }
         catch (OperationCanceledException) when (ct.IsCancellationRequested)
         {
@@ -419,7 +419,10 @@ internal sealed class KyverumVerifyClient(
         // Serie/hash del certificado del subject aprobado (HU #10488). Puede no venir en el GET.
         [property: JsonPropertyName("firmaSerie")] string? FirmaSerie = null,
         // Id del sujeto en Kyverum: lo usa el reenvío (subjects/{subjectId}/reissue).
-        [property: JsonPropertyName("id")] string? Id = null);
+        [property: JsonPropertyName("id")] string? Id = null,
+        // Intentos de captura usados y tope, por persona (contrato de Kyverum). Con ellos se sabe si se agotaron.
+        [property: JsonPropertyName("intentos")] int? Intentos = null,
+        [property: JsonPropertyName("maxIntentos")] int? MaxIntentos = null);
 
     // ── Contrato del POST .../subjects/{subjectId}/reissue ────────────────────
     private sealed record KyverumReissueBody(

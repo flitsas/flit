@@ -113,6 +113,10 @@ internal sealed class ValidacionIdentidadGrpcService(
             respuesta.Motivo = estado.Motivo;
         if (estado.FirmaSerie is not null)
             respuesta.FirmaSerie = estado.FirmaSerie;
+        if (estado.Intentos is { } intentos)
+            respuesta.Intentos = intentos;
+        if (estado.MaxIntentos is { } maxIntentos)
+            respuesta.MaxIntentos = maxIntentos;
         return respuesta;
     }
 
