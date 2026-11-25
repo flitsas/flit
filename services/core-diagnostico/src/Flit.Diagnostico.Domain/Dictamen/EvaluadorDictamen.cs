@@ -37,6 +37,8 @@ public static class EvaluadorDictamen
         AgregarLicencia(hechos, leasing, reglas);
         if (PredicadosDictamen.ImpuestoConDeuda(hechos))
             reglas.Add(Emitir(hechos, "IMPUESTO", "IMPUESTO_DEPARTAMENTAL", hechos.ImpuestoMontoPesos is > 0 ? hechos.ImpuestoMontoPesos : null));
+        if (PredicadosDictamen.ImpuestoValidacionNoCoincide(hechos))
+            reglas.Add(Emitir(hechos, "IMPUESTO_VALIDACION", "IMPUESTO_DEPARTAMENTAL"));
         AgregarFuentes(hechos, reglas);
 
         var veredicto = reglas.Exists(r => r.Efecto == "BLOQUEA") ? "BLOQUEADO" : "VIABLE";

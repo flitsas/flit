@@ -36,7 +36,7 @@ describe('Detalle manual — quién revisó', () => {
     render(
       <ManualReviewDetailModal
         id={APROBADA}
-        client={conRevision({ status: 'aprobado', reviewedBy: 'Ana Pérez', reviewedAt: '2026-10-05T15:00:00Z' })}
+        client={conRevision({ status: 'aprobado', reviewer: null, reviewedBy: 'Ana Pérez', reviewedAt: '2026-10-05T15:00:00Z' })}
         onClose={() => {}}
       />,
     );
@@ -47,7 +47,7 @@ describe('Detalle manual — quién revisó', () => {
     render(
       <ManualReviewDetailModal
         id={RECHAZADA}
-        client={conRevision({ reviewedBy: 'Luis Gómez', reviewedAt: '2026-10-05T15:00:00Z' })}
+        client={conRevision({ reviewer: null, reviewedBy: 'Luis Gómez', reviewedAt: '2026-10-05T15:00:00Z' })}
         onClose={() => {}}
       />,
     );
@@ -56,7 +56,7 @@ describe('Detalle manual — quién revisó', () => {
 
   it('sin revisor ni fecha no pinta nada', async () => {
     render(
-      <ManualReviewDetailModal id={RECHAZADA} client={conRevision({ reviewedBy: null, reviewedAt: null })} onClose={() => {}} />,
+      <ManualReviewDetailModal id={RECHAZADA} client={conRevision({ reviewer: null, reviewedBy: null, reviewedAt: null })} onClose={() => {}} />,
     );
     await screen.findByRole('status', { name: 'Estado: Rechazada' });
     expect(screen.queryByText(/Rechazada por|Rechazada el|null|undefined/)).not.toBeInTheDocument();
@@ -66,11 +66,55 @@ describe('Detalle manual — quién revisó', () => {
     render(
       <ManualReviewDetailModal
         id={APROBADA}
-        client={conRevision({ status: 'aprobado', reviewedBy: null, reviewedAt: '2026-10-05T15:00:00Z' })}
+        client={conRevision({ status: 'aprobado', reviewer: null, reviewedBy: null, reviewedAt: '2026-10-05T15:00:00Z' })}
         onClose={() => {}}
       />,
     );
     expect(await screen.findByText('Aprobada el 05/10/2026 10:00')).toBeInTheDocument();
     expect(screen.queryByText(/por null|null/)).not.toBeInTheDocument();
+  });
+});
+
+describe('Detalle manual — revisor completo (Super Admin)', () => {
+  const fecha = '2026-10-05T15:00:00Z';
+
+  it('aprobada con nombre, correo y rol', async () => {
+    render(
+      <ManualReviewDetailModal
+        id={APROBADA}
+        client={conRevision({
+          status: 'aprobado',
+          reviewer: { name: 'Ana Pérez', email: 'ana@flit.co', role: 'Super Admin' },
+          reviewedAt: fecha,
+        })}
+        onClose={() => {}}
+      />,
+    );
+    expect(
+      await screen.findByText('Aprobada por Ana Pérez (ana@flit.co, Super Admin) el 05/10/2026 10:00'),
+    ).toBeInTheDocument();
+  });
+
+  it('rechazada con revisor parcial (sin correo): omite el trozo y no muestra «null»', async () => {
+    render(
+      <ManualReviewDetailModal
+        id={RECHAZADA}
+        client={conRevision({ reviewer: { name: 'Luis Gómez', email: null, role: 'Super Admin' }, reviewedAt: fecha })}
+        onClose={() => {}}
+      />,
+    );
+    expect(await screen.findByText('Rechazada por Luis Gómez (Super Admin) el 05/10/2026 10:00')).toBeInTheDocument();
+    expect(screen.queryByText(/null|undefined/)).not.toBeInTheDocument();
+  });
+
+  it('reviewer vacío cae al respaldo reviewedBy', async () => {
+    render(
+      <ManualReviewDetailModal
+        id={RECHAZADA}
+        client={conRevision({ reviewer: { name: null, email: null, role: null }, reviewedBy: 'Respaldo', reviewedAt: fecha })}
+        onClose={() => {}}
+      />,
+    );
+    expect(await screen.findByText('Rechazada por Respaldo el 05/10/2026 10:00')).toBeInTheDocument();
   });
 });

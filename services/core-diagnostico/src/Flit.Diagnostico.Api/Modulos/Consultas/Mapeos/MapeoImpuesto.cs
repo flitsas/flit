@@ -9,8 +9,13 @@ namespace Flit.Diagnostico.Api.Modulos.Consultas.Mapeos;
 /// Parte de respuesta del impuesto departamental (ADR-0075; antes en <c>FuenteImpuestoReal</c>, HU #13862, F09-C5, F09-C6):
 /// normaliza <c>ConsultarImpuestoVehicular</c> con <see cref="ResultadoImpuesto.Normalizar"/> y el departamento consultado; el
 /// proveedor solo va al servicio del intento (R-20). Errores: <c>UNIMPLEMENTED</c> (core-consultas sin C3) es
-/// <c>NO_CONECTADO</c>, definitivo. Un chequeo <c>impuesto_*</c> conocido se traduce a su código; el resto de chequeos en ERROR
-/// sigue por <see cref="TraductorErroresConsultas"/> (<c>HTTP_5XX</c>). <c>dato_parcial</c> no arma resultado.
+/// <c>NO_CONECTADO</c>, definitivo. Un chequeo <c>impuesto_*</c> conocido se traduce a su código; <c>impuesto_rechazo</c> (400/422
+/// síncrono) e <c>impuesto_solicitud_invalida</c> (la fuente aceptó y luego rechazó los parámetros) son <c>ESTADO_NO_OK</c>,
+/// definitivo y sin reintento. <c>impuesto_fuente_inactiva</c> (la fuente del departamento está inactiva) es <c>FUENTE_INACTIVA</c>,
+/// definitivo y reprocesable por el usuario. <see cref="ClaveDepartamentoNoSoportado"/> no es un error: la API no tiene fuente para
+/// el departamento y <see cref="EjecutorCeldaImpuesto"/> cierra la celda en N/A <c>DEPARTAMENTO_NO_SOPORTADO</c> antes de mapear
+/// (<see cref="DepartamentoNoSoportado"/>). El resto de chequeos en ERROR sigue por <see cref="TraductorErroresConsultas"/>
+/// (<c>HTTP_5XX</c>). <c>dato_parcial</c> no arma resultado.
 /// </summary>
 /// <example>
 /// <code>
@@ -21,6 +26,16 @@ public static class MapeoImpuesto
 {
     /// <summary>Código de fuente en el mensaje de <c>NO_CONECTADO</c>.</summary>
     public const string CodigoFuente = "IMPUESTO_DEPARTAMENTAL";
+
+    /// <summary>Clave del chequeo en ERROR con que core-consultas avisa que la API no tiene fuente para el departamento.</summary>
+    public const string ClaveDepartamentoNoSoportado = "impuesto_departamento_no_soportado";
+
+    /// <summary>
+    /// Verdadero si el primer chequeo en ERROR de la respuesta es <see cref="ClaveDepartamentoNoSoportado"/>: la celda no es un
+    /// error sino N/A <c>DEPARTAMENTO_NO_SOPORTADO</c>, definitiva y sin reintento.
+    /// </summary>
+    public static bool DepartamentoNoSoportado(ConsultarImpuestoVehicularResponse? respuesta) =>
+        respuesta?.Resultado?.Chequeos.FirstOrDefault(c => c.Estado == EstadoChequeo.Error)?.Clave == ClaveDepartamentoNoSoportado;
 
     public static RespuestaFuente<ResultadoImpuesto> Mapear(ConsultarImpuestoVehicularResponse respuesta, string departamentoCodigo)
     {
@@ -49,6 +64,7 @@ public static class MapeoImpuesto
         {
             "LIMITE" => "LIMITE_PROVEEDOR",
             "RECHAZO" => "ESTADO_NO_OK",
+            "SOLICITUD_INVALIDA" => "ESTADO_NO_OK",
             "CAIDA" => "HTTP_5XX",
             var otro => otro,
         };

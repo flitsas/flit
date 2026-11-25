@@ -298,6 +298,7 @@ public sealed class PaqueteOcr
     public int CantidadDuplicados { get; set; }
     public int CantidadRegistrados { get; set; }
     public int CantidadDescartados { get; set; }
+    public int CantidadAsociados { get; set; }
     public Guid PromptVersionId { get; set; }
     public Guid CreadoPor { get; set; }
     public string? CreadoPorNombre { get; set; }

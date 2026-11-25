@@ -2,13 +2,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "@/lib/api";
 import {
   descargarArchivo,
+  descargarLiquidacionImpuesto,
   estadoZip,
   mensajeDescarga,
+  mensajeDescargaLiquidacion,
+  nombreLiquidacionImpuesto,
   nombreArchivo,
   pedirZip,
   puedeEmitirPdf,
   urlArchivoZip,
   urlExcelLote,
+  urlLiquidacionImpuesto,
   urlPdfVehiculo,
   type EstadoEvidencia,
 } from "@/lib/reportes/api";
@@ -158,5 +162,67 @@ describe("reportes/api — puedeEmitirPdf, misma regla que EmisionPdf.Puede del 
   it("lote INCOMPLETO con una celda abierta o sin celdas: no", () => {
     expect(puedeEmitirPdf("INCOMPLETO", vehiculo(5, [celda(5, "RUNT", "ERROR"), celda(5, "SIMIT_PROPIETARIO", "PENDIENTE")]))).toBe(false);
     expect(puedeEmitirPdf("INCOMPLETO", vehiculo(6, [], { terminado: false }))).toBe(false);
+  });
+});
+
+// Uso de ejemplo (ola impuesto-fuente-real, contrato-api.md B2): descargarLiquidacionImpuesto(id, vid, 2025, "TST001") pide
+// GET …/vehiculos/{vid}/impuesto/liquidaciones/2025 (o …/consolidada) y guarda «liquidacion-TST001-2025.pdf». El navegador
+// nunca manda el id del archivo; los errores se traducen con mensajeDescargaLiquidacion(error).
+describe("reportes/api — liquidaciones del impuesto (por vehículo y vigencia, sin id de archivo)", () => {
+  const RUTA = (v: string) => `GET /diagnosticos/${ID}/vehiculos/vehiculo-1/impuesto/liquidaciones/${v}`;
+
+  it("arma la URL del BFF por año o consolidada, codificando los ids", () => {
+    expect(urlLiquidacionImpuesto(ID, "vehiculo-1", 2025)).toBe(`/api/v1/diagnostico/diagnosticos/${ID}/vehiculos/vehiculo-1/impuesto/liquidaciones/2025`);
+    expect(urlLiquidacionImpuesto("a/b", "c d", "consolidada")).toBe("/api/v1/diagnostico/diagnosticos/a%2Fb/vehiculos/c%20d/impuesto/liquidaciones/consolidada");
+  });
+
+  it("nombre del archivo: liquidacion-<placa>-<año>.pdf, sin caracteres raros", () => {
+    expect(nombreLiquidacionImpuesto("TST001", 2025)).toBe("liquidacion-TST001-2025.pdf");
+    expect(nombreLiquidacionImpuesto("tst 001/x", "consolidada")).toBe("liquidacion-TST001X-consolidada.pdf");
+  });
+
+  it("200: baja el blob como liquidacion-<placa>-<año>.pdf aunque el servidor proponga otro nombre", async () => {
+    const api = simularApi({ [RUTA("2025")]: () => pdf("attachment; filename=impuesto-00000000-TST001-2025.pdf") });
+    await expect(descargarLiquidacionImpuesto(ID, "vehiculo-1", 2025, "TST001")).resolves.toBe("liquidacion-TST001-2025.pdf");
+    expect(descargados).toEqual(["liquidacion-TST001-2025.pdf"]);
+    expect(llamadas(api, "GET", `/diagnosticos/${ID}/vehiculos/vehiculo-1/impuesto/liquidaciones/2025`)).toHaveLength(1);
+  });
+
+  it("la consolidada va por su segmento y la petición no lleva id de archivo ni consulta", async () => {
+    const api = simularApi({ [RUTA("consolidada")]: () => pdf(null) });
+    await descargarLiquidacionImpuesto(ID, "vehiculo-1", "consolidada", "TST001");
+    expect(descargados).toEqual(["liquidacion-TST001-consolidada.pdf"]);
+    const [[entrada, init]] = api.mock.calls as unknown as [[string, RequestInit]];
+    const url = new URL(entrada, "http://localhost");
+    expect(url.search).toBe("");
+    expect(init.method).toBe("GET");
+    expect(init.body).toBeUndefined();
+    expect(entrada).not.toMatch(/file|archivo|liquidacion_id/i);
+  });
+
+  it("404: «La fuente ya no tiene este archivo» y no descarga nada", async () => {
+    simularApi({ [RUTA("2024")]: () => Response.json({ code: "LIQUIDACION_NO_ENCONTRADA", error: "x" }, { status: 404 }) });
+    const error = await descargarLiquidacionImpuesto(ID, "vehiculo-1", 2024, "TST001").catch((e: unknown) => e);
+    expect(error).toBeInstanceOf(ApiError);
+    expect(descargados).toEqual([]);
+    expect(mensajeDescargaLiquidacion(error)).toBe("La fuente ya no tiene este archivo.");
+  });
+
+  it.each([
+    [409, "CREDENCIAL_NO_CONFIGURADA"],
+    [412, undefined],
+    [422, undefined],
+  ])("%s %s: la credencial del impuesto no está configurada", (status, code) => {
+    expect(mensajeDescargaLiquidacion(new ApiError(status, "x", code))).toBe(
+      "La compañía no tiene configurada la credencial del impuesto. Pídele al administrador que la configure.",
+    );
+  });
+
+  it("403: sin permiso; cualquier otro error: texto genérico, nunca el del servidor", () => {
+    expect(mensajeDescargaLiquidacion(new ApiError(403, "x"))).toBe("No tienes permiso para descargar reportes.");
+    const generico = "No se pudo descargar la liquidación. Intenta de nuevo en un momento.";
+    expect(mensajeDescargaLiquidacion(new ApiError(503, "detalle técnico", "FUENTE_NO_DISPONIBLE"))).toBe(generico);
+    expect(mensajeDescargaLiquidacion(new ApiError(409, "x", "LIQUIDACION_NO_DISPONIBLE"))).toBe(generico);
+    expect(mensajeDescargaLiquidacion(new Error("boom"))).toBe(generico);
   });
 });

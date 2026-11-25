@@ -1,0 +1,9 @@
+{
+  "id": "consulta-sintetica-0002",
+  "source_id": "impuesto-05",
+  "status": "failed",
+  "created_at": "2026-11-23T15:00:00Z",
+  "error_code": "source_inactive",
+  "file_errors": [],
+  "result": null
+}

@@ -1,0 +1,38 @@
+{
+  "id": "consulta-sintetica-0001",
+  "source_id": "impuesto-05",
+  "status": "succeeded",
+  "created_at": "2026-11-19T15:00:00Z",
+  "error_code": null,
+  "file_errors": [],
+  "result": {
+    "status": "paz_y_salvo",
+    "consultedAt": "2026-11-19T15:00:45Z",
+    "totals": {
+      "tax": 0,
+      "penalty": 0,
+      "interest": 0,
+      "discounts": 0,
+      "totalToPay": 0
+    },
+    "pendingPeriods": [],
+    "lastPayment": null,
+    "clearance": null,
+    "validations": [
+      {
+        "field": "OwnerName",
+        "sent": "PERSONA PRUEBA UNO",
+        "portal": "PERSONA PRUEBA DOS",
+        "result": "mismatch"
+      }
+    ],
+    "warnings": [],
+    "vehicle": {
+      "plate": "TST160",
+      "brand": "MARCA PRUEBA",
+      "line": "LINEA PRUEBA",
+      "model": 2020
+    },
+    "consolidatedFileId": null
+  }
+}

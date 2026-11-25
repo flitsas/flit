@@ -1,0 +1,27 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Reportes de Comparendos 2.0 — pruebas propias del motor de consultas compartido, sin base de datos. Hasta la
+    extracción el motor solo se probaba a través de los repositorios de Trámites; ahora lo usa también Comparendos,
+    así que su semántica (rangos, normalización, cobertura) se fija aquí, independiente de cualquier módulo.
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>Flit.Queries.Core.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <PublishAot>false</PublishAot>
+    <IsAotCompatible>false</IsAotCompatible>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Flit.Queries.Core\Flit.Queries.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit.v3" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+
+</Project>

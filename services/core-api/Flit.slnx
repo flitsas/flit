@@ -4,6 +4,7 @@
     <Project Path="src/Flit.Admin.Application/Flit.Admin.Application.csproj" />
     <Project Path="src/Flit.Analytics.Application/Flit.Analytics.Application.csproj" />
     <Project Path="src/Flit.DrFlit.Application/Flit.DrFlit.Application.csproj" />
+    <Project Path="src/Flit.Queries.Core/Flit.Queries.Core.csproj" />
     <Project Path="src/Flit.Queries.Domain/Flit.Queries.Domain.csproj" />
     <Project Path="src/Flit.Api/Flit.Api.csproj" />
     <Project Path="src/Flit.Gateway/Flit.Gateway.csproj" />
@@ -31,6 +32,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Flit.Platform.Sdk.Tests/Flit.Platform.Sdk.Tests.csproj" />
+    <Project Path="tests/Flit.Queries.Core.Tests/Flit.Queries.Core.Tests.csproj" />
     <Project Path="tests/Flit.Infrastructure.Tests/Flit.Infrastructure.Tests.csproj" />
     <Project Path="tests/Flit.Tramites.Application.Tests/Flit.Tramites.Application.Tests.csproj" />
     <Project Path="tests/Flit.Tramites.Domain.Tests/Flit.Tramites.Domain.Tests.csproj" />

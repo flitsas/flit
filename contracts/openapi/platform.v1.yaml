@@ -159,6 +159,77 @@ paths:
         "409":
           $ref: "#/components/responses/Problem"
 
+  /api/v1/platform/admin/tenants/{tenantId}/products/{productCode}/credentials/{credentialCode}:
+    put:
+      tags: [Platform]
+      operationId: setTenantProductCredential
+      summary: Guardar o reemplazar la API key de un producto (SuperAdmin)
+      description: >
+        ADR-0092. v1 solo admite (diagnostico, impuesto_api_key). El valor se cifra con Data Protection
+        antes de persistir. Nunca se devuelve. 204 crea o reemplaza.
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - name: productCode
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: credentialCode
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [value]
+              properties:
+                value:
+                  type: string
+                  minLength: 16
+                  maxLength: 256
+                  description: ASCII imprimible sin espacios. Nunca se ecoa en errores.
+      responses:
+        "204":
+          description: Credencial guardada o reemplazada.
+        "400":
+          $ref: "#/components/responses/Problem"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Solo el SuperAdmin.
+        "404":
+          $ref: "#/components/responses/Problem"
+    delete:
+      tags: [Platform]
+      operationId: deleteTenantProductCredential
+      summary: Borrar la API key de un producto (SuperAdmin)
+      description: Idempotente. 204 también si no había fila.
+      parameters:
+        - $ref: "#/components/parameters/TenantId"
+        - name: productCode
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: credentialCode
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "204":
+          description: Credencial borrada o ya ausente.
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          description: Solo el SuperAdmin.
+        "404":
+          $ref: "#/components/responses/Problem"
+
   /api/v1/platform/issuers:
     get:
       tags: [Platform]
@@ -273,6 +344,12 @@ components:
             comingSoon:
               type: boolean
               description: Todavía no desplegado en este ambiente; se puede encender igual (HU 12967).
+            impuestoApiKeyConfigurada:
+              type: boolean
+              nullable: true
+              description: >
+                ADR-0092. true/false solo en diagnostico (si hay fila de impuesto_api_key).
+                null en los demás productos. Nunca el valor.
 
     ProductManifest:
       type: object

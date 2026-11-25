@@ -57,12 +57,24 @@ export interface ManualListResponse {
   pageSize: number;
 }
 
+/** Revisor de una validación manual. Visible solo para el Super Admin FLIT. */
+export interface RevisorIdentidad {
+  name: string | null;
+  email: string | null;
+  role: string | null;
+}
+
 export interface ManualDetail extends ManualListItem {
   consentAt: string | null;
   consentTextVersion: string | null;
   images: { kind: ManualImageKind; available: boolean }[];
   reviewedAt: string | null;
   reviewedBy: string | null;
+  /**
+   * Quién revisó (nombre, correo y rol). Solo lo envía el backend al Super Admin FLIT; la compañía y el cliente
+   * reciben `null` o nada. Todos sus campos pueden venir vacíos.
+   */
+  reviewer?: RevisorIdentidad | null;
   rejectionReasonCode: string | null;
   /**
    * Vencimiento del enlace de captura vigente (30 días): solo con `manual_activo` (el cliente aún no capturó) o `rechazado`

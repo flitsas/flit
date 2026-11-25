@@ -23,12 +23,16 @@ import { capacidades, tienePermiso } from "@/lib/sesion";
 import type { Contadores } from "@/lib/tipos";
 import { useCarga } from "@/lib/useCarga";
 
-/** «412 comparendos pendientes en 287 vehículos · en 30 días entraron 45 y salieron 18». */
-function fraseResumen(o: Operacion): string {
+/**
+ * «412 comparendos pendientes en 287 vehículos · en 30 días entraron 45 y salieron 18». Con el recorte (decisión 1 de
+ * Reportes 2.0) el movimiento de 30 días se va a Reportes › Gestión y aquí queda solo lo pendiente de hoy.
+ */
+function fraseResumen(o: Operacion, recorte: boolean): string {
   const r = o.resumen;
   const n = (x: number) => x.toLocaleString("es-CO");
   const valor = r.valorPendiente === null ? "" : ` por ${pesosCorto(r.valorPendiente)}`;
-  return `${n(r.pendientes)} comparendos pendientes${valor} en ${n(r.vehiculos)} ${r.vehiculos === 1 ? "vehículo" : "vehículos"}. En los últimos 30 días entraron ${n(r.nuevos30)} y ${n(r.resueltos30)} dejaron de estar pendientes (pagados o cerrados).`;
+  const hoy = `${n(r.pendientes)} comparendos pendientes${valor} en ${n(r.vehiculos)} ${r.vehiculos === 1 ? "vehículo" : "vehículos"}.`;
+  return recorte ? hoy : `${hoy} En los últimos 30 días entraron ${n(r.nuevos30)} y ${n(r.resueltos30)} dejaron de estar pendientes (pagados o cerrados).`;
 }
 
 /** Frentes sin el módulo de reportes: solo cantidades, de los mismos contadores de la bandeja. */
@@ -142,6 +146,10 @@ function Contenido() {
   const conDinero = listo && capacidades(sesion).reportes && tienePermiso(sesion, P.reportesVer);
   const veBandeja = tienePermiso(sesion, P.bandejaVer);
   const empresaQuery = esSuperAdmin ? empresa : null;
+  // Decisión 1 de Reportes 2.0: con el módulo y ReportesVer, lo analítico se va a Reportes › Gestión (sin desde ni hasta:
+  // lo pendiente de hoy, las mismas cifras que había aquí). Sin el módulo, Gestión no existe para él y el Inicio no cambia.
+  const recorte = conDinero;
+  const hrefReportes = recorte ? `/reportes/gestion${empresaQuery ? `?empresa=${encodeURIComponent(empresaQuery)}` : ""}` : undefined;
 
   const hoy = diaColombia();
   const dinero = useCarga(conDinero ? `inicio-dinero:${empresaQuery}` : null, (signal) =>
@@ -175,7 +183,7 @@ function Contenido() {
           esSuperAdmin && !empresa
             ? "Vista de administración FLIT: la salud de todas las empresas. Elige una para ver su Inicio."
             : o
-              ? fraseResumen(o)
+              ? fraseResumen(o, recorte)
               : `${sesion?.empresa?.nombre ? `${sesion.empresa.nombre} · ` : ""}Lo que hay que atender hoy.`
         }
         acciones={
@@ -223,15 +231,16 @@ function Contenido() {
       )}
       {listo && veBandeja && operacion.estado === "loading" && <Cargador />}
       {/* listo: al volver a «Todas», useCarga conserva los datos de la empresa anterior y no deben verse. */}
-      {listo && o && <OperacionInicio o={o} empresa={empresaQuery} />}
+      {listo && o && <OperacionInicio o={o} empresa={empresaQuery} recorte={recorte} hrefReportes={hrefReportes} />}
     </section>
   );
 }
 
 /**
- * Inicio de Comparendos (rediseño S2, R2 y R4). Gestora: «Para hoy» (frentes que llevan a la bandeja filtrada), con el
- * módulo de reportes la franja plegable de dinero (segunda, R4) y la operación (gestión, vehículos, evitables,
- * calendario, antigüedad, DP por organismo; GET /comparendos/operacion con BandejaVer). Sin el módulo no hay pesos ni 403. SuperAdmin: con «Todas»,
+ * Inicio de Comparendos (rediseño S2, R2 y R4; Reportes 2.0). Gestora: «Para hoy» (frentes que llevan a la bandeja
+ * filtrada), con el módulo de reportes la franja plegable de dinero (segunda, R4), el embudo y el calendario legal, y el
+ * enlace «Ver en Reportes» a Gestión, donde quedó el resto. Sin el módulo, la operación completa (gestión, vehículos,
+ * evitables, calendario, antigüedad, DP por organismo; GET /comparendos/operacion con BandejaVer), sin pesos ni 403. SuperAdmin: con «Todas»,
  * la salud de la plataforma y las empresas que necesitan algo; con una empresa, el Inicio de esa gestora.
  */
 export default function Inicio() {

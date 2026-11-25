@@ -156,6 +156,8 @@ public enum EstadoDocumentoOcr
     Duplicado,
     Registrado,
     Descartado,
+    /// <summary>El documento escaneado se asoció a un comparendo que ya existía (estado final).</summary>
+    Asociado,
 }
 
 /// <summary>Los cuatro primeros se reintentan (hasta 3 veces); ilegible y archivo inválido no.</summary>
@@ -186,6 +188,7 @@ public enum TipoComunicacion
 
     /// <summary>Epic #14606, HU #14610: resumen diario de lo que el envío automático de DP omitió (una vez al día por empresa).</summary>
     ResumenEnvioAutomaticoDp,
+    ConsultaProgramada,
 }
 
 /// <summary>Solo correo en la primera entrega; WhatsApp y SMS quedan en el backlog [Excel C11].</summary>
@@ -303,6 +306,7 @@ public enum TipoTrabajo
 
     /// <summary>Envío automático de derechos de petición (Epic #14606, HU #14609): una corrida por día hábil, con tope por empresa.</summary>
     EnvioAutomaticoDp,
+    ConsultasProgramadas,
 }
 
 public enum Disparo
@@ -379,6 +383,7 @@ public enum TipoEventoTimeline
     PagoRegistrado,
     CobroCoactivoDetectado,
     NotaManual,
+    DocumentoAsociadoOcr,
 }
 
 public enum ActorTipo

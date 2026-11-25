@@ -65,4 +65,35 @@ public sealed class GetDocumentsTransactionHandler(
 
         return await consolidadoClient.GetPresignedUrlAsync(tenantId.Value, master.ProcedureInstanceId.Value, ct);
     }
+
+    /// <summary>
+    /// Versión preliminar de la carpeta: entrega el consolidado vigente aunque el trámite aún no esté
+    /// aprobado, con su estado y la marca <c>definitivo</c> (true solo cuando está aprobado). Core-api lo
+    /// sirve tal cual (sin regenerarlo) y no entrega el de un trámite anulado.
+    /// </summary>
+    /// <returns>
+    /// <c>(entrega, null)</c> cuando todo OK; si no, <c>unauthenticated</c>, <c>not_found</c>,
+    /// <c>not_materialized</c>, <c>anulado</c>, <c>consolidado_no_disponible</c> o <c>storage_unavailable</c>.
+    /// </returns>
+    public async Task<(ConsolidadoEntregado? Entrega, string? Error)> HandlePreliminarAsync(string id, CancellationToken ct = default)
+    {
+        var tenantId = currentTenant.TenantId;
+        if (tenantId is null)
+        {
+            return (null, "unauthenticated");
+        }
+
+        var master = await repository.FindByManagerIdTransactionAsync(id, tenantId.Value, ct);
+        if (master is null)
+        {
+            return (null, "not_found");
+        }
+
+        if (master.ProcedureInstanceId is null)
+        {
+            return (null, "not_materialized");
+        }
+
+        return await consolidadoClient.GetConsolidadoAsync(tenantId.Value, master.ProcedureInstanceId.Value, preliminar: true, ct);
+    }
 }

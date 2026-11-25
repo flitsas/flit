@@ -13,23 +13,38 @@ public static class NumeroComparendo
     /// <summary>Umbral GDC ID12: números municipales/nacionales reales (≥10); evita vaciar claves sintéticas cortas.</summary>
     public const int DigitosMinimosParaQuitarPrefijo = 10;
 
-    public static string? Normalizar(string? texto)
+    public static string? Normalizar(string? texto) => Alfanumerico(texto) is { } alfanum ? SinPrefijo(alfanum) : null;
+
+    /// <summary>
+    /// El número como se guarda y se muestra al registrar desde un documento escaneado (GDC-ASOC §8): sin la letra inicial
+    /// con la MISMA regla que la llave (<see cref="Normalizar"/>); los cortos o mixtos («A-98765») se guardan como se leyeron.
+    /// </summary>
+    public static string? ParaGuardar(string? texto)
+    {
+        if (Alfanumerico(texto) is not { } alfanum)
+            return null;
+        var sin = SinPrefijo(alfanum);
+        return sin.Length != alfanum.Length ? sin : texto!.Trim();
+    }
+
+    private static string? Alfanumerico(string? texto)
     {
         if (string.IsNullOrWhiteSpace(texto))
             return null;
 
         var alfanum = new string(texto.Trim().Where(char.IsAsciiLetterOrDigit).Select(char.ToUpperInvariant).ToArray());
-        if (alfanum.Length is 0 or > LargoMaximo)
-            return null;
+        return alfanum.Length is 0 or > LargoMaximo ? null : alfanum;
+    }
 
+    /// <summary>La única regla del prefijo: letras iniciales fuera solo si el resto son ≥10 dígitos.</summary>
+    private static string SinPrefijo(string alfanum)
+    {
         var i = 0;
         while (i < alfanum.Length && char.IsAsciiLetter(alfanum[i]))
             i++;
-        if (i > 0 && i < alfanum.Length && alfanum.Length - i >= DigitosMinimosParaQuitarPrefijo
-            && alfanum.Skip(i).All(char.IsAsciiDigit))
-            return alfanum[i..];
-
-        return alfanum;
+        return i > 0 && i < alfanum.Length && alfanum.Length - i >= DigitosMinimosParaQuitarPrefijo && alfanum.Skip(i).All(char.IsAsciiDigit)
+            ? alfanum[i..]
+            : alfanum;
     }
 
     /// <summary>

@@ -99,7 +99,15 @@ public sealed class TrabajoConsultaDiagnosticoContratoTests
 
             var claves = Claves(JsonNode.Parse(trabajo.Payload)!);
             if (impuesto)
-                claves = claves.Where(c => c is not ("propietarioNombre" or "organismoNombre" or "departamentoNombre"));
+            {
+                // C3-bis (ADR-0075): el impuesto puede llevar nombre y contacto del propietario además del organismo.
+                claves = claves.Where(c => c is not (
+                    "propietarioNombre" or "organismoNombre" or "departamentoNombre"
+                    or "propietarioTelefono" or "propietarioCorreo" or "propietarioDepartamento"
+                    or "propietarioCiudad" or "propietarioDireccion"
+                    or "vehiculoClase" or "vehiculoMarca" or "vehiculoServicio" or "vehiculoCombustible"));
+            }
+
             claves.Should().NotContain(c => ClavesProhibidas.Any(p => c.Contains(p, StringComparison.OrdinalIgnoreCase)));
         }
     }

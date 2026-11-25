@@ -1,0 +1,53 @@
+{
+  "id": "consulta-sintetica-0001",
+  "source_id": "impuesto-05",
+  "status": "succeeded",
+  "created_at": "2026-11-19T15:00:00Z",
+  "error_code": null,
+  "file_errors": [],
+  "result": {
+    "status": "con_deuda",
+    "consultedAt": "2026-11-19T15:00:45Z",
+    "totals": {
+      "tax": 100000,
+      "penalty": 0,
+      "interest": 0,
+      "discounts": 0,
+      "totalToPay": 100000
+    },
+    "pendingPeriods": [
+      {
+        "period": 2026,
+        "tax": 100000,
+        "penalty": 0,
+        "interest": 0,
+        "discounts": 0,
+        "totalToPay": 100000,
+        "appraisal": 28000000,
+        "dueDate": "2026-07-31",
+        "fileId": "archivo-sintetico-2026",
+        "paymentReference": "REF-SINTETICA-2026",
+        "otherCharges": [],
+        "previousPayments": 0
+      }
+    ],
+    "lastPayment": null,
+    "clearance": null,
+    "validations": [
+      {
+        "field": "vehicleModel",
+        "sent": "2020",
+        "portal": "2019",
+        "result": "mismatch"
+      }
+    ],
+    "warnings": [],
+    "vehicle": {
+      "plate": "TST170",
+      "brand": "MARCA PRUEBA",
+      "line": "LINEA PRUEBA",
+      "model": 2019
+    },
+    "consolidatedFileId": null
+  }
+}

@@ -101,11 +101,44 @@ internal sealed partial class DetalleCelda(
             .Where(i => i.ConsultaId == celda.Id)
             .ToListAsync(ct).ConfigureAwait(false);
         var datoParcial = codigo == Fuente.ImpuestoDepartamental && ResultadoImpuestoDetalle.EsDatoParcial(respuestaFuente);
+        IReadOnlyList<AdvertenciaImpuestoDetalleDto>? advertencias = null;
+        if (codigo == Fuente.ImpuestoDepartamental && conDato)
+        {
+            JsonElement? origenAdvertencias = null;
+            if (celda.Estado == EstadoCelda.Completado && !string.IsNullOrWhiteSpace(celda.Payload))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(celda.Payload);
+                    origenAdvertencias = doc.RootElement.Clone();
+                }
+                catch (JsonException)
+                {
+                    origenAdvertencias = null;
+                }
+            }
+            else if (celda.Estado == EstadoCelda.Error)
+                origenAdvertencias = respuestaFuente;
+
+            advertencias = ProyectarAdvertencias(ResultadoImpuestoDetalle.LeerAdvertencias(origenAdvertencias));
+        }
+
         return new DetalleCeldaDto(
             celda.Id, vehiculoId, CodigosDeEnum.Codigo(codigo), CodigosDeEnum.Codigo(celda.Estado),
             celda.MotivoNa is { } motivo ? CodigosDeEnum.Codigo(motivo) : null, celda.TipoError, celda.DatoObtenidoEn, celda.Reutilizada,
             resultado, personas, respuestaFuente, identificador, cabecera.Nombre, respuestaProveedor, datoParcial,
-            AuditoriaConsultaCliente.Desde(intentos));
+            AuditoriaConsultaCliente.Desde(intentos), advertencias);
+    }
+
+    private static IReadOnlyList<AdvertenciaImpuestoDetalleDto>? ProyectarAdvertencias(IReadOnlyList<AdvertenciaImpuestoLeida>? leidas)
+    {
+        if (leidas is null || leidas.Count == 0)
+            return null;
+        return [.. leidas.Select(a => new AdvertenciaImpuestoDetalleDto(
+            a.Tipo,
+            a.Campo,
+            a.Anio,
+            RotulosDiagnostico.DeAdvertenciaImpuesto(a.Tipo, a.Campo, a.Anio)))];
     }
 
     /// <summary>

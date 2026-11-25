@@ -47,7 +47,8 @@ internal sealed class LecturasVehiculo(IProtectorRespuestaFuente protector)
             lecturas.SimitPropietario,
             lecturas.SimitLocatario,
             lecturas.RuntLocatario,
-            lecturas.Impuesto);
+            lecturas.Impuesto,
+            lecturas.AdvertenciasImpuesto);
     }
 
     /// <summary>Las lecturas de las celdas de UN vehículo (todas sus fuentes); una fuente sin celda queda en null.</summary>
@@ -56,6 +57,7 @@ internal sealed class LecturasVehiculo(IProtectorRespuestaFuente protector)
         ArgumentNullException.ThrowIfNull(celdas);
         CeldaConsulta? De(Fuente fuente) => celdas.FirstOrDefault(c => c.Fuente == fuente);
         var runt = De(Fuente.Runt);
+        var impuesto = De(Fuente.ImpuestoDepartamental);
         return new LecturasParaDictamen(
             Detalle(runt),
             Normalizado(runt),
@@ -64,7 +66,23 @@ internal sealed class LecturasVehiculo(IProtectorRespuestaFuente protector)
             PersonasSimit(De(Fuente.SimitPropietario)),
             PersonasSimit(De(Fuente.SimitLocatario)),
             PersonasRunt(De(Fuente.RuntLocatario)),
-            Impuesto(De(Fuente.ImpuestoDepartamental)));
+            Impuesto(impuesto),
+            Advertencias(impuesto));
+    }
+
+    private static IReadOnlyList<AdvertenciaImpuestoLeida>? Advertencias(CeldaConsulta? celda)
+    {
+        if (celda is not { Estado: EstadoCelda.Completado } || string.IsNullOrWhiteSpace(celda.Payload))
+            return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(celda.Payload);
+            return ResultadoImpuestoDetalle.LeerAdvertencias(doc.RootElement);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     private LecturaCelda<DetalleRuntReporte>? Detalle(CeldaConsulta? celda) =>

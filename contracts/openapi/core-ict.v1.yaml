@@ -5,7 +5,7 @@
 openapi: 3.1.0
 info:
   title: FLIT Core ICT API
-  version: 2.0.0
+  version: 2.1.0
   description: |-
     API de Integración con Terceros (ICT) de FLIT. El gestor se autentica con su propio token ICT (independiente del inicio de sesión de la plataforma FLIT), registra trámites en lote, consulta su estado y los reprocesa cuando tienen novedades, adjunta los documentos del trámite, consulta las secretarías de tránsito, pausa, reanuda o anula trámites en borrador y recibe en su webhook los cambios de estado.
 
@@ -35,6 +35,12 @@ info:
     generador: python -m atlas_docs.ict (ATLAS-ADR-0037); no se edita a mano
     visibilidad: las operaciones con `x-public` se comparten con clientes; las `x-internal` las quita la poda de Atlas
   x-flit-changelog:
+  - version: 2.1.0
+    fecha: '2026-11-24'
+    hoja: null
+    colaborador: Equipo de integraciones de FLIT
+    cambio: 'MINOR: GET /api/v1/documents-transaction/{id} acepta preliminar=true (carpeta antes de la aprobación,
+      con estado y definitivo) y responde 409 anulado para un trámite anulado. Sin el parámetro, igual que antes.'
   - version: 2.0.0
     fecha: '2026-11-23'
     hoja: null
@@ -1212,8 +1218,11 @@ paths:
         de un trámite de OT en estado **aprobado**. El parámetro `id` puede ser el `transaction_number`
         o el `manager_id_transaction` registrado por el gestor.
 
-        Solo responde con 200 si el trámite existe, está materializado y en estado `aprobado`.
-        En cualquier otro caso devuelve el código de error correspondiente (404 / 409 / 503).
+        Sin `preliminar`, solo responde con 200 si el trámite existe, está materializado y en estado
+        `aprobado`. Con `preliminar=true` también entrega la carpeta del trámite antes de su aprobación:
+        el consolidado vigente (FUR, documentos generados y documentos entregados), tal como está, con el
+        estado del trámite y `definitivo=false`. El trámite anulado no se entrega (`anulado`). En cualquier
+        otro caso devuelve el código de error correspondiente (404 / 409 / 503).
       tags:
       - ICT · Documentos
       security:
@@ -1226,6 +1235,13 @@ paths:
         schema:
           type: string
           example: 'TRX-0001'
+      - name: preliminar
+        in: query
+        required: false
+        description: Con `true`, entrega también la carpeta preliminar de un trámite que aún no está aprobado.
+        schema:
+          type: boolean
+          default: false
       responses:
         '200':
           description: URL prefirmada generada correctamente.
@@ -1240,6 +1256,14 @@ paths:
                     format: uri
                     description: URL prefirmada de descarga del consolidado PDF (TTL 600 s).
                     example: 'https://files.example.com/presigned/abc123?X-Amz-Expires=600'
+                  estado:
+                    type: string
+                    description: Solo con `preliminar=true`. Estado del trámite en FLIT (p. ej. `borrador`, `aprobado`).
+                    example: 'borrador'
+                  definitivo:
+                    type: boolean
+                    description: Solo con `preliminar=true`. `true` cuando el trámite está aprobado; `false` para la carpeta preliminar.
+                    example: false
               example:
                 url: 'https://files.example.com/presigned/abc123?X-Amz-Expires=600'
         '401':
@@ -1262,7 +1286,7 @@ paths:
                 not_materialized:
                   value: { error: 'not_materialized' }
         '409':
-          description: El trámite no está en estado aprobado (`not_approved`) o el consolidado no fue generado (`consolidado_no_disponible`).
+          description: El trámite no está en estado aprobado (`not_approved`, sin `preliminar`), está anulado (`anulado`, con `preliminar`) o el consolidado no fue generado (`consolidado_no_disponible`).
           content:
             application/json:
               schema:
@@ -1270,6 +1294,8 @@ paths:
               examples:
                 not_approved:
                   value: { error: 'not_approved' }
+                anulado:
+                  value: { error: 'anulado' }
                 consolidado_no_disponible:
                   value: { error: 'consolidado_no_disponible' }
         '503':

@@ -9,11 +9,12 @@ import { DataTable, InlineAlert, Miga, Modal, VehicleLoader } from "@flit/ui";
 import { useSesion } from "@/components/ComparendosShell";
 import { useAbrirDetalle } from "@/components/detalle/useAbrirDetalle";
 import { EstadoDocumento, useSondeo } from "@/components/ocr/comunes";
+import { ModalAsociar, ModalComparar } from "@/components/ocr/AsociarDocumento";
 import { OfertaPlacas } from "@/components/ocr/OfertaPlacas";
 import { Encabezado, Requiere } from "@/components/Pantalla";
 import { useToast } from "@/components/Toast";
 import { BOTON_PELIGRO_CLS, BOTON_PRIMARIO_CLS, ETIQUETA_CLS, FECHA_CLS, INPUT_CLS, controlCls } from "@/components/ui/estilos";
-import { API_PREFIX, apiDownload, apiFetch } from "@/lib/api";
+import { API_PREFIX, ApiError, apiDownload, apiFetch } from "@/lib/api";
 import { formatoFechaHora } from "@/lib/format/date";
 import { P } from "@/lib/nav";
 import {
@@ -27,6 +28,8 @@ import {
   TIPOS_DOCUMENTO,
   ETIQUETA_TIPO_DOCUMENTO,
   tipoEntrada,
+  vistaDuplicado,
+  type EvidenciaActual,
   valorInicial,
   vistaOriginal,
 } from "@/lib/ocr";
@@ -56,6 +59,9 @@ interface Duplicado {
   paquete?: string;
   estado?: string;
   comparendoId?: string | null;
+  evidenciaActual?: EvidenciaActual | null;
+  asociable?: boolean;
+  motivoNoAsociable?: string | null;
 }
 
 interface Documento {
@@ -79,6 +85,8 @@ interface Documento {
   motivoNoReprocesable: string | null;
   versionPrompt: number | null;
   comparendoId: string | null;
+  /** Número tal como quedaría guardado (sin la letra inicial); lo calcula el servidor. */
+  numeroAGuardar?: string | null;
   procesadoEn: string | null;
   revisadoEn: string | null;
   motivoDescarte: string | null;
@@ -210,7 +218,8 @@ function Formulario({
 }) {
   const toast = useToast();
   const acciones = accionesDocumento({ estado: d.estado, reintentable: d.reintentable, fuenteDuplicado: d.duplicado?.fuente ?? null, tipoFallo: d.tipoFallo });
-  const marcas = marcasRevision(d);
+  // Asociado es un estado final y correcto: no quedan campos por revisar.
+  const marcas = d.estado === "Asociado" ? {} : marcasRevision(d);
   const porRevisar = Object.keys(marcas).length;
   // GDC punto 6: el NIT guardado (base sin puntos) se muestra con la misma máscara con que se escribe.
   const tipoGuardado = d.campos.find((c) => c.nombreCampo === "tipo_documento_infractor")?.valorFinal;
@@ -222,7 +231,7 @@ function Formulario({
   );
   const [editados, setEditados] = useState<Record<string, string>>(iniciales);
   const [motivo, setMotivo] = useState("");
-  const [modal, setModal] = useState<"guardar" | "descartar" | "reprocesar" | null>(null);
+  const [modal, setModal] = useState<"guardar" | "descartar" | "reprocesar" | "asociar" | "comparar" | null>(null);
   const [ocupado, setOcupado] = useState(false);
   const cambios = cambiosCampos(iniciales, editados);
   const sucio = Object.keys(cambios).length > 0;
@@ -287,6 +296,28 @@ function Formulario({
       toast.show("Documento descartado.", "success");
     });
 
+  // Contrato de asociar: 409 NO_ASOCIABLE / EVIDENCIA_EXISTENTE / EVIDENCIA_CAMBIO = la pantalla estaba desactualizada.
+  const asociar = (reemplazar: boolean) =>
+    ejecutar(async () => {
+      try {
+        const r = await apiFetch<{ numero: string }>(`/ocr/documentos/${d.id}/asociar`, {
+          method: "POST",
+          body: { reemplazar, evidenciaActualId: d.duplicado?.evidenciaActual?.archivoId ?? null },
+        });
+        toast.show(reemplazar ? `Documento reemplazado en el comparendo ${r.numero}.` : `Documento asociado al comparendo ${r.numero}.`, "success");
+      } catch (e) {
+        if (!(e instanceof ApiError) || e.status !== 409) throw e;
+        toast.show(
+          e.code === "EVIDENCIA_CAMBIO"
+            ? "Otra persona cambió el documento del comparendo mientras lo revisabas. Actualizamos la pantalla: compara de nuevo antes de decidir."
+            : e.code === "EVIDENCIA_EXISTENTE"
+              ? "El comparendo ya tiene un documento. Actualizamos la pantalla: compara los dos antes de decidir."
+              : e.message || "Este documento ya no se puede asociar. Actualizamos la pantalla.",
+          "error",
+        );
+      }
+    });
+
   const reintentar = () =>
     ejecutar(async () => {
       await apiFetch(`/ocr/documentos/${d.id}/reintentar`, { method: "POST" });
@@ -299,7 +330,15 @@ function Formulario({
       toast.show("El documento volvió a la cola para leerse de nuevo.", "success");
     });
 
+  // Solo mientras el comparendo se puede registrar: ya registrado o asociado, el número no cambia.
+  // «Lo leído» es el valor final del campo (lo que dejó el operador tras corregir), con el extraído como respaldo.
+  const numeroLeido = d.campos.find((c) => c.nombreCampo === "numero_comparendo")?.valorFinal?.trim() || d.numeroComparendoExtraido;
+  const numeroDistinto =
+    ["Completo", "Incompleto", "Duplicado"].includes(d.estado) && !!d.numeroAGuardar && !!numeroLeido && d.numeroAGuardar.trim() !== numeroLeido.trim();
   const dup = d.duplicado;
+  const vistaDup = vistaDuplicado(d);
+  const puedeAsociar = opera && acciones.asociar;
+  const comparendoExistente = dup && dup.tipo === "comparendo" ? { id: dup.id, numero: dup.numero, fuente: dup.fuente && FUENTE_DUPLICADO[dup.fuente] ? FUENTE_DUPLICADO[dup.fuente] : dup.fuente, activo: dup.activo, pagado: dup.pagado } : null;
   // Arriba y al final del formulario, sin barra flotante: una barra pegada abajo con fondo tapaba los campos (B12-6).
   const botones = opera ? (
     <div className="flex flex-wrap justify-end gap-2">
@@ -373,14 +412,25 @@ function Formulario({
         </InlineAlert>
       )}
 
+      {numeroDistinto && (
+        <InlineAlert tone="info" title="El número se guardará sin la letra inicial">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
+            <dt className="font-semibold">Número en el documento</dt>
+            <dd className="min-w-0 break-all tabular-nums">{numeroLeido}</dd>
+            <dt className="font-semibold">Número que se guardará</dt>
+            <dd className="min-w-0 break-all tabular-nums">{d.numeroAGuardar}</dd>
+          </dl>
+        </InlineAlert>
+      )}
+
       {porRevisar > 0 && ["Completo", "Incompleto", "Duplicado"].includes(d.estado) && (
         <InlineAlert tone="warning" title={porRevisar === 1 ? "Revisa 1 campo marcado" : `Revisa ${porRevisar} campos marcados`}>
           Compáralos con el original antes de registrar.
         </InlineAlert>
       )}
 
-      {dup && (
-        <InlineAlert tone="warning" title="Este comparendo ya existe: no se puede registrar">
+      {dup && d.estado !== "Asociado" && (
+        <InlineAlert tone="warning" title={vistaDup === "asociar" || vistaDup === "comparar" ? "Este comparendo ya existe" : "Este comparendo ya existe: no se puede registrar"}>
           <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5">
             <dt className="font-semibold">Fuente</dt>
             <dd>{(dup.fuente && FUENTE_DUPLICADO[dup.fuente]) ?? dup.fuente ?? "—"}</dd>
@@ -411,6 +461,29 @@ function Formulario({
               </>
             )}
           </dl>
+          {dup.motivoNoAsociable && vistaDup !== "asociar" && vistaDup !== "comparar" && <p className="mt-1">{dup.motivoNoAsociable}</p>}
+          {puedeAsociar && vistaDup === "asociar" && (
+            <div className="mt-2 flex flex-col gap-1">
+              <p>No tiene documento: puedes agregarle este archivo para que salga en sus próximos avisos.</p>
+              <div>
+                <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={() => setModal("asociar")}>
+                  <Icono nombre="documento" className="h-3.5 w-3.5" />
+                  Asociar al comparendo
+                </button>
+              </div>
+            </div>
+          )}
+          {puedeAsociar && vistaDup === "comparar" && (
+            <div className="mt-2 flex flex-col gap-1">
+              <p>Ya tiene un documento: compáralos para decidir si lo reemplazas.</p>
+              <div>
+                <button type="button" className={BOTON_PRIMARIO_CLS} disabled={ocupado} onClick={() => setModal("comparar")}>
+                  <Icono nombre="documento" className="h-3.5 w-3.5" />
+                  Comparar documentos
+                </button>
+              </div>
+            </div>
+          )}
           {acciones.editar && opera && <p className="mt-1">Si el número quedó mal leído, corrígelo abajo y guarda: se vuelve a validar.</p>}
         </InlineAlert>
       )}
@@ -463,8 +536,23 @@ function Formulario({
 
       {botones && <div className="border-t border-border pt-3">{botones}</div>}
 
+      {modal === "asociar" && comparendoExistente && (
+        <ModalAsociar comparendo={comparendoExistente} documento={{ nombreArchivo: d.nombreArchivo, numeroComparendoExtraido: numeroLeido }} ocupado={ocupado} onClose={() => setModal(null)} onConfirmar={() => asociar(false)} />
+      )}
+      {modal === "comparar" && comparendoExistente && dup?.evidenciaActual && (
+        <ModalComparar
+          comparendo={comparendoExistente}
+          entrante={{ archivoId: d.archivoId, nombreArchivo: d.nombreArchivo, tipoArchivo: d.tipoArchivo, numeroComparendoExtraido: numeroLeido }}
+          actual={dup.evidenciaActual}
+          ocupado={ocupado}
+          onClose={() => setModal(null)}
+          onReemplazar={() => asociar(true)}
+          onDescartar={() => setModal("descartar")}
+        />
+      )}
+
       <Modal icono="documento"
-        open={modal !== null}
+        open={modal === "guardar" || modal === "descartar" || modal === "reprocesar"}
         onClose={() => setModal(null)}
         busy={ocupado}
         title={modal === "descartar" ? "Descartar el documento" : modal === "reprocesar" ? "Leer de nuevo el documento" : "Guardar la corrección"}
@@ -604,6 +692,18 @@ function Revision({ id }: { id: string }) {
           {registro.placa && !registro.placaYaMonitoreada && <OfertaPlacas placas={[registro.placa]} />}
           {registro.placa && registro.placaYaMonitoreada && <InlineAlert tone="info">La placa {registro.placa} ya está monitoreada.</InlineAlert>}
         </div>
+      )}
+
+      {d.estado === "Asociado" && (
+        <InlineAlert tone="success" title="Documento asociado al comparendo">
+          {d.comparendoId ? (
+            <button type="button" className="font-semibold text-flit-brand-ink hover:underline" onClick={() => setVerComparendo(d.comparendoId!)}>
+              Ver el comparendo
+            </button>
+          ) : (
+            "El archivo quedó agregado al comparendo existente."
+          )}
+        </InlineAlert>
       )}
 
       {hayEnCurso([d.estado]) && <InlineAlert tone="info">El documento está en cola; esta vista se actualiza sola.</InlineAlert>}

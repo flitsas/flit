@@ -4,6 +4,7 @@ using Flit.Tramites.Application.Identity;
 using Flit.Tramites.Application.Identity.Rounds;
 using Flit.Tramites.Application.UseCases.Persons;
 using Flit.Tramites.Application.UseCases.ProcedureInstances;
+using Flit.Tramites.Domain.Repositories;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -358,6 +359,7 @@ internal static class BiometricaEndpoints
                 "instance_not_found" => Results.Problem(statusCode: 404, title: "Not Found", detail: "Procedure instance not found."),
                 "actor_requerido" => Results.Problem(statusCode: 409, title: "Conflict", detail: "Captura el actor de la parte antes de simular la biométrica."),
                 "tramite_inactivo" => Results.Problem(statusCode: 409, title: "Conflict", detail: "El trámite está anulado o revocado: no admite validaciones de identidad."),
+                "validacion_manual" => Results.Problem(statusCode: 409, title: "Conflict", detail: "La validación es manual: solo la aprueba un revisor en la revisión manual."),
                 _ => Results.Ok(result),
             };
         })
@@ -433,16 +435,28 @@ internal static class BiometricaEndpoints
             Guid id,
             Guid validationId,
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
+            HttpContext http,
             GetIdentityAuditHandler handler,
+            IReviewerDirectory reviewers,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
                 return Results.Problem(statusCode: 400, title: "Bad Request", detail: "Falta header X-Tenant-Id");
 
             var (result, error) = await handler.HandleAsync(id, tenantId.Value, validationId, ct);
-            return error is "not_found"
-                ? Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.")
-                : Results.Ok(result);
+            if (error is "not_found")
+                return Results.Problem(statusCode: 404, title: "Not Found", detail: "Validación de identidad no encontrada.");
+
+            if (result is not null)
+            {
+                // Quién aprobó/rechazó la revisión manual (nombre, correo, rol): solo el Super Admin lo ve. La compañía y el
+                // cliente reciben la bitácora saneada (sin mensajes con el id del revisor ni eventos internos del flujo manual).
+                result = CompanyTenantAccess.IsSuperAdmin(http.User)
+                    ? await IdentityAuditRevisor.AplicarAsync(result, reviewers, ct)
+                    : result with { Events = IdentityAuditParaCliente.Aplicar(result.Events) };
+            }
+
+            return Results.Ok(result);
         })
         .WithName("GetProcedureInstanceIdentityAudit")
         .Produces<IdentityAuditResponse>(StatusCodes.Status200OK);
@@ -670,6 +684,7 @@ internal static class BiometricaEndpoints
             [FromHeader(Name = "X-Tenant-Id")] Guid? tenantId,
             HttpContext http,
             GetIdentityAuditByValidationHandler handler,
+            IReviewerDirectory reviewers,
             CancellationToken ct) =>
         {
             if (tenantId is null || tenantId == Guid.Empty)
@@ -681,8 +696,14 @@ internal static class BiometricaEndpoints
 
             // El flujo manual es una herramienta interna del Super Admin FLIT: la compañía y el cliente ven la bitácora
             // de una validación biométrica normal (los eventos manuales se traducen a su equivalente normal).
-            if (result is not null && !CompanyTenantAccess.IsSuperAdmin(http.User))
-                result = result with { Events = IdentityAuditParaCliente.Aplicar(result.Events) };
+            if (result is not null)
+            {
+                // Quién aprobó/rechazó la revisión manual (nombre, correo, rol): solo el Super Admin lo ve.
+                result = CompanyTenantAccess.IsSuperAdmin(http.User)
+                    ? await IdentityAuditRevisor.AplicarAsync(result, reviewers, ct)
+                    : result with { Events = IdentityAuditParaCliente.Aplicar(result.Events) };
+            }
+
             return Results.Ok(result);
         })
         .WithName("GetIdentityAuditByValidation")

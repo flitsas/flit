@@ -1,0 +1,409 @@
+"use client";
+
+// Los filtros de una consulta, como fichas sobre la tabla.
+//
+// La alternativa era el constructor clásico —una pantalla aparte con filas de campo, operador y
+// valor y un botón «Ejecutar»—, y se descartó por una razón concreta: se entra a un lienzo en
+// blanco. Nadie sabe qué preguntar hasta que ve una pregunta escrita. Aquí la tabla ya está
+// poblada, cada ficha que se añade la acota, y «guardar» solo congela el estado al que se llegó.
+//
+// Copia adaptada de la barra de Trámites. En Comparendos: el editor flotante pasa a ocupar el ancho de la pantalla por
+// debajo de `sm` (a 360 px un panel de 20 rem anclado a una ficha se salía por la derecha), y Escape devuelve el foco
+// a la ficha o al «+ Filtro» que lo abrió.
+//
+// El catálogo de campos lo sirve el backend: este componente no sabe qué campos existen ni cómo se
+// traducen, solo cómo se pinta cada TIPO. Un campo nuevo aparece aquí sin tocar este archivo.
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  OPERATOR_LABEL,
+  UNARY_OPERATORS,
+  type QueryCondition,
+  type QueryField,
+  type QueryFieldOption,
+  type QueryOperator,
+} from "@/lib/api/consultas-personalizadas";
+import { FIELD_CLS, plural } from "./ui";
+
+/**
+ * Trocea lo que el usuario pegó. Acepta saltos de línea, comas, punto y coma y tabuladores porque
+ * una columna copiada de Excel llega con saltos, una lista escrita a mano llega con comas, y quien
+ * pega no debería tener que saber cuál de las dos espera el campo.
+ */
+export function parseValueList(raw: string): string[] {
+  return [
+    ...new Set(
+      raw
+        .split(/[\n\r,;\t]+/)
+        .map((v) => v.trim())
+        .filter(Boolean),
+    ),
+  ];
+}
+
+export function describeCondition(condition: QueryCondition, fields: QueryField[]): string {
+  const field = fields.find((f) => f.id === condition.fieldId);
+  const label = field?.label ?? condition.fieldId;
+  const operador = OPERATOR_LABEL[condition.operator] ?? condition.operator;
+
+  if (UNARY_OPERATORS.includes(condition.operator)) {
+    return `${label} ${operador}`;
+  }
+
+  // Con muchos valores se dice cuántos y no cuáles: veinte placas dentro de una ficha la vuelven
+  // ilegible, y el detalle está a un clic.
+  const valores =
+    condition.values.length > 2
+      ? plural(condition.values.length, "valor", "valores")
+      : condition.values
+          .map((v) => field?.options.find((o) => o.value === v)?.label ?? v)
+          .join(" o ");
+
+  return `${label} ${operador} ${valores}`;
+}
+
+export function QueryFilterBar({
+  fields,
+  conditions,
+  onChange,
+  disabled,
+  testIdPrefix,
+}: {
+  fields: QueryField[];
+  conditions: QueryCondition[];
+  onChange: (conditions: QueryCondition[]) => void;
+  disabled?: boolean;
+  /** Las dos consolas usan esta barra; el prefijo las hace distinguibles en las pruebas. */
+  testIdPrefix: string;
+}) {
+  // `null` = cerrado; una cadena = editando ese campo; "" = eligiendo cuál añadir.
+  const [editing, setEditing] = useState<string | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (editing === null) return undefined;
+
+    function onPointerDown(event: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+        setEditing(null);
+      }
+    }
+
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      // El foco vuelve a quien abrió el panel: sin esto, tras Escape queda en el <body> y el teclado empieza de cero.
+      const destino =
+        containerRef.current?.querySelector<HTMLElement>(`[data-testid="${testIdPrefix}-chip-${editing}"]`) ??
+        containerRef.current?.querySelector<HTMLElement>(`[data-testid="${testIdPrefix}-agregar-filtro"]`);
+      setEditing(null);
+      destino?.focus();
+    }
+
+    document.addEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [editing, testIdPrefix]);
+
+  function upsert(condition: QueryCondition) {
+    const rest = conditions.filter((c) => c.fieldId !== condition.fieldId);
+    onChange([...rest, condition]);
+    setEditing(null);
+  }
+
+  function remove(fieldId: string) {
+    onChange(conditions.filter((c) => c.fieldId !== fieldId));
+    setEditing(null);
+  }
+
+  const disponibles = fields.filter((f) => !conditions.some((c) => c.fieldId === f.id));
+
+  return (
+    <div className="flex flex-wrap items-center gap-2" ref={containerRef} data-testid={`${testIdPrefix}-filtros`}>
+      {conditions.map((condition) => (
+        <span
+          key={condition.fieldId}
+          className="relative inline-flex items-center gap-1 rounded-full border border-flit-brand/40 bg-flit-brand/10 py-1 pl-3 pr-1 text-xs font-semibold text-flit-brand-ink"
+        >
+          <button
+            type="button"
+            onClick={() => setEditing(editing === condition.fieldId ? null : condition.fieldId)}
+            className="max-w-[min(22rem,70vw)] truncate"
+            data-testid={`${testIdPrefix}-chip-${condition.fieldId}`}
+          >
+            {describeCondition(condition, fields)}
+          </button>
+          <button
+            type="button"
+            onClick={() => remove(condition.fieldId)}
+            aria-label={`Quitar filtro ${condition.fieldId}`}
+            className="grid h-7 w-7 place-items-center rounded-full text-sm leading-none opacity-60 hover:opacity-100"
+          >
+            ×
+          </button>
+
+          {editing === condition.fieldId && (
+            <ConditionEditor
+              field={fields.find((f) => f.id === condition.fieldId)!}
+              value={condition}
+              onApply={upsert}
+              onRemove={() => remove(condition.fieldId)}
+              testIdPrefix={testIdPrefix}
+            />
+          )}
+        </span>
+      ))}
+
+      <div className="relative">
+        <button
+          type="button"
+          disabled={disabled || disponibles.length === 0}
+          onClick={() => setEditing(editing === "" ? null : "")}
+          className="rounded-full border border-dashed border-border px-3 py-1 text-xs font-semibold text-muted-foreground hover:border-flit-brand hover:text-flit-brand disabled:opacity-40"
+          data-testid={`${testIdPrefix}-agregar-filtro`}
+        >
+          + Filtro
+        </button>
+
+        {editing === "" && (
+          <QueryFieldPicker
+            fields={disponibles}
+            onPick={setEditing}
+            testIdPrefix={testIdPrefix}
+            className="absolute left-0 z-50 mt-2 max-h-[24rem] w-64 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-2xl border border-border bg-card p-2 shadow-[var(--kit-sombra)]"
+          />
+        )}
+      </div>
+
+      {/* Campo aún sin ficha: el editor se ancla aquí hasta que se aplique. */}
+      {editing && !conditions.some((c) => c.fieldId === editing) && (
+        <div className="relative">
+          <ConditionEditor
+            field={fields.find((f) => f.id === editing)!}
+            value={null}
+            onApply={upsert}
+            onRemove={() => setEditing(null)}
+            testIdPrefix={testIdPrefix}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * El listado de campos disponibles, agrupado. Vive aparte porque no todas las pantallas lo abren
+ * igual: en Consultas cuelga del botón «+ Filtro», y en el listado de trámites ES el contenido del
+ * panel de filtros — allí, un desplegable dentro del desplegable dejaba un panel encima de otro y
+ * exigía dos clics para llegar a lo mismo.
+ */
+export function QueryFieldPicker({
+  fields,
+  onPick,
+  testIdPrefix,
+  className,
+}: {
+  fields: QueryField[];
+  onPick: (fieldId: string) => void;
+  testIdPrefix: string;
+  className?: string;
+}) {
+  const grupos = [...new Set(fields.map((f) => f.group))];
+
+  return (
+    <div className={className} data-testid={`${testIdPrefix}-campos`}>
+      {grupos.map((grupo) => (
+        <div key={grupo} className="mb-1.5">
+          <p className="mb-1 rounded-md bg-secondary px-2 py-1 text-[11px] font-bold uppercase tracking-wide text-flit-primary dark:text-muted-foreground">
+            {grupo}
+          </p>
+          {fields
+            .filter((f) => f.group === grupo)
+            .map((field) => (
+              <button
+                key={field.id}
+                type="button"
+                onClick={() => onPick(field.id)}
+                className="block w-full rounded-lg px-2 py-1.5 text-left text-xs hover:bg-secondary"
+              >
+                {field.label}
+              </button>
+            ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+export function ConditionEditor({
+  field,
+  value,
+  onApply,
+  onRemove,
+  testIdPrefix,
+  anchored = true,
+}: {
+  field: QueryField;
+  value: QueryCondition | null;
+  onApply: (condition: QueryCondition) => void;
+  onRemove: () => void;
+  testIdPrefix: string;
+  /** `false` lo pinta en el flujo del contenedor, sin flotar: es como lo usa el panel de trámites. */
+  anchored?: boolean;
+}) {
+  const [operator, setOperator] = useState<QueryOperator>(
+    value?.operator ?? field.operators[0] ?? "es_alguno",
+  );
+  const [texto, setTexto] = useState(value?.values.join("\n") ?? "");
+  const [seleccion, setSeleccion] = useState<string[]>(value?.values ?? []);
+  const [busqueda, setBusqueda] = useState("");
+
+  const esUnario = UNARY_OPERATORS.includes(operator);
+  const valores = useMemo(
+    () => (field.kind === "texto" ? parseValueList(texto) : seleccion),
+    [field.kind, texto, seleccion],
+  );
+
+  const opciones = busqueda.trim()
+    ? field.options.filter((o) => o.label.toLowerCase().includes(busqueda.trim().toLowerCase()))
+    : field.options;
+
+  // Las opciones se pintan por grupos, en el orden en que las manda el servidor: para el tipo de
+  // trámite ese orden ES la información (la familia primero, sus tipos debajo), y reordenarlas
+  // aquí la destruiría. Un campo sin grupos produce un solo bloque sin encabezado, que es cómo se
+  // veían todos antes.
+  const grupos = useMemo(() => {
+    const bloques: { titulo: string | null; opciones: QueryFieldOption[] }[] = [];
+    for (const option of opciones) {
+      const titulo = option.group ?? null;
+      const ultimo = bloques.at(-1);
+      if (ultimo && ultimo.titulo === titulo) ultimo.opciones.push(option);
+      else bloques.push({ titulo, opciones: [option] });
+    }
+    return bloques;
+  }, [opciones]);
+
+  function aplicar() {
+    onApply({ fieldId: field.id, operator, values: esUnario ? [] : valores });
+  }
+
+  return (
+    <div
+      className={
+        anchored
+          ? "fixed inset-x-4 top-24 z-50 max-h-[calc(100dvh-7rem)] overflow-y-auto rounded-2xl border border-border bg-card p-3 text-left shadow-[var(--kit-sombra)] sm:absolute sm:inset-x-auto sm:left-0 sm:top-full sm:mt-2 sm:max-h-none sm:w-80 sm:overflow-visible"
+          : "text-left"
+      }
+      data-testid={`${testIdPrefix}-editor-${field.id}`}
+    >
+      <p className="mb-2 text-xs font-semibold text-foreground dark:text-foreground">{field.label}</p>
+
+      {field.operators.length > 1 && (
+        <select
+          value={operator}
+          onChange={(e) => setOperator(e.target.value as QueryOperator)}
+          aria-label="Operador"
+          className={`${FIELD_CLS} mb-2 w-full`}
+        >
+          {field.operators.map((op) => (
+            <option key={op} value={op}>
+              {OPERATOR_LABEL[op] ?? op}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {!esUnario && field.kind === "texto" && (
+        <>
+          <textarea
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            rows={operator === "contiene" ? 1 : 4}
+            placeholder={
+              operator === "contiene" ? "Parte del texto…" : "Un valor por línea, o pega una columna de Excel"
+            }
+            aria-label={`Valores de ${field.label}`}
+            className={`${FIELD_CLS} w-full resize-y`}
+            data-testid={`${testIdPrefix}-valores-${field.id}`}
+          />
+          {operator !== "contiene" && valores.length > 0 && (
+            <p className="mt-1 text-[11px] text-muted-foreground">
+              {plural(valores.length, "valor", "valores")}
+            </p>
+          )}
+        </>
+      )}
+
+      {!esUnario && field.kind !== "texto" && (
+        <>
+          {field.options.length > 8 && (
+            <input
+              type="search"
+              value={busqueda}
+              onChange={(e) => setBusqueda(e.target.value)}
+              placeholder="Buscar…"
+              aria-label={`Buscar en ${field.label}`}
+              className={`${FIELD_CLS} mb-2 w-full`}
+            />
+          )}
+          <div className="max-h-48 overflow-y-auto">
+            {grupos.map((bloque, i) => (
+              <div key={bloque.titulo ?? `sin-grupo-${i}`}>
+                {bloque.titulo && (
+                  <p className="mt-1.5 px-1.5 pb-0.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground first:mt-0">
+                    {bloque.titulo}
+                  </p>
+                )}
+                {bloque.opciones.map((option) => (
+                  <label
+                    key={option.value}
+                    className="flex cursor-pointer items-center gap-2 rounded-lg px-1.5 py-1 text-xs hover:bg-secondary"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={seleccion.includes(option.value)}
+                      onChange={() =>
+                        setSeleccion((prev) =>
+                          prev.includes(option.value)
+                            ? prev.filter((v) => v !== option.value)
+                            : [...prev, option.value],
+                        )
+                      }
+                      className="accent-flit-brand"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{option.label}</span>
+                  </label>
+                ))}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
+      {field.hint && (
+        <p className="mt-2 text-[11px] leading-snug text-muted-foreground">{field.hint}</p>
+      )}
+
+      <div className="mt-3 flex items-center justify-between gap-2">
+        <button
+          type="button"
+          onClick={onRemove}
+          className="text-[11px] font-semibold text-muted-foreground hover:text-destructive"
+        >
+          {value ? "Quitar" : "Cancelar"}
+        </button>
+        <button
+          type="button"
+          onClick={aplicar}
+          disabled={!esUnario && valores.length === 0}
+          className="rounded-lg bg-flit-brand px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-40"
+          data-testid={`${testIdPrefix}-aplicar-${field.id}`}
+        >
+          Aplicar
+        </button>
+      </div>
+    </div>
+  );
+}
